@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BAS — Breach Attack Simulator Console</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+.no-pdf { display: block; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─── RESET & VARIABLES ─── */
+
+
+:root {
+  --bg-base:      #0a0c0f;
+  --bg-card:      #111418;
+  --bg-card2:     #161a20;
+  --bg-hover:     #1c2128;
+  --bg-active:    #1a2332;
+  --border:       #232c37;
+  --border-light: #2e3944;
+  --text-primary: #e2e6ea;
+  --text-dim:     #7a8590;
+  --text-muted:   #4f5a65;
+  --accent:       #00d4aa;        /* teal */
+  --accent-dim:   #00a882;
+  --red:          #ff4f5a;
+  --red-dim:      #cc3f48;
+  --amber:        #f0a500;
+  --blue:         #4da6ff;
+  --pass-bg:      rgba(0,212,170,.08);
+  --fail-bg:      rgba(255,79,90,.08);
+  --font-mono:    'SF Mono','Fira Code','Consolas',monospace;
+  --font-sans:    'Inter','Segoe UI',system-ui,sans-serif;
+  --radius:       8px;
+  --transition:   .2s cubic-bezier(.4,0,.2,1);
+}
+
+html, body { height:100%; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ─── LAYOUT ─── */
+.shell { display:flex; height:100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: 300px;
+  min-width: 300px;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: 22px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-header .logo {
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-header .logo svg { flex-shrink:0; }
+.sidebar-header .logo-text { font-size: 18px; font-weight: 700; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; font-family: var(--font-mono); }
+.sidebar-header .logo-sub { font-size: 10px; color: var(--text-muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
+
+.sidebar-search {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-search input {
+  width: 100%;
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px 8px 32px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%234f5a65' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 10px center;
+}
+.sidebar-search input:focus { border-color: var(--accent); }
+.sidebar-search input::placeholder { color: var(--text-muted); }
+
+.tree-section-label {
+  padding: 10px 18px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.tree { flex: 1; overflow-y: auto; padding: 4px 0 12px; }
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: background var(--transition);
+  border-left: 3px solid transparent;
+  position: relative;
+}
+.tree-node:hover { background: var(--bg-hover); }
+.tree-node.active { background: var(--bg-active); border-left-color: var(--accent); }
+.tree-node.active .node-name { color: #fff; }
+
+.node-icon {
+  width: 34px; height: 34px;
+  border-radius: 7px;
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.tree-node.active .node-icon { background: rgba(0,212,170,.1); border-color: var(--accent); }
+
+.node-info { flex:1; min-width:0; }
+.node-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); }
+.node-ip   { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+
+.node-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge-idle   { background: rgba(79,90,101,.25); color: var(--text-muted); }
+.badge-running{ background: rgba(77,166,255,.15); color: var(--blue); animation: pulse 1.8s infinite; }
+.badge-done   { background: var(--pass-bg); color: var(--accent); }
+
+@keyframes pulse {
+  0%,100% { opacity:1; }
+  50%     { opacity:.5; }
+}
+
+/* ── MAIN CONTENT ── */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+/* top bar */
+.topbar {
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  flex-shrink: 0;
+}
+.topbar-left { display:flex; align-items:center; gap: 14px; }
+.topbar-left .page-title { font-size: 15px; font-weight: 600; }
+.topbar-left .page-title span { color: var(--text-muted); font-weight: 400; }
+.topbar-right { display:flex; align-items:center; gap:16px; }
+.status-dot { width:8px; height:8px; border-radius:50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.status-dot.off { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.status-label { font-size: 12px; color: var(--text-muted); }
+
+/* scrollable body */
+.content-wrap { flex:1; overflow-y: auto; padding: 28px; }
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: var(--text-muted);
+}
+.empty-state svg { opacity: .35; }
+.empty-state h3 { font-size: 16px; color: var(--text-primary); font-weight: 600; }
+.empty-state p { font-size: 13px; max-width: 380px; text-align: center; line-height: 1.6; }
+
+/* ── REPORT VIEW ── */
+.report-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap; gap: 16px;
+}
+.report-host-info h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.report-host-info .meta { font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); display: flex; gap: 20px; flex-wrap: wrap; }
+.report-host-info .meta span::before { content: ''; display:inline-block; width:6px; height:6px; border-radius:50%; background: var(--text-muted); margin-right:6px; vertical-align: middle; }
+
+/* score ring */
+.score-ring-wrap {
+  display: flex; align-items: center; gap: 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 22px;
+  flex-shrink:0;
+}
+.score-ring { position: relative; width: 72px; height: 72px; }
+.score-ring svg { transform: rotate(-90deg); }
+.score-ring .score-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; }
+.score-ring .score-num { font-size: 20px; font-weight: 700; font-family: var(--font-mono); color: var(--accent); line-height:1; }
+.score-ring .score-pct { font-size: 9px; color: var(--text-muted); margin-top: 2px; letter-spacing:.5px; }
+.score-stats { display:flex; flex-direction:column; gap:4px; }
+.score-stats .stat-row { display:flex; align-items:center; gap:8px; font-size:12px; }
+.stat-dot { width:10px; height:10px; border-radius:3px; }
+.stat-dot.pass { background: var(--accent); }
+.stat-dot.fail { background: var(--red); }
+.stat-label { color: var(--text-dim); }
+.stat-val   { font-weight:700; font-family: var(--font-mono); color: var(--text-primary); }
+
+/* category cards */
+.categories { display: flex; flex-direction: column; gap: 12px; }
+.cat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+.cat-card:hover { border-color: var(--border-light); }
+.cat-card.expanded .cat-header { border-bottom: 1px solid var(--border); }
+
+.cat-header {
+  display: flex; align-items: center; padding: 14px 18px; cursor: pointer; gap: 12px; user-select:none;
+}
+.cat-header:hover { background: var(--bg-hover); }
+.cat-phase-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 4px;
+  background: rgba(77,166,255,.12); color: var(--blue);
+  flex-shrink:0;
+}
+.cat-name { flex:1; font-size:14px; font-weight:600; }
+.cat-mini-bar { width: 80px; height: 6px; border-radius: 3px; background: var(--bg-card2); overflow:hidden; flex-shrink:0; }
+.cat-mini-bar .bar-fill { height:100%; border-radius: 3px; background: var(--accent); transition: width .4s; }
+.cat-mini-bar .bar-fill.bad { background: var(--red); }
+.cat-chevron { width:16px; color: var(--text-muted); transition: transform .2s; flex-shrink:0; }
+.cat-card.expanded .cat-chevron { transform: rotate(90deg); }
+.cat-score-badge { font-size:11px; font-weight:700; font-family: var(--font-mono); flex-shrink:0; }
+.cat-score-badge.good { color: var(--accent); }
+.cat-score-badge.bad  { color: var(--red); }
+
+/* checks table inside category */
+.cat-checks { display: flex; flex-direction: column; }
+.check-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 11px 18px;
+  border-bottom: 1px solid rgba(35,44,55,.5);
+  transition: background var(--transition);
+}
+.check-row:last-child { border-bottom: none; }
+.check-row:hover { background: var(--bg-hover); }
+
+.check-badge {
+  flex-shrink:0; width: 60px; text-align: center;
+  font-size: 10px; font-weight: 700; letter-spacing:.8px; text-transform:uppercase;
+  padding: 3px 0; border-radius: 4px; margin-top: 2px;
+}
+.check-badge.pass { background: var(--pass-bg); color: var(--accent); }
+.check-badge.fail { background: var(--fail-bg); color: var(--red); }
+.check-badge.skip { background: rgba(79,90,101,.2); color: var(--text-muted); }
+
+.check-body { flex:1; min-width:0; }
+.check-name { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 3px; }
+.check-technique { font-size: 10px; font-family: var(--font-mono); color: var(--blue); font-weight:600; display:inline-block; background: rgba(77,166,255,.1); padding: 1px 6px; border-radius:3px; margin-bottom: 4px; }
+.check-detail { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.check-rem {
+  margin-top: 6px; font-size: 11px;
+  background: var(--fail-bg); border: 1px solid rgba(255,79,90,.2);
+  border-radius: 5px; padding: 6px 10px;
+  color: #f0a500; line-height: 1.5;
+  display: none;
+}
+.check-row.fail .check-rem { display: block; }
+.check-rem::before { content: '⚠ Remediation: '; font-weight:700; }
+
+.check-dur { flex-shrink:0; font-size:10px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 3px; white-space:nowrap; }
+
+/* ── MITRE MAP strip ── */
+.mitre-strip {
+  margin-top: 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.mitre-strip h4 { font-size:12px; color: var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; font-weight:600; }
+.mitre-tags { display:flex; flex-wrap:wrap; gap:6px; }
+.mitre-tag {
+  font-size:11px; font-family: var(--font-mono); font-weight:600;
+  padding: 4px 10px; border-radius: 4px;
+  background: rgba(77,166,255,.1); color: var(--blue); border: 1px solid rgba(77,166,255,.2);
+}
+.mitre-tag.tactic { background: rgba(0,212,170,.1); color: var(--accent); border-color: rgba(0,212,170,.2); }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* ── TOAST ── */
+.toast-wrap { position:fixed; top:20px; right:20px; z-index:999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+.toast {
+  background: var(--bg-card); border:1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 18px;
+  font-size: 13px; color: var(--text-primary);
+  box-shadow: 0 4px 20px rgba(0,0,0,.4);
+  display:flex; align-items:center; gap:10px;
+  animation: slideIn .25s ease;
+  pointer-events: auto;
+  max-width: 320px;
+}
+.toast.info  { border-left: 3px solid var(--blue); }
+.toast.ok    { border-left: 3px solid var(--accent); }
+.toast.warn  { border-left: 3px solid var(--amber); }
+@keyframes slideIn { from { transform:translateX(40px); opacity:0; } to { transform:translateX(0); opacity:1; } }
+</style>
+</head>
+<body>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-wrap" id="toasts"></div>
+
+<div class="shell">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+          <rect width="30" height="30" rx="6" fill="#111418" stroke="#00d4aa" stroke-width="1.5"/>
+          <path d="M15 6 L24 10 L24 18 L15 24 L6 18 L6 10 Z" stroke="#00d4aa" stroke-width="1.5" fill="none"/>
+          <path d="M15 12 L19 14 L19 18 L15 20 L11 18 L11 14 Z" fill="#00d4aa" opacity=".6"/>
+        </svg>
+        <div>
+          <div class="logo-text">BAS</div>
+          <div class="logo-sub">Breach Attack Simulator</div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-search">
+      <input type="text" placeholder="Search endpoints…" id="searchInput" oninput="renderTree()" />
+    </div>
+    <div class="tree-section-label" id="treeLabel">Endpoints (0)</div>
+    <div class="tree" id="tree"></div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="page-title" id="pageTitle">Dashboard <span>— Overview</span></div>
+      </div>
+      <div class="topbar-right">
+        <div class="status-label" id="connStatus">Connecting…</div>
+        <div class="status-dot off" id="connDot"></div>
+      </div>
+    </div>
+    <div class="content-wrap" id="contentArea">
+      <!-- injected dynamically -->
+    </div>
+  </main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let agents   = [];   // [{agentId, hostname, ipAddress, osVersion, username, status, hasReport}]
+let reports  = {};   // { agentId → full report object }
+let selected = null; // currently selected agentId
+
+// ═══════════════════════════════════════════════════
+// SIGNALR CONNECTION
+// ═══════════════════════════════════════════════════
+function initApp() {
+  if (typeof signalR === "undefined") {
+    setTimeout(initApp, 500); // Retry every 500ms until library loads
+    return;
+  }
+
+
+
+  const connection = new signalR.HubConnectionBuilder()
+    .withUrl("/bashub")
+    .withAutomaticReconnect()
+    .build();
+
+
+  connection.on("agentUpdate", (hb) => {
+    // FIX: Extract ID and Hostname safely regardless of casing
+    const incomingId = hb.agentId || hb.AgentId;
+    const incomingHost = hb.hostname || hb.Hostname;
+    const incomingStatus = hb.status || hb.Status;
+
+    // FIX: Look for existing agent using both possible ID casings
+    let idx = agents.findIndex(a => (a.agentId || a.AgentId) === incomingId);
+    
+    if (idx === -1) {
+      // New agent: Store it (we'll keep the casing the server sent)
+      agents.push({ ...hb, hasReport: false });
+    } else {
+      // Existing agent: Update its properties
+      agents[idx] = { ...agents[idx], ...hb };
+    }
+    
+    renderTree();
+    toast("info", `<b>${incomingHost}</b> — agent status: <b>${incomingStatus}</b>`);
+  });
+
+  connection.on("reportReady", (ev) => {
+    // Use lowercase 'agentId' and 'hostname' to match standard JSON serialization
+    let id = ev.agentId || ev.AgentId; 
+    let host = ev.hostname || ev.Hostname;
+
+    let idx = agents.findIndex(a => a.agentId === id);
+    if (idx !== -1) { 
+      agents[idx].status = "done"; 
+      agents[idx].hasReport = true; 
+    }
+    renderTree();
+    fetchReport(id);
+    toast("ok", `Report ready from <b>${host}</b>`);
+  });
+
+  connection.start()
+    .then(() => { 
+      setConnected(true); 
+      fetchAgents(); 
+    })
+    .catch(e => console.error("SignalR Connection Error:", e));
+}
+
+function setConnected(on) {
+  const dot = document.getElementById("connDot");
+  const label = document.getElementById("connStatus");
+  if (dot) dot.className = "status-dot" + (on ? "" : " off");
+  if (label) label.textContent = on ? "Live" : "Disconnected";
+}
+  
+// ═══════════════════════════════════════════════════
+// FETCH HELPERS
+// ═══════════════════════════════════════════════════
+async function fetchAgents() {
+  try {
+    const response = await fetch("/api/agents");
+    const data = await response.json();
+    console.log("Debug: Received Agents Data:", data); // Check your browser console (F12)
+    
+    // Standardize the objects immediately to prevent casing headaches
+    agents = data.map(a => ({
+      agentId: a.agentId || a.AgentId,
+      hostname: a.hostname || a.Hostname || "Unknown",
+      ipAddress: a.ipAddress || a.IpAddress || "0.0.0.0",
+      status: (a.status || a.Status || "idle").toLowerCase(),
+      hasReport: a.hasReport !== undefined ? a.hasReport : a.HasReport
+    }));
+
+    // Pre-fetch reports for agents that already have them
+    for (const a of agents) { 
+      if (a.hasReport && !reports[a.agentId]) {
+        await fetchReport(a.agentId); 
+      }
+    }
+    
+    renderTree();
+  } catch(e) { 
+    console.error("Fetch Agents Error:", e); 
+    toast("warn", "Failed to load endpoints from API.");
+  }
+}
+
+async function fetchReport(agentId) {
+  try { reports[agentId] = await (await fetch(`/api/report/${agentId}`)).json(); if (selected === agentId) renderReport(agentId); }
+  catch(e) { console.error(e); }
+}
+
+// ═══════════════════════════════════════════════════
+// SIDEBAR TREE
+// ═══════════════════════════════════════════════════
+function renderTree() {
+  const q = document.getElementById("searchInput").value.toLowerCase();
+  const el = document.getElementById("tree");
+  
+  const filtered = agents.filter(a => {
+    const host = (a.hostname || a.Hostname || "").toLowerCase();
+    return host.includes(q);
+  });
+
+  // 1. Handle Empty Search
+  if (filtered.length === 0) {
+    el.innerHTML = `<div style="padding:24px 18px;color:var(--text-muted);text-align:center;">No endpoints found.</div>`;
+    document.getElementById("treeLabel").textContent = `Endpoints (0)`;
+    return; 
+  }
+
+  // 2. Update Label and Clear List
+  document.getElementById("treeLabel").textContent = `Endpoints (${filtered.length})`;
+  el.innerHTML = "";
+
+  // 3. Render the nodes (This was outside the function before!)
+  filtered.forEach(a => {
+    const id = a.agentId || a.AgentId;
+    const host = a.hostname || a.Hostname;
+    const ip = a.ipAddress || a.IpAddress;
+    const status = (a.status || a.Status || "idle").toLowerCase();
+
+    const active = selected === id ? "active" : "";
+    const statusClass = status === "done" ? "badge-done" : 
+                        status === "running" ? "badge-running" : "badge-idle";
+
+    el.insertAdjacentHTML("beforeend", `
+      <div class="tree-node ${active}" onclick="selectAgent('${id}')">
+        <div class="node-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="12" rx="2"/><path d="M8 21h8M12 15v6"/><path d="M7 21h10"/>
+          </svg>
+        </div>
+        <div class="node-info">
+          <div class="node-name">${esc(host)}</div>
+          <div class="node-ip">${esc(ip || "—")}</div>
+        </div>
+        <span class="node-badge ${statusClass}">${status === "done" ? "Complete" : status === "running" ? "Running" : "Idle"}</span>
+      </div>
+    `);
+  });
+} // <--- THIS IS THE ONLY CLOSING BRACE NEEDED
+
+
+// ═══════════════════════════════════════════════════
+// AGENT SELECTION → render report or placeholder
+// ═══════════════════════════════════════════════════
+function selectAgent(agentId) {
+  selected = agentId;
+  renderTree();
+  const report = reports[agentId];
+  if (report) { 
+    renderReport(agentId); 
+  } else {
+    // Find agent checking both casings
+    const agent = agents.find(a => (a.agentId || a.AgentId) === agentId);
+    const host = agent ? (agent.hostname || agent.Hostname) : "Unknown";
+    
+    document.getElementById("pageTitle").innerHTML = `${esc(host)} <span>— awaiting report</span>`;
+    document.getElementById("contentArea").innerHTML = `<div class="empty-state"><h3>Waiting for data...</h3></div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER FULL REPORT
+// ═══════════════════════════════════════════════════
+function renderReport(agentId) {
+  const r = reports[agentId];
+  if (!r) return;
+
+  // 1. Standardize the data paths
+  const cats = r.categories || r.Categories || [];
+  const host = r.hostname || r.Hostname || "Unknown";
+  
+  // 2. Calculations with safety fallbacks
+  const total = cats.reduce((s, c) => s + (c.checks || c.Checks || []).length, 0);
+  const passed = cats.reduce((s, c) => s + (c.checks || c.Checks || []).filter(ch => (ch.result || ch.Result) === "Pass").length, 0);
+  const failed = total - passed;
+  const score = total ? Math.round(passed / total * 100) : 0;
+  
+  const circumference = 2 * Math.PI * 30;
+  const dashPass = total ? (passed / total) * circumference : 0;
+
+  document.getElementById("pageTitle").innerHTML = `${esc(host)} <span>— Simulation Report</span>`;
+
+  // 3. Collect MITRE tags safely
+  const techniques = [...new Set(cats.flatMap(c => (c.checks || c.Checks || []).map(ch => ch.techniqueId || ch.TechniqueId)).filter(Boolean))];
+  const tactics = ["TA0001","TA0002","TA0003","TA0004","TA0005","TA0006","TA0007","TA0008","TA0009","TA0010","TA0011","TA0040"];
+
+  /* This class hides elements from the PDF generator */
+
+
+  // 4. Render Main Layout
+  document.getElementById("contentArea").innerHTML = `
+    <div class="report-header">
+      <div class="report-host-info">
+        <div style="display:flex; align-items:center; gap:15px; margin-bottom:8px;">
+            <h2 style="margin:0;">${esc(host)}</h2>
+            <button onclick="downloadPDF('${agentId}')" class="no-pdf" style="background:var(--bg-card2); border:1px solid var(--border); color:var(--accent); padding:4px 12px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:700; text-transform:uppercase; transition: var(--transition);" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+                Download PDF
+            </button>
+        </div>
+        <h2>${esc(host)}</h2>
+        <div class="meta">
+          <span>${esc(r.ipAddress || r.IpAddress)}</span>
+          <span>${esc(r.osVersion || r.OsVersion)}</span>
+          <span>User: ${esc(r.username || r.Username)}</span>
+          <span>Run: ${r.startedAt ? new Date(r.startedAt).toLocaleString() : (r.StartedAt ? new Date(r.StartedAt).toLocaleString() : 'N/A')}</span>
+        </div>
+      </div>
+      <div class="score-ring-wrap">
+        <div class="score-ring">
+          <svg width="72" height="72" viewBox="0 0 72 72">
+            <circle cx="36" cy="36" r="30" fill="none" stroke="var(--bg-card2)" stroke-width="7"/>
+            <circle cx="36" cy="36" r="30" fill="none" stroke="${score >= 60 ? 'var(--accent)' : 'var(--red)'}" stroke-width="7"
+              stroke-dasharray="${circumference}" stroke-dashoffset="${circumference - dashPass}"
+              stroke-linecap="round" style="transition:stroke-dashoffset .6s;"/>
+          </svg>
+          <div class="score-text">
+            <div class="score-num">${score}</div>
+            <div class="score-pct">SCORE</div>
+          </div>
+        </div>
+        <div class="score-stats">
+          <div class="stat-row"><div class="stat-dot pass"></div><span class="stat-label">Passed</span><span class="stat-val">${passed}</span></div>
+          <div class="stat-row"><div class="stat-dot fail"></div><span class="stat-label">Failed</span><span class="stat-val">${failed}</span></div>
+          <div class="stat-row" style="margin-top:2px;padding-top:6px;border-top:1px solid var(--border);"><span class="stat-label">Total</span><span class="stat-val">${total}</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="categories" id="categoriesContainer"></div>
+    <div class="mitre-strip">
+      <h4>MITRE ATT&CK Coverage</h4>
+      <div class="mitre-tags" id="mitreTags"></div>
+    </div>
+  `;
+
+  // 5. Render Categories and Checks (The part causing the .map error)
+  const container = document.getElementById("categoriesContainer");
+  cats.forEach((cat, ci) => {
+    const checks = cat.checks || cat.Checks || []; // Ensure this is an array
+    const catTotal = checks.length;
+    const catPassed = checks.filter(ch => (ch.result || ch.Result) === "Pass").length;
+    const catPct = catTotal ? Math.round(catPassed / catTotal * 100) : 0;
+    const isBad = catPct < 60;
+
+    // Use the safe 'checks' variable here for .map
+    let checksHtml = checks.map(ch => {
+      const res = (ch.result || ch.Result) === "Pass" ? "pass" : (ch.result || ch.Result) === "Fail" ? "fail" : "skip";
+      return `
+        <div class="check-row ${res}">
+          <div class="check-badge ${res}">${ch.result || ch.Result}</div>
+          <div class="check-body">
+            <div class="check-name">${esc(ch.name || ch.Name)}</div>
+            <div class="check-technique">${esc(ch.techniqueId || ch.TechniqueId)}</div>
+            <div class="check-detail">${esc(ch.details || ch.Details)}</div>
+            <div class="check-rem">${esc(ch.remediation || ch.Remediation)}</div>
+          </div>
+          <div class="check-dur">${ch.durationMs || ch.DurationMs || 0}ms</div>
+        </div>`;
+    }).join("");
+
+    container.insertAdjacentHTML("beforeend", `
+      <div class="cat-card" id="cat-${ci}">
+        <div class="cat-header" onclick="toggleCat(${ci})">
+          <span class="cat-phase-badge">${esc(cat.phase || cat.Phase)}</span>
+          <span class="cat-name">${esc(cat.name || cat.Name)}</span>
+          <div class="cat-mini-bar"><div class="bar-fill ${isBad?'bad':''}" style="width:${catPct}%"></div></div>
+          <span class="cat-score-badge ${isBad?'bad':'good'}">${catPct}%</span>
+          <svg class="cat-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l4 4-4 4"/></svg>
+        </div>
+        <div class="cat-checks" style="display:none;">${checksHtml}</div>
+      </div>
+    `);
+  });
+
+  // 6. MITRE tags
+  const mitreTags = document.getElementById("mitreTags");
+  tactics.forEach(t => { mitreTags.insertAdjacentHTML("beforeend", `<span class="mitre-tag tactic">${t}</span>`); });
+  techniques.forEach(t => { mitreTags.insertAdjacentHTML("beforeend", `<span class="mitre-tag">${t}</span>`); });
+}
+
+function toggleCat(idx) {
+  const card = document.getElementById(`cat-${idx}`);
+  card.classList.toggle("expanded");
+  const checks = card.querySelector(".cat-checks");
+  checks.style.display = checks.style.display === "none" ? "flex" : "none";
+}
+
+// ═══════════════════════════════════════════════════
+// EMPTY STATE (initial)
+// ═══════════════════════════════════════════════════
+function showEmpty() {
+  document.getElementById("pageTitle").innerHTML = `Dashboard <span>— Overview</span>`;
+  document.getElementById("contentArea").innerHTML = `
+    <div class="empty-state" style="height:calc(100vh - 120px);">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      <h3>No endpoints connected</h3>
+      <p>Deploy <b>BASAgent.exe</b> on one or more Windows endpoints.  The agent will register here automatically and begin running simulations.</p>
+    </div>`;
+}
+showEmpty();
+
+// ═══════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════
+let toastId = 0;
+function toast(type, msg) {
+  const id = ++toastId;
+  const el = document.getElementById("toasts");
+  el.insertAdjacentHTML("beforeend", `<div class="toast ${type}" id="toast-${id}">${msg}</div>`);
+  setTimeout(() => { const t = document.getElementById(`toast-${id}`); if(t) t.remove(); }, 4000);
+}
+
+// ═══════════════════════════════════════════════════
+// UTIL
+// ═══════════════════════════════════════════════════
+function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+async function downloadPDF(agentId) {
+    const report = reports[agentId];
+    if (!report) return;
+
+    const host = report.hostname || report.Hostname || "Endpoint";
+    const element = document.getElementById('contentArea');
+    
+    toast("info", "Preparing PDF report...");
+
+    // 1. Temporarily expand all categories so they are visible in the PDF
+    const catCards = element.querySelectorAll('.cat-card');
+    const originalStates = []; // Store which ones were actually closed
+    
+    catCards.forEach((card, i) => {
+        const checks = card.querySelector('.cat-checks');
+        originalStates[i] = checks.style.display;
+        card.classList.add('expanded');
+        checks.style.display = 'flex';
+    });
+
+    // 2. Setup PDF options (Dark mode friendly)
+    const opt = {
+        margin:       [0.4, 0.4],
+        filename:     `BAS_Report_${host}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { 
+            scale: 2, 
+            useCORS: true, 
+            backgroundColor: '#0a0c0f', // Match your --bg-base
+            ignoreElements: (el) => el.classList.contains('no-pdf')
+        },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+
+    try {
+        // 3. Generate and Save
+        await html2pdf().set(opt).from(element).save();
+        toast("ok", "Report saved as PDF");
+    } catch (err) {
+        console.error("PDF Export Error:", err);
+        toast("warn", "PDF generation failed.");
+    } finally {
+        // 4. Restore the UI to how it was before the print
+        catCards.forEach((card, i) => {
+            const checks = card.querySelector('.cat-checks');
+            if (originalStates[i] === 'none') {
+                card.classList.remove('expanded');
+                checks.style.display = 'none';
+            }
+        });
+    }
+}
+initApp();
+
+</script>
+</body>
+</html>

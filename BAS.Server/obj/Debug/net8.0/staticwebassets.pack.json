@@ -1,0 +1,41 @@
+{
+  "Files": [
+    {
+      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\index.html",
+      "PackagePath": "staticwebassets\\index.html"
+    },
+    {
+      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\signalr.js",
+      "PackagePath": "staticwebassets\\signalr.js"
+    },
+    {
+      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\signalr.js.map",
+      "PackagePath": "staticwebassets\\signalr.js.map"
+    },
+    {
+      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\signalr.min.js",
+      "PackagePath": "staticwebassets\\signalr.min.js"
+    },
+    {
+      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\signalr.min.js.map",
+      "PackagePath": "staticwebassets\\signalr.min.js.map"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.BAS.Server.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.build.BAS.Server.props",
+      "PackagePath": "build\\BAS.Server.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildMultiTargeting.BAS.Server.props",
+      "PackagePath": "buildMultiTargeting\\BAS.Server.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildTransitive.BAS.Server.props",
+      "PackagePath": "buildTransitive\\BAS.Server.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

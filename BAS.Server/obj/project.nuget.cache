@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "2IAqqdp6Nlg=",
+  "success": true,
+  "projectFilePath": "E:\\claude\\1\\BAS.Server\\BAS.Server.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Hardware\\.nuget\\packages\\system.text.json\\8.0.6\\system.text.json.8.0.6.nupkg.sha512"
+  ],
+  "logs": []
+}
