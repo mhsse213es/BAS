@@ -1,0 +1,61 @@
+# BAS Platform — Helm values
+# Override with: helm upgrade --install bas-platform ./helm/bas-platform -f values-prod.yaml
+
+global:
+  imageRegistry: ""      # set to your private registry, e.g. registry.internal/bas
+  imagePullPolicy: IfNotPresent
+  namespace: bas-platform
+
+# ── Orchestrator (Go) ─────────────────────────────────────────────────────────
+orchestrator:
+  image: bas-orchestrator
+  tag: "1.0.0"
+  replicas: 1
+  port: 9000
+  config:
+    httpPort: 9000
+    scenariosDir: /scenarios
+    jwtSecret: ""          # REQUIRED — set via --set or values-prod.yaml
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ── Python API ────────────────────────────────────────────────────────────────
+api:
+  image: bas-api
+  tag: "1.0.0"
+  replicas: 2
+  port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ── PostgreSQL (External — runs on the Ubuntu host, not in k3s) ───────────────
+postgres:
+  host: postgres.bas-data.svc.cluster.local   # ExternalName service target
+  port: 5432
+  database: bas_platform
+  user: bas_user
+  password: ""     # REQUIRED — set via --set or sealed secret
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  host: bas.internal          # change to your FQDN
+  tlsEnabled: false           # set true with cert-manager in production
+  tlsSecretName: bas-tls
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+
+# ── Network Policy ────────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true               # default-deny with explicit allow rules

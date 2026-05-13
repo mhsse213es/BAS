@@ -1,0 +1,42 @@
+Task: Revert Claude Code back to using Claude (Anthropic) as the model.
+Do the following steps in order. Do nothing else.
+
+## Step 1: Clean up ~/.zshrc (or ~/.bashrc)
+
+Open the user's shell config file (~/.zshrc or ~/.bashrc) and remove the following environment variable exports if they exist:
+
+export ANTHROPIC_BASE_URL
+export ANTHROPIC_AUTH_TOKEN
+export ANTHROPIC_API_KEY
+export ANTHROPIC_MODEL
+export OPENROUTER_API_KEY
+
+Remove only these exact lines. Do not remove any other lines or exports. If none of these exist, skip this step.
+
+## Step 2: Clean up ~/.claude/settings.json
+
+Open setting.json and remove the following keys from inside the "env" block if they exist:
+
+ANTHROPIC_BASE_URL
+ANTHROPIC_AUTH_TOKEN
+ANTHROPIC_API_KEY
+ANTHROPIC_MODEL
+
+Do not remove any other keys. Do not delete the file. If the "env" block becomes empty, remove the empty block too.
+Also remove the top-level "model" key if it is set to "sonnet[1m]".
+
+## Step 3: Unset variables in the current shell
+
+Run these commands to clear any active environment variables from the current session:
+
+unset ANTHROPIC_BASE_URL
+unset ANTHROPIC_AUTH_TOKEN
+unset ANTHROPIC_API_KEY
+unset ANTHROPIC_MODEL
+unset OPENROUTER_API_KEY
+
+## Step 4: Confirm what you did
+
+List exactly which keys you removed from each file, and which variables you unset. If you found nothing to remove in a step, say so.
+
+Stop there. Do not install anything, do not modify any other files, do not run claude login.

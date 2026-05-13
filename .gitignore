@@ -1,0 +1,34 @@
+# ── .NET build output ──────────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# ── Go build output ────────────────────────────────────────────────────────────
+orchestrator/bas-orchestrator
+orchestrator/*.exe
+
+# ── Python ─────────────────────────────────────────────────────────────────────
+api/venv/
+api/__pycache__/
+api/*.pyc
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ── Secrets / config with real credentials ─────────────────────────────────────
+orchestrator/config.json
+.env
+*.env
+secrets.yaml
+
+# ── Node (legacy BAS.Agent frontend deps) ──────────────────────────────────────
+node_modules/
+
+# ── OS / editor ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

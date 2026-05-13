@@ -1,0 +1,93 @@
+ Step 1 — Set the Server IP in the Agent config
+                                                                                                             Edit BAS.Agent/appsettings.json and set your server's IP:
+  {                                                                                                              "ServerUrl": "http://192.168.1.100:5000",
+      "ConnectionRetryIntervalSeconds": 5,
+      "MaxConnectionRetries": 10
+  }
+
+  ---
+  Step 2 — Build & package the Agent
+
+  Run this from the repo root in PowerShell:
+  dotnet publish BAS.Agent -c Release -r win-x64 --self-contained true -o BAS.Agent/publish
+
+  # Create the ZIP and place it in the server's downloads folder
+  New-Item -ItemType Directory -Force "BAS.Server\wwwroot\downloads"
+  Compress-Archive -Force -Path "BAS.Agent\publish\*" -DestinationPath
+  "BAS.Server\wwwroot\downloads\BASAgent.zip"
+
+  ---
+  Step 3 — Run the Server
+
+  dotnet run --project BAS.Server
+
+  Step 1 — Set the Server IP in the Agent config
+
+  Edit BAS.Agent/appsettings.json and set your server's IP:
+  {
+      "ServerUrl": "http://192.168.1.100:5000",
+      "ConnectionRetryIntervalSeconds": 5,
+      "MaxConnectionRetries": 10
+  }
+
+  ---
+  Step 2 — Build & package the Agent
+
+  Run this from the repo root in PowerShell:
+  dotnet publish BAS.Agent -c Release -r win-x64 --self-contained true -o BAS.Agent/publish
+  
+
+  # Create the ZIP and place it in the server's downloads folder
+  New-Item -ItemType Directory -Force "BAS.Server\wwwroot\downloads"
+  Compress-Archive -Force -Path "BAS.Agent\publish\*" -DestinationPath "BAS.Server\wwwroot\downloads\BASAgent.zip"
+
+  ---
+  Step 3 — Run the Server
+
+  dotnet run --project BAS.Server
+
+  Or to listen on all network interfaces (so other machines can reach it):
+  dotnet run --project BAS.Server --urls "http://0.0.0.0:5000"
+
+  ---
+  Step 4 — Access the Dashboard
+
+  Open a browser and go to:
+  http://<your-server-ip>:5000
+
+  ---
+  Step 5 — Download & run the Agent
+
+  From the dashboard, click Download Agent (top-right button). This downloads BASAgent.zip which is already pre-configured with your server's IP.
+
+  On the target machine:
+  1. Extract BASAgent.zip
+  2. Run BASAgent.exe as Administrator
+  3. The agent will appear on the dashboard automatically
+
+  ---
+
+  ▎ Note: If you change the server IP later, just update BAS.Agent/appsettings.json and repeat Steps 2–3 to re-package the agent.
+
+✻ Crunched for 14s
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> build and package the agent
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ accept edits on (shift+tab to cycle)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

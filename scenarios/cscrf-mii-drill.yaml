@@ -1,0 +1,151 @@
+id: cscrf-mii-drill
+name: CSCRF-MII Core Control Validation Drill
+description: >
+  Validates the core security controls mandated by SEBI's Cyber Security and
+  Cyber Resilience Framework for Market Infrastructure Institutions (CSCRF-MII,
+  SEBI Circular SEBI/HO/MRD/MRD-PoD-1/P/CIR/2023/149).
+  Covers the five CSCRF control domains: Network Security, Access Management,
+  Data Security, Monitoring & Detection, and Business Continuity.
+  Simulations are safe and do not disrupt production systems.
+author: Audspect Research
+tags:
+  - cscrf
+  - sebi
+  - mii
+  - compliance
+  - bfsi
+  - india
+  - regulatory
+mitre_phases:
+  - initial-access
+  - defense-evasion
+  - credential-access
+  - discovery
+  - exfiltration
+
+steps:
+  # ── CSCRF Domain 1: Network Security ─────────────────────────────────────
+  - name: "CSCRF-1.1 — Network perimeter: test for open management ports"
+    technique_id: T1046
+    framework: custom
+    command: |
+      Write-Output "[CSCRF-1.1] Checking for open management ports (simulation)"
+      $ports = @(22,23,3389,5985,5986,445,135)
+      foreach ($p in $ports) {
+        $conn = Test-NetConnection -ComputerName localhost -Port $p -WarningAction SilentlyContinue
+        $state = if ($conn.TcpTestSucceeded) { "OPEN" } else { "CLOSED" }
+        Write-Output "  Port $p : $state"
+      }
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "CSCRF-1.2 — Firewall rule enumeration"
+    technique_id: T1518.001
+    framework: custom
+    command: |
+      Write-Output "[CSCRF-1.2] Enumerating Windows Firewall rules"
+      Get-NetFirewallRule -Enabled True -Direction Inbound |
+        Select-Object -First 10 DisplayName, Action, Profile |
+        Format-Table -AutoSize | Out-String
+    executor: powershell
+    timeout_sec: 20
+
+  # ── CSCRF Domain 2: Access Management ────────────────────────────────────
+  - name: "CSCRF-2.1 — Privileged account enumeration (local admins)"
+    technique_id: T1087.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "CSCRF-2.2 — Default/weak credential check (local accounts)"
+    technique_id: T1110.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "CSCRF-2.3 — Kerberos delegation misconfiguration check"
+    technique_id: T1558.003
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  # ── CSCRF Domain 3: Data Security ────────────────────────────────────────
+  - name: "CSCRF-3.1 — Audit log tampering resistance (test disable attempt)"
+    technique_id: T1562.002
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "CSCRF-3.2 — Sensitive data staging detection"
+    technique_id: T1560.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  # ── CSCRF Domain 4: Monitoring & Detection ───────────────────────────────
+  - name: "CSCRF-4.1 — Security tool inventory and health check"
+    technique_id: T1518.001
+    framework: custom
+    command: |
+      Write-Output "[CSCRF-4.1] Security tool inventory"
+      $tools = @(
+        @{Name="Windows Defender";  Key="HKLM:\SOFTWARE\Microsoft\Windows Defender"},
+        @{Name="Windows Firewall";  Key="HKLM:\SYSTEM\CurrentControlSet\Services\MpsSvc"},
+        @{Name="Windows Audit";     Key="HKLM:\SYSTEM\CurrentControlSet\Services\EventLog"}
+      )
+      foreach ($t in $tools) {
+        $exists = Test-Path $t.Key
+        $status = if ($exists) { "FOUND" } else { "NOT FOUND" }
+        Write-Output "  $($t.Name): $status"
+      }
+    executor: powershell
+    timeout_sec: 15
+
+  - name: "CSCRF-4.2 — Exfiltration control validation"
+    technique_id: T1041
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  # ── CSCRF Domain 5: Business Continuity ──────────────────────────────────
+  - name: "CSCRF-5.1 — Patch currency check (installed hotfixes)"
+    technique_id: T1082
+    framework: custom
+    command: |
+      Write-Output "[CSCRF-5.1] Checking patch currency"
+      $hotfixes = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 10
+      $latest   = $hotfixes | Select-Object -First 1
+      $daysSince = if ($latest.InstalledOn) {
+        (New-TimeSpan -Start $latest.InstalledOn -End (Get-Date)).Days
+      } else { 999 }
+      Write-Output "  Latest patch: $($latest.HotFixID) installed $daysSince days ago"
+      if ($daysSince -gt 30) {
+        Write-Output "  WARNING: Endpoint is more than 30 days behind on patches"
+      } else {
+        Write-Output "  OK: Endpoint patched within 30 days"
+      }
+    executor: powershell
+    timeout_sec: 20
+
+  - name: "CSCRF-5.2 — Backup process verification"
+    technique_id: T1490
+    framework: custom
+    command: |
+      Write-Output "[CSCRF-5.2] Checking VSS/backup status"
+      $shadows = Get-WmiObject Win32_ShadowCopy 2>$null
+      if ($shadows) {
+        Write-Output "  VSS shadow copies found: $($shadows.Count)"
+        $shadows | Select-Object -First 3 | ForEach-Object {
+          Write-Output "  - $($_.InstallDate) : $($_.VolumeName)"
+        }
+      } else {
+        Write-Output "  WARNING: No VSS shadow copies found — backup controls may be insufficient"
+      }
+    executor: powershell
+    timeout_sec: 20

@@ -1,0 +1,65 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bas-ingress
+  namespace: {{ .Values.global.namespace }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  {{- if .Values.ingress.tlsEnabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tlsSecretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          # WebSocket and scenario API → Go orchestrator
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: bas-orchestrator
+                port:
+                  number: {{ .Values.orchestrator.port }}
+          - path: /api/heartbeat
+            pathType: Exact
+            backend:
+              service:
+                name: bas-orchestrator
+                port:
+                  number: {{ .Values.orchestrator.port }}
+          - path: /api/report
+            pathType: Exact
+            backend:
+              service:
+                name: bas-orchestrator
+                port:
+                  number: {{ .Values.orchestrator.port }}
+          - path: /api/scenarios/result
+            pathType: Exact
+            backend:
+              service:
+                name: bas-orchestrator
+                port:
+                  number: {{ .Values.orchestrator.port }}
+          # All other API traffic → Python API
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: bas-api
+                port:
+                  number: {{ .Values.api.port }}
+          # Dashboard static files → Python API (or orchestrator)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bas-orchestrator
+                port:
+                  number: {{ .Values.orchestrator.port }}
+{{- end }}

@@ -1,0 +1,13 @@
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+or
+
+
+cd C:\Users\Administrator\Downloads\Audspect_Cloud\BAS.Server.Python
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+
+
+
+cd c:\Users\Administrator\Downloads\Audspect_Cloud\BAS.Agent.Go
+.\bas_agent.exe --config appsettings.json

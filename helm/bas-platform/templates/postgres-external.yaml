@@ -1,0 +1,13 @@
+# ExternalName service pointing to the PostgreSQL instance running on the Ubuntu host.
+# Change the externalName to the actual host IP if DNS resolution is not available.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: bas-data
+spec:
+  type: ExternalName
+  externalName: {{ .Values.postgres.host | replace ".bas-data.svc.cluster.local" "" | default "host.k3s.internal" }}
+  ports:
+    - port: {{ .Values.postgres.port }}
+      targetPort: {{ .Values.postgres.port }}

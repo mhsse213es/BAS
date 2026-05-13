@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BAS Platform</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0d1117;
+  --surface: #161b22;
+  --border:  #30363d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --accent:  #58a6ff;
+  --green:   #3fb950;
+  --red:     #f85149;
+  --yellow:  #d29922;
+  --radius:  6px;
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ── Login ── */
+#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.login-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 2rem; width: 360px;
+}
+.login-card h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+.login-card .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.35rem;
+                    text-transform: uppercase; letter-spacing: 0.04em; }
+.form-group input {
+  width: 100%; padding: 0.5rem 0.75rem;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 0.9rem;
+}
+.form-group input:focus { outline: none; border-color: var(--accent); }
+.error-msg { color: var(--red); font-size: 0.8rem; margin-top: 0.5rem; min-height: 1.2em; }
+
+/* ── Buttons ── */
+.btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.45rem 0.9rem;
+       border-radius: var(--radius); font-size: 0.85rem; cursor: pointer; border: none;
+       font-weight: 500; transition: opacity 0.15s; }
+.btn:hover { opacity: 0.85; }
+.btn-primary       { background: var(--accent); color: #0d1117; width: 100%; justify-content: center; padding: 0.6rem; }
+.btn-outline-green { background: transparent; color: var(--green); border: 1px solid var(--green); }
+.btn-outline-red   { background: transparent; color: var(--red);   border: 1px solid var(--red); }
+.btn-outline       { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-sm { padding: 0.3rem 0.65rem; font-size: 0.78rem; }
+
+/* ── App shell ── */
+#app { display: none; flex-direction: column; min-height: 100vh; }
+
+header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 0 1.5rem; height: 52px; display: flex; align-items: center; gap: 0.75rem;
+}
+header .logo { font-weight: 700; font-size: 0.95rem; letter-spacing: -0.02em; }
+header .logo span { color: var(--accent); }
+.badge { font-size: 0.7rem; padding: 0.2rem 0.55rem; border-radius: 20px;
+         background: #1f2937; border: 1px solid var(--border); color: var(--muted); }
+header .spacer { flex: 1; }
+.ws-indicator { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--muted); }
+.ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+.ws-dot.on { background: var(--green); }
+
+nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; }
+.tab { padding: 0.7rem 1rem; cursor: pointer; font-size: 0.875rem;
+       color: var(--muted); border-bottom: 2px solid transparent; transition: color 0.15s; user-select: none; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+main { flex: 1; padding: 1.5rem; max-width: 1280px; width: 100%; margin: 0 auto; }
+
+/* ── Section header ── */
+.sec-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.sec-hdr h2 { font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+.cnt { font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 20px;
+       background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+
+/* ── Table ── */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+table { width: 100%; border-collapse: collapse; font-size: 0.855rem; }
+th { text-align: left; padding: 0.6rem 0.85rem; font-size: 0.72rem; text-transform: uppercase;
+     letter-spacing: 0.05em; color: var(--muted); background: var(--surface); border-bottom: 1px solid var(--border); }
+td { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: rgba(255,255,255,0.02); }
+code { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82em;
+       background: #1f2937; padding: 0.1rem 0.35rem; border-radius: 3px; }
+
+/* ── Status badges ── */
+.sbadge { font-size: 0.73rem; padding: 0.18rem 0.55rem; border-radius: 20px; font-weight: 500; }
+.s-idle       { background: #1e2530; color: var(--muted); }
+.s-scanning   { background: #1c2e4a; color: var(--accent); }
+.s-offline    { background: #2d1b1b; color: var(--red); }
+.s-running    { background: #1c2e4a; color: var(--accent); }
+.s-completed  { background: #1b2d1b; color: var(--green); }
+.s-failed     { background: #2d1b1b; color: var(--red); }
+.s-dispatched { background: #1c2e4a; color: var(--accent); }
+
+/* ── Cards ── */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1rem; }
+.card { background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.card h3 { font-size: 0.9rem; font-weight: 600; }
+.card p  { font-size: 0.8rem; color: var(--muted); flex: 1; }
+.tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.tag  { font-size: 0.68rem; padding: 0.12rem 0.4rem; border-radius: 20px;
+        background: #1f2937; border: 1px solid var(--border); color: var(--muted); }
+
+/* ── Modal ── */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+           display: none; align-items: center; justify-content: center; z-index: 100; }
+.overlay.open { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border);
+         border-radius: var(--radius); padding: 1.5rem; width: 400px; max-width: 94vw; }
+.modal h3 { margin-bottom: 0.4rem; font-size: 0.95rem; }
+.modal .sub2 { font-size: 0.78rem; color: var(--muted); margin-bottom: 1rem; }
+.modal select { width: 100%; padding: 0.5rem 0.75rem; background: var(--bg);
+                border: 1px solid var(--border); border-radius: var(--radius);
+                color: var(--text); font-size: 0.875rem; margin-bottom: 0.75rem; }
+.modal-lbl { font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 0.3rem; }
+.modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.25rem; }
+
+/* ── Toast ── */
+#toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--surface);
+         border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem;
+         font-size: 0.855rem; max-width: 320px; display: none; z-index: 200; }
+#toast.show { display: block; }
+#toast.ok  { border-left: 3px solid var(--green); }
+#toast.err { border-left: 3px solid var(--red); }
+
+.empty { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 0.855rem; }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>BAS <span style="color:var(--accent)">Platform</span></h1>
+    <p class="sub">Breach &amp; Attack Simulation — Sign in</p>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="inp-user" value="admin" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="inp-pass" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()">Sign in</button>
+    <div id="login-err" class="error-msg"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <header>
+    <div class="logo">BAS <span>Platform</span></div>
+    <span id="role-badge" class="badge">—</span>
+    <div class="spacer"></div>
+    <div class="ws-indicator">
+      <div id="ws-dot" class="ws-dot"></div>
+      <span id="ws-label">disconnected</span>
+    </div>
+    <button class="btn btn-outline-red btn-sm" onclick="doLogout()" style="margin-left:0.75rem">Sign out</button>
+  </header>
+
+  <nav>
+    <div class="tab active" data-tab="agents"    onclick="showTab('agents')">Agents</div>
+    <div class="tab"        data-tab="scenarios" onclick="showTab('scenarios')">Scenarios</div>
+    <div class="tab"        data-tab="runs"      onclick="showTab('runs')">Runs</div>
+  </nav>
+
+  <main>
+    <!-- Agents tab -->
+    <div id="tab-agents">
+      <div class="sec-hdr">
+        <h2>Registered Agents <span id="agent-cnt" class="cnt">0</span></h2>
+        <button class="btn btn-outline btn-sm" onclick="loadAgents()">&#8635; Refresh</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Agent ID</th><th>Hostname</th><th>OS Version</th>
+            <th>Username</th><th>Status</th><th>Env</th><th>Last Seen</th><th>Action</th>
+          </tr></thead>
+          <tbody id="agents-body">
+            <tr><td colspan="8" class="empty">No agents registered yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Scenarios tab -->
+    <div id="tab-scenarios" style="display:none">
+      <div class="sec-hdr">
+        <h2>BFSI Scenarios <span id="sc-cnt" class="cnt">0</span></h2>
+        <button class="btn btn-outline btn-sm" onclick="loadScenarios()">&#8635; Refresh</button>
+      </div>
+      <div id="sc-grid" class="cards"></div>
+    </div>
+
+    <!-- Runs tab -->
+    <div id="tab-runs" style="display:none">
+      <div class="sec-hdr">
+        <h2>Scenario Runs <span id="runs-cnt" class="cnt">0</span></h2>
+        <button class="btn btn-outline btn-sm" onclick="loadRuns()">&#8635; Refresh</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Run ID</th><th>Scenario</th><th>Agent</th><th>Status</th><th>Started</th><th>Completed</th>
+          </tr></thead>
+          <tbody id="runs-body">
+            <tr><td colspan="6" class="empty">No runs yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Run Modal -->
+<div id="run-overlay" class="overlay">
+  <div class="modal">
+    <h3 id="modal-title">Run Scenario</h3>
+    <p class="sub2">Select scenario and target agent, then click Run.</p>
+    <div id="modal-sc-wrap">
+      <label class="modal-lbl">SCENARIO</label>
+      <select id="modal-sc"></select>
+    </div>
+    <label class="modal-lbl">TARGET AGENT</label>
+    <select id="modal-agent"></select>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-outline-green btn-sm" onclick="confirmRun()">&#9654; Run</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+var TOKEN    = localStorage.getItem('bas_token') || '';
+var ROLE     = localStorage.getItem('bas_role')  || '';
+var socket   = null;
+var scenarios = [];
+var agents   = [];
+var _toast;
+var _modalScId = null;
+
+window.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('inp-pass').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doLogin();
+  });
+  if (TOKEN) bootApp();
+});
+
+function doLogin() {
+  var username = document.getElementById('inp-user').value.trim();
+  var password = document.getElementById('inp-pass').value;
+  document.getElementById('login-err').textContent = '';
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: username, password: password })
+  })
+  .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
+  .then(function(res) {
+    if (!res.ok) throw new Error(res.d.error || 'Login failed');
+    TOKEN = res.d.token; ROLE = res.d.role;
+    localStorage.setItem('bas_token', TOKEN);
+    localStorage.setItem('bas_role', ROLE);
+    bootApp();
+  })
+  .catch(function(e) { document.getElementById('login-err').textContent = e.message; });
+}
+
+function doLogout() {
+  TOKEN = ''; ROLE = '';
+  localStorage.removeItem('bas_token');
+  localStorage.removeItem('bas_role');
+  if (socket) socket.close();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('inp-pass').value = '';
+}
+
+function bootApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('role-badge').textContent = ROLE;
+  connectWS();
+  loadAgents();
+  loadScenarios();
+  loadRuns();
+}
+
+function showTab(name) {
+  ['agents','scenarios','runs'].forEach(function(t) {
+    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
+    document.querySelector('[data-tab="' + t + '"]').classList.toggle('active', t === name);
+  });
+}
+
+function apicall(path, opts) {
+  opts = opts || {};
+  return fetch(path, Object.assign({}, opts, {
+    headers: Object.assign({ 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, opts.headers || {})
+  }))
+  .then(function(r) {
+    if (r.status === 401) { doLogout(); throw new Error('Session expired'); }
+    return r.json();
+  });
+}
+
+function loadAgents() {
+  apicall('/api/agents').then(function(data) {
+    agents = data;
+    document.getElementById('agent-cnt').textContent = agents.length;
+    var tbody = document.getElementById('agents-body');
+    if (!agents.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">No agents registered yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = agents.map(function(a) {
+      return '<tr>' +
+        '<td><code>' + x(a.agentId) + '</code></td>' +
+        '<td>' + x(a.hostname) + '</td>' +
+        '<td style="color:var(--muted);font-size:0.8rem">' + x(a.osVersion || '—') + '</td>' +
+        '<td>' + x(a.username || '—') + '</td>' +
+        '<td><span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span></td>' +
+        '<td><span class="tag">' + x(a.envLabel || '—') + '</span></td>' +
+        '<td style="color:var(--muted);font-size:0.79rem">' + ago(a.lastUpdate) + '</td>' +
+        '<td><button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run</button></td>' +
+        '</tr>';
+    }).join('');
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function loadScenarios() {
+  apicall('/api/scenarios').then(function(data) {
+    scenarios = data;
+    document.getElementById('sc-cnt').textContent = scenarios.length;
+    var grid = document.getElementById('sc-grid');
+    if (!scenarios.length) {
+      grid.innerHTML = '<p class="empty">No scenarios loaded.</p>';
+      return;
+    }
+    grid.innerHTML = scenarios.map(function(s) {
+      var tags = (s.tags || []).map(function(t) { return '<span class="tag">' + x(t) + '</span>'; }).join('');
+      return '<div class="card">' +
+        '<h3>' + x(s.name) + '</h3>' +
+        '<p>' + x(s.description || '') + '</p>' +
+        '<div class="tags">' + tags + '<span class="tag">' + (s.steps || []).length + ' steps</span></div>' +
+        '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run Scenario</button>' +
+        '</div>';
+    }).join('');
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function loadRuns() {
+  apicall('/api/scenarios/runs').then(function(runs) {
+    document.getElementById('runs-cnt').textContent = runs.length;
+    var tbody = document.getElementById('runs-body');
+    if (!runs.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No runs yet. Go to Scenarios and run one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = runs.map(function(r) {
+      return '<tr>' +
+        '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
+        '<td>' + x(r.name) + '</td>' +
+        '<td><code>' + x(r.agentId) + '</code></td>' +
+        '<td><span class="sbadge s-' + x(r.status) + '">' + x(r.status) + '</span></td>' +
+        '<td style="color:var(--muted);font-size:0.8rem">' + fmtDate(r.startedAt) + '</td>' +
+        '<td style="color:var(--muted);font-size:0.8rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
+        '</tr>';
+    }).join('');
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function openModal(scenarioId, preAgent) {
+  _modalScId = scenarioId;
+  if (scenarios.length === 0) { showToast('Scenarios not loaded yet', 'err'); return; }
+  if (agents.length === 0)    { showToast('No agents registered yet', 'err'); return; }
+
+  var scSel  = document.getElementById('modal-sc');
+  var scWrap = document.getElementById('modal-sc-wrap');
+  scSel.innerHTML = scenarios.map(function(s) {
+    return '<option value="' + x(s.id) + '"' + (s.id === scenarioId ? ' selected' : '') + '>' + x(s.name) + '</option>';
+  }).join('');
+  scWrap.style.display = scenarioId ? 'none' : 'block';
+
+  var sc = scenarioId ? scenarios.find(function(s) { return s.id === scenarioId; }) : null;
+  document.getElementById('modal-title').textContent = sc ? 'Run: ' + sc.name : 'Run Scenario';
+
+  var agSel = document.getElementById('modal-agent');
+  agSel.innerHTML = agents.map(function(a) {
+    return '<option value="' + x(a.agentId) + '"' + (a.agentId === preAgent ? ' selected' : '') + '>' +
+           x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
+  }).join('');
+
+  document.getElementById('run-overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('run-overlay').classList.remove('open');
+  _modalScId = null;
+}
+
+function confirmRun() {
+  var scenarioId = _modalScId || document.getElementById('modal-sc').value;
+  var agentId    = document.getElementById('modal-agent').value;
+  if (!scenarioId || !agentId) { showToast('Select scenario and agent', 'err'); return; }
+  apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
+    method: 'POST',
+    body: JSON.stringify({ agentId: agentId })
+  }).then(function(res) {
+    closeModal();
+    showToast('Dispatched — Run ID: ' + res.runId, 'ok');
+    showTab('runs');
+    loadRuns();
+  }).catch(function(e) { showToast('Run failed: ' + e.message, 'err'); });
+}
+
+function connectWS() {
+  if (socket) socket.close();
+  var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  socket = new WebSocket(proto + '//' + location.host + '/ws/browser');
+  socket.onopen = function() {
+    document.getElementById('ws-dot').classList.add('on');
+    document.getElementById('ws-label').textContent = 'live';
+  };
+  socket.onclose = function() {
+    document.getElementById('ws-dot').classList.remove('on');
+    document.getElementById('ws-label').textContent = 'reconnecting...';
+    setTimeout(connectWS, 5000);
+  };
+  socket.onmessage = function(evt) {
+    try {
+      var msg = JSON.parse(evt.data);
+      if (msg.type === 'agentUpdate')     loadAgents();
+      if (msg.type === 'scenario_result') { loadRuns(); loadAgents(); }
+      if (msg.type === 'reportReady')     showToast('Report ready: ' + msg.agentId, 'ok');
+    } catch(e) {}
+  };
+}
+
+function x(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function ago(iso) {
+  if (!iso) return '—';
+  var s = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (s < 60)   return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  return Math.floor(s/3600) + 'h ago';
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString();
+}
+function showToast(msg, type) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + (type || 'ok');
+  clearTimeout(_toast);
+  _toast = setTimeout(function() { el.className = ''; }, 3800);
+}
+</script>
+</body>
+</html>

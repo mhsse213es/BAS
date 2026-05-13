@@ -1,0 +1,7 @@
+Phase 2 — Tool Expansion + Compliance Engine 
+1.Add Infection Monkey (isolated GPLv3 microservice), Stratus Red Team, APTSimulator, Metta-pattern scenario format,
+firedrill ransomware module.
+2. Build CSCRF / RBI / IRDAI / CERT-In / NIST CSF / ISO 27001:2022 control mapper and report templates.
+3. Reporting engine + audit-pack export.
+4. Threat-intel ingestion (MISP/OpenCTI connector).
+5. Hardened appliance image (ubuntu + k3s).

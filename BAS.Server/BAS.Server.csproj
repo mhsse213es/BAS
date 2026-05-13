@@ -5,6 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="8.0.*" />
+    <Compile Remove="SetupTables\**" />
+    <Content Remove="SetupTables\**" />
+    <EmbeddedResource Remove="SetupTables\**" />
+    <None Remove="SetupTables\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.*" />
   </ItemGroup>
 </Project>

@@ -1,534 +1,2042 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>BAS — Breach Attack Simulator Console</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<style>
-.no-pdf { display: block; }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-/* ─── RESET & VARIABLES ─── */
-
-
-:root {
-  --bg-base:      #0a0c0f;
-  --bg-card:      #111418;
-  --bg-card2:     #161a20;
-  --bg-hover:     #1c2128;
-  --bg-active:    #1a2332;
-  --border:       #232c37;
-  --border-light: #2e3944;
-  --text-primary: #e2e6ea;
-  --text-dim:     #7a8590;
-  --text-muted:   #4f5a65;
-  --accent:       #00d4aa;        /* teal */
-  --accent-dim:   #00a882;
-  --red:          #ff4f5a;
-  --red-dim:      #cc3f48;
-  --amber:        #f0a500;
-  --blue:         #4da6ff;
-  --pass-bg:      rgba(0,212,170,.08);
-  --fail-bg:      rgba(255,79,90,.08);
-  --font-mono:    'SF Mono','Fira Code','Consolas',monospace;
-  --font-sans:    'Inter','Segoe UI',system-ui,sans-serif;
-  --radius:       8px;
-  --transition:   .2s cubic-bezier(.4,0,.2,1);
-}
-
-html, body { height:100%; }
-body {
-  font-family: var(--font-sans);
-  background: var(--bg-base);
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.5;
-  overflow: hidden;
-  user-select: none;
-}
-
-/* ─── LAYOUT ─── */
-.shell { display:flex; height:100vh; }
-
-/* ── SIDEBAR ── */
-.sidebar {
-  width: 300px;
-  min-width: 300px;
-  background: var(--bg-card);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.sidebar-header {
-  padding: 22px 20px 14px;
-  border-bottom: 1px solid var(--border);
-}
-.sidebar-header .logo {
-  display: flex; align-items: center; gap: 10px;
-}
-.sidebar-header .logo svg { flex-shrink:0; }
-.sidebar-header .logo-text { font-size: 18px; font-weight: 700; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; font-family: var(--font-mono); }
-.sidebar-header .logo-sub { font-size: 10px; color: var(--text-muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
-
-.sidebar-search {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.sidebar-search input {
-  width: 100%;
-  background: var(--bg-card2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 10px 8px 32px;
-  color: var(--text-primary);
-  font-size: 13px;
-  outline: none;
-  transition: border-color var(--transition);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%234f5a65' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: 10px center;
-}
-.sidebar-search input:focus { border-color: var(--accent); }
-.sidebar-search input::placeholder { color: var(--text-muted); }
-
-.tree-section-label {
-  padding: 10px 18px 4px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1.4px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-.tree { flex: 1; overflow-y: auto; padding: 4px 0 12px; }
-
-.tree-node {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 18px;
-  cursor: pointer;
-  transition: background var(--transition);
-  border-left: 3px solid transparent;
-  position: relative;
-}
-.tree-node:hover { background: var(--bg-hover); }
-.tree-node.active { background: var(--bg-active); border-left-color: var(--accent); }
-.tree-node.active .node-name { color: #fff; }
-
-.node-icon {
-  width: 34px; height: 34px;
-  border-radius: 7px;
-  background: var(--bg-card2);
-  border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.tree-node.active .node-icon { background: rgba(0,212,170,.1); border-color: var(--accent); }
-
-.node-info { flex:1; min-width:0; }
-.node-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); }
-.node-ip   { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
-
-.node-badge {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 20px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.badge-idle   { background: rgba(79,90,101,.25); color: var(--text-muted); }
-.badge-running{ background: rgba(77,166,255,.15); color: var(--blue); animation: pulse 1.8s infinite; }
-.badge-done   { background: var(--pass-bg); color: var(--accent); }
-
-@keyframes pulse {
-  0%,100% { opacity:1; }
-  50%     { opacity:.5; }
-}
-
-/* ── MAIN CONTENT ── */
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--bg-base);
-}
-
-/* top bar */
-.topbar {
-  height: 52px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-card);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 28px;
-  flex-shrink: 0;
-}
-.topbar-left { display:flex; align-items:center; gap: 14px; }
-.topbar-left .page-title { font-size: 15px; font-weight: 600; }
-.topbar-left .page-title span { color: var(--text-muted); font-weight: 400; }
-.topbar-right { display:flex; align-items:center; gap:16px; }
-.status-dot { width:8px; height:8px; border-radius:50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
-.status-dot.off { background: var(--red); box-shadow: 0 0 6px var(--red); }
-.status-label { font-size: 12px; color: var(--text-muted); }
-
-/* scrollable body */
-.content-wrap { flex:1; overflow-y: auto; padding: 28px; }
-
-/* ── EMPTY STATE ── */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 16px;
-  color: var(--text-muted);
-}
-.empty-state svg { opacity: .35; }
-.empty-state h3 { font-size: 16px; color: var(--text-primary); font-weight: 600; }
-.empty-state p { font-size: 13px; max-width: 380px; text-align: center; line-height: 1.6; }
-
-/* ── REPORT VIEW ── */
-.report-header {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  margin-bottom: 24px;
-  flex-wrap: wrap; gap: 16px;
-}
-.report-host-info h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-.report-host-info .meta { font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); display: flex; gap: 20px; flex-wrap: wrap; }
-.report-host-info .meta span::before { content: ''; display:inline-block; width:6px; height:6px; border-radius:50%; background: var(--text-muted); margin-right:6px; vertical-align: middle; }
-
-/* score ring */
-.score-ring-wrap {
-  display: flex; align-items: center; gap: 18px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 22px;
-  flex-shrink:0;
-}
-.score-ring { position: relative; width: 72px; height: 72px; }
-.score-ring svg { transform: rotate(-90deg); }
-.score-ring .score-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; }
-.score-ring .score-num { font-size: 20px; font-weight: 700; font-family: var(--font-mono); color: var(--accent); line-height:1; }
-.score-ring .score-pct { font-size: 9px; color: var(--text-muted); margin-top: 2px; letter-spacing:.5px; }
-.score-stats { display:flex; flex-direction:column; gap:4px; }
-.score-stats .stat-row { display:flex; align-items:center; gap:8px; font-size:12px; }
-.stat-dot { width:10px; height:10px; border-radius:3px; }
-.stat-dot.pass { background: var(--accent); }
-.stat-dot.fail { background: var(--red); }
-.stat-label { color: var(--text-dim); }
-.stat-val   { font-weight:700; font-family: var(--font-mono); color: var(--text-primary); }
-
-/* category cards */
-.categories { display: flex; flex-direction: column; gap: 12px; }
-.cat-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  transition: border-color var(--transition);
-}
-.cat-card:hover { border-color: var(--border-light); }
-.cat-card.expanded .cat-header { border-bottom: 1px solid var(--border); }
-
-.cat-header {
-  display: flex; align-items: center; padding: 14px 18px; cursor: pointer; gap: 12px; user-select:none;
-}
-.cat-header:hover { background: var(--bg-hover); }
-.cat-phase-badge {
-  font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
-  padding: 3px 8px; border-radius: 4px;
-  background: rgba(77,166,255,.12); color: var(--blue);
-  flex-shrink:0;
-}
-.cat-name { flex:1; font-size:14px; font-weight:600; }
-.cat-mini-bar { width: 80px; height: 6px; border-radius: 3px; background: var(--bg-card2); overflow:hidden; flex-shrink:0; }
-.cat-mini-bar .bar-fill { height:100%; border-radius: 3px; background: var(--accent); transition: width .4s; }
-.cat-mini-bar .bar-fill.bad { background: var(--red); }
-.cat-chevron { width:16px; color: var(--text-muted); transition: transform .2s; flex-shrink:0; }
-.cat-card.expanded .cat-chevron { transform: rotate(90deg); }
-.cat-score-badge { font-size:11px; font-weight:700; font-family: var(--font-mono); flex-shrink:0; }
-.cat-score-badge.good { color: var(--accent); }
-.cat-score-badge.bad  { color: var(--red); }
-
-/* checks table inside category */
-.cat-checks { display: flex; flex-direction: column; }
-.check-row {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 11px 18px;
-  border-bottom: 1px solid rgba(35,44,55,.5);
-  transition: background var(--transition);
-}
-.check-row:last-child { border-bottom: none; }
-.check-row:hover { background: var(--bg-hover); }
-
-.check-badge {
-  flex-shrink:0; width: 60px; text-align: center;
-  font-size: 10px; font-weight: 700; letter-spacing:.8px; text-transform:uppercase;
-  padding: 3px 0; border-radius: 4px; margin-top: 2px;
-}
-.check-badge.pass { background: var(--pass-bg); color: var(--accent); }
-.check-badge.fail { background: var(--fail-bg); color: var(--red); }
-.check-badge.skip { background: rgba(79,90,101,.2); color: var(--text-muted); }
-
-.check-body { flex:1; min-width:0; }
-.check-name { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 3px; }
-.check-technique { font-size: 10px; font-family: var(--font-mono); color: var(--blue); font-weight:600; display:inline-block; background: rgba(77,166,255,.1); padding: 1px 6px; border-radius:3px; margin-bottom: 4px; }
-.check-detail { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
-.check-rem {
-  margin-top: 6px; font-size: 11px;
-  background: var(--fail-bg); border: 1px solid rgba(255,79,90,.2);
-  border-radius: 5px; padding: 6px 10px;
-  color: #f0a500; line-height: 1.5;
-  display: none;
-}
-.check-row.fail .check-rem { display: block; }
-.check-rem::before { content: '⚠ Remediation: '; font-weight:700; }
-
-.check-dur { flex-shrink:0; font-size:10px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 3px; white-space:nowrap; }
-
-/* ── MITRE MAP strip ── */
-.mitre-strip {
-  margin-top: 28px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
-}
-.mitre-strip h4 { font-size:12px; color: var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; font-weight:600; }
-.mitre-tags { display:flex; flex-wrap:wrap; gap:6px; }
-.mitre-tag {
-  font-size:11px; font-family: var(--font-mono); font-weight:600;
-  padding: 4px 10px; border-radius: 4px;
-  background: rgba(77,166,255,.1); color: var(--blue); border: 1px solid rgba(77,166,255,.2);
-}
-.mitre-tag.tactic { background: rgba(0,212,170,.1); color: var(--accent); border-color: rgba(0,212,170,.2); }
-
-/* ── SCROLLBAR ── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
-
-/* ── TOAST ── */
-.toast-wrap { position:fixed; top:20px; right:20px; z-index:999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
-.toast {
-  background: var(--bg-card); border:1px solid var(--border);
-  border-radius: var(--radius); padding: 12px 18px;
-  font-size: 13px; color: var(--text-primary);
-  box-shadow: 0 4px 20px rgba(0,0,0,.4);
-  display:flex; align-items:center; gap:10px;
-  animation: slideIn .25s ease;
-  pointer-events: auto;
-  max-width: 320px;
-}
-.toast.info  { border-left: 3px solid var(--blue); }
-.toast.ok    { border-left: 3px solid var(--accent); }
-.toast.warn  { border-left: 3px solid var(--amber); }
-@keyframes slideIn { from { transform:translateX(40px); opacity:0; } to { transform:translateX(0); opacity:1; } }
-</style>
-</head>
-<body>
-
-<!-- TOAST CONTAINER -->
-<div class="toast-wrap" id="toasts"></div>
-
-<div class="shell">
-  <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <div class="logo">
-        <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
-          <rect width="30" height="30" rx="6" fill="#111418" stroke="#00d4aa" stroke-width="1.5"/>
-          <path d="M15 6 L24 10 L24 18 L15 24 L6 18 L6 10 Z" stroke="#00d4aa" stroke-width="1.5" fill="none"/>
-          <path d="M15 12 L19 14 L19 18 L15 20 L11 18 L11 14 Z" fill="#00d4aa" opacity=".6"/>
-        </svg>
-        <div>
-          <div class="logo-text">BAS</div>
-          <div class="logo-sub">Breach Attack Simulator</div>
-        </div>
-      </div>
-    </div>
-    <div class="sidebar-search">
-      <input type="text" placeholder="Search endpoints…" id="searchInput" oninput="renderTree()" />
-    </div>
-    <div class="tree-section-label" id="treeLabel">Endpoints (0)</div>
-    <div class="tree" id="tree"></div>
-  </aside>
-
-  <!-- MAIN -->
-  <main class="main">
-    <div class="topbar">
-      <div class="topbar-left">
-        <div class="page-title" id="pageTitle">Dashboard <span>— Overview</span></div>
-      </div>
-      <div class="topbar-right">
-        <div class="status-label" id="connStatus">Connecting…</div>
-        <div class="status-dot off" id="connDot"></div>
-      </div>
-    </div>
-    <div class="content-wrap" id="contentArea">
-      <!-- injected dynamically -->
-    </div>
-  </main>
-</div>
-
-<script>
-// ═══════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════
-let agents   = [];   // [{agentId, hostname, ipAddress, osVersion, username, status, hasReport}]
-let reports  = {};   // { agentId → full report object }
-let selected = null; // currently selected agentId
-
-// ═══════════════════════════════════════════════════
-// SIGNALR CONNECTION
-// ═══════════════════════════════════════════════════
-function initApp() {
-  if (typeof signalR === "undefined") {
-    setTimeout(initApp, 500); // Retry every 500ms until library loads
-    return;
-  }
-
-
-
-  const connection = new signalR.HubConnectionBuilder()
-    .withUrl("/bashub")
-    .withAutomaticReconnect()
-    .build();
-
-
-  connection.on("agentUpdate", (hb) => {
-    // FIX: Extract ID and Hostname safely regardless of casing
-    const incomingId = hb.agentId || hb.AgentId;
-    const incomingHost = hb.hostname || hb.Hostname;
-    const incomingStatus = hb.status || hb.Status;
-
-    // FIX: Look for existing agent using both possible ID casings
-    let idx = agents.findIndex(a => (a.agentId || a.AgentId) === incomingId);
-    
-    if (idx === -1) {
-      // New agent: Store it (we'll keep the casing the server sent)
-      agents.push({ ...hb, hasReport: false });
-    } else {
-      // Existing agent: Update its properties
-      agents[idx] = { ...agents[idx], ...hb };
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audspect — Breach and Attack Simulation Console</title>
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+  <script src="/signalr.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .no-pdf {
+      display: block;
     }
-    
-    renderTree();
-    toast("info", `<b>${incomingHost}</b> — agent status: <b>${incomingStatus}</b>`);
-  });
 
-  connection.on("reportReady", (ev) => {
-    // Use lowercase 'agentId' and 'hostname' to match standard JSON serialization
-    let id = ev.agentId || ev.AgentId; 
-    let host = ev.hostname || ev.Hostname;
-
-    let idx = agents.findIndex(a => a.agentId === id);
-    if (idx !== -1) { 
-      agents[idx].status = "done"; 
-      agents[idx].hasReport = true; 
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
-    renderTree();
-    fetchReport(id);
-    toast("ok", `Report ready from <b>${host}</b>`);
-  });
 
-  connection.start()
-    .then(() => { 
-      setConnected(true); 
-      fetchAgents(); 
-    })
-    .catch(e => console.error("SignalR Connection Error:", e));
-}
+    /* ─── RESET & VARIABLES ─── */
 
-function setConnected(on) {
-  const dot = document.getElementById("connDot");
-  const label = document.getElementById("connStatus");
-  if (dot) dot.className = "status-dot" + (on ? "" : " off");
-  if (label) label.textContent = on ? "Live" : "Disconnected";
-}
-  
-// ═══════════════════════════════════════════════════
-// FETCH HELPERS
-// ═══════════════════════════════════════════════════
-async function fetchAgents() {
-  try {
-    const response = await fetch("/api/agents");
-    const data = await response.json();
-    console.log("Debug: Received Agents Data:", data); // Check your browser console (F12)
-    
-    // Standardize the objects immediately to prevent casing headaches
-    agents = data.map(a => ({
-      agentId: a.agentId || a.AgentId,
-      hostname: a.hostname || a.Hostname || "Unknown",
-      ipAddress: a.ipAddress || a.IpAddress || "0.0.0.0",
-      status: (a.status || a.Status || "idle").toLowerCase(),
-      hasReport: a.hasReport !== undefined ? a.hasReport : a.HasReport
-    }));
 
-    // Pre-fetch reports for agents that already have them
-    for (const a of agents) { 
-      if (a.hasReport && !reports[a.agentId]) {
-        await fetchReport(a.agentId); 
+    :root {
+      --bg-base: #0a0c0f;
+      --bg-card: #111418;
+      --bg-card2: #161a20;
+      --bg-hover: #1c2128;
+      --bg-active: #1a2332;
+      --border: #232c37;
+      --border-light: #2e3944;
+      --text-primary: #e2e6ea;
+      --text-dim: #7a8590;
+      --text-muted: #4f5a65;
+      --accent: #00d4aa;
+      /* teal */
+      --accent-dim: #00a882;
+      --red: #ff4f5a;
+      --red-dim: #cc3f48;
+      --amber: #f0a500;
+      --blue: #4da6ff;
+      --pass-bg: rgba(0, 212, 170, .08);
+      --fail-bg: rgba(255, 79, 90, .08);
+      --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --radius: 8px;
+      --transition: .2s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.5;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ─── LAYOUT ─── */
+    .shell {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 300px;
+      min-width: 300px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 22px 20px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-header .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sidebar-header .logo svg {
+      flex-shrink: 0;
+    }
+
+    .sidebar-header .logo-text {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--accent);
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+    }
+
+    .sidebar-header .logo-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .sidebar-search {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-search input {
+      width: 100%;
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 10px 8px 32px;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+      transition: border-color var(--transition);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%234f5a65' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: 10px center;
+    }
+
+    .sidebar-search input:focus {
+      border-color: var(--accent);
+    }
+
+    .sidebar-search input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .tree-section-label {
+      padding: 10px 18px 4px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.4px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0 12px;
+    }
+
+    .tree-node {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 18px;
+      cursor: pointer;
+      transition: background var(--transition);
+      border-left: 3px solid transparent;
+      position: relative;
+    }
+
+    .tree-node:hover {
+      background: var(--bg-hover);
+    }
+
+    .tree-node.active {
+      background: var(--bg-active);
+      border-left-color: var(--accent);
+    }
+
+    .tree-node.active .node-name {
+      color: #fff;
+    }
+
+    .node-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 7px;
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .tree-node.active .node-icon {
+      background: rgba(0, 212, 170, .1);
+      border-color: var(--accent);
+    }
+
+    .node-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .node-name {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-primary);
+    }
+
+    .node-ip {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .node-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .badge-idle {
+      background: rgba(79, 90, 101, .25);
+      color: var(--text-muted);
+    }
+
+    .badge-running {
+      background: rgba(77, 166, 255, .15);
+      color: var(--blue);
+      animation: pulse 1.8s infinite;
+    }
+
+    .live-pulse {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: livePulse 1.2s ease-in-out infinite;
+    }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: .4; transform: scale(.7); }
+    }
+
+    .badge-done {
+      background: var(--pass-bg);
+      color: var(--accent);
+    }
+
+    .badge-incomplete {
+      background: rgba(255, 159, 10, .15);
+      color: #ff9f0a;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: .5;
       }
     }
-    
-    renderTree();
-  } catch(e) { 
-    console.error("Fetch Agents Error:", e); 
-    toast("warn", "Failed to load endpoints from API.");
-  }
-}
 
-async function fetchReport(agentId) {
-  try { reports[agentId] = await (await fetch(`/api/report/${agentId}`)).json(); if (selected === agentId) renderReport(agentId); }
-  catch(e) { console.error(e); }
-}
+    /* ── MAIN CONTENT ── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-base);
+    }
 
-// ═══════════════════════════════════════════════════
-// SIDEBAR TREE
-// ═══════════════════════════════════════════════════
-function renderTree() {
-  const q = document.getElementById("searchInput").value.toLowerCase();
-  const el = document.getElementById("tree");
-  
-  const filtered = agents.filter(a => {
-    const host = (a.hostname || a.Hostname || "").toLowerCase();
-    return host.includes(q);
-  });
+    /* top bar */
+    .topbar {
+      height: 52px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      flex-shrink: 0;
+    }
 
-  // 1. Handle Empty Search
-  if (filtered.length === 0) {
-    el.innerHTML = `<div style="padding:24px 18px;color:var(--text-muted);text-align:center;">No endpoints found.</div>`;
-    document.getElementById("treeLabel").textContent = `Endpoints (0)`;
-    return; 
-  }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
 
-  // 2. Update Label and Clear List
-  document.getElementById("treeLabel").textContent = `Endpoints (${filtered.length})`;
-  el.innerHTML = "";
+    .topbar-left .page-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
 
-  // 3. Render the nodes (This was outside the function before!)
-  filtered.forEach(a => {
-    const id = a.agentId || a.AgentId;
-    const host = a.hostname || a.Hostname;
-    const ip = a.ipAddress || a.IpAddress;
-    const status = (a.status || a.Status || "idle").toLowerCase();
+    .topbar-left .page-title span {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
 
-    const active = selected === id ? "active" : "";
-    const statusClass = status === "done" ? "badge-done" : 
-                        status === "running" ? "badge-running" : "badge-idle";
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
 
-    el.insertAdjacentHTML("beforeend", `
+    .btn-download-agent {
+      background: var(--accent);
+      color: var(--bg-base);
+      border: none;
+      padding: 7px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: var(--transition);
+      text-decoration: none;
+    }
+
+    .btn-download-agent:hover {
+      background: var(--accent-dim);
+      transform: translateY(-1px);
+    }
+
+    .btn-download-agent svg {
+      flex-shrink: 0;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+    }
+
+    .status-dot.off {
+      background: var(--red);
+      box-shadow: 0 0 6px var(--red);
+    }
+
+    .status-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* scrollable body */
+    .content-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px;
+    }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 16px;
+      color: var(--text-muted);
+    }
+
+    .empty-state svg {
+      opacity: .35;
+    }
+
+    .empty-state h3 {
+      font-size: 16px;
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .empty-state p {
+      font-size: 13px;
+      max-width: 380px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* ── REPORT VIEW ── */
+    .report-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .report-host-info h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .report-host-info .meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .report-host-info .meta span::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    /* score ring */
+    .score-ring-wrap {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 22px;
+      flex-shrink: 0;
+    }
+
+    .score-ring {
+      position: relative;
+      width: 72px;
+      height: 72px;
+    }
+
+    .score-ring svg {
+      transform: rotate(-90deg);
+    }
+
+    .score-ring .score-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    .score-ring .score-num {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .score-ring .score-pct {
+      font-size: 9px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      letter-spacing: .5px;
+    }
+
+    .score-stats {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .score-stats .stat-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .stat-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    .stat-dot.pass {
+      background: var(--accent);
+    }
+
+    .stat-dot.fail {
+      background: var(--red);
+    }
+
+    .stat-label {
+      color: var(--text-dim);
+    }
+
+    .stat-val {
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+    }
+
+    /* category cards */
+    .categories {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .cat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color var(--transition);
+    }
+
+    .cat-card:hover {
+      border-color: var(--border-light);
+    }
+
+    .cat-card.expanded .cat-header {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cat-header {
+      display: flex;
+      align-items: center;
+      padding: 14px 18px;
+      cursor: pointer;
+      gap: 12px;
+      user-select: none;
+    }
+
+    .cat-header:hover {
+      background: var(--bg-hover);
+    }
+
+    .cat-phase-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(77, 166, 255, .12);
+      color: var(--blue);
+      flex-shrink: 0;
+    }
+
+    .cat-name {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .cat-mini-bar {
+      width: 80px;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--bg-card2);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .cat-mini-bar .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--accent);
+      transition: width .4s;
+    }
+
+    .cat-mini-bar .bar-fill.bad {
+      background: var(--red);
+    }
+
+    .cat-chevron {
+      width: 16px;
+      color: var(--text-muted);
+      transition: transform .2s;
+      flex-shrink: 0;
+    }
+
+    .cat-card.expanded .cat-chevron {
+      transform: rotate(90deg);
+    }
+
+    .cat-score-badge {
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      flex-shrink: 0;
+    }
+
+    .cat-score-badge.good {
+      color: var(--accent);
+    }
+
+    .cat-score-badge.bad {
+      color: var(--red);
+    }
+
+    /* checks table inside category */
+    .cat-checks {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 11px 18px;
+      border-bottom: 1px solid rgba(35, 44, 55, .5);
+      transition: background var(--transition);
+    }
+
+    .check-row:last-child {
+      border-bottom: none;
+    }
+
+    .check-row:hover {
+      background: var(--bg-hover);
+    }
+
+    .check-badge {
+      flex-shrink: 0;
+      width: 60px;
+      text-align: center;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      padding: 3px 0;
+      border-radius: 4px;
+      margin-top: 2px;
+    }
+
+    .check-badge.pass {
+      background: var(--pass-bg);
+      color: var(--accent);
+    }
+
+    .check-badge.fail {
+      background: var(--fail-bg);
+      color: var(--red);
+    }
+
+    .check-badge.skip {
+      background: rgba(79, 90, 101, .2);
+      color: var(--text-muted);
+    }
+
+    .check-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .check-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 3px;
+    }
+
+    .check-technique {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--blue);
+      font-weight: 600;
+      display: inline-block;
+      background: rgba(77, 166, 255, .1);
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin-bottom: 4px;
+    }
+
+    .check-detail {
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    .check-rem {
+      margin-top: 6px;
+      font-size: 11px;
+      background: var(--fail-bg);
+      border: 1px solid rgba(255, 79, 90, .2);
+      border-radius: 5px;
+      padding: 6px 10px;
+      color: #f0a500;
+      line-height: 1.5;
+      display: none;
+    }
+
+    .check-row.fail .check-rem {
+      display: block;
+    }
+
+    .check-rem::before {
+      content: '⚠ Remediation: ';
+      font-weight: 700;
+    }
+
+    .check-dur {
+      flex-shrink: 0;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-top: 3px;
+      white-space: nowrap;
+    }
+
+    /* ── MITRE MAP strip ── */
+    .mitre-strip {
+      margin-top: 28px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+
+    .mitre-strip h4 {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .mitre-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .mitre-tag {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: rgba(77, 166, 255, .1);
+      color: var(--blue);
+      border: 1px solid rgba(77, 166, 255, .2);
+    }
+
+    .mitre-tag.tactic {
+      background: rgba(0, 212, 170, .1);
+      color: var(--accent);
+      border-color: rgba(0, 212, 170, .2);
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-light);
+    }
+
+    /* ── TOAST ── */
+    .toast-wrap {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      font-size: 13px;
+      color: var(--text-primary);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .4);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: slideIn .25s ease;
+      pointer-events: auto;
+      max-width: 320px;
+    }
+
+    .toast.info {
+      border-left: 3px solid var(--blue);
+    }
+
+    .toast.ok {
+      border-left: 3px solid var(--accent);
+    }
+
+    .toast.warn {
+      border-left: 3px solid var(--amber);
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(40px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    /* ── COMPLIANCE SECTION ── */
+    .compliance-section {
+      margin-top: 28px;
+    }
+
+    .compliance-section-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .compliance-section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .compliance-summary-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .compliance-fw-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid;
+      cursor: pointer;
+      transition: opacity var(--transition);
+    }
+
+    .compliance-fw-pill:hover {
+      opacity: .8;
+    }
+
+    .fw-pci {
+      background: rgba(240, 165, 0, .1);
+      color: #f0a500;
+      border-color: rgba(240, 165, 0, .3);
+    }
+
+    .fw-iso {
+      background: rgba(77, 166, 255, .1);
+      color: #4da6ff;
+      border-color: rgba(77, 166, 255, .3);
+    }
+
+    .fw-rbi {
+      background: rgba(168, 85, 247, .1);
+      color: #a855f7;
+      border-color: rgba(168, 85, 247, .3);
+    }
+
+    .fw-dpdp {
+      background: rgba(236, 72, 153, .1);
+      color: #ec4899;
+      border-color: rgba(236, 72, 153, .3);
+    }
+
+    .fw-itact {
+      background: rgba(34, 197, 94, .1);
+      color: #22c55e;
+      border-color: rgba(34, 197, 94, .3);
+    }
+
+    .fw-certin {
+      background: rgba(239, 68, 68, .1);
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, .3);
+    }
+
+    .compliance-fw-pill .fw-count {
+      background: rgba(0, 0, 0, .25);
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 10px;
+    }
+
+    .compliance-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .compliance-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color var(--transition);
+    }
+
+    .compliance-card:hover {
+      border-color: var(--border-light);
+    }
+
+    .compliance-card.expanded .compliance-card-header {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .compliance-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 18px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .compliance-card-header:hover {
+      background: var(--bg-hover);
+    }
+
+    .compliance-fw-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .compliance-card-title {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .compliance-violation-count {
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--red);
+      background: var(--fail-bg);
+      padding: 2px 9px;
+      border-radius: 10px;
+    }
+
+    .compliance-chevron {
+      width: 16px;
+      color: var(--text-muted);
+      transition: transform .2s;
+      flex-shrink: 0;
+    }
+
+    .compliance-card.expanded .compliance-chevron {
+      transform: rotate(90deg);
+    }
+
+    .compliance-card-body {
+      display: none;
+      flex-direction: column;
+    }
+
+    .compliance-card.expanded .compliance-card-body {
+      display: flex;
+    }
+
+    .compliance-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 11px 18px;
+      border-bottom: 1px solid rgba(35, 44, 55, .5);
+      transition: background var(--transition);
+    }
+
+    .compliance-row:last-child {
+      border-bottom: none;
+    }
+
+    .compliance-row:hover {
+      background: var(--bg-hover);
+    }
+
+    .compliance-check-icon {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--fail-bg);
+      border: 1px solid rgba(255, 79, 90, .3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .compliance-row-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .compliance-check-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 3px;
+    }
+
+    .compliance-req {
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    .compliance-req-ref {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin-right: 6px;
+    }
+
+    .compliance-action {
+      margin-top: 5px;
+      font-size: 11px;
+      color: var(--amber);
+      padding: 5px 10px;
+      background: rgba(240, 165, 0, .07);
+      border: 1px solid rgba(240, 165, 0, .15);
+      border-radius: 4px;
+      line-height: 1.5;
+    }
+
+    .compliance-action::before {
+      content: '↳ Required Action: ';
+      font-weight: 700;
+    }
+
+    .compliance-clean-banner {
+      background: var(--pass-bg);
+      border: 1px solid rgba(0, 212, 170, .2);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 13px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ─── WINDOWS PATCH SECTION ─── */
+    .patch-section {
+      margin-top: 28px;
+    }
+
+    .patch-section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--text-dim);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .patch-section-title::before {
+      content: '';
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300d4aa' stroke-width='2'%3E%3Crect x='2' y='3' width='20' height='14' rx='2'/%3E%3Cpath d='M8 21h8M12 17v4'/%3E%3C/svg%3E") center/contain no-repeat;
+      flex-shrink: 0;
+    }
+
+    .patch-safe-banner {
+      background: var(--pass-bg);
+      border: 1px solid rgba(0, 212, 170, .25);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .patch-safe-banner svg {
+      flex-shrink: 0;
+    }
+
+    .patch-safe-sub {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    .patch-danger-header {
+      background: rgba(255, 79, 90, .06);
+      border: 1px solid rgba(255, 79, 90, .2);
+      border-bottom: none;
+      border-radius: var(--radius) var(--radius) 0 0;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .patch-danger-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--red);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .patch-last-date {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+    }
+
+    .install-btn {
+      background: linear-gradient(135deg, #ff4f5a 0%, #cc3f48 100%);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: opacity .2s, transform .1s;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .install-btn:hover {
+      opacity: .88;
+      transform: translateY(-1px);
+    }
+
+    .install-btn:active {
+      transform: translateY(0);
+    }
+
+    .install-btn.installing {
+      opacity: .6;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .kb-list {
+      border: 1px solid rgba(255, 79, 90, .2);
+      border-top: none;
+      border-radius: 0 0 var(--radius) var(--radius);
+      overflow: hidden;
+    }
+
+    .kb-card {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px 16px;
+      align-items: start;
+    }
+
+    .kb-card:last-child {
+      border-bottom: none;
+    }
+
+    .kb-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(255, 79, 90, .12);
+      color: var(--red);
+      white-space: nowrap;
+      align-self: start;
+      margin-top: 2px;
+    }
+
+    .kb-body {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .kb-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .kb-threat {
+      font-size: 12px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    /* ── Security Tools Panel ─────────────────────────────── */
+    .sec-tools-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 18px;
+    }
+
+    .sec-tools-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sec-tools-title svg {
+      opacity: .6;
+    }
+
+    .sec-tools-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .sec-tool-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      min-width: 200px;
+      flex: 1 1 200px;
+      max-width: 320px;
+      transition: border-color .2s;
+    }
+
+    .sec-tool-card:hover {
+      border-color: var(--accent);
+    }
+
+    .sec-tool-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .sec-tool-icon.type-av {
+      background: rgba(0, 200, 150, .12);
+      color: #00c896;
+    }
+
+    .sec-tool-icon.type-edr {
+      background: rgba(0, 180, 255, .12);
+      color: #00b4ff;
+    }
+
+    .sec-tool-icon.type-firewall {
+      background: rgba(255, 140, 0, .12);
+      color: #ff8c00;
+    }
+
+    .sec-tool-icon.type-hids {
+      background: rgba(160, 100, 255, .12);
+      color: #a064ff;
+    }
+
+    .sec-tool-icon.type-dlp {
+      background: rgba(255, 80, 80, .12);
+      color: #ff5050;
+    }
+
+    .sec-tool-icon.type-other {
+      background: rgba(150, 150, 150, .12);
+      color: #aaa;
+    }
+
+    .sec-tool-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sec-tool-name {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sec-tool-vendor {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .sec-tool-status {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .sec-tool-status .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    .sec-tool-status.active {
+      color: #00c896;
+    }
+
+    .sec-tool-status.active .dot {
+      background: #00c896;
+      box-shadow: 0 0 6px #00c896;
+    }
+
+    .sec-tool-status.inactive {
+      color: #ff5050;
+    }
+
+    .sec-tool-status.inactive .dot {
+      background: #ff5050;
+    }
+
+    .sec-tool-status.unknown {
+      color: #888;
+    }
+
+    .sec-tool-status.unknown .dot {
+      background: #888;
+    }
+
+    .sec-tools-empty {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #ff8c00;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(255, 140, 0, .06);
+      border: 1px solid rgba(255, 140, 0, .2);
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+
+    .sev-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .sev-critical {
+      background: rgba(255, 79, 90, .18);
+      color: #ff6b74;
+    }
+
+    .sev-important {
+      background: rgba(240, 165, 0, .18);
+      color: var(--amber);
+    }
+
+    .sev-moderate {
+      background: rgba(77, 166, 255, .18);
+      color: var(--blue);
+    }
+
+    .cve-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+    }
+
+    /* ─── APP NAV ─── */
+    .app-nav {
+      width: 64px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+
+    .app-nav-logo {
+      font-family: var(--font-mono);
+      font-weight: 800;
+      color: var(--accent);
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .app-nav-item {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      border-radius: var(--radius);
+      cursor: pointer;
+      margin-bottom: 8px;
+      transition: var(--transition);
+      text-decoration: none;
+      font-size: 9px;
+      gap: 4px;
+    }
+
+    .app-nav-item:hover,
+    .app-nav-item.active {
+      background: rgba(0, 212, 170, 0.1);
+      color: var(--accent);
+    }
+
+    .app-nav-item svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* ─── GLOBAL DASHBOARD ─── */
+    .global-dashboard {
+      padding: 24px;
+      display: none;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .global-dashboard.active {
+      display: flex;
+    }
+
+    .stat-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-title {
+      color: var(--text-muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .chart-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      height: 300px;
+      position: relative;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- TOAST CONTAINER -->
+  <div class="toast-wrap" id="toasts"></div>
+
+  <div class="shell">
+    <!-- APP NAV -->
+    <nav class="app-nav">
+      <div class="app-nav-logo">Audspect</div>
+      <div class="app-nav-item active" id="navDashboard" onclick="switchView('dashboard')" title="Dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"></rect>
+          <rect x="14" y="3" width="7" height="7"></rect>
+          <rect x="14" y="14" width="7" height="7"></rect>
+          <rect x="3" y="14" width="7" height="7"></rect>
+        </svg>
+        Dashboard
+      </div>
+      <div class="app-nav-item" id="navSystemTree" onclick="switchView('systemTree')" title="System Tree">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 3v18" />
+        </svg>
+        System Tree
+      </div>
+    </nav>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="systemTreePanel" style="display:none;">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+            <rect width="30" height="30" rx="6" fill="#111418" stroke="#00d4aa" stroke-width="1.5" />
+            <path d="M15 6 L24 10 L24 18 L15 24 L6 18 L6 10 Z" stroke="#00d4aa" stroke-width="1.5" fill="none" />
+            <path d="M15 12 L19 14 L19 18 L15 20 L11 18 L11 14 Z" fill="#00d4aa" opacity=".6" />
+          </svg>
+          <div>
+            <div class="logo-text">Audspect</div>
+            <div class="logo-sub">Breach Attack Simulation</div>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-search">
+        <input type="text" placeholder="Search endpoints…" id="searchInput" oninput="renderTree()" />
+      </div>
+      <div class="tree-section-label" id="treeLabel">Endpoints (0)</div>
+      <div class="tree" id="tree"></div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="page-title" id="pageTitle">Dashboard <span>— Overview</span></div>
+        </div>
+        <div class="topbar-right">
+          <a href="/api/download-agent" download="BASAgent.zip" class="btn-download-agent"
+            title="Download Audspect Agent Package (ZIP)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download Agent
+          </a>
+          <div class="status-label" id="connStatus">Connecting…</div>
+          <div class="status-dot off" id="connDot"></div>
+        </div>
+      </div>
+      <div class="content-wrap" id="contentArea">
+        <!-- injected dynamically -->
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════════
+    let agents = [];   // [{agentId, hostname, ipAddress, osVersion, username, status, hasReport}]
+    let reports = {};   // { agentId → full report object }
+    let selected = null; // currently selected agentId
+    let connection = null;
+    let patchStatuses = {}; // { agentId → { phase, log } } — mirrors server state
+    let currentView = 'dashboard'; // 'dashboard' or 'systemTree'
+    let globalCharts = {}; // reference to chart.js instances
+    let showDeltaOnly = false; // Toggle for Delta views
+    let livePoller = null; // setInterval handle for live report refresh during Running simulation
+
+    function toggleDelta() {
+      showDeltaOnly = !showDeltaOnly;
+      if (selected) renderReport(selected);
+    }
+
+    // Returns the display status of an agent, detecting stale "running" as "incomplete".
+    // An agent is stale when it was running but hasn't sent a heartbeat or partial report
+    // for >90 seconds — indicating it was killed mid-simulation.
+    function getDisplayStatus(agent) {
+      const status = (agent.status || "idle").toLowerCase();
+      if (status !== "running") return status;
+      const lu = agent.lastUpdate;
+      if (!lu) return status;
+      const ageMs = Date.now() - new Date(lu).getTime();
+      return ageMs > 90000 ? "incomplete" : "running";
+    }
+
+    function startLivePoller(agentId) {
+      stopLivePoller();
+      livePoller = setInterval(async () => {
+        const agent = agents.find(a => a.agentId === agentId);
+        if (!agent) { stopLivePoller(); return; }
+        const disp = getDisplayStatus(agent);
+        if (disp === "incomplete") { stopLivePoller(); renderTree(); return; }
+        if (agent.status !== "running") { stopLivePoller(); return; }
+        await fetchReport(agentId);
+      }, 4000);
+    }
+
+    function stopLivePoller() {
+      if (livePoller) { clearInterval(livePoller); livePoller = null; }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // VIEW SWITCHING
+    // ═══════════════════════════════════════════════════
+    function switchView(view) {
+      currentView = view;
+      document.getElementById('navDashboard').classList.toggle('active', view === 'dashboard');
+      document.getElementById('navSystemTree').classList.toggle('active', view === 'systemTree');
+      document.getElementById('systemTreePanel').style.display = view === 'systemTree' ? 'flex' : 'none';
+
+      if (view === 'dashboard') {
+        renderGlobalDashboard();
+      } else {
+        if (selected) {
+          renderReport(selected);
+        } else {
+          // Display select prompt
+          document.getElementById("pageTitle").innerHTML = `System Tree <span>— Select Endpoint</span>`;
+          document.getElementById("contentArea").innerHTML = `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom:10px; opacity:0.5;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg><h3>Select an Endpoint</h3><p>Choose an endpoint from the system tree via the sidebar to view its latest security posture and reporting data.</p></div>`;
+        }
+      }
+    }
+
+    function renderGlobalDashboard() {
+      if (currentView !== 'dashboard') return;
+      document.getElementById("pageTitle").innerHTML = `Global Dashboard <span>— Overview</span>`;
+
+      let total = agents.length;
+      let online = agents.filter(a => (a.status || a.Status || "offline").toLowerCase() !== 'offline').length;
+
+      // Calculate global score
+      let reportScores = [];
+      let missingPatches = 0;
+      let safePatches = 0;
+
+      Object.values(reports).forEach(r => {
+        const cats = r.categories || r.Categories || [];
+        if (!cats.length) return;
+        const t = cats.reduce((s, c) => s + (c.checks || c.Checks || []).length, 0);
+        const p = cats.reduce((s, c) => s + (c.checks || c.Checks || []).filter(ch => (ch.result || ch.Result) === "Pass").length, 0);
+        if (t > 0) reportScores.push(Math.round(p / t * 100));
+
+        const patchCat = cats.find(c => /windows patch/i.test(c.name || c.Name));
+        if (patchCat) {
+          const pChecks = patchCat.checks || patchCat.Checks || [];
+          if (pChecks.every(ch => (ch.result || ch.Result) === 'Pass')) safePatches++;
+          else missingPatches++;
+        }
+      });
+
+      let avgScore = reportScores.length ? Math.round(reportScores.reduce((a, b) => a + b, 0) / reportScores.length) : 0;
+
+      document.getElementById("contentArea").innerHTML = `
+            <div class="global-dashboard active">
+                <div class="stat-cards">
+                    <div class="stat-card">
+                        <div class="stat-title">Total Endpoints</div>
+                        <div class="stat-value">${total}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Online Endpoints</div>
+                        <div class="stat-value" style="color:var(--accent)">${online}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Average Core Safety Score</div>
+                        <div class="stat-value" style="color:${avgScore >= 60 ? 'var(--accent)' : 'var(--red)'}">${avgScore}%</div>
+                    </div>
+                </div>
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <div class="stat-title">Endpoint Connection Status</div>
+                        <canvas id="connChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <div class="stat-title">Windows Patch Status</div>
+                        <canvas id="patchChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        `;
+
+      // Render charts using Chart.js
+      if (globalCharts.patch) globalCharts.patch.destroy();
+      if (globalCharts.conn) globalCharts.conn.destroy();
+
+      Chart.defaults.color = '#7a8590';
+      Chart.defaults.font.family = "'Inter', sans-serif";
+
+      const ctx1 = document.getElementById('patchChart');
+      if (ctx1) {
+        globalCharts.patch = new Chart(ctx1, {
+          type: 'doughnut',
+          data: {
+            labels: ['Fully Patched', 'Missing Patches', 'Unknown'],
+            datasets: [{
+              data: [safePatches, missingPatches, total - safePatches - missingPatches],
+              backgroundColor: ['#00d4aa', '#ff4f5a', '#232c37'],
+              borderWidth: 0
+            }]
+          },
+          options: { maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right' } } }
+        });
+      }
+
+      const ctx2 = document.getElementById('connChart');
+      if (ctx2) {
+        globalCharts.conn = new Chart(ctx2, {
+          type: 'bar',
+          data: {
+            labels: ['Online', 'Offline'],
+            datasets: [{
+              label: 'Endpoints',
+              data: [online, total - online],
+              backgroundColor: ['#4da6ff', '#232c37'],
+              borderWidth: 0,
+              borderRadius: 4
+            }]
+          },
+          options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // SIGNALR CONNECTION
+    // ═══════════════════════════════════════════════════
+    function initApp() {
+      if (typeof signalR === "undefined") {
+        setTimeout(initApp, 500); // Retry every 500ms until library loads
+        return;
+      }
+
+
+
+      connection = new signalR.HubConnectionBuilder()
+        .withUrl("/bashub", {
+          transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.ServerSentEvents | signalR.HttpTransportType.LongPolling
+        })
+        .withAutomaticReconnect([0, 2000, 5000, 10000, 30000]) // Progressive retry delays
+        .build();
+
+
+      connection.on("agentUpdate", (hb) => {
+        // FIX: Extract ID and Hostname safely regardless of casing
+        const incomingId = hb.agentId || hb.AgentId;
+        const incomingHost = hb.hostname || hb.Hostname;
+        const incomingStatus = hb.status || hb.Status;
+
+        // FIX: Look for existing agent using both possible ID casings
+        let idx = agents.findIndex(a => (a.agentId || a.AgentId) === incomingId);
+
+        const normalized = {
+          agentId: incomingId,
+          hostname: hb.hostname || hb.Hostname || "Unknown",
+          ipAddress: hb.ipAddress || hb.IpAddress || "0.0.0.0",
+          status: (incomingStatus || "idle").toLowerCase(),
+          hasReport: hb.hasReport === true || hb.HasReport === true,
+          lastUpdate: hb.lastUpdate || hb.LastUpdate || new Date().toISOString()
+        };
+        if (idx === -1) {
+          agents.push(normalized);
+        } else {
+          agents[idx] = { ...agents[idx], ...normalized };
+        }
+
+        renderTree();
+        toast("info", `<b>${incomingHost}</b> — agent status: <b>${incomingStatus}</b>`);
+      });
+
+      connection.on("reportReady", (ev) => {
+        let id = ev.agentId || ev.AgentId;
+        let host = ev.hostname || ev.Hostname;
+        let evStatus = (ev.status || ev.Status || "Completed").toLowerCase();
+        const isPartial = evStatus === "running";
+
+        let idx = agents.findIndex(a => a.agentId === id);
+        if (idx !== -1) {
+          agents[idx].hasReport = true;
+          if (!isPartial) agents[idx].status = "done";
+        }
+        renderTree();
+        fetchReport(id);
+        if (isPartial) {
+          toast("info", `Live data from <b>${host}</b> — simulation in progress`);
+        } else {
+          toast("ok", `Simulation complete from <b>${host}</b>`);
+          stopLivePoller(); // Final report received — stop polling
+        }
+      });
+
+      // Live patch install progress from agent (phase: scanning→downloading→installing→done/failed)
+      connection.on("patch_status_update", (agentId, status) => {
+        patchStatuses[agentId] = status;
+        // If this agent is currently selected, update the patch overlay in-place
+        if (selected === agentId) {
+          const overlay = document.getElementById('patch-status-overlay');
+          if (overlay) {
+            overlay.outerHTML = buildPatchStatusOverlay(status);
+          } else {
+            // Patch section exists but no overlay yet — prepend one
+            const patchSec = document.querySelector('.patch-section');
+            if (patchSec) {
+              const wrapper = document.createElement('div');
+              wrapper.innerHTML = buildPatchStatusOverlay(status);
+              patchSec.insertBefore(wrapper.firstElementChild, patchSec.firstElementChild.nextSibling);
+            }
+          }
+        }
+        // Toast for key transitions
+        const labels = { scanning: '🔍 Scanning for updates...', downloading: '⬇️ Downloading patches...', installing: '⚙️ Installing patches (please wait)...', done: '✅ Patches installed!', failed: '❌ Patch installation failed.' };
+        if (labels[status.phase]) showToast(labels[status.phase], status.phase === 'done' ? 'pass' : status.phase === 'failed' ? 'fail' : 'info');
+      });
+
+
+      // ✅ FIX: Load agents from REST API immediately on page load.
+      // Do NOT wait for SignalR to connect — if WebSockets fail (ELB timeout,
+      // network issue, etc.) the data would otherwise never appear after a refresh.
+      // SignalR is now used only for live push updates, not for initial data load.
+      fetchAgents();
+
+      connection.start()
+        .then(() => {
+          setConnected(true);
+        })
+        .catch(e => {
+          console.warn("SignalR connection failed — live updates disabled, but data will still load from API.", e);
+          setConnected(false);
+        });
+    }
+
+    function setConnected(on) {
+      const dot = document.getElementById("connDot");
+      const label = document.getElementById("connStatus");
+      if (dot) dot.className = "status-dot" + (on ? "" : " off");
+      if (label) label.textContent = on ? "Live" : "Disconnected";
+    }
+
+    // ═══════════════════════════════════════════════════
+    // FETCH HELPERS
+    // ═══════════════════════════════════════════════════
+    async function fetchAgents() {
+      try {
+        const response = await fetch("/api/agents");
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch agents');
+        }
+
+        const data = await response.json();
+        console.log("Debug: Received Agents Data:", data); // Check your browser console (F12)
+
+        // Standardize the objects immediately to prevent casing headaches
+        agents = data.map(a => ({
+          agentId: a.agentId || a.AgentId,
+          hostname: a.hostname || a.Hostname || "Unknown",
+          ipAddress: a.ipAddress || a.IpAddress || "0.0.0.0",
+          status: (a.status || a.Status || "idle").toLowerCase(),
+          hasReport: a.hasReport === true || a.HasReport === true,
+          lastUpdate: a.lastUpdate || a.LastUpdate || null
+        }));
+
+        // Pre-fetch reports for agents that have data (hasReport) or are currently running
+        for (const a of agents) {
+          if ((a.hasReport || a.status === "running") && !reports[a.agentId]) {
+            await fetchReport(a.agentId);
+          }
+        }
+
+        renderTree();
+      } catch (e) {
+        console.error("Fetch Agents Error:", e);
+        toast("warn", "Failed to load endpoints from API.");
+      }
+    }
+
+    async function fetchReport(agentId) {
+      try {
+        const response = await fetch(`/api/report/${agentId}`);
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.warn(`Report not found for ${agentId}`);
+            return;
+          }
+          throw new Error('Failed to fetch report');
+        }
+
+        const data = await response.json();
+        reports[agentId] = data;
+
+        // Sync agent state from report
+        const agent = agents.find(a => a.agentId === agentId);
+        if (agent) {
+          agent.hasReport = true;
+          const rStatus = (data.status || data.Status || "Completed").toLowerCase();
+          // Update lastUpdate from report so stale detection stays accurate during partial flushes
+          const rLastUpdate = data.lastUpdate || data.LastUpdate;
+          if (rLastUpdate) agent.lastUpdate = rLastUpdate;
+          if (rStatus === "completed") {
+            if (agent.status === "running") agent.status = "done";
+            if (selected === agentId) stopLivePoller();
+          }
+        }
+
+        if (selected === agentId && currentView === 'systemTree') {
+          renderReport(agentId);
+        }
+        if (currentView === 'dashboard') renderGlobalDashboard();
+      } catch (e) {
+        console.error("Fetch Report Error:", e);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // SIDEBAR TREE
+    // ═══════════════════════════════════════════════════
+    function renderTree() {
+      const q = document.getElementById("searchInput").value.toLowerCase();
+      const el = document.getElementById("tree");
+
+      const filtered = agents.filter(a => {
+        const host = (a.hostname || a.Hostname || "").toLowerCase();
+        return host.includes(q);
+      });
+
+      // 1. Handle Empty Search
+      if (filtered.length === 0) {
+        el.innerHTML = `<div style="padding:24px 18px;color:var(--text-muted);text-align:center;">No endpoints found.</div>`;
+        document.getElementById("treeLabel").textContent = `Endpoints (0)`;
+        return;
+      }
+
+      // 2. Update Label and Clear List
+      document.getElementById("treeLabel").textContent = `Endpoints (${filtered.length})`;
+      el.innerHTML = "";
+
+      // 3. Render the nodes (This was outside the function before!)
+      filtered.forEach(a => {
+        const id = a.agentId || a.AgentId;
+        const host = a.hostname || a.Hostname;
+        const ip = a.ipAddress || a.IpAddress;
+        const status = (a.status || a.Status || "idle").toLowerCase();
+        const env = (a.environmentLabel || a.EnvironmentLabel || "Production").toLowerCase();
+
+        const active = selected === id ? "active" : "";
+        const displayStatus = getDisplayStatus(a);
+        const statusClass = displayStatus === "done" ? "badge-done" :
+          displayStatus === "running" ? "badge-running" :
+          displayStatus === "incomplete" ? "badge-incomplete" : "badge-idle";
+        const statusLabel = displayStatus === "done" ? "Complete" :
+          displayStatus === "running" ? "Running" :
+          displayStatus === "incomplete" ? "Incomplete" : "Idle";
+
+        const envBadge = env === "goldenimage" ? `<span class="node-badge" style="background:#ffd700; color:#000; margin-right:4px;">Golden Image</span>` : "";
+
+        el.insertAdjacentHTML("beforeend", `
       <div class="tree-node ${active}" onclick="selectAgent('${id}')">
         <div class="node-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -539,79 +2047,158 @@ function renderTree() {
           <div class="node-name">${esc(host)}</div>
           <div class="node-ip">${esc(ip || "—")}</div>
         </div>
-        <span class="node-badge ${statusClass}">${status === "done" ? "Complete" : status === "running" ? "Running" : "Idle"}</span>
+        ${envBadge}
+        <span class="node-badge ${statusClass}">${statusLabel}</span>
       </div>
     `);
-  });
-} // <--- THIS IS THE ONLY CLOSING BRACE NEEDED
+      });
+
+      if (currentView === 'dashboard') renderGlobalDashboard();
+    } // <--- THIS IS THE ONLY CLOSING BRACE NEEDED
 
 
-// ═══════════════════════════════════════════════════
-// AGENT SELECTION → render report or placeholder
-// ═══════════════════════════════════════════════════
-function selectAgent(agentId) {
-  selected = agentId;
-  renderTree();
-  const report = reports[agentId];
-  if (report) { 
-    renderReport(agentId); 
-  } else {
-    // Find agent checking both casings
-    const agent = agents.find(a => (a.agentId || a.AgentId) === agentId);
-    const host = agent ? (agent.hostname || agent.Hostname) : "Unknown";
-    
-    document.getElementById("pageTitle").innerHTML = `${esc(host)} <span>— awaiting report</span>`;
-    document.getElementById("contentArea").innerHTML = `<div class="empty-state"><h3>Waiting for data...</h3></div>`;
-  }
-}
+    // ═══════════════════════════════════════════════════
+    // AGENT SELECTION → render report or placeholder
+    // ═══════════════════════════════════════════════════
+    function selectAgent(agentId) {
+      selected = agentId;
+      stopLivePoller();
+      renderTree();
 
-// ═══════════════════════════════════════════════════
-// RENDER FULL REPORT
-// ═══════════════════════════════════════════════════
-function renderReport(agentId) {
-  const r = reports[agentId];
-  if (!r) return;
+      const agent = agents.find(a => (a.agentId || a.AgentId) === agentId);
+      const agentStatus = agent ? (agent.status || "idle").toLowerCase() : "idle";
+      const isRunning = agentStatus === "running";
 
-  // 1. Standardize the data paths
-  const cats = r.categories || r.Categories || [];
-  const host = r.hostname || r.Hostname || "Unknown";
-  
-  // 2. Calculations with safety fallbacks
-  const total = cats.reduce((s, c) => s + (c.checks || c.Checks || []).length, 0);
-  const passed = cats.reduce((s, c) => s + (c.checks || c.Checks || []).filter(ch => (ch.result || ch.Result) === "Pass").length, 0);
-  const failed = total - passed;
-  const score = total ? Math.round(passed / total * 100) : 0;
-  
-  const circumference = 2 * Math.PI * 30;
-  const dashPass = total ? (passed / total) * circumference : 0;
+      const report = reports[agentId];
+      if (report) {
+        renderReport(agentId);
+      } else {
+        const host = agent ? (agent.hostname || agent.Hostname) : "Unknown";
+        document.getElementById("pageTitle").innerHTML = `${esc(host)} <span>— awaiting report</span>`;
+        document.getElementById("contentArea").innerHTML = isRunning ? `
+        <div class="empty-state">
+            <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:12px;">
+              <span class="live-pulse"></span>
+              <span style="color:var(--accent);font-weight:700;font-size:15px;">Simulation Running</span>
+            </div>
+            <p>Waiting for first category results from the agent...</p>
+        </div>` : `
+        <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom:10px; opacity:0.5;">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                <polyline points="13 2 13 9 20 9"></polyline>
+            </svg>
+            <h3>No Data Available Yet</h3>
+            <p>The agent is connected, but no simulation report has been received yet.</p>
+        </div>`;
+        fetchReport(agentId);
+      }
 
-  document.getElementById("pageTitle").innerHTML = `${esc(host)} <span>— Simulation Report</span>`;
+      if (isRunning) startLivePoller(agentId);
+    }
 
-  // 3. Collect MITRE tags safely
-  const techniques = [...new Set(cats.flatMap(c => (c.checks || c.Checks || []).map(ch => ch.techniqueId || ch.TechniqueId)).filter(Boolean))];
-  const tactics = ["TA0001","TA0002","TA0003","TA0004","TA0005","TA0006","TA0007","TA0008","TA0009","TA0010","TA0011","TA0040"];
+    // ═══════════════════════════════════════════════════
+    // RENDER FULL REPORT
+    // ═══════════════════════════════════════════════════
+    function renderReport(agentId) {
+      const r = reports[agentId];
+      if (!r) return;
 
-  /* This class hides elements from the PDF generator */
+      // Preserve scroll position and open accordion state across re-renders (live updates)
+      const contentEl = document.getElementById('contentArea');
+      const savedScroll = contentEl.scrollTop;
+      const expandedCats = new Set(
+        [...document.querySelectorAll('.cat-card.expanded')].map(el => el.id)
+      );
+
+      // 1. Standardize the data paths
+      const cats = r.categories || r.Categories || [];
+      const host = r.hostname || r.Hostname || "Unknown";
+      const env = r.environmentLabel || r.EnvironmentLabel || "Production";
+      const isGolden = env.toLowerCase() === "goldenimage";
+
+      // 2. Calculations with safety fallbacks
+      const total = cats.reduce((s, c) => s + (c.checks || c.Checks || []).length, 0);
+      const passed = cats.reduce((s, c) => s + (c.checks || c.Checks || []).filter(ch => (ch.result || ch.Result) === "Pass").length, 0);
+      const blocked = cats.reduce((s, c) => s + (c.checks || c.Checks || []).filter(ch => (ch.result || ch.Result) === "Blocked").length, 0);
+      const failed = cats.reduce((s, c) => s + (c.checks || c.Checks || []).filter(ch => (ch.result || ch.Result) === "Fail").length, 0);
+      const score = total ? Math.round(passed / total * 100) : 0;
+
+      // BAS Risk Score (from server-computed ScoringEngine)
+      const bas = r.score || r.Score || null;
+
+      const circumference = 2 * Math.PI * 30;
+      const dashPass = total ? (passed / total) * circumference : 0;
+
+      const reportStatus = (r.status || r.Status || "Completed").toLowerCase();
+      const isLive = reportStatus === "running";
+      const liveTag = isLive
+        ? `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,212,170,0.12);border:1px solid var(--accent);color:var(--accent);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;"><span class="live-pulse"></span>LIVE</span>`
+        : '';
+      document.getElementById("pageTitle").innerHTML = `${esc(host)} <span>— Simulation Report</span> ${liveTag}`;
+
+      // 3. Collect MITRE tags safely
+      const techniques = [...new Set(cats.flatMap(c => (c.checks || c.Checks || []).map(ch => ch.techniqueId || ch.TechniqueId)).filter(Boolean))];
+      const tactics = ["TA0001", "TA0002", "TA0003", "TA0004", "TA0005", "TA0006", "TA0007", "TA0008", "TA0009", "TA0010", "TA0011", "TA0040"];
+
+      /* This class hides elements from the PDF generator */
 
 
-  // 4. Render Main Layout
-  document.getElementById("contentArea").innerHTML = `
-    <div class="report-header">
-      <div class="report-host-info">
-        <div style="display:flex; align-items:center; gap:15px; margin-bottom:8px;">
-            <h2 style="margin:0;">${esc(host)}</h2>
-            <button onclick="downloadPDF('${agentId}')" class="no-pdf" style="background:var(--bg-card2); border:1px solid var(--border); color:var(--accent); padding:4px 12px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:700; text-transform:uppercase; transition: var(--transition);" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-                Download PDF
-            </button>
+      // 2b. Compute Critical Failures for Golden Image Logic
+      let criticalFailures = 0;
+      cats.forEach(c => {
+        (c.checks || c.Checks || []).forEach(ch => {
+          const res = (ch.result || ch.Result);
+          const sev = (ch.severity || ch.Severity || "").toLowerCase();
+          if (res === "Fail" && (sev === "critical" || sev === "high")) {
+            criticalFailures++;
+          }
+        });
+      });
+
+      let validationBanner = "";
+      if (isGolden) {
+        if (criticalFailures > 0) {
+          validationBanner = `<div style="background:rgba(255,45,85,0.1); margin-bottom:15px; padding:12px 16px; border:1px solid #ff2d55; border-radius:6px; display:flex; align-items:center; gap:10px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff2d55" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <div><strong style="color:#ff2d55; font-size:14px;">DEPLOYMENT BLOCKED</strong><div style="font-size:13px; color:var(--text-primary); margin-top:2px;">Golden Image template failed ${criticalFailures} Critical/High security checks. Do not roll out.</div></div>
+            </div>`;
+        } else {
+          validationBanner = `<div style="background:rgba(48,209,88,0.1); margin-bottom:15px; padding:12px 16px; border:1px solid #30d158; border-radius:6px; display:flex; align-items:center; gap:10px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <div><strong style="color:#30d158; font-size:14px;">APPROVED FOR DEPLOYMENT</strong><div style="font-size:13px; color:var(--text-primary); margin-top:2px;">Golden Image template passed all severe checks and is cleared for production roll-out.</div></div>
+            </div>`;
+        }
+      }
+
+      /// Change this specific block in your innerHTML string:
+      document.getElementById("contentArea").innerHTML = `
+      ${validationBanner}
+      <div class="report-header">
+        <div class="report-host-info">
+          <div style="display:flex; align-items:center; gap:15px; margin-bottom:8px;">
+              <h2 style="margin:0;">${esc(host)}</h2>
+              <button onclick="downloadPDF('${agentId}')" class="no-pdf" style="background:var(--bg-card2); border:1px solid var(--border); color:var(--accent); padding:4px 12px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:700; text-transform:uppercase; transition: var(--transition);" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+                  Download PDF
+              </button>
+              
+              <button onclick="triggerRemoteScan('${r.agentId || r.AgentId}')" class="btn-scan" style="background:var(--accent); color:var(--bg-base); border:none; padding:8px 16px; border-radius:var(--radius); cursor:pointer; font-weight:700; display:flex; align-items:center; gap:8px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                  Scan Again
+              </button>
+
+              <button onclick="toggleDelta()" style="background:${showDeltaOnly ? 'var(--accent)' : 'var(--bg-card2)'}; color:${showDeltaOnly ? 'var(--bg-base)' : 'var(--text-primary)'}; border:1px solid ${showDeltaOnly ? 'var(--accent)' : 'var(--border)'}; padding:8px 16px; border-radius:var(--radius); cursor:pointer; font-weight:700; display:flex; align-items:center; gap:8px; font-size: 13px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                  ${showDeltaOnly ? 'Delta View Active' : 'Show New Only'}
+              </button>
+          </div>
+          <div class="meta">
+            <span>${esc(r.ipAddress || r.IpAddress)}</span>
+            <span>${esc(r.osVersion || r.OsVersion)}</span>
+            <span>User: ${esc(r.username || r.Username)}</span>
+            <span>Run: ${r.startedAt ? new Date(r.startedAt).toLocaleString() : (r.StartedAt ? new Date(r.StartedAt).toLocaleString() : 'N/A')}</span>
+          </div>
         </div>
-        <h2>${esc(host)}</h2>
-        <div class="meta">
-          <span>${esc(r.ipAddress || r.IpAddress)}</span>
-          <span>${esc(r.osVersion || r.OsVersion)}</span>
-          <span>User: ${esc(r.username || r.Username)}</span>
-          <span>Run: ${r.startedAt ? new Date(r.startedAt).toLocaleString() : (r.StartedAt ? new Date(r.StartedAt).toLocaleString() : 'N/A')}</span>
-        </div>
-      </div>
       <div class="score-ring-wrap">
         <div class="score-ring">
           <svg width="72" height="72" viewBox="0 0 72 72">
@@ -628,75 +2215,951 @@ function renderReport(agentId) {
         <div class="score-stats">
           <div class="stat-row"><div class="stat-dot pass"></div><span class="stat-label">Passed</span><span class="stat-val">${passed}</span></div>
           <div class="stat-row"><div class="stat-dot fail"></div><span class="stat-label">Failed</span><span class="stat-val">${failed}</span></div>
+          <div class="stat-row"><div class="stat-dot" style="background:#a855f7"></div><span class="stat-label">Blocked</span><span class="stat-val">${blocked}</span></div>
           <div class="stat-row" style="margin-top:2px;padding-top:6px;border-top:1px solid var(--border);"><span class="stat-label">Total</span><span class="stat-val">${total}</span></div>
         </div>
       </div>
     </div>
+
+    ${bas ? (() => {
+      const riskScore  = bas.riskScore ?? bas.RiskScore ?? 0;
+      const classif    = bas.classification ?? bas.Classification ?? 'Unknown';
+      const conf       = bas.confidence ?? bas.Confidence ?? 0;
+      const rel        = bas.executionReliability ?? bas.ExecutionReliability ?? 0;
+      const ap         = bas.attackProgression ?? bas.AttackProgression ?? 0;
+      const os2        = bas.objectiveSuccess ?? bas.ObjectiveSuccess ?? 0;
+      const dt         = bas.detectionTiming ?? bas.DetectionTiming ?? 0;
+      const br         = bas.blastRadius ?? bas.BlastRadius ?? 0;
+      const pe         = bas.preventionEffectiveness ?? bas.PreventionEffectiveness ?? 0;
+
+      const classColor = { 'Protected':'#30d158', 'Low Risk':'#4da6ff', 'Medium Risk':'#ffd60a', 'High Risk':'#ff9f0a', 'Critical':'#ff2d55' }[classif] || '#4da6ff';
+      const riskBar = (val, max, color) => `<div style="height:6px;background:var(--bg-card2);border-radius:3px;overflow:hidden;flex:1"><div style="height:100%;width:${Math.round(val/max*100)}%;background:${color};border-radius:3px;transition:width .5s"></div></div>`;
+
+      return `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="font-size:42px;font-weight:800;color:${classColor};line-height:1">${riskScore}</div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px">BAS Risk Score</div>
+              <div style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;background:${classColor}22;color:${classColor};border:1px solid ${classColor}55">${esc(classif)}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:24px;">
+            <div style="text-align:center">
+              <div style="font-size:20px;font-weight:700;color:var(--text-primary)">${conf}%</div>
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Prevention Rate</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:20px;font-weight:700;color:var(--text-primary)">${rel}%</div>
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Exposure</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Score Formula: AP + OS + DT + BR − PE</div>
+
+        <div style="display:grid;gap:8px;">
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
+            <span style="width:200px;color:var(--text-muted)">Attack Progression</span>
+            ${riskBar(ap, 30, '#ff9f0a')}
+            <span style="width:36px;text-align:right;font-weight:700;color:#ff9f0a">+${ap}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
+            <span style="width:200px;color:var(--text-muted)">Objective Success</span>
+            ${riskBar(os2, 25, '#ff6b6b')}
+            <span style="width:36px;text-align:right;font-weight:700;color:#ff6b6b">+${os2}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
+            <span style="width:200px;color:var(--text-muted)">Detection Timing</span>
+            ${riskBar(dt, 25, '#ffd60a')}
+            <span style="width:36px;text-align:right;font-weight:700;color:#ffd60a">+${dt}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
+            <span style="width:200px;color:var(--text-muted)">Blast Radius</span>
+            ${riskBar(br, 20, '#ff2d55')}
+            <span style="width:36px;text-align:right;font-weight:700;color:#ff2d55">+${br}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:13px;padding-top:6px;border-top:1px solid var(--border)">
+            <span style="width:200px;color:var(--text-muted)">Prevention Effectiveness</span>
+            ${riskBar(pe, 50, '#30d158')}
+            <span style="width:36px;text-align:right;font-weight:700;color:#30d158">−${pe}</span>
+          </div>
+        </div>
+      </div>`;
+    })() : ''}
+
+    <div class="sec-tools-panel" id="secToolsPanel"></div>
     <div class="categories" id="categoriesContainer"></div>
+
     <div class="mitre-strip">
       <h4>MITRE ATT&CK Coverage</h4>
       <div class="mitre-tags" id="mitreTags"></div>
     </div>
   `;
 
-  // 5. Render Categories and Checks (The part causing the .map error)
-  const container = document.getElementById("categoriesContainer");
-  cats.forEach((cat, ci) => {
-    const checks = cat.checks || cat.Checks || []; // Ensure this is an array
-    const catTotal = checks.length;
-    const catPassed = checks.filter(ch => (ch.result || ch.Result) === "Pass").length;
-    const catPct = catTotal ? Math.round(catPassed / catTotal * 100) : 0;
-    const isBad = catPct < 60;
 
-    // Use the safe 'checks' variable here for .map
-    let checksHtml = checks.map(ch => {
-      const res = (ch.result || ch.Result) === "Pass" ? "pass" : (ch.result || ch.Result) === "Fail" ? "fail" : "skip";
-      return `
+      // 5. Render Categories and Checks (The part causing the .map error)
+      const container = document.getElementById("categoriesContainer");
+      cats.forEach((cat, ci) => {
+        let checks = cat.checks || cat.Checks || []; // Ensure this is an array
+
+        // --- DELTA FILTERING ---
+        if (showDeltaOnly) {
+          checks = checks.filter(ch => (ch.isNew || ch.IsNew) === true);
+        }
+        if (showDeltaOnly && checks.length === 0) return; // Hide empty categories
+
+        const catTotal  = checks.length;
+        const catPassed = checks.filter(ch => (ch.result || ch.Result) === "Pass").length;
+        const catBlocked = checks.filter(ch => (ch.result || ch.Result) === "Blocked").length;
+        const catPct = catTotal ? Math.round((catPassed + catBlocked) / catTotal * 100) : 0;
+        const isBad = catPct < 60;
+
+        // Use the safe 'checks' variable here for .map
+        let checksHtml = checks.map(ch => {
+          const rawRes = ch.result || ch.Result;
+          const res = rawRes === "Pass" ? "pass" : rawRes === "Fail" ? "fail" : rawRes === "Blocked" ? "skip" : "skip";
+          const sev = (ch.severity || ch.Severity || "").toLowerCase();
+          const sevColor = { critical: "#ff2d55", high: "#ff8c00", medium: "#ffd60a", low: "#30d158" }[sev] || "transparent";
+          const sevBg = { critical: "rgba(255,45,85,.12)", high: "rgba(255,140,0,.12)", medium: "rgba(255,214,10,.10)", low: "rgba(48,209,88,.10)" }[sev] || "transparent";
+          const sevHtml = sev ? `<span style="background:${sevBg};color:${sevColor};border:1px solid ${sevColor}40;padding:1px 7px;border-radius:3px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-left:6px;">${(ch.severity || ch.Severity).toUpperCase()}</span>` : "";
+          const impact = ch.threatImpact || ch.ThreatImpact || "";
+          const impactHtml = impact ? `<div style="margin-top:5px;padding:6px 10px;background:rgba(255,140,0,.06);border-left:2px solid #ff8c00;border-radius:0 4px 4px 0;font-size:11px;color:#aaa;"><span style="color:#ff8c00;font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.05em;">Threat Impact &nbsp;</span>${esc(impact)}</div>` : "";
+          return `
         <div class="check-row ${res}">
           <div class="check-badge ${res}">${ch.result || ch.Result}</div>
           <div class="check-body">
-            <div class="check-name">${esc(ch.name || ch.Name)}</div>
+            <div class="check-name">${esc(ch.name || ch.Name)}${sevHtml}</div>
             <div class="check-technique">${esc(ch.techniqueId || ch.TechniqueId)}</div>
             <div class="check-detail">${esc(ch.details || ch.Details)}</div>
+            ${impactHtml}
             <div class="check-rem">${esc(ch.remediation || ch.Remediation)}</div>
           </div>
           <div class="check-dur">${ch.durationMs || ch.DurationMs || 0}ms</div>
         </div>`;
-    }).join("");
+        }).join("");
 
-    container.insertAdjacentHTML("beforeend", `
+
+        container.insertAdjacentHTML("beforeend", `
       <div class="cat-card" id="cat-${ci}">
         <div class="cat-header" onclick="toggleCat(${ci})">
           <span class="cat-phase-badge">${esc(cat.phase || cat.Phase)}</span>
           <span class="cat-name">${esc(cat.name || cat.Name)}</span>
-          <div class="cat-mini-bar"><div class="bar-fill ${isBad?'bad':''}" style="width:${catPct}%"></div></div>
-          <span class="cat-score-badge ${isBad?'bad':'good'}">${catPct}%</span>
+          <div class="cat-mini-bar"><div class="bar-fill ${isBad ? 'bad' : ''}" style="width:${catPct}%"></div></div>
+          <span class="cat-score-badge ${isBad ? 'bad' : 'good'}">${catPct}%</span>
           <svg class="cat-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l4 4-4 4"/></svg>
         </div>
         <div class="cat-checks" style="display:none;">${checksHtml}</div>
       </div>
     `);
-  });
+      });
 
-  // 6. MITRE tags
-  const mitreTags = document.getElementById("mitreTags");
-  tactics.forEach(t => { mitreTags.insertAdjacentHTML("beforeend", `<span class="mitre-tag tactic">${t}</span>`); });
-  techniques.forEach(t => { mitreTags.insertAdjacentHTML("beforeend", `<span class="mitre-tag">${t}</span>`); });
-}
+      // 5b. Security tools panel
+      renderSecurityTools(r);
 
-function toggleCat(idx) {
-  const card = document.getElementById(`cat-${idx}`);
-  card.classList.toggle("expanded");
-  const checks = card.querySelector(".cat-checks");
-  checks.style.display = checks.style.display === "none" ? "flex" : "none";
-}
+      // 6. MITRE tags
+      const mitreTags = document.getElementById("mitreTags");
+      tactics.forEach(t => { mitreTags.insertAdjacentHTML("beforeend", `<span class="mitre-tag tactic">${t}</span>`); });
+      techniques.forEach(t => { mitreTags.insertAdjacentHTML("beforeend", `<span class="mitre-tag">${t}</span>`); });
 
-// ═══════════════════════════════════════════════════
-// EMPTY STATE (initial)
-// ═══════════════════════════════════════════════════
-function showEmpty() {
-  document.getElementById("pageTitle").innerHTML = `Dashboard <span>— Overview</span>`;
-  document.getElementById("contentArea").innerHTML = `
+      // 7. Compliance section (Function not defined in current codebase)
+      // renderComplianceSection(agentId);
+      // 8. Windows Patch section (Function not defined in current codebase)
+      // renderPatchSection(agentId);
+      // 9. Lateral Movement Attack Graph
+      renderAttackPathGraph(r);
+
+      // Restore accordion open states (prevents collapse on live re-render)
+      expandedCats.forEach(id => {
+        const card = document.getElementById(id);
+        if (card) {
+          card.classList.add('expanded');
+          const checks = card.querySelector('.cat-checks');
+          if (checks) checks.style.display = 'flex';
+        }
+      });
+
+      // Restore scroll position (prevents jump-to-top on live re-render)
+      contentEl.scrollTop = savedScroll;
+    }
+
+    function toggleCat(idx) {
+      const card = document.getElementById(`cat-${idx}`);
+      card.classList.toggle("expanded");
+      const checks = card.querySelector(".cat-checks");
+      checks.style.display = checks.style.display === "none" ? "flex" : "none";
+    }
+
+    // ─── Lateral Movement Attack Path Graph ─────────────────────────────────
+    function renderAttackPathGraph(report) {
+      const cats = report.categories || report.Categories || [];
+
+      // Map each simulation category to its MITRE phase
+      const phaseMap = {
+        'initial access': { label: 'Initial Access', icon: '🎯', tactic: 'TA0001' },
+        'execution': { label: 'Execution', icon: '⚡', tactic: 'TA0002' },
+        'persistence': { label: 'Persistence', icon: '🔗', tactic: 'TA0003' },
+        'privilege escalation': { label: 'Privilege Escalation', icon: '📡', tactic: 'TA0004' },
+        'credential access': { label: 'Credential Theft', icon: '🔑', tactic: 'TA0006' },
+        'lateral movement': { label: 'Lateral Movement', icon: '🚧', tactic: 'TA0008' },
+      };
+
+      // Pre-defined attack chain order
+      const chain = [
+        'initial access',
+        'execution',
+        'persistence',
+        'privilege escalation',
+        'credential access',
+        'lateral movement',
+      ];
+
+      // Final synthetic node
+      const targetNode = { label: 'Domain Compromise', icon: '💀', tactic: 'Goal', status: null };
+
+      // Determine phase status from simulation results
+      const nodeStatus = {};
+      cats.forEach(cat => {
+        const phaseName = (cat.phase || cat.Phase || '').toLowerCase();
+        const checks = cat.checks || cat.Checks || [];
+        const anyFail = checks.some(ch => (ch.result || ch.Result) === 'Fail');
+        const allSkipped = checks.every(ch => (ch.result || ch.Result) === 'Skipped');
+        if (phaseMap[phaseName]) {
+          nodeStatus[phaseName] = allSkipped ? 'skipped' : anyFail ? 'fail' : 'pass';
+        }
+      });
+
+      // Determine whether the chain reaches the target (all nodes in chain are fail)
+      let chainBroken = false;
+      let breakNode = null;
+      const nodeStates = chain.map(phase => {
+        const meta = phaseMap[phase];
+        const status = nodeStatus[phase] || 'unknown';
+        if (!chainBroken && status === 'pass') {
+          chainBroken = true;
+          breakNode = phase;
+        }
+        return { phase, ...meta, status };
+      });
+      const domainCompromised = !chainBroken;
+
+      // Build SVG nodes + edges
+      const nodeW = 120, nodeH = 56, gapX = 60;
+      const svgW = (nodeW + gapX) * (nodeStates.length + 1) + 20;
+      const svgH = 160;
+      const nodeY = 52;
+      const arrowY = nodeY + nodeH / 2;
+
+      const colorFor = s => ({ fail: '#ff2d55', pass: '#30d158', skipped: '#636366', unknown: '#48484a' })[s] || '#48484a';
+      const bgFor = s => ({ fail: 'rgba(255,45,85,.12)', pass: 'rgba(48,209,88,.10)', skipped: 'rgba(99,99,102,.10)', unknown: 'rgba(72,72,74,.10)' })[s] || 'rgba(72,72,74,.10)';
+
+      let svgInner = '';
+      let x = 20;
+
+      nodeStates.forEach((n, i) => {
+        const col = colorFor(n.status);
+        const bg = bgFor(n.status);
+        const cx = x + nodeW / 2;
+
+        // Arrow to next
+        const nextX = x + nodeW + gapX / 2;
+        const nextNodeX = x + nodeW + gapX;
+        const arrowColor = n.status === 'fail' ? '#ff2d55' : n.status === 'pass' ? '#30d158' : '#48484a';
+        const animated = n.status === 'fail' && !chainBroken ? ' class="atk-pulse"' : '';
+        svgInner += `<line x1="${x + nodeW}" y1="${arrowY}" x2="${nextNodeX}" y2="${arrowY}" stroke="${arrowColor}" stroke-width="2.5" stroke-dasharray="${n.status === 'pass' ? '4 3' : ''}" opacity="0.7"/>`;
+        svgInner += `<polygon points="${nextNodeX},${arrowY - 5} ${nextNodeX + 10},${arrowY} ${nextNodeX},${arrowY + 5}" fill="${arrowColor}" opacity="0.85"/>`;
+
+        // Node box
+        svgInner += `<rect x="${x}" y="${nodeY}" width="${nodeW}" height="${nodeH}" rx="8" fill="${bg}" stroke="${col}" stroke-width="1.5"/>`;
+        svgInner += `<text x="${cx}" y="${nodeY + 20}" text-anchor="middle" font-size="16">${n.icon}</text>`;
+        svgInner += `<text x="${cx}" y="${nodeY + 36}" text-anchor="middle" font-size="9" font-weight="700" fill="${col}" font-family="Inter,sans-serif">${n.label}</text>`;
+        svgInner += `<text x="${cx}" y="${nodeY + 48}" text-anchor="middle" font-size="8" fill="#888" font-family="Inter,sans-serif">${n.tactic}</text>`;
+
+        // Status label below node
+        const statusLabel = { fail: '⚠ EXPLOITABLE', pass: '✓ BLOCKED', skipped: '— Skipped', unknown: '? Unknown' }[n.status] || '';
+        const statusColor = colorFor(n.status);
+        svgInner += `<text x="${cx}" y="${nodeY + nodeH + 18}" text-anchor="middle" font-size="8.5" fill="${statusColor}" font-weight="700" font-family="Inter,sans-serif">${statusLabel}</text>`;
+
+        x += nodeW + gapX;
+      });
+
+      // Final domain compromise node
+      const targetCol = domainCompromised ? '#ff2d55' : '#30d158';
+      const targetBg = domainCompromised ? 'rgba(255,45,85,.15)' : 'rgba(48,209,88,.10)';
+      const targetLabel = domainCompromised ? '💀 Domain Compromise' : '🛡️ Attack Stopped';
+      svgInner += `<rect x="${x}" y="${nodeY}" width="${nodeW + 20}" height="${nodeH}" rx="8" fill="${targetBg}" stroke="${targetCol}" stroke-width="2"/>`;
+      svgInner += `<text x="${x + (nodeW + 20) / 2}" y="${nodeY + 20}" text-anchor="middle" font-size="17">${domainCompromised ? '💀' : '🛡️'}</text>`;
+      svgInner += `<text x="${x + (nodeW + 20) / 2}" y="${nodeY + 37}" text-anchor="middle" font-size="9" font-weight="800" fill="${targetCol}" font-family="Inter,sans-serif">${domainCompromised ? 'COMPROMISED' : 'ATTACK STOPPED'}</text>`;
+      svgInner += `<text x="${x + (nodeW + 20) / 2}" y="${nodeY + 49}" text-anchor="middle" font-size="8" fill="#888" font-family="Inter,sans-serif">Final Impact</text>`;
+      const finalStatusLabel = domainCompromised ? '⚠ Full Tree Exploitable' : '✓ Chain Broken';
+      svgInner += `<text x="${x + (nodeW + 20) / 2}" y="${nodeY + nodeH + 18}" text-anchor="middle" font-size="8.5" fill="${targetCol}" font-weight="700" font-family="Inter,sans-serif">${finalStatusLabel}</text>`;
+
+      const totalSvgW = x + nodeW + 20 + 20;
+
+      const summaryMsg = domainCompromised
+        ? `<span style="color:#ff2d55;font-weight:700;">CRITICAL:</span> All simulation phases contain failures. A real attacker could follow this exact chain and reach full domain compromise.`
+        : `<span style="color:#30d158;font-weight:700;">CHAIN BROKEN:</span> The attack path is interrupted at the <b>${phaseMap[breakNode]?.label || breakNode}</b> phase — your controls stopped the attack before domain compromise.`;
+
+      const existing = document.getElementById('attack-graph-panel');
+      if (existing) existing.remove();
+
+      const panel = document.createElement('div');
+      panel.id = 'attack-graph-panel';
+      panel.style.cssText = 'margin-top:28px; background:var(--bg-card,#161b22); border:1px solid var(--border,#2a3040); border-radius:10px; padding:20px 24px;';
+      panel.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4da6ff" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+          <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--text-primary,#e8eaf0);">Lateral Movement Attack Path</h3>
+        </div>
+        <div style="font-size:12px;color:#aaa;margin-bottom:16px;">${summaryMsg}</div>
+        <div style="overflow-x:auto;">
+          <svg width="${totalSvgW}" height="${svgH}" style="display:block;min-width:600px;">
+            <style>
+              @keyframes atkPulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+              .atk-pulse { animation: atkPulse 1.4s ease-in-out infinite; }
+            </style>
+            ${svgInner}
+          </svg>
+        </div>
+        <div style="margin-top:14px;font-size:11px;color:var(--text-muted,#636e7a);">
+          <span style="color:#ff2d55;font-weight:700;">⚠ Exploitable</span> nodes contain at least one FAIL check.
+          <span style="color:#30d158;font-weight:700;margin-left:12px;">✓ Blocked</span> nodes passed all checks, interrupting the threat chain.
+        </div>
+      `;
+
+      const contentArea = document.getElementById('contentArea');
+      if (contentArea) contentArea.appendChild(panel);
+    }
+
+    // ─── Security Tools Panel renderer ────────────────────────────────────────
+    function renderSecurityTools(report) {
+      const panel = document.getElementById("secToolsPanel");
+      if (!panel) return;
+
+      const tools = report.securityTools || report.SecurityTools || [];
+
+      const typeAbbr = t => ({
+        'AV': 'AV', 'EDR': 'EDR', 'Firewall': 'FW',
+        'HIDS': 'IDS', 'DLP': 'DLP', 'AV/EDR': 'AV'
+      })[t] || '??';
+
+      const typeClass = t => ({
+        'AV': 'av', 'EDR': 'edr', 'Firewall': 'firewall',
+        'HIDS': 'hids', 'DLP': 'dlp', 'AV/EDR': 'av'
+      })[t] || 'other';
+
+      const statusCls = s => (s || '').toLowerCase() === 'active' ? 'active' :
+        (s || '').toLowerCase() === 'inactive' ? 'inactive' : 'unknown';
+
+      const toolsHtml = tools.length === 0
+        ? `<div class="sec-tools-empty">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            No security software detected on this endpoint — endpoint may be unprotected.
+           </div>`
+        : `<div class="sec-tools-grid">${tools.map(t => `
+          <div class="sec-tool-card">
+            <div class="sec-tool-icon type-${typeClass(t.type || t.Type)}">${typeAbbr(t.type || t.Type)}</div>
+            <div class="sec-tool-info">
+              <div class="sec-tool-name" title="${esc(t.name || t.Name)}">${esc(t.name || t.Name)}</div>
+              <div class="sec-tool-vendor">${esc(t.vendor || t.Vendor || (t.type || t.Type))}</div>
+            </div>
+            <div class="sec-tool-status ${statusCls(t.status || t.Status)}">
+              <span class="dot"></span>${(t.status || t.Status || 'Unknown').toUpperCase()}
+            </div>
+          </div>`).join('')}</div>`;
+
+      panel.innerHTML = `
+        <div class="sec-tools-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          Installed Security Software &nbsp;<span style="color:var(--accent);font-size:10px;">${tools.length} detected</span>
+        </div>
+        ${toolsHtml}`;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // WINDOWS PATCH SECTION
+    // Finds the "11. Windows Patch Management" category, parses the
+    // structured JSON from the check Details field, and renders either
+    // a safe green banner or a list of missing KBs with an Install button.
+    // ═══════════════════════════════════════════════════════════════════
+    async function renderPatchSection(agentId) {
+      const r = reports[agentId];
+      if (!r) return;
+      const cats = r.categories || r.Categories || [];
+      const patchCat = cats.find(c => /windows patch/i.test(c.name || c.Name));
+      const contentArea = document.getElementById('contentArea');
+      if (!contentArea) return;
+
+      // Build the wrapper
+      const wrapper = document.createElement('div');
+      wrapper.className = 'patch-section';
+      wrapper.innerHTML = '<div class="patch-section-title">Windows Patch Management</div>';
+
+      if (!patchCat) {
+        // Category not in report — agent doesn't send it yet (old agent version)
+        wrapper.innerHTML += `
+          <div class="patch-safe-banner" style="background:rgba(77,166,255,.06); border-color:rgba(77,166,255,.2); color:var(--blue);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <div><div>Patch data not available</div><div class="patch-safe-sub">Update the agent to v2+ to enable Windows Patch Management.</div></div>
+          </div>`;
+        contentArea.appendChild(wrapper);
+        return;
+      }
+
+      const checks = patchCat.checks || patchCat.Checks || [];
+      // Find the "Missing security patches" check which has the rich JSON
+      const missingCheck = checks.find(ch => /missing security/i.test(ch.name || ch.Name));
+      const svcCheck = checks.find(ch => /windows update service/i.test(ch.name || ch.Name));
+
+      // Try to parse structured JSON from Details
+      let patchData = null;
+      if (missingCheck) {
+        const raw = missingCheck.details || missingCheck.Details || '';
+        try { patchData = JSON.parse(raw); } catch { /* not JSON */ }
+      }
+
+      // Determine overall status
+      const allPass = checks.every(ch => (ch.result || ch.Result) === 'Pass');
+
+      if (allPass || (patchData && patchData.patchStatus === 'up_to_date')) {
+        const lastDate = patchData?.lastPatchDate || 'Recently';
+        wrapper.innerHTML += `
+          <div class="patch-safe-banner">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <div>
+              <div>Windows Patch Updated — All patches are current</div>
+              <div class="patch-safe-sub">Last successful update: ${esc(lastDate)}</div>
+            </div>
+          </div>`;
+      } else {
+        // Build danger section
+        const missing = patchData?.missingKBs || [];
+        const lastDate = patchData?.lastPatchDate || 'Unknown';
+        const summary = patchData?.summary || 'One or more security patches are missing.';
+        const aid = r.agentId || r.AgentId;
+
+        const kbCards = missing.map(kb => {
+          const sevClass = (kb.severity || '').toLowerCase() === 'critical' ? 'sev-critical'
+            : (kb.severity || '').toLowerCase() === 'important' ? 'sev-important' : 'sev-moderate';
+          return `
+            <div class="kb-card">
+              <span class="kb-badge">${esc(kb.kb)}</span>
+              <div class="kb-body">
+                <div class="kb-title">${esc(kb.title)}</div>
+                <div class="kb-threat">⚠ ${esc(kb.threat)}</div>
+                <div class="kb-meta">
+                  <span class="sev-badge ${sevClass}">${esc(kb.severity)}</span>
+                  <span class="cve-tag">${esc(kb.cve)}</span>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+
+        const svcWarning = (svcCheck && (svcCheck.result || svcCheck.Result) === 'Fail')
+          ? `<div style="font-size:12px; color:var(--amber); margin-top:4px;">⚠ Windows Update service is disabled — enable it before installing patches.</div>` : '';
+
+        wrapper.innerHTML += `
+          <div class="patch-danger-header">
+            <div class="patch-danger-label">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              ${esc(summary)}
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+              <button class="install-btn" id="installBtn-${esc(aid)}" onclick="triggerPatchInstall('${esc(aid)}', this)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Install Patches
+              </button>
+              <div class="patch-last-date">Last update: ${esc(lastDate)}</div>
+              ${svcWarning}
+            </div>
+          </div>
+          ${missing.length > 0 ? `<div class="kb-list">${kbCards}</div>` : ''}`;
+      }
+
+      // Fetch current patch install status from server (survives page refresh)
+      const aid = r.agentId || r.AgentId;
+      try {
+        const sr = await fetch(`/api/patch-status/${encodeURIComponent(aid)}`);
+        if (sr.ok) {
+          const serverStatus = await sr.json();
+          patchStatuses[aid] = serverStatus;
+        }
+      } catch { }
+
+      // If an install is in-progress or recently finished, show the overlay
+      const knownStatus = patchStatuses[aid];
+      if (knownStatus && knownStatus.phase && knownStatus.phase !== 'idle') {
+        wrapper.insertAdjacentHTML('beforeend', buildPatchStatusOverlay(knownStatus));
+      }
+
+      contentArea.appendChild(wrapper);
+    }
+
+    // Builds the progress/status overlay HTML for patch installation
+    function buildPatchStatusOverlay(status) {
+      const phase = status?.phase || 'idle';
+      const log = status?.log || '';
+      if (phase === 'idle') return '';
+
+      const phaseConfig = {
+        scanning: { icon: '🔍', label: 'Scanning', color: 'var(--blue)', spin: true },
+        downloading: { icon: '⬇️', label: 'Downloading', color: 'var(--amber)', spin: true },
+        installing: { icon: '⚙️', label: 'Installing', color: 'var(--amber)', spin: true },
+        done: { icon: '✅', label: 'Installed', color: 'var(--accent)', spin: false },
+        failed: { icon: '❌', label: 'Failed', color: 'var(--red)', spin: false },
+      };
+      const cfg = phaseConfig[phase] || { icon: '⏳', label: phase, color: 'var(--text-dim)', spin: true };
+      const spinStyle = cfg.spin ? 'animation:spin 1.2s linear infinite;display:inline-block;' : '';
+      const bgColor = phase === 'done' ? 'rgba(0,212,170,.06)'
+        : phase === 'failed' ? 'rgba(255,79,90,.06)'
+          : 'rgba(77,166,255,.06)';
+      const borderColor = phase === 'done' ? 'rgba(0,212,170,.25)'
+        : phase === 'failed' ? 'rgba(255,79,90,.25)'
+          : 'rgba(77,166,255,.25)';
+
+      return `<div id="patch-status-overlay" style="
+          margin-bottom:12px;
+          background:${bgColor};
+          border:1px solid ${borderColor};
+          border-radius:var(--radius);
+          padding:14px 20px;
+          display:flex; align-items:center; gap:14px;
+          font-size:13px;
+        ">
+          <span style="font-size:18px; ${spinStyle}">${cfg.icon}</span>
+          <div style="flex:1;">
+            <div style="font-weight:700; color:${cfg.color};">${cfg.label}</div>
+            <div style="font-size:12px; color:var(--text-dim); margin-top:2px;">${esc(log)}</div>
+          </div>
+        </div>`;
+    }
+
+    async function triggerPatchInstall(agentId, btn) {
+      // Immediately show in-progress state locally  
+      const initStatus = { phase: 'scanning', log: 'Command sent. Waiting for agent...' };
+      patchStatuses[agentId] = initStatus;
+      const patchSec = document.querySelector('.patch-section');
+      if (patchSec) {
+        const existing = document.getElementById('patch-status-overlay');
+        const overlayHtml = buildPatchStatusOverlay(initStatus);
+        if (existing) {
+          existing.outerHTML = overlayHtml;
+        } else {
+          // Insert after the title
+          patchSec.querySelector('.patch-section-title')?.insertAdjacentHTML('afterend', overlayHtml);
+        }
+      }
+      btn.classList.add('installing');
+      btn.textContent = 'Command sent…';
+
+      try {
+        const res = await fetch(`/api/install-patches/${encodeURIComponent(agentId)}`, {
+          method: 'POST'
+        });
+        if (!res.ok) {
+          showToast('⚠ Failed to send install command. Check server.', 'fail');
+          btn.classList.remove('installing');
+          btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install Patches`;
+        }
+        // On success: live updates come via SignalR patch_status_update
+      } catch (e) {
+        showToast('Network error sending install command.', 'fail');
+        btn.classList.remove('installing');
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install Patches`;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // COMPLIANCE SECTION
+    // Maps each failing check to 6 regulatory frameworks and renders
+    // a detailed compliance report below the MITRE strip.
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Framework meta (id, label, CSS class, colour)
+    const FRAMEWORKS = [
+      { id: 'pci', label: 'PCI DSS', cls: 'fw-pci', refCls: 'fw-pci' },
+      { id: 'iso', label: 'ISO 27001', cls: 'fw-iso', refCls: 'fw-iso' },
+      { id: 'rbi', label: 'RBI Guidelines', cls: 'fw-rbi', refCls: 'fw-rbi' },
+      { id: 'dpdp', label: 'DPDP Act', cls: 'fw-dpdp', refCls: 'fw-dpdp' },
+      { id: 'itact', label: 'IT Act 2000', cls: 'fw-itact', refCls: 'fw-itact' },
+      { id: 'certin', label: 'CERT-In', cls: 'fw-certin', refCls: 'fw-certin' },
+    ];
+
+    // Master compliance map — each entry: match regex → per-framework { ref, clause, action }
+    // clause = what the regulation mandates (shown next to ref badge)
+    // action = specific technical remediation step (shown in Required Action block)
+    const COMPLIANCE_MAP = [
+      // ── INITIAL ACCESS: Phishing / attachment ─────────────────────────────
+      {
+        match: /malicious attach|script.based dropper|vba macro/i,
+        pci: { ref: 'Req 5.4.1', clause: 'Deploy controls to detect phishing and malicious attachments.', action: 'Enable Office macro blocking via Group Policy; allow only digitally signed macros from trusted publishers.' },
+        iso: { ref: 'A.8.7', clause: 'Protect against malware delivered via email attachments.', action: 'Configure mail gateway to strip or sandbox Office documents containing active macros or OLE objects.' },
+        rbi: { ref: 'RBI/2015-16/418 §6.3', clause: 'Banks shall implement controls against malware entry vectors.', action: 'Deploy email security gateway with ATP sandboxing; block VBA macros on endpoints via AppLocker policy.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Implement appropriate technical safeguards against malware.', action: 'Enable Defender Attack Surface Reduction rule: Block Office applications from creating child processes.' },
+        itact: { ref: 'Sec 66F', clause: 'Malicious code delivery via email constitutes cyber terrorism.', action: 'Implement SPF/DKIM/DMARC; enable attachment sandboxing; train users on phishing recognition.' },
+        certin: { ref: 'CERT-In/2022 §4(a)', clause: 'Report malware delivery incidents within 6 hours.', action: 'Deploy endpoint EDR; configure SIEM alert for macro execution spawning cmd/wscript/powershell.' },
+      },
+      // ── INITIAL ACCESS: HTML smuggling ────────────────────────────────────
+      {
+        match: /html smuggling/i,
+        pci: { ref: 'Req 6.4.2', clause: 'Protect against client-side attacks and malicious downloads.', action: 'Enable SmartScreen and configure browser policies to block file downloads from untrusted origins.' },
+        iso: { ref: 'A.8.23', clause: 'Implement web filtering to prevent access to malicious content.', action: 'Deploy DNS-layer filtering (e.g., Cisco Umbrella) and configure browser to restrict HTML5 blob: downloads.' },
+        rbi: { ref: 'DPSS.CO.PD.No.267 §5', clause: 'Secure internet-facing channels against drive-by downloads.', action: 'Block JavaScript-based file drops via browser enterprise policy; deploy web proxy with SSL inspection.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent malware from reaching systems processing personal data.', action: 'Restrict browser download permissions; enable Windows Defender SmartScreen for all users.' },
+        itact: { ref: 'Sec 43(c)', clause: 'Downloading/introducing malicious code is an offence.', action: 'Implement web content filtering; alert on blob:// file creation events in endpoint telemetry.' },
+        certin: { ref: 'CERT-In/2022 §4(b)', clause: 'HTML smuggling is a notifiable initial access technique.', action: 'Configure network DPI to detect HTML files containing base64-encoded PE blobs embedded in JavaScript.' },
+      },
+      // ── INITIAL ACCESS: LNK / shortcut ────────────────────────────────────
+      {
+        match: /lnk.*shortcut|shortcut.*exec/i,
+        pci: { ref: 'Req 5.2.1', clause: 'Detect and prevent execution of malicious shortcut files.', action: 'Block LNK files from email and downloads via mail gateway; enable ASR rule for Office child processes.' },
+        iso: { ref: 'A.8.7', clause: 'Implement anti-malware controls that detect shortcut-based loaders.', action: 'Deploy EDR with specific detection for LNK files with suspicious targets (e.g., mshta, wscript, rundll32).' },
+        rbi: { ref: 'RBI/2015-16/418 §6.5', clause: 'Controls shall detect malicious files masquerading as documents.', action: 'Configure email gateway to strip .lnk attachments; alert on LNK execution from download/temp directories.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent execution of malicious payloads on personal data systems.', action: 'Enable Windows ASR rule: Block process creations originating from PSExec and WMI commands.' },
+        itact: { ref: 'Sec 43(a)', clause: 'Executing malicious shortcuts constitutes unauthorized access.', action: 'Enable PowerShell ScriptBlock logging and CommandLine auditing to detect LNK-spawned processes.' },
+        certin: { ref: 'CERT-In/2022 §5', clause: 'Shortcut-based malware delivery is a tracked initial access tactic.', action: 'Enforce Software Restriction Policy to block script execution from %APPDATA% and %TEMP% directories.' },
+      },
+      // ── EXECUTION: certutil download abuse ────────────────────────────────
+      {
+        match: /certutil.*download|certutil.*urlcache|certutil.*decode/i,
+        pci: { ref: 'Req 6.4.3', clause: 'Prevent use of trusted system binaries to download unauthorised code.', action: 'Block certutil.exe outbound HTTP/HTTPS via Windows Firewall or AppLocker; alert on -urlcache and -decode flags.' },
+        iso: { ref: 'A.8.19', clause: 'Control installation of software and binaries on operational systems.', action: 'Restrict certutil.exe to PKI administrative contexts only; monitor for -split -f -urlcache command patterns.' },
+        rbi: { ref: 'RBI/2021-22/112 §7', clause: 'Prevent use of OS utilities for unauthorized file downloads.', action: 'Deploy application whitelisting; create SIEM correlation rule for certutil spawning network connections.' },
+        dpdp: { ref: 'Sec 8(4)', clause: 'Prevent data download channels that bypass organisational controls.', action: 'Enable command-line audit logging (Event ID 4688); alert on certutil -urlcache -split -f <URL> pattern.' },
+        itact: { ref: 'Sec 43(c)', clause: 'Downloading malicious code using system tools is an offence.', action: 'Block certutil from internet access via host-based firewall rule; monitor process creation telemetry.' },
+        certin: { ref: 'CERT-In/2022 §4(c)', clause: 'LOLBin download abuse is a notifiable defence-evasion technique.', action: 'Deploy EDR rule to alert on certutil.exe making TCP connections to external IPs on ports 80/443.' },
+      },
+      // ── EXECUTION: rundll32 abuse ──────────────────────────────────────────
+      {
+        match: /rundll32 abuse/i,
+        pci: { ref: 'Req 6.4.3', clause: 'Detect and prevent abuse of Windows trusted binaries in CDE.', action: 'Create AppLocker rule blocking rundll32.exe from loading DLLs from user-writable directories.' },
+        iso: { ref: 'A.12.2.1', clause: 'Implement malicious code controls covering LOLBin execution patterns.', action: 'Enable Sysmon EventID 1 with command-line logging; create SIEM alert for rundll32 loading non-system DLLs.' },
+        rbi: { ref: 'RBI/2015-16/418 §6.8', clause: 'Behavioral detection required for command interpreter abuse.', action: 'Deploy EDR rule: alert when rundll32.exe calls exports not from %SystemRoot%\\System32.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent unauthorized code execution on systems processing personal data.', action: 'Restrict rundll32 to system DLL paths via WDAC policy; log all rundll32 invocations for 180+ days.' },
+        itact: { ref: 'Sec 43(a)', clause: 'Executing unauthorized code via system utilities violates the IT Act.', action: 'Enable Windows Defender ASR rule: Block rundll32.exe calls to COM objects; audit process creation.' },
+        certin: { ref: 'CERT-In/2022 §4(d)', clause: 'Signed-binary proxy execution is a tracked MITRE T1218 technique.', action: 'Configure SIEM to correlate rundll32.exe spawning network connections or child cmd/powershell processes.' },
+      },
+      // ── EXECUTION: regsvr32 abuse ──────────────────────────────────────────
+      {
+        match: /regsvr32 abuse/i,
+        pci: { ref: 'Req 6.4.3', clause: 'Prevent use of native OS tools to bypass application controls.', action: 'Block regsvr32 from making outbound connections (Squiblydoo technique) via host firewall or proxy rules.' },
+        iso: { ref: 'A.8.19', clause: 'Control which software components can be registered on operational systems.', action: 'Monitor for regsvr32 /s /n /u /i: pattern (scrobj.dll abuse); alert via Sysmon Event ID 12/13.' },
+        rbi: { ref: 'RBI/2021-22/112 §7.2', clause: 'Script-based COM object registration must be monitored.', action: 'Create EDR rule detecting regsvr32.exe spawning with /i:http or /i:ftp parameters indicating remote COM load.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent script-based COM registration on personal data processing systems.', action: 'Enable Windows Script Host restrictions; block regsvr32 from loading from temp/appdata locations.' },
+        itact: { ref: 'Sec 43(c)', clause: 'Using regsvr32 to load malicious scripts violates IT Act computer abuse provisions.', action: 'Configure AppLocker to restrict regsvr32 DLL registration to trusted system paths only.' },
+        certin: { ref: 'CERT-In/2022 §4(d)', clause: 'T1218.010: regsvr32 abuse is tracked as a signed-binary proxy execution technique.', action: 'Implement WDAC to block unsigned COM object registration; alert on regsvr32 outbound HTTP connections.' },
+      },
+      // ── EXECUTION: mshta abuse ─────────────────────────────────────────────
+      {
+        match: /mshta abuse/i,
+        pci: { ref: 'Req 6.4.3', clause: 'Prevent HTA execution as a proxy for malicious script delivery.', action: 'Block mshta.exe from accessing external URLs via firewall; disable HTA file association in Windows.' },
+        iso: { ref: 'A.8.7', clause: 'Controls against malware shall cover script-based HTA delivery.', action: 'Create Sysmon rule detecting mshta.exe with command-line referencing http:// or javascript: URIs.' },
+        rbi: { ref: 'RBI/2015-16/418 §6.8', clause: 'HTML Application abuse for script execution must be controlled.', action: 'Disable the HTA file handler (HKCU\\SOFTWARE\\Classes\\.hta) via GPO on all banking endpoints.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent script-based code execution on personal data environments.', action: 'Enable ASR rule: Block JavaScript or VBScript from launching downloaded executable content.' },
+        itact: { ref: 'Sec 43(a)', clause: 'HTA-based unauthorised script execution violates IT Act provisions.', action: 'Remove mshta.exe or restrict via AppLocker; monitor for mshta spawning cmd, powershell, or wscript.' },
+        certin: { ref: 'CERT-In/2022 §4(d)', clause: 'T1218.005: mshta abuse is a notifiable signed-binary proxy execution technique.', action: 'Deploy EDR detection for mshta.exe spawning network-connected child processes; alert in SIEM.' },
+      },
+      // ── EXECUTION: WMI execution ───────────────────────────────────────────
+      {
+        match: /wmi exec|wmi.*execution|wmic/i,
+        pci: { ref: 'Req 10.2.1', clause: 'Log and monitor all use of management tools with admin capability.', action: 'Enable WMI activity logging (Microsoft-Windows-WMI-Activity/Operational); alert on remote namespace queries.' },
+        iso: { ref: 'A.8.16', clause: 'Monitor networks and systems for anomalous WMI-based activity.', action: 'Configure Sysmon EventID 19/20/21 to log WMI subscriptions; alert when WMI spawns cmd or powershell.' },
+        rbi: { ref: 'RBI/2021-22/112 §8', clause: 'Remote management protocols must be restricted on banking systems.', action: 'Block DCOM port 135 at network level; restrict WMI remote access to admin jump-hosts only.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent unauthorized remote execution on personal data systems.', action: 'Disable WMI for non-admin accounts; audit WMI permanent subscriptions (EventConsumer objects).' },
+        itact: { ref: 'Sec 43(a)', clause: 'Unauthorized remote execution via WMI constitutes system access offence.', action: 'Enable Windows Firewall rule blocking inbound DCOM; log all WMI remote connections via Event ID 4648.' },
+        certin: { ref: 'CERT-In/2022 §4(e)', clause: 'T1047: WMI-based lateral execution is a tracked notifiable technique.', action: 'Deploy SIEM rule correlating WMI process creation events with lateral movement indicators.' },
+      },
+      // ── EXECUTION: PowerShell abuse ────────────────────────────────────────
+      {
+        match: /powershell abuse|powershell.*bypass|powershell.*execut/i,
+        pci: { ref: 'Req 6.4.1', clause: 'Implement controls to detect malicious use of scripting environments.', action: 'Enable PowerShell Constrained Language Mode via WDAC; enforce Script Block Logging and Module Logging.' },
+        iso: { ref: 'A.8.7', clause: 'Anti-malware controls shall cover script-based attack techniques.', action: 'Enable PowerShell transcript logging to a protected network share; alert on -EncodedCommand or -Bypass flags.' },
+        rbi: { ref: 'RBI/2015-16/418 §6.8', clause: 'Script execution policies must be hardened on banking endpoints.', action: 'Set PowerShell ExecutionPolicy to AllSigned via GPO; enable AMSI integration for all PS versions.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent scripting-based attacks on personal data processing systems.', action: 'Deploy ASR rule: Block credential stealing from LSASS; enable PS Script Block Logging (Event ID 4104).' },
+        itact: { ref: 'Sec 43A', clause: 'Inadequate script execution controls constitute negligence under IT Act.', action: 'Restrict PowerShell v2 downgrade by removing v2 feature; enforce version 5+ with enhanced logging.' },
+        certin: { ref: 'CERT-In/2022 §4(d)', clause: 'T1059.001: PowerShell is a primary scripting language abused in attacks.', action: 'Enable AMSI telemetry forwarding to SIEM; alert on PS processes loading System.Reflection namespaces.' },
+      },
+      // ── EXECUTION: Obfuscated PowerShell ──────────────────────────────────
+      {
+        match: /obfuscat|obfuscated.*power/i,
+        pci: { ref: 'Req 6.4.1', clause: 'Detect and block obfuscated script execution in CDE systems.', action: 'Enable PowerShell Script Block Logging (Event 4104); use AMSI to inspect deobfuscated payloads at runtime.' },
+        iso: { ref: 'A.8.7', clause: 'Anti-malware controls shall cover evasion via code obfuscation.', action: 'Deploy commercial AMSI-enhanced EDR; correlate trigger on strings like IEX, Invoke-Expression within encoded blobs.' },
+        rbi: { ref: 'RBI/2015-16/418 §6.8', clause: 'Obfuscated script execution is a key evasion technique on banking endpoints.', action: 'Enable PS Module Logging and AMSI on all endpoints; alert on CharacterFrequency anomalies in PS commands.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Detect defence evasion techniques on personal data processing systems.', action: 'Configure Defender for Endpoint with AMSI integration; alert when PowerShell entropy score exceeds threshold.' },
+        itact: { ref: 'Sec 43', clause: 'Obfuscation to bypass controls enables unauthorized system access.', action: 'Enable ScriptBlock logging; create SIEM rule for PS Event 4104 containing IEX/Invoke-Expression/[char].' },
+        certin: { ref: 'CERT-In/2022 §4(d)', clause: 'T1027: Obfuscated files and scripts are a notifiable defence-evasion technique.', action: 'Deploy UEBA rules to flag high-entropy command-line strings; report evasion incidents within 6 hours.' },
+      },
+      // ── EXECUTION: Base64 encoded commands ────────────────────────────────
+      {
+        match: /encoded.*command|base64.*command|encodedcommand/i,
+        pci: { ref: 'Req 6.4.1', clause: 'Detect and prevent execution of base64-encoded command payloads.', action: 'Alert on PowerShell -EncodedCommand flag via SIEM; decode and inspect payload before allowing execution.' },
+        iso: { ref: 'A.8.28', clause: 'Secure coding and script execution standards shall prevent encoded payload abuse.', action: 'Block PowerShell -enc / -EncodedCommand via constrained language mode and AppLocker rule.' },
+        rbi: { ref: 'RBI/2021-22/112 §7.3', clause: 'Encoded command execution is a known evasion technique on banking infrastructure.', action: 'Enable audit logging for process creation with full command-line capture; alert on -enc flag in PS invocations.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent covert code execution methods on personal data systems.', action: 'Deploy AMSI with base64 decoding; correlate Event 4688 for PowerShell launching with encoded payloads.' },
+        itact: { ref: 'Sec 43', clause: 'Using encoded commands to bypass controls is unauthorized system manipulation.', action: 'Enable Windows Audit Process Creation with command-line logging; alert on base64-pattern process arguments.' },
+        certin: { ref: 'CERT-In/2022 §4(d)', clause: 'T1140: base64-encoded commands are a tracked deobfuscation/decode technique.', action: 'Create SIEM rule: process creation event where command line contains [A-Za-z0-9+/]{40,}={0,2} pattern.' },
+      },
+      // ── PERSISTENCE: Registry Run key ─────────────────────────────────────
+      {
+        match: /registry.*run|run.*key.*persist|hkcu.*run|hklm.*run/i,
+        pci: { ref: 'Req 10.2.2', clause: 'Detect and log changes to sensitive registry persistence locations.', action: 'Enable Sysmon Event 13 for HKCU/HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run key writes; alert via SIEM.' },
+        iso: { ref: 'A.8.15', clause: 'Security events including Registry modifications shall be logged.', action: 'Configure Windows audit policy for registry key access; monitor Run/RunOnce keys via file integrity monitoring.' },
+        rbi: { ref: 'RBI/2015-16/418 §6.7', clause: 'Unauthorized persistence mechanisms shall be detected and removed.', action: 'Deploy EDR rule alerting on Run key writes by non-system processes; review weekly via threat hunting.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent unauthorized persistence on personal data processing endpoints.', action: 'Restrict write access to Run keys for non-admin users; alert on unexpected registry autorun entries.' },
+        itact: { ref: 'Sec 43(a)', clause: 'Unauthorised modification of system registry is a computer access offence.', action: 'Enable registry auditing via GPO; create baseline of authorised Run entries and alert on deviations.' },
+        certin: { ref: 'CERT-In/2022 §5.2', clause: 'T1547.001: Registry Run Keys are a primary tracked persistence mechanism.', action: 'Monitor registry Run keys continuously; include in IR playbook with automated remediation response.' },
+      },
+      // ── PERSISTENCE: Scheduled task ───────────────────────────────────────
+      {
+        match: /scheduled task/i,
+        pci: { ref: 'Req 10.2.2', clause: 'Log creation, modification, or deletion of scheduled tasks in CDE.', action: 'Monitor Windows Task Scheduler log (Event 4698/4699/4702); alert on tasks with actions pointing to %TEMP%.' },
+        iso: { ref: 'A.8.15', clause: 'Scheduled task creation is a security-relevant event requiring logging.', action: 'Enable Microsoft-Windows-TaskScheduler/Operational log; alert on tasks registered by non-admin accounts.' },
+        rbi: { ref: 'RBI/2015-16/418 §6.7', clause: 'Persistence via scheduled tasks must be detected on banking endpoints.', action: 'Audit all scheduled tasks weekly; correlate Task Scheduler Event 4698 with process creation logs.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent unauthorized scheduled persistence on personal data systems.', action: 'Restrict task creation rights to admins; deploy EDR rule for schtasks.exe creating tasks in %APPDATA%.' },
+        itact: { ref: 'Sec 43(a)', clause: 'Unauthorized persistence using OS task scheduler is an access offence.', action: 'Enable Sysmon logging; create SIEM rule correlating schtasks /create with suspicious executable paths.' },
+        certin: { ref: 'CERT-In/2022 §5.2', clause: 'T1053.005: Scheduled Task is a primary persistence mechanism in ransomware.', action: 'Enumerate all scheduled tasks and validate monthly; include in forensic evidence collection on incident.' },
+      },
+      // ── CREDENTIAL ACCESS: LSASS / dumping ────────────────────────────────
+      {
+        match: /lsass.*memory|credential.*dump|sam.*database|mimikatz/i,
+        pci: { ref: 'Req 8.2.1', clause: 'Protect authentication credentials from memory scraping attacks.', action: 'Enable Credential Guard via Hyper-V; configure LSA protection (RunAsPPL=1) to block LSASS memory reads.' },
+        iso: { ref: 'A.9.3.1', clause: 'Secret authentication credentials shall be protected from disclosure.', action: 'Enable Windows Defender Credential Guard; alert on OpenProcess calls to lsass.exe from non-system processes.' },
+        rbi: { ref: 'RBI/2021-22/112 §6.2', clause: 'Credential theft is a critical risk requiring preventive controls on banking systems.', action: 'Deploy EDR with LSASS protection; block Mimikatz-like tool patterns (sekurlsa::, lsadump::) in AMSI.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent theft of credentials used to access personal data systems.', action: 'Enable LSA RunAsPPL via GPO; configure SIEM alert on Event 4656 (handle to lsass.exe) from unexpected processes.' },
+        itact: { ref: 'Sec 43', clause: 'Accessing system credentials without authorization violates IT Act.', action: 'Deploy MDE with attack surface reduction rules for credential stealing; review Event 4625 (failed logons) daily.' },
+        certin: { ref: 'CERT-In/2022 §4(f)', clause: 'T1003: OS credential dumping is a notifiable critical attack technique.', action: 'Enable Credential Guard; configure alert on any process reading lsass memory outside system context.' },
+      },
+      // ── PRIVILEGE ESCALATION ───────────────────────────────────────────────
+      {
+        match: /uac bypass|privilege.*escal|token impersonation|weak service.*perm/i,
+        pci: { ref: 'Req 7.2.2', clause: 'Enforce least privilege; prevent escalation to unauthorised access levels.', action: 'Run processes as standard users; patch UAC bypass vectors; disable unused admin accounts.' },
+        iso: { ref: 'A.9.2.3', clause: 'Privileged access rights shall be restricted, monitored, and reviewed.', action: 'Enable UAC at highest level (Always Notify); audit use of SeDebugPrivilege and SeImpersonatePrivilege.' },
+        rbi: { ref: 'RBI/2021-22/112 §6.1', clause: 'Strict privilege management required for all banking system administrators.', action: 'Implement PAM solution; review service account privileges quarterly; block token impersonation for services.' },
+        dpdp: { ref: 'Sec 8(3)', clause: 'Restrict personal data access strictly to authorised roles.', action: 'Enable Windows privilege use auditing; alert on Event 4672 (special privileges assigned to new logon).' },
+        itact: { ref: 'Sec 43A', clause: 'Inadequate privilege controls constitute failure of reasonable security practices.', action: 'Enforce tiered admin model; require JIT access for privileged operations; review escalation paths quarterly.' },
+        certin: { ref: 'CERT-In/2022 §4(g)', clause: 'T1548: Abuse of elevation control is a tracked privilege escalation technique.', action: 'Audit all UAC bypass vectors; deploy EDR behavioural rule for impersonation token creation.' },
+      },
+      // ── DEFENCE EVASION: Log clearing ─────────────────────────────────────
+      {
+        match: /log.*clear|event.*log.*clear|wevtutil.*clear|clear.*log/i,
+        pci: { ref: 'Req 10.3.3', clause: 'Audit logs shall be protected against modification or deletion.', action: 'Forward logs in real-time to immutable SIEM; enable Event 1102 (Security log cleared) alert — immediate SOC response.' },
+        iso: { ref: 'A.8.15', clause: 'Log integrity must be maintained against tampering and deletion.', action: 'Configure Windows Event Forwarding (WEF) to central log server; alert on wevtutil cl or Clear-EventLog commands.' },
+        rbi: { ref: 'RBI/2021-22/112 §8.3', clause: 'Banks must retain and protect audit logs for minimum 5 years.', action: 'Stream all endpoint logs to immutable S3 or syslog server; alert immediately on Security log clearing (Event 1102).' },
+        dpdp: { ref: 'Sec 8(5)', clause: 'Audit trails must be retained for statutory investigation purposes.', action: 'Enable centralised log collection; restrict wevtutil and PowerShell Clear-EventLog to senior admins only.' },
+        itact: { ref: 'Sec 67C', clause: 'Intermediaries must preserve logs per prescribed standards; tampering is an offence.', action: 'Ship logs to immutable storage within 60 seconds; alert on any Security log clearing in real-time.' },
+        certin: { ref: 'CERT-In/2022 §5.4', clause: 'Log manipulation must be reported; 180-day log retention is mandatory.', action: 'Deploy Windows Event Forwarding immediately; treat Event 1102 as a P1 incident requiring 6-hour CERT-In report.' },
+      },
+      // ── CREDENTIAL / ACCOUNT: Password policy ─────────────────────────────
+      {
+        match: /password policy|strong password|minimum password/i,
+        pci: { ref: 'Req 8.3.6', clause: 'Passwords must meet minimum length and complexity requirements.', action: 'Enforce minimum 12-character, complex password policy via GPO; deploy Azure AD Password Protection for banned passwords.' },
+        iso: { ref: 'A.9.4.3', clause: 'Password management systems shall enforce strong passwords.', action: 'Implement password manager policy; enforce complexity rules; block known-breached passwords via HaveIBeenPwned API.' },
+        rbi: { ref: 'RBI/2021-22/112 §6.3', clause: 'Strong passwords mandatory for all CDE access and remote admin.', action: 'Enforce 14-char minimum with complexity; mandate password change every 90 days for privileged accounts.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Strong authentication required for systems processing personal data.', action: 'Enforce complex passwords via Fine-Grained Password Policy; apply stricter rules to service accounts.' },
+        itact: { ref: 'Sec 43A', clause: 'Weak password controls constitute failure of reasonable security practices.', action: 'Audit all accounts for weak passwords; enforce complexity policy; disable password reuse for 12 cycles.' },
+        certin: { ref: 'CERT-In/2022 §6.1', clause: 'Enforce baseline password complexity per CERT-In advisory.', action: 'Set GPO: MinimumPasswordLength=14, PasswordComplexity=1, PasswordHistorySize=12. Audit monthly.' },
+      },
+      // ── CREDENTIAL / ACCOUNT: MFA ─────────────────────────────────────────
+      {
+        match: /multi.factor|mfa|two.factor|2fa/i,
+        pci: { ref: 'Req 8.4.2', clause: 'MFA is required for all non-console admin access to CDE.', action: 'Deploy Microsoft Authenticator or FIDO2 keys for all admin accounts; require MFA for VPN and RDP access.' },
+        iso: { ref: 'A.9.4.2', clause: 'Secure log-on procedures shall include multi-factor authentication.', action: 'Implement Conditional Access policies requiring MFA for all privileged and remote access sessions.' },
+        rbi: { ref: 'RBI/2021-22/112 §6.4', clause: 'MFA is mandatory for internet banking and payment platform admin access.', action: 'Enforce OTP/TOTP-based MFA for all banking portal logins; FIDO2 for admin interfaces.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'MFA required for access to systems storing sensitive personal data.', action: 'Enable Azure AD Conditional Access MFA; block legacy authentication protocols that bypass MFA.' },
+        itact: { ref: 'Sec 43A', clause: 'Multi-factor authentication is a required reasonable security practice.', action: 'Enable MFA on all internet-facing systems; audit MFA bypass methods monthly.' },
+        certin: { ref: 'CERT-In/2022 §6.2', clause: 'MFA mandatory on all critical and internet-facing systems.', action: 'Enforce MFA using TOTP or hardware token; disable SMS OTP; audit exemptions quarterly.' },
+      },
+      // ── LATERAL MOVEMENT ──────────────────────────────────────────────────
+      {
+        match: /lateral movement|pass.the.hash|smb lateral|remote.*service.*exec/i,
+        pci: { ref: 'Req 1.3.2', clause: 'Restrict inbound and outbound traffic to only necessary communication.', action: 'Enable SMB signing on all endpoints; block NTLM where possible; implement micro-segmentation between CDE tiers.' },
+        iso: { ref: 'A.8.22', clause: 'Networks shall be segregated to limit impact of lateral breach.', action: 'Enforce SMB signing via GPO; disable NTLM v1; implement VLAN isolation for critical banking segments.' },
+        rbi: { ref: 'RBI/2015-16/418 §7', clause: 'Network segmentation is mandatory for banking system environments.', action: 'Deploy network segmentation with firewall ACLs between user, server, and payment network tiers.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Contain breach propagation to protect personal data stores.', action: 'Segment personal data stores on isolated VLAN; restrict SMB access to authorised admin systems only.' },
+        itact: { ref: 'Sec 43(a)', clause: 'Unauthorized lateral access between systems is an IT Act offence.', action: 'Enable lateral movement detection via UEBA; alert on unusual admin share access or wmiexec patterns.' },
+        certin: { ref: 'CERT-In/2022 §5.3', clause: 'T1021: Remote service lateral movement is a notifiable tracked technique.', action: 'Enable SMB signing; block NTLM relay; configure SIEM to alert on pass-the-hash authentication events.' },
+      },
+      // ── C2 / BEACONING ────────────────────────────────────────────────────
+      {
+        match: /command.*control|c2|beaconing|dns tunnel|encrypted outbound/i,
+        pci: { ref: 'Req 1.4.1', clause: 'Restrict and inspect outbound traffic from CDE systems.', action: 'Deploy egress filtering; whitelist DNS resolvers; alert on high-frequency periodic outbound connections via SIEM.' },
+        iso: { ref: 'A.8.20', clause: 'Network controls shall include monitoring of outbound communications.', action: 'Implement DNS sinkholing for known C2 domains; deploy NDR to detect beaconing by periodicity analysis.' },
+        rbi: { ref: 'RBI/2021-22/112 §8.1', clause: 'Inspect and control all outbound traffic from banking systems.', action: 'Block direct internet access from servers; route all traffic via authenticated proxy with SSL inspection.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Prevent unauthorised exfiltration of personal data via C2 channels.', action: 'Deploy DNS RPZ to block C2 domains; alert on HTTPS connections to newly-registered or low-reputation domains.' },
+        itact: { ref: 'Sec 43', clause: 'Remote control of systems via C2 constitutes unauthorized access.', action: 'Enable full packet capture for incident response; correlate outbound flows with threat intelligence feeds.' },
+        certin: { ref: 'CERT-In/2022 §4(h)', clause: 'C2 beaconing activity must be reported within 6 hours of detection.', action: 'Deploy NDR (Network Detection & Response); configure CERT-In incident report template for C2 events.' },
+      },
+      // ── EXFILTRATION ──────────────────────────────────────────────────────
+      {
+        match: /exfiltrat|file staging|https upload|cloud storage upload/i,
+        pci: { ref: 'Req 3.3.1', clause: 'Implement DLP controls to prevent cardholder data exfiltration.', action: 'Deploy DLP solution with PAN/CVV pattern detection; block uploads to cloud storage from CDE systems.' },
+        iso: { ref: 'A.8.24', clause: 'Information transfer policies shall prevent unauthorised data movement.', action: 'Configure DLP to inspect outbound web traffic and email for sensitive data patterns; block unapproved cloud services.' },
+        rbi: { ref: 'DPSS.CO.PD.No.267 §8', clause: 'Customer financial data shall not be transmitted to unauthorised external parties.', action: 'Implement CASB to control cloud storage access; alert on bulk file uploads above threshold.' },
+        dpdp: { ref: 'Sec 8(6)', clause: 'Personal data shall not be transferred without lawful authority.', action: 'Enable Purview DLP or equivalent; block data transfer to uncategorised domains; alert on bulk file access events.' },
+        itact: { ref: 'Sec 43A', clause: 'Data exfiltration due to inadequate controls constitutes negligence.', action: 'Monitor large outbound data transfers (>50MB); alert on archiving tools (7zip, rar) compressing sensitive paths.' },
+        certin: { ref: 'CERT-In/2022 §4(i)', clause: 'Data exfiltration incidents must be reported to CERT-In within 6 hours.', action: 'Deploy NetFlow monitoring; create SIEM rule for large outbound transfers outside business hours.' },
+      },
+      // ── IMPACT: Ransomware / shadow copies ────────────────────────────────
+      {
+        match: /ransomware|shadow copy|vssadmin delete|file.*encrypt.*impact/i,
+        pci: { ref: 'Req 12.10.1', clause: 'An incident response plan must address ransomware and destructive attacks.', action: 'Enable Controlled Folder Access in Defender; maintain offline immutable backups; test recovery quarterly.' },
+        iso: { ref: 'A.8.13', clause: 'Information backup procedures shall protect against ransomware destruction.', action: 'Implement 3-2-1 backup strategy; enable VSS shadow copy protection; block vssadmin.exe for non-admin users.' },
+        rbi: { ref: 'RBI/2021-22/112 §9', clause: 'Banks must maintain tested BCP/DR plans against ransomware scenarios.', action: 'Segment backups on isolated network; test bare-metal restore quarterly; disable SMBv1 across environment.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Ensure availability and recoverability of personal data systems.', action: 'Deploy ransomware-resilient backup with air-gap; enable Controlled Folder Access for personal data directories.' },
+        itact: { ref: 'Sec 43', clause: 'Ransomware deployment is destruction of data — a serious IT Act offence.', action: 'Implement honeypot files in critical folders; alert on mass file extension changes or shadow copy deletion.' },
+        certin: { ref: 'CERT-In/2022 §4(j)', clause: 'Ransomware attacks must be reported to CERT-In within 6 hours of detection.', action: 'Block vssadmin.exe and wmic shadowcopy delete for non-admins; test IR ransomware playbook bi-annually.' },
+      },
+      // ── PATCHING / VULNERABILITY MANAGEMENT ───────────────────────────────
+      {
+        match: /patch|windows update|missing.*patch|critical.*update/i,
+        pci: { ref: 'Req 6.3.3', clause: 'Security patches must be applied within defined risk-based timelines.', action: 'Apply critical patches within 1 month; critical CVE (CVSS≥9) within 15 days. Automate via WSUS or Intune.' },
+        iso: { ref: 'A.8.8', clause: 'Technical vulnerabilities shall be managed through timely patching.', action: 'Run monthly vulnerability scans; patch within SLA; track remediation via vulnerability management platform.' },
+        rbi: { ref: 'RBI/2015-16/418 §6.6', clause: 'Critical patches must be applied within prescribed timelines for banking systems.', action: 'Patch Windows critical vulnerabilities within 30 days; emergency patches (0-day) within 72 hours.' },
+        dpdp: { ref: 'Sec 8(2)', clause: 'Systems processing personal data must be kept free of known vulnerabilities.', action: 'Enable automatic updates for OS and critical applications on personal data systems; track with CMDB.' },
+        itact: { ref: 'Sec 43A', clause: 'Failure to patch known vulnerabilities constitutes negligence under IT Act.', action: 'Maintain patch compliance >95%; report critical unpatched systems to CISO weekly.' },
+        certin: { ref: 'CERT-In/2022 §6.5', clause: 'Critical vulnerabilities must be reported and patched within 6 hours per CERT-In.', action: 'Subscribe to CERT-In vulnerability notifications; trigger emergency change control for CVSS≥9 vulnerabilities.' },
+      },
+      // ── AUDIT LOGGING / SIEM ──────────────────────────────────────────────
+      {
+        match: /audit log|event log|siem|log monitoring|security.*event.*log/i,
+        pci: { ref: 'Req 10.2.1', clause: 'Implement audit logs capturing user activities, admin actions, and security events.', action: 'Enable Windows security auditing (logon, privilege use, object access); forward to SIEM within 60 seconds.' },
+        iso: { ref: 'A.8.15', clause: 'Event logs shall be produced, stored, protected and regularly reviewed.', action: 'Configure Windows Event Forwarding to centralised SIEM; set retention to 365 days minimum.' },
+        rbi: { ref: 'RBI/2021-22/112 §8.3', clause: 'Transaction and access logs must be retained for minimum 5 years by banks.', action: 'Implement centralised SIEM with 5-year log retention; enable real-time correlation rules for critical events.' },
+        dpdp: { ref: 'Sec 8(5)', clause: 'Audit trails of personal data access must be retained per statutory timelines.', action: 'Log all access to personal data fields; retain access logs per DPDP retention schedule; enable tamper alerting.' },
+        itact: { ref: 'Sec 67C', clause: 'Intermediaries must preserve information in the manner and format prescribed.', action: 'Implement immutable log storage (WORM); configure 180-day hot retention + 5-year cold archive.' },
+        certin: { ref: 'CERT-In/2022 §5.4', clause: '180-day log retention is mandatory; logs must be available for CERT-In investigations.', action: 'Configure SIEM retention to 180 days active; archive to S3 with AES-256 for 5 years; audit log integrity monthly.' },
+      },
+      // ── POST-COMPROMISE / INCIDENT RESPONSE ───────────────────────────────
+      {
+        match: /post.compromise|kill.chain|auto.response|alert.*generation|incident.*detect/i,
+        pci: { ref: 'Req 12.10.2', clause: 'Test the incident response plan at least annually.', action: 'Run tabletop exercise covering ransomware and data breach scenarios; update IR runbook after each incident.' },
+        iso: { ref: 'A.5.26', clause: 'Respond to information security incidents in a structured and effective manner.', action: 'Implement SOAR platform for automated containment; define RTO/RPO for critical banking systems.' },
+        rbi: { ref: 'RBI/2021-22/112 §10', clause: 'Cybersecurity incidents must be reported to RBI and CERT-In per prescribed timelines.', action: 'Establish 24×7 SOC; define escalation matrix; test incident response against RBI cyber drill scenarios.' },
+        dpdp: { ref: 'Sec 8(6)', clause: 'Data principals and board must be notified within prescribed timelines after personal data breach.', action: 'Implement breach notification workflow; designate DPO; test notification process quarterly.' },
+        itact: { ref: 'Sec 43A', clause: 'Timely incident response and notification are reasonable security practices.', action: 'Maintain documented IR plan; test recovery procedures; train Security team on IT Act notification requirements.' },
+        certin: { ref: 'CERT-In/2022 §4', clause: 'All cybersecurity incidents must be reported to CERT-In within 6 hours of detection.', action: 'Maintain CERT-In incident reporting portal credentials; deploy automated alert-to-ticket pipeline for P1 events.' },
+      },
+    ];
+
+
+    function getComplianceForCheck(checkName) {
+      const entry = COMPLIANCE_MAP.find(e => e.match.test(checkName));
+      return entry || null;
+    }
+
+    function renderComplianceSection(agentId) {
+      const r = reports[agentId];
+      if (!r) return;
+
+      const cats = r.categories || r.Categories || [];
+      const contentArea = document.getElementById('contentArea');
+
+      // Gather all failing checks
+      const failingChecks = [];
+      cats.forEach(cat => {
+        const checks = cat.checks || cat.Checks || [];
+        checks.forEach(ch => {
+          const res = ch.result || ch.Result;
+          if (res === 'Fail') {
+            failingChecks.push({ checkName: ch.name || ch.Name, category: cat.name || cat.Name });
+          }
+        });
+      });
+
+      // Build per-framework violation list
+      const fwViolations = {};
+      FRAMEWORKS.forEach(fw => { fwViolations[fw.id] = []; });
+
+      failingChecks.forEach(({ checkName, category }) => {
+        const entry = getComplianceForCheck(checkName);
+        if (entry) {
+          FRAMEWORKS.forEach(fw => {
+            if (entry[fw.id]) {
+              fwViolations[fw.id].push({ checkName, category, ...entry[fw.id] });
+            }
+          });
+        }
+      });
+
+      const totalViolations = Object.values(fwViolations).reduce((s, arr) => s + arr.length, 0);
+
+      // Build HTML
+      let html = `<div class="compliance-section" id="complianceSection">`;
+      html += `<div class="compliance-section-title">Compliance Report</div>`;
+
+      if (totalViolations === 0) {
+        html += `<div class="compliance-clean-banner">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          All checks passed — no compliance violations detected across all 6 frameworks.
+        </div>`;
+      } else {
+        // Summary pill bar
+        html += `<div class="compliance-summary-bar">`;
+        FRAMEWORKS.forEach(fw => {
+          const count = fwViolations[fw.id].length;
+          html += `<div class="compliance-fw-pill ${fw.cls}" onclick="document.getElementById('cfw-${fw.id}').scrollIntoView({behavior:'smooth',block:'start'})">
+            ${fw.label} <span class="fw-count">${count} finding${count !== 1 ? 's' : ''}</span>
+          </div>`;
+        });
+        html += `</div>`;
+
+        // Per-framework cards
+        html += `<div class="compliance-grid">`;
+        FRAMEWORKS.forEach((fw, fi) => {
+          const violations = fwViolations[fw.id];
+          const rowsHtml = violations.map(v => `
+            <div class="compliance-row">
+              <div class="compliance-check-icon">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ff4f5a" stroke-width="3">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </div>
+              <div class="compliance-row-body">
+                <div class="compliance-check-name">${esc(v.checkName)}</div>
+                <div class="compliance-req">
+                  <span class="compliance-req-ref ${fw.refCls}" style="background:rgba(0,0,0,.2);">${esc(v.ref)}</span>
+                  ${esc(v.clause)}
+                </div>
+                <div class="compliance-action">${esc(v.action)}</div>
+              </div>
+            </div>`).join('');
+
+          html += `
+          <div class="compliance-card" id="cfw-${fw.id}">
+            <div class="compliance-card-header" onclick="toggleComplianceCard('cfw-${fw.id}')">
+              <span class="compliance-fw-badge ${fw.cls}">${esc(fw.label)}</span>
+              <span class="compliance-card-title">${esc(fw.label)} Compliance Findings</span>
+              <span class="compliance-violation-count">${violations.length} violation${violations.length !== 1 ? 's' : ''}</span>
+              <svg class="compliance-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l4 4-4 4"/></svg>
+            </div>
+            <div class="compliance-card-body">${rowsHtml}</div>
+          </div>`;
+        });
+        html += `</div>`;
+      }
+
+      html += `</div>`;
+      contentArea.insertAdjacentHTML('beforeend', html);
+    }
+
+    function toggleComplianceCard(cardId) {
+      const card = document.getElementById(cardId);
+      card.classList.toggle('expanded');
+    }
+
+    // ═══════════════════════════════════════════════════
+    // EMPTY STATE (initial)
+    // ═══════════════════════════════════════════════════
+    function showEmpty() {
+      document.getElementById("pageTitle").innerHTML = `Dashboard <span>— Overview</span>`;
+      document.getElementById("contentArea").innerHTML = `
     <div class="empty-state" style="height:calc(100vh - 120px);">
       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -704,78 +3167,94 @@ function showEmpty() {
       <h3>No endpoints connected</h3>
       <p>Deploy <b>BASAgent.exe</b> on one or more Windows endpoints.  The agent will register here automatically and begin running simulations.</p>
     </div>`;
-}
-showEmpty();
+    }
+    showEmpty();
 
-// ═══════════════════════════════════════════════════
-// TOAST
-// ═══════════════════════════════════════════════════
-let toastId = 0;
-function toast(type, msg) {
-  const id = ++toastId;
-  const el = document.getElementById("toasts");
-  el.insertAdjacentHTML("beforeend", `<div class="toast ${type}" id="toast-${id}">${msg}</div>`);
-  setTimeout(() => { const t = document.getElementById(`toast-${id}`); if(t) t.remove(); }, 4000);
-}
+    // ═══════════════════════════════════════════════════
+    // TOAST
+    // ═══════════════════════════════════════════════════
+    let toastId = 0;
+    function toast(type, msg) {
+      const id = ++toastId;
+      const el = document.getElementById("toasts");
+      el.insertAdjacentHTML("beforeend", `<div class="toast ${type}" id="toast-${id}">${msg}</div>`);
+      setTimeout(() => { const t = document.getElementById(`toast-${id}`); if (t) t.remove(); }, 4000);
+    }
 
-// ═══════════════════════════════════════════════════
-// UTIL
-// ═══════════════════════════════════════════════════
-function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
-async function downloadPDF(agentId) {
-    const report = reports[agentId];
-    if (!report) return;
+    // ═══════════════════════════════════════════════════
+    // UTIL
+    // ═══════════════════════════════════════════════════
+    function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+    async function downloadPDF(agentId) {
+      const report = reports[agentId];
+      if (!report) return;
 
-    const host = report.hostname || report.Hostname || "Endpoint";
-    const element = document.getElementById('contentArea');
-    
-    toast("info", "Preparing PDF report...");
+      const host = report.hostname || report.Hostname || "Endpoint";
+      const element = document.getElementById('contentArea');
 
-    // 1. Temporarily expand all categories so they are visible in the PDF
-    const catCards = element.querySelectorAll('.cat-card');
-    const originalStates = []; // Store which ones were actually closed
-    
-    catCards.forEach((card, i) => {
+      toast("info", "Preparing PDF report...");
+
+      // 1. Temporarily expand all categories so they are visible in the PDF
+      const catCards = element.querySelectorAll('.cat-card');
+      const originalStates = []; // Store which ones were actually closed
+
+      catCards.forEach((card, i) => {
         const checks = card.querySelector('.cat-checks');
         originalStates[i] = checks.style.display;
         card.classList.add('expanded');
         checks.style.display = 'flex';
-    });
+      });
 
-    // 2. Setup PDF options (Dark mode friendly)
-    const opt = {
-        margin:       [0.4, 0.4],
-        filename:     `BAS_Report_${host}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { 
-            scale: 2, 
-            useCORS: true, 
-            backgroundColor: '#0a0c0f', // Match your --bg-base
-            ignoreElements: (el) => el.classList.contains('no-pdf')
+      // 2. Setup PDF options (Dark mode friendly)
+      const opt = {
+        margin: [0.4, 0.4],
+        filename: `BAS_Report_${host}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#0a0c0f', // Match your --bg-base
+          ignoreElements: (el) => el.classList.contains('no-pdf')
         },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
 
-    try {
+      try {
         // 3. Generate and Save
         await html2pdf().set(opt).from(element).save();
         toast("ok", "Report saved as PDF");
-    } catch (err) {
+      } catch (err) {
         console.error("PDF Export Error:", err);
         toast("warn", "PDF generation failed.");
-    } finally {
+      } finally {
         // 4. Restore the UI to how it was before the print
         catCards.forEach((card, i) => {
-            const checks = card.querySelector('.cat-checks');
-            if (originalStates[i] === 'none') {
-                card.classList.remove('expanded');
-                checks.style.display = 'none';
-            }
+          const checks = card.querySelector('.cat-checks');
+          if (originalStates[i] === 'none') {
+            card.classList.remove('expanded');
+            checks.style.display = 'none';
+          }
         });
+      }
     }
-}
-initApp();
+    async function triggerRemoteScan(agentId) {
+      if (!connection || connection.state !== "Connected") {
+        const state = connection ? connection.state : "Null";
+        toast("warn", `SignalR is ${state}. Please wait...`);
+        return;
+      }
 
-</script>
+      try {
+        await connection.invoke("RequestAgentScan", agentId);
+        toast("ok", "Scan command sent to agent!");
+      } catch (err) {
+        console.error("SignalR Invoke Error:", err);
+        toast("warn", "Failed to reach server.");
+      }
+    }
+    initApp();
+
+  </script>
 </body>
+
 </html>

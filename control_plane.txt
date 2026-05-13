@@ -1,0 +1,50 @@
+CONTROL PLANE (Server / Console)
+
+├── Orchestrator
+│     ├── Campaign coordination
+│     ├── Attack sequencing
+│     ├── Multi-agent workflow handling
+│     └── State tracking
+│
+├── Scenario Engine
+│     ├── Attack definitions
+│     ├── MITRE mappings
+│     ├── Preconditions
+│     ├── Branching logic
+│     └── Safety constraints
+│
+├── Tool Adapter Manager
+│     ├── Prelude Operator adapter
+│     ├── Caldera adapter
+│     ├── Atomic Red Team adapter
+│     ├── Infection Monkey adapter
+│     ├── Stratus adapter
+│     └── Custom tool wrappers
+│
+├── Policy Engine
+│     ├── Execution restrictions
+│     ├── Safety guardrails
+│     ├── Approval workflows
+│     ├── Asset exclusions
+│     └── Time-window enforcement
+│
+├── Tenant Manager
+│     ├── Tenant isolation
+│     ├── Licensing
+│     ├── Resource quotas
+│     ├── Workspace separation
+│     └── Customer configuration
+│
+├── RBAC/Auth
+│     ├── SSO/SAML/OIDC
+│     ├── Role enforcement
+│     ├── API tokens
+│     ├── Audit trails
+│     └── Permission scopes
+│
+├── Evidence Correlation Engine
+├── Reporting Engine
+├── Detection Validation Engine
+├── Scheduler
+├── API Gateway
+└── Central Evidence Store

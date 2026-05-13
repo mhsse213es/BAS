@@ -1,0 +1,70 @@
+id: apt36-spearphish
+name: APT36 Spear-Phishing Kill Chain
+description: >
+  Simulates APT36 (Transparent Tribe / PROJECTM) TTPs targeting BFSI sector
+  employees in India. APT36 is a Pakistan-nexus threat actor known for
+  targeting Indian government, defence, and financial institutions via
+  spear-phishing with weaponised Office documents, HTA droppers, and
+  CrimsonRAT/ObliqueRAT C2 implants.
+author: Audspect Research
+tags:
+  - apt36
+  - transparent-tribe
+  - spearphish
+  - bfsi
+  - india
+  - initial-access
+  - rat
+mitre_phases:
+  - reconnaissance
+  - initial-access
+  - execution
+  - persistence
+  - credential-access
+  - command-and-control
+
+steps:
+  - name: "Recon — Harvest employee email addresses via OSINT"
+    technique_id: T1589.002
+    framework: custom
+    command: |
+      Write-Output "[APT36-1] Simulating OSINT email harvest (no network activity)"
+      $target = @("finance@target-bank.in","treasury@target-bank.in","ciso@target-bank.in")
+      $target | ForEach-Object { Write-Output "  Discovered: $_" }
+    executor: powershell
+    timeout_sec: 10
+
+  - name: "Initial Access — HTA dropper execution (weaponised Office macro)"
+    technique_id: T1566.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Execution — mshta.exe launching VBScript payload"
+    technique_id: T1218.005
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Persistence — Scheduled task mimicking system task (APT36 style)"
+    technique_id: T1053.005
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Credential Access — Browser credential theft (payment portal)"
+    technique_id: T1555.003
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "C2 — HTTP beacon to attacker infrastructure"
+    technique_id: T1071.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30

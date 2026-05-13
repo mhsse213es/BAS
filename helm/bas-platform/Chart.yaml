@@ -1,0 +1,13 @@
+apiVersion: v2
+name: bas-platform
+description: Breach and Attack Simulation Platform — single-tenant on-prem deployment
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - security
+  - bas
+  - bfsi
+  - mitre-attack
+maintainers:
+  - name: Audspect

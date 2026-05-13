@@ -1,0 +1,75 @@
+id: ransomware-drill
+name: Ransomware Drill (BFSI Business Continuity Test)
+description: >
+  Simulates a ransomware kill chain for BFSI DR/BCP testing per RBI guidelines
+  on Business Continuity Planning (RBI/2019-20/105). Based on firedrill
+  simulation methodology. Tests pre-ransomware staging, defence evasion,
+  shadow copy deletion, and data encryption impact. All destructive steps
+  are safe simulations — no actual files are encrypted.
+author: Audspect Research
+tags:
+  - ransomware
+  - bfsi
+  - dr-test
+  - bcp
+  - rbi
+  - firedrill
+  - impact
+mitre_phases:
+  - initial-access
+  - execution
+  - defense-evasion
+  - impact
+
+steps:
+  - name: "Defence Evasion — Disable Windows Defender real-time protection (test)"
+    technique_id: T1562.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Defence Evasion — Clear Windows Event Logs (anti-forensics)"
+    technique_id: T1070.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Impact — Shadow copy deletion (VSS)"
+    technique_id: T1490
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Impact — Inhibit system recovery via bcdedit"
+    technique_id: T1490
+    framework: art
+    test_index: 1
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Impact — Safe file encryption simulation (creates test artefact only)"
+    technique_id: T1486
+    framework: custom
+    command: |
+      $path = "$env:TEMP\bas_ransom_test_$(Get-Random).txt"
+      "RANSOMWARE_SIMULATION_ARTEFACT_BAS_SAFE" | Out-File $path
+      Write-Output "[RansomDrill] Created test artefact: $path"
+      Remove-Item $path -Force
+      Write-Output "[RansomDrill] Artefact cleaned up — simulation complete"
+    executor: powershell
+    timeout_sec: 15
+
+  - name: "Impact — Ransom note drop simulation"
+    technique_id: T1491.001
+    framework: custom
+    command: |
+      $note = "$env:TEMP\README_RESTORE_FILES_BAS_TEST.txt"
+      "THIS IS A SIMULATED RANSOM NOTE - BAS DRILL ONLY`nDo not panic. This is a controlled test." | Out-File $note
+      Write-Output "[RansomDrill] Note created at: $note"
+      Remove-Item $note -Force
+      Write-Output "[RansomDrill] Note cleaned up"
+    executor: powershell
+    timeout_sec: 15

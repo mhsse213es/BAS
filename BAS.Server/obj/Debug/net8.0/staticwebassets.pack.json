@@ -1,23 +1,47 @@
 {
   "Files": [
     {
-      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\index.html",
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\auth.js",
+      "PackagePath": "staticwebassets\\auth.js"
+    },
+    {
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\deploy\\BASAgent.exe",
+      "PackagePath": "staticwebassets\\deploy\\BASAgent.exe"
+    },
+    {
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\downloads\\BASAgent.exe",
+      "PackagePath": "staticwebassets\\downloads\\BASAgent.exe"
+    },
+    {
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\downloads\\BASAgent.zip",
+      "PackagePath": "staticwebassets\\downloads\\BASAgent.zip"
+    },
+    {
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\index.html",
       "PackagePath": "staticwebassets\\index.html"
     },
     {
-      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\signalr.js",
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\login.html",
+      "PackagePath": "staticwebassets\\login.html"
+    },
+    {
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\register.html",
+      "PackagePath": "staticwebassets\\register.html"
+    },
+    {
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\signalr.js",
       "PackagePath": "staticwebassets\\signalr.js"
     },
     {
-      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\signalr.js.map",
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\signalr.js.map",
       "PackagePath": "staticwebassets\\signalr.js.map"
     },
     {
-      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\signalr.min.js",
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\signalr.min.js",
       "PackagePath": "staticwebassets\\signalr.min.js"
     },
     {
-      "Id": "E:\\claude\\1\\BAS.Server\\wwwroot\\signalr.min.js.map",
+      "Id": "E:\\claude\\Alhamdulilah\\1\\BAS.Server\\wwwroot\\signalr.min.js.map",
       "PackagePath": "staticwebassets\\signalr.min.js.map"
     },
     {

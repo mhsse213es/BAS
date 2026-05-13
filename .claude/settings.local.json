@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\" -Force | Select-Object Name, @{Name=\"Type\"; Expression={if\\($_.PSIsContainer\\){\"Directory\"}else{\"File\"}}} | Format-Table -AutoSize)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\BAS.Server\\\\AgentAuthModels.cs\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\BAS.Server\\\\TenantModels.cs\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\BAS.Server\\\\TenantService.cs\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\BAS.Server\\\\wwwroot\\\\login.html\" -Force)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\BAS.Server\\\\wwwroot\\\\register.html\" -Force)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet run *)",
+      "Bash(Start-Sleep -Seconds 8)",
+      "Bash(Get-Content \"C:\\\\Users\\\\ADMINI~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Administrator-Downloads-Audspect-Cloud\\\\76be556d-bf6b-4e85-a7ce-d0885849aac3\\\\tasks\\\\bx411jh8o.output\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "Bash(python3 *)",
+      "Bash(jobs -l)",
+      "PowerShell(Get-Process *)",
+      "Bash(grep -n \"\\\\.py$\\\\|infection_monkey\\\\|post_breach\\\\|PostBreach\" \"C:/Users/Administrator/Downloads/Audspect_Cloud/contents.txt\")",
+      "Bash(findstr /n \"RegistrySnapshot\" Program.cs)",
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\BAS.Agent\\\\Program.cs\" | Measure-Object -Line\\).Lines)",
+      "Bash(go version *)",
+      "Bash(psql --version)",
+      "Bash(curl --version)",
+      "Bash(pip show *)",
+      "Bash(pip install *)",
+      "Bash(python -c \"import docx; print\\('OK'\\)\")",
+      "Bash(python generate_test_guide.py)",
+      "PowerShell(New-Item *)"
+    ]
+  }
+}

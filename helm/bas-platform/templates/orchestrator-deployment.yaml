@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bas-orchestrator
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: bas-orchestrator
+spec:
+  replicas: {{ .Values.orchestrator.replicas }}
+  selector:
+    matchLabels:
+      app: bas-orchestrator
+  template:
+    metadata:
+      labels:
+        app: bas-orchestrator
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: orchestrator
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.orchestrator.image }}:{{ .Values.orchestrator.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.orchestrator.port }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: bas-secrets
+                  key: POSTGRES_DSN
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bas-secrets
+                  key: JWT_SECRET
+          volumeMounts:
+            - name: config
+              mountPath: /etc/bas
+            - name: scenarios
+              mountPath: /scenarios
+          resources:
+            {{- toYaml .Values.orchestrator.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.orchestrator.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.orchestrator.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: config
+          configMap:
+            name: bas-orchestrator-config
+        - name: scenarios
+          configMap:
+            name: bas-scenarios
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bas-orchestrator
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector:
+    app: bas-orchestrator
+  ports:
+    - port: {{ .Values.orchestrator.port }}
+      targetPort: {{ .Values.orchestrator.port }}
+  type: ClusterIP

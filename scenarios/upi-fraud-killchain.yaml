@@ -1,0 +1,89 @@
+id: upi-fraud-killchain
+name: UPI Fraud Kill Chain (RBI Cyber Resilience Drill)
+description: >
+  Simulates the attacker TTPs commonly used in UPI (Unified Payments Interface)
+  fraud campaigns targeting Indian BFSI institutions. Covers the full kill chain
+  from credential harvesting (banking portal, UPI app), through SIM-swap
+  precursors, OTP interception simulation, and data exfiltration.
+  Aligned with RBI Circular RBI/2021-22/112 on Cyber Security Framework.
+  All network steps are simulated in the local environment — no external
+  connections are made.
+author: Audspect Research
+tags:
+  - upi
+  - fraud
+  - bfsi
+  - india
+  - rbi
+  - payment-system
+  - exfiltration
+  - credential-access
+mitre_phases:
+  - reconnaissance
+  - initial-access
+  - credential-access
+  - collection
+  - exfiltration
+
+steps:
+  - name: "Recon — Domain and user enumeration (banking environment)"
+    technique_id: T1087.002
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Recon — OSINT credential exposure check (public breach data simulation)"
+    technique_id: T1589.001
+    framework: custom
+    command: |
+      Write-Output "[UPI-1] Simulating credential exposure check"
+      $exposed = @(
+        "user1@bank.in:Password123",
+        "finance_mgr@bank.in:Summer2023!"
+      )
+      Write-Output "[UPI-1] Found $($exposed.Count) potentially exposed credential pairs in simulation dataset"
+    executor: powershell
+    timeout_sec: 10
+
+  - name: "Credential Access — Browser saved passwords (UPI app / netbanking portal)"
+    technique_id: T1555.003
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Collection — Screen capture (OTP harvesting simulation)"
+    technique_id: T1113
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Collection — Keylogger deployment (simulated, no real capture)"
+    technique_id: T1056.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Exfiltration — DNS tunnelling simulation"
+    technique_id: T1048.003
+    framework: art
+    test_index: 0
+    executor: powershell
+    timeout_sec: 30
+
+  - name: "Exfiltration — HTTP POST to attacker server (simulated)"
+    technique_id: T1041
+    framework: custom
+    command: |
+      $payload = @{
+        simulation = "upi-fraud-killchain"
+        data       = "SIMULATED_UPI_TRANSACTION_LOG"
+        timestamp  = (Get-Date -Format o)
+      } | ConvertTo-Json
+      Write-Output "[UPI-7] Simulated exfil payload prepared: $($payload.Length) bytes"
+      Write-Output "[UPI-7] No actual network connection made — simulation only"
+    executor: powershell
+    timeout_sec: 15

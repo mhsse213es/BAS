@@ -1,0 +1,378 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/ws"
+)
+
+// Handler holds shared dependencies for all API handlers.
+type Handler struct {
+	db     *pgxpool.Pool
+	hub    *ws.Hub
+	engine *scenario.Engine
+	secret string
+}
+
+// New creates a Handler.
+func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) *Handler {
+	return &Handler{db: db, hub: hub, engine: engine, secret: secret}
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+// POST /api/auth/login
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	var id, hash, role string
+	err := h.db.QueryRow(r.Context(),
+		`SELECT id, password_hash, role FROM users WHERE username = $1`, req.Username,
+	).Scan(&id, &hash, &role)
+	if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)) != nil {
+		jsonError(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	token, err := auth.GenerateToken(id, auth.Role(role), h.secret, 24*time.Hour)
+	if err != nil {
+		jsonError(w, "token generation failed", http.StatusInternalServerError)
+		return
+	}
+	_, _ = h.db.Exec(r.Context(), `UPDATE users SET last_login = NOW() WHERE id = $1`, id)
+	respond(w, map[string]string{"token": token, "role": role, "userId": id})
+}
+
+// ── Agents ────────────────────────────────────────────────────────────────────
+
+// GET /api/agents
+func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(),
+		`SELECT agent_id, hostname, ip_address, os_version, username, status, env_label, has_report, last_update
+		 FROM agents ORDER BY last_update DESC`)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var agents []models.Agent
+	for rows.Next() {
+		var a models.Agent
+		if err := rows.Scan(&a.AgentID, &a.Hostname, &a.IPAddress, &a.OSVersion,
+			&a.Username, &a.Status, &a.EnvLabel, &a.HasReport, &a.LastUpdate); err != nil {
+			continue
+		}
+		agents = append(agents, a)
+	}
+	if agents == nil {
+		agents = []models.Agent{}
+	}
+	respond(w, agents)
+}
+
+// POST /api/heartbeat — called by agents (no auth required, agents use agentId as identity)
+func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
+	var hb models.Heartbeat
+	if err := json.NewDecoder(r.Body).Decode(&hb); err != nil || hb.AgentID == "" {
+		jsonError(w, "invalid heartbeat payload", http.StatusBadRequest)
+		return
+	}
+
+	_, err := h.db.Exec(r.Context(), `
+		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username, status, env_label, last_update)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		ON CONFLICT (agent_id) DO UPDATE SET
+			hostname    = EXCLUDED.hostname,
+			ip_address  = EXCLUDED.ip_address,
+			os_version  = EXCLUDED.os_version,
+			username    = EXCLUDED.username,
+			status      = EXCLUDED.status,
+			env_label   = EXCLUDED.env_label,
+			last_update = NOW()`,
+		hb.AgentID, hb.Hostname, hb.IPAddr, hb.OSVer, hb.Username, hb.Status, hb.EnvLabel,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: hb.AgentID, Data: hb})
+	w.WriteHeader(http.StatusOK)
+}
+
+// POST /api/scan/{agentId} — triggers full simulation scan on agent
+func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	sent := h.hub.SendToAgent(agentID, models.WSMessage{
+		Type:    models.MsgCommandScan,
+		AgentID: agentID,
+	})
+	if !sent {
+		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// ── Scenarios ─────────────────────────────────────────────────────────────────
+
+// GET /api/scenarios
+func (h *Handler) ListScenarios(w http.ResponseWriter, r *http.Request) {
+	respond(w, h.engine.List())
+}
+
+// GET /api/scenarios/{id}
+func (h *Handler) GetScenario(w http.ResponseWriter, r *http.Request) {
+	sc, ok := h.engine.Get(chi.URLParam(r, "id"))
+	if !ok {
+		jsonError(w, "scenario not found", http.StatusNotFound)
+		return
+	}
+	respond(w, sc)
+}
+
+// POST /api/scenarios/{id}/run — dispatches scenario to a connected agent
+func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
+	scenarioID := chi.URLParam(r, "id")
+	var req struct {
+		AgentID string `json:"agentId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+
+	sc, ok := h.engine.Get(scenarioID)
+	if !ok {
+		jsonError(w, "scenario not found", http.StatusNotFound)
+		return
+	}
+
+	// Create a run record in RUNNING state
+	runID := newID()
+	_, err := h.db.Exec(r.Context(),
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at)
+		 VALUES ($1, $2, $3, $4, 'running', NOW())`,
+		runID, scenarioID, req.AgentID, sc.Name,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	cmd := scenario.ScenarioCommand{
+		RunID:      runID,
+		ScenarioID: scenarioID,
+		Name:       sc.Name,
+		Steps:      sc.Steps,
+	}
+	sent := h.hub.SendToAgent(req.AgentID, models.WSMessage{
+		Type:    models.MsgCommandScenario,
+		AgentID: req.AgentID,
+		Data:    cmd,
+	})
+	if !sent {
+		// Mark run as failed if agent is offline
+		_, _ = h.db.Exec(context.Background(),
+			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	log.Printf("[scenario] dispatched %s → agent %s (run %s)", scenarioID, req.AgentID, runID)
+	respond(w, map[string]string{"runId": runID, "status": "dispatched"})
+}
+
+// POST /api/scenarios/result — called by agents to submit scenario results
+func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
+	var run models.ScenarioRun
+	if err := json.NewDecoder(r.Body).Decode(&run); err != nil {
+		jsonError(w, "invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	resultsJSON, _ := json.Marshal(run.Results)
+	_, err := h.db.Exec(r.Context(),
+		`UPDATE scenario_runs SET status = 'completed', results = $1, completed_at = NOW()
+		 WHERE id = $2`,
+		resultsJSON, run.ID,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.hub.BroadcastBrowsers(models.WSMessage{
+		Type:    models.MsgScenarioResult,
+		AgentID: run.AgentID,
+		Data:    run,
+	})
+	w.WriteHeader(http.StatusOK)
+}
+
+// GET /api/scenarios/runs?agentId=&scenarioId=
+func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agentId")
+	scenarioID := r.URL.Query().Get("scenarioId")
+
+	rows, err := h.db.Query(r.Context(),
+		`SELECT id, scenario_id, agent_id, name, status, results, score, started_at, completed_at
+		 FROM scenario_runs
+		 WHERE ($1 = '' OR agent_id = $1)
+		   AND ($2 = '' OR scenario_id = $2)
+		 ORDER BY started_at DESC LIMIT 100`,
+		agentID, scenarioID,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var runs []models.ScenarioRun
+	for rows.Next() {
+		var run models.ScenarioRun
+		var resultsJSON []byte
+		var scoreJSON *[]byte
+		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.Name,
+			&run.Status, &resultsJSON, &scoreJSON, &run.StartedAt, &run.CompletedAt); err != nil {
+			continue
+		}
+		json.Unmarshal(resultsJSON, &run.Results)
+		if scoreJSON != nil {
+			json.Unmarshal(*scoreJSON, &run.Score)
+		}
+		runs = append(runs, run)
+	}
+	if runs == nil {
+		runs = []models.ScenarioRun{}
+	}
+	respond(w, runs)
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+// POST /api/report — agents upload full simulation reports here
+func (h *Handler) SubmitReport(w http.ResponseWriter, r *http.Request) {
+	var report struct {
+		AgentID       string          `json:"agentId"`
+		Hostname      string          `json:"hostname"`
+		IPAddress     string          `json:"ipAddress"`
+		OSVersion     string          `json:"osVersion"`
+		Username      string          `json:"username"`
+		Status        string          `json:"status"`
+		EnvLabel      string          `json:"envLabel"`
+		SecurityTools json.RawMessage `json:"securityTools"`
+		Categories    json.RawMessage `json:"categories"`
+		Score         json.RawMessage `json:"score"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&report); err != nil || report.AgentID == "" {
+		jsonError(w, "invalid report payload", http.StatusBadRequest)
+		return
+	}
+
+	tools := report.SecurityTools
+	if tools == nil {
+		tools = []byte("[]")
+	}
+	cats := report.Categories
+	if cats == nil {
+		cats = []byte("[]")
+	}
+
+	_, err := h.db.Exec(r.Context(), `
+		INSERT INTO reports
+			(agent_id, hostname, ip_address, os_version, username, status, env_label, security_tools, categories, score, last_update)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+		ON CONFLICT (agent_id) DO UPDATE SET
+			hostname=EXCLUDED.hostname, ip_address=EXCLUDED.ip_address,
+			os_version=EXCLUDED.os_version, username=EXCLUDED.username,
+			status=EXCLUDED.status, env_label=EXCLUDED.env_label,
+			security_tools=EXCLUDED.security_tools, categories=EXCLUDED.categories,
+			score=EXCLUDED.score, last_update=NOW()`,
+		report.AgentID, report.Hostname, report.IPAddress, report.OSVersion,
+		report.Username, report.Status, report.EnvLabel, tools, cats, report.Score,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	_, _ = h.db.Exec(r.Context(),
+		`UPDATE agents SET has_report = true WHERE agent_id = $1`, report.AgentID)
+
+	h.hub.BroadcastBrowsers(models.WSMessage{
+		Type:    models.MsgReportReady,
+		AgentID: report.AgentID,
+		Data:    map[string]string{"agentId": report.AgentID, "status": report.Status},
+	})
+	w.WriteHeader(http.StatusOK)
+}
+
+// GET /api/report/{agentId}
+func (h *Handler) GetReport(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	row := h.db.QueryRow(r.Context(),
+		`SELECT agent_id, hostname, ip_address, os_version, username, status, env_label,
+		        security_tools, categories, score, started_at, last_update
+		 FROM reports WHERE agent_id = $1`, agentID)
+
+	var (
+		rep        map[string]interface{}
+		tools      json.RawMessage
+		categories json.RawMessage
+		score      json.RawMessage
+	)
+	var agID, host, ip, osv, user, status, env string
+	var startedAt, lastUpdate time.Time
+	if err := row.Scan(&agID, &host, &ip, &osv, &user, &status, &env,
+		&tools, &categories, &score, &startedAt, &lastUpdate); err != nil {
+		jsonError(w, "report not found", http.StatusNotFound)
+		return
+	}
+	rep = map[string]interface{}{
+		"agentId": agID, "hostname": host, "ipAddress": ip,
+		"osVersion": osv, "username": user, "status": status, "envLabel": env,
+		"securityTools": tools, "categories": categories, "score": score,
+		"startedAt": startedAt, "lastUpdate": lastUpdate,
+	}
+	respond(w, rep)
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+func respond(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("[api] encode error: %v", err)
+	}
+}
+
+func jsonError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	fmt.Fprintf(w, `{"error":%q}`, msg)
+}
+
+func newID() string {
+	return fmt.Sprintf("%x", time.Now().UnixNano())
+}

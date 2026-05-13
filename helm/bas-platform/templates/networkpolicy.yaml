@@ -1,0 +1,72 @@
+{{- if .Values.networkPolicy.enabled }}
+# Default deny — only explicitly allowed traffic is permitted.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Orchestrator: accepts from ingress-nginx and from API service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-orchestrator
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: bas-orchestrator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app: bas-api
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: bas-data
+      ports:
+        - port: 5432
+---
+# API: accepts from ingress-nginx, can call orchestrator, can reach postgres
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: bas-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: bas-orchestrator
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: bas-data
+      ports:
+        - port: 5432
+{{- end }}
