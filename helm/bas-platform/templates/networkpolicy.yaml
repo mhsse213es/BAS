@@ -34,9 +34,8 @@ spec:
               app: bas-api
   egress:
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: bas-data
+        - ipBlock:
+            cidr: {{ .Values.postgres.host }}/32
       ports:
         - port: 5432
 ---
@@ -64,9 +63,8 @@ spec:
             matchLabels:
               app: bas-orchestrator
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: bas-data
+        - ipBlock:
+            cidr: {{ .Values.postgres.host }}/32
       ports:
         - port: 5432
 {{- end }}
