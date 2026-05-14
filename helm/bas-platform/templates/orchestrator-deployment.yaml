@@ -35,11 +35,6 @@ spec:
                 secretKeyRef:
                   name: bas-secrets
                   key: JWT_SECRET
-          volumeMounts:
-            - name: config
-              mountPath: /etc/bas
-            - name: scenarios
-              mountPath: /scenarios
           resources:
             {{- toYaml .Values.orchestrator.resources | nindent 12 }}
           readinessProbe:
@@ -54,13 +49,6 @@ spec:
               port: {{ .Values.orchestrator.port }}
             initialDelaySeconds: 15
             periodSeconds: 20
-      volumes:
-        - name: config
-          configMap:
-            name: bas-orchestrator-config
-        - name: scenarios
-          configMap:
-            name: bas-scenarios
 ---
 apiVersion: v1
 kind: Service
