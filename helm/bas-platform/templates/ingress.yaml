@@ -14,7 +14,9 @@ spec:
       secretName: {{ .Values.ingress.tlsSecretName }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.host }}
+    - {{- if .Values.ingress.host }}
+      host: {{ .Values.ingress.host }}
+      {{- end }}
       http:
         paths:
           # WebSocket and scenario API → Go orchestrator
