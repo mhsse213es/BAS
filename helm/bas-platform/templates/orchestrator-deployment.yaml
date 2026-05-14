@@ -35,6 +35,10 @@ spec:
                 secretKeyRef:
                   name: bas-secrets
                   key: JWT_SECRET
+          command: ["/orchestrator", "/etc/bas/config.json"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/bas
           resources:
             {{- toYaml .Values.orchestrator.resources | nindent 12 }}
           readinessProbe:
@@ -49,6 +53,10 @@ spec:
               port: {{ .Values.orchestrator.port }}
             initialDelaySeconds: 15
             periodSeconds: 20
+      volumes:
+        - name: config
+          configMap:
+            name: bas-orchestrator-config
 ---
 apiVersion: v1
 kind: Service
