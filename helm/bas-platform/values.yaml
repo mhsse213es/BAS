@@ -53,6 +53,7 @@ ingress:
   tlsEnabled: false           # set true with cert-manager in production
   tlsSecretName: bas-tls
   annotations:
+    kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
 
