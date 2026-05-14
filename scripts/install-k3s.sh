@@ -30,10 +30,22 @@ until kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get nodes | grep -q " Ready
 done
 info "k3s node ready"
 
-# ── Install ingress-nginx ─────────────────────────────────────────────────────
+# ── Install ingress-nginx (baremetal — no cloud load balancer needed) ─────────
 info "Installing ingress-nginx"
 kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml apply \
-    -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.2/deploy/static/provider/cloud/deploy.yaml
+    -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.2/deploy/static/provider/baremetal/deploy.yaml
+
+info "Waiting for ingress-nginx controller to be ready"
+kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml wait \
+    --namespace ingress-nginx \
+    --for=condition=ready pod \
+    --selector=app.kubernetes.io/component=controller \
+    --timeout=120s
+
+# Remove admission webhook — avoids Helm failures on bare-metal where
+# the webhook endpoint may not be reachable during first deploy
+kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
+    delete validatingwebhookconfiguration ingress-nginx-admission 2>/dev/null || true
 
 # ── Install Helm ──────────────────────────────────────────────────────────────
 info "Installing Helm"
