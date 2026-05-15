@@ -245,6 +245,17 @@ code { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82em;
   </div>
 </div>
 
+<!-- Report Modal -->
+<div id="report-overlay" class="overlay" onclick="if(event.target===this)closeReport()">
+  <div class="modal" style="width:680px;max-height:82vh;overflow-y:auto">
+    <h3 id="report-title">Scan Report</h3>
+    <div id="report-body" style="margin-top:1rem;font-size:0.82rem"></div>
+    <div class="modal-actions" style="margin-top:1rem">
+      <button class="btn btn-outline btn-sm" onclick="closeReport()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -340,7 +351,10 @@ function loadAgents() {
         '<td><span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span></td>' +
         '<td><span class="tag">' + x(a.envLabel || '—') + '</span></td>' +
         '<td style="color:var(--muted);font-size:0.79rem">' + ago(a.lastUpdate) + '</td>' +
-        '<td><button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run</button></td>' +
+        '<td>' +
+          '<button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run</button>' +
+          (a.hasReport ? ' <button class="btn btn-outline btn-sm" style="margin-left:0.3rem" onclick="viewReport(\'' + x(a.agentId) + '\')">&#128203; Report</button>' : '') +
+        '</td>' +
         '</tr>';
     }).join('');
   }).catch(function(e) { showToast(e.message, 'err'); });
@@ -426,6 +440,33 @@ function closeModal() {
   document.getElementById('run-overlay').classList.remove('open');
   _modalScId = null;
 }
+
+function viewReport(agentId) {
+  apicall('/api/report/' + encodeURIComponent(agentId)).then(function(r) {
+    document.getElementById('report-title').textContent = 'Report: ' + x(r.hostname) + ' (' + x(r.agentId) + ')';
+    var scoreHtml = r.score
+      ? '<strong>' + r.score.percent + '%</strong> &mdash; ' + r.score.passed + '/' + r.score.total + ' checks passed'
+      : 'No score computed yet';
+    var catsHtml = (r.categories || []).map(function(c) {
+      var checks = (c.checks || []).map(function(ch) {
+        var col = ch.result === 'pass' ? 'var(--green)' : (ch.result === 'fail' ? 'var(--red)' : 'var(--muted)');
+        return '<div style="padding:0.25rem 0;border-bottom:1px solid rgba(48,54,61,0.5)">' +
+          '<span style="color:' + col + ';font-size:0.74rem;min-width:42px;display:inline-block;font-weight:600">' + x(ch.result) + '</span>' +
+          x(ch.name) +
+          (ch.detail ? '<div style="color:var(--muted);font-size:0.74rem;padding-left:46px;margin-top:0.1rem">' + x(ch.detail) + '</div>' : '') +
+          '</div>';
+      }).join('');
+      return '<div style="margin-bottom:1.25rem">' +
+        '<div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:0.4rem">' + x(c.phase) + '</div>' +
+        checks + '</div>';
+    }).join('');
+    document.getElementById('report-body').innerHTML =
+      '<div style="background:var(--bg);padding:0.5rem 0.75rem;border-radius:4px;margin-bottom:1rem">' + scoreHtml + '</div>' +
+      (catsHtml || '<p style="color:var(--muted)">No category data in report.</p>');
+    document.getElementById('report-overlay').classList.add('open');
+  }).catch(function(e) { showToast('Report load failed: ' + e.message, 'err'); });
+}
+function closeReport() { document.getElementById('report-overlay').classList.remove('open'); }
 
 function confirmRun() {
   var scenarioId = _modalScId || document.getElementById('modal-sc').value;
