@@ -19,51 +19,22 @@ spec:
       {{- end }}
       http:
         paths:
-          # WebSocket and agent/auth API → Go orchestrator
-          - path: /ws
-            pathType: Prefix
-            backend:
-              service:
-                name: bas-orchestrator
-                port:
-                  number: {{ .Values.orchestrator.port }}
-          - path: /api/auth
-            pathType: Prefix
-            backend:
-              service:
-                name: bas-orchestrator
-                port:
-                  number: {{ .Values.orchestrator.port }}
-          - path: /api/heartbeat
-            pathType: Exact
-            backend:
-              service:
-                name: bas-orchestrator
-                port:
-                  number: {{ .Values.orchestrator.port }}
+          # Analytics-only endpoints → Python API
           - path: /api/report
-            pathType: Exact
-            backend:
-              service:
-                name: bas-orchestrator
-                port:
-                  number: {{ .Values.orchestrator.port }}
-          - path: /api/scenarios/result
-            pathType: Exact
-            backend:
-              service:
-                name: bas-orchestrator
-                port:
-                  number: {{ .Values.orchestrator.port }}
-          # All other API traffic → Python API
-          - path: /api
             pathType: Prefix
             backend:
               service:
                 name: bas-api
                 port:
                   number: {{ .Values.api.port }}
-          # Dashboard static files → Python API (or orchestrator)
+          - path: /api/scenarios/runs
+            pathType: Prefix
+            backend:
+              service:
+                name: bas-api
+                port:
+                  number: {{ .Values.api.port }}
+          # Everything else (auth, agents, scenarios, ws, static) → Go orchestrator
           - path: /
             pathType: Prefix
             backend:
