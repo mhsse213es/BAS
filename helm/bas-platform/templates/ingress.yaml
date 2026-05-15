@@ -20,13 +20,6 @@ spec:
       http:
         paths:
           # Analytics-only endpoints → Python API
-          - path: /api/report
-            pathType: Prefix
-            backend:
-              service:
-                name: bas-api
-                port:
-                  number: {{ .Values.api.port }}
           - path: /api/scenarios/runs
             pathType: Prefix
             backend:
