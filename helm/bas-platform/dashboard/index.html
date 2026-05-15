@@ -216,10 +216,10 @@ code { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82em;
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Run ID</th><th>Scenario</th><th>Agent</th><th>Status</th><th>Started</th><th>Completed</th>
+            <th>Run ID</th><th>Scenario</th><th>Agent</th><th>Status</th><th>Started</th><th>Completed</th><th>Results</th>
           </tr></thead>
           <tbody id="runs-body">
-            <tr><td colspan="6" class="empty">No runs yet.</td></tr>
+            <tr><td colspan="7" class="empty">No runs yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -241,6 +241,18 @@ code { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82em;
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeModal()">Cancel</button>
       <button class="btn btn-outline-green btn-sm" onclick="confirmRun()">&#9654; Run</button>
+    </div>
+  </div>
+</div>
+
+<!-- Run Results Modal -->
+<div id="results-overlay" class="overlay" onclick="if(event.target===this)closeResults()">
+  <div class="modal" style="width:720px;max-height:84vh;overflow-y:auto">
+    <h3 id="results-title">Run Results</h3>
+    <div id="results-summary" style="margin:0.5rem 0 1rem;font-size:0.82rem"></div>
+    <div id="results-body" style="font-size:0.82rem"></div>
+    <div class="modal-actions" style="margin-top:1rem">
+      <button class="btn btn-outline btn-sm" onclick="closeResults()">Close</button>
     </div>
   </div>
 </div>
@@ -396,10 +408,13 @@ function loadRuns() {
     document.getElementById('runs-cnt').textContent = runs.length;
     var tbody = document.getElementById('runs-body');
     if (!runs.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty">No runs yet. Go to Scenarios and run one.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No runs yet. Go to Scenarios and run one.</td></tr>';
       return;
     }
     tbody.innerHTML = runs.map(function(r) {
+      var cnt = (r.results || []).length;
+      var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
+      var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : '—';
       return '<tr>' +
         '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
         '<td>' + x(r.name) + '</td>' +
@@ -407,6 +422,7 @@ function loadRuns() {
         '<td><span class="sbadge s-' + x(r.status) + '">' + x(r.status) + '</span></td>' +
         '<td style="color:var(--muted);font-size:0.8rem">' + fmtDate(r.startedAt) + '</td>' +
         '<td style="color:var(--muted);font-size:0.8rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
+        '<td>' + (cnt ? '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>' : '—') + '</td>' +
         '</tr>';
     }).join('');
   }).catch(function(e) { showToast(e.message, 'err'); });
@@ -440,6 +456,46 @@ function closeModal() {
   document.getElementById('run-overlay').classList.remove('open');
   _modalScId = null;
 }
+
+function viewRunResults(run) {
+  document.getElementById('results-title').textContent = run.name + ' — Results';
+  var results = run.results || [];
+  var fail = results.filter(function(c) { return c.result === 'fail'; }).length;
+  var pass = results.length - fail;
+  document.getElementById('results-summary').innerHTML =
+    '<span style="color:var(--red);font-weight:600">' + fail + ' fail</span>' +
+    ' &nbsp;/&nbsp; <span style="color:var(--green);font-weight:600">' + pass + ' pass</span>' +
+    ' &nbsp;&middot;&nbsp; ' + results.length + ' total checks' +
+    ' &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>';
+
+  var byTactic = {};
+  results.forEach(function(c) {
+    var tactic = (c.technique && c.technique.tactic) || 'other';
+    if (!byTactic[tactic]) byTactic[tactic] = [];
+    byTactic[tactic].push(c);
+  });
+
+  document.getElementById('results-body').innerHTML = Object.keys(byTactic).map(function(tactic) {
+    var checks = byTactic[tactic].map(function(c) {
+      var col = c.result === 'pass' ? 'var(--green)' : 'var(--red)';
+      return '<div style="padding:0.3rem 0;border-bottom:1px solid rgba(48,54,61,0.5)">' +
+        '<div style="display:flex;align-items:baseline;gap:0.5rem">' +
+          '<span style="color:' + col + ';font-size:0.74rem;font-weight:600;min-width:36px">' + x(c.result) + '</span>' +
+          '<span>' + x((c.technique && c.technique.name) || c.name || '') + '</span>' +
+          '<span style="color:var(--muted);font-size:0.72rem;margin-left:auto">' + x(c.severity || '') + '</span>' +
+        '</div>' +
+        (c.details ? '<div style="color:var(--muted);font-size:0.75rem;padding-left:44px;margin-top:0.1rem">' + x(c.details) + '</div>' : '') +
+        (c.result === 'fail' && c.remediation ? '<div style="color:#d29922;font-size:0.74rem;padding-left:44px;margin-top:0.1rem">&#9888; ' + x(c.remediation) + '</div>' : '') +
+        '</div>';
+    }).join('');
+    return '<div style="margin-bottom:1.25rem">' +
+      '<div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:0.4rem">' + x(tactic) + '</div>' +
+      checks + '</div>';
+  }).join('');
+
+  document.getElementById('results-overlay').classList.add('open');
+}
+function closeResults() { document.getElementById('results-overlay').classList.remove('open'); }
 
 function viewReport(agentId) {
   apicall('/api/report/' + encodeURIComponent(agentId)).then(function(r) {
