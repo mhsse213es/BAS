@@ -39,6 +39,8 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/bas
+            - name: dashboard
+              mountPath: /wwwroot
           resources:
             {{- toYaml .Values.orchestrator.resources | nindent 12 }}
           readinessProbe:
@@ -57,6 +59,9 @@ spec:
         - name: config
           configMap:
             name: bas-orchestrator-config
+        - name: dashboard
+          configMap:
+            name: bas-dashboard
 ---
 apiVersion: v1
 kind: Service
