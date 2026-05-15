@@ -19,8 +19,15 @@ spec:
       {{- end }}
       http:
         paths:
-          # WebSocket and scenario API → Go orchestrator
+          # WebSocket and agent/auth API → Go orchestrator
           - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: bas-orchestrator
+                port:
+                  number: {{ .Values.orchestrator.port }}
+          - path: /api/auth
             pathType: Prefix
             backend:
               service:
