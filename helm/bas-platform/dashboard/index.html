@@ -169,13 +169,15 @@ code { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82em;
       <div id="ws-dot" class="ws-dot"></div>
       <span id="ws-label">disconnected</span>
     </div>
-    <button class="btn btn-outline-red btn-sm" onclick="doLogout()" style="margin-left:0.75rem">Sign out</button>
+    <button class="btn btn-outline btn-sm" onclick="openChangePassword()" style="margin-left:0.75rem">&#128273; Password</button>
+    <button class="btn btn-outline-red btn-sm" onclick="doLogout()" style="margin-left:0.5rem">Sign out</button>
   </header>
 
   <nav>
     <div class="tab active" data-tab="agents"    onclick="showTab('agents')">Agents</div>
     <div class="tab"        data-tab="scenarios" onclick="showTab('scenarios')">Scenarios</div>
     <div class="tab"        data-tab="runs"      onclick="showTab('runs')">Runs</div>
+    <div class="tab"        data-tab="users"     onclick="showTab('users')" id="nav-users" style="display:none">Users</div>
   </nav>
 
   <main>
@@ -216,10 +218,28 @@ code { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82em;
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Run ID</th><th>Scenario</th><th>Agent</th><th>Status</th><th>Started</th><th>Completed</th><th>Results</th>
+            <th>Run ID</th><th>Scenario</th><th>Agent</th><th>Status</th><th>Initiated By</th><th>Started</th><th>Completed</th><th>Results</th>
           </tr></thead>
           <tbody id="runs-body">
-            <tr><td colspan="7" class="empty">No runs yet.</td></tr>
+            <tr><td colspan="8" class="empty">No runs yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Users tab (admin only) -->
+    <div id="tab-users" style="display:none">
+      <div class="sec-hdr">
+        <h2>User Management <span id="users-cnt" class="cnt">0</span></h2>
+        <button class="btn btn-outline-green btn-sm" onclick="openCreateUser()">&#43; New User</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Last Login</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="users-body">
+            <tr><td colspan="6" class="empty">Loading...</td></tr>
           </tbody>
         </table>
       </div>
@@ -268,6 +288,81 @@ code { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82em;
   </div>
 </div>
 
+<!-- Create User Modal -->
+<div id="create-user-overlay" class="overlay" onclick="if(event.target===this)closeCreateUser()">
+  <div class="modal">
+    <h3>Create User</h3>
+    <p class="sub2">New users must change their password on first login.</p>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="cu-username" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Temporary Password</label>
+      <input type="password" id="cu-password" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label>Role</label>
+      <select id="cu-role">
+        <option value="analyst">Analyst — run scenarios, view reports</option>
+        <option value="viewer">Viewer — read-only</option>
+        <option value="admin">Admin — full access</option>
+      </select>
+    </div>
+    <div id="cu-err" class="error-msg"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeCreateUser()">Cancel</button>
+      <button class="btn btn-outline-green btn-sm" onclick="submitCreateUser()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit User Modal -->
+<div id="edit-user-overlay" class="overlay" onclick="if(event.target===this)closeEditUser()">
+  <div class="modal">
+    <h3 id="edit-user-title">Edit User</h3>
+    <p class="sub2" id="edit-user-sub"></p>
+    <div class="form-group">
+      <label>Role</label>
+      <select id="eu-role">
+        <option value="analyst">Analyst</option>
+        <option value="viewer">Viewer</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div id="eu-err" class="error-msg"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeEditUser()">Cancel</button>
+      <button class="btn btn-outline-green btn-sm" onclick="submitEditUser()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div id="changepw-overlay" class="overlay" onclick="if(event.target===this && !_pwForced)closeChangePassword()">
+  <div class="modal">
+    <h3 id="changepw-title">Change Password</h3>
+    <p class="sub2" id="changepw-sub">Update your account password.</p>
+    <div class="form-group">
+      <label>Current Password</label>
+      <input type="password" id="cpw-current" autocomplete="current-password">
+    </div>
+    <div class="form-group">
+      <label>New Password <span style="color:var(--muted)">(min 8 chars)</span></label>
+      <input type="password" id="cpw-new" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label>Confirm New Password</label>
+      <input type="password" id="cpw-confirm" autocomplete="new-password">
+    </div>
+    <div id="cpw-err" class="error-msg"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" id="cpw-cancel-btn" onclick="closeChangePassword()">Cancel</button>
+      <button class="btn btn-outline-green btn-sm" onclick="submitChangePassword()">Update Password</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -279,6 +374,8 @@ var scenarios = [];
 var agents   = [];
 var _toast;
 var _modalScId = null;
+var _editUserId = null;
+var _pwForced = false;
 
 window.addEventListener('DOMContentLoaded', function() {
   document.getElementById('inp-pass').addEventListener('keydown', function(e) {
@@ -303,6 +400,13 @@ function doLogin() {
     localStorage.setItem('bas_token', TOKEN);
     localStorage.setItem('bas_role', ROLE);
     bootApp();
+    if (res.d.mustChangePw) {
+      _pwForced = true;
+      document.getElementById('changepw-title').textContent = 'Set New Password';
+      document.getElementById('changepw-sub').textContent = 'Your account requires a password change before continuing.';
+      document.getElementById('cpw-cancel-btn').style.display = 'none';
+      document.getElementById('changepw-overlay').classList.add('open');
+    }
   })
   .catch(function(e) { document.getElementById('login-err').textContent = e.message; });
 }
@@ -321,6 +425,9 @@ function bootApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('role-badge').textContent = ROLE;
+  if (ROLE === 'admin') {
+    document.getElementById('nav-users').style.display = '';
+  }
   connectWS();
   loadAgents();
   loadScenarios();
@@ -328,10 +435,13 @@ function bootApp() {
 }
 
 function showTab(name) {
-  ['agents','scenarios','runs'].forEach(function(t) {
-    document.getElementById('tab-' + t).style.display = t === name ? '' : 'none';
-    document.querySelector('[data-tab="' + t + '"]').classList.toggle('active', t === name);
+  ['agents','scenarios','runs','users'].forEach(function(t) {
+    var el = document.getElementById('tab-' + t);
+    if (el) el.style.display = t === name ? '' : 'none';
+    var nav = document.querySelector('[data-tab="' + t + '"]');
+    if (nav) nav.classList.toggle('active', t === name);
   });
+  if (name === 'users') loadUsers();
 }
 
 function apicall(path, opts) {
@@ -408,7 +518,7 @@ function loadRuns() {
     document.getElementById('runs-cnt').textContent = runs.length;
     var tbody = document.getElementById('runs-body');
     if (!runs.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">No runs yet. Go to Scenarios and run one.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">No runs yet. Go to Scenarios and run one.</td></tr>';
       return;
     }
     tbody.innerHTML = runs.map(function(r) {
@@ -420,6 +530,7 @@ function loadRuns() {
         '<td>' + x(r.name) + '</td>' +
         '<td><code>' + x(r.agentId) + '</code></td>' +
         '<td><span class="sbadge s-' + x(r.status) + '">' + x(r.status) + '</span></td>' +
+        '<td style="color:var(--muted);font-size:0.8rem">' + x(r.initiatedBy || '—') + '</td>' +
         '<td style="color:var(--muted);font-size:0.8rem">' + fmtDate(r.startedAt) + '</td>' +
         '<td style="color:var(--muted);font-size:0.8rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
         '<td>' + (cnt ? '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>' : '—') + '</td>' +
@@ -583,6 +694,148 @@ function showToast(msg, type) {
   el.className = 'show ' + (type || 'ok');
   clearTimeout(_toast);
   _toast = setTimeout(function() { el.className = ''; }, 3800);
+}
+
+// ── User Management ──────────────────────────────────────────────────────────
+
+var ROLE_LABELS = { admin: '&#128274; Admin', analyst: '&#128269; Analyst', viewer: '&#128065; Viewer' };
+
+function loadUsers() {
+  apicall('/api/users').then(function(data) {
+    document.getElementById('users-cnt').textContent = data.length;
+    var tbody = document.getElementById('users-body');
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No users found.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(function(u) {
+      var statusBadge = u.isActive
+        ? '<span class="sbadge s-completed">Active</span>'
+        : '<span class="sbadge s-offline">Disabled</span>';
+      var mustPw = u.mustChangePw ? ' <span class="tag" style="color:var(--yellow)">pw reset</span>' : '';
+      var actions =
+        '<button class="btn btn-outline btn-sm" onclick="openEditUser(\'' + x(u.id) + '\',\'' + x(u.username) + '\',\'' + x(u.role) + '\')">&#9998; Edit</button>' +
+        ' <button class="btn btn-outline btn-sm" onclick="doResetPassword(\'' + x(u.id) + '\',\'' + x(u.username) + '\')" style="margin-left:0.3rem">&#128273; Reset PW</button>' +
+        ' <button class="btn btn-outline-' + (u.isActive ? 'red' : 'green') + ' btn-sm" onclick="toggleUserActive(\'' + x(u.id) + '\',' + !u.isActive + ')" style="margin-left:0.3rem">' +
+          (u.isActive ? '&#128683; Disable' : '&#10003; Enable') + '</button>';
+      return '<tr>' +
+        '<td><strong>' + x(u.username) + '</strong>' + mustPw + '</td>' +
+        '<td>' + (ROLE_LABELS[u.role] || x(u.role)) + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '<td style="color:var(--muted);font-size:0.8rem">' + fmtDate(u.createdAt) + '</td>' +
+        '<td style="color:var(--muted);font-size:0.8rem">' + (u.lastLogin ? fmtDate(u.lastLogin) : 'Never') + '</td>' +
+        '<td>' + actions + '</td>' +
+        '</tr>';
+    }).join('');
+  }).catch(function(e) { showToast('Failed to load users: ' + e.message, 'err'); });
+}
+
+function openCreateUser() {
+  document.getElementById('cu-username').value = '';
+  document.getElementById('cu-password').value = '';
+  document.getElementById('cu-role').value = 'analyst';
+  document.getElementById('cu-err').textContent = '';
+  document.getElementById('create-user-overlay').classList.add('open');
+}
+function closeCreateUser() { document.getElementById('create-user-overlay').classList.remove('open'); }
+
+function submitCreateUser() {
+  var username = document.getElementById('cu-username').value.trim();
+  var password = document.getElementById('cu-password').value;
+  var role     = document.getElementById('cu-role').value;
+  document.getElementById('cu-err').textContent = '';
+  if (!username || !password) { document.getElementById('cu-err').textContent = 'Username and password are required.'; return; }
+  apicall('/api/users', { method: 'POST', body: JSON.stringify({ username: username, password: password, role: role }) })
+  .then(function(res) {
+    if (res.error) throw new Error(res.error);
+    closeCreateUser();
+    showToast('User ' + username + ' created (must change password on first login)', 'ok');
+    loadUsers();
+  })
+  .catch(function(e) { document.getElementById('cu-err').textContent = e.message; });
+}
+
+function openEditUser(id, username, role) {
+  _editUserId = id;
+  document.getElementById('edit-user-title').textContent = 'Edit: ' + username;
+  document.getElementById('edit-user-sub').textContent = 'Change role for ' + username;
+  document.getElementById('eu-role').value = role;
+  document.getElementById('eu-err').textContent = '';
+  document.getElementById('edit-user-overlay').classList.add('open');
+}
+function closeEditUser() { document.getElementById('edit-user-overlay').classList.remove('open'); _editUserId = null; }
+
+function submitEditUser() {
+  if (!_editUserId) return;
+  var role = document.getElementById('eu-role').value;
+  apicall('/api/users/' + encodeURIComponent(_editUserId), { method: 'PUT', body: JSON.stringify({ role: role }) })
+  .then(function(res) {
+    if (res.error) throw new Error(res.error);
+    closeEditUser();
+    showToast('Role updated', 'ok');
+    loadUsers();
+  })
+  .catch(function(e) { document.getElementById('eu-err').textContent = e.message; });
+}
+
+function toggleUserActive(id, active) {
+  apicall('/api/users/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ isActive: active }) })
+  .then(function(res) {
+    if (res.error) throw new Error(res.error);
+    showToast('Account ' + (active ? 'enabled' : 'disabled'), 'ok');
+    loadUsers();
+  })
+  .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function doResetPassword(id, username) {
+  var pw = prompt('Set temporary password for ' + username + ' (min 8 characters):');
+  if (!pw) return;
+  if (pw.length < 8) { showToast('Password must be at least 8 characters', 'err'); return; }
+  apicall('/api/users/' + encodeURIComponent(id) + '/reset-password', { method: 'POST', body: JSON.stringify({ newPassword: pw }) })
+  .then(function(res) {
+    if (res.error) throw new Error(res.error);
+    showToast('Password reset for ' + username + ' — user must change on next login', 'ok');
+    loadUsers();
+  })
+  .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// ── Change Password ──────────────────────────────────────────────────────────
+
+function openChangePassword() {
+  _pwForced = false;
+  document.getElementById('changepw-title').textContent = 'Change Password';
+  document.getElementById('changepw-sub').textContent = 'Update your account password.';
+  document.getElementById('cpw-cancel-btn').style.display = '';
+  document.getElementById('cpw-current').value = '';
+  document.getElementById('cpw-new').value = '';
+  document.getElementById('cpw-confirm').value = '';
+  document.getElementById('cpw-err').textContent = '';
+  document.getElementById('changepw-overlay').classList.add('open');
+}
+
+function closeChangePassword() {
+  if (_pwForced) return;
+  document.getElementById('changepw-overlay').classList.remove('open');
+}
+
+function submitChangePassword() {
+  var current = document.getElementById('cpw-current').value;
+  var newpw   = document.getElementById('cpw-new').value;
+  var confirm = document.getElementById('cpw-confirm').value;
+  document.getElementById('cpw-err').textContent = '';
+  if (!current || !newpw) { document.getElementById('cpw-err').textContent = 'All fields are required.'; return; }
+  if (newpw !== confirm)  { document.getElementById('cpw-err').textContent = 'New passwords do not match.'; return; }
+  if (newpw.length < 8)   { document.getElementById('cpw-err').textContent = 'Password must be at least 8 characters.'; return; }
+  apicall('/api/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword: current, newPassword: newpw }) })
+  .then(function(res) {
+    if (res.error) throw new Error(res.error);
+    _pwForced = false;
+    document.getElementById('changepw-overlay').classList.remove('open');
+    showToast('Password updated successfully', 'ok');
+  })
+  .catch(function(e) { document.getElementById('cpw-err').textContent = e.message; });
 }
 </script>
 </body>

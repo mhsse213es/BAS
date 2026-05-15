@@ -70,10 +70,17 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret string) http.Handler {
 			r.Post("/api/scenarios/{id}/run", h.RunScenario)
 		})
 
-		// Admin only — user management (Phase 2)
+		// Any authenticated user — self-service password change
+		r.Post("/api/auth/change-password", h.ChangePassword)
+
+		// Admin only — user management
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin))
-			// TODO: POST /api/users, GET /api/users, DELETE /api/users/{id}
+			r.Get("/api/users", h.ListUsers)
+			r.Post("/api/users", h.CreateUser)
+			r.Put("/api/users/{id}", h.UpdateUser)
+			r.Delete("/api/users/{id}", h.DeleteUser)
+			r.Post("/api/users/{id}/reset-password", h.ResetPassword)
 		})
 	})
 

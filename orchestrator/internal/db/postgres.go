@@ -31,9 +31,15 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			username      text        UNIQUE NOT NULL,
 			password_hash text        NOT NULL,
 			role          text        NOT NULL DEFAULT 'analyst',
+			is_active     boolean     NOT NULL DEFAULT true,
+			must_change_pw boolean    NOT NULL DEFAULT false,
 			created_at    timestamptz NOT NULL DEFAULT NOW(),
 			last_login    timestamptz
 		)`,
+
+		// Idempotent migrations for existing deployments
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_pw boolean NOT NULL DEFAULT false`,
 
 		`CREATE TABLE IF NOT EXISTS agents (
 			agent_id    text        PRIMARY KEY,
@@ -48,17 +54,20 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS scenario_runs (
-			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
-			scenario_id  text        NOT NULL,
-			agent_id     text        NOT NULL,
-			name         text        NOT NULL DEFAULT '',
-			status       text        NOT NULL DEFAULT 'running',
-			results      jsonb       NOT NULL DEFAULT '[]',
-			score        jsonb,
-			started_at   timestamptz NOT NULL DEFAULT NOW(),
-			completed_at timestamptz,
+			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			scenario_id    text        NOT NULL,
+			agent_id       text        NOT NULL,
+			name           text        NOT NULL DEFAULT '',
+			status         text        NOT NULL DEFAULT 'running',
+			results        jsonb       NOT NULL DEFAULT '[]',
+			score          jsonb,
+			initiated_by   text,
+			started_at     timestamptz NOT NULL DEFAULT NOW(),
+			completed_at   timestamptz,
 			CONSTRAINT fk_agent FOREIGN KEY (agent_id) REFERENCES agents(agent_id) ON DELETE CASCADE
 		)`,
+
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS initiated_by text`,
 
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_agent ON scenario_runs(agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_scenario ON scenario_runs(scenario_id)`,

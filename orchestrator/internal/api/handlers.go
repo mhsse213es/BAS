@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -45,11 +46,16 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id, hash, role string
+	var isActive, mustChangePw bool
 	err := h.db.QueryRow(r.Context(),
-		`SELECT id, password_hash, role FROM users WHERE username = $1`, req.Username,
-	).Scan(&id, &hash, &role)
+		`SELECT id, password_hash, role, is_active, must_change_pw FROM users WHERE username = $1`, req.Username,
+	).Scan(&id, &hash, &role, &isActive, &mustChangePw)
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)) != nil {
 		jsonError(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	if !isActive {
+		jsonError(w, "account is disabled — contact your administrator", http.StatusForbidden)
 		return
 	}
 
@@ -59,7 +65,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = h.db.Exec(r.Context(), `UPDATE users SET last_login = NOW() WHERE id = $1`, id)
-	respond(w, map[string]string{"token": token, "role": role, "userId": id})
+	respond(w, map[string]interface{}{
+		"token":       token,
+		"role":        role,
+		"userId":      id,
+		"mustChangePw": mustChangePw,
+	})
 }
 
 // ── Agents ────────────────────────────────────────────────────────────────────
@@ -167,12 +178,16 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a run record in RUNNING state
+	// Create a run record in RUNNING state, stamped with the requesting user
 	runID := newID()
+	var initiatedBy *string
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+		initiatedBy = &c.UserID
+	}
 	_, err := h.db.Exec(r.Context(),
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at)
-		 VALUES ($1, $2, $3, $4, 'running', NOW())`,
-		runID, scenarioID, req.AgentID, sc.Name,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW())`,
+		runID, scenarioID, req.AgentID, sc.Name, initiatedBy,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -235,7 +250,7 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	scenarioID := r.URL.Query().Get("scenarioId")
 
 	rows, err := h.db.Query(r.Context(),
-		`SELECT id, scenario_id, agent_id, name, status, results, score, started_at, completed_at
+		`SELECT id, scenario_id, agent_id, name, status, results, score, initiated_by, started_at, completed_at
 		 FROM scenario_runs
 		 WHERE ($1 = '' OR agent_id = $1)
 		   AND ($2 = '' OR scenario_id = $2)
@@ -248,13 +263,17 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var runs []models.ScenarioRun
+	type runRow struct {
+		models.ScenarioRun
+		InitiatedBy *string `json:"initiatedBy"`
+	}
+	var runs []runRow
 	for rows.Next() {
-		var run models.ScenarioRun
+		var run runRow
 		var resultsJSON []byte
 		var scoreJSON *[]byte
 		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.Name,
-			&run.Status, &resultsJSON, &scoreJSON, &run.StartedAt, &run.CompletedAt); err != nil {
+			&run.Status, &resultsJSON, &scoreJSON, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt); err != nil {
 			continue
 		}
 		json.Unmarshal(resultsJSON, &run.Results)
@@ -264,7 +283,7 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 		runs = append(runs, run)
 	}
 	if runs == nil {
-		runs = []models.ScenarioRun{}
+		runs = []runRow{}
 	}
 	respond(w, runs)
 }
@@ -356,6 +375,214 @@ func (h *Handler) GetReport(w http.ResponseWriter, r *http.Request) {
 		"startedAt": startedAt, "lastUpdate": lastUpdate,
 	}
 	respond(w, rep)
+}
+
+// ── User Management (admin only) ─────────────────────────────────────────────
+
+// GET /api/users
+func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(),
+		`SELECT id, username, role, is_active, must_change_pw, created_at, last_login
+		 FROM users ORDER BY created_at ASC`)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type UserRow struct {
+		ID           string     `json:"id"`
+		Username     string     `json:"username"`
+		Role         string     `json:"role"`
+		IsActive     bool       `json:"isActive"`
+		MustChangePw bool       `json:"mustChangePw"`
+		CreatedAt    time.Time  `json:"createdAt"`
+		LastLogin    *time.Time `json:"lastLogin"`
+	}
+	var users []UserRow
+	for rows.Next() {
+		var u UserRow
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.IsActive, &u.MustChangePw, &u.CreatedAt, &u.LastLogin); err != nil {
+			continue
+		}
+		users = append(users, u)
+	}
+	if users == nil {
+		users = []UserRow{}
+	}
+	respond(w, users)
+}
+
+// POST /api/users
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" || req.Password == "" {
+		jsonError(w, "username and password are required", http.StatusBadRequest)
+		return
+	}
+	if req.Role == "" {
+		req.Role = "analyst"
+	}
+	if req.Role != "admin" && req.Role != "analyst" && req.Role != "viewer" {
+		jsonError(w, "role must be admin, analyst, or viewer", http.StatusBadRequest)
+		return
+	}
+	if len(req.Password) < 8 {
+		jsonError(w, "password must be at least 8 characters", http.StatusBadRequest)
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		jsonError(w, "password hashing failed", http.StatusInternalServerError)
+		return
+	}
+
+	var id string
+	err = h.db.QueryRow(r.Context(),
+		`INSERT INTO users (username, password_hash, role, must_change_pw)
+		 VALUES ($1, $2, $3, true)
+		 RETURNING id`,
+		req.Username, string(hash), req.Role,
+	).Scan(&id)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") {
+			jsonError(w, "username already exists", http.StatusConflict)
+			return
+		}
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	respond(w, map[string]string{"id": id, "username": req.Username, "role": req.Role})
+}
+
+// PUT /api/users/{id}  — update role and/or active status (admin only)
+func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	targetID := chi.URLParam(r, "id")
+	claims, _ := auth.ClaimsFrom(r.Context())
+
+	var req struct {
+		Role     *string `json:"role"`
+		IsActive *bool   `json:"isActive"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Role == nil && req.IsActive == nil {
+		jsonError(w, "provide role or isActive to update", http.StatusBadRequest)
+		return
+	}
+	if req.Role != nil {
+		if *req.Role != "admin" && *req.Role != "analyst" && *req.Role != "viewer" {
+			jsonError(w, "role must be admin, analyst, or viewer", http.StatusBadRequest)
+			return
+		}
+	}
+	// Prevent admin from deactivating their own account
+	if req.IsActive != nil && !*req.IsActive && claims != nil && claims.UserID == targetID {
+		jsonError(w, "cannot deactivate your own account", http.StatusBadRequest)
+		return
+	}
+
+	if req.Role != nil {
+		h.db.Exec(r.Context(), `UPDATE users SET role = $1 WHERE id = $2`, *req.Role, targetID)
+	}
+	if req.IsActive != nil {
+		h.db.Exec(r.Context(), `UPDATE users SET is_active = $1 WHERE id = $2`, *req.IsActive, targetID)
+	}
+	w.WriteHeader(http.StatusOK)
+	respond(w, map[string]string{"status": "updated"})
+}
+
+// DELETE /api/users/{id}  — hard delete (admin only, cannot delete self)
+func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	targetID := chi.URLParam(r, "id")
+	claims, _ := auth.ClaimsFrom(r.Context())
+	if claims != nil && claims.UserID == targetID {
+		jsonError(w, "cannot delete your own account", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.db.Exec(r.Context(), `DELETE FROM users WHERE id = $1`, targetID); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/auth/change-password  — any authenticated user
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	claims, ok := auth.ClaimsFrom(r.Context())
+	if !ok || claims == nil {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		CurrentPassword string `json:"currentPassword"`
+		NewPassword     string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CurrentPassword == "" || req.NewPassword == "" {
+		jsonError(w, "currentPassword and newPassword are required", http.StatusBadRequest)
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		jsonError(w, "new password must be at least 8 characters", http.StatusBadRequest)
+		return
+	}
+
+	var hash string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT password_hash FROM users WHERE id = $1`, claims.UserID,
+	).Scan(&hash); err != nil {
+		jsonError(w, "user not found", http.StatusNotFound)
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.CurrentPassword)) != nil {
+		jsonError(w, "current password is incorrect", http.StatusUnauthorized)
+		return
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		jsonError(w, "password hashing failed", http.StatusInternalServerError)
+		return
+	}
+	h.db.Exec(r.Context(),
+		`UPDATE users SET password_hash = $1, must_change_pw = false WHERE id = $2`,
+		string(newHash), claims.UserID)
+
+	respond(w, map[string]string{"status": "password updated"})
+}
+
+// POST /api/auth/reset-password  — admin resets another user's password
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	targetID := chi.URLParam(r, "id")
+	var req struct {
+		NewPassword string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.NewPassword == "" {
+		jsonError(w, "newPassword is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		jsonError(w, "password must be at least 8 characters", http.StatusBadRequest)
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		jsonError(w, "password hashing failed", http.StatusInternalServerError)
+		return
+	}
+	h.db.Exec(r.Context(),
+		`UPDATE users SET password_hash = $1, must_change_pw = true WHERE id = $2`,
+		string(hash), targetID)
+	respond(w, map[string]string{"status": "password reset — user must change on next login"})
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
