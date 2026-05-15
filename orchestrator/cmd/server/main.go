@@ -16,6 +16,7 @@ import (
 	"github.com/audspect/bas/config"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -64,6 +65,11 @@ func main() {
 	handler := api.New(pool, hub, engine, cfg.JWTSecret)
 	router := api.Mount(handler, hub, cfg.JWTSecret)
 
+	// ── Agent Staleness Monitor ───────────────────────────────────────────
+	// Marks agents offline if no heartbeat received within 90 seconds and
+	// broadcasts the change so the dashboard updates in real time.
+	go runStalenessMonitor(pool, hub)
+
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler:      router,
@@ -91,6 +97,44 @@ func main() {
 		log.Printf("[!] shutdown error: %v", err)
 	}
 	log.Println("[*] Server stopped.")
+}
+
+// runStalenessMonitor ticks every 30s and marks agents offline when their
+// last heartbeat is older than 90 seconds. Broadcasts each change so the
+// dashboard reflects the real status without a manual refresh.
+func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
+	const staleAfter = 90 * time.Second
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		rows, err := pool.Query(context.Background(),
+			`UPDATE agents
+			    SET status = 'offline'
+			  WHERE status != 'offline'
+			    AND last_update < NOW() - $1::interval
+			RETURNING agent_id, hostname, ip_address, os_version, username,
+			          status, env_label, has_report, last_update`,
+			staleAfter.String(),
+		)
+		if err != nil {
+			log.Printf("[monitor] staleness query: %v", err)
+			continue
+		}
+		for rows.Next() {
+			var a models.Agent
+			if err := rows.Scan(&a.AgentID, &a.Hostname, &a.IPAddress, &a.OSVersion,
+				&a.Username, &a.Status, &a.EnvLabel, &a.HasReport, &a.LastUpdate); err != nil {
+				continue
+			}
+			log.Printf("[monitor] agent %s marked offline (no heartbeat for >90s)", a.AgentID)
+			hub.BroadcastBrowsers(models.WSMessage{
+				Type:    models.MsgAgentUpdate,
+				AgentID: a.AgentID,
+				Data:    a,
+			})
+		}
+		rows.Close()
+	}
 }
 
 // seedDefaultAdmin creates admin/ChangeMe!2024 on first run if no users exist.

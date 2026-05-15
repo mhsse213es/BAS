@@ -5,15 +5,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -33,11 +36,24 @@ type Config struct {
 }
 
 func loadConfig() Config {
+	// Env vars take priority (interactive use).
+	// Registry fallback is used when running as a Windows Service (no user env).
 	serverURL := os.Getenv("BAS_SERVER_URL")
+	envLabel := os.Getenv("BAS_ENV_LABEL")
+
+	if serverURL == "" || envLabel == "" {
+		if u, e := readServiceParams(); u != "" || e != "" {
+			if serverURL == "" {
+				serverURL = u
+			}
+			if envLabel == "" {
+				envLabel = e
+			}
+		}
+	}
 	if serverURL == "" {
 		serverURL = "http://localhost:9000"
 	}
-	envLabel := os.Getenv("BAS_ENV_LABEL")
 	if envLabel == "" {
 		envLabel = "Production"
 	}
@@ -72,7 +88,7 @@ func collectIdentity() Identity {
 	h := sha256.Sum256([]byte(hostname))
 	agentID := hex.EncodeToString(h[:])[:16]
 
-	osVer := fmt.Sprintf("Windows/%s", runtime.GOARCH)
+	osVer := fmt.Sprintf("Windows/%s (%s)", runtime.GOARCH, getWindowsVersion())
 
 	return Identity{
 		AgentID:   agentID,
@@ -319,7 +335,75 @@ func (a *Agent) connectWS() {
 // ── Entry Point ───────────────────────────────────────────────────────────────
 
 func main() {
-	log.SetFlags(log.Ltime)
+	log.SetFlags(log.Ltime | log.Lmsgprefix)
+
+	// ── Flags ─────────────────────────────────────────────────────────────────
+	var (
+		flagInstall   = flag.Bool("install", false, "Install BASAgent as a Windows Service (SYSTEM, auto-start)")
+		flagUninstall = flag.Bool("uninstall", false, "Uninstall BASAgent Windows Service")
+		flagUpdate    = flag.Bool("update", false, "Stop service, replace binary in-place, restart — no reinstall needed")
+		flagConsole   = flag.Bool("console", false, "Force interactive console mode even if service detection triggers")
+		flagServer    = flag.String("server", "", "Override BAS_SERVER_URL (used with --install)")
+		flagEnv       = flag.String("env", "Production", "Override BAS_ENV_LABEL (used with --install)")
+	)
+	flag.Parse()
+
+	if *flagUpdate {
+		if err := svcUpdate(); err != nil {
+			fmt.Fprintf(os.Stderr, "update failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// ── Service management commands ───────────────────────────────────────────
+	if *flagInstall {
+		serverURL := *flagServer
+		if serverURL == "" {
+			serverURL = os.Getenv("BAS_SERVER_URL")
+		}
+		if serverURL == "" {
+			fmt.Fprintln(os.Stderr, "error: provide --server <url> or set BAS_SERVER_URL")
+			os.Exit(1)
+		}
+		if err := svcInstall(serverURL, *flagEnv); err != nil {
+			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if *flagUninstall {
+		if err := svcUninstall(); err != nil {
+			fmt.Fprintf(os.Stderr, "uninstall failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// ── Windows Service mode ──────────────────────────────────────────────────
+	if !*flagConsole && isWindowsService() {
+		if err := svcRun(); err != nil {
+			log.Fatalf("[!] service run: %v", err)
+		}
+		return
+	}
+
+	// ── Interactive mode ──────────────────────────────────────────────────────
+	// Self-elevate via UAC if not already admin — most BAS checks need it.
+	if !isElevated() {
+		log.Println("[!] Not running as Administrator — attempting UAC elevation...")
+		if err := selfElevate(); err != nil {
+			log.Printf("[!] UAC elevation failed: %v", err)
+			log.Println("[!] Some checks will be skipped or inaccurate without admin rights.")
+		} else {
+			// Elevated child process is now running; exit this unelevated instance.
+			os.Exit(0)
+		}
+	}
+
+	// Enable all available Windows privileges for maximum check coverage.
+	enablePrivileges()
 
 	cfg := loadConfig()
 	id := collectIdentity()
@@ -329,21 +413,31 @@ func main() {
 	fmt.Printf("  Hostname  : %s\n", id.Hostname)
 	fmt.Printf("  AgentID   : %s\n", id.AgentID)
 	fmt.Printf("  IP        : %s\n", id.IPAddress)
+	fmt.Printf("  OS        : %s\n", id.OSVersion)
 	fmt.Printf("  Server    : %s\n", cfg.ServerURL)
 	fmt.Printf("  Env       : %s\n", cfg.EnvLabel)
+	fmt.Printf("  Elevated  : %v\n", isElevated())
 	fmt.Printf("\n")
 
 	agent := newAgent(cfg, id)
 
-	// Start WebSocket listener in background
 	go agent.connectWS()
-
-	// Initial heartbeat then run baseline scan
 	agent.sendHeartbeat("idle")
-	go agent.runScan()
 
-	// Periodic heartbeat loop (runs forever)
-	for range time.NewTicker(heartbeatInterval).C {
-		agent.sendHeartbeat(agent.getStatus())
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			agent.sendHeartbeat(agent.getStatus())
+		case <-quit:
+			log.Println("[*] Shutting down — sending offline heartbeat...")
+			agent.sendHeartbeat("offline")
+			return
+		}
 	}
 }
