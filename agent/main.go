@@ -230,7 +230,7 @@ func (a *Agent) runScenario(cmd ScenarioCommand) {
 	a.sendHeartbeat("scanning")
 
 	start := time.Now()
-	cats := RunAllChecks()
+	cats := RunScenarioChecks(cmd.ScenarioID)
 
 	// Flatten all checks into a single results slice for the run record
 	var results []interface{}
