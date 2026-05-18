@@ -35,7 +35,8 @@ type SimulationResult struct {
 	RawOutput    string          `json:"rawOutput,omitempty"`
 	DurationMs   int64           `json:"durationMs"`
 	ExecutedAt   time.Time       `json:"executedAt"`
-	Framework    string          `json:"framework"` // art | caldera | sigma | custom
+	Framework    string          `json:"framework"`          // art | caldera | sigma | custom
+	Events       []string        `json:"events,omitempty"`   // Windows Event IDs observed during execution
 }
 
 // ScenarioRun is a complete execution of a named scenario against one agent.

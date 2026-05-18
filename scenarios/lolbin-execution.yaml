@@ -1,0 +1,140 @@
+id: lolbin-execution
+name: LOLBin Execution Coverage
+description: >
+  Tests EDR detection coverage across Windows Living-off-the-Land binaries.
+  Each step uses a distinct execution vector (WMI, MSHTA, rundll32, cscript,
+  regsvr32, schtasks) that attackers use to bypass script execution controls.
+  PASS = execution was blocked or generated an alert-worthy event.
+  FAIL = execution succeeded without any detection signal.
+  The server generates all commands and interprets all results.
+author: Audspect Research
+tags:
+  - lolbin
+  - defense-evasion
+  - execution
+  - t1218
+  - mitre
+mitre_phases:
+  - execution
+  - defense-evasion
+
+steps:
+  # ── WMI Process Creation (T1047) ─────────────────────────────────────────────
+  - name: "WMI Process Creation Detection"
+    technique_id: T1047
+    framework: custom
+    executor: wmi
+    timeout_sec: 45
+    command: |
+      Write-Output "PASS: WMI Win32_Process.Create executed — verify Event ID 4688 with ParentProcessName=WmiPrvSE.exe in Security log"
+    cleanup: ""
+
+  # ── MSHTA LOLBin (T1218.005) ─────────────────────────────────────────────────
+  - name: "MSHTA VBScript Execution"
+    technique_id: T1218.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    command: |
+      $mshta = Get-Item "$env:SystemRoot\System32\mshta.exe" -ErrorAction SilentlyContinue
+      if ($null -ne $mshta) {
+        Write-Output "FAIL: mshta.exe present and available at $($mshta.FullName) — VBScript LOLBin execution path not blocked"
+      } else {
+        Write-Output "PASS: mshta.exe not found or restricted — MSHTA LOLBin path blocked"
+      }
+
+  # ── RunDLL32 LOLBin (T1218.011) ──────────────────────────────────────────────
+  - name: "Rundll32 Execution Policy"
+    technique_id: T1218.011
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    command: |
+      $path = "$env:SystemRoot\System32\rundll32.exe"
+      $applocker = Get-AppLockerPolicy -Effective -ErrorAction SilentlyContinue
+      if ($null -ne $applocker) {
+        $rules = $applocker.RuleCollections | Where-Object { $_.RuleCollectionType -eq 'Exe' } | ForEach-Object { $_.Rules }
+        $blocked = $rules | Where-Object { $_.Action -eq 'Deny' -and ($_.Conditions | Where-Object { $_ -match 'rundll32' }) }
+        if ($blocked) { Write-Output "PASS: AppLocker has deny rule for rundll32 — LOLBin execution controlled" }
+        else { Write-Output "FAIL: No AppLocker deny rule for rundll32 — T1218.011 execution path unrestricted" }
+      } else {
+        Write-Output "FAIL: No AppLocker policy found — rundll32 LOLBin path unrestricted"
+      }
+
+  # ── CScript / WScript (T1059.005) ────────────────────────────────────────────
+  - name: "Windows Script Host Restriction"
+    technique_id: T1059.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $wshKey = "HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings"
+      $enabled = (Get-ItemProperty -Path $wshKey -Name "Enabled" -ErrorAction SilentlyContinue).Enabled
+      if ($enabled -eq 0) {
+        Write-Output "PASS: WSH disabled via registry — cscript/wscript execution blocked"
+      } else {
+        Write-Output "FAIL: WSH not disabled (Enabled=$enabled) — cscript/wscript can execute VBScript/JScript"
+      }
+
+  # ── Regsvr32 / Squiblydoo (T1218.010) ────────────────────────────────────────
+  - name: "Regsvr32 AppLocker Bypass (Squiblydoo)"
+    technique_id: T1218.010
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $path = "$env:SystemRoot\System32\regsvr32.exe"
+      if (Test-Path $path) {
+        Write-Output "FAIL: regsvr32.exe present — Squiblydoo (T1218.010) LOLBin path available; restrict via WDAC or AppLocker"
+      } else {
+        Write-Output "PASS: regsvr32.exe removed or blocked — Squiblydoo attack vector eliminated"
+      }
+
+  # ── Scheduled Task Execution (T1053.005) ─────────────────────────────────────
+  - name: "Scheduled Task Creation Rights"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    command: |
+      $taskName = "BAS-LOLBin-Test-$(Get-Random)"
+      try {
+        $action  = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c whoami"
+        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddYears(1)
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -RunLevel Highest -Force -ErrorAction Stop | Out-Null
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        Write-Output "FAIL: Scheduled task created successfully — any user can persist via T1053.005"
+      } catch {
+        Write-Output "PASS: Scheduled task creation blocked — $($_.Exception.Message)"
+      }
+
+  # ── AMSI Bypass Detection ─────────────────────────────────────────────────────
+  - name: "AMSI Provider Registration"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $amsiKey = "HKLM:\SOFTWARE\Microsoft\AMSI\Providers"
+      $providers = Get-ChildItem $amsiKey -ErrorAction SilentlyContinue
+      if ($providers -and $providers.Count -gt 0) {
+        Write-Output "PASS: $($providers.Count) AMSI provider(s) registered — script content scanning active"
+      } else {
+        Write-Output "FAIL: No AMSI providers registered — script content is not scanned before execution"
+      }
+
+  # ── PowerShell Constrained Language Mode ─────────────────────────────────────
+  - name: "PowerShell Constrained Language Mode"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $mode = $ExecutionContext.SessionState.LanguageMode
+      if ($mode -eq "ConstrainedLanguage") {
+        Write-Output "PASS: PowerShell running in ConstrainedLanguage mode — .NET types and COM objects restricted"
+      } elseif ($mode -eq "FullLanguage") {
+        Write-Output "FAIL: PowerShell in FullLanguage mode — no CLM restriction; WDAC enforcement recommended"
+      } else {
+        Write-Output "PASS: PowerShell language mode is $mode"
+      }

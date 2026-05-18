@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -23,7 +24,7 @@ import (
 )
 
 const (
-	version           = "1.0.0"
+	version           = "2.1.0"
 	heartbeatInterval = 30 * time.Second
 	wsReconnectDelay  = 5 * time.Second
 )
@@ -36,8 +37,6 @@ type Config struct {
 }
 
 func loadConfig() Config {
-	// Env vars take priority (interactive use).
-	// Registry fallback is used when running as a Windows Service (no user env).
 	serverURL := os.Getenv("BAS_SERVER_URL")
 	envLabel := os.Getenv("BAS_ENV_LABEL")
 
@@ -84,7 +83,6 @@ func collectIdentity() Identity {
 		username = "unknown"
 	}
 
-	// Stable agent ID: first 16 hex chars of SHA256(hostname)
 	h := sha256.Sum256([]byte(hostname))
 	agentID := hex.EncodeToString(h[:])[:16]
 
@@ -110,7 +108,6 @@ func getOutboundIP() string {
 
 // ── Wire Protocol ─────────────────────────────────────────────────────────────
 
-// Heartbeat matches orchestrator models.Heartbeat JSON tags.
 type Heartbeat struct {
 	AgentID   string `json:"agentId"`
 	Hostname  string `json:"hostname"`
@@ -121,18 +118,27 @@ type Heartbeat struct {
 	EnvLabel  string `json:"envLabel"`
 }
 
-// WSMessage matches orchestrator models.WSMessage.
 type WSMessage struct {
 	Type    string          `json:"type"`
 	AgentID string          `json:"agentId,omitempty"`
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
-// ScenarioCommand is sent by the orchestrator to trigger a scenario run.
+// ScenarioCommand is sent by the server to trigger a scenario run.
+// Steps contain fully-resolved commands — no framework knowledge required by the agent.
 type ScenarioCommand struct {
-	RunID      string `json:"runId"`
-	ScenarioID string `json:"scenarioId"`
-	Name       string `json:"name"`
+	RunID      string         `json:"runId"`
+	ScenarioID string         `json:"scenarioId"`
+	Name       string         `json:"name"`
+	Steps      []ScenarioStep `json:"steps"`
+}
+
+// RawRunResult is what the agent posts back after executing all steps.
+type RawRunResult struct {
+	RunID      string       `json:"runId"`
+	ScenarioID string       `json:"scenarioId"`
+	AgentID    string       `json:"agentId"`
+	Results    []ExecResult `json:"results"`
 }
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
@@ -150,7 +156,7 @@ func newAgent(cfg Config, id Identity) *Agent {
 		cfg:    cfg,
 		id:     id,
 		status: "idle",
-		client: &http.Client{Timeout: 20 * time.Second},
+		client: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -199,77 +205,66 @@ func (a *Agent) sendHeartbeat(status string) {
 	}
 }
 
-func (a *Agent) runScan() {
-	log.Printf("[*] scan started")
+// runScenario executes each step sent by the server and returns raw results.
+// All intelligence (command building, result interpretation) lives on the server.
+func (a *Agent) runScenario(cmd ScenarioCommand) {
+	log.Printf("[*] scenario started: run=%s scenario=%s steps=%d",
+		cmd.RunID, cmd.ScenarioID, len(cmd.Steps))
 	a.setStatus("scanning")
 	a.sendHeartbeat("scanning")
 
-	start := time.Now()
-	cats := RunAllChecks()
+	// Create a per-run temp directory for payload staging.
+	// All payloads from all steps land here; commands reference it via BAS_PAYLOAD_DIR.
+	payloadDir := filepath.Join(os.TempDir(), "bas-"+cmd.RunID)
+	if err := os.MkdirAll(payloadDir, 0700); err != nil {
+		log.Printf("[!] payload dir: %v", err)
+		payloadDir = os.TempDir()
+	}
+	defer func() {
+		if err := os.RemoveAll(payloadDir); err != nil {
+			log.Printf("[!] payload dir cleanup: %v", err)
+		}
+	}()
 
-	total, failed := 0, 0
-	for _, c := range cats {
-		total += len(c.Checks)
-		for _, chk := range c.Checks {
-			if chk.Result == "fail" {
-				failed++
+	start := time.Now()
+	results := make([]ExecResult, 0, len(cmd.Steps))
+
+	for i, step := range cmd.Steps {
+		log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, len(cmd.Steps), step.TechniqueID, step.Executor, step.Name)
+
+		// Stage any payloads this step needs before running it.
+		if len(step.Payloads) > 0 {
+			if err := StagePayloads(step.Payloads, payloadDir); err != nil {
+				log.Printf("[!]   payload stage: %v", err)
+			} else {
+				log.Printf("[*]   staged %d payload(s) to %s", len(step.Payloads), payloadDir)
 			}
 		}
-	}
-	log.Printf("[*] scan done: %d checks, %d failed (%v)", total, failed, time.Since(start).Round(time.Millisecond))
 
-	report := map[string]interface{}{
-		"agentId":       a.id.AgentID,
-		"hostname":      a.id.Hostname,
-		"ipAddress":     a.id.IPAddress,
-		"osVersion":     a.id.OSVersion,
-		"username":      a.id.Username,
-		"status":        "completed",
-		"envLabel":      a.cfg.EnvLabel,
-		"securityTools": []interface{}{},
-		"categories":    cats,
-	}
+		step.PayloadDir = payloadDir
+		r := execStep(step)
 
-	if err := a.postJSON("/api/report", report); err != nil {
-		log.Printf("[!] report submit: %v", err)
-	} else {
-		log.Printf("[+] report submitted (%d categories, %d checks)", len(cats), total)
-	}
-
-	a.setStatus("idle")
-	a.sendHeartbeat("idle")
-}
-
-func (a *Agent) runScenario(cmd ScenarioCommand) {
-	log.Printf("[*] scenario started: runId=%s scenarioId=%s", cmd.RunID, cmd.ScenarioID)
-	a.setStatus("scanning")
-	a.sendHeartbeat("scanning")
-
-	start := time.Now()
-	cats := RunScenarioChecks(cmd.ScenarioID)
-
-	// Flatten all checks into a single results slice for the run record
-	var results []interface{}
-	for _, cat := range cats {
-		for _, chk := range cat.Checks {
-			results = append(results, chk)
+		evtSummary := ""
+		if len(r.Events) > 0 {
+			evtSummary = fmt.Sprintf(" events=%d", len(r.Events))
 		}
+		log.Printf("[*]   → exit=%d dur=%dms%s", r.ExitCode, r.DurationMs, evtSummary)
+		results = append(results, r)
 	}
 
-	payload := map[string]interface{}{
-		"id":          cmd.RunID,
-		"scenarioId":  cmd.ScenarioID,
-		"agentId":     a.id.AgentID,
-		"status":      "completed",
-		"results":     results,
-		"startedAt":   start,
-		"completedAt": time.Now(),
-	}
+	log.Printf("[*] scenario done: run=%s steps=%d elapsed=%v",
+		cmd.RunID, len(results), time.Since(start).Round(time.Millisecond))
 
+	payload := RawRunResult{
+		RunID:      cmd.RunID,
+		ScenarioID: cmd.ScenarioID,
+		AgentID:    a.id.AgentID,
+		Results:    results,
+	}
 	if err := a.postJSON("/api/scenarios/result", payload); err != nil {
-		log.Printf("[!] scenario result submit: %v", err)
+		log.Printf("[!] result submit: %v", err)
 	} else {
-		log.Printf("[+] scenario result submitted: runId=%s", cmd.RunID)
+		log.Printf("[+] results submitted: run=%s", cmd.RunID)
 	}
 
 	a.setStatus("idle")
@@ -277,7 +272,6 @@ func (a *Agent) runScenario(cmd ScenarioCommand) {
 }
 
 // connectWS maintains the WebSocket connection to the orchestrator.
-// Reconnects automatically on disconnect.
 func (a *Agent) connectWS() {
 	rawURL := strings.Replace(a.cfg.ServerURL, "http://", "ws://", 1)
 	rawURL = strings.Replace(rawURL, "https://", "wss://", 1)
@@ -303,7 +297,7 @@ func (a *Agent) connectWS() {
 		for {
 			_, data, err := conn.ReadMessage()
 			if err != nil {
-				log.Printf("[!] WS read error: %v — reconnecting", err)
+				log.Printf("[!] WS read: %v — reconnecting", err)
 				conn.Close()
 				break
 			}
@@ -314,17 +308,16 @@ func (a *Agent) connectWS() {
 			}
 
 			switch msg.Type {
-			case "command_scan":
-				log.Printf("[*] WS: command_scan received")
-				go a.runScan()
-
 			case "command_scenario":
 				var cmd ScenarioCommand
 				if err := json.Unmarshal(msg.Data, &cmd); err != nil {
-					log.Printf("[!] WS: failed to parse scenario command: %v", err)
+					log.Printf("[!] WS: bad scenario command: %v", err)
 					continue
 				}
 				go a.runScenario(cmd)
+
+			default:
+				log.Printf("[~] WS: unhandled message type %q", msg.Type)
 			}
 		}
 
@@ -337,14 +330,13 @@ func (a *Agent) connectWS() {
 func main() {
 	log.SetFlags(log.Ltime | log.Lmsgprefix)
 
-	// ── Flags ─────────────────────────────────────────────────────────────────
 	var (
-		flagInstall   = flag.Bool("install", false, "Install BASAgent as a Windows Service (SYSTEM, auto-start)")
+		flagInstall   = flag.Bool("install", false, "Install BASAgent as a Windows Service")
 		flagUninstall = flag.Bool("uninstall", false, "Uninstall BASAgent Windows Service")
-		flagUpdate    = flag.Bool("update", false, "Stop service, replace binary in-place, restart — no reinstall needed")
-		flagConsole   = flag.Bool("console", false, "Force interactive console mode even if service detection triggers")
-		flagServer    = flag.String("server", "", "Override BAS_SERVER_URL (used with --install)")
-		flagEnv       = flag.String("env", "Production", "Override BAS_ENV_LABEL (used with --install)")
+		flagUpdate    = flag.Bool("update", false, "In-place binary update without reinstall")
+		flagConsole   = flag.Bool("console", false, "Force interactive console mode")
+		flagServer    = flag.String("server", "", "Override BAS_SERVER_URL")
+		flagEnv       = flag.String("env", "Production", "Override BAS_ENV_LABEL")
 	)
 	flag.Parse()
 
@@ -356,7 +348,6 @@ func main() {
 		return
 	}
 
-	// ── Service management commands ───────────────────────────────────────────
 	if *flagInstall {
 		serverURL := *flagServer
 		if serverURL == "" {
@@ -381,7 +372,6 @@ func main() {
 		return
 	}
 
-	// ── Windows Service mode ──────────────────────────────────────────────────
 	if !*flagConsole && isWindowsService() {
 		if err := svcRun(); err != nil {
 			log.Fatalf("[!] service run: %v", err)
@@ -389,20 +379,16 @@ func main() {
 		return
 	}
 
-	// ── Interactive mode ──────────────────────────────────────────────────────
-	// Self-elevate via UAC if not already admin — most BAS checks need it.
 	if !isElevated() {
 		log.Println("[!] Not running as Administrator — attempting UAC elevation...")
 		if err := selfElevate(); err != nil {
 			log.Printf("[!] UAC elevation failed: %v", err)
-			log.Println("[!] Some checks will be skipped or inaccurate without admin rights.")
+			log.Println("[!] Some checks will be skipped without admin rights.")
 		} else {
-			// Elevated child process is now running; exit this unelevated instance.
 			os.Exit(0)
 		}
 	}
 
-	// Enable all available Windows privileges for maximum check coverage.
 	enablePrivileges()
 
 	cfg := loadConfig()

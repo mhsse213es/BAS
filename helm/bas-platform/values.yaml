@@ -9,13 +9,16 @@ global:
 # ── Orchestrator (Go) ─────────────────────────────────────────────────────────
 orchestrator:
   image: bas-orchestrator
-  tag: "1.0.1"
+  tag: "1.0.3"
   replicas: 1
   port: 9000
   config:
     httpPort: 9000
     scenariosDir: /scenarios
     jwtSecret: ""          # REQUIRED — set via --set or values-prod.yaml
+  caldera:
+    url: ""                # Optional — e.g. http://caldera.internal:8888
+    apiKey: ""             # Optional — Caldera REST API key
   resources:
     requests:
       cpu: 100m
