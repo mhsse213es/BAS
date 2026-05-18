@@ -25,11 +25,13 @@ type Step struct {
 
 // Scenario is a replayable named attack chain loaded from a YAML file.
 //
-// Caldera execution modes (mutually exclusive, checked in this order):
-//  1. caldera_all_windows: true  — runs every Windows-capable ability in the Caldera library
-//  2. caldera_abilities: [...]   — runs a specific list of ability IDs chosen by the admin
-//  3. caldera_adversary_id: "x" — runs all abilities in a named adversary profile
-//  4. steps: [...]               — static YAML steps (fallback / non-Caldera scenarios)
+// Execution modes — checked in this priority order:
+//  1. caldera_all_windows: true  — every Windows ability in the Caldera library
+//  2. caldera_abilities: [...]   — specific Caldera ability IDs chosen by the admin
+//  3. caldera_adversary_id: "x" — all abilities in a named Caldera adversary profile
+//  4. art_all_windows: true      — every Windows technique in the Atomic Red Team index
+//  5. art_techniques: [...]      — specific ATT&CK technique IDs run via Invoke-AtomicTest
+//  6. steps: [...]               — static YAML steps (custom / fallback)
 type Scenario struct {
 	ID                 string   `yaml:"id"                             json:"id"`
 	Name               string   `yaml:"name"                           json:"name"`
@@ -41,6 +43,8 @@ type Scenario struct {
 	CalderaAllWindows  bool     `yaml:"caldera_all_windows,omitempty"  json:"calderaAllWindows,omitempty"`
 	CalderaAbilities   []string `yaml:"caldera_abilities,omitempty"    json:"calderaAbilities,omitempty"`
 	CalderaAdversaryID string   `yaml:"caldera_adversary_id,omitempty" json:"calderaAdversaryId,omitempty"`
+	ARTAllWindows      bool     `yaml:"art_all_windows,omitempty"      json:"artAllWindows,omitempty"`
+	ARTTechniques      []string `yaml:"art_techniques,omitempty"       json:"artTechniques,omitempty"`
 }
 
 // Payload is a file the server stages on the endpoint before a step runs.

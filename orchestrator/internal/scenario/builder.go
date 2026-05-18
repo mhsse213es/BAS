@@ -2,11 +2,13 @@ package scenario
 
 import (
 	"crypto/sha256"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -19,7 +21,7 @@ func TaskID(techniqueID, name string) string {
 }
 
 // BuildSteps converts a Scenario into concrete ScenarioSteps the agent executes.
-// Caldera modes are checked in priority order (see Scenario type comment).
+// Modes are checked in priority order (see Scenario type comment).
 func BuildSteps(sc *Scenario, calderaURL, calderaKey string) ([]ScenarioStep, error) {
 	if calderaURL != "" {
 		if sc.CalderaAllWindows {
@@ -31,6 +33,12 @@ func BuildSteps(sc *Scenario, calderaURL, calderaKey string) ([]ScenarioStep, er
 		if sc.CalderaAdversaryID != "" {
 			return buildCalderaAdversarySteps(sc.CalderaAdversaryID, calderaURL, calderaKey)
 		}
+	}
+	if sc.ARTAllWindows {
+		return buildARTAllWindowsSteps()
+	}
+	if len(sc.ARTTechniques) > 0 {
+		return buildARTTechniquesSteps(sc.ARTTechniques)
 	}
 	out := make([]ScenarioStep, 0, len(sc.Steps))
 	for _, s := range sc.Steps {
@@ -84,19 +92,108 @@ func buildStep(s Step, calderaURL, calderaKey string) (ScenarioStep, error) {
 	}, nil
 }
 
-// buildARTCommand generates the Invoke-AtomicTest PowerShell command.
-// The agent runs this as-is; the server interprets the output.
+// buildARTCommand generates the Invoke-AtomicTest PowerShell command for a single
+// hardcoded step (framework: art with test_index set).
 func buildARTCommand(s Step) string {
 	timeout := s.TimeoutSec
 	if timeout == 0 {
 		timeout = 120
 	}
-	// Wrap in try/catch so syntax errors or missing module don't kill the process.
 	return fmt.Sprintf(
 		`try {`+
 			` Invoke-AtomicTest %s -TestNumbers @(%d) -Confirm:$false -TimeoutSeconds %d 2>&1`+
 			` } catch { Write-Output "ART_ERROR: $_" }`,
 		s.TechniqueID, s.TestIndex, timeout)
+}
+
+// ── Atomic Red Team Dynamic Modes ─────────────────────────────────────────────
+
+const artIndexURL = "https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/atomics/Indexes/Indexes-CSV/index.csv"
+
+// buildARTAllWindowsSteps fetches the ART index from GitHub and builds one step
+// per technique that has at least one PowerShell or command_prompt test.
+// Omitting -TestNumbers runs ALL tests for that technique automatically.
+func buildARTAllWindowsSteps() ([]ScenarioStep, error) {
+	techniques, err := fetchARTWindowsTechniques()
+	if err != nil {
+		return nil, err
+	}
+	return buildARTTechniquesSteps(techniques)
+}
+
+// buildARTTechniquesSteps builds one step per technique in the provided list.
+// Each step runs ALL atomic tests for that technique via Invoke-AtomicTest.
+func buildARTTechniquesSteps(techniques []string) ([]ScenarioStep, error) {
+	if len(techniques) == 0 {
+		return nil, fmt.Errorf("ART: empty technique list")
+	}
+	steps := make([]ScenarioStep, 0, len(techniques))
+	for _, t := range techniques {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		steps = append(steps, ScenarioStep{
+			TaskID:      TaskID(t, "art-"+t),
+			TechniqueID: t,
+			Name:        "ART: " + t,
+			Executor:    "powershell",
+			// No -TestNumbers → runs every atomic test for this technique.
+			// -GetPrereqs installs dependencies before execution.
+			Command: fmt.Sprintf(
+				`try {`+
+					` Invoke-AtomicTest %s -GetPrereqs -Confirm:$false 2>&1;`+
+					` Invoke-AtomicTest %s -Confirm:$false -TimeoutSeconds 120 2>&1`+
+					` } catch { Write-Output "ART_ERROR: $_" }`,
+				t, t),
+			TimeoutSec: 180,
+		})
+	}
+	if len(steps) == 0 {
+		return nil, fmt.Errorf("ART: no valid techniques to run")
+	}
+	return steps, nil
+}
+
+// fetchARTWindowsTechniques downloads the ART CSV index and returns all unique
+// technique IDs that have at least one PowerShell or command_prompt test.
+func fetchARTWindowsTechniques() ([]string, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(artIndexURL)
+	if err != nil {
+		return nil, fmt.Errorf("fetch ART index: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch ART index: HTTP %d", resp.StatusCode)
+	}
+
+	r := csv.NewReader(resp.Body)
+	r.Read() // skip header row
+
+	seen := make(map[string]bool)
+	var techniques []string
+	for {
+		record, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil || len(record) < 5 {
+			continue
+		}
+		techniqueID := strings.TrimSpace(record[0])
+		executor := strings.ToLower(strings.TrimSpace(record[4]))
+		if (executor == "powershell" || executor == "command_prompt") && !seen[techniqueID] {
+			seen[techniqueID] = true
+			techniques = append(techniques, techniqueID)
+		}
+	}
+
+	if len(techniques) == 0 {
+		return nil, fmt.Errorf("ART index returned no Windows techniques")
+	}
+	sort.Strings(techniques)
+	return techniques, nil
 }
 
 // buildCalderaCommand returns the ability command from Caldera API,

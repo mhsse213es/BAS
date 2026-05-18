@@ -17,8 +17,8 @@ orchestrator:
     scenariosDir: /scenarios
     jwtSecret: ""          # REQUIRED — set via --set or values-prod.yaml
   caldera:
-    url: ""                # Optional — e.g. http://caldera.internal:8888
-    apiKey: ""             # Optional — Caldera REST API key
+    url: "http://caldera:8888"   # ClusterIP service — same namespace
+    apiKey: "BASPlatform2024"    # Must match caldera.apiKey below
   resources:
     requests:
       cpu: 100m
@@ -59,6 +59,24 @@ ingress:
     kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+
+# ── Caldera (MITRE ATT&CK Simulation Engine) ──────────────────────────────────
+caldera:
+  enabled: true
+  image: ghcr.io/mitre/caldera
+  tag: "latest"
+  port: 8888
+  nodePort: 32888              # external access: http://<vm-ip>:32888
+  apiKey: "BASPlatform2024"    # red-team API key — must match orchestrator.caldera.apiKey
+  apiKeyBlue: "BASBlue2024"    # blue-team API key
+  adminPassword: "BASAdmin2024"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
 
 # ── Network Policy ────────────────────────────────────────────────────────────
 networkPolicy:

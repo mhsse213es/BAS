@@ -1,8 +1,8 @@
 package scenario
 
 import (
-	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,26 +22,30 @@ func NewEngine(dir string) *Engine {
 }
 
 // Load reads all *.yaml files in the scenarios directory.
+// Individual file errors are logged and skipped — a bad file never blocks the rest.
 // Safe to call multiple times — reloads on each call.
 func (e *Engine) Load() error {
 	e.scenarios = make(map[string]*Scenario)
 	return filepath.WalkDir(e.dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			return err // directory-level error — abort
 		}
 		if d.IsDir() || filepath.Ext(path) != ".yaml" {
 			return nil
 		}
 		b, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("read %s: %w", path, err)
+			log.Printf("[!] scenario: read %s: %v — skipping", path, err)
+			return nil
 		}
 		var s Scenario
 		if err := yaml.Unmarshal(b, &s); err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
+			log.Printf("[!] scenario: parse %s: %v — skipping", path, err)
+			return nil
 		}
 		if s.ID == "" {
-			return fmt.Errorf("%s: scenario missing required field 'id'", path)
+			log.Printf("[!] scenario: %s missing required field 'id' — skipping", path)
+			return nil
 		}
 		e.scenarios[s.ID] = &s
 		return nil

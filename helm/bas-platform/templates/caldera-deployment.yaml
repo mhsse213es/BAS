@@ -1,0 +1,91 @@
+{{- if .Values.caldera.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caldera-config
+  namespace: {{ .Values.global.namespace }}
+data:
+  local.yml: |
+    host: 0.0.0.0
+    port: {{ .Values.caldera.port }}
+    externalcontacthost: 0.0.0.0
+    api_key_red: {{ .Values.caldera.apiKey | quote }}
+    api_key_blue: {{ .Values.caldera.apiKeyBlue | quote }}
+    plugins:
+      - access
+      - stockpile
+      - compass
+      - response
+    users:
+      admin:
+        password: {{ .Values.caldera.adminPassword | quote }}
+        username: admin
+    app.contact.http: http://0.0.0.0:{{ .Values.caldera.port }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caldera
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: caldera
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: caldera
+  template:
+    metadata:
+      labels:
+        app: caldera
+    spec:
+      containers:
+        - name: caldera
+          image: "{{ .Values.caldera.image }}:{{ .Values.caldera.tag }}"
+          imagePullPolicy: Always
+          command: ["python3", "server.py", "--insecure"]
+          ports:
+            - containerPort: {{ .Values.caldera.port }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/src/app/conf/local.yml
+              subPath: local.yml
+            - name: data
+              mountPath: /usr/src/app/data
+          resources:
+            {{- toYaml .Values.caldera.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/v2/health
+              port: {{ .Values.caldera.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/v2/health
+              port: {{ .Values.caldera.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: config
+          configMap:
+            name: caldera-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: caldera
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector:
+    app: caldera
+  ports:
+    - name: http
+      port: {{ .Values.caldera.port }}
+      targetPort: {{ .Values.caldera.port }}
+      nodePort: {{ .Values.caldera.nodePort }}
+  type: NodePort
+{{- end }}
