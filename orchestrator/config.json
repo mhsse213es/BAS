@@ -1,0 +1,6 @@
+{
+  "database_url": "postgres://bas_user:123@localhost:5432/bas_platform",
+  "jwt_secret":   "dev-secret-change-in-prod-min32chars!!",
+  "http_port":    9000,
+  "scenarios_dir": "/mnt/c/Users/Administrator/Downloads/Audspect_Cloud/scenarios"
+}

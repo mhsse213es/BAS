@@ -18,7 +18,7 @@ orchestrator:
     jwtSecret: ""          # REQUIRED — set via --set or values-prod.yaml
   caldera:
     url: "http://caldera:8888"   # ClusterIP service — same namespace
-    apiKey: "BASPlatform2024"    # Must match caldera.apiKey below
+    apiKey: "ADMIN123"           # Caldera default red API key (local.yml override not applied at runtime)
   resources:
     requests:
       cpu: 100m
