@@ -17,9 +17,10 @@ data:
       - compass
       - response
     users:
-      admin:
-        password: {{ .Values.caldera.adminPassword | quote }}
-        username: admin
+      red:
+        admin: {{ .Values.caldera.adminPassword | quote }}
+      blue:
+        admin: {{ .Values.caldera.adminPassword | quote }}
     app.contact.http: http://0.0.0.0:{{ .Values.caldera.port }}
 ---
 apiVersion: apps/v1
