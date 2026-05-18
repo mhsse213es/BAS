@@ -21,15 +21,24 @@ import (
 
 // Handler holds shared dependencies for all API handlers.
 type Handler struct {
-	db     *pgxpool.Pool
-	hub    *ws.Hub
-	engine *scenario.Engine
-	secret string
+	db          *pgxpool.Pool
+	hub         *ws.Hub
+	engine      *scenario.Engine
+	secret      string
+	calderaURL  string
+	calderaKey  string
 }
 
 // New creates a Handler.
 func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) *Handler {
 	return &Handler{db: db, hub: hub, engine: engine, secret: secret}
+}
+
+// WithCaldera configures the optional Caldera integration.
+func (h *Handler) WithCaldera(url, key string) *Handler {
+	h.calderaURL = url
+	h.calderaKey = key
+	return h
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -130,18 +139,58 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// POST /api/scan/{agentId} — triggers full simulation scan on agent
+// POST /api/scan/{agentId} — triggers a full-scan scenario on the agent.
+// The "full-scan" scenario YAML must be present in the scenarios directory.
+// The server builds all commands before sending — the agent only executes.
 func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	agentID := chi.URLParam(r, "agentId")
+
+	sc, ok := h.engine.Get("full-scan")
+	if !ok {
+		jsonError(w, "full-scan scenario not found — add scenarios/full-scan.yaml to the scenarios directory", http.StatusNotFound)
+		return
+	}
+
+	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey)
+	if err != nil {
+		jsonError(w, "build steps: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	runID := newID()
+	var initiatedBy *string
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+		initiatedBy = &c.UserID
+	}
+	_, err = h.db.Exec(r.Context(),
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW())`,
+		runID, "full-scan", agentID, sc.Name, initiatedBy,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	cmd := scenario.ScenarioCommand{
+		RunID:      runID,
+		ScenarioID: "full-scan",
+		Name:       sc.Name,
+		Steps:      steps,
+	}
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
-		Type:    models.MsgCommandScan,
+		Type:    models.MsgCommandScenario,
 		AgentID: agentID,
+		Data:    cmd,
 	})
 	if !sent {
+		_, _ = h.db.Exec(context.Background(),
+			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
 		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
 		return
 	}
-	w.WriteHeader(http.StatusAccepted)
+	log.Printf("[scan] dispatched full-scan → agent %s (run %s)", agentID, runID)
+	respond(w, map[string]string{"runId": runID, "status": "dispatched"})
 }
 
 // ── Scenarios ─────────────────────────────────────────────────────────────────
@@ -194,11 +243,18 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build concrete commands — all framework logic resolved server-side
+	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey)
+	if err != nil {
+		jsonError(w, "build steps: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	cmd := scenario.ScenarioCommand{
 		RunID:      runID,
 		ScenarioID: scenarioID,
 		Name:       sc.Name,
-		Steps:      sc.Steps,
+		Steps:      steps,
 	}
 	sent := h.hub.SendToAgent(req.AgentID, models.WSMessage{
 		Type:    models.MsgCommandScenario,
@@ -217,29 +273,59 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"runId": runID, "status": "dispatched"})
 }
 
-// POST /api/scenarios/result — called by agents to submit scenario results
+// POST /api/scenarios/result — agents post raw execution results here.
+// The server interprets exit codes and output, then saves SimulationResult records.
+// All framework intelligence (ART, Caldera, custom) lives in the interpreter — not the agent.
 func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
-	var run models.ScenarioRun
-	if err := json.NewDecoder(r.Body).Decode(&run); err != nil {
-		jsonError(w, "invalid payload", http.StatusBadRequest)
+	var raw scenario.RawRunResult
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil || raw.RunID == "" {
+		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)
 		return
 	}
 
-	resultsJSON, _ := json.Marshal(run.Results)
+	// Look up the scenario to get framework context for interpretation
+	sc, _ := h.engine.Get(raw.ScenarioID)
+
+	// Build a taskId→Step map for O(1) lookup
+	stepMap := make(map[string]scenario.Step)
+	if sc != nil {
+		for _, s := range sc.Steps {
+			stepMap[scenario.TaskID(s.TechniqueID, s.Name)] = s
+		}
+	}
+
+	// Interpret each raw ExecResult into a SimulationResult
+	simResults := make([]models.SimulationResult, 0, len(raw.Results))
+	for _, execResult := range raw.Results {
+		step, found := stepMap[execResult.TaskID]
+		if !found {
+			// Unknown step — treat as custom
+			step = scenario.Step{Framework: "custom"}
+		}
+		simResults = append(simResults, scenario.Interpret(step, execResult))
+	}
+
+	resultsJSON, _ := json.Marshal(simResults)
 	_, err := h.db.Exec(r.Context(),
 		`UPDATE scenario_runs SET status = 'completed', results = $1, completed_at = NOW()
 		 WHERE id = $2`,
-		resultsJSON, run.ID,
+		resultsJSON, raw.RunID,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	// Notify connected dashboards in real time
 	h.hub.BroadcastBrowsers(models.WSMessage{
 		Type:    models.MsgScenarioResult,
-		AgentID: run.AgentID,
-		Data:    run,
+		AgentID: raw.AgentID,
+		Data: map[string]interface{}{
+			"runId":      raw.RunID,
+			"scenarioId": raw.ScenarioID,
+			"agentId":    raw.AgentID,
+			"results":    simResults,
+		},
 	})
 	w.WriteHeader(http.StatusOK)
 }

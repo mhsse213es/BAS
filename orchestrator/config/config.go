@@ -44,6 +44,12 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("SCENARIOS_DIR"); v != "" {
 		cfg.ScenariosDir = v
 	}
+	if v := os.Getenv("CALDERA_URL"); v != "" {
+		cfg.CalderaURL = v
+	}
+	if v := os.Getenv("CALDERA_API_KEY"); v != "" {
+		cfg.CalderaAPIKey = v
+	}
 
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("database_url required (set DATABASE_URL env var or config file)")

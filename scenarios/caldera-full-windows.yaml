@@ -1,0 +1,31 @@
+id: caldera-full-windows
+name: Caldera Full Windows Library Sweep
+description: >
+  Runs EVERY ability in the Caldera library that has a Windows
+  (psh/powershell/cmd) executor — no hardcoded IDs, no adversary profile.
+  The orchestrator fetches the complete ability list from Caldera at run time,
+  filters for Windows executors, and sends all of them to the agent.
+  With default Caldera + stockpile plugin: ~500 abilities.
+  With all plugins loaded: up to 2000+ abilities.
+  Requires CALDERA_URL and CALDERA_API_KEY to be configured.
+author: Audspect Research
+tags:
+  - caldera
+  - full-sweep
+  - windows
+  - comprehensive
+mitre_phases:
+  - initial-access
+  - execution
+  - persistence
+  - privilege-escalation
+  - defense-evasion
+  - credential-access
+  - discovery
+  - lateral-movement
+  - collection
+  - exfiltration
+  - impact
+
+# One flag — runs the entire Caldera Windows library.
+caldera_all_windows: true

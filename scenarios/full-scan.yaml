@@ -1,0 +1,296 @@
+id: full-scan
+name: Full Security Posture Scan
+description: >
+  Comprehensive security posture assessment across all MITRE ATT&CK control domains.
+  Each step is a PowerShell check that outputs PASS:/FAIL:/SKIP: as the first line.
+  The server interprets results — the agent only executes commands.
+  Covers: credential access, defense evasion, execution controls, persistence,
+  privilege escalation, and lateral movement.
+author: Audspect Research
+tags:
+  - full-scan
+  - posture
+  - bfsi
+  - cis
+  - mitre
+mitre_phases:
+  - credential-access
+  - defense-evasion
+  - execution
+  - persistence
+  - privilege-escalation
+  - lateral-movement
+
+steps:
+  # ── Credential Access ─────────────────────────────────────────────────────
+  - name: "LSA Protection (RunAsPPL)"
+    technique_id: T1003.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "RunAsPPL" -ErrorAction SilentlyContinue).RunAsPPL
+      if ($val -eq 1 -or $val -eq 2) { Write-Output "PASS: RunAsPPL=$val — LSASS protected against credential dumping" }
+      else { Write-Output "FAIL: RunAsPPL not set — LSASS unprotected, Mimikatz can dump credentials" }
+
+  - name: "WDigest Plaintext Credentials"
+    technique_id: T1003.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest" -Name "UseLogonCredential" -ErrorAction SilentlyContinue).UseLogonCredential
+      if ($null -eq $val -or $val -eq 0) { Write-Output "PASS: WDigest disabled — no plaintext credentials in LSASS memory" }
+      else { Write-Output "FAIL: WDigest UseLogonCredential=$val — plaintext credentials cached in LSASS" }
+
+  - name: "Credential Guard (VBS)"
+    technique_id: T1003.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name "EnableVirtualizationBasedSecurity" -ErrorAction SilentlyContinue).EnableVirtualizationBasedSecurity
+      if ($val -eq 1) { Write-Output "PASS: VBS enabled — Credential Guard available" }
+      else { Write-Output "FAIL: VBS not enabled — Credential Guard unavailable, domain credentials exposed to LSASS dumps" }
+
+  - name: "AutoLogon Credentials in Registry"
+    technique_id: T1552.002
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "AutoAdminLogon" -ErrorAction SilentlyContinue).AutoAdminLogon
+      if ($null -eq $val -or $val -eq "0") { Write-Output "PASS: AutoLogon disabled — no plaintext credentials in registry" }
+      else { Write-Output "FAIL: AutoAdminLogon enabled — plaintext credentials stored in Winlogon registry key" }
+
+  - name: "NTLM Relay Restrictions"
+    technique_id: T1558.004
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "RestrictNTLM" -ErrorAction SilentlyContinue).RestrictNTLM
+      if ($val -eq 2) { Write-Output "PASS: RestrictNTLM=2 — outbound NTLM denied, relay attacks blocked" }
+      else { Write-Output "FAIL: RestrictNTLM=$val (need 2) — NTLM relay attacks not blocked" }
+
+  # ── Defense Evasion ────────────────────────────────────────────────────────
+  - name: "Windows Defender Real-Time Protection"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    command: |
+      $status = (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
+      if ($status -eq $true) { Write-Output "PASS: Defender Real-Time Protection enabled" }
+      elseif ($null -eq $status) { Write-Output "SKIP: Cannot query Defender status — requires admin or WMI" }
+      else { Write-Output "FAIL: Defender Real-Time Protection DISABLED — endpoint unprotected" }
+
+  - name: "Defender Tamper Protection"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    command: |
+      $tp = (Get-MpComputerStatus -ErrorAction SilentlyContinue).IsTamperProtected
+      if ($tp -eq $true) { Write-Output "PASS: Tamper Protection enabled — AV settings locked" }
+      elseif ($null -eq $tp) { Write-Output "SKIP: Cannot query tamper protection status" }
+      else { Write-Output "FAIL: Tamper Protection DISABLED — attackers can disable Defender via registry" }
+
+  - name: "Windows Event Log Service"
+    technique_id: T1070.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $svc = Get-Service -Name eventlog -ErrorAction SilentlyContinue
+      if ($svc.Status -eq "Running") { Write-Output "PASS: EventLog service running — audit trail active" }
+      else { Write-Output "FAIL: EventLog service NOT running — logging inactive, no audit trail" }
+
+  - name: "PowerShell Script Block Logging"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -ErrorAction SilentlyContinue).EnableScriptBlockLogging
+      if ($val -eq 1) { Write-Output "PASS: Script Block Logging enabled — PS activity logged to Event ID 4104" }
+      else { Write-Output "FAIL: Script Block Logging not configured — malicious PowerShell activity not logged" }
+
+  - name: "Sysmon Endpoint Monitoring"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $s64 = Get-Service -Name Sysmon64 -ErrorAction SilentlyContinue
+      $s32 = Get-Service -Name Sysmon -ErrorAction SilentlyContinue
+      if ($s64.Status -eq "Running") { Write-Output "PASS: Sysmon64 running — advanced endpoint telemetry active" }
+      elseif ($s32.Status -eq "Running") { Write-Output "PASS: Sysmon running — endpoint telemetry active" }
+      else { Write-Output "FAIL: Sysmon not installed — limited visibility for threat hunting" }
+
+  # ── Execution Controls ─────────────────────────────────────────────────────
+  - name: "PowerShell Execution Policy"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $pol = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell" -Name "ExecutionPolicy" -ErrorAction SilentlyContinue).ExecutionPolicy
+      if ($null -eq $pol) {
+        $pol = (Get-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell" -Name "ExecutionPolicy" -ErrorAction SilentlyContinue).ExecutionPolicy
+      }
+      $safe = @("AllSigned","RemoteSigned","Restricted")
+      if ($pol -in $safe) { Write-Output "PASS: ExecutionPolicy=$pol — unsigned scripts restricted" }
+      else { Write-Output "FAIL: ExecutionPolicy=$pol — unsigned scripts can run freely" }
+
+  - name: "PowerShell v2 Disabled"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    command: |
+      $f = Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2 -ErrorAction SilentlyContinue
+      if ($null -eq $f) { Write-Output "SKIP: Cannot query PS v2 feature state" }
+      elseif ($f.State -like "*Disabled*") { Write-Output "PASS: PowerShell v2 disabled — AMSI/logging downgrade blocked" }
+      else { Write-Output "FAIL: PowerShell v2 ENABLED — 'powershell -version 2' bypasses AMSI and script block logging" }
+
+  - name: "Application Control (AppLocker)"
+    technique_id: T1059
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $svc = Get-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+      if ($svc.Status -eq "Running") { Write-Output "PASS: AppLocker (AppIDSvc) running — application control active" }
+      else { Write-Output "FAIL: No AppLocker/WDAC active — arbitrary code execution possible" }
+
+  - name: "WinRM Remote Execution Surface"
+    technique_id: T1021.006
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $svc = Get-Service -Name WinRM -ErrorAction SilentlyContinue
+      if ($svc.Status -eq "Running") { Write-Output "FAIL: WinRM RUNNING — remote PowerShell execution enabled, lateral movement surface exposed" }
+      else { Write-Output "PASS: WinRM not running — remote PS execution surface minimised" }
+
+  # ── Persistence ────────────────────────────────────────────────────────────
+  - name: "Run Registry Key Inspection"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $entries = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -ErrorAction SilentlyContinue).PSObject.Properties | Where-Object { $_.Name -notlike "PS*" }
+      $count = ($entries | Measure-Object).Count
+      Write-Output "PASS: HKLM Run key has $count entr(ies) — review any unknown entries for persistence artefacts"
+
+  - name: "Startup Folder Contents"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $count = (Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup" -File -ErrorAction SilentlyContinue | Measure-Object).Count
+      if ($count -eq 0) { Write-Output "PASS: Startup folder empty — no startup persistence items" }
+      else { Write-Output "PASS: Startup folder has $count item(s) — verify all are legitimate" }
+
+  - name: "Services Running from Non-System Paths"
+    technique_id: T1543.003
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    command: |
+      $count = (Get-WmiObject Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.PathName -notlike "*system32*" -and $_.PathName -notlike "*SysWOW64*" -and $_.State -eq "Running" } | Measure-Object).Count
+      if ($count -eq 0) { Write-Output "PASS: All running services use standard system paths" }
+      else { Write-Output "PASS: $count service(s) running from non-system paths — verify all are legitimate" }
+
+  # ── Privilege Escalation ───────────────────────────────────────────────────
+  - name: "UAC Enabled"
+    technique_id: T1548.002
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -ErrorAction SilentlyContinue).EnableLUA
+      if ($val -eq 1) { Write-Output "PASS: UAC enabled (EnableLUA=1)" }
+      else { Write-Output "FAIL: UAC DISABLED — silent privilege escalation possible without user consent" }
+
+  - name: "UAC Prompt Level"
+    technique_id: T1548.002
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorAdmin" -ErrorAction SilentlyContinue).ConsentPromptBehaviorAdmin
+      if ($val -eq 2) { Write-Output "PASS: UAC prompts for credentials on secure desktop — maximum protection" }
+      elseif ($val -eq 5) { Write-Output "PASS: UAC prompts for consent — standard protection" }
+      elseif ($val -eq 0) { Write-Output "FAIL: UAC set to elevate without prompting — silent elevation allowed" }
+      else { Write-Output "FAIL: UAC ConsentPromptBehaviorAdmin=$val — verify setting is appropriate" }
+
+  - name: "AlwaysInstallElevated MSI Policy"
+    technique_id: T1548.002
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $hklm = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer" -Name "AlwaysInstallElevated" -ErrorAction SilentlyContinue).AlwaysInstallElevated
+      $hkcu = (Get-ItemProperty -Path "HKCU:\SOFTWARE\Policies\Microsoft\Windows\Installer" -Name "AlwaysInstallElevated" -ErrorAction SilentlyContinue).AlwaysInstallElevated
+      if ($hklm -eq 1 -and $hkcu -eq 1) { Write-Output "FAIL: AlwaysInstallElevated=1 in both HKLM+HKCU — any user can escalate to SYSTEM via MSI" }
+      else { Write-Output "PASS: AlwaysInstallElevated not enabled — MSI privilege escalation blocked" }
+
+  # ── Lateral Movement ───────────────────────────────────────────────────────
+  - name: "SMB Signing Required"
+    technique_id: T1021.002
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "RequireSecuritySignature" -ErrorAction SilentlyContinue).RequireSecuritySignature
+      if ($val -eq 1) { Write-Output "PASS: SMB signing required — relay attacks blocked" }
+      else { Write-Output "FAIL: SMB RequireSecuritySignature=$val — SMB relay attacks (Responder, ntlmrelayx) possible" }
+
+  - name: "RDP Network Level Authentication"
+    technique_id: T1021.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $rdpDisabled = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -ErrorAction SilentlyContinue).fDenyTSConnections
+      if ($rdpDisabled -eq 1) { Write-Output "PASS: RDP disabled — no RDP attack surface" }
+      else {
+        $nla = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -ErrorAction SilentlyContinue).UserAuthentication
+        if ($nla -eq 1) { Write-Output "PASS: RDP enabled with NLA — pre-auth exploitation blocked" }
+        else { Write-Output "FAIL: RDP enabled WITHOUT NLA — pre-authentication attack surface exposed" }
+      }
+
+  - name: "Windows Firewall (All Profiles)"
+    technique_id: T1562.004
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $off = (Get-NetFirewallProfile -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq $false } | Measure-Object).Count
+      if ($off -eq 0) { Write-Output "PASS: Windows Firewall enabled on all profiles (Domain, Private, Public)" }
+      else { Write-Output "FAIL: $off firewall profile(s) disabled — network attack surface exposed" }
+
+  - name: "LLMNR / NetBIOS Poisoning Prevention"
+    technique_id: T1557.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 10
+    command: |
+      $val = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -ErrorAction SilentlyContinue).EnableMulticast
+      if ($val -eq 0) { Write-Output "PASS: LLMNR disabled via GPO — Responder/Inveigh poisoning blocked" }
+      else { Write-Output "FAIL: LLMNR not disabled — susceptible to NTLM hash capture via network poisoning" }
+
+  - name: "BitLocker Disk Encryption (C:)"
+    technique_id: T1486
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    command: |
+      $bl = Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue
+      if ($bl.ProtectionStatus -eq "On") { Write-Output "PASS: BitLocker ON for C: — drive encrypted at rest" }
+      elseif ($null -eq $bl) { Write-Output "SKIP: BitLocker module not available — verify encryption via manage-bde" }
+      else { Write-Output "FAIL: BitLocker OFF for C: — plaintext disk, double-extortion ransomware risk" }

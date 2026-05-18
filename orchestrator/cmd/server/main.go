@@ -62,7 +62,8 @@ func main() {
 
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────
 	hub := ws.NewHub()
-	handler := api.New(pool, hub, engine, cfg.JWTSecret)
+	handler := api.New(pool, hub, engine, cfg.JWTSecret).
+		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey)
 	router := api.Mount(handler, hub, cfg.JWTSecret)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────

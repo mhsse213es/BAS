@@ -35,6 +35,16 @@ spec:
                 secretKeyRef:
                   name: bas-secrets
                   key: JWT_SECRET
+            {{- if .Values.orchestrator.caldera.url }}
+            - name: CALDERA_URL
+              value: {{ .Values.orchestrator.caldera.url | quote }}
+            - name: CALDERA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bas-secrets
+                  key: CALDERA_API_KEY
+                  optional: true
+            {{- end }}
           command: ["/orchestrator", "/etc/bas/config.json"]
           volumeMounts:
             - name: config
