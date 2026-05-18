@@ -43,7 +43,8 @@ api:
 
 # ── PostgreSQL (External — runs on the Ubuntu host, not in k3s) ───────────────
 postgres:
-  host: postgres.bas-data.svc.cluster.local   # ExternalName service target
+  host: postgres.bas-data.svc.cluster.local   # headless service DNS name (do not change)
+  externalIP: "10.128.0.2"                    # actual host IP postgres is running on
   port: 5432
   database: bas_platform
   user: bas_user
@@ -66,7 +67,7 @@ caldera:
   image: ghcr.io/mitre/caldera
   tag: "latest"
   port: 8888
-  nodePort: 32888              # external access: http://<vm-ip>:32888
+  nodePort: 32088              # external access: http://<vm-ip>:32088
   apiKey: "BASPlatform2024"    # red-team API key — must match orchestrator.caldera.apiKey
   apiKeyBlue: "BASBlue2024"    # blue-team API key
   adminPassword: "BASAdmin2024"

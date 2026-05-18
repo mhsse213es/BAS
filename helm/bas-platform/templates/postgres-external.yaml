@@ -1,13 +1,29 @@
-# ExternalName service pointing to the PostgreSQL instance running on the Ubuntu host.
-# Change the externalName to the actual host IP if DNS resolution is not available.
+# Headless Service + Endpoints pointing directly to the PostgreSQL host IP.
+# ExternalName services don't support IPs — Endpoints do.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bas-data
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: postgres
   namespace: bas-data
 spec:
-  type: ExternalName
-  externalName: {{ .Values.postgres.host | replace ".bas-data.svc.cluster.local" "" | default "host.k3s.internal" }}
+  clusterIP: None
   ports:
     - port: {{ .Values.postgres.port }}
       targetPort: {{ .Values.postgres.port }}
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: postgres
+  namespace: bas-data
+subsets:
+  - addresses:
+      - ip: {{ .Values.postgres.externalIP }}
+    ports:
+      - port: {{ .Values.postgres.port }}
