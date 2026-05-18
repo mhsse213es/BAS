@@ -55,17 +55,15 @@ spec:
           resources:
             {{- toYaml .Values.caldera.resources | nindent 12 }}
           readinessProbe:
-            httpGet:
-              path: /api/v2/health
-              port: {{ .Values.caldera.port }}
-            initialDelaySeconds: 30
-            periodSeconds: 15
-            failureThreshold: 6
-          livenessProbe:
-            httpGet:
-              path: /api/v2/health
+            tcpSocket:
               port: {{ .Values.caldera.port }}
             initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 8
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.caldera.port }}
+            initialDelaySeconds: 90
             periodSeconds: 30
       volumes:
         - name: config

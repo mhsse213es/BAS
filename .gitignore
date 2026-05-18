@@ -8,3 +8,17 @@ error.txt
 !scenarios/*.yaml
 .claude/
 ag/
+
+# Python
+api/venv/
+api/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# .NET build output
+**/bin/
+**/obj/
+
+# Node
+node_modules/
