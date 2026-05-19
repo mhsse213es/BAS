@@ -68,6 +68,8 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS initiated_by text`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS score jsonb`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT ''`,
 
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_agent ON scenario_runs(agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_scenario ON scenario_runs(scenario_id)`,

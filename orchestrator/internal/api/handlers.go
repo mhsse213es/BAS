@@ -404,15 +404,15 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	var runs []runRow
 	for rows.Next() {
 		var run runRow
-		var resultsJSON []byte
-		var scoreJSON *[]byte
+		var resultsJSON, scoreRaw []byte
 		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.Name,
-			&run.Status, &resultsJSON, &scoreJSON, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt); err != nil {
+			&run.Status, &resultsJSON, &scoreRaw, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt); err != nil {
+			log.Printf("[api] list runs scan: %v", err)
 			continue
 		}
 		json.Unmarshal(resultsJSON, &run.Results)
-		if scoreJSON != nil {
-			json.Unmarshal(*scoreJSON, &run.Score)
+		if len(scoreRaw) > 0 {
+			json.Unmarshal(scoreRaw, &run.Score)
 		}
 		runs = append(runs, run)
 	}
