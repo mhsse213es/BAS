@@ -256,7 +256,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		}
 
 		step.PayloadDir = payloadDir
-		r := execStep(step)
+		r := execStep(ctx, step)
 
 		evtSummary := ""
 		if len(r.Events) > 0 {

@@ -66,13 +66,15 @@ func StagePayloads(payloads []Payload, dir string) error {
 }
 
 // execStep runs a single ScenarioStep and returns the raw result.
-func execStep(step ScenarioStep) ExecResult {
+// parentCtx is the scenario-level context; cancelling it kills the running process immediately.
+func execStep(parentCtx context.Context, step ScenarioStep) ExecResult {
 	timeout := step.TimeoutSec
 	if timeout <= 0 {
 		timeout = 120
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	// Combine scenario cancellation with the per-step timeout.
+	ctx, cancel := context.WithTimeout(parentCtx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
 	before := time.Now()
@@ -111,7 +113,8 @@ func execStep(step ScenarioStep) ExecResult {
 	}
 
 	// Collect Windows events generated during this step.
-	result.Events = collectRecentEvents(before)
+	// Skip if scenario was cancelled — don't block shutdown on event collection.
+	result.Events = collectRecentEvents(parentCtx, before)
 
 	// Run cleanup command if present — fire and forget, does not affect result.
 	if step.Cleanup != "" {
@@ -201,7 +204,14 @@ else { Write-Output "WMI_TIMEOUT: inner process did not write output within time
 // collectRecentEvents collects Windows Security and Sysmon Event IDs generated
 // since `since`. Returns a deduplicated sorted list of "EventID:LogName" strings.
 // Returns nil on any error (non-fatal — telemetry is best-effort).
-func collectRecentEvents(since time.Time) []string {
+func collectRecentEvents(parentCtx context.Context, since time.Time) []string {
+	// Skip event collection if the scenario was already cancelled.
+	select {
+	case <-parentCtx.Done():
+		return nil
+	default:
+	}
+
 	// Allow a short settling time so events flushed slightly after cmd.Run() returns are included.
 	time.Sleep(300 * time.Millisecond)
 
@@ -219,7 +229,7 @@ foreach ($log in $logs) {
 ($out | Sort-Object -Unique) -join ","
 `, sinceStr)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(parentCtx, 8*time.Second)
 	defer cancel()
 
 	out, err := exec.CommandContext(ctx, "powershell",
