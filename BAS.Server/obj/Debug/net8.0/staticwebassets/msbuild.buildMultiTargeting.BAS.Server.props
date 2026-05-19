@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\build\BAS.Server.props" />
-</Project>

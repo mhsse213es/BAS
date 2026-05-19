@@ -31,7 +31,18 @@
       "Bash(python generate_test_guide.py)",
       "PowerShell(New-Item *)",
       "Bash(go build *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(dir /s /b *.cs)",
+      "Bash(findstr /n \"server\\\\|config\\\\|32077\\\\|32090\\\\|appsettings\\\\|args\\\\[\" Program.cs)",
+      "Bash(findstr /n \"server\" Program.cs)",
+      "Bash(findstr /n \"server\" \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\BAS.Agent\\\\Program.cs\")",
+      "PowerShell(Select-String *)",
+      "Bash(dir \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\" /s /b)",
+      "Bash(findstr /v \"\\\\\\\\obj\\\\\\\\\")",
+      "Bash(findstr /v \"\\\\\\\\bin\\\\\\\\\")",
+      "Bash(findstr /v \"node_modules\")",
+      "Bash(findstr /v \".git\")",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Administrator\\\\Downloads\\\\Audspect_Cloud\\\\BAS.Agent\" -Recurse -File | Where-Object { $_.Extension -in '.csproj','.json','.cs' } | Select-Object FullName)"
     ]
   }
 }
