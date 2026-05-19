@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Microsoft.AspNetCore.SignalR.Client;
+using System.Net.WebSockets;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -635,7 +635,7 @@ static class SimulationArtifactTracker
 partial class Program
 {
     // Configuration
-    static readonly string ServerUrl;
+    static string ServerUrl;
 
     // Agent Identity
     static readonly string AgentId;
@@ -694,74 +694,17 @@ partial class Program
         Console.WriteLine($"[BAS Agent] Connecting to: {ServerUrl}");
 
         // Suppress WER crash dialogs and critical-error popups for this process and children
+        // Override server URL from command line: BASAgent.exe --server http://host:port
+        for (int i = 0; i < args.Length - 1; i++)
+            if (args[i] == "--server") { ServerUrl = args[i + 1]; break; }
+
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
 
         // 1b. Dependency self-check: auto-fix what we can before doing anything
         await EnsureDependencies();
 
-        var connection = new HubConnectionBuilder()
-            .WithUrl($"{ServerUrl}/bashub", options =>
-            {
-                // Configure HTTP client for better compatibility
-                options.HttpMessageHandlerFactory = (handler) =>
-                {
-                    if (handler is HttpClientHandler clientHandler)
-                    {
-                        // Disable SSL validation if testing (remove in production)
-                        // clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
-                    }
-                    return handler;
-                };
-                
-                // Set timeouts
-                options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets | 
-                                   Microsoft.AspNetCore.Http.Connections.HttpTransportType.ServerSentEvents |
-                                   Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
-            })
-            .WithAutomaticReconnect()
-            .Build();
-
-        
-
-        // 3. Listen for the remote "Scan Again" command from the dashboard
-        connection.On<string>("command_scan", async (targetId) =>
-        {
-            if (targetId == AgentId)
-            {
-                Console.WriteLine("\n[!] Remote trigger received from dashboard. Restarting scan...");
-                await RunFullSimulation();
-            }
-        });
-
-        // Listen for remote "Install Patches" command from the dashboard
-        connection.On<string>("command_install_patches", async (targetId) =>
-        {
-            if (targetId == AgentId)
-            {
-                Console.WriteLine("\n[!] Install Patches command received. Triggering Windows Update...");
-                await InstallWindowsUpdates();
-            }
-        });
-
-        try 
-        {
-            Console.WriteLine("[*] Attempting SignalR connection...");
-            await connection.StartAsync();
-            Console.WriteLine("[*] SignalR Connected to Hub.");
-        }
-        catch (HttpRequestException rex)
-        {
-            Console.WriteLine($"[!] HTTP connection failed: {rex.Message}");
-            Console.WriteLine($"[!] Server URL: {ServerUrl}/bashub");
-            Console.WriteLine($"[!] Check if server is accessible and running.");
-        }
-        catch (Exception ex) 
-        {
-            Console.WriteLine($"[!] Hub connection failed: {ex.Message}");
-            Console.WriteLine($"[!] Exception Type: {ex.GetType().Name}");
-            if (ex.InnerException != null)
-                Console.WriteLine($"[!] Inner Exception: {ex.InnerException.Message}");
-        }
+        // 3. Start standard WebSocket command listener — reconnects automatically
+        _ = Task.Run(RunWebSocketLoop);
 
         // 4. Initial Run on Startup
         await RunFullSimulation();
@@ -8494,4 +8437,168 @@ static partial class Program
 
         return cat;
     }
+
+    // ── WebSocket / Scenario protocol ────────────────────────────────────────────
+
+    static readonly JsonSerializerOptions WsJsonOpts = new() { PropertyNameCaseInsensitive = true };
+
+    // Mirrors orchestrator/internal/scenario/types.go
+    record WsEnvelope(string Type, string AgentId, JsonElement Data);
+    record BasScenarioCommand(string RunId, string ScenarioId, string Name, BasScenarioStep[] Steps);
+    record BasScenarioStep(string TaskId, string TechniqueId, string Name, string Executor,
+                           string Command, int TimeoutSec, BasPayload[]? Payloads, string? Cleanup);
+    record BasPayload(string Name, string Content);
+    record BasExecResult(string TaskId, int ExitCode, string Stdout, string Stderr,
+                         long DurationMs, DateTime ExecutedAt, string[] Events);
+    record BasRawRunResult(string RunId, string ScenarioId, string AgentId, BasExecResult[] Results);
+
+    // Persistent WebSocket loop — connects to /ws/agent?agentId=X, handles commands.
+    static async Task RunWebSocketLoop()
+    {
+        while (true)
+        {
+            try
+            {
+                var wsBase = ServerUrl.Replace("http://", "ws://").Replace("https://", "wss://");
+                using var ws = new ClientWebSocket();
+                await ws.ConnectAsync(new Uri($"{wsBase}/ws/agent?agentId={AgentId}"), CancellationToken.None);
+                Console.WriteLine($"[ws] Connected — {wsBase}/ws/agent?agentId={AgentId}");
+
+                var buf = new byte[1 << 20]; // 1 MB
+                while (ws.State == WebSocketState.Open)
+                {
+                    int offset = 0;
+                    WebSocketReceiveResult result;
+                    do
+                    {
+                        result = await ws.ReceiveAsync(new ArraySegment<byte>(buf, offset, buf.Length - offset), CancellationToken.None);
+                        offset += result.Count;
+                    } while (!result.EndOfMessage);
+
+                    if (result.MessageType == WebSocketMessageType.Close) break;
+                    if (result.MessageType != WebSocketMessageType.Text) continue;
+
+                    var json = Encoding.UTF8.GetString(buf, 0, offset);
+                    var env = JsonSerializer.Deserialize<WsEnvelope>(json, WsJsonOpts);
+                    if (env == null) continue;
+
+                    switch (env.Type)
+                    {
+                        case "command_scan":
+                            Console.WriteLine("[ws] command_scan received");
+                            _ = Task.Run(RunFullSimulation);
+                            break;
+                        case "command_scenario":
+                            var cmd = env.Data.Deserialize<BasScenarioCommand>(WsJsonOpts);
+                            if (cmd != null)
+                            {
+                                Console.WriteLine($"[ws] command_scenario: {cmd.Name} ({cmd.Steps.Length} steps)");
+                                _ = Task.Run(() => ExecuteScenario(cmd));
+                            }
+                            break;
+                        case "command_install_patches":
+                            Console.WriteLine("[ws] command_install_patches received");
+                            _ = Task.Run(InstallWindowsUpdates);
+                            break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[!] WS connect failed: {ex.Message} — retry in 5s");
+            }
+            await Task.Delay(5000);
+        }
+    }
+
+    // Execute a scenario command received from the orchestrator.
+    static async Task ExecuteScenario(BasScenarioCommand cmd)
+    {
+        Console.WriteLine($"[scenario] Starting '{cmd.Name}'");
+        await SendHeartbeat("scanning");
+
+        var results = new List<BasExecResult>();
+        var payloadDir = Path.Combine(Path.GetTempPath(), $"bas_{cmd.RunId}");
+
+        foreach (var step in cmd.Steps)
+        {
+            Console.WriteLine($"  [{step.TechniqueId}] {step.Name} ({step.Executor})");
+
+            if (step.Payloads?.Length > 0)
+            {
+                Directory.CreateDirectory(payloadDir);
+                foreach (var p in step.Payloads)
+                {
+                    var bytes = Convert.FromBase64String(p.Content);
+                    await File.WriteAllBytesAsync(Path.Combine(payloadDir, p.Name), bytes);
+                }
+            }
+
+            results.Add(await ExecuteStep(step, payloadDir));
+
+            if (!string.IsNullOrWhiteSpace(step.Cleanup))
+                await RunCmdCapture("powershell.exe",
+                    $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"{EscapePs(step.Cleanup)}\"", 30);
+        }
+
+        try { if (Directory.Exists(payloadDir)) Directory.Delete(payloadDir, true); } catch { }
+
+        var body = JsonSerializer.Serialize(
+            new BasRawRunResult(cmd.RunId, cmd.ScenarioId, AgentId, results.ToArray()), WsJsonOpts);
+        try
+        {
+            using var http = new HttpClient();
+            var resp = await http.PostAsync($"{ServerUrl}/api/scenarios/result",
+                new StringContent(body, Encoding.UTF8, "application/json"));
+            Console.WriteLine($"[scenario] Results posted — HTTP {(int)resp.StatusCode}");
+        }
+        catch (Exception ex) { Console.WriteLine($"[!] Failed to post results: {ex.Message}"); }
+
+        await SendHeartbeat("idle");
+    }
+
+    static async Task<BasExecResult> ExecuteStep(BasScenarioStep step, string payloadDir)
+    {
+        var sw = Stopwatch.StartNew();
+        var startedAt = DateTime.UtcNow;
+        var timeout = step.TimeoutSec > 0 ? step.TimeoutSec : 120;
+
+        var cmdStr = step.Command
+            .Replace("%BAS_PAYLOAD_DIR%", payloadDir)
+            .Replace("$env:BAS_PAYLOAD_DIR", payloadDir);
+
+        string exe, argStr;
+        switch (step.Executor.ToLowerInvariant())
+        {
+            case "cmd":
+                exe = "cmd.exe"; argStr = $"/c {cmdStr}"; break;
+            default: // powershell
+                exe = "powershell.exe";
+                argStr = $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"{EscapePs(cmdStr)}\"";
+                break;
+        }
+
+        var (stdout, stderr, exitCode) = await RunCmdCapture(exe, argStr, timeout);
+        sw.Stop();
+        return new BasExecResult(step.TaskId, exitCode, stdout, stderr, sw.ElapsedMilliseconds, startedAt, Array.Empty<string>());
+    }
+
+    static async Task<(string stdout, string stderr, int exitCode)> RunCmdCapture(string exe, string args, int timeoutSec)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo(exe, args)
+                { CreateNoWindow = true, UseShellExecute = false,
+                  RedirectStandardOutput = true, RedirectStandardError = true };
+            using var p = Process.Start(psi)!;
+            var stdoutTask = p.StandardOutput.ReadToEndAsync();
+            var stderrTask = p.StandardError.ReadToEndAsync();
+            await Task.WhenAny(p.WaitForExitAsync(), Task.Delay(timeoutSec * 1000));
+            if (!p.HasExited) { try { p.Kill(entireProcessTree: true); } catch { } }
+            return (await stdoutTask, await stderrTask, p.HasExited ? p.ExitCode : -1);
+        }
+        catch (Exception ex) { return ("", ex.Message, -1); }
+    }
+
+    static string EscapePs(string cmd) => cmd.Replace("\"", "`\"").Replace("\r\n", " ").Replace("\n", " ");
 }

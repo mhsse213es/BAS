@@ -30,7 +30,8 @@
       "Bash(python -c \"import docx; print\\('OK'\\)\")",
       "Bash(python generate_test_guide.py)",
       "PowerShell(New-Item *)",
-      "Bash(go build *)"
+      "Bash(go build *)",
+      "Bash(git push *)"
     ]
   }
 }
