@@ -91,9 +91,11 @@ type ExecResult struct {
 }
 
 // RawRunResult is the payload the agent POSTs to /api/scenarios/result.
+// Partial=true means the agent was interrupted mid-run; results cover only completed steps.
 type RawRunResult struct {
 	RunID      string       `json:"runId"`
 	ScenarioID string       `json:"scenarioId"`
 	AgentID    string       `json:"agentId"`
 	Results    []ExecResult `json:"results"`
+	Partial    bool         `json:"partial,omitempty"`
 }

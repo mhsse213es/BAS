@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -134,21 +135,25 @@ type ScenarioCommand struct {
 }
 
 // RawRunResult is what the agent posts back after executing all steps.
+// Partial=true means the agent was interrupted and results are incomplete.
 type RawRunResult struct {
 	RunID      string       `json:"runId"`
 	ScenarioID string       `json:"scenarioId"`
 	AgentID    string       `json:"agentId"`
 	Results    []ExecResult `json:"results"`
+	Partial    bool         `json:"partial,omitempty"`
 }
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
 type Agent struct {
-	cfg    Config
-	id     Identity
-	status string
-	mu     sync.Mutex
-	client *http.Client
+	cfg            Config
+	id             Identity
+	status         string
+	mu             sync.Mutex
+	client         *http.Client
+	cancelScenario context.CancelFunc
+	scenarioMu     sync.Mutex
 }
 
 func newAgent(cfg Config, id Identity) *Agent {
@@ -207,14 +212,13 @@ func (a *Agent) sendHeartbeat(status string) {
 
 // runScenario executes each step sent by the server and returns raw results.
 // All intelligence (command building, result interpretation) lives on the server.
-func (a *Agent) runScenario(cmd ScenarioCommand) {
+// ctx is cancelled on agent shutdown — partial results are submitted immediately.
+func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	log.Printf("[*] scenario started: run=%s scenario=%s steps=%d",
 		cmd.RunID, cmd.ScenarioID, len(cmd.Steps))
 	a.setStatus("scanning")
 	a.sendHeartbeat("scanning")
 
-	// Create a per-run temp directory for payload staging.
-	// All payloads from all steps land here; commands reference it via BAS_PAYLOAD_DIR.
 	payloadDir := filepath.Join(os.TempDir(), "bas-"+cmd.RunID)
 	if err := os.MkdirAll(payloadDir, 0700); err != nil {
 		log.Printf("[!] payload dir: %v", err)
@@ -230,9 +234,19 @@ func (a *Agent) runScenario(cmd ScenarioCommand) {
 	results := make([]ExecResult, 0, len(cmd.Steps))
 
 	for i, step := range cmd.Steps {
+		// Check for shutdown before starting each step.
+		select {
+		case <-ctx.Done():
+			log.Printf("[*] scenario interrupted at step %d/%d — submitting partial results", i+1, len(cmd.Steps))
+			a.submitResults(cmd, results, true)
+			a.setStatus("idle")
+			a.sendHeartbeat("idle")
+			return
+		default:
+		}
+
 		log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, len(cmd.Steps), step.TechniqueID, step.Executor, step.Name)
 
-		// Stage any payloads this step needs before running it.
 		if len(step.Payloads) > 0 {
 			if err := StagePayloads(step.Payloads, payloadDir); err != nil {
 				log.Printf("[!]   payload stage: %v", err)
@@ -255,20 +269,28 @@ func (a *Agent) runScenario(cmd ScenarioCommand) {
 	log.Printf("[*] scenario done: run=%s steps=%d elapsed=%v",
 		cmd.RunID, len(results), time.Since(start).Round(time.Millisecond))
 
+	a.submitResults(cmd, results, false)
+	a.setStatus("idle")
+	a.sendHeartbeat("idle")
+}
+
+func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial bool) {
 	payload := RawRunResult{
 		RunID:      cmd.RunID,
 		ScenarioID: cmd.ScenarioID,
 		AgentID:    a.id.AgentID,
 		Results:    results,
+		Partial:    partial,
+	}
+	label := "completed"
+	if partial {
+		label = "partial"
 	}
 	if err := a.postJSON("/api/scenarios/result", payload); err != nil {
-		log.Printf("[!] result submit: %v", err)
+		log.Printf("[!] result submit (%s): %v", label, err)
 	} else {
-		log.Printf("[+] results submitted: run=%s", cmd.RunID)
+		log.Printf("[+] results submitted (%s): run=%s steps=%d", label, cmd.RunID, len(results))
 	}
-
-	a.setStatus("idle")
-	a.sendHeartbeat("idle")
 }
 
 // connectWS maintains the WebSocket connection to the orchestrator.
@@ -314,7 +336,14 @@ func (a *Agent) connectWS() {
 					log.Printf("[!] WS: bad scenario command: %v", err)
 					continue
 				}
-				go a.runScenario(cmd)
+				ctx, cancel := context.WithCancel(context.Background())
+				a.scenarioMu.Lock()
+				if a.cancelScenario != nil {
+					a.cancelScenario() // cancel any currently running scenario
+				}
+				a.cancelScenario = cancel
+				a.scenarioMu.Unlock()
+				go a.runScenario(ctx, cmd)
 
 			default:
 				log.Printf("[~] WS: unhandled message type %q", msg.Type)
@@ -421,7 +450,13 @@ func main() {
 		case <-ticker.C:
 			agent.sendHeartbeat(agent.getStatus())
 		case <-quit:
-			log.Println("[*] Shutting down — sending offline heartbeat...")
+			log.Println("[*] Shutting down — interrupting active scenario if any...")
+			agent.scenarioMu.Lock()
+			if agent.cancelScenario != nil {
+				agent.cancelScenario()
+			}
+			agent.scenarioMu.Unlock()
+			time.Sleep(3 * time.Second) // allow partial result submit to complete
 			agent.sendHeartbeat("offline")
 			return
 		}

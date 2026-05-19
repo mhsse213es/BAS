@@ -133,6 +133,34 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 				AgentID: a.AgentID,
 				Data:    a,
 			})
+
+			// Mark any runs that are still "running" for this agent as partial.
+			// This handles hard kills where the agent never got to submit results.
+			stuckRows, err := pool.Query(context.Background(),
+				`UPDATE scenario_runs
+				 SET status = 'partial', completed_at = NOW()
+				 WHERE agent_id = $1 AND status = 'running'
+				 RETURNING id, scenario_id`,
+				a.AgentID,
+			)
+			if err == nil {
+				for stuckRows.Next() {
+					var runID, scenID string
+					stuckRows.Scan(&runID, &scenID)
+					log.Printf("[monitor] run %s marked partial (agent %s went offline)", runID, a.AgentID)
+					hub.BroadcastBrowsers(models.WSMessage{
+						Type:    models.MsgScenarioResult,
+						AgentID: a.AgentID,
+						Data: map[string]interface{}{
+							"runId":      runID,
+							"scenarioId": scenID,
+							"agentId":    a.AgentID,
+							"status":     "partial",
+						},
+					})
+				}
+				stuckRows.Close()
+			}
 		}
 		rows.Close()
 	}

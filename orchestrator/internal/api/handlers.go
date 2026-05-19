@@ -305,11 +305,18 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		simResults = append(simResults, scenario.Interpret(step, execResult))
 	}
 
+	status := "completed"
+	if raw.Partial {
+		status = "partial"
+	}
+
 	resultsJSON, _ := json.Marshal(simResults)
+	// Append new results to whatever already exists (handles partial submissions).
 	_, err := h.db.Exec(r.Context(),
-		`UPDATE scenario_runs SET status = 'completed', results = $1, completed_at = NOW()
-		 WHERE id = $2`,
-		resultsJSON, raw.RunID,
+		`UPDATE scenario_runs
+		 SET status = $1, results = results || $2::jsonb, completed_at = NOW()
+		 WHERE id = $3`,
+		status, resultsJSON, raw.RunID,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -324,6 +331,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			"runId":      raw.RunID,
 			"scenarioId": raw.ScenarioID,
 			"agentId":    raw.AgentID,
+			"status":     status,
 			"results":    simResults,
 		},
 	})
