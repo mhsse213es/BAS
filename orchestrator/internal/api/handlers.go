@@ -347,6 +347,22 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Compute score from all accumulated results (including prior partial submissions).
+	var allResultsJSON []byte
+	h.db.QueryRow(r.Context(),
+		`SELECT results FROM scenario_runs WHERE id = $1`, raw.RunID,
+	).Scan(&allResultsJSON)
+	var allResults []models.SimulationResult
+	if len(allResultsJSON) > 0 {
+		json.Unmarshal(allResultsJSON, &allResults)
+	}
+	if len(allResults) > 0 {
+		score := models.ComputeScore(allResults)
+		scoreJSON, _ := json.Marshal(score)
+		h.db.Exec(r.Context(),
+			`UPDATE scenario_runs SET score = $1 WHERE id = $2`, scoreJSON, raw.RunID)
+	}
+
 	// Notify connected dashboards in real time
 	h.hub.BroadcastBrowsers(models.WSMessage{
 		Type:    models.MsgScenarioResult,

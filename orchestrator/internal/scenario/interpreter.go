@@ -8,12 +8,17 @@ import (
 	"github.com/audspect/bas/internal/models"
 )
 
-// Interpret converts a raw ExecResult into a SimulationResult.
-// The step provides the framework context the agent doesn't see.
-// Convention for custom/scan PowerShell checks: first output line starts with
-// "PASS:", "FAIL:", or "SKIP:" — the interpreter uses this for structured results.
+// Interpret converts a raw ExecResult into a normalised SimulationResult.
+// ATT&CK technique ID is normalised, name resolved from TechniqueNameMap,
+// and ThreatImpact / Remediation populated from the BFSI-aware helpers.
 func Interpret(step Step, result ExecResult) models.SimulationResult {
-	tactic := models.LookupTactic(step.TechniqueID)
+	techniqueID := models.NormalizeID(step.TechniqueID)
+	techniqueName := models.LookupTechniqueName(techniqueID)
+	if techniqueName == "" {
+		techniqueName = step.Name // fallback for local checks and unknown IDs
+	}
+
+	tactic := models.LookupTactic(techniqueID)
 	sev := models.Severity(tactic)
 	if sev == "" {
 		sev = "Medium"
@@ -26,10 +31,15 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 
 	combined := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
 
+	framework := step.Framework
+	if framework == "" {
+		framework = "custom"
+	}
+
 	var checkResult models.CheckResult
 	var details string
 
-	switch step.Framework {
+	switch framework {
 	case "art":
 		checkResult, details = interpretART(result, combined)
 	case "caldera":
@@ -41,64 +51,50 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 	return models.SimulationResult{
 		ID: TaskID(step.TechniqueID, step.Name),
 		Technique: models.AttackTechnique{
-			ID:     step.TechniqueID,
-			Name:   step.Name,
+			ID:     techniqueID,
+			Name:   techniqueName,
 			Tactic: tactic,
 		},
 		Result:       checkResult,
 		Severity:     sev,
-		ThreatImpact: fmt.Sprintf("[%s] %s", strings.ToUpper(step.Framework), step.Name),
+		ThreatImpact: models.ThreatImpact(tactic, techniqueID, techniqueName),
 		Details:      details,
-		Remediation:  "Review MITRE ATT&CK mitigations — attack.mitre.org/techniques/" + strings.ReplaceAll(step.TechniqueID, ".", "/"),
+		Remediation:  models.Remediation(checkResult, tactic, techniqueID, techniqueName),
 		RawOutput:    truncate(combined, 3000),
 		DurationMs:   result.DurationMs,
 		ExecutedAt:   execAt,
-		Framework:    step.Framework,
+		Framework:    framework,
 		Events:       result.Events,
 	}
 }
 
-// interpretART interprets raw Invoke-AtomicTest output.
+// interpretART interprets raw command output from an ART atomic test.
+// The orchestrator now resolves commands locally and sends raw PowerShell/cmd —
+// no Invoke-AtomicTest on the endpoint, so output is plain shell output.
 //
-// Semantics:
-//   - blocked/access-denied by security control → PASS (control worked)
-//   - test ran successfully                      → FAIL (control did not stop it)
-//   - module not installed / prereqs missing     → SKIPPED
+//   - access denied / blocked by control  → PASS  (control worked)
+//   - exit 0 / technique ran              → FAIL  (control did not stop it)
+//   - exit non-zero without clear signal  → FAIL  (attempted; outcome uncertain)
 func interpretART(r ExecResult, combined string) (models.CheckResult, string) {
 	lower := strings.ToLower(combined)
 
-	// Module not installed
-	if strings.Contains(lower, "is not recognized") ||
-		(strings.Contains(lower, "invoke-atomictest") && strings.Contains(lower, "not found")) ||
-		strings.Contains(lower, "art_error") {
-		return models.ResultSkipped,
-			"AtomicRedTeam not installed — run: IEX (IWR 'https://raw.githubusercontent.com/redcanaryco/invoke-atomicredteam/master/install-atomicredteam.ps1' -UseBasicParsing); Install-AtomicRedTeam"
-	}
-
-	// Prerequisites not met
-	if (strings.Contains(lower, "prerequisite") || strings.Contains(lower, "prereq")) &&
-		(strings.Contains(lower, "not met") || strings.Contains(lower, "missing") || strings.Contains(lower, "failed")) {
-		return models.ResultSkipped, "Prerequisites not met: " + firstLine(combined)
-	}
-
-	// Blocked by security controls
 	if strings.Contains(lower, "access is denied") ||
 		strings.Contains(lower, "access denied") ||
 		strings.Contains(lower, "blocked by") ||
 		strings.Contains(lower, "quarantined") ||
-		strings.Contains(lower, "this program is blocked") {
+		strings.Contains(lower, "this program is blocked") ||
+		strings.Contains(lower, "operation did not complete successfully") {
 		return models.ResultPass, "Security control blocked the technique: " + firstLine(combined)
 	}
 
-	// Explicit ART success
-	if strings.Contains(lower, "successfully") || strings.Contains(lower, "done executing") {
-		return models.ResultFail, "Technique executed without blockage: " + firstLine(combined)
+	if r.ExitCode == 0 {
+		out := firstLine(combined)
+		if out == "" {
+			out = "technique ran to completion"
+		}
+		return models.ResultFail, "Technique executed: " + out
 	}
-
-	if r.ExitCode != 0 {
-		return models.ResultFail, fmt.Sprintf("Technique exited with code %d: %s", r.ExitCode, firstLine(combined))
-	}
-	return models.ResultFail, "Technique completed — no blockage detected: " + firstLine(combined)
+	return models.ResultFail, fmt.Sprintf("Technique exited %d: %s", r.ExitCode, firstLine(combined))
 }
 
 // interpretCaldera interprets a Caldera ability execution result.
@@ -119,9 +115,9 @@ func interpretCaldera(r ExecResult, combined string) (models.CheckResult, string
 	return models.ResultFail, "Ability executed: " + firstLine(combined)
 }
 
-// interpretCustom interprets a custom PowerShell check.
-// Checks should output "PASS: ...", "FAIL: ...", or "SKIP: ..." as the first line.
-// If no prefix, exit code 0 = pass, non-zero = fail.
+// interpretCustom interprets a custom PowerShell check or local posture check.
+// Checks output "PASS: ...", "FAIL: ...", or "SKIP: ..." as the first line.
+// If no structured prefix: exit 0 = pass, non-zero = fail.
 func interpretCustom(r ExecResult, combined string) (models.CheckResult, string) {
 	first := strings.TrimSpace(firstLine(combined))
 	lower := strings.ToLower(first)
@@ -135,7 +131,6 @@ func interpretCustom(r ExecResult, combined string) (models.CheckResult, string)
 		return models.ResultSkipped, stripPrefix(first)
 	}
 
-	// No structured prefix — fall back to exit code
 	if r.ExitCode == 0 {
 		return models.ResultPass, "Step completed: " + first
 	}
