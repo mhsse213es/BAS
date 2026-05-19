@@ -293,6 +293,56 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 	}
 }
 
+// runLocalScan runs built-in registry/PowerShell posture checks (no ART/Caldera needed).
+// Results are posted to /api/scenarios/result using PASS:/FAIL:/SKIP: prefixes
+// so the server's interpretCustom picks them up correctly.
+func (a *Agent) runLocalScan(scenarioID, runID string) {
+	log.Printf("[*] local scan started: scenario=%s run=%s", scenarioID, runID)
+	a.setStatus("scanning")
+	a.sendHeartbeat("scanning")
+
+	categories := RunScenarioChecks(scenarioID)
+
+	results := make([]ExecResult, 0)
+	for _, cat := range categories {
+		for _, ch := range cat.Checks {
+			var stdout string
+			exitCode := 0
+			switch ch.Result {
+			case "pass":
+				stdout = "PASS: " + ch.Details
+			case "fail":
+				stdout = "FAIL: " + ch.Details
+				exitCode = 1
+			default:
+				stdout = "SKIP: " + ch.Details
+			}
+			results = append(results, ExecResult{
+				TaskID:     ch.ID,
+				ExitCode:   exitCode,
+				Stdout:     stdout,
+				DurationMs: ch.DurationMs,
+				ExecutedAt: ch.ExecutedAt,
+			})
+		}
+	}
+
+	payload := RawRunResult{
+		RunID:      runID,
+		ScenarioID: scenarioID,
+		AgentID:    a.id.AgentID,
+		Results:    results,
+	}
+	if err := a.postJSON("/api/scenarios/result", payload); err != nil {
+		log.Printf("[!] local scan submit: %v", err)
+	} else {
+		log.Printf("[+] local scan submitted: scenario=%s checks=%d", scenarioID, len(results))
+	}
+
+	a.setStatus("idle")
+	a.sendHeartbeat("idle")
+}
+
 // connectWS maintains the WebSocket connection to the orchestrator.
 func (a *Agent) connectWS() {
 	rawURL := strings.Replace(a.cfg.ServerURL, "http://", "ws://", 1)
@@ -339,11 +389,22 @@ func (a *Agent) connectWS() {
 				ctx, cancel := context.WithCancel(context.Background())
 				a.scenarioMu.Lock()
 				if a.cancelScenario != nil {
-					a.cancelScenario() // cancel any currently running scenario
+					a.cancelScenario()
 				}
 				a.cancelScenario = cancel
 				a.scenarioMu.Unlock()
 				go a.runScenario(ctx, cmd)
+
+			case "command_simulate":
+				var sim struct {
+					ScenarioID string `json:"scenarioId"`
+					RunID      string `json:"runId"`
+				}
+				if err := json.Unmarshal(msg.Data, &sim); err != nil || sim.ScenarioID == "" {
+					log.Printf("[!] WS: bad command_simulate payload: %v", err)
+					continue
+				}
+				go a.runLocalScan(sim.ScenarioID, sim.RunID)
 
 			default:
 				log.Printf("[~] WS: unhandled message type %q", msg.Type)

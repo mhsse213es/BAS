@@ -9,6 +9,7 @@ description: >
   All network steps are simulated in the local environment — no external
   connections are made.
 author: Audspect Research
+local_check: true
 tags:
   - upi
   - fraud

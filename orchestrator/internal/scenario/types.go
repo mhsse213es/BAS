@@ -26,6 +26,7 @@ type Step struct {
 // Scenario is a replayable named attack chain loaded from a YAML file.
 //
 // Execution modes — checked in this priority order:
+//  0. local_check: true          — agent runs built-in registry/PS posture checks (no ART/Caldera needed)
 //  1. caldera_all_windows: true  — every Windows ability in the Caldera library
 //  2. caldera_abilities: [...]   — specific Caldera ability IDs chosen by the admin
 //  3. caldera_adversary_id: "x" — all abilities in a named Caldera adversary profile
@@ -40,6 +41,7 @@ type Scenario struct {
 	Tags               []string `yaml:"tags"                           json:"tags"`
 	MITREPhases        []string `yaml:"mitre_phases"                   json:"mitrePhases"`
 	Steps              []Step   `yaml:"steps"                          json:"steps"`
+	LocalCheck         bool     `yaml:"local_check,omitempty"          json:"localCheck,omitempty"`
 	CalderaAllWindows  bool     `yaml:"caldera_all_windows,omitempty"  json:"calderaAllWindows,omitempty"`
 	CalderaAbilities   []string `yaml:"caldera_abilities,omitempty"    json:"calderaAbilities,omitempty"`
 	CalderaAdversaryID string   `yaml:"caldera_adversary_id,omitempty" json:"calderaAdversaryId,omitempty"`

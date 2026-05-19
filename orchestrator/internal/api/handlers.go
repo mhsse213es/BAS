@@ -243,6 +243,24 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// local_check scenarios use built-in agent checks — no ART/Caldera required
+	if sc.LocalCheck {
+		sent := h.hub.SendToAgent(req.AgentID, models.WSMessage{
+			Type:    models.MsgCommandSimulate,
+			AgentID: req.AgentID,
+			Data:    map[string]string{"scenarioId": scenarioID, "runId": runID},
+		})
+		if !sent {
+			_, _ = h.db.Exec(context.Background(),
+				`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+			jsonError(w, "agent not connected", http.StatusServiceUnavailable)
+			return
+		}
+		log.Printf("[scenario] dispatched local-check %s → agent %s (run %s)", scenarioID, req.AgentID, runID)
+		respond(w, map[string]string{"runId": runID, "status": "dispatched"})
+		return
+	}
+
 	// Build concrete commands — all framework logic resolved server-side
 	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey)
 	if err != nil {
@@ -262,7 +280,6 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Data:    cmd,
 	})
 	if !sent {
-		// Mark run as failed if agent is offline
 		_, _ = h.db.Exec(context.Background(),
 			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
 		jsonError(w, "agent not connected", http.StatusServiceUnavailable)

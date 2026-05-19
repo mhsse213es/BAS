@@ -99,14 +99,15 @@ type WSMessage struct {
 
 // WebSocket message type constants.
 const (
-	MsgHeartbeat       = "heartbeat"
-	MsgAgentUpdate     = "agentUpdate"
-	MsgCommandScan     = "command_scan"
-	MsgCommandScenario = "command_scenario"
-	MsgScenarioResult  = "scenario_result"
-	MsgReportReady     = "reportReady"
-	MsgPatchStatus     = "patch_status_update"
-	MsgCommandPatches  = "command_install_patches"
+	MsgHeartbeat        = "heartbeat"
+	MsgAgentUpdate      = "agentUpdate"
+	MsgCommandScan      = "command_scan"
+	MsgCommandScenario  = "command_scenario"
+	MsgCommandSimulate  = "command_simulate" // triggers local RunScenarioChecks on agent (no ART/Caldera needed)
+	MsgScenarioResult   = "scenario_result"
+	MsgReportReady      = "reportReady"
+	MsgPatchStatus      = "patch_status_update"
+	MsgCommandPatches   = "command_install_patches"
 )
 
 // TacticMap maps MITRE T-IDs to tactic names.
