@@ -425,7 +425,10 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 		})
 	}
 	if len(steps) == 0 {
-		return nil, fmt.Errorf("none of the %d specified abilities had a Windows executor", len(abilityIDs))
+		return nil, fmt.Errorf(
+			"none of the %d ability IDs in caldera_abilities had a Windows executor in your Caldera instance. "+
+				"Browse real IDs at: GET /api/v2/abilities (KEY: <your-api-key>) and update the scenario YAML",
+			len(abilityIDs))
 	}
 	return steps, nil
 }

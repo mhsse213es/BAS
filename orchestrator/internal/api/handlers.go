@@ -153,7 +153,7 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 
 	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey)
 	if err != nil {
-		jsonError(w, "build steps: "+err.Error(), http.StatusInternalServerError)
+		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -246,7 +246,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	// Build concrete commands — all framework logic resolved server-side
 	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey)
 	if err != nil {
-		jsonError(w, "build steps: "+err.Error(), http.StatusInternalServerError)
+		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 
