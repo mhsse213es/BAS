@@ -124,22 +124,7 @@ async def get_scenario_run(run_id: str, db: AsyncSession = Depends(get_db)):
     run = await db.get(ScenarioRun, run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-
-    run_dict = _run_to_dict(run)
-
-    # Compute score if run is completed and score not yet stored
-    if run.status == "completed" and not run.score and run.results:
-        # Wrap results as a single category for scoring
-        categories = [{"phase": "simulation", "checks": _results_to_checks(run.results)}]
-        score = scoring.compute(categories)
-        score_dict = score.to_dict()
-        await db.execute(
-            update(ScenarioRun).where(ScenarioRun.id == run_id).values(score=score_dict)
-        )
-        await db.commit()
-        run_dict["score"] = score_dict
-
-    return run_dict
+    return _run_to_dict(run)
 
 
 # ── Proxy to Orchestrator (scenario dispatch) ──────────────────────────────────

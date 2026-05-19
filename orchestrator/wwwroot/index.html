@@ -218,10 +218,10 @@ code { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82em;
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Run ID</th><th>Scenario</th><th>Agent</th><th>Status</th><th>Initiated By</th><th>Started</th><th>Completed</th><th>Results</th>
+            <th>Run ID</th><th>Scenario</th><th>Agent</th><th>Status</th><th>Initiated By</th><th>Started</th><th>Completed</th><th>Results</th><th>Score</th>
           </tr></thead>
           <tbody id="runs-body">
-            <tr><td colspan="8" class="empty">No runs yet.</td></tr>
+            <tr><td colspan="9" class="empty">No runs yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -525,6 +525,16 @@ function loadRuns() {
       var cnt = (r.results || []).length;
       var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
       var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : '—';
+      var scoreHtml = '—';
+      if (r.score && typeof r.score.riskScore !== 'undefined') {
+        var cls = r.score.classification || '';
+        var col = cls === 'Protected' ? 'var(--green)' :
+                  cls === 'Low Risk'  ? '#3fb950' :
+                  cls === 'Medium Risk' ? 'var(--yellow)' :
+                  cls === 'High Risk' ? '#e5534b' : 'var(--red)';
+        scoreHtml = '<span style="font-weight:600;color:' + col + '">' + r.score.riskScore + '</span>' +
+                    '<span style="color:var(--muted);font-size:0.75rem;margin-left:0.35rem">' + x(cls) + '</span>';
+      }
       return '<tr>' +
         '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
         '<td>' + x(r.name) + '</td>' +
@@ -534,6 +544,7 @@ function loadRuns() {
         '<td style="color:var(--muted);font-size:0.8rem">' + fmtDate(r.startedAt) + '</td>' +
         '<td style="color:var(--muted);font-size:0.8rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
         '<td>' + (cnt ? '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>' : '—') + '</td>' +
+        '<td>' + scoreHtml + '</td>' +
         '</tr>';
     }).join('');
   }).catch(function(e) { showToast(e.message, 'err'); });
@@ -571,13 +582,41 @@ function closeModal() {
 function viewRunResults(run) {
   document.getElementById('results-title').textContent = run.name + ' — Results';
   var results = run.results || [];
+  var skipped = results.filter(function(c) { return c.result === 'skipped'; }).length;
   var fail = results.filter(function(c) { return c.result === 'fail'; }).length;
-  var pass = results.length - fail;
+  var pass = results.length - fail - skipped;
   document.getElementById('results-summary').innerHTML =
     '<span style="color:var(--red);font-weight:600">' + fail + ' fail</span>' +
     ' &nbsp;/&nbsp; <span style="color:var(--green);font-weight:600">' + pass + ' pass</span>' +
+    (skipped ? ' &nbsp;/&nbsp; <span style="color:var(--muted)">' + skipped + ' skipped</span>' : '') +
     ' &nbsp;&middot;&nbsp; ' + results.length + ' total checks' +
     ' &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>';
+
+  // Score summary panel
+  var scorePanel = '';
+  if (run.score && typeof run.score.riskScore !== 'undefined') {
+    var s = run.score;
+    var scol = s.classification === 'Protected' ? 'var(--green)' :
+               s.classification === 'Low Risk'  ? '#3fb950' :
+               s.classification === 'Medium Risk' ? 'var(--yellow)' :
+               s.classification === 'High Risk' ? '#e5534b' : 'var(--red)';
+    scorePanel = '<div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;' +
+      'padding:0.75rem 1rem;margin-bottom:1rem;display:grid;grid-template-columns:repeat(3,1fr);gap:0.6rem 1rem;font-size:0.78rem">' +
+      '<div><div style="color:var(--muted);font-size:0.65rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Risk Score</div>' +
+        '<span style="font-size:1.4rem;font-weight:700;color:' + scol + '">' + s.riskScore + '</span>' +
+        '<span style="color:' + scol + ';font-size:0.78rem;margin-left:0.35rem">' + x(s.classification) + '</span></div>' +
+      '<div><div style="color:var(--muted);font-size:0.65rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Prevention Eff.</div>' +
+        '<span style="font-size:1rem;font-weight:600;color:var(--green)">' + s.preventionEffectiveness + '%</span></div>' +
+      '<div><div style="color:var(--muted);font-size:0.65rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Confidence</div>' +
+        '<span style="font-size:1rem;font-weight:600">' + s.confidence + '%</span></div>' +
+      '<div><div style="color:var(--muted);font-size:0.65rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Attack Progression</div>' +
+        '<span style="font-size:1rem;font-weight:600;color:var(--red)">' + s.attackProgression + '%</span></div>' +
+      '<div><div style="color:var(--muted);font-size:0.65rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Blast Radius</div>' +
+        '<span style="font-size:1rem;font-weight:600;color:var(--yellow)">' + s.blastRadius + '%</span></div>' +
+      '<div><div style="color:var(--muted);font-size:0.65rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Detection</div>' +
+        '<span style="font-size:1rem;font-weight:600">' + s.detectionTiming + '%</span></div>' +
+      '</div>';
+  }
 
   var byTactic = {};
   results.forEach(function(c) {
@@ -586,7 +625,7 @@ function viewRunResults(run) {
     byTactic[tactic].push(c);
   });
 
-  document.getElementById('results-body').innerHTML = Object.keys(byTactic).map(function(tactic) {
+  var checksHtml = Object.keys(byTactic).map(function(tactic) {
     var checks = byTactic[tactic].map(function(c) {
       var col = c.result === 'pass' ? 'var(--green)' : c.result === 'skipped' ? 'var(--muted)' : 'var(--red)';
       var fw = (c.framework || 'custom').toLowerCase();
@@ -604,7 +643,8 @@ function viewRunResults(run) {
           '<span style="color:var(--muted);font-size:0.72rem;margin-left:auto">' + x(c.severity || '') + '</span>' +
         '</div>' +
         (c.details ? '<div style="color:var(--muted);font-size:0.75rem;padding-left:44px;margin-top:0.1rem">' + x(c.details) + '</div>' : '') +
-        (c.result === 'fail' && c.remediation ? '<div style="color:#d29922;font-size:0.74rem;padding-left:44px;margin-top:0.1rem">&#9888; ' + x(c.remediation) + '</div>' : '') +
+        (c.result === 'fail' && c.threatImpact ? '<div style="color:var(--muted);font-size:0.73rem;padding-left:44px;margin-top:0.1rem">&#128269; ' + x(c.threatImpact) + '</div>' : '') +
+        (c.result === 'fail' && c.remediation ? '<div style="color:#d29922;font-size:0.74rem;padding-left:44px;margin-top:0.1rem;white-space:pre-wrap">&#9888; ' + x(c.remediation) + '</div>' : '') +
         '</div>';
     }).join('');
     return '<div style="margin-bottom:1.25rem">' +
@@ -612,6 +652,7 @@ function viewRunResults(run) {
       checks + '</div>';
   }).join('');
 
+  document.getElementById('results-body').innerHTML = scorePanel + checksHtml;
   document.getElementById('results-overlay').classList.add('open');
 }
 function closeResults() { document.getElementById('results-overlay').classList.remove('open'); }
