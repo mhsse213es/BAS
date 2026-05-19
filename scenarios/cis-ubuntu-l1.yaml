@@ -1,0 +1,290 @@
+id: cis-ubuntu-l1
+name: CIS Ubuntu 26.04 L1 Baseline Hardening Check
+local_check: true
+description: >
+  Validates CIS Benchmark Level 1 controls for Ubuntu 26.04 LTS.
+  All checks run on the Linux agent as built-in posture assessments —
+  no external commands are sent. Results are scored against 38 controls
+  across kernel hardening, filesystem security, network configuration,
+  SSH hardening, service inventory, access control, and password policy.
+tags:
+  - cis
+  - linux
+  - ubuntu
+  - hardening
+  - compliance
+
+steps:
+  # ── Kernel Hardening ────────────────────────────────────────────────────────
+  - name: "ASLR Enabled (kernel.randomize_va_space)"
+    technique_id: T1055
+    framework: custom
+    executor: local
+    command: "sysctl kernel.randomize_va_space"
+    timeout_sec: 10
+
+  - name: "Core Dumps Restricted (fs.suid_dumpable)"
+    technique_id: T1003
+    framework: custom
+    executor: local
+    command: "sysctl fs.suid_dumpable"
+    timeout_sec: 10
+
+  - name: "Ptrace Scope (kernel.yama.ptrace_scope)"
+    technique_id: T1055
+    framework: custom
+    executor: local
+    command: "sysctl kernel.yama.ptrace_scope"
+    timeout_sec: 10
+
+  - name: "NX/Execute Disable Bit"
+    technique_id: T1055
+    framework: custom
+    executor: local
+    command: "grep -m1 ' nx ' /proc/cpuinfo"
+    timeout_sec: 10
+
+  # ── Filesystem Hardening ────────────────────────────────────────────────────
+  - name: "/tmp Mounted noexec"
+    technique_id: T1059
+    framework: custom
+    executor: local
+    command: "grep -E '\\s/tmp\\s' /proc/mounts"
+    timeout_sec: 10
+
+  - name: "/tmp Mounted nosuid"
+    technique_id: T1548
+    framework: custom
+    executor: local
+    command: "grep -E '\\s/tmp\\s' /proc/mounts"
+    timeout_sec: 10
+
+  - name: "/tmp Mounted nodev"
+    technique_id: T1083
+    framework: custom
+    executor: local
+    command: "grep -E '\\s/tmp\\s' /proc/mounts"
+    timeout_sec: 10
+
+  - name: "/dev/shm Mounted noexec"
+    technique_id: T1059
+    framework: custom
+    executor: local
+    command: "grep -E '\\s/dev/shm\\s' /proc/mounts"
+    timeout_sec: 10
+
+  - name: "/dev/shm Mounted nosuid"
+    technique_id: T1548
+    framework: custom
+    executor: local
+    command: "grep -E '\\s/dev/shm\\s' /proc/mounts"
+    timeout_sec: 10
+
+  - name: "Sticky Bit on World-Writable Directories"
+    technique_id: T1083
+    framework: custom
+    executor: local
+    command: "find / -xdev -type d -perm -0002 ! -perm -1000"
+    timeout_sec: 30
+
+  # ── Network Hardening ───────────────────────────────────────────────────────
+  - name: "IP Forwarding Disabled (net.ipv4.ip_forward)"
+    technique_id: T1090
+    framework: custom
+    executor: local
+    command: "sysctl net.ipv4.ip_forward"
+    timeout_sec: 10
+
+  - name: "ICMP Redirects Not Accepted"
+    technique_id: T1562
+    framework: custom
+    executor: local
+    command: "sysctl net.ipv4.conf.all.accept_redirects net.ipv4.conf.default.accept_redirects"
+    timeout_sec: 10
+
+  - name: "ICMP Redirects Not Sent"
+    technique_id: T1562
+    framework: custom
+    executor: local
+    command: "sysctl net.ipv4.conf.all.send_redirects net.ipv4.conf.default.send_redirects"
+    timeout_sec: 10
+
+  - name: "Martian Packet Logging Enabled"
+    technique_id: T1562
+    framework: custom
+    executor: local
+    command: "sysctl net.ipv4.conf.all.log_martians net.ipv4.conf.default.log_martians"
+    timeout_sec: 10
+
+  - name: "TCP SYN Cookies Enabled (net.ipv4.tcp_syncookies)"
+    technique_id: T1046
+    framework: custom
+    executor: local
+    command: "sysctl net.ipv4.tcp_syncookies"
+    timeout_sec: 10
+
+  - name: "IPv6 Router Advertisements Ignored"
+    technique_id: T1090
+    framework: custom
+    executor: local
+    command: "sysctl net.ipv6.conf.all.accept_ra net.ipv6.conf.default.accept_ra"
+    timeout_sec: 10
+
+  # ── SSH Hardening ───────────────────────────────────────────────────────────
+  - name: "SSH Root Login Disabled (PermitRootLogin no)"
+    technique_id: T1078
+    framework: custom
+    executor: local
+    command: "sshd -T 2>/dev/null | grep -i permitrootlogin"
+    timeout_sec: 10
+
+  - name: "SSH MaxAuthTries <= 4"
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: "sshd -T 2>/dev/null | grep -i maxauthtries"
+    timeout_sec: 10
+
+  - name: "SSH Empty Passwords Forbidden (PermitEmptyPasswords no)"
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: "sshd -T 2>/dev/null | grep -i permitemptypasswords"
+    timeout_sec: 10
+
+  - name: "SSH Ignores .rhosts Files (IgnoreRhosts yes)"
+    technique_id: T1078
+    framework: custom
+    executor: local
+    command: "sshd -T 2>/dev/null | grep -i ignorerhosts"
+    timeout_sec: 10
+
+  - name: "SSH Host-Based Authentication Disabled"
+    technique_id: T1078
+    framework: custom
+    executor: local
+    command: "sshd -T 2>/dev/null | grep -i hostbasedauthentication"
+    timeout_sec: 10
+
+  - name: "SSH User Environment Variables Forbidden"
+    technique_id: T1548
+    framework: custom
+    executor: local
+    command: "sshd -T 2>/dev/null | grep -i permituserenvironment"
+    timeout_sec: 10
+
+  - name: "SSH Protocol 2 Only"
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: "grep -i '^Protocol' /etc/ssh/sshd_config || echo 'not set (defaults to 2)'"
+    timeout_sec: 10
+
+  # ── Services ────────────────────────────────────────────────────────────────
+  - name: "Telnet Not Installed/Running"
+    technique_id: T1078
+    framework: custom
+    executor: local
+    command: "dpkg -s telnetd 2>&1 || echo 'not installed'"
+    timeout_sec: 10
+
+  - name: "rsh/rlogin Services Not Installed"
+    technique_id: T1078
+    framework: custom
+    executor: local
+    command: "dpkg -s rsh-server 2>&1 || echo 'not installed'"
+    timeout_sec: 10
+
+  - name: "TFTP Not Running"
+    technique_id: T1105
+    framework: custom
+    executor: local
+    command: "systemctl is-active tftpd-hpa 2>&1 || echo 'not active'"
+    timeout_sec: 10
+
+  - name: "SSH Daemon Running (sshd)"
+    technique_id: T1078
+    framework: custom
+    executor: local
+    command: "systemctl is-active ssh"
+    timeout_sec: 10
+
+  # ── Access Control ──────────────────────────────────────────────────────────
+  - name: "Cron Access Restricted to Authorised Users"
+    technique_id: T1053
+    framework: custom
+    executor: local
+    command: "ls /etc/cron.allow /etc/cron.deny 2>&1"
+    timeout_sec: 10
+
+  - name: "Auditd Running and Enabled"
+    technique_id: T1070
+    framework: custom
+    executor: local
+    command: "systemctl is-active auditd && systemctl is-enabled auditd"
+    timeout_sec: 10
+
+  - name: "Rsyslog Running and Enabled"
+    technique_id: T1070
+    framework: custom
+    executor: local
+    command: "systemctl is-active rsyslog && systemctl is-enabled rsyslog"
+    timeout_sec: 10
+
+  - name: "Journald Persistent Storage Enabled"
+    technique_id: T1070
+    framework: custom
+    executor: local
+    command: "grep -i 'storage' /etc/systemd/journald.conf || ls /var/log/journal 2>&1"
+    timeout_sec: 10
+
+  - name: "Log Files Not World-Readable (/var/log)"
+    technique_id: T1070
+    framework: custom
+    executor: local
+    command: "find /var/log -type f -perm /o+r ! -name '*.gz' -maxdepth 4"
+    timeout_sec: 15
+
+  # ── Security Tools ──────────────────────────────────────────────────────────
+  - name: "UFW Firewall Enabled"
+    technique_id: T1046
+    framework: custom
+    executor: local
+    command: "ufw status 2>&1"
+    timeout_sec: 10
+
+  - name: "AppArmor Enabled and Enforcing"
+    technique_id: T1068
+    framework: custom
+    executor: local
+    command: "aa-status 2>/dev/null || apparmor_status 2>&1"
+    timeout_sec: 10
+
+  # ── Password Policy ─────────────────────────────────────────────────────────
+  - name: "Password Minimum Length >= 12 (PASS_MIN_LEN)"
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: "grep PASS_MIN_LEN /etc/login.defs"
+    timeout_sec: 10
+
+  - name: "Password Maximum Age <= 365 Days (PASS_MAX_DAYS)"
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: "grep PASS_MAX_DAYS /etc/login.defs"
+    timeout_sec: 10
+
+  - name: "Sudo Usage Logged"
+    technique_id: T1548
+    framework: custom
+    executor: local
+    command: "grep -r 'logfile' /etc/sudoers /etc/sudoers.d/ 2>/dev/null || echo 'not configured'"
+    timeout_sec: 10
+
+  - name: "No Accounts with Empty Passwords (/etc/shadow)"
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: "awk -F: '($2==\"\"){print $1}' /etc/shadow 2>/dev/null || echo 'requires root'"
+    timeout_sec: 10
