@@ -84,4 +84,5 @@ spec:
   ports:
     - port: {{ .Values.orchestrator.port }}
       targetPort: {{ .Values.orchestrator.port }}
-  type: ClusterIP
+      nodePort: {{ .Values.orchestrator.nodePort }}
+  type: NodePort
