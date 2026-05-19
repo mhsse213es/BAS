@@ -11,6 +11,7 @@ type Config struct {
 	JWTSecret     string `json:"jwt_secret"`
 	HTTPPort      int    `json:"http_port"`
 	ScenariosDir  string `json:"scenarios_dir"`
+	ARTDir        string `json:"art_dir,omitempty"`
 	CalderaURL    string `json:"caldera_url,omitempty"`
 	CalderaAPIKey string `json:"caldera_api_key,omitempty"`
 }
@@ -21,6 +22,7 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{
 		HTTPPort:     9000,
 		ScenariosDir: "scenarios",
+		ARTDir:       "/art-atomics",
 	}
 
 	// Try file first (local dev)
@@ -43,6 +45,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("SCENARIOS_DIR"); v != "" {
 		cfg.ScenariosDir = v
+	}
+	if v := os.Getenv("ART_DIR"); v != "" {
+		cfg.ARTDir = v
 	}
 	if v := os.Getenv("CALDERA_URL"); v != "" {
 		cfg.CalderaURL = v

@@ -2,13 +2,12 @@ package scenario
 
 import (
 	"crypto/sha256"
-	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 )
@@ -22,7 +21,7 @@ func TaskID(techniqueID, name string) string {
 
 // BuildSteps converts a Scenario into concrete ScenarioSteps the agent executes.
 // Modes are checked in priority order (see Scenario type comment).
-func BuildSteps(sc *Scenario, calderaURL, calderaKey string) ([]ScenarioStep, error) {
+func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore) ([]ScenarioStep, error) {
 	if calderaURL != "" {
 		if sc.CalderaAllWindows {
 			return buildCalderaAllWindowsSteps(calderaURL, calderaKey)
@@ -35,14 +34,20 @@ func BuildSteps(sc *Scenario, calderaURL, calderaKey string) ([]ScenarioStep, er
 		}
 	}
 	if sc.ARTAllWindows {
-		return buildARTAllWindowsSteps()
+		if artStore == nil {
+			return nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
+		}
+		return buildARTAllWindowsSteps(artStore)
 	}
 	if len(sc.ARTTechniques) > 0 {
-		return buildARTTechniquesSteps(sc.ARTTechniques)
+		if artStore == nil {
+			return nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
+		}
+		return buildARTTechniquesSteps(sc.ARTTechniques, artStore)
 	}
 	out := make([]ScenarioStep, 0, len(sc.Steps))
 	for _, s := range sc.Steps {
-		built, err := buildStep(s, calderaURL, calderaKey)
+		built, err := buildStep(s, calderaURL, calderaKey, artStore)
 		if err != nil {
 			return nil, fmt.Errorf("step %q: %w", s.Name, err)
 		}
@@ -51,7 +56,7 @@ func BuildSteps(sc *Scenario, calderaURL, calderaKey string) ([]ScenarioStep, er
 	return out, nil
 }
 
-func buildStep(s Step, calderaURL, calderaKey string) (ScenarioStep, error) {
+func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (ScenarioStep, error) {
 	executor := s.Executor
 	if executor == "" {
 		executor = "powershell"
@@ -64,7 +69,19 @@ func buildStep(s Step, calderaURL, calderaKey string) (ScenarioStep, error) {
 	var command string
 	switch s.Framework {
 	case "art":
-		command = buildARTCommand(s)
+		if artStore != nil {
+			artSteps := artStore.GetSteps(s.TechniqueID)
+			idx := s.TestIndex
+			if idx < 0 || idx >= len(artSteps) {
+				idx = 0
+			}
+			if len(artSteps) > 0 {
+				command = artSteps[idx].Command
+			}
+		}
+		if command == "" {
+			command = fmt.Sprintf(`Write-Output "SKIP: ART technique %s not in local store"`, s.TechniqueID)
+		}
 	case "caldera":
 		command = buildCalderaCommand(s, calderaURL, calderaKey)
 	default: // "custom" or unset
@@ -92,108 +109,30 @@ func buildStep(s Step, calderaURL, calderaKey string) (ScenarioStep, error) {
 	}, nil
 }
 
-// buildARTCommand generates the Invoke-AtomicTest PowerShell command for a single
-// hardcoded step (framework: art with test_index set).
-func buildARTCommand(s Step) string {
-	timeout := s.TimeoutSec
-	if timeout == 0 {
-		timeout = 120
-	}
-	return fmt.Sprintf(
-		`try {`+
-			` Invoke-AtomicTest %s -TestNumbers @(%d) -Confirm:$false -TimeoutSeconds %d 2>&1`+
-			` } catch { Write-Output "ART_ERROR: $_" }`,
-		s.TechniqueID, s.TestIndex, timeout)
-}
+// ── ART Local Store Modes ──────────────────────────────────────────────────────
 
-// ── Atomic Red Team Dynamic Modes ─────────────────────────────────────────────
-
-const artIndexURL = "https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/atomics/Indexes/Indexes-CSV/index.csv"
-
-// buildARTAllWindowsSteps fetches the ART index from GitHub and builds one step
-// per technique that has at least one PowerShell or command_prompt test.
-// Omitting -TestNumbers runs ALL tests for that technique automatically.
-func buildARTAllWindowsSteps() ([]ScenarioStep, error) {
-	techniques, err := fetchARTWindowsTechniques()
-	if err != nil {
-		return nil, err
-	}
-	return buildARTTechniquesSteps(techniques)
-}
-
-// buildARTTechniquesSteps builds one step per technique in the provided list.
-// Each step runs ALL atomic tests for that technique via Invoke-AtomicTest.
-func buildARTTechniquesSteps(techniques []string) ([]ScenarioStep, error) {
+func buildARTAllWindowsSteps(artStore *ARTStore) ([]ScenarioStep, error) {
+	techniques := artStore.ListTechniques()
 	if len(techniques) == 0 {
-		return nil, fmt.Errorf("ART: empty technique list")
+		return nil, fmt.Errorf("ART store is empty — verify ART_DIR was loaded at startup")
 	}
-	steps := make([]ScenarioStep, 0, len(techniques))
+	return buildARTTechniquesSteps(techniques, artStore)
+}
+
+func buildARTTechniquesSteps(techniques []string, artStore *ARTStore) ([]ScenarioStep, error) {
+	var steps []ScenarioStep
 	for _, t := range techniques {
-		t = strings.TrimSpace(t)
-		if t == "" {
+		s := artStore.GetSteps(strings.ToUpper(strings.TrimSpace(t)))
+		if len(s) == 0 {
+			log.Printf("[ART] no Windows steps for %s — skipped", t)
 			continue
 		}
-		steps = append(steps, ScenarioStep{
-			TaskID:      TaskID(t, "art-"+t),
-			TechniqueID: t,
-			Name:        "ART: " + t,
-			Executor:    "powershell",
-			// No -TestNumbers → runs every atomic test for this technique.
-			// -GetPrereqs installs dependencies before execution.
-			Command: fmt.Sprintf(
-				`try {`+
-					` Invoke-AtomicTest %s -GetPrereqs -Confirm:$false 2>&1;`+
-					` Invoke-AtomicTest %s -Confirm:$false -TimeoutSeconds 120 2>&1`+
-					` } catch { Write-Output "ART_ERROR: $_" }`,
-				t, t),
-			TimeoutSec: 180,
-		})
+		steps = append(steps, s...)
 	}
 	if len(steps) == 0 {
-		return nil, fmt.Errorf("ART: no valid techniques to run")
+		return nil, fmt.Errorf("ART: no Windows steps found for any of the %d requested techniques", len(techniques))
 	}
 	return steps, nil
-}
-
-// fetchARTWindowsTechniques downloads the ART CSV index and returns all unique
-// technique IDs that have at least one PowerShell or command_prompt test.
-func fetchARTWindowsTechniques() ([]string, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(artIndexURL)
-	if err != nil {
-		return nil, fmt.Errorf("fetch ART index: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch ART index: HTTP %d", resp.StatusCode)
-	}
-
-	r := csv.NewReader(resp.Body)
-	r.Read() // skip header row
-
-	seen := make(map[string]bool)
-	var techniques []string
-	for {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil || len(record) < 5 {
-			continue
-		}
-		techniqueID := strings.TrimSpace(record[0])
-		executor := strings.ToLower(strings.TrimSpace(record[4]))
-		if (executor == "powershell" || executor == "command_prompt") && !seen[techniqueID] {
-			seen[techniqueID] = true
-			techniques = append(techniques, techniqueID)
-		}
-	}
-
-	if len(techniques) == 0 {
-		return nil, fmt.Errorf("ART index returned no Windows techniques")
-	}
-	sort.Strings(techniques)
-	return techniques, nil
 }
 
 // buildCalderaCommand returns the ability command from Caldera API,
@@ -335,12 +274,10 @@ type calderaAbilityFull struct {
 // buildCalderaAdversarySteps fetches an adversary profile from Caldera,
 // then fetches each ability in its atomic_ordering and builds a ScenarioStep
 // for every ability that has a Windows (psh/powershell/cmd) executor.
-// This replaces the static 5-step YAML with the full adversary ability set.
 func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]ScenarioStep, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	base := strings.TrimRight(calderaURL, "/")
 
-	// 1. Fetch the adversary profile
 	req, _ := http.NewRequest("GET", base+"/api/v2/adversaries/"+adversaryID, nil)
 	if apiKey != "" {
 		req.Header.Set("KEY", apiKey)
@@ -362,17 +299,14 @@ func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]Scena
 		return nil, fmt.Errorf("adversary %s has no abilities in atomic_ordering", adversaryID)
 	}
 
-	// 2. Fetch each ability and build a step
 	var steps []ScenarioStep
 	for _, abilityID := range adversary.AtomicOrdering {
 		ab, err := fetchCalderaAbilityFull(client, base, apiKey, abilityID)
 		if err != nil {
-			// Non-fatal: skip abilities that can't be fetched
 			continue
 		}
 		cmd := pickExecutorCommand(ab.Executors, "psh")
 		if cmd == "" {
-			// No Windows executor for this ability — skip
 			continue
 		}
 		techniqueID := ab.TechniqueID
@@ -396,7 +330,6 @@ func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]Scena
 }
 
 // buildCalderaAbilitiesSteps runs a specific admin-chosen list of ability IDs.
-// Use this when the admin selects individual abilities from the Caldera library.
 func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) ([]ScenarioStep, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	base := strings.TrimRight(calderaURL, "/")
@@ -405,7 +338,7 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 	for _, id := range abilityIDs {
 		ab, err := fetchCalderaAbilityFull(client, base, apiKey, id)
 		if err != nil {
-			continue // skip abilities that can't be fetched
+			continue
 		}
 		cmd := pickExecutorCommand(ab.Executors, "psh")
 		if cmd == "" {
@@ -434,8 +367,7 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 }
 
 // buildCalderaAllWindowsSteps fetches the entire Caldera ability library and
-// returns a step for every ability that has a Windows (psh/powershell/cmd) executor.
-// This is the "run everything" mode — could be 500–2000+ steps depending on plugins loaded.
+// returns a step for every ability that has a Windows executor.
 func buildCalderaAllWindowsSteps(calderaURL, apiKey string) ([]ScenarioStep, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	base := strings.TrimRight(calderaURL, "/")
@@ -463,7 +395,7 @@ func buildCalderaAllWindowsSteps(calderaURL, apiKey string) ([]ScenarioStep, err
 	for _, ab := range abilities {
 		cmd := pickExecutorCommand(ab.Executors, "psh")
 		if cmd == "" {
-			continue // no Windows executor — skip
+			continue
 		}
 		techniqueID := ab.TechniqueID
 		if techniqueID == "" {

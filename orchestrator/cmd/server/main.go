@@ -60,10 +60,23 @@ func main() {
 	}
 	log.Printf("[+] Loaded %d scenarios from %s", engine.Count(), cfg.ScenariosDir)
 
+	// ── ART Store (bundled atomics — resolved locally, zero endpoint footprint) ──
+	var artStore *scenario.ARTStore
+	if cfg.ARTDir != "" {
+		var artErr error
+		artStore, artErr = scenario.NewARTStore(cfg.ARTDir)
+		if artErr != nil {
+			log.Printf("[!] ART store: %v — ART scenarios will be unavailable", artErr)
+		} else {
+			log.Printf("[+] ART loaded: %d techniques from %s", artStore.Count(), cfg.ARTDir)
+		}
+	}
+
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
-		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey)
+		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
+		WithART(artStore)
 	router := api.Mount(handler, hub, cfg.JWTSecret)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────

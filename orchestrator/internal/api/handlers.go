@@ -27,6 +27,7 @@ type Handler struct {
 	secret      string
 	calderaURL  string
 	calderaKey  string
+	artStore    *scenario.ARTStore
 }
 
 // New creates a Handler.
@@ -38,6 +39,12 @@ func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) 
 func (h *Handler) WithCaldera(url, key string) *Handler {
 	h.calderaURL = url
 	h.calderaKey = key
+	return h
+}
+
+// WithART attaches the pre-loaded ART store (may be nil if ART_DIR is unavailable).
+func (h *Handler) WithART(store *scenario.ARTStore) *Handler {
+	h.artStore = store
 	return h
 }
 
@@ -151,7 +158,7 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey)
+	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore)
 	if err != nil {
 		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -262,7 +269,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build concrete commands — all framework logic resolved server-side
-	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey)
+	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore)
 	if err != nil {
 		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
 		return
