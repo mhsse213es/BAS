@@ -25,6 +25,7 @@ type Handler struct {
 	hub         *ws.Hub
 	engine      *scenario.Engine
 	secret      string
+	agentSecret string // optional shared secret for agent-facing endpoints
 	calderaURL  string
 	calderaKey  string
 	artStore    *scenario.ARTStore
@@ -33,6 +34,25 @@ type Handler struct {
 // New creates a Handler.
 func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) *Handler {
 	return &Handler{db: db, hub: hub, engine: engine, secret: secret}
+}
+
+// WithAgentSecret configures the optional agent shared secret.
+func (h *Handler) WithAgentSecret(s string) *Handler {
+	h.agentSecret = s
+	return h
+}
+
+// validateAgentAuth checks the X-Agent-Token header when an agent secret is configured.
+// Returns true if the request is authorized (secret matches, or no secret is configured).
+func (h *Handler) validateAgentAuth(r *http.Request) bool {
+	if h.agentSecret == "" {
+		return true
+	}
+	provided := r.Header.Get("X-Agent-Token")
+	if provided == "" {
+		provided = r.URL.Query().Get("agentSecret")
+	}
+	return provided == h.agentSecret
 }
 
 // WithCaldera configures the optional Caldera integration.
@@ -81,12 +101,35 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = h.db.Exec(r.Context(), `UPDATE users SET last_login = NOW() WHERE id = $1`, id)
+
+	// Set HttpOnly cookie so the token is not accessible via JavaScript.
+	http.SetCookie(w, &http.Cookie{
+		Name:     "bas_token",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   86400,
+	})
 	respond(w, map[string]interface{}{
-		"token":       token,
-		"role":        role,
-		"userId":      id,
+		"token":        token, // kept for backward compat with CLI/API clients
+		"role":         role,
+		"userId":       id,
 		"mustChangePw": mustChangePw,
 	})
+}
+
+// POST /api/auth/logout — clears the session cookie.
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "bas_token",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,
+	})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── Agents ────────────────────────────────────────────────────────────────────
@@ -117,8 +160,13 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	respond(w, agents)
 }
 
-// POST /api/heartbeat — called by agents (no auth required, agents use agentId as identity)
+// POST /api/heartbeat — called by agents.
+// Requires X-Agent-Token header when AGENT_SECRET is configured.
 func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
+	if !h.validateAgentAuth(r) {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	var hb models.Heartbeat
 	if err := json.NewDecoder(r.Body).Decode(&hb); err != nil || hb.AgentID == "" {
 		jsonError(w, "invalid heartbeat payload", http.StatusBadRequest)
@@ -301,6 +349,10 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 // The server interprets exit codes and output, then saves SimulationResult records.
 // All framework intelligence (ART, Caldera, custom) lives in the interpreter — not the agent.
 func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
+	if !h.validateAgentAuth(r) {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	var raw scenario.RawRunResult
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil || raw.RunID == "" {
 		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)
@@ -440,8 +492,13 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 
 // ── Reports ───────────────────────────────────────────────────────────────────
 
-// POST /api/report — agents upload full simulation reports here
+// POST /api/report — agents upload full simulation reports here.
+// Requires X-Agent-Token header when AGENT_SECRET is configured.
 func (h *Handler) SubmitReport(w http.ResponseWriter, r *http.Request) {
+	if !h.validateAgentAuth(r) {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	var report struct {
 		AgentID       string          `json:"agentId"`
 		Hostname      string          `json:"hostname"`

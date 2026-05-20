@@ -8,9 +8,14 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// safeID allows only alphanumeric characters, hyphens, and underscores (max 128 chars).
+// This prevents path traversal when IDs are interpolated into Caldera API URLs.
+var safeID = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
 
 // TaskID generates a stable 8-char hex ID for a step.
 // Used to correlate agent ExecResults back to their YAML Step.
@@ -275,6 +280,9 @@ type calderaAbilityFull struct {
 // then fetches each ability in its atomic_ordering and builds a ScenarioStep
 // for every ability that has a Windows (psh/powershell/cmd) executor.
 func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]ScenarioStep, error) {
+	if !safeID.MatchString(adversaryID) {
+		return nil, fmt.Errorf("invalid adversary ID %q: must be alphanumeric/hyphen/underscore", adversaryID)
+	}
 	client := &http.Client{Timeout: 15 * time.Second}
 	base := strings.TrimRight(calderaURL, "/")
 
@@ -417,6 +425,9 @@ func buildCalderaAllWindowsSteps(calderaURL, apiKey string) ([]ScenarioStep, err
 }
 
 func fetchCalderaAbilityFull(client *http.Client, base, apiKey, abilityID string) (*calderaAbilityFull, error) {
+	if !safeID.MatchString(abilityID) {
+		return nil, fmt.Errorf("invalid ability ID %q: must be alphanumeric/hyphen/underscore", abilityID)
+	}
 	req, _ := http.NewRequest("GET", base+"/api/v2/abilities/"+abilityID, nil)
 	if apiKey != "" {
 		req.Header.Set("KEY", apiKey)

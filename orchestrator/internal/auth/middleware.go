@@ -8,16 +8,19 @@ import (
 
 type ctxClaimsKey struct{}
 
-// Middleware validates the Bearer JWT on every request and injects claims into context.
+// Middleware validates the JWT on every request.
+// Accepts the token from (in priority order):
+//  1. HttpOnly cookie "bas_token" (browser sessions)
+//  2. Authorization: Bearer <token> header (API / CLI clients)
 func Middleware(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			header := r.Header.Get("Authorization")
-			if !strings.HasPrefix(header, "Bearer ") {
+			tokenStr := tokenFromRequest(r)
+			if tokenStr == "" {
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
-			claims, err := ValidateToken(strings.TrimPrefix(header, "Bearer "), secret)
+			claims, err := ValidateToken(tokenStr, secret)
 			if err != nil {
 				http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
 				return
@@ -26,6 +29,22 @@ func Middleware(secret string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// TokenFromRequest extracts the JWT from cookie or Bearer header.
+// Exported so WebSocket handlers can reuse it during the upgrade handshake.
+func TokenFromRequest(r *http.Request) string {
+	return tokenFromRequest(r)
+}
+
+func tokenFromRequest(r *http.Request) string {
+	if cookie, err := r.Cookie("bas_token"); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer ")
+	}
+	return ""
 }
 
 // RequireRole rejects requests from users whose role is not in the allowed list.

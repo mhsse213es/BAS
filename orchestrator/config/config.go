@@ -9,6 +9,7 @@ import (
 type Config struct {
 	DatabaseURL   string `json:"database_url"`
 	JWTSecret     string `json:"jwt_secret"`
+	AgentSecret   string `json:"agent_secret,omitempty"` // optional shared secret for agent endpoints
 	HTTPPort      int    `json:"http_port"`
 	ScenariosDir  string `json:"scenarios_dir"`
 	ARTDir        string `json:"art_dir,omitempty"`
@@ -54,6 +55,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("CALDERA_API_KEY"); v != "" {
 		cfg.CalderaAPIKey = v
+	}
+	if v := os.Getenv("AGENT_SECRET"); v != "" {
+		cfg.AgentSecret = v
 	}
 
 	if cfg.DatabaseURL == "" {

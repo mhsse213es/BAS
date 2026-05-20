@@ -835,7 +835,7 @@ code {
 var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', users:'Users' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#238636','#8957e5','#1a9f8a'];
 
-var TOKEN    = localStorage.getItem('bas_token') || '';
+var TOKEN    = ''; // kept in memory only — never persisted to localStorage
 var ROLE     = localStorage.getItem('bas_role')  || '';
 var socket   = null;
 var scenarios = [];
@@ -849,7 +849,13 @@ window.addEventListener('DOMContentLoaded', function() {
   document.getElementById('inp-pass').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') doLogin();
   });
-  if (TOKEN) bootApp();
+  // If role is stored, attempt to resume session via cookie.
+  // A 401 response means the cookie is expired — fall through to login screen.
+  if (ROLE) {
+    fetch('/api/agents', { credentials: 'same-origin' })
+      .then(function(r) { if (r.ok) bootApp(); else { localStorage.removeItem('bas_role'); } })
+      .catch(function() { localStorage.removeItem('bas_role'); });
+  }
 });
 
 function doLogin() {
@@ -865,8 +871,7 @@ function doLogin() {
   .then(function(res) {
     if (!res.ok) throw new Error(res.d.error || 'Login failed');
     TOKEN = res.d.token; ROLE = res.d.role;
-    localStorage.setItem('bas_token', TOKEN);
-    localStorage.setItem('bas_role', ROLE);
+    localStorage.setItem('bas_role', ROLE); // role only — token is in HttpOnly cookie
     bootApp();
     if (res.d.mustChangePw) {
       _pwForced = true;
@@ -881,9 +886,9 @@ function doLogin() {
 
 function doLogout() {
   TOKEN = ''; ROLE = '';
-  localStorage.removeItem('bas_token');
   localStorage.removeItem('bas_role');
   if (socket) socket.close();
+  fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(function(){});
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('inp-pass').value = '';
@@ -918,8 +923,8 @@ function showTab(name) {
 
 function apicall(path, opts) {
   opts = opts || {};
-  return fetch(path, Object.assign({}, opts, {
-    headers: Object.assign({ 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, opts.headers || {})
+  return fetch(path, Object.assign({ credentials: 'same-origin' }, opts, {
+    headers: Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {})
   }))
   .then(function(r) {
     if (r.status === 401) { doLogout(); throw new Error('Session expired'); }

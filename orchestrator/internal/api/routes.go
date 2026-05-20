@@ -11,7 +11,7 @@ import (
 )
 
 // Mount builds the full HTTP router and returns it.
-func Mount(h *Handler, hub *ws.Hub, jwtSecret string) http.Handler {
+func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
@@ -19,32 +19,46 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret string) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.StripSlashes)
 
-	// CORS — allow dashboard origin in development
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			if req.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			next.ServeHTTP(w, req)
-		})
-	})
-
 	// ── Public endpoints (no auth) ────────────────────────────────────────
 	r.Post("/api/auth/login", h.Login)
+	r.Post("/api/auth/logout", h.Logout)
 
-	// Agent endpoints — no browser auth; agents identify via agentId field
+	// Agent endpoints — protected by optional AGENT_SECRET shared token.
+	// When agentSecret is empty these remain open (backward compat).
 	r.Post("/api/heartbeat", h.Heartbeat)
 	r.Post("/api/report", h.SubmitReport)
 	r.Post("/api/scenarios/result", h.SubmitScenarioResult)
 
-	// WebSocket — agents connect here
-	r.Get("/ws/agent", hub.ServeAgentWS)
-	// WebSocket — browser dashboard connects here
-	r.Get("/ws/browser", hub.ServeBrowserWS)
+	// WebSocket — agents connect here.
+	// Validates agentSecret query param / X-Agent-Token header when configured.
+	r.Get("/ws/agent", func(w http.ResponseWriter, req *http.Request) {
+		if agentSecret != "" {
+			provided := req.URL.Query().Get("agentSecret")
+			if provided == "" {
+				provided = req.Header.Get("X-Agent-Token")
+			}
+			if provided != agentSecret {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+		hub.ServeAgentWS(w, req)
+	})
+
+	// WebSocket — browser dashboard.
+	// Requires a valid JWT from the bas_token cookie or Authorization header.
+	r.Get("/ws/browser", func(w http.ResponseWriter, req *http.Request) {
+		tokenStr := auth.TokenFromRequest(req)
+		if tokenStr == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if _, err := auth.ValidateToken(tokenStr, jwtSecret); err != nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		hub.ServeBrowserWS(w, req)
+	})
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

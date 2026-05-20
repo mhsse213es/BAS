@@ -76,8 +76,9 @@ func main() {
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
-		WithART(artStore)
-	router := api.Mount(handler, hub, cfg.JWTSecret)
+		WithART(artStore).
+		WithAgentSecret(cfg.AgentSecret)
+	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
 	// Marks agents offline if no heartbeat received within 90 seconds and
@@ -199,6 +200,6 @@ func seedDefaultAdmin(pool *pgxpool.Pool) error {
 	if err != nil {
 		return fmt.Errorf("insert admin: %w", err)
 	}
-	log.Println("[+] Default admin created — username: admin  password: ChangeMe!2024  ← CHANGE THIS NOW")
+	log.Println("[+] Default admin seeded (username: admin) — change the password immediately via Settings → Users")
 	return nil
 }
