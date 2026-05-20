@@ -1,0 +1,5 @@
+# Generated at build time from user-data.tmpl — contains hashed build password
+http/user-data
+
+# Packer output directory
+packer_cache/

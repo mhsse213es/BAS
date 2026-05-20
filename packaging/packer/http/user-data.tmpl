@@ -1,0 +1,59 @@
+#cloud-config
+autoinstall:
+  version: 1
+
+  locale: en_US.UTF-8
+
+  keyboard:
+    layout: us
+
+  network:
+    network:
+      version: 2
+      ethernets:
+        any-nic:
+          match:
+            driver: "virtio_net"
+          dhcp4: true
+          dhcp6: false
+
+  storage:
+    layout:
+      name: lvm
+      match:
+        size: largest
+
+  identity:
+    hostname: bas-platform
+    username: bas
+    # %%PACKER_SSH_PASS_HASH%% is substituted by build-packer.sh at build time.
+    # This is a temporary build credential — locked during sysprep.
+    password: "%%PACKER_SSH_PASS_HASH%%"
+    realname: "BAS Platform"
+
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys: []
+
+  packages:
+    - ca-certificates
+    - curl
+    - wget
+    - gnupg
+    - whiptail
+    - openssl
+    - jq
+    - net-tools
+    - lsb-release
+
+  # Docker is installed in provision.sh for better control over the version
+  late-commands:
+    # Give bas user passwordless sudo (Packer needs it; locked down during sysprep)
+    - echo 'bas ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/bas-packer
+    - chmod 0440 /target/etc/sudoers.d/bas-packer
+    # Disable unattended-upgrades during build to avoid apt lock races
+    - systemctl --root /target disable unattended-upgrades || true
+
+  updates: security
+  shutdown: poweroff
