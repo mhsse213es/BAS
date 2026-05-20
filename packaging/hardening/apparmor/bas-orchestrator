@@ -1,0 +1,85 @@
+# AppArmor profile for the BAS Platform orchestrator container.
+#
+# Install:  sudo apparmor_parser -r /etc/apparmor.d/bas-orchestrator
+# Enable:   sudo aa-enforce /etc/apparmor.d/bas-orchestrator
+#
+# Apply to container via docker-compose.hardened.yml:
+#   security_opt:
+#     - apparmor:bas-orchestrator
+#
+# The orchestrator is a statically-linked Go binary that:
+#   - Listens on TCP :9000 (HTTP)
+#   - Connects to PostgreSQL (TCP)
+#   - Reads /scenarios/ and /wwwroot/ (read-only bind mounts)
+#   - Makes outbound HTTPS requests (ART atomics fetch; disable for air-gap)
+#   - Writes logs to stdout (captured by Docker json-file driver)
+
+#include <tunables/global>
+
+profile bas-orchestrator flags=(attach_disconnected, mediate_deleted) {
+
+  # ── Base abstractions ────────────────────────────────────────────────────────
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+  #include <abstractions/ssl_certs>
+
+  # ── Binary ───────────────────────────────────────────────────────────────────
+  /bas-orchestrator     mrix,
+  /usr/local/bin/**     mrix,
+
+  # ── Filesystem reads ─────────────────────────────────────────────────────────
+  /scenarios/**         r,
+  /wwwroot/**           r,
+  /art-atomics/**       r,
+
+  /etc/ssl/**           r,
+  /etc/ca-certificates/** r,
+  /usr/share/ca-certificates/** r,
+  /etc/resolv.conf      r,
+  /etc/nsswitch.conf    r,
+  /etc/hosts            r,
+  /etc/hostname         r,
+  /etc/localtime        r,
+  /proc/sys/kernel/random/uuid r,
+
+  # ── Temp files (scenario runner scratch space) ────────────────────────────────
+  /tmp/**               rw,
+  /var/tmp/**           rw,
+
+  # ── Proc (Go runtime needs these) ─────────────────────────────────────────────
+  /proc/sys/net/core/somaxconn r,
+  /proc/sys/kernel/pid_max     r,
+  /proc/cpuinfo                r,
+  /proc/meminfo                r,
+  /proc/@{pid}/maps            r,
+  /proc/@{pid}/status          r,
+  /proc/@{pid}/fd/             r,
+
+  # ── Networking ────────────────────────────────────────────────────────────────
+  # HTTP server + PostgreSQL client + outbound HTTPS (ART fetch)
+  network tcp,
+  network udp,
+
+  # ── Capabilities ─────────────────────────────────────────────────────────────
+  # net_bind_service: bind to port < 1024 (not strictly needed for :9000 but future-proof)
+  capability net_bind_service,
+
+  # ── Explicit denies ───────────────────────────────────────────────────────────
+  # Prevent writing to host system paths or other container mounts
+  deny /etc/passwd      w,
+  deny /etc/shadow      w,
+  deny /etc/sudoers     w,
+  deny /etc/sudoers.d/  w,
+  deny /boot/**         rwx,
+  deny /sys/**          w,
+  deny /proc/sysrq-trigger w,
+  deny /proc/sys/kernel/core_pattern w,
+  deny @{PROC}/sys/kernel/shmmax w,
+
+  # Prevent loading kernel modules
+  deny /proc/sys/kernel/modprobe w,
+
+  # ── Signals ───────────────────────────────────────────────────────────────────
+  signal (receive) peer=unconfined,
+  signal (send) peer=bas-orchestrator,
+}

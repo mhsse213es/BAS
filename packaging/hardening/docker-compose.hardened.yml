@@ -1,0 +1,28 @@
+version: "3.9"
+
+# Hardening overlay — apply AFTER harden.sh has installed the AppArmor profile.
+# Usage:
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.prod.yml \
+#                  -f docker-compose.hardened.yml \
+#                  up -d
+#
+# Prerequisites:
+#   sudo bash packaging/hardening/harden.sh --apply
+#   (installs and enforces the bas-orchestrator AppArmor profile)
+
+services:
+
+  orchestrator:
+    security_opt:
+      - no-new-privileges:true          # prevent SUID escalation
+      - apparmor:bas-orchestrator       # custom profile (installed by harden.sh)
+    read_only: true                     # container root filesystem is read-only
+    tmpfs:
+      - /tmp:size=128m,mode=1777        # orchestrator needs /tmp for scratch
+
+  postgres:
+    security_opt:
+      - no-new-privileges:true
+      - apparmor:docker-default         # built-in Docker profile
+    # postgres needs a writable filesystem — read_only not applied here
