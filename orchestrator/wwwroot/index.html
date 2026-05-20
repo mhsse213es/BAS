@@ -617,14 +617,14 @@ code {
             <div class="kpi-sub" id="kpi-agents-sub">of 0 registered</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Latest Risk Score</div>
+            <div class="kpi-label">Prevention Score</div>
             <div class="kpi-value" id="kpi-score-val">—</div>
             <div class="kpi-sub" id="kpi-score-sub">no runs yet</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">Prevention Effectiveness</div>
+            <div class="kpi-label">Exposure Score</div>
             <div class="kpi-value" id="kpi-prev-val">—</div>
-            <div class="kpi-sub" id="kpi-prev-sub">from latest run</div>
+            <div class="kpi-sub" id="kpi-prev-sub">tactic-weighted risk</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">Total Runs</div>
@@ -1000,12 +1000,24 @@ function loadRuns() {
       var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
       var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : '—';
       var scoreHtml = '—';
-      if (r.score && typeof r.score.riskScore !== 'undefined') {
-        var cls = r.score.classification || '';
-        var col = cls === 'Protected' ? 'var(--success)' : cls === 'Low Risk' ? '#3fb950' :
-                  cls === 'Medium Risk' ? 'var(--warning)' : cls === 'High Risk' ? '#e5534b' : 'var(--danger)';
-        scoreHtml = '<span style="font-weight:600;color:' + col + '">' + r.score.riskScore + '</span>' +
-                    '<span style="color:var(--muted);font-size:0.72rem;margin-left:0.3rem">' + x(cls) + '</span>';
+      if (r.score && typeof r.score.preventionScore !== 'undefined') {
+        var prevPct = Math.round(r.score.preventionScore || 0);
+        var expVal  = Math.round(r.score.exposureScore || 0);
+        var cls     = r.score.classification || '';
+        var prevCol = prevPct >= 80 ? 'var(--success)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+        var expCol  = expVal  <= 20 ? 'var(--success)' : expVal  <= 50 ? 'var(--warning)' : 'var(--danger)';
+        var trend   = r.score.trend || '';
+        var trendBadge = trend === 'Improving' ? '<span style="color:var(--success);font-size:0.65rem;margin-left:0.3rem">↑</span>' :
+                         trend === 'Degrading' ? '<span style="color:var(--danger);font-size:0.65rem;margin-left:0.3rem">↓</span>' : '';
+        scoreHtml = '<span style="font-weight:600;color:' + prevCol + '">' + prevPct + '%</span>' +
+                    '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.2rem">prev</span>' +
+                    '<span style="color:' + expCol + ';font-size:0.72rem;margin-left:0.45rem">exp:' + expVal + '</span>' +
+                    trendBadge;
+      } else if (r.score && typeof r.score.riskScore !== 'undefined') {
+        var cls2 = r.score.classification || '';
+        var col2 = cls2 === 'Protected' ? 'var(--success)' : cls2 === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
+        scoreHtml = '<span style="font-weight:600;color:' + col2 + '">' + r.score.riskScore + '</span>' +
+                    '<span style="color:var(--muted);font-size:0.72rem;margin-left:0.3rem">' + x(cls2) + '</span>';
       }
       return '<tr>' +
         '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
@@ -1054,25 +1066,76 @@ function viewRunResults(run) {
     ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>';
 
   var scorePanel = '';
-  if (run.score && typeof run.score.riskScore !== 'undefined') {
+  if (run.score && typeof run.score.preventionScore !== 'undefined') {
     var s = run.score;
-    var scol = s.classification === 'Protected' ? 'var(--success)' : s.classification === 'Low Risk' ? '#3fb950' :
-               s.classification === 'Medium Risk' ? 'var(--warning)' : s.classification === 'High Risk' ? '#e5534b' : 'var(--danger)';
-    scorePanel = '<div style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0.75rem 1rem;margin-bottom:1rem;display:grid;grid-template-columns:repeat(3,1fr);gap:0.6rem 1rem;font-size:0.78rem">' +
-      '<div><div style="color:var(--muted);font-size:0.63rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Risk Score</div>' +
-        '<span style="font-size:1.35rem;font-weight:700;color:' + scol + '">' + s.riskScore + '</span>' +
-        '<span style="color:' + scol + ';font-size:0.75rem;margin-left:0.3rem">' + x(s.classification) + '</span></div>' +
-      '<div><div style="color:var(--muted);font-size:0.63rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Prevention Eff.</div>' +
-        '<span style="font-size:1rem;font-weight:600;color:var(--success)">' + s.preventionEffectiveness + '%</span></div>' +
-      '<div><div style="color:var(--muted);font-size:0.63rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Confidence</div>' +
-        '<span style="font-size:1rem;font-weight:600">' + s.confidence + '%</span></div>' +
-      '<div><div style="color:var(--muted);font-size:0.63rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Attack Progression</div>' +
-        '<span style="font-size:1rem;font-weight:600;color:var(--danger)">' + s.attackProgression + '%</span></div>' +
-      '<div><div style="color:var(--muted);font-size:0.63rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Blast Radius</div>' +
-        '<span style="font-size:1rem;font-weight:600;color:var(--warning)">' + s.blastRadius + '%</span></div>' +
-      '<div><div style="color:var(--muted);font-size:0.63rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.15rem">Detection</div>' +
-        '<span style="font-size:1rem;font-weight:600">' + s.detectionTiming + '%</span></div>' +
+    var prevPct = Math.round(s.preventionScore || 0);
+    var expVal  = Math.round(s.exposureScore || 0);
+    var covPct  = Math.round(s.coverageScore || 0);
+    var amp     = (s.killChainAmplifier || 1).toFixed(1);
+    var trend   = s.trend || 'Baseline';
+    var cls     = s.classification || '';
+
+    var prevCol = prevPct >= 80 ? 'var(--success)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    var expCol  = expVal  <= 20 ? 'var(--success)' : expVal  <= 50 ? 'var(--warning)' : 'var(--danger)';
+    var covCol  = covPct  >= 80 ? 'var(--success)' : covPct  >= 50 ? 'var(--warning)' : 'var(--danger)';
+    var trendCol = trend === 'Improving' ? 'var(--success)' :
+                   trend === 'Degrading' ? 'var(--danger)' :
+                   trend === 'Stable'    ? 'var(--warning)' : 'var(--muted)';
+    var trendIcon = trend === 'Improving' ? '↑' : trend === 'Degrading' ? '↓' : trend === 'Stable' ? '→' : '◎';
+
+    var dimStyle = 'background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.6rem 0.75rem;';
+    var labelStyle = 'color:var(--muted);font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:0.2rem';
+    var bigStyle = 'font-size:1.4rem;font-weight:700;line-height:1.1';
+    var subStyle = 'font-size:0.68rem;color:var(--muted);margin-top:0.1rem';
+
+    scorePanel =
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.75rem">' +
+        '<div style="' + dimStyle + '">' +
+          '<div style="' + labelStyle + '">Prevention</div>' +
+          '<div style="' + bigStyle + ';color:' + prevCol + '">' + prevPct + '%</div>' +
+          '<div style="' + subStyle + '">' + x(cls) + '</div>' +
+        '</div>' +
+        '<div style="' + dimStyle + '">' +
+          '<div style="' + labelStyle + '">Exposure</div>' +
+          '<div style="' + bigStyle + ';color:' + expCol + '">' + expVal + '</div>' +
+          '<div style="' + subStyle + '">×' + amp + ' kill-chain</div>' +
+        '</div>' +
+        '<div style="' + dimStyle + '">' +
+          '<div style="' + labelStyle + '">Tactic Coverage</div>' +
+          '<div style="' + bigStyle + ';color:' + covCol + '">' + covPct + '%</div>' +
+          '<div style="' + subStyle + '">tactics with no fail</div>' +
+        '</div>' +
+        '<div style="' + dimStyle + '">' +
+          '<div style="' + labelStyle + '">Trend</div>' +
+          '<div style="' + bigStyle + ';color:' + trendCol + '">' + trendIcon + ' ' + trend + '</div>' +
+          '<div style="' + subStyle + '">vs prior run</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0.4rem 0.75rem;margin-bottom:0.75rem;font-size:0.72rem;color:var(--muted);display:flex;gap:1.25rem;flex-wrap:wrap">' +
+        '<span>Total: <strong style="color:var(--text)">' + (s.totalTechniques || 0) + '</strong></span>' +
+        '<span style="color:var(--success)">Pass: <strong>' + (s.passedTechniques || 0) + '</strong></span>' +
+        '<span style="color:var(--danger)">Fail: <strong>' + (s.failedTechniques || 0) + '</strong></span>' +
+        '<span>Confidence: <strong style="color:var(--text)">' + (s.confidence || 0) + '%</strong></span>' +
+        (s.previousPreventionScore ? '<span>Prev Prevention: <strong>' + Math.round(s.previousPreventionScore) + '%</strong></span>' : '') +
       '</div>';
+
+    // Critical failures alert
+    var cf = s.criticalFailures || [];
+    if (cf.length > 0) {
+      scorePanel +=
+        '<div style="background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.35);border-radius:3px;padding:0.5rem 0.75rem;margin-bottom:0.75rem">' +
+          '<div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--danger);margin-bottom:0.35rem">⚠ ' + cf.length + ' Critical Failure' + (cf.length > 1 ? 's' : '') + '</div>' +
+          cf.map(function(f) {
+            var sc = f.severity === 'Critical' ? 'var(--danger)' : '#e5534b';
+            return '<div style="display:flex;align-items:baseline;gap:0.5rem;padding:0.2rem 0;font-size:0.75rem;border-bottom:1px solid rgba(218,54,51,0.15)">' +
+              '<span style="color:' + sc + ';font-weight:700;font-size:0.65rem;min-width:50px">' + x(f.severity) + '</span>' +
+              (f.techniqueId ? '<code style="font-size:0.65rem;color:var(--muted)">' + x(f.techniqueId) + '</code>' : '') +
+              '<span>' + x(f.name || '') + '</span>' +
+              '<span style="color:var(--muted);font-size:0.68rem;margin-left:auto">' + x(f.tactic || '') + '</span>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+    }
   }
 
   var byTactic = {};
@@ -1294,17 +1357,20 @@ function loadDashboard() {
     document.getElementById('kpi-agents-sub').textContent = 'of ' + ag.length + ' registered';
 
     // KPI — Latest score
-    var scored = runs.filter(function(r) { return r.score && r.score.riskScore != null; });
+    var scored = runs.filter(function(r) { return r.score && (r.score.preventionScore != null || r.score.riskScore != null); });
     if (scored.length) {
       var s = scored[0].score;
-      var scol = s.classification === 'Protected' ? 'var(--success)' :
-                 s.classification === 'Low Risk' ? '#3fb950' :
-                 s.classification === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
-      document.getElementById('kpi-score-val').textContent = s.riskScore;
-      document.getElementById('kpi-score-val').style.color = scol;
-      document.getElementById('kpi-score-sub').textContent = s.classification || '';
-      document.getElementById('kpi-prev-val').textContent = s.preventionEffectiveness + '%';
-      document.getElementById('kpi-prev-sub').textContent = 'from latest run';
+      var prevPct = Math.round(s.preventionScore != null ? s.preventionScore : s.preventionEffectiveness || 0);
+      var prevCol = prevPct >= 80 ? 'var(--success)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+      var trendStr = s.trend ? ' · ' + s.trend : '';
+      document.getElementById('kpi-score-val').textContent = prevPct + '%';
+      document.getElementById('kpi-score-val').style.color = prevCol;
+      document.getElementById('kpi-score-sub').textContent = (s.classification || '') + trendStr;
+      var expVal = Math.round(s.exposureScore != null ? s.exposureScore : s.riskScore || 0);
+      var expCol = expVal <= 20 ? 'var(--success)' : expVal <= 50 ? 'var(--warning)' : 'var(--danger)';
+      document.getElementById('kpi-prev-val').textContent = expVal;
+      document.getElementById('kpi-prev-val').style.color = expCol;
+      document.getElementById('kpi-prev-sub').textContent = 'exposure score';
     }
 
     // KPI — Runs
@@ -1321,10 +1387,18 @@ function loadDashboard() {
       rrEl.innerHTML = recent.map(function(r) {
         var cnt = (r.results || []).length;
         var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
-        var scoreStr = (r.score && r.score.riskScore != null) ? r.score.riskScore : '—';
-        var scol = (r.score && r.score.classification) === 'Protected' ? 'var(--success)' :
-                   (r.score && r.score.classification) === 'Medium Risk' ? 'var(--warning)' :
-                   (r.score && r.score.classification) === 'High Risk' ? 'var(--danger)' : 'var(--text-dim)';
+        var scoreStr = '—';
+        var scol = 'var(--text-dim)';
+        if (r.score && r.score.preventionScore != null) {
+          var pp = Math.round(r.score.preventionScore);
+          var ta = r.score.trend === 'Improving' ? ' ↑' : r.score.trend === 'Degrading' ? ' ↓' : '';
+          scoreStr = pp + '%' + ta;
+          scol = pp >= 80 ? 'var(--success)' : pp >= 50 ? 'var(--warning)' : 'var(--danger)';
+        } else if (r.score && r.score.riskScore != null) {
+          scoreStr = r.score.riskScore;
+          scol = r.score.classification === 'Protected' ? 'var(--success)' :
+                 r.score.classification === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
+        }
         return '<div class="dash-run-row">' +
           '<span class="sbadge s-' + x(r.status) + '" style="flex-shrink:0">' + x(r.status) + '</span>' +
           '<span class="dash-run-name">' + x(r.name) + '</span>' +

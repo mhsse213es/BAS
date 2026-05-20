@@ -55,17 +55,45 @@ type ScenarioRun struct {
 	CompletedAt *time.Time         `json:"completedAt,omitempty"`
 }
 
-// Score is the computed risk assessment for a scenario run.
+// TacticScore holds per-tactic pass/fail breakdown.
+type TacticScore struct {
+	Tactic  string `json:"tactic"`
+	Passed  int    `json:"passed"`
+	Failed  int    `json:"failed"`
+	Total   int    `json:"total"`
+	PassPct int    `json:"passPct"` // 0–100
+}
+
+// CriticalFailure surfaces a high-severity technique that the attacker won.
+type CriticalFailure struct {
+	TechniqueID string `json:"techniqueId"`
+	Name        string `json:"name"`
+	Tactic      string `json:"tactic"`
+	Severity    string `json:"severity"`
+}
+
+// Score is the multi-dimensional risk assessment for a scenario run.
 type Score struct {
-	RiskScore               int    `json:"riskScore"`               // 0–100; higher = more risk
+	// ── Primary dimensions ────────────────────────────────────────────────────
+	PreventionScore         float64                `json:"preventionScore"`         // 0–100, higher=better: weighted pass rate
+	ExposureScore           float64                `json:"exposureScore"`           // 0–100, higher=worse: tactic-weighted fail rate
+	CoverageScore           float64                `json:"coverageScore"`           // 0–100, higher=better: % tactics with zero fails
+	KillChainAmplifier      float64                `json:"killChainAmplifier"`      // 1.0–2.5: consecutive kill-chain failures multiplier
+	Trend                   string                 `json:"trend"`                   // Improving | Degrading | Stable | Baseline
+	PreviousPreventionScore float64                `json:"previousPreventionScore"` // prevention score of prior run (0 if Baseline)
+	TacticBreakdown         map[string]TacticScore `json:"tacticBreakdown"`         // per-tactic pass/fail counts
+	CriticalFailures        []CriticalFailure      `json:"criticalFailures"`        // Critical/High severity fails, shown prominently
+
+	// ── Aggregate counts ─────────────────────────────────────────────────────
+	TotalTechniques  int `json:"totalTechniques"`
+	PassedTechniques int `json:"passedTechniques"`
+	FailedTechniques int `json:"failedTechniques"`
+
+	// ── Legacy / backward-compat fields ──────────────────────────────────────
+	RiskScore               int    `json:"riskScore"`               // = round(ExposureScore * amplifier), clamped 0–100
 	Classification          string `json:"classification"`          // Protected | Low Risk | Medium Risk | High Risk | Critical
-	Confidence              int    `json:"confidence"`              // % of steps that produced a result (not skipped)
-	ExecutionReliability    int    `json:"executionReliability"`    // same as Confidence
-	AttackProgression       int    `json:"attackProgression"`       // % of ATT&CK tactics reached by failed steps
-	ObjectiveSuccess        int    `json:"objectiveSuccess"`        // % of executed steps the attacker won
-	DetectionTiming         int    `json:"detectionTiming"`         // % of executed steps that generated Windows events
-	BlastRadius             int    `json:"blastRadius"`             // % of ATT&CK tactics touched (any result)
-	PreventionEffectiveness int    `json:"preventionEffectiveness"` // % of executed steps that were blocked/passed
+	Confidence              int    `json:"confidence"`              // % of non-skipped results
+	PreventionEffectiveness int    `json:"preventionEffectiveness"` // = round(PreventionScore)
 }
 
 // Agent represents a registered endpoint.

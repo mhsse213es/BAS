@@ -357,7 +357,23 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(allResultsJSON, &allResults)
 	}
 	if len(allResults) > 0 {
-		score := models.ComputeScore(allResults)
+		// Fetch previous completed run for the same scenario+agent to compute Trend.
+		var prevScoreJSON []byte
+		h.db.QueryRow(r.Context(),
+			`SELECT score FROM scenario_runs
+			 WHERE scenario_id = $1 AND agent_id = $2 AND id != $3
+			   AND status IN ('completed','partial') AND score IS NOT NULL
+			 ORDER BY completed_at DESC LIMIT 1`,
+			raw.ScenarioID, raw.AgentID, raw.RunID,
+		).Scan(&prevScoreJSON)
+		var prevScore *models.Score
+		if len(prevScoreJSON) > 0 {
+			var ps models.Score
+			if json.Unmarshal(prevScoreJSON, &ps) == nil {
+				prevScore = &ps
+			}
+		}
+		score := models.ComputeScore(allResults, prevScore)
 		scoreJSON, _ := json.Marshal(score)
 		h.db.Exec(r.Context(),
 			`UPDATE scenario_runs SET score = $1 WHERE id = $2`, scoreJSON, raw.RunID)

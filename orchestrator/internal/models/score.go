@@ -1,100 +1,225 @@
 package models
 
-// ComputeScore derives a risk Score from a slice of SimulationResults.
+import "math"
+
+// killChainTactics is the ordered ATT&CK kill-chain path used for amplification.
+// Consecutive failures in this sequence amplify the Exposure Score.
+var killChainTactics = []string{
+	"initial-access", "execution", "persistence",
+	"privilege-escalation", "defense-evasion", "credential-access",
+	"lateral-movement", "collection", "exfiltration",
+}
+
+// tacticExposureWeight returns the tactic-level weight for Exposure Score.
+// Mirrors the severity tiers defined in Severity(tactic).
+func tacticExposureWeight(tactic string) float64 {
+	switch tactic {
+	case "credential-access", "lateral-movement", "privilege-escalation":
+		return 4
+	case "persistence", "defense-evasion", "execution",
+		"command-and-control", "impact", "exfiltration", "collection":
+		return 3
+	case "initial-access":
+		return 2
+	default:
+		return 1
+	}
+}
+
+// ComputeScore derives a multi-dimensional Score from SimulationResults.
 //
-// Severity-weighted risk formula:
-//   - Each result is weighted by severity (Critical=4, High=3, Medium=2, Low=1)
-//   - RiskScore = (weighted failed steps / weighted executed steps) * 100
-//   - Higher RiskScore = attacker got through more = worse posture
-func ComputeScore(results []SimulationResult) Score {
+// Five primary dimensions:
+//   - PreventionScore  — severity-weighted pass rate (higher = safer)
+//   - ExposureScore    — tactic-weighted fail rate, amplified by kill-chain depth
+//   - CoverageScore    — % of tested ATT&CK tactics with zero failures
+//   - KillChainAmplifier — consecutive kill-chain phase failures multiplier
+//   - Trend            — comparison against prev run (Improving/Degrading/Stable/Baseline)
+//
+// Pass prev=nil when no prior run exists; Trend will be "Baseline".
+func ComputeScore(results []SimulationResult, prev *Score) Score {
 	if len(results) == 0 {
-		return Score{}
+		return Score{
+			Trend:            "Baseline",
+			TacticBreakdown:  make(map[string]TacticScore),
+			CriticalFailures: []CriticalFailure{},
+		}
 	}
 
 	var (
 		total    int
-		executed int // non-skipped
-		passed   int // result == pass or blocked
-		failed   int // result == fail
+		executed int
+		passed   int
+		failed   int
 
-		weightedFailed   float64
-		weightedExecuted float64
+		weightedPassed float64
+		weightedTotal  float64
 
-		tacticsFailed  = make(map[string]bool)
-		tacticsAll     = make(map[string]bool)
-		stepsWithEvents int
+		tacticWeightFailed float64
+		tacticWeightTotal  float64
+
+		tacticPassCount = make(map[string]int)
+		tacticFailCount = make(map[string]int)
+		tacticCount     = make(map[string]int)
+
+		criticalFailures []CriticalFailure
 	)
 
 	for _, r := range results {
 		total++
-		if r.Technique.Tactic != "" {
-			tacticsAll[r.Technique.Tactic] = true
-		}
+		tactic := r.Technique.Tactic
+		tw := tacticExposureWeight(tactic)
 
 		if r.Result == ResultSkipped {
 			continue
 		}
 		executed++
 
-		w := float64(severityWeight(r.Severity))
-		weightedExecuted += w
-
-		if len(r.Events) > 0 {
-			stepsWithEvents++
+		sw := float64(severityWeight(r.Severity))
+		weightedTotal += sw
+		if tactic != "" {
+			tacticWeightTotal += tw
+			tacticCount[tactic]++
 		}
 
 		switch r.Result {
 		case ResultPass, ResultBlocked:
 			passed++
+			weightedPassed += sw
+			if tactic != "" {
+				tacticPassCount[tactic]++
+			}
 		case ResultFail:
 			failed++
-			weightedFailed += w
-			if r.Technique.Tactic != "" {
-				tacticsFailed[r.Technique.Tactic] = true
+			if tactic != "" {
+				tacticWeightFailed += tw
+				tacticFailCount[tactic]++
+			}
+			if r.Severity == "Critical" || r.Severity == "High" {
+				criticalFailures = append(criticalFailures, CriticalFailure{
+					TechniqueID: r.Technique.ID,
+					Name:        r.Technique.Name,
+					Tactic:      tactic,
+					Severity:    r.Severity,
+				})
 			}
 		}
 	}
 
-	const totalTactics = 14 // ATT&CK Enterprise tactic count
-
-	riskScore := 0
-	if weightedExecuted > 0 {
-		riskScore = clamp(int(weightedFailed/weightedExecuted*100), 0, 100)
+	// ── Prevention Score (0–100, higher = better) ─────────────────────────────
+	preventionScore := 0.0
+	if weightedTotal > 0 {
+		preventionScore = clampF(weightedPassed/weightedTotal*100, 0, 100)
 	}
 
+	// ── Tactic Breakdown ─────────────────────────────────────────────────────
+	tacticBreakdown := make(map[string]TacticScore)
+	for tactic, cnt := range tacticCount {
+		p := tacticPassCount[tactic]
+		f := tacticFailCount[tactic]
+		passPct := 0
+		if cnt > 0 {
+			passPct = p * 100 / cnt
+		}
+		tacticBreakdown[tactic] = TacticScore{
+			Tactic:  tactic,
+			Passed:  p,
+			Failed:  f,
+			Total:   cnt,
+			PassPct: passPct,
+		}
+	}
+
+	// ── Coverage Score (0–100, higher = better) ───────────────────────────────
+	// A tactic is "covered" when it has been tested and has zero failures.
+	testedTactics := len(tacticCount)
+	coveredTactics := 0
+	for tactic := range tacticCount {
+		if tacticFailCount[tactic] == 0 {
+			coveredTactics++
+		}
+	}
+	coverageScore := 0.0
+	if testedTactics > 0 {
+		coverageScore = clampF(float64(coveredTactics)/float64(testedTactics)*100, 0, 100)
+	}
+
+	// ── Kill Chain Amplifier ──────────────────────────────────────────────────
+	// Find the longest consecutive sequence of kill-chain phase failures.
+	maxConsec := 0
+	consec := 0
+	for _, t := range killChainTactics {
+		if tacticFailCount[t] > 0 {
+			consec++
+			if consec > maxConsec {
+				maxConsec = consec
+			}
+		} else {
+			consec = 0
+		}
+	}
+	amplifier := 1.0
+	switch {
+	case maxConsec >= 5:
+		amplifier = 2.5
+	case maxConsec >= 3:
+		amplifier = 1.8
+	case maxConsec >= 2:
+		amplifier = 1.3
+	}
+
+	// ── Exposure Score (0–100, higher = worse) ───────────────────────────────
+	rawExposure := 0.0
+	if tacticWeightTotal > 0 {
+		rawExposure = tacticWeightFailed / tacticWeightTotal * 100
+	}
+	exposureScore := clampF(rawExposure*amplifier, 0, 100)
+
+	// ── Confidence (% of non-skipped steps) ──────────────────────────────────
 	confidence := 0
 	if total > 0 {
 		confidence = clamp(executed*100/total, 0, 100)
 	}
 
-	preventionEff := 0
-	if executed > 0 {
-		preventionEff = clamp(passed*100/executed, 0, 100)
+	// ── Trend ─────────────────────────────────────────────────────────────────
+	trend := "Baseline"
+	prevPreventionScore := 0.0
+	if prev != nil {
+		prevPreventionScore = prev.PreventionScore
+		delta := preventionScore - prevPreventionScore
+		switch {
+		case delta >= 5:
+			trend = "Improving"
+		case delta <= -5:
+			trend = "Degrading"
+		default:
+			trend = "Stable"
+		}
 	}
 
-	objectiveSuccess := 0
-	if executed > 0 {
-		objectiveSuccess = clamp(failed*100/executed, 0, 100)
+	if criticalFailures == nil {
+		criticalFailures = []CriticalFailure{}
 	}
 
-	attackProgression := clamp(len(tacticsFailed)*100/totalTactics, 0, 100)
-	blastRadius := clamp(len(tacticsAll)*100/totalTactics, 0, 100)
-
-	detectionTiming := 0
-	if executed > 0 {
-		detectionTiming = clamp(stepsWithEvents*100/executed, 0, 100)
-	}
+	riskScore := clamp(int(math.Round(exposureScore)), 0, 100)
 
 	return Score{
+		PreventionScore:         preventionScore,
+		ExposureScore:           rawExposure,
+		CoverageScore:           coverageScore,
+		KillChainAmplifier:      amplifier,
+		Trend:                   trend,
+		PreviousPreventionScore: prevPreventionScore,
+		TacticBreakdown:         tacticBreakdown,
+		CriticalFailures:        criticalFailures,
+
+		TotalTechniques:  total,
+		PassedTechniques: passed,
+		FailedTechniques: failed,
+
 		RiskScore:               riskScore,
 		Classification:          classify(riskScore),
 		Confidence:              confidence,
-		ExecutionReliability:    confidence,
-		AttackProgression:       attackProgression,
-		ObjectiveSuccess:        objectiveSuccess,
-		DetectionTiming:         detectionTiming,
-		BlastRadius:             blastRadius,
-		PreventionEffectiveness: preventionEff,
+		PreventionEffectiveness: clamp(int(math.Round(preventionScore)), 0, 100),
 	}
 }
 
@@ -127,6 +252,16 @@ func classify(riskScore int) string {
 }
 
 func clamp(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+func clampF(v, min, max float64) float64 {
 	if v < min {
 		return min
 	}
