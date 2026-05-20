@@ -1,0 +1,18 @@
+[Unit]
+Description=BAS Platform Boot Integrity Verification (TPM2 PCR check)
+Documentation=https://github.com/audspect/bas
+After=clevis-luks-askpass.service multi-user.target
+Wants=clevis-luks-askpass.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/bas-tpm-verify
+StandardOutput=journal
+StandardError=journal
+
+# Alert via wall if boot integrity check fails
+ExecStartPost=/usr/local/sbin/bas-tpm-alert
+
+[Install]
+WantedBy=multi-user.target
