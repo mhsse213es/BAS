@@ -9,7 +9,7 @@ global:
 # ── Orchestrator (Go) ─────────────────────────────────────────────────────────
 orchestrator:
   image: bas-orchestrator
-  tag: "1.2.0"
+  tag: "1.2.1"
   replicas: 1
   port: 9000
   nodePort: 32090
