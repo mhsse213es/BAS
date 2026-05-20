@@ -105,6 +105,17 @@ CHECKSUM="${TARBALL}.sha256"
 sha256sum "${TARBALL}" > "${CHECKSUM}" 2>/dev/null || \
   shasum -a 256 "${TARBALL}" > "${CHECKSUM}"
 
+# ── 6. Sign bundle if signing key is available ────────────────────────────────
+SIGN_SCRIPT="${REPO_ROOT}/packaging/signing/sign.sh"
+SIGNING_KEY_EMAIL="releases@audspect.com"
+if command -v gpg &>/dev/null && gpg --list-secret-keys "${SIGNING_KEY_EMAIL}" &>/dev/null 2>&1; then
+  log "Signing bundle with GPG key ${SIGNING_KEY_EMAIL}..."
+  bash "${SIGN_SCRIPT}" "${TARBALL}"
+else
+  warn "GPG signing key not found — bundle is unsigned."
+  echo "  To sign: bash packaging/signing/keygen.sh && bash packaging/signing/sign.sh ${TARBALL}"
+fi
+
 log "Done."
 echo ""
 echo "  Package:   ${TARBALL}"

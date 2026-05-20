@@ -1,0 +1,5 @@
+# Never commit private signing keys
+cosign.key
+*-PRIVATE.asc
+*.p12
+*.pfx

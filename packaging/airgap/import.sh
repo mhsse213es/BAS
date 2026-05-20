@@ -52,6 +52,27 @@ if ! docker info &>/dev/null; then
   exit 1
 fi
 
+# ── Signature verification (if .asc present) ──────────────────────────────────
+SIGFILE="${TARBALL}.asc"
+VERIFY_SIG_SCRIPT="$(dirname "$0")/../signing/verify-sig.sh"
+# Also check same-dir placement (when distributed as part of a bundle-tools package)
+[[ ! -f "$VERIFY_SIG_SCRIPT" ]] && VERIFY_SIG_SCRIPT="$(dirname "$0")/verify-sig.sh"
+
+if [[ -f "$SIGFILE" ]]; then
+  if [[ -f "$VERIFY_SIG_SCRIPT" ]]; then
+    log "GPG signature found — verifying before import..."
+    if ! bash "$VERIFY_SIG_SCRIPT" "$TARBALL"; then
+      err "Signature verification failed. Import aborted."
+      exit 1
+    fi
+  else
+    warn ".asc signature file found but verify-sig.sh not available — skipping GPG check."
+  fi
+else
+  warn "No GPG signature (.asc) found — proceeding without signature verification."
+  warn "For production deployments, always verify signatures. See packaging/signing/."
+fi
+
 # ── Extract bundle ─────────────────────────────────────────────────────────────
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT

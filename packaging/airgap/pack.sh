@@ -120,11 +120,23 @@ sha256sum "${TARBALL}" > "${CHECKSUM}" 2>/dev/null || \
 
 BUNDLE_SIZE=$(du -sh "${TARBALL}" | cut -f1)
 
+# ── 8. Sign bundle if signing key is present ───────────────────────────────────
+SIGN_SCRIPT="${REPO_ROOT}/packaging/signing/sign.sh"
+SIGNING_KEY_EMAIL="releases@audspect.com"
+if command -v gpg &>/dev/null && gpg --list-secret-keys "${SIGNING_KEY_EMAIL}" &>/dev/null 2>&1; then
+  log "Signing bundle with GPG key ${SIGNING_KEY_EMAIL}..."
+  bash "${SIGN_SCRIPT}" "${TARBALL}"
+else
+  warn "GPG signing key not found — bundle is unsigned."
+  echo "  To sign: bash packaging/signing/keygen.sh && bash packaging/signing/sign.sh ${TARBALL}"
+fi
+
 log "Done."
 echo ""
 echo "  Bundle:    ${TARBALL}  (${BUNDLE_SIZE})"
 echo "  Checksum:  ${CHECKSUM}"
 echo ""
-echo "  Transfer both files to the air-gapped server, then run:"
+echo "  Transfer bundle + .sha256 + .asc (if signed) to the air-gapped server, then run:"
+echo "    bash verify-sig.sh bas-airgap-${VERSION}.tar.gz   # if signed"
 echo "    bash verify.sh bas-airgap-${VERSION}.tar.gz"
 echo "    sudo bash import.sh bas-airgap-${VERSION}.tar.gz"
