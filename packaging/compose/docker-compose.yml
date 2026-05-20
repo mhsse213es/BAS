@@ -1,0 +1,64 @@
+version: "3.9"
+
+# BAS Platform — Docker Compose (SMB / single-server tier)
+# Generated .env file required — run setup.sh to create it.
+
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: bas-postgres
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-bas_platform}
+      POSTGRES_USER:     ${POSTGRES_USER:-bas_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - bas-postgres-data:/var/lib/postgresql/data
+    networks:
+      - bas-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bas_user} -d ${POSTGRES_DB:-bas_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── BAS Orchestrator ─────────────────────────────────────────────────────────
+  orchestrator:
+    image: ${REGISTRY:-}bas-orchestrator:${BAS_VERSION:-latest}
+    container_name: bas-orchestrator
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=disable"
+      JWT_SECRET:    ${JWT_SECRET}
+      AGENT_SECRET:  ${AGENT_SECRET:-}
+      HTTP_PORT:     "9000"
+      SCENARIOS_DIR: /scenarios
+      ART_DIR:       /art-atomics
+    volumes:
+      - ./scenarios:/scenarios:ro
+      - ./wwwroot:/wwwroot:ro
+    ports:
+      - "${DASHBOARD_PORT:-9000}:9000"
+    networks:
+      - bas-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  bas-internal:
+    driver: bridge
+    internal: false   # orchestrator needs outbound for ART sparse-clone (set true for air-gap)
+
+volumes:
+  bas-postgres-data:
+    driver: local
