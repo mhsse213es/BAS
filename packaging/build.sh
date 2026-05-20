@@ -85,8 +85,6 @@ if command -v docker &>/dev/null; then
     "${REPO_ROOT}"
 
   log "Exporting Docker image to bundle..."
-  docker save "bas-orchestrator:${VERSION}" \
-    | gzip > "${BUILD_DIR}/images/bas-orchestrator-${VERSION}.tar.gz"
   mkdir -p "${BUILD_DIR}/images"
   docker save "bas-orchestrator:${VERSION}" \
     | gzip > "${BUILD_DIR}/images/bas-orchestrator-${VERSION}.tar.gz"

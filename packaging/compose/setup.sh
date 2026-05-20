@@ -13,6 +13,9 @@ readonly MIN_DISK_MB=5120
 readonly SERVICE_NAME="bas-compose"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Set by --offline flag; skips docker pull (images already loaded)
+OFFLINE=false
+
 # ── Colours (only when stdout is a terminal) ───────────────────────────────────
 if [ -t 1 ]; then
   RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -353,12 +356,17 @@ EOF
     chmod 600 "${INSTALL_DIR}/.env.admin-seed"
     sleep 0.3
 
-    # Step 6 — Pull Docker images
+    # Step 6 — Pull Docker images (skipped in offline/air-gap mode)
     echo 50
-    echo "# Pulling Docker images (this may take a few minutes)..."
-    cd "${INSTALL_DIR}"
-    docker compose -f docker-compose.yml pull --quiet 2>>"$progress_log" || true
-    sleep 0.5
+    if [[ "$OFFLINE" == "true" ]]; then
+      echo "# Offline mode — skipping image pull (images pre-loaded)..."
+      sleep 0.3
+    else
+      echo "# Pulling Docker images (this may take a few minutes)..."
+      cd "${INSTALL_DIR}"
+      docker compose -f docker-compose.yml pull --quiet 2>>"$progress_log" || true
+      sleep 0.5
+    fi
 
     # Step 7 — Install systemd service
     echo 75
@@ -425,6 +433,13 @@ Press OK to exit the installer." 22 70
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 main() {
+  # Parse flags
+  for arg in "$@"; do
+    case "$arg" in
+      --offline) OFFLINE=true ;;
+    esac
+  done
+
   require_root
   ensure_whiptail
 
