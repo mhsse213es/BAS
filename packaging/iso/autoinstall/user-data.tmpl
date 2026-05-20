@@ -1,0 +1,245 @@
+#cloud-config
+autoinstall:
+  version: 1
+
+  locale: en_IN.UTF-8
+
+  keyboard:
+    layout: us
+
+  # Network — DHCP on any interface found (first-boot can be reconfigured)
+  network:
+    network:
+      version: 2
+      ethernets:
+        any-nic:
+          match:
+            name: "en*"
+          dhcp4: true
+          dhcp6: false
+
+  # ── Storage: LUKS + LVM (full layout) ──────────────────────────────────────
+  # %%LUKS_PASSPHRASE%% is substituted by build-iso.sh at build time.
+  # For --no-luks builds, build-iso.sh strips the dm_crypt block.
+  storage:
+    config:
+      # Target the largest available disk
+      - type: disk
+        id: disk0
+        match:
+          size: largest
+        ptable: gpt
+        wipe: superblock-recursive
+        grub_device: false
+        preserve: false
+
+      # EFI System Partition (UEFI boot)
+      - type: partition
+        id: efi-part
+        device: disk0
+        size: 512M
+        flag: boot
+        grub_device: false
+        preserve: false
+
+      # /boot (outside LUKS — GRUB must read kernel without decryption)
+      - type: partition
+        id: boot-part
+        device: disk0
+        size: 1G
+        preserve: false
+
+      # Encrypted partition — rest of disk
+      - type: partition
+        id: luks-part
+        device: disk0
+        size: -1
+        preserve: false
+
+      # Format EFI as FAT32
+      - type: format
+        id: fmt-efi
+        volume: efi-part
+        fstype: fat32
+        label: EFI
+        preserve: false
+
+      # Format /boot as ext4
+      - type: format
+        id: fmt-boot
+        volume: boot-part
+        fstype: ext4
+        label: boot
+        preserve: false
+
+      # LUKS encryption layer
+      # %%LUKS_PASSPHRASE%% is set by build-iso.sh — change on first boot with:
+      #   sudo cryptsetup luksChangeKey /dev/<partition>
+      - type: dm_crypt
+        id: dm-crypt0
+        volume: luks-part
+        key: "%%LUKS_PASSPHRASE%%"
+        preserve: false
+
+      # LVM volume group on top of LUKS
+      - type: lvm_volgroup
+        id: vg-bas
+        name: vg-bas
+        devices:
+          - dm-crypt0
+        preserve: false
+
+      # Swap (8 GB)
+      - type: lvm_partition
+        id: lv-swap
+        name: swap
+        volgroup: vg-bas
+        size: 8G
+        preserve: false
+
+      # Root — all remaining space
+      - type: lvm_partition
+        id: lv-root
+        name: root
+        volgroup: vg-bas
+        size: -1
+        preserve: false
+
+      # Format swap
+      - type: format
+        id: fmt-swap
+        volume: lv-swap
+        fstype: swap
+        label: swap
+        preserve: false
+
+      # Format root as ext4
+      - type: format
+        id: fmt-root
+        volume: lv-root
+        fstype: ext4
+        label: root
+        preserve: false
+
+      # Mount points
+      - type: mount
+        id: mnt-root
+        device: fmt-root
+        path: /
+
+      - type: mount
+        id: mnt-boot
+        device: fmt-boot
+        path: /boot
+
+      - type: mount
+        id: mnt-efi
+        device: fmt-efi
+        path: /boot/efi
+
+      - type: mount
+        id: mnt-swap
+        device: fmt-swap
+        path: none
+
+  # ── Identity ───────────────────────────────────────────────────────────────
+  identity:
+    hostname: bas-platform
+    username: bas
+    # %%ADMIN_PASS_HASH%% set by build-iso.sh — first-boot wizard sets the real password
+    password: "%%ADMIN_PASS_HASH%%"
+    realname: "BAS Platform"
+
+  # ── SSH ────────────────────────────────────────────────────────────────────
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys: []
+
+  # ── Base packages (Docker installed by post-install.sh) ────────────────────
+  packages:
+    - ca-certificates
+    - curl
+    - wget
+    - gnupg
+    - whiptail
+    - openssl
+    - jq
+    - net-tools
+    - lsb-release
+    - cryptsetup
+    - lvm2
+    - apparmor
+    - apparmor-utils
+    - auditd
+    - ufw
+
+  # ── Late-commands (chrooted into installed system) ─────────────────────────
+  late-commands:
+    # Passwordless sudo for bas user (locked after first-boot wizard)
+    - echo 'bas ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/bas-install
+    - chmod 0440 /target/etc/sudoers.d/bas-install
+
+    # Copy BAS airgap bundle from ISO into installed system (if embedded)
+    - mkdir -p /target/var/tmp
+    - "bash -c 'if [ -f /cdrom/bas-airgap.tar.gz ]; then cp /cdrom/bas-airgap.tar.gz /target/var/tmp/bas-airgap.tar.gz; fi'"
+
+    # Copy post-install script (completes BAS setup on first boot)
+    - mkdir -p /target/opt/bas-install
+    - cp /cdrom/autoinstall/scripts/post-install.sh /target/opt/bas-install/
+    - chmod +x /target/opt/bas-install/post-install.sh
+
+    # Install bas-postinstall systemd service (runs post-install.sh on first boot)
+    - |
+      cat > /target/etc/systemd/system/bas-postinstall.service << 'UNIT'
+      [Unit]
+      Description=BAS Platform Post-Install (Docker + BAS setup)
+      After=network-online.target
+      Wants=network-online.target
+      ConditionPathExists=!/opt/bas-platform/.postinstall-done
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/opt/bas-install/post-install.sh
+      StandardOutput=journal+console
+      StandardError=journal+console
+
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+    - systemctl --root /target enable bas-postinstall.service
+
+    # Write the initial LUKS passphrase reminder file (shown on first login)
+    - mkdir -p /target/root
+    - |
+      cat > /target/root/LUKS-PASSPHRASE.txt << 'KEYEOF'
+      BAS Platform — Initial LUKS Disk Encryption Key
+      ================================================
+      Passphrase: %%LUKS_PASSPHRASE%%
+
+      IMPORTANT: Change this passphrase immediately:
+        sudo cryptsetup luksChangeKey /dev/<encrypted-partition>
+
+      Delete this file after changing the passphrase:
+        sudo shred -u /root/LUKS-PASSPHRASE.txt
+      KEYEOF
+    - chmod 600 /target/root/LUKS-PASSPHRASE.txt
+
+    # Add login message directing admin to the LUKS key file
+    - echo 'cat /root/LUKS-PASSPHRASE.txt 2>/dev/null || true' >> /target/root/.bash_profile
+
+    # Enable AppArmor
+    - systemctl --root /target enable apparmor
+
+    # Enable UFW (BAS + SSH only)
+    - curtin in-target -- ufw default deny incoming
+    - curtin in-target -- ufw default allow outgoing
+    - curtin in-target -- ufw limit 22/tcp
+    - curtin in-target -- ufw --force enable
+
+    # Disable unattended-upgrades during initial setup (post-install will re-enable)
+    - systemctl --root /target disable unattended-upgrades || true
+
+  updates: security
+  shutdown: reboot
