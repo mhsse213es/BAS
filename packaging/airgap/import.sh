@@ -95,8 +95,8 @@ if [[ -f "$MANIFEST" ]]; then
   log "Verifying bundle integrity..."
   FAIL=0
   while IFS= read -r line; do
-    hash="${line%% *}"
-    rel="${line#*  }"; rel="${rel#./}"   # two spaces: sha256sum format is "hash  path"
+    hash=$(awk '{print $1}' <<<"$line")
+    rel=$(awk '{print $2}' <<<"$line"); rel="${rel#\*}"; rel="${rel#./}"
     abs="${BUNDLE_DIR}/${rel}"
     [[ ! -f "$abs" ]] && { err "Missing: $rel"; ((FAIL++)); continue; }
     actual=$(sha256sum "$abs" | cut -d' ' -f1)

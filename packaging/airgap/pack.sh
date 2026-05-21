@@ -103,7 +103,7 @@ MANIFEST="${BUILD_DIR}/MANIFEST.sha256"
 (
   cd "${BUILD_DIR}"
   find . -type f ! -name "MANIFEST.sha256" | sort | while read -r f; do
-    sha256sum "$f"
+    sha256sum "$f" | sed 's/^\([a-f0-9]*\) \*\(.*\)/\1  \2/'
   done
 ) > "${MANIFEST}"
 log "  $(wc -l < "${MANIFEST}") files indexed."
