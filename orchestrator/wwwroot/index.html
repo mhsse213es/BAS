@@ -254,6 +254,25 @@ main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   color: var(--muted); font-weight: 500;
 }
 
+/* ── Agent Download ────────────────────────────────────────── */
+.agent-dl-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin-bottom: 1rem; }
+.agent-dl-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.75rem;
+}
+.agent-dl-os { display: flex; align-items: center; gap: 0.55rem; font-weight: 600; font-size: 0.875rem; color: var(--fg); }
+.agent-dl-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.agent-dl-hint { font-size: 0.73rem; color: var(--muted); }
+.agent-dl-usage {
+  background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 0.65rem 0.9rem; margin-bottom: 0.6rem; font-size: 0.78rem; color: var(--muted);
+}
+.agent-dl-usage strong { color: var(--fg); }
+.agent-dl-usage code {
+  display: block; margin-top: 0.3rem; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem; color: var(--accent); word-break: break-all;
+}
+
 /* ── Tables ────────────────────────────────────────────────── */
 .tbl-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
@@ -672,6 +691,53 @@ code {
               <tr><td colspan="8" class="empty">No agents registered yet.</td></tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Agent Download -->
+        <div class="sec-hdr" style="margin-top:2rem">
+          <h2>Download Agent</h2>
+        </div>
+        <div class="agent-dl-grid">
+          <div class="agent-dl-card">
+            <div class="agent-dl-os">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M20.205 16.392c-.403 1.038-1.261 2.062-2.098 2.587-.547.346-.96.426-1.184.426-.336 0-.567-.14-.826-.28-1.107-.594-2.35-.892-3.598-.89s-2.49.298-3.598.892c-.26.14-.49.28-.826.28-.224 0-.637-.08-1.184-.426-.837-.525-1.694-1.55-2.098-2.587C4.09 14.784 3.75 12.57 3.75 12c0-4.556 3.694-8.25 8.25-8.25s8.25 3.694 8.25 8.25c0 .57-.34 2.784-1.045 4.392zM12 1.5C6.201 1.5 1.5 6.201 1.5 12S6.201 22.5 12 22.5 22.5 17.799 22.5 12 17.799 1.5 12 1.5z"/></svg>
+              Linux
+            </div>
+            <div class="agent-dl-btns">
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64" download>x86_64 (amd64)</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-arm64" download>ARM64</a>
+            </div>
+            <div class="agent-dl-hint">Ubuntu 20.04+, Debian 10+</div>
+          </div>
+          <div class="agent-dl-card">
+            <div class="agent-dl-os">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M3 5.5h8v-2H3v2zm0 5h8v-2H3v2zm0 5h8v-2H3v2zm10-10h8v-2h-8v2zm0 5h8v-2h-8v2zm0 5h8v-2h-8v2z"/></svg>
+              Windows
+            </div>
+            <div class="agent-dl-btns">
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/windows-amd64" download>x86_64 (amd64)</a>
+            </div>
+            <div class="agent-dl-hint">Windows 10/11, Server 2019+</div>
+          </div>
+          <div class="agent-dl-card">
+            <div class="agent-dl-os">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 2c4.418 0 8 3.582 8 8s-3.582 8-8 8-8-3.582-8-8 3.582-8 8-8zm-1 3v5l4 2.5-.75 1.25L9 13V7h2z"/></svg>
+              macOS
+            </div>
+            <div class="agent-dl-btns">
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-amd64" download>Intel (amd64)</a>
+              <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-arm64" download>Apple Silicon</a>
+            </div>
+            <div class="agent-dl-hint">macOS 12+</div>
+          </div>
+        </div>
+        <div class="agent-dl-usage">
+          <strong>Linux/macOS install:</strong>
+          <code>chmod +x bas-agent-* &amp;&amp; sudo ./bas-agent-* --install --server https://&lt;BAS_HOST&gt;:9000 --env Production</code>
+        </div>
+        <div class="agent-dl-usage">
+          <strong>Windows install (Admin PowerShell):</strong>
+          <code>.\bas-agent-windows-amd64.exe --install --server https://&lt;BAS_HOST&gt;:9000 --env Production</code>
         </div>
       </div>
 

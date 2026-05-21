@@ -11,6 +11,17 @@ RUN apk add --no-cache git && \
     mkdir /art-atomics && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 
+# ── Agent Builder (linux/amd64 and linux/arm64) ───────────────────────────────
+FROM golang:1.25-alpine AS agent-builder
+WORKDIR /src
+COPY agent/go.mod agent/go.sum ./
+RUN go mod download
+COPY agent/ .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-amd64 . && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+    go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-arm64 .
+
 # ── Go Orchestrator ──────────────────────────────────────────────────────────
 FROM golang:1.25-alpine AS builder
 WORKDIR /src
@@ -22,6 +33,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/orchestrator /orchestrator
+COPY --from=agent-builder /agents /agents
 COPY orchestrator/wwwroot /wwwroot
 COPY scenarios /scenarios
 COPY --from=art-fetcher /art-atomics /art-atomics

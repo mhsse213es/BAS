@@ -2,7 +2,7 @@
 name: APT36 Spear-Phishing Kill Chain
 description: >
   Simulates APT36 (Transparent Tribe / PROJECTM) TTPs targeting BFSI sector
-  employees in India. APT36 is a Pakistan-nexus threat actor known for
+  employees in India. APT36 is a Nexus threat actor known for
   targeting Indian government, defence, and financial institutions via
   spear-phishing with weaponised Office documents, HTA droppers, and
   CrimsonRAT/ObliqueRAT C2 implants.

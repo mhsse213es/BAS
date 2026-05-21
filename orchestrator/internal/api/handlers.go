@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -158,6 +160,36 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 		agents = []models.Agent{}
 	}
 	respond(w, agents)
+}
+
+// GET /api/agents/download/{platform} — serves the pre-built agent binary for the requested platform.
+// platform values: linux-amd64, linux-arm64, windows-amd64, darwin-amd64, darwin-arm64
+func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
+	platform := chi.URLParam(r, "platform")
+
+	ext := ""
+	if strings.HasPrefix(platform, "windows") {
+		ext = ".exe"
+	}
+	filename := "bas-agent-" + platform + ext
+	filePath := filepath.Join("./agents", filename)
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		jsonError(w, "agent binary not found for platform: "+platform, http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		jsonError(w, "could not stat agent binary", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	http.ServeContent(w, r, filename, stat.ModTime(), f)
 }
 
 // POST /api/heartbeat — called by agents.

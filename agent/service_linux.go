@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -13,8 +14,6 @@ const (
 	configFile = "/etc/bas-agent/config"
 )
 
-// svcInstall copies the binary, writes config, creates the systemd unit,
-// and enables + starts the service. Requires root.
 func svcInstall(serverURL, envLabel string) error {
 	selfPath, err := os.Executable()
 	if err != nil {
@@ -25,7 +24,7 @@ func svcInstall(serverURL, envLabel string) error {
 		return fmt.Errorf("resolve symlink: %w", err)
 	}
 
-	destBin := "/usr/local/bin/bas-agent-linux"
+	destBin := "/usr/local/bin/bas-agent"
 	data, err := os.ReadFile(selfPath)
 	if err != nil {
 		return fmt.Errorf("read binary: %w", err)
@@ -45,7 +44,7 @@ func svcInstall(serverURL, envLabel string) error {
 	fmt.Printf("[+] config written: %s\n", configFile)
 
 	unit := fmt.Sprintf(`[Unit]
-Description=BAS Linux Agent
+Description=BAS Agent
 After=network-online.target
 Wants=network-online.target
 
@@ -80,14 +79,29 @@ WantedBy=multi-user.target
 	return nil
 }
 
-// svcUninstall stops, disables, and removes the systemd unit. Leaves binary and config intact.
 func svcUninstall() error {
 	_ = exec.Command("systemctl", "stop", "bas-agent.service").Run()
 	_ = exec.Command("systemctl", "disable", "bas-agent.service").Run()
 	_ = os.Remove(unitPath)
 	_ = exec.Command("systemctl", "daemon-reload").Run()
 	fmt.Println("[+] bas-agent.service removed.")
-	fmt.Printf("[!] Binary (%s) and config (%s) left in place — remove manually if no longer needed.\n",
-		"/usr/local/bin/bas-agent-linux", configDir)
+	fmt.Printf("[!] Binary and config (%s) left in place — remove manually if no longer needed.\n", configDir)
 	return nil
+}
+
+func readServiceParams() (serverURL, envLabel string) {
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return "", ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "BAS_SERVER_URL=") {
+			serverURL = strings.TrimPrefix(line, "BAS_SERVER_URL=")
+		}
+		if strings.HasPrefix(line, "BAS_ENV_LABEL=") {
+			envLabel = strings.TrimPrefix(line, "BAS_ENV_LABEL=")
+		}
+	}
+	return serverURL, envLabel
 }

@@ -1,3 +1,5 @@
+//go:build linux
+
 package main
 
 import (
@@ -8,8 +10,121 @@ import (
 	"strings"
 )
 
-// RunScenarioChecks returns checks scoped to a specific scenario ID.
-// Falls back to cisUbuntuL1 for unknown IDs.
+// ── Linux System Helpers ──────────────────────────────────────────────────────
+
+func sysctl(key string) string {
+	path := "/proc/sys/" + strings.ReplaceAll(key, ".", "/")
+	data, err := os.ReadFile(path)
+	if err == nil {
+		return strings.TrimSpace(string(data))
+	}
+	out, err := exec.Command("sysctl", "-n", key).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func serviceActive(name string) bool {
+	err := exec.Command("systemctl", "is-active", "--quiet", name).Run()
+	return err == nil
+}
+
+func serviceEnabled(name string) bool {
+	err := exec.Command("systemctl", "is-enabled", "--quiet", name).Run()
+	return err == nil
+}
+
+func sshConfigValue(keyword string) string {
+	result := sshConfigValueInFile("/etc/ssh/sshd_config", keyword)
+	entries, err := os.ReadDir("/etc/ssh/sshd_config.d")
+	if err == nil {
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".conf") {
+				if v := sshConfigValueInFile("/etc/ssh/sshd_config.d/"+e.Name(), keyword); v != "" {
+					result = v
+				}
+			}
+		}
+	}
+	return result
+}
+
+func sshConfigValueInFile(path, keyword string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	result := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && strings.EqualFold(fields[0], keyword) {
+			result = fields[1]
+		}
+	}
+	return result
+}
+
+func mountHasOption(mountpoint, option string) bool {
+	data, err := os.ReadFile("/proc/mounts")
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		if fields[1] == mountpoint {
+			for _, opt := range strings.Split(fields[3], ",") {
+				if opt == option {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func packageInstalled(name string) bool {
+	out, err := exec.Command("dpkg", "-s", name).Output()
+	return err == nil && strings.Contains(string(out), "Status: install ok installed")
+}
+
+func sudoHasOption(option string) bool {
+	if data, err := os.ReadFile("/etc/sudoers"); err == nil {
+		if strings.Contains(string(data), option) {
+			return true
+		}
+	}
+	entries, err := os.ReadDir("/etc/sudoers.d")
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile("/etc/sudoers.d/" + e.Name())
+		if err == nil && strings.Contains(string(data), option) {
+			return true
+		}
+	}
+	return false
+}
+
+// ── All Checks Entry Point ────────────────────────────────────────────────────
+
+func RunAllChecks() []SimCategory {
+	return cisUbuntuL1()
+}
+
+// ── Scenario Checks Entry Point ───────────────────────────────────────────────
+
 func RunScenarioChecks(scenarioID string) []SimCategory {
 	switch scenarioID {
 	case "cis-ubuntu-l1":
@@ -621,11 +736,10 @@ func checkUFWEnabled() SimCheck {
 				}
 				return "fail", "UFW installed but inactive — host firewall disabled. Run: ufw enable."
 			}
-			// UFW not present — check iptables for a non-trivial ruleset
 			iptOut, iptErr := exec.Command("iptables", "-L", "INPUT", "-n", "--line-numbers").Output()
 			if iptErr == nil {
 				lines := strings.Split(strings.TrimSpace(string(iptOut)), "\n")
-				if len(lines) > 3 { // header + Chain + policy + at least one rule
+				if len(lines) > 3 {
 					return "pass", "iptables INPUT rules present — custom firewall active (UFW not installed)."
 				}
 			}
@@ -678,7 +792,6 @@ func checkPasswordMinLen() SimCheck {
 		"Short passwords are quickly cracked by dictionary and brute-force attacks against the system or its hash database.",
 		"Set PASS_MIN_LEN 12 in /etc/login.defs. Also configure: minlen=12 in /etc/security/pwquality.conf.",
 		func() (string, string) {
-			// Check login.defs
 			if data, err := os.ReadFile("/etc/login.defs"); err == nil {
 				for _, line := range strings.Split(string(data), "\n") {
 					line = strings.TrimSpace(line)
@@ -698,7 +811,6 @@ func checkPasswordMinLen() SimCheck {
 					}
 				}
 			}
-			// Check pam_pwquality
 			if data, err := os.ReadFile("/etc/security/pwquality.conf"); err == nil {
 				for _, line := range strings.Split(string(data), "\n") {
 					line = strings.TrimSpace(line)
@@ -765,7 +877,6 @@ func checkSudoLogged() SimCheck {
 			if sudoHasOption("log_output") || sudoHasOption("log_input") {
 				return "pass", "Sudo I/O logging configured — full command sessions recorded."
 			}
-			// rsyslog captures auth.info which includes sudo entries by default
 			if serviceActive("rsyslog") {
 				if data, err := os.ReadFile("/etc/rsyslog.conf"); err == nil {
 					if strings.Contains(string(data), "auth") {
@@ -797,7 +908,6 @@ func checkNoEmptyPasswords() SimCheck {
 				}
 				user := parts[0]
 				pwField := parts[1]
-				// Empty field means no password (not locked with ! or *)
 				if pwField == "" {
 					empty = append(empty, user)
 				}

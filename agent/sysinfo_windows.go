@@ -4,9 +4,14 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 
 	"golang.org/x/sys/windows"
 )
+
+func getOSVersion() string {
+	return fmt.Sprintf("Windows/%s (%s)", runtime.GOARCH, getWindowsVersion())
+}
 
 // getWindowsVersion returns the real Windows build version using
 // RtlGetVersion, which bypasses the compatibility shim that makes

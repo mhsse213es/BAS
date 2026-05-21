@@ -72,6 +72,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 
 		// Viewer + Analyst + Admin
 		r.Get("/api/agents", h.GetAgents)
+		r.Get("/api/agents/download/{platform}", h.DownloadAgent)
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
 		r.Get("/api/scenarios/runs", h.ListScenarioRuns)

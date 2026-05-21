@@ -46,6 +46,35 @@ cd "${REPO_ROOT}"
 
 log "Binary: ${DIST_DIR}/bas-orchestrator-linux-amd64"
 
+# ── 1b. Cross-compile agent binaries ──────────────────────────────────────────
+AGENTS_DIR="${DIST_DIR}/agents"
+mkdir -p "${AGENTS_DIR}"
+log "Cross-compiling bas-agent for all platforms..."
+cd "${REPO_ROOT}/agent"
+
+declare -A AGENT_TARGETS=(
+  ["linux-amd64"]="linux/amd64"
+  ["linux-arm64"]="linux/arm64"
+  ["darwin-amd64"]="darwin/amd64"
+  ["darwin-arm64"]="darwin/arm64"
+)
+
+for LABEL in "${!AGENT_TARGETS[@]}"; do
+  IFS='/' read -r GOOS GOARCH <<< "${AGENT_TARGETS[$LABEL]}"
+  OUT="${AGENTS_DIR}/bas-agent-${LABEL}"
+  log "  [agent] GOOS=${GOOS} GOARCH=${GOARCH} → ${OUT}"
+  CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
+    go build -trimpath -ldflags="-s -w" -o "${OUT}" .
+done
+
+# Windows cross-compile (separate because of .exe extension)
+log "  [agent] GOOS=windows GOARCH=amd64 → ${AGENTS_DIR}/bas-agent-windows-amd64.exe"
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+  go build -trimpath -ldflags="-s -w" -o "${AGENTS_DIR}/bas-agent-windows-amd64.exe" .
+
+cd "${REPO_ROOT}"
+log "Agent binaries written to ${AGENTS_DIR}/"
+
 # ── 2. Prepare staging directory ───────────────────────────────────────────────
 log "Staging distribution bundle..."
 rm -rf "${BUILD_DIR}"
@@ -62,9 +91,11 @@ cp "${REPO_ROOT}/packaging/compose/systemd/bas-compose.service" "${BUILD_DIR}/sy
 chmod +x "${BUILD_DIR}/setup.sh" "${BUILD_DIR}/uninstall.sh"
 
 # Application assets
-log "Copying scenarios and wwwroot..."
+log "Copying scenarios, wwwroot, and agent binaries..."
 cp -r "${REPO_ROOT}/scenarios/."   "${BUILD_DIR}/scenarios/"
 cp -r "${REPO_ROOT}/orchestrator/wwwroot/." "${BUILD_DIR}/wwwroot/"
+mkdir -p "${BUILD_DIR}/agents"
+cp "${AGENTS_DIR}"/* "${BUILD_DIR}/agents/" 2>/dev/null || true
 
 # Version file
 echo "${VERSION}" > "${BUILD_DIR}/VERSION"
