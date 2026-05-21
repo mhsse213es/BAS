@@ -30,12 +30,13 @@ err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 # Capture whiptail output via temp file — portable under sudo (fd-swap breaks in some envs)
 _wt() {
   local _retvar="$1"; shift
-  local _tmp; _tmp=$(mktemp)
-  whiptail "$@" 2>"$_tmp" >/dev/tty
-  local _rc=$?
+  local _tmp _rc
+  _tmp=$(mktemp)
+  _rc=0
+  whiptail "$@" 2>"$_tmp" || _rc=$?   # || prevents set -e from firing on Cancel/ESC
   printf -v "$_retvar" '%s' "$(cat "$_tmp")"
   rm -f "$_tmp"
-  return $_rc
+  return "$_rc"
 }
 
 # ── Root check ─────────────────────────────────────────────────────────────────
