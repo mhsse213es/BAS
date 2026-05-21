@@ -11,7 +11,7 @@ RemainAfterExit=yes
 WorkingDirectory=/opt/bas-platform
 EnvironmentFile=/opt/bas-platform/.env
 
-ExecStartPre=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml pull --quiet
+ExecStartPre=-/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml pull --quiet
 ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
 ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 ExecReload=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml pull --quiet
