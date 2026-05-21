@@ -27,6 +27,17 @@ log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
+# Capture whiptail output via temp file — portable under sudo (fd-swap breaks in some envs)
+_wt() {
+  local _retvar="$1"; shift
+  local _tmp; _tmp=$(mktemp)
+  whiptail "$@" 2>"$_tmp" >/dev/tty
+  local _rc=$?
+  printf -v "$_retvar" '%s' "$(cat "$_tmp")"
+  rm -f "$_tmp"
+  return $_rc
+}
+
 # ── Root check ─────────────────────────────────────────────────────────────────
 require_root() {
   if [[ $EUID -ne 0 ]]; then
@@ -193,19 +204,19 @@ Press OK to continue." 22 70
 }
 
 page_install_dir() {
-  INSTALL_DIR=$(whiptail --title "$TITLE" \
+  _wt INSTALL_DIR --title "$TITLE" \
     --inputbox "Installation directory:" 10 64 "$DEFAULT_INSTALL_DIR" \
-    3>&1 1>&2 2>&3) || { err "Setup cancelled."; exit 1; }
+    || { err "Setup cancelled."; exit 1; }
   [[ -z "$INSTALL_DIR" ]] && INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 }
 
 page_database() {
-  DB_PASSWORD=$(whiptail --title "$TITLE — Database" \
+  _wt DB_PASSWORD --title "$TITLE — Database" \
     --passwordbox \
 "PostgreSQL will be installed as a Docker container.
 
 Set the database password (min 8 characters):" \
-    12 64 3>&1 1>&2 2>&3) || { err "Setup cancelled."; exit 1; }
+    12 64 || { err "Setup cancelled."; exit 1; }
 
   if [[ ${#DB_PASSWORD} -lt 8 ]]; then
     whiptail --title "$TITLE" --msgbox "Password must be at least 8 characters." 8 50
@@ -214,9 +225,9 @@ Set the database password (min 8 characters):" \
   fi
 
   local confirm
-  confirm=$(whiptail --title "$TITLE — Database" \
+  _wt confirm --title "$TITLE — Database" \
     --passwordbox "Confirm database password:" \
-    10 64 3>&1 1>&2 2>&3) || { err "Setup cancelled."; exit 1; }
+    10 64 || { err "Setup cancelled."; exit 1; }
 
   if [[ "$DB_PASSWORD" != "$confirm" ]]; then
     whiptail --title "$TITLE" --msgbox "Passwords do not match. Try again." 8 50
@@ -225,12 +236,12 @@ Set the database password (min 8 characters):" \
 }
 
 page_network() {
-  DASHBOARD_PORT=$(whiptail --title "$TITLE — Network" \
+  _wt DASHBOARD_PORT --title "$TITLE — Network" \
     --inputbox \
 "Dashboard port (the port your browser will connect to):
 
 Default is 9000. Change only if another service uses it." \
-    12 64 "$DEFAULT_PORT" 3>&1 1>&2 2>&3) || { err "Setup cancelled."; exit 1; }
+    12 64 "$DEFAULT_PORT" || { err "Setup cancelled."; exit 1; }
 
   [[ -z "$DASHBOARD_PORT" ]] && DASHBOARD_PORT="$DEFAULT_PORT"
 
@@ -248,12 +259,12 @@ page_security() {
   AGENT_SECRET=$(openssl rand -hex 24)
 
   local admin_pw
-  admin_pw=$(whiptail --title "$TITLE — Security" \
+  _wt admin_pw --title "$TITLE — Security" \
     --passwordbox \
 "Set the BAS admin password (min 10 characters):
 
 This is the password for the 'admin' user in the dashboard." \
-    12 64 3>&1 1>&2 2>&3) || { err "Setup cancelled."; exit 1; }
+    12 64 || { err "Setup cancelled."; exit 1; }
 
   if [[ ${#admin_pw} -lt 10 ]]; then
     whiptail --title "$TITLE" --msgbox "Admin password must be at least 10 characters." 8 56
@@ -262,9 +273,9 @@ This is the password for the 'admin' user in the dashboard." \
   fi
 
   local confirm
-  confirm=$(whiptail --title "$TITLE — Security" \
+  _wt confirm --title "$TITLE — Security" \
     --passwordbox "Confirm admin password:" \
-    10 64 3>&1 1>&2 2>&3) || { err "Setup cancelled."; exit 1; }
+    10 64 || { err "Setup cancelled."; exit 1; }
 
   if [[ "$admin_pw" != "$confirm" ]]; then
     whiptail --title "$TITLE" --msgbox "Passwords do not match. Try again." 8 50
