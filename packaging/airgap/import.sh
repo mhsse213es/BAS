@@ -96,7 +96,7 @@ if [[ -f "$MANIFEST" ]]; then
   FAIL=0
   while IFS= read -r line; do
     hash="${line%% *}"
-    rel="${line#* }"; rel="${rel#./}"
+    rel="${line#*  }"; rel="${rel#./}"   # two spaces: sha256sum format is "hash  path"
     abs="${BUNDLE_DIR}/${rel}"
     [[ ! -f "$abs" ]] && { err "Missing: $rel"; ((FAIL++)); continue; }
     actual=$(sha256sum "$abs" | cut -d' ' -f1)
