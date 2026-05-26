@@ -22,20 +22,14 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
     go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-arm64 .
 
-# ── Go Orchestrator (garble-obfuscated) ──────────────────────────────────────
-# IMPORTANT: must stay on golang:1.23-alpine — garble v0.12.x cannot obfuscate
-# Go 1.25 runtime internals (ABI selector error). GOTOOLCHAIN=local lets Go 1.23
-# build the module even though go.mod declares go 1.25.0.
-# Do NOT upgrade to golang:1.25-alpine here until garble adds Go 1.25 support.
-FROM golang:1.23-alpine AS builder
-RUN apk add --no-cache git
+# ── Go Orchestrator ───────────────────────────────────────────────────────────
+FROM golang:1.25-alpine AS builder
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
-RUN go install mvdan.cc/garble@v0.12.1
 COPY orchestrator/ .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    garble -tiny -seed=random build -ldflags="-s -w" -o /bin/orchestrator ./cmd/server
+    go build -trimpath -ldflags="-s -w" -o /bin/orchestrator ./cmd/server
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/orchestrator /orchestrator
