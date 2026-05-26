@@ -80,6 +80,13 @@ caldera:
       cpu: 1000m
       memory: 2Gi
 
+# ── License ───────────────────────────────────────────────────────────────────
+license:
+  # Pass the .lic file at deploy time:
+  #   helm upgrade ... --set-file license.content=audspect-dev.lic
+  # Leave empty to disable enforcement (only works before keygen.sh is run).
+  content: ""
+
 # ── Network Policy ────────────────────────────────────────────────────────────
 networkPolicy:
   enabled: true               # default-deny with explicit allow rules

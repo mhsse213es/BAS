@@ -48,9 +48,15 @@ spec:
           command: ["/orchestrator", "/etc/bas/config.json"]
           volumeMounts:
             - name: config
-              mountPath: /etc/bas
+              mountPath: /etc/bas/config.json
+              subPath: config.json
             - name: dashboard
               mountPath: /wwwroot
+            {{- if .Values.license.content }}
+            - name: license
+              mountPath: /etc/bas/bas.lic
+              subPath: bas.lic
+            {{- end }}
           resources:
             {{- toYaml .Values.orchestrator.resources | nindent 12 }}
           readinessProbe:
@@ -72,6 +78,11 @@ spec:
         - name: dashboard
           configMap:
             name: bas-dashboard
+        {{- if .Values.license.content }}
+        - name: license
+          secret:
+            secretName: bas-license
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service
