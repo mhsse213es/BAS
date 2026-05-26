@@ -23,8 +23,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-arm64 .
 
 # ── Go Orchestrator (garble-obfuscated) ──────────────────────────────────────
-# golang:1.23 + GOTOOLCHAIN=local: compiles the 1.25 module with 1.23 toolchain
-# so garble (which doesn't support Go 1.25 yet) can install and run cleanly.
+# IMPORTANT: must stay on golang:1.23-alpine — garble v0.12.x cannot obfuscate
+# Go 1.25 runtime internals (ABI selector error). GOTOOLCHAIN=local lets Go 1.23
+# build the module even though go.mod declares go 1.25.0.
+# Do NOT upgrade to golang:1.25-alpine here until garble adds Go 1.25 support.
 FROM golang:1.23-alpine AS builder
 ENV GOTOOLCHAIN=local
 RUN apk add --no-cache git
