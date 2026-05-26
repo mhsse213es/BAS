@@ -21,7 +21,7 @@ ZKTftlLSAELFxhi81iDw7789G53Ur0+PQTcf9wCVFAPFk7DjCykHNcMf3c05vTdn
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 readonly TITLE="BAS Platform Setup"
-readonly BAS_VERSION="1.5.0"
+readonly BAS_VERSION="1.6.0"
 readonly DEFAULT_INSTALL_DIR="/opt/bas-platform"
 readonly DEFAULT_PORT="9000"
 readonly MIN_RAM_MB=3800
@@ -623,7 +623,7 @@ EOF
     echo 50
     if [[ "$OFFLINE" == "true" ]]; then
       echo "# Offline mode — loading images from bundle..."
-      for img in "${SCRIPT_DIR}"/images/*.tar.gz; do
+      for img in "${SCRIPT_DIR}"/images/*.tar.gz "${SCRIPT_DIR}"/images/*.tar; do
         [[ -f "$img" ]] || continue
         echo "# Loading $(basename "$img")..."
         docker load < "$img" 2>>"$progress_log" || true
