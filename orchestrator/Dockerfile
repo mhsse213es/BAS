@@ -12,7 +12,7 @@ RUN apk add --no-cache git && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 
 # ── Agent Builder (linux/amd64 and linux/arm64) ───────────────────────────────
-FROM golang:1.25-alpine AS agent-builder
+FROM golang:1.23-alpine AS agent-builder
 WORKDIR /src
 COPY agent/go.mod agent/go.sum ./
 RUN go mod download
@@ -23,11 +23,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-arm64 .
 
 # ── Go Orchestrator (garble-obfuscated) ──────────────────────────────────────
-FROM golang:1.25-alpine AS builder
+FROM golang:1.23-alpine AS builder
+RUN apk add --no-cache git
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
-RUN go install mvdan.cc/garble@latest
+RUN go install mvdan.cc/garble@v0.12.1
 COPY orchestrator/ .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     garble -tiny -seed=random build -ldflags="-s -w" -o /bin/orchestrator ./cmd/server
