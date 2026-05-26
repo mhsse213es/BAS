@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -31,4 +32,26 @@ func runCleanup(step ScenarioStep) {
 
 func collectRecentEvents(_ context.Context, _ time.Time) []string {
 	return nil
+}
+
+// detectSecurityBlock returns true when an EDR/AV killed the child process.
+// SIGKILL from our own context (timeout/cancel) is excluded by the caller.
+func detectSecurityBlock(exitErr *exec.ExitError, durMs int64) (bool, string) {
+	status, ok := exitErr.Sys().(syscall.WaitStatus)
+	if !ok {
+		return false, ""
+	}
+	if !status.Signaled() {
+		return false, ""
+	}
+	switch status.Signal() {
+	case syscall.SIGKILL:
+		return true, "process killed by SIGKILL — terminated by EDR or security control"
+	case syscall.SIGTERM:
+		// SIGTERM within 500 ms of start → external security tool, not a graceful shutdown
+		if durMs < 500 {
+			return true, "process terminated by SIGTERM within 500ms — likely blocked by security control"
+		}
+	}
+	return false, ""
 }

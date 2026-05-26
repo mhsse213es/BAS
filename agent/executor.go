@@ -28,6 +28,18 @@ func StagePayloads(payloads []Payload, dir string) error {
 	return nil
 }
 
+// CheckPayloadQuarantine waits briefly then checks whether any staged payload
+// was removed by AV/EDR. Returns the first quarantined filename, or "".
+func CheckPayloadQuarantine(payloads []Payload, dir string) string {
+	time.Sleep(200 * time.Millisecond)
+	for _, p := range payloads {
+		if _, err := os.Stat(filepath.Join(dir, p.Name)); os.IsNotExist(err) {
+			return p.Name
+		}
+	}
+	return ""
+}
+
 func execStep(parentCtx context.Context, step ScenarioStep) ExecResult {
 	timeout := step.TimeoutSec
 	if timeout <= 0 {
@@ -52,21 +64,31 @@ func execStep(parentCtx context.Context, step ScenarioStep) ExecResult {
 	dur := time.Since(before).Milliseconds()
 
 	exitCode := 0
+	blocked := false
+	blockedReason := ""
+
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
+			// Only flag as security block when neither the step timeout nor a
+			// scenario-cancel triggered the kill — those are our own SIGKILLs.
+			if ctx.Err() == nil && parentCtx.Err() == nil {
+				blocked, blockedReason = detectSecurityBlock(exitErr, dur)
+			}
 		} else {
 			exitCode = -1
 		}
 	}
 
 	result := ExecResult{
-		TaskID:     step.TaskID,
-		ExitCode:   exitCode,
-		Stdout:     trimOutput(stdout.Bytes()),
-		Stderr:     trimOutput(stderr.Bytes()),
-		DurationMs: dur,
-		ExecutedAt: time.Now(),
+		TaskID:        step.TaskID,
+		ExitCode:      exitCode,
+		Stdout:        trimOutput(stdout.Bytes()),
+		Stderr:        trimOutput(stderr.Bytes()),
+		DurationMs:    dur,
+		ExecutedAt:    time.Now(),
+		Blocked:       blocked,
+		BlockedReason: blockedReason,
 	}
 
 	result.Events = collectRecentEvents(parentCtx, before)

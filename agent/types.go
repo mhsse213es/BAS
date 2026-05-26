@@ -58,11 +58,13 @@ type ScenarioStep struct {
 }
 
 type ExecResult struct {
-	TaskID     string    `json:"taskId"`
-	ExitCode   int       `json:"exitCode"`
-	Stdout     string    `json:"stdout"`
-	Stderr     string    `json:"stderr"`
-	DurationMs int64     `json:"durationMs"`
-	ExecutedAt time.Time `json:"executedAt"`
-	Events     []string  `json:"events,omitempty"`
+	TaskID        string    `json:"taskId"`
+	ExitCode      int       `json:"exitCode"`
+	Stdout        string    `json:"stdout"`
+	Stderr        string    `json:"stderr"`
+	DurationMs    int64     `json:"durationMs"`
+	ExecutedAt    time.Time `json:"executedAt"`
+	Events        []string  `json:"events,omitempty"`
+	Blocked       bool      `json:"blocked,omitempty"`
+	BlockedReason string    `json:"blockedReason,omitempty"`
 }

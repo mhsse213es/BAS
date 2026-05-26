@@ -76,6 +76,28 @@ func runCleanup(step ScenarioStep) {
 	_ = cmd.Run()
 }
 
+// detectSecurityBlock returns true when an EDR/AV terminated the child process.
+// Recognised Windows patterns:
+//   0xC0000005 STATUS_ACCESS_VIOLATION  — memory execution blocked
+//   0xC0000022 STATUS_ACCESS_DENIED     — file/process access denied by AV
+//   exit -1 in <500 ms               — TerminateProcess called almost immediately
+func detectSecurityBlock(exitErr *exec.ExitError, durMs int64) (bool, string) {
+	code := uint32(exitErr.ExitCode())
+	switch code {
+	case 0xC0000005:
+		return true, "process blocked: STATUS_ACCESS_VIOLATION — execution denied by security control"
+	case 0xC0000022:
+		return true, "process blocked: STATUS_ACCESS_DENIED — execution denied by security control"
+	case 0xC000013A: // STATUS_CONTROL_C_EXIT — intentional, not a block
+		return false, ""
+	}
+	// ExitCode -1 means TerminateProcess was used; very short run = external kill
+	if exitErr.ExitCode() == -1 && durMs < 500 {
+		return true, "process terminated externally within 500ms — likely blocked by EDR or AV"
+	}
+	return false, ""
+}
+
 func collectRecentEvents(parentCtx context.Context, since time.Time) []string {
 	select {
 	case <-parentCtx.Done():

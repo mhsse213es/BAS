@@ -117,6 +117,18 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 			if err := StagePayloads(step.Payloads, payloadDir); err != nil {
 				log.Printf("[!]   payload stage: %v", err)
 			} else {
+				// Check if AV/EDR quarantined a payload immediately after staging
+				if name := CheckPayloadQuarantine(step.Payloads, payloadDir); name != "" {
+					log.Printf("[!]   payload quarantined by security control: %s", name)
+					results = append(results, ExecResult{
+						TaskID:        step.TaskID,
+						ExitCode:      -1,
+						Blocked:       true,
+						BlockedReason: fmt.Sprintf("payload '%s' quarantined by security control before execution", name),
+						ExecutedAt:    time.Now(),
+					})
+					continue
+				}
 				log.Printf("[*]   staged %d payload(s) to %s", len(step.Payloads), payloadDir)
 			}
 		}
