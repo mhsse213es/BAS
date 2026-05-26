@@ -21,7 +21,7 @@ ZKTftlLSAELFxhi81iDw7789G53Ur0+PQTcf9wCVFAPFk7DjCykHNcMf3c05vTdn
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 readonly TITLE="BAS Platform Setup"
-readonly BAS_VERSION="latest"
+readonly BAS_VERSION="1.5.0"
 readonly DEFAULT_INSTALL_DIR="/opt/bas-platform"
 readonly DEFAULT_PORT="9000"
 readonly MIN_RAM_MB=3800
@@ -31,6 +31,10 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Set by --offline flag; skips docker pull (images already loaded)
 OFFLINE=false
+
+# Set during prereq checks — installer auto-installs these if missing
+NEED_DOCKER=false
+NEED_COMPOSE=false
 
 # ── Colours (only when stdout is a terminal) ───────────────────────────────────
 if [ -t 1 ]; then
@@ -131,11 +135,12 @@ check_disk() {
 
 check_docker() {
   if ! command -v docker &>/dev/null; then
-    echo "FAIL:Docker — not installed"
+    NEED_DOCKER=true
+    echo "INST:Docker — not installed (will be auto-installed)"
     return
   fi
   if ! docker info &>/dev/null; then
-    echo "FAIL:Docker — daemon not running (start with: systemctl start docker)"
+    echo "FAIL:Docker — daemon not running (run: systemctl start docker)"
     return
   fi
   echo "PASS:Docker — $(docker --version | grep -oP 'Docker version \K[^,]+')"
@@ -147,7 +152,8 @@ check_compose() {
   elif command -v docker-compose &>/dev/null; then
     echo "WARN:Compose — docker-compose v1 found (v2 plugin recommended)"
   else
-    echo "FAIL:Compose — Docker Compose v2 not found"
+    NEED_COMPOSE=true
+    echo "INST:Compose — not installed (will be auto-installed with Docker)"
   fi
 }
 
@@ -158,6 +164,26 @@ check_port() {
   else
     echo "PASS:Port ${port} — available"
   fi
+}
+
+# ── Docker CE installation (Ubuntu/Debian) ─────────────────────────────────────
+install_docker() {
+  log "Installing Docker CE..."
+  apt-get update -qq
+  apt-get install -y -qq ca-certificates curl gnupg lsb-release
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  chmod a+r /etc/apt/keyrings/docker.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+    > /etc/apt/sources.list.d/docker.list
+  apt-get update -qq
+  apt-get install -y -qq \
+    docker-ce docker-ce-cli containerd.io \
+    docker-buildx-plugin docker-compose-plugin
+  systemctl enable --now docker
+  log "Docker CE installed: $(docker --version)"
 }
 
 # ── License validation ─────────────────────────────────────────────────────────
@@ -335,7 +361,8 @@ page_prereqs() {
     local message="${r#*:}"
     case "$status" in
       PASS) display+="  ✓  ${message}\n" ;;
-      WARN) display+="  ⚠  ${message}\n"; ;;
+      WARN) display+="  ⚠  ${message}\n" ;;
+      INST) display+="  ↓  ${message}\n" ;;
       FAIL) display+="  ✗  ${message}\n"; has_fail=true ;;
     esac
   done
@@ -349,10 +376,13 @@ Please resolve the items marked ✗ before continuing.
 Re-run this installer after fixing them." 22 70
     exit 1
   else
+    local note=""
+    ($NEED_DOCKER || $NEED_COMPOSE) && \
+      note="\n  Items marked ↓ will be installed automatically.\n"
     whiptail --title "$TITLE — Prerequisites" --msgbox \
-"Prerequisite check — ALL PASSED:
+"Prerequisite check — READY TO INSTALL:
 
-${display}
+${display}${note}
 Press OK to continue." 22 70
   fi
 }
@@ -411,6 +441,8 @@ page_security() {
   # Auto-generate secrets
   JWT_SECRET=$(openssl rand -hex 32)
   AGENT_SECRET=$(openssl rand -hex 24)
+  CALDERA_API_KEY=$(openssl rand -hex 20)
+  CALDERA_API_KEY_BLUE=$(openssl rand -hex 20)
 
   local admin_pw
   _wt admin_pw --title "$TITLE — Security" \
@@ -442,13 +474,14 @@ This is the password for the 'admin' user in the dashboard." \
   whiptail --title "$TITLE — Security" --msgbox \
 "Security secrets have been generated:
 
-  JWT Secret:    ${JWT_SECRET:0:16}... (auto-generated)
-  Agent Secret:  ${AGENT_SECRET:0:12}... (auto-generated)
+  JWT Secret:       ${JWT_SECRET:0:16}... (auto-generated)
+  Agent Secret:     ${AGENT_SECRET:0:12}... (auto-generated)
+  Caldera API Key:  ${CALDERA_API_KEY:0:12}... (auto-generated)
 
 These are written to ${INSTALL_DIR}/.env
 Keep that file secure (chmod 640, root-readable only).
 
-Press OK to continue." 16 68
+Press OK to continue." 17 68
 }
 
 page_confirm() {
@@ -473,34 +506,48 @@ do_install() {
   progress_log=$(mktemp)
 
   (
-    # Step 1 — Create directory structure
+    # Step 1 — Install Docker if missing
     echo 5
+    if $NEED_DOCKER; then
+      echo "# Installing Docker CE (this may take 1-2 minutes)..."
+      install_docker 2>>"$progress_log" || { err "Docker install failed. See $progress_log"; exit 1; }
+    else
+      echo "# Docker already installed — skipping..."
+      sleep 0.2
+    fi
+
+    # Step 2 — Create directory structure
+    echo 15
     echo "# Creating install directory..."
     mkdir -p "${INSTALL_DIR}/scenarios" "${INSTALL_DIR}/wwwroot" "${INSTALL_DIR}/data"
-    sleep 0.3
+    sleep 0.2
 
-    # Step 2 — Copy license file
-    echo 12
+    # Step 3 — Copy license file
+    echo 20
     echo "# Installing license..."
     cp "${LIC_PATH}" "${INSTALL_DIR}/bas.lic"
     chmod 640 "${INSTALL_DIR}/bas.lic"
+    chown root:root "${INSTALL_DIR}/bas.lic"
 
-    # Step 3 — Copy application files
-    echo 15
-    echo "# Copying scenario files..."
-    cp -r "${SCRIPT_DIR}/scenarios/." "${INSTALL_DIR}/scenarios/"
-    cp -r "${SCRIPT_DIR}/wwwroot/." "${INSTALL_DIR}/wwwroot/"
-    sleep 0.3
-
-    # Step 3 — Copy compose files
+    # Step 4 — Copy application files
     echo 25
+    echo "# Copying application files..."
+    if [[ -d "${SCRIPT_DIR}/scenarios" ]]; then
+      cp -r "${SCRIPT_DIR}/scenarios/." "${INSTALL_DIR}/scenarios/"
+    fi
+    if [[ -d "${SCRIPT_DIR}/wwwroot" ]]; then
+      cp -r "${SCRIPT_DIR}/wwwroot/." "${INSTALL_DIR}/wwwroot/"
+    fi
+
+    # Step 5 — Copy compose files
+    echo 30
     echo "# Copying configuration templates..."
     cp "${SCRIPT_DIR}/docker-compose.yml"      "${INSTALL_DIR}/"
     cp "${SCRIPT_DIR}/docker-compose.prod.yml" "${INSTALL_DIR}/"
-    sleep 0.3
+    sleep 0.2
 
-    # Step 4 — Write .env
-    echo 35
+    # Step 6 — Write .env
+    echo 38
     echo "# Writing .env configuration..."
     cat > "${INSTALL_DIR}/.env" <<EOF
 # BAS Platform — generated by setup.sh on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -513,59 +560,65 @@ JWT_SECRET=${JWT_SECRET}
 AGENT_SECRET=${AGENT_SECRET}
 DASHBOARD_PORT=${DASHBOARD_PORT}
 BAS_LICENSE_PATH=/etc/bas/bas.lic
+CALDERA_API_KEY=${CALDERA_API_KEY}
+CALDERA_API_KEY_BLUE=${CALDERA_API_KEY_BLUE}
 EOF
     chmod 640 "${INSTALL_DIR}/.env"
     chown root:root "${INSTALL_DIR}/.env"
-    sleep 0.3
+    sleep 0.2
 
-    # Step 5 — Write admin seed env (read by orchestrator on first boot)
-    echo 42
+    # Step 7 — Write admin seed env (read by orchestrator on first boot)
+    echo 45
     echo "# Writing admin seed..."
     cat > "${INSTALL_DIR}/.env.admin-seed" <<EOF
 # One-time admin seed — deleted after first successful boot
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 EOF
     chmod 600 "${INSTALL_DIR}/.env.admin-seed"
-    sleep 0.3
+    sleep 0.2
 
-    # Step 6 — Pull Docker images (skipped in offline/air-gap mode)
+    # Step 8 — Pull or load Docker images
     echo 50
     if [[ "$OFFLINE" == "true" ]]; then
-      echo "# Offline mode — skipping image pull (images pre-loaded)..."
-      sleep 0.3
+      echo "# Offline mode — loading images from bundle..."
+      for img in "${SCRIPT_DIR}"/images/*.tar.gz; do
+        [[ -f "$img" ]] || continue
+        echo "# Loading $(basename "$img")..."
+        docker load < "$img" 2>>"$progress_log" || true
+      done
     else
-      echo "# Pulling Docker images (this may take a few minutes)..."
+      echo "# Pulling Docker images (first run may take several minutes)..."
       cd "${INSTALL_DIR}"
       docker compose -f docker-compose.yml pull --quiet 2>>"$progress_log" || true
-      sleep 0.5
     fi
 
-    # Step 7 — Install systemd service
-    echo 75
+    # Step 9 — Install systemd service
+    echo 80
     echo "# Installing systemd service..."
     sed "s|/opt/bas-platform|${INSTALL_DIR}|g" \
       "${SCRIPT_DIR}/systemd/bas-compose.service" \
       > /etc/systemd/system/bas-compose.service
     systemctl daemon-reload
     systemctl enable bas-compose.service
-    sleep 0.3
+    sleep 0.2
 
-    # Step 8 — Start services
-    echo 85
+    # Step 10 — Start services
+    echo 87
     echo "# Starting BAS Platform..."
+    cd "${INSTALL_DIR}"
     systemctl start bas-compose.service
-    sleep 2
+    sleep 3
 
-    # Step 9 — Health check
+    # Step 11 — Health check
     echo 93
-    echo "# Waiting for health check..."
+    echo "# Waiting for orchestrator to become healthy..."
     local retries=0
-    until curl -sf "http://localhost:${DASHBOARD_PORT}/health" &>/dev/null || [[ $retries -ge 18 ]]; do
+    until curl -sf "http://localhost:${DASHBOARD_PORT}/health" &>/dev/null || [[ $retries -ge 24 ]]; do
       sleep 5
       ((retries++))
     done
 
-    # Step 10 — Clean up admin seed (orchestrator has read it via env)
+    # Step 12 — Clean up admin seed
     echo 98
     echo "# Finalising..."
     rm -f "${INSTALL_DIR}/.env.admin-seed"
@@ -586,21 +639,26 @@ page_finish() {
   svc_status=$(systemctl is-active bas-compose.service 2>/dev/null || echo "unknown")
 
   whiptail --title "$TITLE — Complete" --msgbox \
-"BAS Platform has been installed successfully!
+"BAS Platform v${BAS_VERSION} installed successfully!
 
   Service status:   ${svc_status}
   Dashboard URL:    http://${detected_ip}:${DASHBOARD_PORT}
+  Caldera UI:       http://${detected_ip}:8888
   Install path:     ${INSTALL_DIR}
+  Login:            admin / (password set during setup)
 
-  Login:  admin / (password you set during setup)
+Agent download (run on each target host):
+  Linux amd64:  http://${detected_ip}:${DASHBOARD_PORT}/api/agent/download/linux-amd64
+  Linux arm64:  http://${detected_ip}:${DASHBOARD_PORT}/api/agent/download/linux-arm64
+  Windows:      http://${detected_ip}:${DASHBOARD_PORT}/api/agent/download/windows-amd64
 
 Useful commands:
-  Check status:  systemctl status bas-compose
-  View logs:     docker compose -C ${INSTALL_DIR} logs -f
-  Stop:          systemctl stop bas-compose
-  Uninstall:     sudo bash ${INSTALL_DIR}/uninstall.sh
+  Logs:      docker compose -C ${INSTALL_DIR} logs -f
+  Status:    systemctl status bas-compose
+  Stop:      systemctl stop bas-compose
+  Uninstall: sudo bash ${INSTALL_DIR}/uninstall.sh
 
-Press OK to exit the installer." 22 70
+Press OK to exit the installer." 28 74
 }
 
 # ── Main ───────────────────────────────────────────────────────────────────────

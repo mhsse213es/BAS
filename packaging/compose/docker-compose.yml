@@ -1,7 +1,7 @@
 version: "3.9"
 
-# BAS Platform — Docker Compose (SMB / single-server tier)
-# Generated .env file required — run setup.sh to create it.
+# BAS Platform — Docker Compose (single-server / SMB tier)
+# Generated .env required — run setup.sh to create it.
 
 services:
 
@@ -25,6 +25,25 @@ services:
       retries: 5
       start_period: 15s
 
+  # ── Caldera (MITRE ATT&CK simulation engine) ─────────────────────────────────
+  caldera:
+    image: ghcr.io/mitre/caldera:latest
+    container_name: bas-caldera
+    environment:
+      API_KEY_RED:  ${CALDERA_API_KEY:-BASPlatform2024}
+      API_KEY_BLUE: ${CALDERA_API_KEY_BLUE:-BASBlue2024}
+    ports:
+      - "8888:8888"
+    networks:
+      - bas-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8888/api/v2/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   # ── BAS Orchestrator ─────────────────────────────────────────────────────────
   orchestrator:
     image: ${REGISTRY:-}bas-orchestrator:${BAS_VERSION:-latest}
@@ -32,16 +51,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      caldera:
+        condition: service_healthy
     environment:
-      DATABASE_URL: "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=disable"
-      JWT_SECRET:    ${JWT_SECRET}
-      AGENT_SECRET:  ${AGENT_SECRET:-}
-      HTTP_PORT:     "9000"
-      SCENARIOS_DIR: /scenarios
-      ART_DIR:       /art-atomics
+      DATABASE_URL:     "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=disable"
+      JWT_SECRET:       ${JWT_SECRET}
+      AGENT_SECRET:     ${AGENT_SECRET:-}
+      HTTP_PORT:        "9000"
+      SCENARIOS_DIR:    /scenarios
+      BAS_LICENSE_PATH: /etc/bas/bas.lic
+      CALDERA_URL:      "http://caldera:8888"
+      CALDERA_API_KEY:  ${CALDERA_API_KEY:-BASPlatform2024}
     volumes:
       - ./scenarios:/scenarios:ro
       - ./wwwroot:/wwwroot:ro
+      - ./bas.lic:/etc/bas/bas.lic:ro
     ports:
       - "${DASHBOARD_PORT:-9000}:9000"
     networks:
@@ -57,7 +81,6 @@ services:
 networks:
   bas-internal:
     driver: bridge
-    internal: false   # orchestrator needs outbound for ART sparse-clone (set true for air-gap)
 
 volumes:
   bas-postgres-data:
