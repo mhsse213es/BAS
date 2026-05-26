@@ -36,23 +36,22 @@ func (l *License) payload() string {
 }
 
 // Check validates the license at licPath.
-//   - If licPath is empty, enforcement is disabled (dev/internal deployments).
-//   - If PublicKeyPEM is the placeholder, keygen.sh has not been run yet — skip.
-//   - Otherwise the signature and expiry are verified; any failure is fatal.
+//   - If PublicKeyPEM is the placeholder (keygen.sh not yet run), skips — dev only.
+//   - Otherwise defaults to /etc/bas/bas.lic when licPath is empty.
+//   - Missing file, bad signature, or expired date are all fatal errors.
 func Check(licPath string) error {
-	if licPath == "" {
-		log.Println("[license] BAS_LICENSE_PATH not set — enforcement disabled")
+	if PublicKeyPEM == "KEYGEN_REQUIRED" {
+		log.Println("[license] WARNING: signing key not initialised — enforcement disabled (run packaging/licensing/keygen.sh)")
 		return nil
 	}
 
-	if PublicKeyPEM == "KEYGEN_REQUIRED" {
-		log.Println("[license] WARNING: signing key not initialised — run bash packaging/licensing/keygen.sh")
-		return nil
+	if licPath == "" {
+		licPath = "/etc/bas/bas.lic"
 	}
 
 	data, err := os.ReadFile(licPath)
 	if err != nil {
-		return fmt.Errorf("license: cannot read %s: %w", licPath, err)
+		return fmt.Errorf("license: file not found at %s — place your bas.lic file there or set BAS_LICENSE_PATH. Contact support@audspect.com", licPath)
 	}
 
 	var lic License
