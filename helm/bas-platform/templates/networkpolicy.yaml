@@ -11,7 +11,8 @@ spec:
     - Ingress
     - Egress
 ---
-# Orchestrator: accepts from ingress-nginx and from API service
+# Orchestrator: inbound from anywhere (NodePort agents + API + health probes)
+# Outbound: postgres (host IP), caldera (pod), DNS
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -25,21 +26,30 @@ spec:
     - Ingress
     - Egress
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-        - podSelector:
-            matchLabels:
-              app: bas-api
+    - {}
   egress:
     - to:
         - ipBlock:
-            cidr: {{ .Values.postgres.host }}/32
+            cidr: {{ .Values.postgres.externalIP }}/32
       ports:
-        - port: 5432
+        - port: {{ .Values.postgres.port }}
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: caldera
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
 ---
-# API: accepts from ingress-nginx, can call orchestrator, can reach postgres
+# API: inbound from anywhere (ingress-nginx + health probes)
+# Outbound: orchestrator (pod), postgres (host IP), DNS
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -53,10 +63,7 @@ spec:
     - Ingress
     - Egress
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
+    - {}
   egress:
     - to:
         - podSelector:
@@ -64,7 +71,17 @@ spec:
               app: bas-orchestrator
     - to:
         - ipBlock:
-            cidr: {{ .Values.postgres.host }}/32
+            cidr: {{ .Values.postgres.externalIP }}/32
       ports:
-        - port: 5432
+        - port: {{ .Values.postgres.port }}
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
 {{- end }}
