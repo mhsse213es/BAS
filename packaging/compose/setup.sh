@@ -3,6 +3,22 @@
 # Supports Ubuntu 20.04 / 22.04 / 24.04 and Rocky Linux 9
 set -euo pipefail
 
+# ── Audspect public key — DO NOT MODIFY ───────────────────────────────────────
+readonly _LIC_PUBKEY='-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA1Tkfvrt9afADqXrViDca
+CMqjC9YC7FPQ/cEG5Uyw/mHa17/oeVAselWrfyw3sd8c/aS8dCUzE+DhMGRmnPm7
+Kf9eCT4pGxVbkKq6h1/ospdsFUgWmrfHECmPgVLK6fppLPnpOEoC8g6ZDm0N5+Wi
+v7r1Ke7ZAfKIxjkOHY2J4/sbexV5yNshO7y54nuhV2HO5aO8bIcbleqEejYB5p+o
+waz/nlY+CQEQvkhvAb3ycBmcdUn1JJx3/uFNRANzWMjXvUm6svc89PqmeztFQyh1
+D3JN8H8DP3tpu6sYJB546Bp/ibha3q2daQdaZBzPMG3stqx8vuRBDk6oP3Git1Oc
+sLwFvk21TPctYgG2ZIIe79X6OZURBM3pmh2MMv3EGGosZQjwjKK2XJHBXTQRKbOu
+DALVvcNDHOHJuJ79uN4ZQgRKcTh9+rbc+U8ItiqxMPaz6PgnWXp232MknfNd0o5c
++FgMfeAWEUyZwu2iO172ghWYkM5JzFCijJz9u5yTxL/25qferhhD9XcerdPJT1uS
+viWhPS0KAZel/o+9jJg2H4P7H1NrZc4diIMhPMhmm6jxC9S3TyCQjf2rvl8oNeD6
+ZKTftlLSAELFxhi81iDw7789G53Ur0+PQTcf9wCVFAPFk7DjCykHNcMf3c05vTdn
+/CNAusfhqKmVI/VkLgROhr0CAwEAAQ==
+-----END PUBLIC KEY-----'
+
 # ── Constants ──────────────────────────────────────────────────────────────────
 readonly TITLE="BAS Platform Setup"
 readonly BAS_VERSION="latest"
@@ -142,6 +158,143 @@ check_port() {
   else
     echo "PASS:Port ${port} — available"
   fi
+}
+
+# ── License validation ─────────────────────────────────────────────────────────
+# Returns "OK:customer|expires" or "FAIL:reason". Never throws.
+_check_license() {
+  local lic="$1"
+
+  [[ -f "$lic" ]] || { echo "FAIL:File not found: ${lic}"; return 0; }
+
+  command -v python3 &>/dev/null || { echo "FAIL:python3 required (apt install python3)"; return 0; }
+  command -v openssl &>/dev/null || { echo "FAIL:openssl required (apt install openssl)"; return 0; }
+
+  # Parse all required fields in one python call
+  local parsed
+  parsed=$(python3 - <<PYEOF 2>/dev/null
+import json, sys
+try:
+    d = json.load(open('${lic}'))
+    for f in ('customer','customer_id','issued_at','expires_at','features','signature'):
+        if f not in d:
+            print('FAIL:Missing field: ' + f)
+            sys.exit()
+    print('|'.join([
+        d['customer'], d['customer_id'], d['issued_at'],
+        d['expires_at'], ','.join(d['features']), d['signature']
+    ]))
+except Exception as e:
+    print('FAIL:' + str(e))
+PYEOF
+)
+
+  [[ "$parsed" == FAIL:* ]] && { echo "$parsed"; return 0; }
+  [[ -z "$parsed" ]]        && { echo "FAIL:Could not parse license file"; return 0; }
+
+  local customer customer_id issued_at expires_at features signature
+  IFS='|' read -r customer customer_id issued_at expires_at features signature <<< "$parsed"
+
+  # Canonical payload — must match licensegen/main.go exactly
+  local payload="${customer_id}|${issued_at}|${expires_at}|${features}"
+
+  # Verify RSA-SHA256 signature with the embedded Audspect public key
+  local tmpkey tmpsig tmpdata
+  tmpkey=$(mktemp); tmpsig=$(mktemp); tmpdata=$(mktemp)
+
+  printf '%s' "$_LIC_PUBKEY" > "$tmpkey"
+  printf '%s' "$signature"   | base64 -d > "$tmpsig" 2>/dev/null || {
+    rm -f "$tmpkey" "$tmpsig" "$tmpdata"
+    echo "FAIL:Cannot decode signature — file is corrupt or not an Audspect license"
+    return 0
+  }
+  printf '%s' "$payload" > "$tmpdata"
+
+  local sig_ok=false
+  openssl dgst -sha256 -verify "$tmpkey" -signature "$tmpsig" "$tmpdata" &>/dev/null \
+    && sig_ok=true
+  rm -f "$tmpkey" "$tmpsig" "$tmpdata"
+
+  $sig_ok || {
+    echo "FAIL:Signature invalid — license was not issued by Audspect or has been tampered"
+    return 0
+  }
+
+  # Check expiry (24-hour grace matches the orchestrator)
+  local today_epoch expiry_epoch
+  today_epoch=$(date -u +%s)
+  expiry_epoch=$(date -d "${expires_at} + 1 day" -u +%s 2>/dev/null) || {
+    echo "FAIL:Cannot parse expiry date '${expires_at}'"
+    return 0
+  }
+
+  [[ $today_epoch -gt $expiry_epoch ]] && {
+    echo "FAIL:License expired on ${expires_at} — contact support@audspect.com to renew"
+    return 0
+  }
+
+  echo "OK:${customer}|${expires_at}"
+}
+
+# License wizard page — loops until a valid .lic is provided or user cancels.
+# Sets LIC_PATH on success.
+page_license() {
+  # Pre-fill with any .lic found next to setup.sh
+  local default_lic=""
+  local found
+  found=$(ls "${SCRIPT_DIR}"/*.lic 2>/dev/null | head -1 || true)
+  [[ -n "$found" ]] && default_lic="$found"
+
+  while true; do
+    local lic_path
+    if ! _wt lic_path --title "$TITLE — License" \
+        --inputbox \
+"A valid Audspect license file (.lic) is required to proceed.
+
+If you received a .lic file from Audspect, enter its full path below.
+Contact support@audspect.com if you do not have a license.
+
+Path to license file:" \
+        14 70 "$default_lic"; then
+      err "Setup cancelled."
+      exit 1
+    fi
+
+    if [[ -z "$lic_path" ]]; then
+      whiptail --title "$TITLE — License" \
+        --msgbox "No path entered. You must provide a valid .lic file to continue." 8 62
+      continue
+    fi
+
+    local result
+    result=$(_check_license "$lic_path")
+
+    if [[ "$result" == OK:* ]]; then
+      local info="${result#OK:}"
+      local lic_customer="${info%%|*}"
+      local lic_expires="${info##*|}"
+      whiptail --title "$TITLE — License Valid" --msgbox \
+"License verified successfully.
+
+  Licensed to:  ${lic_customer}
+  Valid until:  ${lic_expires}
+
+Press OK to continue." 12 58
+      LIC_PATH="$lic_path"
+      return 0
+    fi
+
+    # FAIL — show the specific reason and loop
+    local reason="${result#FAIL:}"
+    whiptail --title "$TITLE — Invalid License" --msgbox \
+"License check FAILED:
+
+  ${reason}
+
+Please provide a valid Audspect-issued .lic file.
+Contact support@audspect.com if you need assistance." 14 68
+    default_lic="$lic_path"
+  done
 }
 
 # ── Wizard pages ───────────────────────────────────────────────────────────────
@@ -326,7 +479,13 @@ do_install() {
     mkdir -p "${INSTALL_DIR}/scenarios" "${INSTALL_DIR}/wwwroot" "${INSTALL_DIR}/data"
     sleep 0.3
 
-    # Step 2 — Copy application files
+    # Step 2 — Copy license file
+    echo 12
+    echo "# Installing license..."
+    cp "${LIC_PATH}" "${INSTALL_DIR}/bas.lic"
+    chmod 640 "${INSTALL_DIR}/bas.lic"
+
+    # Step 3 — Copy application files
     echo 15
     echo "# Copying scenario files..."
     cp -r "${SCRIPT_DIR}/scenarios/." "${INSTALL_DIR}/scenarios/"
@@ -353,6 +512,7 @@ POSTGRES_PASSWORD=${DB_PASSWORD}
 JWT_SECRET=${JWT_SECRET}
 AGENT_SECRET=${AGENT_SECRET}
 DASHBOARD_PORT=${DASHBOARD_PORT}
+BAS_LICENSE_PATH=/etc/bas/bas.lic
 EOF
     chmod 640 "${INSTALL_DIR}/.env"
     chown root:root "${INSTALL_DIR}/.env"
@@ -455,6 +615,7 @@ main() {
   require_root
   ensure_whiptail
 
+  page_license    # must pass before anything else is shown
   page_welcome
   page_prereqs
   page_install_dir
