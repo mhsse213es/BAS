@@ -12,24 +12,37 @@ RUN apk add --no-cache git && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 
 # ── Agent Builder (linux/amd64 and linux/arm64) ───────────────────────────────
-FROM golang:1.25-alpine AS agent-builder
+FROM golang:1.23-alpine AS agent-builder
+# garble v0.12.1 — last release verified compatible with Go 1.23
+RUN apk add --no-cache git && \
+    go install mvdan.cc/garble@v0.12.1
 WORKDIR /src
 COPY agent/go.mod agent/go.sum ./
 RUN go mod download
 COPY agent/ .
+# -literals: encrypt all string literals (hides API routes, error strings, SQL)
+# -tiny:     strip filenames/line numbers from all packages
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-amd64 . && \
+    garble -literals -tiny build \
+    -ldflags="-s -w" \
+    -o /agents/bas-agent-linux-amd64 . && \
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-    go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-arm64 .
+    garble -literals -tiny build \
+    -ldflags="-s -w" \
+    -o /agents/bas-agent-linux-arm64 .
 
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
-FROM golang:1.25-alpine AS builder
+FROM golang:1.23-alpine AS builder
+RUN apk add --no-cache git && \
+    go install mvdan.cc/garble@v0.12.1
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
 COPY orchestrator/ .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -trimpath -ldflags="-s -w" -o /bin/orchestrator ./cmd/server
+    garble -literals -tiny build \
+    -ldflags="-s -w" \
+    -o /bin/orchestrator ./cmd/server
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/orchestrator /orchestrator

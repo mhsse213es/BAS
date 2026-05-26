@@ -33,15 +33,27 @@ fi
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 
+# ── Garble detection ──────────────────────────────────────────────────────────
+# garble v0.12.1 — compatible with Go 1.23.  Install with:
+#   go install mvdan.cc/garble@v0.12.1
+if command -v garble &>/dev/null; then
+  log "garble found — builds will be obfuscated (-literals -tiny)"
+  GOBUILD_ORCH="garble -literals -tiny build -ldflags=-s -w -X main.Version=${VERSION}"
+  GOBUILD_AGENT="garble -literals -tiny build -ldflags=-s -w"
+else
+  warn "garble not found — building without obfuscation."
+  echo "  Install: go install mvdan.cc/garble@v0.12.1"
+  GOBUILD_ORCH="go build -trimpath -ldflags=-s -w -X main.Version=${VERSION}"
+  GOBUILD_AGENT="go build -trimpath -ldflags=-s -w"
+fi
+
 # ── 1. Build orchestrator binary ───────────────────────────────────────────────
 log "Building bas-orchestrator ${VERSION} for linux/amd64..."
 cd "${REPO_ROOT}/orchestrator"
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build \
-    -trimpath \
-    -ldflags "-s -w -X main.Version=${VERSION}" \
-    -o "${DIST_DIR}/bas-orchestrator-linux-amd64" \
-    ./cmd/server/
+  ${GOBUILD_ORCH} \
+  -o "${DIST_DIR}/bas-orchestrator-linux-amd64" \
+  ./cmd/server/
 cd "${REPO_ROOT}"
 
 log "Binary: ${DIST_DIR}/bas-orchestrator-linux-amd64"
@@ -64,13 +76,13 @@ for LABEL in "${!AGENT_TARGETS[@]}"; do
   OUT="${AGENTS_DIR}/bas-agent-${LABEL}"
   log "  [agent] GOOS=${GOOS} GOARCH=${GOARCH} → ${OUT}"
   CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
-    go build -trimpath -ldflags="-s -w" -o "${OUT}" .
+    ${GOBUILD_AGENT} -o "${OUT}" .
 done
 
 # Windows cross-compile (separate because of .exe extension)
 log "  [agent] GOOS=windows GOARCH=amd64 → ${AGENTS_DIR}/bas-agent-windows-amd64.exe"
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-  go build -trimpath -ldflags="-s -w" -o "${AGENTS_DIR}/bas-agent-windows-amd64.exe" .
+  ${GOBUILD_AGENT} -o "${AGENTS_DIR}/bas-agent-windows-amd64.exe" .
 
 cd "${REPO_ROOT}"
 log "Agent binaries written to ${AGENTS_DIR}/"
