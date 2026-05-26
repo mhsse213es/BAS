@@ -12,7 +12,7 @@ RUN apk add --no-cache git && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 
 # ── Agent Builder (linux/amd64 and linux/arm64) ───────────────────────────────
-FROM golang:1.23-alpine AS agent-builder
+FROM golang:1.25-alpine AS agent-builder
 WORKDIR /src
 COPY agent/go.mod agent/go.sum ./
 RUN go mod download
@@ -23,7 +23,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-arm64 .
 
 # ── Go Orchestrator (garble-obfuscated) ──────────────────────────────────────
+# golang:1.23 + GOTOOLCHAIN=local: compiles the 1.25 module with 1.23 toolchain
+# so garble (which doesn't support Go 1.25 yet) can install and run cleanly.
 FROM golang:1.23-alpine AS builder
+ENV GOTOOLCHAIN=local
 RUN apk add --no-cache git
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
