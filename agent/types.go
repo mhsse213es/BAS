@@ -36,6 +36,7 @@ type RawRunResult struct {
 	AgentID    string       `json:"agentId"`
 	Results    []ExecResult `json:"results"`
 	Partial    bool         `json:"partial,omitempty"`
+	Reverted   []string     `json:"reverted,omitempty"`
 }
 
 // ── Executor Types ────────────────────────────────────────────────────────────

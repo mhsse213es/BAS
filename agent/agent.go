@@ -86,6 +86,9 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	a.setStatus("scanning")
 	a.sendHeartbeat("scanning")
 
+	snap := captureSnapshot(cmd.RunID)
+	log.Printf("[*] snapshot taken: run=%s", cmd.RunID)
+
 	payloadDir, err := os.MkdirTemp("", "bas-"+cmd.RunID+"-*")
 	if err != nil {
 		log.Printf("[!] payload dir: %v", err)
@@ -104,7 +107,11 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		select {
 		case <-ctx.Done():
 			log.Printf("[*] scenario interrupted at step %d/%d — submitting partial results", i+1, len(cmd.Steps))
-			a.submitResults(cmd, results, true)
+			reverted := revertFromSnapshot(snap)
+			if len(reverted) > 0 {
+				log.Printf("[*] reverted %d change(s) after partial run", len(reverted))
+			}
+			a.submitResults(cmd, results, true, reverted)
 			a.setStatus("idle")
 			a.sendHeartbeat("idle")
 			return
@@ -147,18 +154,23 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	log.Printf("[*] scenario done: run=%s steps=%d elapsed=%v",
 		cmd.RunID, len(results), time.Since(start).Round(time.Millisecond))
 
-	a.submitResults(cmd, results, false)
+	reverted := revertFromSnapshot(snap)
+	if len(reverted) > 0 {
+		log.Printf("[*] reverted %d change(s) after run", len(reverted))
+	}
+	a.submitResults(cmd, results, false, reverted)
 	a.setStatus("idle")
 	a.sendHeartbeat("idle")
 }
 
-func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial bool) {
+func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial bool, reverted []string) {
 	payload := RawRunResult{
 		RunID:      cmd.RunID,
 		ScenarioID: cmd.ScenarioID,
 		AgentID:    a.id.AgentID,
 		Results:    results,
 		Partial:    partial,
+		Reverted:   reverted,
 	}
 	label := "completed"
 	if partial {
