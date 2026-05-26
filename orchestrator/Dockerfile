@@ -28,7 +28,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 # build the module even though go.mod declares go 1.25.0.
 # Do NOT upgrade to golang:1.25-alpine here until garble adds Go 1.25 support.
 FROM golang:1.23-alpine AS builder
-ENV GOTOOLCHAIN=local
 RUN apk add --no-cache git
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
