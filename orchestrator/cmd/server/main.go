@@ -16,6 +16,7 @@ import (
 	"github.com/audspect/bas/config"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
@@ -78,12 +79,21 @@ func main() {
 		}
 	}
 
+	// ── Binary integrity manifest ─────────────────────────────────────────
+	manifest := integrity.LoadManifest("./agents/BINARIES.sha256")
+	if manifest.Loaded() {
+		log.Println("[+] Binary integrity manifest loaded — agent hash verification enabled")
+	} else {
+		log.Println("[~] No binary manifest found — agent hash verification disabled")
+	}
+
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
-		WithAgentSecret(cfg.AgentSecret)
+		WithAgentSecret(cfg.AgentSecret).
+		WithManifest(manifest)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
@@ -134,7 +144,7 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 			  WHERE status != 'offline'
 			    AND last_update < NOW() - $1::interval
 			RETURNING agent_id, hostname, ip_address, os_version, username,
-			          status, env_label, has_report, last_update`,
+			          status, env_label, has_report, binary_hash, binary_trusted, last_update`,
 			staleAfter.String(),
 		)
 		if err != nil {
@@ -144,7 +154,8 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 		for rows.Next() {
 			var a models.Agent
 			if err := rows.Scan(&a.AgentID, &a.Hostname, &a.IPAddress, &a.OSVersion,
-				&a.Username, &a.Status, &a.EnvLabel, &a.HasReport, &a.LastUpdate); err != nil {
+				&a.Username, &a.Status, &a.EnvLabel, &a.HasReport,
+				&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate); err != nil {
 				continue
 			}
 			log.Printf("[monitor] agent %s marked offline (no heartbeat for >90s)", a.AgentID)

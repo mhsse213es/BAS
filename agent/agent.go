@@ -24,15 +24,23 @@ type Agent struct {
 	client         *http.Client
 	cancelScenario context.CancelFunc
 	scenarioMu     sync.Mutex
+	binaryHash     string // SHA-256 of own binary, computed once at startup
 }
 
 func newAgent(cfg Config, id Identity) *Agent {
-	return &Agent{
+	a := &Agent{
 		cfg:    cfg,
 		id:     id,
 		status: "idle",
 		client: &http.Client{Timeout: 30 * time.Second},
 	}
+	if h, err := SelfHash(); err == nil {
+		a.binaryHash = h
+		log.Printf("[*] binary hash: %s", h[:16]+"...")
+	} else {
+		log.Printf("[!] could not hash binary: %v", err)
+	}
+	return a
 }
 
 func (a *Agent) setStatus(s string) {
@@ -52,7 +60,19 @@ func (a *Agent) postJSON(path string, body interface{}) error {
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
-	resp, err := a.client.Post(a.cfg.ServerURL+path, "application/json", bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPost, a.cfg.ServerURL+path, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if a.cfg.AgentSecret != "" {
+		req.Header.Set("X-Agent-Token", a.cfg.AgentSecret)
+		// Sign result and report payloads so the orchestrator can detect tampering.
+		if path == "/api/scenarios/result" || path == "/api/report" {
+			req.Header.Set("X-Result-MAC", SignBody(data, a.cfg.AgentSecret))
+		}
+	}
+	resp, err := a.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", path, err)
 	}
@@ -65,13 +85,14 @@ func (a *Agent) postJSON(path string, body interface{}) error {
 
 func (a *Agent) sendHeartbeat(status string) {
 	hb := Heartbeat{
-		AgentID:   a.id.AgentID,
-		Hostname:  a.id.Hostname,
-		IPAddress: a.id.IPAddress,
-		OSVersion: a.id.OSVersion,
-		Username:  a.id.Username,
-		Status:    status,
-		EnvLabel:  a.cfg.EnvLabel,
+		AgentID:    a.id.AgentID,
+		Hostname:   a.id.Hostname,
+		IPAddress:  a.id.IPAddress,
+		OSVersion:  a.id.OSVersion,
+		Username:   a.id.Username,
+		Status:     status,
+		EnvLabel:   a.cfg.EnvLabel,
+		BinaryHash: a.binaryHash,
 	}
 	if err := a.postJSON("/api/heartbeat", hb); err != nil {
 		log.Printf("[!] heartbeat: %v", err)

@@ -6,13 +6,15 @@ import (
 )
 
 type Config struct {
-	ServerURL string
-	EnvLabel  string
+	ServerURL   string
+	EnvLabel    string
+	AgentSecret string // shared secret for X-Agent-Token + result HMAC signing
 }
 
 func loadConfig() Config {
-	serverURL := os.Getenv("BAS_SERVER_URL")
-	envLabel := os.Getenv("BAS_ENV_LABEL")
+	serverURL   := os.Getenv("BAS_SERVER_URL")
+	envLabel    := os.Getenv("BAS_ENV_LABEL")
+	agentSecret := os.Getenv("BAS_AGENT_SECRET")
 
 	if serverURL == "" || envLabel == "" {
 		if u, e := readServiceParams(); u != "" || e != "" {
@@ -31,7 +33,8 @@ func loadConfig() Config {
 		envLabel = "Production"
 	}
 	return Config{
-		ServerURL: strings.TrimRight(serverURL, "/"),
-		EnvLabel:  envLabel,
+		ServerURL:   strings.TrimRight(serverURL, "/"),
+		EnvLabel:    envLabel,
+		AgentSecret: agentSecret,
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
@@ -31,6 +33,7 @@ type Handler struct {
 	calderaURL  string
 	calderaKey  string
 	artStore    *scenario.ARTStore
+	manifest    *integrity.Manifest // binary hash manifest — nil means verification disabled
 }
 
 // New creates a Handler.
@@ -68,6 +71,18 @@ func (h *Handler) WithCaldera(url, key string) *Handler {
 func (h *Handler) WithART(store *scenario.ARTStore) *Handler {
 	h.artStore = store
 	return h
+}
+
+// WithManifest attaches the binary hash manifest for agent verification.
+func (h *Handler) WithManifest(m *integrity.Manifest) *Handler {
+	h.manifest = m
+	return h
+}
+
+// verifyResultMAC checks X-Result-MAC on a pre-read body.
+// Returns true if the MAC is valid, or if agent secret is not configured.
+func (h *Handler) verifyResultMAC(r *http.Request, body []byte) bool {
+	return integrity.VerifyResultMAC(body, h.agentSecret, r.Header.Get("X-Result-MAC"))
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -139,7 +154,8 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // GET /api/agents
 func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
-		`SELECT agent_id, hostname, ip_address, os_version, username, status, env_label, has_report, last_update
+		`SELECT agent_id, hostname, ip_address, os_version, username, status, env_label,
+		        has_report, binary_hash, binary_trusted, last_update
 		 FROM agents ORDER BY last_update DESC`)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -151,7 +167,8 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var a models.Agent
 		if err := rows.Scan(&a.AgentID, &a.Hostname, &a.IPAddress, &a.OSVersion,
-			&a.Username, &a.Status, &a.EnvLabel, &a.HasReport, &a.LastUpdate); err != nil {
+			&a.Username, &a.Status, &a.EnvLabel, &a.HasReport,
+			&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate); err != nil {
 			continue
 		}
 		agents = append(agents, a)
@@ -205,18 +222,34 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify binary hash against the manifest if one is loaded.
+	trusted := false
+	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() {
+		trusted = h.manifest.HashKnown(hb.BinaryHash)
+		if !trusted {
+			log.Printf("[!] agent %s binary hash MISMATCH — possible tampered binary (hash %s...)",
+				hb.AgentID, hb.BinaryHash[:16])
+		} else {
+			log.Printf("[*] agent %s binary hash verified OK", hb.AgentID)
+		}
+	}
+
 	_, err := h.db.Exec(r.Context(), `
-		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username, status, env_label, last_update)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username, status, env_label,
+		                    binary_hash, binary_trusted, last_update)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
 		ON CONFLICT (agent_id) DO UPDATE SET
-			hostname    = EXCLUDED.hostname,
-			ip_address  = EXCLUDED.ip_address,
-			os_version  = EXCLUDED.os_version,
-			username    = EXCLUDED.username,
-			status      = EXCLUDED.status,
-			env_label   = EXCLUDED.env_label,
-			last_update = NOW()`,
+			hostname       = EXCLUDED.hostname,
+			ip_address     = EXCLUDED.ip_address,
+			os_version     = EXCLUDED.os_version,
+			username       = EXCLUDED.username,
+			status         = EXCLUDED.status,
+			env_label      = EXCLUDED.env_label,
+			binary_hash    = EXCLUDED.binary_hash,
+			binary_trusted = EXCLUDED.binary_trusted,
+			last_update    = NOW()`,
 		hb.AgentID, hb.Hostname, hb.IPAddr, hb.OSVer, hb.Username, hb.Status, hb.EnvLabel,
+		hb.BinaryHash, trusted,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -385,8 +418,18 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		jsonError(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !h.verifyResultMAC(r, body) {
+		log.Printf("[!] result MAC verification FAILED from agent — rejecting submission")
+		jsonError(w, "result MAC invalid — possible tampered payload", http.StatusUnauthorized)
+		return
+	}
 	var raw scenario.RawRunResult
-	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil || raw.RunID == "" {
+	if e := json.Unmarshal(body, &raw); e != nil || raw.RunID == "" {
 		jsonError(w, "invalid payload — expected {runId, scenarioId, agentId, results}", http.StatusBadRequest)
 		return
 	}
@@ -420,14 +463,15 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 
 	resultsJSON, _ := json.Marshal(simResults)
 	// Append new results to whatever already exists (handles partial submissions).
-	_, err := h.db.Exec(r.Context(),
+	var dbErr error
+	_, dbErr = h.db.Exec(r.Context(),
 		`UPDATE scenario_runs
 		 SET status = $1, results = results || $2::jsonb, completed_at = NOW()
 		 WHERE id = $3`,
 		status, resultsJSON, raw.RunID,
 	)
-	if err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
+	if dbErr != nil {
+		jsonError(w, dbErr.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -531,6 +575,16 @@ func (h *Handler) SubmitReport(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	reportBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		jsonError(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !h.verifyResultMAC(r, reportBody) {
+		log.Printf("[!] report MAC verification FAILED — rejecting submission")
+		jsonError(w, "report MAC invalid — possible tampered payload", http.StatusUnauthorized)
+		return
+	}
 	var report struct {
 		AgentID       string          `json:"agentId"`
 		Hostname      string          `json:"hostname"`
@@ -543,7 +597,7 @@ func (h *Handler) SubmitReport(w http.ResponseWriter, r *http.Request) {
 		Categories    json.RawMessage `json:"categories"`
 		Score         json.RawMessage `json:"score"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&report); err != nil || report.AgentID == "" {
+	if err := json.Unmarshal(reportBody, &report); err != nil || report.AgentID == "" {
 		jsonError(w, "invalid report payload", http.StatusBadRequest)
 		return
 	}
@@ -557,7 +611,7 @@ func (h *Handler) SubmitReport(w http.ResponseWriter, r *http.Request) {
 		cats = []byte("[]")
 	}
 
-	_, err := h.db.Exec(r.Context(), `
+	_, err = h.db.Exec(r.Context(), `
 		INSERT INTO reports
 			(agent_id, hostname, ip_address, os_version, username, status, env_label, security_tools, categories, score, last_update)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())

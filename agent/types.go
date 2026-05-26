@@ -8,13 +8,14 @@ import (
 // ── Wire Protocol ─────────────────────────────────────────────────────────────
 
 type Heartbeat struct {
-	AgentID   string `json:"agentId"`
-	Hostname  string `json:"hostname"`
-	IPAddress string `json:"ipAddress"`
-	OSVersion string `json:"osVersion"`
-	Username  string `json:"username"`
-	Status    string `json:"status"`
-	EnvLabel  string `json:"envLabel"`
+	AgentID    string `json:"agentId"`
+	Hostname   string `json:"hostname"`
+	IPAddress  string `json:"ipAddress"`
+	OSVersion  string `json:"osVersion"`
+	Username   string `json:"username"`
+	Status     string `json:"status"`
+	EnvLabel   string `json:"envLabel"`
+	BinaryHash string `json:"binaryHash,omitempty"`
 }
 
 type WSMessage struct {

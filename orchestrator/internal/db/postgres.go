@@ -42,16 +42,22 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_pw boolean NOT NULL DEFAULT false`,
 
 		`CREATE TABLE IF NOT EXISTS agents (
-			agent_id    text        PRIMARY KEY,
-			hostname    text        NOT NULL DEFAULT '',
-			ip_address  text        NOT NULL DEFAULT '',
-			os_version  text        NOT NULL DEFAULT '',
-			username    text        NOT NULL DEFAULT '',
-			status      text        NOT NULL DEFAULT 'idle',
-			env_label   text        NOT NULL DEFAULT 'Production',
-			has_report  boolean     NOT NULL DEFAULT false,
-			last_update timestamptz NOT NULL DEFAULT NOW()
+			agent_id       text        PRIMARY KEY,
+			hostname       text        NOT NULL DEFAULT '',
+			ip_address     text        NOT NULL DEFAULT '',
+			os_version     text        NOT NULL DEFAULT '',
+			username       text        NOT NULL DEFAULT '',
+			status         text        NOT NULL DEFAULT 'idle',
+			env_label      text        NOT NULL DEFAULT 'Production',
+			has_report     boolean     NOT NULL DEFAULT false,
+			binary_hash    text        NOT NULL DEFAULT '',
+			binary_trusted boolean     NOT NULL DEFAULT false,
+			last_update    timestamptz NOT NULL DEFAULT NOW()
 		)`,
+
+		// Idempotent migrations for existing deployments
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS binary_hash    text    NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS binary_trusted boolean NOT NULL DEFAULT false`,
 
 		`CREATE TABLE IF NOT EXISTS scenario_runs (
 			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,

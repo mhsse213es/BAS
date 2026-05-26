@@ -98,26 +98,29 @@ type Score struct {
 
 // Agent represents a registered endpoint.
 type Agent struct {
-	AgentID    string    `json:"agentId"`
-	Hostname   string    `json:"hostname"`
-	IPAddress  string    `json:"ipAddress"`
-	OSVersion  string    `json:"osVersion"`
-	Username   string    `json:"username"`
-	Status     string    `json:"status"` // idle | scanning | offline
-	EnvLabel   string    `json:"envLabel"`
-	HasReport  bool      `json:"hasReport"`
-	LastUpdate time.Time `json:"lastUpdate"`
+	AgentID       string    `json:"agentId"`
+	Hostname      string    `json:"hostname"`
+	IPAddress     string    `json:"ipAddress"`
+	OSVersion     string    `json:"osVersion"`
+	Username      string    `json:"username"`
+	Status        string    `json:"status"` // idle | scanning | offline
+	EnvLabel      string    `json:"envLabel"`
+	HasReport     bool      `json:"hasReport"`
+	BinaryHash    string    `json:"binaryHash,omitempty"`
+	BinaryTrusted bool      `json:"binaryTrusted"`
+	LastUpdate    time.Time `json:"lastUpdate"`
 }
 
 // Heartbeat is sent by agents periodically.
 type Heartbeat struct {
-	AgentID  string `json:"agentId"`
-	Hostname string `json:"hostname"`
-	IPAddr   string `json:"ipAddress"`
-	OSVer    string `json:"osVersion"`
-	Username string `json:"username"`
-	Status   string `json:"status"`
-	EnvLabel string `json:"envLabel"`
+	AgentID    string `json:"agentId"`
+	Hostname   string `json:"hostname"`
+	IPAddr     string `json:"ipAddress"`
+	OSVer      string `json:"osVersion"`
+	Username   string `json:"username"`
+	Status     string `json:"status"`
+	EnvLabel   string `json:"envLabel"`
+	BinaryHash string `json:"binaryHash,omitempty"`
 }
 
 // WSMessage is the envelope for all WebSocket frames.
