@@ -9,12 +9,13 @@ import (
 type Config struct {
 	DatabaseURL   string `json:"database_url"`
 	JWTSecret     string `json:"jwt_secret"`
-	AgentSecret   string `json:"agent_secret,omitempty"` // optional shared secret for agent endpoints
+	AgentSecret   string `json:"agent_secret,omitempty"`
 	HTTPPort      int    `json:"http_port"`
 	ScenariosDir  string `json:"scenarios_dir"`
 	ARTDir        string `json:"art_dir,omitempty"`
 	CalderaURL    string `json:"caldera_url,omitempty"`
 	CalderaAPIKey string `json:"caldera_api_key,omitempty"`
+	LicensePath   string `json:"license_path,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -58,6 +59,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("AGENT_SECRET"); v != "" {
 		cfg.AgentSecret = v
+	}
+	if v := os.Getenv("BAS_LICENSE_PATH"); v != "" {
+		cfg.LicensePath = v
 	}
 
 	if cfg.DatabaseURL == "" {

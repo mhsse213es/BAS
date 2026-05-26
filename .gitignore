@@ -9,6 +9,12 @@ error.txt
 .claude/
 ag/
 
+# License keys — NEVER commit the private key
+packaging/licensing/keys/private.pem
+packaging/licensing/keys/
+# Generated customer license files
+*.lic
+
 # Python
 api/venv/
 api/__pycache__/

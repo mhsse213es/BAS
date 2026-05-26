@@ -22,14 +22,15 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
     go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-arm64 .
 
-# ── Go Orchestrator ──────────────────────────────────────────────────────────
+# ── Go Orchestrator (garble-obfuscated) ──────────────────────────────────────
 FROM golang:1.25-alpine AS builder
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
+RUN go install mvdan.cc/garble@latest
 COPY orchestrator/ .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w" -o /bin/orchestrator ./cmd/server
+    garble -tiny -seed=random build -ldflags="-s -w" -o /bin/orchestrator ./cmd/server
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/orchestrator /orchestrator

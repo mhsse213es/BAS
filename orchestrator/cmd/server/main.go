@@ -16,6 +16,7 @@ import (
 	"github.com/audspect/bas/config"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
@@ -32,6 +33,11 @@ func main() {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		log.Fatalf("[FATAL] config: %v", err)
+	}
+
+	// ── License Check ─────────────────────────────────────────────────────
+	if err := license.Check(cfg.LicensePath); err != nil {
+		log.Fatalf("[FATAL] %v", err)
 	}
 
 	// ── Database ──────────────────────────────────────────────────────────

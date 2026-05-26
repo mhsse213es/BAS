@@ -36,12 +36,23 @@ warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 # ── 1. Build orchestrator binary ───────────────────────────────────────────────
 log "Building bas-orchestrator ${VERSION} for linux/amd64..."
 cd "${REPO_ROOT}/orchestrator"
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build \
-    -trimpath \
-    -ldflags "-s -w -X main.Version=${VERSION}" \
-    -o "${DIST_DIR}/bas-orchestrator-linux-amd64" \
-    ./cmd/server/
+if command -v garble &>/dev/null; then
+  log "  Using garble obfuscation"
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    garble -tiny -seed=random build \
+      -ldflags "-s -w -X main.Version=${VERSION}" \
+      -o "${DIST_DIR}/bas-orchestrator-linux-amd64" \
+      ./cmd/server/
+else
+  warn "garble not found — building without obfuscation"
+  warn "Install: go install mvdan.cc/garble@latest"
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build \
+      -trimpath \
+      -ldflags "-s -w -X main.Version=${VERSION}" \
+      -o "${DIST_DIR}/bas-orchestrator-linux-amd64" \
+      ./cmd/server/
+fi
 cd "${REPO_ROOT}"
 
 log "Binary: ${DIST_DIR}/bas-orchestrator-linux-amd64"
