@@ -166,6 +166,48 @@ check_port() {
   fi
 }
 
+# ── Binary manifest verification ──────────────────────────────────────────────
+# Runs silently if no signing artifacts are present (unsigned dev bundle).
+# Aborts installation if signatures are present but fail to verify.
+verify_bundle_signatures() {
+  local agents_dir="${SCRIPT_DIR}/agents"
+  local manifest="${agents_dir}/BINARIES.sha256"
+  local manifest_sig="${agents_dir}/BINARIES.sha256.asc"
+  local pubkey="${agents_dir}/pubkey.asc"
+
+  # No signing artifacts — skip silently (dev/test bundle)
+  [[ -f "$manifest" ]] || return 0
+  [[ -f "$manifest_sig" ]] || { warn "Binary manifest present but unsigned — skipping verification."; return 0; }
+  [[ -f "$pubkey" ]] || { err "pubkey.asc missing alongside BINARIES.sha256 — cannot verify."; exit 1; }
+
+  command -v gpg &>/dev/null || {
+    warn "gpg not installed — cannot verify binary signatures (install gnupg to enable)."
+    return 0
+  }
+
+  local tmpring
+  tmpring=$(mktemp -d)
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmpring'" RETURN
+
+  gpg --quiet --batch --no-default-keyring \
+      --keyring "${tmpring}/bas.gpg" \
+      --import "${pubkey}" 2>/dev/null
+
+  if ! gpg --quiet --batch --no-default-keyring \
+           --keyring "${tmpring}/bas.gpg" \
+           --verify "${manifest_sig}" "${manifest}" 2>/dev/null; then
+    err "SECURITY: Binary manifest signature verification FAILED."
+    echo ""
+    echo "  The agent binaries in this bundle may have been tampered with."
+    echo "  Do NOT continue installation."
+    echo "  Contact Audspect support if you received this bundle from an official source."
+    exit 1
+  fi
+
+  log "Binary manifest signature verified (Audspect release key)."
+}
+
 # ── Docker CE installation (Ubuntu/Debian) ─────────────────────────────────────
 install_docker() {
   log "Installing Docker CE..."
@@ -672,6 +714,7 @@ main() {
 
   require_root
   ensure_whiptail
+  verify_bundle_signatures   # abort if signed bundle has invalid signatures
 
   page_license    # must pass before anything else is shown
   page_welcome

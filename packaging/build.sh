@@ -75,6 +75,23 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
 cd "${REPO_ROOT}"
 log "Agent binaries written to ${AGENTS_DIR}/"
 
+# ── 1c. Sign binaries if GPG key is available ─────────────────────────────────
+SIGNING_KEY_EMAIL="releases@audspect.com"
+SIGN_BINS="${REPO_ROOT}/packaging/signing/sign-binaries.sh"
+
+# Also sign the orchestrator binary alongside the agents
+cp "${DIST_DIR}/bas-orchestrator-linux-amd64" "${AGENTS_DIR}/bas-orchestrator-linux-amd64"
+
+if command -v gpg &>/dev/null && gpg --list-secret-keys "${SIGNING_KEY_EMAIL}" &>/dev/null 2>&1; then
+  log "Signing binaries..."
+  bash "${SIGN_BINS}" "${AGENTS_DIR}"
+  # Copy pubkey.asc into agents dir for bundle inclusion
+  cp "${REPO_ROOT}/packaging/signing/pubkey.asc" "${AGENTS_DIR}/"
+else
+  warn "GPG signing key not found — binaries will not be signed."
+  echo "  To sign: bash packaging/signing/keygen.sh then rebuild."
+fi
+
 # ── 2. Prepare staging directory ───────────────────────────────────────────────
 log "Staging distribution bundle..."
 rm -rf "${BUILD_DIR}"
@@ -97,6 +114,10 @@ cp -r "${REPO_ROOT}/orchestrator/wwwroot/." "${BUILD_DIR}/wwwroot/"
 mkdir -p "${BUILD_DIR}/agents"
 cp "${AGENTS_DIR}"/* "${BUILD_DIR}/agents/" 2>/dev/null || true
 
+# Copy signing verification tools alongside binaries
+cp "${REPO_ROOT}/packaging/signing/verify-binary.sh" "${BUILD_DIR}/agents/"
+chmod +x "${BUILD_DIR}/agents/verify-binary.sh"
+
 # Version file
 echo "${VERSION}" > "${BUILD_DIR}/VERSION"
 
@@ -115,6 +136,19 @@ if command -v docker &>/dev/null; then
     -t "bas-orchestrator:${VERSION}" \
     -f "${REPO_ROOT}/orchestrator/Dockerfile" \
     "${REPO_ROOT}"
+
+  # Sign image with cosign if available
+  COSIGN_SCRIPT="${REPO_ROOT}/packaging/signing/cosign.sh"
+  COSIGN_PUB="${REPO_ROOT}/packaging/signing/cosign.pub"
+  if command -v cosign &>/dev/null && [[ -f "${REPO_ROOT}/packaging/signing/cosign.key" ]]; then
+    log "Signing Docker image with cosign..."
+    bash "${COSIGN_SCRIPT}" --sign "bas-orchestrator:${VERSION}"
+    # Copy public key into bundle so installer can verify
+    [[ -f "$COSIGN_PUB" ]] && cp "$COSIGN_PUB" "${BUILD_DIR}/"
+  else
+    warn "cosign not available or cosign.key missing — Docker image will not be cosign-signed."
+    echo "  To sign: bash packaging/signing/cosign.sh --keygen  then rebuild."
+  fi
 
   log "Exporting Docker image to bundle..."
   mkdir -p "${BUILD_DIR}/images"
