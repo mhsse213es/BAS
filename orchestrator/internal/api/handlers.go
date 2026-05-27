@@ -688,6 +688,16 @@ func (h *Handler) GetReport(w http.ResponseWriter, r *http.Request) {
 	respond(w, rep)
 }
 
+// ── Config (admin only) ──────────────────────────────────────────────────────
+
+// GET /api/config/connection — returns the agent secret so admins can copy it
+// into the agent config file without needing SSH access to the server.
+func (h *Handler) GetConnectionConfig(w http.ResponseWriter, r *http.Request) {
+	respond(w, map[string]string{
+		"agentSecret": h.agentSecret,
+	})
+}
+
 // ── User Management (admin only) ─────────────────────────────────────────────
 
 // GET /api/users

@@ -88,9 +88,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		// Any authenticated user — self-service password change
 		r.Post("/api/auth/change-password", h.ChangePassword)
 
-		// Admin only — user management
+		// Admin only — config + user management
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin))
+			r.Get("/api/config/connection", h.GetConnectionConfig)
 			r.Get("/api/users", h.ListUsers)
 			r.Post("/api/users", h.CreateUser)
 			r.Put("/api/users/{id}", h.UpdateUser)

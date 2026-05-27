@@ -256,6 +256,22 @@ main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   color: var(--muted); font-weight: 500;
 }
 
+/* ── Connection Config ─────────────────────────────────────── */
+.conn-cfg-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1rem 1.2rem; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;
+}
+.conn-cfg-row { display: flex; align-items: center; gap: 0.6rem; }
+.conn-cfg-label { font-size: 0.72rem; font-weight: 600; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.06em; min-width: 7rem; }
+.conn-cfg-val {
+  flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+  background: var(--elevated); border: 1px solid var(--border); border-radius: 4px;
+  padding: 0.28rem 0.6rem; color: var(--accent); word-break: break-all;
+}
+.conn-cfg-val.secret-hidden { color: var(--muted); letter-spacing: 0.2em; }
+.conn-cfg-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+
 /* ── Agent Download ────────────────────────────────────────── */
 .agent-dl-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin-bottom: 1rem; }
 .agent-dl-card {
@@ -695,6 +711,30 @@ code {
           </table>
         </div>
 
+        <!-- Connection Config (admin only) -->
+        <div id="conn-cfg-wrap" style="display:none; margin-top:2rem">
+          <div class="sec-hdr">
+            <h2>Connection Config</h2>
+          </div>
+          <div class="conn-cfg-card">
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Server URL</span>
+              <span class="conn-cfg-val" id="cfg-server-url"></span>
+              <div class="conn-cfg-actions">
+                <button class="btn btn-sm btn-outline" onclick="copyText('cfg-server-url', this)">Copy</button>
+              </div>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Agent Secret</span>
+              <span class="conn-cfg-val secret-hidden" id="cfg-agent-secret" data-value="">••••••••••••••••••••••••</span>
+              <div class="conn-cfg-actions">
+                <button class="btn btn-sm btn-outline" onclick="toggleSecret(this)">Show</button>
+                <button class="btn btn-sm btn-outline" onclick="copyText('cfg-agent-secret', this)">Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Agent Download -->
         <div class="sec-hdr" style="margin-top:2rem">
           <h2>Download Agent</h2>
@@ -986,6 +1026,7 @@ function bootApp() {
   loadAgents();
   loadScenarios();
   loadRuns();
+  if (ROLE === 'admin') loadConnectionConfig();
   showTab('dashboard');
 }
 
@@ -1037,6 +1078,42 @@ function loadAgents() {
         '</td></tr>';
     }).join('');
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function loadConnectionConfig() {
+  apicall('/api/config/connection').then(function(data) {
+    var wrap = document.getElementById('conn-cfg-wrap');
+    if (!wrap) return;
+    wrap.style.display = '';
+    document.getElementById('cfg-server-url').textContent = window.location.origin;
+    var secretEl = document.getElementById('cfg-agent-secret');
+    secretEl.dataset.value = data.agentSecret || '';
+    // keep masked until user clicks Show
+  }).catch(function() {});
+}
+
+function toggleSecret(btn) {
+  var el = document.getElementById('cfg-agent-secret');
+  var hidden = el.classList.contains('secret-hidden');
+  if (hidden) {
+    el.textContent = el.dataset.value || '(not configured)';
+    el.classList.remove('secret-hidden');
+    btn.textContent = 'Hide';
+  } else {
+    el.textContent = '••••••••••••••••••••••••';
+    el.classList.add('secret-hidden');
+    btn.textContent = 'Show';
+  }
+}
+
+function copyText(elId, btn) {
+  var el = document.getElementById(elId);
+  var text = el.dataset.value || el.textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    var orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  }).catch(function() { showToast('Copy failed', 'err'); });
 }
 
 function stripeColor(id) {
