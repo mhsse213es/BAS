@@ -14,7 +14,7 @@ RUN apk add --no-cache git && \
 # ── Agent Builder (linux/amd64 and linux/arm64) ───────────────────────────────
 # Plain stripped build: golang.org/x/sys assembly is incompatible with garble.
 # The agent has no business logic or secrets -- protection lives in the orchestrator.
-FROM golang:1.23-alpine AS agent-builder
+FROM golang:1.26-alpine AS agent-builder
 WORKDIR /src
 COPY agent/go.mod agent/go.sum ./
 RUN go mod download
@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     -o /agents/bas-agent-linux-arm64 .
 
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
-FROM golang:1.23-alpine AS builder
+FROM golang:1.26-alpine AS builder
 RUN apk add --no-cache git && \
     go install mvdan.cc/garble@latest
 WORKDIR /src
