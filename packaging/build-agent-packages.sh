@@ -61,16 +61,41 @@ CTRL
   cat > "${D}/DEBIAN/postinst" <<'POST'
 #!/bin/sh
 set -e
+
+# Prompt on the real terminal even when dpkg pipes stdin
+if [ -t 0 ]; then
+  TERM_IN=/dev/stdin
+else
+  TERM_IN=/dev/tty
+fi
+
+printf '\n  ┌─────────────────────────────────────────────────┐\n'
+printf   '  │          BAS Agent Configuration               │\n'
+printf   '  └─────────────────────────────────────────────────┘\n\n'
+
+printf '  Orchestrator URL  (e.g. http://192.168.1.10:9000) : '
+read -r BAS_SERVER_URL < "$TERM_IN"
+
+printf '  Agent Secret      (from dashboard → Agents page)  : '
+stty -echo 2>/dev/null || true
+read -r BAS_AGENT_SECRET < "$TERM_IN"
+stty echo 2>/dev/null || true
+printf '\n'
+
+# Write config (preserves existing ENV_LABEL if already set)
+cat > /etc/bas-agent/config <<CFG
+BAS_SERVER_URL=${BAS_SERVER_URL}
+BAS_ENV_LABEL=Production
+BAS_AGENT_SECRET=${BAS_AGENT_SECRET}
+CFG
+chmod 600 /etc/bas-agent/config
+
 systemctl daemon-reload
 systemctl enable bas-agent.service || true
-echo ""
-echo "  BAS Agent installed. Configure /etc/bas-agent/config:"
-echo "    BAS_SERVER_URL=http://<orchestrator-ip>:9000"
-echo "    BAS_AGENT_SECRET=<from /opt/bas-platform/.env>"
-echo ""
-echo "  Then start:  systemctl start bas-agent"
-echo "  View logs:   journalctl -u bas-agent -f"
-echo ""
+systemctl start bas-agent.service  || true
+
+printf '\n  Agent started.\n'
+printf '  View logs:  journalctl -u bas-agent -f\n\n'
 POST
   chmod 755 "${D}/DEBIAN/postinst"
 
