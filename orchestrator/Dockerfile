@@ -35,7 +35,7 @@ COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
 COPY orchestrator/ .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    garble -literals -tiny build \
+    garble -literals build \
     -ldflags="-s -w" \
     -o /bin/orchestrator ./cmd/server
 
