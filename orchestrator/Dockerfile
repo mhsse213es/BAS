@@ -25,6 +25,17 @@ RUN CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" 
     CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-amd64  . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-arm64  .
 
+# ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────
+FROM debian:bookworm-slim AS packager
+ARG BAS_VERSION=1.6.0
+ENV BAS_VERSION=${BAS_VERSION}
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    dpkg alien rpm && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=agent-builder /agents /binaries
+COPY packaging/build-agent-packages.sh /build-packages.sh
+RUN bash /build-packages.sh
+
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
 FROM golang:1.26-alpine AS builder
 RUN apk add --no-cache git && \
@@ -41,6 +52,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/orchestrator /orchestrator
 COPY --from=agent-builder /agents /agents
+COPY --from=packager /packages/ /agents/
 COPY orchestrator/wwwroot /wwwroot
 COPY scenarios /scenarios
 COPY --from=art-fetcher /art-atomics /art-atomics

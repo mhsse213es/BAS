@@ -179,18 +179,36 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	respond(w, agents)
 }
 
-// GET /api/agents/download/{platform} — serves the pre-built agent binary for the requested platform.
-// platform values: linux-amd64, linux-arm64, windows-amd64, darwin-amd64, darwin-arm64
+// agentFiles is the explicit allowlist of downloadable agent artifacts.
+// key = URL platform param; value = filename and MIME type served.
+var agentFiles = map[string]struct {
+	filename string
+	mimeType string
+}{
+	"linux-amd64":     {"bas-agent-linux-amd64", "application/octet-stream"},
+	"linux-arm64":     {"bas-agent-linux-arm64", "application/octet-stream"},
+	"linux-amd64-deb": {"bas-agent-linux-amd64.deb", "application/vnd.debian.binary-package"},
+	"linux-arm64-deb": {"bas-agent-linux-arm64.deb", "application/vnd.debian.binary-package"},
+	"linux-amd64-rpm": {"bas-agent-linux-amd64.rpm", "application/x-rpm"},
+	"windows-amd64":   {"bas-agent-windows-amd64.exe", "application/octet-stream"},
+	"darwin-amd64":    {"bas-agent-darwin-amd64", "application/octet-stream"},
+	"darwin-arm64":    {"bas-agent-darwin-arm64", "application/octet-stream"},
+}
+
+// GET /api/agents/download/{platform} — serves the pre-built agent binary or package.
+// platform values: linux-amd64, linux-arm64, linux-amd64-deb, linux-arm64-deb,
+//
+//	linux-amd64-rpm, windows-amd64, darwin-amd64, darwin-arm64
 func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
 	platform := chi.URLParam(r, "platform")
 
-	ext := ""
-	if strings.HasPrefix(platform, "windows") {
-		ext = ".exe"
+	entry, ok := agentFiles[platform]
+	if !ok {
+		jsonError(w, "unknown platform: "+platform, http.StatusNotFound)
+		return
 	}
-	filename := "bas-agent-" + platform + ext
-	filePath := filepath.Join("./agents", filename)
 
+	filePath := filepath.Join("./agents", entry.filename)
 	f, err := os.Open(filePath)
 	if err != nil {
 		jsonError(w, "agent binary not found for platform: "+platform, http.StatusNotFound)
@@ -204,9 +222,9 @@ func (h *Handler) DownloadAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
-	http.ServeContent(w, r, filename, stat.ModTime(), f)
+	w.Header().Set("Content-Type", entry.mimeType)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+entry.filename+`"`)
+	http.ServeContent(w, r, entry.filename, stat.ModTime(), f)
 }
 
 // POST /api/heartbeat — called by agents.
