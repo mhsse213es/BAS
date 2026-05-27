@@ -111,9 +111,6 @@ Copy-Item "$ComposeDir\docker-compose.prod.yml" "$OutDir\docker-compose.prod.yml
 Copy-Item "$ComposeDir\.env.example"            "$OutDir\.env.example"
 Copy-Item "$ComposeDir\systemd\bas-compose.service" "$OutDir\systemd\bas-compose.service"
 
-if (Test-Path "$ComposeDir\uninstall.sh") {
-    Copy-Item "$ComposeDir\uninstall.sh" "$OutDir\uninstall.sh"
-}
 Copy-Item "$ComposeDir\setup.conf" "$OutDir\setup.conf"
 
 # -- 6. Copy scenarios and wwwroot (if present) --------------------------------

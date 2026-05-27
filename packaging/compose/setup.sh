@@ -477,8 +477,6 @@ _do_install_steps() {
   _step 30 "Copying configuration templates..."
   cp "${SCRIPT_DIR}/docker-compose.yml"      "${INSTALL_DIR}/"
   cp "${SCRIPT_DIR}/docker-compose.prod.yml" "${INSTALL_DIR}/"
-  cp "${SCRIPT_DIR}/uninstall.sh"            "${INSTALL_DIR}/"
-  chmod +x "${INSTALL_DIR}/uninstall.sh"
 
   _step 38 "Writing .env configuration..."
   cat > "${INSTALL_DIR}/.env" <<EOF
