@@ -47,6 +47,18 @@ log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
+# Ensure whiptail has a valid terminal type (sudo strips TERM in some envs)
+export TERM="${TERM:-xterm}"
+
+# Plain-text password prompt -- used when whiptail passwordbox returns empty
+_read_secret() {
+  local _var="$1" _prompt="$2" _pw
+  printf "\n  %s: " "$_prompt" >/dev/tty
+  read -rs _pw </dev/tty
+  printf "\n" >/dev/tty
+  printf -v "$_var" '%s' "$_pw"
+}
+
 # Capture whiptail output via temp file — portable under sudo (fd-swap breaks in some envs)
 _wt() {
   local _retvar="$1"; shift
@@ -442,10 +454,19 @@ page_database() {
 "PostgreSQL will be installed as a Docker container.
 
 Set the database password (min 8 characters):" \
-    12 64 || { err "Setup cancelled."; exit 1; }
+    12 64 || true
+
+  # whiptail passwordbox unavailable in this terminal — fall back to read
+  if [[ -z "$DB_PASSWORD" ]]; then
+    echo ""
+    echo "--- Database Setup ---"
+    _read_secret DB_PASSWORD "Database password (min 8 chars)"
+  fi
+  [[ -z "$DB_PASSWORD" ]] && { err "Setup cancelled."; exit 1; }
 
   if [[ ${#DB_PASSWORD} -lt 8 ]]; then
-    whiptail --title "$TITLE" --msgbox "Password must be at least 8 characters." 8 50
+    { whiptail --title "$TITLE" --msgbox "Password must be at least 8 characters." 8 50; } 2>/dev/null \
+      || warn "Password must be at least 8 characters."
     page_database
     return
   fi
@@ -453,10 +474,15 @@ Set the database password (min 8 characters):" \
   local confirm
   _wt confirm --title "$TITLE — Database" \
     --passwordbox "Confirm database password:" \
-    10 64 || { err "Setup cancelled."; exit 1; }
+    10 64 || true
+
+  if [[ -z "$confirm" ]]; then
+    _read_secret confirm "Confirm database password"
+  fi
 
   if [[ "$DB_PASSWORD" != "$confirm" ]]; then
-    whiptail --title "$TITLE" --msgbox "Passwords do not match. Try again." 8 50
+    { whiptail --title "$TITLE" --msgbox "Passwords do not match. Try again." 8 50; } 2>/dev/null \
+      || warn "Passwords do not match. Try again."
     page_database
   fi
 }
@@ -492,10 +518,19 @@ page_security() {
 "Set the BAS admin password (min 10 characters):
 
 This is the password for the 'admin' user in the dashboard." \
-    12 64 || { err "Setup cancelled."; exit 1; }
+    12 64 || true
+
+  # whiptail passwordbox unavailable in this terminal — fall back to read
+  if [[ -z "$admin_pw" ]]; then
+    echo ""
+    echo "--- Admin Account Setup ---"
+    _read_secret admin_pw "BAS admin password (min 10 chars)"
+  fi
+  [[ -z "$admin_pw" ]] && { err "Setup cancelled."; exit 1; }
 
   if [[ ${#admin_pw} -lt 10 ]]; then
-    whiptail --title "$TITLE" --msgbox "Admin password must be at least 10 characters." 8 56
+    { whiptail --title "$TITLE" --msgbox "Admin password must be at least 10 characters." 8 56; } 2>/dev/null \
+      || warn "Admin password must be at least 10 characters."
     page_security
     return
   fi
@@ -503,10 +538,15 @@ This is the password for the 'admin' user in the dashboard." \
   local confirm
   _wt confirm --title "$TITLE — Security" \
     --passwordbox "Confirm admin password:" \
-    10 64 || { err "Setup cancelled."; exit 1; }
+    10 64 || true
+
+  if [[ -z "$confirm" ]]; then
+    _read_secret confirm "Confirm admin password"
+  fi
 
   if [[ "$admin_pw" != "$confirm" ]]; then
-    whiptail --title "$TITLE" --msgbox "Passwords do not match. Try again." 8 50
+    { whiptail --title "$TITLE" --msgbox "Passwords do not match. Try again." 8 50; } 2>/dev/null \
+      || warn "Passwords do not match. Try again."
     page_security
     return
   fi
