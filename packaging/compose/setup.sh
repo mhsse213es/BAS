@@ -36,6 +36,13 @@ OFFLINE=false
 NEED_DOCKER=false
 NEED_COMPOSE=false
 
+# Set by --config <file>; skips wizard and reads all values from file
+CONFIG_FILE=""
+
+# Set internally when Python wizard spawns setup.sh as subprocess
+# Disables all whiptail; outputs plain log lines captured by Python SSE streamer
+NO_WIZARD=false
+
 # ── Colours (only when stdout is a terminal) ───────────────────────────────────
 if [ -t 1 ]; then
   RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -50,13 +57,51 @@ err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 # Ensure whiptail has a valid terminal type (sudo strips TERM in some envs)
 export TERM="${TERM:-xterm}"
 
-# Plain-text password prompt -- used when whiptail passwordbox returns empty
-_read_secret() {
-  local _var="$1" _prompt="$2" _pw
-  printf "\n  %s: " "$_prompt" >/dev/tty
-  read -rs _pw </dev/tty
-  printf "\n" >/dev/tty
-  printf -v "$_var" '%s' "$_pw"
+# ── Config file loader ────────────────────────────────────────────────────────
+# Reads key=value pairs from setup.conf without sourcing (no arbitrary code exec).
+# Sets: INSTALL_DIR, DASHBOARD_PORT, DB_PASSWORD, ADMIN_PASSWORD, LIC_PATH
+# Generates: JWT_SECRET, AGENT_SECRET, CALDERA_API_KEY, CALDERA_API_KEY_BLUE
+load_config() {
+  local cfg="$1"
+  [[ -f "$cfg" ]] || { err "Config file not found: $cfg"; exit 1; }
+
+  local key val
+  while IFS='=' read -r key val; do
+    [[ "$key" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${key// }" ]] && continue
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    val="${val#"${val%%[![:space:]]*}"}"
+    val="${val%"${val##*[![:space:]]}"}"
+    val="${val#\'}" ; val="${val%\'}"
+    val="${val#\"}" ; val="${val%\"}"
+    case "$key" in
+      INSTALL_DIR)    INSTALL_DIR="$val"    ;;
+      DASHBOARD_PORT) DASHBOARD_PORT="$val" ;;
+      DB_PASSWORD)    DB_PASSWORD="$val"    ;;
+      ADMIN_PASSWORD) ADMIN_PASSWORD="$val" ;;
+      LIC_PATH)       LIC_PATH="$val"       ;;
+    esac
+  done < "$cfg"
+
+  [[ -z "${INSTALL_DIR:-}"    ]] && INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+  [[ -z "${DASHBOARD_PORT:-}" ]] && DASHBOARD_PORT="$DEFAULT_PORT"
+
+  local missing=false
+  [[ -z "${LIC_PATH:-}"       ]] && { err "setup.conf: LIC_PATH is required.";       missing=true; }
+  [[ -z "${DB_PASSWORD:-}"    ]] && { err "setup.conf: DB_PASSWORD is required.";    missing=true; }
+  [[ -z "${ADMIN_PASSWORD:-}" ]] && { err "setup.conf: ADMIN_PASSWORD is required."; missing=true; }
+  $missing && exit 1
+
+  [[ ${#DB_PASSWORD}    -lt 8  ]] && { err "DB_PASSWORD must be at least 8 characters.";     exit 1; }
+  [[ ${#ADMIN_PASSWORD} -lt 10 ]] && { err "ADMIN_PASSWORD must be at least 10 characters."; exit 1; }
+
+  JWT_SECRET=$(openssl rand -hex 32)
+  AGENT_SECRET=$(openssl rand -hex 24)
+  CALDERA_API_KEY=$(openssl rand -hex 20)
+  CALDERA_API_KEY_BLUE=$(openssl rand -hex 20)
+
+  log "Config loaded: install=${INSTALL_DIR} port=${DASHBOARD_PORT}"
 }
 
 # Capture whiptail output via temp file — portable under sudo (fd-swap breaks in some envs)
@@ -316,67 +361,6 @@ PYEOF
   echo "OK:${customer}|${expires_at}"
 }
 
-# License wizard page — loops until a valid .lic is provided or user cancels.
-# Sets LIC_PATH on success.
-page_license() {
-  # Pre-fill with any .lic found next to setup.sh
-  local default_lic=""
-  local found
-  found=$(ls "${SCRIPT_DIR}"/*.lic 2>/dev/null | head -1 || true)
-  [[ -n "$found" ]] && default_lic="$found"
-
-  while true; do
-    local lic_path
-    if ! _wt lic_path --title "$TITLE — License" \
-        --inputbox \
-"A valid Audspect license file (.lic) is required to proceed.
-
-If you received a .lic file from Audspect, enter its full path below.
-Contact support@audspect.com if you do not have a license.
-
-Path to license file:" \
-        14 70 "$default_lic"; then
-      err "Setup cancelled."
-      exit 1
-    fi
-
-    if [[ -z "$lic_path" ]]; then
-      whiptail --title "$TITLE — License" \
-        --msgbox "No path entered. You must provide a valid .lic file to continue." 8 62
-      continue
-    fi
-
-    local result
-    result=$(_check_license "$lic_path")
-
-    if [[ "$result" == OK:* ]]; then
-      local info="${result#OK:}"
-      local lic_customer="${info%%|*}"
-      local lic_expires="${info##*|}"
-      whiptail --title "$TITLE — License Valid" --msgbox \
-"License verified successfully.
-
-  Licensed to:  ${lic_customer}
-  Valid until:  ${lic_expires}
-
-Press OK to continue." 12 58
-      LIC_PATH="$lic_path"
-      return 0
-    fi
-
-    # FAIL — show the specific reason and loop
-    local reason="${result#FAIL:}"
-    whiptail --title "$TITLE — Invalid License" --msgbox \
-"License check FAILED:
-
-  ${reason}
-
-Please provide a valid Audspect-issued .lic file.
-Contact support@audspect.com if you need assistance." 14 68
-    default_lic="$lic_path"
-  done
-}
-
 # ── Wizard pages ───────────────────────────────────────────────────────────────
 page_welcome() {
   whiptail --title "$TITLE" --msgbox \
@@ -441,197 +425,58 @@ Press OK to continue." 22 70
   fi
 }
 
-page_install_dir() {
-  _wt INSTALL_DIR --title "$TITLE" \
-    --inputbox "Installation directory:" 10 64 "$DEFAULT_INSTALL_DIR" \
-    || { err "Setup cancelled."; exit 1; }
-  [[ -z "$INSTALL_DIR" ]] && INSTALL_DIR="$DEFAULT_INSTALL_DIR"
-}
-
-page_database() {
-  _wt DB_PASSWORD --title "$TITLE — Database" \
-    --passwordbox \
-"PostgreSQL will be installed as a Docker container.
-
-Set the database password (min 8 characters):" \
-    12 64 || true
-
-  # whiptail passwordbox unavailable in this terminal — fall back to read
-  if [[ -z "$DB_PASSWORD" ]]; then
-    echo ""
-    echo "--- Database Setup ---"
-    _read_secret DB_PASSWORD "Database password (min 8 chars)"
-  fi
-  [[ -z "$DB_PASSWORD" ]] && { err "Setup cancelled."; exit 1; }
-
-  if [[ ${#DB_PASSWORD} -lt 8 ]]; then
-    { whiptail --title "$TITLE" --msgbox "Password must be at least 8 characters." 8 50; } 2>/dev/null \
-      || warn "Password must be at least 8 characters."
-    page_database
-    return
-  fi
-
-  local confirm
-  _wt confirm --title "$TITLE — Database" \
-    --passwordbox "Confirm database password:" \
-    10 64 || true
-
-  if [[ -z "$confirm" ]]; then
-    _read_secret confirm "Confirm database password"
-  fi
-
-  if [[ "$DB_PASSWORD" != "$confirm" ]]; then
-    { whiptail --title "$TITLE" --msgbox "Passwords do not match. Try again." 8 50; } 2>/dev/null \
-      || warn "Passwords do not match. Try again."
-    page_database
-  fi
-}
-
-page_network() {
-  _wt DASHBOARD_PORT --title "$TITLE — Network" \
-    --inputbox \
-"Dashboard port (the port your browser will connect to):
-
-Default is 9000. Change only if another service uses it." \
-    12 64 "$DEFAULT_PORT" || { err "Setup cancelled."; exit 1; }
-
-  [[ -z "$DASHBOARD_PORT" ]] && DASHBOARD_PORT="$DEFAULT_PORT"
-
-  # Re-check port with user's chosen value
-  if ss -tlnH "sport = :${DASHBOARD_PORT}" 2>/dev/null | grep -q ":${DASHBOARD_PORT}"; then
-    whiptail --title "$TITLE" \
-      --msgbox "Port ${DASHBOARD_PORT} is already in use. Choose a different port." 8 60
-    page_network
-  fi
-}
-
-page_security() {
-  # Auto-generate secrets
-  JWT_SECRET=$(openssl rand -hex 32)
-  AGENT_SECRET=$(openssl rand -hex 24)
-  CALDERA_API_KEY=$(openssl rand -hex 20)
-  CALDERA_API_KEY_BLUE=$(openssl rand -hex 20)
-
-  local admin_pw
-  _wt admin_pw --title "$TITLE — Security" \
-    --passwordbox \
-"Set the BAS admin password (min 10 characters):
-
-This is the password for the 'admin' user in the dashboard." \
-    12 64 || true
-
-  # whiptail passwordbox unavailable in this terminal — fall back to read
-  if [[ -z "$admin_pw" ]]; then
-    echo ""
-    echo "--- Admin Account Setup ---"
-    _read_secret admin_pw "BAS admin password (min 10 chars)"
-  fi
-  [[ -z "$admin_pw" ]] && { err "Setup cancelled."; exit 1; }
-
-  if [[ ${#admin_pw} -lt 10 ]]; then
-    { whiptail --title "$TITLE" --msgbox "Admin password must be at least 10 characters." 8 56; } 2>/dev/null \
-      || warn "Admin password must be at least 10 characters."
-    page_security
-    return
-  fi
-
-  local confirm
-  _wt confirm --title "$TITLE — Security" \
-    --passwordbox "Confirm admin password:" \
-    10 64 || true
-
-  if [[ -z "$confirm" ]]; then
-    _read_secret confirm "Confirm admin password"
-  fi
-
-  if [[ "$admin_pw" != "$confirm" ]]; then
-    { whiptail --title "$TITLE" --msgbox "Passwords do not match. Try again." 8 50; } 2>/dev/null \
-      || warn "Passwords do not match. Try again."
-    page_security
-    return
-  fi
-
-  ADMIN_PASSWORD="$admin_pw"
-
-  whiptail --title "$TITLE — Security" --msgbox \
-"Security secrets have been generated:
-
-  JWT Secret:       ${JWT_SECRET:0:16}... (auto-generated)
-  Agent Secret:     ${AGENT_SECRET:0:12}... (auto-generated)
-  Caldera API Key:  ${CALDERA_API_KEY:0:12}... (auto-generated)
-
-These are written to ${INSTALL_DIR}/.env
-Keep that file secure (chmod 640, root-readable only).
-
-Press OK to continue." 17 68
-}
-
-page_confirm() {
-  local detected_ip
-  detected_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-server-ip")
-
-  whiptail --title "$TITLE — Confirm" --yesno \
-"Ready to install with these settings:
-
-  Install directory:  ${INSTALL_DIR}
-  Dashboard port:     ${DASHBOARD_PORT}
-  Dashboard URL:      http://${detected_ip}:${DASHBOARD_PORT}
-  Database:           PostgreSQL 16 (Docker container)
-  Admin user:         admin
-
-Proceed with installation?" 18 66 || { err "Setup cancelled."; exit 1; }
-}
 
 # ── Installation ───────────────────────────────────────────────────────────────
+# _step PCT "message" — outputs whiptail gauge format or plain log depending on mode
+_step() {
+  local pct="$1" msg="$2"
+  if $NO_WIZARD; then
+    log "$msg"
+  else
+    echo "$pct"
+    echo "# $msg"
+  fi
+}
+
 do_install() {
-  local progress_log
-  progress_log=$(mktemp)
+  if $NO_WIZARD; then
+    _do_install_steps
+  else
+    (
+      _do_install_steps
+    ) | whiptail --title "$TITLE — Installing" \
+                 --gauge "Installing BAS Platform, please wait..." 10 70 0
+  fi
+}
 
-  (
-    # Step 1 — Install Docker if missing
-    echo 5
-    if $NEED_DOCKER; then
-      echo "# Installing Docker CE (this may take 1-2 minutes)..."
-      install_docker 2>>"$progress_log" || { err "Docker install failed. See $progress_log"; exit 1; }
-    else
-      echo "# Docker already installed — skipping..."
-      sleep 0.2
-    fi
+_do_install_steps() {
+  _step 5 "Installing Docker CE (may take 1-2 minutes)..."
+  if $NEED_DOCKER; then
+    install_docker || { err "Docker install failed."; exit 1; }
+  fi
 
-    # Step 2 — Create directory structure
-    echo 15
-    echo "# Creating install directory..."
-    mkdir -p "${INSTALL_DIR}/scenarios" "${INSTALL_DIR}/wwwroot" "${INSTALL_DIR}/data"
-    sleep 0.2
+  _step 15 "Creating install directory..."
+  mkdir -p "${INSTALL_DIR}/scenarios" "${INSTALL_DIR}/wwwroot" "${INSTALL_DIR}/data"
 
-    # Step 3 — Copy license file
-    echo 20
-    echo "# Installing license..."
-    cp "${LIC_PATH}" "${INSTALL_DIR}/bas.lic"
-    chmod 640 "${INSTALL_DIR}/bas.lic"
-    chown root:root "${INSTALL_DIR}/bas.lic"
+  _step 20 "Installing license..."
+  cp "${LIC_PATH}" "${INSTALL_DIR}/bas.lic"
+  chmod 640 "${INSTALL_DIR}/bas.lic"
+  chown root:root "${INSTALL_DIR}/bas.lic"
 
-    # Step 4 — Copy application files
-    echo 25
-    echo "# Copying application files..."
-    if [[ -d "${SCRIPT_DIR}/scenarios" ]]; then
-      cp -r "${SCRIPT_DIR}/scenarios/." "${INSTALL_DIR}/scenarios/"
-    fi
-    if [[ -d "${SCRIPT_DIR}/wwwroot" ]]; then
-      cp -r "${SCRIPT_DIR}/wwwroot/." "${INSTALL_DIR}/wwwroot/"
-    fi
+  _step 25 "Copying application files..."
+  if [[ -d "${SCRIPT_DIR}/scenarios" ]]; then
+    cp -r "${SCRIPT_DIR}/scenarios/." "${INSTALL_DIR}/scenarios/"
+  fi
+  if [[ -d "${SCRIPT_DIR}/wwwroot" ]]; then
+    cp -r "${SCRIPT_DIR}/wwwroot/." "${INSTALL_DIR}/wwwroot/"
+  fi
 
-    # Step 5 — Copy compose files
-    echo 30
-    echo "# Copying configuration templates..."
-    cp "${SCRIPT_DIR}/docker-compose.yml"      "${INSTALL_DIR}/"
-    cp "${SCRIPT_DIR}/docker-compose.prod.yml" "${INSTALL_DIR}/"
-    sleep 0.2
+  _step 30 "Copying configuration templates..."
+  cp "${SCRIPT_DIR}/docker-compose.yml"      "${INSTALL_DIR}/"
+  cp "${SCRIPT_DIR}/docker-compose.prod.yml" "${INSTALL_DIR}/"
 
-    # Step 6 — Write .env
-    echo 38
-    echo "# Writing .env configuration..."
-    cat > "${INSTALL_DIR}/.env" <<EOF
+  _step 38 "Writing .env configuration..."
+  cat > "${INSTALL_DIR}/.env" <<EOF
 # BAS Platform — generated by setup.sh on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 BAS_VERSION=${BAS_VERSION}
 REGISTRY=
@@ -645,72 +490,396 @@ BAS_LICENSE_PATH=/etc/bas/bas.lic
 CALDERA_API_KEY=${CALDERA_API_KEY}
 CALDERA_API_KEY_BLUE=${CALDERA_API_KEY_BLUE}
 EOF
-    chmod 640 "${INSTALL_DIR}/.env"
-    chown root:root "${INSTALL_DIR}/.env"
-    sleep 0.2
+  chmod 640 "${INSTALL_DIR}/.env"
+  chown root:root "${INSTALL_DIR}/.env"
 
-    # Step 7 — Write admin seed env (read by orchestrator on first boot)
-    echo 45
-    echo "# Writing admin seed..."
-    cat > "${INSTALL_DIR}/.env.admin-seed" <<EOF
+  _step 45 "Writing admin seed..."
+  cat > "${INSTALL_DIR}/.env.admin-seed" <<EOF
 # One-time admin seed — deleted after first successful boot
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 EOF
-    chmod 600 "${INSTALL_DIR}/.env.admin-seed"
-    sleep 0.2
+  chmod 600 "${INSTALL_DIR}/.env.admin-seed"
 
-    # Step 8 — Pull or load Docker images
-    echo 50
-    if [[ "$OFFLINE" == "true" ]]; then
-      echo "# Offline mode — loading images from bundle..."
-      for img in "${SCRIPT_DIR}"/images/*.tar.gz "${SCRIPT_DIR}"/images/*.tar; do
-        [[ -f "$img" ]] || continue
-        echo "# Loading $(basename "$img")..."
-        docker load < "$img" 2>>"$progress_log" || true
-      done
-    else
-      echo "# Pulling Docker images (first run may take several minutes)..."
-      cd "${INSTALL_DIR}"
-      docker compose -f docker-compose.yml pull --quiet 2>>"$progress_log" || true
-    fi
-
-    # Step 9 — Install systemd service
-    echo 80
-    echo "# Installing systemd service..."
-    sed "s|/opt/bas-platform|${INSTALL_DIR}|g" \
-      "${SCRIPT_DIR}/systemd/bas-compose.service" \
-      > /etc/systemd/system/bas-compose.service
-    systemctl daemon-reload
-    systemctl enable bas-compose.service
-    sleep 0.2
-
-    # Step 10 — Start services
-    echo 87
-    echo "# Starting BAS Platform..."
-    cd "${INSTALL_DIR}"
-    systemctl start bas-compose.service
-    sleep 3
-
-    # Step 11 — Health check
-    echo 93
-    echo "# Waiting for orchestrator to become healthy..."
-    local retries=0
-    until curl -sf "http://localhost:${DASHBOARD_PORT}/health" &>/dev/null || [[ $retries -ge 24 ]]; do
-      sleep 5
-      ((retries++))
+  _step 50 "Loading Docker images..."
+  if [[ "$OFFLINE" == "true" ]]; then
+    for img in "${SCRIPT_DIR}"/images/*.tar.gz "${SCRIPT_DIR}"/images/*.tar; do
+      [[ -f "$img" ]] || continue
+      _step 55 "Loading $(basename "$img")..."
+      docker load < "$img" || true
     done
+  else
+    cd "${INSTALL_DIR}"
+    docker compose -f docker-compose.yml pull --quiet || true
+  fi
 
-    # Step 12 — Clean up admin seed
-    echo 98
-    echo "# Finalising..."
-    rm -f "${INSTALL_DIR}/.env.admin-seed"
+  _step 80 "Installing systemd service..."
+  sed "s|/opt/bas-platform|${INSTALL_DIR}|g" \
+    "${SCRIPT_DIR}/systemd/bas-compose.service" \
+    > /etc/systemd/system/bas-compose.service
+  systemctl daemon-reload
+  systemctl enable bas-compose.service
 
-    echo 100
-    echo "# Installation complete."
-  ) | whiptail --title "$TITLE — Installing" \
-               --gauge "Installing BAS Platform, please wait..." 10 70 0
+  _step 87 "Starting BAS Platform..."
+  cd "${INSTALL_DIR}"
+  systemctl start bas-compose.service
+  sleep 3
 
-  rm -f "$progress_log"
+  _step 93 "Waiting for orchestrator to become healthy..."
+  local retries=0
+  until curl -sf "http://localhost:${DASHBOARD_PORT}/health" &>/dev/null || [[ $retries -ge 24 ]]; do
+    sleep 5
+    ((retries++))
+  done
+
+  _step 98 "Finalising..."
+  rm -f "${INSTALL_DIR}/.env.admin-seed"
+
+  _step 100 "Installation complete."
+}
+
+show_credentials() {
+  local detected_ip
+  detected_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-server-ip")
+  echo ""
+  echo "============================================================"
+  echo "  BAS Platform v${BAS_VERSION} installed successfully!"
+  echo "============================================================"
+  echo ""
+  echo "  Dashboard URL : http://${detected_ip}:${DASHBOARD_PORT}"
+  echo "  Caldera UI    : http://${detected_ip}:8888"
+  echo "  Login         : admin / (password you set)"
+  echo "  Install path  : ${INSTALL_DIR}"
+  echo ""
+  echo "  Agent downloads:"
+  echo "    Linux amd64 : http://${detected_ip}:${DASHBOARD_PORT}/api/agent/download/linux-amd64"
+  echo "    Linux arm64 : http://${detected_ip}:${DASHBOARD_PORT}/api/agent/download/linux-arm64"
+  echo "    Windows     : http://${detected_ip}:${DASHBOARD_PORT}/api/agent/download/windows-amd64"
+  echo ""
+  echo "  Useful commands:"
+  echo "    Logs   : docker compose -C ${INSTALL_DIR} logs -f"
+  echo "    Status : systemctl status bas-compose"
+  echo "    Stop   : systemctl stop bas-compose"
+  echo "============================================================"
+}
+
+# ── Web-based setup wizard ────────────────────────────────────────────────────
+# Writes a Python3 stdlib HTTP server to /tmp, starts it on :9001.
+# The browser form POSTs config values; the server writes setup.conf and
+# spawns this same setup.sh with --config + --no-wizard.
+# All output from the install subprocess is streamed back to the browser via SSE.
+# Python exits automatically ~3 s after the subprocess completes.
+start_web_wizard() {
+  command -v python3 &>/dev/null || { err "python3 is required for the setup wizard."; exit 1; }
+
+  local server_ip
+  server_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
+
+  local pyfile
+  pyfile=$(mktemp /tmp/bas-wizard-XXXXXX.py)
+  chmod 600 "$pyfile"
+
+  # Write the Python server — single-quoted heredoc prevents bash expansion
+  cat > "$pyfile" << 'PYEOF'
+#!/usr/bin/env python3
+"""BAS Platform setup wizard -- Python3 stdlib only, fully offline."""
+import http.server, socketserver, subprocess, threading, json, os, sys, time, socket
+
+SCRIPT_DIR = sys.argv[1]
+SETUP_SH   = sys.argv[2]
+PORT       = 9001
+
+_log     = []
+_done    = False
+_rc      = 0
+_lock    = threading.Lock()
+_started = False
+
+def _local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        ip = "127.0.0.1"
+    return ip
+
+PAGE = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BAS Platform Setup</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0b1420;color:#c9d1d9;font-family:ui-monospace,SFMono-Regular,"SF Mono",Consolas,"Liberation Mono",Menlo,monospace;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.card{background:#152338;border:1px solid #22324a;border-radius:8px;width:100%;max-width:580px;padding:2rem}
+.header{margin-bottom:1.5rem}
+.header h1{color:#e6edf3;font-size:1.1rem;font-weight:600;margin-bottom:.3rem}
+.header p{color:#9aa9bc;font-size:.78rem}
+.section-title{color:#9aa9bc;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;margin:1.25rem 0 .5rem}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+label{display:block;color:#9aa9bc;font-size:.75rem;margin-bottom:.3rem}
+input{width:100%;background:#0d1b2e;border:1px solid #22324a;border-radius:4px;color:#e6edf3;padding:.45rem .65rem;font-size:.82rem;font-family:inherit;outline:none;transition:border-color .15s}
+input:focus{border-color:#2f81f7;background:#0f1f35}
+input::placeholder{color:#3d4f63}
+input:disabled{opacity:.5}
+.field{margin-bottom:.75rem}
+.btn{display:block;width:100%;margin-top:1.5rem;padding:.65rem;background:#2f81f7;border:none;border-radius:6px;color:#fff;font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .15s}
+.btn:hover:not(:disabled){background:#388bfd}
+.btn:disabled{background:#1b2a41;color:#4d5f72;cursor:not-allowed}
+.log-wrap{display:none;margin-top:1.25rem;border:1px solid #22324a;border-radius:4px;overflow:hidden}
+.log-wrap.show{display:block}
+.log-head{background:#0d1b2e;padding:.4rem .7rem;font-size:.7rem;color:#9aa9bc;border-bottom:1px solid #22324a}
+.log-body{background:#080f1a;padding:.6rem .7rem;height:240px;overflow-y:auto;font-size:.72rem;line-height:1.6}
+.ll{white-space:pre-wrap;word-break:break-all}
+.ll.ok{color:#3fb950}.ll.warn{color:#d29922}.ll.bad{color:#f85149}
+.banner{display:none;margin-top:1rem;border-radius:6px;padding:.9rem 1rem;font-size:.8rem}
+.banner.show{display:block}
+.banner.success{background:#0f2718;border:1px solid #238636;color:#3fb950}
+.banner.success h2{font-size:.9rem;margin-bottom:.4rem}
+.banner.success a{color:#2f81f7;text-decoration:none}
+.banner.success p{color:#9aa9bc;margin-top:.3rem;font-size:.75rem}
+.banner.fail{background:#200e0e;border:1px solid #da3633;color:#f85149}
+.sep{border:none;border-top:1px solid #1b2a41;margin:1.25rem 0}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <h1>BAS Platform &mdash; Setup Wizard</h1>
+    <p>All configuration stays on this server. No internet required.</p>
+  </div>
+  <form id="frm">
+    <p class="section-title">License</p>
+    <div class="field">
+      <label>License file path</label>
+      <input name="LIC_PATH" placeholder="/root/hdfc-prod-001.lic" required>
+    </div>
+    <hr class="sep">
+    <p class="section-title">Installation</p>
+    <div class="row">
+      <div class="field">
+        <label>Install directory</label>
+        <input name="INSTALL_DIR" value="/opt/bas-platform" required>
+      </div>
+      <div class="field">
+        <label>Dashboard port</label>
+        <input name="DASHBOARD_PORT" value="9000" required>
+      </div>
+    </div>
+    <hr class="sep">
+    <p class="section-title">Database</p>
+    <div class="row">
+      <div class="field">
+        <label>Password <span style="color:#4d5f72">(min 8)</span></label>
+        <input type="password" id="dbp" name="DB_PASSWORD" required>
+      </div>
+      <div class="field">
+        <label>Confirm password</label>
+        <input type="password" id="dbp2" required>
+      </div>
+    </div>
+    <hr class="sep">
+    <p class="section-title">Admin Account</p>
+    <div class="row">
+      <div class="field">
+        <label>Password <span style="color:#4d5f72">(min 10)</span></label>
+        <input type="password" id="adp" name="ADMIN_PASSWORD" required>
+      </div>
+      <div class="field">
+        <label>Confirm password</label>
+        <input type="password" id="adp2" required>
+      </div>
+    </div>
+    <button type="submit" class="btn" id="btn">Install BAS Platform</button>
+  </form>
+  <div class="log-wrap" id="logwrap">
+    <div class="log-head">Installation log</div>
+    <div class="log-body" id="log"></div>
+  </div>
+  <div class="banner" id="ok"></div>
+  <div class="banner fail" id="fail"></div>
+</div>
+<script>
+const frm=document.getElementById("frm"),btn=document.getElementById("btn"),
+      logEl=document.getElementById("log"),logWrap=document.getElementById("logwrap"),
+      okBanner=document.getElementById("ok"),failBanner=document.getElementById("fail");
+function addLine(txt){
+  const d=document.createElement("div");
+  const cls=txt.startsWith("[+]")?"ok":txt.startsWith("[!")?"warn":
+            (txt.includes("[x]")||txt.toLowerCase().includes("error"))?"bad":"";
+  d.className="ll"+(cls?" "+cls:"");
+  d.textContent=txt;
+  logEl.appendChild(d);
+  logEl.scrollTop=logEl.scrollHeight;
+}
+frm.addEventListener("submit",async function(e){
+  e.preventDefault();
+  const dbp=document.getElementById("dbp").value;
+  const dbp2=document.getElementById("dbp2").value;
+  const adp=document.getElementById("adp").value;
+  const adp2=document.getElementById("adp2").value;
+  if(dbp!==dbp2){alert("Database passwords do not match.");return;}
+  if(adp!==adp2){alert("Admin passwords do not match.");return;}
+  if(dbp.length<8){alert("Database password must be at least 8 characters.");return;}
+  if(adp.length<10){alert("Admin password must be at least 10 characters.");return;}
+  const data={};
+  new FormData(frm).forEach(function(v,k){data[k]=v;});
+  btn.disabled=true;
+  btn.textContent="Installing...";
+  frm.querySelectorAll("input").forEach(function(i){i.disabled=true;});
+  logWrap.classList.add("show");
+  try{
+    const res=await fetch("/install",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(data)
+    });
+    if(!res.ok){throw new Error("HTTP "+res.status);}
+  }catch(err){
+    failBanner.textContent="Failed to start installation: "+err.message;
+    failBanner.classList.add("show");
+    btn.disabled=false;
+    btn.textContent="Retry";
+    return;
+  }
+  const src=new EventSource("/events");
+  src.onmessage=function(ev){
+    const d=ev.data;
+    if(d.startsWith("__DONE__")){
+      src.close();
+      const rc=parseInt(d.slice(8),10);
+      btn.textContent="Done";
+      if(rc===0){
+        const ip=location.hostname;
+        const port=data.DASHBOARD_PORT||"9000";
+        okBanner.className="banner success show";
+        okBanner.innerHTML="<h2>Installation complete!</h2>"+
+          "<p>Dashboard: <a href=\"http://"+ip+":"+port+"\" target=\"_blank\">"+
+          "http://"+ip+":"+port+"</a></p>"+
+          "<p>Caldera: http://"+ip+":8888</p>"+
+          "<p>Login: admin / (password you set)</p>";
+      }else{
+        failBanner.textContent="Installation failed (exit code "+rc+"). Check the log above.";
+        failBanner.classList.add("show");
+      }
+    }else{
+      try{addLine(JSON.parse(d));}catch(_){addLine(d);}
+    }
+  };
+  src.onerror=function(){src.close();};
+});
+</script>
+</body>
+</html>'''
+
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+
+    def do_GET(self):
+        if self.path == "/":
+            body = PAGE.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/events":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            idx = 0
+            try:
+                while True:
+                    with _lock:
+                        chunk = _log[idx:]
+                        done  = _done
+                        rc    = _rc
+                    for line in chunk:
+                        msg = json.dumps(line)
+                        self.wfile.write(("data:" + msg + "\n\n").encode("utf-8"))
+                        idx += 1
+                    if chunk:
+                        self.wfile.flush()
+                    if done and idx >= len(_log):
+                        self.wfile.write(("data:__DONE__" + str(rc) + "\n\n").encode("utf-8"))
+                        self.wfile.flush()
+                        break
+                    time.sleep(0.1)
+            except Exception:
+                pass
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_POST(self):
+        global _started
+        if self.path == "/install" and not _started:
+            length = int(self.headers.get("Content-Length", 0))
+            data = json.loads(self.rfile.read(length))
+            cfg = os.path.join(SCRIPT_DIR, "setup.conf")
+            with open(cfg, "w") as fh:
+                for k, v in data.items():
+                    fh.write(k + "=" + v + "\n")
+            os.chmod(cfg, 0o600)
+            _started = True
+            threading.Thread(target=_run_install, args=(cfg,), daemon=True).start()
+            resp = b'{"ok":true}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            self.wfile.write(resp)
+        else:
+            self.send_response(400)
+            self.end_headers()
+
+def _run_install(cfg):
+    global _done, _rc
+    proc = subprocess.Popen(
+        ["bash", SETUP_SH, "--config", cfg, "--offline", "--no-wizard"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    for line in proc.stdout:
+        with _lock:
+            _log.append(line.rstrip())
+    proc.wait()
+    with _lock:
+        _rc   = proc.returncode
+        _done = True
+    threading.Timer(3, srv.shutdown).start()
+
+ip  = _local_ip()
+srv = ThreadedHTTPServer(("", PORT), Handler)
+print("[+] BAS Setup Wizard: http://" + ip + ":" + str(PORT), flush=True)
+print("[+] Open this URL in a browser on any machine on this network.", flush=True)
+srv.serve_forever()
+PYEOF
+
+  log "Starting setup wizard on port 9001..."
+  log ""
+  log "  Open this URL in your browser:"
+  log "  http://${server_ip}:9001"
+  log ""
+  log "  Fill in the form and click 'Install BAS Platform'."
+  log "  This terminal will exit when installation is complete."
+  log "  (Ctrl+C to cancel)"
+  log ""
+
+  python3 "$pyfile" "$SCRIPT_DIR" "${BASH_SOURCE[0]}"
+  local wiz_rc=$?
+  rm -f "$pyfile"
+  [[ $wiz_rc -ne 0 ]] && { err "Setup wizard exited unexpectedly."; exit 1; }
 }
 
 page_finish() {
@@ -745,30 +914,105 @@ Press OK to exit the installer." 28 74
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 main() {
-  # Parse flags
-  for arg in "$@"; do
-    case "$arg" in
-      --offline) OFFLINE=true ;;
+  # ── Parse flags ──────────────────────────────────────────────────────────────
+  local _args=("$@")
+  local i=0
+  while [[ $i -lt ${#_args[@]} ]]; do
+    case "${_args[$i]}" in
+      --offline)   OFFLINE=true ;;
+      --no-wizard) NO_WIZARD=true ;;
+      --config)
+        i=$(( i + 1 ))
+        CONFIG_FILE="${_args[$i]:-}"
+        ;;
     esac
+    i=$(( i + 1 ))
   done
 
+  # ── No-wizard mode: called internally by Python wizard subprocess ─────────────
+  # Pure stdout, no whiptail; all output captured by Python SSE streamer.
+  if $NO_WIZARD; then
+    [[ -z "$CONFIG_FILE" ]] && { err "--config <file> is required with --no-wizard"; exit 1; }
+    require_root
+    verify_bundle_signatures
+    load_config "$CONFIG_FILE"
+
+    log "Validating license..."
+    local lic_result
+    lic_result=$(_check_license "$LIC_PATH")
+    if [[ "$lic_result" == OK:* ]]; then
+      local lic_info="${lic_result#OK:}"
+      log "License OK -- ${lic_info%%|*} (expires ${lic_info##*|})"
+    else
+      err "License invalid: ${lic_result#FAIL:}"
+      exit 1
+    fi
+
+    log "Checking prerequisites..."
+    while IFS= read -r result; do
+      local status="${result%%:*}" message="${result#*:}"
+      case "$status" in
+        PASS) log "  OK  ${message}" ;;
+        WARN) warn "  WN  ${message}" ;;
+        INST) log "  >>  ${message} (will install)" ;;
+        FAIL) err "  !! ${message}"; exit 1 ;;
+      esac
+    done < <(
+      check_os
+      check_ram
+      check_disk "$INSTALL_DIR"
+      check_docker
+      check_compose
+      check_port "$DASHBOARD_PORT"
+      check_port "5432"
+    )
+
+    if $NEED_DOCKER; then
+      log "Installing Docker CE..."
+      install_docker || { err "Docker CE installation failed."; exit 1; }
+    fi
+
+    do_install
+    show_credentials
+    return 0
+  fi
+
+  # ── Normal interactive modes ──────────────────────────────────────────────────
   require_root
   ensure_whiptail
-  verify_bundle_signatures   # abort if signed bundle has invalid signatures
+  verify_bundle_signatures
 
-  page_license    # must pass before anything else is shown
-  page_welcome
-  page_prereqs
-  page_install_dir
-  # Re-run disk check with actual install dir chosen by user
-  page_database
-  page_network
-  page_security
-  page_confirm
-  do_install
-  page_finish
+  # Config file mode: setup.conf was pre-seeded or --config passed
+  if [[ -n "$CONFIG_FILE" ]] || [[ -f "${SCRIPT_DIR}/setup.conf" ]]; then
+    [[ -z "$CONFIG_FILE" ]] && CONFIG_FILE="${SCRIPT_DIR}/setup.conf"
+    load_config "$CONFIG_FILE"
 
-  log "Setup complete. Dashboard: http://$(hostname -I | awk '{print $1}'):${DASHBOARD_PORT}"
+    log "Validating license..."
+    local lic_result lic_info
+    lic_result=$(_check_license "$LIC_PATH")
+    if [[ "$lic_result" != OK:* ]]; then
+      { whiptail --title "$TITLE -- License Error" --msgbox \
+"License check FAILED:
+
+  ${lic_result#FAIL:}
+
+Edit setup.conf, update LIC_PATH, and re-run." 14 64; } 2>/dev/null || \
+        err "License invalid: ${lic_result#FAIL:}"
+      exit 1
+    fi
+    lic_info="${lic_result#OK:}"
+    log "License OK -- ${lic_info%%|*} (expires ${lic_info##*|})"
+
+    page_welcome
+    page_prereqs
+    do_install
+    page_finish
+    log "Setup complete. Dashboard: http://$(hostname -I | awk '{print $1}'):${DASHBOARD_PORT}"
+    return 0
+  fi
+
+  # Web wizard mode: no setup.conf found
+  start_web_wizard
 }
 
 main "$@"

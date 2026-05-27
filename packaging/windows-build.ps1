@@ -114,6 +114,7 @@ Copy-Item "$ComposeDir\systemd\bas-compose.service" "$OutDir\systemd\bas-compose
 if (Test-Path "$ComposeDir\uninstall.sh") {
     Copy-Item "$ComposeDir\uninstall.sh" "$OutDir\uninstall.sh"
 }
+Copy-Item "$ComposeDir\setup.conf" "$OutDir\setup.conf"
 
 # -- 6. Copy scenarios and wwwroot (if present) --------------------------------
 $ScenariosDir = Join-Path $RepoRoot "scenarios"
