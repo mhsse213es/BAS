@@ -37,15 +37,15 @@ warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 # garble v0.12.1 — compatible with Go 1.23.  Install with:
 #   go install mvdan.cc/garble@v0.12.1
 if command -v garble &>/dev/null; then
-  log "garble found — builds will be obfuscated (-literals -tiny)"
+  log "garble found — orchestrator will be obfuscated (-literals -tiny)"
   GOBUILD_ORCH="garble -literals -tiny build -ldflags=-s -w -X main.Version=${VERSION}"
-  GOBUILD_AGENT="garble -literals -tiny build -ldflags=-s -w"
 else
-  warn "garble not found — building without obfuscation."
+  warn "garble not found — building orchestrator without obfuscation."
   echo "  Install: go install mvdan.cc/garble@v0.12.1"
   GOBUILD_ORCH="go build -trimpath -ldflags=-s -w -X main.Version=${VERSION}"
-  GOBUILD_AGENT="go build -trimpath -ldflags=-s -w"
 fi
+# Agent uses plain stripped build: golang.org/x/sys assembly is incompatible with garble.
+GOBUILD_AGENT="go build -trimpath -ldflags=-s -w"
 
 # ── 1. Build orchestrator binary ───────────────────────────────────────────────
 log "Building bas-orchestrator ${VERSION} for linux/amd64..."

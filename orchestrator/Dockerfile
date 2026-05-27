@@ -12,23 +12,18 @@ RUN apk add --no-cache git && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 
 # ── Agent Builder (linux/amd64 and linux/arm64) ───────────────────────────────
+# Plain stripped build: golang.org/x/sys assembly is incompatible with garble.
+# The agent has no business logic or secrets -- protection lives in the orchestrator.
 FROM golang:1.23-alpine AS agent-builder
-# garble v0.12.1 — last release verified compatible with Go 1.23
-RUN apk add --no-cache git && \
-    go install mvdan.cc/garble@v0.12.1
 WORKDIR /src
 COPY agent/go.mod agent/go.sum ./
 RUN go mod download
 COPY agent/ .
-# -literals: encrypt all string literals (hides API routes, error strings, SQL)
-# -tiny:     strip filenames/line numbers from all packages
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    garble -literals -tiny build \
-    -ldflags="-s -w" \
+    go build -trimpath -ldflags="-s -w" \
     -o /agents/bas-agent-linux-amd64 . && \
     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-    garble -literals -tiny build \
-    -ldflags="-s -w" \
+    go build -trimpath -ldflags="-s -w" \
     -o /agents/bas-agent-linux-arm64 .
 
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
