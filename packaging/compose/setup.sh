@@ -492,16 +492,10 @@ DASHBOARD_PORT=${DASHBOARD_PORT}
 BAS_LICENSE_PATH=/etc/bas/bas.lic
 CALDERA_API_KEY=${CALDERA_API_KEY}
 CALDERA_API_KEY_BLUE=${CALDERA_API_KEY_BLUE}
+BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 EOF
   chmod 640 "${INSTALL_DIR}/.env"
   chown root:root "${INSTALL_DIR}/.env"
-
-  _step 45 "Writing admin seed..."
-  cat > "${INSTALL_DIR}/.env.admin-seed" <<EOF
-# One-time admin seed — deleted after first successful boot
-BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
-EOF
-  chmod 600 "${INSTALL_DIR}/.env.admin-seed"
 
   _step 50 "Loading Docker images..."
   if [[ "$OFFLINE" == "true" ]]; then
@@ -535,8 +529,6 @@ EOF
   done
 
   _step 98 "Finalising..."
-  rm -f "${INSTALL_DIR}/.env.admin-seed"
-
   _step 100 "Installation complete."
 }
 

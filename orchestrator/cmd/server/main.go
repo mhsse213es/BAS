@@ -56,7 +56,7 @@ func main() {
 	}
 	log.Println("[+] Schema verified")
 
-	if err := seedDefaultAdmin(pool); err != nil {
+	if err := seedDefaultAdmin(pool, cfg.AdminPassword); err != nil {
 		log.Printf("[!] admin seed: %v", err)
 	}
 
@@ -197,22 +197,29 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 	}
 }
 
-// seedDefaultAdmin creates admin/ChangeMe!2024 on first run if no users exist.
-// The operator MUST change this password immediately after deployment.
-func seedDefaultAdmin(pool *pgxpool.Pool) error {
+// seedDefaultAdmin creates the admin user on first run if no users exist.
+// Uses the operator-supplied password from BAS_ADMIN_PASSWORD; falls back to
+// "ChangeMe!2024" and forces a password change on next login when not set.
+func seedDefaultAdmin(pool *pgxpool.Pool, adminPassword string) error {
 	var count int
 	err := pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM users`).Scan(&count)
 	if err != nil || count > 0 {
 		return err
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte("ChangeMe!2024"), bcrypt.DefaultCost)
+	mustChange := false
+	if adminPassword == "" {
+		adminPassword = "ChangeMe!2024"
+		mustChange = true
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("bcrypt: %w", err)
 	}
 	_, err = pool.Exec(context.Background(),
-		`INSERT INTO users (username, password_hash, role) VALUES ('admin', $1, 'admin')`,
-		string(hash),
+		`INSERT INTO users (username, password_hash, role, must_change_pw) VALUES ('admin', $1, 'admin', $2)`,
+		string(hash), mustChange,
 	)
 	if err != nil {
 		return fmt.Errorf("insert admin: %w", err)

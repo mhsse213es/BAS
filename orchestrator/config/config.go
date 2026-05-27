@@ -16,6 +16,7 @@ type Config struct {
 	CalderaURL    string `json:"caldera_url,omitempty"`
 	CalderaAPIKey string `json:"caldera_api_key,omitempty"`
 	LicensePath   string `json:"license_path,omitempty"`
+	AdminPassword string `json:"admin_password,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -62,6 +63,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("BAS_LICENSE_PATH"); v != "" {
 		cfg.LicensePath = v
+	}
+	if v := os.Getenv("BAS_ADMIN_PASSWORD"); v != "" {
+		cfg.AdminPassword = v
 	}
 
 	if cfg.DatabaseURL == "" {

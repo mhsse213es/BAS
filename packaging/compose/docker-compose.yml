@@ -62,6 +62,7 @@ services:
       BAS_LICENSE_PATH: /etc/bas/bas.lic
       CALDERA_URL:      "http://caldera:8888"
       CALDERA_API_KEY:  ${CALDERA_API_KEY:-BASPlatform2024}
+      BAS_ADMIN_PASSWORD: ${BAS_ADMIN_PASSWORD:-}
     volumes:
       - ./scenarios:/scenarios:ro
       - ./wwwroot:/wwwroot:ro
