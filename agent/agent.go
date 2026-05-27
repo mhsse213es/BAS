@@ -262,6 +262,9 @@ func (a *Agent) connectWS() {
 	}
 	q := u.Query()
 	q.Set("agentId", a.id.AgentID)
+	if a.cfg.AgentSecret != "" {
+		q.Set("agentSecret", a.cfg.AgentSecret)
+	}
 	u.RawQuery = q.Encode()
 
 	for {
