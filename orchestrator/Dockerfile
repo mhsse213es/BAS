@@ -29,13 +29,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
 FROM golang:1.23-alpine AS builder
 RUN apk add --no-cache git && \
-    go install mvdan.cc/garble@v0.12.1
+    go install mvdan.cc/garble@latest
 WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
 COPY orchestrator/ .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    garble -literals build \
+    garble -literals -tiny build \
     -ldflags="-s -w" \
     -o /bin/orchestrator ./cmd/server
 
