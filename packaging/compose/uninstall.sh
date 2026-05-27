@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # BAS Platform — Uninstaller
-# Removes all containers, volumes, images, the systemd service, and the install directory.
+# Removes containers, volumes, images, systemd service, and install directory,
+# then verifies every item was actually gone.
 #
 # Usage: sudo bash uninstall.sh [--purge-images] [--yes]
-#   --purge-images   Also remove Docker images (bas-orchestrator, postgres, caldera)
+#   --purge-images   Also remove Docker images
 #   --yes / -y       Skip confirmation prompt
 set -euo pipefail
 
@@ -35,12 +36,10 @@ if [[ -f "$SERVICE_UNIT" ]]; then
   detected=$(grep -Po '(?<=WorkingDirectory=)[^\s]+' "$SERVICE_UNIT" || true)
   [[ -n "$detected" ]] && INSTALL_DIR="$detected"
 fi
-
-# Docker Compose project name = basename of install dir (Docker Compose default)
 PROJECT="$(basename "$INSTALL_DIR")"
 
 echo ""
-echo -e "${RED}${BOLD}━━━  BAS Platform — Complete Uninstaller  ━━━${NC}"
+echo -e "${RED}${BOLD}━━━  BAS Platform — Uninstaller  ━━━${NC}"
 echo "  Install directory : $INSTALL_DIR"
 echo "  Compose project   : $PROJECT"
 echo "  Purge images      : $PURGE_IMAGES"
@@ -59,99 +58,164 @@ echo ""
 if ! $YES; then
   read -rp "  Type 'yes' to confirm complete removal: " confirm
   if [[ "$confirm" != "yes" ]]; then
-    echo "Aborted."
-    exit 0
+    echo "Aborted."; exit 0
   fi
 fi
 
-# ── 1. Stop + disable systemd service ─────────────────────────────────────────
-step "Stopping systemd service..."
+# ═════════════════════════════════════════════════════════════════════════════
+# REMOVAL
+# ═════════════════════════════════════════════════════════════════════════════
+
+step "1/6  Stopping systemd service..."
 if systemctl is-active --quiet bas-compose 2>/dev/null; then
   systemctl stop bas-compose && log "Service stopped." || warn "Failed to stop service (continuing)."
 else
-  warn "Service bas-compose is not active — skipping stop."
+  warn "Service not active — skipping stop."
 fi
 if systemctl is-enabled --quiet bas-compose 2>/dev/null; then
-  systemctl disable bas-compose && log "Service disabled." || warn "Failed to disable service (continuing)."
+  systemctl disable bas-compose && log "Service disabled." || warn "Failed to disable (continuing)."
 fi
 if [[ -f "$SERVICE_UNIT" ]]; then
   rm -f "$SERVICE_UNIT"
   systemctl daemon-reload
-  log "Service unit removed and daemon reloaded."
+  log "Unit file removed."
 fi
 
-# ── 2. Docker Compose down (removes containers + project network + named volumes) ─
-step "Bringing down Docker Compose stack..."
+step "2/6  Removing containers..."
 if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
   COMPOSE_ARGS="-f docker-compose.yml"
   [[ -f "${INSTALL_DIR}/docker-compose.prod.yml" ]] && COMPOSE_ARGS+=" -f docker-compose.prod.yml"
   (cd "${INSTALL_DIR}" && docker compose $COMPOSE_ARGS down --volumes --remove-orphans 2>&1) \
-    && log "Compose stack torn down." \
-    || warn "Compose down reported errors (continuing)."
+    && log "Compose stack torn down." || warn "Compose down had errors (continuing)."
 else
-  warn "No docker-compose.yml found — removing containers by name..."
   for ctr in bas-orchestrator bas-caldera bas-postgres; do
     if docker inspect "$ctr" &>/dev/null 2>&1; then
-      docker rm -f "$ctr" && log "Removed container: $ctr" || warn "Could not remove $ctr"
+      docker rm -f "$ctr" && log "Removed: $ctr" || warn "Could not remove $ctr"
     else
       warn "Container $ctr not found — skipping."
     fi
   done
 fi
 
-# ── 3. Remove named volumes (belt-and-suspenders — compose down covers these,
-#       but the project prefix can differ if the user moved the directory) ───────
-step "Removing Docker volumes..."
+step "3/6  Removing Docker volumes..."
 for vol in "${PROJECT}_bas-postgres-data" "bas-postgres-data"; do
   if docker volume inspect "$vol" &>/dev/null 2>&1; then
-    docker volume rm -f "$vol" && log "Removed volume: $vol" || warn "Could not remove volume: $vol"
-  else
-    warn "Volume $vol not found — skipping."
+    docker volume rm -f "$vol" && log "Removed volume: $vol" || warn "Could not remove: $vol"
   fi
 done
 
-# ── 4. Remove Docker network ──────────────────────────────────────────────────
-step "Removing Docker network..."
+step "4/6  Removing Docker network..."
 for net in "${PROJECT}_bas-internal" "bas-internal"; do
   if docker network inspect "$net" &>/dev/null 2>&1; then
-    docker network rm "$net" && log "Removed network: $net" \
-      || warn "Could not remove network $net (may still have endpoints)."
+    docker network rm "$net" && log "Removed network: $net" || warn "Could not remove: $net"
   fi
 done
 
-# ── 5. Remove Docker images ───────────────────────────────────────────────────
+step "5/6  Removing Docker images..."
 if $PURGE_IMAGES; then
-  step "Removing Docker images..."
-  # Find all local bas-orchestrator image tags
   while IFS= read -r img; do
     [[ -z "$img" ]] && continue
-    docker rmi -f "$img" && log "Removed image: $img" || warn "Could not remove image: $img"
+    docker rmi -f "$img" && log "Removed image: $img" || warn "Could not remove: $img"
   done < <(docker images --format '{{.Repository}}:{{.Tag}}' | grep '^bas-orchestrator' || true)
   for img in "postgres:16-alpine" "ghcr.io/mitre/caldera:latest"; do
     if docker image inspect "$img" &>/dev/null 2>&1; then
-      docker rmi -f "$img" && log "Removed image: $img" || warn "Could not remove image: $img"
-    else
-      warn "Image $img not found — skipping."
+      docker rmi -f "$img" && log "Removed image: $img" || warn "Could not remove: $img"
     fi
   done
 else
-  warn "Docker images retained. Re-run with --purge-images to also remove them."
+  warn "Images retained (re-run with --purge-images to remove them)."
 fi
 
-# ── 6. Remove install directory ───────────────────────────────────────────────
-step "Removing install directory..."
+step "6/6  Removing install directory..."
 if [[ -d "$INSTALL_DIR" ]]; then
-  rm -rf "$INSTALL_DIR" && log "Removed ${INSTALL_DIR}."
+  rm -rf "$INSTALL_DIR" && log "Removed $INSTALL_DIR."
 else
-  warn "Install directory not found — already removed."
+  warn "Directory not found — already removed."
 fi
 
-# ── Done ──────────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+# VERIFICATION
+# ═════════════════════════════════════════════════════════════════════════════
+
 echo ""
-echo -e "${GREEN}${BOLD}BAS Platform has been completely removed.${NC}"
+echo -e "${BOLD}━━━  Verification  ━━━${NC}"
 echo ""
-if ! $PURGE_IMAGES; then
-  echo "  Docker images are still on disk. To also remove them:"
-  echo "    sudo bash $(basename "$0") --purge-images --yes"
-  echo ""
+
+PASS=true
+ok()   { echo -e "  ${GREEN}✔${NC}  $*"; }
+fail() { echo -e "  ${RED}✘${NC}  $*"; PASS=false; }
+
+# Containers
+for ctr in bas-orchestrator bas-caldera bas-postgres; do
+  if docker inspect "$ctr" &>/dev/null 2>&1; then
+    fail "Container still exists: $ctr"
+  else
+    ok "Container removed: $ctr"
+  fi
+done
+
+# Volumes
+for vol in "${PROJECT}_bas-postgres-data" "bas-postgres-data"; do
+  if docker volume inspect "$vol" &>/dev/null 2>&1; then
+    fail "Volume still exists: $vol"
+  else
+    ok "Volume removed: $vol"
+  fi
+done
+
+# Network
+for net in "${PROJECT}_bas-internal" "bas-internal"; do
+  if docker network inspect "$net" &>/dev/null 2>&1; then
+    fail "Network still exists: $net"
+  else
+    ok "Network removed: $net"
+  fi
+done
+
+# Systemd service unit file
+if [[ -f "$SERVICE_UNIT" ]]; then
+  fail "Systemd unit still present: $SERVICE_UNIT"
+else
+  ok "Systemd unit removed"
 fi
+
+# Ports
+for port in 9000 8888 5432; do
+  if ss -tlnp 2>/dev/null | grep -q ":${port}"; then
+    fail "Port $port still in use"
+  else
+    ok "Port $port free"
+  fi
+done
+
+# Install directory
+if [[ -d "$INSTALL_DIR" ]]; then
+  fail "Install directory still present: $INSTALL_DIR"
+else
+  ok "Install directory removed: $INSTALL_DIR"
+fi
+
+# Images (only checked when --purge-images was requested)
+if $PURGE_IMAGES; then
+  for img in "postgres:16-alpine" "ghcr.io/mitre/caldera:latest"; do
+    if docker image inspect "$img" &>/dev/null 2>&1; then
+      fail "Image still present: $img"
+    else
+      ok "Image removed: $img"
+    fi
+  done
+  if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q '^bas-orchestrator'; then
+    fail "Image still present: bas-orchestrator:*"
+  else
+    ok "Image removed: bas-orchestrator:*"
+  fi
+fi
+
+echo ""
+if $PASS; then
+  echo -e "${GREEN}${BOLD}✔  BAS Platform completely removed. All checks passed.${NC}"
+else
+  echo -e "${RED}${BOLD}✘  Uninstall incomplete — review the failures above.${NC}"
+  exit 1
+fi
+echo ""
