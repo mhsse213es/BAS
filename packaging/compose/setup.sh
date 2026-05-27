@@ -84,6 +84,9 @@ load_config() {
     esac
   done < "$cfg"
 
+  # Expand leading ~ to $HOME (tilde is not expanded when read from a file)
+  LIC_PATH="${LIC_PATH/#\~/$HOME}"
+
   [[ -z "${INSTALL_DIR:-}"    ]] && INSTALL_DIR="$DEFAULT_INSTALL_DIR"
   [[ -z "${DASHBOARD_PORT:-}" ]] && DASHBOARD_PORT="$DEFAULT_PORT"
 
