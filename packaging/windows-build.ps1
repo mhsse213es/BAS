@@ -166,7 +166,7 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
 # -- 9. Create ZIP for transfer -----------------------------------------------
 Log "Creating ZIP: $ZipPath"
 if (Test-Path $ZipPath) { Remove-Item -Force $ZipPath }
-Compress-Archive -Path "$OutDir\*" -DestinationPath $ZipPath -Force
+Compress-Archive -Path $OutDir -DestinationPath $ZipPath -Force
 $ZipSizeMB = [math]::Round((Get-Item $ZipPath).Length / 1MB)
 Log "  ZIP: $ZipPath ($ZipSizeMB MB)"
 
