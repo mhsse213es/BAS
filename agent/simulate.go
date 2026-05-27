@@ -35,7 +35,7 @@ type Tech struct {
 }
 
 func checkID(techID, name string) string {
-	h := sha256.Sum256([]byte(techID + name))
+	h := sha256.Sum256([]byte(techID + "|" + name))
 	return hex.EncodeToString(h[:])[:8]
 }
 
