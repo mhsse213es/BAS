@@ -206,7 +206,9 @@ body {
 
 /* ── Main wrapper ──────────────────────────────────────────── */
 .main-wrapper {
-  margin-left: var(--sidebar-w); height: 100vh;
+  margin-left: var(--sidebar-w);
+  width: calc(100vw - var(--sidebar-w));
+  height: 100vh;
   display: flex; flex-direction: column; overflow: hidden;
 }
 
