@@ -463,7 +463,7 @@ _do_install_steps() {
 
   _step 20 "Installing license..."
   cp "${LIC_PATH}" "${INSTALL_DIR}/bas.lic"
-  chmod 640 "${INSTALL_DIR}/bas.lic"
+  chmod 644 "${INSTALL_DIR}/bas.lic"
   chown root:root "${INSTALL_DIR}/bas.lic"
 
   _step 25 "Copying application files..."
