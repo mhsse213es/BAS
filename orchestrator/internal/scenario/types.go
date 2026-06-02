@@ -48,6 +48,11 @@ type Scenario struct {
 	ARTAllWindows      bool     `yaml:"art_all_windows,omitempty"      json:"artAllWindows,omitempty"`
 	ARTTechniques      []string `yaml:"art_techniques,omitempty"       json:"artTechniques,omitempty"`
 
+	// Source is set at load time from the file's folder, NOT persisted to YAML.
+	// One of: "builtin" (scenarios/*.yaml), "custom" (scenarios/custom/),
+	// "intel" (scenarios/intel/). The UI uses it to decide editable vs read-only.
+	Source string `yaml:"-" json:"source,omitempty"`
+
 	// Intel fields — populated only on auto-generated threat-intel scenarios.
 	IntelSource      string    `yaml:"intel_source,omitempty"       json:"intelSource,omitempty"`
 	IntelSourceID    string    `yaml:"intel_source_id,omitempty"    json:"intelSourceId,omitempty"`

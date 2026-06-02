@@ -6,10 +6,16 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// idPattern restricts custom scenario IDs to a filesystem-safe slug so a user
+// can never write outside scenarios/custom/ via a crafted ID.
+var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,63}$`)
 
 // Engine loads and manages scenario definitions from YAML files.
 type Engine struct {
@@ -48,9 +54,27 @@ func (e *Engine) Load() error {
 			log.Printf("[!] scenario: %s missing required field 'id' — skipping", path)
 			return nil
 		}
+		s.Source = e.sourceForPath(path)
 		e.scenarios[s.ID] = &s
 		return nil
 	})
+}
+
+// sourceForPath classifies a scenario file by which sub-folder it lives in,
+// relative to the scenarios root: "custom", "intel", or "builtin".
+func (e *Engine) sourceForPath(path string) string {
+	rel, err := filepath.Rel(e.dir, path)
+	if err != nil {
+		return "builtin"
+	}
+	switch {
+	case strings.HasPrefix(rel, "custom"+string(os.PathSeparator)):
+		return "custom"
+	case strings.HasPrefix(rel, "intel"+string(os.PathSeparator)):
+		return "intel"
+	default:
+		return "builtin"
+	}
 }
 
 // List returns all loaded scenarios sorted by ID.
@@ -74,12 +98,74 @@ func (e *Engine) Count() int {
 	return len(e.scenarios)
 }
 
-// Delete removes an intel scenario from memory and deletes its YAML file.
-// Returns an error if the file cannot be found or removed.
+// Validate checks that a scenario is well-formed enough to save and run.
+// Returns a human-readable error describing the first problem found.
+func (s *Scenario) Validate() error {
+	if !idPattern.MatchString(s.ID) {
+		return fmt.Errorf("id must be 2-64 chars, lowercase letters/digits/hyphens, and start with a letter or digit")
+	}
+	if strings.TrimSpace(s.Name) == "" {
+		return fmt.Errorf("name is required")
+	}
+	// At least one execution mode must be set.
+	hasMode := s.LocalCheck || s.CalderaAllWindows || s.ARTAllWindows ||
+		len(s.CalderaAbilities) > 0 || s.CalderaAdversaryID != "" ||
+		len(s.ARTTechniques) > 0 || len(s.Steps) > 0
+	if !hasMode {
+		return fmt.Errorf("scenario has no execution mode: add steps, ART techniques, Caldera abilities, or set local_check")
+	}
+	// Custom steps must each name a technique.
+	for i, st := range s.Steps {
+		if strings.TrimSpace(st.TechniqueID) == "" {
+			return fmt.Errorf("step %d (%q) is missing a technique_id", i+1, st.Name)
+		}
+	}
+	return nil
+}
+
+// Save validates a scenario and writes it as YAML into scenarios/custom/<id>.yaml,
+// then updates the in-memory map. It refuses to overwrite a builtin or intel file
+// (those live outside custom/) so shipped content can never be clobbered.
+func (e *Engine) Save(s *Scenario) error {
+	if err := s.Validate(); err != nil {
+		return err
+	}
+	// If a scenario with this ID already exists, it must be a custom one.
+	if existing, ok := e.scenarios[s.ID]; ok && existing.Source != "custom" {
+		return fmt.Errorf("scenario %q is %s and cannot be overwritten — clone it to a new ID instead", s.ID, existing.Source)
+	}
+
+	customDir := filepath.Join(e.dir, "custom")
+	if err := os.MkdirAll(customDir, 0o755); err != nil {
+		return fmt.Errorf("create custom dir: %w", err)
+	}
+
+	s.Source = "" // never persist the runtime-only field
+	b, err := yaml.Marshal(s)
+	if err != nil {
+		return fmt.Errorf("marshal scenario: %w", err)
+	}
+
+	dest := filepath.Join(customDir, s.ID+".yaml")
+	if err := os.WriteFile(dest, b, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", dest, err)
+	}
+
+	s.Source = "custom"
+	e.scenarios[s.ID] = s
+	return nil
+}
+
+// Delete removes a custom or intel scenario from memory and deletes its YAML file.
+// Builtin (shipped) scenarios cannot be deleted. Returns an error if the file
+// cannot be found or removed.
 func (e *Engine) Delete(id string) error {
 	sc, ok := e.scenarios[id]
 	if !ok {
 		return fmt.Errorf("scenario %q not found", id)
+	}
+	if sc.Source == "builtin" {
+		return fmt.Errorf("scenario %q is a built-in and cannot be deleted", id)
 	}
 
 	// Find the file on disk by re-scanning for the matching ID
