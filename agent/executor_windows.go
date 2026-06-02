@@ -64,6 +64,18 @@ else { Write-Output "WMI_TIMEOUT: inner process did not write output within time
 	}
 }
 
+// hostIsDomainController reports whether this Windows host is a domain controller.
+// The DC role is recorded in ProductOptions\ProductType = "LanmanNT" (DC) vs
+// "WinNT" (workstation) / "ServerNT" (member server).
+func hostIsDomainController() bool {
+	out, err := exec.Command("reg", "query",
+		`HKLM\SYSTEM\CurrentControlSet\Control\ProductOptions`, "/v", "ProductType").Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "LanmanNT")
+}
+
 func runCleanup(step ScenarioStep) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

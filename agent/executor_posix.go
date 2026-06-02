@@ -34,6 +34,10 @@ func collectRecentEvents(_ context.Context, _ time.Time) []string {
 	return nil
 }
 
+// hostIsDomainController is always false on Linux/macOS — the DC interlock is a
+// Windows Active Directory concept.
+func hostIsDomainController() bool { return false }
+
 // detectSecurityBlock returns true when an EDR/AV killed the child process.
 // SIGKILL from our own context (timeout/cancel) is excluded by the caller.
 func detectSecurityBlock(exitErr *exec.ExitError, durMs int64) (bool, string) {

@@ -31,6 +31,22 @@ type Step struct {
 	Reversible  bool     `yaml:"reversible,omitempty"   json:"reversible,omitempty"`  // true = self-cleaning / no residual change
 	Telemetry   []string `yaml:"telemetry,omitempty"    json:"telemetry,omitempty"`   // expected events, e.g. "Security EID 4688", "Sysmon EID 1"
 	Detection   []string `yaml:"detection,omitempty"    json:"detection,omitempty"`   // detection objectives, e.g. "EDR: WmiPrvSE child process"
+
+	// Fidelity controls which live tier a step runs in:
+	//   "" or "telemetry-safe" → runs in telemetry AND lab modes (zero identity risk)
+	//   "lab-only"             → runs ONLY in lab mode (isolated range; higher risk)
+	Fidelity       string `yaml:"fidelity,omitempty"        json:"fidelity,omitempty"`
+	ProductionSafe bool   `yaml:"production_safe,omitempty" json:"productionSafe,omitempty"`
+}
+
+// LivePolicy is the per-scenario guardrail set applied to live (telemetry/lab)
+// execution. Zero values mean "no constraint".
+type LivePolicy struct {
+	BlockOnDomainController bool     `yaml:"block_on_domain_controller,omitempty" json:"blockOnDomainController,omitempty"`
+	RequireDCReachable      bool     `yaml:"require_dc_reachable,omitempty"        json:"requireDcReachable,omitempty"`
+	MaxSprayAttempts        int      `yaml:"max_spray_attempts,omitempty"          json:"maxSprayAttempts,omitempty"`
+	SprayAccountAllowlist   []string `yaml:"spray_account_allowlist,omitempty"     json:"sprayAccountAllowlist,omitempty"`
+	ExecutionWindow         string   `yaml:"execution_window,omitempty"            json:"executionWindow,omitempty"` // "HH:MM-HH:MM" local; empty = always
 }
 
 // Scenario is a replayable named attack chain loaded from a YAML file.
@@ -57,6 +73,9 @@ type Scenario struct {
 	CalderaAdversaryID string   `yaml:"caldera_adversary_id,omitempty" json:"calderaAdversaryId,omitempty"`
 	ARTAllWindows      bool     `yaml:"art_all_windows,omitempty"      json:"artAllWindows,omitempty"`
 	ARTTechniques      []string `yaml:"art_techniques,omitempty"       json:"artTechniques,omitempty"`
+
+	// LivePolicy holds the guardrails enforced during live (telemetry/lab) runs.
+	LivePolicy *LivePolicy `yaml:"live_policy,omitempty" json:"livePolicy,omitempty"`
 
 	// Executable marks a hybrid scenario that supports opt-in LIVE execution of
 	// real (self-cleaning) attack steps in addition to its read-only posture
@@ -106,6 +125,8 @@ type ScenarioCommand struct {
 	ScenarioID string         `json:"scenarioId"`
 	Name       string         `json:"name"`
 	Steps      []ScenarioStep `json:"steps"`
+	Mode       string         `json:"mode,omitempty"`   // telemetry | lab (live runs only)
+	Policy     *LivePolicy    `json:"policy,omitempty"` // guardrails the agent enforces
 }
 
 // ExecResult is the raw output returned by the agent per step.

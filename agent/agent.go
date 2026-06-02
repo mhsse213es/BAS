@@ -102,10 +102,38 @@ func (a *Agent) sendHeartbeat(status string) {
 }
 
 func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
-	log.Printf("[*] scenario started: run=%s scenario=%s steps=%d",
-		cmd.RunID, cmd.ScenarioID, len(cmd.Steps))
+	log.Printf("[*] scenario started: run=%s scenario=%s steps=%d mode=%s",
+		cmd.RunID, cmd.ScenarioID, len(cmd.Steps), cmd.Mode)
+
+	// ── Domain-controller safety interlock ───────────────────────────────────
+	// Live AD drills must never run directly on a domain controller. If policy
+	// requires it and this host is a DC, abort the whole run before any step.
+	if cmd.Policy != nil && cmd.Policy.BlockOnDomainController && hostIsDomainController() {
+		log.Printf("[!] ABORT: host is a domain controller and policy blocks live execution on DCs (run %s)", cmd.RunID)
+		a.submitResults(cmd, []ExecResult{{
+			ExitCode:      -1,
+			Blocked:       true,
+			BlockedReason: "aborted by domain-controller safety interlock — live AD techniques must not run on a domain controller",
+			ExecutedAt:    time.Now(),
+		}}, false, nil)
+		a.setStatus("idle")
+		a.sendHeartbeat("idle")
+		return
+	}
+
 	a.setStatus("scanning")
 	a.sendHeartbeat("scanning")
+
+	// Policy variables exposed to every step command as environment variables.
+	policyEnv := map[string]string{"BAS_RUN_MODE": cmd.Mode}
+	if cmd.Policy != nil {
+		if cmd.Policy.MaxSprayAttempts > 0 {
+			policyEnv["BAS_MAX_SPRAY_ATTEMPTS"] = fmt.Sprintf("%d", cmd.Policy.MaxSprayAttempts)
+		}
+		if len(cmd.Policy.SprayAccountAllowlist) > 0 {
+			policyEnv["BAS_SPRAY_ALLOWLIST"] = strings.Join(cmd.Policy.SprayAccountAllowlist, ",")
+		}
+	}
 
 	snap := captureSnapshot(cmd.RunID)
 	log.Printf("[*] snapshot taken: run=%s", cmd.RunID)
@@ -162,6 +190,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		}
 
 		step.PayloadDir = payloadDir
+		step.Env = policyEnv
 		r := execStep(ctx, step)
 
 		evtSummary := ""

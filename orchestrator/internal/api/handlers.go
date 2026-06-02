@@ -419,8 +419,9 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	scenarioID := chi.URLParam(r, "id")
 	var req struct {
 		AgentID     string `json:"agentId"`
-		Mode        string `json:"mode"`        // "posture" (default, safe) | "execute" (live)
-		ConfirmLive bool   `json:"confirmLive"` // required acknowledgement for live execution
+		Mode        string `json:"mode"`        // posture (default) | telemetry | lab
+		ConfirmLive bool   `json:"confirmLive"` // required ack for any live run (telemetry/lab)
+		ConfirmLab  bool   `json:"confirmLab"`  // second-stage approval, required for lab mode
 		Reason      string `json:"reason"`      // optional operator justification (audited)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
@@ -434,19 +435,48 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hybrid execution guardrails. "execute" runs the real (self-cleaning) attack
-	// steps and is only permitted when ALL hold:
-	//   1. the scenario is explicitly marked executable, and
-	//   2. the caller explicitly acknowledges live execution (confirmLive).
-	// Anything else falls back to safe posture mode.
-	live := req.Mode == "execute"
+	// ── Three-tier run modes ─────────────────────────────────────────────────
+	//   posture   (default) → read-only checks, safe anywhere
+	//   telemetry (opt-in)   → real, identity-safe techniques; production-safe under approval
+	//   lab       (opt-in)   → full-fidelity emulation; isolated range only
+	// "execute" is accepted as a legacy alias for telemetry.
+	mode := req.Mode
+	switch mode {
+	case "":
+		mode = "posture"
+	case "execute":
+		mode = "telemetry"
+	case "posture", "telemetry", "lab":
+		// ok
+	default:
+		jsonError(w, "invalid mode — use posture | telemetry | lab", http.StatusBadRequest)
+		return
+	}
+	live := mode == "telemetry" || mode == "lab"
+
 	if live && !sc.Executable {
 		jsonError(w, "scenario does not support live execution — run it in posture mode", http.StatusBadRequest)
 		return
 	}
 	if live && !req.ConfirmLive {
-		jsonError(w, "live execution requires explicit acknowledgement (confirmLive=true) — it runs real techniques and must only target an isolated lab host", http.StatusBadRequest)
+		jsonError(w, "live execution requires explicit acknowledgement (confirmLive=true) — it runs real techniques", http.StatusBadRequest)
 		return
+	}
+	if mode == "lab" && !req.ConfirmLab {
+		jsonError(w, "lab mode is a second approval gate (confirmLab=true) — it allows full-fidelity emulation and must target an isolated AD range only", http.StatusBadRequest)
+		return
+	}
+	// Execution-window guardrail (server-enforced) applies to live runs only.
+	if live && sc.LivePolicy != nil && sc.LivePolicy.ExecutionWindow != "" {
+		ok, werr := withinWindow(sc.LivePolicy.ExecutionWindow, time.Now())
+		if werr != nil {
+			jsonError(w, "invalid execution_window in scenario policy: "+werr.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			jsonError(w, "outside the approved execution window ("+sc.LivePolicy.ExecutionWindow+") for live execution", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Create a run record in RUNNING state, stamped with the requesting user
@@ -495,12 +525,29 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 			reason = "(none provided)"
 		}
 		// Audit record for every live execution — who/what/where/when/why.
-		log.Printf("[AUDIT] live-execution dispatched: user=%s scenario=%s agent=%s run=%s reason=%q",
-			who, scenarioID, req.AgentID, runID, reason)
+		log.Printf("[AUDIT] live-execution dispatched: mode=%s user=%s scenario=%s agent=%s run=%s reason=%q",
+			mode, who, scenarioID, req.AgentID, runID, reason)
+	}
+
+	// Filter steps by fidelity for the requested tier: telemetry excludes
+	// lab-only steps; lab includes everything. Build from a filtered copy so the
+	// original scenario is untouched.
+	buildSc := sc
+	if live {
+		filtered := *sc
+		kept := make([]scenario.Step, 0, len(sc.Steps))
+		for _, st := range sc.Steps {
+			if mode == "telemetry" && st.Fidelity == "lab-only" {
+				continue
+			}
+			kept = append(kept, st)
+		}
+		filtered.Steps = kept
+		buildSc = &filtered
 	}
 
 	// Build concrete commands — all framework logic resolved server-side
-	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore)
+	steps, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore)
 	if err != nil {
 		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -511,6 +558,8 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		ScenarioID: scenarioID,
 		Name:       sc.Name,
 		Steps:      steps,
+		Mode:       mode,
+		Policy:     sc.LivePolicy,
 	}
 	sent := h.hub.SendToAgent(req.AgentID, models.WSMessage{
 		Type:    models.MsgCommandScenario,
@@ -1182,6 +1231,30 @@ func respond(w http.ResponseWriter, v interface{}) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("[api] encode error: %v", err)
 	}
+}
+
+// withinWindow reports whether now falls inside an "HH:MM-HH:MM" local-time
+// window. Supports windows that wrap past midnight (e.g. "22:00-06:00").
+func withinWindow(spec string, now time.Time) (bool, error) {
+	parts := strings.SplitN(spec, "-", 2)
+	if len(parts) != 2 {
+		return false, fmt.Errorf("expected HH:MM-HH:MM, got %q", spec)
+	}
+	start, err := time.Parse("15:04", strings.TrimSpace(parts[0]))
+	if err != nil {
+		return false, fmt.Errorf("bad start time: %w", err)
+	}
+	end, err := time.Parse("15:04", strings.TrimSpace(parts[1]))
+	if err != nil {
+		return false, fmt.Errorf("bad end time: %w", err)
+	}
+	cur := now.Hour()*60 + now.Minute()
+	s := start.Hour()*60 + start.Minute()
+	e := end.Hour()*60 + end.Minute()
+	if s <= e {
+		return cur >= s && cur <= e, nil
+	}
+	return cur >= s || cur <= e, nil // wraps past midnight
 }
 
 // respondStatus is respond with an explicit status code (e.g. 201 Created).

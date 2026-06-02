@@ -29,6 +29,17 @@ type ScenarioCommand struct {
 	ScenarioID string         `json:"scenarioId"`
 	Name       string         `json:"name"`
 	Steps      []ScenarioStep `json:"steps"`
+	Mode       string         `json:"mode,omitempty"`   // telemetry | lab (live runs)
+	Policy     *LivePolicy    `json:"policy,omitempty"` // guardrails enforced by the agent
+}
+
+// LivePolicy mirrors the server-side guardrails the agent must honour for live runs.
+type LivePolicy struct {
+	BlockOnDomainController bool     `json:"blockOnDomainController,omitempty"`
+	RequireDCReachable      bool     `json:"requireDcReachable,omitempty"`
+	MaxSprayAttempts        int      `json:"maxSprayAttempts,omitempty"`
+	SprayAccountAllowlist   []string `json:"sprayAccountAllowlist,omitempty"`
+	ExecutionWindow         string   `json:"executionWindow,omitempty"`
 }
 
 // SimCheckResult carries the pre-interpreted result of a single built-in
@@ -76,6 +87,9 @@ type ScenarioStep struct {
 	Payloads    []Payload `json:"payloads,omitempty"`
 	Cleanup     string    `json:"cleanup,omitempty"`
 	PayloadDir  string    `json:"-"`
+	// Env holds runtime-only policy variables (BAS_RUN_MODE, BAS_MAX_SPRAY_ATTEMPTS,
+	// BAS_SPRAY_ALLOWLIST) injected by the runner; never wire-serialised.
+	Env map[string]string `json:"-"`
 }
 
 type ExecResult struct {

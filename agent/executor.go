@@ -56,8 +56,15 @@ func execStep(parentCtx context.Context, step ScenarioStep) ExecResult {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	if step.PayloadDir != "" {
-		cmd.Env = append(os.Environ(), "BAS_PAYLOAD_DIR="+step.PayloadDir)
+	if step.PayloadDir != "" || len(step.Env) > 0 {
+		env := os.Environ()
+		if step.PayloadDir != "" {
+			env = append(env, "BAS_PAYLOAD_DIR="+step.PayloadDir)
+		}
+		for k, v := range step.Env {
+			env = append(env, k+"="+v)
+		}
+		cmd.Env = env
 	}
 
 	err := cmd.Run()
