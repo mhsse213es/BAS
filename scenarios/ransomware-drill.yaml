@@ -1,4 +1,4 @@
-﻿id: ransomware-drill
+id: ransomware-drill
 name: Ransomware Drill (BFSI Business Continuity Test)
 description: >
   Simulates a ransomware kill chain for BFSI DR/BCP testing per RBI guidelines
