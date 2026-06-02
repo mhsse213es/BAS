@@ -1046,10 +1046,14 @@ sudo systemctl start bas-agent</code>
       <label class="modal-lbl">Execution mode</label>
       <select id="modal-mode" onchange="renderRunMode()">
         <option value="posture">Posture — read-only, safe on any host</option>
-        <option value="execute">Live execution — runs real techniques (lab only)</option>
+        <option value="telemetry">Telemetry — real identity-safe techniques (production-safe under approval)</option>
+        <option value="lab">Lab — full-fidelity emulation (isolated range only)</option>
       </select>
-      <div id="modal-mode-warn" style="display:none;margin-top:0.6rem;padding:0.6rem 0.75rem;border:1px solid rgba(218,54,51,0.4);background:rgba(218,54,51,0.1);border-radius:var(--radius);font-size:0.78rem;color:#f85149;line-height:1.45">
-        &#9888; <strong>Live execution</strong> runs real attack techniques on the target and <strong>will trigger EDR/Defender</strong>. Use only on a domain-joined Windows <strong>test VM with a snapshot</strong> — never production. Each step is self-cleaning.
+      <div id="modal-mode-warn" style="display:none;margin-top:0.6rem;padding:0.6rem 0.75rem;border-radius:var(--radius);font-size:0.78rem;line-height:1.45"></div>
+      <div id="modal-reason-wrap" style="display:none;margin-top:0.6rem">
+        <label class="modal-lbl">Reason / change reference (audited, optional)</label>
+        <input type="text" id="modal-reason" placeholder="e.g. CR-1234 detection validation" autocomplete="off"
+               style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
       </div>
     </div>
 
@@ -1622,9 +1626,29 @@ function renderRunMode() {
     return;
   }
   wrap.style.display = 'block';
-  var live = modeSel.value === 'execute';
-  document.getElementById('modal-mode-warn').style.display = live ? 'block' : 'none';
-  document.getElementById('modal-run-btn').innerHTML = live ? '&#9654; Run LIVE' : '&#9654; Run';
+  var mode = modeSel.value;
+  var warn = document.getElementById('modal-mode-warn');
+  var reasonWrap = document.getElementById('modal-reason-wrap');
+  var btn = document.getElementById('modal-run-btn');
+  reasonWrap.style.display = (mode === 'posture') ? 'none' : 'block';
+  if (mode === 'telemetry') {
+    warn.style.display = 'block';
+    warn.style.border = '1px solid rgba(210,153,34,0.5)';
+    warn.style.background = 'rgba(210,153,34,0.12)';
+    warn.style.color = '#d29922';
+    warn.innerHTML = '&#9888; <strong>Telemetry mode</strong> runs real, identity-safe techniques (no credential access, cracking, or persistence) and <strong>will generate EDR/SIEM alerts</strong>. Production-safe only under an approved window.';
+    btn.innerHTML = '&#9654; Run Telemetry';
+  } else if (mode === 'lab') {
+    warn.style.display = 'block';
+    warn.style.border = '1px solid rgba(218,54,51,0.5)';
+    warn.style.background = 'rgba(218,54,51,0.12)';
+    warn.style.color = '#f85149';
+    warn.innerHTML = '&#9888; <strong>LAB MODE — full-fidelity emulation.</strong> Runs LSASS memory dump and allowlisted password spray. <strong>Isolated AD range only, never production.</strong> Triggers EDR by design; requires a second confirmation.';
+    btn.innerHTML = '&#9654; Run LAB';
+  } else {
+    warn.style.display = 'none';
+    btn.innerHTML = '&#9654; Run';
+  }
 }
 function closeModal() { document.getElementById('run-overlay').classList.remove('open'); _modalScId = null; }
 
@@ -2035,13 +2059,19 @@ function confirmRun() {
   if (!scenarioId || !agentId) { showToast('Select scenario and agent', 'err'); return; }
   var modeWrap = document.getElementById('modal-mode-wrap');
   var mode = (modeWrap.style.display !== 'none') ? document.getElementById('modal-mode').value : 'posture';
-  var confirmLive = false;
-  if (mode === 'execute') {
-    if (!confirm('LIVE execution runs real attack techniques on the target endpoint and will trigger EDR/Defender.\n\nOnly proceed on an isolated lab / test VM with a snapshot. Continue?')) return;
+  var confirmLive = false, confirmLab = false;
+  if (mode === 'telemetry') {
+    if (!confirm('TELEMETRY mode runs real, identity-safe techniques and WILL generate EDR/SIEM alerts.\n\nProceed only on an approved, monitored target. Continue?')) return;
     confirmLive = true;
+  } else if (mode === 'lab') {
+    if (!confirm('LAB mode runs FULL-FIDELITY techniques (LSASS dump, allowlisted spray) and will trigger EDR.\n\nISOLATED AD RANGE ONLY — never production. Continue?')) return;
+    if (!confirm('Second confirmation required for LAB mode.\n\nConfirm the target is an isolated lab/range with a snapshot?')) return;
+    confirmLive = true; confirmLab = true;
   }
+  var reasonEl = document.getElementById('modal-reason');
+  var reason = (mode !== 'posture' && reasonEl) ? reasonEl.value.trim() : '';
   apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
-    method: 'POST', body: JSON.stringify({ agentId: agentId, mode: mode, confirmLive: confirmLive })
+    method: 'POST', body: JSON.stringify({ agentId: agentId, mode: mode, confirmLive: confirmLive, confirmLab: confirmLab, reason: reason })
   }).then(function(res) {
     if (res && res.error) { showToast('Run failed: ' + res.error, 'err'); return; }
     closeModal();
