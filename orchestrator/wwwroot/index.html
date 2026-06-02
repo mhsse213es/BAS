@@ -2035,11 +2035,13 @@ function confirmRun() {
   if (!scenarioId || !agentId) { showToast('Select scenario and agent', 'err'); return; }
   var modeWrap = document.getElementById('modal-mode-wrap');
   var mode = (modeWrap.style.display !== 'none') ? document.getElementById('modal-mode').value : 'posture';
+  var confirmLive = false;
   if (mode === 'execute') {
-    if (!confirm('LIVE execution runs real attack techniques on the target endpoint and will trigger EDR/Defender.\n\nOnly proceed on a test VM with a snapshot. Continue?')) return;
+    if (!confirm('LIVE execution runs real attack techniques on the target endpoint and will trigger EDR/Defender.\n\nOnly proceed on an isolated lab / test VM with a snapshot. Continue?')) return;
+    confirmLive = true;
   }
   apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
-    method: 'POST', body: JSON.stringify({ agentId: agentId, mode: mode })
+    method: 'POST', body: JSON.stringify({ agentId: agentId, mode: mode, confirmLive: confirmLive })
   }).then(function(res) {
     if (res && res.error) { showToast('Run failed: ' + res.error, 'err'); return; }
     closeModal();

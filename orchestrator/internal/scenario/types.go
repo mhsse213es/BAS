@@ -21,6 +21,16 @@ type Step struct {
 	TimeoutSec  int           `yaml:"timeout_sec,omitempty" json:"timeoutSec,omitempty"`
 	Payloads    []YAMLPayload `yaml:"payloads,omitempty"   json:"payloads,omitempty"`
 	Cleanup     string        `yaml:"cleanup,omitempty"    json:"cleanup,omitempty"`
+
+	// ── Hybrid/live-mode safety & telemetry metadata (optional) ──────────────
+	// These document the risk and expected detection signal of a live step so
+	// operators see the blast radius before running and SOC teams know what to
+	// look for. Surfaced in the run results; ignored in posture mode.
+	Risk        string   `yaml:"risk,omitempty"         json:"risk,omitempty"`         // low | medium | high
+	BlastRadius string   `yaml:"blast_radius,omitempty" json:"blastRadius,omitempty"` // short human label, e.g. "spawns benign child process; no persistence"
+	Reversible  bool     `yaml:"reversible,omitempty"   json:"reversible,omitempty"`  // true = self-cleaning / no residual change
+	Telemetry   []string `yaml:"telemetry,omitempty"    json:"telemetry,omitempty"`   // expected events, e.g. "Security EID 4688", "Sysmon EID 1"
+	Detection   []string `yaml:"detection,omitempty"    json:"detection,omitempty"`   // detection objectives, e.g. "EDR: WmiPrvSE child process"
 }
 
 // Scenario is a replayable named attack chain loaded from a YAML file.

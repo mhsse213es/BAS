@@ -418,8 +418,10 @@ func (h *Handler) GetScenario(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	scenarioID := chi.URLParam(r, "id")
 	var req struct {
-		AgentID string `json:"agentId"`
-		Mode    string `json:"mode"` // "posture" (default, safe) | "execute" (live)
+		AgentID     string `json:"agentId"`
+		Mode        string `json:"mode"`        // "posture" (default, safe) | "execute" (live)
+		ConfirmLive bool   `json:"confirmLive"` // required acknowledgement for live execution
+		Reason      string `json:"reason"`      // optional operator justification (audited)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -432,12 +434,18 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hybrid execution: "execute" runs the real (self-cleaning) attack steps and
-	// is only permitted on scenarios explicitly marked executable. Anything else
-	// falls back to safe posture mode.
+	// Hybrid execution guardrails. "execute" runs the real (self-cleaning) attack
+	// steps and is only permitted when ALL hold:
+	//   1. the scenario is explicitly marked executable, and
+	//   2. the caller explicitly acknowledges live execution (confirmLive).
+	// Anything else falls back to safe posture mode.
 	live := req.Mode == "execute"
 	if live && !sc.Executable {
 		jsonError(w, "scenario does not support live execution — run it in posture mode", http.StatusBadRequest)
+		return
+	}
+	if live && !req.ConfirmLive {
+		jsonError(w, "live execution requires explicit acknowledgement (confirmLive=true) — it runs real techniques and must only target an isolated lab host", http.StatusBadRequest)
 		return
 	}
 
@@ -478,7 +486,17 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if live {
-		log.Printf("[scenario] LIVE execution requested for %s → agent %s (run %s)", scenarioID, req.AgentID, runID)
+		who := "unknown"
+		if initiatedBy != nil {
+			who = *initiatedBy
+		}
+		reason := req.Reason
+		if reason == "" {
+			reason = "(none provided)"
+		}
+		// Audit record for every live execution — who/what/where/when/why.
+		log.Printf("[AUDIT] live-execution dispatched: user=%s scenario=%s agent=%s run=%s reason=%q",
+			who, scenarioID, req.AgentID, runID, reason)
 	}
 
 	// Build concrete commands — all framework logic resolved server-side
