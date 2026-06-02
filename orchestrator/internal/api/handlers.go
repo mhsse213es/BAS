@@ -355,6 +355,48 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"runId": runID, "status": "dispatched"})
 }
 
+// POST /api/scan/safe/{agentId} — triggers the read-only safe-simulation.
+// Available to Viewer+ since it makes no changes to the endpoint. Dispatched
+// as a local_check (agent runs built-in read-only checks).
+func (h *Handler) SafeScan(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+
+	sc, ok := h.engine.Get("safe-simulation")
+	if !ok {
+		jsonError(w, "safe-simulation scenario not found — add scenarios/safe-simulation.yaml", http.StatusNotFound)
+		return
+	}
+
+	runID := newID()
+	var initiatedBy *string
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+		initiatedBy = &c.UserID
+	}
+	_, err := h.db.Exec(r.Context(),
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW())`,
+		runID, "safe-simulation", agentID, sc.Name, initiatedBy,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sent := h.hub.SendToAgent(agentID, models.WSMessage{
+		Type:    models.MsgCommandSimulate,
+		AgentID: agentID,
+		Data:    map[string]string{"scenarioId": "safe-simulation", "runId": runID},
+	})
+	if !sent {
+		_, _ = h.db.Exec(context.Background(),
+			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
+		return
+	}
+	log.Printf("[scan] dispatched safe-simulation → agent %s (run %s)", agentID, runID)
+	respond(w, map[string]string{"runId": runID, "status": "dispatched"})
+}
+
 // ── Scenarios ─────────────────────────────────────────────────────────────────
 
 // GET /api/scenarios

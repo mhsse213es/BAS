@@ -78,6 +78,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/scenarios/runs", h.ListScenarioRuns)
 		r.Get("/api/report/{agentId}", h.GetReport)
 
+		// Viewer+ — safe read-only simulation makes no changes to the endpoint
+		r.Post("/api/scan/safe/{agentId}", h.SafeScan)
+
 		// Analyst + Admin only — can trigger scans and run scenarios
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleAnalyst))
