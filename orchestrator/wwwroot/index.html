@@ -1209,6 +1209,7 @@ function loadAgents() {
         '<td style="color:var(--muted);font-size:0.78rem">' + ago(a.lastUpdate) + '</td>' +
         '<td style="white-space:nowrap">' +
           '<button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run</button>' +
+          ' <button class="btn btn-outline btn-sm" onclick="safeScan(\'' + x(a.agentId) + '\')" title="Read-only simulation — makes no changes to the endpoint">&#128737; Safe Scan</button>' +
           (a.hasReport ? ' <button class="btn btn-outline btn-sm" onclick="viewReport(\'' + x(a.agentId) + '\')">Posture</button>' : '') +
           ' <button class="btn btn-outline btn-sm" onclick="openFullReport(\'' + x(a.agentId) + '\')" title="Open HTML report in new tab">&#128196; Report</button>' +
           ' <button class="btn btn-outline btn-sm" onclick="downloadAuditPack(\'' + x(a.agentId) + '\')" title="Download audit pack ZIP">&#8659; Audit Pack</button>' +
@@ -1893,6 +1894,15 @@ function deleteIntelScenario(id) {
 /* ═══════════════════════════════════════════════════════════════════════════
    REPORTING MODULE
    ═══════════════════════════════════════════════════════════════════════════ */
+
+function safeScan(agentId) {
+  apicall('/api/scan/safe/' + encodeURIComponent(agentId), { method: 'POST' })
+    .then(function(res) {
+      showToast('Safe scan dispatched (read-only) — results will appear in Live Runs', 'ok');
+      showTab('runs'); loadRuns();
+    })
+    .catch(function(e) { showToast('Safe scan failed: ' + e.message, 'err'); });
+}
 
 function openFullReport(agentId) {
   window.open('/api/report/full/html?agentId=' + encodeURIComponent(agentId), '_blank');
