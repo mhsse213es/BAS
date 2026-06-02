@@ -123,6 +123,42 @@ body {
 }
 .error-msg { color: var(--danger); font-size: 0.78rem; margin-top: 0.4rem; min-height: 1.2em; }
 
+/* ── Scenario builder ──────────────────────────────────────── */
+.form-group textarea, .form-group select {
+  width: 100%; padding: 0.55rem 0.875rem;
+  background: var(--elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  font-size: 0.85rem; font-family: inherit; resize: vertical;
+}
+.form-group textarea:focus, .form-group select:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47,129,247,0.1);
+}
+.bld-step {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); padding: 0.75rem; margin-bottom: 0.75rem;
+}
+.bld-step-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--muted);
+}
+.bld-step-hdr .bld-actions button {
+  background: var(--elevated); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 4px; padding: 2px 7px; font-size: 0.8rem; cursor: pointer; margin-left: 3px;
+}
+.bld-step-hdr .bld-actions button:hover { color: var(--text); }
+.bld-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.bld-grid .full { grid-column: 1 / -1; }
+.bld-field label {
+  display: block; font-size: 0.68rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;
+}
+.bld-field input, .bld-field select, .bld-field textarea {
+  width: 100%; padding: 0.45rem 0.7rem; background: var(--elevated);
+  border: 1px solid var(--border); border-radius: var(--radius); color: var(--text);
+  font-size: 0.82rem; font-family: inherit; resize: vertical;
+}
+.bld-mode-help { font-size: 0.76rem; color: var(--muted); margin: 0.25rem 0 0.75rem; line-height: 1.5; }
+
 /* ── Buttons ───────────────────────────────────────────────── */
 .btn {
   display: inline-flex; align-items: center; gap: 0.3rem;
@@ -876,7 +912,12 @@ sudo systemctl start bas-agent</code>
       <div id="tab-scenarios">
         <div class="sec-hdr">
           <h2>BFSI Scenarios <span id="sc-cnt" class="cnt">0</span></h2>
-          <button class="btn btn-outline btn-sm" onclick="loadScenarios()">Refresh</button>
+          <div style="display:flex;gap:0.4rem">
+            <button id="sc-new-btn" class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" onclick="openBuilder(null)">+ New Scenario</button>
+            <button id="sc-upload-btn" class="btn btn-outline btn-sm" onclick="document.getElementById('sc-upload-file').click()">&#8657; Upload YAML</button>
+            <input type="file" id="sc-upload-file" accept=".yaml,.yml" style="display:none" onchange="uploadScenarioFile(this)">
+            <button class="btn btn-outline btn-sm" onclick="loadScenarios()">Refresh</button>
+          </div>
         </div>
         <div id="sc-grid" class="cards"></div>
       </div>
@@ -1024,6 +1065,102 @@ sudo systemctl start bas-agent</code>
   </div>
 </div>
 
+<!-- Scenario Builder Drawer -->
+<div id="builder-overlay" class="drawer-overlay" onclick="if(event.target===this)closeBuilder()">
+  <div class="drawer" style="width:560px;max-width:92vw">
+    <div class="drawer-header">
+      <h3 id="builder-title">New Scenario</h3>
+      <button class="drawer-close" onclick="closeBuilder()">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="form-group">
+        <label>Scenario ID</label>
+        <input type="text" id="bld-id" placeholder="e.g. ransomware-emulation" autocomplete="off">
+        <div class="bld-mode-help">Lowercase letters, digits and hyphens. Cannot be changed after creation.</div>
+      </div>
+      <div class="form-group"><label>Name</label><input type="text" id="bld-name" placeholder="Human-readable title" autocomplete="off"></div>
+      <div class="form-group"><label>Description</label><textarea id="bld-desc" rows="2" placeholder="What this scenario emulates"></textarea></div>
+      <div class="form-group"><label>Tags (comma separated)</label><input type="text" id="bld-tags" placeholder="ransomware, lateral-movement" autocomplete="off"></div>
+      <div class="form-group"><label>MITRE phases (comma separated tactics)</label><input type="text" id="bld-phases" placeholder="initial-access, execution, impact" autocomplete="off"></div>
+
+      <div class="form-group">
+        <label>Execution mode</label>
+        <select id="bld-mode" onchange="renderBuilderMode()">
+          <option value="custom">Custom steps — define each command yourself</option>
+          <option value="art">Atomic Red Team — list of ATT&CK technique IDs</option>
+          <option value="caldera">Caldera — list of ability IDs</option>
+          <option value="local">Local check — built-in read-only posture checks</option>
+        </select>
+      </div>
+
+      <!-- Custom steps -->
+      <div id="bld-custom">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+          <span style="font-size:0.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Attack chain steps</span>
+          <button class="btn btn-outline btn-sm" onclick="addStep()">+ Add step</button>
+        </div>
+        <div id="bld-steps"></div>
+      </div>
+
+      <!-- ART techniques -->
+      <div id="bld-art" style="display:none">
+        <div class="form-group"><label>ATT&amp;CK technique IDs (one per line or comma separated)</label>
+          <textarea id="bld-art-list" rows="4" placeholder="T1059.001&#10;T1003.001&#10;T1486"></textarea></div>
+        <div class="bld-mode-help">Each technique is run via Atomic Red Team on the target endpoint.</div>
+      </div>
+
+      <!-- Caldera abilities -->
+      <div id="bld-caldera" style="display:none">
+        <div class="form-group"><label>Caldera ability IDs (one per line or comma separated)</label>
+          <textarea id="bld-caldera-list" rows="4" placeholder="ability-uuid-1&#10;ability-uuid-2"></textarea></div>
+        <div class="bld-mode-help">Each ability is fetched from the Caldera library and executed in order.</div>
+      </div>
+
+      <!-- Local check -->
+      <div id="bld-local" style="display:none">
+        <div class="bld-mode-help">This scenario runs the agent's built-in read-only security checks for the target OS. No commands to configure &mdash; it makes no changes to the endpoint.</div>
+      </div>
+
+      <div id="bld-err" class="error-msg"></div>
+      <div class="modal-actions" style="margin-top:1rem;display:flex;gap:0.4rem;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="closeBuilder()">Cancel</button>
+        <button class="btn btn-outline btn-sm" onclick="downloadBuilderYaml()">&#8659; Download YAML</button>
+        <button class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" onclick="saveScenario(false)">Save</button>
+        <button class="btn btn-outline-green btn-sm" onclick="saveScenario(true)">Save &amp; Run</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- common ATT&CK techniques for autocomplete -->
+<datalist id="att-techniques">
+  <option value="T1059.001">PowerShell</option>
+  <option value="T1059.003">Windows Command Shell</option>
+  <option value="T1059.004">Unix Shell</option>
+  <option value="T1003.001">LSASS Memory</option>
+  <option value="T1003.008">/etc/passwd and /etc/shadow</option>
+  <option value="T1055">Process Injection</option>
+  <option value="T1547.001">Registry Run Keys / Startup Folder</option>
+  <option value="T1053.005">Scheduled Task</option>
+  <option value="T1053.003">Cron</option>
+  <option value="T1078">Valid Accounts</option>
+  <option value="T1021.001">Remote Desktop Protocol</option>
+  <option value="T1021.004">SSH</option>
+  <option value="T1486">Data Encrypted for Impact</option>
+  <option value="T1490">Inhibit System Recovery</option>
+  <option value="T1562.001">Disable or Modify Tools</option>
+  <option value="T1070.004">File Deletion</option>
+  <option value="T1112">Modify Registry</option>
+  <option value="T1082">System Information Discovery</option>
+  <option value="T1083">File and Directory Discovery</option>
+  <option value="T1057">Process Discovery</option>
+  <option value="T1016">System Network Configuration Discovery</option>
+  <option value="T1567.002">Exfiltration to Cloud Storage</option>
+  <option value="T1105">Ingress Tool Transfer</option>
+  <option value="T1218.011">Rundll32</option>
+  <option value="T1136.001">Create Local Account</option>
+</datalist>
+
 <!-- Create User Modal -->
 <div id="create-user-overlay" class="overlay" onclick="if(event.target===this)closeCreateUser()">
   <div class="modal">
@@ -1156,6 +1293,11 @@ function bootApp() {
   if (ROLE === 'admin') {
     document.getElementById('nav-users').style.display = '';
   }
+  // Scenario authoring is Analyst+Admin only — hide builder entry points for viewers.
+  if (ROLE !== 'admin' && ROLE !== 'analyst') {
+    var nb = document.getElementById('sc-new-btn');     if (nb) nb.style.display = 'none';
+    var ub = document.getElementById('sc-upload-btn');  if (ub) ub.style.display = 'none';
+  }
   connectWS();
   loadAgents();
   loadScenarios();
@@ -1264,16 +1406,23 @@ function loadScenarios() {
   apicall('/api/scenarios').then(function(data) {
     scenarios = (data || []).map(function(s) {
       return {
-        id:              s.id              || '',
-        name:            s.name            || '',
-        description:     s.description     || '',
-        tags:            s.tags            || [],
-        steps:           s.steps           || [],
-        mitrePhases:     s.mitrePhases     || [],
-        intelSource:     s.intelSource     || '',
-        intelActor:      s.intelActor      || '',
-        intelConfidence: s.intelConfidence || '',
-        artTechniques:   s.artTechniques   || []
+        id:                 s.id                 || '',
+        name:               s.name               || '',
+        description:        s.description         || '',
+        author:             s.author              || '',
+        tags:               s.tags               || [],
+        steps:              s.steps              || [],
+        mitrePhases:        s.mitrePhases        || [],
+        source:             s.source             || 'builtin',
+        localCheck:         !!s.localCheck,
+        calderaAllWindows:  !!s.calderaAllWindows,
+        calderaAbilities:   s.calderaAbilities   || [],
+        calderaAdversaryId: s.calderaAdversaryId || '',
+        artAllWindows:      !!s.artAllWindows,
+        intelSource:        s.intelSource         || '',
+        intelActor:         s.intelActor          || '',
+        intelConfidence:    s.intelConfidence      || '',
+        artTechniques:      s.artTechniques       || []
       };
     });
     document.getElementById('sc-cnt').textContent = scenarios.length;
@@ -1310,14 +1459,34 @@ function loadScenarios() {
             '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
           '</div></div>';
       }
+      var canEdit = (ROLE === 'admin' || ROLE === 'analyst');
+      var customBadge = s.source === 'custom'
+        ? '<span class="tag" style="background:rgba(35,134,54,0.15);color:#3fb950;border-color:rgba(35,134,54,0.4)">custom</span> '
+        : '';
+      var editBtns = '';
+      if (canEdit) {
+        editBtns += '<button class="btn btn-outline btn-sm" onclick="cloneScenario(\'' + x(s.id) + '\')" title="Clone into an editable custom scenario">&#9112; Clone</button> ';
+        if (s.source === 'custom') {
+          editBtns += '<button class="btn btn-outline btn-sm" onclick="openBuilder(\'' + x(s.id) + '\')" title="Edit">&#9998; Edit</button> ';
+          editBtns += '<button class="btn btn-sm" style="background:rgba(218,54,51,0.12);color:#f85149" onclick="deleteCustomScenario(\'' + x(s.id) + '\')" title="Delete">&#10005;</button> ';
+        }
+      }
+      var modeMeta = s.localCheck ? 'local check'
+        : (s.artTechniques || []).length ? (s.artTechniques.length + ' ART techniques')
+        : (s.calderaAbilities || []).length ? (s.calderaAbilities.length + ' Caldera abilities')
+        : ((s.steps || []).length + ' steps');
       return '<div class="card">' +
         '<div class="card-stripe" style="background:' + color + '"></div>' +
+        '<div>' + customBadge + '</div>' +
         '<h3>' + x(s.name) + '</h3>' +
         '<p>' + x(s.description || '') + '</p>' +
         '<div class="tags">' + tags + '</div>' +
         '<div class="card-footer">' +
-          '<div class="card-meta">' + (s.steps || []).length + ' steps</div>' +
-          '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
+          '<div class="card-meta">' + modeMeta + '</div>' +
+          '<div style="display:flex;gap:0.3rem;flex-wrap:wrap;justify-content:flex-end">' +
+            editBtns +
+            '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
+          '</div>' +
         '</div></div>';
     }).join('');
   }).catch(function(e) { showToast(e.message, 'err'); });
@@ -1385,6 +1554,262 @@ function openModal(scenarioId, preAgent) {
   document.getElementById('run-overlay').classList.add('open');
 }
 function closeModal() { document.getElementById('run-overlay').classList.remove('open'); _modalScId = null; }
+
+/* ── Scenario Builder ──────────────────────────────────────── */
+var _bldEditId = null;
+
+function openBuilder(id) {
+  _bldEditId = id;
+  document.getElementById('bld-err').textContent = '';
+  document.getElementById('builder-title').textContent = id ? 'Edit Scenario' : 'New Scenario';
+  if (id) {
+    // Fetch the full, fresh scenario so we edit complete data.
+    apicall('/api/scenarios/' + encodeURIComponent(id)).then(function(s) {
+      fillBuilder(s);
+      document.getElementById('builder-overlay').classList.add('open');
+    }).catch(function(e) { showToast(e.message, 'err'); });
+  } else {
+    fillBuilder(null);
+    document.getElementById('builder-overlay').classList.add('open');
+  }
+}
+
+function fillBuilder(s) {
+  s = s || {};
+  var idIn = document.getElementById('bld-id');
+  idIn.value = s.id || '';
+  idIn.disabled = !!_bldEditId; // ID is immutable once created
+  document.getElementById('bld-name').value   = s.name || '';
+  document.getElementById('bld-desc').value   = s.description || '';
+  document.getElementById('bld-tags').value   = (s.tags || []).join(', ');
+  document.getElementById('bld-phases').value = (s.mitrePhases || []).join(', ');
+
+  // Determine mode
+  var mode = 'custom';
+  if (s.localCheck) mode = 'local';
+  else if ((s.artTechniques || []).length) mode = 'art';
+  else if ((s.calderaAbilities || []).length) mode = 'caldera';
+  document.getElementById('bld-mode').value = mode;
+
+  document.getElementById('bld-art-list').value     = (s.artTechniques || []).join('\n');
+  document.getElementById('bld-caldera-list').value = (s.calderaAbilities || []).join('\n');
+
+  var steps = document.getElementById('bld-steps');
+  steps.innerHTML = '';
+  ((s.steps) || []).forEach(function(st) { addStep(st); });
+  if (mode === 'custom' && !steps.children.length) addStep(null);
+
+  renderBuilderMode();
+}
+
+function closeBuilder() {
+  document.getElementById('builder-overlay').classList.remove('open');
+  _bldEditId = null;
+}
+
+function renderBuilderMode() {
+  var mode = document.getElementById('bld-mode').value;
+  document.getElementById('bld-custom').style.display  = mode === 'custom'  ? 'block' : 'none';
+  document.getElementById('bld-art').style.display     = mode === 'art'     ? 'block' : 'none';
+  document.getElementById('bld-caldera').style.display = mode === 'caldera' ? 'block' : 'none';
+  document.getElementById('bld-local').style.display   = mode === 'local'   ? 'block' : 'none';
+  if (mode === 'custom' && !document.getElementById('bld-steps').children.length) addStep(null);
+}
+
+function addStep(st) {
+  st = st || {};
+  var execs = ['powershell','cmd','bash','sh','wmi','mshta','rundll32','cscript','wscript','regsvr32','schtasks'];
+  var cur = st.executor || 'powershell';
+  var execOpts = execs.map(function(e) {
+    return '<option value="' + e + '"' + (e === cur ? ' selected' : '') + '>' + e + '</option>';
+  }).join('');
+  var div = document.createElement('div');
+  div.className = 'bld-step';
+  div.innerHTML =
+    '<div class="bld-step-hdr"><span class="bld-step-num">Step</span>' +
+      '<span class="bld-actions">' +
+        '<button type="button" onclick="moveStep(this,-1)" title="Move up">&#9650;</button>' +
+        '<button type="button" onclick="moveStep(this,1)" title="Move down">&#9660;</button>' +
+        '<button type="button" onclick="removeStep(this)" title="Remove">&#10005;</button>' +
+      '</span></div>' +
+    '<div class="bld-grid">' +
+      '<div class="bld-field"><label>Name</label><input class="st-name" type="text" value="' + x(st.name || '') + '" placeholder="e.g. Dump LSASS"></div>' +
+      '<div class="bld-field"><label>Technique ID</label><input class="st-tech" list="att-techniques" type="text" value="' + x(st.techniqueId || '') + '" placeholder="T1003.001"></div>' +
+      '<div class="bld-field"><label>Executor</label><select class="st-exec">' + execOpts + '</select></div>' +
+      '<div class="bld-field"><label>Timeout (sec)</label><input class="st-timeout" type="number" min="0" value="' + (st.timeoutSec || 60) + '"></div>' +
+      '<div class="bld-field full"><label>Command</label><textarea class="st-cmd" rows="2" placeholder="command to run on the endpoint">' + x(st.command || '') + '</textarea></div>' +
+      '<div class="bld-field full"><label>Cleanup (optional)</label><textarea class="st-cleanup" rows="1" placeholder="command run after the step">' + x(st.cleanup || '') + '</textarea></div>' +
+    '</div>';
+  document.getElementById('bld-steps').appendChild(div);
+  renumberSteps();
+}
+
+function removeStep(btn) { btn.closest('.bld-step').remove(); renumberSteps(); }
+
+function moveStep(btn, dir) {
+  var el = btn.closest('.bld-step');
+  if (dir < 0 && el.previousElementSibling) el.parentNode.insertBefore(el, el.previousElementSibling);
+  if (dir > 0 && el.nextElementSibling) el.parentNode.insertBefore(el.nextElementSibling, el);
+  renumberSteps();
+}
+
+function renumberSteps() {
+  var steps = document.querySelectorAll('#bld-steps .bld-step');
+  steps.forEach(function(s, i) { s.querySelector('.bld-step-num').textContent = 'Step ' + (i + 1); });
+}
+
+// splitList parses a comma- or newline-separated textbox into a trimmed array.
+function splitList(val) {
+  return (val || '').split(/[\n,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+}
+
+// collectBuilder reads the form into a scenario object, or returns null + shows an error.
+function collectBuilder() {
+  var err = document.getElementById('bld-err');
+  err.textContent = '';
+  var id = document.getElementById('bld-id').value.trim();
+  var name = document.getElementById('bld-name').value.trim();
+  if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(id)) {
+    err.textContent = 'ID must be 2-64 chars: lowercase letters, digits, hyphens.'; return null;
+  }
+  if (!name) { err.textContent = 'Name is required.'; return null; }
+
+  var sc = {
+    id: id, name: name,
+    description: document.getElementById('bld-desc').value.trim(),
+    tags: splitList(document.getElementById('bld-tags').value),
+    mitrePhases: splitList(document.getElementById('bld-phases').value),
+    steps: [], artTechniques: [], calderaAbilities: [], localCheck: false
+  };
+
+  var mode = document.getElementById('bld-mode').value;
+  if (mode === 'local') {
+    sc.localCheck = true;
+  } else if (mode === 'art') {
+    sc.artTechniques = splitList(document.getElementById('bld-art-list').value);
+    if (!sc.artTechniques.length) { err.textContent = 'Add at least one ATT&CK technique ID.'; return null; }
+  } else if (mode === 'caldera') {
+    sc.calderaAbilities = splitList(document.getElementById('bld-caldera-list').value);
+    if (!sc.calderaAbilities.length) { err.textContent = 'Add at least one Caldera ability ID.'; return null; }
+  } else {
+    var rows = document.querySelectorAll('#bld-steps .bld-step');
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var tech = r.querySelector('.st-tech').value.trim();
+      if (!tech) { err.textContent = 'Step ' + (i + 1) + ': technique ID is required.'; return null; }
+      sc.steps.push({
+        name: r.querySelector('.st-name').value.trim() || ('Step ' + (i + 1)),
+        techniqueId: tech,
+        framework: 'custom',
+        executor: r.querySelector('.st-exec').value,
+        command: r.querySelector('.st-cmd').value,
+        timeoutSec: parseInt(r.querySelector('.st-timeout').value, 10) || 60,
+        cleanup: r.querySelector('.st-cleanup').value.trim()
+      });
+    }
+    if (!sc.steps.length) { err.textContent = 'Add at least one step.'; return null; }
+  }
+  return sc;
+}
+
+function saveScenario(runAfter) {
+  var sc = collectBuilder();
+  if (!sc) return;
+  var editing = !!_bldEditId;
+  var path = editing ? '/api/scenarios/' + encodeURIComponent(_bldEditId) : '/api/scenarios';
+  var method = editing ? 'PUT' : 'POST';
+  apicall(path, { method: method, body: JSON.stringify(sc) }).then(function(res) {
+    if (res && res.error) { document.getElementById('bld-err').textContent = res.error; return; }
+    showToast('Scenario ' + (editing ? 'updated' : 'created'), 'ok');
+    closeBuilder();
+    loadScenarios();
+    if (runAfter) { setTimeout(function() { openModal(sc.id, null); }, 250); }
+  }).catch(function(e) { document.getElementById('bld-err').textContent = e.message; });
+}
+
+function cloneScenario(id) {
+  var newId = prompt('New scenario ID for the clone:', id + '-copy');
+  if (!newId) return;
+  apicall('/api/scenarios/' + encodeURIComponent(id) + '/clone', {
+    method: 'POST', body: JSON.stringify({ newId: newId.trim() })
+  }).then(function(res) {
+    if (res && res.error) { showToast(res.error, 'err'); return; }
+    showToast('Cloned to ' + newId, 'ok');
+    loadScenarios();
+    setTimeout(function() { openBuilder(newId.trim()); }, 250);
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function deleteCustomScenario(id) {
+  if (!confirm('Delete custom scenario "' + id + '"? This removes its YAML file.')) return;
+  fetch('/api/scenarios/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' })
+    .then(function(r) {
+      if (r.status === 204) { showToast('Scenario deleted', 'ok'); loadScenarios(); }
+      else { r.json().then(function(j) { showToast(j.error || 'Delete failed', 'err'); }); }
+    }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function uploadScenarioFile(input) {
+  var file = input.files && input.files[0];
+  input.value = ''; // reset so the same file can be re-picked
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function() {
+    fetch('/api/scenarios/upload', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-yaml' },
+      body: reader.result
+    }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, j: j }; }); })
+      .then(function(res) {
+        if (!res.ok) { showToast(res.j.error || 'Upload failed', 'err'); return; }
+        showToast('Uploaded ' + (res.j.id || 'scenario'), 'ok');
+        loadScenarios();
+      }).catch(function(e) { showToast(e.message, 'err'); });
+  };
+  reader.readAsText(file);
+}
+
+function downloadBuilderYaml() {
+  var sc = collectBuilder();
+  if (!sc) return;
+  var yaml = scenarioToYaml(sc);
+  var blob = new Blob([yaml], { type: 'text/yaml' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = sc.id + '.yaml';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+// scenarioToYaml emits a YAML file the server can re-import (snake_case keys).
+function scenarioToYaml(sc) {
+  function q(s) { return '"' + String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+  function block(s, indent) {
+    var pad = new Array(indent + 1).join(' ');
+    return '|\n' + String(s).split('\n').map(function(l) { return pad + l; }).join('\n');
+  }
+  var out = 'id: ' + q(sc.id) + '\n';
+  out += 'name: ' + q(sc.name) + '\n';
+  if (sc.description) out += 'description: ' + q(sc.description) + '\n';
+  if (sc.tags.length) out += 'tags: [' + sc.tags.map(q).join(', ') + ']\n';
+  if (sc.mitrePhases.length) out += 'mitre_phases: [' + sc.mitrePhases.map(q).join(', ') + ']\n';
+  if (sc.localCheck) out += 'local_check: true\n';
+  if (sc.artTechniques.length) out += 'art_techniques: [' + sc.artTechniques.map(q).join(', ') + ']\n';
+  if (sc.calderaAbilities.length) out += 'caldera_abilities: [' + sc.calderaAbilities.map(q).join(', ') + ']\n';
+  if (sc.steps.length) {
+    out += 'steps:\n';
+    sc.steps.forEach(function(st) {
+      out += '  - name: ' + q(st.name) + '\n';
+      out += '    technique_id: ' + q(st.techniqueId) + '\n';
+      out += '    framework: ' + q(st.framework || 'custom') + '\n';
+      out += '    executor: ' + q(st.executor) + '\n';
+      out += '    timeout_sec: ' + (st.timeoutSec || 60) + '\n';
+      if (st.command) out += '    command: ' + block(st.command, 6) + '\n';
+      if (st.cleanup) out += '    cleanup: ' + block(st.cleanup, 6) + '\n';
+    });
+  }
+  return out;
+}
 
 function viewRunResults(run) {
   document.getElementById('results-title').textContent = run.name + ' — Results';
