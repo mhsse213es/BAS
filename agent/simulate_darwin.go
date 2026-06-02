@@ -43,21 +43,23 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	case "cscrf-mii-drill":
 		return cscrfChecks()
 	case "purplesharp-ad-drill":
-		return notApplicableAD()
+		return notApplicableWindows("PurpleSharp AD Credential Drill", "T1558.003", "credential-access")
+	case "lolbin-execution":
+		return notApplicableWindows("LOLBin Execution drill", "T1218", "execution")
 	default:
 		return safeSimChecks()
 	}
 }
 
-// notApplicableAD returns a single skipped result — the PurpleSharp AD drill
-// targets Windows Active Directory and has no macOS equivalent.
-func notApplicableAD() []SimCategory {
-	return []SimCategory{{Phase: "credential-access", Checks: []SimCheck{
-		check("T1558.003", "PurpleSharp AD Credential Drill", "credential-access", "Low",
-			"Active Directory credential techniques (Kerberoasting, LSASS dump, password spray) apply to Windows domain hosts.",
-			"Run this scenario against a domain-joined Windows endpoint.",
+// notApplicableWindows returns a single skipped result for Windows-only
+// scenarios run against a macOS host.
+func notApplicableWindows(name, techID, tactic string) []SimCategory {
+	return []SimCategory{{Phase: tactic, Checks: []SimCheck{
+		check(techID, name, tactic, "Low",
+			name+" targets Windows endpoints.",
+			"Run this scenario against a Windows host.",
 			func() (string, string) {
-				return "skipped", "PurpleSharp AD credential drill is Windows/Active Directory-only — not applicable on macOS."
+				return "skipped", name + " is Windows-only — not applicable on macOS."
 			})}}}
 }
 

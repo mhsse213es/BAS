@@ -69,8 +69,28 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 		return cscrfChecks()
 	case "purplesharp-ad-drill":
 		return purpleSharpADChecks()
+	case "lolbin-execution":
+		return lolbinPostureChecks()
 	default:
 		return RunAllChecks()
+	}
+}
+
+// lolbinPostureChecks is the POSTURE side of the LOLBin drill — read-only
+// validation of the controls that detect or restrict living-off-the-land
+// binary abuse (the live mode actually executes the LOLBins).
+func lolbinPostureChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "execution-controls", Checks: []SimCheck{
+			checkAppLocker(),
+			checkPSExecutionPolicy(),
+			checkPSv2(),
+			checkWinRM(),
+		}},
+		{Phase: "detection-logging", Checks: []SimCheck{
+			checkScriptBlockLogging(),
+			checkSysmon(),
+		}},
 	}
 }
 

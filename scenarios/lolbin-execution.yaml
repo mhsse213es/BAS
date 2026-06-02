@@ -1,140 +1,142 @@
 id: lolbin-execution
-name: LOLBin Execution Coverage
+name: LOLBin Execution Coverage (Hybrid)
 description: >
-  Tests EDR detection coverage across Windows Living-off-the-Land binaries.
-  Each step uses a distinct execution vector (WMI, MSHTA, rundll32, cscript,
-  regsvr32, schtasks) that attackers use to bypass script execution controls.
-  PASS = execution was blocked or generated an alert-worthy event.
-  FAIL = execution succeeded without any detection signal.
-  The server generates all commands and interprets all results.
+  Validates Living-off-the-Land Binary (LOLBin) abuse across distinct execution
+  vectors (WMI, MSHTA, regsvr32/Squiblydoo, certutil, schtasks).
+
+  HYBRID scenario. Posture mode (default, safe anywhere) validates the defences
+  against LOLBin abuse (AppLocker, PowerShell execution policy / language mode,
+  ScriptBlock logging, Sysmon, WinRM). Live execution mode (opt-in, lab-only)
+  actually runs each LOLBin with a BENIGN, self-cleaning payload to generate
+  genuine parent-child process telemetry for EDR/Sysmon/SIEM detection
+  validation — detection over payload realism.
+
+  Per-OS coverage: Windows only. Linux/macOS report "not applicable".
+
+  SAFETY: live mode triggers EDR/Defender by design, needs admin/SYSTEM, and
+  must only target an isolated lab / test VM with a snapshot. Every step is
+  reversible (self-cleaning), uses no destructive payload, and leaves no
+  persistence except the schtasks step which explicitly tests persistence and
+  deletes its own task.
 author: Audspect Research
+executable: true
+local_check: true
 tags:
   - lolbin
   - defense-evasion
   - execution
   - t1218
+  - hybrid
   - mitre
 mitre_phases:
   - execution
   - defense-evasion
+  - persistence
 
 steps:
-  # ── WMI Process Creation (T1047) ─────────────────────────────────────────────
-  - name: "WMI Process Creation Detection"
+  - name: "WMI Process Creation (T1047)"
     technique_id: T1047
     framework: custom
     executor: wmi
     timeout_sec: 45
+    risk: low
+    blast_radius: "Spawns one benign child process under WmiPrvSE.exe; no files, no persistence."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (process creation, ParentProcessName=WmiPrvSE.exe)"
+      - "Sysmon EID 1 (process create)"
+    detection:
+      - "EDR: powershell.exe spawned by WmiPrvSE.exe (WMI process creation)"
     command: |
-      Write-Output "PASS: WMI Win32_Process.Create executed — verify Event ID 4688 with ParentProcessName=WmiPrvSE.exe in Security log"
+      Write-Output "BAS-WMI-TELEMETRY: process spawned via Win32_Process.Create under WmiPrvSE.exe (T1047)."
     cleanup: ""
 
-  # ── MSHTA LOLBin (T1218.005) ─────────────────────────────────────────────────
-  - name: "MSHTA VBScript Execution"
+  - name: "MSHTA Script Execution (T1218.005)"
     technique_id: T1218.005
     framework: custom
-    executor: powershell
+    executor: mshta
     timeout_sec: 20
+    risk: medium
+    blast_radius: "Launches mshta.exe which immediately self-closes; no payload, no file written."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (mshta.exe process creation)"
+      - "Sysmon EID 1 (mshta.exe)"
+    detection:
+      - "EDR/Sysmon: mshta.exe executing an inline vbscript: URI"
     command: |
-      $mshta = Get-Item "$env:SystemRoot\System32\mshta.exe" -ErrorAction SilentlyContinue
-      if ($null -ne $mshta) {
-        Write-Output "FAIL: mshta.exe present and available at $($mshta.FullName) — VBScript LOLBin execution path not blocked"
-      } else {
-        Write-Output "PASS: mshta.exe not found or restricted — MSHTA LOLBin path blocked"
-      }
+      vbscript:window.close
+    cleanup: ""
 
-  # ── RunDLL32 LOLBin (T1218.011) ──────────────────────────────────────────────
-  - name: "Rundll32 Execution Policy"
-    technique_id: T1218.011
-    framework: custom
-    executor: powershell
-    timeout_sec: 15
-    command: |
-      $path = "$env:SystemRoot\System32\rundll32.exe"
-      $applocker = Get-AppLockerPolicy -Effective -ErrorAction SilentlyContinue
-      if ($null -ne $applocker) {
-        $rules = $applocker.RuleCollections | Where-Object { $_.RuleCollectionType -eq 'Exe' } | ForEach-Object { $_.Rules }
-        $blocked = $rules | Where-Object { $_.Action -eq 'Deny' -and ($_.Conditions | Where-Object { $_ -match 'rundll32' }) }
-        if ($blocked) { Write-Output "PASS: AppLocker has deny rule for rundll32 — LOLBin execution controlled" }
-        else { Write-Output "FAIL: No AppLocker deny rule for rundll32 — T1218.011 execution path unrestricted" }
-      } else {
-        Write-Output "FAIL: No AppLocker policy found — rundll32 LOLBin path unrestricted"
-      }
-
-  # ── CScript / WScript (T1059.005) ────────────────────────────────────────────
-  - name: "Windows Script Host Restriction"
-    technique_id: T1059.005
-    framework: custom
-    executor: powershell
-    timeout_sec: 10
-    command: |
-      $wshKey = "HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings"
-      $enabled = (Get-ItemProperty -Path $wshKey -Name "Enabled" -ErrorAction SilentlyContinue).Enabled
-      if ($enabled -eq 0) {
-        Write-Output "PASS: WSH disabled via registry — cscript/wscript execution blocked"
-      } else {
-        Write-Output "FAIL: WSH not disabled (Enabled=$enabled) — cscript/wscript can execute VBScript/JScript"
-      }
-
-  # ── Regsvr32 / Squiblydoo (T1218.010) ────────────────────────────────────────
-  - name: "Regsvr32 AppLocker Bypass (Squiblydoo)"
+  - name: "Regsvr32 Squiblydoo (T1218.010)"
     technique_id: T1218.010
     framework: custom
     executor: powershell
-    timeout_sec: 10
+    timeout_sec: 30
+    risk: medium
+    blast_radius: "Creates+deletes a temp scriptlet and loads scrobj.dll with an EMPTY payload; nothing is executed from the scriptlet."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7 (scrobj.dll image load by regsvr32.exe)"
+      - "Security EID 4688 (regsvr32.exe), parent powershell.exe"
+    detection:
+      - "EDR: regsvr32.exe /i:*.sct scrobj.dll (Squiblydoo AppLocker/WDAC bypass)"
     command: |
-      $path = "$env:SystemRoot\System32\regsvr32.exe"
-      if (Test-Path $path) {
-        Write-Output "FAIL: regsvr32.exe present — Squiblydoo (T1218.010) LOLBin path available; restrict via WDAC or AppLocker"
-      } else {
-        Write-Output "PASS: regsvr32.exe removed or blocked — Squiblydoo attack vector eliminated"
-      }
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sct = Join-Path $env:TEMP ("bas_squiblydoo_{0}.sct" -f (Get-Random))
+      Set-Content -Path $sct -Encoding ascii -Value '<?XML version="1.0"?><scriptlet><registration progid="BASProbe" classid="{10001111-0000-0000-0000-00000000FEED}"><script language="JScript"><![CDATA[]]></script></registration></scriptlet>'
+      & regsvr32.exe /s /n /u /i:$sct scrobj.dll
+      Remove-Item $sct -Force -ErrorAction SilentlyContinue
+      Write-Output "EXEC: regsvr32 Squiblydoo (/i with scrobj.dll) ran against a benign empty local scriptlet — expect regsvr32.exe -> scrobj.dll telemetry (T1218.010). AppLocker/WDAC bypass path is unrestricted if this ran."
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_squiblydoo_*.sct') -Force -ErrorAction SilentlyContinue
 
-  # ── Scheduled Task Execution (T1053.005) ─────────────────────────────────────
-  - name: "Scheduled Task Creation Rights"
+  - name: "Certutil Encode (T1140)"
+    technique_id: T1140
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    risk: low
+    blast_radius: "Creates+deletes two temp files; no network connection made."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (certutil.exe), parent powershell.exe"
+      - "Sysmon EID 1 (certutil.exe with -encode)"
+    detection:
+      - "EDR/SIEM: certutil.exe with -encode/-decode/-urlcache arguments"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $in  = Join-Path $env:TEMP ("bas_certutil_{0}.txt" -f (Get-Random))
+      $enc = "$in.b64"
+      "BAS certutil LOLBin telemetry probe" | Set-Content -Path $in -Encoding ascii
+      & certutil.exe -encode $in $enc | Out-Null
+      $ran = Test-Path $enc
+      Remove-Item $in, $enc -Force -ErrorAction SilentlyContinue
+      if ($ran) { Write-Output "EXEC: certutil.exe -encode ran locally (no network) — expect certutil execution telemetry (T1140/T1027). certutil is widely abused for payload encode/decode and download." }
+      else { Write-Output "PASS: certutil produced no output — execution may be restricted (WDAC/AppLocker)." }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_certutil_*.txt*') -Force -ErrorAction SilentlyContinue
+
+  - name: "Scheduled Task Persistence (T1053.005)"
     technique_id: T1053.005
     framework: custom
     executor: powershell
-    timeout_sec: 15
+    timeout_sec: 30
+    risk: medium
+    blast_radius: "Creates a scheduled task that is immediately deleted; the task runs no payload. EXPLICIT persistence test."
+    reversible: true
+    telemetry:
+      - "Security EID 4698 (scheduled task created)"
+      - "Security EID 4699 (scheduled task deleted)"
+    detection:
+      - "SIEM: 4698 task creation by an unexpected actor/process"
     command: |
-      $taskName = "BAS-LOLBin-Test-$(Get-Random)"
-      try {
-        $action  = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c whoami"
-        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddYears(1)
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -RunLevel Highest -Force -ErrorAction Stop | Out-Null
-        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-        Write-Output "FAIL: Scheduled task created successfully — any user can persist via T1053.005"
-      } catch {
-        Write-Output "PASS: Scheduled task creation blocked — $($_.Exception.Message)"
-      }
-
-  # ── AMSI Bypass Detection ─────────────────────────────────────────────────────
-  - name: "AMSI Provider Registration"
-    technique_id: T1562.001
-    framework: custom
-    executor: powershell
-    timeout_sec: 10
-    command: |
-      $amsiKey = "HKLM:\SOFTWARE\Microsoft\AMSI\Providers"
-      $providers = Get-ChildItem $amsiKey -ErrorAction SilentlyContinue
-      if ($providers -and $providers.Count -gt 0) {
-        Write-Output "PASS: $($providers.Count) AMSI provider(s) registered — script content scanning active"
-      } else {
-        Write-Output "FAIL: No AMSI providers registered — script content is not scanned before execution"
-      }
-
-  # ── PowerShell Constrained Language Mode ─────────────────────────────────────
-  - name: "PowerShell Constrained Language Mode"
-    technique_id: T1059.001
-    framework: custom
-    executor: powershell
-    timeout_sec: 10
-    command: |
-      $mode = $ExecutionContext.SessionState.LanguageMode
-      if ($mode -eq "ConstrainedLanguage") {
-        Write-Output "PASS: PowerShell running in ConstrainedLanguage mode — .NET types and COM objects restricted"
-      } elseif ($mode -eq "FullLanguage") {
-        Write-Output "FAIL: PowerShell in FullLanguage mode — no CLM restriction; WDAC enforcement recommended"
-      } else {
-        Write-Output "PASS: PowerShell language mode is $mode"
-      }
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tn = "BAS_LOLBin_Probe_$(Get-Random)"
+      & schtasks.exe /Create /TN $tn /TR "cmd.exe /c echo bas" /SC ONCE /ST 23:59 /F | Out-Null
+      $exists = & schtasks.exe /Query /TN $tn 2>$null
+      & schtasks.exe /Delete /TN $tn /F | Out-Null
+      if ($exists) { Write-Output "FAIL: scheduled task '$tn' was created via schtasks.exe then deleted — expect Event ID 4698 (created) + 4699 (deleted). Task-based persistence (T1053.005) is unrestricted." }
+      else { Write-Output "PASS: scheduled task creation did not succeed — task persistence may be restricted." }
+    cleanup: |
+      Get-ScheduledTask -TaskName 'BAS_LOLBin_Probe_*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
