@@ -487,15 +487,46 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Interpret each raw ExecResult into a SimulationResult
-	simResults := make([]models.SimulationResult, 0, len(raw.Results))
-	for _, execResult := range raw.Results {
-		step, found := stepMap[execResult.TaskID]
-		if !found {
-			// Unknown step — treat as custom
-			step = scenario.Step{Framework: "custom"}
+	// local_check scenarios submit SimCheckResult (pre-interpreted with full metadata).
+	// Use these directly so technique ID, tactic, severity and remediation are preserved.
+	// Fall back to ExecResult interpretation for regular ART/Caldera/custom steps.
+	var simResults []models.SimulationResult
+	if len(raw.Checks) > 0 {
+		simResults = make([]models.SimulationResult, 0, len(raw.Checks))
+		for _, ch := range raw.Checks {
+			sev := ch.Severity
+			if sev == "" {
+				sev = models.Severity(ch.Tactic)
+			}
+			if sev == "" {
+				sev = "Medium"
+			}
+			simResults = append(simResults, models.SimulationResult{
+				ID: ch.ID,
+				Technique: models.AttackTechnique{
+					ID:     models.NormalizeID(ch.TechniqueID),
+					Name:   ch.TechniqueName,
+					Tactic: ch.Tactic,
+				},
+				Result:       models.CheckResult(ch.Result),
+				Severity:     sev,
+				ThreatImpact: ch.ThreatImpact,
+				Details:      ch.Details,
+				Remediation:  ch.Remediation,
+				Framework:    ch.Framework,
+				DurationMs:   ch.DurationMs,
+				ExecutedAt:   ch.ExecutedAt,
+			})
 		}
-		simResults = append(simResults, scenario.Interpret(step, execResult))
+	} else {
+		simResults = make([]models.SimulationResult, 0, len(raw.Results))
+		for _, execResult := range raw.Results {
+			step, found := stepMap[execResult.TaskID]
+			if !found {
+				step = scenario.Step{Framework: "custom"}
+			}
+			simResults = append(simResults, scenario.Interpret(step, execResult))
+		}
 	}
 
 	status := "completed"

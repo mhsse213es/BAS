@@ -99,12 +99,34 @@ type ExecResult struct {
 	Events []string `json:"events,omitempty"`
 }
 
+// SimCheckResult carries the pre-interpreted result of a single built-in local check.
+// Agents populate RawRunResult.Checks (not Results) for local_check scenarios so
+// all technique metadata (tactic, severity, threat impact, remediation) is preserved
+// end-to-end without re-derivation from empty step definitions.
+type SimCheckResult struct {
+	ID            string    `json:"id"`
+	TechniqueID   string    `json:"techniqueId"`
+	TechniqueName string    `json:"techniqueName"`
+	Tactic        string    `json:"tactic"`
+	Result        string    `json:"result"`      // pass | fail | skipped
+	Severity      string    `json:"severity"`
+	ThreatImpact  string    `json:"threatImpact"`
+	Details       string    `json:"details"`
+	Remediation   string    `json:"remediation"`
+	Framework     string    `json:"framework"`
+	DurationMs    int64     `json:"durationMs"`
+	ExecutedAt    time.Time `json:"executedAt"`
+}
+
 // RawRunResult is the payload the agent POSTs to /api/scenarios/result.
 // Partial=true means the agent was interrupted mid-run; results cover only completed steps.
+// For local_check scenarios, Checks is populated instead of Results so full technique
+// metadata is preserved — Results will be empty in that case.
 type RawRunResult struct {
-	RunID      string       `json:"runId"`
-	ScenarioID string       `json:"scenarioId"`
-	AgentID    string       `json:"agentId"`
-	Results    []ExecResult `json:"results"`
-	Partial    bool         `json:"partial,omitempty"`
+	RunID      string           `json:"runId"`
+	ScenarioID string           `json:"scenarioId"`
+	AgentID    string           `json:"agentId"`
+	Results    []ExecResult     `json:"results"`
+	Checks     []SimCheckResult `json:"checks,omitempty"` // local_check scenarios only
+	Partial    bool             `json:"partial,omitempty"`
 }

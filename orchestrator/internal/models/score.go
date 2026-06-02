@@ -174,10 +174,24 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 	}
 	exposureScore := clampF(rawExposure*amplifier, 0, 100)
 
-	// ── Confidence (% of non-skipped steps) ──────────────────────────────────
+	// ── Confidence ────────────────────────────────────────────────────────────
+	// Blends two dimensions:
+	//   execution rate  — % of steps that actually ran (not skipped due to errors)
+	//   tactic coverage — % of the ATT&CK kill chain covered (9 main phases)
+	// A scan that skips many checks OR covers only 1-2 tactics should show lower
+	// confidence so analysts know the risk score is less representative.
 	confidence := 0
 	if total > 0 {
-		confidence = clamp(executed*100/total, 0, 100)
+		execRate := float64(executed) / float64(total) * 100.0
+
+		const mainKillChainPhases = 9 // initial-access through exfiltration
+		tacticCov := float64(testedTactics) / mainKillChainPhases * 100.0
+		if tacticCov > 100 {
+			tacticCov = 100
+		}
+
+		blended := (execRate + tacticCov) / 2.0
+		confidence = clamp(int(math.Round(blended)), 0, 100)
 	}
 
 	// ── Trend ─────────────────────────────────────────────────────────────────

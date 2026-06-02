@@ -211,26 +211,25 @@ func (a *Agent) runLocalScan(scenarioID, runID string) {
 
 	categories := RunScenarioChecks(scenarioID)
 
-	results := make([]ExecResult, 0)
+	// Submit full SimCheck metadata so the orchestrator can correctly populate
+	// technique ID, tactic, severity, threat impact, and remediation without
+	// having to re-derive them from an empty step definition.
+	checks := make([]SimCheckResult, 0)
 	for _, cat := range categories {
 		for _, ch := range cat.Checks {
-			var stdout string
-			exitCode := 0
-			switch ch.Result {
-			case "pass":
-				stdout = "PASS: " + ch.Details
-			case "fail":
-				stdout = "FAIL: " + ch.Details
-				exitCode = 1
-			default:
-				stdout = "SKIP: " + ch.Details
-			}
-			results = append(results, ExecResult{
-				TaskID:     ch.ID,
-				ExitCode:   exitCode,
-				Stdout:     stdout,
-				DurationMs: ch.DurationMs,
-				ExecutedAt: ch.ExecutedAt,
+			checks = append(checks, SimCheckResult{
+				ID:            ch.ID,
+				TechniqueID:   ch.Technique.ID,
+				TechniqueName: ch.Technique.Name,
+				Tactic:        ch.Technique.Tactic,
+				Result:        ch.Result,
+				Severity:      ch.Severity,
+				ThreatImpact:  ch.ThreatImpact,
+				Details:       ch.Details,
+				Remediation:   ch.Remediation,
+				Framework:     ch.Framework,
+				DurationMs:    ch.DurationMs,
+				ExecutedAt:    ch.ExecutedAt,
 			})
 		}
 	}
@@ -239,12 +238,12 @@ func (a *Agent) runLocalScan(scenarioID, runID string) {
 		RunID:      runID,
 		ScenarioID: scenarioID,
 		AgentID:    a.id.AgentID,
-		Results:    results,
+		Checks:     checks,
 	}
 	if err := a.postJSON("/api/scenarios/result", payload); err != nil {
 		log.Printf("[!] local scan submit: %v", err)
 	} else {
-		log.Printf("[+] local scan submitted: scenario=%s checks=%d", scenarioID, len(results))
+		log.Printf("[+] local scan submitted: scenario=%s checks=%d", scenarioID, len(checks))
 	}
 
 	a.setStatus("idle")

@@ -31,13 +31,32 @@ type ScenarioCommand struct {
 	Steps      []ScenarioStep `json:"steps"`
 }
 
+// SimCheckResult carries the pre-interpreted result of a single built-in
+// local check — preserves all technique metadata so the orchestrator does
+// not have to re-derive it from empty step definitions.
+type SimCheckResult struct {
+	ID            string    `json:"id"`
+	TechniqueID   string    `json:"techniqueId"`
+	TechniqueName string    `json:"techniqueName"`
+	Tactic        string    `json:"tactic"`
+	Result        string    `json:"result"`      // pass | fail | skipped
+	Severity      string    `json:"severity"`
+	ThreatImpact  string    `json:"threatImpact"`
+	Details       string    `json:"details"`
+	Remediation   string    `json:"remediation"`
+	Framework     string    `json:"framework"`
+	DurationMs    int64     `json:"durationMs"`
+	ExecutedAt    time.Time `json:"executedAt"`
+}
+
 type RawRunResult struct {
-	RunID      string       `json:"runId"`
-	ScenarioID string       `json:"scenarioId"`
-	AgentID    string       `json:"agentId"`
-	Results    []ExecResult `json:"results"`
-	Partial    bool         `json:"partial,omitempty"`
-	Reverted   []string     `json:"reverted,omitempty"`
+	RunID      string           `json:"runId"`
+	ScenarioID string           `json:"scenarioId"`
+	AgentID    string           `json:"agentId"`
+	Results    []ExecResult     `json:"results"`
+	Checks     []SimCheckResult `json:"checks,omitempty"` // local_check scenarios only
+	Partial    bool             `json:"partial,omitempty"`
+	Reverted   []string         `json:"reverted,omitempty"`
 }
 
 // ── Executor Types ────────────────────────────────────────────────────────────
