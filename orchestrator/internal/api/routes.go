@@ -81,11 +81,19 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		// Viewer+ — safe read-only simulation makes no changes to the endpoint
 		r.Post("/api/scan/safe/{agentId}", h.SafeScan)
 
-		// Analyst + Admin only — can trigger scans and run scenarios
+		// Analyst + Admin only — can trigger scans, run scenarios, and
+		// author custom scenarios from the dashboard.
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleAnalyst))
 			r.Post("/api/scan/{agentId}", h.TriggerScan)
 			r.Post("/api/scenarios/{id}/run", h.RunScenario)
+
+			// Custom scenario builder
+			r.Post("/api/scenarios", h.CreateScenario)
+			r.Post("/api/scenarios/upload", h.UploadScenario)
+			r.Post("/api/scenarios/{id}/clone", h.CloneScenario)
+			r.Put("/api/scenarios/{id}", h.UpdateScenario)
+			r.Delete("/api/scenarios/{id}", h.DeleteScenario)
 		})
 
 		// Any authenticated user — self-service password change

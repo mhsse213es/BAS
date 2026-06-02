@@ -98,6 +98,19 @@ func (e *Engine) Count() int {
 	return len(e.scenarios)
 }
 
+// ParseYAML parses a single scenario from raw YAML bytes (e.g. an uploaded file)
+// and validates it. It does not write anything — pass the result to Save.
+func ParseYAML(b []byte) (*Scenario, error) {
+	var s Scenario
+	if err := yaml.Unmarshal(b, &s); err != nil {
+		return nil, err
+	}
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 // Validate checks that a scenario is well-formed enough to save and run.
 // Returns a human-readable error describing the first problem found.
 func (s *Scenario) Validate() error {

@@ -494,6 +494,144 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"runId": runID, "status": "dispatched"})
 }
 
+// POST /api/scenarios — create a new custom scenario from a JSON body.
+// Analyst+Admin only. The ID must be unique; clone an existing scenario to base off it.
+func (h *Handler) CreateScenario(w http.ResponseWriter, r *http.Request) {
+	var sc scenario.Scenario
+	if err := json.NewDecoder(r.Body).Decode(&sc); err != nil {
+		jsonError(w, "invalid scenario JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if _, exists := h.engine.Get(sc.ID); exists {
+		jsonError(w, fmt.Sprintf("scenario %q already exists — choose a different id or edit the existing one", sc.ID), http.StatusConflict)
+		return
+	}
+	if err := h.engine.Save(&sc); err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	log.Printf("[scenario] created custom scenario %s", sc.ID)
+	respondStatus(w, &sc, http.StatusCreated)
+}
+
+// PUT /api/scenarios/{id} — update an existing custom scenario.
+// Analyst+Admin only. Only scenarios with source=="custom" can be edited.
+func (h *Handler) UpdateScenario(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	existing, ok := h.engine.Get(id)
+	if !ok {
+		jsonError(w, "scenario not found", http.StatusNotFound)
+		return
+	}
+	if existing.Source != "custom" {
+		jsonError(w, fmt.Sprintf("scenario %q is %s and cannot be edited — clone it first", id, existing.Source), http.StatusBadRequest)
+		return
+	}
+	var sc scenario.Scenario
+	if err := json.NewDecoder(r.Body).Decode(&sc); err != nil {
+		jsonError(w, "invalid scenario JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	sc.ID = id // the URL is authoritative — ignore any mismatched body id
+	if err := h.engine.Save(&sc); err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	log.Printf("[scenario] updated custom scenario %s", id)
+	respond(w, &sc)
+}
+
+// POST /api/scenarios/{id}/clone — copy any scenario into a new editable custom one.
+// Analyst+Admin only. Optional body {newId, name}; defaults to "<id>-copy".
+func (h *Handler) CloneScenario(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	src, ok := h.engine.Get(id)
+	if !ok {
+		jsonError(w, "scenario not found", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		NewID string `json:"newId"`
+		Name  string `json:"name"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req) // body is optional
+
+	clone := *src // shallow copy is fine — we overwrite the slices/fields we change
+	clone.Source = ""
+	clone.IntelSource = ""
+	clone.IntelSourceID = ""
+	clone.IntelActor = ""
+	clone.IntelConfidence = ""
+	clone.IntelGeneratedAt = time.Time{}
+
+	clone.ID = req.NewID
+	if clone.ID == "" {
+		clone.ID = id + "-copy"
+	}
+	if _, exists := h.engine.Get(clone.ID); exists {
+		jsonError(w, fmt.Sprintf("scenario %q already exists — supply a different newId", clone.ID), http.StatusConflict)
+		return
+	}
+	if req.Name != "" {
+		clone.Name = req.Name
+	} else {
+		clone.Name = src.Name + " (copy)"
+	}
+
+	if err := h.engine.Save(&clone); err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	log.Printf("[scenario] cloned %s → %s", id, clone.ID)
+	respondStatus(w, &clone, http.StatusCreated)
+}
+
+// POST /api/scenarios/upload — accept a raw YAML body and save it as a custom scenario.
+// Analyst+Admin only. Content-Type may be text/yaml or application/x-yaml.
+func (h *Handler) UploadScenario(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1 MiB cap
+	if err != nil {
+		jsonError(w, "read body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	sc, err := scenario.ParseYAML(body)
+	if err != nil {
+		jsonError(w, "invalid YAML: "+err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	if _, exists := h.engine.Get(sc.ID); exists {
+		jsonError(w, fmt.Sprintf("scenario %q already exists — rename the id in the file or delete the existing one", sc.ID), http.StatusConflict)
+		return
+	}
+	if err := h.engine.Save(sc); err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	log.Printf("[scenario] uploaded custom scenario %s", sc.ID)
+	respondStatus(w, sc, http.StatusCreated)
+}
+
+// DELETE /api/scenarios/{id} — delete a custom scenario. Analyst+Admin only.
+// Built-in scenarios are protected; intel scenarios use /api/connector/scenarios/{id}.
+func (h *Handler) DeleteScenario(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	sc, ok := h.engine.Get(id)
+	if !ok {
+		jsonError(w, "scenario not found", http.StatusNotFound)
+		return
+	}
+	if sc.Source != "custom" {
+		jsonError(w, fmt.Sprintf("scenario %q is %s and cannot be deleted here", id, sc.Source), http.StatusBadRequest)
+		return
+	}
+	if err := h.engine.Delete(id); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[scenario] deleted custom scenario %s", id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // POST /api/scenarios/result — agents post raw execution results here.
 // The server interprets exit codes and output, then saves SimulationResult records.
 // All framework intelligence (ART, Caldera, custom) lives in the interpreter — not the agent.
@@ -1007,6 +1145,15 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 func respond(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("[api] encode error: %v", err)
+	}
+}
+
+// respondStatus is respond with an explicit status code (e.g. 201 Created).
+func respondStatus(w http.ResponseWriter, v interface{}, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("[api] encode error: %v", err)
 	}
