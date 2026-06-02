@@ -131,8 +131,143 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 		return cisUbuntuL1()
 	case "cis-ubuntu-l1":
 		return cisUbuntuL1()
+	case "apt36-spearphish":
+		return apt36Checks()
+	case "ransomware-drill":
+		return ransomwareChecks()
+	case "ad-credential-access":
+		return adCredentialChecks()
+	case "upi-fraud-killchain":
+		return upiChecks()
+	case "cscrf-mii-drill":
+		return cscrfChecks()
 	default:
 		return cisUbuntuL1()
+	}
+}
+
+// ── Scenario-specific Linux check sets ────────────────────────────────────────
+// Each scenario emulates the equivalent attack surface on Linux (the YAML steps
+// describe Windows TTPs; here we test the Linux controls that defend against the
+// same tactic). All checks are read-only — nothing on the endpoint is modified.
+
+// apt36-spearphish — phishing payload delivery, execution, persistence, C2 egress.
+func apt36Checks() []SimCategory {
+	return []SimCategory{
+		{Phase: "initial-access", Checks: []SimCheck{
+			checkTmpNoexec(),
+			checkTmpNosuid(),
+			checkShmNoexec(),
+		}},
+		{Phase: "execution", Checks: []SimCheck{
+			checkAppArmorEnforcing(),
+			checkWorldWritableStickyBit(),
+		}},
+		{Phase: "persistence", Checks: []SimCheck{
+			checkCronAccess(),
+			checkBashrcWorldWritable(),
+			checkSSHRootLogin(),
+		}},
+		{Phase: "command-and-control", Checks: []SimCheck{
+			checkUFWEnabled(),
+			checkIPForwarding(),
+		}},
+	}
+}
+
+// ransomware-drill — execution staging, defence evasion, anti-forensics, impact.
+func ransomwareChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "execution", Checks: []SimCheck{
+			checkTmpNoexec(),
+			checkShmNoexec(),
+		}},
+		{Phase: "defense-evasion", Checks: []SimCheck{
+			checkAuditdRunning(),
+			checkAppArmorEnforcing(),
+		}},
+		{Phase: "anti-forensics", Checks: []SimCheck{
+			checkRsyslogRunning(),
+			checkJournaldPersistent(),
+			checkLogFilesWorldReadable(),
+		}},
+		{Phase: "impact", Checks: []SimCheck{
+			checkWorldWritableStickyBit(),
+			checkUFWEnabled(),
+		}},
+	}
+}
+
+// ad-credential-access — credential theft, privilege escalation, lateral movement.
+func adCredentialChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "credential-access", Checks: []SimCheck{
+			checkPtraceScope(),
+			checkCoreDumps(),
+			checkShadowPerms(),
+			checkNoEmptyPasswords(),
+		}},
+		{Phase: "privilege-escalation", Checks: []SimCheck{
+			checkSUIDBinaries(),
+			checkTmpNosuid(),
+			checkPasswdPerms(),
+		}},
+		{Phase: "lateral-movement", Checks: []SimCheck{
+			checkSSHRootLogin(),
+			checkSSHHostBasedAuth(),
+			checkSSHIgnoreRhosts(),
+		}},
+	}
+}
+
+// upi-fraud-killchain — recon/discovery, credential harvest, collection, exfiltration.
+func upiChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "discovery", Checks: []SimCheck{
+			checkLogFilesWorldReadable(),
+		}},
+		{Phase: "credential-access", Checks: []SimCheck{
+			checkPtraceScope(),
+			checkShadowPerms(),
+		}},
+		{Phase: "collection", Checks: []SimCheck{
+			checkWorldWritableStickyBit(),
+		}},
+		{Phase: "exfiltration", Checks: []SimCheck{
+			checkIPForwarding(),
+			checkICMPRedirectsAccepted(),
+			checkSYNCookies(),
+			checkUFWEnabled(),
+		}},
+	}
+}
+
+// cscrf-mii-drill — SEBI CSCRF five control domains mapped to Linux controls.
+func cscrfChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "network-security", Checks: []SimCheck{
+			checkUFWEnabled(),
+			checkIPForwarding(),
+			checkSYNCookies(),
+			checkICMPRedirectsAccepted(),
+		}},
+		{Phase: "access-management", Checks: []SimCheck{
+			checkSSHRootLogin(),
+			checkSSHMaxAuthTries(),
+			checkSudoLogged(),
+			checkPasswordMinLen(),
+		}},
+		{Phase: "data-security", Checks: []SimCheck{
+			checkShadowPerms(),
+			checkPasswdPerms(),
+			checkLogFilesWorldReadable(),
+			checkCoreDumps(),
+		}},
+		{Phase: "monitoring-detection", Checks: []SimCheck{
+			checkAuditdRunning(),
+			checkRsyslogRunning(),
+			checkJournaldPersistent(),
+		}},
 	}
 }
 
@@ -918,5 +1053,124 @@ func checkNoEmptyPasswords() SimCheck {
 				return "pass", "No accounts with empty password fields in /etc/shadow."
 			}
 			return "fail", fmt.Sprintf("%d account(s) with empty password: %s — immediate unauthorised access risk.", len(empty), strings.Join(empty, ", "))
+		})
+}
+
+// ── Additional read-only checks used by scenario sets ─────────────────────────
+
+func checkShadowPerms() SimCheck {
+	return check("T1003.008", "/etc/shadow Permissions", "credential-access", "Critical",
+		"World- or group-accessible /etc/shadow lets any local user copy password hashes for offline cracking.",
+		"chown root:shadow /etc/shadow && chmod 640 /etc/shadow (0600 or stricter also acceptable).",
+		func() (string, string) {
+			fi, err := os.Stat("/etc/shadow")
+			if err != nil {
+				return "skipped", "Cannot stat /etc/shadow."
+			}
+			perm := fi.Mode().Perm()
+			if perm&0o007 != 0 {
+				return "fail", fmt.Sprintf("/etc/shadow mode %#o is world-accessible — local users can read password hashes.", perm)
+			}
+			if perm&0o020 != 0 {
+				return "fail", fmt.Sprintf("/etc/shadow mode %#o is group-writable — password hash tampering possible.", perm)
+			}
+			return "pass", fmt.Sprintf("/etc/shadow mode %#o — not accessible to non-root users.", perm)
+		})
+}
+
+func checkPasswdPerms() SimCheck {
+	return check("T1098", "/etc/passwd Write Protection", "persistence", "High",
+		"A group- or world-writable /etc/passwd lets attackers add UID 0 accounts or change login shells for persistence.",
+		"chown root:root /etc/passwd && chmod 644 /etc/passwd.",
+		func() (string, string) {
+			fi, err := os.Stat("/etc/passwd")
+			if err != nil {
+				return "skipped", "Cannot stat /etc/passwd."
+			}
+			perm := fi.Mode().Perm()
+			if perm&0o022 != 0 {
+				return "fail", fmt.Sprintf("/etc/passwd mode %#o is group/world-writable — attackers can add root accounts.", perm)
+			}
+			return "pass", fmt.Sprintf("/etc/passwd mode %#o — only root can modify account entries.", perm)
+		})
+}
+
+func checkSUIDBinaries() SimCheck {
+	return check("T1548.001", "Unexpected SUID Binaries", "privilege-escalation", "High",
+		"SUID binaries outside the known baseline are a common local privilege-escalation vector (GTFOBins).",
+		"Audit with: find / -perm -4000 -type f. Remove the SUID bit from anything not required: chmod u-s <file>.",
+		func() (string, string) {
+			baseline := map[string]bool{
+				"sudo": true, "su": true, "passwd": true, "chsh": true, "chfn": true,
+				"newgrp": true, "gpasswd": true, "mount": true, "umount": true,
+				"ping": true, "pkexec": true, "fusermount": true, "fusermount3": true,
+				"ssh-keysign": true, "dbus-daemon-launch-helper": true, "chage": true,
+				"unix_chkpwd": true, "snap-confine": true, "vmware-user-suid-wrapper": true,
+				"polkit-agent-helper-1": true, "Xorg.wrap": true, "ntfs-3g": true,
+			}
+			dirs := []string{"/usr/bin", "/usr/sbin", "/bin", "/sbin", "/usr/local/bin", "/usr/local/sbin"}
+			var unexpected []string
+			scanned := false
+			for _, d := range dirs {
+				entries, err := os.ReadDir(d)
+				if err != nil {
+					continue
+				}
+				scanned = true
+				for _, e := range entries {
+					if e.IsDir() {
+						continue
+					}
+					info, err := e.Info()
+					if err != nil {
+						continue
+					}
+					if info.Mode()&os.ModeSetuid != 0 && !baseline[e.Name()] {
+						unexpected = append(unexpected, d+"/"+e.Name())
+					}
+				}
+			}
+			if !scanned {
+				return "skipped", "Could not scan standard binary directories for SUID files."
+			}
+			if len(unexpected) == 0 {
+				return "pass", "No SUID binaries outside the expected baseline in standard paths."
+			}
+			n := len(unexpected)
+			shown := unexpected
+			if n > 8 {
+				shown = unexpected[:8]
+			}
+			return "fail", fmt.Sprintf("%d unexpected SUID binary(ies): %s — review for GTFOBins privilege-escalation paths.", n, strings.Join(shown, ", "))
+		})
+}
+
+func checkBashrcWorldWritable() SimCheck {
+	return check("T1546.004", "Shell Init File Integrity", "persistence", "Medium",
+		"World-writable shell init files let attackers inject commands that run at every login (Unix shell config persistence).",
+		"Remove world-write from /etc/profile, /etc/bash.bashrc and /etc/profile.d/*: chmod go-w <file>; chown root:root.",
+		func() (string, string) {
+			targets := []string{"/etc/profile", "/etc/bash.bashrc"}
+			if entries, err := os.ReadDir("/etc/profile.d"); err == nil {
+				for _, e := range entries {
+					if !e.IsDir() {
+						targets = append(targets, "/etc/profile.d/"+e.Name())
+					}
+				}
+			}
+			var ww []string
+			for _, t := range targets {
+				fi, err := os.Stat(t)
+				if err != nil {
+					continue
+				}
+				if fi.Mode().Perm()&0o002 != 0 {
+					ww = append(ww, t)
+				}
+			}
+			if len(ww) == 0 {
+				return "pass", "System shell init files are not world-writable — login-time command injection prevented."
+			}
+			return "fail", fmt.Sprintf("World-writable shell init file(s): %s — attacker can inject login persistence.", strings.Join(ww, ", "))
 		})
 }
