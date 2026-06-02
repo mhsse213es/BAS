@@ -912,7 +912,16 @@ sudo systemctl start bas-agent</code>
       <div id="tab-scenarios">
         <div class="sec-hdr">
           <h2>BFSI Scenarios <span id="sc-cnt" class="cnt">0</span></h2>
-          <div style="display:flex;gap:0.4rem">
+          <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
+            <input type="search" id="sc-search" placeholder="Search name, tag, technique…" oninput="renderScenarios()"
+                   style="padding:0.45rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;min-width:200px">
+            <select id="sc-filter-source" onchange="renderScenarios()"
+                    style="padding:0.45rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+              <option value="all">All sources</option>
+              <option value="builtin">Built-in</option>
+              <option value="custom">Custom</option>
+              <option value="intel">Threat intel</option>
+            </select>
             <button id="sc-new-btn" class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" onclick="openBuilder(null)">+ New Scenario</button>
             <button id="sc-upload-btn" class="btn btn-outline btn-sm" onclick="document.getElementById('sc-upload-file').click()">&#8657; Upload YAML</button>
             <input type="file" id="sc-upload-file" accept=".yaml,.yml" style="display:none" onchange="uploadScenarioFile(this)">
@@ -1425,10 +1434,40 @@ function loadScenarios() {
         artTechniques:      s.artTechniques       || []
       };
     });
-    document.getElementById('sc-cnt').textContent = scenarios.length;
-    var grid = document.getElementById('sc-grid');
-    if (!scenarios.length) { grid.innerHTML = '<p class="empty">No scenarios loaded.</p>'; return; }
-    grid.innerHTML = scenarios.map(function(s) {
+    renderScenarios();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// renderScenarios filters the loaded scenarios by the search box + source
+// filter, then paints the grid. Called on load and whenever a filter changes.
+function renderScenarios() {
+  var grid = document.getElementById('sc-grid');
+  if (!grid) return;
+  if (!scenarios.length) { grid.innerHTML = '<p class="empty">No scenarios loaded.</p>'; document.getElementById('sc-cnt').textContent = 0; return; }
+
+  var searchEl = document.getElementById('sc-search');
+  var srcEl = document.getElementById('sc-filter-source');
+  var q = (searchEl ? searchEl.value : '').trim().toLowerCase();
+  var src = srcEl ? srcEl.value : 'all';
+
+  var matches = scenarios.filter(function(s) {
+    if (src !== 'all') {
+      var srcVal = s.intelSource ? 'intel' : (s.source || 'builtin');
+      if (srcVal !== src) return false;
+    }
+    if (!q) return true;
+    var hay = [s.id, s.name, s.description, (s.tags || []).join(' '),
+               (s.mitrePhases || []).join(' '), (s.artTechniques || []).join(' '),
+               s.intelActor].join(' ').toLowerCase();
+    return hay.indexOf(q) !== -1;
+  });
+
+  document.getElementById('sc-cnt').textContent = matches.length;
+  if (!matches.length) { grid.innerHTML = '<p class="empty">No scenarios match your filter.</p>'; return; }
+  grid.innerHTML = matches.map(scenarioCardHTML).join('');
+}
+
+function scenarioCardHTML(s) {
       var color = stripeColor(s.id);
       var visibleTags = (s.tags || []).filter(function(t) {
         return t !== 'intel' && t !== 'auto-generated';
@@ -1488,8 +1527,6 @@ function loadScenarios() {
             '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
           '</div>' +
         '</div></div>';
-    }).join('');
-  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
 function loadRuns() {
