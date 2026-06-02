@@ -1,0 +1,157 @@
+id: ISO_27001_2022
+name: ISO/IEC 27001:2022
+version: "2022"
+regulator: ISO/IEC
+published_year: "2022"
+controls:
+  # ── Annex A Clause 5 — Organizational Controls ───────────────────────────
+  - id: A.5.14
+    name: Information transfer
+    domain: Organizational
+    category: Information Protection
+    techniques: [T1041, T1048, T1567]
+
+  - id: A.5.23
+    name: Information security for use of cloud services
+    domain: Organizational
+    category: Supplier Relationships
+    techniques: [T1567, T1195]
+
+  - id: A.5.24
+    name: Information security incident management planning and preparation
+    domain: Organizational
+    category: Information Security Incident Management
+    techniques: [T1486, T1490, T1485]
+
+  - id: A.5.25
+    name: Assessment and decision on information security events
+    domain: Organizational
+    category: Information Security Incident Management
+    techniques: [T1003, T1558, T1036]
+
+  - id: A.5.26
+    name: Response to information security incidents
+    domain: Organizational
+    category: Information Security Incident Management
+    techniques: [T1486, T1490]
+
+  - id: A.5.29
+    name: Information security during disruption
+    domain: Organizational
+    category: Business Continuity
+    techniques: [T1486, T1489, T1490]
+
+  - id: A.5.37
+    name: Documented operating procedures
+    domain: Organizational
+    category: Operations Security
+    techniques: [T1562, T1112]
+
+  # ── Annex A Clause 8 — Technological Controls ────────────────────────────
+  - id: A.8.2
+    name: Privileged access rights
+    domain: Technological
+    category: Access Control
+    techniques: [T1134, T1548, T1078]
+
+  - id: A.8.3
+    name: Information access restriction
+    domain: Technological
+    category: Access Control
+    techniques: [T1078, T1087, T1005]
+
+  - id: A.8.4
+    name: Access to source code
+    domain: Technological
+    category: Access Control
+    techniques: [T1505]
+
+  - id: A.8.5
+    name: Secure authentication
+    domain: Technological
+    category: Access Control
+    techniques: [T1110, T1556, T1558]
+
+  - id: A.8.7
+    name: Protection against malware
+    domain: Technological
+    category: System and Network Security
+    techniques: [T1059, T1047, T1566, T1204, T1027]
+
+  - id: A.8.8
+    name: Management of technical vulnerabilities
+    domain: Technological
+    category: System and Network Security
+    techniques: [T1190, T1203, T1068]
+
+  - id: A.8.9
+    name: Configuration management
+    domain: Technological
+    category: System and Network Security
+    techniques: [T1562, T1112, T1547]
+
+  - id: A.8.12
+    name: Data leakage prevention
+    domain: Technological
+    category: Information Protection
+    techniques: [T1041, T1048, T1005, T1039, T1560]
+
+  - id: A.8.15
+    name: Logging
+    domain: Technological
+    category: Monitoring
+    techniques: [T1070, T1562.002]
+
+  - id: A.8.16
+    name: Monitoring activities
+    domain: Technological
+    category: Monitoring
+    techniques: [T1003, T1055, T1134, T1036]
+
+  - id: A.8.18
+    name: Use of privileged utility programs
+    domain: Technological
+    category: Access Control
+    techniques: [T1134, T1548, T1218]
+
+  - id: A.8.20
+    name: Networks security
+    domain: Technological
+    category: System and Network Security
+    techniques: [T1071, T1095, T1572, T1021]
+
+  - id: A.8.22
+    name: Segregation of networks
+    domain: Technological
+    category: System and Network Security
+    techniques: [T1021, T1550]
+
+  - id: A.8.23
+    name: Web filtering
+    domain: Technological
+    category: System and Network Security
+    techniques: [T1071.001, T1567]
+
+  - id: A.8.25
+    name: Secure development life cycle
+    domain: Technological
+    category: Secure Development
+    techniques: [T1195]
+
+  - id: A.8.26
+    name: Application security requirements
+    domain: Technological
+    category: Secure Development
+    techniques: [T1190, T1566]
+
+  - id: A.8.28
+    name: Secure coding
+    domain: Technological
+    category: Secure Development
+    techniques: [T1190, T1059]
+
+  - id: A.8.29
+    name: Security testing in development and acceptance
+    domain: Technological
+    category: Secure Development
+    techniques: [T1190, T1203]

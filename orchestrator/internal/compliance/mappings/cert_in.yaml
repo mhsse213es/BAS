@@ -1,0 +1,103 @@
+id: CERT_IN
+name: CERT-In Directions on Information Security Practices
+version: "2022 (MeitY No.20(3)/2022-CERT-In)"
+regulator: CERT-In / MeitY
+published_year: "2022"
+controls:
+  # ── Incident Reporting ────────────────────────────────────────────────────
+  - id: CI-01
+    name: Mandatory incident reporting — cybersecurity incidents reported to CERT-In within 6 hours
+    domain: Incident Reporting
+    category: Mandatory Reporting
+    techniques: [T1486, T1490, T1078, T1566, T1003]
+
+  - id: CI-02
+    name: Incident types requiring reporting — data breach, ransomware, unauthorised access, DDoS
+    domain: Incident Reporting
+    category: Incident Scope
+    techniques: [T1486, T1485, T1078, T1003, T1498]
+
+  # ── Log Management ────────────────────────────────────────────────────────
+  - id: CI-03
+    name: ICT system logs maintained for 180 days — logs stored in India, accessible on demand
+    domain: Log Management
+    category: Log Retention
+    techniques: [T1070, T1562.002, T1070.001]
+
+  - id: CI-04
+    name: Log integrity — logs protected from modification and deletion
+    domain: Log Management
+    category: Log Protection
+    techniques: [T1070, T1562.002]
+
+  # ── NTP Synchronisation ───────────────────────────────────────────────────
+  - id: CI-05
+    name: NTP synchronisation — all ICT systems synchronised to NTP servers in India (NIC/NPLI)
+    domain: System Configuration
+    category: Time Synchronisation
+    techniques: [T1070]
+
+  # ── Access Control ────────────────────────────────────────────────────────
+  - id: CI-06
+    name: Multi-factor authentication — MFA mandatory for all critical systems and remote access
+    domain: Access Control
+    category: Authentication
+    techniques: [T1078, T1110, T1556, T1558]
+
+  - id: CI-07
+    name: Subscriber and customer KYC — identity proofing for service subscribers
+    domain: Access Control
+    category: Identity Verification
+    techniques: [T1078, T1110]
+
+  # ── Vulnerability Management ──────────────────────────────────────────────
+  - id: CI-08
+    name: Vulnerability scanning — regular scanning of IT infrastructure; timely remediation
+    domain: Vulnerability Management
+    category: Vulnerability Assessment
+    techniques: [T1190, T1203, T1068]
+
+  - id: CI-09
+    name: Patch management — security patches applied within timelines per criticality
+    domain: Vulnerability Management
+    category: Patch Management
+    techniques: [T1190, T1203, T1068]
+
+  # ── Data Protection ───────────────────────────────────────────────────────
+  - id: CI-10
+    name: Data localisation — sensitive personal and financial data stored within India
+    domain: Data Protection
+    category: Data Residency
+    techniques: [T1041, T1048, T1567]
+
+  - id: CI-11
+    name: Encryption — sensitive data encrypted at rest and in transit
+    domain: Data Protection
+    category: Encryption
+    techniques: [T1041, T1048, T1005]
+
+  # ── Endpoint and Network Security ─────────────────────────────────────────
+  - id: CI-12
+    name: Anti-malware and EDR — deployed on all endpoints; updated signatures
+    domain: Endpoint Security
+    category: Anti-Malware
+    techniques: [T1059, T1047, T1562.001, T1566, T1204]
+
+  - id: CI-13
+    name: Network security controls — firewall, IDS/IPS, network segmentation
+    domain: Network Security
+    category: Network Protection
+    techniques: [T1021, T1550, T1071, T1095, T1562.004]
+
+  # ── Audit and Forensics ───────────────────────────────────────────────────
+  - id: CI-14
+    name: Audit trail — comprehensive audit logs for privileged access and administrative actions
+    domain: Audit & Forensics
+    category: Audit Logging
+    techniques: [T1070, T1134, T1548, T1003]
+
+  - id: CI-15
+    name: Forensic readiness — capability to perform forensic investigation post-incident
+    domain: Audit & Forensics
+    category: Forensics
+    techniques: [T1003, T1070, T1550, T1055]

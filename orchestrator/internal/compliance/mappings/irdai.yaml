@@ -1,0 +1,143 @@
+id: IRDAI_CSF
+name: IRDAI Cyber Security Guidelines
+version: "2023 (IRDA/IT/GDL/MISC/100/4/2023)"
+regulator: IRDAI
+published_year: "2023"
+controls:
+  # ── Governance ────────────────────────────────────────────────────────────
+  - id: CS.1.1
+    name: Cybersecurity governance framework — Board policy, CISO, roles and responsibilities
+    domain: Governance
+    category: Governance & Oversight
+    techniques: [T1078, T1098]
+
+  - id: CS.1.2
+    name: Third-party IT service provider risk management
+    domain: Governance
+    category: Third-Party Risk
+    techniques: [T1195, T1199]
+
+  # ── Identification ────────────────────────────────────────────────────────
+  - id: CS.2.1
+    name: IT asset inventory — all hardware, software, and data assets inventoried
+    domain: Identification
+    category: Asset Management
+    techniques: [T1518, T1082]
+
+  - id: CS.2.2
+    name: Cyber risk assessment — formal risk assessment; critical insurance data prioritised
+    domain: Identification
+    category: Risk Assessment
+    techniques: [T1190, T1566, T1078]
+
+  - id: CS.2.3
+    name: Vulnerability assessment and penetration testing — VAPT annually on critical systems
+    domain: Identification
+    category: Vulnerability Management
+    techniques: [T1190, T1203, T1068]
+
+  # ── Protection ────────────────────────────────────────────────────────────
+  - id: CS.3.1
+    name: Access control — RBAC, need-to-know principle, regular access reviews
+    domain: Protection
+    category: Access Control
+    techniques: [T1134, T1078, T1548, T1068]
+
+  - id: CS.3.2
+    name: Strong authentication — MFA for privileged accounts, remote access, and policy admin portals
+    domain: Protection
+    category: Authentication
+    techniques: [T1110, T1556, T1558]
+
+  - id: CS.3.3
+    name: Credential management — PAM for privileged accounts; password vaulting
+    domain: Protection
+    category: Credential Management
+    techniques: [T1003, T1555, T1078]
+
+  - id: CS.3.4
+    name: Data protection — encryption at rest and in transit; DLP controls
+    domain: Protection
+    category: Data Security
+    techniques: [T1041, T1048, T1005, T1039]
+
+  - id: CS.3.5
+    name: Endpoint protection — EDR on all endpoints; mobile device management
+    domain: Protection
+    category: Endpoint Security
+    techniques: [T1059, T1047, T1562.001, T1204]
+
+  - id: CS.3.6
+    name: Network security — firewall, IPS, segmentation of core insurance platforms
+    domain: Protection
+    category: Network Security
+    techniques: [T1021, T1550, T1071, T1095, T1562.004]
+
+  - id: CS.3.7
+    name: Patch management — critical vulnerabilities remediated within 30 days
+    domain: Protection
+    category: Vulnerability Management
+    techniques: [T1190, T1203, T1068]
+
+  - id: CS.3.8
+    name: Secure configuration — CIS hardening on servers and endpoints
+    domain: Protection
+    category: Configuration Management
+    techniques: [T1562, T1112, T1547]
+
+  - id: CS.3.9
+    name: Business continuity and DR — offline backups; tested BCP; RTO/RPO defined
+    domain: Protection
+    category: Resilience
+    techniques: [T1490, T1486, T1485]
+
+  - id: CS.3.10
+    name: Application security — SAST/DAST in SDLC; WAF for customer-facing portals
+    domain: Protection
+    category: Application Security
+    techniques: [T1190, T1505, T1059.007]
+
+  # ── Detection ─────────────────────────────────────────────────────────────
+  - id: CS.4.1
+    name: Security monitoring — SIEM, SOC, log retention minimum 1 year
+    domain: Detection
+    category: Security Monitoring
+    techniques: [T1070, T1562.002, T1036]
+
+  - id: CS.4.2
+    name: Intrusion detection and prevention — IDS/IPS on all critical network segments
+    domain: Detection
+    category: Intrusion Detection
+    techniques: [T1071, T1095, T1572, T1003]
+
+  - id: CS.4.3
+    name: Anomaly detection — behavioral analytics and UBA for detecting insider threats
+    domain: Detection
+    category: Threat Detection
+    techniques: [T1056, T1087, T1134, T1113]
+
+  # ── Response ──────────────────────────────────────────────────────────────
+  - id: CS.5.1
+    name: Incident response plan — documented, tested annually; IRDAI reporting within 6 hours
+    domain: Response
+    category: Incident Management
+    techniques: [T1486, T1490, T1485]
+
+  - id: CS.5.2
+    name: Forensics capability — digital forensics for post-incident investigation
+    domain: Response
+    category: Forensics
+    techniques: [T1003, T1070, T1550]
+
+  # ── Recovery ──────────────────────────────────────────────────────────────
+  - id: CS.6.1
+    name: Recovery execution — IT/business operations restored per tested DR plan
+    domain: Recovery
+    category: Recovery
+    techniques: [T1490, T1486]
+
+  - id: CS.6.2
+    name: Post-incident review — lessons learned documented; controls updated
+    domain: Recovery
+    category: Improvement
+    techniques: [T1485, T1489]

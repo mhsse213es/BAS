@@ -17,6 +17,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
@@ -25,20 +26,27 @@ import (
 
 // Handler holds shared dependencies for all API handlers.
 type Handler struct {
-	db          *pgxpool.Pool
-	hub         *ws.Hub
-	engine      *scenario.Engine
-	secret      string
-	agentSecret string // optional shared secret for agent-facing endpoints
-	calderaURL  string
-	calderaKey  string
-	artStore    *scenario.ARTStore
-	manifest    *integrity.Manifest // binary hash manifest — nil means verification disabled
+	db               *pgxpool.Pool
+	hub              *ws.Hub
+	engine           *scenario.Engine
+	secret           string
+	agentSecret      string // optional shared secret for agent-facing endpoints
+	calderaURL       string
+	calderaKey       string
+	artStore         *scenario.ARTStore
+	manifest         *integrity.Manifest  // binary hash manifest — nil means verification disabled
+	complianceMapper *compliance.Mapper   // nil when not loaded
 }
 
 // New creates a Handler.
 func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) *Handler {
 	return &Handler{db: db, hub: hub, engine: engine, secret: secret}
+}
+
+// WithCompliance attaches the compliance mapper.
+func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
+	h.complianceMapper = m
+	return h
 }
 
 // WithAgentSecret configures the optional agent shared secret.
@@ -923,4 +931,96 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 
 func newID() string {
 	return fmt.Sprintf("%x", time.Now().UnixNano())
+}
+
+// ── Compliance ────────────────────────────────────────────────────────────────
+
+// GET /api/compliance/frameworks
+func (h *Handler) ListComplianceFrameworks(w http.ResponseWriter, r *http.Request) {
+	if h.complianceMapper == nil {
+		jsonError(w, "compliance mapper not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	respond(w, h.complianceMapper.Frameworks())
+}
+
+// GET /api/compliance/report?agentId=X&framework=Y[&runId=Z][&format=json|csv]
+//
+// format=json  → JSON download (Content-Disposition: attachment)
+// format=csv   → CSV download (Content-Disposition: attachment)
+// (no format)  → JSON for dashboard display (no attachment header)
+func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
+	if h.complianceMapper == nil {
+		jsonError(w, "compliance mapper not loaded", http.StatusServiceUnavailable)
+		return
+	}
+
+	frameworkID := r.URL.Query().Get("framework")
+	agentID := r.URL.Query().Get("agentId")
+	runID := r.URL.Query().Get("runId")
+	format := strings.ToLower(r.URL.Query().Get("format"))
+
+	if frameworkID == "" {
+		jsonError(w, "framework parameter required", http.StatusBadRequest)
+		return
+	}
+	if agentID == "" && runID == "" {
+		jsonError(w, "agentId or runId required", http.StatusBadRequest)
+		return
+	}
+
+	// ── Fetch simulation results from DB ─────────────────────────────────────
+	var resultsJSON []byte
+	var scenarioName, resolvedRunID, resolvedAgentID string
+
+	if runID != "" {
+		err := h.db.QueryRow(r.Context(),
+			`SELECT id, agent_id, name, results FROM scenario_runs WHERE id = $1`, runID,
+		).Scan(&resolvedRunID, &resolvedAgentID, &scenarioName, &resultsJSON)
+		if err != nil {
+			jsonError(w, "run not found", http.StatusNotFound)
+			return
+		}
+	} else {
+		err := h.db.QueryRow(r.Context(),
+			`SELECT id, agent_id, name, results FROM scenario_runs
+			  WHERE agent_id = $1 AND status IN ('completed','partial')
+			  ORDER BY started_at DESC LIMIT 1`, agentID,
+		).Scan(&resolvedRunID, &resolvedAgentID, &scenarioName, &resultsJSON)
+		if err != nil {
+			jsonError(w, "no completed run found for agent", http.StatusNotFound)
+			return
+		}
+	}
+
+	var results []models.SimulationResult
+	if len(resultsJSON) > 0 {
+		_ = json.Unmarshal(resultsJSON, &results)
+	}
+
+	// ── Generate report ───────────────────────────────────────────────────────
+	report, err := h.complianceMapper.GenerateReport(results, frameworkID, resolvedAgentID, resolvedRunID, scenarioName)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	fname := fmt.Sprintf("compliance-%s-%s-%s",
+		frameworkID, resolvedAgentID, time.Now().UTC().Format("2006-01-02"))
+
+	switch format {
+	case "csv":
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.csv"`, fname))
+		compliance.WriteCSV(w, report)
+
+	case "json":
+		b, _ := json.MarshalIndent(report, "", "  ")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.json"`, fname))
+		w.Write(b)
+
+	default:
+		respond(w, report)
+	}
 }

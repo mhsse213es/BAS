@@ -485,6 +485,45 @@ code {
 .bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
 
 .tactic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; padding: 0.75rem 1rem; }
+
+/* ── Compliance ────────────────────────────────────────────────────────── */
+.cmp-meta { font-size:0.8rem; color:var(--muted); margin-bottom:1rem; padding:0.5rem 0; border-bottom:1px solid var(--border); }
+.cmp-domain-row { display:flex; align-items:center; gap:0.75rem; padding:0.45rem 0; border-bottom:1px solid var(--border); }
+.cmp-domain-row:last-child { border-bottom:none; }
+.cmp-domain-name { min-width:160px; font-size:0.82rem; font-weight:500; }
+.cmp-domain-bar-wrap { flex:1; height:8px; background:var(--border); border-radius:4px; overflow:hidden; }
+.cmp-domain-bar { height:100%; border-radius:4px; transition:width 0.4s; }
+.cmp-domain-pct { min-width:40px; text-align:right; font-size:0.8rem; font-weight:600; }
+.cmp-status-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.cmp-status-dot.pass { background:#238636; }
+.cmp-status-dot.fail { background:#da3633; }
+.cmp-status-dot.untested { background:#4a5568; }
+.cmp-evidence { display:none; padding:0.6rem 1rem; background:rgba(0,0,0,0.2); font-size:0.78rem; }
+.cmp-evidence.open { display:block; }
+.cmp-ev-row { display:flex; gap:0.5rem; padding:0.25rem 0; border-bottom:1px solid rgba(255,255,255,0.04); }
+.cmp-ev-row:last-child { border-bottom:none; }
+.cmp-ev-tech { min-width:90px; font-family:monospace; color:var(--accent); }
+.cmp-ev-result { min-width:52px; font-weight:600; }
+.cmp-ev-result.pass { color:#3fb950; }
+.cmp-ev-result.fail { color:#f85149; }
+.cmp-ev-result.blocked { color:#58a6ff; }
+.cmp-ev-detail { color:var(--muted); }
+.cmp-expand-btn { cursor:pointer; color:var(--muted); font-size:0.75rem; padding:0 0.3rem; user-select:none; }
+
+/* Print stylesheet for PDF export */
+@media print {
+  #sidebar, header, .sec-hdr button, #cmp-export-json, #cmp-export-csv, #cmp-export-pdf,
+  .cmp-expand-btn { display:none !important; }
+  .main-wrapper { margin-left:0 !important; width:100% !important; }
+  body { background:#fff !important; color:#111 !important; }
+  .card { border:1px solid #ddd !important; background:#fff !important; break-inside:avoid; }
+  table { border-collapse:collapse; }
+  th, td { border:1px solid #ddd !important; color:#111 !important; }
+  .cmp-evidence.open { display:block !important; }
+  .cmp-status-dot.pass { background:#238636 !important; -webkit-print-color-adjust:exact; }
+  .cmp-status-dot.fail { background:#da3633 !important; -webkit-print-color-adjust:exact; }
+  .score-card { border:1px solid #ddd !important; background:#fff !important; }
+}
 </style>
 </head>
 <body>
@@ -566,6 +605,14 @@ code {
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Visibility</div>
+        <div class="nav-item" data-tab="compliance" onclick="showTab('compliance')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <rect x="2" y="1" width="12" height="14" rx="1"/>
+            <path d="M5 5h6M5 8h6M5 11h3"/>
+            <path d="M10 10l1.5 1.5L14 9" stroke-width="1.6"/>
+          </svg>
+          Compliance
+        </div>
         <div class="nav-item disabled">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/>
@@ -577,12 +624,6 @@ code {
             <polyline points="1,11 5,6 8,9 11,4 15,7"/>
           </svg>
           Detections <span class="coming-tag">Soon</span>
-        </div>
-        <div class="nav-item disabled">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
-            <rect x="1" y="4" width="14" height="9" rx="1"/><path d="M5 4V3a3 3 0 016 0v1"/>
-          </svg>
-          ATT&amp;CK Coverage <span class="coming-tag">Soon</span>
         </div>
       </div>
       <div class="nav-group">
@@ -841,6 +882,64 @@ sudo systemctl start bas-agent</code>
           </table>
         </div>
       </div>
+
+      <!-- Compliance -->
+      <div id="tab-compliance" style="display:none">
+        <div class="sec-hdr">
+          <h2>Compliance Report</h2>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+            <select id="cmp-agent-sel" class="btn btn-outline" style="min-width:160px"></select>
+            <select id="cmp-fw-sel" class="btn btn-outline" style="min-width:200px"></select>
+            <button class="btn btn-primary btn-sm" onclick="loadComplianceReport()">Generate</button>
+            <button class="btn btn-outline btn-sm" onclick="exportCompliance('json')" id="cmp-export-json" style="display:none">↓ JSON</button>
+            <button class="btn btn-outline btn-sm" onclick="exportCompliance('csv')" id="cmp-export-csv" style="display:none">↓ CSV</button>
+            <button class="btn btn-outline btn-sm" onclick="window.print()" id="cmp-export-pdf" style="display:none">↓ PDF</button>
+          </div>
+        </div>
+
+        <div id="cmp-placeholder" style="text-align:center;padding:3rem;color:var(--muted)">
+          Select an agent and framework, then click Generate.
+        </div>
+
+        <div id="cmp-report" style="display:none">
+          <!-- Summary cards -->
+          <div class="cmp-meta" id="cmp-meta"></div>
+          <div class="score-grid" id="cmp-summary-cards"></div>
+
+          <!-- Domain breakdown -->
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-title">Domain Breakdown</div>
+            <div id="cmp-domains"></div>
+          </div>
+
+          <!-- Controls table -->
+          <div class="card">
+            <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+              <span>Controls</span>
+              <div style="display:flex;gap:0.5rem">
+                <button class="btn btn-sm" style="background:rgba(35,134,54,0.15);color:#3fb950" onclick="filterControls('pass')">Pass</button>
+                <button class="btn btn-sm" style="background:rgba(218,54,51,0.15);color:#f85149" onclick="filterControls('fail')">Fail</button>
+                <button class="btn btn-sm" style="background:rgba(154,169,188,0.15);color:var(--muted)" onclick="filterControls('untested')">Untested</button>
+                <button class="btn btn-sm btn-outline" onclick="filterControls('')">All</button>
+              </div>
+            </div>
+            <div class="tbl-wrap">
+              <table id="cmp-controls-table">
+                <thead><tr>
+                  <th style="width:1px"></th>
+                  <th>Control ID</th>
+                  <th>Name</th>
+                  <th>Domain</th>
+                  <th>Tested</th>
+                  <th>Pass</th>
+                  <th>Fail</th>
+                </tr></thead>
+                <tbody id="cmp-controls-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -953,7 +1052,7 @@ sudo systemctl start bas-agent</code>
 <div id="toast"></div>
 
 <script>
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', users:'Users' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', users:'Users', compliance:'Compliance' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#238636','#8957e5','#1a9f8a'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -1031,7 +1130,7 @@ function bootApp() {
 }
 
 function showTab(name) {
-  ['dashboard','agents','scenarios','runs','users'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','users','compliance'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -1041,6 +1140,7 @@ function showTab(name) {
   if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
   if (name === 'users') loadUsers();
   if (name === 'dashboard') loadDashboard();
+  if (name === 'compliance') initComplianceTab();
 }
 
 function apicall(path, opts) {
@@ -1664,6 +1764,165 @@ function submitChangePassword() {
     showToast('Password updated successfully', 'ok');
   })
   .catch(function(e) { document.getElementById('cpw-err').textContent = e.message; });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COMPLIANCE MODULE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+var _cmpReport = null;
+var _cmpFrameworks = [];
+var _cmpFilter = '';
+
+function initComplianceTab() {
+  var fwSel = document.getElementById('cmp-fw-sel');
+  if (_cmpFrameworks.length === 0) {
+    apicall('/api/compliance/frameworks').then(function(fws) {
+      _cmpFrameworks = fws || [];
+      fwSel.innerHTML = _cmpFrameworks.map(function(f) {
+        return '<option value="' + f.id + '">' + f.name + ' ' + f.version + '</option>';
+      }).join('');
+    }).catch(function() {
+      fwSel.innerHTML = '<option value="">Error loading frameworks</option>';
+    });
+  }
+  // Populate agent selector from already-loaded agents array
+  var agSel = document.getElementById('cmp-agent-sel');
+  if (agSel.options.length <= 1) {
+    agSel.innerHTML = '<option value="">— Select Agent —</option>' +
+      (agents || []).map(function(a) {
+        return '<option value="' + a.agentId + '">' + (a.hostname || a.agentId) + '</option>';
+      }).join('');
+  }
+}
+
+function loadComplianceReport() {
+  var agentId = document.getElementById('cmp-agent-sel').value;
+  var framework = document.getElementById('cmp-fw-sel').value;
+  if (!agentId) { showToast('Select an agent first', 'warn'); return; }
+  if (!framework) { showToast('Select a framework first', 'warn'); return; }
+
+  document.getElementById('cmp-placeholder').textContent = 'Generating report…';
+  document.getElementById('cmp-placeholder').style.display = '';
+  document.getElementById('cmp-report').style.display = 'none';
+  ['cmp-export-json','cmp-export-csv','cmp-export-pdf'].forEach(function(id) {
+    document.getElementById(id).style.display = 'none';
+  });
+
+  apicall('/api/compliance/report?agentId=' + encodeURIComponent(agentId) + '&framework=' + encodeURIComponent(framework))
+    .then(function(report) {
+      _cmpReport = report;
+      _cmpFilter = '';
+      renderComplianceReport(report);
+      document.getElementById('cmp-placeholder').style.display = 'none';
+      document.getElementById('cmp-report').style.display = '';
+      ['cmp-export-json','cmp-export-csv','cmp-export-pdf'].forEach(function(id) {
+        document.getElementById(id).style.display = '';
+      });
+    })
+    .catch(function(e) {
+      document.getElementById('cmp-placeholder').textContent = 'Error: ' + (e.message || 'Could not generate report. Run a scenario first.');
+    });
+}
+
+function renderComplianceReport(r) {
+  // Meta
+  document.getElementById('cmp-meta').innerHTML =
+    '<strong>' + r.framework.name + ' ' + r.framework.version + '</strong>' +
+    ' &nbsp;·&nbsp; Agent: <strong>' + (r.agentId) + '</strong>' +
+    ' &nbsp;·&nbsp; Run: <strong>' + (r.scenarioName || r.runId) + '</strong>' +
+    ' &nbsp;·&nbsp; Generated: ' + new Date(r.generatedAt).toLocaleString();
+
+  // Summary cards
+  var s = r.summary;
+  var cards = [
+    { label:'Compliance', value: s.compliancePct.toFixed(1) + '%', sub: s.passingControls + '/' + s.testedControls + ' tested controls passing', color: s.compliancePct >= 70 ? 'var(--success)' : s.compliancePct >= 40 ? 'var(--warning)' : 'var(--danger)' },
+    { label:'Coverage', value: s.coveragePct.toFixed(1) + '%', sub: s.testedControls + ' of ' + s.totalControls + ' controls have BAS test evidence', color: 'var(--accent)' },
+    { label:'Failing Controls', value: s.failingControls, sub: 'controls with at least one failed technique', color: s.failingControls > 0 ? 'var(--danger)' : 'var(--success)' },
+    { label:'Untested Controls', value: s.untestedControls, sub: 'controls with no BAS evidence yet', color: 'var(--muted)' },
+  ];
+  document.getElementById('cmp-summary-cards').innerHTML = cards.map(function(c) {
+    return '<div class="score-card"><div class="score-label">' + c.label + '</div>' +
+           '<div class="score-value" style="color:' + c.color + '">' + c.value + '</div>' +
+           '<div class="score-sub">' + c.sub + '</div></div>';
+  }).join('');
+
+  // Domains
+  document.getElementById('cmp-domains').innerHTML = (r.domains || []).map(function(d) {
+    var tested = d.passing + d.failing;
+    var pct = tested > 0 ? d.compliancePct : 0;
+    var barColor = pct >= 70 ? '#238636' : pct >= 40 ? '#d29922' : '#da3633';
+    if (tested === 0) barColor = '#4a5568';
+    return '<div class="cmp-domain-row">' +
+      '<span class="cmp-domain-name">' + d.name + '</span>' +
+      '<div class="cmp-domain-bar-wrap"><div class="cmp-domain-bar" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
+      '<span class="cmp-domain-pct" style="color:' + barColor + '">' + (tested > 0 ? pct.toFixed(0) + '%' : '—') + '</span>' +
+      '<span style="font-size:0.75rem;color:var(--muted)">' + d.passing + 'P / ' + d.failing + 'F / ' + d.untested + 'U</span>' +
+      '</div>';
+  }).join('');
+
+  // Controls table
+  renderControlsTable(r.controls, _cmpFilter);
+}
+
+function renderControlsTable(controls, filter) {
+  var rows = controls.filter(function(c) { return !filter || c.status === filter; });
+  document.getElementById('cmp-controls-body').innerHTML = rows.map(function(c, i) {
+    var dotClass = 'cmp-status-dot ' + c.status;
+    var evidenceId = 'cmp-ev-' + i;
+    var hasEvidence = c.evidence && c.evidence.length > 0;
+    var evRows = (c.evidence || []).map(function(ev) {
+      var rc = ev.result === 'pass' || ev.result === 'blocked' ? 'pass' : 'fail';
+      return '<div class="cmp-ev-row">' +
+        '<span class="cmp-ev-tech">' + ev.techniqueId + '</span>' +
+        '<span class="cmp-ev-result ' + rc + '">' + ev.result.toUpperCase() + '</span>' +
+        '<span class="cmp-ev-detail">' + (ev.details || '').substring(0,120) + '</span>' +
+        '</div>';
+    }).join('');
+    var expandBtn = hasEvidence ?
+      '<span class="cmp-expand-btn" onclick="toggleEvidence(\'' + evidenceId + '\')">▶ evidence</span>' : '';
+    return '<tr>' +
+      '<td><span class="' + dotClass + '"></span></td>' +
+      '<td style="font-family:monospace;white-space:nowrap">' + c.id + '</td>' +
+      '<td>' + c.name + ' ' + expandBtn + '<div class="cmp-evidence" id="' + evidenceId + '">' + evRows + '</div></td>' +
+      '<td><span style="font-size:0.75rem;color:var(--muted)">' + c.domain + '</span></td>' +
+      '<td>' + c.tested + '</td>' +
+      '<td style="color:#3fb950">' + c.passed + '</td>' +
+      '<td style="color:' + (c.failed > 0 ? '#f85149' : 'var(--muted)') + '">' + c.failed + '</td>' +
+      '</tr>';
+  }).join('');
+  if (rows.length === 0) {
+    document.getElementById('cmp-controls-body').innerHTML =
+      '<tr><td colspan="7" class="empty">No controls match the filter.</td></tr>';
+  }
+}
+
+function toggleEvidence(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('open');
+  var btn = el.previousElementSibling;
+  if (btn && btn.classList.contains('cmp-expand-btn')) {
+    btn.textContent = el.classList.contains('open') ? '▼ evidence' : '▶ evidence';
+  }
+}
+
+function filterControls(status) {
+  _cmpFilter = status;
+  if (_cmpReport) renderControlsTable(_cmpReport.controls, status);
+}
+
+function exportCompliance(format) {
+  var agentId = document.getElementById('cmp-agent-sel').value;
+  var framework = document.getElementById('cmp-fw-sel').value;
+  if (!agentId || !framework) return;
+  var url = '/api/compliance/report?agentId=' + encodeURIComponent(agentId) +
+            '&framework=' + encodeURIComponent(framework) +
+            '&format=' + format;
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'compliance-' + framework + '-' + agentId + '.' + format;
+  a.click();
 }
 </script>
 </body>

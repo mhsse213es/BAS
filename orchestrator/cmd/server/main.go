@@ -15,6 +15,7 @@ import (
 
 	"github.com/audspect/bas/config"
 	"github.com/audspect/bas/internal/api"
+	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
@@ -87,13 +88,22 @@ func main() {
 		log.Println("[~] No binary manifest found — agent hash verification disabled")
 	}
 
+	// ── Compliance Mapper ─────────────────────────────────────────────────
+	complianceMapper, cmErr := compliance.NewMapper()
+	if cmErr != nil {
+		log.Printf("[!] compliance mapper: %v — compliance reports unavailable", cmErr)
+	} else {
+		log.Printf("[+] Compliance mapper loaded (%d frameworks)", len(complianceMapper.Frameworks()))
+	}
+
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
 		WithAgentSecret(cfg.AgentSecret).
-		WithManifest(manifest)
+		WithManifest(manifest).
+		WithCompliance(complianceMapper)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────

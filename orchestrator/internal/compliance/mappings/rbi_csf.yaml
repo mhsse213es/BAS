@@ -1,0 +1,163 @@
+id: RBI_CSF
+name: RBI Cyber Security Framework
+version: "2016 (Circular RBI/2015-16/418)"
+regulator: RBI
+published_year: "2016"
+controls:
+  # ── Identity & Access Management ─────────────────────────────────────────
+  - id: IAM-01
+    name: Privileged access management — PAM controls for admin/service accounts
+    domain: Identity & Access Management
+    category: Privileged Access
+    techniques: [T1134, T1548, T1078]
+
+  - id: IAM-02
+    name: Identity and access management — MFA for all privileged and remote access
+    domain: Identity & Access Management
+    category: Authentication
+    techniques: [T1078, T1110, T1556]
+
+  - id: IAM-03
+    name: Access control — least-privilege enforcement and regular access reviews
+    domain: Identity & Access Management
+    category: Access Control
+    techniques: [T1068, T1087, T1134]
+
+  - id: IAM-04
+    name: Credential management — secure storage and rotation of credentials
+    domain: Identity & Access Management
+    category: Credential Management
+    techniques: [T1003, T1555, T1558]
+
+  # ── Network Security ─────────────────────────────────────────────────────
+  - id: NET-01
+    name: Network segmentation — critical banking systems isolated from general network
+    domain: Network Security
+    category: Segmentation
+    techniques: [T1021, T1550, T1571]
+
+  - id: NET-02
+    name: Firewall and perimeter security — rules reviewed, inbound/outbound filtered
+    domain: Network Security
+    category: Perimeter Security
+    techniques: [T1562.004, T1071, T1095]
+
+  - id: NET-03
+    name: Remote access security — VPN with MFA, session recording for privileged sessions
+    domain: Network Security
+    category: Remote Access
+    techniques: [T1133, T1021.001]
+
+  - id: NET-04
+    name: Network monitoring — IDS/IPS and SIEM integration for anomaly detection
+    domain: Network Security
+    category: Monitoring
+    techniques: [T1071, T1095, T1572, T1219]
+
+  # ── Endpoint Protection ───────────────────────────────────────────────────
+  - id: EPT-01
+    name: Endpoint security — EDR/AV deployed on all endpoints with real-time protection
+    domain: Endpoint Protection
+    category: Anti-Malware
+    techniques: [T1059, T1047, T1562.001]
+
+  - id: EPT-02
+    name: Patch management — critical patches applied within 30 days; zero-days within 7 days
+    domain: Endpoint Protection
+    category: Vulnerability Management
+    techniques: [T1190, T1203, T1068]
+
+  - id: EPT-03
+    name: Anti-malware controls — signature and behavioral detection enforced
+    domain: Endpoint Protection
+    category: Anti-Malware
+    techniques: [T1566, T1059, T1204]
+
+  - id: EPT-04
+    name: Application whitelisting — only authorized software permitted to execute
+    domain: Endpoint Protection
+    category: Execution Control
+    techniques: [T1218, T1027, T1543]
+
+  # ── Data Security ─────────────────────────────────────────────────────────
+  - id: DAT-01
+    name: Data encryption at rest — sensitive financial data encrypted at rest (AES-256)
+    domain: Data Security
+    category: Encryption
+    techniques: [T1005, T1039, T1025]
+
+  - id: DAT-02
+    name: Data encryption in transit — TLS 1.2+ enforced for all data transmission
+    domain: Data Security
+    category: Encryption
+    techniques: [T1041, T1048]
+
+  - id: DAT-03
+    name: Data loss prevention — DLP controls on email, USB, and cloud upload channels
+    domain: Data Security
+    category: Data Leakage Prevention
+    techniques: [T1041, T1048, T1560]
+
+  - id: DAT-04
+    name: Data classification — sensitive data (customer PII, financial) classified and labeled
+    domain: Data Security
+    category: Data Classification
+    techniques: [T1005, T1114, T1213]
+
+  # ── Security Monitoring ───────────────────────────────────────────────────
+  - id: MON-01
+    name: Security information and event management — SIEM deployed with correlation rules
+    domain: Security Monitoring
+    category: SIEM
+    techniques: [T1070, T1562.002, T1562]
+
+  - id: MON-02
+    name: Intrusion detection — IDS/IPS monitoring east-west and north-south traffic
+    domain: Security Monitoring
+    category: Intrusion Detection
+    techniques: [T1003, T1055, T1036, T1134]
+
+  - id: MON-03
+    name: Log management — all critical system logs retained for minimum 180 days
+    domain: Security Monitoring
+    category: Log Management
+    techniques: [T1070.001, T1562.002]
+
+  # ── Incident Management ───────────────────────────────────────────────────
+  - id: INC-01
+    name: Incident detection — automated alerting on security events
+    domain: Incident Management
+    category: Detection
+    techniques: [T1003, T1558, T1486]
+
+  - id: INC-02
+    name: Incident response — documented IR plan tested annually; RBI reporting within 6 hours
+    domain: Incident Management
+    category: Response
+    techniques: [T1486, T1490, T1485]
+
+  # ── Business Continuity ───────────────────────────────────────────────────
+  - id: BCP-01
+    name: Backup and recovery — immutable offline backups; RTO/RPO per RBI guidelines
+    domain: Business Continuity
+    category: Backup
+    techniques: [T1490, T1486]
+
+  - id: BCP-02
+    name: Disaster recovery — DR drills conducted semi-annually; alternate site maintained
+    domain: Business Continuity
+    category: Disaster Recovery
+    techniques: [T1485, T1489, T1529]
+
+  # ── Application Security ──────────────────────────────────────────────────
+  - id: APP-01
+    name: Secure coding practices — SAST/DAST in SDLC; code review for critical apps
+    domain: Application Security
+    category: Secure Development
+    techniques: [T1190, T1505]
+
+  - id: APP-02
+    name: Web application firewall — WAF deployed before all internet-facing applications
+    domain: Application Security
+    category: Application Protection
+    techniques: [T1190, T1059.007]

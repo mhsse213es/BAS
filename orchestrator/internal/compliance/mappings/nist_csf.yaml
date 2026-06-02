@@ -1,0 +1,191 @@
+id: NIST_CSF_2
+name: NIST Cybersecurity Framework
+version: "2.0"
+regulator: NIST
+published_year: "2024"
+controls:
+  # ── Govern ────────────────────────────────────────────────────────────────
+  - id: GV.RM-06
+    name: Cybersecurity risk is considered alongside supply chain and third-party risks
+    domain: Govern
+    category: Risk Management Strategy
+    techniques: [T1195, T1199]
+
+  # ── Identify ─────────────────────────────────────────────────────────────
+  - id: ID.AM-05
+    name: Software, hardware, and services are inventoried with their relevant risk data
+    domain: Identify
+    category: Asset Management
+    techniques: [T1518, T1082]
+
+  - id: ID.AM-08
+    name: Systems, hardware, software, and services are managed throughout their life cycles
+    domain: Identify
+    category: Asset Management
+    techniques: [T1195, T1505]
+
+  - id: ID.RA-01
+    name: Vulnerabilities in assets are identified, validated, and recorded
+    domain: Identify
+    category: Risk Assessment
+    techniques: [T1190, T1203, T1068]
+
+  - id: ID.RA-05
+    name: Threats, vulnerabilities, likelihoods, and impacts are used to understand inherent risk
+    domain: Identify
+    category: Risk Assessment
+    techniques: [T1566, T1078, T1190]
+
+  # ── Protect ───────────────────────────────────────────────────────────────
+  - id: PR.AA-01
+    name: Identities and credentials for authorized users, services, and hardware are managed
+    domain: Protect
+    category: Identity Management, Authentication, and Access Control
+    techniques: [T1078, T1110, T1556]
+
+  - id: PR.AA-02
+    name: Identities are proofed and bound to credentials based on the context of interactions
+    domain: Protect
+    category: Identity Management, Authentication, and Access Control
+    techniques: [T1078, T1110]
+
+  - id: PR.AA-03
+    name: Users, services, and hardware are authenticated
+    domain: Protect
+    category: Identity Management, Authentication, and Access Control
+    techniques: [T1110, T1558, T1555]
+
+  - id: PR.AA-04
+    name: Identity assertions and org credentials are protected, monitored, and reviewed
+    domain: Protect
+    category: Identity Management, Authentication, and Access Control
+    techniques: [T1003, T1558, T1555]
+
+  - id: PR.AA-05
+    name: Access permissions and authorizations are managed, incorporating least privilege
+    domain: Protect
+    category: Identity Management, Authentication, and Access Control
+    techniques: [T1134, T1548, T1068, T1078]
+
+  - id: PR.AT-01
+    name: Personnel are provided with awareness and training
+    domain: Protect
+    category: Awareness and Training
+    techniques: [T1566, T1204]
+
+  - id: PR.DS-01
+    name: The confidentiality, integrity, and availability of data-at-rest are protected
+    domain: Protect
+    category: Data Security
+    techniques: [T1005, T1039, T1025, T1560]
+
+  - id: PR.DS-02
+    name: The confidentiality, integrity, and availability of data-in-transit are protected
+    domain: Protect
+    category: Data Security
+    techniques: [T1041, T1048, T1572]
+
+  - id: PR.DS-10
+    name: Data are managed consistent with the organization's risk strategy to protect confidentiality
+    domain: Protect
+    category: Data Security
+    techniques: [T1485, T1565]
+
+  - id: PR.IR-01
+    name: Networks and environments are protected from unauthorized logical access and usage
+    domain: Protect
+    category: Technology Infrastructure Resilience
+    techniques: [T1021, T1550, T1571]
+
+  - id: PR.IR-04
+    name: Adequate resource capacity to ensure availability is maintained
+    domain: Protect
+    category: Technology Infrastructure Resilience
+    techniques: [T1490, T1486]
+
+  - id: PR.PS-01
+    name: Configuration management practices are established and applied
+    domain: Protect
+    category: Platform Security
+    techniques: [T1562, T1112]
+
+  - id: PR.PS-02
+    name: Software is maintained, replaced, and removed commensurate with risk
+    domain: Protect
+    category: Platform Security
+    techniques: [T1218, T1027]
+
+  - id: PR.PS-04
+    name: Log records are generated and made available for continuous monitoring
+    domain: Protect
+    category: Platform Security
+    techniques: [T1070, T1562.002]
+
+  - id: PR.PS-05
+    name: Installation and execution of unauthorized software are prevented
+    domain: Protect
+    category: Platform Security
+    techniques: [T1059, T1047, T1204, T1543]
+
+  - id: PR.PS-06
+    name: Secure software development practices are integrated
+    domain: Protect
+    category: Platform Security
+    techniques: [T1195, T1505]
+
+  # ── Detect ────────────────────────────────────────────────────────────────
+  - id: DE.AE-02
+    name: Potentially adverse events are analyzed to better characterize them
+    domain: Detect
+    category: Adverse Event Analysis
+    techniques: [T1036, T1027, T1070]
+
+  - id: DE.AE-03
+    name: Information is correlated from multiple sources to better characterize adverse events
+    domain: Detect
+    category: Adverse Event Analysis
+    techniques: [T1070, T1562.002]
+
+  - id: DE.CM-01
+    name: Networks and network services are monitored to find potentially adverse events
+    domain: Detect
+    category: Continuous Monitoring
+    techniques: [T1071, T1095, T1572, T1219]
+
+  - id: DE.CM-03
+    name: Personnel activity and technology usage are monitored to find potentially adverse events
+    domain: Detect
+    category: Continuous Monitoring
+    techniques: [T1056, T1087, T1113]
+
+  - id: DE.CM-06
+    name: External service provider activities are monitored to find adverse events
+    domain: Detect
+    category: Continuous Monitoring
+    techniques: [T1195, T1199]
+
+  - id: DE.CM-09
+    name: Computing hardware, runtime environments, and their data are monitored
+    domain: Detect
+    category: Continuous Monitoring
+    techniques: [T1562, T1003, T1055, T1134]
+
+  # ── Respond ───────────────────────────────────────────────────────────────
+  - id: RS.AN-03
+    name: Analysis is performed to establish what has taken place during an incident
+    domain: Respond
+    category: Incident Analysis
+    techniques: [T1003, T1558, T1550]
+
+  - id: RS.MI-02
+    name: Incidents are contained
+    domain: Respond
+    category: Incident Mitigation
+    techniques: [T1486, T1490, T1485]
+
+  # ── Recover ───────────────────────────────────────────────────────────────
+  - id: RC.RP-02
+    name: Recovery actions are selected, scoped, prioritized, and performed
+    domain: Recover
+    category: Incident Recovery Plan Execution
+    techniques: [T1490, T1486]

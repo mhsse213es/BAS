@@ -1,0 +1,149 @@
+id: SEBI_CSCRF
+name: SEBI Cyber Security and Cyber Resilience Framework
+version: "2023 (SEBI/HO/ITD-PoD-2/P/CIR/2023/194)"
+regulator: SEBI
+published_year: "2023"
+controls:
+  # ── Govern ────────────────────────────────────────────────────────────────
+  - id: GOV-01
+    name: Cybersecurity governance — Board-level policy, CISO appointed, roles defined
+    domain: Govern
+    category: Governance
+    techniques: [T1078, T1098]
+
+  - id: GOV-02
+    name: Third-party and supply chain risk management
+    domain: Govern
+    category: Governance
+    techniques: [T1195, T1199]
+
+  # ── Identify ─────────────────────────────────────────────────────────────
+  - id: ID-01
+    name: Asset inventory — all IT assets catalogued and classified
+    domain: Identify
+    category: Asset Management
+    techniques: [T1518, T1082]
+
+  - id: ID-02
+    name: Risk assessment — formal risk assessment conducted annually
+    domain: Identify
+    category: Risk Management
+    techniques: [T1190, T1566]
+
+  - id: ID-03
+    name: Vulnerability assessment — quarterly VAPT on critical systems and internet-facing apps
+    domain: Identify
+    category: Vulnerability Management
+    techniques: [T1190, T1203, T1068]
+
+  # ── Protect ───────────────────────────────────────────────────────────────
+  - id: PR-01
+    name: Data classification — data categorized as Critical/Sensitive/Internal/Public
+    domain: Protect
+    category: Data Protection
+    techniques: [T1005, T1039, T1114]
+
+  - id: PR-02
+    name: Vulnerability management — critical vulnerabilities patched within 15 days
+    domain: Protect
+    category: Vulnerability Management
+    techniques: [T1190, T1203, T1068]
+
+  - id: PR-03
+    name: Encryption — data at rest and in transit encrypted; key management formal
+    domain: Protect
+    category: Data Security
+    techniques: [T1041, T1048, T1005]
+
+  - id: PR-04
+    name: Access controls — role-based access; regular access reviews; no shared accounts
+    domain: Protect
+    category: Access Control
+    techniques: [T1134, T1078, T1548, T1068]
+
+  - id: PR-05
+    name: Authentication controls — MFA mandatory for all privileged and remote access
+    domain: Protect
+    category: Authentication
+    techniques: [T1110, T1556, T1558, T1078]
+
+  - id: PR-06
+    name: Endpoint security — EDR/AV on all endpoints; USB controls; device encryption
+    domain: Protect
+    category: Endpoint Security
+    techniques: [T1059, T1047, T1562.001, T1204]
+
+  - id: PR-07
+    name: Network security — network segmentation; firewall rules reviewed quarterly
+    domain: Protect
+    category: Network Security
+    techniques: [T1021, T1550, T1071, T1095]
+
+  - id: PR-08
+    name: Application security — SAST/DAST mandatory; WAF for internet-facing applications
+    domain: Protect
+    category: Application Security
+    techniques: [T1190, T1505, T1059.007]
+
+  - id: PR-09
+    name: Backup and recovery — immutable backups offline; BCP/DR tested bi-annually
+    domain: Protect
+    category: Resilience
+    techniques: [T1490, T1486, T1485]
+
+  - id: PR-10
+    name: Log management — security logs retained for 1 year; centralized SIEM collection
+    domain: Protect
+    category: Logging
+    techniques: [T1070, T1562.002, T1070.001]
+
+  - id: PR-11
+    name: Configuration management — hardened baseline configs; CIS Benchmark compliance
+    domain: Protect
+    category: Configuration
+    techniques: [T1562, T1112, T1547]
+
+  # ── Detect ────────────────────────────────────────────────────────────────
+  - id: DE-01
+    name: Security monitoring — 24×7 SOC; SIEM with use-cases for financial threat actors
+    domain: Detect
+    category: Continuous Monitoring
+    techniques: [T1003, T1558, T1036, T1562]
+
+  - id: DE-02
+    name: Intrusion detection — IDS/IPS covering all network ingress/egress points
+    domain: Detect
+    category: Intrusion Detection
+    techniques: [T1071, T1095, T1572]
+
+  - id: DE-03
+    name: Anomaly detection — behavioral analytics and UBA for insider threat detection
+    domain: Detect
+    category: Threat Detection
+    techniques: [T1056, T1087, T1113, T1134]
+
+  # ── Respond ───────────────────────────────────────────────────────────────
+  - id: RS-01
+    name: Incident response — IR plan documented; reported to SEBI CERT within 6 hours
+    domain: Respond
+    category: Incident Response
+    techniques: [T1486, T1490, T1485]
+
+  - id: RS-02
+    name: Forensic investigation — digital forensics capability for post-incident analysis
+    domain: Respond
+    category: Forensics
+    techniques: [T1003, T1070, T1550]
+
+  # ── Recover ───────────────────────────────────────────────────────────────
+  - id: RC-01
+    name: Recovery planning — documented RTO/RPO; tested DR capability
+    domain: Recover
+    category: Recovery
+    techniques: [T1490, T1486]
+
+  - id: RC-02
+    name: Business continuity — alternate processing site; crisis communication plan
+    domain: Recover
+    category: Business Continuity
+    techniques: [T1485, T1489, T1529]
