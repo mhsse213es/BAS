@@ -332,7 +332,7 @@ The platform ships with 14 pre-built scenarios. Additional scenarios can be adde
 | `apt36-spearphish` | APT36 Spear-Phishing | Custom | South Asia APT36 TTPs |
 | `cis-ubuntu-l1` | CIS Ubuntu L1 Benchmark | Custom | Linux hardening benchmark |
 | `cscrf-mii-drill` | CSCRF/MII Compliance Drill | Custom | SEBI/RBI financial sector controls |
-| `lolbin-execution` | LOLBIN Execution | Custom/ART | Living-off-the-land binaries |
+| `lolbin-execution` | LOLBin Execution Coverage | **Hybrid** | Living-off-the-land binaries — posture + opt-in live execution |
 | `ransomware-drill` | Ransomware Response Drill | Custom | Ransomware defense controls |
 | `upi-fraud-killchain` | UPI Fraud Kill Chain | Custom | UPI payment fraud detection |
 | `purplesharp-ad-drill` | PurpleSharp AD Credential Drill | **Hybrid** | AD credential techniques — posture + opt-in live execution |
@@ -872,7 +872,14 @@ Some scenarios (marked `executable: true`, e.g. **PurpleSharp AD Credential Dril
 - **Kerberoasting (T1558.003)** — a single native Kerberos TGS request for one SPN account → Security **Event ID 4769**. No ticket is exported or cracked.
 - **LSASS Dump (T1003.001)** — a `comsvcs.dll` MiniDump written to a temp file then immediately deleted → Sysmon **Event ID 10**. Reports `PASS` (blocked) if RunAsPPL / Credential Guard / Defender stops it.
 
-> **Safety contract:** Live steps are designed to be reversible and lab-safe, but they execute real attack behaviour and will alert your EDR. Only the agent operator (Analyst/Admin) can launch them, only on scenarios explicitly marked executable, and the platform rejects a live-execution request against any non-executable scenario. **Never run live mode on production endpoints.** Non-Windows hosts report the AD drill as "not applicable".
+**Example — LOLBin Execution live steps (Windows, self-cleaning):**
+- **WMI Process Creation (T1047)** — benign child spawned via `Win32_Process.Create` → Security **EID 4688** (parent `WmiPrvSE.exe`).
+- **mshta (T1218.005)** — `mshta.exe` runs a self-closing inline script → mshta process telemetry.
+- **regsvr32 Squiblydoo (T1218.010)** — `regsvr32 /i:<empty .sct> scrobj.dll` → Sysmon **EID 7** (scrobj.dll load).
+- **certutil encode (T1140)** — local `certutil -encode` (no network) → certutil execution telemetry.
+- **schtasks (T1053.005)** — creates then immediately deletes a benign task → Security **EID 4698/4699**.
+
+> **Safety contract:** Live steps are reversible and lab-safe, but they execute real attack behaviour and will alert your EDR. Live execution is gated by role (Analyst/Admin), an `executable: true` scenario flag, and an explicit `confirmLive` acknowledgement; every live dispatch is written to the audit log. The platform rejects a live request against any non-executable scenario or without acknowledgement. **Never run live mode on production endpoints.** Non-Windows hosts report Windows-only drills as "not applicable". See the **Hybrid Execution Framework** reference (`docs/Hybrid_Execution_Framework.md`) for the full taxonomy, per-technique telemetry, detection objectives, and guardrails.
 
 ### 12.4 Interpreting Results
 
