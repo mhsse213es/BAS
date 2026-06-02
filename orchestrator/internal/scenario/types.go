@@ -48,6 +48,12 @@ type Scenario struct {
 	ARTAllWindows      bool     `yaml:"art_all_windows,omitempty"      json:"artAllWindows,omitempty"`
 	ARTTechniques      []string `yaml:"art_techniques,omitempty"       json:"artTechniques,omitempty"`
 
+	// Executable marks a hybrid scenario that supports opt-in LIVE execution of
+	// real (self-cleaning) attack steps in addition to its read-only posture
+	// checks. Only scenarios with audited, safe steps set this true. When false,
+	// the scenario can only be run in posture mode regardless of requested mode.
+	Executable bool `yaml:"executable,omitempty" json:"executable,omitempty"`
+
 	// Source is set at load time from the file's folder, NOT persisted to YAML.
 	// One of: "builtin" (scenarios/*.yaml), "custom" (scenarios/custom/),
 	// "intel" (scenarios/intel/). The UI uses it to decide editable vs read-only.

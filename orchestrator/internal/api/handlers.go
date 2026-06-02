@@ -419,6 +419,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	scenarioID := chi.URLParam(r, "id")
 	var req struct {
 		AgentID string `json:"agentId"`
+		Mode    string `json:"mode"` // "posture" (default, safe) | "execute" (live)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -428,6 +429,15 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	sc, ok := h.engine.Get(scenarioID)
 	if !ok {
 		jsonError(w, "scenario not found", http.StatusNotFound)
+		return
+	}
+
+	// Hybrid execution: "execute" runs the real (self-cleaning) attack steps and
+	// is only permitted on scenarios explicitly marked executable. Anything else
+	// falls back to safe posture mode.
+	live := req.Mode == "execute"
+	if live && !sc.Executable {
+		jsonError(w, "scenario does not support live execution — run it in posture mode", http.StatusBadRequest)
 		return
 	}
 
@@ -447,8 +457,10 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// local_check scenarios use built-in agent checks — no ART/Caldera required
-	if sc.LocalCheck {
+	// Posture mode (default): local_check scenarios use built-in read-only agent
+	// checks — no ART/Caldera and no system changes. Live mode skips this and runs
+	// the real steps below.
+	if !live && sc.LocalCheck {
 		sent := h.hub.SendToAgent(req.AgentID, models.WSMessage{
 			Type:    models.MsgCommandSimulate,
 			AgentID: req.AgentID,
@@ -460,9 +472,13 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "agent not connected", http.StatusServiceUnavailable)
 			return
 		}
-		log.Printf("[scenario] dispatched local-check %s → agent %s (run %s)", scenarioID, req.AgentID, runID)
-		respond(w, map[string]string{"runId": runID, "status": "dispatched"})
+		log.Printf("[scenario] dispatched posture-check %s → agent %s (run %s)", scenarioID, req.AgentID, runID)
+		respond(w, map[string]string{"runId": runID, "status": "dispatched", "mode": "posture"})
 		return
+	}
+
+	if live {
+		log.Printf("[scenario] LIVE execution requested for %s → agent %s (run %s)", scenarioID, req.AgentID, runID)
 	}
 
 	// Build concrete commands — all framework logic resolved server-side
