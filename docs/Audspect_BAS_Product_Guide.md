@@ -316,7 +316,7 @@ The platform includes a dedicated `TechniqueNameMap` and `TacticMap` for automat
 
 ## 7. Scenario Library
 
-The platform ships with 12 pre-built scenarios. Additional scenarios can be added by dropping YAML files into the scenarios directory (no restart required).
+The platform ships with 14 pre-built scenarios. Additional scenarios can be added by dropping YAML files into the scenarios directory (no restart required) or via the dashboard builder (§12.3a).
 
 ### 7.1 Built-in Scenarios
 
@@ -335,6 +335,9 @@ The platform ships with 12 pre-built scenarios. Additional scenarios can be adde
 | `lolbin-execution` | LOLBIN Execution | Custom/ART | Living-off-the-land binaries |
 | `ransomware-drill` | Ransomware Response Drill | Custom | Ransomware defense controls |
 | `upi-fraud-killchain` | UPI Fraud Kill Chain | Custom | UPI payment fraud detection |
+| `purplesharp-ad-drill` | PurpleSharp AD Credential Drill | **Hybrid** | AD credential techniques — posture + opt-in live execution |
+
+> **Hybrid scenarios** (e.g. `purplesharp-ad-drill`) support two run modes. **Posture** (default, safe on any host) validates the *defences* against a set of techniques with read-only checks. **Live execution** (opt-in, lab-only) *actually performs* the techniques in a self-cleaning way to generate real EDR/SIEM telemetry. See §12.3b.
 
 ### 7.2 Full Posture Scan (Detail)
 
@@ -853,6 +856,24 @@ Custom scenarios are stored as YAML files in `scenarios/custom/` on the server a
 
 > **Note:** Built-in scenarios cannot be overwritten. To customize one, clone it first and edit the copy. Auto-generated threat-intel scenarios are deleted from the **Integrations** connector panel, not here.
 
+### 12.3b Hybrid Scenarios — Posture vs. Live Execution
+
+Some scenarios (marked `executable: true`, e.g. **PurpleSharp AD Credential Drill**) support **two run modes**, selectable in the Run dialog:
+
+| Mode | What it does | Safety | Where to run |
+|------|--------------|--------|--------------|
+| **Posture** (default) | Read-only checks that validate the **defences** against the techniques (e.g. RunAsPPL, Credential Guard, Kerberos AES, account-lockout policy). Changes nothing. | Safe on any host | Anywhere |
+| **Live execution** (opt-in) | **Actually performs** the techniques in a self-cleaning way to generate genuine SOC/EDR/SIEM telemetry. | Triggers EDR/Defender **by design**; needs admin/SYSTEM | **Domain-joined Windows test VM with a snapshot only** |
+
+**How to run live mode:** open the Run dialog, set **Execution mode → Live execution**. A red warning and a confirmation prompt appear. The default is always **Posture** — live mode must be chosen deliberately each time.
+
+**Example — PurpleSharp AD Drill live steps (all self-cleaning):**
+- **Password Spraying (T1110.003)** — one *lockout-safe* failed authentication against a non-existent probe account → Security **Event ID 4625**.
+- **Kerberoasting (T1558.003)** — a single native Kerberos TGS request for one SPN account → Security **Event ID 4769**. No ticket is exported or cracked.
+- **LSASS Dump (T1003.001)** — a `comsvcs.dll` MiniDump written to a temp file then immediately deleted → Sysmon **Event ID 10**. Reports `PASS` (blocked) if RunAsPPL / Credential Guard / Defender stops it.
+
+> **Safety contract:** Live steps are designed to be reversible and lab-safe, but they execute real attack behaviour and will alert your EDR. Only the agent operator (Analyst/Admin) can launch them, only on scenarios explicitly marked executable, and the platform rejects a live-execution request against any non-executable scenario. **Never run live mode on production endpoints.** Non-Windows hosts report the AD drill as "not applicable".
+
 ### 12.4 Interpreting Results
 
 Each step in a run is displayed with:
@@ -952,14 +973,15 @@ Most endpoints require a valid JWT, either as an HttpOnly cookie (`bas_token`) s
 | POST | `/api/scenarios/{id}/clone` | JWT (Analyst+) | Clone any scenario into an editable custom one |
 | POST | `/api/scenarios/upload` | JWT (Analyst+) | Upload a scenario YAML file |
 | DELETE | `/api/scenarios/{id}` | JWT (Analyst+) | Delete a custom scenario (built-in protected) |
-| POST | `/api/scenarios/{id}/run` | JWT (Analyst+) | Dispatch to agent |
+| POST | `/api/scenarios/{id}/run` | JWT (Analyst+) | Dispatch to agent (posture or live mode) |
 | POST | `/api/scan/{agentId}` | JWT (Analyst+) | Run full-scan scenario |
 | GET | `/api/scenarios/runs` | JWT (Viewer+) | Query run history |
 
 **Run request body:**
 ```json
-{ "agentId": "<agent-id>" }
+{ "agentId": "<agent-id>", "mode": "posture" }
 ```
+`mode` is optional and defaults to `"posture"` (read-only). `"execute"` requests live execution and is only accepted on scenarios marked `executable: true`; a live request against any other scenario is rejected with HTTP 400. See §12.3b.
 
 ### 13.4 Reporting Endpoints
 
