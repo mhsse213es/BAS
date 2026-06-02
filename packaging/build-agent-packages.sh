@@ -62,40 +62,26 @@ CTRL
 #!/bin/sh
 set -e
 
-# Prompt on the real terminal even when dpkg pipes stdin
-if [ -t 0 ]; then
-  TERM_IN=/dev/stdin
-else
-  TERM_IN=/dev/tty
-fi
-
-printf '\n  ┌─────────────────────────────────────────────────┐\n'
-printf   '  │          BAS Agent Configuration               │\n'
-printf   '  └─────────────────────────────────────────────────┘\n\n'
-
-printf '  Orchestrator URL  (e.g. http://192.168.1.10:9000) : '
-read -r BAS_SERVER_URL < "$TERM_IN"
-
-printf '  Agent Secret      (from dashboard → Agents page)  : '
-stty -echo 2>/dev/null || true
-read -r BAS_AGENT_SECRET < "$TERM_IN"
-stty echo 2>/dev/null || true
-printf '\n'
-
-# Write config (preserves existing ENV_LABEL if already set)
-cat > /etc/bas-agent/config <<CFG
-BAS_SERVER_URL=${BAS_SERVER_URL}
+# Write config only if it does not already exist (preserves reconfigure runs)
+if [ ! -f /etc/bas-agent/config ] || ! grep -q "^BAS_SERVER_URL=.\+" /etc/bas-agent/config 2>/dev/null; then
+  cat > /etc/bas-agent/config <<CFG
+BAS_SERVER_URL=
 BAS_ENV_LABEL=Production
-BAS_AGENT_SECRET=${BAS_AGENT_SECRET}
+BAS_AGENT_SECRET=
 CFG
-chmod 600 /etc/bas-agent/config
+  chmod 600 /etc/bas-agent/config
+fi
 
 systemctl daemon-reload
 systemctl enable bas-agent.service || true
 systemctl start bas-agent.service  || true
 
-printf '\n  Agent started.\n'
-printf '  View logs:  journalctl -u bas-agent -f\n\n'
+echo ""
+echo "  BAS Agent installed."
+echo "  Configure /etc/bas-agent/config with your server URL and agent secret,"
+echo "  then run:  sudo systemctl restart bas-agent"
+echo "  View logs: journalctl -u bas-agent -f"
+echo ""
 POST
   chmod 755 "${D}/DEBIAN/postinst"
 
