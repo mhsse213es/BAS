@@ -18,6 +18,7 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
+	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting"
@@ -31,13 +32,14 @@ type Handler struct {
 	hub              *ws.Hub
 	engine           *scenario.Engine
 	secret           string
-	agentSecret      string            // optional shared secret for agent-facing endpoints
+	agentSecret      string              // optional shared secret for agent-facing endpoints
 	calderaURL       string
 	calderaKey       string
 	artStore         *scenario.ARTStore
-	manifest         *integrity.Manifest // binary hash manifest — nil means verification disabled
-	complianceMapper *compliance.Mapper  // nil when not loaded
-	reportingEngine  *reporting.Engine   // nil when not loaded
+	manifest         *integrity.Manifest  // binary hash manifest — nil means verification disabled
+	complianceMapper *compliance.Mapper   // nil when not loaded
+	reportingEngine  *reporting.Engine    // nil when not loaded
+	scheduler        *connector.Scheduler // nil when no sources configured
 }
 
 // New creates a Handler.
@@ -54,6 +56,12 @@ func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
 // WithReporting attaches the reporting engine.
 func (h *Handler) WithReporting(e *reporting.Engine) *Handler {
 	h.reportingEngine = e
+	return h
+}
+
+// WithScheduler attaches the threat-intel connector scheduler.
+func (h *Handler) WithScheduler(s *connector.Scheduler) *Handler {
+	h.scheduler = s
 	return h
 }
 
@@ -939,6 +947,49 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 
 func newID() string {
 	return fmt.Sprintf("%x", time.Now().UnixNano())
+}
+
+// ── Threat-Intel Connector (Admin only) ───────────────────────────────────────
+
+// GET /api/connector/status
+func (h *Handler) GetConnectorStatus(w http.ResponseWriter, r *http.Request) {
+	if h.scheduler == nil {
+		respond(w, connector.ConnectorStatus{
+			LastSyncStatus: "never",
+			LastError:      "No threat-intel sources configured. Set MISP_URL/MISP_API_KEY or OPENCTI_URL/OPENCTI_API_KEY.",
+		})
+		return
+	}
+	respond(w, h.scheduler.Status())
+}
+
+// POST /api/connector/sync  — triggers an immediate sync in background
+func (h *Handler) TriggerConnectorSync(w http.ResponseWriter, r *http.Request) {
+	if h.scheduler == nil {
+		jsonError(w, "connector not configured", http.StatusServiceUnavailable)
+		return
+	}
+	h.scheduler.TriggerSync()
+	respond(w, map[string]bool{"queued": true})
+}
+
+// DELETE /api/connector/scenarios/{id}  — removes a generated intel scenario
+func (h *Handler) DeleteIntelScenario(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	sc, ok := h.engine.Get(id)
+	if !ok {
+		jsonError(w, "scenario not found", http.StatusNotFound)
+		return
+	}
+	if sc.IntelSource == "" {
+		jsonError(w, "only auto-generated intel scenarios can be deleted via this endpoint", http.StatusBadRequest)
+		return
+	}
+	if err := h.engine.Delete(id); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── Full Reporting + Audit Pack ───────────────────────────────────────────────

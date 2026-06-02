@@ -776,6 +776,41 @@ code {
           </div>
         </div>
 
+        <!-- Threat Intel Connector Status (admin only) -->
+        <div id="connector-status-wrap" style="display:none;margin-top:2rem">
+          <div class="sec-hdr">
+            <h2>Threat Intel Connector</h2>
+            <button class="btn btn-outline btn-sm" onclick="triggerConnectorSync()" id="connector-sync-btn">Sync Now</button>
+          </div>
+          <div class="conn-cfg-card" id="connector-status-card">
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">MISP</span>
+              <span id="cs-misp" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">OpenCTI</span>
+              <span id="cs-opencti" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Last Sync</span>
+              <span id="cs-last-sync" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Status</span>
+              <span id="cs-status" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Scenarios Created</span>
+              <span id="cs-created" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Next Sync</span>
+              <span id="cs-next" class="conn-cfg-val">—</span>
+            </div>
+            <div id="cs-error" style="display:none;margin-top:0.5rem;font-size:0.75rem;color:#f85149"></div>
+          </div>
+        </div>
+
         <!-- Agent Download -->
         <div class="sec-hdr" style="margin-top:2rem">
           <h2>Download Agent</h2>
@@ -1125,7 +1160,7 @@ function bootApp() {
   loadAgents();
   loadScenarios();
   loadRuns();
-  if (ROLE === 'admin') loadConnectionConfig();
+  if (ROLE === 'admin') { loadConnectionConfig(); loadConnectorStatus(); }
   showTab('dashboard');
 }
 
@@ -1228,12 +1263,16 @@ function loadScenarios() {
   apicall('/api/scenarios').then(function(data) {
     scenarios = (data || []).map(function(s) {
       return {
-        id:          s.id          || s.ID          || '',
-        name:        s.name        || s.Name        || '',
-        description: s.description || s.Description || '',
-        tags:        s.tags        || s.Tags        || [],
-        steps:       s.steps       || s.Steps       || [],
-        mitrePhases: s.mitrePhases || s.MITREPhases || []
+        id:              s.id              || '',
+        name:            s.name            || '',
+        description:     s.description     || '',
+        tags:            s.tags            || [],
+        steps:           s.steps           || [],
+        mitrePhases:     s.mitrePhases     || [],
+        intelSource:     s.intelSource     || '',
+        intelActor:      s.intelActor      || '',
+        intelConfidence: s.intelConfidence || '',
+        artTechniques:   s.artTechniques   || []
       };
     });
     document.getElementById('sc-cnt').textContent = scenarios.length;
@@ -1241,7 +1280,35 @@ function loadScenarios() {
     if (!scenarios.length) { grid.innerHTML = '<p class="empty">No scenarios loaded.</p>'; return; }
     grid.innerHTML = scenarios.map(function(s) {
       var color = stripeColor(s.id);
-      var tags = (s.tags || []).map(function(t) { return '<span class="tag">' + x(t) + '</span>'; }).join('');
+      var visibleTags = (s.tags || []).filter(function(t) {
+        return t !== 'intel' && t !== 'auto-generated';
+      });
+      var tags = visibleTags.map(function(t) { return '<span class="tag">' + x(t) + '</span>'; }).join('');
+      var intelBadge = '';
+      if (s.intelSource) {
+        var confColor = s.intelConfidence === 'high' ? '#3fb950' : s.intelConfidence === 'medium' ? '#d29922' : '#9aa9bc';
+        intelBadge = '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(47,129,247,0.12);' +
+          'border:1px solid rgba(47,129,247,0.35);border-radius:4px;padding:2px 7px;font-size:0.72rem;color:#58a6ff;font-weight:600;margin-bottom:6px">' +
+          '&#128268; Intel &nbsp;·&nbsp; ' + x(s.intelActor) +
+          ' &nbsp;<span style="color:' + confColor + '">' + x(s.intelConfidence) + '</span>' +
+          ' &nbsp;·&nbsp; ' + x(s.intelSource.toUpperCase()) + '</span><br>';
+        var techCount = (s.artTechniques || []).length;
+        var deleteBtn = (ROLE === 'admin')
+          ? ' <button class="btn btn-sm" style="background:rgba(218,54,51,0.12);color:#f85149;margin-left:4px" ' +
+            'onclick="deleteIntelScenario(\'' + x(s.id) + '\')" title="Delete intel scenario">&#10005;</button>'
+          : '';
+        var footerMeta = techCount + ' techniques' + deleteBtn;
+        return '<div class="card">' +
+          '<div class="card-stripe" style="background:#2f81f7"></div>' +
+          '<div>' + intelBadge + '</div>' +
+          '<h3>' + x(s.name) + '</h3>' +
+          '<p style="font-size:0.78rem;color:var(--muted)">' + x((s.description || '').substring(0,120)) + '</p>' +
+          '<div class="tags">' + tags + '</div>' +
+          '<div class="card-footer">' +
+            '<div class="card-meta">' + footerMeta + '</div>' +
+            '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
+          '</div></div>';
+      }
       return '<div class="card">' +
         '<div class="card-stripe" style="background:' + color + '"></div>' +
         '<h3>' + x(s.name) + '</h3>' +
@@ -1766,6 +1833,61 @@ function submitChangePassword() {
     showToast('Password updated successfully', 'ok');
   })
   .catch(function(e) { document.getElementById('cpw-err').textContent = e.message; });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THREAT-INTEL CONNECTOR
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function loadConnectorStatus() {
+  var wrap = document.getElementById('connector-status-wrap');
+  if (!wrap) return;
+  wrap.style.display = '';
+  apicall('/api/connector/status').then(function(s) {
+    document.getElementById('cs-misp').textContent    = s.mispEnabled    ? '✓ Enabled' : '✗ Not configured';
+    document.getElementById('cs-opencti').textContent = s.openctiEnabled ? '✓ Enabled' : '✗ Not configured';
+    document.getElementById('cs-last-sync').textContent = s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : 'Never';
+    document.getElementById('cs-created').textContent = (s.scenariosCreated || 0) + ' created, ' + (s.scenariosUpdated || 0) + ' updated';
+    document.getElementById('cs-next').textContent = s.nextSyncAt ? new Date(s.nextSyncAt).toLocaleString() : '—';
+    var statusEl = document.getElementById('cs-status');
+    statusEl.textContent = s.lastSyncStatus || 'never';
+    statusEl.style.color = s.lastSyncStatus === 'ok' ? '#3fb950' : s.lastSyncStatus === 'error' ? '#f85149' : 'var(--muted)';
+    var errEl = document.getElementById('cs-error');
+    if (s.lastError) { errEl.textContent = s.lastError; errEl.style.display = ''; }
+    else { errEl.style.display = 'none'; }
+  }).catch(function() {});
+}
+
+function triggerConnectorSync() {
+  var btn = document.getElementById('connector-sync-btn');
+  if (btn) btn.disabled = true;
+  apicall('/api/connector/sync', { method: 'POST' })
+    .then(function() {
+      showToast('Threat-intel sync queued', 'ok');
+      setTimeout(function() {
+        loadConnectorStatus();
+        loadScenarios();
+        if (btn) btn.disabled = false;
+      }, 3000);
+    })
+    .catch(function(e) {
+      showToast('Sync failed: ' + e.message, 'err');
+      if (btn) btn.disabled = false;
+    });
+}
+
+function deleteIntelScenario(id) {
+  if (!confirm('Delete intel scenario "' + id + '"? This removes the generated YAML file.')) return;
+  fetch('/api/connector/scenarios/' + encodeURIComponent(id), {
+    method: 'DELETE', credentials: 'same-origin'
+  }).then(function(r) {
+    if (r.ok || r.status === 204) {
+      showToast('Intel scenario deleted', 'ok');
+      loadScenarios();
+    } else {
+      r.json().then(function(e) { showToast(e.error || 'Delete failed', 'err'); });
+    }
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -47,6 +47,13 @@ type Scenario struct {
 	CalderaAdversaryID string   `yaml:"caldera_adversary_id,omitempty" json:"calderaAdversaryId,omitempty"`
 	ARTAllWindows      bool     `yaml:"art_all_windows,omitempty"      json:"artAllWindows,omitempty"`
 	ARTTechniques      []string `yaml:"art_techniques,omitempty"       json:"artTechniques,omitempty"`
+
+	// Intel fields — populated only on auto-generated threat-intel scenarios.
+	IntelSource      string    `yaml:"intel_source,omitempty"       json:"intelSource,omitempty"`
+	IntelSourceID    string    `yaml:"intel_source_id,omitempty"    json:"intelSourceId,omitempty"`
+	IntelActor       string    `yaml:"intel_actor,omitempty"        json:"intelActor,omitempty"`
+	IntelConfidence  string    `yaml:"intel_confidence,omitempty"   json:"intelConfidence,omitempty"`
+	IntelGeneratedAt time.Time `yaml:"intel_generated_at,omitempty" json:"intelGeneratedAt,omitempty"`
 }
 
 // Payload is a file the server stages on the endpoint before a step runs.

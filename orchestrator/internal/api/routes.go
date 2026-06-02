@@ -96,7 +96,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/compliance/frameworks", h.ListComplianceFrameworks)
 		r.Get("/api/compliance/report", h.GetComplianceReport)
 
-		// Admin only — config + user management
+		// Admin only — config + user management + connector
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin))
 			r.Get("/api/config/connection", h.GetConnectionConfig)
@@ -105,6 +105,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 			r.Put("/api/users/{id}", h.UpdateUser)
 			r.Delete("/api/users/{id}", h.DeleteUser)
 			r.Post("/api/users/{id}/reset-password", h.ResetPassword)
+
+			// Threat-intel connector
+			r.Get("/api/connector/status", h.GetConnectorStatus)
+			r.Post("/api/connector/sync", h.TriggerConnectorSync)
+			r.Delete("/api/connector/scenarios/{id}", h.DeleteIntelScenario)
 		})
 	})
 

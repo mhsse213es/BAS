@@ -17,6 +17,15 @@ type Config struct {
 	CalderaAPIKey string `json:"caldera_api_key,omitempty"`
 	LicensePath   string `json:"license_path,omitempty"`
 	AdminPassword string `json:"admin_password,omitempty"`
+
+	// Threat-intel connector (MISP / OpenCTI)
+	MISPUrl              string   `json:"misp_url,omitempty"`
+	MISPApiKey           string   `json:"misp_api_key,omitempty"`
+	OpenCTIUrl           string   `json:"opencti_url,omitempty"`
+	OpenCTIApiKey        string   `json:"opencti_api_key,omitempty"`
+	ThreatIntelPollHours int      `json:"threat_intel_poll_hours,omitempty"` // default 24
+	ThreatIntelSectors   []string `json:"threat_intel_sectors,omitempty"`    // e.g. ["financial-services","banking"]
+	ThreatIntelRegions   []string `json:"threat_intel_regions,omitempty"`    // e.g. ["Asia","India"]
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -60,6 +69,21 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("AGENT_SECRET"); v != "" {
 		cfg.AgentSecret = v
+	}
+	if v := os.Getenv("MISP_URL"); v != "" {
+		cfg.MISPUrl = v
+	}
+	if v := os.Getenv("MISP_API_KEY"); v != "" {
+		cfg.MISPApiKey = v
+	}
+	if v := os.Getenv("OPENCTI_URL"); v != "" {
+		cfg.OpenCTIUrl = v
+	}
+	if v := os.Getenv("OPENCTI_API_KEY"); v != "" {
+		cfg.OpenCTIApiKey = v
+	}
+	if v := os.Getenv("THREAT_INTEL_POLL_HOURS"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.ThreatIntelPollHours)
 	}
 	if v := os.Getenv("BAS_LICENSE_PATH"); v != "" {
 		cfg.LicensePath = v

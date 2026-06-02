@@ -1,6 +1,7 @@
 package scenario
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -71,4 +72,39 @@ func (e *Engine) Get(id string) (*Scenario, bool) {
 // Count returns the number of loaded scenarios.
 func (e *Engine) Count() int {
 	return len(e.scenarios)
+}
+
+// Delete removes an intel scenario from memory and deletes its YAML file.
+// Returns an error if the file cannot be found or removed.
+func (e *Engine) Delete(id string) error {
+	sc, ok := e.scenarios[id]
+	if !ok {
+		return fmt.Errorf("scenario %q not found", id)
+	}
+
+	// Find the file on disk by re-scanning for the matching ID
+	var found string
+	filepath.WalkDir(e.dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || filepath.Ext(path) != ".yaml" {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		var s Scenario
+		if yaml.Unmarshal(b, &s) == nil && s.ID == sc.ID {
+			found = path
+		}
+		return nil
+	})
+
+	if found == "" {
+		return fmt.Errorf("YAML file for scenario %q not found on disk", id)
+	}
+	if err := os.Remove(found); err != nil {
+		return fmt.Errorf("remove %s: %w", found, err)
+	}
+	delete(e.scenarios, id)
+	return nil
 }

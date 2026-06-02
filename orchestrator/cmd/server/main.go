@@ -16,6 +16,7 @@ import (
 	"github.com/audspect/bas/config"
 	"github.com/audspect/bas/internal/api"
 	"github.com/audspect/bas/internal/compliance"
+	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
@@ -101,6 +102,22 @@ func main() {
 	reportingEngine := reporting.NewEngine(pool)
 	log.Println("[+] Reporting engine ready")
 
+	// ── Threat-Intel Connector ────────────────────────────────────────────
+	var mispClient *connector.MISPClient
+	if cfg.MISPUrl != "" && cfg.MISPApiKey != "" {
+		mispClient = connector.NewMISPClient(cfg.MISPUrl, cfg.MISPApiKey, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
+		log.Printf("[+] MISP connector configured: %s", cfg.MISPUrl)
+	}
+	var openctiClient *connector.OpenCTIClient
+	if cfg.OpenCTIUrl != "" && cfg.OpenCTIApiKey != "" {
+		openctiClient = connector.NewOpenCTIClient(cfg.OpenCTIUrl, cfg.OpenCTIApiKey, cfg.ThreatIntelSectors)
+		log.Printf("[+] OpenCTI connector configured: %s", cfg.OpenCTIUrl)
+	}
+	gen := connector.NewGenerator(cfg.ScenariosDir)
+	scheduler := connector.NewScheduler(mispClient, openctiClient, gen, engine, cfg.ThreatIntelPollHours)
+	scheduler.Start()
+	defer scheduler.Stop()
+
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
@@ -109,7 +126,8 @@ func main() {
 		WithAgentSecret(cfg.AgentSecret).
 		WithManifest(manifest).
 		WithCompliance(complianceMapper).
-		WithReporting(reportingEngine)
+		WithReporting(reportingEngine).
+		WithScheduler(scheduler)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
