@@ -67,8 +67,28 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 		return upiChecks()
 	case "cscrf-mii-drill":
 		return cscrfChecks()
+	case "purplesharp-ad-drill":
+		return purpleSharpADChecks()
 	default:
 		return RunAllChecks()
+	}
+}
+
+// purpleSharpADChecks is the POSTURE side of the PurpleSharp AD drill — it
+// validates the defences against the three techniques the live scenario runs
+// (Password Spraying, Kerberoasting, LSASS dumping). Read-only; no changes.
+func purpleSharpADChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "credential-access", Checks: []SimCheck{
+			checkLSAProtection(),         // vs LSASS dump (T1003.001)
+			checkWDigest(),               // vs plaintext creds in LSASS
+			checkCredentialGuard(),       // vs LSASS dump
+			checkLSASSAuditPolicy(),      // detection of LSASS access
+			checkKerberosAESEncryption(), // vs Kerberoasting RC4 (T1558.003)
+		}},
+		{Phase: "credential-access-policy", Checks: []SimCheck{
+			checkAccountLockoutPolicy(), // vs Password Spraying (T1110.003)
+		}},
 	}
 }
 

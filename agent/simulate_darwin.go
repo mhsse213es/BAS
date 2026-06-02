@@ -42,9 +42,23 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 		return upiChecks()
 	case "cscrf-mii-drill":
 		return cscrfChecks()
+	case "purplesharp-ad-drill":
+		return notApplicableAD()
 	default:
 		return safeSimChecks()
 	}
+}
+
+// notApplicableAD returns a single skipped result — the PurpleSharp AD drill
+// targets Windows Active Directory and has no macOS equivalent.
+func notApplicableAD() []SimCategory {
+	return []SimCategory{{Phase: "credential-access", Checks: []SimCheck{
+		check("T1558.003", "PurpleSharp AD Credential Drill", "credential-access", "Low",
+			"Active Directory credential techniques (Kerberoasting, LSASS dump, password spray) apply to Windows domain hosts.",
+			"Run this scenario against a domain-joined Windows endpoint.",
+			func() (string, string) {
+				return "skipped", "PurpleSharp AD credential drill is Windows/Active Directory-only — not applicable on macOS."
+			})}}}
 }
 
 // ── Scenario-specific macOS check sets ────────────────────────────────────────
