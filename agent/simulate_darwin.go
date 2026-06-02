@@ -32,8 +32,108 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	switch scenarioID {
 	case "safe-simulation":
 		return safeSimChecks()
+	case "apt36-spearphish":
+		return apt36Checks()
+	case "ransomware-drill":
+		return ransomwareChecks()
+	case "ad-credential-access":
+		return adCredentialChecks()
+	case "upi-fraud-killchain":
+		return upiChecks()
+	case "cscrf-mii-drill":
+		return cscrfChecks()
 	default:
 		return safeSimChecks()
+	}
+}
+
+// ── Scenario-specific macOS check sets ────────────────────────────────────────
+// The YAML steps describe Windows TTPs; on macOS we test the equivalent control
+// surface for the same tactic. All checks are read-only.
+
+// apt36-spearphish — phishing payload delivery, execution, persistence, C2 egress.
+func apt36Checks() []SimCategory {
+	return []SimCategory{
+		{Phase: "initial-access", Checks: []SimCheck{
+			checkGatekeeper(),
+			checkAssessmentPolicy(),
+		}},
+		{Phase: "execution", Checks: []SimCheck{
+			checkXProtect(),
+		}},
+		{Phase: "persistence", Checks: []SimCheck{
+			checkLaunchAgents(),
+		}},
+		{Phase: "command-and-control", Checks: []SimCheck{
+			checkApplicationFirewall(),
+		}},
+	}
+}
+
+// ransomware-drill — defence evasion / system integrity, data-at-rest impact.
+func ransomwareChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "defense-evasion", Checks: []SimCheck{
+			checkSIP(),
+			checkSIPEnforcement(),
+			checkXProtect(),
+		}},
+		{Phase: "impact", Checks: []SimCheck{
+			checkFileVault(),
+			checkApplicationFirewall(),
+		}},
+	}
+}
+
+// ad-credential-access — credential store theft and lateral movement.
+func adCredentialChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "credential-access", Checks: []SimCheck{
+			checkKeychainLock(),
+			checkFileVault(),
+		}},
+		{Phase: "lateral-movement", Checks: []SimCheck{
+			checkSSHRemoteLogin(),
+			checkScreenSharing(),
+		}},
+	}
+}
+
+// upi-fraud-killchain — credential harvest, remote collection, exfiltration.
+func upiChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "credential-access", Checks: []SimCheck{
+			checkKeychainLock(),
+		}},
+		{Phase: "collection", Checks: []SimCheck{
+			checkScreenSharing(),
+			checkSSHRemoteLogin(),
+		}},
+		{Phase: "exfiltration", Checks: []SimCheck{
+			checkApplicationFirewall(),
+		}},
+	}
+}
+
+// cscrf-mii-drill — SEBI CSCRF five control domains mapped to macOS controls.
+func cscrfChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "network-security", Checks: []SimCheck{
+			checkApplicationFirewall(),
+			checkGatekeeper(),
+		}},
+		{Phase: "access-management", Checks: []SimCheck{
+			checkSSHRemoteLogin(),
+			checkScreenSharing(),
+		}},
+		{Phase: "data-security", Checks: []SimCheck{
+			checkFileVault(),
+			checkKeychainLock(),
+		}},
+		{Phase: "monitoring-detection", Checks: []SimCheck{
+			checkSIP(),
+			checkXProtect(),
+		}},
 	}
 }
 
