@@ -1172,9 +1172,11 @@ function loadAgents() {
         '<td><span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span></td>' +
         '<td><span class="tag">' + x(a.envLabel || '—') + '</span></td>' +
         '<td style="color:var(--muted);font-size:0.78rem">' + ago(a.lastUpdate) + '</td>' +
-        '<td>' +
+        '<td style="white-space:nowrap">' +
           '<button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run</button>' +
-          (a.hasReport ? ' <button class="btn btn-outline btn-sm" style="margin-left:0.3rem" onclick="viewReport(\'' + x(a.agentId) + '\')">Report</button>' : '') +
+          (a.hasReport ? ' <button class="btn btn-outline btn-sm" onclick="viewReport(\'' + x(a.agentId) + '\')">Posture</button>' : '') +
+          ' <button class="btn btn-outline btn-sm" onclick="openFullReport(\'' + x(a.agentId) + '\')" title="Open HTML report in new tab">&#128196; Report</button>' +
+          ' <button class="btn btn-outline btn-sm" onclick="downloadAuditPack(\'' + x(a.agentId) + '\')" title="Download audit pack ZIP">&#8659; Audit Pack</button>' +
         '</td></tr>';
     }).join('');
   }).catch(function(e) { showToast(e.message, 'err'); });
@@ -1764,6 +1766,24 @@ function submitChangePassword() {
     showToast('Password updated successfully', 'ok');
   })
   .catch(function(e) { document.getElementById('cpw-err').textContent = e.message; });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REPORTING MODULE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function openFullReport(agentId) {
+  window.open('/api/report/full/html?agentId=' + encodeURIComponent(agentId), '_blank');
+}
+
+function downloadAuditPack(agentId) {
+  showToast('Preparing audit pack…', 'ok');
+  var a = document.createElement('a');
+  a.href = '/api/report/audit-pack?agentId=' + encodeURIComponent(agentId);
+  a.download = 'bas-audit-pack-' + agentId + '.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

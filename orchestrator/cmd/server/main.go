@@ -20,6 +20,7 @@ import (
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -96,6 +97,10 @@ func main() {
 		log.Printf("[+] Compliance mapper loaded (%d frameworks)", len(complianceMapper.Frameworks()))
 	}
 
+	// ── Reporting Engine ──────────────────────────────────────────────────
+	reportingEngine := reporting.NewEngine(pool)
+	log.Println("[+] Reporting engine ready")
+
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
@@ -103,7 +108,8 @@ func main() {
 		WithART(artStore).
 		WithAgentSecret(cfg.AgentSecret).
 		WithManifest(manifest).
-		WithCompliance(complianceMapper)
+		WithCompliance(complianceMapper).
+		WithReporting(reportingEngine)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────

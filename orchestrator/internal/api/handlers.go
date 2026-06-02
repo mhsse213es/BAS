@@ -20,6 +20,7 @@ import (
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -30,12 +31,13 @@ type Handler struct {
 	hub              *ws.Hub
 	engine           *scenario.Engine
 	secret           string
-	agentSecret      string // optional shared secret for agent-facing endpoints
+	agentSecret      string            // optional shared secret for agent-facing endpoints
 	calderaURL       string
 	calderaKey       string
 	artStore         *scenario.ARTStore
-	manifest         *integrity.Manifest  // binary hash manifest — nil means verification disabled
-	complianceMapper *compliance.Mapper   // nil when not loaded
+	manifest         *integrity.Manifest // binary hash manifest — nil means verification disabled
+	complianceMapper *compliance.Mapper  // nil when not loaded
+	reportingEngine  *reporting.Engine   // nil when not loaded
 }
 
 // New creates a Handler.
@@ -46,6 +48,12 @@ func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) 
 // WithCompliance attaches the compliance mapper.
 func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
 	h.complianceMapper = m
+	return h
+}
+
+// WithReporting attaches the reporting engine.
+func (h *Handler) WithReporting(e *reporting.Engine) *Handler {
+	h.reportingEngine = e
 	return h
 }
 
@@ -931,6 +939,84 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 
 func newID() string {
 	return fmt.Sprintf("%x", time.Now().UnixNano())
+}
+
+// ── Full Reporting + Audit Pack ───────────────────────────────────────────────
+
+// GET /api/report/full/html?agentId=X
+// Returns a self-contained HTML report suitable for printing to PDF.
+func (h *Handler) GetFullReportHTML(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	agentID := r.URL.Query().Get("agentId")
+	if agentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	report, err := h.reportingEngine.Build(r.Context(), agentID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Build compliance summaries for the HTML report
+	var compRows []reporting.ComplianceSummaryRow
+	if h.complianceMapper != nil {
+		var resultsRaw []byte
+		h.db.QueryRow(r.Context(),
+			`SELECT results FROM scenario_runs
+			  WHERE agent_id = $1 AND status IN ('completed','partial')
+			  ORDER BY started_at DESC LIMIT 1`, agentID,
+		).Scan(&resultsRaw)
+		var results []models.SimulationResult
+		if len(resultsRaw) > 0 {
+			json.Unmarshal(resultsRaw, &results)
+		}
+		for _, fw := range h.complianceMapper.Frameworks() {
+			cr, err := h.complianceMapper.GenerateReport(results, fw.ID, agentID, "", "")
+			if err != nil {
+				continue
+			}
+			compRows = append(compRows, reporting.ComplianceSummaryRow{
+				Framework:     fw.Name + " " + fw.Version,
+				TotalControls: cr.Summary.TotalControls,
+				Tested:        cr.Summary.TestedControls,
+				Passing:       cr.Summary.PassingControls,
+				Failing:       cr.Summary.FailingControls,
+				Untested:      cr.Summary.UntestedControls,
+				CompliancePct: cr.Summary.CompliancePercent,
+				CoveragePct:   cr.Summary.CoveragePercent,
+			})
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := reporting.GenerateHTML(w, report, compRows); err != nil {
+		log.Printf("[api] generate HTML report: %v", err)
+	}
+}
+
+// GET /api/report/audit-pack?agentId=X
+// Streams a ZIP containing the full audit pack.
+func (h *Handler) GetAuditPack(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	agentID := r.URL.Query().Get("agentId")
+	if agentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	fname := fmt.Sprintf("bas-audit-pack-%s-%s.zip", agentID, time.Now().UTC().Format("2006-01-02"))
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+
+	if err := h.reportingEngine.WriteAuditPack(r.Context(), agentID, h.complianceMapper, w); err != nil {
+		log.Printf("[api] audit pack: %v", err)
+	}
 }
 
 // ── Compliance ────────────────────────────────────────────────────────────────

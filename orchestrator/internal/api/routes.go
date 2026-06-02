@@ -88,6 +88,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		// Any authenticated user — self-service password change
 		r.Post("/api/auth/change-password", h.ChangePassword)
 
+		// Full report + audit pack — Viewer+ role
+		r.Get("/api/report/full/html", h.GetFullReportHTML)
+		r.Get("/api/report/audit-pack", h.GetAuditPack)
+
 		// Compliance — Viewer+ role
 		r.Get("/api/compliance/frameworks", h.ListComplianceFrameworks)
 		r.Get("/api/compliance/report", h.GetComplianceReport)
