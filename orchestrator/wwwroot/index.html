@@ -1036,13 +1036,26 @@ sudo systemctl start bas-agent</code>
     <p class="sub2">Select scenario and target agent, then click Run.</p>
     <div id="modal-sc-wrap">
       <label class="modal-lbl">Scenario</label>
-      <select id="modal-sc"></select>
+      <select id="modal-sc" onchange="renderRunMode()"></select>
     </div>
     <label class="modal-lbl">Target Agent</label>
     <select id="modal-agent"></select>
+
+    <!-- Execution mode — only shown for hybrid (executable) scenarios -->
+    <div id="modal-mode-wrap" style="display:none;margin-top:0.75rem">
+      <label class="modal-lbl">Execution mode</label>
+      <select id="modal-mode" onchange="renderRunMode()">
+        <option value="posture">Posture — read-only, safe on any host</option>
+        <option value="execute">Live execution — runs real techniques (lab only)</option>
+      </select>
+      <div id="modal-mode-warn" style="display:none;margin-top:0.6rem;padding:0.6rem 0.75rem;border:1px solid rgba(218,54,51,0.4);background:rgba(218,54,51,0.1);border-radius:var(--radius);font-size:0.78rem;color:#f85149;line-height:1.45">
+        &#9888; <strong>Live execution</strong> runs real attack techniques on the target and <strong>will trigger EDR/Defender</strong>. Use only on a domain-joined Windows <strong>test VM with a snapshot</strong> — never production. Each step is self-cleaning.
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-outline-green btn-sm" onclick="confirmRun()">&#9654; Run</button>
+      <button id="modal-run-btn" class="btn btn-outline-green btn-sm" onclick="confirmRun()">&#9654; Run</button>
     </div>
   </div>
 </div>
@@ -1423,6 +1436,7 @@ function loadScenarios() {
         steps:              s.steps              || [],
         mitrePhases:        s.mitrePhases        || [],
         source:             s.source             || 'builtin',
+        executable:         !!s.executable,
         localCheck:         !!s.localCheck,
         calderaAllWindows:  !!s.calderaAllWindows,
         calderaAbilities:   s.calderaAbilities   || [],
@@ -1588,7 +1602,29 @@ function openModal(scenarioId, preAgent) {
     return '<option value="' + x(a.agentId) + '"' + (a.agentId === preAgent ? ' selected' : '') + '>' +
            x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
   }).join('');
+  document.getElementById('modal-mode').value = 'posture'; // always default to safe
+  renderRunMode();
   document.getElementById('run-overlay').classList.add('open');
+}
+
+// renderRunMode shows the Posture/Live selector only for executable (hybrid)
+// scenarios, and toggles the live-execution warning.
+function renderRunMode() {
+  var id = _modalScId || document.getElementById('modal-sc').value;
+  var sc = scenarios.find(function(s) { return s.id === id; });
+  var wrap = document.getElementById('modal-mode-wrap');
+  var modeSel = document.getElementById('modal-mode');
+  if (!sc || !sc.executable) {
+    wrap.style.display = 'none';
+    modeSel.value = 'posture';
+    document.getElementById('modal-mode-warn').style.display = 'none';
+    document.getElementById('modal-run-btn').innerHTML = '&#9654; Run';
+    return;
+  }
+  wrap.style.display = 'block';
+  var live = modeSel.value === 'execute';
+  document.getElementById('modal-mode-warn').style.display = live ? 'block' : 'none';
+  document.getElementById('modal-run-btn').innerHTML = live ? '&#9654; Run LIVE' : '&#9654; Run';
 }
 function closeModal() { document.getElementById('run-overlay').classList.remove('open'); _modalScId = null; }
 
@@ -1997,11 +2033,17 @@ function confirmRun() {
   var scenarioId = _modalScId || document.getElementById('modal-sc').value;
   var agentId    = document.getElementById('modal-agent').value;
   if (!scenarioId || !agentId) { showToast('Select scenario and agent', 'err'); return; }
+  var modeWrap = document.getElementById('modal-mode-wrap');
+  var mode = (modeWrap.style.display !== 'none') ? document.getElementById('modal-mode').value : 'posture';
+  if (mode === 'execute') {
+    if (!confirm('LIVE execution runs real attack techniques on the target endpoint and will trigger EDR/Defender.\n\nOnly proceed on a test VM with a snapshot. Continue?')) return;
+  }
   apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
-    method: 'POST', body: JSON.stringify({ agentId: agentId })
+    method: 'POST', body: JSON.stringify({ agentId: agentId, mode: mode })
   }).then(function(res) {
+    if (res && res.error) { showToast('Run failed: ' + res.error, 'err'); return; }
     closeModal();
-    showToast('Dispatched — Run ID: ' + res.runId, 'ok');
+    showToast('Dispatched (' + (res.mode || mode) + ') — Run ID: ' + res.runId, 'ok');
     showTab('runs'); loadRuns();
   }).catch(function(e) { showToast('Run failed: ' + e.message, 'err'); });
 }
