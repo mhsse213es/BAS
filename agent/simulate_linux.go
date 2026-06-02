@@ -127,6 +127,8 @@ func RunAllChecks() []SimCategory {
 
 func RunScenarioChecks(scenarioID string) []SimCategory {
 	switch scenarioID {
+	case "safe-simulation":
+		return cisUbuntuL1()
 	case "cis-ubuntu-l1":
 		return cisUbuntuL1()
 	default:

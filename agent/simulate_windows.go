@@ -55,6 +55,8 @@ func RunAllChecks() []SimCategory {
 
 func RunScenarioChecks(scenarioID string) []SimCategory {
 	switch scenarioID {
+	case "safe-simulation":
+		return safeSimChecks()
 	case "apt36-spearphish":
 		return apt36Checks()
 	case "ransomware-drill":
@@ -67,6 +69,40 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 		return cscrfChecks()
 	default:
 		return RunAllChecks()
+	}
+}
+
+// safeSimChecks is the cross-platform safe simulation — a comprehensive,
+// read-only superset covering the full kill chain plus data-protection,
+// account-security, and monitoring categories. All checks compose existing
+// read-only functions; nothing on the endpoint is modified.
+func safeSimChecks() []SimCategory {
+	return []SimCategory{
+		credentialAccess(),
+		defenseEvasion(),
+		executionControls(),
+		persistenceChecks(),
+		privEscChecks(),
+		networkControls(),
+		{Phase: "collection", Checks: []SimCheck{
+			checkClipboardHistoryPolicy(),
+			checkScreenCaptureASR(),
+		}},
+		{Phase: "impact", Checks: []SimCheck{
+			checkBitLockerStatus(),
+			checkVSSShadowCopies(),
+			checkControlledFolderAccess(),
+		}},
+		{Phase: "account-security", Checks: []SimCheck{
+			checkAccountLockoutPolicy(),
+			checkPasswordMinLength(),
+			checkLocalAdminCount(),
+			checkDefaultAdminAccount(),
+		}},
+		{Phase: "monitoring", Checks: []SimCheck{
+			checkAuditLogRetention(),
+			checkPatchCurrency(),
+		}},
 	}
 }
 

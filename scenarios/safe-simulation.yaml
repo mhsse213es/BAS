@@ -1,0 +1,26 @@
+id: safe-simulation
+name: "Safe Security Simulation (Read-Only)"
+description: >
+  Cross-platform read-only security posture simulation. Reads configuration —
+  registry keys, sysctl values, service states, SSH config, policy files — and
+  predicts whether real attacks would be blocked. Makes NO changes to the
+  endpoint: no payloads executed, no files written, no registry modified.
+  Safe to run on production systems and for demonstrations.
+author: Audspect
+tags:
+  - safe
+  - read-only
+  - cross-platform
+  - posture
+  - testing
+mitre_phases:
+  - initial-access
+  - execution
+  - persistence
+  - privilege-escalation
+  - defense-evasion
+  - credential-access
+  - lateral-movement
+  - collection
+  - impact
+local_check: true
