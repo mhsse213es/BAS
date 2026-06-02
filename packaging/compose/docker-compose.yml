@@ -63,8 +63,16 @@ services:
       CALDERA_URL:      "http://caldera:8888"
       CALDERA_API_KEY:  ${CALDERA_API_KEY:-BASPlatform2024}
       BAS_ADMIN_PASSWORD: ${BAS_ADMIN_PASSWORD:-}
+      # ── Threat-Intel Connector (optional — leave blank to disable) ──
+      MISP_URL:                ${MISP_URL:-}
+      MISP_API_KEY:            ${MISP_API_KEY:-}
+      OPENCTI_URL:             ${OPENCTI_URL:-}
+      OPENCTI_API_KEY:         ${OPENCTI_API_KEY:-}
+      THREAT_INTEL_POLL_HOURS: ${THREAT_INTEL_POLL_HOURS:-24}
     volumes:
-      - ./scenarios:/scenarios:ro
+      # scenarios is read-write: the threat-intel connector writes generated
+      # YAMLs into scenarios/intel/. Keep writable even if connector is unused.
+      - ./scenarios:/scenarios
       - ./wwwroot:/wwwroot:ro
       - ./bas.lic:/etc/bas/bas.lic:ro
     ports:
