@@ -9,11 +9,18 @@ error.txt
 .claude/
 ag/
 
-# License keys — NEVER commit the private key
-packaging/licensing/keys/private.pem
+# Private keys — NEVER commit any PEM/SSH key (incl. stray keys in repo root)
+*.pem
+*.key
+id_rsa
 packaging/licensing/keys/
 # Generated customer license files
 *.lic
+
+# Build / delivery output and local tooling — never ship via git
+dist/
+build/
+claude-code-security-review/
 
 # Python
 api/venv/
