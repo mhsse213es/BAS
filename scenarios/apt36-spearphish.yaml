@@ -6,6 +6,12 @@ description: >
   targeting Indian government, defence, and financial institutions via
   spear-phishing with weaponised Office documents, HTA droppers, and
   CrimsonRAT/ObliqueRAT C2 implants.
+
+  Per-OS local checks - Windows: Office VBA macro / Protected View / MOTW,
+  MSHTA and WScript execution control, scheduled-task and Run-key persistence,
+  browser credential storage. Linux: /tmp and /dev/shm execution restrictions,
+  cron / shell-init / SSH persistence, AppArmor, host firewall egress. macOS:
+  Gatekeeper and assessment policy, XProtect, LaunchAgents, application firewall.
 author: Audspect Research
 local_check: true
 tags:

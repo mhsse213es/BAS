@@ -7,6 +7,15 @@ description: >
   Covers the five CSCRF control domains: Network Security, Access Management,
   Data Security, Monitoring & Detection, and Business Continuity.
   Simulations are safe and do not disrupt production systems.
+
+  Per-OS local checks - Windows: open management ports / firewall / SMB signing /
+  LLMNR (network), local-admin, account-lockout and password policy (access),
+  BitLocker and audit-log retention (data), Defender / Sysmon / script-block /
+  event-log (monitoring), VSS / patch currency / Controlled Folder Access (BCP).
+  Linux: UFW / IP-forwarding / SYN cookies / ICMP (network), SSH, sudo and
+  password policy (access), shadow and passwd perms, log exposure and core dumps
+  (data), auditd / rsyslog / journald (monitoring). macOS: application firewall
+  and Gatekeeper, SSH and Screen Sharing, FileVault and Keychain, SIP and XProtect.
 author: Audspect Research
 local_check: true
 tags:

@@ -8,6 +8,13 @@ description: >
   Aligned with RBI Circular RBI/2021-22/112 on Cyber Security Framework.
   All network steps are simulated in the local environment — no external
   connections are made.
+
+  Per-OS local checks - Windows: browser credential storage / WDigest / autologon,
+  clipboard, screen-capture and keylogger indicators, DNS / root-certificate /
+  outbound-proxy exfiltration controls, Defender and script-block logging. Linux:
+  log exposure, ptrace and /etc/shadow, world-writable collection paths,
+  IP-forwarding / ICMP-redirect / SYN-cookie / firewall exfiltration controls.
+  macOS: Keychain, Screen Sharing and SSH, application firewall.
 author: Audspect Research
 local_check: true
 tags:

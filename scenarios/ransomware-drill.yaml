@@ -6,6 +6,12 @@ description: >
   simulation methodology. Tests pre-ransomware staging, defence evasion,
   shadow copy deletion, and data encryption impact. All destructive steps
   are safe simulations â€” no actual files are encrypted.
+
+  Per-OS local checks - Windows: Defender real-time and tamper protection,
+  event-log clearing, VSS shadow copies, BitLocker and Controlled Folder Access,
+  SMB signing / LLMNR, Run-key and service persistence. Linux: auditd / rsyslog /
+  journald anti-forensics, world-writable files, AppArmor, host firewall. macOS:
+  System Integrity Protection, XProtect, FileVault, application firewall.
 author: Audspect Research
 local_check: true
 tags:
