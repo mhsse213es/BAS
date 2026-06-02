@@ -19,9 +19,9 @@ const (
 
 // AttackTechnique is a MITRE ATT&CK technique reference.
 type AttackTechnique struct {
-	ID          string `json:"id"`                    // T1059.001
-	Name        string `json:"name"`                  // PowerShell
-	Tactic      string `json:"tactic"`                // execution
+	ID          string `json:"id"`     // T1059.001
+	Name        string `json:"name"`   // PowerShell
+	Tactic      string `json:"tactic"` // execution
 	Description string `json:"description,omitempty"`
 }
 
@@ -346,15 +346,15 @@ var TechniqueNameMap = map[string]string{
 	"T1219":     "Remote Access Software",
 
 	// ── Impact ────────────────────────────────────────────────────────────────
-	"T1486": "Data Encrypted for Impact",
-	"T1490": "Inhibit System Recovery",
-	"T1491": "Defacement",
+	"T1486":     "Data Encrypted for Impact",
+	"T1490":     "Inhibit System Recovery",
+	"T1491":     "Defacement",
 	"T1491.001": "Defacement: Internal Defacement",
-	"T1485": "Data Destruction",
-	"T1565": "Data Manipulation",
+	"T1485":     "Data Destruction",
+	"T1565":     "Data Manipulation",
 	"T1565.001": "Data Manipulation: Stored Data Manipulation",
-	"T1489": "Service Stop",
-	"T1529": "System Shutdown/Reboot",
+	"T1489":     "Service Stop",
+	"T1529":     "System Shutdown/Reboot",
 }
 
 // TacticMap maps MITRE T-IDs to tactic names.

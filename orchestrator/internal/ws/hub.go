@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/gorilla/websocket"
 	"github.com/audspect/bas/internal/models"
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{

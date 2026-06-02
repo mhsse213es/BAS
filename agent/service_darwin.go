@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	darwinPlistPath = "/Library/LaunchDaemons/com.audspect.bas-agent.plist"
-	darwinConfigDir = "/etc/bas-agent"
+	darwinPlistPath  = "/Library/LaunchDaemons/com.audspect.bas-agent.plist"
+	darwinConfigDir  = "/etc/bas-agent"
 	darwinConfigFile = "/etc/bas-agent/config"
 )
 

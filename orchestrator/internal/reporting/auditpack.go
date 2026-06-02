@@ -94,15 +94,15 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 	// agent-inventory.json
 	if f, err := zw.Create(prefix + "agent-inventory.json"); err == nil {
 		inv := map[string]interface{}{
-			"agentId":       report.Agent.AgentID,
-			"hostname":      report.Agent.Hostname,
-			"ipAddress":     report.Agent.IPAddress,
-			"osVersion":     report.Agent.OSVersion,
-			"username":      report.Agent.Username,
-			"envLabel":      report.Agent.EnvLabel,
-			"binaryTrusted": report.Agent.BinaryTrusted,
-			"lastUpdate":    report.Agent.LastUpdate,
-			"securityTools": report.SecurityTools,
+			"agentId":             report.Agent.AgentID,
+			"hostname":            report.Agent.Hostname,
+			"ipAddress":           report.Agent.IPAddress,
+			"osVersion":           report.Agent.OSVersion,
+			"username":            report.Agent.Username,
+			"envLabel":            report.Agent.EnvLabel,
+			"binaryTrusted":       report.Agent.BinaryTrusted,
+			"lastUpdate":          report.Agent.LastUpdate,
+			"securityTools":       report.SecurityTools,
 			"detectionCategories": report.DetectionCategories,
 		}
 		enc := json.NewEncoder(f)

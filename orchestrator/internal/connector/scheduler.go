@@ -18,10 +18,10 @@ type Scheduler struct {
 	engine    *scenario.Engine
 	interval  time.Duration
 
-	mu        sync.RWMutex
-	status    ConnectorStatus
-	syncCh    chan struct{} // manual trigger
-	stopCh    chan struct{}
+	mu     sync.RWMutex
+	status ConnectorStatus
+	syncCh chan struct{} // manual trigger
+	stopCh chan struct{}
 }
 
 // NewScheduler creates a Scheduler. Pass nil for either client to disable it.

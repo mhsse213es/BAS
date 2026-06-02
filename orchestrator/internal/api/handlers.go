@@ -32,7 +32,7 @@ type Handler struct {
 	hub              *ws.Hub
 	engine           *scenario.Engine
 	secret           string
-	agentSecret      string              // optional shared secret for agent-facing endpoints
+	agentSecret      string // optional shared secret for agent-facing endpoints
 	calderaURL       string
 	calderaKey       string
 	artStore         *scenario.ARTStore

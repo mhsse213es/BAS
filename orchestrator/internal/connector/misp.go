@@ -74,10 +74,10 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 // ── MISP API types ────────────────────────────────────────────────────────────
 
 type mispEventIndex struct {
-	ID        string      `json:"id"`
-	Info      string      `json:"info"`
-	Timestamp string      `json:"timestamp"`
-	Tag       []mispTag   `json:"Tag"`
+	ID        string    `json:"id"`
+	Info      string    `json:"info"`
+	Timestamp string    `json:"timestamp"`
+	Tag       []mispTag `json:"Tag"`
 }
 
 type mispTag struct {
@@ -86,12 +86,12 @@ type mispTag struct {
 
 type mispEventDetail struct {
 	Event struct {
-		ID             string           `json:"id"`
-		Info           string           `json:"info"`
-		Timestamp      string           `json:"timestamp"`
-		Tag            []mispTag        `json:"Tag"`
-		GalaxyCluster  []mispGalaxy     `json:"GalaxyCluster"`
-		Attribute      []mispAttribute  `json:"Attribute"`
+		ID            string          `json:"id"`
+		Info          string          `json:"info"`
+		Timestamp     string          `json:"timestamp"`
+		Tag           []mispTag       `json:"Tag"`
+		GalaxyCluster []mispGalaxy    `json:"GalaxyCluster"`
+		Attribute     []mispAttribute `json:"Attribute"`
 	} `json:"Event"`
 }
 

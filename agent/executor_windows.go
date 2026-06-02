@@ -78,9 +78,10 @@ func runCleanup(step ScenarioStep) {
 
 // detectSecurityBlock returns true when an EDR/AV terminated the child process.
 // Recognised Windows patterns:
-//   0xC0000005 STATUS_ACCESS_VIOLATION  — memory execution blocked
-//   0xC0000022 STATUS_ACCESS_DENIED     — file/process access denied by AV
-//   exit -1 in <500 ms               — TerminateProcess called almost immediately
+//
+//	0xC0000005 STATUS_ACCESS_VIOLATION  — memory execution blocked
+//	0xC0000022 STATUS_ACCESS_DENIED     — file/process access denied by AV
+//	exit -1 in <500 ms               — TerminateProcess called almost immediately
 func detectSecurityBlock(exitErr *exec.ExitError, durMs int64) (bool, string) {
 	code := uint32(exitErr.ExitCode())
 	switch code {

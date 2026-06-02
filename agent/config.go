@@ -12,8 +12,8 @@ type Config struct {
 }
 
 func loadConfig() Config {
-	serverURL   := os.Getenv("BAS_SERVER_URL")
-	envLabel    := os.Getenv("BAS_ENV_LABEL")
+	serverURL := os.Getenv("BAS_SERVER_URL")
+	envLabel := os.Getenv("BAS_ENV_LABEL")
 	agentSecret := os.Getenv("BAS_AGENT_SECRET")
 
 	if serverURL == "" || envLabel == "" {

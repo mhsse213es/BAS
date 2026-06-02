@@ -16,8 +16,8 @@ type SimCategory struct {
 type SimCheck struct {
 	ID           string    `json:"id"`
 	Technique    Tech      `json:"technique"`
-	Result       string    `json:"result"`       // pass | fail | skipped
-	Severity     string    `json:"severity"`     // Critical | High | Medium | Low
+	Result       string    `json:"result"`   // pass | fail | skipped
+	Severity     string    `json:"severity"` // Critical | High | Medium | Low
 	ThreatImpact string    `json:"threatImpact"`
 	Details      string    `json:"details"`
 	Remediation  string    `json:"remediation"`

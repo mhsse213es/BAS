@@ -164,7 +164,7 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 			}
 			name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "SERVICE_NAME:"))
 			if name != "" && !origSvcs[name] {
-				exec.Command("sc", "stop", name).Run()    //nolint
+				exec.Command("sc", "stop", name).Run()                         //nolint
 				exec.Command("sc", "config", name, "start=", "disabled").Run() //nolint
 				reverted = append(reverted, "service stopped: "+name)
 			}

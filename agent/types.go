@@ -39,7 +39,7 @@ type SimCheckResult struct {
 	TechniqueID   string    `json:"techniqueId"`
 	TechniqueName string    `json:"techniqueName"`
 	Tactic        string    `json:"tactic"`
-	Result        string    `json:"result"`      // pass | fail | skipped
+	Result        string    `json:"result"` // pass | fail | skipped
 	Severity      string    `json:"severity"`
 	ThreatImpact  string    `json:"threatImpact"`
 	Details       string    `json:"details"`

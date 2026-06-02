@@ -15,7 +15,7 @@ var (
 )
 
 func registerPlatformFlags() {
-	flagUpdate  = flag.Bool("update", false, "In-place binary update without reinstall")
+	flagUpdate = flag.Bool("update", false, "In-place binary update without reinstall")
 	flagConsole = flag.Bool("console", false, "Force interactive console mode")
 }
 

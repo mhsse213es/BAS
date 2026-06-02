@@ -19,10 +19,10 @@ const (
 func main() {
 	log.SetFlags(log.Ltime | log.Lmsgprefix)
 
-	flagInstall   := flag.Bool("install", false, "Install agent as a system service (requires root/admin)")
+	flagInstall := flag.Bool("install", false, "Install agent as a system service (requires root/admin)")
 	flagUninstall := flag.Bool("uninstall", false, "Uninstall agent system service")
-	flagServer    := flag.String("server", "", "Override BAS_SERVER_URL")
-	flagEnv       := flag.String("env", "Production", "Override BAS_ENV_LABEL")
+	flagServer := flag.String("server", "", "Override BAS_SERVER_URL")
+	flagEnv := flag.String("env", "Production", "Override BAS_ENV_LABEL")
 
 	registerPlatformFlags()
 	flag.Parse()

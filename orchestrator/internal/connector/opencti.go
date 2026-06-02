@@ -21,9 +21,9 @@ type OpenCTIClient struct {
 // NewOpenCTIClient creates an OpenCTI GraphQL client.
 func NewOpenCTIClient(baseURL, apiKey string, sectors []string) *OpenCTIClient {
 	return &OpenCTIClient{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		apiKey:  apiKey,
-		sectors: sectors,
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		apiKey:     apiKey,
+		sectors:    sectors,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -55,18 +55,18 @@ type octiGQLRequest struct {
 }
 
 type octiThreatActorNode struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Aliases     []string `json:"aliases"`
-	Description string   `json:"description"`
-	Confidence  int      `json:"confidence"` // 0-100
-	Modified    string   `json:"modified"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Aliases        []string `json:"aliases"`
+	Description    string   `json:"description"`
+	Confidence     int      `json:"confidence"` // 0-100
+	Modified       string   `json:"modified"`
 	AttackPatterns struct {
 		Edges []struct {
 			Node struct {
 				To struct {
-					XMitreID       string `json:"x_mitre_id"`
-					Name           string `json:"name"`
+					XMitreID        string `json:"x_mitre_id"`
+					Name            string `json:"name"`
 					KillChainPhases []struct {
 						PhaseName string `json:"phase_name"`
 					} `json:"killChainPhases"`

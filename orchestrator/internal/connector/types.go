@@ -12,8 +12,8 @@ type ThreatActor struct {
 	Techniques  []TechniqueRef
 	Sectors     []string
 	Regions     []string
-	Source      string    // "misp" | "opencti"
-	SourceID    string    // MISP event ID or OpenCTI object ID
+	Source      string // "misp" | "opencti"
+	SourceID    string // MISP event ID or OpenCTI object ID
 	LastSeen    time.Time
 	Confidence  string // "high" | "medium" | "low"
 }

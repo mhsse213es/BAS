@@ -13,7 +13,7 @@ import (
 )
 
 type artAtomicFile struct {
-	AttackTechnique string         `yaml:"attack_technique"`
+	AttackTechnique string          `yaml:"attack_technique"`
 	AtomicTests     []artAtomicTest `yaml:"atomic_tests"`
 }
 

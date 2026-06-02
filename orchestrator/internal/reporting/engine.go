@@ -23,14 +23,14 @@ func NewEngine(db *pgxpool.Pool) *Engine { return &Engine{db: db} }
 
 // FullReport is the complete assessment output for one agent.
 type FullReport struct {
-	GeneratedAt     time.Time        `json:"generatedAt"`
-	Agent           models.Agent     `json:"agent"`
-	Summary         ExecutiveSummary `json:"summary"`
-	TacticHeatmap   []TacticEntry    `json:"tacticHeatmap"`
-	TopFindings     []Finding        `json:"topFindings"`
-	Runs            []RunSummary     `json:"runs"`
-	SecurityTools   []string         `json:"securityTools"`
-	DetectionCategories []Category   `json:"detectionCategories"`
+	GeneratedAt         time.Time        `json:"generatedAt"`
+	Agent               models.Agent     `json:"agent"`
+	Summary             ExecutiveSummary `json:"summary"`
+	TacticHeatmap       []TacticEntry    `json:"tacticHeatmap"`
+	TopFindings         []Finding        `json:"topFindings"`
+	Runs                []RunSummary     `json:"runs"`
+	SecurityTools       []string         `json:"securityTools"`
+	DetectionCategories []Category       `json:"detectionCategories"`
 }
 
 // ExecutiveSummary is the top-level risk picture derived from the latest run.
@@ -75,17 +75,17 @@ type Finding struct {
 
 // RunSummary is one row in the Scenario Run History table.
 type RunSummary struct {
-	ID              string     `json:"id"`
-	ScenarioName    string     `json:"scenarioName"`
-	Status          string     `json:"status"`
-	StartedAt       time.Time  `json:"startedAt"`
-	CompletedAt     *time.Time `json:"completedAt,omitempty"`
-	RiskScore       int        `json:"riskScore"`
-	Classification  string     `json:"classification"`
-	PreventionScore float64    `json:"preventionScore"`
-	ExposureScore   float64    `json:"exposureScore"`
-	TotalTechniques int        `json:"totalTechniques"`
-	FailedTechniques int       `json:"failedTechniques"`
+	ID               string     `json:"id"`
+	ScenarioName     string     `json:"scenarioName"`
+	Status           string     `json:"status"`
+	StartedAt        time.Time  `json:"startedAt"`
+	CompletedAt      *time.Time `json:"completedAt,omitempty"`
+	RiskScore        int        `json:"riskScore"`
+	Classification   string     `json:"classification"`
+	PreventionScore  float64    `json:"preventionScore"`
+	ExposureScore    float64    `json:"exposureScore"`
+	TotalTechniques  int        `json:"totalTechniques"`
+	FailedTechniques int        `json:"failedTechniques"`
 }
 
 // Category is one detection category from the agent's posture report.

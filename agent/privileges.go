@@ -11,18 +11,18 @@ import (
 // agentPrivileges are enabled on startup so all BAS checks have
 // the access they need regardless of how the agent was launched.
 var agentPrivileges = []string{
-	"SeDebugPrivilege",              // process memory access — LSASS dump detection, module inspection
-	"SeSecurityPrivilege",           // auditpol read, security event log size queries
-	"SeBackupPrivilege",             // read files/registry ignoring ACLs
-	"SeRestorePrivilege",            // write access ignoring ACLs
-	"SeTakeOwnershipPrivilege",      // take ownership of arbitrary objects
-	"SeLoadDriverPrivilege",         // driver load/unload checks
-	"SeSystemEnvironmentPrivilege",  // firmware/UEFI variable access
-	"SeImpersonatePrivilege",        // impersonate tokens for context checks
-	"SeManageVolumePrivilege",       // VSS / BitLocker volume queries
+	"SeDebugPrivilege",                // process memory access — LSASS dump detection, module inspection
+	"SeSecurityPrivilege",             // auditpol read, security event log size queries
+	"SeBackupPrivilege",               // read files/registry ignoring ACLs
+	"SeRestorePrivilege",              // write access ignoring ACLs
+	"SeTakeOwnershipPrivilege",        // take ownership of arbitrary objects
+	"SeLoadDriverPrivilege",           // driver load/unload checks
+	"SeSystemEnvironmentPrivilege",    // firmware/UEFI variable access
+	"SeImpersonatePrivilege",          // impersonate tokens for context checks
+	"SeManageVolumePrivilege",         // VSS / BitLocker volume queries
 	"SeIncreaseBasePriorityPrivilege", // real-time priority for time-sensitive checks
-	"SeCreateSymbolicLinkPrivilege", // symlink-based path checks
-	"SeShutdownPrivilege",           // shutdown/reboot policy verification
+	"SeCreateSymbolicLinkPrivilege",   // symlink-based path checks
+	"SeShutdownPrivilege",             // shutdown/reboot policy verification
 }
 
 // enablePrivileges enables every privilege in agentPrivileges on the current

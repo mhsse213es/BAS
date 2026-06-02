@@ -73,11 +73,11 @@ type Payload struct {
 // The server builds these from Step definitions before sending to the agent.
 // The agent has no framework knowledge — it only sees executor + command.
 type ScenarioStep struct {
-	TaskID      string    `json:"taskId"`               // stable hash for result correlation
-	TechniqueID string    `json:"techniqueId"`          // for logging/telemetry on agent
-	Name        string    `json:"name"`                 // for logging on agent
-	Executor    string    `json:"executor"`             // powershell|cmd|wmi|mshta|rundll32|cscript|wscript|regsvr32|schtasks
-	Command     string    `json:"command"`              // concrete command, ready to run
+	TaskID      string    `json:"taskId"`      // stable hash for result correlation
+	TechniqueID string    `json:"techniqueId"` // for logging/telemetry on agent
+	Name        string    `json:"name"`        // for logging on agent
+	Executor    string    `json:"executor"`    // powershell|cmd|wmi|mshta|rundll32|cscript|wscript|regsvr32|schtasks
+	Command     string    `json:"command"`     // concrete command, ready to run
 	TimeoutSec  int       `json:"timeoutSec"`
 	Payloads    []Payload `json:"payloads,omitempty"` // files to stage before executing
 	Cleanup     string    `json:"cleanup,omitempty"`  // cleanup command run after step (pass or fail)
@@ -113,7 +113,7 @@ type SimCheckResult struct {
 	TechniqueID   string    `json:"techniqueId"`
 	TechniqueName string    `json:"techniqueName"`
 	Tactic        string    `json:"tactic"`
-	Result        string    `json:"result"`      // pass | fail | skipped
+	Result        string    `json:"result"` // pass | fail | skipped
 	Severity      string    `json:"severity"`
 	ThreatImpact  string    `json:"threatImpact"`
 	Details       string    `json:"details"`
