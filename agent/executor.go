@@ -24,6 +24,13 @@ func StagePayloads(payloads []Payload, dir string) error {
 		if err := os.WriteFile(dest, data, 0600); err != nil {
 			return fmt.Errorf("payload %q: write: %w", p.Name, err)
 		}
+		// Remove the Zone.Identifier NTFS alternate data stream that Windows
+		// automatically adds to files written by non-elevated processes.
+		// Without this, executing a payload triggers the "Open File — Security
+		// Warning" dialog ("Do you want to run this file?") which blocks the step
+		// indefinitely waiting for a human to click Run.
+		// This call is a no-op on Linux/macOS (path does not exist → ignored).
+		os.Remove(dest + ":Zone.Identifier")
 	}
 	return nil
 }

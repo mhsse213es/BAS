@@ -9,58 +9,105 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
+
+// Windows process creation flags.
+const (
+	createNoWindow      = 0x08000000 // no console window, no GUI window on initial create
+	createNewProcessGrp = 0x00000200 // own Ctrl+C group — breaks console inheritance
+)
+
+// silentCmd applies creation flags to every scenario step command so that:
+//   - No console or GUI window is created (CREATE_NO_WINDOW)
+//   - HideWindow hint is passed via STARTUPINFO (SW_HIDE) — suppresses main window
+//   - The child is in its own Ctrl+C group (CREATE_NEW_PROCESS_GROUP) to avoid
+//     inadvertently killing the agent when we cancel a step
+//
+// This is the primary defence against interactive dialogs blocking scenario steps.
+func silentCmd(cmd *exec.Cmd) *exec.Cmd {
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: createNoWindow | createNewProcessGrp,
+	}
+	return cmd
+}
 
 func buildCmd(ctx context.Context, step ScenarioStep) *exec.Cmd {
 	switch strings.ToLower(step.Executor) {
 	case "cmd":
-		return exec.CommandContext(ctx, "cmd", "/c", step.Command)
+		return silentCmd(exec.CommandContext(ctx, "cmd", "/c", step.Command))
 
 	case "wmi":
+		// WMI creates a new session via Win32_Process.Create, which bypasses any
+		// SysProcAttr we set on the outer shell.  Force the inner process hidden by
+		// passing -WindowStyle Hidden and -NonInteractive explicitly.
 		tmpOut := filepath.Join(os.Getenv("TEMP"), fmt.Sprintf("bas-wmi-%d.txt", time.Now().UnixNano()))
 		innerCmd := strings.ReplaceAll(step.Command, "'", "''")
 		wmiScript := fmt.Sprintf(`
 $tmp = '%s'
-$inner = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { %s } 2>&1 | Out-File -FilePath ''%s'' -Encoding utf8"'
+$inner = 'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "& { %s } 2>&1 | Out-File -FilePath ''%s'' -Encoding utf8"'
 ([wmiclass]'Win32_Process').Create($inner) | Out-Null
 $deadline = (Get-Date).AddSeconds(28)
 do { Start-Sleep -Milliseconds 500 } while (!(Test-Path $tmp) -and (Get-Date) -lt $deadline)
 if (Test-Path $tmp) { Get-Content $tmp; Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
 else { Write-Output "WMI_TIMEOUT: inner process did not write output within timeout" }
 `, tmpOut, innerCmd, tmpOut)
-		return exec.CommandContext(ctx, "powershell",
-			"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-			"-Command", wmiScript)
+		return silentCmd(exec.CommandContext(ctx, "powershell",
+			"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+			"-ExecutionPolicy", "Bypass",
+			"-Command", wmiScript))
 
 	case "mshta":
-		return exec.CommandContext(ctx, "mshta.exe", step.Command)
+		// mshta.exe is a GUI host — CREATE_NO_WINDOW alone does not prevent it from
+		// creating new windows after startup.  Wrap it in Start-Process so PowerShell
+		// applies SW_HIDE to the mshta window and waits for completion.
+		safeArg := strings.ReplaceAll(step.Command, "'", "''")
+		wrapped := fmt.Sprintf(
+			`Start-Process -FilePath mshta.exe -ArgumentList '%s' -WindowStyle Hidden -Wait`,
+			safeArg)
+		return silentCmd(exec.CommandContext(ctx, "powershell",
+			"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+			"-ExecutionPolicy", "Bypass",
+			"-Command", wrapped))
+
+	case "wscript":
+		// wscript.exe is a GUI host — same treatment as mshta.
+		safeArg := strings.ReplaceAll(step.Command, "'", "''")
+		wrapped := fmt.Sprintf(
+			`Start-Process -FilePath wscript.exe -ArgumentList '//nologo %s' -WindowStyle Hidden -Wait`,
+			safeArg)
+		return silentCmd(exec.CommandContext(ctx, "powershell",
+			"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+			"-ExecutionPolicy", "Bypass",
+			"-Command", wrapped))
 
 	case "rundll32":
 		parts := strings.Fields(step.Command)
 		if len(parts) == 0 {
 			parts = []string{step.Command}
 		}
-		return exec.CommandContext(ctx, "rundll32.exe", parts...)
+		return silentCmd(exec.CommandContext(ctx, "rundll32.exe", parts...))
 
 	case "cscript":
-		parts := append([]string{"//nologo"}, strings.Fields(step.Command)...)
-		return exec.CommandContext(ctx, "cscript.exe", parts...)
-
-	case "wscript":
-		parts := append([]string{"//nologo"}, strings.Fields(step.Command)...)
-		return exec.CommandContext(ctx, "wscript.exe", parts...)
+		// cscript is a console host — CREATE_NO_WINDOW is sufficient.
+		parts := append([]string{"//nologo", "//B"}, strings.Fields(step.Command)...)
+		return silentCmd(exec.CommandContext(ctx, "cscript.exe", parts...))
 
 	case "regsvr32":
-		return exec.CommandContext(ctx, "regsvr32.exe", strings.Fields(step.Command)...)
+		// /s = silent (no success/failure dialog)
+		args := append([]string{"/s"}, strings.Fields(step.Command)...)
+		return silentCmd(exec.CommandContext(ctx, "regsvr32.exe", args...))
 
 	case "schtasks":
-		return exec.CommandContext(ctx, "schtasks.exe", strings.Fields(step.Command)...)
+		return silentCmd(exec.CommandContext(ctx, "schtasks.exe", strings.Fields(step.Command)...))
 
-	default:
-		return exec.CommandContext(ctx, "powershell",
-			"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-			"-Command", step.Command)
+	default: // powershell / psh
+		return silentCmd(exec.CommandContext(ctx, "powershell",
+			"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+			"-ExecutionPolicy", "Bypass",
+			"-Command", step.Command))
 	}
 }
 
