@@ -62,7 +62,7 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	case "apt36-kill-chain":
 		return apt36KillChainChecks()
 	case "ransomware-drill":
-		return ransomwareChecks()
+		return ransomwareDrillChecks()
 	case "ad-credential-access":
 		return adCredentialChecks()
 	case "upi-fraud-killchain":
@@ -944,8 +944,182 @@ func checkAMSIEnforcement() SimCheck {
 		})
 }
 
-// ── Ransomware Drill ──────────────────────────────────────────────────────────
+// ── Ransomware Drill (Three-Tier) ────────────────────────────────────────────
 
+// ransomwareDrillChecks is the POSTURE side of the ransomware drill. Six
+// categories surface both "Can we block?" (prevention) and "Can we recover?"
+// (recovery-posture) independently — the distinction that matters most for
+// BFSI BCP/DR reviews.
+func ransomwareDrillChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "prevention-posture", Checks: []SimCheck{
+			checkControlledFolderAccess(),
+			checkAppLocker(),
+			checkDefenderRTP(),
+			checkDefenderTamperProtection(),
+		}},
+		{Phase: "detection-posture", Checks: []SimCheck{
+			checkSysmon(),
+			checkScriptBlockLogging(),
+			checkEventLog(),
+			checkAuditLogRetention(),
+		}},
+		{Phase: "backup-resilience", Checks: []SimCheck{
+			checkVSSWriterHealth(),
+			checkWindowsBackupPresence(),
+			checkVSSServiceStatus(),
+			checkBackupPrivSeparation(),
+		}},
+		{Phase: "identity-hardening", Checks: []SimCheck{
+			checkLAPSDeployment(),
+			checkRDPNLA(),
+			checkLocalAdminCount(),
+			checkPrivilegedLocalAccounts(),
+		}},
+		{Phase: "lateral-movement", Checks: []SimCheck{
+			checkSMBSigning(),
+			checkLLMNR(),
+		}},
+		{Phase: "recovery-posture", Checks: []SimCheck{
+			checkVSSShadowCopies(),
+			checkBCDEditRecovery(),
+			checkBitLockerStatus(),
+		}},
+	}
+}
+
+func checkVSSWriterHealth() SimCheck {
+	return check("T1490", "VSS Writer Health", "backup-resilience", "Critical",
+		"Ransomware corrupts VSS writers before executing so that in-flight backups silently fail — recovery points are absent at the moment they are most needed.",
+		"Run 'vssadmin list writers'. Repair any FAILED or TIMED OUT writers. Monitor VSS event log (Source: VSS) for writer failures.",
+		func() (string, string) {
+			out, err := exec.Command("vssadmin", "list", "writers").Output()
+			if err != nil {
+				return "skipped", "Could not query VSS writers — vssadmin not available or requires elevation."
+			}
+			lower := strings.ToLower(string(out))
+			if strings.Contains(lower, "failed") || strings.Contains(lower, "timed out") {
+				return "fail", "One or more VSS writers are in FAILED or TIMED OUT state — backup operations will silently fail before ransomware even executes."
+			}
+			count := strings.Count(lower, "writer name:")
+			if count > 0 {
+				return "pass", fmt.Sprintf("%d VSS writer(s) found, none in failed state — backup chain is intact.", count)
+			}
+			return "fail", "No VSS writers detected — VSS subsystem may not be functional."
+		})
+}
+
+func checkWindowsBackupPresence() SimCheck {
+	return check("T1490", "Backup Agent / Service Presence", "backup-resilience", "High",
+		"Without any backup solution, ransomware recovery depends entirely on external systems. Absence of a local backup agent is a critical resilience gap.",
+		"Deploy Windows Server Backup (wbadmin) or a supported third-party agent (Veeam, Acronis). Verify scheduled backup jobs run and complete successfully.",
+		func() (string, string) {
+			out, err := psRun(`Test-Path "$env:SystemRoot\System32\wbadmin.exe"`)
+			if err == nil && strings.EqualFold(strings.TrimSpace(out), "True") {
+				if svcRunning("sdrsvc") {
+					return "pass", "Windows Server Backup (wbadmin.exe + sdrsvc service) installed and running — local backup capability active."
+				}
+				return "pass", "Windows Backup (wbadmin.exe) installed; sdrsvc not currently running — verify scheduled backup jobs are active."
+			}
+			for _, svc := range []string{"VeeamBackupSvc", "AcrSch2Svc", "AcronisAgent", "BackupExecAgentAccelerator"} {
+				if svcRunning(svc) {
+					return "pass", fmt.Sprintf("Third-party backup agent running (%s) — backup capability present.", svc)
+				}
+			}
+			return "fail", "No backup service detected (Windows Backup or third-party agent) — ransomware recovery has no local backup path."
+		})
+}
+
+func checkVSSServiceStatus() SimCheck {
+	return check("T1490", "VSS Service Configuration", "backup-resilience", "Critical",
+		"Ransomware disables the VSS service before executing to ensure no recovery snapshot can be created post-encryption.",
+		"Set VSS service startup type to Automatic (Delayed). Alert on VSS service state change via Security EID 7036.",
+		func() (string, string) {
+			if !svcRunning("vss") {
+				return "fail", "VSS (Volume Shadow Copy) service is NOT running — shadow copy creation is unavailable. Recovery snapshots cannot be created."
+			}
+			out, err := psRun(`(Get-Service -Name vss -ErrorAction SilentlyContinue).StartType`)
+			if err == nil {
+				st := strings.ToLower(strings.TrimSpace(out))
+				if strings.Contains(st, "automatic") {
+					return "pass", "VSS service running with Automatic startup — protected against simple service-disable attacks."
+				}
+				return "pass", fmt.Sprintf("VSS service running (StartType=%s) — operational but Automatic startup recommended for resilience.", strings.TrimSpace(out))
+			}
+			return "pass", "VSS service running — snapshot creation capability active."
+		})
+}
+
+func checkBackupPrivSeparation() SimCheck {
+	return check("T1490", "Backup Privilege Separation (SeBackupPrivilege)", "backup-resilience", "High",
+		"If SeBackupPrivilege is held by broad admin groups, ransomware operators can read all files regardless of NTFS ACLs — enabling full data exfiltration before encryption.",
+		"Restrict SeBackupPrivilege to a dedicated backup service account only (Computer Config → User Rights Assignment → Back up files and directories).",
+		func() (string, string) {
+			out, err := exec.Command("whoami", "/priv").Output()
+			if err != nil {
+				return "skipped", "Could not query current privileges."
+			}
+			lower := strings.ToLower(string(out))
+			if strings.Contains(lower, "sebackupprivilege") && strings.Contains(lower, "enabled") {
+				return "fail", "SeBackupPrivilege ENABLED for current session — this account can read all files regardless of ACLs (ransomware exfil vector active)."
+			}
+			if strings.Contains(lower, "sebackupprivilege") {
+				return "pass", "SeBackupPrivilege present but disabled in current token — not immediately exploitable."
+			}
+			return "pass", "SeBackupPrivilege absent from current session — backup privilege exposure contained for this account."
+		})
+}
+
+func checkLAPSDeployment() SimCheck {
+	return check("T1550.002", "LAPS — Local Admin Password Uniqueness", "identity-hardening", "Critical",
+		"Without LAPS, local administrator passwords are identical across all workstations — one compromised machine grants lateral movement to every endpoint at scale.",
+		"Deploy Microsoft LAPS (legacy AdmPwd.dll) or Windows LAPS (built-in Windows 11/Server 2022+). Set rotation interval ≤ 30 days.",
+		func() (string, string) {
+			// Windows LAPS (built-in, Server 2022+/Win11 22H2+)
+			val, err := regValue(`HKLM\SOFTWARE\Microsoft\Policies\LAPS`, "BackupDirectory")
+			if err == nil && val != "0x0" && val != "0" {
+				return "pass", "Windows LAPS configured (BackupDirectory set) — local admin passwords are unique and rotated per policy."
+			}
+			// Legacy LAPS (AdmPwd CSE)
+			out, err2 := psRun(`Test-Path "C:\Program Files\LAPS\CSE\AdmPwd.dll"`)
+			if err2 == nil && strings.EqualFold(strings.TrimSpace(out), "True") {
+				return "pass", "Legacy Microsoft LAPS (AdmPwd.dll) detected — local admin passwords are managed and unique per machine."
+			}
+			// LAPS policy via registry (GPO push)
+			_, err3 := regValue(`HKLM\SOFTWARE\Policies\Microsoft Services\AdmPwd`, "AdmPwdEnabled")
+			if err3 == nil {
+				return "pass", "LAPS AdmPwdEnabled policy key detected — local admin password management active."
+			}
+			return "fail", "LAPS not detected — local administrator passwords likely identical across workstations. Lateral movement via pass-the-hash scales to the entire estate."
+		})
+}
+
+func checkPrivilegedLocalAccounts() SimCheck {
+	return check("T1087.001", "Built-in Privileged Account Exposure", "identity-hardening", "High",
+		"Ransomware operators use enabled built-in Administrator and Guest accounts as lateral movement anchors — default names with predictable or reused passwords.",
+		"Disable built-in Administrator and Guest. Rename if policy requires. Use LAPS for any remaining local admin account.",
+		func() (string, string) {
+			adminOut, _ := psRun(`(Get-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue).Enabled`)
+			guestOut, _ := psRun(`(Get-LocalUser -Name "Guest" -ErrorAction SilentlyContinue).Enabled`)
+			adminOn := strings.EqualFold(strings.TrimSpace(adminOut), "True")
+			guestOn := strings.EqualFold(strings.TrimSpace(guestOut), "True")
+			switch {
+			case adminOn && guestOn:
+				return "fail", "Built-in Administrator AND Guest accounts enabled — maximum default-account lateral-movement exposure for ransomware operators."
+			case adminOn:
+				return "fail", "Built-in Administrator account ENABLED — ransomware targets this for credential-stuffing and hash-reuse lateral spread."
+			case guestOn:
+				return "fail", "Guest account ENABLED — anonymous share access facilitated; ransomware reconnaissance and traversal easier."
+			default:
+				return "pass", "Built-in Administrator and Guest accounts disabled — default-account lateral movement vectors contained."
+			}
+		})
+}
+
+// ── Ransomware Drill (legacy — kept for shared-function reuse) ───────────────
+// ransomwareChecks is the original posture-only set reused by safeSimChecks and
+// the Linux/macOS simulate files. Windows "ransomware-drill" routes to
+// ransomwareDrillChecks() above; this remains for cross-platform consistency.
 func ransomwareChecks() []SimCategory {
 	return []SimCategory{
 		{Phase: "defense-evasion", Checks: []SimCheck{

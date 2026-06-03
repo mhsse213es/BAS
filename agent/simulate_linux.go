@@ -136,7 +136,7 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	case "apt36-kill-chain":
 		return notApplicableWindows("APT36 Kill Chain", "T1566.001", "initial-access")
 	case "ransomware-drill":
-		return ransomwareChecks()
+		return ransomwareChecks() // posture-only linux checks; drill is Windows-primary
 	case "ad-credential-access":
 		return adCredentialChecks()
 	case "upi-fraud-killchain":
