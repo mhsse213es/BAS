@@ -1039,7 +1039,7 @@ sudo systemctl start bas-agent</code>
       <select id="modal-sc" onchange="renderRunMode()"></select>
     </div>
     <label class="modal-lbl">Target Agent</label>
-    <select id="modal-agent"></select>
+    <select id="modal-agent" onchange="renderRunMode()"></select>
 
     <!-- Execution mode — only shown for hybrid (executable) scenarios -->
     <div id="modal-mode-wrap" style="display:none;margin-top:0.75rem">
@@ -1533,12 +1533,32 @@ function scenarioCardHTML(s) {
         : (s.artTechniques || []).length ? (s.artTechniques.length + ' ART techniques')
         : (s.calderaAbilities || []).length ? (s.calderaAbilities.length + ' Caldera abilities')
         : ((s.steps || []).length + ' steps');
+
+      // OS platform badge
+      var osArr = s.supportedOs || [];
+      var osBadge = '';
+      if (osArr.length > 0) {
+        var osIcons = { windows: '⊞', linux: '🐧', darwin: '⌘' };
+        var osColors = {
+          windows: 'rgba(47,129,247,0.15);color:#58a6ff;border-color:rgba(47,129,247,0.4)',
+          linux:   'rgba(35,134,54,0.15);color:#3fb950;border-color:rgba(35,134,54,0.4)',
+          darwin:  'rgba(154,169,188,0.15);color:#9aa9bc;border-color:rgba(154,169,188,0.4)'
+        };
+        var osOnly = (osArr.length === 1);
+        osBadge = osArr.map(function(os) {
+          var lc = os.toLowerCase();
+          var col = osColors[lc] || 'rgba(154,169,188,0.12);color:#9aa9bc;border-color:rgba(154,169,188,0.35)';
+          var label = osOnly ? (os === 'darwin' ? 'macOS' : os.charAt(0).toUpperCase() + os.slice(1)) : (osIcons[lc] || os);
+          return '<span class="tag" style="background:' + col + ';font-size:0.62rem;padding:1px 6px" title="Supported OS: ' + os + '">' + label + '</span>';
+        }).join('') + ' ';
+      }
+
       return '<div class="card">' +
         '<div class="card-stripe" style="background:' + color + '"></div>' +
         '<div>' + customBadge + '</div>' +
         '<h3>' + x(s.name) + '</h3>' +
         '<p>' + x(s.description || '') + '</p>' +
-        '<div class="tags">' + tags + '</div>' +
+        '<div class="tags">' + osBadge + tags + '</div>' +
         '<div class="card-footer">' +
           '<div class="card-meta">' + modeMeta + '</div>' +
           '<div style="display:flex;gap:0.3rem;flex-wrap:wrap;justify-content:flex-end">' +
@@ -1604,8 +1624,13 @@ function openModal(scenarioId, preAgent) {
   var sc = scenarioId ? scenarios.find(function(s) { return s.id === scenarioId; }) : null;
   document.getElementById('modal-title').textContent = sc ? 'Run: ' + sc.name : 'Run Scenario';
   document.getElementById('modal-agent').innerHTML = agents.map(function(a) {
+    var osLabel = '';
+    if (a.osVersion) {
+      var ov = a.osVersion.toLowerCase();
+      osLabel = ov.indexOf('windows') !== -1 ? ' [Win]' : ov.indexOf('darwin') !== -1 || ov.indexOf('macos') !== -1 ? ' [macOS]' : ' [Linux]';
+    }
     return '<option value="' + x(a.agentId) + '"' + (a.agentId === preAgent ? ' selected' : '') + '>' +
-           x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
+           x(a.agentId) + ' — ' + x(a.hostname) + osLabel + '</option>';
   }).join('');
   document.getElementById('modal-mode').value = 'posture'; // always default to safe
   renderRunMode();
@@ -1619,25 +1644,73 @@ function renderRunMode() {
   var sc = scenarios.find(function(s) { return s.id === id; });
   var wrap = document.getElementById('modal-mode-wrap');
   var modeSel = document.getElementById('modal-mode');
+  var warn = document.getElementById('modal-mode-warn');
+  var btn = document.getElementById('modal-run-btn');
+
+  // OS compatibility check
+  var agentId = document.getElementById('modal-agent').value;
+  var agent = agents.find(function(a) { return a.agentId === agentId; });
+  var agentOSClass = '';
+  if (agent && agent.osVersion) {
+    var ov = agent.osVersion.toLowerCase();
+    if (ov.indexOf('windows') !== -1) agentOSClass = 'windows';
+    else if (ov.indexOf('darwin') !== -1 || ov.indexOf('macos') !== -1) agentOSClass = 'darwin';
+    else agentOSClass = 'linux';
+  }
+  var osMismatch = false;
+  var osMismatchMsg = '';
+  if (sc && (sc.supportedOs || []).length > 0 && agentOSClass) {
+    var supported = (sc.supportedOs || []).some(function(o) { return o.toLowerCase() === agentOSClass; });
+    if (!supported) {
+      osMismatch = true;
+      var targetOS = (sc.supportedOs || []).join(' / ');
+      osMismatchMsg = '&#9888; <strong>OS mismatch:</strong> this scenario targets <strong>' + x(targetOS) +
+        '</strong> but the selected agent is <strong>' + x(agent.osVersion) + '</strong>. ' +
+        'Posture checks will return "not applicable". Live execution will be blocked by the server.';
+    }
+  }
+
   if (!sc || !sc.executable) {
     wrap.style.display = 'none';
     modeSel.value = 'posture';
-    document.getElementById('modal-mode-warn').style.display = 'none';
-    document.getElementById('modal-run-btn').innerHTML = '&#9654; Run';
+    if (osMismatch) {
+      warn.style.display = 'block';
+      warn.style.border = '1px solid rgba(218,54,51,0.5)';
+      warn.style.background = 'rgba(218,54,51,0.08)';
+      warn.style.color = '#f85149';
+      warn.innerHTML = osMismatchMsg;
+    } else {
+      warn.style.display = 'none';
+    }
+    btn.innerHTML = '&#9654; Run';
     return;
   }
   wrap.style.display = 'block';
   var mode = modeSel.value;
-  var warn = document.getElementById('modal-mode-warn');
   var reasonWrap = document.getElementById('modal-reason-wrap');
-  var btn = document.getElementById('modal-run-btn');
   reasonWrap.style.display = (mode === 'posture') ? 'none' : 'block';
+
+  // OS mismatch overrides mode warnings for live modes
+  if (osMismatch && (mode === 'telemetry' || mode === 'lab')) {
+    warn.style.display = 'block';
+    warn.style.border = '1px solid rgba(218,54,51,0.5)';
+    warn.style.background = 'rgba(218,54,51,0.08)';
+    warn.style.color = '#f85149';
+    warn.innerHTML = osMismatchMsg + ' <strong>Cannot run ' + mode + ' mode on this agent.</strong>';
+    btn.disabled = true;
+    btn.innerHTML = '&#9888; OS Mismatch';
+    return;
+  }
+  btn.disabled = false;
+
   if (mode === 'telemetry') {
     warn.style.display = 'block';
     warn.style.border = '1px solid rgba(210,153,34,0.5)';
     warn.style.background = 'rgba(210,153,34,0.12)';
     warn.style.color = '#d29922';
-    warn.innerHTML = '&#9888; <strong>Telemetry mode</strong> runs real, identity-safe techniques (no credential access, cracking, or persistence) and <strong>will generate EDR/SIEM alerts</strong>. Production-safe only under an approved window.';
+    var warnText = '&#9888; <strong>Telemetry mode</strong> runs real, identity-safe techniques (no credential access, cracking, or persistence) and <strong>will generate EDR/SIEM alerts</strong>. Production-safe only under an approved window.';
+    if (osMismatch) warnText = osMismatchMsg + '<br>' + warnText;
+    warn.innerHTML = warnText;
     btn.innerHTML = '&#9654; Run Telemetry';
   } else if (mode === 'lab') {
     warn.style.display = 'block';
@@ -1647,7 +1720,15 @@ function renderRunMode() {
     warn.innerHTML = '&#9888; <strong>LAB MODE — full-fidelity emulation.</strong> Runs LSASS memory dump and allowlisted password spray. <strong>Isolated AD range only, never production.</strong> Triggers EDR by design; requires a second confirmation.';
     btn.innerHTML = '&#9654; Run LAB';
   } else {
-    warn.style.display = 'none';
+    if (osMismatch) {
+      warn.style.display = 'block';
+      warn.style.border = '1px solid rgba(218,54,51,0.4)';
+      warn.style.background = 'rgba(218,54,51,0.08)';
+      warn.style.color = '#f85149';
+      warn.innerHTML = osMismatchMsg;
+    } else {
+      warn.style.display = 'none';
+    }
     btn.innerHTML = '&#9654; Run';
   }
 }

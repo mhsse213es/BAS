@@ -435,6 +435,16 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ── OS compatibility check ────────────────────────────────────────────────
+	// Fetch the target agent's OS and compare against scenario's supported_os list.
+	// Live runs (telemetry/lab) are hard-blocked on mismatch; posture is allowed
+	// but the response includes an osWarning so the UI can flag it.
+	var agentOSVersion string
+	h.db.QueryRow(r.Context(),
+		`SELECT os_version FROM agents WHERE agent_id = $1`, req.AgentID,
+	).Scan(&agentOSVersion)
+	agentOS := classifyAgentOS(agentOSVersion)
+
 	// ── Three-tier run modes ─────────────────────────────────────────────────
 	//   posture   (default) → read-only checks, safe anywhere
 	//   telemetry (opt-in)   → real, identity-safe techniques; production-safe under approval
@@ -466,6 +476,26 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "lab mode is a second approval gate (confirmLab=true) — it allows full-fidelity emulation and must target an isolated AD range only", http.StatusBadRequest)
 		return
 	}
+	// OS compatibility guardrail — live mode hard-blocks on mismatch.
+	var osWarning string
+	if len(sc.SupportedOS) > 0 && agentOS != "" {
+		supported := false
+		for _, o := range sc.SupportedOS {
+			if strings.EqualFold(o, agentOS) {
+				supported = true
+				break
+			}
+		}
+		if !supported {
+			if live {
+				jsonError(w, fmt.Sprintf("OS mismatch: scenario '%s' supports %v but agent OS is %s — run this scenario against a matching endpoint",
+					sc.Name, sc.SupportedOS, agentOS), http.StatusBadRequest)
+				return
+			}
+			osWarning = fmt.Sprintf("scenario targets %v but agent OS is %s — posture checks will return 'not applicable'", sc.SupportedOS, agentOS)
+		}
+	}
+
 	// Execution-window guardrail (server-enforced) applies to live runs only.
 	if live && sc.LivePolicy != nil && sc.LivePolicy.ExecutionWindow != "" {
 		ok, werr := withinWindow(sc.LivePolicy.ExecutionWindow, time.Now())
@@ -511,7 +541,11 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("[scenario] dispatched posture-check %s → agent %s (run %s)", scenarioID, req.AgentID, runID)
-		respond(w, map[string]string{"runId": runID, "status": "dispatched", "mode": "posture"})
+		res := map[string]string{"runId": runID, "status": "dispatched", "mode": "posture"}
+		if osWarning != "" {
+			res["osWarning"] = osWarning
+		}
+		respond(w, res)
 		return
 	}
 
@@ -1490,6 +1524,24 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── Per-run export ────────────────────────────────────────────────────────────
+
+// classifyAgentOS maps a raw os_version string to "windows", "linux", or "darwin".
+// Returns "" if the OS cannot be determined.
+func classifyAgentOS(osVersion string) string {
+	lower := strings.ToLower(osVersion)
+	switch {
+	case strings.Contains(lower, "windows"):
+		return "windows"
+	case strings.Contains(lower, "darwin") || strings.Contains(lower, "macos") || strings.Contains(lower, "mac os"):
+		return "darwin"
+	case strings.Contains(lower, "linux") || strings.Contains(lower, "ubuntu") ||
+		strings.Contains(lower, "debian") || strings.Contains(lower, "centos") ||
+		strings.Contains(lower, "rhel") || strings.Contains(lower, "fedora") ||
+		strings.Contains(lower, "kali") || strings.Contains(lower, "arch"):
+		return "linux"
+	}
+	return ""
+}
 
 // GET /api/scenarios/runs/{runId}/report
 // Returns a self-contained HTML report scoped to a single scenario run.

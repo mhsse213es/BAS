@@ -1,5 +1,5 @@
-id: art-full-windows
-name: Atomic Red Team — Full Windows Sweep
+﻿id: art-full-windows
+name: Atomic Red Team â€” Full Windows Sweep
 description: >
   Runs EVERY Windows atomic test in the Atomic Red Team library.
   The orchestrator fetches the ART index from GitHub at run time,
@@ -10,6 +10,7 @@ description: >
   Requires Invoke-AtomicRedTeam module on the endpoint:
     Install-Module -Name invoke-atomicredteam -Scope CurrentUser -Force
 author: Audspect Research
+supported_os: [windows]
 tags:
   - art
   - atomic-red-team
@@ -29,5 +30,5 @@ mitre_phases:
   - exfiltration
   - impact
 
-# One flag — fetches live ART index from GitHub and runs everything.
+# One flag â€” fetches live ART index from GitHub and runs everything.
 art_all_windows: true

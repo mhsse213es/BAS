@@ -83,6 +83,12 @@ type Scenario struct {
 	// the scenario can only be run in posture mode regardless of requested mode.
 	Executable bool `yaml:"executable,omitempty" json:"executable,omitempty"`
 
+	// SupportedOS lists the operating systems on which this scenario has meaningful
+	// coverage. When set, live execution (telemetry/lab) against a mismatched agent
+	// is rejected by the API. Posture mode is always allowed.
+	// Values: "windows", "linux", "darwin". Empty = no restriction.
+	SupportedOS []string `yaml:"supported_os,omitempty" json:"supportedOs,omitempty"`
+
 	// Source is set at load time from the file's folder, NOT persisted to YAML.
 	// One of: "builtin" (scenarios/*.yaml), "custom" (scenarios/custom/),
 	// "intel" (scenarios/intel/). The UI uses it to decide editable vs read-only.

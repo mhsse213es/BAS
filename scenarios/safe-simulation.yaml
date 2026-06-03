@@ -1,12 +1,13 @@
-id: safe-simulation
+﻿id: safe-simulation
 name: "Safe Security Simulation (Read-Only)"
 description: >
-  Cross-platform read-only security posture simulation. Reads configuration —
-  registry keys, sysctl values, service states, SSH config, policy files — and
+  Cross-platform read-only security posture simulation. Reads configuration â€”
+  registry keys, sysctl values, service states, SSH config, policy files â€” and
   predicts whether real attacks would be blocked. Makes NO changes to the
   endpoint: no payloads executed, no files written, no registry modified.
   Safe to run on production systems and for demonstrations.
 author: Audspect
+supported_os: [windows, linux, darwin]
 tags:
   - safe
   - read-only

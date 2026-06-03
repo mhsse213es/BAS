@@ -1,12 +1,13 @@
-id: caldera-lateral-movement
+﻿id: caldera-lateral-movement
 name: Caldera Lateral Movement Scenario
 description: >
   Executes Caldera adversary abilities to test lateral movement controls
   in BFSI environments. When CALDERA_URL is configured, dynamically loads
-  ALL abilities from the specified adversary profile — up to the full
+  ALL abilities from the specified adversary profile â€” up to the full
   Caldera library (2000+ abilities). Falls back to 5 inline steps if
   Caldera is not reachable.
 author: Audspect Research
+supported_os: [windows]
 tags:
   - caldera
   - lateral-movement
@@ -20,7 +21,7 @@ mitre_phases:
   - credential-access
 
 # When CALDERA_URL is set, this adversary's full atomic_ordering is fetched
-# at run time — no steps are hardcoded. Replace with any adversary_id from
+# at run time â€” no steps are hardcoded. Replace with any adversary_id from
 # your Caldera instance (GET /api/v2/adversaries to list all).
 # Common built-ins:
 #   de07f52d-9928-4071-9142-cb1d3bd851e7  Discovery
@@ -28,9 +29,9 @@ mitre_phases:
 #   0f4c3c67-845e-49a0-927e-90ed33c044e0  Lateral Movement
 caldera_adversary_id: "0f4c3c67-845e-49a0-927e-90ed33c044e0"
 
-# Fallback steps — used only when Caldera is NOT configured (no CALDERA_URL).
+# Fallback steps â€” used only when Caldera is NOT configured (no CALDERA_URL).
 steps:
-  - name: "Lateral Movement — SMB admin share enumeration"
+  - name: "Lateral Movement â€” SMB admin share enumeration"
     technique_id: T1021.002
     framework: caldera
     ability_id: 800b17b4-a45b-476f-b3b0-73b21d7f4cef
@@ -40,7 +41,7 @@ steps:
     executor: psh
     timeout_sec: 30
 
-  - name: "Lateral Movement — Remote service creation via sc.exe"
+  - name: "Lateral Movement â€” Remote service creation via sc.exe"
     technique_id: T1543.003
     framework: caldera
     ability_id: 6469befa-748a-4b9c-aaa8-a5b0bd9b8104
@@ -49,7 +50,7 @@ steps:
     executor: psh
     timeout_sec: 30
 
-  - name: "Execution — WMI remote command execution test"
+  - name: "Execution â€” WMI remote command execution test"
     technique_id: T1047
     framework: caldera
     ability_id: 0f3e8b98-d1e0-4d5c-9e25-3b0e30123456
@@ -60,18 +61,18 @@ steps:
     executor: psh
     timeout_sec: 30
 
-  - name: "Lateral Movement — Pass-the-hash detection (NTLM over network)"
+  - name: "Lateral Movement â€” Pass-the-hash detection (NTLM over network)"
     technique_id: T1550.002
     framework: caldera
     ability_id: c3d03db3-e491-4b07-8e93-4c6c6b3cbcfe
     command: |
       $val = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "RestrictNTLM" -ErrorAction SilentlyContinue).RestrictNTLM
-      if ($val -ge 2) { Write-Output "NTLM outbound restricted — PtH lateral movement blocked" }
-      else { Write-Output "NTLM outbound NOT restricted — PtH lateral movement possible (RestrictNTLM=$val)" }
+      if ($val -ge 2) { Write-Output "NTLM outbound restricted â€” PtH lateral movement blocked" }
+      else { Write-Output "NTLM outbound NOT restricted â€” PtH lateral movement possible (RestrictNTLM=$val)" }
     executor: psh
     timeout_sec: 15
 
-  - name: "Credential Access — LSASS memory access via task manager simulation"
+  - name: "Credential Access â€” LSASS memory access via task manager simulation"
     technique_id: T1003.001
     framework: caldera
     ability_id: 4d9b079c-9ede-4116-8b14-72ad3a5533af
@@ -80,9 +81,9 @@ steps:
       if ($lsass) {
         try {
           $handle = [System.Diagnostics.Process]::GetProcessById($lsass.Id)
-          Write-Output "LSASS process accessible (PID $($lsass.Id)) — PPL may not be active"
+          Write-Output "LSASS process accessible (PID $($lsass.Id)) â€” PPL may not be active"
         } catch {
-          Write-Output "LSASS access denied — RunAsPPL is protecting the process"
+          Write-Output "LSASS access denied â€” RunAsPPL is protecting the process"
         }
       }
     executor: psh

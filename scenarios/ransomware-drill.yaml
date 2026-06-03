@@ -1,5 +1,5 @@
-id: ransomware-drill
-name: Ransomware Drill — Enterprise Resilience Validation (Three-Tier)
+﻿id: ransomware-drill
+name: Ransomware Drill â€” Enterprise Resilience Validation (Three-Tier)
 description: >
   Campaign-grade ransomware resilience validation for Indian BFSI, aligned with
   RBI BCP/DR guidelines (RBI/2019-20/105) and SEBI CSCRF. Covers modern
@@ -7,15 +7,15 @@ description: >
 
   TIERS:
   - Posture (default, safe anywhere): six categories across the full resilience
-    stack — prevention, detection, backup, identity, lateral-movement surface,
+    stack â€” prevention, detection, backup, identity, lateral-movement surface,
     and recovery. Split so BFSI customers see both "Can we block?" (prevention)
     and "Can we recover?" (recovery-posture) independently.
-  - Telemetry (opt-in, production-safe): real, data-safe technique execution —
+  - Telemetry (opt-in, production-safe): real, data-safe technique execution â€”
     controlled file enumeration with BFSI-relevant filename markers, Defender
     exclusion command invocation (no actual state change), event-log clear probe
     on a non-existent log (process telemetry only, no log deleted), VSS+wbadmin
     enumeration, and benign .bas_locked file rename with execution-ID tagging.
-  - Lab (opt-in, isolated range only): full-fidelity impact simulation — XOR
+  - Lab (opt-in, isolated range only): full-fidelity impact simulation â€” XOR
     encryption on isolated temp directory (configurable file cap + forced cleanup
     verification), VSS deletion (default disabled, requires explicit env flag +
     snapshot pre-check), Defender RTP disable with mandatory restoration, and
@@ -32,6 +32,7 @@ description: >
 author: Audspect Research
 executable: true
 local_check: true
+supported_os: [windows]
 tags:
   - ransomware
   - bfsi
@@ -72,7 +73,7 @@ steps:
       - "Security EID 4688 (powershell.exe with file-enumeration command line)"
       - "File access events if SACL/object access auditing enabled on monitored paths"
     detection:
-      - "UEBA: bulk file enumeration from a single process — pre-encryption staging signal"
+      - "UEBA: bulk file enumeration from a single process â€” pre-encryption staging signal"
       - "DLP: enumeration of filenames matching financial/PII patterns"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -90,10 +91,10 @@ steps:
         }
       }
       $markerNames = @('finance_q4.xlsx','customer_export.csv','swift_ops.docx')
-      Write-Output "EXEC: file enumeration across Desktop/Documents/Downloads (depth=2). Found $($found.Count) BFSI-pattern file(s). UEBA/DLP marker filenames targeted: $($markerNames -join ', '). Read-only — no files opened. [BAS-SIM]"
+      Write-Output "EXEC: file enumeration across Desktop/Documents/Downloads (depth=2). Found $($found.Count) BFSI-pattern file(s). UEBA/DLP marker filenames targeted: $($markerNames -join ', '). Read-only â€” no files opened. [BAS-SIM]"
     cleanup: ""
 
-  - name: "Defender Exclusion Invocation (cmdline probe — no state change)"
+  - name: "Defender Exclusion Invocation (cmdline probe â€” no state change)"
     technique_id: T1562.001
     framework: custom
     executor: powershell
@@ -107,16 +108,16 @@ steps:
       - "Security EID 4688 (powershell.exe with Add-MpPreference -ExclusionPath in command line)"
       - "PowerShell EID 4104 (script block: Add-MpPreference invocation) if ScriptBlock logging enabled"
     detection:
-      - "EDR: PowerShell invoking Add-MpPreference — primary Defender tampering signal"
+      - "EDR: PowerShell invoking Add-MpPreference â€” primary Defender tampering signal"
       - "SIEM: cmdline containing Add-MpPreference and ExclusionPath from a non-management process"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $cmdLine = 'Add-MpPreference -ExclusionPath $env:TEMP'
-      Write-Output "EXEC: Defender exclusion invocation probe — cmdline '$cmdLine' logged to EID 4104/4688. Security state NOT modified (dry-run). [BAS-SIM]"
+      Write-Output "EXEC: Defender exclusion invocation probe â€” cmdline '$cmdLine' logged to EID 4104/4688. Security state NOT modified (dry-run). [BAS-SIM]"
       Write-Output "TELEMETRY: if ScriptBlock logging (EID 4104) captured this block, the control is detecting Defender tampering attempts correctly."
     cleanup: ""
 
-  - name: "Event Log Clear Probe (nonexistent log — process telemetry only)"
+  - name: "Event Log Clear Probe (nonexistent log â€” process telemetry only)"
     technique_id: T1070.001
     framework: custom
     executor: powershell
@@ -130,13 +131,13 @@ steps:
       - "Security EID 4688 (powershell.exe with Clear-EventLog command line)"
       - "PowerShell EID 4104 (script block: Clear-EventLog invocation) if ScriptBlock logging enabled"
     detection:
-      - "EDR/SIEM: Clear-EventLog cmdline from a non-admin/non-maintenance process — ransomware anti-forensics signal"
+      - "EDR/SIEM: Clear-EventLog cmdline from a non-admin/non-maintenance process â€” ransomware anti-forensics signal"
       - "Alert: EID 1102 must NOT fire (no real log cleared = correct)"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $fakeLog = 'BAS-SIM-NonExistent-Log'
       Clear-EventLog -LogName $fakeLog -ErrorAction SilentlyContinue
-      Write-Output "EXEC: Clear-EventLog invoked against nonexistent log '$fakeLog' (always fails safely). EID 4688 + EID 4104 generated. NO real log cleared — EID 1102 must NOT appear. [BAS-SIM]"
+      Write-Output "EXEC: Clear-EventLog invoked against nonexistent log '$fakeLog' (always fails safely). EID 4688 + EID 4104 generated. NO real log cleared â€” EID 1102 must NOT appear. [BAS-SIM]"
     cleanup: ""
 
   - name: "VSS + Backup Catalog Enumeration"
@@ -152,15 +153,15 @@ steps:
     telemetry:
       - "Security EID 4688 (vssadmin.exe + wbadmin.exe invocations)"
     detection:
-      - "SIEM: vssadmin list shadows from a non-backup process — ransomware pre-deletion recon"
-      - "EDR: wbadmin get versions invocation — backup catalog discovery before destruction"
+      - "SIEM: vssadmin list shadows from a non-backup process â€” ransomware pre-deletion recon"
+      - "EDR: wbadmin get versions invocation â€” backup catalog discovery before destruction"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $vssOut   = & vssadmin list shadows 2>&1
       $shadowCount = ([regex]::Matches(($vssOut -join "`n"), 'Shadow Copy ID')).Count
       $wbaOut   = & wbadmin get versions 2>&1
       $backupCount = ([regex]::Matches(($wbaOut -join "`n"), 'Backup time')).Count
-      Write-Output "EXEC: VSS enumeration — $shadowCount shadow copy/copies found. Backup catalog: $backupCount version(s) via wbadmin. Ransomware operators enumerate these before deletion. No copies removed. [BAS-SIM]"
+      Write-Output "EXEC: VSS enumeration â€” $shadowCount shadow copy/copies found. Backup catalog: $backupCount version(s) via wbadmin. Ransomware operators enumerate these before deletion. No copies removed. [BAS-SIM]"
     cleanup: ""
 
   - name: "Benign File Rename Probe (.bas_locked extension)"
@@ -178,7 +179,7 @@ steps:
       - "Sysmon EID 11 (file renamed to .bas_locked extension)"
       - "Security EID 4663 (file rename) if object access auditing enabled"
     detection:
-      - "EDR: file renamed to known ransomware extension (.bas_locked) — extension-change detection rule"
+      - "EDR: file renamed to known ransomware extension (.bas_locked) â€” extension-change detection rule"
       - "SIEM: rapid file rename to uncommon extension from powershell.exe"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -192,18 +193,18 @@ steps:
       Remove-Item $orig -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $orig) -and -not (Test-Path $locked)
       if ($renamed) {
-        Write-Output "EXEC: file renamed to .bas_locked extension (run-id=$runId, cleanup=$cleaned) — expect Sysmon EID 11 rename event. [BAS-SIM]"
+        Write-Output "EXEC: file renamed to .bas_locked extension (run-id=$runId, cleanup=$cleaned) â€” expect Sysmon EID 11 rename event. [BAS-SIM]"
       } else {
-        Write-Output "PASS: file rename blocked — Controlled Folder Access or WDAC/EDR prevented .bas_locked extension rename."
+        Write-Output "PASS: file rename blocked â€” Controlled Folder Access or WDAC/EDR prevented .bas_locked extension rename."
       }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP "bas_ransom_probe_*.txt")      -Force -ErrorAction SilentlyContinue
       Remove-Item (Join-Path $env:TEMP "bas_ransom_probe_*.bas_locked") -Force -ErrorAction SilentlyContinue
 
-  # ── Lab-only steps ─────────────────────────────────────────────────────────
-  # fidelity: lab-only — isolated range + snapshot required before execution
+  # â”€â”€ Lab-only steps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # fidelity: lab-only â€” isolated range + snapshot required before execution
 
-  - name: "XOR Encryption Simulation (lab — isolated temp dir, forced cleanup)"
+  - name: "XOR Encryption Simulation (lab â€” isolated temp dir, forced cleanup)"
     technique_id: T1486
     framework: custom
     executor: powershell
@@ -211,14 +212,14 @@ steps:
     fidelity: lab-only
     production_safe: false
     risk: high
-    blast_radius: "Creates isolated %TEMP%\\bas_range_<id>\\ with ≤3 benign dummy files, XOR-encrypts in-place, drops marker ransom note, XOR-decrypts to restore, deletes entire directory. File cap + size cap + cleanup verification enforced."
+    blast_radius: "Creates isolated %TEMP%\\bas_range_<id>\\ with â‰¤3 benign dummy files, XOR-encrypts in-place, drops marker ransom note, XOR-decrypts to restore, deletes entire directory. File cap + size cap + cleanup verification enforced."
     reversible: true
     telemetry:
       - "Sysmon EID 11 (file create/modify): bas_range_<id>\\ directory + .bas_locked files"
       - "Security EID 4663 (file write) if object access auditing enabled"
     detection:
-      - "EDR: rapid sequential file modification pattern across multiple files — encryption behaviour"
-      - "SIEM: high file-modify rate from powershell.exe on %TEMP% path — ransomware staging signal"
+      - "EDR: rapid sequential file modification pattern across multiple files â€” encryption behaviour"
+      - "SIEM: high file-modify rate from powershell.exe on %TEMP% path â€” ransomware staging signal"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId   = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
@@ -243,8 +244,8 @@ steps:
         $encFiles += $locked
       }
       $noteFile = Join-Path $rangeDir 'README_RESTORE_BAS_SIM.txt'
-      Set-Content -Path $noteFile -Value "BAS-SIM RANSOM NOTE — run-id=$runId — THIS IS A CONTROLLED DRILL" -Encoding UTF8
-      Write-Output "EXEC: $($encFiles.Count) file(s) XOR-encrypted in $rangeDir — expect EDR encryption-behaviour alert. Restoring now. [BAS-SIM]"
+      Set-Content -Path $noteFile -Value "BAS-SIM RANSOM NOTE â€” run-id=$runId â€” THIS IS A CONTROLLED DRILL" -Encoding UTF8
+      Write-Output "EXEC: $($encFiles.Count) file(s) XOR-encrypted in $rangeDir â€” expect EDR encryption-behaviour alert. Restoring now. [BAS-SIM]"
       foreach ($enc in $encFiles) {
         $bytes  = [System.IO.File]::ReadAllBytes($enc)
         $plain  = $bytes | ForEach-Object { $_ -bxor $key }
@@ -259,7 +260,7 @@ steps:
     cleanup: |
       Remove-Item (Join-Path $env:TEMP "bas_range_*") -Recurse -Force -ErrorAction SilentlyContinue
 
-  - name: "VSS Shadow Copy Deletion (lab — requires BAS_CONFIRM_VSS_DELETE=true)"
+  - name: "VSS Shadow Copy Deletion (lab â€” requires BAS_CONFIRM_VSS_DELETE=true)"
     technique_id: T1490
     framework: custom
     executor: powershell
@@ -273,28 +274,28 @@ steps:
       - "Security EID 8224 (VSS service shutdown) + EID 524 (shadow copy deletion)"
       - "Security EID 4688 (vssadmin.exe with delete command)"
     detection:
-      - "EDR: vssadmin.exe with 'delete shadows' argument — #1 ransomware pre-encryption technique"
+      - "EDR: vssadmin.exe with 'delete shadows' argument â€” #1 ransomware pre-encryption technique"
       - "SIEM: shadow copy count decrease; alert if count drops to 0"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $confirm = $env:BAS_CONFIRM_VSS_DELETE
       if (-not $confirm -or $confirm -ne 'true') {
-        Write-Output "SKIP: BAS_CONFIRM_VSS_DELETE not set to 'true' — VSS deletion skipped (default-disabled per ransm safety policy). Set env var explicitly in isolated lab to enable. [BAS-SIM]"
+        Write-Output "SKIP: BAS_CONFIRM_VSS_DELETE not set to 'true' â€” VSS deletion skipped (default-disabled per ransm safety policy). Set env var explicitly in isolated lab to enable. [BAS-SIM]"
         return
       }
       $shadows = Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Where-Object { $_.VolumeName -match 'C:' }
       if (-not $shadows -or @($shadows).Count -eq 0) {
-        Write-Output "SKIP: no C: VSS shadow copies exist — nothing to delete. Create a snapshot first with: vssadmin create shadow /for=C:"
+        Write-Output "SKIP: no C: VSS shadow copies exist â€” nothing to delete. Create a snapshot first with: vssadmin create shadow /for=C:"
         return
       }
       $oldest = @($shadows | Sort-Object InstallDate)[0]
       $id = $oldest.ID
       & vssadmin delete shadows /Shadow=$id /Quiet 2>&1 | Out-Null
       $remaining = @(Get-WmiObject Win32_ShadowCopy -ErrorAction SilentlyContinue | Where-Object { $_.VolumeName -match 'C:' }).Count
-      Write-Output "FAIL: VSS shadow copy $id deleted — expect EID 8224/524. $remaining shadow copy/copies remaining on C:. Create a new snapshot to restore recovery capability. [BAS-SIM]"
+      Write-Output "FAIL: VSS shadow copy $id deleted â€” expect EID 8224/524. $remaining shadow copy/copies remaining on C:. Create a new snapshot to restore recovery capability. [BAS-SIM]"
     cleanup: ""
 
-  - name: "Defender RTP Disable (lab — mandatory restoration + health check)"
+  - name: "Defender RTP Disable (lab â€” mandatory restoration + health check)"
     technique_id: T1562.001
     framework: custom
     executor: powershell
@@ -308,7 +309,7 @@ steps:
       - "Security EID 4657 (registry value modified): HKLM\\...\\Windows Defender\\DisableRealtimeMonitoring"
       - "Defender event log: EID 5001 (RTP disabled) + EID 5000 (re-enabled)"
     detection:
-      - "EDR: Defender RTP disabled — immediate P1 alert in any mature SOC"
+      - "EDR: Defender RTP disabled â€” immediate P1 alert in any mature SOC"
       - "SIEM: WMI/registry change to Defender configuration from non-management process"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -319,17 +320,17 @@ steps:
       $restored = (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
       $tamperBlocked = (Get-MpComputerStatus -ErrorAction SilentlyContinue).IsTamperProtected
       if (-not $disabled) {
-        Write-Output "PASS: Defender RTP disable attempt failed — Tamper Protection or EDR blocked the change (tamperProtected=$tamperBlocked). [BAS-SIM]"
+        Write-Output "PASS: Defender RTP disable attempt failed â€” Tamper Protection or EDR blocked the change (tamperProtected=$tamperBlocked). [BAS-SIM]"
       } elseif ($restored) {
         Write-Output "FAIL: Defender RTP was disabled then re-enabled (restoration verified=true). HEALTH: RTP now $restored, tamperProtected=$tamperBlocked. Expect Defender EID 5001+5000. [BAS-SIM]"
       } else {
         Set-MpPreference -DisableRealtimeMonitoring $false -Force -ErrorAction SilentlyContinue
-        Write-Output "CRITICAL: Defender RTP disabled and re-enable failed — manual restoration required. Run: Set-MpPreference -DisableRealtimeMonitoring $false [BAS-SIM]"
+        Write-Output "CRITICAL: Defender RTP disabled and re-enable failed â€” manual restoration required. Run: Set-MpPreference -DisableRealtimeMonitoring $false [BAS-SIM]"
       }
     cleanup: |
       Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
 
-  - name: "Malicious Service Probe (lab — creation + lineage logging)"
+  - name: "Malicious Service Probe (lab â€” creation + lineage logging)"
     technique_id: T1543.003
     framework: custom
     executor: powershell
@@ -343,7 +344,7 @@ steps:
       - "Security EID 4697 (service installed) + EID 7045 (new service installed in system)"
       - "Security EID 4688 (sc.exe create + start + stop + delete)"
     detection:
-      - "SIEM: new service installed with binary path in non-standard directory — LockBit/PsExec lateral-spread signal"
+      - "SIEM: new service installed with binary path in non-standard directory â€” LockBit/PsExec lateral-spread signal"
       - "EDR: service binary path pointing to cmd.exe or user-writable path"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -361,7 +362,7 @@ steps:
         $gone = (Get-Service -Name $svcName -ErrorAction SilentlyContinue) -eq $null
         Write-Output "FAIL: service '$svcName' created+started+deleted (removed=$gone). BinaryPath='$svcBin'. Parent=$parentImg (PID=$parentPid). Expect EID 4697+7045. LockBit/PsExec service deployment vector confirmed. [BAS-SIM]"
       } else {
-        Write-Output "PASS: sc.exe service creation blocked — AppLocker / restricted token / policy prevented malicious service deployment."
+        Write-Output "PASS: sc.exe service creation blocked â€” AppLocker / restricted token / policy prevented malicious service deployment."
       }
     cleanup: |
       sc.exe stop   BAS-SIM-RansomSvc 2>&1 | Out-Null

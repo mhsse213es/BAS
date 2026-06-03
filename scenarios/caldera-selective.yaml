@@ -1,4 +1,4 @@
-id: caldera-selective
+﻿id: caldera-selective
 name: Caldera Selective Abilities
 description: >
   Admin-curated list of specific Caldera ability IDs to run.
@@ -7,6 +7,7 @@ description: >
   Only abilities with a Windows (psh/powershell/cmd) executor will run;
   others are silently skipped.
 author: Audspect Research
+supported_os: [windows]
 tags:
   - caldera
   - selective

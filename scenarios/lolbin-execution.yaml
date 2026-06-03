@@ -1,4 +1,4 @@
-id: lolbin-execution
+﻿id: lolbin-execution
 name: LOLBin Execution Coverage (Hybrid)
 description: >
   Validates Living-off-the-Land Binary (LOLBin) abuse across distinct execution
@@ -9,7 +9,7 @@ description: >
   ScriptBlock logging, Sysmon, WinRM). Live execution mode (opt-in, lab-only)
   actually runs each LOLBin with a BENIGN, self-cleaning payload to generate
   genuine parent-child process telemetry for EDR/Sysmon/SIEM detection
-  validation — detection over payload realism.
+  validation â€” detection over payload realism.
 
   Per-OS coverage: Windows only. Linux/macOS report "not applicable".
 
@@ -21,6 +21,7 @@ description: >
 author: Audspect Research
 executable: true
 local_check: true
+supported_os: [windows]
 tags:
   - lolbin
   - defense-evasion
@@ -87,7 +88,7 @@ steps:
       Set-Content -Path $sct -Encoding ascii -Value '<?XML version="1.0"?><scriptlet><registration progid="BASProbe" classid="{10001111-0000-0000-0000-00000000FEED}"><script language="JScript"><![CDATA[]]></script></registration></scriptlet>'
       & regsvr32.exe /s /n /u /i:$sct scrobj.dll
       Remove-Item $sct -Force -ErrorAction SilentlyContinue
-      Write-Output "EXEC: regsvr32 Squiblydoo (/i with scrobj.dll) ran against a benign empty local scriptlet — expect regsvr32.exe -> scrobj.dll telemetry (T1218.010). AppLocker/WDAC bypass path is unrestricted if this ran."
+      Write-Output "EXEC: regsvr32 Squiblydoo (/i with scrobj.dll) ran against a benign empty local scriptlet â€” expect regsvr32.exe -> scrobj.dll telemetry (T1218.010). AppLocker/WDAC bypass path is unrestricted if this ran."
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_squiblydoo_*.sct') -Force -ErrorAction SilentlyContinue
 
@@ -112,8 +113,8 @@ steps:
       & certutil.exe -encode $in $enc | Out-Null
       $ran = Test-Path $enc
       Remove-Item $in, $enc -Force -ErrorAction SilentlyContinue
-      if ($ran) { Write-Output "EXEC: certutil.exe -encode ran locally (no network) — expect certutil execution telemetry (T1140/T1027). certutil is widely abused for payload encode/decode and download." }
-      else { Write-Output "PASS: certutil produced no output — execution may be restricted (WDAC/AppLocker)." }
+      if ($ran) { Write-Output "EXEC: certutil.exe -encode ran locally (no network) â€” expect certutil execution telemetry (T1140/T1027). certutil is widely abused for payload encode/decode and download." }
+      else { Write-Output "PASS: certutil produced no output â€” execution may be restricted (WDAC/AppLocker)." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_certutil_*.txt*') -Force -ErrorAction SilentlyContinue
 
@@ -136,7 +137,7 @@ steps:
       & schtasks.exe /Create /TN $tn /TR "cmd.exe /c echo bas" /SC ONCE /ST 23:59 /F | Out-Null
       $exists = & schtasks.exe /Query /TN $tn 2>$null
       & schtasks.exe /Delete /TN $tn /F | Out-Null
-      if ($exists) { Write-Output "FAIL: scheduled task '$tn' was created via schtasks.exe then deleted — expect Event ID 4698 (created) + 4699 (deleted). Task-based persistence (T1053.005) is unrestricted." }
-      else { Write-Output "PASS: scheduled task creation did not succeed — task persistence may be restricted." }
+      if ($exists) { Write-Output "FAIL: scheduled task '$tn' was created via schtasks.exe then deleted â€” expect Event ID 4698 (created) + 4699 (deleted). Task-based persistence (T1053.005) is unrestricted." }
+      else { Write-Output "PASS: scheduled task creation did not succeed â€” task persistence may be restricted." }
     cleanup: |
       Get-ScheduledTask -TaskName 'BAS_LOLBin_Probe_*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
