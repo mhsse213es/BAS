@@ -1,0 +1,63 @@
+id: apt36-kill-chain
+name: APT36 Kill Chain (Three-Tier)
+description: >
+  Campaign-grade adversary emulation of APT36 (Transparent Tribe / PROJECTM) —
+  a Pakistani nexus threat actor with documented targeting of Indian BFSI,
+  government, and defence organisations.
+
+  TIERS:
+  - Posture (default, safe anywhere): validates defences across prevention and
+    detection layers — macro controls, Protected View, MOTW, AMSI, Office child-
+    process ASR, COM-abuse restrictions, ScriptBlock logging, Sysmon, persistence
+    indicators, and browser credential exposure. Split into prevention-posture and
+    detection-posture categories so the UI can distinguish "attack blocked" from
+    "attack detectable".
+  - Telemetry (opt-in, production-safe under approval): real, data/identity-safe
+    technique execution — authentic winword.exe→powershell.exe child chain, Run-key
+    write+delete (EID 4657/Sysmon 13), localhost template-fetch (EID 4688), and
+    deterministic DNS beacon (bas-telemetry-<runid>.invalid → nslookup). Generates
+    real EDR/SIEM/Sysmon telemetry; no credential access, no persistence, no real
+    network egress.
+  - Lab (opt-in, isolated range only): full-fidelity APT36 tradecraft — mshta HTA
+    chain, scheduled-task persistence, DNS TXT beacon, BAS listener C2 simulation.
+    Triggers EDR by design. Isolated range with snapshot only.
+
+  GUARDRAILS: no domain-controller interlock (workstation campaign); optional
+  execution window; BAS execution markers (BAS_RUN_ID env + [BAS-SIM] command-line
+  tag) on every step to distinguish authorised simulation from real intrusion.
+
+  Per-OS: Windows only. Linux/macOS report "not applicable".
+  SAFETY: telemetry mode has no real network egress; lab mode uses localhost/RFC5737
+  BAS listener only (never internet destinations).
+author: Audspect Research
+executable: true
+local_check: true
+tags:
+  - apt36
+  - transparent-tribe
+  - spearphish
+  - bfsi
+  - india
+  - initial-access
+  - execution
+  - persistence
+  - credential-access
+  - hybrid
+  - campaign
+mitre_phases:
+  - initial-access
+  - execution
+  - persistence
+  - credential-access
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""   # optional "HH:MM-HH:MM" local-time gate
+
+# Telemetry and lab steps are added in Portions 2 and 3.
+# Posture checks are handled by apt36KillChainChecks() in the agent (local_check path).
+steps: []

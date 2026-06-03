@@ -59,6 +59,8 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 		return safeSimChecks()
 	case "apt36-spearphish":
 		return apt36Checks()
+	case "apt36-kill-chain":
+		return apt36KillChainChecks()
 	case "ransomware-drill":
 		return ransomwareChecks()
 	case "ad-credential-access":
@@ -844,6 +846,101 @@ func checkBrowserCredentialStorage() SimCheck {
 				return "fail", "Edge Login Data DB found — saved passwords accessible to credential-dumping tools."
 			}
 			return "pass", "No browser credential databases found, or password manager disabled by policy."
+		})
+}
+
+// apt36KillChainChecks is the POSTURE side of the APT36 Kill Chain three-tier
+// scenario. Categories are split by outcome so the UI can surface two distinct
+// posture dimensions: prevention (attack blocked) and detection (attack visible).
+func apt36KillChainChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "prevention-posture", Checks: []SimCheck{
+			checkOfficeMacroBlocking(),
+			checkProtectedViewInternetFiles(),
+			checkMOTWProcessing(),
+			checkOfficeChildProcessASR(),
+			checkOfficeCOMAbuse(),
+			checkMshtaExecControl(),
+			checkWScriptControl(),
+		}},
+		{Phase: "detection-posture", Checks: []SimCheck{
+			checkAMSIEnforcement(),
+			checkScriptBlockLogging(),
+			checkSysmon(),
+			checkKeyloggerIndicators(),
+		}},
+		{Phase: "persistence", Checks: []SimCheck{
+			checkScheduledTasksFromWritablePaths(),
+			checkRunKeys(),
+		}},
+		{Phase: "credential-access", Checks: []SimCheck{
+			checkBrowserCredentialStorage(),
+			checkAutoLogon(),
+		}},
+	}
+}
+
+func checkOfficeChildProcessASR() SimCheck {
+	const ruleGUID = "D4F940AB-401B-4EFC-AADC-AD5F3C50688A"
+	return check("T1566.001", "ASR Rule — Block Office Child Process Spawning", "prevention-posture", "Critical",
+		"APT36 weaponised documents spawn cmd.exe/powershell.exe as Office child processes to execute CrimsonRAT. This ASR rule directly blocks that chain.",
+		"Enable ASR rule D4F940AB-401B-4EFC-AADC-AD5F3C50688A via GPO (Block Office apps from creating child processes).",
+		func() (string, string) {
+			out, err := psRun(fmt.Sprintf(`(Get-MpPreference -ErrorAction SilentlyContinue).AttackSurfaceReductionRules_Ids | Where-Object {$_ -eq "%s"}`, ruleGUID))
+			if err == nil && strings.TrimSpace(out) != "" {
+				actionOut, err2 := psRun(fmt.Sprintf(
+					`$ids = @((Get-MpPreference).AttackSurfaceReductionRules_Ids); $idx = [array]::IndexOf($ids, "%s"); if ($idx -ge 0) { @((Get-MpPreference).AttackSurfaceReductionRules_Actions)[$idx] }`,
+					ruleGUID))
+				if err2 == nil {
+					switch strings.TrimSpace(actionOut) {
+					case "1":
+						return "pass", "ASR rule D4F940AB ENABLED — APT36 winword.exe→cmd.exe/powershell.exe child-process chain blocked."
+					case "2":
+						return "pass", "ASR rule D4F940AB AUDIT — detects but does not block APT36 Office child-process chain."
+					}
+				}
+				return "pass", "ASR rule D4F940AB present — Office child process spawning restricted."
+			}
+			return "fail", "ASR rule D4F940AB not configured — Office can spawn cmd.exe/powershell.exe (APT36 initial access vector open)."
+		})
+}
+
+func checkOfficeCOMAbuse() SimCheck {
+	const ruleGUID = "3B576869-A4EC-4529-8536-B80A7769E899"
+	return check("T1559.001", "ASR Rule — Block Win32 API Calls from Office Macros", "prevention-posture", "High",
+		"APT36 uses Office COM automation (GetObject/CreateObject) to execute payloads without spawning a visible child process, evading process-chain detections.",
+		"Enable ASR rule 3B576869-A4EC-4529-8536-B80A7769E899 via GPO (Block Win32 API calls from Office macros).",
+		func() (string, string) {
+			out, err := psRun(fmt.Sprintf(`(Get-MpPreference -ErrorAction SilentlyContinue).AttackSurfaceReductionRules_Ids | Where-Object {$_ -eq "%s"}`, ruleGUID))
+			if err == nil && strings.TrimSpace(out) != "" {
+				return "pass", "ASR rule 3B576869 (Block Win32 API calls from Office macros) enabled — COM/API abuse from Office macros restricted."
+			}
+			val, err2 := regValue(`HKLM\SOFTWARE\Microsoft\Ole`, "EnableDCOM")
+			if err2 == nil && strings.EqualFold(val, "N") {
+				return "pass", "DCOM disabled — Office COM-object lateral movement and GetObject/CreateObject abuse restricted."
+			}
+			return "fail", "ASR rule 3B576869 not configured — Office macros can invoke Win32 APIs and COM objects (APT36 GetObject/CreateObject vector open)."
+		})
+}
+
+func checkAMSIEnforcement() SimCheck {
+	return check("T1562.001", "AMSI Enforcement (Anti-Malware Scan Interface)", "detection-posture", "High",
+		"APT36 PowerShell stagers and CrimsonRAT loaders use AMSI bypass techniques to evade real-time script scanning before initial execution.",
+		"Ensure AmsiEnable≠0 in HKCU\\SOFTWARE\\Microsoft\\Windows Script\\Settings. Deploy EDR with AMSI provider integration.",
+		func() (string, string) {
+			val, err := regValue(`HKCU\SOFTWARE\Microsoft\Windows Script\Settings`, "AmsiEnable")
+			if err == nil && (val == "0x0" || val == "0") {
+				return "fail", "AMSI explicitly disabled via registry (AmsiEnable=0) — PowerShell and VBScript payload scanning bypassed."
+			}
+			out, err2 := psRun(`(Get-ChildItem "HKLM:\SOFTWARE\Microsoft\AMSI\Providers" -ErrorAction SilentlyContinue | Measure-Object).Count`)
+			if err2 == nil {
+				var n int
+				fmt.Sscanf(strings.TrimSpace(out), "%d", &n)
+				if n > 0 {
+					return "pass", fmt.Sprintf("AMSI enabled with %d registered provider(s) — PowerShell, VBScript, and Office macro content scanned at runtime.", n)
+				}
+			}
+			return "fail", "No AMSI providers registered — malicious PowerShell, VBScript, and Office macro payloads not scanned at execution."
 		})
 }
 

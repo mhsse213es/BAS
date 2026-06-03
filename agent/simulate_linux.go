@@ -133,6 +133,8 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 		return cisUbuntuL1()
 	case "apt36-spearphish":
 		return apt36Checks()
+	case "apt36-kill-chain":
+		return notApplicableWindows("APT36 Kill Chain", "T1566.001", "initial-access")
 	case "ransomware-drill":
 		return ransomwareChecks()
 	case "ad-credential-access":
