@@ -62,6 +62,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 			case svc.Stop, svc.Shutdown:
 				status <- svc.Status{State: svc.StopPending}
 				agent.sendHeartbeat("offline")
+				RestoreSystemDialogs()
 				return false, 0
 			case svc.Interrogate:
 				status <- c.CurrentStatus

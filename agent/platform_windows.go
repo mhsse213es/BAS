@@ -48,6 +48,11 @@ func platformPreStart() {
 	}
 	enablePrivileges()
 
+	// Suppress system-generated interactive dialogs (WER, PCA, hung-app, GPF)
+	// so that scenario steps never block waiting for human input.
+	// All settings are reverted on clean shutdown via RestoreSystemDialogs().
+	suppressSystemDialogs()
+
 	// Startup integrity check — compare running binary against hash stored at install.
 	if err := VerifyOwnIntegrity(); err != nil {
 		log.Printf("[!] INTEGRITY: %v — server will be notified via heartbeat", err)
@@ -58,6 +63,12 @@ func platformPreStart() {
 
 func platformPrintBannerExtras(_ Identity) {
 	fmt.Printf("  Elevated  : %v\n", isElevated())
+}
+
+// platformRestoreOnShutdown reverts dialog suppression before the agent exits
+// so the machine returns to normal Windows behaviour when BAS is not running.
+func platformRestoreOnShutdown() {
+	RestoreSystemDialogs()
 }
 
 // readEncryptedSecretPlatform returns the DPAPI-decrypted agent secret from registry.

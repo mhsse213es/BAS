@@ -10,3 +10,6 @@ func platformPrintBannerExtras(_ Identity) {}
 // readEncryptedSecretPlatform is a no-op on non-Windows — secrets are read
 // from BAS_AGENT_SECRET env var or the system service config instead.
 func readEncryptedSecretPlatform() string { return "" }
+
+// platformRestoreOnShutdown is a no-op on non-Windows.
+func platformRestoreOnShutdown() {}

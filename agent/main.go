@@ -108,6 +108,7 @@ func main() {
 			agent.scenarioMu.Unlock()
 			time.Sleep(3 * time.Second)
 			agent.sendHeartbeat("offline")
+			platformRestoreOnShutdown()
 			return
 		}
 	}
