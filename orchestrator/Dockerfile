@@ -11,19 +11,29 @@ RUN apk add --no-cache git && \
     mkdir /art-atomics && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 
-# ── Agent Builder (linux/amd64 and linux/arm64) ───────────────────────────────
+# ── Agent + Installer Builder ────────────────────────────────────────────────
 # Plain stripped build: golang.org/x/sys assembly is incompatible with garble.
-# The agent has no business logic or secrets -- protection lives in the orchestrator.
 FROM golang:1.26-alpine AS agent-builder
-WORKDIR /src
+RUN apk add --no-cache git
+WORKDIR /agent
 COPY agent/go.mod agent/go.sum ./
 RUN go mod download
 COPY agent/ .
+# All platform binaries
 RUN CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-amd64   . && \
     CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-linux-arm64   . && \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-windows-amd64.exe . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-amd64  . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-arm64  .
+# Windows GUI installer — embeds the Windows agent binary built above
+WORKDIR /installer
+COPY installer/go.mod installer/go.sum ./
+RUN go mod download
+COPY installer/ .
+RUN cp /agents/bas-agent-windows-amd64.exe ./bas_agent.exe && \
+    CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+    go build -trimpath -ldflags="-s -w -H windowsgui" \
+    -o /agents/bas-agent-windows-amd64-setup.exe .
 
 # ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────
 FROM debian:bookworm-slim AS packager

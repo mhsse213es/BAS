@@ -218,14 +218,15 @@ var agentFiles = map[string]struct {
 	filename string
 	mimeType string
 }{
-	"linux-amd64":     {"bas-agent-linux-amd64", "application/octet-stream"},
-	"linux-arm64":     {"bas-agent-linux-arm64", "application/octet-stream"},
-	"linux-amd64-deb": {"bas-agent-linux-amd64.deb", "application/vnd.debian.binary-package"},
-	"linux-arm64-deb": {"bas-agent-linux-arm64.deb", "application/vnd.debian.binary-package"},
-	"linux-amd64-rpm": {"bas-agent-linux-amd64.rpm", "application/x-rpm"},
-	"windows-amd64":   {"bas-agent-windows-amd64.exe", "application/octet-stream"},
-	"darwin-amd64":    {"bas-agent-darwin-amd64", "application/octet-stream"},
-	"darwin-arm64":    {"bas-agent-darwin-arm64", "application/octet-stream"},
+	"linux-amd64":         {"bas-agent-linux-amd64", "application/octet-stream"},
+	"linux-arm64":         {"bas-agent-linux-arm64", "application/octet-stream"},
+	"linux-amd64-deb":     {"bas-agent-linux-amd64.deb", "application/vnd.debian.binary-package"},
+	"linux-arm64-deb":     {"bas-agent-linux-arm64.deb", "application/vnd.debian.binary-package"},
+	"linux-amd64-rpm":     {"bas-agent-linux-amd64.rpm", "application/x-rpm"},
+	"windows-amd64-setup": {"bas-agent-windows-amd64-setup.exe", "application/octet-stream"},
+	"windows-amd64":       {"bas-agent-windows-amd64.exe", "application/octet-stream"},
+	"darwin-amd64":        {"bas-agent-darwin-amd64", "application/octet-stream"},
+	"darwin-arm64":        {"bas-agent-darwin-arm64", "application/octet-stream"},
 }
 
 // GET /api/agents/download/{platform} — serves the pre-built agent binary or package.

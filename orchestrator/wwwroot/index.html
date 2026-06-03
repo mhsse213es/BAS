@@ -309,14 +309,42 @@ main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .conn-cfg-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
 
 /* ── Agent Download ────────────────────────────────────────── */
-.agent-dl-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin-bottom: 1rem; }
+/* ── Agent Download ─────────────────────────────────────────────── */
+.agent-dl-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 1rem; margin-bottom: 1rem; }
 .agent-dl-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.75rem;
 }
+.agent-dl-featured {
+  background: linear-gradient(135deg, rgba(47,129,247,0.06) 0%, var(--surface) 60%);
+  border: 1px solid rgba(47,129,247,0.35); border-radius: var(--radius);
+  padding: 1.3rem 1.4rem; margin-bottom: 1rem;
+  display: flex; flex-direction: column; gap: 0.9rem;
+  position: relative; overflow: hidden;
+}
+.agent-dl-featured::before {
+  content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+  background: var(--accent);
+}
+.agent-dl-badge {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  background: rgba(47,129,247,0.15); color: var(--accent);
+  border: 1px solid rgba(47,129,247,0.3); border-radius: 20px;
+  padding: 0.18rem 0.6rem; font-size: 0.68rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em; width: fit-content;
+}
 .agent-dl-os { display: flex; align-items: center; gap: 0.55rem; font-weight: 600; font-size: 0.875rem; color: var(--fg); }
 .agent-dl-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .agent-dl-hint { font-size: 0.73rem; color: var(--muted); }
+.agent-dl-steps { display: flex; flex-direction: column; gap: 0.35rem; }
+.agent-dl-step {
+  display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.78rem; color: var(--muted);
+}
+.agent-dl-step-num {
+  flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%;
+  background: rgba(47,129,247,0.18); color: var(--accent);
+  font-size: 0.68rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
 .agent-dl-usage {
   background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 0.65rem 0.9rem; margin-bottom: 0.6rem; font-size: 0.78rem; color: var(--muted);
@@ -894,12 +922,48 @@ code {
 
         <!-- Agent Download -->
         <div class="sec-hdr" style="margin-top:2rem">
-          <h2>Download Agent</h2>
+          <h2>Deploy Agent</h2>
         </div>
+
+        <!-- Windows — featured -->
+        <div class="agent-dl-featured">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:0.75rem">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32" style="color:var(--accent)"><path d="M3 5.5h8v-2H3v2zm0 5h8v-2H3v2zm0 5h8v-2H3v2zm10-10h8v-2h-8v2zm0 5h8v-2h-8v2zm0 5h8v-2h-8v2z"/></svg>
+              <div>
+                <div style="font-weight:700;font-size:0.95rem">Windows Agent</div>
+                <div style="font-size:0.72rem;color:var(--muted);margin-top:1px">Windows 10 / 11 / Server 2019+</div>
+              </div>
+            </div>
+            <div class="agent-dl-badge">&#10003; Recommended</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+            <a class="btn btn-primary" href="/api/agents/download/windows-amd64-setup" download="BASAgent-Setup.exe"
+               style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.55rem 1.1rem;font-size:0.85rem;font-weight:600">
+              <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M7.47 10.78a.75.75 0 0 0 1.06 0l3.75-3.75a.75.75 0 0 0-1.06-1.06L8.75 8.44V1.75a.75.75 0 0 0-1.5 0v6.69L4.78 5.97a.75.75 0 0 0-1.06 1.06l3.75 3.75ZM3.75 13a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z"/></svg>
+              Download Installer
+            </a>
+            <div style="font-size:0.75rem;color:var(--muted)">BASAgent-Setup.exe &nbsp;·&nbsp; Self-contained GUI wizard &nbsp;·&nbsp; Run as Administrator</div>
+          </div>
+          <div class="agent-dl-steps">
+            <div class="agent-dl-step"><span class="agent-dl-step-num">1</span><span>Download <strong style="color:var(--fg)">BASAgent-Setup.exe</strong> and copy to the target Windows machine</span></div>
+            <div class="agent-dl-step"><span class="agent-dl-step-num">2</span><span>Right-click → <strong style="color:var(--fg)">Run as administrator</strong> — UAC prompt will appear</span></div>
+            <div class="agent-dl-step"><span class="agent-dl-step-num">3</span><span>Enter <strong style="color:var(--fg)">Server URL</strong> (<code id="win-server-url" style="font-size:0.72rem;color:var(--accent)">http://this-server:9000</code>) and <strong style="color:var(--fg)">Agent Secret</strong> from Connection Config above</span></div>
+            <div class="agent-dl-step"><span class="agent-dl-step-num">4</span><span>Click <strong style="color:var(--fg)">Validate &amp; Install</strong> — the wizard tests connectivity before writing anything, then installs and starts the service automatically</span></div>
+            <div class="agent-dl-step"><span class="agent-dl-step-num">5</span><span>Agent appears in the <strong style="color:var(--fg)">Agents</strong> tab within 30 seconds</span></div>
+          </div>
+          <div style="border-top:1px solid rgba(47,129,247,0.2);padding-top:0.7rem;display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+            <span style="font-size:0.72rem;color:var(--muted)">Advanced / scripted deployment:</span>
+            <a class="btn btn-sm btn-outline" href="/api/agents/download/windows-amd64" download="bas-agent-windows-amd64.exe">&#8659; CLI Binary</a>
+            <code id="win-cli-cmd" style="font-size:0.7rem;color:var(--muted);font-family:monospace">.\bas-agent-windows-amd64.exe --install --server &lt;URL&gt; --secret &lt;SECRET&gt; --env Production</code>
+          </div>
+        </div>
+
+        <!-- Linux + macOS -->
         <div class="agent-dl-grid">
           <div class="agent-dl-card">
             <div class="agent-dl-os">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M20.205 16.392c-.403 1.038-1.261 2.062-2.098 2.587-.547.346-.96.426-1.184.426-.336 0-.567-.14-.826-.28-1.107-.594-2.35-.892-3.598-.89s-2.49.298-3.598.892c-.26.14-.49.28-.826.28-.224 0-.637-.08-1.184-.426-.837-.525-1.694-1.55-2.098-2.587C4.09 14.784 3.75 12.57 3.75 12c0-4.556 3.694-8.25 8.25-8.25s8.25 3.694 8.25 8.25c0 .57-.34 2.784-1.045 4.392zM12 1.5C6.201 1.5 1.5 6.201 1.5 12S6.201 22.5 12 22.5 22.5 17.799 22.5 12 17.799 1.5 12 1.5z"/></svg>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M20.205 16.392c-.403 1.038-1.261 2.062-2.098 2.587-.547.346-.96.426-1.184.426-.336 0-.567-.14-.826-.28-1.107-.594-2.35-.892-3.598-.89s-2.49.298-3.598.892c-.26.14-.49.28-.826.28-.224 0-.637-.08-1.184-.426-.837-.525-1.694-1.55-2.098-2.587C4.09 14.784 3.75 12.57 3.75 12c0-4.556 3.694-8.25 8.25-8.25s8.25 3.694 8.25 8.25c0 .57-.34 2.784-1.045 4.392z"/></svg>
               Linux
             </div>
             <div class="agent-dl-btns">
@@ -908,48 +972,29 @@ code {
               <a class="btn btn-sm btn-outline" href="/api/agents/download/linux-amd64-rpm" download>.rpm x86_64</a>
             </div>
             <div class="agent-dl-hint">Ubuntu 20.04+, Debian 10+, RHEL/Rocky 8+</div>
+            <div class="agent-dl-usage" style="margin-bottom:0">
+              <strong>Install (.deb):</strong>
+              <code id="linux-deb-cmd">sudo dpkg -i bas-agent-linux-amd64.deb &amp;&amp; sudo systemctl start bas-agent</code>
+              <strong style="margin-top:0.5rem;display:block">Install (.rpm):</strong>
+              <code id="linux-rpm-cmd">sudo rpm -i bas-agent-linux-amd64.rpm &amp;&amp; sudo systemctl start bas-agent</code>
+              <div style="margin-top:0.4rem;font-size:0.7rem">Config file: <code style="color:var(--muted)">/etc/bas-agent/config</code> — set <code style="color:var(--muted)">BAS_SERVER_URL</code> and <code style="color:var(--muted)">BAS_AGENT_SECRET</code></div>
+            </div>
           </div>
           <div class="agent-dl-card">
             <div class="agent-dl-os">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M3 5.5h8v-2H3v2zm0 5h8v-2H3v2zm0 5h8v-2H3v2zm10-10h8v-2h-8v2zm0 5h8v-2h-8v2zm0 5h8v-2h-8v2z"/></svg>
-              Windows
-            </div>
-            <div class="agent-dl-btns">
-              <a class="btn btn-sm btn-outline" href="/api/agents/download/windows-amd64" download>x86_64 (amd64)</a>
-            </div>
-            <div class="agent-dl-hint">Windows 10/11, Server 2019+</div>
-          </div>
-          <div class="agent-dl-card">
-            <div class="agent-dl-os">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 2c4.418 0 8 3.582 8 8s-3.582 8-8 8-8-3.582-8-8 3.582-8 8-8zm-1 3v5l4 2.5-.75 1.25L9 13V7h2z"/></svg>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 14.5v-9l7 4.5-7 4.5z"/></svg>
               macOS
             </div>
             <div class="agent-dl-btns">
               <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-amd64" download>Intel (amd64)</a>
               <a class="btn btn-sm btn-outline" href="/api/agents/download/darwin-arm64" download>Apple Silicon</a>
             </div>
-            <div class="agent-dl-hint">macOS 12+</div>
+            <div class="agent-dl-hint">macOS 12 Monterey+</div>
+            <div class="agent-dl-usage" style="margin-bottom:0">
+              <strong>Install:</strong>
+              <code id="mac-cmd">chmod +x bas-agent-darwin-* &amp;&amp; sudo ./bas-agent-darwin-* --install --server &lt;URL&gt; --env Production</code>
+            </div>
           </div>
-        </div>
-        <div class="agent-dl-usage">
-          <strong>Linux install (.deb — Ubuntu/Debian):</strong>
-          <code>sudo dpkg -i bas-agent-linux-amd64.deb
-sudo nano /etc/bas-agent/config   # set BAS_SERVER_URL and BAS_AGENT_SECRET
-sudo systemctl start bas-agent</code>
-        </div>
-        <div class="agent-dl-usage">
-          <strong>Linux install (.rpm — RHEL/Rocky/CentOS):</strong>
-          <code>sudo rpm -i bas-agent-linux-amd64.rpm
-sudo nano /etc/bas-agent/config   # set BAS_SERVER_URL and BAS_AGENT_SECRET
-sudo systemctl start bas-agent</code>
-        </div>
-        <div class="agent-dl-usage">
-          <strong>macOS install:</strong>
-          <code>chmod +x bas-agent-darwin-* &amp;&amp; sudo ./bas-agent-darwin-* --install --server http://&lt;BAS_HOST&gt;:9000 --env Production</code>
-        </div>
-        <div class="agent-dl-usage">
-          <strong>Windows install (Admin PowerShell):</strong>
-          <code>.\bas-agent-windows-amd64.exe --install --server http://&lt;BAS_HOST&gt;:9000 --env Production</code>
         </div>
       </div>
 
@@ -1397,6 +1442,7 @@ function bootApp() {
   loadScenarios();
   loadRuns();
   if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); }
+  injectServerURL();
   showTab('dashboard');
 }
 
@@ -1456,6 +1502,16 @@ function loadAgents() {
         '</td></tr>';
     }).join('');
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function injectServerURL() {
+  var url = window.location.origin;
+  var winUrl  = document.getElementById('win-server-url');
+  var winCli  = document.getElementById('win-cli-cmd');
+  var macCmd  = document.getElementById('mac-cmd');
+  if (winUrl)  winUrl.textContent = url;
+  if (winCli)  winCli.textContent = '.\\bas-agent-windows-amd64.exe --install --server ' + url + ' --secret <AGENT_SECRET> --env Production';
+  if (macCmd)  macCmd.textContent = 'chmod +x bas-agent-darwin-* && sudo ./bas-agent-darwin-* --install --server ' + url + ' --env Production';
 }
 
 function loadConnectionConfig() {
