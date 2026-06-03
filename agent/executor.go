@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,8 +75,39 @@ func execStep(parentCtx context.Context, step ScenarioStep) ExecResult {
 		cmd.Env = env
 	}
 
-	err := cmd.Run()
+	// Use Start + Wait (instead of Run) so we can assign the process to a Job
+	// Object between spawn and wait.  exec.CommandContext's own context-kill
+	// goroutine is still active after Start — the Job Object adds a second kill
+	// layer that reaches the ENTIRE process tree, including grandchildren and any
+	// dialog-holding GUI processes that the parent spawned.
+	if err := cmd.Start(); err != nil {
+		return ExecResult{
+			TaskID:     step.TaskID,
+			ExitCode:   -1,
+			Stderr:     err.Error(),
+			DurationMs: time.Since(before).Milliseconds(),
+			ExecutedAt: time.Now(),
+		}
+	}
+
+	// Assign the child to a Job Object.  On timeout the goroutine below calls
+	// TerminateJobObject which kills every process in the tree atomically.
+	// On POSIX this is a no-op — process-group signal propagation is sufficient.
+	job, jobErr := newStepJob(cmd.Process.Pid)
+	if jobErr != nil {
+		log.Printf("[exec] job assign: %v — timeout will only kill direct child", jobErr)
+	}
+	go func() {
+		<-ctx.Done()
+		terminateStepJob(job) // kills entire tree: parent + all spawned children
+	}()
+
+	err := cmd.Wait()
 	dur := time.Since(before).Milliseconds()
+
+	// Close the Job handle — KILL_ON_JOB_CLOSE terminates any processes that
+	// somehow survived both the context kill and TerminateJobObject.
+	closeStepJob(job)
 
 	exitCode := 0
 	blocked := false
@@ -85,7 +117,7 @@ func execStep(parentCtx context.Context, step ScenarioStep) ExecResult {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 			// Only flag as security block when neither the step timeout nor a
-			// scenario-cancel triggered the kill — those are our own SIGKILLs.
+			// scenario-cancel triggered the kill — those are our own kills.
 			if ctx.Err() == nil && parentCtx.Err() == nil {
 				blocked, blockedReason = detectSecurityBlock(exitErr, dur)
 			}
