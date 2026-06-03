@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	fpdf "github.com/go-pdf/fpdf"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
@@ -1524,6 +1525,269 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── Per-run export ────────────────────────────────────────────────────────────
+
+// GET /api/scenarios/runs/{runId}/pdf
+// Generates and downloads a PDF report for a single scenario run.
+func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runId")
+
+	var runName, agentID, status string
+	var resultsJSON, scoreRaw []byte
+	var startedAt time.Time
+	var completedAt *time.Time
+
+	err := h.db.QueryRow(r.Context(),
+		`SELECT name, agent_id, status, results, score, started_at, completed_at
+		 FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&runName, &agentID, &status, &resultsJSON, &scoreRaw, &startedAt, &completedAt)
+	if err != nil {
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	}
+
+	var results []models.SimulationResult
+	var score models.Score
+	json.Unmarshal(resultsJSON, &results)
+	json.Unmarshal(scoreRaw, &score)
+
+	// Fetch agent hostname
+	var hostname, osVersion string
+	h.db.QueryRow(r.Context(),
+		`SELECT hostname, os_version FROM agents WHERE agent_id = $1`, agentID,
+	).Scan(&hostname, &osVersion)
+	if hostname == "" {
+		hostname = agentID
+	}
+
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(18, 18, 18)
+	pdf.AddPage()
+
+	// ── Header bar ────────────────────────────────────────────────────────────
+	pdf.SetFillColor(11, 20, 32)
+	pdf.Rect(0, 0, 210, 18, "F")
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.SetXY(18, 5)
+	pdf.Cell(0, 8, "Audspect BAS — Scenario Run Report")
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetXY(0, 5)
+	pdf.CellFormat(192, 8, "CONFIDENTIAL", "", 0, "R", false, 0, "")
+
+	// ── Title block ───────────────────────────────────────────────────────────
+	pdf.SetTextColor(34, 50, 74)
+	pdf.SetFillColor(21, 35, 56)
+	pdf.Rect(0, 18, 210, 32, "F")
+	pdf.SetTextColor(255, 255, 255)
+	pdf.SetFont("Helvetica", "B", 15)
+	pdf.SetXY(18, 23)
+	pdf.Cell(0, 9, runName)
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetXY(18, 34)
+	pdf.Cell(0, 6, "Agent: "+hostname+" ("+agentID+")")
+	pdf.SetXY(18, 40)
+	pdf.Cell(0, 6, "OS: "+osVersion+"   Status: "+status+"   Run ID: "+runID[:8])
+	pdf.SetXY(18, 46)
+	ts := startedAt.UTC().Format("02 Jan 2006, 15:04 UTC")
+	if completedAt != nil {
+		ts += "  →  " + completedAt.UTC().Format("15:04 UTC")
+	}
+	pdf.Cell(0, 6, "Time: "+ts)
+
+	// ── Score cards ───────────────────────────────────────────────────────────
+	pdf.SetXY(18, 58)
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.SetTextColor(154, 169, 188)
+	pdf.Cell(0, 6, "ASSESSMENT SCORES")
+
+	type card struct{ label, value, note string }
+	cards := []card{
+		{"Prevention", fmt.Sprintf("%d%%", int(score.PreventionScore)), score.Classification},
+		{"Exposure", fmt.Sprintf("%.0f", score.ExposureScore), fmt.Sprintf("×%.1f kill-chain", score.KillChainAmplifier)},
+		{"Coverage", fmt.Sprintf("%d%%", int(score.CoverageScore)), "tactic coverage"},
+		{"Trend", score.Trend, fmt.Sprintf("%d/%d techniques", score.PassedTechniques, score.TotalTechniques)},
+	}
+	cardW := 42.0
+	for i, c := range cards {
+		x := 18.0 + float64(i)*cardW
+		pdf.SetFillColor(27, 42, 65)
+		pdf.RoundedRect(x, 66, cardW-2, 22, 2, "1234", "F")
+		pdf.SetFont("Helvetica", "", 7)
+		pdf.SetTextColor(154, 169, 188)
+		pdf.SetXY(x+2, 68)
+		pdf.Cell(cardW-4, 4, strings.ToUpper(c.label))
+		pdf.SetFont("Helvetica", "B", 12)
+		pdf.SetTextColor(255, 255, 255)
+		pdf.SetXY(x+2, 73)
+		pdf.Cell(cardW-4, 7, c.value)
+		pdf.SetFont("Helvetica", "", 7)
+		pdf.SetTextColor(154, 169, 188)
+		pdf.SetXY(x+2, 81)
+		pdf.Cell(cardW-4, 4, c.note)
+	}
+
+	// ── Critical failures ─────────────────────────────────────────────────────
+	yPos := 95.0
+	cf := score.CriticalFailures
+	if len(cf) > 0 {
+		pdf.SetFont("Helvetica", "B", 9)
+		pdf.SetTextColor(218, 54, 51)
+		pdf.SetXY(18, yPos)
+		pdf.Cell(0, 6, fmt.Sprintf("⚠  CRITICAL FAILURES (%d)", len(cf)))
+		yPos += 7
+		for _, f := range cf {
+			if yPos > 270 {
+				pdf.AddPage()
+				yPos = 20
+			}
+			pdf.SetFillColor(60, 20, 20)
+			pdf.SetDrawColor(218, 54, 51)
+			pdf.RoundedRect(18, yPos, 174, 8, 1, "1234", "FD")
+			pdf.SetFont("Helvetica", "B", 8)
+			pdf.SetTextColor(218, 54, 51)
+			pdf.SetXY(21, yPos+1)
+			pdf.Cell(22, 6, f.Severity)
+			pdf.SetTextColor(230, 230, 230)
+			pdf.SetFont("Helvetica", "", 8)
+			pdf.SetXY(43, yPos+1)
+			pdf.Cell(40, 6, f.TechniqueID)
+			pdf.Cell(0, 6, f.Name)
+			yPos += 10
+		}
+		yPos += 3
+	}
+
+	// ── Results table ──────────────────────────────────────────────────────────
+	if yPos > 270 {
+		pdf.AddPage()
+		yPos = 20
+	}
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.SetTextColor(154, 169, 188)
+	pdf.SetXY(18, yPos)
+	pdf.Cell(0, 6, "DETAILED RESULTS")
+	yPos += 7
+
+	// Table header
+	pdf.SetFillColor(21, 35, 56)
+	pdf.Rect(18, yPos, 174, 7, "F")
+	pdf.SetFont("Helvetica", "B", 7.5)
+	pdf.SetTextColor(255, 255, 255)
+	cols := []struct{ w float64; label string }{
+		{18, "Result"}, {38, "Technique"}, {32, "Tactic"}, {18, "Severity"}, {68, "Details"},
+	}
+	xc := 18.0
+	for _, col := range cols {
+		pdf.SetXY(xc+1, yPos+0.5)
+		pdf.Cell(col.w-1, 6, col.label)
+		xc += col.w
+	}
+	yPos += 7
+
+	for _, res := range results {
+		if res.Result == models.ResultSkipped {
+			continue
+		}
+		rowH := 7.0
+		detail := res.Details
+		if len(detail) > 70 {
+			detail = detail[:70] + "…"
+		}
+		if yPos+rowH > 278 {
+			pdf.AddPage()
+			yPos = 20
+			// Reprint header on new page
+			pdf.SetFillColor(21, 35, 56)
+			pdf.Rect(18, yPos, 174, 7, "F")
+			pdf.SetFont("Helvetica", "B", 7.5)
+			pdf.SetTextColor(255, 255, 255)
+			xc = 18.0
+			for _, col := range cols {
+				pdf.SetXY(xc+1, yPos+0.5)
+				pdf.Cell(col.w-1, 6, col.label)
+				xc += col.w
+			}
+			yPos += 7
+		}
+
+		// Row background
+		var r2, g2, b2 int
+		switch res.Result {
+		case models.ResultPass, models.ResultBlocked:
+			r2, g2, b2 = 18, 35, 24
+		case models.ResultFail:
+			r2, g2, b2 = 40, 18, 18
+		default:
+			r2, g2, b2 = 27, 35, 48
+		}
+		pdf.SetFillColor(r2, g2, b2)
+		pdf.Rect(18, yPos, 174, rowH, "F")
+
+		// Result badge colour
+		switch res.Result {
+		case models.ResultPass, models.ResultBlocked:
+			pdf.SetTextColor(63, 185, 80)
+		case models.ResultFail:
+			pdf.SetTextColor(248, 81, 73)
+		default:
+			pdf.SetTextColor(154, 169, 188)
+		}
+		pdf.SetFont("Helvetica", "B", 7.5)
+		pdf.SetXY(19, yPos+0.5)
+		pdf.Cell(17, 6, string(res.Result))
+
+		pdf.SetTextColor(200, 200, 200)
+		pdf.SetFont("Helvetica", "", 7.5)
+		pdf.SetXY(37, yPos+0.5)
+		techName := res.Technique.Name
+		if len(techName) > 24 {
+			techName = techName[:24] + "…"
+		}
+		pdf.Cell(37, 6, techName)
+
+		pdf.SetXY(69, yPos+0.5)
+		tactic := res.Technique.Tactic
+		if len(tactic) > 20 {
+			tactic = tactic[:20]
+		}
+		pdf.Cell(31, 6, tactic)
+
+		pdf.SetXY(101, yPos+0.5)
+		pdf.Cell(17, 6, res.Severity)
+
+		pdf.SetXY(119, yPos+0.5)
+		pdf.Cell(67, 6, detail)
+
+		yPos += rowH
+	}
+
+	// ── Footer ────────────────────────────────────────────────────────────────
+	pdf.SetFont("Helvetica", "", 7)
+	pdf.SetTextColor(80, 80, 80)
+	pdf.SetXY(18, 288)
+	pdf.Cell(0, 5, fmt.Sprintf("Generated %s — Audspect BAS — CONFIDENTIAL",
+		time.Now().UTC().Format("02 Jan 2006 15:04 UTC")))
+
+	// Sanitise run name for filename
+	var safeName []byte
+	for _, c := range []byte(runName) {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+			safeName = append(safeName, c)
+		default:
+			safeName = append(safeName, '_')
+		}
+	}
+	if len(safeName) > 32 {
+		safeName = safeName[:32]
+	}
+	fname := fmt.Sprintf("bas-report-%s-%s.pdf", string(safeName), runID[:8])
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	if err := pdf.Output(w); err != nil {
+		log.Printf("[api] pdf output: %v", err)
+	}
+}
 
 // classifyAgentOS maps a raw os_version string to "windows", "linux", or "darwin".
 // Returns "" if the OS cannot be determined.

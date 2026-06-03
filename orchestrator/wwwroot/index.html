@@ -2012,7 +2012,7 @@ function viewRunResults(run) {
         '<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:0.25rem">Export</span>' +
         '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">↓ JSON</button>' +
         '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">↓ HTML Report</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="window.print()" title="Print or save as PDF">⎙ Print / PDF</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">↓ PDF</button>' +
       '</div>';
   }
   document.getElementById('results-export').innerHTML = exportHtml;
@@ -2135,6 +2135,14 @@ function exportRunJSON(runId) {
 }
 function openRunReport(runId) {
   window.open('/api/scenarios/runs/' + encodeURIComponent(runId) + '/report', '_blank');
+}
+function downloadRunPDF(runId) {
+  var a = document.createElement('a');
+  a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/pdf';
+  a.download = 'bas-report-' + runId.substring(0, 8) + '.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function viewReport(agentId) {
