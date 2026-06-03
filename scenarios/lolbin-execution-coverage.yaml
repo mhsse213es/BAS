@@ -237,3 +237,152 @@ steps:
       if ($ec -ge 0) { Write-Output "EXEC T1127.001: MSBuild inline task executed (exit $ec, cleaned=$cleaned) — Sysmon EID 1 MSBuild from %TEMP%. [BAS-SIM]" } else { Write-Output "PASS: MSBuild.exe blocked — AppLocker/WDAC restricted inline task execution." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_msbuild_*.proj') -Force -ErrorAction SilentlyContinue
+
+  # ── Telemetry LOLBins 7-11 (Portion 3) ─────────────────────────────────────
+
+  - name: "WMI Execution (T1047 — WmiPrvSE→cmd chain)"
+    technique_id: T1047
+    framework: custom
+    executor: wmi
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Win32_Process.Create spawns cmd.exe /c echo [BAS-SIM-WMI] under WmiPrvSE.exe. No payload, no persistence."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: cmd.exe with ParentImage=WmiPrvSE.exe"
+      - "Security EID 4688: cmd.exe (parent WmiPrvSE.exe)"
+      - "WMI-Activity/Operational EID 5857-5861"
+    detection:
+      - "EDR: WmiPrvSE.exe spawning cmd.exe — Sigma rule proc_creation_win_wmi_spawn_process.yml"
+      - "SIEM: WMI process creation from non-system context"
+    command: |
+      Write-Output "EXEC T1047: WMI Win32_Process.Create spawned cmd.exe under WmiPrvSE.exe — expect Sysmon EID 1 with ParentImage=WmiPrvSE.exe + WMI-Activity EID 5857. [BAS-SIM-WMI]"
+    cleanup: ""
+
+  - name: "Certutil LOLBin (T1140 — encode + decode + hashfile)"
+    technique_id: T1140
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a temp file, runs certutil -encode, -decode, -hashfile on it. No network. Deletes all temp files."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: certutil.exe with -encode / -decode / -hashfile arguments"
+      - "Security EID 4688: certutil.exe (three invocations)"
+    detection:
+      - "EDR/SIEM: certutil.exe with -encode/-decode/-hashfile — Sigma rule proc_creation_win_certutil_decode_file.yml"
+      - "SIEM: certutil invoked outside certificate management context"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $src = Join-Path $env:TEMP "bas_cert_src_$runId.txt"
+      $enc = Join-Path $env:TEMP "bas_cert_enc_$runId.b64"
+      $dec = Join-Path $env:TEMP "bas_cert_dec_$runId.txt"
+      Set-Content -Path $src -Value '[BAS-SIM-CERTUTIL] T1140 encode/decode/hash probe' -Encoding ASCII
+      & certutil.exe -encode $src $enc 2>&1 | Out-Null
+      & certutil.exe -decode $enc $dec 2>&1 | Out-Null
+      $hash = & certutil.exe -hashfile $src SHA256 2>&1 | Select-String '^[0-9a-f]{64}' | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value
+      Remove-Item $src,$enc,$dec -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $src) -and -not (Test-Path $enc)
+      Write-Output "EXEC T1140: certutil -encode/-decode/-hashfile ran (cleaned=$cleaned, hash=$hash) — 3x Sysmon EID 1 certutil.exe invocations. [BAS-SIM]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_cert_*') -Force -ErrorAction SilentlyContinue
+
+  - name: "Schtasks Persistence (T1053.005 — user-context, immediate delete)"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates one-time schtask with BAS-SIM-LOLBIN-<runid> name (user context, one-time trigger at 23:59), immediately deletes. No task ever runs."
+    reversible: true
+    telemetry:
+      - "Security EID 4698 (task created) + EID 4699 (task deleted)"
+      - "Sysmon EID 1: schtasks.exe with /Create and /Delete"
+    detection:
+      - "SIEM: EID 4698 task creation from non-maintenance context — Sigma rule win_security_schedueld_task_creation.yml"
+      - "EDR: schtasks.exe invoked by powershell.exe outside of install context"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $tn = "BAS-SIM-LOLBIN-$runId"
+      & schtasks.exe /Create /TN $tn /TR "cmd.exe /c echo [BAS-SIM-SCHTASK]" /SC ONCE /ST 23:59 /F 2>&1 | Out-Null
+      $created = (& schtasks.exe /Query /TN $tn 2>$null) -ne $null
+      & schtasks.exe /Delete /TN $tn /F 2>&1 | Out-Null
+      $gone = (& schtasks.exe /Query /TN $tn 2>$null) -eq $null
+      if ($created) { Write-Output "EXEC T1053.005: schtask '$tn' created+deleted (removed=$gone) — EID 4698+4699. User context, one-time trigger, never ran. [BAS-SIM]" } else { Write-Output "PASS: schtasks.exe creation blocked — AppLocker/policy/restricted token prevented task persistence." }
+    cleanup: |
+      & schtasks.exe /Delete /TN "BAS-SIM-LOLBIN-*" /F 2>&1 | Out-Null
+
+  - name: "Cscript/Wscript LOLBin (T1059.005 — wscript→cmd chain)"
+    technique_id: T1059.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Writes benign .vbs to %TEMP% that calls WScript.Shell.Run cmd /c echo [BAS-SIM-WSCRIPT]. Runs via wscript.exe //B. Deletes file."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: wscript.exe with //B argument; then cmd.exe with ParentImage=wscript.exe"
+      - "Security EID 4688: wscript.exe + cmd.exe"
+    detection:
+      - "EDR: wscript.exe spawning cmd.exe — Sigma rule proc_creation_win_script_host_susp_child_process.yml"
+      - "SIEM: wscript.exe executing VBS from %TEMP%"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $vbs = Join-Path $env:TEMP "bas_lolbin_wscript_$runId.vbs"
+      [System.IO.File]::WriteAllText($vbs, 'CreateObject("WScript.Shell").Run "cmd.exe /c echo [BAS-SIM-WSCRIPT]",0,True', [System.Text.Encoding]::ASCII)
+      $p = Start-Process 'wscript.exe' -ArgumentList "//B //Nologo `"$vbs`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $vbs -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $vbs)
+      if ($ec -ge 0) { Write-Output "EXEC T1059.005: wscript->cmd chain fired (exit $ec, cleaned=$cleaned) — Sysmon EID 1 wscript->cmd. [BAS-SIM]" } else { Write-Output "PASS: wscript.exe blocked — AppLocker/ASR/Zone-3 policy prevented VBScript execution." }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_lolbin_wscript_*.vbs') -Force -ErrorAction SilentlyContinue
+
+  - name: "BITSAdmin LOLBin (T1197 — BITS job create + cancel)"
+    technique_id: T1197
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a BITS transfer job to RFC5737 192.0.2.1 (guaranteed non-routable), immediately cancels. No file downloaded."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: bitsadmin.exe with /create and /cancel"
+      - "Sysmon EID 3: BITS service network connection attempt to 192.0.2.1"
+      - "Microsoft-Windows-Bits-Client EID 59 (BITS job created)"
+    detection:
+      - "EDR/SIEM: BITS job created to non-corporate destination — Sigma rule proc_creation_win_bitsadmin_download.yml"
+      - "NDR: BITS outbound attempt to RFC5737 range"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $jobName = "BAS-SIM-BITS-$runId"
+      $dst = Join-Path $env:TEMP "bas_bits_$runId.txt"
+      $job = Start-BitsTransfer -Source 'http://192.0.2.1/bas-sim-lolbin.txt' -Destination $dst -DisplayName $jobName -Asynchronous -Description '[BAS-SIM] T1197' -ErrorAction SilentlyContinue
+      if ($job) {
+        Remove-BitsTransfer $job -ErrorAction SilentlyContinue
+        Remove-Item $dst -Force -ErrorAction SilentlyContinue
+        Write-Output "EXEC T1197: BITS job '$jobName' created to 192.0.2.1 then cancelled — BITS-Client EID 59 + Sysmon EID 3. No file downloaded. [BAS-SIM]"
+      } else {
+        & bitsadmin.exe /create $jobName 2>&1 | Out-Null
+        & bitsadmin.exe /addfile $jobName 'http://192.0.2.1/bas-sim.txt' $dst 2>&1 | Out-Null
+        & bitsadmin.exe /cancel $jobName 2>&1 | Out-Null
+        Write-Output "EXEC T1197: bitsadmin job '$jobName' created+cancelled — Sysmon EID 1 bitsadmin.exe + EID 3 network. [BAS-SIM]"
+      }
+    cleanup: |
+      Get-BitsTransfer -Name "BAS-SIM-BITS-*" -ErrorAction SilentlyContinue | Remove-BitsTransfer -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_bits_*.txt') -Force -ErrorAction SilentlyContinue
