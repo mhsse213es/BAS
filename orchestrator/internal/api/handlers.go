@@ -1439,6 +1439,93 @@ func newID() string {
 	return fmt.Sprintf("%x", time.Now().UnixNano())
 }
 
+// ── Caldera Status (Admin only) ───────────────────────────────────────────────
+
+// GET /api/caldera/status — probes Caldera health + returns ability count.
+// Lets the admin confirm the integration is working without leaving the dashboard.
+func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
+	type CalderaStatus struct {
+		Reachable    bool   `json:"reachable"`
+		URL          string `json:"url"`
+		Version      string `json:"version,omitempty"`
+		AbilityCount int    `json:"abilityCount"`
+		LatencyMs    int64  `json:"latencyMs"`
+		Error        string `json:"error,omitempty"`
+	}
+
+	if h.calderaURL == "" {
+		respond(w, CalderaStatus{
+			Reachable: false,
+			Error:     "CALDERA_URL not configured — set it in .env and restart the stack",
+		})
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	base := strings.TrimRight(h.calderaURL, "/")
+
+	// Health check
+	t0 := time.Now()
+	hReq, _ := http.NewRequest(http.MethodGet, base+"/api/v2/health", nil)
+	if h.calderaKey != "" {
+		hReq.Header.Set("KEY", h.calderaKey)
+	}
+	hResp, err := client.Do(hReq)
+	latencyMs := time.Since(t0).Milliseconds()
+
+	if err != nil {
+		respond(w, CalderaStatus{
+			Reachable: false,
+			URL:       h.calderaURL,
+			LatencyMs: latencyMs,
+			Error:     "Cannot reach Caldera: " + err.Error(),
+		})
+		return
+	}
+	defer hResp.Body.Close()
+
+	if hResp.StatusCode != http.StatusOK {
+		respond(w, CalderaStatus{
+			Reachable: false,
+			URL:       h.calderaURL,
+			LatencyMs: latencyMs,
+			Error:     fmt.Sprintf("Caldera returned HTTP %d — verify CALDERA_API_KEY matches the running instance", hResp.StatusCode),
+		})
+		return
+	}
+
+	var health struct {
+		Version string `json:"version"`
+	}
+	healthBody, _ := io.ReadAll(hResp.Body)
+	json.Unmarshal(healthBody, &health)
+
+	// Ability count (best-effort — don't fail the status if this times out)
+	abilityCount := 0
+	abReq, _ := http.NewRequest(http.MethodGet, base+"/api/v2/abilities", nil)
+	if h.calderaKey != "" {
+		abReq.Header.Set("KEY", h.calderaKey)
+	}
+	if abResp, err := client.Do(abReq); err == nil {
+		defer abResp.Body.Close()
+		if abResp.StatusCode == http.StatusOK {
+			var abilities []json.RawMessage
+			if body, err := io.ReadAll(abResp.Body); err == nil {
+				json.Unmarshal(body, &abilities)
+				abilityCount = len(abilities)
+			}
+		}
+	}
+
+	respond(w, CalderaStatus{
+		Reachable:    true,
+		URL:          h.calderaURL,
+		Version:      health.Version,
+		AbilityCount: abilityCount,
+		LatencyMs:    latencyMs,
+	})
+}
+
 // ── Threat-Intel Connector (Admin only) ───────────────────────────────────────
 
 // GET /api/connector/status

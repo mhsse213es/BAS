@@ -125,6 +125,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 			r.Delete("/api/users/{id}", h.DeleteUser)
 			r.Post("/api/users/{id}/reset-password", h.ResetPassword)
 
+			// Caldera engine status
+			r.Get("/api/caldera/status", h.GetCalderaStatus)
+
 			// Threat-intel connector
 			r.Get("/api/connector/status", h.GetConnectorStatus)
 			r.Post("/api/connector/sync", h.TriggerConnectorSync)

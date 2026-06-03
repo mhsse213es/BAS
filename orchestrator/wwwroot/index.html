@@ -826,6 +826,37 @@ code {
           </div>
         </div>
 
+        <!-- Caldera Engine Status (admin only) -->
+        <div id="caldera-status-wrap" style="display:none;margin-top:2rem">
+          <div class="sec-hdr">
+            <h2>Caldera Engine</h2>
+            <button class="btn btn-outline btn-sm" onclick="loadCalderaStatus()" id="caldera-check-btn">Check Now</button>
+          </div>
+          <div class="conn-cfg-card" id="caldera-status-card">
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Status</span>
+              <span id="cs-caldera-status" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">URL</span>
+              <span id="cs-caldera-url" class="conn-cfg-val" style="font-size:0.8rem">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Version</span>
+              <span id="cs-caldera-version" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Abilities Loaded</span>
+              <span id="cs-caldera-abilities" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Latency</span>
+              <span id="cs-caldera-latency" class="conn-cfg-val">—</span>
+            </div>
+            <div id="cs-caldera-error" style="display:none;margin-top:0.5rem;font-size:0.75rem;padding:0.45rem 0.6rem;background:rgba(218,54,51,.1);border:1px solid var(--danger);border-radius:3px;color:var(--danger)"></div>
+          </div>
+        </div>
+
         <!-- Threat Intel Connector Status (admin only) -->
         <div id="connector-status-wrap" style="display:none;margin-top:2rem">
           <div class="sec-hdr">
@@ -1365,7 +1396,7 @@ function bootApp() {
   loadAgents();
   loadScenarios();
   loadRuns();
-  if (ROLE === 'admin') { loadConnectionConfig(); loadConnectorStatus(); }
+  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); }
   showTab('dashboard');
 }
 
@@ -2532,6 +2563,38 @@ function submitChangePassword() {
 /* ═══════════════════════════════════════════════════════════════════════════
    THREAT-INTEL CONNECTOR
    ═══════════════════════════════════════════════════════════════════════════ */
+
+function loadCalderaStatus() {
+  var wrap = document.getElementById('caldera-status-wrap');
+  if (wrap) wrap.style.display = '';
+  var btn = document.getElementById('caldera-check-btn');
+  if (btn) btn.disabled = true;
+
+  apicall('/api/caldera/status').then(function(d) {
+    var dot = d.reachable
+      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span style="color:var(--success)">Connected</span>'
+      : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:6px;vertical-align:middle"></span><span style="color:var(--danger)">Unreachable</span>';
+    document.getElementById('cs-caldera-status').innerHTML = dot;
+    document.getElementById('cs-caldera-url').textContent = d.url || '(not configured)';
+    document.getElementById('cs-caldera-version').textContent = d.version || (d.reachable ? 'unknown' : '—');
+    document.getElementById('cs-caldera-abilities').textContent = d.reachable ? (d.abilityCount + ' abilities') : '—';
+    document.getElementById('cs-caldera-latency').textContent = d.reachable ? (d.latencyMs + ' ms') : '—';
+    var errEl = document.getElementById('cs-caldera-error');
+    if (d.error) {
+      errEl.textContent = d.error;
+      errEl.style.display = '';
+    } else {
+      errEl.style.display = 'none';
+    }
+  }).catch(function(e) {
+    var errEl = document.getElementById('cs-caldera-error');
+    if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
+    document.getElementById('cs-caldera-status').innerHTML =
+      '<span style="color:var(--danger)">Error checking status</span>';
+  }).finally(function() {
+    if (btn) btn.disabled = false;
+  });
+}
 
 function loadConnectorStatus() {
   var wrap = document.getElementById('connector-status-wrap');
