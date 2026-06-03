@@ -58,6 +58,158 @@ live_policy:
   spray_account_allowlist: []
   execution_window: ""   # optional "HH:MM-HH:MM" local-time gate
 
-# Telemetry and lab steps are added in Portions 2 and 3.
 # Posture checks are handled by apt36KillChainChecks() in the agent (local_check path).
-steps: []
+# Lab steps (schtasks persistence, mshta chain, DNS TXT, C2 listener) are added in Portion 3.
+steps:
+  - name: "Office Child Process Chain (winword.exe → powershell.exe)"
+    technique_id: T1566.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Copies cmd.exe to a temp winword.exe, spawns powershell.exe with a benign exit, deletes the copy. No real macro or document."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 (process create): Image=powershell.exe, ParentImage=%TEMP%\\winword.exe"
+      - "Security EID 4688 (process create with command line) if process auditing enabled"
+    detection:
+      - "EDR: Office process (winword.exe) spawning a shell — primary APT36 initial-access detection signal"
+      - "SIEM: parent-child rule winword.exe → powershell.exe / cmd.exe"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tmp = Join-Path $env:TEMP 'winword.exe'
+      Copy-Item "$env:SystemRoot\System32\cmd.exe" $tmp -Force
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $tmp
+      $psi.Arguments = '/c powershell.exe -NoProfile -NonInteractive -Command "Write-Output BAS-SIM-T1566"'
+      $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+      $psi.CreateNoWindow = $true
+      $p = [System.Diagnostics.Process]::Start($psi)
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+      if ($ec -ge 0) {
+        Write-Output "EXEC: winword.exe->powershell.exe child-process chain fired (exit $ec) — expect Sysmon EID 1 with ParentImage=winword.exe. Benign payload only. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: child process could not be started — AppLocker/WDAC/EDR blocked Office process spawning (good)."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
+
+  - name: "Template Injection Probe (localhost fetch)"
+    technique_id: T1221
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Single HTTP GET to 127.0.0.1 only — no real network egress, no remote server contacted."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (powershell.exe with Invoke-WebRequest command line)"
+      - "Network connection event: 127.0.0.1:80 — connection refused is expected and harmless"
+    detection:
+      - "EDR: PowerShell making network connection shortly after Office child process spawn"
+      - "SIEM: HTTP outbound correlated with T1566.001 step above"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $uri = 'http://127.0.0.1/bas-template-probe'
+      try {
+        $r = Invoke-WebRequest -Uri $uri -TimeoutSec 2 -ErrorAction Stop
+        Write-Output "EXEC: template-fetch probe to $uri succeeded (status $($r.StatusCode)) — network telemetry generated. [BAS-SIM]"
+      } catch {
+        Write-Output "EXEC: template-fetch probe to $uri attempted (connection refused — expected, no listener running) — expect EID 4688 + network event. [BAS-SIM]"
+      }
+    cleanup: ""
+
+  - name: "Keylogger Hook-Monitoring Probe (API surface check)"
+    technique_id: T1056.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Enumerates loaded DLLs in current process to check hook-monitoring coverage. No hook installed; no keystrokes captured."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (PowerShell process with module-enumeration command line)"
+    detection:
+      - "EDR: process enumerating its own loaded modules — visibility check; real hook install is lab-only"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $proc   = [System.Diagnostics.Process]::GetCurrentProcess()
+      $loaded = @($proc.Modules | Select-Object -ExpandProperty ModuleName | ForEach-Object { $_.ToLower() })
+      $user32 = $loaded -contains 'user32.dll'
+      $edrPatterns = @('mfehidk','cyoptics','epdrv','atrsdfw','cbk7','cbstream','psinject','hmpalert','amsi')
+      $edrMods = @($loaded | Where-Object { $m = $_; ($edrPatterns | Where-Object { $m -match $_ }).Count -gt 0 })
+      $edrStr  = if ($edrMods.Count -gt 0) { $edrMods -join ',' } else { 'none detected' }
+      if ($user32) {
+        Write-Output "EXEC: user32.dll loaded — SetWindowsHookEx API reachable from this process. EDR/AMSI hook-monitoring modules: $edrStr. Real keyboard-hook install is lab-only. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: user32.dll not in current process space — keyboard-hook API surface not directly reachable."
+      }
+    cleanup: ""
+
+  - name: "Registry Run Key Persistence (write + delete)"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes then immediately deletes a HKCU Run and RunOnce entry. Value is a benign string; no executable is written."
+    reversible: true
+    telemetry:
+      - "Security EID 4657 (registry value set) for HKCU\\...\\Run and RunOnce"
+      - "Sysmon EID 13 (registry value set) with Image=powershell.exe, TargetObject=...\\Run\\BAS-SIM-APT36-Persist"
+    detection:
+      - "SIEM: Run/RunOnce key modification by a non-installer process — APT36 persistence signal"
+      - "EDR: registry persistence write from powershell.exe with no corresponding installer activity"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runKey     = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+      $runOnceKey = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce'
+      $name = 'BAS-SIM-APT36-Persist'
+      $val  = 'BAS-SIM T1547.001 persistence probe — auto-removed'
+      Set-ItemProperty -Path $runKey     -Name $name -Value $val -ErrorAction SilentlyContinue
+      Set-ItemProperty -Path $runOnceKey -Name $name -Value $val -ErrorAction SilentlyContinue
+      $runOk     = (Get-ItemProperty -Path $runKey     -Name $name -ErrorAction SilentlyContinue).$name -eq $val
+      $runOnceOk = (Get-ItemProperty -Path $runOnceKey -Name $name -ErrorAction SilentlyContinue).$name -eq $val
+      Remove-ItemProperty -Path $runKey     -Name $name -ErrorAction SilentlyContinue
+      Remove-ItemProperty -Path $runOnceKey -Name $name -ErrorAction SilentlyContinue
+      if ($runOk -or $runOnceOk) {
+        Write-Output "EXEC: Run=$runOk RunOnce=$runOnceOk — registry persistence probe written and deleted. Expect Sysmon EID 13 + Security EID 4657. No entry remains. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: could not write to HKCU Run/RunOnce keys — registry write blocked (restricted token / AppLocker / policy)."
+      }
+    cleanup: |
+      Remove-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'     -Name 'BAS-SIM-APT36-Persist' -ErrorAction SilentlyContinue
+      Remove-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'BAS-SIM-APT36-Persist' -ErrorAction SilentlyContinue
+
+  - name: "C2 DNS Beacon (deterministic .invalid query)"
+    technique_id: T1071.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "nslookup to a .invalid RFC 2606 reserved domain — guaranteed non-routable; DNS query goes to corporate resolver only, never to the internet."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22 (DNS query event) for bas-telemetry-<id>.invalid"
+      - "Security EID 4688 (nslookup.exe with beacon domain as argument)"
+      - "Corporate DNS server log: NXDOMAIN for bas-telemetry-*.invalid"
+    detection:
+      - "SIEM: DNS query for .invalid TLD from endpoint — deterministic BAS beacon; correlate run ID across all events in this run"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId  = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0, [Math]::Min(8, $env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $beacon = "bas-telemetry-$runId.invalid"
+      nslookup $beacon 2>&1 | Out-Null
+      Write-Output "EXEC: DNS beacon '$beacon' queried — expect Sysmon EID 22 + nslookup EID 4688. NXDOMAIN response expected. Use run-id '$runId' for SIEM correlation across this scenario run. [BAS-SIM]"
+    cleanup: ""
