@@ -25,6 +25,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 
 	// Agent endpoints — protected by optional AGENT_SECRET shared token.
 	// When agentSecret is empty these remain open (backward compat).
+	r.Post("/api/agents/enroll", h.EnrollAgent)
 	r.Post("/api/heartbeat", h.Heartbeat)
 	r.Post("/api/report", h.SubmitReport)
 	r.Post("/api/scenarios/result", h.SubmitScenarioResult)

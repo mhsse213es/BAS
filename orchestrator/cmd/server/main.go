@@ -178,7 +178,8 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 			  WHERE status != 'offline'
 			    AND last_update < NOW() - $1::interval
 			RETURNING agent_id, hostname, ip_address, os_version, username,
-			          status, env_label, has_report, binary_hash, binary_trusted, last_update`,
+			          status, env_label, has_report, binary_hash, binary_trusted, last_update,
+			          COALESCE(state, 'active'), enrolled_at`,
 			staleAfter.String(),
 		)
 		if err != nil {
@@ -187,11 +188,14 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 		}
 		for rows.Next() {
 			var a models.Agent
+			var stateStr string
 			if err := rows.Scan(&a.AgentID, &a.Hostname, &a.IPAddress, &a.OSVersion,
 				&a.Username, &a.Status, &a.EnvLabel, &a.HasReport,
-				&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate); err != nil {
+				&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate,
+				&stateStr, &a.EnrolledAt); err != nil {
 				continue
 			}
+			a.State = models.AgentState(stateStr)
 			log.Printf("[monitor] agent %s marked offline (no heartbeat for >90s)", a.AgentID)
 			hub.BroadcastBrowsers(models.WSMessage{
 				Type:    models.MsgAgentUpdate,

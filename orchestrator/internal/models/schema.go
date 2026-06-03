@@ -96,31 +96,64 @@ type Score struct {
 	PreventionEffectiveness int    `json:"preventionEffectiveness"` // = round(PreventionScore)
 }
 
+// AgentState is the lifecycle state of a registered agent.
+type AgentState string
+
+const (
+	AgentStateEnrolling   AgentState = "enrolling"
+	AgentStateActive      AgentState = "active"
+	AgentStateRestricted  AgentState = "restricted"
+	AgentStateQuarantined AgentState = "quarantined"
+	AgentStateRetired     AgentState = "retired"
+)
+
+// PolicyBundle is sent to the agent at enroll time and refreshed on each heartbeat response.
+// It governs what the agent is allowed to do without operator intervention.
+type PolicyBundle struct {
+	LogLevel          string   `json:"logLevel"`           // debug | info | warn | error
+	AllowedScenarios  []string `json:"allowedScenarios"`   // nil = all allowed
+	ExecutionWindow   string   `json:"executionWindow"`    // "09:00-18:00 IST" — empty = unrestricted
+	MaxConcurrentRuns int      `json:"maxConcurrentRuns"`  // 0 = unlimited
+	HeartbeatInterval int      `json:"heartbeatIntervalS"` // seconds; 0 = agent default
+}
+
 // Agent represents a registered endpoint.
 type Agent struct {
-	AgentID       string    `json:"agentId"`
-	Hostname      string    `json:"hostname"`
-	IPAddress     string    `json:"ipAddress"`
-	OSVersion     string    `json:"osVersion"`
-	Username      string    `json:"username"`
-	Status        string    `json:"status"` // idle | scanning | offline
-	EnvLabel      string    `json:"envLabel"`
-	HasReport     bool      `json:"hasReport"`
-	BinaryHash    string    `json:"binaryHash,omitempty"`
-	BinaryTrusted bool      `json:"binaryTrusted"`
-	LastUpdate    time.Time `json:"lastUpdate"`
+	AgentID       string        `json:"agentId"`
+	Hostname      string        `json:"hostname"`
+	IPAddress     string        `json:"ipAddress"`
+	OSVersion     string        `json:"osVersion"`
+	Username      string        `json:"username"`
+	Status        string        `json:"status"` // idle | scanning | offline (connectivity)
+	State         AgentState    `json:"state"`  // active | restricted | quarantined | retired (lifecycle)
+	EnvLabel      string        `json:"envLabel"`
+	HasReport     bool          `json:"hasReport"`
+	BinaryHash    string        `json:"binaryHash,omitempty"`
+	BinaryTrusted bool          `json:"binaryTrusted"`
+	Policy        *PolicyBundle `json:"policy,omitempty"`
+	EnrolledAt    *time.Time    `json:"enrolledAt,omitempty"`
+	LastUpdate    time.Time     `json:"lastUpdate"`
 }
 
 // Heartbeat is sent by agents periodically.
 type Heartbeat struct {
-	AgentID    string `json:"agentId"`
-	Hostname   string `json:"hostname"`
-	IPAddr     string `json:"ipAddress"`
-	OSVer      string `json:"osVersion"`
-	Username   string `json:"username"`
-	Status     string `json:"status"`
-	EnvLabel   string `json:"envLabel"`
-	BinaryHash string `json:"binaryHash,omitempty"`
+	AgentID       string `json:"agentId"`
+	Hostname      string `json:"hostname"`
+	IPAddr        string `json:"ipAddress"`
+	OSVer         string `json:"osVersion"`
+	Username      string `json:"username"`
+	Status        string `json:"status"`
+	EnvLabel      string `json:"envLabel"`
+	BinaryHash    string `json:"binaryHash,omitempty"`
+	AgentVersion  string `json:"agentVersion,omitempty"`
+	SchemaVersion int    `json:"schemaVersion,omitempty"`
+}
+
+// HeartbeatResponse is returned to the agent after each heartbeat.
+// Agents must act on State and Policy immediately.
+type HeartbeatResponse struct {
+	State  AgentState   `json:"state"`
+	Policy PolicyBundle `json:"policy"`
 }
 
 // WSMessage is the envelope for all WebSocket frames.
@@ -141,6 +174,7 @@ const (
 	MsgReportReady     = "reportReady"
 	MsgPatchStatus     = "patch_status_update"
 	MsgCommandPatches  = "command_install_patches"
+	MsgPolicyUpdate    = "policy_update"
 )
 
 // ── ATT&CK Normalisation ──────────────────────────────────────────────────────

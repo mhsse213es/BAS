@@ -180,7 +180,8 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT agent_id, hostname, ip_address, os_version, username, status, env_label,
-		        has_report, binary_hash, binary_trusted, last_update
+		        has_report, binary_hash, binary_trusted, last_update,
+		        COALESCE(state, 'active'), COALESCE(policy_json::text, '{}'), enrolled_at
 		 FROM agents ORDER BY last_update DESC`)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -191,10 +192,17 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	var agents []models.Agent
 	for rows.Next() {
 		var a models.Agent
+		var stateStr, policyRaw string
 		if err := rows.Scan(&a.AgentID, &a.Hostname, &a.IPAddress, &a.OSVersion,
 			&a.Username, &a.Status, &a.EnvLabel, &a.HasReport,
-			&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate); err != nil {
+			&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate,
+			&stateStr, &policyRaw, &a.EnrolledAt); err != nil {
 			continue
+		}
+		a.State = models.AgentState(stateStr)
+		var p models.PolicyBundle
+		if err := json.Unmarshal([]byte(policyRaw), &p); err == nil {
+			a.Policy = &p
 		}
 		agents = append(agents, a)
 	}
@@ -279,8 +287,8 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 
 	_, err := h.db.Exec(r.Context(), `
 		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username, status, env_label,
-		                    binary_hash, binary_trusted, last_update)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+		                    binary_hash, binary_trusted, state, last_update)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', NOW())
 		ON CONFLICT (agent_id) DO UPDATE SET
 			hostname       = EXCLUDED.hostname,
 			ip_address     = EXCLUDED.ip_address,
@@ -298,8 +306,115 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Quarantine if manifest is loaded and the binary hash is not recognised.
+	// Only transition active→quarantined, never overwrite an already-quarantined agent.
+	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() && !trusted {
+		_, _ = h.db.Exec(r.Context(),
+			`UPDATE agents SET state = 'quarantined' WHERE agent_id = $1 AND state = 'active'`,
+			hb.AgentID)
+		log.Printf("[!] agent %s QUARANTINED — binary hash unrecognised", hb.AgentID)
+	}
+
+	// Fetch current state and policy to return to the agent.
+	var stateStr, policyRaw string
+	h.db.QueryRow(r.Context(),
+		`SELECT COALESCE(state,'active'), COALESCE(policy_json::text,'{}') FROM agents WHERE agent_id = $1`,
+		hb.AgentID,
+	).Scan(&stateStr, &policyRaw)
+	var policy models.PolicyBundle
+	json.Unmarshal([]byte(policyRaw), &policy)
+
 	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: hb.AgentID, Data: hb})
-	w.WriteHeader(http.StatusOK)
+	respond(w, models.HeartbeatResponse{
+		State:  models.AgentState(stateStr),
+		Policy: policy,
+	})
+}
+
+// POST /api/agents/enroll — called by the installer/agent before first heartbeat.
+// Validates the agent secret, registers the agent, and returns a policy bundle.
+// Pre-enrollment handshake: installer calls this to confirm URL+secret are valid
+// before writing anything to the local machine.
+func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
+	if !h.validateAgentAuth(r) {
+		jsonError(w, "unauthorized — check AGENT_SECRET", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		AgentID      string `json:"agentId"`
+		Hostname     string `json:"hostname"`
+		IPAddress    string `json:"ipAddress"`
+		OSVersion    string `json:"osVersion"`
+		Username     string `json:"username"`
+		EnvLabel     string `json:"envLabel"`
+		BinaryHash   string `json:"binaryHash"`
+		AgentVersion string `json:"agentVersion"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
+		jsonError(w, "invalid enrollment payload — agentId required", http.StatusBadRequest)
+		return
+	}
+
+	trusted := false
+	if req.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() {
+		trusted = h.manifest.HashKnown(req.BinaryHash)
+		if !trusted {
+			log.Printf("[enroll] agent %s binary hash unrecognised — will enroll as active but flag untrusted", req.AgentID)
+		}
+	}
+
+	policy := models.PolicyBundle{
+		LogLevel:          "info",
+		MaxConcurrentRuns: 1,
+		HeartbeatInterval: 30,
+	}
+	policyJSON, _ := json.Marshal(policy)
+
+	// Upsert: preserve quarantined/retired state on re-enroll — operator must
+	// explicitly clear quarantine via the dashboard before the agent can run.
+	_, err := h.db.Exec(r.Context(), `
+		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username,
+		                    status, env_label, binary_hash, binary_trusted,
+		                    state, policy_json, enrolled_at, last_update)
+		VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $8, 'active', $9, NOW(), NOW())
+		ON CONFLICT (agent_id) DO UPDATE SET
+			hostname       = EXCLUDED.hostname,
+			ip_address     = EXCLUDED.ip_address,
+			os_version     = EXCLUDED.os_version,
+			username       = EXCLUDED.username,
+			env_label      = EXCLUDED.env_label,
+			binary_hash    = EXCLUDED.binary_hash,
+			binary_trusted = EXCLUDED.binary_trusted,
+			state          = CASE
+			                   WHEN agents.state IN ('quarantined','retired') THEN agents.state
+			                   ELSE 'active'
+			                 END,
+			policy_json    = EXCLUDED.policy_json,
+			enrolled_at    = COALESCE(agents.enrolled_at, NOW()),
+			last_update    = NOW()`,
+		req.AgentID, req.Hostname, req.IPAddress, req.OSVersion, req.Username,
+		req.EnvLabel, req.BinaryHash, trusted, policyJSON,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Read back the final state (may still be quarantined from a prior run).
+	var finalState string
+	h.db.QueryRow(r.Context(), `SELECT COALESCE(state,'active') FROM agents WHERE agent_id = $1`, req.AgentID).Scan(&finalState)
+
+	log.Printf("[enroll] agent %s (%s) enrolled — state=%s trusted=%v version=%s",
+		req.AgentID, req.Hostname, finalState, trusted, req.AgentVersion)
+	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: req.AgentID})
+
+	respond(w, map[string]interface{}{
+		"agentId": req.AgentID,
+		"state":   finalState,
+		"policy":  policy,
+		"trusted": trusted,
+	})
 }
 
 // POST /api/scan/{agentId} — triggers a full-scan scenario on the agent.
@@ -433,6 +548,19 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	sc, ok := h.engine.Get(scenarioID)
 	if !ok {
 		jsonError(w, "scenario not found", http.StatusNotFound)
+		return
+	}
+
+	// ── Agent state gate ─────────────────────────────────────────────────────
+	// Only active agents may run scenarios. Quarantined / restricted / retired
+	// agents are blocked regardless of mode — operators must resolve the state
+	// via the dashboard before resuming execution.
+	var agentState string
+	h.db.QueryRow(r.Context(),
+		`SELECT COALESCE(state,'active') FROM agents WHERE agent_id = $1`, req.AgentID,
+	).Scan(&agentState)
+	if agentState != "" && agentState != string(models.AgentStateActive) {
+		jsonError(w, fmt.Sprintf("agent is in '%s' state — only active agents can run scenarios; resolve via Administration → Agents", agentState), http.StatusForbidden)
 		return
 	}
 
