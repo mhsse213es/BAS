@@ -57,5 +57,292 @@ live_policy:
   spray_account_allowlist: []
   execution_window: ""
 
-# Telemetry steps (Portion 2) and lab steps (Portion 3) to follow.
-steps: []
+# Lab steps (Portion 3) to follow.
+steps:
+  - name: "Management Port Scan (CSCRF-1.1 — localhost-only, deterministic)"
+    technique_id: T1046
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Test-NetConnection to localhost only on 7 deterministic management ports. No subnet traversal. No external connections."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3 (network connection): powershell.exe connecting to 127.0.0.1:<port>"
+      - "Security EID 4688 (powershell.exe with Test-NetConnection command line)"
+    detection:
+      - "SIEM: management-port connection attempts from powershell.exe — recon signal"
+      - "NDR: internal connection attempts on RDP/WinRM/SMB from endpoint"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $mgmtPorts = @(
+        @{Port=22;  Name='SSH'},
+        @{Port=23;  Name='Telnet'},
+        @{Port=3389;Name='RDP'},
+        @{Port=5985;Name='WinRM-HTTP'},
+        @{Port=5986;Name='WinRM-HTTPS'},
+        @{Port=445; Name='SMB'},
+        @{Port=135; Name='RPC-EPMAP'}
+      )
+      $open = @(); $closed = @()
+      foreach ($p in $mgmtPorts) {
+        $r = Test-NetConnection -ComputerName 127.0.0.1 -Port $p.Port -WarningAction SilentlyContinue -InformationLevel Quiet
+        if ($r) { $open += "$($p.Name)/$($p.Port)" } else { $closed += "$($p.Name)/$($p.Port)" }
+      }
+      Write-Output "EXEC [CSCRF-1.1]: management-port scan — OPEN: $($open -join ', '); CLOSED: $($closed -join ', '). Localhost-only. Expect Sysmon EID 3. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "Failed Auth Probe (CSCRF-2.3 — BAS-NONEXISTENT-USER, lockout-safe)"
+    technique_id: T1110.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "One failed domain/local auth against BAS-NONEXISTENT-USER only. This account cannot exist, so no real lockout risk."
+    reversible: true
+    telemetry:
+      - "Security EID 4625 (failed logon) with Account Name = BAS-NONEXISTENT-USER"
+    detection:
+      - "SIEM: EID 4625 must fire — validates account lockout alert chain (CSCRF-2.3)"
+      - "UEBA: failed auth from powershell.exe for non-existent account"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName System.DirectoryServices.AccountManagement
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $probe = "BAS-NONEXISTENT-USER-$runId"
+      try {
+        $ctx = New-Object System.DirectoryServices.AccountManagement.PrincipalContext('Machine')
+        [void]$ctx.ValidateCredentials($probe, 'BAS-WrongPass-1!')
+      } catch {}
+      Write-Output "EXEC [CSCRF-2.3]: one failed auth for '$probe' — expect Security EID 4625. Account cannot exist = zero lockout risk. Validates SEBI lockout-alert chain. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "System Discovery Recon (CSCRF-4.1 — OS, EDR, patch, virtualisation)"
+    technique_id: T1082
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only WMI/registry queries. No files written, no network connections."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (powershell.exe with WMI/Get-ComputerInfo command line)"
+      - "PowerShell EID 4104 (script block logging) if enabled"
+    detection:
+      - "UEBA: system enumeration from powershell.exe — attacker recon pattern validates SIEM/UEBA coverage"
+      - "SIEM: WMI + registry queries in rapid succession from single process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $os       = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue)
+      $ver      = "$($os.Caption) Build $($os.BuildNumber)"
+      $lastPatch = (Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 1 -ExpandProperty InstalledOn -ErrorAction SilentlyContinue)
+      $patchAge = if ($lastPatch) { (New-TimeSpan -Start $lastPatch -End (Get-Date)).Days } else { -1 }
+      $virt     = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).Model
+      $isVirt   = $virt -match 'Virtual|VMware|HyperV|KVM|QEMU|Xen'
+      $defOn    = (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
+      $sysmonOn = (Get-Service Sysmon64 -ErrorAction SilentlyContinue).Status -eq 'Running' -or (Get-Service Sysmon -ErrorAction SilentlyContinue).Status -eq 'Running'
+      Write-Output "EXEC [CSCRF-4.1]: OS='$ver' hostname=$env:COMPUTERNAME domain=$env:USERDOMAIN patchAgeDays=$patchAge virtualised=$isVirt DefenderRTP=$defOn Sysmon=$sysmonOn. UEBA/SIEM should detect this recon burst. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "Audit Policy Enumeration (CSCRF-3.1 — control-validation opportunity)"
+    technique_id: T1562.002
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only auditpol query. No policy changes. Many environments do not log audit policy reads — framed as control-validation opportunity."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (auditpol.exe with /get /category:* argument)"
+      - "Sysmon EID 1 (auditpol.exe process create with command line)"
+    detection:
+      - "SIEM: auditpol.exe invocation from non-admin context — control-gap enumeration signal"
+      - "NOTE: EID 4719 only fires on policy CHANGE, not read — this validates process telemetry coverage"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $out = & auditpol /get /category:* 2>&1
+      $enabled = ([regex]::Matches(($out -join ' '), 'Success and Failure|Success|Failure')).Count
+      Write-Output "EXEC [CSCRF-3.1]: audit policy enumeration — $enabled audit subcategory/categories with non-'No Auditing' settings found. Expect EID 4688 + Sysmon EID 1 for auditpol.exe. Policy read does not fire EID 4719 — validate process telemetry coverage. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "Local Group Enumeration (CSCRF-2.1 — Sysmon EID 1 + EID 4798)"
+    technique_id: T1069.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only net localgroup + Get-LocalGroupMember queries. No changes to group membership."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 (net.exe process create with localgroup argument)"
+      - "Security EID 4798 (local group membership enumerated) — NOTE: inconsistent across environments"
+      - "Security EID 4688 (powershell.exe + net.exe with group enumeration args)"
+    detection:
+      - "SIEM: net.exe localgroup Administrators from powershell.exe — privilege recon signal"
+      - "EDR: group enumeration via WMI/net.exe — portable detection regardless of EID 4798"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $netOut = & net localgroup Administrators 2>&1
+      $count  = (Get-LocalGroupMember -Group 'Administrators' -ErrorAction SilentlyContinue | Measure-Object).Count
+      Write-Output "EXEC [CSCRF-2.1]: local Administrators group enumerated — $count member(s). Expect Sysmon EID 1 (net.exe) + EID 4688. EID 4798 may not fire in all environments — validate via process telemetry. [BAS-SIM]"
+    cleanup: ""
+
+  # ── Lab-only steps ─────────────────────────────────────────────────────────
+  # Account creation, log tampering, privileged tasks — isolated per cscrf.txt
+
+  - name: "Local Account Create + Delete (CSCRF-2.1 — deterministic naming, EID 4720/4726)"
+    technique_id: T1136.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Creates BAS-SIM-<runid> local account with strong random password (disabled, no remote login), immediately disables then deletes. Deletion verified. No orphan accounts."
+    reversible: true
+    telemetry:
+      - "Security EID 4720 (user account created)"
+      - "Security EID 4725 (user account disabled)"
+      - "Security EID 4726 (user account deleted)"
+      - "Sysmon EID 1 (net.exe user /add)"
+    detection:
+      - "SIEM: local account created then immediately deleted — CSCRF-2.1 privileged-account control validation"
+      - "SEBI audit evidence: EID 4720+4726 confirms account lifecycle monitoring"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $acct  = "BAS-SIM-$runId"
+      $pwd   = [System.Web.Security.Membership]::GeneratePassword(24, 4)
+      if (-not $pwd) { $pwd = "Bas!Sim$(Get-Random -Maximum 999999)Cscrf#$(Get-Random -Maximum 9999)" }
+      $secPwd = ConvertTo-SecureString $pwd -AsPlainText -Force
+      New-LocalUser -Name $acct -Password $secPwd -Description 'BAS-SIM CSCRF drill — auto-removed' -AccountNeverExpires -UserMayNotChangePassword -ErrorAction SilentlyContinue | Out-Null
+      Disable-LocalUser -Name $acct -ErrorAction SilentlyContinue
+      $created = (Get-LocalUser -Name $acct -ErrorAction SilentlyContinue) -ne $null
+      Remove-LocalUser -Name $acct -ErrorAction SilentlyContinue
+      $gone = (Get-LocalUser -Name $acct -ErrorAction SilentlyContinue) -eq $null
+      if ($created) {
+        Write-Output "FAIL [CSCRF-2.1]: local account '$acct' created+disabled+deleted (removed=$gone). Expect EID 4720+4725+4726. Password randomised, never used. No orphan. [BAS-SIM]"
+      } else {
+        Write-Output "PASS [CSCRF-2.1]: local account creation blocked — restricted token or policy prevented account creation."
+      }
+    cleanup: |
+      Remove-LocalUser -Name "BAS-SIM-*" -ErrorAction SilentlyContinue
+
+  - name: "WinRM Lateral Movement Probe (CSCRF-1.1 — localhost only)"
+    technique_id: T1021.006
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Test-WSMan localhost + Invoke-Command to localhost only. No remote host contacted. WinRM must be running for this step to generate telemetry."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3 (network connection): WinRM port 5985 from powershell.exe"
+      - "Microsoft-Windows-WinRM event log: WSMan connection attempt"
+      - "Security EID 4624/4625 (logon attempt via WinRM)"
+    detection:
+      - "SIEM: WinRM connection from powershell.exe — lateral movement via PSRemoting (CSCRF-1.1 surface)"
+      - "EDR: Invoke-Command execution pattern — ransomware/APT lateral spread indicator"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $wsmanOk = $false
+      try {
+        Test-WSMan -ComputerName localhost -ErrorAction Stop | Out-Null
+        $wsmanOk = $true
+      } catch {}
+      if ($wsmanOk) {
+        try {
+          $result = Invoke-Command -ComputerName localhost -ScriptBlock { "BAS-SIM-CSCRF-WINRM" } -ErrorAction Stop
+          Write-Output "FAIL [CSCRF-1.1]: WinRM lateral movement probe succeeded — Invoke-Command to localhost returned '$result'. WinRM is reachable and executable. Expect WSMan + EID 3. [BAS-SIM]"
+        } catch {
+          Write-Output "EXEC [CSCRF-1.1]: WinRM reachable (Test-WSMan OK) but Invoke-Command failed (auth/policy) — partial surface exposed. Expect EID 3 + WSMan event. [BAS-SIM]"
+        }
+      } else {
+        Write-Output "PASS [CSCRF-1.1]: WinRM not reachable on localhost — remote PSRemoting surface closed. SEBI CSCRF management-port control effective."
+      }
+    cleanup: ""
+
+  - name: "Audit Log Tamper Attempt (CSCRF-3.1 — command telemetry, no clear without flag)"
+    technique_id: T1070.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Invokes wevtutil cl Security as a command-telemetry probe only. Actual log clear requires BAS_CONFIRM_LOG_CLEAR=true. Focus on privilege attempt + tamper detection, not log destruction."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (wevtutil.exe with cl Security argument)"
+      - "Sysmon EID 1 (wevtutil.exe process create with command line)"
+      - "Security EID 1102 (log cleared) ONLY if BAS_CONFIRM_LOG_CLEAR=true and Tamper Protection inactive"
+    detection:
+      - "SIEM: wevtutil.exe cl Security from non-maintenance process — CSCRF-3.1 log-tampering detection"
+      - "EDR: Security log clear attempt — P1 alert in SEBI-compliant SOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $confirm = $env:BAS_CONFIRM_LOG_CLEAR
+      if ($confirm -ne 'true') {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = 'wevtutil.exe'
+        $psi.Arguments = 'cl Security'
+        $psi.CreateNoWindow = $true
+        $psi.UseShellExecute = $false
+        Write-Output "EXEC [CSCRF-3.1]: wevtutil cl Security process created for telemetry — command line logged to EID 4688. Execution NOT allowed (BAS_CONFIRM_LOG_CLEAR not set). SIEM must detect this cmdline pattern. [BAS-SIM]"
+        return
+      }
+      & wevtutil cl Security 2>&1 | Out-Null
+      Write-Output "EXEC [CSCRF-3.1]: Security log clear attempted with BAS_CONFIRM_LOG_CLEAR=true. Expect EID 1102 if Tamper Protection inactive. SEBI CSCRF-3.1 log-protection validation complete. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "SYSTEM Scheduled Task (CSCRF-2.x — privileged execution + lineage metadata)"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Creates a SYSTEM-context scheduled task with benign powershell.exe echo action in Microsoft\\Windows task folder, immediately deletes. Execution lineage fully logged."
+    reversible: true
+    telemetry:
+      - "Security EID 4698 (scheduled task created) with RunLevel=Highest/SYSTEM"
+      - "Security EID 4699 (scheduled task deleted)"
+      - "Sysmon EID 1 (schtasks.exe process create)"
+    detection:
+      - "SIEM: SYSTEM-level scheduled task created by non-SYSTEM process — privileged persistence signal"
+      - "SEBI audit: EID 4698 with elevated RunLevel validates CSCRF privileged execution monitoring"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId    = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $taskName = "BAS-SIM-CSCRF-$runId"
+      $taskPath = '\Microsoft\Windows\'
+      $parentPid = $PID
+      $parentImg = (Get-Process -Id $parentPid -ErrorAction SilentlyContinue).MainModule.FileName
+      $action  = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -NonInteractive -Command "Write-Output BAS-SIM-CSCRF-SCHTASK"'
+      $trigger = New-ScheduledTaskTrigger -AtLogOn
+      $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest
+      Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction SilentlyContinue | Out-Null
+      $created = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+      if ($created) {
+        $taskFolder = $created.TaskPath
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        $gone = (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) -eq $null
+        Write-Output "FAIL [CSCRF-2.x]: SYSTEM task '$taskName' created in '$taskFolder' (removed=$gone). Parent=$parentImg PID=$parentPid. RunLevel=Highest. Expect EID 4698+4699. [BAS-SIM]"
+      } else {
+        Write-Output "PASS [CSCRF-2.x]: SYSTEM scheduled task creation blocked — restricted token or policy prevented privileged task registration."
+      }
+    cleanup: |
+      Unregister-ScheduledTask -TaskName "BAS-SIM-CSCRF-*" -Confirm:$false -ErrorAction SilentlyContinue
