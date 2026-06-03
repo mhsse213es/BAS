@@ -23,6 +23,7 @@ func main() {
 	flagUninstall := flag.Bool("uninstall", false, "Uninstall agent system service")
 	flagServer := flag.String("server", "", "Override BAS_SERVER_URL")
 	flagEnv := flag.String("env", "Production", "Override BAS_ENV_LABEL")
+	flagSecret := flag.String("secret", "", "Agent shared secret (encrypted at rest via DPAPI on Windows)")
 
 	registerPlatformFlags()
 	flag.Parse()
@@ -40,7 +41,11 @@ func main() {
 			fmt.Fprintln(os.Stderr, "error: provide --server <url> or set BAS_SERVER_URL")
 			os.Exit(1)
 		}
-		if err := svcInstall(serverURL, *flagEnv); err != nil {
+		secret := *flagSecret
+		if secret == "" {
+			secret = os.Getenv("BAS_AGENT_SECRET")
+		}
+		if err := svcInstall(serverURL, *flagEnv, secret); err != nil {
 			fmt.Fprintf(os.Stderr, "install failed: %v\n", err)
 			os.Exit(1)
 		}
@@ -79,6 +84,7 @@ func main() {
 	fmt.Printf("\n")
 
 	agent := newAgent(cfg, id)
+	agent.enrollWithServer()
 
 	go agent.connectWS()
 	agent.sendHeartbeat("idle")

@@ -7,15 +7,56 @@ import (
 
 // ── Wire Protocol ─────────────────────────────────────────────────────────────
 
+// schemaVersion is bumped whenever the wire protocol changes in a breaking way.
+const schemaVersion = 1
+
 type Heartbeat struct {
-	AgentID    string `json:"agentId"`
-	Hostname   string `json:"hostname"`
-	IPAddress  string `json:"ipAddress"`
-	OSVersion  string `json:"osVersion"`
-	Username   string `json:"username"`
-	Status     string `json:"status"`
-	EnvLabel   string `json:"envLabel"`
-	BinaryHash string `json:"binaryHash,omitempty"`
+	AgentID       string `json:"agentId"`
+	Hostname      string `json:"hostname"`
+	IPAddress     string `json:"ipAddress"`
+	OSVersion     string `json:"osVersion"`
+	Username      string `json:"username"`
+	Status        string `json:"status"`
+	EnvLabel      string `json:"envLabel"`
+	BinaryHash    string `json:"binaryHash,omitempty"`
+	AgentVersion  string `json:"agentVersion,omitempty"`
+	SchemaVersion int    `json:"schemaVersion,omitempty"`
+}
+
+// HeartbeatResponse is returned by the server on every POST /api/heartbeat.
+// The agent must act on State immediately: quarantined agents must not run scenarios.
+type HeartbeatResponse struct {
+	State  string     `json:"state"`
+	Policy PolicyConf `json:"policy"`
+}
+
+// PolicyConf carries server-side policy down to the agent on enroll + heartbeat.
+type PolicyConf struct {
+	LogLevel          string   `json:"logLevel"`
+	AllowedScenarios  []string `json:"allowedScenarios"`
+	ExecutionWindow   string   `json:"executionWindow"`
+	MaxConcurrentRuns int      `json:"maxConcurrentRuns"`
+	HeartbeatInterval int      `json:"heartbeatIntervalS"`
+}
+
+// EnrollRequest is sent by the agent on first contact with the server.
+type EnrollRequest struct {
+	AgentID      string `json:"agentId"`
+	Hostname     string `json:"hostname"`
+	IPAddress    string `json:"ipAddress"`
+	OSVersion    string `json:"osVersion"`
+	Username     string `json:"username"`
+	EnvLabel     string `json:"envLabel"`
+	BinaryHash   string `json:"binaryHash,omitempty"`
+	AgentVersion string `json:"agentVersion,omitempty"`
+}
+
+// EnrollResponse is returned by POST /api/agents/enroll.
+type EnrollResponse struct {
+	AgentID string     `json:"agentId"`
+	State   string     `json:"state"`
+	Policy  PolicyConf `json:"policy"`
+	Trusted bool       `json:"trusted"`
 }
 
 type WSMessage struct {

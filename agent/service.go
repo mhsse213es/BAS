@@ -32,9 +32,15 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 
 	enablePrivileges()
 
+	// Startup integrity check — compare running binary against hash stored at install.
+	if err := VerifyOwnIntegrity(); err != nil {
+		log.Printf("[!] INTEGRITY: %v — continuing; server will quarantine on hash mismatch", err)
+	}
+
 	cfg := loadConfig()
 	id := collectIdentity()
 	agent := newAgent(cfg, id)
+	agent.enrollWithServer()
 
 	go agent.connectWS()
 	agent.sendHeartbeat("idle")
@@ -66,7 +72,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 
 // ── Service Control ───────────────────────────────────────────────────────────
 
-func svcInstall(serverURL, envLabel string) error {
+func svcInstall(serverURL, envLabel, secret string) error {
 	exePath, err := filepath.Abs(os.Args[0])
 	if err != nil {
 		return err
@@ -89,7 +95,7 @@ func svcInstall(serverURL, envLabel string) error {
 			Description:      svcDescription,
 			StartType:        mgr.StartAutomatic,
 			ServiceType:      windows.SERVICE_WIN32_OWN_PROCESS,
-			ServiceStartName: "LocalSystem", // SYSTEM integrity level
+			ServiceStartName: "LocalSystem",
 			DelayedAutoStart: true,
 		},
 	)
@@ -98,14 +104,48 @@ func svcInstall(serverURL, envLabel string) error {
 	}
 	defer s.Close()
 
-	// Store BAS_SERVER_URL and BAS_ENV_LABEL in the service Parameters registry key
-	// so the service picks them up without relying on user environment variables.
+	// Write URL + env label to registry (plaintext — these are not secrets).
 	if err := writeServiceParams(serverURL, envLabel); err != nil {
 		log.Printf("[svc] warning: could not write service params: %v", err)
 	}
 
+	// DPAPI-encrypt the agent secret and store the blob in registry.
+	// Plain-text secret is never persisted to disk.
+	if secret != "" {
+		if err := StoreEncryptedSecret(secret); err != nil {
+			log.Printf("[svc] warning: could not store encrypted secret: %v", err)
+		} else {
+			fmt.Printf("[+] Agent secret encrypted (DPAPI, machine-scope) and stored\n")
+		}
+	}
+
+	// Store the binary hash so startup integrity checks can detect replacement.
+	if hash, err := SelfHash(); err == nil {
+		if err := StoreBinaryHash(hash); err != nil {
+			log.Printf("[svc] warning: could not store binary hash: %v", err)
+		} else {
+			fmt.Printf("[+] Binary hash stored: %s...\n", hash[:16])
+		}
+	}
+
 	_ = eventlog.InstallAsEventCreate(svcName, eventlog.Error|eventlog.Warning|eventlog.Info)
 	fmt.Printf("[+] Service %q installed (LocalSystem, auto-start)\n", svcName)
+
+	// Apply tamper protections — failures are non-fatal (logged, service still starts).
+	if err := ApplyServiceRecovery(); err != nil {
+		log.Printf("[svc] warning: recovery policy: %v", err)
+	}
+	if err := ApplyServiceDACL(); err != nil {
+		log.Printf("[svc] warning: service DACL: %v", err)
+	}
+	installDir := filepath.Dir(exePath)
+	if err := ApplyFileACL(installDir); err != nil {
+		log.Printf("[svc] warning: file ACL: %v", err)
+	}
+	if err := ApplyRegistryACL(); err != nil {
+		log.Printf("[svc] warning: registry ACL: %v", err)
+	}
+
 	fmt.Printf("    Run: sc start %s\n", svcName)
 	return nil
 }

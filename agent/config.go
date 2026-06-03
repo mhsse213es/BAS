@@ -26,6 +26,11 @@ func loadConfig() Config {
 			}
 		}
 	}
+	// Fallback: read DPAPI-encrypted secret from registry (Windows service installs).
+	// Env var takes priority so operators can override without reinstalling.
+	if agentSecret == "" {
+		agentSecret = readEncryptedSecretPlatform()
+	}
 	if serverURL == "" {
 		serverURL = "http://localhost:9000"
 	}

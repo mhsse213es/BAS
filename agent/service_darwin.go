@@ -15,11 +15,11 @@ const (
 	darwinConfigFile = "/etc/bas-agent/config"
 )
 
-func svcInstall(serverURL, envLabel string) error {
+func svcInstall(serverURL, envLabel, secret string) error {
 	if err := os.MkdirAll(darwinConfigDir, 0755); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
-	cfg := fmt.Sprintf("BAS_SERVER_URL=%s\nBAS_ENV_LABEL=%s\n", serverURL, envLabel)
+	cfg := fmt.Sprintf("BAS_SERVER_URL=%s\nBAS_ENV_LABEL=%s\nBAS_AGENT_SECRET=%s\n", serverURL, envLabel, secret)
 	if err := os.WriteFile(darwinConfigFile, []byte(cfg), 0600); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}

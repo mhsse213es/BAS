@@ -47,8 +47,20 @@ func platformPreStart() {
 		}
 	}
 	enablePrivileges()
+
+	// Startup integrity check — compare running binary against hash stored at install.
+	if err := VerifyOwnIntegrity(); err != nil {
+		log.Printf("[!] INTEGRITY: %v — server will be notified via heartbeat", err)
+		// Do not abort: let the agent connect so the server can quarantine it.
+		// Aborting silently is worse — it hides the compromise from the SOC.
+	}
 }
 
 func platformPrintBannerExtras(_ Identity) {
 	fmt.Printf("  Elevated  : %v\n", isElevated())
+}
+
+// readEncryptedSecretPlatform returns the DPAPI-decrypted agent secret from registry.
+func readEncryptedSecretPlatform() string {
+	return ReadEncryptedSecret()
 }

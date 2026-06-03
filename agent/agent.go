@@ -20,6 +20,7 @@ type Agent struct {
 	cfg            Config
 	id             Identity
 	status         string
+	state          string // server-assigned lifecycle state: active|restricted|quarantined|retired
 	mu             sync.Mutex
 	client         *http.Client
 	cancelScenario context.CancelFunc
@@ -55,7 +56,9 @@ func (a *Agent) getStatus() string {
 	return a.status
 }
 
-func (a *Agent) postJSON(path string, body interface{}) error {
+// postJSONDecode POSTs body as JSON and optionally decodes the response into out.
+// Pass nil for out to discard the response body.
+func (a *Agent) postJSONDecode(path string, body interface{}, out interface{}) error {
 	data, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
@@ -67,7 +70,6 @@ func (a *Agent) postJSON(path string, body interface{}) error {
 	req.Header.Set("Content-Type", "application/json")
 	if a.cfg.AgentSecret != "" {
 		req.Header.Set("X-Agent-Token", a.cfg.AgentSecret)
-		// Sign result and report payloads so the orchestrator can detect tampering.
 		if path == "/api/scenarios/result" || path == "/api/report" {
 			req.Header.Set("X-Result-MAC", SignBody(data, a.cfg.AgentSecret))
 		}
@@ -80,28 +82,84 @@ func (a *Agent) postJSON(path string, body interface{}) error {
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("server %d on %s", resp.StatusCode, path)
 	}
+	if out != nil {
+		// Non-fatal if body can't be decoded — old server versions return 200 with no body.
+		_ = json.NewDecoder(resp.Body).Decode(out)
+	}
 	return nil
+}
+
+func (a *Agent) postJSON(path string, body interface{}) error {
+	return a.postJSONDecode(path, body, nil)
+}
+
+// enrollWithServer performs the pre-operation handshake: validates URL+secret
+// are accepted by the server and receives the initial policy bundle.
+// Failure is non-fatal — the agent continues and will retry on next heartbeat.
+func (a *Agent) enrollWithServer() {
+	req := EnrollRequest{
+		AgentID:      a.id.AgentID,
+		Hostname:     a.id.Hostname,
+		IPAddress:    a.id.IPAddress,
+		OSVersion:    a.id.OSVersion,
+		Username:     a.id.Username,
+		EnvLabel:     a.cfg.EnvLabel,
+		BinaryHash:   a.binaryHash,
+		AgentVersion: version,
+	}
+	var resp EnrollResponse
+	if err := a.postJSONDecode("/api/agents/enroll", req, &resp); err != nil {
+		log.Printf("[!] enrollment failed: %v — continuing; will retry on reconnect", err)
+		return
+	}
+	a.mu.Lock()
+	a.state = resp.State
+	a.mu.Unlock()
+	log.Printf("[+] enrolled — state=%s trusted=%v", resp.State, resp.Trusted)
+	if resp.State == "quarantined" {
+		log.Printf("[!] AGENT IS QUARANTINED — scenario execution blocked; contact your BAS administrator")
+	}
 }
 
 func (a *Agent) sendHeartbeat(status string) {
 	hb := Heartbeat{
-		AgentID:    a.id.AgentID,
-		Hostname:   a.id.Hostname,
-		IPAddress:  a.id.IPAddress,
-		OSVersion:  a.id.OSVersion,
-		Username:   a.id.Username,
-		Status:     status,
-		EnvLabel:   a.cfg.EnvLabel,
-		BinaryHash: a.binaryHash,
+		AgentID:       a.id.AgentID,
+		Hostname:      a.id.Hostname,
+		IPAddress:     a.id.IPAddress,
+		OSVersion:     a.id.OSVersion,
+		Username:      a.id.Username,
+		Status:        status,
+		EnvLabel:      a.cfg.EnvLabel,
+		BinaryHash:    a.binaryHash,
+		AgentVersion:  version,
+		SchemaVersion: schemaVersion,
 	}
-	if err := a.postJSON("/api/heartbeat", hb); err != nil {
+	var resp HeartbeatResponse
+	if err := a.postJSONDecode("/api/heartbeat", hb, &resp); err != nil {
 		log.Printf("[!] heartbeat: %v", err)
-	} else {
-		log.Printf("[~] heartbeat: %s", status)
+		return
 	}
+	if resp.State != "" {
+		a.mu.Lock()
+		prev := a.state
+		a.state = resp.State
+		a.mu.Unlock()
+		if resp.State == "quarantined" && prev != "quarantined" {
+			log.Printf("[!] SERVER HAS QUARANTINED THIS AGENT — scenario execution blocked; contact administrator")
+		}
+	}
+	log.Printf("[~] heartbeat: %s (state=%s)", status, resp.State)
 }
 
 func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
+	// Local state guard — defense-in-depth alongside server-side enforcement.
+	a.mu.Lock()
+	st := a.state
+	a.mu.Unlock()
+	if st == "quarantined" || st == "restricted" || st == "retired" {
+		log.Printf("[!] scenario blocked locally — agent state=%s (run %s)", st, cmd.RunID)
+		return
+	}
 	log.Printf("[*] scenario started: run=%s scenario=%s steps=%d mode=%s",
 		cmd.RunID, cmd.ScenarioID, len(cmd.Steps), cmd.Mode)
 
@@ -234,6 +292,13 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 }
 
 func (a *Agent) runLocalScan(scenarioID, runID string) {
+	a.mu.Lock()
+	st := a.state
+	a.mu.Unlock()
+	if st == "quarantined" || st == "restricted" || st == "retired" {
+		log.Printf("[!] local scan blocked — agent state=%s (run %s)", st, runID)
+		return
+	}
 	log.Printf("[*] local scan started: scenario=%s run=%s", scenarioID, runID)
 	a.setStatus("scanning")
 	a.sendHeartbeat("scanning")
