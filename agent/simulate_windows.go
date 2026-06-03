@@ -68,7 +68,7 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	case "upi-fraud-killchain":
 		return upiFraudChecks()
 	case "cscrf-mii-drill":
-		return cscrfChecks()
+		return cscrfDrillChecks()
 	case "purplesharp-ad-drill":
 		return purpleSharpADChecks()
 	case "lolbin-execution":
@@ -1616,7 +1616,204 @@ func checkOutboundProxyEnforcement() SimCheck {
 		})
 }
 
-// ── CSCRF-MII Core Control Validation ────────────────────────────────────────
+// ── CSCRF-MII Drill (Three-Tier) ─────────────────────────────────────────────
+
+// cscrfDrillChecks is the POSTURE side of the SEBI CSCRF-MII three-tier drill.
+// Eight categories map directly to SEBI CSCRF control domains plus three new
+// areas: third-party risk, incident-response readiness, and identity security.
+func cscrfDrillChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "cscrf-network-security", Checks: []SimCheck{
+			checkOpenManagementPorts(),
+			checkFirewall(),
+			checkSMBSigning(),
+			checkLLMNR(),
+		}},
+		{Phase: "cscrf-access-management", Checks: []SimCheck{
+			checkLocalAdminCount(),
+			checkDefaultAdminAccount(),
+			checkAccountLockoutPolicy(),
+			checkPasswordMinLength(),
+		}},
+		{Phase: "cscrf-data-security", Checks: []SimCheck{
+			checkBitLockerStatus(),
+			checkAuditLogRetention(),
+		}},
+		{Phase: "cscrf-monitoring-detection", Checks: []SimCheck{
+			checkDefenderRTP(),
+			checkSysmon(),
+			checkScriptBlockLogging(),
+			checkEventLog(),
+		}},
+		{Phase: "cscrf-business-continuity", Checks: []SimCheck{
+			checkVSSShadowCopies(),
+			checkPatchCurrency(),
+			checkControlledFolderAccess(),
+		}},
+		{Phase: "cscrf-third-party-risk", Checks: []SimCheck{
+			checkRemoteSupportTools(),
+			checkUnsignedPSModules(),
+			checkUSBAutorun(),
+		}},
+		{Phase: "cscrf-incident-response", Checks: []SimCheck{
+			checkCrashDumpPolicy(),
+			checkTimeSynchronization(),
+		}},
+		{Phase: "cscrf-identity-security", Checks: []SimCheck{
+			checkLAPSDeployment(),
+			checkCredentialGuard(),
+			checkNTLMRestrictions(),
+			checkCachedLogonCount(),
+			checkRDPNLA(),
+		}},
+	}
+}
+
+func checkRemoteSupportTools() SimCheck {
+	return check("T1219", "Remote Support Tool Inventory", "cscrf-third-party-risk", "High",
+		"SEBI CSCRF requires inventory and control of remote access tools — unmanaged remote support software creates persistent backdoor risk outside vendor oversight.",
+		"Inventory and formally approve all remote support tools. Enforce AppLocker/WDAC allow-list. Require MFA and session logging for any approved tool.",
+		func() (string, string) {
+			toolPaths := []struct{ name, path string }{
+				{"TeamViewer", `C:\Program Files\TeamViewer\TeamViewer.exe`},
+				{"TeamViewer", `C:\Program Files (x86)\TeamViewer\TeamViewer.exe`},
+				{"AnyDesk", `C:\Program Files (x86)\AnyDesk\AnyDesk.exe`},
+				{"AnyDesk", `C:\Program Files\AnyDesk\AnyDesk.exe`},
+				{"Supremo", `C:\Program Files\Supremo\Supremo.exe`},
+			}
+			var found []string
+			for _, t := range toolPaths {
+				out, err := psRun(fmt.Sprintf(`Test-Path "%s"`, t.path))
+				if err == nil && strings.EqualFold(strings.TrimSpace(out), "True") {
+					found = append(found, t.name)
+				}
+			}
+			for _, svc := range []string{"TeamViewer", "AnyDesk", "ScreenConnect", "Supremo", "rutserv"} {
+				if svcRunning(svc) {
+					found = append(found, svc+" (svc)")
+				}
+			}
+			if len(found) == 0 {
+				return "pass", "No unmanaged remote support tools detected — SEBI CSCRF remote-access inventory compliant."
+			}
+			return "fail", fmt.Sprintf("Remote support tool(s) present: %s — verify each is enterprise-approved, MFA-enforced, and session-logged per SEBI CSCRF.", strings.Join(found, ", "))
+		})
+}
+
+func checkUnsignedPSModules() SimCheck {
+	return check("T1195", "Unsigned PowerShell Module Detection", "cscrf-third-party-risk", "High",
+		"Unsigned PowerShell modules represent unverified supply-chain code — a vector for persistence and privilege escalation in MII trading environments.",
+		"Enforce AllSigned execution policy on servers. Audit PSModulePath for unsigned modules. Remove or sign all third-party modules.",
+		func() (string, string) {
+			out, err := psRun(`$u=0; $env:PSModulePath.Split(';') | ForEach-Object { if(Test-Path $_){ Get-ChildItem -Path $_ -Recurse -Filter *.psm1 -ErrorAction SilentlyContinue | ForEach-Object { $s=Get-AuthenticodeSignature $_.FullName -ErrorAction SilentlyContinue; if($s -and $s.Status -ne 'Valid'){$u++} } } }; $u`)
+			if err != nil {
+				return "skipped", "Could not enumerate PowerShell module signatures — requires module path access."
+			}
+			var count int
+			fmt.Sscanf(strings.TrimSpace(out), "%d", &count)
+			if count == 0 {
+				return "pass", "All discoverable PowerShell modules have valid signatures — supply-chain integrity maintained."
+			}
+			return "fail", fmt.Sprintf("%d unsigned PowerShell module(s) in PSModulePath — potential supply-chain risk. SEBI CSCRF third-party code review required.", count)
+		})
+}
+
+func checkUSBAutorun() SimCheck {
+	return check("T1091", "USB/Removable Device Autorun Policy", "cscrf-third-party-risk", "High",
+		"SEBI CSCRF requires removable media controls — enabled autorun allows physical-access attacks via USB without any user interaction.",
+		"Disable AutoRun via GPO: Computer Config → Security → NoDriveTypeAutoRun = 0xFF (all drive types).",
+		func() (string, string) {
+			for _, key := range []string{
+				`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer`,
+				`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer`,
+			} {
+				val, err := regValue(key, "NoDriveTypeAutoRun")
+				if err == nil && (val == "0xff" || val == "255" || val == "0xFF") {
+					return "pass", "AutoRun disabled for all drive types (NoDriveTypeAutoRun=0xFF) — USB autorun attacks blocked, SEBI CSCRF removable-media control met."
+				}
+			}
+			return "fail", "AutoRun not disabled for all drive types — USB device autorun attacks possible. SEBI CSCRF removable-media control non-compliant."
+		})
+}
+
+func checkCrashDumpPolicy() SimCheck {
+	return check("T1003.001", "Crash Dump / Forensic Artifact Retention Policy", "cscrf-incident-response", "Medium",
+		"SEBI CSCRF requires forensic artifact retention for regulatory investigations — disabled crash dumps prevent post-incident memory analysis and regulatory review.",
+		"Enable kernel or minidump: HKLM\\SYSTEM\\CurrentControlSet\\Control\\CrashControl\\CrashDumpEnabled = 2 (kernel) or 7 (automatic).",
+		func() (string, string) {
+			val, err := regValue(`HKLM\SYSTEM\CurrentControlSet\Control\CrashControl`, "CrashDumpEnabled")
+			if err != nil {
+				return "skipped", "Could not read CrashControl configuration."
+			}
+			switch val {
+			case "0x1", "1":
+				return "pass", "Complete memory dump enabled — maximum forensic artifact retention for SEBI incident investigations."
+			case "0x2", "2":
+				return "pass", "Kernel memory dump enabled — forensic data available for SEBI regulatory investigations."
+			case "0x3", "3":
+				return "pass", "Minidump enabled — basic forensic capture active for incident response."
+			case "0x7", "7":
+				return "pass", "Automatic memory dump enabled — forensic capture active."
+			case "0x0", "0":
+				return "fail", "Crash dumps DISABLED — post-incident memory forensics impossible. SEBI CSCRF incident investigation capability impaired."
+			default:
+				return "pass", fmt.Sprintf("Crash dump configured (CrashDumpEnabled=%s) — forensic capture enabled.", val)
+			}
+		})
+}
+
+func checkTimeSynchronization() SimCheck {
+	return check("T1070.006", "Time Synchronisation (W32tm / NTP)", "cscrf-incident-response", "High",
+		"SEBI CSCRF and RBI require synchronised time — time skew corrupts forensic timelines, invalidates Kerberos tickets, and breaks regulatory audit trails under investigation.",
+		"Configure W32tm: w32tm /config /manualpeerlist:<NTP-SERVER> /syncfromflags:MANUAL /update. Monitor for time drift via EID 37.",
+		func() (string, string) {
+			if !svcRunning("W32Time") {
+				return "fail", "W32Time service NOT running — NTP synchronisation unavailable. Regulatory and forensic timeline integrity at risk."
+			}
+			out, err := exec.Command("w32tm", "/query", "/status").Output()
+			if err != nil {
+				return "pass", "W32Time running — time synchronisation active (status query unavailable)."
+			}
+			for _, line := range strings.Split(string(out), "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(strings.ToLower(line), "source:") {
+					parts := strings.SplitN(line, ":", 2)
+					if len(parts) == 2 {
+						src := strings.TrimSpace(parts[1])
+						if strings.Contains(src, "Local CMOS") || strings.Contains(src, "Free-running") {
+							return "fail", fmt.Sprintf("W32tm source = '%s' — NOT syncing with NTP. Forensic and Kerberos timelines unreliable.", src)
+						}
+						return "pass", fmt.Sprintf("W32tm syncing from '%s' — time synchronisation active, SEBI audit timeline integrity maintained.", src)
+					}
+				}
+			}
+			return "pass", "W32Time running — NTP synchronisation active."
+		})
+}
+
+func checkCachedLogonCount() SimCheck {
+	return check("T1003.005", "Cached Domain Logon Credential Count", "cscrf-identity-security", "High",
+		"Each cached domain logon stores a hashed credential extractable offline — SEBI CSCRF requires minimising credential exposure on endpoints.",
+		"Set CachedLogonsCount = 1 via GPO: Computer Config → Security → Interactive Logon: Number of previous logons to cache.",
+		func() (string, string) {
+			val, err := regValue(`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon`, "CachedLogonsCount")
+			if err != nil {
+				return "fail", "CachedLogonsCount not set — Windows default (10) applies. Explicitly set to 1 for SEBI CSCRF MII compliance."
+			}
+			var n int
+			fmt.Sscanf(strings.Trim(val, `"`), "%d", &n)
+			switch {
+			case n == 0:
+				return "pass", "CachedLogonsCount = 0 — no domain credentials cached. Maximum protection (verify offline login not required)."
+			case n <= 2:
+				return "pass", fmt.Sprintf("CachedLogonsCount = %d — minimal credential caching, SEBI CSCRF compliant.", n)
+			default:
+				return "fail", fmt.Sprintf("CachedLogonsCount = %d — %d extractable cached credential set(s). SEBI CSCRF MII requires ≤1.", n, n)
+			}
+		})
+}
+
+// ── CSCRF-MII Core Control Validation (legacy) ───────────────────────────────
 
 func cscrfChecks() []SimCategory {
 	return []SimCategory{

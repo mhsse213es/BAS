@@ -1,22 +1,38 @@
 id: cscrf-mii-drill
-name: CSCRF-MII Core Control Validation Drill
+name: SEBI CSCRF-MII Continuous Control Validation (Three-Tier)
 description: >
-  Validates the core security controls mandated by SEBI's Cyber Security and
-  Cyber Resilience Framework for Market Infrastructure Institutions (CSCRF-MII,
-  SEBI Circular SEBI/HO/MRD/MRD-PoD-1/P/CIR/2023/149).
-  Covers the five CSCRF control domains: Network Security, Access Management,
-  Data Security, Monitoring & Detection, and Business Continuity.
-  Simulations are safe and do not disrupt production systems.
+  Continuous compliance validation for SEBI's Cyber Security and Cyber Resilience
+  Framework for Market Infrastructure Institutions (SEBI/HO/MRD/MRD-PoD-1/P/
+  CIR/2023/149). Evolving from static CIS scanner toward continuous
+  control-effectiveness validation — validating that SEBI-mandated controls
+  actually detect and prevent threats, not just that they are configured.
 
-  Per-OS local checks - Windows: open management ports / firewall / SMB signing /
-  LLMNR (network), local-admin, account-lockout and password policy (access),
-  BitLocker and audit-log retention (data), Defender / Sysmon / script-block /
-  event-log (monitoring), VSS / patch currency / Controlled Folder Access (BCP).
-  Linux: UFW / IP-forwarding / SYN cookies / ICMP (network), SSH, sudo and
-  password policy (access), shadow and passwd perms, log exposure and core dumps
-  (data), auditd / rsyslog / journald (monitoring). macOS: application firewall
-  and Gatekeeper, SSH and Screen Sharing, FileVault and Keychain, SIP and XProtect.
+  TIERS:
+  - Posture (default, safe anywhere): eight CSCRF-mapped categories — network
+    security, access management, data security, monitoring/detection, business
+    continuity, third-party risk (remote support tools, unsigned PS modules, USB
+    autorun), incident response readiness (crash dump policy, time sync), and
+    identity security (LAPS, Credential Guard, NTLM, cached logons, RDP).
+  - Telemetry (opt-in, production-safe): five CSCRF detection-validation
+    techniques — localhost management-port scan, failed auth probe against
+    BAS-NONEXISTENT-USER only (lockout-safe), system discovery recon, audit
+    policy enumeration, and local group enumeration. Validates that SEBI-mandated
+    monitoring controls actually generate alerts.
+  - Lab (opt-in, isolated range only): four privileged-operation probes —
+    local account create+delete (deterministic naming, strong random password,
+    disabled before deletion), WinRM localhost lateral probe, Security log clear
+    attempt (default-disabled without BAS_CONFIRM_LOG_CLEAR=true, focuses on
+    command telemetry), SYSTEM-context scheduled task create+delete with execution
+    lineage metadata.
+
+  GUARDRAILS: workstation-targeted; execution window optional; account probe uses
+  BAS-NONEXISTENT-USER only; log-clear requires explicit env flag; all steps
+  tagged [BAS-SIM] with run IDs for SEBI audit evidence.
+
+  STRATEGIC DIRECTION: moving toward continuous compliance assurance with
+  control-drift detection rather than periodic assessment.
 author: Audspect Research
+executable: true
 local_check: true
 tags:
   - cscrf
@@ -26,136 +42,20 @@ tags:
   - bfsi
   - india
   - regulatory
+  - hybrid
+  - continuous-compliance
 mitre_phases:
-  - initial-access
-  - defense-evasion
-  - credential-access
   - discovery
-  - exfiltration
+  - credential-access
+  - defense-evasion
+  - persistence
 
-steps:
-  # â”€â”€ CSCRF Domain 1: Network Security â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  - name: "CSCRF-1.1 â€” Network perimeter: test for open management ports"
-    technique_id: T1046
-    framework: custom
-    command: |
-      Write-Output "[CSCRF-1.1] Checking for open management ports (simulation)"
-      $ports = @(22,23,3389,5985,5986,445,135)
-      foreach ($p in $ports) {
-        $conn = Test-NetConnection -ComputerName localhost -Port $p -WarningAction SilentlyContinue
-        $state = if ($conn.TcpTestSucceeded) { "OPEN" } else { "CLOSED" }
-        Write-Output "  Port $p : $state"
-      }
-    executor: powershell
-    timeout_sec: 30
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
 
-  - name: "CSCRF-1.2 â€” Firewall rule enumeration"
-    technique_id: T1518.001
-    framework: custom
-    command: |
-      Write-Output "[CSCRF-1.2] Enumerating Windows Firewall rules"
-      Get-NetFirewallRule -Enabled True -Direction Inbound |
-        Select-Object -First 10 DisplayName, Action, Profile |
-        Format-Table -AutoSize | Out-String
-    executor: powershell
-    timeout_sec: 20
-
-  # â”€â”€ CSCRF Domain 2: Access Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  - name: "CSCRF-2.1 â€” Privileged account enumeration (local admins)"
-    technique_id: T1087.001
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  - name: "CSCRF-2.2 â€” Default/weak credential check (local accounts)"
-    technique_id: T1110.001
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  - name: "CSCRF-2.3 â€” Kerberos delegation misconfiguration check"
-    technique_id: T1558.003
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  # â”€â”€ CSCRF Domain 3: Data Security â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  - name: "CSCRF-3.1 â€” Audit log tampering resistance (test disable attempt)"
-    technique_id: T1562.002
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  - name: "CSCRF-3.2 â€” Sensitive data staging detection"
-    technique_id: T1560.001
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  # â”€â”€ CSCRF Domain 4: Monitoring & Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  - name: "CSCRF-4.1 â€” Security tool inventory and health check"
-    technique_id: T1518.001
-    framework: custom
-    command: |
-      Write-Output "[CSCRF-4.1] Security tool inventory"
-      $tools = @(
-        @{Name="Windows Defender";  Key="HKLM:\SOFTWARE\Microsoft\Windows Defender"},
-        @{Name="Windows Firewall";  Key="HKLM:\SYSTEM\CurrentControlSet\Services\MpsSvc"},
-        @{Name="Windows Audit";     Key="HKLM:\SYSTEM\CurrentControlSet\Services\EventLog"}
-      )
-      foreach ($t in $tools) {
-        $exists = Test-Path $t.Key
-        $status = if ($exists) { "FOUND" } else { "NOT FOUND" }
-        Write-Output "  $($t.Name): $status"
-      }
-    executor: powershell
-    timeout_sec: 15
-
-  - name: "CSCRF-4.2 â€” Exfiltration control validation"
-    technique_id: T1041
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  # â”€â”€ CSCRF Domain 5: Business Continuity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  - name: "CSCRF-5.1 â€” Patch currency check (installed hotfixes)"
-    technique_id: T1082
-    framework: custom
-    command: |
-      Write-Output "[CSCRF-5.1] Checking patch currency"
-      $hotfixes = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 10
-      $latest   = $hotfixes | Select-Object -First 1
-      $daysSince = if ($latest.InstalledOn) {
-        (New-TimeSpan -Start $latest.InstalledOn -End (Get-Date)).Days
-      } else { 999 }
-      Write-Output "  Latest patch: $($latest.HotFixID) installed $daysSince days ago"
-      if ($daysSince -gt 30) {
-        Write-Output "  WARNING: Endpoint is more than 30 days behind on patches"
-      } else {
-        Write-Output "  OK: Endpoint patched within 30 days"
-      }
-    executor: powershell
-    timeout_sec: 20
-
-  - name: "CSCRF-5.2 â€” Backup process verification"
-    technique_id: T1490
-    framework: custom
-    command: |
-      Write-Output "[CSCRF-5.2] Checking VSS/backup status"
-      $shadows = Get-WmiObject Win32_ShadowCopy 2>$null
-      if ($shadows) {
-        Write-Output "  VSS shadow copies found: $($shadows.Count)"
-        $shadows | Select-Object -First 3 | ForEach-Object {
-          Write-Output "  - $($_.InstallDate) : $($_.VolumeName)"
-        }
-      } else {
-        Write-Output "  WARNING: No VSS shadow copies found â€” backup controls may be insufficient"
-      }
-    executor: powershell
-    timeout_sec: 20
+# Telemetry steps (Portion 2) and lab steps (Portion 3) to follow.
+steps: []
