@@ -9,17 +9,22 @@ execution, and future families).
 
 ## 1. Execution-mode taxonomy
 
-| Tier | Mode | What runs | Telemetry generated | Where it may run |
-|------|------|-----------|--------------------|------------------|
-| **0** | **Posture** (default) | Read-only configuration checks (`local_check`) | None — no attack behaviour | Any host, including production |
-| **1** | **Live (lab-safe)** | Real techniques with **benign, self-cleaning** payloads | Genuine endpoint telemetry (EID/Sysmon) | **Isolated lab / test VM with snapshot only** |
-| **2** | **Full-fidelity** (future, not enabled) | Real techniques with realistic payloads (real C2 listener, test-file encryption) | Maximum fidelity, irreversible side effects | Dedicated, network-isolated cyber range only |
+| Mode | What runs | Telemetry generated | Where it may run | Gates |
+|------|-----------|--------------------|------------------|-------|
+| **Posture** (default) | Read-only configuration checks (`local_check`) | None — no attack behaviour | Any host, incl. production | role only |
+| **Telemetry** (opt-in) | Real, **identity-safe** techniques (request-only / probe-only / handle-only) with benign, self-cleaning effects | Genuine endpoint telemetry (EID/Sysmon) | Production-safe under an approved window | `executable` + `confirmLive` |
+| **Lab** (opt-in) | **Full-fidelity** emulation — persistence, real dumps, allowlisted spray | Maximum fidelity | **Isolated lab / AD range with snapshot only** | `executable` + `confirmLive` + `confirmLab` |
 
-The platform currently ships Tier 0 and Tier 1. Tier 2 is reserved for explicitly
-isolated range scenarios and is not enabled by default.
+All three modes are enabled. A scenario opts into live capability with
+`executable: true`; the mode is chosen per run (`mode: posture | telemetry | lab`,
+default posture). Steps are filtered by `fidelity`: telemetry runs only
+`telemetry-safe` steps; lab runs all. `execute` is accepted as a legacy alias for
+`telemetry`.
 
-A scenario opts into live capability with `executable: true`. The run mode is
-chosen per run (`mode: posture | execute`); posture is always the default.
+The three tiers are operationally and commercially distinct: **Posture** =
+continuous safe validation; **Telemetry** = production-safe detection validation
+(primary SOC/EDR/SIEM layer); **Lab** = maximum-fidelity adversary emulation
+(red/purple-team layer). They are never merged.
 
 ---
 
@@ -102,15 +107,61 @@ Live execution is gated at multiple layers:
 1. **Role** — only Analyst/Admin can run scenarios (route-level RBAC).
 2. **Scenario opt-in** — the scenario must declare `executable: true`. A live
    request against any other scenario is rejected (HTTP 400).
-3. **Explicit acknowledgement** — the live request must include
-   `confirmLive: true`. Without it the server rejects the run (HTTP 400). The
-   dashboard sets this only after the operator accepts the live-execution warning.
-4. **Optional justification** — an operator may pass `reason`, which is recorded
-   in the audit log.
-5. **Audit log** — every live dispatch emits:
-   `[AUDIT] live-execution dispatched: user=<id> scenario=<id> agent=<id> run=<id> reason=<...>`
-   and is also captured in the `scenario_runs` record (`initiated_by`, timestamps).
+3. **Live acknowledgement** — any live run (telemetry or lab) requires
+   `confirmLive: true`, else HTTP 400.
+4. **Lab second-stage approval** — `mode: lab` additionally requires
+   `confirmLab: true` (a separate, deliberate confirmation), else HTTP 400.
+5. **Execution window** — if `live_policy.execution_window` is set, live runs
+   outside the "HH:MM-HH:MM" local window are rejected (HTTP 400).
+6. **Domain-controller interlock** — if `live_policy.block_on_domain_controller`
+   is set and the target host is a DC, the agent aborts the whole run before any
+   step executes.
+7. **Account allowlist + attempt cap** — `live_policy.spray_account_allowlist`
+   and `max_spray_attempts` are passed to the agent as env (`BAS_SPRAY_ALLOWLIST`,
+   `BAS_MAX_SPRAY_ATTEMPTS`); the spray step refuses to target non-allowlisted
+   accounts and caps attempts below the lockout threshold.
+8. **Audit log** — every live dispatch emits:
+   `[AUDIT] live-execution dispatched: mode=<...> user=<id> scenario=<id> agent=<id> run=<id> reason=<...>`
+   and is captured in the `scenario_runs` record (`initiated_by`, timestamps).
 
-**Default is always posture.** Live mode must be chosen deliberately each run.
-Run live mode only against an isolated lab / test VM with a snapshot — it will
-trigger EDR/Defender by design and requires admin/SYSTEM for some techniques.
+**Default is always posture.** Telemetry and lab must be chosen deliberately each
+run. Run lab mode only against an isolated lab / AD range with a snapshot — it
+triggers EDR/Defender by design and requires admin/SYSTEM for some techniques.
+
+---
+
+## 8. Active Directory drill (PurpleSharp) — technique classification & policy
+
+### Technique classification by risk
+| Technique | Telemetry mode | Lab mode | Identity risk |
+|-----------|----------------|----------|---------------|
+| AD Enumeration (LDAP recon) T1087.002 | real read-only LDAP queries | same | very low |
+| Kerberoasting T1558.003 | request **one** TGS; never export/crack/reuse; `klist purge` | same | low |
+| LSASS access T1003.001 | **read-handle only** (no dump, no memory read) | comsvcs **MiniDump** created+deleted, never read | medium → high |
+| Password Spraying T1110.003 | **non-existent probe** (cannot lock anyone) | **allowlisted** test accounts, capped < lockout threshold | low → high |
+
+Persistence, lateral movement, and any credential reuse/ticket abuse are **lab-only**.
+
+### Kerberos-safe execution
+TGS requested via native `KerberosRequestorSecurityToken` to fire **4769** only;
+the ticket is never serialised, cracked, or reused; the ticket cache is purged on
+cleanup.
+
+### Credential-handling policy
+Never write hashes/tickets to disk; never export; never reuse. Telemetry mode
+produces **no** LSASS dump file at all (handle only). The lab MiniDump is deleted
+immediately and never read or exfiltrated.
+
+### Domain-controller safety controls
+`block_on_domain_controller` aborts live runs on a DC; `require_dc_reachable`
+gates Kerberos operations; spray volume is capped via `max_spray_attempts`;
+accounts are restricted to `spray_account_allowlist`.
+
+### AD detection-telemetry matrix
+| Technique | Windows Event | Sysmon | EDR signal |
+|-----------|---------------|--------|------------|
+| AD enumeration | 4662 (DS access) | — | bulk LDAP recon from one host |
+| Kerberoasting | **4769** (RC4 = weak) | — | TGS for SPN, RC4 |
+| Password spray | **4625**/4771; 4740 lockout **must NOT** fire | — | many 4625 one source/several accounts |
+| LSASS read-handle | 4656/4663 (if SACL) | **EID 10** (GrantedAccess 0x1010/0x1410) | suspicious lsass read-handle |
+| LSASS MiniDump (lab) | — | **EID 10** + dump-file create | comsvcs credential-theft behaviour |

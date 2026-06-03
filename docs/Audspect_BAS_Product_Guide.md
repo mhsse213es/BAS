@@ -856,16 +856,17 @@ Custom scenarios are stored as YAML files in `scenarios/custom/` on the server a
 
 > **Note:** Built-in scenarios cannot be overwritten. To customize one, clone it first and edit the copy. Auto-generated threat-intel scenarios are deleted from the **Integrations** connector panel, not here.
 
-### 12.3b Hybrid Scenarios — Posture vs. Live Execution
+### 12.3b Hybrid Scenarios — Posture / Telemetry / Lab
 
-Some scenarios (marked `executable: true`, e.g. **PurpleSharp AD Credential Drill**) support **two run modes**, selectable in the Run dialog:
+Some scenarios (marked `executable: true`, e.g. **PurpleSharp AD Credential Drill**) support **three run modes**, selectable in the Run dialog:
 
 | Mode | What it does | Safety | Where to run |
 |------|--------------|--------|--------------|
-| **Posture** (default) | Read-only checks that validate the **defences** against the techniques (e.g. RunAsPPL, Credential Guard, Kerberos AES, account-lockout policy). Changes nothing. | Safe on any host | Anywhere |
-| **Live execution** (opt-in) | **Actually performs** the techniques in a self-cleaning way to generate genuine SOC/EDR/SIEM telemetry. | Triggers EDR/Defender **by design**; needs admin/SYSTEM | **Domain-joined Windows test VM with a snapshot only** |
+| **Posture** (default) | Read-only checks that validate the **defences** against the techniques (RunAsPPL, Credential Guard, Kerberos AES, lockout policy). Changes nothing. | Safe on any host | Anywhere, incl. production |
+| **Telemetry** (opt-in) | **Real, identity-safe** techniques (request-only / probe-only / handle-only) that generate genuine SOC/EDR/SIEM telemetry with no credential access, cracking, or persistence. | Triggers EDR alerts by design; production-safe under an approved window | Approved/monitored targets |
+| **Lab** (opt-in, 2-step approval) | **Full-fidelity** emulation — real LSASS dump, allowlisted spray, persistence. | Highest risk; requires `confirmLab` | **Isolated AD range / test VM with snapshot only** |
 
-**How to run live mode:** open the Run dialog, set **Execution mode → Live execution**. A red warning and a confirmation prompt appear. The default is always **Posture** — live mode must be chosen deliberately each time.
+**How to run:** open the Run dialog → **Execution mode**. Telemetry shows an amber warning + confirm; Lab shows a red warning and requires a **second** confirmation. The default is always **Posture**. Guardrails (DC interlock, account allowlist, attempt cap, execution window) and the full taxonomy are in `docs/Hybrid_Execution_Framework.md` §8.
 
 **Example — PurpleSharp AD Drill live steps (all self-cleaning):**
 - **Password Spraying (T1110.003)** — one *lockout-safe* failed authentication against a non-existent probe account → Security **Event ID 4625**.
