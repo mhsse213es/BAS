@@ -1072,7 +1072,8 @@ sudo systemctl start bas-agent</code>
       <button class="drawer-close" onclick="closeResults()">&#10005;</button>
     </div>
     <div class="drawer-body">
-      <div id="results-summary" style="margin-bottom:1rem;font-size:0.8rem"></div>
+      <div id="results-summary" style="margin-bottom:0.75rem;font-size:0.8rem"></div>
+      <div id="results-export"></div>
       <div id="results-body" style="font-size:0.8rem"></div>
     </div>
   </div>
@@ -1920,6 +1921,21 @@ function viewRunResults(run) {
     (skipped ? ' &nbsp;/&nbsp; <span style="color:var(--muted)">' + skipped + ' skipped</span>' : '') +
     ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>';
 
+  // Export bar — only when run has an ID and is completed/partial
+  var exportHtml = '';
+  var runId = run.id || '';
+  if (runId && (run.status === 'completed' || run.status === 'partial')) {
+    exportHtml =
+      '<div style="display:flex;gap:0.5rem;align-items:center;padding:0.5rem 0.75rem;margin-bottom:0.75rem;' +
+                  'background:var(--surface);border:1px solid var(--border);border-radius:4px">' +
+        '<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:0.25rem">Export</span>' +
+        '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">↓ JSON</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">↓ HTML Report</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="window.print()" title="Print or save as PDF">⎙ Print / PDF</button>' +
+      '</div>';
+  }
+  document.getElementById('results-export').innerHTML = exportHtml;
+
   var scorePanel = '';
   if (run.score && typeof run.score.preventionScore !== 'undefined') {
     var s = run.score;
@@ -2027,6 +2043,18 @@ function viewRunResults(run) {
   document.getElementById('results-overlay').classList.add('open');
 }
 function closeResults() { document.getElementById('results-overlay').classList.remove('open'); }
+
+function exportRunJSON(runId) {
+  var a = document.createElement('a');
+  a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/export';
+  a.download = 'bas-run-' + runId.substring(0, 8) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+function openRunReport(runId) {
+  window.open('/api/scenarios/runs/' + encodeURIComponent(runId) + '/report', '_blank');
+}
 
 function viewReport(agentId) {
   apicall('/api/report/' + encodeURIComponent(agentId)).then(function(r) {

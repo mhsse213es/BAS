@@ -76,6 +76,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/scenarios", h.ListScenarios)
 		r.Get("/api/scenarios/{id}", h.GetScenario)
 		r.Get("/api/scenarios/runs", h.ListScenarioRuns)
+		r.Get("/api/scenarios/runs/{runId}/report", h.GetRunReport)
+		r.Get("/api/scenarios/runs/{runId}/export", h.ExportRunJSON)
 		r.Get("/api/report/{agentId}", h.GetReport)
 
 		// Viewer+ — safe read-only simulation makes no changes to the endpoint

@@ -1488,3 +1488,79 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 		respond(w, report)
 	}
 }
+
+// ── Per-run export ────────────────────────────────────────────────────────────
+
+// GET /api/scenarios/runs/{runId}/report
+// Returns a self-contained HTML report scoped to a single scenario run.
+func (h *Handler) GetRunReport(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	runID := chi.URLParam(r, "runId")
+	report, err := h.reportingEngine.BuildFromRun(r.Context(), runID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := reporting.GenerateHTML(w, report, nil); err != nil {
+		log.Printf("[api] generate run report HTML: %v", err)
+	}
+}
+
+// GET /api/scenarios/runs/{runId}/export
+// Downloads a single run's full results as a JSON file.
+func (h *Handler) ExportRunJSON(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runId")
+
+	var runName, agentID, status string
+	var resultsJSON, scoreRaw []byte
+	var startedAt time.Time
+	var completedAt *time.Time
+
+	err := h.db.QueryRow(r.Context(),
+		`SELECT name, agent_id, status, results, score, started_at, completed_at
+		 FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&runName, &agentID, &status, &resultsJSON, &scoreRaw, &startedAt, &completedAt)
+	if err != nil {
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	}
+
+	var results []models.SimulationResult
+	var score models.Score
+	json.Unmarshal(resultsJSON, &results)
+	json.Unmarshal(scoreRaw, &score)
+
+	// Sanitise run name for use in filename
+	var safeName []byte
+	for _, c := range []byte(runName) {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+			safeName = append(safeName, c)
+		default:
+			safeName = append(safeName, '_')
+		}
+	}
+	if len(safeName) > 32 {
+		safeName = safeName[:32]
+	}
+	fname := fmt.Sprintf("bas-run-%s-%s.json", string(safeName), runID[:8])
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	enc.Encode(map[string]interface{}{
+		"id":           runID,
+		"scenarioName": runName,
+		"agentId":      agentID,
+		"status":       status,
+		"startedAt":    startedAt,
+		"completedAt":  completedAt,
+		"score":        score,
+		"results":      results,
+	})
+}

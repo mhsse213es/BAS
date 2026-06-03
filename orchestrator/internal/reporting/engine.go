@@ -218,6 +218,106 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	return report, nil
 }
 
+// BuildFromRun constructs a FullReport scoped to a single scenario run.
+// Useful for per-run export and HTML report without needing the full agent history.
+func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, error) {
+	report := &FullReport{GeneratedAt: time.Now().UTC()}
+
+	var agentID, scenarioName, status string
+	var resultsRaw, scoreRaw []byte
+	var startedAt time.Time
+	var completedAt *time.Time
+
+	err := e.db.QueryRow(ctx,
+		`SELECT agent_id, name, status, results, score, started_at, completed_at
+		 FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&agentID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt)
+	if err != nil {
+		return nil, fmt.Errorf("run %s not found: %w", runID, err)
+	}
+
+	var results []models.SimulationResult
+	var score models.Score
+	json.Unmarshal(resultsRaw, &results)
+	json.Unmarshal(scoreRaw, &score)
+
+	// Agent metadata
+	row := e.db.QueryRow(ctx,
+		`SELECT agent_id, hostname, ip_address, os_version, username,
+		        status, env_label, has_report, binary_hash, binary_trusted, last_update
+		 FROM agents WHERE agent_id = $1`, agentID)
+	row.Scan(
+		&report.Agent.AgentID, &report.Agent.Hostname, &report.Agent.IPAddress,
+		&report.Agent.OSVersion, &report.Agent.Username, &report.Agent.Status,
+		&report.Agent.EnvLabel, &report.Agent.HasReport,
+		&report.Agent.BinaryHash, &report.Agent.BinaryTrusted, &report.Agent.LastUpdate,
+	)
+	if report.Agent.AgentID == "" {
+		report.Agent.AgentID = agentID
+	}
+
+	report.TacticHeatmap = buildTacticHeatmap(results)
+	report.TopFindings = buildTopFindings(results, scenarioName)
+
+	report.Summary = ExecutiveSummary{
+		RiskScore:          score.RiskScore,
+		Classification:     score.Classification,
+		PreventionScore:    score.PreventionScore,
+		ExposureScore:      score.ExposureScore,
+		CoverageScore:      score.CoverageScore,
+		KillChainAmplifier: score.KillChainAmplifier,
+		Trend:              score.Trend,
+		TotalRuns:          1,
+		TotalTechniques:    score.TotalTechniques,
+		PassedTechniques:   score.PassedTechniques,
+		FailedTechniques:   score.FailedTechniques,
+		LastRunAt:          startedAt,
+		LastScenarioName:   scenarioName,
+		CriticalFailures:   score.CriticalFailures,
+		Recommendations:    buildRecommendations(score, report.TacticHeatmap),
+	}
+	if report.Summary.Classification == "" {
+		report.Summary.Classification = "No Data"
+	}
+
+	report.Runs = []RunSummary{{
+		ID: runID, ScenarioName: scenarioName, Status: status,
+		StartedAt: startedAt, CompletedAt: completedAt,
+		RiskScore: score.RiskScore, Classification: score.Classification,
+		PreventionScore: score.PreventionScore, ExposureScore: score.ExposureScore,
+		TotalTechniques: score.TotalTechniques, FailedTechniques: score.FailedTechniques,
+	}}
+
+	// Security tools / detection categories from the reports table
+	var toolsRaw, catsRaw []byte
+	e.db.QueryRow(ctx,
+		`SELECT security_tools, categories FROM reports WHERE agent_id = $1`, agentID,
+	).Scan(&toolsRaw, &catsRaw)
+	var toolsList []struct {
+		Name string `json:"name"`
+	}
+	if len(toolsRaw) > 0 {
+		json.Unmarshal(toolsRaw, &toolsList)
+		for _, t := range toolsList {
+			if t.Name != "" {
+				report.SecurityTools = append(report.SecurityTools, t.Name)
+			}
+		}
+	}
+	var catsList []struct {
+		Name   string `json:"name"`
+		Result string `json:"result"`
+	}
+	if len(catsRaw) > 0 {
+		json.Unmarshal(catsRaw, &catsList)
+		for _, c := range catsList {
+			report.DetectionCategories = append(report.DetectionCategories, Category{Name: c.Name, Result: c.Result})
+		}
+	}
+
+	return report, nil
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 var tacticOrder = []string{
