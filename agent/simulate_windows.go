@@ -73,9 +73,194 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 		return purpleSharpADChecks()
 	case "lolbin-execution":
 		return lolbinPostureChecks()
+	case "lolbin-execution-coverage":
+		return lolbinCoverageChecks()
 	default:
 		return RunAllChecks()
 	}
+}
+
+// ── LOLBin Execution Coverage (Three-Tier) ───────────────────────────────────
+
+// lolbinCoverageChecks is the POSTURE side of the full LOLBin Coverage scenario.
+// Five categories span the complete LOLBin defensive stack: exposure, logging,
+// execution surface, binary integrity, and parent-child chain protection.
+func lolbinCoverageChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "lolbin-exposure", Checks: []SimCheck{
+			checkAppLocker(),
+			checkPSConstrainedLanguage(),
+			checkMshtaExecControl(),
+			checkWScriptControl(),
+			checkOfficeChildProcessASR(),
+		}},
+		{Phase: "logging-detection", Checks: []SimCheck{
+			checkSysmon(),
+			checkScriptBlockLogging(),
+			checkAMSIEnforcement(),
+			checkPSTranscription(),
+			checkCommandLineAuditing(),
+			checkWMIActivityLogging(),
+		}},
+		{Phase: "execution-surface", Checks: []SimCheck{
+			checkWinRM(),
+			checkPsExecExposure(),
+			checkOfficeMacroBlocking(),
+			checkOfficeCOMAbuse(),
+		}},
+		{Phase: "lolbin-integrity", Checks: []SimCheck{
+			checkWDACPolicy(),
+			checkLOLBinIntegrity(),
+		}},
+		{Phase: "parent-child-protection", Checks: []SimCheck{
+			checkOfficeChildProcessASR(),
+			checkBrowserChildProcessASR(),
+		}},
+	}
+}
+
+func checkPSConstrainedLanguage() SimCheck {
+	return check("T1059.001", "PowerShell Constrained Language Mode", "lolbin-exposure", "High",
+		"Without Constrained Language Mode, PowerShell allows type creation, P/Invoke, and Add-Type — the foundation of LOLBin execution and AMSI bypass.",
+		"Enforce via WDAC policy (most tamper-resistant) or set __PSLockdownPolicy=4. Verify with: $ExecutionContext.SessionState.LanguageMode",
+		func() (string, string) {
+			out, err := psRun(`$ExecutionContext.SessionState.LanguageMode`)
+			if err != nil {
+				return "skipped", "Could not query PowerShell language mode."
+			}
+			switch strings.ToLower(strings.TrimSpace(out)) {
+			case "constrainedlanguage":
+				return "pass", "PowerShell in ConstrainedLanguage mode — Add-Type, P/Invoke, and type creation blocked."
+			case "restrictedlanguage":
+				return "pass", "PowerShell in RestrictedLanguage mode — most LOLBin script execution blocked."
+			case "nolanguage":
+				return "pass", "PowerShell in NoLanguage mode — script execution fully disabled."
+			default:
+				return "fail", fmt.Sprintf("PowerShell in %s mode — all .NET types, P/Invoke, and LOLBin abuse accessible.", strings.TrimSpace(out))
+			}
+		})
+}
+
+func checkPSTranscription() SimCheck {
+	return check("T1059.001", "PowerShell Transcription Logging", "logging-detection", "Medium",
+		"Transcription records all PS input/output — essential for forensic reconstruction of obfuscated LOLBin chains. Without it, obfuscated PS leaves no audit trail.",
+		"Enable via GPO: Computer Config → PowerShell → Turn on PowerShell Transcription. Set a secure network output directory.",
+		func() (string, string) {
+			val, err := regValue(
+				`HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription`,
+				"EnableTranscripting")
+			if err == nil && (val == "0x1" || val == "1") {
+				dir, _ := regValue(
+					`HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription`,
+					"OutputDirectory")
+				if dir == "" {
+					dir = "local"
+				}
+				return "pass", fmt.Sprintf("PowerShell Transcription enabled (output: %s) — full PS session I/O logged for LOLBin forensic reconstruction.", dir)
+			}
+			return "fail", "PowerShell Transcription not configured — obfuscated LOLBin PS commands leave no reconstructible audit trail."
+		})
+}
+
+func checkCommandLineAuditing() SimCheck {
+	return check("T1059", "Process Command-Line Auditing (EID 4688)", "logging-detection", "High",
+		"Without command-line capture, LOLBin arguments (certutil -decode, regsvr32 /i:*, mshta vbscript:) are invisible in EID 4688 — LOLBin detection is fundamentally blind.",
+		"Enable via GPO: Computer Config → Audit Policy → Process Creation → Include command line in process creation events.",
+		func() (string, string) {
+			val, err := regValue(
+				`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit`,
+				"ProcessCreationIncludeCmdLine_Enabled")
+			if err == nil && (val == "0x1" || val == "1") {
+				return "pass", "Command-line auditing enabled — EID 4688 captures LOLBin arguments (certutil, regsvr32, mshta, rundll32)."
+			}
+			return "fail", "Command-line auditing NOT enabled — EID 4688 logs process create without arguments. LOLBin detection is fundamentally blind."
+		})
+}
+
+func checkWMIActivityLogging() SimCheck {
+	return check("T1047", "WMI Activity Logging (EID 5857-5860)", "logging-detection", "High",
+		"WMI process creation is invisible without WMI event logging — used for LOLBin parent-process spoofing and fileless lateral movement with no disk artefacts.",
+		"Enable via: wevtutil sl Microsoft-Windows-WMI-Activity/Operational /e:true /ms:536870912. Set retention ≥ 512MB.",
+		func() (string, string) {
+			out, err := psRun(`(Get-WinEvent -ListLog "Microsoft-Windows-WMI-Activity/Operational" -ErrorAction SilentlyContinue).IsEnabled`)
+			if err == nil && strings.EqualFold(strings.TrimSpace(out), "True") {
+				szOut, _ := psRun(`(Get-WinEvent -ListLog "Microsoft-Windows-WMI-Activity/Operational" -ErrorAction SilentlyContinue).MaximumSizeInBytes`)
+				var sz int64
+				fmt.Sscanf(strings.TrimSpace(szOut), "%d", &sz)
+				return "pass", fmt.Sprintf("WMI-Activity/Operational log enabled (%dMB) — WMI process creation (EID 5857-5860) captured.", sz/1024/1024)
+			}
+			return "fail", "WMI-Activity/Operational log NOT enabled — Win32_Process.Create LOLBin execution is invisible. EID 5857-5860 not collected."
+		})
+}
+
+func checkPsExecExposure() SimCheck {
+	return check("T1569.002", "PsExec Presence / Lateral-Movement Surface", "execution-surface", "High",
+		"PsExec is the most common LOLBin for lateral movement and ransomware deployment — its presence on non-admin workstations is a persistent risk.",
+		"Remove PsExec from standard workstations. Block via AppLocker publisher rule. Require dedicated jump-host for legitimate remote execution.",
+		func() (string, string) {
+			for _, p := range []string{
+				`C:\Windows\PsExec.exe`, `C:\Windows\System32\PsExec.exe`,
+				`C:\PSTools\PsExec.exe`, `C:\Tools\PsExec.exe`,
+			} {
+				out, err := psRun(fmt.Sprintf(`Test-Path "%s"`, p))
+				if err == nil && strings.EqualFold(strings.TrimSpace(out), "True") {
+					return "fail", fmt.Sprintf("PsExec found at %s — remove from non-admin endpoints. Block via AppLocker publisher rule.", p)
+				}
+			}
+			if svcRunning("PsExecSvc") {
+				return "fail", "PsExecSvc service running — active PsExec remote session detected. Investigate for unauthorised lateral movement."
+			}
+			return "pass", "PsExec not detected in standard paths — lateral movement LOLBin surface reduced."
+		})
+}
+
+func checkWDACPolicy() SimCheck {
+	return check("T1059", "WDAC (Windows Defender Application Control) Base Policy", "lolbin-integrity", "High",
+		"WDAC is the strongest LOLBin prevention — code integrity policy blocks unsigned/untrusted binaries and restricts LOLBin abuse. Without it, the entire LOLBin surface is open.",
+		"Deploy WDAC base policy + Microsoft recommended LOLBin blocklist (supplemental). Use Audit mode first, then Enforcement.",
+		func() (string, string) {
+			out, err := psRun(`Test-Path "$env:SystemRoot\System32\CodeIntegrity\SIPolicy.p7b"`)
+			if err == nil && strings.EqualFold(strings.TrimSpace(out), "True") {
+				return "pass", "WDAC SIPolicy.p7b present — code integrity policy deployed, LOLBin execution restricted."
+			}
+			out2, err2 := psRun(`(Get-CIPolicy -FilePath "$env:SystemRoot\System32\CodeIntegrity\SIPolicy.p7b" -ErrorAction SilentlyContinue) -ne $null`)
+			if err2 == nil && strings.EqualFold(strings.TrimSpace(out2), "True") {
+				return "pass", "WDAC policy active — code integrity enforcement confirmed."
+			}
+			return "fail", "No WDAC policy detected — LOLBin execution unrestricted by code integrity. Microsoft LOLBin blocklist not applied."
+		})
+}
+
+func checkLOLBinIntegrity() SimCheck {
+	return check("T1036.003", "Key LOLBin Authenticode Signature Integrity", "lolbin-integrity", "High",
+		"Attackers replace key LOLBins with trojanised copies — verifying Authenticode signatures confirms mshta/regsvr32/certutil/rundll32 have not been tampered with.",
+		"Monitor key LOLBin signatures and file hashes via FIM. Alert on any signature invalidation for system32 LOLBins.",
+		func() (string, string) {
+			out, err := psRun(`$bad=@(); @('mshta.exe','regsvr32.exe','certutil.exe','rundll32.exe','wscript.exe','cscript.exe','msbuild.exe') | ForEach-Object { $p="$env:SystemRoot\System32\$_"; if(Test-Path $p){ $s=Get-AuthenticodeSignature $p -ErrorAction SilentlyContinue; if($s -and $s.Status -ne 'Valid'){$bad+=$_} } }; $bad.Count`)
+			if err != nil {
+				return "skipped", "Could not verify LOLBin signatures — requires file access."
+			}
+			var count int
+			fmt.Sscanf(strings.TrimSpace(out), "%d", &count)
+			if count == 0 {
+				return "pass", "Key LOLBins (mshta/regsvr32/certutil/rundll32/wscript/cscript/msbuild) all have valid Authenticode signatures — no tampering detected."
+			}
+			return "fail", fmt.Sprintf("%d key LOLBin(s) with invalid/missing signatures — potential trojan replacement or tampering detected.", count)
+		})
+}
+
+func checkBrowserChildProcessASR() SimCheck {
+	const ruleGUID = "D3E037E1-3EB8-44C8-A917-57927947596D"
+	return check("T1059.007", "ASR Rule — Block JS/VBScript from Launching Executables", "parent-child-protection", "High",
+		"Browser-driven LOLBin chains use JS/VBScript to launch executables via WScript.Shell — this ASR rule blocks that parent-child vector.",
+		"Enable ASR rule D3E037E1-3EB8-44C8-A917-57927947596D (Block JS or VBScript from launching downloaded executable content).",
+		func() (string, string) {
+			out, err := psRun(fmt.Sprintf(`(Get-MpPreference -ErrorAction SilentlyContinue).AttackSurfaceReductionRules_Ids | Where-Object {$_ -eq "%s"}`, ruleGUID))
+			if err == nil && strings.TrimSpace(out) != "" {
+				return "pass", "ASR rule D3E037E1 (Block JS/VBScript → executable) present — browser script-host LOLBin chain restricted."
+			}
+			return "fail", "ASR rule D3E037E1 not configured — JS/VBScript can launch executables via WScript.Shell (browser→LOLBin chain open)."
+		})
 }
 
 // lolbinPostureChecks is the POSTURE side of the LOLBin drill — read-only

@@ -48,6 +48,8 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 		return notApplicableWindows("PurpleSharp AD Credential Drill", "T1558.003", "credential-access")
 	case "lolbin-execution":
 		return notApplicableWindows("LOLBin Execution drill", "T1218", "execution")
+	case "lolbin-execution-coverage":
+		return notApplicableWindows("LOLBin Execution Coverage", "T1218", "execution")
 	default:
 		return safeSimChecks()
 	}

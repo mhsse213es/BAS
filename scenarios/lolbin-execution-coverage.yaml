@@ -1,0 +1,58 @@
+id: lolbin-execution-coverage
+name: LOLBin Execution Coverage — Full Three-Tier Orchestration
+description: >
+  Campaign-grade Living-off-the-Land Binary (LOLBin) adversary emulation.
+  Not isolated atomic tests — realistic process ancestry, chained execution,
+  and authentic parent-child telemetry for EDR/SIEM/Sysmon pressure-testing.
+
+  TIERS:
+  - Posture (default, safe anywhere): five categories — LOLBin exposure
+    (AppLocker, WDAC, PS Constrained Language, script interpreter restrictions,
+    ASR rules), logging & detection (Sysmon, ScriptBlock, PS transcription,
+    command-line auditing, WMI activity logging, AMSI), execution surface
+    (WinRM, PsExec, Office macro, COM), LOLBin integrity (WDAC policy,
+    key LOLBin signature verification), parent-child protection (Office/browser
+    child-process ASR rules).
+  - Telemetry (opt-in, production-safe): 11 LOLBins with authentic parent-child
+    chains and real EDR/Sysmon signals — PowerShell (winword→PS), MSHTA (→cmd),
+    Regsvr32 Squiblydoo (scrobj.dll), Rundll32 (exported function), InstallUtil
+    (.NET assembly), MSBuild (inline task), WMI (WmiPrvSE→cmd), Certutil
+    (encode/decode/hash), Schtasks (create+delete), Cscript/Wscript (→cmd),
+    BITSAdmin (job create+cancel). No persistence, no destructive payload,
+    no external C2.
+  - Lab (opt-in, isolated range only): five full-fidelity chains — Office attack
+    chain (winword→mshta→PS), Squiblydoo with localhost BAS listener, Rundll32
+    with Alternate Data Stream, service-to-LOLBin (services.exe→rundll32),
+    WMI remote execution simulation.
+
+  DETECTION COVERAGE: every step defines Sysmon EIDs, Windows EIDs, expected
+  EDR alert, and Sigma rule reference.
+  SAFETY: all steps reversible, self-cleaning, [BAS-SIM] tagged in command
+  lines / task names / temp files / network labels.
+  Per-OS: Windows only. Linux/macOS report not applicable.
+author: Audspect Research
+executable: true
+local_check: true
+tags:
+  - lolbin
+  - defense-evasion
+  - execution
+  - persistence
+  - t1218
+  - hybrid
+  - campaign
+  - mitre
+mitre_phases:
+  - execution
+  - defense-evasion
+  - persistence
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+# Telemetry steps (Portions 2-3) and lab chains (Portion 4) to follow.
+steps: []
