@@ -26,6 +26,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 	// Agent endpoints — protected by optional AGENT_SECRET shared token.
 	// When agentSecret is empty these remain open (backward compat).
 	r.Post("/api/agents/enroll", h.EnrollAgent)
+	r.Post("/api/agents/events", h.ReceiveEvents)
 	r.Post("/api/heartbeat", h.Heartbeat)
 	r.Post("/api/report", h.SubmitReport)
 	r.Post("/api/scenarios/result", h.SubmitScenarioResult)
@@ -80,6 +81,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/scenarios/runs/{runId}/report", h.GetRunReport)
 		r.Get("/api/scenarios/runs/{runId}/export", h.ExportRunJSON)
 		r.Get("/api/scenarios/runs/{runId}/pdf", h.GetRunPDF)
+		r.Get("/api/agents/{agentId}/logs/operational", h.GetOpLogs)
+		r.Get("/api/agents/{agentId}/logs/security", h.GetSecLogs)
+		r.Get("/api/agents/{agentId}/telemetry", h.GetTelemetry)
 		r.Get("/api/report/{agentId}", h.GetReport)
 
 		// Viewer+ — safe read-only simulation makes no changes to the endpoint

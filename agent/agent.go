@@ -25,7 +25,8 @@ type Agent struct {
 	client         *http.Client
 	cancelScenario context.CancelFunc
 	scenarioMu     sync.Mutex
-	binaryHash     string // SHA-256 of own binary, computed once at startup
+	binaryHash     string  // SHA-256 of own binary, computed once at startup
+	logger         *Logger // 3-tier structured logger
 }
 
 func newAgent(cfg Config, id Identity) *Agent {
@@ -34,6 +35,7 @@ func newAgent(cfg Config, id Identity) *Agent {
 		id:     id,
 		status: "idle",
 		client: &http.Client{Timeout: 30 * time.Second},
+		logger: NewLogger(id.AgentID, cfg.ServerURL, cfg.AgentSecret),
 	}
 	if h, err := SelfHash(); err == nil {
 		a.binaryHash = h
@@ -41,6 +43,12 @@ func newAgent(cfg Config, id Identity) *Agent {
 	} else {
 		log.Printf("[!] could not hash binary: %v", err)
 	}
+	a.logger.Op("info", "lifecycle", fmt.Sprintf("agent started v%s hash=%s...", version, func() string {
+		if len(a.binaryHash) >= 16 {
+			return a.binaryHash[:16]
+		}
+		return a.binaryHash
+	}()))
 	return a
 }
 
@@ -116,8 +124,11 @@ func (a *Agent) enrollWithServer() {
 	a.state = resp.State
 	a.mu.Unlock()
 	log.Printf("[+] enrolled — state=%s trusted=%v", resp.State, resp.Trusted)
+	a.logger.Op("info", "lifecycle", fmt.Sprintf("enrolled — state=%s trusted=%v version=%s",
+		resp.State, resp.Trusted, version))
 	if resp.State == "quarantined" {
 		log.Printf("[!] AGENT IS QUARANTINED — scenario execution blocked; contact your BAS administrator")
+		a.logger.Op("error", "lifecycle", "agent quarantined — contact administrator to resolve before running scenarios")
 	}
 }
 
@@ -134,11 +145,16 @@ func (a *Agent) sendHeartbeat(status string) {
 		AgentVersion:  version,
 		SchemaVersion: schemaVersion,
 	}
+	t0 := time.Now()
 	var resp HeartbeatResponse
 	if err := a.postJSONDecode("/api/heartbeat", hb, &resp); err != nil {
 		log.Printf("[!] heartbeat: %v", err)
+		a.logger.Op("warn", "connectivity", fmt.Sprintf("heartbeat failed: %v", err))
 		return
 	}
+	latencyMs := float64(time.Since(t0).Milliseconds())
+	a.logger.Metric("heartbeat_latency_ms", latencyMs, "ms")
+
 	if resp.State != "" {
 		a.mu.Lock()
 		prev := a.state
@@ -146,9 +162,10 @@ func (a *Agent) sendHeartbeat(status string) {
 		a.mu.Unlock()
 		if resp.State == "quarantined" && prev != "quarantined" {
 			log.Printf("[!] SERVER HAS QUARANTINED THIS AGENT — scenario execution blocked; contact administrator")
+			a.logger.Op("error", "lifecycle", "server quarantined this agent — contact administrator")
 		}
 	}
-	log.Printf("[~] heartbeat: %s (state=%s)", status, resp.State)
+	log.Printf("[~] heartbeat: %s (state=%s latency=%.0fms)", status, resp.State, latencyMs)
 }
 
 func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
@@ -158,10 +175,14 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	a.mu.Unlock()
 	if st == "quarantined" || st == "restricted" || st == "retired" {
 		log.Printf("[!] scenario blocked locally — agent state=%s (run %s)", st, cmd.RunID)
+		a.logger.Sec("error", cmd.ScenarioID, cmd.RunID, "", "", "blocked",
+			fmt.Sprintf("scenario blocked — agent state=%s", st))
 		return
 	}
 	log.Printf("[*] scenario started: run=%s scenario=%s steps=%d mode=%s",
 		cmd.RunID, cmd.ScenarioID, len(cmd.Steps), cmd.Mode)
+	a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, "", "", "scenario_start",
+		fmt.Sprintf("scenario started: %s steps=%d mode=%s", cmd.Name, len(cmd.Steps), cmd.Mode))
 
 	// ── Domain-controller safety interlock ───────────────────────────────────
 	// Live AD drills must never run directly on a domain controller. If policy
@@ -226,6 +247,8 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		}
 
 		log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, len(cmd.Steps), step.TechniqueID, step.Executor, step.Name)
+		a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
+			"scenario_step", fmt.Sprintf("[%d/%d] %s executor=%s", i+1, len(cmd.Steps), step.Name, step.Executor))
 
 		if len(step.Payloads) > 0 {
 			if err := StagePayloads(step.Payloads, payloadDir); err != nil {
@@ -259,8 +282,11 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		results = append(results, r)
 	}
 
-	log.Printf("[*] scenario done: run=%s steps=%d elapsed=%v",
-		cmd.RunID, len(results), time.Since(start).Round(time.Millisecond))
+	elapsed := time.Since(start).Round(time.Millisecond)
+	log.Printf("[*] scenario done: run=%s steps=%d elapsed=%v", cmd.RunID, len(results), elapsed)
+	a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, "", "", "scenario_done",
+		fmt.Sprintf("completed: steps=%d elapsed=%v", len(results), elapsed))
+	a.logger.Metric("scenario_duration_ms", float64(elapsed.Milliseconds()), "ms")
 
 	reverted := revertFromSnapshot(snap)
 	if len(reverted) > 0 {
@@ -368,11 +394,15 @@ func (a *Agent) connectWS() {
 			continue
 		}
 		log.Printf("[+] WS connected: %s", u.String())
+		a.logger.Op("info", "connectivity", fmt.Sprintf("WebSocket connected to %s", a.cfg.ServerURL))
+		// Flush events buffered while the connection was down.
+		go a.logger.Flush()
 
 		for {
 			_, data, err := conn.ReadMessage()
 			if err != nil {
 				log.Printf("[!] WS read: %v — reconnecting", err)
+				a.logger.Op("warn", "connectivity", fmt.Sprintf("WebSocket disconnected: %v", err))
 				conn.Close()
 				break
 			}

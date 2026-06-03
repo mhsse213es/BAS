@@ -83,6 +83,49 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_agent ON scenario_runs(agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_scenario ON scenario_runs(scenario_id)`,
 
+		// ── Agent logging tables ──────────────────────────────────────────────
+		`CREATE TABLE IF NOT EXISTS agent_op_logs (
+			id         bigserial    PRIMARY KEY,
+			agent_id   text         NOT NULL,
+			level      text         NOT NULL DEFAULT 'info',
+			category   text         NOT NULL DEFAULT 'lifecycle',
+			message    text         NOT NULL,
+			seq        bigint       NOT NULL DEFAULT 0,
+			schema_ver int          NOT NULL DEFAULT 1,
+			created_at timestamptz  NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_op_logs_agent_time ON agent_op_logs(agent_id, created_at DESC)`,
+
+		`CREATE TABLE IF NOT EXISTS agent_sec_logs (
+			id           bigserial   PRIMARY KEY,
+			agent_id     text        NOT NULL,
+			level        text        NOT NULL DEFAULT 'info',
+			scenario_id  text        NOT NULL DEFAULT '',
+			run_id       text        NOT NULL DEFAULT '',
+			step_id      text        NOT NULL DEFAULT '',
+			technique_id text        NOT NULL DEFAULT '',
+			category     text        NOT NULL DEFAULT 'scenario_step',
+			message      text        NOT NULL,
+			seq          bigint      NOT NULL DEFAULT 0,
+			schema_ver   int         NOT NULL DEFAULT 1,
+			created_at   timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sec_logs_agent_time ON agent_sec_logs(agent_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_sec_logs_run        ON agent_sec_logs(run_id)`,
+
+		`CREATE TABLE IF NOT EXISTS agent_telemetry (
+			id         bigserial        PRIMARY KEY,
+			agent_id   text             NOT NULL,
+			metric     text             NOT NULL,
+			value      double precision NOT NULL,
+			unit       text             NOT NULL DEFAULT '',
+			seq        bigint           NOT NULL DEFAULT 0,
+			schema_ver int              NOT NULL DEFAULT 1,
+			created_at timestamptz      NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_telemetry_agent_time ON agent_telemetry(agent_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_telemetry_metric     ON agent_telemetry(agent_id, metric, created_at DESC)`,
+
 		`CREATE TABLE IF NOT EXISTS reports (
 			agent_id       text        PRIMARY KEY,
 			hostname       text        NOT NULL DEFAULT '',
