@@ -66,7 +66,7 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	case "ad-credential-access":
 		return adCredentialChecks()
 	case "upi-fraud-killchain":
-		return upiChecks()
+		return upiFraudChecks()
 	case "cscrf-mii-drill":
 		return cscrfChecks()
 	case "purplesharp-ad-drill":
@@ -1322,7 +1322,153 @@ func checkPassTheHashMitigation() SimCheck {
 		})
 }
 
-// ── UPI Fraud Kill Chain ──────────────────────────────────────────────────────
+// ── UPI Fraud Kill Chain (Three-Tier) ────────────────────────────────────────
+
+// upiFraudChecks is the POSTURE side of the UPI Fraud Kill Chain three-tier
+// scenario. Six categories cover the full fraud stack including the browser and
+// mobile attack surfaces unique to UPI/payment fraud.
+func upiFraudChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "prevention-posture", Checks: []SimCheck{
+			checkBrowserCredentialStorage(),
+			checkAutoLogon(),
+			checkAppLocker(),
+			checkDefenderRTP(),
+		}},
+		{Phase: "detection-posture", Checks: []SimCheck{
+			checkSysmon(),
+			checkScriptBlockLogging(),
+			checkDefenderTamperProtection(),
+			checkKeyloggerIndicators(),
+		}},
+		{Phase: "payment-security", Checks: []SimCheck{
+			checkDNSSecurityPolicy(),
+			checkRootCertificateAudit(),
+			checkOutboundProxyEnforcement(),
+			checkScreenCaptureASR(),
+		}},
+		{Phase: "collection-exposure", Checks: []SimCheck{
+			checkClipboardHistoryPolicy(),
+			checkWDigest(),
+			checkLLMNR(),
+		}},
+		{Phase: "browser-isolation", Checks: []SimCheck{
+			checkSmartScreen(),
+			checkBrowserExtensionPolicy(),
+		}},
+		{Phase: "mobile-linkage", Checks: []SimCheck{
+			checkPhoneLinkDisabled(),
+			checkCloudClipboard(),
+		}},
+	}
+}
+
+func checkSmartScreen() SimCheck {
+	return check("T1566.001", "SmartScreen / Defender SmartScreen Enforcement", "browser-isolation", "High",
+		"UPI phishing portals and fake banking apps bypass user warnings when SmartScreen is disabled — employees open credential-harvesting pages without any browser alert.",
+		"Enable SmartScreen via GPO: Computer Config → Windows Components → File Explorer → Configure Windows Defender SmartScreen = Warn.",
+		func() (string, string) {
+			// Policy-enforced SmartScreen (all apps)
+			val, err := regValue(`HKLM\SOFTWARE\Policies\Microsoft\Windows\System`, "EnableSmartScreen")
+			if err == nil && (val == "0x1" || val == "1" || val == "0x2" || val == "2") {
+				return "pass", fmt.Sprintf("SmartScreen enforced by policy (EnableSmartScreen=%s) — UPI phishing page warnings active.", val)
+			}
+			// Edge SmartScreen policy
+			val2, err2 := regValue(`HKLM\SOFTWARE\Policies\Microsoft\Edge`, "SmartScreenEnabled")
+			if err2 == nil {
+				if val2 == "0x1" || val2 == "1" {
+					return "pass", "Edge SmartScreen enabled via policy — banking phishing URLs blocked at browser level."
+				}
+				if val2 == "0x0" || val2 == "0" {
+					return "fail", "Edge SmartScreen DISABLED by policy — UPI fraud phishing pages not filtered in Edge."
+				}
+			}
+			// User-level SmartScreen (fallback)
+			val3, _ := regValue(`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer`, "SmartScreenEnabled")
+			switch strings.ToLower(strings.Trim(val3, `"`)) {
+			case "requireadmin", "prompt":
+				return "pass", fmt.Sprintf("SmartScreen = %s — fake banking portal warnings active.", val3)
+			case "off", "0x0", "0":
+				return "fail", "SmartScreen DISABLED — UPI phishing portals and fake banking apps open without any warning."
+			}
+			return "fail", "SmartScreen policy not configured — default browser protection against UPI phishing portals not verified."
+		})
+}
+
+func checkBrowserExtensionPolicy() SimCheck {
+	return check("T1176", "Browser Extension Allowlist / Blocklist Policy", "browser-isolation", "High",
+		"Malicious browser extensions intercept OTPs, harvest UPI credentials, and silently modify payment page content without user awareness.",
+		"Configure extension allowlisting via GPO: Chrome/Edge → Extensions → ExtensionInstallAllowlist or set ExtensionInstallBlocklist = *.",
+		func() (string, string) {
+			// Chrome allowlist
+			_, err := regValue(`HKLM\SOFTWARE\Policies\Google\Chrome\ExtensionInstallAllowlist`, "1")
+			if err == nil {
+				return "pass", "Chrome ExtensionInstallAllowlist configured — only approved extensions permitted."
+			}
+			// Chrome blocklist = * (deny all except force-installed)
+			val2, err2 := regValue(`HKLM\SOFTWARE\Policies\Google\Chrome`, "ExtensionInstallBlocklist")
+			if err2 == nil && strings.Contains(val2, "*") {
+				return "pass", "Chrome ExtensionInstallBlocklist = * — no unapproved extensions can install."
+			}
+			// Edge allowlist
+			_, err3 := regValue(`HKLM\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallAllowlist`, "1")
+			if err3 == nil {
+				return "pass", "Edge ExtensionInstallAllowlist configured — only approved extensions permitted."
+			}
+			// Edge blocklist
+			val4, err4 := regValue(`HKLM\SOFTWARE\Policies\Microsoft\Edge`, "ExtensionInstallBlocklist")
+			if err4 == nil && strings.Contains(val4, "*") {
+				return "pass", "Edge ExtensionInstallBlocklist = * — unapproved extension installation blocked."
+			}
+			return "fail", "No browser extension allowlist or blocklist policy found — malicious payment-page hijacking extensions can be installed by users."
+		})
+}
+
+func checkPhoneLinkDisabled() SimCheck {
+	return check("T1111", "Phone Link OTP Relay Exposure", "mobile-linkage", "High",
+		"Windows Phone Link (formerly 'Your Phone') relays SMS OTPs from mobile to desktop — UPI fraud malware reads OTP notifications without physical phone access.",
+		"Disable Phone Link via GPO: set HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\PhoneLink\\PhoneLinkEnabled = 0.",
+		func() (string, string) {
+			val, err := regValue(`HKLM\SOFTWARE\Policies\Microsoft\Windows\PhoneLink`, "PhoneLinkEnabled")
+			if err == nil && (val == "0x0" || val == "0") {
+				return "pass", "Phone Link disabled via policy — SMS OTP relay to desktop blocked."
+			}
+			out, err2 := psRun(`(Get-AppxPackage -Name "Microsoft.YourPhone" -ErrorAction SilentlyContinue) -ne $null`)
+			if err2 == nil && strings.EqualFold(strings.TrimSpace(out), "True") {
+				return "fail", "Phone Link (Microsoft.YourPhone) installed and not policy-restricted — SMS OTP relay to PC is possible. Restrict for BFSI compliance."
+			}
+			out2, _ := psRun(`(Get-AppxPackage -Name "MicrosoftCorporationII.PhoneLink" -ErrorAction SilentlyContinue) -ne $null`)
+			if strings.EqualFold(strings.TrimSpace(out2), "True") {
+				return "fail", "Phone Link (MicrosoftCorporationII.PhoneLink) installed — SMS OTP relay attack surface present."
+			}
+			return "pass", "Phone Link app not installed or restricted — SMS OTP relay surface removed."
+		})
+}
+
+func checkCloudClipboard() SimCheck {
+	return check("T1115", "Cloud Clipboard Sync (VPA/OTP Cross-Device Risk)", "mobile-linkage", "High",
+		"Windows Cloud Clipboard syncs content across all signed-in devices — a copied UPI VPA or OTP is accessible from any compromised linked device.",
+		"Disable via GPO: Computer Config → Windows Components → OS Policies → Allow Clipboard Sync Across Devices = Disabled.",
+		func() (string, string) {
+			// Machine-level cross-device clipboard
+			val, err := regValue(`HKLM\SOFTWARE\Policies\Microsoft\Windows\System`, "AllowCrossDeviceClipboard")
+			if err == nil && (val == "0x0" || val == "0") {
+				return "pass", "Cross-device clipboard sync disabled by machine policy — UPI OTP/VPA clipboard interception across devices blocked."
+			}
+			// Check if cloud upload is enabled
+			val2, err2 := regValue(`HKCU\SOFTWARE\Microsoft\Clipboard`, "CloudClipboardAutomaticUpload")
+			if err2 == nil && (val2 == "0x1" || val2 == "1") {
+				return "fail", "Cloud clipboard auto-upload ENABLED — copied UPI OTPs and VPAs may sync to other linked devices (cross-device OTP relay risk)."
+			}
+			val3, err3 := regValue(`HKCU\SOFTWARE\Microsoft\Clipboard`, "EnableClipboardHistory")
+			if err3 == nil && (val3 == "0x1" || val3 == "1") {
+				return "fail", "Clipboard history enabled without cross-device restriction — copied payment data persists and may sync."
+			}
+			return "fail", "Cloud clipboard cross-device sync not explicitly disabled by policy — UPI OTP/VPA interception surface not fully restricted."
+		})
+}
+
+// ── UPI Fraud Kill Chain (legacy posture-only) ────────────────────────────────
 
 func upiChecks() []SimCategory {
 	return []SimCategory{

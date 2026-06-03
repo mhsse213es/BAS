@@ -1,21 +1,38 @@
 id: upi-fraud-killchain
-name: UPI Fraud Kill Chain (RBI Cyber Resilience Drill)
+name: UPI Fraud Kill Chain — BFSI Financial Fraud Simulation (Three-Tier)
 description: >
-  Simulates the attacker TTPs commonly used in UPI (Unified Payments Interface)
-  fraud campaigns targeting Indian BFSI institutions. Covers the full kill chain
-  from credential harvesting (banking portal, UPI app), through SIM-swap
-  precursors, OTP interception simulation, and data exfiltration.
-  Aligned with RBI Circular RBI/2021-22/112 on Cyber Security Framework.
-  All network steps are simulated in the local environment — no external
-  connections are made.
+  Financial-fraud-focused adversary emulation of UPI (Unified Payments Interface)
+  attack chains targeting Indian BFSI institutions. Aligned with RBI Circular
+  RBI/2021-22/112 (Cyber Security Framework) and NPCI security guidelines.
 
-  Per-OS local checks - Windows: browser credential storage / WDigest / autologon,
-  clipboard, screen-capture and keylogger indicators, DNS / root-certificate /
-  outbound-proxy exfiltration controls, Defender and script-block logging. Linux:
-  log exposure, ptrace and /etc/shadow, world-writable collection paths,
-  IP-forwarding / ICMP-redirect / SYN-cookie / firewall exfiltration controls.
-  macOS: Keychain, Screen Sharing and SSH, application firewall.
+  Covers the full fraud kill chain: credential harvesting → OTP/clipboard
+  interception → VPA substitution → data exfiltration. Evolving from generic
+  ATT&CK simulation toward UPI fraud kill-chain orchestration.
+
+  TIERS:
+  - Posture (default, safe anywhere): six categories — prevention, detection,
+    payment-security, collection-exposure, browser-isolation, and mobile-linkage.
+    Covers the browser and mobile attack surfaces unique to UPI fraud (SmartScreen,
+    extension allowlisting, Phone Link OTP relay, cloud clipboard sync).
+  - Telemetry (opt-in, production-safe): real, privacy-safe techniques — clipboard
+    VPA probe with UPI address variants and restoration, 1×1 screen capture with
+    blank overwrite + cleanup verification, browser Login Data accessibility probe
+    (header-only, read-only, no decryption), DNS exfil beacon with multi-tenant
+    naming, HTTP exfil probe to RFC5737 address with versioned JSON schema.
+  - Lab (opt-in, isolated range only): full-fidelity collection — clipboard
+    monitor (AddClipboardFormatListener with guaranteed unregister), single-monitor
+    screen capture with secure wipe, keyboard hook (SetWindowsHookEx
+    WH_KEYBOARD_LL capturing zero keystrokes + UnhookWindowsHookEx in finally),
+    HTTP exfil POST with bas-upi-v1 schema payload to BAS listener.
+
+  GUARDRAILS: workstation-targeted (no DC interlock); execution window optional;
+  [BAS-SIM] markers on all output; execution IDs for SIEM correlation.
+
+  Per-OS: Windows only for live modes. Linux/macOS run existing CIS-based checks.
+  FUTURE: UPI transaction manipulation layer (VPA substitution, QR-code
+  replacement, clipboard overwrite race, OTP overlay) — next expansion phase.
 author: Audspect Research
+executable: true
 local_check: true
 tags:
   - upi
@@ -24,74 +41,23 @@ tags:
   - india
   - rbi
   - payment-system
+  - clipboard
+  - screen-capture
   - exfiltration
   - credential-access
+  - hybrid
+  - campaign
 mitre_phases:
-  - reconnaissance
-  - initial-access
   - credential-access
   - collection
   - exfiltration
 
-steps:
-  - name: "Recon — Domain and user enumeration (banking environment)"
-    technique_id: T1087.002
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""   # optional "HH:MM-HH:MM" local-time gate
 
-  - name: "Recon — OSINT credential exposure check (public breach data simulation)"
-    technique_id: T1589.001
-    framework: custom
-    command: |
-      Write-Output "[UPI-1] Simulating credential exposure check"
-      $exposed = @(
-        "user1@bank.in:Password123",
-        "finance_mgr@bank.in:Summer2023!"
-      )
-      Write-Output "[UPI-1] Found $($exposed.Count) potentially exposed credential pairs in simulation dataset"
-    executor: powershell
-    timeout_sec: 10
-
-  - name: "Credential Access — Browser saved passwords (UPI app / netbanking portal)"
-    technique_id: T1555.003
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  - name: "Collection — Screen capture (OTP harvesting simulation)"
-    technique_id: T1113
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  - name: "Collection — Keylogger deployment (simulated, no real capture)"
-    technique_id: T1056.001
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  - name: "Exfiltration — DNS tunnelling simulation"
-    technique_id: T1048.003
-    framework: art
-    test_index: 0
-    executor: powershell
-    timeout_sec: 30
-
-  - name: "Exfiltration — HTTP POST to attacker server (simulated)"
-    technique_id: T1041
-    framework: custom
-    command: |
-      $payload = @{
-        simulation = "upi-fraud-killchain"
-        data       = "SIMULATED_UPI_TRANSACTION_LOG"
-        timestamp  = (Get-Date -Format o)
-      } | ConvertTo-Json
-      Write-Output "[UPI-7] Simulated exfil payload prepared: $($payload.Length) bytes"
-      Write-Output "[UPI-7] No actual network connection made — simulation only"
-    executor: powershell
-    timeout_sec: 15
+# Telemetry steps (Portion 2) and lab steps (Portion 3) to follow.
+steps: []
