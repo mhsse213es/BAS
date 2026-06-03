@@ -54,5 +54,186 @@ live_policy:
   spray_account_allowlist: []
   execution_window: ""
 
-# Telemetry steps (Portions 2-3) and lab chains (Portion 4) to follow.
-steps: []
+# Lab chains (Portion 4) to follow.
+steps:
+  # ── Telemetry LOLBins 1-6 (Portion 2) ──────────────────────────────────────
+
+  - name: "PowerShell LOLBin (T1059.001 — winword→PS chain)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Copies cmd.exe to %TEMP%\\winword.exe, spawns powershell.exe as child with benign echo, deletes copy. [BAS-SIM] in command line."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: Image=powershell.exe ParentImage=%TEMP%\\winword.exe"
+      - "Security EID 4688: powershell.exe with -nop -w hidden -c [BAS-SIM-PS]"
+    detection:
+      - "EDR: Office process spawning PowerShell — Sigma rule proc_creation_win_office_spawn_process.yml"
+      - "SIEM: winword.exe→powershell.exe parent-child chain"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tmp = Join-Path $env:TEMP 'winword.exe'
+      Copy-Item "$env:SystemRoot\System32\cmd.exe" $tmp -Force
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = $tmp
+      $psi.Arguments = '/c powershell.exe -nop -w hidden -c "Write-Output [BAS-SIM-PS]"'
+      $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+      $psi.CreateNoWindow = $true
+      $p = [System.Diagnostics.Process]::Start($psi)
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+      if ($ec -ge 0) { Write-Output "EXEC T1059.001: winword->powershell chain fired (exit $ec) — Sysmon EID 1 ParentImage=winword.exe. [BAS-SIM]" } else { Write-Output "PASS: chain blocked — AppLocker/WDAC/EDR prevented Office→PS execution." }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
+
+  - name: "MSHTA LOLBin (T1218.005 — mshta→cmd chain)"
+    technique_id: T1218.005
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Executes mshta.exe with inline VBScript body-onload that spawns cmd.exe /c echo [BAS-SIM-MSHTA]. Temp HTA written and deleted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: mshta.exe; then cmd.exe with ParentImage=mshta.exe"
+      - "Security EID 4688: mshta.exe + cmd.exe"
+    detection:
+      - "EDR: mshta.exe spawning cmd.exe — Sigma rule proc_creation_win_mshta_spawn_process.yml"
+      - "SIEM: mshta.exe executing file from %TEMP%"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $hta = Join-Path $env:TEMP "bas_lolbin_mshta_$runId.hta"
+      $htaContent = '<html><head></head><body onload="vbscript:CreateObject(''WScript.Shell'').Run ''cmd.exe /c echo [BAS-SIM-MSHTA]'',0,True:window.close"></body></html>'
+      [System.IO.File]::WriteAllText($hta, $htaContent, [System.Text.Encoding]::UTF8)
+      $p = Start-Process 'mshta.exe' -ArgumentList "`"$hta`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $hta -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $hta)
+      if ($ec -ge 0) { Write-Output "EXEC T1218.005: mshta->cmd chain fired (exit $ec, cleaned=$cleaned) — Sysmon EID 1 chain mshta->cmd. [BAS-SIM]" } else { Write-Output "PASS: mshta.exe blocked — AppLocker/ASR/WDAC prevented HTA execution." }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_lolbin_mshta_*.hta') -Force -ErrorAction SilentlyContinue
+
+  - name: "Regsvr32 Squiblydoo (T1218.010 — regsvr32→scrobj.dll chain)"
+    technique_id: T1218.010
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Creates empty .sct scriptlet in %TEMP%, loads via regsvr32 /i scrobj.dll (no payload — JScript body empty). File deleted after. No remote retrieval."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7: scrobj.dll image load by regsvr32.exe"
+      - "Sysmon EID 1: regsvr32.exe with /s /n /u /i argument"
+      - "Security EID 4688: regsvr32.exe"
+    detection:
+      - "EDR: regsvr32 /i:*.sct scrobj.dll — Sigma rule proc_creation_win_regsvr32_squiblydoo.yml"
+      - "SIEM: regsvr32.exe with /i: argument pointing to %TEMP%"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $sct = Join-Path $env:TEMP "bas_lolbin_sct_$runId.sct"
+      $sctContent = '<?XML version="1.0"?><scriptlet><registration progid="BAS" classid="{11111111-1111-1111-1111-111111111111}"><script language="JScript"><![CDATA[]]></script></registration></scriptlet>'
+      [System.IO.File]::WriteAllText($sct, $sctContent, [System.Text.Encoding]::UTF8)
+      $p = Start-Process 'regsvr32.exe' -ArgumentList "/s /n /u /i:`"$sct`" scrobj.dll" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $sct -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $sct)
+      if ($ec -ge 0) { Write-Output "EXEC T1218.010: regsvr32 Squiblydoo loaded scrobj.dll (exit $ec, cleaned=$cleaned) — Sysmon EID 7 scrobj.dll. Empty payload. [BAS-SIM]" } else { Write-Output "PASS: regsvr32/scrobj.dll blocked — AppLocker/WDAC/ASR prevented Squiblydoo." }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_lolbin_sct_*.sct') -Force -ErrorAction SilentlyContinue
+
+  - name: "Rundll32 LOLBin (T1218.011 — exported function execution)"
+    technique_id: T1218.011
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Calls rundll32.exe with advapi32.dll,ProcessIdleTasks — valid no-op exported function. No payload, no file write, no network."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: rundll32.exe with advapi32.dll,ProcessIdleTasks argument"
+      - "Security EID 4688: rundll32.exe"
+    detection:
+      - "EDR: rundll32.exe with non-standard DLL argument — Sigma rule proc_creation_win_rundll32_susp_activity.yml"
+      - "SIEM: rundll32.exe invocation from powershell.exe parent"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = Start-Process 'rundll32.exe' -ArgumentList 'advapi32.dll,ProcessIdleTasks' -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(5000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      if ($ec -ge 0) { Write-Output "EXEC T1218.011: rundll32.exe advapi32.dll,ProcessIdleTasks ran (exit $ec) — Sysmon EID 1 rundll32 with DLL arg. [BAS-SIM]" } else { Write-Output "PASS: rundll32.exe execution blocked — AppLocker/WDAC denied rundll32." }
+    cleanup: ""
+
+  - name: "InstallUtil LOLBin (T1218.004 — .NET assembly load)"
+    technique_id: T1218.004
+    framework: custom
+    executor: powershell
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Compiles minimal benign .NET class to %TEMP%\\bas_installutil.dll, runs InstallUtil /uninstall on it, deletes. No payload executed."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: InstallUtil.exe with /logfile= /LogToConsole=false /U argument"
+      - "Security EID 4688: InstallUtil.exe"
+    detection:
+      - "EDR: InstallUtil.exe loading assembly from %TEMP% — Sigma rule proc_creation_win_susp_use_of_installutil.yml"
+      - "SIEM: InstallUtil.exe invoked outside of software install context"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $dll = Join-Path $env:TEMP "bas_installutil_$runId.dll"
+      $src = 'using System;using System.ComponentModel;public class BASInstall:System.Configuration.Install.Installer{public BASInstall(){} }'
+      try { Add-Type -TypeDefinition $src -OutputAssembly $dll -ReferencedAssemblies 'System.Configuration.Install' -ErrorAction Stop } catch { Write-Output "SKIP: could not compile .NET assembly — .NET build tools unavailable."; return }
+      $iu = @("$env:windir\Microsoft.NET\Framework64\v4.0.30319\InstallUtil.exe","$env:windir\Microsoft.NET\Framework\v4.0.30319\InstallUtil.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $iu) { Remove-Item $dll -Force; Write-Output "SKIP: InstallUtil.exe not found — .NET Framework 4.x not installed."; return }
+      $p = Start-Process $iu -ArgumentList "/logfile= /LogToConsole=false /U `"$dll`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(15000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $dll -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $dll)
+      if ($ec -ge 0) { Write-Output "EXEC T1218.004: InstallUtil loaded assembly from %TEMP% (exit $ec, cleaned=$cleaned) — Sysmon EID 1. [BAS-SIM]" } else { Write-Output "PASS: InstallUtil.exe blocked — AppLocker/WDAC restricted .NET assembly loading." }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_installutil_*.dll') -Force -ErrorAction SilentlyContinue
+
+  - name: "MSBuild LOLBin (T1127.001 — inline task execution)"
+    technique_id: T1127.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates %TEMP%\\bas_msbuild.proj with inline C# task that writes [BAS-SIM-MSBUILD] to console. Runs MSBuild, deletes project file."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: MSBuild.exe with inline task .proj file from %TEMP%"
+      - "Security EID 4688: MSBuild.exe"
+    detection:
+      - "EDR: MSBuild.exe loading project from %TEMP% — Sigma rule proc_creation_win_msbuild_susp_proj.yml"
+      - "SIEM: MSBuild.exe invoked outside of Visual Studio / build pipeline"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $proj = Join-Path $env:TEMP "bas_msbuild_$runId.proj"
+      $xml = '<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="BAS"><BASTask /></Target><UsingTask TaskName="BASTask" TaskFactory="CodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll"><Task><Code Type="Fragment" Language="cs"><![CDATA[Log.LogMessage("[BAS-SIM-MSBUILD] T1127.001 inline task",MessageImportance.High);]]></Code></Task></UsingTask></Project>'
+      [System.IO.File]::WriteAllText($proj, $xml, [System.Text.Encoding]::UTF8)
+      $mb = @("$env:windir\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe","$env:windir\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe","${env:ProgramFiles(x86)}\MSBuild\14.0\Bin\MSBuild.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $mb) { Remove-Item $proj -Force; Write-Output "SKIP: MSBuild.exe not found — .NET Framework or VS Build Tools not installed."; return }
+      $p = Start-Process $mb -ArgumentList "`"$proj`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(30000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $proj -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $proj)
+      if ($ec -ge 0) { Write-Output "EXEC T1127.001: MSBuild inline task executed (exit $ec, cleaned=$cleaned) — Sysmon EID 1 MSBuild from %TEMP%. [BAS-SIM]" } else { Write-Output "PASS: MSBuild.exe blocked — AppLocker/WDAC restricted inline task execution." }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_msbuild_*.proj') -Force -ErrorAction SilentlyContinue
