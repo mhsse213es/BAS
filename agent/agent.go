@@ -184,6 +184,14 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, "", "", "scenario_start",
 		fmt.Sprintf("scenario started: %s steps=%d mode=%s", cmd.Name, len(cmd.Steps), cmd.Mode))
 
+	// Start the dialog auto-dismisser for the duration of this scenario.
+	// It scans for dialog boxes belonging to step processes every 500ms and
+	// dismisses them automatically — last line of defence after CREATE_NO_WINDOW,
+	// SetErrorMode, and the Job Object tree-kill.
+	dismissCtx, dismissCancel := context.WithCancel(ctx)
+	defer dismissCancel()
+	startDismisser(dismissCtx)
+
 	// ── Domain-controller safety interlock ───────────────────────────────────
 	// Live AD drills must never run directly on a domain controller. If policy
 	// requires it and this host is a DC, abort the whole run before any step.

@@ -90,6 +90,12 @@ func execStep(parentCtx context.Context, step ScenarioStep) ExecResult {
 		}
 	}
 
+	// Register the child PID with the dialog dismisser so it can identify
+	// dialog boxes that belong to this step (including grandchildren).
+	childPID := uint32(cmd.Process.Pid)
+	trackExecPID(childPID)
+	defer untrackExecPID(childPID)
+
 	// Assign the child to a Job Object.  On timeout the goroutine below calls
 	// TerminateJobObject which kills every process in the tree atomically.
 	// On POSIX this is a no-op — process-group signal propagation is sufficient.
