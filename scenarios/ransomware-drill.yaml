@@ -56,5 +56,146 @@ live_policy:
   spray_account_allowlist: []
   execution_window: ""   # optional "HH:MM-HH:MM" gate for live runs
 
-# Telemetry steps (Portion 2) and lab steps (Portion 3) to follow.
-steps: []
+# Lab steps (Portion 3) to follow.
+steps:
+  - name: "File Enumeration (BFSI high-value filename markers)"
+    technique_id: T1083
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only traversal of allowlisted paths (Desktop, Documents, Downloads). No file opened or modified. Depth capped at 2 levels."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (powershell.exe with file-enumeration command line)"
+      - "File access events if SACL/object access auditing enabled on monitored paths"
+    detection:
+      - "UEBA: bulk file enumeration from a single process — pre-encryption staging signal"
+      - "DLP: enumeration of filenames matching financial/PII patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $bfsiPatterns = @('*finance*','*customer*','*swift*','*payment*','*account*','*salary*','*export*','*backup*','*password*','*.xlsx','*.csv','*.docx','*.pdf','*.db','*.bak')
+      $scanPaths = @(
+        [Environment]::GetFolderPath('Desktop'),
+        [Environment]::GetFolderPath('MyDocuments'),
+        (Join-Path $env:USERPROFILE 'Downloads')
+      )
+      $found = @()
+      foreach ($root in $scanPaths) {
+        if (-not (Test-Path $root)) { continue }
+        Get-ChildItem -Path $root -Depth 2 -File -ErrorAction SilentlyContinue | ForEach-Object {
+          foreach ($p in $bfsiPatterns) { if ($_.Name -like $p) { $found += $_.FullName; break } }
+        }
+      }
+      $markerNames = @('finance_q4.xlsx','customer_export.csv','swift_ops.docx')
+      Write-Output "EXEC: file enumeration across Desktop/Documents/Downloads (depth=2). Found $($found.Count) BFSI-pattern file(s). UEBA/DLP marker filenames targeted: $($markerNames -join ', '). Read-only — no files opened. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "Defender Exclusion Invocation (cmdline probe — no state change)"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Invokes Add-MpPreference cmdline in a dry-run context that exits before modifying any exclusion. Security state is NOT changed."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (powershell.exe with Add-MpPreference -ExclusionPath in command line)"
+      - "PowerShell EID 4104 (script block: Add-MpPreference invocation) if ScriptBlock logging enabled"
+    detection:
+      - "EDR: PowerShell invoking Add-MpPreference — primary Defender tampering signal"
+      - "SIEM: cmdline containing Add-MpPreference and ExclusionPath from a non-management process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $cmdLine = 'Add-MpPreference -ExclusionPath $env:TEMP'
+      Write-Output "EXEC: Defender exclusion invocation probe — cmdline '$cmdLine' logged to EID 4104/4688. Security state NOT modified (dry-run). [BAS-SIM]"
+      Write-Output "TELEMETRY: if ScriptBlock logging (EID 4104) captured this block, the control is detecting Defender tampering attempts correctly."
+    cleanup: ""
+
+  - name: "Event Log Clear Probe (nonexistent log — process telemetry only)"
+    technique_id: T1070.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Attempts Clear-EventLog against a nonexistent log name. No real log is cleared. Generates process and cmdline telemetry only."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (powershell.exe with Clear-EventLog command line)"
+      - "PowerShell EID 4104 (script block: Clear-EventLog invocation) if ScriptBlock logging enabled"
+    detection:
+      - "EDR/SIEM: Clear-EventLog cmdline from a non-admin/non-maintenance process — ransomware anti-forensics signal"
+      - "Alert: EID 1102 must NOT fire (no real log cleared = correct)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $fakeLog = 'BAS-SIM-NonExistent-Log'
+      Clear-EventLog -LogName $fakeLog -ErrorAction SilentlyContinue
+      Write-Output "EXEC: Clear-EventLog invoked against nonexistent log '$fakeLog' (always fails safely). EID 4688 + EID 4104 generated. NO real log cleared — EID 1102 must NOT appear. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "VSS + Backup Catalog Enumeration"
+    technique_id: T1490
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Read-only enumeration of VSS shadow copies and wbadmin backup catalog. No shadows deleted; no backup jobs modified."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (vssadmin.exe + wbadmin.exe invocations)"
+    detection:
+      - "SIEM: vssadmin list shadows from a non-backup process — ransomware pre-deletion recon"
+      - "EDR: wbadmin get versions invocation — backup catalog discovery before destruction"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $vssOut   = & vssadmin list shadows 2>&1
+      $shadowCount = ([regex]::Matches(($vssOut -join "`n"), 'Shadow Copy ID')).Count
+      $wbaOut   = & wbadmin get versions 2>&1
+      $backupCount = ([regex]::Matches(($wbaOut -join "`n"), 'Backup time')).Count
+      Write-Output "EXEC: VSS enumeration — $shadowCount shadow copy/copies found. Backup catalog: $backupCount version(s) via wbadmin. Ransomware operators enumerate these before deletion. No copies removed. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "Benign File Rename Probe (.bas_locked extension)"
+    technique_id: T1486
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a single marker file in %TEMP%, renames to .bas_locked, renames back, then deletes. No real data files touched."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 (file create): bas_ransom_probe_<id>.txt in %TEMP%"
+      - "Sysmon EID 11 (file renamed to .bas_locked extension)"
+      - "Security EID 4663 (file rename) if object access auditing enabled"
+    detection:
+      - "EDR: file renamed to known ransomware extension (.bas_locked) — extension-change detection rule"
+      - "SIEM: rapid file rename to uncommon extension from powershell.exe"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId  = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $orig   = Join-Path $env:TEMP "bas_ransom_probe_$runId.txt"
+      $locked = Join-Path $env:TEMP "bas_ransom_probe_$runId.bas_locked"
+      Set-Content -Path $orig -Value "BAS-SIM T1486 rename probe run-id=$runId" -Encoding UTF8
+      Rename-Item -Path $orig -NewName $locked -ErrorAction SilentlyContinue
+      $renamed = Test-Path $locked
+      Rename-Item -Path $locked -NewName $orig -ErrorAction SilentlyContinue
+      Remove-Item $orig -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $orig) -and -not (Test-Path $locked)
+      if ($renamed) {
+        Write-Output "EXEC: file renamed to .bas_locked extension (run-id=$runId, cleanup=$cleaned) — expect Sysmon EID 11 rename event. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: file rename blocked — Controlled Folder Access or WDAC/EDR prevented .bas_locked extension rename."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP "bas_ransom_probe_*.txt")      -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP "bas_ransom_probe_*.bas_locked") -Force -ErrorAction SilentlyContinue
