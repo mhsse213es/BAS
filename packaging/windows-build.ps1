@@ -101,6 +101,40 @@ if ($calderaExists) {
     Warn "Caldera image not available - skipping. Setup will pull it if internet is available."
 }
 
+# -- 5a. Build Windows agent binary + installer EXE ---------------------------
+Log "Building Windows agent binary..."
+$AgentDir     = Join-Path $RepoRoot "agent"
+$InstallerDir = Join-Path $RepoRoot "installer"
+
+Push-Location $AgentDir
+$env:GOOS = "windows"; $env:GOARCH = "amd64"
+go build -ldflags="-s -w" -o "$InstallerDir\bas_agent.exe" . 2>&1
+if ($LASTEXITCODE -ne 0) { Err "Agent build failed." }
+$env:GOOS = ""; $env:GOARCH = ""
+Pop-Location
+Log "  Agent binary built: installer\bas_agent.exe"
+
+Log "Building installer EXE (embeds agent binary)..."
+Push-Location $InstallerDir
+$env:GOOS = "windows"; $env:GOARCH = "amd64"
+go build -ldflags="-s -w -H windowsgui" -o "$OutDir\BASAgent-Setup-$Version.exe" . 2>&1
+if ($LASTEXITCODE -ne 0) { Err "Installer build failed." }
+$env:GOOS = ""; $env:GOARCH = ""
+Pop-Location
+$exeSizeMB = [math]::Round((Get-Item "$OutDir\BASAgent-Setup-$Version.exe").Length / 1MB, 1)
+Log "  Installer EXE: BASAgent-Setup-$Version.exe (${exeSizeMB}MB)"
+
+# Also build standalone agent EXE for manual install / Linux/macOS
+Log "Building standalone agent binaries..."
+Push-Location $AgentDir
+$env:GOOS = "windows"; $env:GOARCH = "amd64"
+go build -ldflags="-s -w" -o "$OutDir\bas_agent_windows.exe" . 2>&1
+$env:GOOS = "linux"; $env:GOARCH = "amd64"
+go build -ldflags="-s -w" -o "$OutDir\bas_agent_linux" . 2>&1
+$env:GOOS = ""; $env:GOARCH = ""
+Pop-Location
+Log "  Agent binaries built."
+
 # -- 5. Copy installer files --------------------------------------------------
 Log "Copying installer files..."
 

@@ -1,0 +1,3 @@
+bas_agent.exe
+*.exe
+!.gitignore
