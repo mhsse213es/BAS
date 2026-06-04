@@ -89,6 +89,7 @@ func main() {
 	agent.enrollWithServer()
 
 	go agent.connectWS()
+	go agent.startLocalAPI()
 	agent.sendHeartbeat("idle")
 
 	quit := make(chan os.Signal, 1)

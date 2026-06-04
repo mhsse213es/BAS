@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	flagUpdate  *bool
-	flagConsole *bool
+	flagUpdate       *bool
+	flagConsole      *bool
+	flagTray         *bool
+	flagStatusWindow *bool
 
 	// Console allocation procs — used when the agent is launched without an
 	// attached console (e.g. via ShellExecuteW during self-elevation from Explorer).
@@ -43,9 +45,21 @@ func ensureConsole() {
 func registerPlatformFlags() {
 	flagUpdate = flag.Bool("update", false, "In-place binary update without reinstall")
 	flagConsole = flag.Bool("console", false, "Force interactive console mode")
+	flagTray = flag.Bool("tray", false, "Run the system-tray status monitor (user session)")
+	flagStatusWindow = flag.Bool("status-window", false, "Open the WebView2 status console (user session)")
 }
 
 func platformHandleFlags() bool {
+	// UI modes run unprivileged in the user session and must be handled before
+	// any elevation logic in platformPreStart.
+	if *flagStatusWindow {
+		runStatusWindow()
+		return true
+	}
+	if *flagTray {
+		runTray()
+		return true
+	}
 	if *flagUpdate {
 		if err := svcUpdate(); err != nil {
 			fmt.Fprintf(os.Stderr, "update failed: %v\n", err)

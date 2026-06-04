@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audspect BAS Agent</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────────────────
+     Audspect BAS Agent — local status console
+     Self-contained, fully offline (no CDN). Fonts are Windows system fonts so
+     this renders identically on every endpoint without network access.
+  ───────────────────────────────────────────────────────────────────────── */
+  :root{
+    --bg:#080e18;
+    --bg-grad-1:#0c1626;
+    --bg-grad-2:#070c14;
+    --surface:#101b2d;
+    --surface-2:#16233a;
+    --surface-3:#1b2c47;
+    --border:#21344f;
+    --border-soft:#18273e;
+    --text:#e8eef8;
+    --muted:#8ea2be;
+    --faint:#5d708c;
+    --accent:#3b8eea;
+    --accent-2:#56b6ff;
+    --green:#3fb950;
+    --green-dim:#1c6e2c;
+    --amber:#e3a008;
+    --amber-dim:#7a5806;
+    --red:#f4564a;
+    --red-dim:#8f2b24;
+    --font-sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+    --font-display:"Segoe UI Variable Display","Segoe UI Semibold","Segoe UI",system-ui,sans-serif;
+    --font-mono:"Cascadia Code","Cascadia Mono",Consolas,"Courier New",monospace;
+    --radius:14px;
+    --radius-sm:10px;
+    --shadow:0 18px 40px -22px rgba(0,0,0,.85);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font-sans);
+    color:var(--text);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(59,142,234,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(86,182,255,.06), transparent 55%),
+      linear-gradient(160deg, var(--bg-grad-1), var(--bg-grad-2) 70%);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+    overflow-y:scroll;
+    font-size:14px;
+    line-height:1.45;
+  }
+  /* subtle grid texture overlay */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+    background-size:46px 46px;
+    mask-image:radial-gradient(circle at 50% 30%, #000 30%, transparent 80%);
+  }
+  .wrap{position:relative;z-index:1;max-width:1040px;margin:0 auto;padding:22px 26px 40px}
+
+  /* ── Top bar ──────────────────────────────────────────────────────────── */
+  .topbar{display:flex;align-items:center;gap:16px;padding-bottom:20px}
+  .brand{display:flex;align-items:center;gap:13px;min-width:0}
+  .logo{
+    width:42px;height:42px;flex:0 0 auto;border-radius:11px;
+    background:linear-gradient(150deg,#1d3a5f,#0e1f36);
+    border:1px solid #2b466b;
+    display:grid;place-items:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .logo svg{width:23px;height:23px}
+  .brand-text h1{
+    font-family:var(--font-display);font-size:18px;font-weight:700;letter-spacing:.2px;
+    line-height:1.1;white-space:nowrap;
+  }
+  .brand-text .sub{
+    font-size:11.5px;color:var(--muted);letter-spacing:.4px;margin-top:1px;
+  }
+  .topbar .spacer{flex:1}
+  .ver{
+    font-family:var(--font-mono);font-size:11px;color:var(--faint);
+    border:1px solid var(--border-soft);border-radius:7px;padding:4px 9px;
+    background:rgba(255,255,255,.02);white-space:nowrap;
+  }
+
+  /* ── Status pill ──────────────────────────────────────────────────────── */
+  .pill{
+    display:inline-flex;align-items:center;gap:9px;
+    font-family:var(--font-display);font-weight:600;font-size:13px;letter-spacing:.3px;
+    padding:8px 15px 8px 13px;border-radius:999px;border:1px solid var(--border);
+    background:var(--surface-2);white-space:nowrap;
+  }
+  .pill .dot{width:9px;height:9px;border-radius:50%;position:relative;flex:0 0 auto}
+  .pill .dot::after{content:"";position:absolute;inset:-5px;border-radius:50%;opacity:.5;animation:pulse 2.2s ease-out infinite}
+  @keyframes pulse{0%{transform:scale(.7);opacity:.55}70%{transform:scale(2.1);opacity:0}100%{opacity:0}}
+  .ok    .dot,.ok    .dot::after{background:var(--green)}
+  .warn  .dot,.warn  .dot::after{background:var(--amber)}
+  .bad   .dot,.bad   .dot::after{background:var(--red)}
+  .ok{color:#9ff0ab;border-color:rgba(63,185,80,.35)}
+  .warn{color:#f6cf6a;border-color:rgba(227,160,8,.35)}
+  .bad{color:#ff9b92;border-color:rgba(244,86,74,.4)}
+
+  /* ── Hero ─────────────────────────────────────────────────────────────── */
+  .hero{
+    position:relative;display:flex;align-items:center;gap:20px;
+    padding:22px 24px;border-radius:var(--radius);overflow:hidden;
+    background:linear-gradient(120deg, var(--surface-2), var(--surface));
+    border:1px solid var(--border);box-shadow:var(--shadow);
+    margin-bottom:18px;
+  }
+  .hero::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--green);
+    box-shadow:0 0 26px 2px var(--green);transition:.4s;
+  }
+  .hero.s-warn::before{background:var(--amber);box-shadow:0 0 26px 2px var(--amber)}
+  .hero.s-bad::before{background:var(--red);box-shadow:0 0 26px 2px var(--red)}
+  .hero-shield{
+    width:64px;height:64px;flex:0 0 auto;border-radius:16px;display:grid;place-items:center;
+    background:radial-gradient(circle at 50% 30%, rgba(63,185,80,.22), rgba(63,185,80,.04));
+    border:1px solid rgba(63,185,80,.35);
+  }
+  .hero.s-warn .hero-shield{background:radial-gradient(circle at 50% 30%, rgba(227,160,8,.22), rgba(227,160,8,.04));border-color:rgba(227,160,8,.35)}
+  .hero.s-bad .hero-shield{background:radial-gradient(circle at 50% 30%, rgba(244,86,74,.22), rgba(244,86,74,.04));border-color:rgba(244,86,74,.35)}
+  .hero-shield svg{width:34px;height:34px}
+  .hero-main{flex:1;min-width:0}
+  .hero-main .label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .hero-main .title{font-family:var(--font-display);font-size:25px;font-weight:700;line-height:1.15;margin-top:3px}
+  .hero-main .desc{color:var(--muted);font-size:13px;margin-top:4px}
+  .hero-host{
+    text-align:right;flex:0 0 auto;
+  }
+  .hero-host .h{font-family:var(--font-mono);font-size:13px;color:var(--text)}
+  .hero-host .l{font-size:11px;color:var(--faint);letter-spacing:.4px;margin-top:2px}
+
+  /* ── Grid ─────────────────────────────────────────────────────────────── */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .card{
+    background:linear-gradient(180deg, var(--surface), rgba(16,27,45,.7));
+    border:1px solid var(--border-soft);border-radius:var(--radius);padding:18px 19px;
+    box-shadow:var(--shadow);position:relative;
+  }
+  .card.col-span{grid-column:1 / -1}
+  .card h2{
+    font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent-2);
+    font-weight:700;margin-bottom:15px;display:flex;align-items:center;gap:8px;
+  }
+  .card h2 .ic{width:14px;height:14px;opacity:.85}
+
+  /* key/value rows */
+  .kv{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.035)}
+  .kv:last-child{border-bottom:none}
+  .kv .k{color:var(--muted);font-size:12.5px;white-space:nowrap}
+  .kv .v{font-family:var(--font-mono);font-size:12.5px;color:var(--text);text-align:right;word-break:break-all}
+  .kv .v.good{color:var(--green)}
+  .kv .v.bad{color:var(--red)}
+
+  /* current operation */
+  .op-title{font-family:var(--font-display);font-size:15px;font-weight:600;margin-bottom:3px}
+  .op-meta{color:var(--muted);font-size:12px;margin-bottom:13px}
+  .bar{height:8px;border-radius:5px;background:var(--surface-3);overflow:hidden;position:relative}
+  .bar > i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+  .bar.idle > i{background:linear-gradient(90deg,#2c425f,#33506f)}
+  .op-phase{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:8px;font-family:var(--font-mono)}
+  .result-tag{display:inline-block;font-family:var(--font-display);font-weight:600;font-size:11px;padding:3px 10px;border-radius:6px;letter-spacing:.3px;margin-top:4px}
+  .r-detected{background:rgba(63,185,80,.14);color:#8be79a;border:1px solid rgba(63,185,80,.3)}
+  .r-evaded{background:rgba(244,86,74,.14);color:#ff9b92;border:1px solid rgba(244,86,74,.3)}
+  .r-partial{background:rgba(227,160,8,.14);color:#f6cf6a;border:1px solid rgba(227,160,8,.3)}
+
+  /* control chips */
+  .chips{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+  .chip{
+    display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:var(--radius-sm);
+    background:var(--surface-2);border:1px solid var(--border-soft);transition:.2s;
+  }
+  .chip .ind{width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:var(--faint);box-shadow:0 0 0 0 transparent}
+  .chip.on  .ind{background:var(--green);box-shadow:0 0 9px 1px rgba(63,185,80,.6)}
+  .chip.off .ind{background:var(--red);box-shadow:0 0 9px 1px rgba(244,86,74,.5)}
+  .chip.degraded .ind{background:var(--amber);box-shadow:0 0 9px 1px rgba(227,160,8,.5)}
+  .chip .cn{font-size:12.5px;font-weight:500}
+  .chip .cs{margin-left:auto;font-family:var(--font-mono);font-size:10.5px;color:var(--faint);letter-spacing:.3px}
+  .chip.on .cs{color:#7bd189}.chip.off .cs{color:#ff9b92}.chip.degraded .cs{color:#f6cf6a}
+
+  /* metric tiles */
+  .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
+  .tile{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);padding:13px 14px}
+  .tile .n{font-family:var(--font-display);font-size:26px;font-weight:700;line-height:1}
+  .tile .t{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-top:6px}
+  .tile.accent .n{color:var(--accent-2)}
+  .tile.alert .n{color:var(--amber)}
+
+  /* self-protection rows */
+  .sp{display:flex;flex-direction:column;gap:2px}
+  .sp .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.035)}
+  .sp .row:last-child{border-bottom:none}
+  .sp .ind{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:0 0 auto}
+  .sp .row.on .ind{background:var(--green);box-shadow:0 0 8px rgba(63,185,80,.6)}
+  .sp .row.off .ind{background:var(--red);box-shadow:0 0 8px rgba(244,86,74,.5)}
+  .sp .nm{font-size:12.5px}
+  .sp .st{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--faint)}
+  .sp .row.on .st{color:#7bd189}.sp .row.off .st{color:#ff9b92}
+
+  /* activity feed */
+  .feed{max-height:230px;overflow-y:auto;margin:-4px -6px -4px -4px;padding-right:6px}
+  .feed .ev{display:flex;gap:12px;padding:8px 6px;border-radius:8px;transition:.15s}
+  .feed .ev:hover{background:rgba(255,255,255,.025)}
+  .feed .ev .ts{font-family:var(--font-mono);font-size:11.5px;color:var(--faint);flex:0 0 auto;width:62px}
+  .feed .ev .tx{font-size:12.5px;color:var(--text)}
+  .feed .ev .mk{width:6px;height:6px;border-radius:50%;background:var(--accent);margin-top:5px;flex:0 0 auto}
+  .feed::-webkit-scrollbar{width:8px}
+  .feed::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+  /* footer actions */
+  .actions{display:flex;gap:11px;margin-top:18px}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);font-weight:600;font-size:13px;
+    padding:10px 17px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);
+    color:var(--text);cursor:pointer;transition:.18s;
+  }
+  .btn:hover{background:var(--surface-3);border-color:var(--accent)}
+  .btn svg{width:15px;height:15px}
+  .btn.primary{background:linear-gradient(180deg,#2f6fc4,#255ba6);border-color:#3a7fd6;color:#fff}
+  .btn.primary:hover{background:linear-gradient(180deg,#3a7fd6,#2f6fc4)}
+  .btn .spacer{flex:1}
+  .foot-note{margin-left:auto;align-self:center;font-size:11px;color:var(--faint);font-family:var(--font-mono)}
+
+  /* offline banner */
+  .offline{
+    display:none;align-items:center;gap:12px;padding:14px 18px;border-radius:var(--radius);
+    background:rgba(244,86,74,.08);border:1px solid rgba(244,86,74,.3);margin-bottom:16px;color:#ffb3ab;
+  }
+  body.is-offline .offline{display:flex}
+  body.is-offline .hero,body.is-offline .grid,body.is-offline .actions{opacity:.5;filter:saturate(.4)}
+
+  /* load animation */
+  .reveal{opacity:0;transform:translateY(10px);animation:rise .5s cubic-bezier(.2,.8,.2,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .d1{animation-delay:.04s}.d2{animation-delay:.10s}.d3{animation-delay:.16s}
+  .d4{animation-delay:.22s}.d5{animation-delay:.28s}.d6{animation-delay:.34s}.d7{animation-delay:.40s}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Top bar -->
+  <div class="topbar reveal d1">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z" fill="url(#g)" stroke="#56b6ff" stroke-width="1.1"/><path d="M9 12l2 2 4-4.5" stroke="#cfeaff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><defs><linearGradient id="g" x1="4" y1="2" x2="20" y2="22"><stop offset="0" stop-color="#22507f"/><stop offset="1" stop-color="#0d2138"/></linearGradient></defs></svg>
+      </div>
+      <div class="brand-text">
+        <h1>Audspect BAS Agent</h1>
+        <div class="sub">Breach &amp; Attack Simulation · Endpoint Defense Validation</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <span class="ver" id="ver">v—</span>
+    <span class="pill ok" id="statusPill"><span class="dot"></span><span id="statusText">Checking…</span></span>
+  </div>
+
+  <!-- Offline -->
+  <div class="offline" id="offlineBanner">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" stroke="#ffb3ab" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><strong>Agent service not reachable.</strong> The BASAgent service may be starting or stopped. Retrying every few seconds…</div>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero reveal d2" id="hero">
+    <div class="hero-shield" id="heroShield">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z" stroke="currentColor" stroke-width="1.3" fill="none" id="heroPath"/><path d="M9 12l2 2 4-4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <div class="hero-main">
+      <div class="label">Endpoint Protection Status</div>
+      <div class="title" id="heroTitle">—</div>
+      <div class="desc" id="heroDesc">Establishing connection to local agent service…</div>
+    </div>
+    <div class="hero-host">
+      <div class="h" id="heroHost">—</div>
+      <div class="l">HOSTNAME</div>
+    </div>
+  </div>
+
+  <!-- Grid -->
+  <div class="grid">
+
+    <!-- Connection -->
+    <div class="card reveal d3">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M5 12.5a7 7 0 0 1 14 0M8.5 15a3.5 3.5 0 0 1 7 0M12 18.5h.01" stroke="#56b6ff" stroke-width="1.6" stroke-linecap="round"/></svg>Connection</h2>
+      <div class="kv"><span class="k">Server</span><span class="v" id="cServer">—</span></div>
+      <div class="kv"><span class="k">Link</span><span class="v" id="cConn">—</span></div>
+      <div class="kv"><span class="k">Lifecycle State</span><span class="v" id="cState">—</span></div>
+      <div class="kv"><span class="k">Uptime</span><span class="v" id="cUptime">—</span></div>
+      <div class="kv"><span class="k">Last Heartbeat</span><span class="v" id="cHeartbeat">—</span></div>
+    </div>
+
+    <!-- Current operation -->
+    <div class="card reveal d3">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" stroke="#56b6ff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Current Operation</h2>
+      <div class="op-title" id="opTitle">No active simulation</div>
+      <div class="op-meta" id="opMeta">Awaiting tasking from the BAS console</div>
+      <div class="bar idle" id="opBar"><i id="opBarFill"></i></div>
+      <div class="op-phase"><span id="opPhase">IDLE</span><span id="opPct"></span></div>
+      <div id="opResultWrap"></div>
+    </div>
+
+    <!-- Security controls -->
+    <div class="card col-span reveal d4">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z" stroke="#56b6ff" stroke-width="1.5" fill="none"/></svg>Endpoint Security Controls</h2>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <!-- Evidence -->
+    <div class="card reveal d5">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M9 3h6l1 3h3v15H5V6h3l1-3zM9 12l2 2 4-4" stroke="#56b6ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>Evidence · Last Run</h2>
+      <div class="tiles">
+        <div class="tile accent"><div class="n" id="evEvents">—</div><div class="t">Events Collected</div></div>
+        <div class="tile alert"><div class="n" id="evDefender">—</div><div class="t">Defender Alerts</div></div>
+        <div class="tile alert"><div class="n" id="evSysmon">—</div><div class="t">Sysmon Detections</div></div>
+        <div class="tile"><div class="n" id="evQueue">—</div><div class="t">Upload Queue</div></div>
+      </div>
+    </div>
+
+    <!-- Self protection -->
+    <div class="card reveal d5">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M12 2l7 3v6c0 5-3 8-7 11-4-3-7-6-7-11V5l7-3zM12 8v4m0 3h.01" stroke="#56b6ff" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>Self-Protection</h2>
+      <div class="sp" id="selfprot"></div>
+    </div>
+
+    <!-- Resources -->
+    <div class="card col-span reveal d6">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M4 6h16v10H4zM2 20h20M9 16v4m6-4v4" stroke="#56b6ff" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>Resources</h2>
+      <div class="tiles" style="grid-template-columns:repeat(3,1fr)">
+        <div class="tile"><div class="n" id="rRam">—</div><div class="t">Memory (Working Set)</div></div>
+        <div class="tile"><div class="n" id="rAgent">—</div><div class="t">Agent Version</div></div>
+        <div class="tile"><div class="n" id="rId">—</div><div class="t">Agent ID</div></div>
+      </div>
+    </div>
+
+    <!-- Activity -->
+    <div class="card col-span reveal d7">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M4 12h4l2-6 4 12 2-6h4" stroke="#56b6ff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>Recent Activity</h2>
+      <div class="feed" id="feed"><div class="ev"><span class="ts">—</span><span class="tx" style="color:var(--muted)">No recent activity recorded.</span></div></div>
+    </div>
+
+  </div>
+
+  <!-- Actions -->
+  <div class="actions reveal d7">
+    <button class="btn primary" id="btnDashboard">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M14 3h7v7m0-7L10 14M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Open BAS Console
+    </button>
+    <button class="btn" id="btnExport">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Export Diagnostic Bundle
+    </button>
+    <span class="foot-note" id="lastUpdate">—</span>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+  // Token is injected by the tray host via ?t=<token>; data endpoints require it.
+  var TOKEN = new URLSearchParams(location.search).get("t") || "";
+  var H = { headers: { "Authorization": "Bearer " + TOKEN } };
+  var $ = function(id){ return document.getElementById(id); };
+  var lastServerUrl = "";
+
+  function rel(iso){
+    if(!iso) return "—";
+    var t = new Date(iso); if(isNaN(t)) return "—";
+    var s = Math.floor((Date.now()-t)/1000);
+    if(s<0) s=0;
+    if(s<60) return s+"s ago";
+    if(s<3600) return Math.floor(s/60)+"m ago";
+    return t.toLocaleTimeString();
+  }
+  function hms(iso){ if(!iso) return "—"; var t=new Date(iso); return isNaN(t)?"—":t.toLocaleTimeString(); }
+  function uptime(sec){ sec=sec||0; var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h>0?(h+"h "+m+"m"):(m+"m "+(sec%60)+"s"); }
+
+  function setHero(kind, title, desc){
+    var hero=$("hero"), shield=$("heroShield");
+    hero.classList.remove("s-warn","s-bad");
+    shield.style.color = "var(--green)";
+    if(kind==="warn"){ hero.classList.add("s-warn"); shield.style.color="var(--amber)"; }
+    else if(kind==="bad"){ hero.classList.add("s-bad"); shield.style.color="var(--red)"; }
+    $("heroTitle").textContent=title;
+    $("heroDesc").textContent=desc;
+  }
+  function setPill(kind, text){
+    var p=$("statusPill"); p.className="pill "+(kind==="bad"?"bad":kind==="warn"?"warn":"ok");
+    $("statusText").textContent=text;
+  }
+
+  var CONTROLS = [
+    {key:"defender", name:"Defender RTP", label:"Real-Time"},
+    {key:"sysmon",   name:"Sysmon",      label:"Telemetry"},
+    {key:"firewall", name:"Firewall",    label:"Network"},
+    {key:"applocker",name:"AppLocker",   label:"App Control"},
+    {key:"wdac",     name:"WDAC",        label:"Code Integrity"},
+    {key:"amsi",     name:"AMSI",        label:"Script Scan"}
+  ];
+
+  function renderControls(c){
+    var box=$("chips"); box.innerHTML="";
+    function state(on,degraded){ return degraded?"degraded":(on?"on":"off"); }
+    var map={};
+    if(c){
+      map.defender ={on:c.defender&&c.defender.rtpEnabled, deg:c.defender&&c.defender.present&&!c.defender.rtpEnabled, ext:c.defender&&c.defender.tamperProtected?"+Tamper":""};
+      map.sysmon   ={on:c.sysmon&&c.sysmon.present};
+      map.firewall ={on:c.firewall&&c.firewall.enabled};
+      map.applocker={on:c.applocker&&c.applocker.enabled};
+      map.wdac     ={on:c.wdac&&c.wdac.enabled};
+      map.amsi     ={on:c.amsi&&c.amsi.enabled};
+    }
+    CONTROLS.forEach(function(ctl){
+      var m=map[ctl.key]||{};
+      var st = c ? state(m.on, m.deg) : "";
+      var el=document.createElement("div");
+      el.className="chip "+st;
+      var status = !c ? "—" : (m.deg?"DEGRADED":(m.on?"ACTIVE":"ABSENT"));
+      el.innerHTML='<span class="ind"></span><span class="cn">'+ctl.name+(m.ext?' <span style="color:#7bd189;font-size:10px">'+m.ext+'</span>':'')+'</span><span class="cs">'+status+'</span>';
+      box.appendChild(el);
+    });
+  }
+
+  function renderSelfProt(s, ev){
+    var rows=[
+      {nm:"Service Running",   on: s? s.serviceRunning : false},
+      {nm:"Policy Sync",       on: s? (s.state==="active"||s.state==="restricted") : false},
+      {nm:"Evidence Queue",    on: !ev || (ev.uploadQueueSize||0) < 100},
+      {nm:"Last Upload OK",    on: s? s.lastUploadOk : false},
+      {nm:"Server Contact",    on: s? s.serverConnected : false}
+    ];
+    var box=$("selfprot"); box.innerHTML="";
+    rows.forEach(function(r){
+      var el=document.createElement("div");
+      el.className="row "+(r.on?"on":"off");
+      el.innerHTML='<span class="ind"></span><span class="nm">'+r.nm+'</span><span class="st">'+(r.on?"HEALTHY":"CHECK")+'</span>';
+      box.appendChild(el);
+    });
+  }
+
+  function renderActivity(a){
+    var feed=$("feed");
+    var list = a && a.recentActivity ? a.recentActivity : [];
+    if(!list.length){ feed.innerHTML='<div class="ev"><span class="ts">—</span><span class="tx" style="color:var(--muted)">No recent activity recorded.</span></div>'; return; }
+    feed.innerHTML="";
+    list.forEach(function(item){
+      var el=document.createElement("div"); el.className="ev";
+      el.innerHTML='<span class="mk"></span><span class="ts">'+hms(item.time)+'</span><span class="tx">'+escapeHtml(item.event||"")+'</span>';
+      feed.appendChild(el);
+    });
+  }
+  function escapeHtml(s){ return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+
+  function renderOperation(a){
+    var cur = a && a.currentOperation;
+    var last = a && a.lastOperation;
+    var bar=$("opBar"), fill=$("opBarFill");
+    $("opResultWrap").innerHTML="";
+    if(cur && cur.running){
+      $("opTitle").textContent = (cur.techniqueId?cur.techniqueId+"  ":"") + (cur.scenarioName||"Simulation");
+      $("opMeta").textContent = "Started "+rel(cur.startTime)+" · "+(cur.totalSteps||0)+" steps";
+      bar.classList.remove("idle");
+      fill.style.width=(cur.progress||0)+"%";
+      $("opPhase").textContent=(cur.phase||"EXECUTION").toUpperCase();
+      $("opPct").textContent=(cur.progress||0)+"%";
+    } else if(last){
+      $("opTitle").textContent=(last.techniqueId?last.techniqueId+"  ":"")+(last.scenarioName||"Last simulation");
+      $("opMeta").textContent="Completed "+rel(last.completedAt)+" · "+(last.durationSec||0)+"s";
+      bar.classList.add("idle"); fill.style.width="100%";
+      $("opPhase").textContent="COMPLETE"; $("opPct").textContent="100%";
+      var r=(last.result||"").toLowerCase();
+      var cls=r==="detected"?"r-detected":r==="evaded"?"r-evaded":"r-partial";
+      if(last.result) $("opResultWrap").innerHTML='<span class="result-tag '+cls+'">Result: '+escapeHtml(last.result)+'</span>';
+    } else {
+      $("opTitle").textContent="No active simulation";
+      $("opMeta").textContent="Awaiting tasking from the BAS console";
+      bar.classList.add("idle"); fill.style.width="0%";
+      $("opPhase").textContent="IDLE"; $("opPct").textContent="";
+    }
+  }
+
+  function applyStatus(s){
+    document.body.classList.remove("is-offline");
+    $("ver").textContent="v"+(s.agentVersion||"?");
+    $("heroHost").textContent=s.hostname||"—";
+    lastServerUrl=s.serverUrl||"";
+    $("cServer").textContent=s.serverUrl||"—";
+    var conn=$("cConn"); conn.textContent=s.serverConnected?"Connected":"Disconnected";
+    conn.className="v "+(s.serverConnected?"good":"bad");
+    $("cState").textContent=(s.state||"—");
+    $("cUptime").textContent=uptime(s.uptimeSec);
+    $("cHeartbeat").textContent=rel(s.lastHeartbeat);
+    $("rRam").textContent=(s.ramMB||0)+" MB";
+    $("rAgent").textContent="v"+(s.agentVersion||"?");
+    $("rId").textContent=(s.agentId||"—");
+
+    // Overall posture
+    if(!s.serverConnected){ setPill("bad","Disconnected"); setHero("bad","Disconnected","Cannot reach the BAS server. Simulations are paused until the link is restored."); }
+    else if(s.state==="quarantined"){ setPill("bad","Quarantined"); setHero("bad","Quarantined","This agent was quarantined by the server. Contact your administrator."); }
+    else if(s.state==="restricted"){ setPill("warn","Restricted"); setHero("warn","Restricted","Operating under restricted policy. Some simulations are disabled."); }
+    else if(s.status && s.status!=="idle"){ setPill("warn","Simulation Running"); setHero("warn","Simulation In Progress","A breach &amp; attack simulation is executing on this endpoint."); }
+    else { setPill("ok","Protected"); setHero("ok","Protected","Agent healthy and connected. Defenses are being continuously validated."); }
+  }
+
+  function goOffline(){
+    document.body.classList.add("is-offline");
+    setPill("bad","Offline");
+    $("heroTitle").textContent="Service Offline";
+    $("heroDesc").textContent="The BASAgent service is not responding on this endpoint.";
+  }
+
+  function tick(){
+    fetch("/status",H).then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(s){
+        applyStatus(s);
+        return Promise.all([
+          fetch("/activity",H).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;}),
+          fetch("/evidence",H).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;}),
+          fetch("/controls",H).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;})
+        ]).then(function(res){
+          var a=res[0], ev=res[1], c=res[2];
+          renderOperation(a);
+          renderActivity(a);
+          renderControls(c);
+          renderSelfProt(s, ev);
+          if(ev){ $("evEvents").textContent=ev.eventsCollected||0; $("evDefender").textContent=ev.defenderAlerts||0; $("evSysmon").textContent=ev.sysmonDetections||0; $("evQueue").textContent=ev.uploadQueueSize||0; }
+          $("lastUpdate").textContent="Updated "+new Date().toLocaleTimeString();
+        });
+      })
+      .catch(function(){ goOffline(); });
+  }
+
+  // Action buttons — bound to native host functions by the tray (WebView2).
+  // Fall back to no-op-with-hint if bindings are unavailable.
+  $("btnExport").addEventListener("click",function(){
+    if(window.basExport){ window.basExport(); flash($("btnExport"),"Exporting…"); }
+    else alert("Export is available from the system tray menu.");
+  });
+  $("btnDashboard").addEventListener("click",function(){
+    if(window.basOpenDashboard){ window.basOpenDashboard(lastServerUrl||""); }
+    else if(lastServerUrl){ window.open(lastServerUrl,"_blank"); }
+    else alert("Server URL not available yet.");
+  });
+  function flash(btn,txt){ var o=btn.innerHTML; btn.disabled=true; btn.style.opacity=.7; setTimeout(function(){btn.disabled=false;btn.style.opacity=1;},1500); }
+
+  tick();
+  setInterval(tick, 5000);
+})();
+</script>
+</body>
+</html>

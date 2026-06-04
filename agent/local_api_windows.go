@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"log"
@@ -22,6 +23,14 @@ import (
 )
 
 const localAPIAddr = "127.0.0.1:9001"
+
+// dashboardHTML is the self-contained status console served at GET /.
+// The page itself is unauthenticated markup; the data endpoints it calls
+// (/status, /activity, …) still require the bearer token, which the tray
+// passes to the page via the ?t=<token> query parameter.
+//
+//go:embed ui_dashboard.html
+var dashboardHTML []byte
 
 // startLocalAPI starts the loopback-only status HTTP server.
 // The auth token is persisted at %ProgramData%\BASAgent\api.token so the
@@ -43,6 +52,15 @@ func (a *Agent) startLocalAPI() {
 			next(w, r)
 		}
 	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Write(dashboardHTML)
+	})
 	mux.HandleFunc("/status",   bearer(a.handleLocalStatus))
 	mux.HandleFunc("/activity", bearer(a.handleLocalActivity))
 	mux.HandleFunc("/evidence", bearer(a.handleLocalEvidence))
