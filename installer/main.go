@@ -482,26 +482,49 @@ func runInstall(hwnd uintptr) {
 }
 
 // validateEnrollment checks connectivity and token validity without creating
-// any agent records. Uses GET /api/agents/ping which returns 200/401 only.
+// any agent records.
+//
+// Step 1: GET /health  — plain connectivity (no auth, always present).
+// Step 2: GET /ws/agent — token probe. The WS endpoint validates
+// X-Agent-Token before attempting the upgrade, so a non-WS request gets:
+//   401 → wrong token
+//   400/426/other → token accepted (upgrade refused because not a WS request)
 func validateEnrollment(serverURL, secret string) error {
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, serverURL+"/api/agents/ping", nil)
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		// Don't follow redirects — a redirect means something unexpected.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	// Step 1: connectivity
+	req, err := http.NewRequest(http.MethodGet, serverURL+"/health", nil)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
-	req.Header.Set("X-Agent-Token", secret)
-
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("cannot reach server at %s — check URL and network", serverURL)
+		return fmt.Errorf("cannot reach server at %s — check URL and firewall", serverURL)
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server health check returned HTTP %d", resp.StatusCode)
+	}
 
-	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("agent secret rejected (HTTP 401) — check AGENT_SECRET on the server")
+	// Step 2: token check via existing WebSocket endpoint
+	req2, err := http.NewRequest(http.MethodGet, serverURL+"/ws/agent", nil)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
 	}
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("server returned HTTP %d — check server configuration", resp.StatusCode)
+	req2.Header.Set("X-Agent-Token", secret)
+	resp2, err := client.Do(req2)
+	if err != nil {
+		return fmt.Errorf("token check failed — cannot reach %s/ws/agent", serverURL)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("agent secret rejected (HTTP 401) — check AGENT_SECRET on the server")
 	}
 	return nil
 }
