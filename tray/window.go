@@ -166,6 +166,14 @@ func createStatusWindow() {
 // ── Window procedure ──────────────────────────────────────────────────────────
 
 func windowWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
+	// A panic inside a Win32 callback terminates the whole process silently.
+	// Recover so a painting/data glitch never kills the tray.
+	defer func() {
+		if r := recover(); r != nil {
+			dbg(fmt.Sprintf("PANIC in windowWndProc msg=0x%X: %v", msg, r))
+		}
+	}()
+
 	switch uint32(msg) {
 
 	case WM_CREATE:
@@ -230,6 +238,18 @@ func windowWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	return r
 }
 
+// Persistent UTF16 pointers — package-level so the GC never frees them while
+// Win32 holds references during/after window creation. Returning a uintptr from
+// a helper (the old strPtr) lost the reference and could crash on GC.
+var (
+	clsEDIT      = windows.StringToUTF16Ptr("EDIT")
+	clsBUTTON    = windows.StringToUTF16Ptr("BUTTON")
+	lblEmpty     = windows.StringToUTF16Ptr("")
+	lblRefresh   = windows.StringToUTF16Ptr("  Refresh  ")
+	lblExport    = windows.StringToUTF16Ptr("  Export Bundle  ")
+	lblDashboard = windows.StringToUTF16Ptr("  Open Dashboard  ")
+)
+
 func createWindowControls(hwnd uintptr) {
 	fw := uintptr(statusWinW - pad*2) // usable width
 
@@ -237,7 +257,7 @@ func createWindowControls(hwnd uintptr) {
 	actEditH := uintptr(yButtons - (yActivity + 18) - 8)
 	hActivityEdit, _, _ = procCreateWindowExW.Call(
 		0x200, /*WS_EX_CLIENTEDGE*/
-		strPtr("EDIT"), strPtr(""),
+		uintptr(unsafe.Pointer(clsEDIT)), uintptr(unsafe.Pointer(lblEmpty)),
 		WS_CHILD|WS_VISIBLE|WS_BORDER|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL,
 		pad, yActivity+18, fw, actEditH,
 		hwnd, IDC_ACTIVITY, hInst, 0,
@@ -246,17 +266,20 @@ func createWindowControls(hwnd uintptr) {
 
 	// Buttons
 	btnY := uintptr(yButtons)
-	hBtnRefresh, _, _ = procCreateWindowExW.Call(0, strPtr("BUTTON"), strPtr("  Refresh  "),
+	hBtnRefresh, _, _ = procCreateWindowExW.Call(0,
+		uintptr(unsafe.Pointer(clsBUTTON)), uintptr(unsafe.Pointer(lblRefresh)),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_PUSHBUTTON,
 		pad, btnY, 90, 30, hwnd, IDC_REFRESH, hInst, 0)
 	sendFont(hBtnRefresh, wFont)
 
-	hBtnExport, _, _ = procCreateWindowExW.Call(0, strPtr("BUTTON"), strPtr("  Export Bundle  "),
+	hBtnExport, _, _ = procCreateWindowExW.Call(0,
+		uintptr(unsafe.Pointer(clsBUTTON)), uintptr(unsafe.Pointer(lblExport)),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_PUSHBUTTON,
 		pad+100, btnY, 140, 30, hwnd, IDC_EXPORT, hInst, 0)
 	sendFont(hBtnExport, wFont)
 
-	hBtnDashboard, _, _ = procCreateWindowExW.Call(0, strPtr("BUTTON"), strPtr("  Open Dashboard  "),
+	hBtnDashboard, _, _ = procCreateWindowExW.Call(0,
+		uintptr(unsafe.Pointer(clsBUTTON)), uintptr(unsafe.Pointer(lblDashboard)),
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_DEFPUSHBUTTON,
 		pad+250, btnY, 150, 30, hwnd, IDC_DASHBOARD, hInst, 0)
 	sendFont(hBtnDashboard, wFont)
@@ -580,11 +603,6 @@ func drawText(hdc uintptr, s string, x1, y1, x2, y2 int, flags uintptr) {
 
 func sendFont(hwnd, font uintptr) {
 	procSendMessageW.Call(hwnd, WM_SETFONT, font, 1)
-}
-
-func strPtr(s string) uintptr {
-	p, _ := windows.UTF16PtrFromString(s)
-	return uintptr(unsafe.Pointer(p))
 }
 
 // ── Data display update ───────────────────────────────────────────────────────

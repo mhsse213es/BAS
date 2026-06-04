@@ -176,13 +176,16 @@ var (
 
 func main() {
 	runtime.LockOSThread()
+	dbg("main() started")
 
 	hInst, _, _ = procGetModuleHandleW.Call(0)
 
 	// Try to connect to the agent API; non-fatal if not yet available.
 	if cli, err := newAPIClient(); err == nil {
 		apiCli = cli
+		dbg("api client ready")
 	} else {
+		dbg("api client unavailable: " + err.Error())
 		log.Printf("[!] agent API: %v — will retry", err)
 	}
 
@@ -206,6 +209,7 @@ func main() {
 		^uintptr(0), // HWND_MESSAGE
 		0, hInst, 0,
 	)
+	dbg(fmt.Sprintf("msgWnd=%d", msgWnd))
 
 	// Load status window tray icons from system stock.
 	trayIconGreen, _, _ = procLoadImageW.Call(0, IDI_SHIELD, IMAGE_ICON, 0, 0, LR_SHARED)
@@ -213,7 +217,9 @@ func main() {
 	trayIconRed, _, _ = procLoadImageW.Call(0, IDI_HAND, IMAGE_ICON, 0, 0, LR_SHARED)
 
 	addTrayIcon(trayIconGreen, "BAS Agent - Connecting...")
+	dbg("tray icon added")
 	createStatusWindow()
+	dbg(fmt.Sprintf("status window created=%d", statusWndHandle))
 
 	// Initial fetch.
 	go func() {
@@ -246,6 +252,7 @@ func main() {
 	}()
 
 	// Message loop.
+	dbg("entering message loop")
 	var msg winMsg
 	for {
 		r, _, _ := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
@@ -255,6 +262,7 @@ func main() {
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
 	}
+	dbg("message loop exited")
 
 	removeTrayIcon()
 }
@@ -305,6 +313,12 @@ func copyTip(dst *[128]uint16, s string) {
 // ── Message window procedure ──────────────────────────────────────────────────
 
 func msgWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
+	defer func() {
+		if r := recover(); r != nil {
+			dbg(fmt.Sprintf("PANIC in msgWndProc msg=0x%X: %v", msg, r))
+		}
+	}()
+
 	switch uint32(msg) {
 
 	case WM_TRAYNOTIFY:
@@ -492,17 +506,62 @@ func openDashboard() {
 		0, 0, SW_SHOW)
 }
 
-// Single-instance guard — exit if another tray instance is running.
+// Single-instance guard — exit if another tray instance is already running in
+// this session. Uses a session-local mutex (no "Global\\" prefix) so it works
+// when the tray runs unprivileged at login; "Global\\" would need a privilege
+// the unprivileged tray does not have, which previously killed it on startup.
+//
+// CreateMutex succeeds even when the mutex already exists (returns a valid
+// handle with last-error ERROR_ALREADY_EXISTS), so we must check the handle is
+// valid AND whether it pre-existed — but the x/sys wrapper only returns an
+// error on a zero handle. To detect a pre-existing instance reliably we open
+// first, then create.
 func checkSingleInstance() {
-	name, _ := windows.UTF16PtrFromString("Global\\BASAgentTray")
-	h, err := windows.CreateMutex(nil, false, name)
-	if err != nil {
+	name, _ := windows.UTF16PtrFromString("BASAgentTray_singleton")
+	// Try to open an existing mutex first.
+	if h, err := windows.OpenMutex(0x00100000 /*SYNCHRONIZE*/, false, name); err == nil && h != 0 {
+		windows.CloseHandle(h)
 		fmt.Fprintln(os.Stderr, "BAS Agent tray is already running.")
 		os.Exit(0)
+	}
+	// Create and hold the mutex for the process lifetime.
+	h, err := windows.CreateMutex(nil, false, name)
+	if err != nil && h == 0 {
+		// Could not create the guard — continue anyway rather than failing to start.
+		dbg("single-instance: create mutex failed: " + err.Error())
+		return
 	}
 	_ = h // leaked intentionally to hold the mutex for process lifetime
 }
 
+// ── Debug logging ─────────────────────────────────────────────────────────────
+// Writes to %ProgramData%\BASAgent\tray-debug.txt (fallback %TEMP%). Used to
+// diagnose silent exits. Remove or gate behind a flag once the tray is stable.
+
+var dbgPath string
+
+func dbg(msg string) {
+	if dbgPath == "" {
+		base := os.Getenv("ProgramData")
+		if base == "" {
+			base = os.Getenv("TEMP")
+		}
+		dbgPath = base + `\BASAgent\tray-debug.txt`
+	}
+	f, err := os.OpenFile(dbgPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		// fall back to TEMP if ProgramData\BASAgent isn't writable
+		dbgPath = os.Getenv("TEMP") + `\bas-tray-debug.txt`
+		f, err = os.OpenFile(dbgPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return
+		}
+	}
+	fmt.Fprintf(f, "%s  %s\n", time.Now().Format("15:04:05.000"), msg)
+	f.Close()
+}
+
 func init() {
+	dbg("=== tray launch ===")
 	checkSingleInstance()
 }
