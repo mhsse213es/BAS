@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 	"unsafe"
@@ -524,9 +525,14 @@ func splitLines(s string) []string {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 func main() {
-	// Require admin — re-elevate if not already elevated.
+	// Win32 message loops must run on a single OS thread.
+	runtime.LockOSThread()
+
 	if !isElevated() {
-		selfElevate()
+		procMessageBox.Call(0,
+			uintptr(unsafe.Pointer(utf16("This installer requires Administrator privileges.\n\nPlease right-click the file and choose \"Run as administrator\"."))),
+			uintptr(unsafe.Pointer(utf16("BAS Agent Setup"))),
+			0x10 /*MB_ICONERROR*/)
 		return
 	}
 
@@ -548,11 +554,19 @@ func main() {
 		"BAS Platform — Agent Setup",
 		winStyle, 100, 100, WINW, WINH, 0, 0, hInst)
 
+	if hMainWnd == 0 {
+		procMessageBox.Call(0,
+			uintptr(unsafe.Pointer(utf16("Failed to create installer window.\n\nThe installer may already be running, or Windows blocked the application."))),
+			uintptr(unsafe.Pointer(utf16("BAS Agent Setup"))),
+			0x10 /*MB_ICONERROR*/)
+		return
+	}
+
 	// Center on screen
 	sw, _, _ := procGetSystemMetrics.Call(SM_CXSCREEN)
 	sh, _, _ := procGetSystemMetrics.Call(SM_CYSCREEN)
 	procSetWindowPos.Call(hMainWnd, 0,
-		(sw-WINW)/2, (sh-WINH)/2, WINW, WINH,
+		uintptr(int((int(sw)-WINW)/2)), uintptr(int((int(sh)-WINH)/2)), WINW, WINH,
 		0x0040 /*SWP_SHOWWINDOW*/)
 
 	procShowWindow.Call(hMainWnd, SW_SHOW)
@@ -561,7 +575,7 @@ func main() {
 	var msg MSG
 	for {
 		r, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
-		if r == 0 {
+		if r == 0 || r == ^uintptr(0) { // 0 = WM_QUIT, ^0 = error
 			break
 		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
