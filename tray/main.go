@@ -194,7 +194,10 @@ func main() {
 	taskbarMsg32, _, _ := procRegisterWindowMessage.Call(uintptr(unsafe.Pointer(taskbarCreated)))
 	taskbarMsg = uint32(taskbarMsg32)
 
-	// Create a hidden message-only window to receive tray callbacks.
+	// Create a hidden window to receive tray callbacks. We use a normal
+	// (never-shown) top-level window rather than a message-only window
+	// (HWND_MESSAGE) because HWND_MESSAGE creation fails on some systems
+	// and a hidden normal window receives WM_TRAYNOTIFY just as reliably.
 	clsName := windows.StringToUTF16Ptr("BASAgentTrayMsgWnd")
 	wc := wndClassEx{
 		Size:      uint32(unsafe.Sizeof(wndClassEx{})),
@@ -202,13 +205,22 @@ func main() {
 		Instance:  hInst,
 		ClassName: clsName,
 	}
-	procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+	atom, _, regErr := procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+	dbg(fmt.Sprintf("RegisterClassEx(msg) atom=%d err=%v", atom, regErr))
+	title := windows.StringToUTF16Ptr("BAS Agent Tray")
 	msgWnd, _, _ = procCreateWindowExW.Call(
-		0, uintptr(unsafe.Pointer(clsName)), 0, 0,
+		0,
+		uintptr(unsafe.Pointer(clsName)),
+		uintptr(unsafe.Pointer(title)),
+		WS_OVERLAPPED, // not WS_VISIBLE — window is never shown
 		0, 0, 0, 0,
-		^uintptr(0), // HWND_MESSAGE
+		0, // parent = desktop (not HWND_MESSAGE)
 		0, hInst, 0,
 	)
+	if msgWnd == 0 {
+		le := windows.GetLastError()
+		dbg(fmt.Sprintf("CreateWindowEx(msg) FAILED lastErr=%v", le))
+	}
 	dbg(fmt.Sprintf("msgWnd=%d", msgWnd))
 
 	// Load status window tray icons from system stock.
