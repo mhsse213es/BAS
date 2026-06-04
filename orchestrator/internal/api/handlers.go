@@ -85,6 +85,16 @@ func (h *Handler) validateAgentAuth(r *http.Request) bool {
 	return provided == h.agentSecret
 }
 
+// GET /api/agents/ping — token validation probe used by the GUI installer.
+// Validates X-Agent-Token and returns 200/401 without touching any records.
+func (h *Handler) PingAgent(w http.ResponseWriter, r *http.Request) {
+	if !h.validateAgentAuth(r) {
+		jsonError(w, "unauthorized — check Agent Secret", http.StatusUnauthorized)
+		return
+	}
+	respond(w, map[string]string{"status": "ok"})
+}
+
 // WithCaldera configures the optional Caldera integration.
 func (h *Handler) WithCaldera(url, key string) *Handler {
 	h.calderaURL = url

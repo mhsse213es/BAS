@@ -5,8 +5,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -483,24 +481,14 @@ func runInstall(hwnd uintptr) {
 	installing = false
 }
 
-// validateEnrollment calls POST /api/agents/enroll with a minimal payload to
-// verify both the server URL and the agent secret before writing anything locally.
+// validateEnrollment checks connectivity and token validity without creating
+// any agent records. Uses GET /api/agents/ping which returns 200/401 only.
 func validateEnrollment(serverURL, secret string) error {
-	hostname, _ := os.Hostname()
-	payload := map[string]string{
-		"agentId":      "install-probe-" + hostname,
-		"hostname":     hostname,
-		"agentVersion": "installer",
-	}
-	body, _ := json.Marshal(payload)
-
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodPost,
-		serverURL+"/api/agents/enroll", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodGet, serverURL+"/api/agents/ping", nil)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Agent-Token", secret)
 
 	resp, err := client.Do(req)
