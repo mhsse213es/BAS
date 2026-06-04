@@ -136,7 +136,20 @@ $env:GOOS = ""; $env:GOARCH = ""
 Pop-Location
 Log "  Agent binary built: installer\bas_agent.exe"
 
-Log "Building installer EXE (embeds agent binary)..."
+# Build the tray status monitor (GUI subsystem, no console) and stage it
+# alongside the agent so the installer can embed it.
+Log "Building tray status monitor (bas_agent_tray.exe)..."
+$TrayDir = Join-Path $RepoRoot "tray"
+Push-Location $TrayDir
+$env:GOOS = "windows"; $env:GOARCH = "amd64"
+go build -ldflags="-s -w -H windowsgui" -o "$InstallerDir\bas_agent_tray.exe" . 2>&1
+if ($LASTEXITCODE -ne 0) { Err "Tray build failed." }
+go build -ldflags="-s -w -H windowsgui" -o "$OutDir\BASAgent-Tray.exe" . 2>&1
+$env:GOOS = ""; $env:GOARCH = ""
+Pop-Location
+Log "  Tray monitor built: installer\bas_agent_tray.exe + dist BASAgent-Tray.exe"
+
+Log "Building installer EXE (embeds agent + tray binaries)..."
 Log "  Embedding UAC manifest into installer..."
 if (Test-Path $rsrcBin) {
     Push-Location $InstallerDir

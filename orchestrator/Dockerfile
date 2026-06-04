@@ -25,12 +25,21 @@ RUN CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" 
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-windows-amd64.exe . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-amd64  . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-arm64  .
-# Windows GUI installer — embeds the Windows agent binary built above
+# Windows tray status monitor — embedded into the installer below
+WORKDIR /tray
+COPY tray/go.mod tray/go.sum ./
+RUN go mod download
+COPY tray/ .
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+    go build -trimpath -ldflags="-s -w -H windowsgui" \
+    -o /agents/bas-agent-windows-amd64-tray.exe .
+# Windows GUI installer — embeds the Windows agent + tray binaries built above
 WORKDIR /installer
 COPY installer/go.mod installer/go.sum ./
 RUN go mod download
 COPY installer/ .
 RUN cp /agents/bas-agent-windows-amd64.exe ./bas_agent.exe && \
+    cp /agents/bas-agent-windows-amd64-tray.exe ./bas_agent_tray.exe && \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w -H windowsgui" \
     -o /agents/bas-agent-windows-amd64-setup.exe .

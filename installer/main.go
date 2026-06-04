@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 // ── Win32 lazy DLL procs ──────────────────────────────────────────────────────
@@ -432,6 +433,15 @@ func runInstall(hwnd uintptr) {
 	}
 	appendStatus("[2/4] Agent extracted to: " + agentPath)
 
+	// Extract the tray status monitor alongside the agent.
+	trayPath := filepath.Join(installDir, "bas_agent_tray.exe")
+	if err := os.WriteFile(trayPath, trayData, 0755); err != nil {
+		appendStatus("[~] Tray monitor could not be written (non-fatal): " + err.Error())
+		trayPath = ""
+	} else {
+		appendStatus("[2/4] Status monitor extracted to: " + trayPath)
+	}
+
 	// Step 3: Install service
 	appendStatus("[3/4] Installing BASAgent service...")
 	cmd := exec.Command(agentPath,
@@ -469,16 +479,51 @@ func runInstall(hwnd uintptr) {
 		appendStatus("[~] sc start: " + string(scOut))
 	}
 
+	// Register and launch the tray status monitor (best-effort, non-fatal).
+	if trayPath != "" {
+		if err := registerTrayStartup(trayPath); err != nil {
+			appendStatus("[~] Could not register status monitor for startup: " + err.Error())
+		} else {
+			appendStatus("[+] Status monitor registered to start at login.")
+		}
+		launchTray(trayPath)
+	}
+
 	appendStatus("")
 	appendStatus("========================================")
 	appendStatus("  BAS Agent installed and started.")
 	appendStatus("  The agent will appear in the dashboard")
 	appendStatus("  within 30 seconds.")
+	appendStatus("  A status monitor icon will appear in")
+	appendStatus("  the system tray.")
 	appendStatus("========================================")
 
 	setWindowText(hInstBtn, "  Installed  ")
 	setWindowText(hCancelBtn, "Close")
 	installing = false
+}
+
+// registerTrayStartup adds the tray monitor to the per-machine Run key so it
+// launches for every user at login. Uses HKLM so the tray starts regardless of
+// which user logs in (the agent service runs as SYSTEM independently).
+func registerTrayStartup(trayPath string) error {
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE,
+		`SOFTWARE\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+	return k.SetStringValue("BASAgentTray", `"`+trayPath+`"`)
+}
+
+// launchTray starts the tray monitor immediately in the current user session so
+// the icon appears without requiring a logoff/logon. The installer runs elevated;
+// the tray itself is unprivileged but inherits the session here, which is
+// acceptable for first launch (it re-launches unprivileged at next login).
+func launchTray(trayPath string) {
+	cmd := exec.Command(trayPath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	_ = cmd.Start() // fire and forget
 }
 
 // validateEnrollment checks connectivity and token validity without creating
