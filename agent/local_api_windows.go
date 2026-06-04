@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -95,6 +96,9 @@ func (a *Agent) handleLocalStatus(w http.ResponseWriter, _ *http.Request) {
 	state, status := a.state, a.status
 	a.mu.Unlock()
 
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+
 	localJSON(w, map[string]interface{}{
 		"agentVersion":    version,
 		"agentId":         a.id.AgentID,
@@ -108,6 +112,7 @@ func (a *Agent) handleLocalStatus(w http.ResponseWriter, _ *http.Request) {
 		"lastUploadOk":    lastUpOK,
 		"lastUploadTime":  lastUpTime,
 		"uptimeSec":       int(time.Since(start).Seconds()),
+		"ramMB":           ms.Sys / (1024 * 1024),
 	})
 }
 
