@@ -25,17 +25,19 @@ type Agent struct {
 	client         *http.Client
 	cancelScenario context.CancelFunc
 	scenarioMu     sync.Mutex
-	binaryHash     string  // SHA-256 of own binary, computed once at startup
-	logger         *Logger // 3-tier structured logger
+	binaryHash     string            // SHA-256 of own binary, computed once at startup
+	logger         *Logger           // 3-tier structured logger
+	localSt        *LocalAgentState  // in-memory state for local status API
 }
 
 func newAgent(cfg Config, id Identity) *Agent {
 	a := &Agent{
-		cfg:    cfg,
-		id:     id,
-		status: "idle",
-		client: &http.Client{Timeout: 30 * time.Second},
-		logger: NewLogger(id.AgentID, cfg.ServerURL, cfg.AgentSecret),
+		cfg:     cfg,
+		id:      id,
+		status:  "idle",
+		client:  &http.Client{Timeout: 30 * time.Second},
+		logger:  NewLogger(id.AgentID, cfg.ServerURL, cfg.AgentSecret),
+		localSt: newLocalAgentState(),
 	}
 	if h, err := SelfHash(); err == nil {
 		a.binaryHash = h
@@ -150,8 +152,10 @@ func (a *Agent) sendHeartbeat(status string) {
 	if err := a.postJSONDecode("/api/heartbeat", hb, &resp); err != nil {
 		log.Printf("[!] heartbeat: %v", err)
 		a.logger.Op("warn", "connectivity", fmt.Sprintf("heartbeat failed: %v", err))
+		a.localSt.SetConnected(false)
 		return
 	}
+	a.localSt.SetConnected(true)
 	latencyMs := float64(time.Since(t0).Milliseconds())
 	a.logger.Metric("heartbeat_latency_ms", latencyMs, "ms")
 
@@ -210,6 +214,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 
 	a.setStatus("scanning")
 	a.sendHeartbeat("scanning")
+	a.localSt.StartOperation(cmd.ScenarioID, cmd.Name, cmd.ScenarioID, len(cmd.Steps))
 
 	// Policy variables exposed to every step command as environment variables.
 	policyEnv := map[string]string{"BAS_RUN_MODE": cmd.Mode}
@@ -254,6 +259,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		default:
 		}
 
+		a.localSt.UpdateProgress(i, len(cmd.Steps), "Execution")
 		log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, len(cmd.Steps), step.TechniqueID, step.Executor, step.Name)
 		a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
 			"scenario_step", fmt.Sprintf("[%d/%d] %s executor=%s", i+1, len(cmd.Steps), step.Name, step.Executor))
@@ -306,6 +312,43 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 }
 
 func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial bool, reverted []string) {
+	// Tally evidence collected across all steps for the local status API.
+	var ev LocalEvidenceStats
+	for _, r := range results {
+		ev.EventsCollected += len(r.Events)
+		for _, e := range r.Events {
+			el := strings.ToLower(e)
+			if strings.Contains(el, "defender") || strings.Contains(el, "antimalware") {
+				ev.DefenderAlerts++
+			}
+			if strings.Contains(el, "sysmon") || strings.Contains(el, "microsoft-windows-sysmon") {
+				ev.SysmonDetections++
+			}
+		}
+	}
+	// Derive overall result label for the local status display.
+	resultLabel := "Completed"
+	if partial {
+		resultLabel = "Partial"
+	} else {
+		blocked := 0
+		for _, r := range results {
+			if r.Blocked {
+				blocked++
+			}
+		}
+		switch {
+		case blocked == len(results) && len(results) > 0:
+			resultLabel = "Detected"
+		case blocked > 0:
+			resultLabel = "Partial"
+		default:
+			resultLabel = "Evaded"
+		}
+	}
+	a.localSt.UpdateProgress(len(results), len(results), "Upload")
+	a.localSt.CompleteOperation(resultLabel, ev)
+
 	payload := RawRunResult{
 		RunID:      cmd.RunID,
 		ScenarioID: cmd.ScenarioID,

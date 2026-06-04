@@ -43,6 +43,7 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 	agent.enrollWithServer()
 
 	go agent.connectWS()
+	go agent.startLocalAPI()
 	agent.sendHeartbeat("idle")
 
 	ticker := time.NewTicker(heartbeatInterval)
