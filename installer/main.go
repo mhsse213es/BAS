@@ -48,8 +48,6 @@ var (
 	procBeginPaint       = user32.NewProc("BeginPaint")
 	procEndPaint         = user32.NewProc("EndPaint")
 	procFillRect         = user32.NewProc("FillRect")
-	procSetBkMode        = user32.NewProc("SetBkMode")
-	procSetTextColor     = user32.NewProc("SetTextColor")
 	procDrawText         = user32.NewProc("DrawTextW")
 	procEnableWindow     = user32.NewProc("EnableWindow")
 	procInvalidateRect   = user32.NewProc("InvalidateRect")
@@ -59,6 +57,8 @@ var (
 	procSelectObject     = gdi32.NewProc("SelectObject")
 	procDeleteObject     = gdi32.NewProc("DeleteObject")
 	procGetStockObject   = gdi32.NewProc("GetStockObject")
+	procSetBkMode        = gdi32.NewProc("SetBkMode")
+	procSetTextColor     = gdi32.NewProc("SetTextColor")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
 )
@@ -112,8 +112,8 @@ const (
 	IDC_STATUS  = 106
 
 	WINW = 520
-	WINH = 430
-	HDR  = 88 // header height
+	WINH = 520 // total window height including title bar (~30px non-client)
+	HDR  = 88  // header height
 
 	// Colours (BGR for Win32)
 	colHdrBg   = 0x201408 // #0b1420 dark navy
@@ -161,8 +161,8 @@ type PAINTSTRUCT struct {
 // ── Global state ──────────────────────────────────────────────────────────────
 
 var (
-	hInst      uintptr
-	hMainWnd   uintptr
+	hInst    uintptr
+	hMainWnd uintptr
 	hURLEdit   uintptr
 	hSecEdit   uintptr
 	hEnvEdit   uintptr
@@ -229,55 +229,68 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	case WM_CREATE:
 		hdrBrush, _, _ = procCreateSolidBrush.Call(colHdrBg)
 		bodyBrush, _, _ = procCreateSolidBrush.Call(colBodyBg)
+		segoeUI := utf16("Segoe UI")
 		hFont, _, _ = procCreateFont.Call(
 			16, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0,
-			uintptr(unsafe.Pointer(utf16("Segoe UI"))),
+			uintptr(unsafe.Pointer(segoeUI)),
 		)
 		hFontBold, _, _ = procCreateFont.Call(
 			16, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 0, 0,
-			uintptr(unsafe.Pointer(utf16("Segoe UI"))),
+			uintptr(unsafe.Pointer(segoeUI)),
 		)
+		runtime.KeepAlive(segoeUI)
 		createControls(hwnd)
 		return 0
 
 	case WM_PAINT:
 		var ps PAINTSTRUCT
 		hdc, _, _ := procBeginPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
+		if hdc == 0 {
+			procEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
+			return 0
+		}
 
-		// Header background
 		var hdrRect [4]int32
 		hdrRect[2] = WINW
 		hdrRect[3] = HDR
 		procFillRect.Call(hdc, uintptr(unsafe.Pointer(&hdrRect)), hdrBrush)
 
-		// Header title
 		procSetBkMode.Call(hdc, TRANSPARENT)
 		procSetTextColor.Call(hdc, colHdrText)
+
+		segoeUITitle := utf16("Segoe UI")
 		titleFont, _, _ := procCreateFont.Call(
 			22, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 0, 0,
-			uintptr(unsafe.Pointer(utf16("Segoe UI"))),
+			uintptr(unsafe.Pointer(segoeUITitle)),
 		)
+		runtime.KeepAlive(segoeUITitle)
 		procSelectObject.Call(hdc, titleFont)
+
 		var tr [4]int32
 		tr[0], tr[1], tr[2], tr[3] = 20, 16, WINW-20, 48
-		procDrawText.Call(hdc, uintptr(unsafe.Pointer(utf16("BAS Platform Agent Setup"))),
+		titleStr := utf16("BAS Platform Agent Setup")
+		procDrawText.Call(hdc, uintptr(unsafe.Pointer(titleStr)),
 			^uintptr(0), uintptr(unsafe.Pointer(&tr)),
 			DT_LEFT|DT_VCENTER|DT_SINGLELINE)
+		runtime.KeepAlive(titleStr)
 
-		// Subtitle
+		segoeUISub := utf16("Segoe UI")
 		subFont, _, _ := procCreateFont.Call(
 			14, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0,
-			uintptr(unsafe.Pointer(utf16("Segoe UI"))),
+			uintptr(unsafe.Pointer(segoeUISub)),
 		)
+		runtime.KeepAlive(segoeUISub)
 		procSelectObject.Call(hdc, subFont)
 		procSetTextColor.Call(hdc, 0xCCCCCC)
+
 		var sr [4]int32
 		sr[0], sr[1], sr[2], sr[3] = 20, 48, WINW-20, 76
-		procDrawText.Call(hdc, uintptr(unsafe.Pointer(utf16("Breach & Attack Simulation Platform  ·  Audspect Security"))),
+		subStr := utf16("Breach & Attack Simulation - Audspect Security")
+		procDrawText.Call(hdc, uintptr(unsafe.Pointer(subStr)),
 			^uintptr(0), uintptr(unsafe.Pointer(&sr)),
 			DT_LEFT|DT_VCENTER|DT_SINGLELINE)
+		runtime.KeepAlive(subStr)
 
-		// Body background
 		var bodyRect [4]int32
 		bodyRect[0], bodyRect[1], bodyRect[2], bodyRect[3] = 0, HDR, WINW, WINH
 		procFillRect.Call(hdc, uintptr(unsafe.Pointer(&bodyRect)), bodyBrush)
@@ -525,7 +538,6 @@ func splitLines(s string) []string {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 func main() {
-	// Win32 message loops must run on a single OS thread.
 	runtime.LockOSThread()
 
 	if !isElevated() {
@@ -551,7 +563,7 @@ func main() {
 
 	winStyle := uint32(WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE)
 	hMainWnd = createWindow(0, "BASInstallerWnd",
-		"BAS Platform — Agent Setup",
+		"BAS Platform - Agent Setup",
 		winStyle, 100, 100, WINW, WINH, 0, 0, hInst)
 
 	if hMainWnd == 0 {
@@ -562,7 +574,6 @@ func main() {
 		return
 	}
 
-	// Center on screen
 	sw, _, _ := procGetSystemMetrics.Call(SM_CXSCREEN)
 	sh, _, _ := procGetSystemMetrics.Call(SM_CYSCREEN)
 	procSetWindowPos.Call(hMainWnd, 0,
@@ -575,7 +586,7 @@ func main() {
 	var msg MSG
 	for {
 		r, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
-		if r == 0 || r == ^uintptr(0) { // 0 = WM_QUIT, ^0 = error
+		if r == 0 || r == ^uintptr(0) {
 			break
 		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
