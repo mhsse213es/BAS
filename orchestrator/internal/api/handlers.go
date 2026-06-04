@@ -1452,6 +1452,7 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 		AbilityCount int    `json:"abilityCount"`
 		LatencyMs    int64  `json:"latencyMs"`
 		Error        string `json:"error,omitempty"`
+		HttpStatus   int    `json:"httpStatus,omitempty"` // non-zero on non-200 HTTP response
 	}
 
 	if h.calderaURL == "" {
@@ -1486,11 +1487,18 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 	defer hResp.Body.Close()
 
 	if hResp.StatusCode != http.StatusOK {
+		errMsg := fmt.Sprintf("Caldera returned HTTP %d — verify CALDERA_API_KEY matches the running instance", hResp.StatusCode)
+		if hResp.StatusCode == http.StatusUnauthorized {
+			errMsg = "Caldera returned HTTP 401 (wrong API key). " +
+				"On the server: check CALDERA_API_KEY in .env matches API_KEY_RED in the bas-caldera container. " +
+				"Run: docker inspect bas-caldera | grep API_KEY_RED"
+		}
 		respond(w, CalderaStatus{
-			Reachable: false,
-			URL:       h.calderaURL,
-			LatencyMs: latencyMs,
-			Error:     fmt.Sprintf("Caldera returned HTTP %d — verify CALDERA_API_KEY matches the running instance", hResp.StatusCode),
+			Reachable:  false,
+			URL:        h.calderaURL,
+			LatencyMs:  latencyMs,
+			HttpStatus: hResp.StatusCode,
+			Error:      errMsg,
 		})
 		return
 	}

@@ -2627,9 +2627,14 @@ function loadCalderaStatus() {
   if (btn) btn.disabled = true;
 
   apicall('/api/caldera/status').then(function(d) {
-    var dot = d.reachable
-      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span style="color:var(--success)">Connected</span>'
-      : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:6px;vertical-align:middle"></span><span style="color:var(--danger)">Unreachable</span>';
+    var dot;
+    if (d.reachable) {
+      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span style="color:var(--success)">Connected</span>';
+    } else if (d.httpStatus === 401) {
+      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle"></span><span style="color:var(--warning)">Auth Error — wrong API key</span>';
+    } else {
+      dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:6px;vertical-align:middle"></span><span style="color:var(--danger)">Unreachable</span>';
+    }
     document.getElementById('cs-caldera-status').innerHTML = dot;
     document.getElementById('cs-caldera-url').textContent = d.url || '(not configured)';
     document.getElementById('cs-caldera-version').textContent = d.version || (d.reachable ? 'unknown' : '—');
