@@ -108,23 +108,24 @@ $InstallerDir = Join-Path $RepoRoot "installer"
 
 # Embed requireAdministrator manifest into the binary via rsrc.
 # rsrc generates rsrc.syso which go build picks up automatically,
-# so the OS handles UAC elevation before the process starts — no
-# double-process dance where the first window closes instantly.
+# so the OS handles UAC elevation before the process starts (no
+# double-process dance where the first window closes instantly).
 Log "  Embedding UAC manifest (requireAdministrator)..."
 $GoPathBin = Join-Path (go env GOPATH) "bin"
 $rsrcBin   = Join-Path $GoPathBin "rsrc.exe"
 if (-not (Test-Path $rsrcBin)) {
-    go install github.com/akavel/rsrc@latest 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { Warn "    rsrc install failed — agent will rely on runtime self-elevation" }
+    go install github.com/akavel/rsrc@latest
+    if ($LASTEXITCODE -ne 0) { Warn "    rsrc install failed - agent will rely on runtime self-elevation" }
 }
 if (Test-Path $rsrcBin) {
     Push-Location $AgentDir
-    & $rsrcBin -manifest bas_agent.exe.manifest -arch amd64 -o rsrc.syso 2>&1 | Out-Null
+    & $rsrcBin -manifest bas_agent.exe.manifest -arch amd64 -o rsrc.syso
+    $rsrcExit = $LASTEXITCODE
     Pop-Location
-    if ($LASTEXITCODE -eq 0) { Log "    rsrc.syso generated — manifest embedded" }
-    else { Warn "    rsrc failed — manifest will not be embedded" }
+    if ($rsrcExit -eq 0) { Log "    rsrc.syso generated - manifest embedded" }
+    else { Warn "    rsrc failed - manifest will not be embedded" }
 } else {
-    Warn "    rsrc not available — agent will runtime-elevate via ShellExecuteW (console may flash)"
+    Warn "    rsrc not available - agent will runtime-elevate via ShellExecuteW"
 }
 
 Push-Location $AgentDir
@@ -157,8 +158,8 @@ Pop-Location
 Log "  Agent binaries built."
 
 # Copy manifest alongside the standalone Windows exe as a side-by-side fallback.
-# If rsrc.syso was not generated (rsrc not installed), Windows will use this
-# external manifest file when the user runs bas_agent_windows.exe directly.
+# If rsrc.syso was not generated, Windows will use this external manifest file
+# when the user runs bas_agent_windows.exe directly.
 Copy-Item "$AgentDir\bas_agent.exe.manifest" "$OutDir\bas_agent_windows.exe.manifest" -ErrorAction SilentlyContinue
 Log "  Manifest copied: bas_agent_windows.exe.manifest (side-by-side fallback)"
 
