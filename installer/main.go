@@ -1,5 +1,7 @@
 //go:build windows
 
+//go:generate rsrc -manifest installer.exe.manifest -arch amd64 -o rsrc.syso
+
 package main
 
 import (

@@ -137,6 +137,17 @@ Pop-Location
 Log "  Agent binary built: installer\bas_agent.exe"
 
 Log "Building installer EXE (embeds agent binary)..."
+Log "  Embedding UAC manifest into installer..."
+if (Test-Path $rsrcBin) {
+    Push-Location $InstallerDir
+    & $rsrcBin -manifest installer.exe.manifest -arch amd64 -o rsrc.syso
+    $rsrcInstExit = $LASTEXITCODE
+    Pop-Location
+    if ($rsrcInstExit -eq 0) { Log "    rsrc.syso generated - installer manifest embedded" }
+    else { Warn "    rsrc failed for installer - manifest will not be embedded" }
+} else {
+    Warn "    rsrc not available - installer will use runtime self-elevation"
+}
 Push-Location $InstallerDir
 $env:GOOS = "windows"; $env:GOARCH = "amd64"
 go build -ldflags="-s -w -H windowsgui" -o "$OutDir\BASAgent-Setup-$Version.exe" . 2>&1
