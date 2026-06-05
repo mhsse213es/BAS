@@ -215,6 +215,19 @@ if (Test-Path $WwwrootDir) {
     Log "  Copied wwwroot"
 }
 
+# -- 6b. Copy ART external payloads (gsecdump, etc.) ---------------------------
+# Binaries staged on the build host in packaging\art-payloads are baked into the
+# bundle; setup.sh stages them and compose bind-mounts them to /art-payloads, so
+# the client gets them automatically. Empty is fine (payload atomics skip).
+$PayloadDir = Join-Path $RepoRoot "packaging\art-payloads"
+New-Item -ItemType Directory -Force -Path "$OutDir\art-payloads" | Out-Null
+if (Test-Path $PayloadDir) {
+    Copy-Item "$PayloadDir\*" "$OutDir\art-payloads\" -Recurse -Force
+    $payloadCount = (Get-ChildItem "$OutDir\art-payloads" -File |
+        Where-Object { $_.Name -notin @('README.md', '.gitkeep') }).Count
+    Log "  Copied ART payloads ($payloadCount binaries)"
+}
+
 # -- 7. Write VERSION file ----------------------------------------------------
 $Version | Out-File -FilePath "$OutDir\VERSION" -Encoding utf8 -NoNewline
 
