@@ -20,6 +20,11 @@ orchestrator:
   caldera:
     url: "http://caldera:8888"   # ClusterIP service — same namespace
     apiKey: "ADMIN123"           # Caldera default red API key (local.yml override not applied at runtime)
+  # ART external payloads (gsecdump, etc.). Set hostPath to an absolute dir on
+  # the node where you drop the binaries; it is mounted read-only at
+  # /art-payloads. Leave empty to disable (payload atomics are skipped cleanly).
+  payloads:
+    hostPath: ""
   resources:
     requests:
       cpu: 100m

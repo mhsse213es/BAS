@@ -75,6 +75,9 @@ services:
       - ./scenarios:/scenarios
       - ./wwwroot:/wwwroot:ro
       - ./bas.lic:/etc/bas/bas.lic:ro
+      # ART external payloads (gsecdump, etc.) — drop binaries in ./art-payloads
+      # on the host to enable payload-dependent atomics; empty by default.
+      - ./art-payloads:/art-payloads:ro
     ports:
       - "${DASHBOARD_PORT:-9000}:9000"
     networks:

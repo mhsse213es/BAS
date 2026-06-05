@@ -57,6 +57,11 @@ spec:
               mountPath: /etc/bas/bas.lic
               subPath: bas.lic
             {{- end }}
+            {{- if .Values.orchestrator.payloads.hostPath }}
+            - name: art-payloads
+              mountPath: /art-payloads
+              readOnly: true
+            {{- end }}
           resources:
             {{- toYaml .Values.orchestrator.resources | nindent 12 }}
           readinessProbe:
@@ -82,6 +87,12 @@ spec:
         - name: license
           secret:
             secretName: bas-license
+        {{- end }}
+        {{- if .Values.orchestrator.payloads.hostPath }}
+        - name: art-payloads
+          hostPath:
+            path: {{ .Values.orchestrator.payloads.hostPath | quote }}
+            type: DirectoryOrCreate
         {{- end }}
 ---
 apiVersion: v1
