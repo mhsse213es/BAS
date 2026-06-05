@@ -475,6 +475,10 @@ func runInstall(hwnd uintptr) {
 		appendStatus("[~] sc start: " + string(scOut))
 	}
 
+	// Ensure the WebView2 runtime is present so the status console opens in a
+	// native window rather than falling back to the browser (best-effort).
+	ensureWebView2Runtime()
+
 	// Register and launch the tray status monitor (best-effort, non-fatal).
 	// Same binary as the agent, run with --tray in the user session.
 	if err := registerTrayStartup(agentPath); err != nil {
@@ -521,6 +525,69 @@ func launchTray(agentPath string) {
 	cmd.Dir = filepath.Dir(agentPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_ = cmd.Start() // fire and forget
+}
+
+// webView2RuntimeClientGUID is the EdgeUpdate client ID for the Evergreen
+// WebView2 Runtime. A non-empty, non-zero "pv" value under this key means the
+// runtime is installed.
+const webView2RuntimeClientGUID = `{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`
+
+// webView2Installed reports whether the Edge WebView2 runtime is present, by
+// checking the per-machine (64-bit and WOW6432Node views) and per-user
+// EdgeUpdate registry entries.
+func webView2Installed() bool {
+	checks := []struct {
+		root registry.Key
+		sub  string
+	}{
+		{registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\` + webView2RuntimeClientGUID},
+		{registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\EdgeUpdate\Clients\` + webView2RuntimeClientGUID},
+		{registry.CURRENT_USER, `SOFTWARE\Microsoft\EdgeUpdate\Clients\` + webView2RuntimeClientGUID},
+	}
+	for _, c := range checks {
+		k, err := registry.OpenKey(c.root, c.sub, registry.QUERY_VALUE)
+		if err != nil {
+			continue
+		}
+		pv, _, err := k.GetStringValue("pv")
+		k.Close()
+		if err == nil && pv != "" && pv != "0.0.0.0" {
+			return true
+		}
+	}
+	return false
+}
+
+// ensureWebView2Runtime installs the bundled WebView2 runtime if it is missing.
+// Best-effort and non-fatal: if the runtime is absent and not bundled (or the
+// install fails), the agent status console simply falls back to the browser.
+func ensureWebView2Runtime() {
+	if webView2Installed() {
+		appendStatus("[+] WebView2 runtime present.")
+		return
+	}
+	if len(webview2RuntimeInstaller) == 0 {
+		appendStatus("[~] WebView2 runtime missing and not bundled - status console will open in the browser.")
+		return
+	}
+	appendStatus("[*] Installing Microsoft Edge WebView2 runtime...")
+	tmp := filepath.Join(os.TempDir(), "MicrosoftEdgeWebView2RuntimeInstaller.exe")
+	if err := os.WriteFile(tmp, webview2RuntimeInstaller, 0755); err != nil {
+		appendStatus("[~] Could not stage WebView2 installer: " + err.Error())
+		return
+	}
+	defer os.Remove(tmp)
+	cmd := exec.Command(tmp, "/silent", "/install")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		appendStatus("[~] WebView2 runtime install failed: " + err.Error())
+		if len(out) > 0 {
+			appendStatus("        " + string(out))
+		}
+		appendStatus("    Status console will open in the browser until the runtime is installed.")
+		return
+	}
+	appendStatus("[+] WebView2 runtime installed.")
 }
 
 // validateEnrollment checks connectivity and token validity without creating

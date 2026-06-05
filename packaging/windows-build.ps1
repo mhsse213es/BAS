@@ -148,9 +148,23 @@ if (Test-Path $rsrcBin) {
 } else {
     Warn "    rsrc not available - installer will use runtime self-elevation"
 }
+# Bundle the WebView2 runtime if the Evergreen Standalone Installer was placed
+# at installer\webview2\. When present, the installer silently installs it on
+# clients that lack the runtime so the status console opens natively (not the
+# browser). Absent -> graceful browser fallback (see installer\webview2\README.md).
+$WebView2Installer = Join-Path $InstallerDir "webview2\MicrosoftEdgeWebView2RuntimeInstaller.exe"
+$installerTags = @()
+if (Test-Path $WebView2Installer) {
+    $wv2MB = [math]::Round((Get-Item $WebView2Installer).Length / 1MB)
+    Log "  Bundling WebView2 runtime (${wv2MB}MB) - clients without it get the native window automatically"
+    $installerTags = @("-tags", "webview2bundled")
+} else {
+    Warn "  WebView2 runtime not bundled - drop MicrosoftEdgeWebView2RuntimeInstaller.exe in installer\webview2\ to enable auto-install (clients without it use browser fallback)"
+}
+
 Push-Location $InstallerDir
 $env:GOOS = "windows"; $env:GOARCH = "amd64"
-go build -ldflags="-s -w -H windowsgui" -o "$OutDir\BASAgent-Setup-$Version.exe" . 2>&1
+go build @installerTags -ldflags="-s -w -H windowsgui" -o "$OutDir\BASAgent-Setup-$Version.exe" . 2>&1
 if ($LASTEXITCODE -ne 0) { Err "Installer build failed." }
 $env:GOOS = ""; $env:GOARCH = ""
 Pop-Location

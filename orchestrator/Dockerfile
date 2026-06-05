@@ -32,9 +32,13 @@ WORKDIR /installer
 COPY installer/go.mod installer/go.sum ./
 RUN go mod download
 COPY installer/ .
+# Bundle the WebView2 runtime into the installer when the Evergreen Standalone
+# Installer is present at installer/webview2/ (auto-installed on clients lacking
+# the runtime so the status console opens natively). Absent -> browser fallback.
 RUN cp /agents/bas-agent-windows-amd64.exe ./bas_agent.exe && \
+    TAGS=""; if [ -f webview2/MicrosoftEdgeWebView2RuntimeInstaller.exe ]; then TAGS="webview2bundled"; fi && \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
-    go build -trimpath -ldflags="-s -w -H windowsgui" \
+    go build -trimpath -tags "$TAGS" -ldflags="-s -w -H windowsgui" \
     -o /agents/bas-agent-windows-amd64-setup.exe .
 
 # ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────
