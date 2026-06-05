@@ -5,12 +5,12 @@
     processorArchitecture="AMD64"
     name="Audspect.BASAgent"
     type="win32"/>
-  <description>BAS Platform Agent — Next-Gen Breach and Attack Simulation</description>
+  <description>BAS Platform Agent for Breach and Attack Simulation</description>
 
   <!-- Run as the invoking user. The agent runs primarily as a SYSTEM service
-       (manifest irrelevant there); the --tray and --status-window UI modes must
-       run unprivileged in the user session, so the binary must NOT force UAC.
-       Admin-requiring modes (--install/--uninstall) are launched from the
+       (manifest irrelevant there). The tray and status-window UI modes must run
+       unprivileged in the user session, so the binary must NOT force UAC. The
+       admin-requiring install and uninstall modes are launched from the
        already-elevated GUI installer, and the console path self-elevates at
        runtime when needed. -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
