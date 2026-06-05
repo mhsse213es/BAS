@@ -204,6 +204,28 @@ if (Test-Path $WwwrootDir) {
 # -- 7. Write VERSION file ----------------------------------------------------
 $Version | Out-File -FilePath "$OutDir\VERSION" -Encoding utf8 -NoNewline
 
+# -- 7b. Air-gap integrity: verify.sh + per-file SHA-256 manifest --------------
+# Gives bas-install the same offline integrity guarantees as the dedicated
+# bas-airgap bundle: a per-file manifest the client verifies after unzip.
+Log "Generating integrity manifest..."
+Copy-Item "$ComposeDir\verify.sh" "$OutDir\verify.sh"
+# Normalize to LF so the script runs on Linux even if git checked it out CRLF.
+$verifyText = (Get-Content "$OutDir\verify.sh" -Raw) -replace "`r`n", "`n"
+[System.IO.File]::WriteAllText("$OutDir\verify.sh", $verifyText)
+
+$ManifestPath = Join-Path $OutDir "MANIFEST.sha256"
+$prefixLen = $OutDir.Length + 1
+$lines = Get-ChildItem -Path $OutDir -Recurse -File |
+    Where-Object { $_.Name -ne "MANIFEST.sha256" } |
+    ForEach-Object {
+        $rel = $_.FullName.Substring($prefixLen).Replace('\', '/')
+        $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+        "$hash  $rel"
+    } | Sort-Object
+# sha256sum-compatible: "<hash><two spaces><relative/path>", LF line endings, no BOM.
+[System.IO.File]::WriteAllText($ManifestPath, ($lines -join "`n") + "`n")
+Log "  MANIFEST.sha256 generated ($($lines.Count) files indexed)"
+
 # -- 8. Generate license ------------------------------------------------------
 $LicensePath = ""
 if ($Customer -ne "" -and $CustomerID -ne "") {
@@ -241,6 +263,12 @@ Compress-Archive -Path $OutDir -DestinationPath $ZipPath -Force
 $ZipSizeMB = [math]::Round((Get-Item $ZipPath).Length / 1MB)
 Log "  ZIP: $ZipPath ($ZipSizeMB MB)"
 
+# Bundle-level checksum so the transfer itself is verifiable before unzip.
+# sha256sum-compatible line: "<hash>  <filename>" (filename only, no path).
+$zipHash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToLower()
+[System.IO.File]::WriteAllText("$ZipPath.sha256", "$zipHash  $(Split-Path -Leaf $ZipPath)`n")
+Log "  Checksum: $ZipPath.sha256"
+
 # -- 10. Summary --------------------------------------------------------------
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -248,17 +276,20 @@ Write-Host "  BAS Platform v$Version -- Client Delivery Package Ready"   -Foregr
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Package ZIP : $ZipPath"
+Write-Host "  Checksum    : $ZipPath.sha256"
 if ($LicensePath -ne "" -and (Test-Path $LicensePath)) {
     Write-Host "  License     : $LicensePath"
 }
 Write-Host ""
 Write-Host "  Transfer to client server:" -ForegroundColor Yellow
-Write-Host "    scp -i <key.pem> `"$ZipPath`" ubuntu@<client-ip>:~/"
+Write-Host "    scp -i <key.pem> `"$ZipPath`" `"$ZipPath.sha256`" ubuntu@<client-ip>:~/"
 if ($LicensePath -ne "" -and (Test-Path $LicensePath)) {
     Write-Host "    scp -i <key.pem> `"$LicensePath`" ubuntu@<client-ip>:~/"
 }
 Write-Host ""
 Write-Host "  Client runs (on their Ubuntu server):" -ForegroundColor Yellow
+Write-Host "    sha256sum -c $(Split-Path -Leaf $ZipPath).sha256   # verify transfer"
 Write-Host "    unzip $(Split-Path -Leaf $ZipPath)"
-Write-Host "    sudo bash $OutName/setup.sh --offline"
+Write-Host "    cd $OutName && bash verify.sh                       # verify file integrity"
+Write-Host "    sudo bash setup.sh --offline"
 Write-Host ""
