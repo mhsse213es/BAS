@@ -24,6 +24,27 @@ func TaskID(techniqueID, name string) string {
 	return hex.EncodeToString(h[:])[:8]
 }
 
+// StepMeta is the per-task metadata the server retains after dispatch so it can
+// interpret results from dynamically-built steps (ART/Caldera modes), whose
+// definitions are NOT stored in the scenario's static Steps. Persisted with the
+// run and read back when the agent returns results.
+type StepMeta struct {
+	TechniqueID string `json:"techniqueId"`
+	Name        string `json:"name"`
+	Framework   string `json:"framework"`
+}
+
+// BuildStepMeta builds a TaskID→StepMeta lookup from the steps actually
+// dispatched to the agent, capturing the technique, name and framework needed
+// to interpret each result correctly.
+func BuildStepMeta(steps []ScenarioStep) map[string]StepMeta {
+	m := make(map[string]StepMeta, len(steps))
+	for _, s := range steps {
+		m[s.TaskID] = StepMeta{TechniqueID: s.TechniqueID, Name: s.Name, Framework: s.Framework}
+	}
+	return m
+}
+
 // BuildSteps converts a Scenario into concrete ScenarioSteps the agent executes.
 // Modes are checked in priority order (see Scenario type comment).
 func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore) ([]ScenarioStep, error) {
@@ -102,10 +123,15 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 		payloads = append(payloads, Payload{Name: p.Name, Content: p.Content})
 	}
 
+	framework := s.Framework
+	if framework == "" {
+		framework = "custom"
+	}
 	return ScenarioStep{
 		TaskID:      TaskID(s.TechniqueID, s.Name),
 		TechniqueID: s.TechniqueID,
 		Name:        s.Name,
+		Framework:   framework,
 		Executor:    executor,
 		Command:     command,
 		TimeoutSec:  timeout,
@@ -325,6 +351,7 @@ func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]Scena
 			TaskID:      TaskID(techniqueID, ab.Name),
 			TechniqueID: techniqueID,
 			Name:        ab.Name,
+			Framework:   "caldera",
 			Executor:    "powershell",
 			Command:     cmd,
 			TimeoutSec:  60,
@@ -360,6 +387,7 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 			TaskID:      TaskID(techniqueID, ab.Name),
 			TechniqueID: techniqueID,
 			Name:        ab.Name,
+			Framework:   "caldera",
 			Executor:    "powershell",
 			Command:     cmd,
 			TimeoutSec:  60,
@@ -413,6 +441,7 @@ func buildCalderaAllWindowsSteps(calderaURL, apiKey string) ([]ScenarioStep, err
 			TaskID:      TaskID(techniqueID, ab.Name),
 			TechniqueID: techniqueID,
 			Name:        ab.Name,
+			Framework:   "caldera",
 			Executor:    "powershell",
 			Command:     cmd,
 			TimeoutSec:  60,

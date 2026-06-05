@@ -117,6 +117,10 @@ type ScenarioStep struct {
 	TaskID      string    `json:"taskId"`      // stable hash for result correlation
 	TechniqueID string    `json:"techniqueId"` // for logging/telemetry on agent
 	Name        string    `json:"name"`        // for logging on agent
+	// Framework is retained server-side only (json:"-" keeps it off the agent
+	// wire) so results from dynamically-built steps can be interpreted by the
+	// correct framework handler (art|caldera|custom).
+	Framework string `json:"-"`
 	Executor    string    `json:"executor"`    // powershell|cmd|wmi|mshta|rundll32|cscript|wscript|regsvr32|schtasks
 	Command     string    `json:"command"`     // concrete command, ready to run
 	TimeoutSec  int       `json:"timeoutSec"`

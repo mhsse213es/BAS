@@ -130,6 +130,7 @@ func parseARTFile(path string) (string, []ScenarioStep, error) {
 			TaskID:      TaskID(techniqueID, name),
 			TechniqueID: techniqueID,
 			Name:        name,
+			Framework:   "art",
 			Executor:    executor,
 			Command:     cmd,
 			TimeoutSec:  120,

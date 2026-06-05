@@ -460,6 +460,8 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.persistStepMeta(r.Context(), runID, steps)
+
 	cmd := scenario.ScenarioCommand{
 		RunID:      runID,
 		ScenarioID: "full-scan",
@@ -726,6 +728,8 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.persistStepMeta(r.Context(), runID, steps)
+
 	cmd := scenario.ScenarioCommand{
 		RunID:      runID,
 		ScenarioID: scenarioID,
@@ -888,6 +892,19 @@ func (h *Handler) DeleteScenario(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// persistStepMeta saves the TaskID→{technique,name,framework} map for the steps
+// actually dispatched, so results from dynamically-built ART/Caldera steps (not
+// present in the scenario's static Steps) can be interpreted correctly.
+func (h *Handler) persistStepMeta(ctx context.Context, runID string, steps []scenario.ScenarioStep) {
+	raw, err := json.Marshal(scenario.BuildStepMeta(steps))
+	if err != nil {
+		return
+	}
+	if _, err := h.db.Exec(ctx, `UPDATE scenario_runs SET step_meta = $1 WHERE id = $2`, raw, runID); err != nil {
+		log.Printf("[scenario] persist step_meta for run %s: %v", runID, err)
+	}
+}
+
 // POST /api/scenarios/result — agents post raw execution results here.
 // The server interprets exit codes and output, then saves SimulationResult records.
 // All framework intelligence (ART, Caldera, custom) lives in the interpreter — not the agent.
@@ -915,11 +932,29 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	// Look up the scenario to get framework context for interpretation
 	sc, _ := h.engine.Get(raw.ScenarioID)
 
-	// Build a taskId→Step map for O(1) lookup
+	// Build a taskId→Step map for O(1) lookup. Static YAML steps come from the
+	// scenario; dynamically-built ART/Caldera steps are NOT in sc.Steps, so we
+	// overlay the per-run step_meta captured at dispatch (authoritative — it
+	// carries the real technique ID, name and framework for every task sent).
 	stepMap := make(map[string]scenario.Step)
 	if sc != nil {
 		for _, s := range sc.Steps {
 			stepMap[scenario.TaskID(s.TechniqueID, s.Name)] = s
+		}
+	}
+	var metaRaw []byte
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT step_meta FROM scenario_runs WHERE id = $1`, raw.RunID,
+	).Scan(&metaRaw); err == nil && len(metaRaw) > 0 {
+		var meta map[string]scenario.StepMeta
+		if json.Unmarshal(metaRaw, &meta) == nil {
+			for taskID, m := range meta {
+				stepMap[taskID] = scenario.Step{
+					TechniqueID: m.TechniqueID,
+					Name:        m.Name,
+					Framework:   m.Framework,
+				}
+			}
 		}
 	}
 
