@@ -269,27 +269,80 @@ $zipHash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToLower()
 [System.IO.File]::WriteAllText("$ZipPath.sha256", "$zipHash  $(Split-Path -Leaf $ZipPath)`n")
 Log "  Checksum: $ZipPath.sha256"
 
+# -- 9b. GPG-sign the bundle (skipped gracefully if no signing key) ------------
+# Produces bas-install-<version>.zip.asc and stages a self-contained verify kit
+# (pubkey.asc + verify-sig.sh) in dist\ so the client can authenticate the zip
+# before unzip. The private key lives only in this host's GPG keyring.
+$Signed = $false
+$SigningDir      = Join-Path $RepoRoot "packaging\signing"
+$SigningKeyEmail = "releases@audspect.com"
+$gpgExe = $null
+$gpgCmd = Get-Command gpg -ErrorAction SilentlyContinue
+if ($gpgCmd) { $gpgExe = $gpgCmd.Source }
+elseif (Test-Path "C:\Program Files\Git\usr\bin\gpg.exe") { $gpgExe = "C:\Program Files\Git\usr\bin\gpg.exe" }
+
+if (-not $gpgExe) {
+    Warn "gpg not found - bundle is unsigned. Install Git for Windows or GnuPG to enable signing."
+} else {
+    & $gpgExe --list-secret-keys $SigningKeyEmail *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Warn "No signing key for $SigningKeyEmail - bundle is unsigned."
+        Warn "  Generate one: bash packaging/signing/keygen.sh"
+    } else {
+        Log "Signing bundle with GPG key $SigningKeyEmail..."
+        $SigPath = "$ZipPath.asc"
+        if (Test-Path $SigPath) { Remove-Item -Force $SigPath }
+        & $gpgExe --armor --batch --yes --detach-sign `
+            --local-user $SigningKeyEmail --output $SigPath $ZipPath *> $null
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $SigPath)) {
+            $Signed = $true
+            Log "  Signature: $SigPath"
+            # Self-contained verify kit alongside the zip (verify-sig.sh reads
+            # pubkey.asc from its own directory).
+            Copy-Item "$SigningDir\pubkey.asc"    "$DistDir\pubkey.asc"    -Force
+            Copy-Item "$SigningDir\verify-sig.sh" "$DistDir\verify-sig.sh" -Force
+            $vsText = (Get-Content "$DistDir\verify-sig.sh" -Raw) -replace "`r`n", "`n"
+            [System.IO.File]::WriteAllText("$DistDir\verify-sig.sh", $vsText)
+            Log "  Verify kit staged in dist\: pubkey.asc + verify-sig.sh"
+        } else {
+            Warn "  GPG signing failed (exit $LASTEXITCODE) - bundle is unsigned."
+        }
+    }
+}
+
 # -- 10. Summary --------------------------------------------------------------
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "  BAS Platform v$Version -- Client Delivery Package Ready"   -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
+$zipLeaf = Split-Path -Leaf $ZipPath
 Write-Host "  Package ZIP : $ZipPath"
 Write-Host "  Checksum    : $ZipPath.sha256"
+if ($Signed) {
+    Write-Host "  Signature   : $ZipPath.asc  (GPG, $SigningKeyEmail)"
+}
 if ($LicensePath -ne "" -and (Test-Path $LicensePath)) {
     Write-Host "  License     : $LicensePath"
 }
 Write-Host ""
 Write-Host "  Transfer to client server:" -ForegroundColor Yellow
-Write-Host "    scp -i <key.pem> `"$ZipPath`" `"$ZipPath.sha256`" ubuntu@<client-ip>:~/"
+if ($Signed) {
+    Write-Host "    scp -i <key.pem> `"$ZipPath`" `"$ZipPath.sha256`" `"$ZipPath.asc`" `"$DistDir\pubkey.asc`" `"$DistDir\verify-sig.sh`" ubuntu@<client-ip>:~/"
+} else {
+    Write-Host "    scp -i <key.pem> `"$ZipPath`" `"$ZipPath.sha256`" ubuntu@<client-ip>:~/"
+}
 if ($LicensePath -ne "" -and (Test-Path $LicensePath)) {
     Write-Host "    scp -i <key.pem> `"$LicensePath`" ubuntu@<client-ip>:~/"
 }
 Write-Host ""
 Write-Host "  Client runs (on their Ubuntu server):" -ForegroundColor Yellow
-Write-Host "    sha256sum -c $(Split-Path -Leaf $ZipPath).sha256   # verify transfer"
-Write-Host "    unzip $(Split-Path -Leaf $ZipPath)"
+if ($Signed) {
+    Write-Host "    bash verify-sig.sh $zipLeaf            # verify signature + sha256"
+} else {
+    Write-Host "    sha256sum -c $zipLeaf.sha256   # verify transfer"
+}
+Write-Host "    unzip $zipLeaf"
 Write-Host "    cd $OutName && bash verify.sh                       # verify file integrity"
 Write-Host "    sudo bash setup.sh --offline"
 Write-Host ""
