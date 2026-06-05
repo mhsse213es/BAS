@@ -123,6 +123,14 @@ chmod +x "${BUILD_DIR}/setup.sh" "${BUILD_DIR}/uninstall.sh"
 log "Copying scenarios, wwwroot, and agent binaries..."
 cp -r "${REPO_ROOT}/scenarios/."   "${BUILD_DIR}/scenarios/"
 cp -r "${REPO_ROOT}/orchestrator/wwwroot/." "${BUILD_DIR}/wwwroot/"
+
+# ART external payloads (gsecdump, etc.) staged on the build host — baked into
+# the bundle so the client gets them automatically (bind-mounted to /art-payloads).
+mkdir -p "${BUILD_DIR}/art-payloads"
+if cp -r "${REPO_ROOT}/packaging/art-payloads/." "${BUILD_DIR}/art-payloads/" 2>/dev/null; then
+  PAYLOAD_N=$(find "${BUILD_DIR}/art-payloads" -type f ! -name 'README.md' ! -name '.gitkeep' | wc -l)
+  log "  ART payloads bundled: ${PAYLOAD_N}"
+fi
 mkdir -p "${BUILD_DIR}/agents"
 cp "${AGENTS_DIR}"/* "${BUILD_DIR}/agents/" 2>/dev/null || true
 

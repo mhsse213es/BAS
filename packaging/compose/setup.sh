@@ -459,7 +459,7 @@ _do_install_steps() {
   fi
 
   _step 15 "Creating install directory..."
-  mkdir -p "${INSTALL_DIR}/scenarios" "${INSTALL_DIR}/wwwroot" "${INSTALL_DIR}/data"
+  mkdir -p "${INSTALL_DIR}/scenarios" "${INSTALL_DIR}/wwwroot" "${INSTALL_DIR}/data" "${INSTALL_DIR}/art-payloads"
 
   _step 20 "Installing license..."
   cp "${LIC_PATH}" "${INSTALL_DIR}/bas.lic"
@@ -472,6 +472,12 @@ _do_install_steps() {
   fi
   if [[ -d "${SCRIPT_DIR}/wwwroot" ]]; then
     cp -r "${SCRIPT_DIR}/wwwroot/." "${INSTALL_DIR}/wwwroot/"
+  fi
+  # ART external payloads bundled at build time — copied so the orchestrator's
+  # /art-payloads mount is populated. Empty is fine (payload atomics skip cleanly).
+  if [[ -d "${SCRIPT_DIR}/art-payloads" ]]; then
+    cp -r "${SCRIPT_DIR}/art-payloads/." "${INSTALL_DIR}/art-payloads/"
+    chmod 644 "${INSTALL_DIR}/art-payloads/"* 2>/dev/null || true
   fi
 
   _step 30 "Copying configuration templates..."

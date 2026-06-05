@@ -89,6 +89,14 @@ chmod +x "${BUILD_DIR}/compose/setup.sh" "${BUILD_DIR}/compose/uninstall.sh"
 cp -r "${REPO_ROOT}/scenarios/."                  "${BUILD_DIR}/compose/scenarios/"
 cp -r "${REPO_ROOT}/orchestrator/wwwroot/."       "${BUILD_DIR}/compose/wwwroot/"
 
+# ART external payloads staged on the build host — baked in so the client gets
+# them automatically (compose bind-mounts ./art-payloads to /art-payloads).
+mkdir -p "${BUILD_DIR}/compose/art-payloads"
+if cp -r "${REPO_ROOT}/packaging/art-payloads/." "${BUILD_DIR}/compose/art-payloads/" 2>/dev/null; then
+  PAYLOAD_N=$(find "${BUILD_DIR}/compose/art-payloads" -type f ! -name 'README.md' ! -name '.gitkeep' | wc -l)
+  log "  ART payloads bundled: ${PAYLOAD_N}"
+fi
+
 # ── 5. Copy import helper ──────────────────────────────────────────────────────
 cp "${REPO_ROOT}/packaging/airgap/import.sh"  "${BUILD_DIR}/"
 cp "${REPO_ROOT}/packaging/airgap/verify.sh"  "${BUILD_DIR}/"

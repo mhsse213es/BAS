@@ -1,0 +1,2 @@
+# Keep this directory in git; drop payload binaries here on the build host.
+# Binaries are git-ignored (see .gitignore).
