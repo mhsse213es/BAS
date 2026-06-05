@@ -121,6 +121,10 @@ type ScenarioStep struct {
 	// wire) so results from dynamically-built steps can be interpreted by the
 	// correct framework handler (art|caldera|custom).
 	Framework string `json:"-"`
+	// requiredPayloads lists external payload basenames the command references
+	// (e.g. "gsecdump.exe"). Resolved at dispatch: found files are shipped in
+	// Payloads, a missing one turns the step into a clean SKIP. Server-internal.
+	requiredPayloads []string
 	Executor    string    `json:"executor"`    // powershell|cmd|wmi|mshta|rundll32|cscript|wscript|regsvr32|schtasks
 	Command     string    `json:"command"`     // concrete command, ready to run
 	TimeoutSec  int       `json:"timeoutSec"`

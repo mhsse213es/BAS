@@ -71,10 +71,14 @@ func main() {
 	log.Printf("[+] Loaded %d scenarios from %s", engine.Count(), cfg.ScenariosDir)
 
 	// ── ART Store (bundled atomics — resolved locally, zero endpoint footprint) ──
+	// External payloads (gsecdump, etc.) an operator drops in ART_PAYLOAD_DIR are
+	// shipped to the agent at dispatch; atomics without their payload are skipped.
+	payloadStore := scenario.NewPayloadStore(cfg.ARTPayloadDir)
+	log.Printf("[+] ART payload store: %d binaries from %s", payloadStore.Count(), cfg.ARTPayloadDir)
 	var artStore *scenario.ARTStore
 	if cfg.ARTDir != "" {
 		var artErr error
-		artStore, artErr = scenario.NewARTStore(cfg.ARTDir)
+		artStore, artErr = scenario.NewARTStore(cfg.ARTDir, payloadStore)
 		if artErr != nil {
 			log.Printf("[!] ART store: %v — ART scenarios will be unavailable", artErr)
 		} else {

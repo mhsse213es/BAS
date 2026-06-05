@@ -93,6 +93,7 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 	}
 
 	var command string
+	var artPayloads []Payload
 	switch s.Framework {
 	case "art":
 		if artStore != nil {
@@ -102,7 +103,14 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 				idx = 0
 			}
 			if len(artSteps) > 0 {
-				command = artSteps[idx].Command
+				// materialize ships any required external payloads (or turns the
+				// step into a clean SKIP if a payload is missing).
+				m := artStore.materialize(artSteps[idx])
+				command = m.Command
+				artPayloads = m.Payloads
+				if m.Executor != "" {
+					executor = m.Executor
+				}
 			}
 		}
 		if command == "" {
@@ -122,6 +130,7 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 	for _, p := range s.Payloads {
 		payloads = append(payloads, Payload{Name: p.Name, Content: p.Content})
 	}
+	payloads = append(payloads, artPayloads...)
 
 	framework := s.Framework
 	if framework == "" {
@@ -158,7 +167,10 @@ func buildARTTechniquesSteps(techniques []string, artStore *ARTStore) ([]Scenari
 			log.Printf("[ART] no Windows steps for %s — skipped", t)
 			continue
 		}
-		steps = append(steps, s...)
+		for _, st := range s {
+			// Ship required external payloads, or skip cleanly if missing.
+			steps = append(steps, artStore.materialize(st))
+		}
 	}
 	if len(steps) == 0 {
 		return nil, fmt.Errorf("ART: no Windows steps found for any of the %d requested techniques", len(techniques))

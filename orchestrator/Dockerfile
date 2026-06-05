@@ -8,7 +8,7 @@ RUN apk add --no-cache git && \
     printf 'atomics/T[0-9]*/T[0-9]*.yaml\n' > .git/info/sparse-checkout && \
     git -c protocol.version=2 fetch --depth=1 --filter=blob:none origin master && \
     git checkout FETCH_HEAD && \
-    mkdir /art-atomics && \
+    mkdir /art-atomics /art-payloads && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
 
 # ── Agent + Installer Builder ────────────────────────────────────────────────
@@ -72,7 +72,12 @@ COPY --from=packager /packages/ /agents/
 COPY orchestrator/wwwroot /wwwroot
 COPY scenarios /scenarios
 COPY --from=art-fetcher /art-atomics /art-atomics
+# Empty by default — mount a volume here (or bake binaries in) to enable ART
+# atomics that need external payloads (gsecdump, etc.). Absent payloads → the
+# atomic is skipped cleanly, never run with a broken path.
+COPY --from=art-fetcher /art-payloads /art-payloads
 ENV ART_DIR=/art-atomics
+ENV ART_PAYLOAD_DIR=/art-payloads
 USER nonroot
 EXPOSE 9000
 ENTRYPOINT ["/orchestrator"]

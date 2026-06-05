@@ -78,8 +78,19 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 func interpretART(r ExecResult, combined string) (models.CheckResult, string) {
 	lower := strings.ToLower(combined)
 
+	// Explicit SKIP marker (e.g. missing external payload, technique not in store).
+	if first := strings.TrimSpace(firstLine(combined)); len(first) >= 5 && strings.EqualFold(first[:5], "skip:") {
+		return models.ResultSkipped, strings.TrimSpace(first[5:])
+	}
+
 	if sig := blockSignature(lower); sig != "" {
 		return models.ResultPass, "Security control blocked the technique (" + sig + "): " + firstLine(combined)
+	}
+
+	// Prerequisite/setup failures mean the test could not run — they are NOT a
+	// security outcome, so record them as skipped rather than pass/fail.
+	if isPrereqFailure(lower) {
+		return models.ResultSkipped, "Test prerequisite missing — not executed: " + firstLine(combined)
 	}
 
 	// Silent blocks: EDR/AV often kills or denies the process without printing a
@@ -131,6 +142,20 @@ func blockSignature(lower string) string {
 		return "antivirus"
 	}
 	return ""
+}
+
+// isPrereqFailure reports whether output indicates the test could not run
+// because a binary, file, path or module it depends on was missing — a setup
+// failure, not a security outcome. lower must already be lower-cased.
+func isPrereqFailure(lower string) bool {
+	return strings.Contains(lower, "is not recognized as an internal or external command") ||
+		strings.Contains(lower, "is not recognized as the name of a cmdlet") ||
+		strings.Contains(lower, "cannot find path") ||
+		strings.Contains(lower, "could not find") ||
+		strings.Contains(lower, "no such file or directory") ||
+		strings.Contains(lower, "the system cannot find the file") ||
+		strings.Contains(lower, "the system cannot find the path") ||
+		strings.Contains(lower, "cannot find the path")
 }
 
 // isBlockExitCode reports whether an exit code indicates the process was denied

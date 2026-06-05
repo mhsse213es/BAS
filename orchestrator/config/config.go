@@ -13,6 +13,7 @@ type Config struct {
 	HTTPPort      int    `json:"http_port"`
 	ScenariosDir  string `json:"scenarios_dir"`
 	ARTDir        string `json:"art_dir,omitempty"`
+	ARTPayloadDir string `json:"art_payload_dir,omitempty"` // server-side store of ART external payloads (operator-provided)
 	CalderaURL    string `json:"caldera_url,omitempty"`
 	CalderaAPIKey string `json:"caldera_api_key,omitempty"`
 	LicensePath   string `json:"license_path,omitempty"`
@@ -32,9 +33,10 @@ type Config struct {
 // In Kubernetes the file is optional — DATABASE_URL and JWT_SECRET come from Secrets.
 func Load(path string) (*Config, error) {
 	cfg := &Config{
-		HTTPPort:     9000,
-		ScenariosDir: "scenarios",
-		ARTDir:       "/art-atomics",
+		HTTPPort:      9000,
+		ScenariosDir:  "scenarios",
+		ARTDir:        "/art-atomics",
+		ARTPayloadDir: "/art-payloads",
 	}
 
 	// Try file first (local dev)
@@ -60,6 +62,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("ART_DIR"); v != "" {
 		cfg.ARTDir = v
+	}
+	if v := os.Getenv("ART_PAYLOAD_DIR"); v != "" {
+		cfg.ARTPayloadDir = v
 	}
 	if v := os.Getenv("CALDERA_URL"); v != "" {
 		cfg.CalderaURL = v
