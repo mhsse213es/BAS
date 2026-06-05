@@ -2154,14 +2154,14 @@ function viewRunResults(run) {
     var s = run.score;
     var prevPct = Math.round(s.preventionScore || 0);
     var expVal  = Math.round(s.exposureScore || 0);
-    var covPct  = Math.round(s.coverageScore || 0);
+    var covPct  = Math.round(s.killChainCoverage || 0);
     var amp     = (s.killChainAmplifier || 1).toFixed(1);
     var trend   = s.trend || 'Baseline';
     var cls     = s.classification || '';
 
     var prevCol = prevPct >= 80 ? 'var(--success)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
     var expCol  = expVal  <= 20 ? 'var(--success)' : expVal  <= 50 ? 'var(--warning)' : 'var(--danger)';
-    var covCol  = covPct  >= 80 ? 'var(--success)' : covPct  >= 50 ? 'var(--warning)' : 'var(--danger)';
+    var covCol  = 'var(--accent)'; // breadth metric — neutral; low single-run coverage is expected, not "bad"
     var trendCol = trend === 'Improving' ? 'var(--success)' :
                    trend === 'Degrading' ? 'var(--danger)' :
                    trend === 'Stable'    ? 'var(--warning)' : 'var(--muted)';
@@ -2187,7 +2187,7 @@ function viewRunResults(run) {
         '<div style="' + dimStyle + '">' +
           '<div style="' + labelStyle + '">Tactic Coverage</div>' +
           '<div style="' + bigStyle + ';color:' + covCol + '">' + covPct + '%</div>' +
-          '<div style="' + subStyle + '">tactics with no fail</div>' +
+          '<div style="' + subStyle + '">of 14 ATT&CK tactics</div>' +
         '</div>' +
         '<div style="' + dimStyle + '">' +
           '<div style="' + labelStyle + '">Trend</div>' +

@@ -39,7 +39,8 @@ type ExecutiveSummary struct {
 	Classification     string                   `json:"classification"`
 	PreventionScore    float64                  `json:"preventionScore"`
 	ExposureScore      float64                  `json:"exposureScore"`
-	CoverageScore      float64                  `json:"coverageScore"`
+	CoverageScore      float64                  `json:"coverageScore"`      // defense rate — tactics fully blocked
+	KillChainCoverage  float64                  `json:"killChainCoverage"`  // breadth — % of 14 ATT&CK tactics exercised
 	KillChainAmplifier float64                  `json:"killChainAmplifier"`
 	Trend              string                   `json:"trend"`
 	TotalRuns          int                      `json:"totalRuns"`
@@ -172,6 +173,7 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 		PreventionScore:    latestScore.PreventionScore,
 		ExposureScore:      latestScore.ExposureScore,
 		CoverageScore:      latestScore.CoverageScore,
+		KillChainCoverage:  latestScore.KillChainCoverage,
 		KillChainAmplifier: latestScore.KillChainAmplifier,
 		Trend:              latestScore.Trend,
 		TotalRuns:          len(report.Runs),
@@ -265,6 +267,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 		PreventionScore:    score.PreventionScore,
 		ExposureScore:      score.ExposureScore,
 		CoverageScore:      score.CoverageScore,
+		KillChainCoverage:  score.KillChainCoverage,
 		KillChainAmplifier: score.KillChainAmplifier,
 		Trend:              score.Trend,
 		TotalRuns:          1,
@@ -409,8 +412,8 @@ func buildRecommendations(score models.Score, heatmap []TacticEntry) []string {
 	if score.ExposureScore > 60 {
 		recs = append(recs, "Exposure score exceeds 60. Deploy a 24×7 SOC with SIEM correlation rules aligned to detected failure patterns.")
 	}
-	if score.CoverageScore < 50 {
-		recs = append(recs, "Tactic coverage is below 50%. Run additional scenarios (ART full sweep, Caldera lateral movement) to increase test coverage before next audit.")
+	if score.KillChainCoverage < 50 {
+		recs = append(recs, "Tactic coverage is below 50%. Run additional scenarios (ART full sweep, Caldera lateral movement) to exercise more of the ATT&CK kill chain before next audit.")
 	}
 	if len(recs) == 0 {
 		recs = append(recs, "Maintain current security posture. Schedule next BAS assessment within 30 days to verify continued effectiveness.")

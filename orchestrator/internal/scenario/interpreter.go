@@ -78,13 +78,19 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 func interpretART(r ExecResult, combined string) (models.CheckResult, string) {
 	lower := strings.ToLower(combined)
 
-	if strings.Contains(lower, "access is denied") ||
-		strings.Contains(lower, "access denied") ||
-		strings.Contains(lower, "blocked by") ||
-		strings.Contains(lower, "quarantined") ||
-		strings.Contains(lower, "this program is blocked") ||
-		strings.Contains(lower, "operation did not complete successfully") {
-		return models.ResultPass, "Security control blocked the technique: " + firstLine(combined)
+	if sig := blockSignature(lower); sig != "" {
+		return models.ResultPass, "Security control blocked the technique (" + sig + "): " + firstLine(combined)
+	}
+
+	// Silent blocks: EDR/AV often kills or denies the process without printing a
+	// recognizable message. Treat well-known access-denied / termination exit
+	// codes as a PASS so a real prevention is not mis-scored as a failure.
+	if isBlockExitCode(r.ExitCode) {
+		out := firstLine(combined)
+		if out == "" {
+			out = "process terminated before completion"
+		}
+		return models.ResultPass, fmt.Sprintf("Security control blocked the technique (exit 0x%X): %s", uint32(r.ExitCode), out)
 	}
 
 	if r.ExitCode == 0 {
@@ -95,6 +101,51 @@ func interpretART(r ExecResult, combined string) (models.CheckResult, string) {
 		return models.ResultFail, "Technique executed: " + out
 	}
 	return models.ResultFail, fmt.Sprintf("Technique exited %d: %s", r.ExitCode, firstLine(combined))
+}
+
+// blockSignature returns a short label when the output contains a known
+// access-denied / antivirus / policy-block signature, or "" if none match.
+// lower must already be lower-cased.
+func blockSignature(lower string) string {
+	switch {
+	case strings.Contains(lower, "access is denied"),
+		strings.Contains(lower, "access denied"),
+		strings.Contains(lower, "permission denied"),
+		strings.Contains(lower, "denied by"):
+		return "access denied"
+	case strings.Contains(lower, "blocked by group policy"),
+		strings.Contains(lower, "blocked by your administrator"),
+		strings.Contains(lower, "restricted by"),
+		strings.Contains(lower, "blocked by"),
+		strings.Contains(lower, "this program is blocked"),
+		strings.Contains(lower, "this app has been blocked"),
+		strings.Contains(lower, "operation was blocked"):
+		return "policy block"
+	case strings.Contains(lower, "windows defender"),
+		strings.Contains(lower, "antivirus"),
+		strings.Contains(lower, "threat detected"),
+		strings.Contains(lower, "malware"),
+		strings.Contains(lower, "virus detected"),
+		strings.Contains(lower, "quarantined"),
+		strings.Contains(lower, "operation did not complete successfully"):
+		return "antivirus"
+	}
+	return ""
+}
+
+// isBlockExitCode reports whether an exit code indicates the process was denied
+// or terminated by a security control rather than run to completion.
+//   - 5            ERROR_ACCESS_DENIED (Win32)
+//   - 0xC0000022   STATUS_ACCESS_DENIED (NTSTATUS, surfaces as -1073741790)
+//   - 0xC0000142   STATUS_DLL_INIT_FAILED (commonly seen on EDR injection block)
+func isBlockExitCode(code int) bool {
+	switch int64(code) {
+	case 5, // ERROR_ACCESS_DENIED
+		-1073741790, 3221225506, // 0xC0000022 STATUS_ACCESS_DENIED (signed32 / unsigned)
+		-1073741502, 3221225794: // 0xC0000142 STATUS_DLL_INIT_FAILED (signed32 / unsigned)
+		return true
+	}
+	return false
 }
 
 // interpretCaldera interprets a Caldera ability execution result.

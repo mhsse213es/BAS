@@ -223,10 +223,16 @@ tr:last-child td{border-bottom:none}
     <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Higher = worse. Tactic-weighted fail rate</div>
   </div>
   <div class="scard">
-    <div class="scard-label">Coverage Score</div>
-    <div class="scard-value" style="color:#2f81f7">{{fmtScore .Summary.CoverageScore}}%</div>
-    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .Summary.CoverageScore}}%;background:#2f81f7"></div></div>
-    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Tactics with zero failures</div>
+    <div class="scard-label">Tactic Coverage</div>
+    <div class="scard-value" style="color:#2f81f7">{{fmtScore .Summary.KillChainCoverage}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .Summary.KillChainCoverage}}%;background:#2f81f7"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Breadth — of 14 ATT&amp;CK tactics tested</div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Defense Rate</div>
+    <div class="scard-value" style="color:#238636">{{fmtScore .Summary.CoverageScore}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .Summary.CoverageScore}}%;background:#238636"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Tactics fully blocked (zero failures)</div>
   </div>
   <div class="scard">
     <div class="scard-label">Kill-Chain Amplifier</div>

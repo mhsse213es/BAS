@@ -77,7 +77,8 @@ type Score struct {
 	// ── Primary dimensions ────────────────────────────────────────────────────
 	PreventionScore         float64                `json:"preventionScore"`         // 0–100, higher=better: weighted pass rate
 	ExposureScore           float64                `json:"exposureScore"`           // 0–100, higher=worse: tactic-weighted fail rate
-	CoverageScore           float64                `json:"coverageScore"`           // 0–100, higher=better: % tactics with zero fails
+	CoverageScore           float64                `json:"coverageScore"`           // 0–100, higher=better: defense rate — % of tested tactics fully blocked (zero fails)
+	KillChainCoverage       float64                `json:"killChainCoverage"`       // 0–100: breadth — % of the 14 ATT&CK enterprise tactics exercised by this run
 	KillChainAmplifier      float64                `json:"killChainAmplifier"`      // 1.0–2.5: consecutive kill-chain failures multiplier
 	Trend                   string                 `json:"trend"`                   // Improving | Degrading | Stable | Baseline
 	PreviousPreventionScore float64                `json:"previousPreventionScore"` // prevention score of prior run (0 if Baseline)

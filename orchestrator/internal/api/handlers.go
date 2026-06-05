@@ -1838,7 +1838,7 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 	cards := []card{
 		{"Prevention", fmt.Sprintf("%d%%", int(score.PreventionScore)), score.Classification},
 		{"Exposure", fmt.Sprintf("%.0f", score.ExposureScore), fmt.Sprintf("×%.1f kill-chain", score.KillChainAmplifier)},
-		{"Coverage", fmt.Sprintf("%d%%", int(score.CoverageScore)), "tactic coverage"},
+		{"Coverage", fmt.Sprintf("%d%%", int(score.KillChainCoverage)), "of 14 ATT&CK tactics"},
 		{"Trend", score.Trend, fmt.Sprintf("%d/%d techniques", score.PassedTechniques, score.TotalTechniques)},
 	}
 	cardW := 42.0

@@ -10,6 +10,13 @@ var killChainTactics = []string{
 	"lateral-movement", "collection", "exfiltration",
 }
 
+// enterpriseTacticCount is the number of tactics in MITRE ATT&CK Enterprise
+// (reconnaissance, resource-development, initial-access, execution, persistence,
+// privilege-escalation, defense-evasion, credential-access, discovery,
+// lateral-movement, collection, command-and-control, exfiltration, impact).
+// Used as the denominator for KillChainCoverage (testing breadth).
+const enterpriseTacticCount = 14
+
 // tacticExposureWeight returns the tactic-level weight for Exposure Score.
 // Mirrors the severity tiers defined in Severity(tactic).
 func tacticExposureWeight(tactic string) float64 {
@@ -31,7 +38,8 @@ func tacticExposureWeight(tactic string) float64 {
 // Five primary dimensions:
 //   - PreventionScore  — severity-weighted pass rate (higher = safer)
 //   - ExposureScore    — tactic-weighted fail rate, amplified by kill-chain depth
-//   - CoverageScore    — % of tested ATT&CK tactics with zero failures
+//   - CoverageScore    — defense rate: % of tested ATT&CK tactics with zero failures
+//   - KillChainCoverage — breadth: % of the 14 ATT&CK enterprise tactics exercised
 //   - KillChainAmplifier — consecutive kill-chain phase failures multiplier
 //   - Trend            — comparison against prev run (Improving/Degrading/Stable/Baseline)
 //
@@ -143,6 +151,13 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		coverageScore = clampF(float64(coveredTactics)/float64(testedTactics)*100, 0, 100)
 	}
 
+	// ── Kill-Chain Coverage (0–100) ───────────────────────────────────────────
+	// Breadth: how much of the ATT&CK Enterprise kill chain this run exercised,
+	// regardless of pass/fail. Unlike CoverageScore (a defense-success metric),
+	// this measures testing completeness so a run that touches few tactics reads
+	// low even when every technique was blocked.
+	killChainCoverage := clampF(float64(testedTactics)/float64(enterpriseTacticCount)*100, 0, 100)
+
 	// ── Kill Chain Amplifier ──────────────────────────────────────────────────
 	// Find the longest consecutive sequence of kill-chain phase failures.
 	maxConsec := 0
@@ -220,6 +235,7 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		PreventionScore:         preventionScore,
 		ExposureScore:           rawExposure,
 		CoverageScore:           coverageScore,
+		KillChainCoverage:       killChainCoverage,
 		KillChainAmplifier:      amplifier,
 		Trend:                   trend,
 		PreviousPreventionScore: prevPreventionScore,
