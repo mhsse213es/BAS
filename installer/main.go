@@ -441,6 +441,11 @@ func runInstall(hwnd uintptr) {
 		"--env", envLabel,
 		"--secret", secret,
 	)
+	// Anchor the child's working directory to the install dir, never the
+	// installer's own launch dir. Otherwise a spawned agent inherits the
+	// installer's cwd and holds a lock on it (e.g. the dist build folder),
+	// blocking later cleanup/rebuilds.
+	cmd.Dir = installDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -510,6 +515,10 @@ func registerTrayStartup(agentPath string) error {
 // appears without requiring a logoff/logon.
 func launchTray(agentPath string) {
 	cmd := exec.Command(agentPath, "--tray")
+	// Anchor cwd to the install dir so the long-lived tray never holds a lock
+	// on the installer's launch dir (e.g. the dist build folder), which would
+	// block later cleanup/rebuilds.
+	cmd.Dir = filepath.Dir(agentPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_ = cmd.Start() // fire and forget
 }
