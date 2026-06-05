@@ -45,10 +45,12 @@ func (d *rpt) fill(c rgb) { d.pdf.SetFillColor(c.r, c.g, c.b) }
 func (d *rpt) text(c rgb) { d.pdf.SetTextColor(c.r, c.g, c.b) }
 func (d *rpt) draw(c rgb) { d.pdf.SetDrawColor(c.r, c.g, c.b) }
 
-// RenderRunPDF writes an enterprise-grade assessment PDF for a single scenario
-// run to w, using the engine's rich FullReport plus the raw per-technique
-// results (which carry Threat Impact and Remediation).
-func RenderRunPDF(w io.Writer, rep *FullReport, results []models.SimulationResult) error {
+// RenderReportPDF writes an enterprise-grade assessment PDF to w from the
+// engine's rich FullReport plus the raw per-technique results (which carry
+// Threat Impact and Remediation). It backs both the per-run report and the
+// agent-level report / audit pack — the FullReport supplies the summary,
+// tactic heatmap and findings, while results drive the detailed section.
+func RenderReportPDF(w io.Writer, rep *FullReport, results []models.SimulationResult) error {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.SetAutoPageBreak(true, 20)
 	pdf.AliasNbPages("")

@@ -110,6 +110,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 
 		// Full report + audit pack — Viewer+ role
 		r.Get("/api/report/full/html", h.GetFullReportHTML)
+		r.Get("/api/report/full/pdf", h.GetFullReportPDF)
 		r.Get("/api/report/audit-pack", h.GetAuditPack)
 
 		// Compliance — Viewer+ role

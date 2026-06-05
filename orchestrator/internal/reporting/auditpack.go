@@ -28,11 +28,9 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 		return fmt.Errorf("build report: %w", err)
 	}
 
-	// ── Build compliance summaries ────────────────────────────────────────
-	var compSummaries []ComplianceSummaryRow
+	// Latest run results — used for the PDF detailed section and compliance.
 	var latestResults []models.SimulationResult
-	if len(report.Runs) > 0 && mapper != nil {
-		// Re-fetch latest run results for compliance
+	if len(report.Runs) > 0 {
 		var resultsRaw []byte
 		e.db.QueryRow(ctx,
 			`SELECT results FROM scenario_runs
@@ -40,7 +38,11 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 			  ORDER BY started_at DESC LIMIT 1`, agentID,
 		).Scan(&resultsRaw)
 		json.Unmarshal(resultsRaw, &latestResults)
+	}
 
+	// ── Build compliance summaries ────────────────────────────────────────
+	var compSummaries []ComplianceSummaryRow
+	if len(latestResults) > 0 && mapper != nil {
 		for _, fw := range mapper.Frameworks() {
 			cr, err := mapper.GenerateReport(latestResults, fw.ID, agentID, "", "")
 			if err != nil {
@@ -89,6 +91,13 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 	// executive-report.html
 	if f, err := zw.Create(prefix + "executive-report.html"); err == nil {
 		GenerateHTML(f, report, compSummaries)
+	}
+
+	// executive-report.pdf — print-ready enterprise report
+	if f, err := zw.Create(prefix + "executive-report.pdf"); err == nil {
+		if err := RenderReportPDF(f, report, latestResults); err != nil {
+			fmt.Fprintf(f, "PDF generation failed: %v", err)
+		}
 	}
 
 	// agent-inventory.json
@@ -210,16 +219,17 @@ Contents
 --------
   README.txt              This file
   MANIFEST.txt            Pack summary (agent, risk score, run count)
+  executive-report.pdf    Print-ready enterprise assessment report (PDF)
   summary.json            Full machine-readable report (JSON)
-  executive-report.html   Human-readable HTML report — open in browser, print to PDF
+  executive-report.html   Human-readable HTML report — open in a browser
   runs/                   Raw scenario run data (one JSON file per run)
   compliance/             Per-framework compliance reports (CSV, one file per framework)
   agent-inventory.json    Agent metadata, security tools, and detection categories
 
 Usage
 -----
-1. Open executive-report.html in any modern browser.
-2. Use File → Print → Save as PDF to produce an audit-ready PDF.
+1. Open executive-report.pdf — the audit-ready report to share or archive.
+2. executive-report.html is the same report for on-screen viewing in a browser.
 3. Import compliance/*.csv into Excel or your GRC platform.
 4. Attach summary.json to your ticketing system for automated processing.
 

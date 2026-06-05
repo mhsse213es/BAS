@@ -1644,6 +1644,65 @@ func (h *Handler) GetFullReportHTML(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// sanitizeFilename keeps only filename-safe characters, capped at 32 chars.
+func sanitizeFilename(s string) string {
+	var b []byte
+	for _, c := range []byte(s) {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+			b = append(b, c)
+		default:
+			b = append(b, '_')
+		}
+	}
+	if len(b) > 32 {
+		b = b[:32]
+	}
+	return string(b)
+}
+
+// GET /api/report/full/pdf?agentId=X
+// Streams the agent-level assessment report as an enterprise PDF.
+func (h *Handler) GetFullReportPDF(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	agentID := r.URL.Query().Get("agentId")
+	if agentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	report, err := h.reportingEngine.Build(r.Context(), agentID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Latest run results drive the detailed-techniques section.
+	var resultsRaw []byte
+	h.db.QueryRow(r.Context(),
+		`SELECT results FROM scenario_runs
+		  WHERE agent_id = $1 AND status IN ('completed','partial')
+		  ORDER BY started_at DESC LIMIT 1`, agentID,
+	).Scan(&resultsRaw)
+	var results []models.SimulationResult
+	if len(resultsRaw) > 0 {
+		json.Unmarshal(resultsRaw, &results)
+	}
+
+	host := report.Agent.Hostname
+	if host == "" {
+		host = agentID
+	}
+	fname := fmt.Sprintf("bas-report-%s-%s.pdf", sanitizeFilename(host), time.Now().UTC().Format("2006-01-02"))
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	if err := reporting.RenderReportPDF(w, report, results); err != nil {
+		log.Printf("[api] full report pdf: %v", err)
+	}
+}
+
 // GET /api/report/audit-pack?agentId=X
 // Streams a ZIP containing the full audit pack.
 func (h *Handler) GetAuditPack(w http.ResponseWriter, r *http.Request) {
@@ -1789,28 +1848,15 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 	var results []models.SimulationResult
 	json.Unmarshal(resultsJSON, &results)
 
-	// Sanitise run name for the download filename.
-	var safeName []byte
-	for _, c := range []byte(runName) {
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
-			safeName = append(safeName, c)
-		default:
-			safeName = append(safeName, '_')
-		}
-	}
-	if len(safeName) > 32 {
-		safeName = safeName[:32]
-	}
 	idShort := runID
 	if len(idShort) > 8 {
 		idShort = idShort[:8]
 	}
-	fname := fmt.Sprintf("bas-report-%s-%s.pdf", string(safeName), idShort)
+	fname := fmt.Sprintf("bas-report-%s-%s.pdf", sanitizeFilename(runName), idShort)
 
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
-	if err := reporting.RenderRunPDF(w, rep, results); err != nil {
+	if err := reporting.RenderReportPDF(w, rep, results); err != nil {
 		log.Printf("[api] pdf output: %v", err)
 	}
 }

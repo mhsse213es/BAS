@@ -1503,6 +1503,7 @@ function loadAgents() {
           ' <button class="btn btn-outline btn-sm" onclick="safeScan(\'' + x(a.agentId) + '\')" title="Read-only simulation — makes no changes to the endpoint">&#128737; Safe Scan</button>' +
           (a.hasReport ? ' <button class="btn btn-outline btn-sm" onclick="viewReport(\'' + x(a.agentId) + '\')">Posture</button>' : '') +
           ' <button class="btn btn-outline btn-sm" onclick="openFullReport(\'' + x(a.agentId) + '\')" title="Open HTML report in new tab">&#128196; Report</button>' +
+          ' <button class="btn btn-outline btn-sm" onclick="downloadFullReportPDF(\'' + x(a.agentId) + '\')" title="Download enterprise PDF report">&#8659; PDF</button>' +
           ' <button class="btn btn-outline btn-sm" onclick="downloadAuditPack(\'' + x(a.agentId) + '\')" title="Download audit pack ZIP">&#8659; Audit Pack</button>' +
         '</td></tr>';
     }).join('');
@@ -2946,6 +2947,15 @@ function safeScan(agentId) {
 
 function openFullReport(agentId) {
   window.open('/api/report/full/html?agentId=' + encodeURIComponent(agentId), '_blank');
+}
+
+function downloadFullReportPDF(agentId) {
+  var a = document.createElement('a');
+  a.href = '/api/report/full/pdf?agentId=' + encodeURIComponent(agentId);
+  a.download = 'bas-report-' + agentId + '.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function downloadAuditPack(agentId) {

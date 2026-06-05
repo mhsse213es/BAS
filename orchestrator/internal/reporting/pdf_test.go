@@ -10,7 +10,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 )
 
-func TestRenderRunPDF(t *testing.T) {
+func TestRenderReportPDF(t *testing.T) {
 	now := time.Now().UTC()
 	rep := &FullReport{
 		GeneratedAt: now,
@@ -58,8 +58,8 @@ func TestRenderRunPDF(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := RenderRunPDF(&buf, rep, results); err != nil {
-		t.Fatalf("RenderRunPDF: %v", err)
+	if err := RenderReportPDF(&buf, rep, results); err != nil {
+		t.Fatalf("RenderReportPDF: %v", err)
 	}
 	if !strings.HasPrefix(buf.String(), "%PDF-") {
 		t.Errorf("output is not a PDF (prefix %q)", buf.String()[:min(8, buf.Len())])
