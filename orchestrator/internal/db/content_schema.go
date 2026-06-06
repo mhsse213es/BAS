@@ -102,11 +102,13 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			PRIMARY KEY (technique_id, cve_id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS owasp_risks (
-			risk_id    text        PRIMARY KEY,               -- e.g. A03:2021
-			version    text        NOT NULL DEFAULT '',       -- 2013 | 2017 | 2021 | future
-			name       text        NOT NULL DEFAULT '',
-			updated_at timestamptz NOT NULL DEFAULT NOW()
+			risk_id       text        PRIMARY KEY,            -- e.g. A03:2021
+			version       text        NOT NULL DEFAULT '',    -- 2013 | 2017 | 2021 | future
+			name          text        NOT NULL DEFAULT '',
+			display_order int         NOT NULL DEFAULT 0,
+			updated_at    timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		`ALTER TABLE owasp_risks ADD COLUMN IF NOT EXISTS display_order int NOT NULL DEFAULT 0`,
 		`CREATE TABLE IF NOT EXISTS technique_owasp (
 			technique_id text NOT NULL REFERENCES techniques(technique_id) ON DELETE CASCADE,
 			risk_id      text NOT NULL REFERENCES owasp_risks(risk_id) ON DELETE CASCADE,

@@ -105,6 +105,14 @@ func SeedContent(ctx context.Context, pool *pgxpool.Pool, atomicsDir, payloadDir
 	} else if n > 0 {
 		log.Printf("[content] tactic backfill updated %d techniques", n)
 	}
+	if err := seedOWASP(ctx, pool); err != nil {
+		log.Printf("[content] seed OWASP risks: %v", err)
+	}
+	if n, err := backfillTechniqueOWASP(ctx, pool); err != nil {
+		log.Printf("[content] backfill technique OWASP: %v", err)
+	} else if n > 0 {
+		log.Printf("[content] OWASP backfill added %d technique links", n)
+	}
 
 	if !force && version != "" {
 		var recVer string
@@ -351,4 +359,63 @@ func backfillTechniqueTactics(ctx context.Context, pool *pgxpool.Pool) (int, err
 		}
 	}
 	return len(updates), nil
+}
+
+// seedOWASP upserts the OWASP Top 10 (2021) categories into the owasp_risks
+// table. Idempotent — the canonical set lives in the models package.
+func seedOWASP(ctx context.Context, pool *pgxpool.Pool) error {
+	for _, r := range models.OWASP2021 {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO owasp_risks (risk_id, version, name, display_order, updated_at)
+			 VALUES ($1, $2, $3, $4, NOW())
+			 ON CONFLICT (risk_id) DO UPDATE SET
+			   version = EXCLUDED.version, name = EXCLUDED.name,
+			   display_order = EXCLUDED.display_order, updated_at = NOW()`,
+			r.ID, r.Version, r.Name, r.Order,
+		); err != nil {
+			return fmt.Errorf("owasp %s: %w", r.ID, err)
+		}
+	}
+	return nil
+}
+
+// backfillTechniqueOWASP links each technique present in the DB to the OWASP 2021
+// categories it relates to, per the curated map in the models package. Additive
+// and idempotent (ON CONFLICT DO NOTHING). Returns the number of links inserted.
+// Only techniques that exist in the techniques table are linked, so the FK on
+// technique_owasp is always satisfied.
+func backfillTechniqueOWASP(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	rows, err := pool.Query(ctx, `SELECT technique_id FROM techniques`)
+	if err != nil {
+		return 0, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	inserted := 0
+	for _, id := range ids {
+		for _, risk := range models.LookupOWASP(id) {
+			tag, err := pool.Exec(ctx,
+				`INSERT INTO technique_owasp (technique_id, risk_id)
+				 VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+				id, risk,
+			)
+			if err != nil {
+				return inserted, err
+			}
+			inserted += int(tag.RowsAffected())
+		}
+	}
+	return inserted, nil
 }
