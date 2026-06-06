@@ -316,37 +316,59 @@ Log "  Checksum: $ZipPath.sha256"
 $Signed = $false
 $SigningDir      = Join-Path $RepoRoot "packaging\signing"
 $SigningKeyEmail = "releases@audspect.com"
+# Prefer a full GnuPG (Gpg4win) over the Git-for-Windows MSYS gpg: the latter's
+# keyboxd is not launchable from a PowerShell (non-MSYS) context, so a keyboxd-
+# backed keyring fails here. (If you hit "error running keyboxd", disable it:
+# remove 'use-keyboxd' from %USERPROFILE%\.gnupg\common.conf and re-import the
+# public key so gpg uses a classic in-process pubring.kbx.)
 $gpgExe = $null
-$gpgCmd = Get-Command gpg -ErrorAction SilentlyContinue
-if ($gpgCmd) { $gpgExe = $gpgCmd.Source }
-elseif (Test-Path "C:\Program Files\Git\usr\bin\gpg.exe") { $gpgExe = "C:\Program Files\Git\usr\bin\gpg.exe" }
+foreach ($cand in @("C:\Program Files (x86)\GnuPG\bin\gpg.exe", "C:\Program Files\GnuPG\bin\gpg.exe")) {
+    if (-not $gpgExe -and (Test-Path $cand)) { $gpgExe = $cand }
+}
+if (-not $gpgExe) {
+    $gpgCmd = Get-Command gpg -ErrorAction SilentlyContinue
+    if ($gpgCmd) { $gpgExe = $gpgCmd.Source }
+    elseif (Test-Path "C:\Program Files\Git\usr\bin\gpg.exe") { $gpgExe = "C:\Program Files\Git\usr\bin\gpg.exe" }
+}
 
 if (-not $gpgExe) {
-    Warn "gpg not found - bundle is unsigned. Install Git for Windows or GnuPG to enable signing."
+    Warn "gpg not found - bundle is unsigned. Install Gpg4win or Git for Windows to enable signing."
 } else {
-    & $gpgExe --list-secret-keys $SigningKeyEmail *> $null
-    if ($LASTEXITCODE -ne 0) {
-        Warn "No signing key for $SigningKeyEmail - bundle is unsigned."
-        Warn "  Generate one: bash packaging/signing/keygen.sh"
-    } else {
-        Log "Signing bundle with GPG key $SigningKeyEmail..."
-        $SigPath = "$ZipPath.asc"
-        if (Test-Path $SigPath) { Remove-Item -Force $SigPath }
-        & $gpgExe --armor --batch --yes --detach-sign `
-            --local-user $SigningKeyEmail --output $SigPath $ZipPath *> $null
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $SigPath)) {
-            $Signed = $true
-            Log "  Signature: $SigPath"
-            # Self-contained verify kit alongside the zip (verify-sig.sh reads
-            # pubkey.asc from its own directory).
-            Copy-Item "$SigningDir\pubkey.asc"    "$DistDir\pubkey.asc"    -Force
-            Copy-Item "$SigningDir\verify-sig.sh" "$DistDir\verify-sig.sh" -Force
-            $vsText = (Get-Content "$DistDir\verify-sig.sh" -Raw) -replace "`r`n", "`n"
-            [System.IO.File]::WriteAllText("$DistDir\verify-sig.sh", $vsText)
-            Log "  Verify kit staged in dist\: pubkey.asc + verify-sig.sh"
+    # gpg writes progress to stderr; with $ErrorActionPreference='Stop' (set above)
+    # PowerShell turns native stderr into a terminating NativeCommandError, which
+    # would abort the whole build over a mere signing hiccup. Run the native gpg
+    # calls under 'Continue' so a missing key or a broken gpg only SKIPS signing.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $gpgExe --list-secret-keys $SigningKeyEmail 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Warn "No usable signing key for $SigningKeyEmail (gpg exit $LASTEXITCODE) - bundle is unsigned."
+            Warn "  Generate one: bash packaging/signing/keygen.sh"
         } else {
-            Warn "  GPG signing failed (exit $LASTEXITCODE) - bundle is unsigned."
+            Log "Signing bundle with GPG key $SigningKeyEmail..."
+            $SigPath = "$ZipPath.asc"
+            if (Test-Path $SigPath) { Remove-Item -Force $SigPath }
+            & $gpgExe --armor --batch --yes --detach-sign `
+                --local-user $SigningKeyEmail --output $SigPath $ZipPath 2>$null
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $SigPath)) {
+                $Signed = $true
+                Log "  Signature: $SigPath"
+                # Self-contained verify kit alongside the zip (verify-sig.sh reads
+                # pubkey.asc from its own directory).
+                Copy-Item "$SigningDir\pubkey.asc"    "$DistDir\pubkey.asc"    -Force
+                Copy-Item "$SigningDir\verify-sig.sh" "$DistDir\verify-sig.sh" -Force
+                $vsText = (Get-Content "$DistDir\verify-sig.sh" -Raw) -replace "`r`n", "`n"
+                [System.IO.File]::WriteAllText("$DistDir\verify-sig.sh", $vsText)
+                Log "  Verify kit staged in dist\: pubkey.asc + verify-sig.sh"
+            } else {
+                Warn "  GPG signing failed (exit $LASTEXITCODE) - bundle is unsigned."
+            }
         }
+    } catch {
+        Warn "  GPG signing skipped (gpg error: $($_.Exception.Message)) - bundle is unsigned."
+    } finally {
+        $ErrorActionPreference = $prevEAP
     }
 }
 
