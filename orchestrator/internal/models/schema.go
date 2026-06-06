@@ -494,6 +494,77 @@ var TacticMap = map[string]string{
 	"T1565": "impact",
 	"T1489": "impact",
 	"T1529": "impact",
+
+	// ── Expanded coverage ───────────────────────────────────────────────────
+	// Broader enterprise mapping so ART/Caldera runs and the shipped scenarios
+	// score with a tactic instead of falling through to "unknown". For
+	// multi-tactic techniques the primary (most-tested) tactic is used.
+
+	// Reconnaissance
+	"T1590": "reconnaissance", "T1591": "reconnaissance", "T1593": "reconnaissance",
+	"T1594": "reconnaissance", "T1595": "reconnaissance", "T1597": "reconnaissance",
+
+	// Resource Development
+	"T1583": "resource-development", "T1584": "resource-development",
+	"T1585": "resource-development", "T1586": "resource-development",
+	"T1587": "resource-development", "T1588": "resource-development",
+	"T1608": "resource-development", "T1650": "resource-development",
+
+	// Initial Access
+	"T1091": "initial-access", "T1199": "initial-access",
+	"T1200": "initial-access", "T1189": "initial-access",
+
+	// Execution
+	"T1559": "execution", "T1610": "execution", "T1648": "execution",
+	"T1651": "execution", "T1609": "execution", "T1569": "execution",
+
+	// Persistence
+	"T1037": "persistence", "T1546": "persistence", "T1574": "persistence",
+	"T1137": "persistence", "T1176": "persistence", "T1554": "persistence",
+
+	// Privilege Escalation
+	"T1484": "privilege-escalation", "T1611": "privilege-escalation",
+
+	// Defense Evasion
+	"T1221": "defense-evasion", "T1127": "defense-evasion", "T1197": "defense-evasion",
+	"T1497": "defense-evasion", "T1480": "defense-evasion", "T1620": "defense-evasion",
+	"T1014": "defense-evasion", "T1202": "defense-evasion", "T1222": "defense-evasion",
+	"T1564": "defense-evasion", "T1553": "defense-evasion", "T1006": "defense-evasion",
+	"T1211": "defense-evasion",
+
+	// Credential Access
+	"T1552": "credential-access", "T1557": "credential-access", "T1040": "credential-access",
+	"T1539": "credential-access", "T1606": "credential-access", "T1528": "credential-access",
+	"T1621": "credential-access", "T1649": "credential-access", "T1111": "credential-access",
+
+	// Discovery
+	"T1046": "discovery", "T1135": "discovery", "T1057": "discovery",
+	"T1012": "discovery", "T1010": "discovery", "T1124": "discovery",
+	"T1201": "discovery", "T1120": "discovery", "T1217": "discovery",
+	"T1482": "discovery", "T1614": "discovery",
+
+	// Lateral Movement
+	"T1210": "lateral-movement", "T1080": "lateral-movement", "T1534": "lateral-movement",
+	"T1563": "lateral-movement", "T1072": "lateral-movement",
+
+	// Collection
+	"T1115": "collection", "T1119": "collection", "T1074": "collection",
+	"T1123": "collection", "T1125": "collection", "T1185": "collection",
+	"T1213": "collection", "T1530": "collection",
+
+	// Exfiltration
+	"T1011": "exfiltration", "T1052": "exfiltration", "T1029": "exfiltration",
+	"T1030": "exfiltration", "T1537": "exfiltration",
+
+	// Command and Control
+	"T1090": "command-and-control", "T1568": "command-and-control", "T1573": "command-and-control",
+	"T1132": "command-and-control", "T1001": "command-and-control", "T1102": "command-and-control",
+	"T1008": "command-and-control", "T1104": "command-and-control", "T1571": "command-and-control",
+	"T1092": "command-and-control",
+
+	// Impact
+	"T1499": "impact", "T1498": "impact", "T1496": "impact",
+	"T1561": "impact", "T1531": "impact", "T1657": "impact", "T1495": "impact",
 }
 
 // LookupTactic resolves T1059.001 → "execution" by stripping the sub-technique suffix.

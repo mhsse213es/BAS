@@ -23,6 +23,15 @@ import (
 // Idempotent — safe to call on every startup.
 func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	stmts := []string{
+		// ── Tactic reference (the 14 ATT&CK Enterprise tactics) ───────────────
+		`CREATE TABLE IF NOT EXISTS tactics (
+			tactic_id        text        PRIMARY KEY,            -- shortname, e.g. credential-access
+			name             text        NOT NULL DEFAULT '',    -- display name, e.g. Credential Access
+			attack_id        text        NOT NULL DEFAULT '',    -- ATT&CK tactic ID, e.g. TA0006
+			kill_chain_order int         NOT NULL DEFAULT 0,
+			updated_at       timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
 		// ── Master security object ────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS techniques (
 			technique_id text        PRIMARY KEY,            -- e.g. T1059.001

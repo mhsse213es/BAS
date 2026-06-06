@@ -12,6 +12,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
+
+	"github.com/audspect/bas/internal/models"
 )
 
 // normalizedTest is a single execution-ready atomic test, as it will be stored
@@ -92,6 +94,18 @@ func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []norm
 // already present), the import is skipped entirely as a fast path — unless force
 // is set (used by the admin reseed endpoint to apply a dropped content pack).
 func SeedContent(ctx context.Context, pool *pgxpool.Pool, atomicsDir, payloadDir, version string, force bool) (techCount, payloadCount int, err error) {
+	// Tactic reference + technique→tactic backfill are cheap and idempotent, so
+	// run them on every boot (independent of the content-version fast-path) to
+	// keep the knowledge graph populated even when atomics are unchanged.
+	if err := seedTactics(ctx, pool); err != nil {
+		log.Printf("[content] seed tactics: %v", err)
+	}
+	if n, err := backfillTechniqueTactics(ctx, pool); err != nil {
+		log.Printf("[content] backfill technique tactics: %v", err)
+	} else if n > 0 {
+		log.Printf("[content] tactic backfill updated %d techniques", n)
+	}
+
 	if !force && version != "" {
 		var recVer string
 		var recTech, recPayload int
@@ -172,7 +186,8 @@ func importAtomics(ctx context.Context, pool *pgxpool.Pool, dir string) (int, er
 			continue
 		}
 
-		if err := upsertTechnique(ctx, pool, techniqueID, displayName, string(data), hash, tests); err != nil {
+		tactic := models.LookupTactic(techniqueID)
+		if err := upsertTechnique(ctx, pool, techniqueID, displayName, tactic, string(data), hash, tests); err != nil {
 			log.Printf("[content] upsert %s failed: %v", techniqueID, err)
 			continue
 		}
@@ -183,7 +198,7 @@ func importAtomics(ctx context.Context, pool *pgxpool.Pool, dir string) (int, er
 
 // upsertTechnique writes the technique row, its raw YAML, and a fresh set of
 // normalized tests within a single transaction.
-func upsertTechnique(ctx context.Context, pool *pgxpool.Pool, techniqueID, displayName, rawYAML, hash string, tests []normalizedTest) error {
+func upsertTechnique(ctx context.Context, pool *pgxpool.Pool, techniqueID, displayName, tactic, rawYAML, hash string, tests []normalizedTest) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -191,12 +206,13 @@ func upsertTechnique(ctx context.Context, pool *pgxpool.Pool, techniqueID, displ
 	defer tx.Rollback(ctx)
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO techniques (technique_id, name, updated_at)
-		 VALUES ($1, $2, NOW())
+		`INSERT INTO techniques (technique_id, name, tactic, updated_at)
+		 VALUES ($1, $2, $3, NOW())
 		 ON CONFLICT (technique_id) DO UPDATE SET
 		   name = CASE WHEN EXCLUDED.name <> '' THEN EXCLUDED.name ELSE techniques.name END,
+		   tactic = CASE WHEN EXCLUDED.tactic <> '' THEN EXCLUDED.tactic ELSE techniques.tactic END,
 		   updated_at = NOW()`,
-		techniqueID, displayName,
+		techniqueID, displayName, tactic,
 	); err != nil {
 		return fmt.Errorf("technique: %w", err)
 	}
@@ -279,4 +295,60 @@ func importPayloads(ctx context.Context, pool *pgxpool.Pool, dir string) (int, e
 		return count, walkErr
 	}
 	return count, nil
+}
+
+// seedTactics upserts the 14 ATT&CK Enterprise tactics into the tactics table.
+// Idempotent — the reference set is the canonical list in the models package.
+func seedTactics(ctx context.Context, pool *pgxpool.Pool) error {
+	for _, t := range models.EnterpriseTactics {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO tactics (tactic_id, name, attack_id, kill_chain_order, updated_at)
+			 VALUES ($1, $2, $3, $4, NOW())
+			 ON CONFLICT (tactic_id) DO UPDATE SET
+			   name = EXCLUDED.name, attack_id = EXCLUDED.attack_id,
+			   kill_chain_order = EXCLUDED.kill_chain_order, updated_at = NOW()`,
+			t.ID, t.Name, t.AttackID, t.Order,
+		); err != nil {
+			return fmt.Errorf("tactic %s: %w", t.ID, err)
+		}
+	}
+	return nil
+}
+
+// backfillTechniqueTactics fills techniques.tactic from the in-code ATT&CK map
+// for any rows where it is currently empty or stale. Returns the number updated.
+// This keeps the DB knowledge graph consistent with runtime scoring even for
+// techniques whose YAML did not change (so the importer skipped them).
+func backfillTechniqueTactics(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	rows, err := pool.Query(ctx, `SELECT technique_id, tactic FROM techniques`)
+	if err != nil {
+		return 0, err
+	}
+	type pair struct{ id, want string }
+	var updates []pair
+	for rows.Next() {
+		var id, cur string
+		if err := rows.Scan(&id, &cur); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		want := models.LookupTactic(id)
+		if want != "" && want != cur {
+			updates = append(updates, pair{id, want})
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	for _, u := range updates {
+		if _, err := pool.Exec(ctx,
+			`UPDATE techniques SET tactic = $2, updated_at = NOW() WHERE technique_id = $1`,
+			u.id, u.want,
+		); err != nil {
+			return 0, err
+		}
+	}
+	return len(updates), nil
 }
