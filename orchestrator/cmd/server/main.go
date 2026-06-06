@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -70,6 +71,22 @@ func main() {
 		log.Printf("[!] ART content seed: %v", sErr)
 	} else {
 		log.Printf("[+] ART content seeded: %d techniques, %d payloads (version %q)", tc, pc, cfg.ARTContentVersion)
+		// Surface which external binaries the loaded atomics reference but we don't
+		// ship, so an operator knows exactly what to add/rename. Advisory only —
+		// these tests skip cleanly at dispatch. Capped in the log to stay readable;
+		// the full list is available via GET /api/art/content/status.
+		if missing, mErr := scenario.MissingPayloads(context.Background(), pool); mErr != nil {
+			log.Printf("[!] missing-payload lookup: %v", mErr)
+		} else if n := len(missing); n > 0 {
+			shown := missing
+			suffix := ""
+			if n > 15 {
+				shown, suffix = missing[:15], " …"
+			}
+			log.Printf("[i] %d atomic payload(s) not present (tests will skip): %s%s",
+				n, strings.Join(shown, ", "), suffix)
+			log.Printf("    full list: GET /api/art/content/status (missingPayloads)")
+		}
 	}
 
 	if err := seedDefaultAdmin(pool, cfg.AdminPassword); err != nil {

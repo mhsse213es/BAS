@@ -329,6 +329,33 @@ func importPayloads(ctx context.Context, pool *pgxpool.Pool, dir string) (int, e
 	return count, nil
 }
 
+// MissingPayloads returns the distinct payload basenames that loaded atomics
+// reference but which are absent from art_payloads — i.e. the external binaries
+// an operator would need to add (or rename to match) to enable those tests.
+// Basenames are returned lowercased and sorted; matching is case-insensitive, so
+// these are the exact filenames to rename a binary to. An atomic whose payload is
+// missing is skipped cleanly at dispatch, so this list is advisory, not an error.
+func MissingPayloads(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT DISTINCT lower(rp) AS needed
+		   FROM art_atomic_tests t, unnest(t.required_payloads) AS rp
+		  WHERE lower(rp) NOT IN (SELECT basename FROM art_payloads)
+		  ORDER BY needed`)
+	if err != nil {
+		return nil, fmt.Errorf("query missing payloads: %w", err)
+	}
+	defer rows.Close()
+	var missing []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		missing = append(missing, name)
+	}
+	return missing, rows.Err()
+}
+
 // seedTactics upserts the 14 ATT&CK Enterprise tactics into the tactics table.
 // Idempotent — the reference set is the canonical list in the models package.
 func seedTactics(ctx context.Context, pool *pgxpool.Pool) error {
