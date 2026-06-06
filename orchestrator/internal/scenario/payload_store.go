@@ -67,6 +67,19 @@ func NewPayloadStoreFromDB(ctx context.Context, pool *pgxpool.Pool) (*PayloadSto
 	return ps, rows.Err()
 }
 
+// Reload re-reads the payload metadata index from the DB and swaps it in under
+// the write lock. Used by the admin reseed endpoint after a content-pack import.
+func (ps *PayloadStore) Reload(ctx context.Context, pool *pgxpool.Pool) error {
+	fresh, err := NewPayloadStoreFromDB(ctx, pool)
+	if err != nil {
+		return err
+	}
+	ps.mu.Lock()
+	ps.files = fresh.files
+	ps.mu.Unlock()
+	return nil
+}
+
 // Count returns the number of indexed payload files.
 func (ps *PayloadStore) Count() int {
 	if ps == nil {

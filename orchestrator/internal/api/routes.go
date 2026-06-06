@@ -134,6 +134,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 			r.Get("/api/connector/status", h.GetConnectorStatus)
 			r.Post("/api/connector/sync", h.TriggerConnectorSync)
 			r.Delete("/api/connector/scenarios/{id}", h.DeleteIntelScenario)
+
+			// ART content: status + content-pack reseed (no image rebuild)
+			r.Get("/api/art/content/status", h.GetARTContentStatus)
+			r.Post("/api/art/content/reseed", h.ReseedART)
 		})
 	})
 

@@ -36,6 +36,9 @@ type Handler struct {
 	calderaURL       string
 	calderaKey       string
 	artStore         *scenario.ARTStore
+	artContentDir    string // seed source for ART atomics (ART_DIR)
+	artPayloadDir    string // seed source for ART payload binaries (ART_PAYLOAD_DIR)
+	artContentVer    string // recorded content-pack version
 	manifest         *integrity.Manifest  // binary hash manifest — nil means verification disabled
 	complianceMapper *compliance.Mapper   // nil when not loaded
 	reportingEngine  *reporting.Engine    // nil when not loaded
@@ -104,6 +107,15 @@ func (h *Handler) WithCaldera(url, key string) *Handler {
 // WithART attaches the pre-loaded ART store (may be nil if ART_DIR is unavailable).
 func (h *Handler) WithART(store *scenario.ARTStore) *Handler {
 	h.artStore = store
+	return h
+}
+
+// WithContentSeed records the disk seed sources so the admin reseed endpoint
+// can re-import a dropped content pack and hot-reload the ART store.
+func (h *Handler) WithContentSeed(atomicsDir, payloadDir, version string) *Handler {
+	h.artContentDir = atomicsDir
+	h.artPayloadDir = payloadDir
+	h.artContentVer = version
 	return h
 }
 
@@ -1985,5 +1997,72 @@ func (h *Handler) ExportRunJSON(w http.ResponseWriter, r *http.Request) {
 		"completedAt":  completedAt,
 		"score":        score,
 		"results":      results,
+	})
+}
+
+// ── ART Content (admin) ──────────────────────────────────────────────────────
+
+// GetARTContentStatus returns the current ART content version and counts.
+// GET /api/art/content/status
+func (h *Handler) GetARTContentStatus(w http.ResponseWriter, r *http.Request) {
+	var version, source string
+	var techCount, payloadCount int
+	var importedAt time.Time
+	err := h.db.QueryRow(r.Context(),
+		`SELECT source_version, technique_count, payload_count, source, imported_at
+		   FROM art_content_meta WHERE id = 1`,
+	).Scan(&version, &techCount, &payloadCount, &source, &importedAt)
+	if err != nil {
+		respond(w, map[string]any{"seeded": false})
+		return
+	}
+	loaded := 0
+	if h.artStore != nil {
+		loaded = h.artStore.Count()
+	}
+	respond(w, map[string]any{
+		"seeded":           true,
+		"version":          version,
+		"techniqueCount":   techCount,
+		"payloadCount":     payloadCount,
+		"source":           source,
+		"importedAt":       importedAt,
+		"techniquesLoaded": loaded,
+	})
+}
+
+// ReseedART re-imports the on-disk content pack into Postgres and hot-reloads the
+// runtime store, applying a content update without rebuilding the orchestrator
+// image. Optional JSON body: {"version":"v2026.07"}.
+// POST /api/art/content/reseed
+func (h *Handler) ReseedART(w http.ResponseWriter, r *http.Request) {
+	if h.artStore == nil {
+		jsonError(w, "ART store not available", http.StatusServiceUnavailable)
+		return
+	}
+	version := h.artContentVer
+	var req struct {
+		Version string `json:"version"`
+	}
+	if json.NewDecoder(r.Body).Decode(&req) == nil && req.Version != "" {
+		version = req.Version
+	}
+
+	tc, pc, err := scenario.SeedContent(r.Context(), h.db, h.artContentDir, h.artPayloadDir, version, true)
+	if err != nil {
+		jsonError(w, "reseed failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.artStore.Reload(r.Context(), h.db); err != nil {
+		jsonError(w, "reseeded but reload failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[content] reseed via API: %d techniques, %d payloads (version %q)", tc, pc, version)
+	respond(w, map[string]any{
+		"status":           "ok",
+		"version":          version,
+		"techniqueCount":   tc,
+		"payloadCount":     pc,
+		"techniquesLoaded": h.artStore.Count(),
 	})
 }

@@ -89,9 +89,10 @@ func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []norm
 // DB — only their metadata and on-disk storage_path are recorded.
 //
 // If version is non-empty and matches the recorded content version (with content
-// already present), the import is skipped entirely as a fast path.
-func SeedContent(ctx context.Context, pool *pgxpool.Pool, atomicsDir, payloadDir, version string) (techCount, payloadCount int, err error) {
-	if version != "" {
+// already present), the import is skipped entirely as a fast path — unless force
+// is set (used by the admin reseed endpoint to apply a dropped content pack).
+func SeedContent(ctx context.Context, pool *pgxpool.Pool, atomicsDir, payloadDir, version string, force bool) (techCount, payloadCount int, err error) {
+	if !force && version != "" {
 		var recVer string
 		var recTech, recPayload int
 		qErr := pool.QueryRow(ctx,

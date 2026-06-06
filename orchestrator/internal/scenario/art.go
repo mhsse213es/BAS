@@ -112,6 +112,25 @@ func NewARTStoreFromDB(ctx context.Context, pool *pgxpool.Pool, payloads *Payloa
 	return s, rows.Err()
 }
 
+// Reload re-reads atomic tests from the DB and swaps them in under the write
+// lock, then reloads the underlying payload store. Used by the admin reseed
+// endpoint so a dropped content pack takes effect without a restart.
+func (s *ARTStore) Reload(ctx context.Context, pool *pgxpool.Pool) error {
+	fresh, err := NewARTStoreFromDB(ctx, pool, s.payloads)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.steps = fresh.steps
+	s.mu.Unlock()
+	if s.payloads != nil {
+		if err := s.payloads.Reload(ctx, pool); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Count returns the number of techniques with at least one Windows step.
 func (s *ARTStore) Count() int {
 	s.mu.RLock()
