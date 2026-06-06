@@ -1,11 +1,15 @@
 package scenario
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // PayloadStore is the server-side store of external ART payload binaries
@@ -40,6 +44,27 @@ func NewPayloadStore(dir string) *PayloadStore {
 		log.Printf("[payloads] index %q: %v", dir, err)
 	}
 	return ps
+}
+
+// NewPayloadStoreFromDB builds the store from the art_payloads metadata table.
+// Binaries remain on disk — only their storage_path is indexed, so dispatch-time
+// staging reads the file exactly as before. This is the runtime constructor;
+// NewPayloadStore (disk walk) is retained for tests and the seed path.
+func NewPayloadStoreFromDB(ctx context.Context, pool *pgxpool.Pool) (*PayloadStore, error) {
+	ps := &PayloadStore{files: make(map[string]string)}
+	rows, err := pool.Query(ctx, `SELECT basename, storage_path FROM art_payloads`)
+	if err != nil {
+		return nil, fmt.Errorf("load payloads: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var base, path string
+		if err := rows.Scan(&base, &path); err != nil {
+			return nil, err
+		}
+		ps.files[strings.ToLower(base)] = path
+	}
+	return ps, rows.Err()
 }
 
 // Count returns the number of indexed payload files.

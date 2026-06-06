@@ -1,6 +1,7 @@
 package scenario
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
 )
 
@@ -68,6 +70,46 @@ func NewARTStore(dir string, payloads *PayloadStore) (*ARTStore, error) {
 		}
 	}
 	return s, nil
+}
+
+// NewARTStoreFromDB builds the store from the art_atomic_tests runtime table.
+// Rows are already parsed and execution-ready (commands resolved, payload-folder
+// references rewritten), so no YAML is parsed at boot. This is the runtime
+// constructor; NewARTStore (disk parse) is retained for tests and the seed path.
+func NewARTStoreFromDB(ctx context.Context, pool *pgxpool.Pool, payloads *PayloadStore) (*ARTStore, error) {
+	s := &ARTStore{steps: make(map[string][]ScenarioStep), payloads: payloads}
+	rows, err := pool.Query(ctx,
+		`SELECT technique_id, name, executor, command, cleanup, timeout_sec, required_payloads
+		   FROM art_atomic_tests
+		  ORDER BY technique_id, test_index`)
+	if err != nil {
+		return nil, fmt.Errorf("load atomic tests: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tech, name, executor, command, cleanup string
+		var timeout int
+		var required []string
+		if err := rows.Scan(&tech, &name, &executor, &command, &cleanup, &timeout, &required); err != nil {
+			return nil, err
+		}
+		tech = strings.ToUpper(tech)
+		if timeout <= 0 {
+			timeout = 120
+		}
+		s.steps[tech] = append(s.steps[tech], ScenarioStep{
+			TaskID:           TaskID(tech, name),
+			TechniqueID:      tech,
+			Name:             name,
+			Framework:        "art",
+			Executor:         executor,
+			Command:          command,
+			TimeoutSec:       timeout,
+			Cleanup:          cleanup,
+			requiredPayloads: required,
+		})
+	}
+	return s, rows.Err()
 }
 
 // Count returns the number of techniques with at least one Windows step.

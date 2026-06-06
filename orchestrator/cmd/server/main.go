@@ -83,20 +83,22 @@ func main() {
 	}
 	log.Printf("[+] Loaded %d scenarios from %s", engine.Count(), cfg.ScenariosDir)
 
-	// ── ART Store (bundled atomics — resolved locally, zero endpoint footprint) ──
-	// External payloads (gsecdump, etc.) an operator drops in ART_PAYLOAD_DIR are
-	// shipped to the agent at dispatch; atomics without their payload are skipped.
-	payloadStore := scenario.NewPayloadStore(cfg.ARTPayloadDir)
-	log.Printf("[+] ART payload store: %d binaries from %s", payloadStore.Count(), cfg.ARTPayloadDir)
+	// ── ART Store (DB-backed — seeded above; disk was only the seed source) ──
+	// Payload binaries stay on disk; the store indexes their metadata/path from
+	// Postgres and ships them to the agent at dispatch. Atomics whose payload is
+	// absent are skipped cleanly. Techniques come pre-parsed from art_atomic_tests.
+	payloadStore, psErr := scenario.NewPayloadStoreFromDB(context.Background(), pool)
+	if psErr != nil {
+		log.Printf("[!] payload store: %v — payload-backed atomics will be skipped", psErr)
+		payloadStore = scenario.NewPayloadStore("") // empty store → clean skips
+	}
+	log.Printf("[+] ART payload store: %d binaries (from Postgres)", payloadStore.Count())
 	var artStore *scenario.ARTStore
-	if cfg.ARTDir != "" {
-		var artErr error
-		artStore, artErr = scenario.NewARTStore(cfg.ARTDir, payloadStore)
-		if artErr != nil {
-			log.Printf("[!] ART store: %v — ART scenarios will be unavailable", artErr)
-		} else {
-			log.Printf("[+] ART loaded: %d techniques from %s", artStore.Count(), cfg.ARTDir)
-		}
+	if store, artErr := scenario.NewARTStoreFromDB(context.Background(), pool, payloadStore); artErr != nil {
+		log.Printf("[!] ART store: %v — ART scenarios will be unavailable", artErr)
+	} else {
+		artStore = store
+		log.Printf("[+] ART loaded: %d techniques (from Postgres)", artStore.Count())
 	}
 
 	// ── Binary integrity manifest ─────────────────────────────────────────
