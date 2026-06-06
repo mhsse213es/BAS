@@ -255,11 +255,19 @@ func upsertTechnique(ctx context.Context, pool *pgxpool.Pool, techniqueID, displ
 		return fmt.Errorf("clear tests: %w", err)
 	}
 	for _, t := range tests {
+		// required_payloads is NOT NULL; most tests need no payload, so the
+		// slice is nil here. pgx encodes a nil slice as SQL NULL (which would
+		// violate the constraint and roll back the whole technique), so send an
+		// empty array instead.
+		payloads := t.RequiredPayloads
+		if payloads == nil {
+			payloads = []string{}
+		}
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO art_atomic_tests
 			   (technique_id, test_index, name, executor, command, cleanup, platform, timeout_sec, required_payloads, framework, updated_at)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'art', NOW())`,
-			techniqueID, t.Index, t.Name, t.Executor, t.Command, t.Cleanup, t.Platform, t.TimeoutSec, t.RequiredPayloads,
+			techniqueID, t.Index, t.Name, t.Executor, t.Command, t.Cleanup, t.Platform, t.TimeoutSec, payloads,
 		); err != nil {
 			return fmt.Errorf("insert test %d: %w", t.Index, err)
 		}
