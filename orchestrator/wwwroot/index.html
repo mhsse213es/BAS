@@ -2263,6 +2263,38 @@ function viewRunResults(run) {
           }).join('') +
         '</div>';
     }
+
+    // ATT&CK Tactic Breakdown — aggregate pass rate per tactic (mirrors the PDF
+    // report's section 4). Sourced from the score.tacticBreakdown field; ordered
+    // by kill-chain phase, colored with the same >=80/>=50 thresholds as the bars
+    // elsewhere. Complements the per-check list below (aggregate vs itemized).
+    var tb = s.tacticBreakdown || {};
+    var tbKeys = Object.keys(tb);
+    if (tbKeys.length > 0) {
+      var tacticOrder = ['initial-access','execution','persistence','privilege-escalation',
+        'defense-evasion','credential-access','discovery','lateral-movement','collection',
+        'exfiltration','command-and-control','impact'];
+      var ordered = tacticOrder.filter(function(t) { return tb[t]; })
+        .concat(tbKeys.filter(function(t) { return tacticOrder.indexOf(t) < 0; }));
+      var tbRows = ordered.map(function(t) {
+        var e = tb[t];
+        var pct = e.passPct || 0;
+        var barCol = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+        return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.28rem 0">' +
+          '<span style="min-width:135px;font-size:0.72rem;text-transform:capitalize">' + x(t.replace(/-/g, ' ')) + '</span>' +
+          '<div style="flex:1;height:7px;background:var(--bg);border-radius:4px;overflow:hidden">' +
+            '<div style="height:100%;width:' + pct + '%;background:' + barCol + '"></div>' +
+          '</div>' +
+          '<span style="min-width:34px;text-align:right;font-size:0.72rem;font-weight:600;color:' + barCol + '">' + pct + '%</span>' +
+          '<span style="min-width:92px;text-align:right;font-size:0.66rem;color:var(--muted)">' + (e.passed || 0) + ' pass · ' + (e.failed || 0) + ' fail</span>' +
+        '</div>';
+      }).join('');
+      scorePanel +=
+        '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.6rem 0.75rem;margin-bottom:0.75rem">' +
+          '<div style="' + labelStyle + ';margin-bottom:0.4rem">ATT&CK Tactic Breakdown</div>' +
+          tbRows +
+        '</div>';
+    }
   }
 
   var byTactic = {};
