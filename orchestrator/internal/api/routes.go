@@ -80,6 +80,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/scenarios/{id}", h.GetScenario)
 		r.Get("/api/scenarios/runs", h.ListScenarioRuns)
 		r.Get("/api/scenarios/runs/{runId}/report", h.GetRunReport)
+		r.Get("/api/scenarios/runs/{runId}/report.json", h.GetRunReportData)
 		r.Get("/api/scenarios/runs/{runId}/export", h.ExportRunJSON)
 		r.Get("/api/scenarios/runs/{runId}/pdf", h.GetRunPDF)
 		r.Get("/api/agents/{agentId}/logs/operational", h.GetOpLogs)

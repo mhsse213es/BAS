@@ -2327,8 +2327,62 @@ function viewRunResults(run) {
       checks + '</div>';
   }).join('');
 
-  document.getElementById('results-body').innerHTML = scorePanel + checksHtml;
+  document.getElementById('results-body').innerHTML = scorePanel + '<div id="run-report-extra"></div>' + checksHtml;
   document.getElementById('results-overlay').classList.add('open');
+
+  // Key Findings + Prioritised Recommendations — fetched from the report engine
+  // (BuildFromRun, the same source as the HTML/PDF report) so the drawer matches
+  // the formal report exactly. Rendered into the placeholder above once it loads.
+  if (runId && (run.status === 'completed' || run.status === 'partial')) {
+    var extraEl = document.getElementById('run-report-extra');
+    extraEl.innerHTML = '<div style="color:var(--muted);font-size:0.72rem;padding:0.4rem 0">Loading findings &amp; recommendations…</div>';
+    apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/report.json').then(function(rep) {
+      // Guard: a different run may have been opened while this was in flight.
+      if (document.getElementById('run-report-extra') === extraEl) {
+        extraEl.innerHTML = renderRunReportExtra(rep);
+      }
+    }).catch(function() { extraEl.innerHTML = ''; });
+  }
+}
+
+// Builds the Key Findings + Prioritised Recommendations blocks for the run drawer
+// from the report-engine payload. Each block renders only when non-empty.
+function renderRunReportExtra(rep) {
+  rep = rep || {};
+  var findings = rep.topFindings || [];
+  var recs = rep.recommendations || [];
+  var panel = 'background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.6rem 0.75rem;margin-bottom:0.75rem';
+  var hdr = 'font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.45rem';
+  var html = '';
+
+  if (findings.length > 0) {
+    var rows = findings.map(function(f, i) {
+      var sc = f.severity === 'Critical' ? 'var(--danger)' : f.severity === 'High' ? '#e5534b' : 'var(--warning)';
+      var num = 'F-' + ('0' + (i + 1)).slice(-2);
+      return '<div style="border-left:2px solid ' + sc + ';padding:0.4rem 0 0.4rem 0.6rem;margin-bottom:0.5rem">' +
+        '<div style="display:flex;align-items:baseline;gap:0.45rem;flex-wrap:wrap">' +
+          '<span style="color:' + sc + ';font-weight:700;font-size:0.62rem;text-transform:uppercase">' + x(f.severity || '') + '</span>' +
+          '<span style="font-size:0.6rem;color:var(--muted)">' + num + '</span>' +
+          (f.techniqueId ? '<code style="font-size:0.66rem;color:var(--muted)">' + x(f.techniqueId) + '</code>' : '') +
+          '<span style="font-size:0.8rem;font-weight:600">' + x(f.techniqueName || '') + '</span>' +
+          '<span style="font-size:0.66rem;color:var(--muted);margin-left:auto;text-transform:capitalize">' + x((f.tactic || '').replace(/-/g, ' ')) + '</span>' +
+        '</div>' +
+        (f.details ? '<div style="color:var(--muted);font-size:0.72rem;margin-top:0.2rem">' + x(f.details) + '</div>' : '') +
+        (f.remediation ? '<div style="color:var(--warning);font-size:0.72rem;margin-top:0.15rem;white-space:pre-wrap">' + x(f.remediation) + '</div>' : '') +
+      '</div>';
+    }).join('');
+    html += '<div style="' + panel + '"><div style="' + hdr + '">Key Findings</div>' + rows + '</div>';
+  }
+
+  if (recs.length > 0) {
+    var items = recs.map(function(rc) {
+      return '<li style="font-size:0.74rem;margin-bottom:0.35rem;line-height:1.45">' + x(rc) + '</li>';
+    }).join('');
+    html += '<div style="' + panel + '"><div style="' + hdr + '">Prioritised Recommendations</div>' +
+            '<ol style="margin:0;padding-left:1.1rem;color:var(--text)">' + items + '</ol></div>';
+  }
+
+  return html;
 }
 function closeResults() { document.getElementById('results-overlay').classList.remove('open'); }
 

@@ -1947,6 +1947,28 @@ func (h *Handler) GetRunReport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GET /api/scenarios/runs/{runId}/report.json
+// Returns the report's key findings + prioritised recommendations for a run,
+// computed by the same engine (BuildFromRun → buildTopFindings/buildRecommendations)
+// that produces the HTML/PDF report. The console drawer renders these so it can
+// never disagree with the formal report — one source of truth, no logic in JS.
+func (h *Handler) GetRunReportData(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	runID := chi.URLParam(r, "runId")
+	report, err := h.reportingEngine.BuildFromRun(r.Context(), runID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	respond(w, map[string]any{
+		"topFindings":     report.TopFindings,
+		"recommendations": report.Summary.Recommendations,
+	})
+}
+
 // GET /api/scenarios/runs/{runId}/export
 // Downloads a single run's full results as a JSON file.
 func (h *Handler) ExportRunJSON(w http.ResponseWriter, r *http.Request) {
