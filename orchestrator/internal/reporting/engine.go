@@ -189,33 +189,12 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 		report.Summary.Classification = "No Data"
 	}
 
-	// ── 7. Agent posture report (security tools, detection categories) ────
-	var toolsRaw, catsRaw []byte
-	e.db.QueryRow(ctx,
-		`SELECT security_tools, categories FROM reports WHERE agent_id = $1`, agentID,
-	).Scan(&toolsRaw, &catsRaw)
-
-	var toolsList []struct {
-		Name string `json:"name"`
-	}
-	if len(toolsRaw) > 0 {
-		json.Unmarshal(toolsRaw, &toolsList)
-		for _, t := range toolsList {
-			if t.Name != "" {
-				report.SecurityTools = append(report.SecurityTools, t.Name)
-			}
-		}
-	}
-	var catsList []struct {
-		Name   string `json:"name"`
-		Result string `json:"result"`
-	}
-	if len(catsRaw) > 0 {
-		json.Unmarshal(catsRaw, &catsList)
-		for _, c := range catsList {
-			report.DetectionCategories = append(report.DetectionCategories, Category{Name: c.Name, Result: c.Result})
-		}
-	}
+	// ── 7. Detection coverage by tactic (re-derived from live run results) ─
+	// The legacy agent-submitted posture report (/api/report → reports table)
+	// is no longer fed by the agent — it posts only to /api/scenarios/result.
+	// Derive per-tactic verdicts from the latest run instead. SecurityTools has
+	// no live source, so it is intentionally left empty.
+	report.DetectionCategories = buildDetectionCategories(latestResults)
 
 	return report, nil
 }
@@ -259,6 +238,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	}
 
 	report.TacticHeatmap = buildTacticHeatmap(results)
+	report.DetectionCategories = buildDetectionCategories(results)
 	report.TopFindings = buildTopFindings(results, scenarioName)
 
 	report.Summary = ExecutiveSummary{
@@ -368,6 +348,53 @@ func buildTacticHeatmap(results []models.SimulationResult) []TacticEntry {
 			Tactic: tactic, Passed: p, Failed: f, Total: total, PassPct: pct,
 			Weight: tacticWeight[tactic],
 		})
+	}
+	return out
+}
+
+// buildDetectionCategories rolls the run's checks up to a per-tactic verdict for
+// the report's "Detection Coverage" section: a tactic is "pass" when all its
+// executed checks passed, "fail" when any failed, "unknown" when it was only
+// skipped. Re-derived from live results (each check carries its ATT&CK tactic),
+// replacing the legacy agent-submitted posture report. Ordered by kill-chain
+// phase and consistent with the tactic heatmap (a single failure taints the
+// tactic — same rule as CoverageScore).
+func buildDetectionCategories(results []models.SimulationResult) []Category {
+	type agg struct{ exec, fail int }
+	m := make(map[string]*agg)
+	for _, r := range results {
+		t := r.Technique.Tactic
+		if t == "" {
+			continue
+		}
+		a := m[t]
+		if a == nil {
+			a = &agg{}
+			m[t] = a
+		}
+		if r.Result == models.ResultSkipped {
+			continue
+		}
+		a.exec++
+		if r.Result != models.ResultPass && r.Result != models.ResultBlocked {
+			a.fail++
+		}
+	}
+	var out []Category
+	for _, tactic := range tacticOrder {
+		a := m[tactic]
+		if a == nil {
+			continue
+		}
+		result := "unknown" // tested but only skipped
+		if a.exec > 0 {
+			if a.fail == 0 {
+				result = "pass"
+			} else {
+				result = "fail"
+			}
+		}
+		out = append(out, Category{Name: tactic, Result: result})
 	}
 	return out
 }

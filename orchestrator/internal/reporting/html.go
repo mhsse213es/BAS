@@ -366,20 +366,11 @@ tr:last-child td{border-bottom:none}
 
 <!-- ═══ 5. SECURITY CONTROLS INVENTORY ══════════════════════════════════ -->
 <div class="page">
-<h1>5. Security Controls Inventory</h1>
-<h2>Detected Security Tools</h2>
-{{if .SecurityTools}}
-<p>
-{{range .SecurityTools}}<span class="tool-tag">{{.}}</span>{{end}}
-</p>
-{{else}}
-<p style="color:#6e7681">No security tools data. Run a full-scan scenario to collect endpoint inventory.</p>
-{{end}}
-
+<h1>5. Detection Coverage by Tactic</h1>
 {{if .DetectionCategories}}
-<h2>Detection Category Results</h2>
+<p style="color:#6e7681;margin-bottom:14px">Per-tactic verdict derived from this run's executed checks: <strong>PASS</strong> when every check in the tactic was prevented, <strong>FAIL</strong> when any check succeeded against the endpoint, <strong>UNKNOWN</strong> when the tactic was only skipped.</p>
 <table>
-  <thead><tr><th>Category</th><th>Result</th></tr></thead>
+  <thead><tr><th>Tactic</th><th>Verdict</th></tr></thead>
   <tbody>
   {{range .DetectionCategories}}
   <tr>
@@ -389,6 +380,8 @@ tr:last-child td{border-bottom:none}
   {{end}}
   </tbody>
 </table>
+{{else}}
+<p style="color:#6e7681">No tactic-level results were recorded for this run.</p>
 {{end}}
 
 <div class="footer">

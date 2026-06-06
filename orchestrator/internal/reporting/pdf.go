@@ -346,9 +346,6 @@ func (d *rpt) methodology(rep *FullReport, results []models.SimulationResult) {
 		{"Tactics exercised", fmt.Sprintf("%d of 14 ATT&CK tactics", len(rep.TacticHeatmap))},
 		{"Window", rep.Summary.LastRunAt.UTC().Format("02 Jan 2006 15:04 UTC")},
 	}
-	if len(rep.SecurityTools) > 0 {
-		rows = append(rows, [2]string{"Security tooling", strings.Join(rep.SecurityTools, ", ")})
-	}
 	d.keyValueTable(rows)
 	d.body("Each technique is scored as PASS when a security control prevented or blocked it, FAIL when it executed without being stopped, or SKIPPED when it could not run. A FAIL is a finding — it means the simulated adversary behaviour succeeded against this endpoint.")
 }
