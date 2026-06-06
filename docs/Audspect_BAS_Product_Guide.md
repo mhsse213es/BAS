@@ -995,7 +995,12 @@ Most endpoints require a valid JWT, either as an HttpOnly cookie (`bas_token`) s
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/report/{agentId}` | JWT (Viewer+) | Get latest report for agent |
+| GET | `/api/report/full/html` | JWT (Viewer+) | Full agent assessment report (HTML) |
+| GET | `/api/report/full/pdf` | JWT (Viewer+) | Full agent assessment report (PDF) |
+| GET | `/api/report/audit-pack` | JWT (Viewer+) | Audit-pack ZIP for an agent |
+| GET | `/api/scenarios/runs/{runId}/report` | JWT (Viewer+) | Single-run report (HTML) |
+| GET | `/api/scenarios/runs/{runId}/report.json` | JWT (Viewer+) | Single-run key findings + recommendations (JSON) |
+| GET | `/api/scenarios/runs/{runId}/pdf` | JWT (Viewer+) | Single-run report (PDF) |
 
 ### 13.5 Admin Endpoints
 
@@ -1015,7 +1020,6 @@ These are called by the agent binary and are authenticated with the AGENT_SECRET
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/heartbeat` | X-Agent-Token | Register/update agent status |
-| POST | `/api/report` | X-Result-MAC | Submit full simulation report |
 | POST | `/api/scenarios/result` | X-Result-MAC | Submit scenario step results |
 | GET | `/ws/agent` | WS + agentSecret | WebSocket for command delivery |
 

@@ -172,7 +172,6 @@ const (
 	MsgCommandScenario = "command_scenario"
 	MsgCommandSimulate = "command_simulate"
 	MsgScenarioResult  = "scenario_result"
-	MsgReportReady     = "reportReady"
 	MsgPatchStatus     = "patch_status_update"
 	MsgCommandPatches  = "command_install_patches"
 	MsgPolicyUpdate    = "policy_update"

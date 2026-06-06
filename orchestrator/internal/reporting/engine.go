@@ -271,33 +271,6 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 		TotalTechniques: score.TotalTechniques, FailedTechniques: score.FailedTechniques,
 	}}
 
-	// Security tools / detection categories from the reports table
-	var toolsRaw, catsRaw []byte
-	e.db.QueryRow(ctx,
-		`SELECT security_tools, categories FROM reports WHERE agent_id = $1`, agentID,
-	).Scan(&toolsRaw, &catsRaw)
-	var toolsList []struct {
-		Name string `json:"name"`
-	}
-	if len(toolsRaw) > 0 {
-		json.Unmarshal(toolsRaw, &toolsList)
-		for _, t := range toolsList {
-			if t.Name != "" {
-				report.SecurityTools = append(report.SecurityTools, t.Name)
-			}
-		}
-	}
-	var catsList []struct {
-		Name   string `json:"name"`
-		Result string `json:"result"`
-	}
-	if len(catsRaw) > 0 {
-		json.Unmarshal(catsRaw, &catsList)
-		for _, c := range catsList {
-			report.DetectionCategories = append(report.DetectionCategories, Category{Name: c.Name, Result: c.Result})
-		}
-	}
-
 	return report, nil
 }
 

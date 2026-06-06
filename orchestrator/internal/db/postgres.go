@@ -129,21 +129,6 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_telemetry_agent_time ON agent_telemetry(agent_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_telemetry_metric     ON agent_telemetry(agent_id, metric, created_at DESC)`,
-
-		`CREATE TABLE IF NOT EXISTS reports (
-			agent_id       text        PRIMARY KEY,
-			hostname       text        NOT NULL DEFAULT '',
-			ip_address     text        NOT NULL DEFAULT '',
-			os_version     text        NOT NULL DEFAULT '',
-			username       text        NOT NULL DEFAULT '',
-			started_at     timestamptz NOT NULL DEFAULT NOW(),
-			status         text        NOT NULL DEFAULT 'Completed',
-			env_label      text        NOT NULL DEFAULT 'Production',
-			security_tools jsonb       NOT NULL DEFAULT '[]',
-			categories     jsonb       NOT NULL DEFAULT '[]',
-			score          jsonb,
-			last_update    timestamptz NOT NULL DEFAULT NOW()
-		)`,
 	}
 
 	for _, s := range stmts {

@@ -80,7 +80,7 @@ func (a *Agent) postJSONDecode(path string, body interface{}, out interface{}) e
 	req.Header.Set("Content-Type", "application/json")
 	if a.cfg.AgentSecret != "" {
 		req.Header.Set("X-Agent-Token", a.cfg.AgentSecret)
-		if path == "/api/scenarios/result" || path == "/api/report" {
+		if path == "/api/scenarios/result" {
 			req.Header.Set("X-Result-MAC", SignBody(data, a.cfg.AgentSecret))
 		}
 	}
