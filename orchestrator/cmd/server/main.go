@@ -57,7 +57,20 @@ func main() {
 	if err := db.EnsureSchema(context.Background(), pool); err != nil {
 		log.Fatalf("[FATAL] schema bootstrap: %v", err)
 	}
+	if err := db.EnsureContentSchema(context.Background(), pool); err != nil {
+		log.Fatalf("[FATAL] content schema bootstrap: %v", err)
+	}
 	log.Println("[+] Schema verified")
+
+	// ── Seed ART content into Postgres (disk is the seed source, DB the runtime
+	// source of truth). Idempotent — unchanged techniques are left untouched and
+	// payload binaries stay on disk (only metadata is recorded).
+	if tc, pc, sErr := scenario.SeedContent(context.Background(), pool,
+		cfg.ARTDir, cfg.ARTPayloadDir, cfg.ARTContentVersion); sErr != nil {
+		log.Printf("[!] ART content seed: %v", sErr)
+	} else {
+		log.Printf("[+] ART content seeded: %d techniques, %d payloads (version %q)", tc, pc, cfg.ARTContentVersion)
+	}
 
 	if err := seedDefaultAdmin(pool, cfg.AdminPassword); err != nil {
 		log.Printf("[!] admin seed: %v", err)

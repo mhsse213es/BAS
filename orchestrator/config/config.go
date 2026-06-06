@@ -12,8 +12,9 @@ type Config struct {
 	AgentSecret   string `json:"agent_secret,omitempty"`
 	HTTPPort      int    `json:"http_port"`
 	ScenariosDir  string `json:"scenarios_dir"`
-	ARTDir        string `json:"art_dir,omitempty"`
-	ARTPayloadDir string `json:"art_payload_dir,omitempty"` // server-side store of ART external payloads (operator-provided)
+	ARTDir            string `json:"art_dir,omitempty"`
+	ARTPayloadDir     string `json:"art_payload_dir,omitempty"`     // server-side store of ART external payloads (operator-provided)
+	ARTContentVersion string `json:"art_content_version,omitempty"` // content-pack version; reseed is skipped when unchanged
 	CalderaURL    string `json:"caldera_url,omitempty"`
 	CalderaAPIKey string `json:"caldera_api_key,omitempty"`
 	LicensePath   string `json:"license_path,omitempty"`
@@ -65,6 +66,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("ART_PAYLOAD_DIR"); v != "" {
 		cfg.ARTPayloadDir = v
+	}
+	if v := os.Getenv("ART_CONTENT_VERSION"); v != "" {
+		cfg.ARTContentVersion = v
 	}
 	if v := os.Getenv("CALDERA_URL"); v != "" {
 		cfg.CalderaURL = v
