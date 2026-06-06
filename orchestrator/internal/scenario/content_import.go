@@ -255,22 +255,46 @@ func upsertTechnique(ctx context.Context, pool *pgxpool.Pool, techniqueID, displ
 	return tx.Commit(ctx)
 }
 
-// importPayloads walks payloadDir and upserts metadata for each binary it finds.
-// The binary itself stays on disk; only its hash, size, type, and storage_path
-// are recorded. README.md and .gitkeep are ignored.
+// payloadExtAllow is the set of file extensions treated as ART external payloads.
+// The staging folder on a build host often also contains tool source trees, zip
+// archives, installers, PDBs and license files — none of which an atomic invokes.
+// Only real executables/scripts are indexed so the bundle and DB stay clean.
+var payloadExtAllow = map[string]bool{
+	".exe": true, ".dll": true, ".ps1": true, ".psm1": true, ".bat": true,
+	".cmd": true, ".vbs": true, ".js": true, ".hta": true, ".sys": true,
+	".com": true, ".scr": true, ".jar": true, ".py": true, ".sh": true,
+}
+
+// isPayloadFile reports whether name has an allowlisted payload extension.
+func isPayloadFile(name string) bool {
+	return payloadExtAllow[strings.ToLower(filepath.Ext(name))]
+}
+
+// importPayloads walks payloadDir and upserts metadata for each payload binary it
+// finds. Only allowlisted executables/scripts are indexed; source, archives and
+// docs are ignored. The binary itself stays on disk; only its hash, size, type
+// and storage_path are recorded. Duplicate basenames (the same tool present in
+// several extracted folders) are resolved first-wins, with a warning.
 func importPayloads(ctx context.Context, pool *pgxpool.Pool, dir string) (int, error) {
 	if dir == "" {
 		return 0, nil
 	}
 	count := 0
+	seen := make(map[string]string) // lowercase basename -> first path used
 	walkErr := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
 		name := d.Name()
-		if name == "README.md" || name == ".gitkeep" {
+		if !isPayloadFile(name) {
 			return nil
 		}
+		key := strings.ToLower(name)
+		if first, dup := seen[key]; dup {
+			log.Printf("[content] payload duplicate %q ignored (keeping %s, skipping %s)", name, first, path)
+			return nil
+		}
+		seen[key] = path
 		data, rErr := os.ReadFile(path)
 		if rErr != nil {
 			log.Printf("[content] payload skip %s: %v", name, rErr)

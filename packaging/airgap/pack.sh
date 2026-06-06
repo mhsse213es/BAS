@@ -91,10 +91,23 @@ cp -r "${REPO_ROOT}/orchestrator/wwwroot/."       "${BUILD_DIR}/compose/wwwroot/
 
 # ART external payloads staged on the build host — baked in so the client gets
 # them automatically (compose bind-mounts ./art-payloads to /art-payloads).
+# Only real executables/scripts are bundled (the staging folder may also hold tool
+# source trees, zips, installers and PDBs — none of which an atomic invokes).
+# Flattened with no-clobber so companion files co-locate and duplicate basenames
+# resolve first-wins, matching the server's payload importer.
 mkdir -p "${BUILD_DIR}/compose/art-payloads"
-if cp -r "${REPO_ROOT}/packaging/art-payloads/." "${BUILD_DIR}/compose/art-payloads/" 2>/dev/null; then
-  PAYLOAD_N=$(find "${BUILD_DIR}/compose/art-payloads" -type f ! -name 'README.md' ! -name '.gitkeep' | wc -l)
-  log "  ART payloads bundled: ${PAYLOAD_N}"
+PAYLOAD_N=0
+if [ -d "${REPO_ROOT}/packaging/art-payloads" ]; then
+  while IFS= read -r -d '' f; do
+    if cp -n "$f" "${BUILD_DIR}/compose/art-payloads/" 2>/dev/null; then
+      PAYLOAD_N=$((PAYLOAD_N + 1))
+    fi
+  done < <(find "${REPO_ROOT}/packaging/art-payloads" -type f \( \
+      -iname '*.exe' -o -iname '*.dll' -o -iname '*.ps1' -o -iname '*.psm1' \
+      -o -iname '*.bat' -o -iname '*.cmd' -o -iname '*.vbs' -o -iname '*.js' \
+      -o -iname '*.hta' -o -iname '*.sys' -o -iname '*.com' -o -iname '*.scr' \
+      -o -iname '*.jar' -o -iname '*.py' -o -iname '*.sh' \) -print0)
+  log "  ART payloads bundled (binaries only): ${PAYLOAD_N}"
 fi
 
 # ── 5. Copy import helper ──────────────────────────────────────────────────────

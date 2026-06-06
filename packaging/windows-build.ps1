@@ -220,12 +220,25 @@ if (Test-Path $WwwrootDir) {
 # bundle; setup.sh stages them and compose bind-mounts them to /art-payloads, so
 # the client gets them automatically. Empty is fine (payload atomics skip).
 $PayloadDir = Join-Path $RepoRoot "packaging\art-payloads"
-New-Item -ItemType Directory -Force -Path "$OutDir\art-payloads" | Out-Null
+$PayloadOut = Join-Path $OutDir "art-payloads"
+New-Item -ItemType Directory -Force -Path $PayloadOut | Out-Null
 if (Test-Path $PayloadDir) {
-    Copy-Item "$PayloadDir\*" "$OutDir\art-payloads\" -Recurse -Force
-    $payloadCount = (Get-ChildItem "$OutDir\art-payloads" -File |
-        Where-Object { $_.Name -notin @('README.md', '.gitkeep') }).Count
-    Log "  Copied ART payloads ($payloadCount binaries)"
+    # Only real executables/scripts are bundled — the staging folder may also hold
+    # tool source trees, zips, installers and PDBs, none of which an atomic invokes.
+    # Flattened, first-wins on duplicate basenames, matching the server's importer.
+    $allow = @('.exe', '.dll', '.ps1', '.psm1', '.bat', '.cmd', '.vbs', '.js',
+               '.hta', '.sys', '.com', '.scr', '.jar', '.py', '.sh')
+    $payloadCount = 0
+    Get-ChildItem $PayloadDir -File -Recurse |
+        Where-Object { $allow -contains $_.Extension.ToLower() } |
+        ForEach-Object {
+            $dest = Join-Path $PayloadOut $_.Name
+            if (-not (Test-Path $dest)) {
+                Copy-Item $_.FullName $dest -Force
+                $payloadCount++
+            }
+        }
+    Log "  Copied ART payloads (binaries only): $payloadCount"
 }
 
 # -- 7. Write VERSION file ----------------------------------------------------
