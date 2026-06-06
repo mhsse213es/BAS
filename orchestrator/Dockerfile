@@ -1,6 +1,6 @@
 # ── ART Atomics (sparse clone — YAML only, ~10 MB, no binaries) ──────────────
 FROM alpine AS art-fetcher
-RUN apk add --no-cache git && \
+RUN apk add --no-cache git curl && \
     git init /art-repo && \
     cd /art-repo && \
     git remote add origin https://github.com/redcanaryco/atomic-red-team.git && \
@@ -10,6 +10,15 @@ RUN apk add --no-cache git && \
     git checkout FETCH_HEAD && \
     mkdir /art-atomics /art-payloads && \
     find atomics -name 'T[0-9]*.yaml' -exec cp {} /art-atomics/ \;
+
+# CISA Known Exploited Vulnerabilities catalog — fetched at build, baked into the
+# image so it travels inside the air-gap bundle. &&-chained with a size check so
+# the build fails loudly if CISA is unreachable (never ships an empty catalog).
+RUN mkdir -p /content && \
+    curl -fsSL --retry 3 \
+      https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json \
+      -o /content/cisa-kev.json && \
+    test -s /content/cisa-kev.json
 
 # ── Agent + Installer Builder ────────────────────────────────────────────────
 # Plain stripped build: golang.org/x/sys assembly is incompatible with garble.
@@ -76,8 +85,11 @@ COPY --from=art-fetcher /art-atomics /art-atomics
 # atomics that need external payloads (gsecdump, etc.). Absent payloads → the
 # atomic is skipped cleanly, never run with a broken path.
 COPY --from=art-fetcher /art-payloads /art-payloads
+# CISA KEV catalog (seeds the cves knowledge-graph table at boot).
+COPY --from=art-fetcher /content /content
 ENV ART_DIR=/art-atomics
 ENV ART_PAYLOAD_DIR=/art-payloads
+ENV KEV_FILE=/content/cisa-kev.json
 USER nonroot
 EXPOSE 9000
 ENTRYPOINT ["/orchestrator"]

@@ -36,9 +36,10 @@ type Handler struct {
 	calderaURL       string
 	calderaKey       string
 	artStore         *scenario.ARTStore
-	artContentDir    string // seed source for ART atomics (ART_DIR)
-	artPayloadDir    string // seed source for ART payload binaries (ART_PAYLOAD_DIR)
-	artContentVer    string // recorded content-pack version
+	artContentDir    string               // seed source for ART atomics (ART_DIR)
+	artPayloadDir    string               // seed source for ART payload binaries (ART_PAYLOAD_DIR)
+	artKEVFile       string               // CISA KEV catalog JSON (KEV_FILE)
+	artContentVer    string               // recorded content-pack version
 	manifest         *integrity.Manifest  // binary hash manifest — nil means verification disabled
 	complianceMapper *compliance.Mapper   // nil when not loaded
 	reportingEngine  *reporting.Engine    // nil when not loaded
@@ -112,9 +113,10 @@ func (h *Handler) WithART(store *scenario.ARTStore) *Handler {
 
 // WithContentSeed records the disk seed sources so the admin reseed endpoint
 // can re-import a dropped content pack and hot-reload the ART store.
-func (h *Handler) WithContentSeed(atomicsDir, payloadDir, version string) *Handler {
+func (h *Handler) WithContentSeed(atomicsDir, payloadDir, kevFile, version string) *Handler {
 	h.artContentDir = atomicsDir
 	h.artPayloadDir = payloadDir
+	h.artKEVFile = kevFile
 	h.artContentVer = version
 	return h
 }
@@ -2057,7 +2059,7 @@ func (h *Handler) ReseedART(w http.ResponseWriter, r *http.Request) {
 		version = req.Version
 	}
 
-	tc, pc, err := scenario.SeedContent(r.Context(), h.db, h.artContentDir, h.artPayloadDir, version, true)
+	tc, pc, err := scenario.SeedContent(r.Context(), h.db, h.artContentDir, h.artPayloadDir, h.artKEVFile, version, true)
 	if err != nil {
 		jsonError(w, "reseed failed: "+err.Error(), http.StatusInternalServerError)
 		return

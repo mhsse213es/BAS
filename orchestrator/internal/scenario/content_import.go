@@ -4,12 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
 
@@ -93,7 +96,7 @@ func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []norm
 // If version is non-empty and matches the recorded content version (with content
 // already present), the import is skipped entirely as a fast path — unless force
 // is set (used by the admin reseed endpoint to apply a dropped content pack).
-func SeedContent(ctx context.Context, pool *pgxpool.Pool, atomicsDir, payloadDir, version string, force bool) (techCount, payloadCount int, err error) {
+func SeedContent(ctx context.Context, pool *pgxpool.Pool, atomicsDir, payloadDir, kevFile, version string, force bool) (techCount, payloadCount int, err error) {
 	// Tactic reference + technique→tactic backfill are cheap and idempotent, so
 	// run them on every boot (independent of the content-version fast-path) to
 	// keep the knowledge graph populated even when atomics are unchanged.
@@ -112,6 +115,16 @@ func SeedContent(ctx context.Context, pool *pgxpool.Pool, atomicsDir, payloadDir
 		log.Printf("[content] backfill technique OWASP: %v", err)
 	} else if n > 0 {
 		log.Printf("[content] OWASP backfill added %d technique links", n)
+	}
+	if n, err := seedCVEs(ctx, pool, kevFile); err != nil {
+		log.Printf("[content] seed CISA KEV: %v", err)
+	} else if n > 0 {
+		log.Printf("[content] CISA KEV catalog: %d CVEs seeded", n)
+	}
+	if n, err := backfillTechniqueCVEs(ctx, pool); err != nil {
+		log.Printf("[content] backfill technique CVEs: %v", err)
+	} else if n > 0 {
+		log.Printf("[content] CVE backfill added %d technique links", n)
 	}
 
 	if !force && version != "" {
@@ -354,6 +367,130 @@ func MissingPayloads(ctx context.Context, pool *pgxpool.Pool) ([]string, error) 
 		missing = append(missing, name)
 	}
 	return missing, rows.Err()
+}
+
+// kevCatalog mirrors the CISA Known Exploited Vulnerabilities JSON feed. Only the
+// fields we store are decoded; the rest of the feed is ignored.
+type kevCatalog struct {
+	CatalogVersion  string    `json:"catalogVersion"`
+	Vulnerabilities []kevVuln `json:"vulnerabilities"`
+}
+
+type kevVuln struct {
+	CveID             string `json:"cveID"`
+	VendorProject     string `json:"vendorProject"`
+	Product           string `json:"product"`
+	VulnerabilityName string `json:"vulnerabilityName"`
+	ShortDescription  string `json:"shortDescription"`
+	DateAdded         string `json:"dateAdded"`                  // YYYY-MM-DD
+	KnownRansomware   string `json:"knownRansomwareCampaignUse"` // "Known" | "Unknown"
+}
+
+// seedCVEs loads the CISA KEV catalog from kevFile and upserts every entry into
+// the cves table (source = 'cisa-kev'). The file is baked into the image at build
+// time; a missing/empty path is not an error — KEV enrichment is simply skipped.
+// Upserts are pipelined in a single batch so the ~1.4k-row catalog seeds quickly
+// on boot. Returns the number of CVEs upserted.
+func seedCVEs(ctx context.Context, pool *pgxpool.Pool, kevFile string) (int, error) {
+	if kevFile == "" {
+		return 0, nil
+	}
+	data, err := os.ReadFile(kevFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("[content] CISA KEV file %q absent — skipping CVE enrichment", kevFile)
+			return 0, nil
+		}
+		return 0, fmt.Errorf("read KEV file %q: %w", kevFile, err)
+	}
+	var cat kevCatalog
+	if err := json.Unmarshal(data, &cat); err != nil {
+		return 0, fmt.Errorf("parse KEV file %q: %w", kevFile, err)
+	}
+	if len(cat.Vulnerabilities) == 0 {
+		return 0, nil
+	}
+
+	const upsert = `INSERT INTO cves
+	   (cve_id, description, name, vendor, product, date_added, known_ransomware, source, updated_at)
+	 VALUES ($1, $2, $3, $4, $5, $6, $7, 'cisa-kev', NOW())
+	 ON CONFLICT (cve_id) DO UPDATE SET
+	   description = EXCLUDED.description, name = EXCLUDED.name,
+	   vendor = EXCLUDED.vendor, product = EXCLUDED.product,
+	   date_added = EXCLUDED.date_added, known_ransomware = EXCLUDED.known_ransomware,
+	   source = EXCLUDED.source, updated_at = NOW()`
+
+	batch := &pgx.Batch{}
+	for _, v := range cat.Vulnerabilities {
+		id := strings.ToUpper(strings.TrimSpace(v.CveID))
+		if id == "" {
+			continue
+		}
+		var dateAdded *time.Time
+		if t, perr := time.Parse("2006-01-02", strings.TrimSpace(v.DateAdded)); perr == nil {
+			dateAdded = &t
+		}
+		ransom := strings.EqualFold(strings.TrimSpace(v.KnownRansomware), "Known")
+		batch.Queue(upsert, id, v.ShortDescription, v.VulnerabilityName,
+			v.VendorProject, v.Product, dateAdded, ransom)
+	}
+	if batch.Len() == 0 {
+		return 0, nil
+	}
+
+	br := pool.SendBatch(ctx, batch)
+	defer br.Close()
+	count := 0
+	for i := 0; i < batch.Len(); i++ {
+		if _, err := br.Exec(); err != nil {
+			return count, fmt.Errorf("upsert KEV entry %d: %w", i, err)
+		}
+		count++
+	}
+	return count, nil
+}
+
+// backfillTechniqueCVEs links each technique present in the DB to the curated
+// CISA KEV CVEs it relates to (models.LookupCVEs). The link is created only when
+// the CVE actually exists in the seeded cves table, so an unknown/retired CVE in
+// the curated map is silently skipped and the FK on technique_cves always holds.
+// Additive and idempotent (ON CONFLICT DO NOTHING). Returns links inserted.
+func backfillTechniqueCVEs(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	rows, err := pool.Query(ctx, `SELECT technique_id FROM techniques`)
+	if err != nil {
+		return 0, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	inserted := 0
+	for _, id := range ids {
+		for _, cve := range models.LookupCVEs(id) {
+			tag, err := pool.Exec(ctx,
+				`INSERT INTO technique_cves (technique_id, cve_id)
+				 SELECT $1, $2
+				 WHERE EXISTS (SELECT 1 FROM cves WHERE cve_id = $2)
+				 ON CONFLICT DO NOTHING`,
+				id, cve,
+			)
+			if err != nil {
+				return inserted, err
+			}
+			inserted += int(tag.RowsAffected())
+		}
+	}
+	return inserted, nil
 }
 
 // seedTactics upserts the 14 ATT&CK Enterprise tactics into the tactics table.

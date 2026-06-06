@@ -78,8 +78,31 @@ curl -fsS https://<server>/api/art/content/status -H "Authorization: Bearer <adm
 
 ```json
 { "seeded": true, "version": "v2026.07", "techniqueCount": 312,
-  "payloadCount": 7, "source": "disk-seed", "techniquesLoaded": 312 }
+  "payloadCount": 7, "source": "disk-seed", "techniquesLoaded": 312,
+  "missingPayloadCount": 14,
+  "missingPayloads": ["rubeus.exe", "seatbelt.exe", "..."] }
 ```
+
+`missingPayloads` lists the external binaries the loaded atomics reference but
+that are **not** present in `art_payloads` — i.e. the exact filenames to add (or
+rename a binary to) under `/art-payloads` to enable those tests. Matching is
+case-insensitive; a test whose payload is missing skips cleanly. The same list is
+printed at boot.
+
+## CISA KEV catalog (the `cves` table)
+
+The `cves` knowledge-graph table is seeded from the **CISA Known Exploited
+Vulnerabilities (KEV)** catalog. The JSON feed is fetched at image build time and
+baked in at `/content/cisa-kev.json` (`KEV_FILE`), so it travels inside the
+air-gap bundle — no runtime internet needed. On every boot the server upserts the
+catalog into `cves` (source `cisa-kev`) and links the techniques it ships to the
+CVEs they're exploited by, via a curated, conservative `technique_cves` mapping.
+
+To refresh KEV in the field without an image rebuild: download a newer
+`known_exploited_vulnerabilities.json`, bind-mount it over `/content` (or point
+`KEV_FILE` at it), and **reseed** — same endpoint as above. CISA KEV carries no
+CVSS, so that column stays null; `date_added`, `vendor`, `product`, `name` and
+`known_ransomware` come straight from the feed.
 
 ## Mounting a writable atomics dir (optional, for field atomic updates)
 

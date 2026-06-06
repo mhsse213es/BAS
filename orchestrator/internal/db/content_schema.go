@@ -96,6 +96,14 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			published   date,
 			updated_at  timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		// CISA KEV enrichment — added as idempotent ALTERs so an existing cves
+		// table upgrades in place. KEV carries no CVSS, so that column stays null.
+		`ALTER TABLE cves ADD COLUMN IF NOT EXISTS vendor            text NOT NULL DEFAULT ''`,
+		`ALTER TABLE cves ADD COLUMN IF NOT EXISTS product           text NOT NULL DEFAULT ''`,
+		`ALTER TABLE cves ADD COLUMN IF NOT EXISTS name              text NOT NULL DEFAULT ''`,
+		`ALTER TABLE cves ADD COLUMN IF NOT EXISTS date_added        date`,
+		`ALTER TABLE cves ADD COLUMN IF NOT EXISTS known_ransomware  boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE cves ADD COLUMN IF NOT EXISTS source            text NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS technique_cves (
 			technique_id text NOT NULL REFERENCES techniques(technique_id) ON DELETE CASCADE,
 			cve_id       text NOT NULL REFERENCES cves(cve_id) ON DELETE CASCADE,

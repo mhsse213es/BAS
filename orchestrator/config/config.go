@@ -7,18 +7,19 @@ import (
 )
 
 type Config struct {
-	DatabaseURL   string `json:"database_url"`
-	JWTSecret     string `json:"jwt_secret"`
-	AgentSecret   string `json:"agent_secret,omitempty"`
-	HTTPPort      int    `json:"http_port"`
-	ScenariosDir  string `json:"scenarios_dir"`
+	DatabaseURL       string `json:"database_url"`
+	JWTSecret         string `json:"jwt_secret"`
+	AgentSecret       string `json:"agent_secret,omitempty"`
+	HTTPPort          int    `json:"http_port"`
+	ScenariosDir      string `json:"scenarios_dir"`
 	ARTDir            string `json:"art_dir,omitempty"`
 	ARTPayloadDir     string `json:"art_payload_dir,omitempty"`     // server-side store of ART external payloads (operator-provided)
 	ARTContentVersion string `json:"art_content_version,omitempty"` // content-pack version; reseed is skipped when unchanged
-	CalderaURL    string `json:"caldera_url,omitempty"`
-	CalderaAPIKey string `json:"caldera_api_key,omitempty"`
-	LicensePath   string `json:"license_path,omitempty"`
-	AdminPassword string `json:"admin_password,omitempty"`
+	KEVFile           string `json:"kev_file,omitempty"`            // CISA KEV catalog JSON (baked into image); seeds the cves table
+	CalderaURL        string `json:"caldera_url,omitempty"`
+	CalderaAPIKey     string `json:"caldera_api_key,omitempty"`
+	LicensePath       string `json:"license_path,omitempty"`
+	AdminPassword     string `json:"admin_password,omitempty"`
 
 	// Threat-intel connector (MISP / OpenCTI)
 	MISPUrl              string   `json:"misp_url,omitempty"`
@@ -38,6 +39,7 @@ func Load(path string) (*Config, error) {
 		ScenariosDir:  "scenarios",
 		ARTDir:        "/art-atomics",
 		ARTPayloadDir: "/art-payloads",
+		KEVFile:       "/content/cisa-kev.json",
 	}
 
 	// Try file first (local dev)
@@ -69,6 +71,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("ART_CONTENT_VERSION"); v != "" {
 		cfg.ARTContentVersion = v
+	}
+	if v := os.Getenv("KEV_FILE"); v != "" {
+		cfg.KEVFile = v
 	}
 	if v := os.Getenv("CALDERA_URL"); v != "" {
 		cfg.CalderaURL = v

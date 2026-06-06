@@ -67,7 +67,7 @@ func main() {
 	// source of truth). Idempotent — unchanged techniques are left untouched and
 	// payload binaries stay on disk (only metadata is recorded).
 	if tc, pc, sErr := scenario.SeedContent(context.Background(), pool,
-		cfg.ARTDir, cfg.ARTPayloadDir, cfg.ARTContentVersion, false); sErr != nil {
+		cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion, false); sErr != nil {
 		log.Printf("[!] ART content seed: %v", sErr)
 	} else {
 		log.Printf("[+] ART content seeded: %d techniques, %d payloads (version %q)", tc, pc, cfg.ARTContentVersion)
@@ -159,7 +159,7 @@ func main() {
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
-		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.ARTContentVersion).
+		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
 		WithAgentSecret(cfg.AgentSecret).
 		WithManifest(manifest).
 		WithCompliance(complianceMapper).
