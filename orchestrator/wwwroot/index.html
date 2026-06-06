@@ -999,6 +999,48 @@ code {
             <div id="cs-error" style="display:none;margin-top:0.5rem;font-size:0.75rem;color:#f85149"></div>
           </div>
         </div>
+
+        <!-- ART Content Library -->
+        <div id="art-content-wrap" style="display:none;margin-top:2rem">
+          <div class="sec-hdr">
+            <h2>ART Content Library</h2>
+            <div style="display:flex;gap:0.4rem">
+              <button class="btn btn-outline btn-sm" onclick="loadARTContentStatus()" id="art-check-btn">Check Now</button>
+              <button class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" onclick="reseedART()" id="art-reseed-btn">Reseed from Pack</button>
+            </div>
+          </div>
+          <div class="conn-cfg-card" id="art-content-card">
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Status</span>
+              <span id="cs-art-status" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Content Version</span>
+              <span id="cs-art-version" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Techniques</span>
+              <span id="cs-art-techniques" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Payloads</span>
+              <span id="cs-art-payloads" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Source</span>
+              <span id="cs-art-source" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Last Import</span>
+              <span id="cs-art-imported" class="conn-cfg-val">—</span>
+            </div>
+            <div style="margin-top:0.6rem;font-size:0.72rem;color:var(--muted)">
+              Reseed re-imports atomics + payload metadata from the server's content
+              directory into Postgres and hot-reloads the engine — no image rebuild,
+              no restart. Drop a new content pack on the server first.
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Scenarios -->
@@ -1445,7 +1487,7 @@ function bootApp() {
   loadAgents();
   loadScenarios();
   loadRuns();
-  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); }
+  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
   injectServerURL();
   showTab('dashboard');
 }
@@ -1462,7 +1504,7 @@ function showTab(name) {
   if (name === 'users') loadUsers();
   if (name === 'dashboard') loadDashboard();
   if (name === 'compliance') initComplianceTab();
-  if (name === 'settings' && ROLE === 'admin') { loadCalderaStatus(); loadConnectorStatus(); }
+  if (name === 'settings' && ROLE === 'admin') { loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
 }
 
 function apicall(path, opts) {
@@ -2697,6 +2739,52 @@ function triggerConnectorSync() {
     .catch(function(e) {
       showToast('Sync failed: ' + e.message, 'err');
       if (btn) btn.disabled = false;
+    });
+}
+
+function loadARTContentStatus() {
+  var wrap = document.getElementById('art-content-wrap');
+  if (!wrap) return;
+  wrap.style.display = '';
+  var btn = document.getElementById('art-check-btn');
+  if (btn) btn.disabled = true;
+  apicall('/api/art/content/status').then(function(d) {
+    var statusEl = document.getElementById('cs-art-status');
+    if (d.seeded) {
+      statusEl.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle"></span><span style="color:var(--success)">Seeded</span>';
+    } else {
+      statusEl.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle"></span><span style="color:var(--warning)">Not seeded</span>';
+    }
+    document.getElementById('cs-art-version').textContent = d.version || '(unversioned)';
+    document.getElementById('cs-art-techniques').textContent =
+      (d.techniquesLoaded != null ? d.techniquesLoaded : (d.techniqueCount || 0)) + ' loaded' +
+      (d.techniqueCount != null ? ' / ' + d.techniqueCount + ' in DB' : '');
+    document.getElementById('cs-art-payloads').textContent = (d.payloadCount || 0) + ' indexed';
+    document.getElementById('cs-art-source').textContent = d.source || '—';
+    document.getElementById('cs-art-imported').textContent =
+      d.importedAt ? new Date(d.importedAt).toLocaleString() : '—';
+  }).catch(function(e) {
+    document.getElementById('cs-art-status').innerHTML =
+      '<span style="color:var(--danger)">Error checking status</span>';
+  }).finally(function() {
+    if (btn) btn.disabled = false;
+  });
+}
+
+function reseedART() {
+  if (!confirm('Reseed ART content from the server content pack?\n\nThis re-imports atomics + payload metadata into Postgres and hot-reloads the engine. Existing runs are unaffected.')) return;
+  var btn = document.getElementById('art-reseed-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Reseeding…'; }
+  apicall('/api/art/content/reseed', { method: 'POST' })
+    .then(function(d) {
+      showToast('Reseeded: ' + d.techniqueCount + ' techniques, ' + d.payloadCount + ' payloads', 'ok');
+      loadARTContentStatus();
+    })
+    .catch(function(e) {
+      showToast('Reseed failed: ' + e.message, 'err');
+    })
+    .finally(function() {
+      if (btn) { btn.disabled = false; btn.textContent = 'Reseed from Pack'; }
     });
 }
 
