@@ -1,6 +1,7 @@
 package sched
 
 import (
+	"context"
 	"sort"
 	"sync"
 )
@@ -71,17 +72,58 @@ func (m *LockManager) mutex(key string) *sync.RWMutex {
 	return l
 }
 
-// Acquire blocks until every lock in reqs is held. reqs must be sorted (resolve
-// guarantees this); acquiring in a single global order across all goroutines is
-// what makes the scheduler deadlock-free.
-func (m *LockManager) Acquire(reqs []lockReq) {
-	for _, r := range reqs {
-		l := m.mutex(r.key)
-		if r.write {
+// AcquireCtx acquires every lock in reqs, in canonical (sorted) order, returning
+// true once all are held. If ctx is cancelled (scenario abort) or its deadline
+// fires (schedule timeout) before all locks are held, it releases any locks it
+// already took — in reverse order — and returns false, having acquired nothing on
+// net. Ordered acquisition across all goroutines is what keeps the scheduler
+// deadlock-free; a background ctx makes this behave like an unbounded blocking
+// acquire.
+func (m *LockManager) AcquireCtx(ctx context.Context, reqs []lockReq) bool {
+	for i, r := range reqs {
+		if !tryLock(ctx, m.mutex(r.key), r.write) {
+			for j := i - 1; j >= 0; j-- {
+				rr := reqs[j]
+				ll := m.mutex(rr.key)
+				if rr.write {
+					ll.Unlock()
+				} else {
+					ll.RUnlock()
+				}
+			}
+			return false
+		}
+	}
+	return true
+}
+
+// tryLock acquires l (write or read) but gives up if ctx is done first. Because
+// sync.RWMutex has no cancellable Lock, the acquire runs in a goroutine; if ctx
+// wins the race, a detached goroutine releases the lock the instant the abandoned
+// acquire finally succeeds, so no lock is ever leaked.
+func tryLock(ctx context.Context, l *sync.RWMutex, write bool) bool {
+	acquired := make(chan struct{})
+	go func() {
+		if write {
 			l.Lock()
 		} else {
 			l.RLock()
 		}
+		close(acquired)
+	}()
+	select {
+	case <-acquired:
+		return true
+	case <-ctx.Done():
+		go func() {
+			<-acquired
+			if write {
+				l.Unlock()
+			} else {
+				l.RUnlock()
+			}
+		}()
+		return false
 	}
 }
 

@@ -48,11 +48,33 @@ func CheckPayloadQuarantine(payloads []Payload, dir string) string {
 	return ""
 }
 
-func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) ExecResult {
-	timeout := step.TimeoutSec
-	if timeout <= 0 {
-		timeout = 120
+// defaultGraceSec is the post-kill grace window when a step's profile doesn't set
+// one: enough for a killed command's tree to wind down before forced termination.
+const defaultGraceSec = 3
+
+// executeSeconds resolves the step's execute-timeout (layer 2). Precedence:
+// curated TimeoutProfile.ExecuteSec → legacy TimeoutSec → 120s blanket default.
+func executeSeconds(step ScenarioStep) int {
+	if step.Timeout != nil && step.Timeout.ExecuteSec > 0 {
+		return step.Timeout.ExecuteSec
 	}
+	if step.TimeoutSec > 0 {
+		return step.TimeoutSec
+	}
+	return 120
+}
+
+// graceSeconds resolves the post-kill grace window (layer 3).
+func graceSeconds(step ScenarioStep) int {
+	if step.Timeout != nil && step.Timeout.GraceSec > 0 {
+		return step.Timeout.GraceSec
+	}
+	return defaultGraceSec
+}
+
+func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) ExecResult {
+	timeout := executeSeconds(step)
+	grace := graceSeconds(step)
 
 	ctx, cancel := context.WithTimeout(parentCtx, time.Duration(timeout)*time.Second)
 	defer cancel()
@@ -118,13 +140,35 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 	if jobErr != nil {
 		log.Printf("[exec] job assign: %v — timeout will only kill direct child", jobErr)
 	}
+	// Layer 3 (grace): on execute-timeout or scenario-cancel, CommandContext kills
+	// the direct child; we then allow a grace window for the tree to wind down and
+	// only hard-kill the whole process tree if it is still alive after grace.
+	waitDone := make(chan struct{})
 	go func() {
-		<-ctx.Done()
+		select {
+		case <-waitDone:
+			return // step finished on its own — nothing to kill
+		case <-ctx.Done():
+		}
+		if grace > 0 {
+			t := time.NewTimer(time.Duration(grace) * time.Second)
+			defer t.Stop()
+			select {
+			case <-waitDone:
+				return // exited within grace
+			case <-t.C:
+			}
+		}
 		terminateStepJob(job) // kills entire tree: parent + all spawned children
 	}()
 
 	err := cmd.Wait()
+	close(waitDone)
 	dur := time.Since(before).Milliseconds()
+
+	// An execute-timeout (our deadline) is an explicit "ran, did not return"
+	// verdict — distinct from a scenario abort (parent cancel) or a clean finish.
+	timedOut := ctx.Err() == context.DeadlineExceeded && parentCtx.Err() == nil
 
 	// Close the Job handle — KILL_ON_JOB_CLOSE terminates any processes that
 	// somehow survived both the context kill and TerminateJobObject.
@@ -147,6 +191,13 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 		}
 	}
 
+	if timedOut {
+		exitCode = -1
+		if strings.TrimSpace(stderr.String()) == "" {
+			fmt.Fprintf(&stderr, "step exceeded execute timeout of %ds", timeout)
+		}
+	}
+
 	result := ExecResult{
 		TaskID:        step.TaskID,
 		ExitCode:      exitCode,
@@ -156,6 +207,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 		ExecutedAt:    time.Now(),
 		Blocked:       blocked,
 		BlockedReason: blockedReason,
+		TimedOut:      timedOut,
 	}
 
 	result.Events = collectRecentEvents(parentCtx, before)

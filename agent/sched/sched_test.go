@@ -213,6 +213,103 @@ func TestRandomizedNoDeadlock(t *testing.T) {
 	}
 }
 
+// ── timeout supervisor: cancellable acquire, panic safety, schedule timeout ───
+
+// TestAcquireCtxTimesOutAndLeavesNoLeak proves a contended acquire gives up on
+// ctx deadline AND that the abandoned attempt does not leak the lock: once the
+// holder releases, the key is acquirable again.
+func TestAcquireCtxTimesOutAndLeavesNoLeak(t *testing.T) {
+	lm := NewLockManager()
+	w := []lockReq{{key: "k", write: true}}
+
+	if !lm.AcquireCtx(context.Background(), w) {
+		t.Fatal("first acquire should succeed")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if lm.AcquireCtx(ctx, w) {
+		t.Fatal("second acquire of a held write lock must time out")
+	}
+
+	lm.Release(w) // releasing must make the key acquirable again (no leak)
+	done := make(chan bool, 1)
+	go func() { done <- lm.AcquireCtx(context.Background(), w) }()
+	select {
+	case ok := <-done:
+		if !ok {
+			t.Error("acquire after release returned false")
+		}
+		lm.Release(w)
+	case <-time.After(2 * time.Second):
+		t.Fatal("acquire after release blocked — a timed-out attempt leaked the lock")
+	}
+}
+
+// TestRunJobReleasesLocksOnPanic verifies a panicking step is recovered (the agent
+// does not crash) and its locks are released so a conflicting step still runs.
+func TestRunJobReleasesLocksOnPanic(t *testing.T) {
+	reg := &ResourceProfile{Domains: []ResourceLock{{Domain: "registry"}}, Scope: "local", Risk: RiskModification}
+	var ran2 bool
+	jobs := []Job{
+		{Resource: reg, Run: func(context.Context) { panic("boom") }},
+		{Resource: reg, Run: func(context.Context) { ran2 = true }},
+	}
+	Run(context.Background(), 2, NewLockManager(), jobs)
+	if !ran2 {
+		t.Error("second job did not run — a panic leaked the registry write lock")
+	}
+}
+
+// TestScheduleTimeoutFires verifies a step that cannot acquire its locks within
+// its Schedule records a schedule timeout instead of blocking, and does not run.
+func TestScheduleTimeoutFires(t *testing.T) {
+	lm := NewLockManager()
+	held := []lockReq{{key: globalKey, write: true}} // conflicts with every step
+	if !lm.AcquireCtx(context.Background(), held) {
+		t.Fatal("could not pre-hold the global barrier")
+	}
+	defer lm.Release(held)
+
+	var toFired, ran bool
+	job := Job{
+		Resource:          &ResourceProfile{Scope: "global", Risk: RiskModification},
+		Schedule:          20 * time.Millisecond,
+		OnScheduleTimeout: func() { toFired = true },
+		Run:               func(context.Context) { ran = true },
+	}
+	Run(context.Background(), 1, lm, []Job{job})
+	if !toFired {
+		t.Error("OnScheduleTimeout did not fire for a step that could not acquire its lock")
+	}
+	if ran {
+		t.Error("step ran despite never acquiring its lock")
+	}
+}
+
+// TestScheduleTimeoutNotFiredOnCancel verifies a scenario abort (ctx cancelled) is
+// NOT misreported as a schedule timeout.
+func TestScheduleTimeoutNotFiredOnCancel(t *testing.T) {
+	lm := NewLockManager()
+	held := []lockReq{{key: globalKey, write: true}}
+	lm.AcquireCtx(context.Background(), held)
+	defer lm.Release(held)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // scenario already aborted
+
+	var toFired bool
+	runJob(ctx, lm, Job{
+		Resource:          &ResourceProfile{Scope: "global", Risk: RiskModification},
+		Schedule:          20 * time.Millisecond,
+		OnScheduleTimeout: func() { toFired = true },
+		Run:               func(context.Context) {},
+	})
+	if toFired {
+		t.Error("schedule timeout fired on a cancelled scenario — abort misreported as timeout")
+	}
+}
+
 // TestCancellationStopsDispatch verifies that cancelling the context prevents
 // not-yet-started jobs from running.
 func TestCancellationStopsDispatch(t *testing.T) {

@@ -273,8 +273,33 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	jobs := make([]sched.Job, total)
 	for i := range cmd.Steps {
 		step := cmd.Steps[i] // per-job copy (PayloadDir/Env set below)
+
+		// Layer 1 (schedule timeout): bound how long this step may wait for its
+		// resource locks. On expiry the scheduler records an explicit timeout
+		// verdict rather than blocking the worker indefinitely.
+		var schedDur time.Duration
+		schedSec := 0
+		if step.Timeout != nil && step.Timeout.ScheduleSec > 0 {
+			schedSec = step.Timeout.ScheduleSec
+			schedDur = time.Duration(schedSec) * time.Second
+		}
+
 		jobs[i] = sched.Job{
 			Resource: step.Resource,
+			Schedule: schedDur,
+			OnScheduleTimeout: func() {
+				n := atomic.AddInt64(&completed, 1)
+				a.localSt.UpdateProgress(int(n), total, "Execution")
+				log.Printf("[*]   [%d/%d] %s — schedule timeout after %ds (locks unavailable)", i+1, total, step.TechniqueID, schedSec)
+				results[i] = ExecResult{
+					TaskID:     step.TaskID,
+					ExitCode:   -1,
+					Stderr:     fmt.Sprintf("schedule timeout: resource locks unavailable within %ds", schedSec),
+					ExecutedAt: time.Now(),
+					TimedOut:   true,
+				}
+				ran[i] = true
+			},
 			Run: func(ctx context.Context) {
 				n := atomic.AddInt64(&completed, 1)
 				a.localSt.UpdateProgress(int(n), total, "Execution")

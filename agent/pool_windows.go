@@ -195,6 +195,7 @@ func (h *psHost) exec(ctx context.Context, step ScenarioStep) (res ExecResult, o
 			Stderr:     "step timed out or was cancelled",
 			DurationMs: time.Since(start).Milliseconds(),
 			ExecutedAt: time.Now(),
+			TimedOut:   true,
 		}, true, false
 	}
 }

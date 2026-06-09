@@ -137,6 +137,9 @@ type ScenarioStep struct {
 	// Resource is the step's lock profile, used by the scheduler to decide which
 	// steps may run concurrently. nil → the step runs serially (always safe).
 	Resource *sched.ResourceProfile `json:"resource,omitempty"`
+	// Timeout bounds the step's schedule/execute/grace windows. nil or zero fields
+	// fall back to engine defaults.
+	Timeout *sched.TimeoutProfile `json:"timeout,omitempty"`
 	// Env holds runtime-only policy variables (BAS_RUN_MODE, BAS_MAX_SPRAY_ATTEMPTS,
 	// BAS_SPRAY_ALLOWLIST) injected by the runner; never wire-serialised.
 	Env map[string]string `json:"-"`
@@ -152,4 +155,8 @@ type ExecResult struct {
 	Events        []string  `json:"events,omitempty"`
 	Blocked       bool      `json:"blocked,omitempty"`
 	BlockedReason string    `json:"blockedReason,omitempty"`
+	// TimedOut marks a step that ran but exceeded its execute timeout (or hit a
+	// schedule timeout before running). An explicit "ran, did not return" verdict —
+	// never conflated with a clean skip or a security block.
+	TimedOut bool `json:"timedOut,omitempty"`
 }

@@ -33,6 +33,23 @@ type ResourceLock struct {
 	Key    string `json:"key,omitempty"`
 }
 
+// TimeoutProfile bounds a step's lifecycle across three layers. It is resolved
+// server-side from curated per-technique metadata and shipped with the step. Any
+// zero field falls back to an engine default (see the agent runner/executor), so
+// an absent profile is always safe — it just means "use defaults".
+//
+//   - ScheduleSec: max time a step may wait for its resource locks before the
+//     scheduler records a schedule timeout instead of blocking forever.
+//   - ExecuteSec:  max command runtime before the executor kills it and returns an
+//     explicit timeout verdict (never a silent skip).
+//   - GraceSec:    window after a kill for an in-flight command to finish/clean up
+//     before the host is recycled.
+type TimeoutProfile struct {
+	ScheduleSec int `json:"scheduleSec,omitempty"`
+	ExecuteSec  int `json:"executeSec,omitempty"`
+	GraceSec    int `json:"graceSec,omitempty"`
+}
+
 // globalKey is the synthetic barrier lock every step participates in: scoped
 // steps hold it shared (read), global/unlabeled steps hold it exclusive (write).
 // This makes a global step mutually exclusive with every other step without the
