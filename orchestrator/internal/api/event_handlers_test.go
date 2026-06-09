@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -152,5 +153,27 @@ func TestListRunEventsOrderedBySeq(t *testing.T) {
 	seqs := []float64{got[0]["seq"].(float64), got[1]["seq"].(float64), got[2]["seq"].(float64)}
 	if seqs[0] != 11 || seqs[1] != 12 || seqs[2] != 13 {
 		t.Fatalf("events not ordered by seq: %v", seqs)
+	}
+}
+
+func TestBuildRunEventMsg(t *testing.T) {
+	batch := []models.RunEvent{
+		{RunID: "r9", Seq: 1, Type: "started", TaskID: "a1"},
+		{RunID: "r9", Seq: 2, Type: "completed", TaskID: "a1"},
+	}
+	msg := buildRunEventMsg(batch)
+	if msg.Type != models.MsgRunEvent {
+		t.Fatalf("type = %q, want %q", msg.Type, models.MsgRunEvent)
+	}
+	data, ok := msg.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("data not a map: %T", msg.Data)
+	}
+	if data["runId"] != "r9" {
+		t.Fatalf("runId = %v", data["runId"])
+	}
+	evs, ok := data["events"].([]models.RunEvent)
+	if !ok || len(evs) != 2 {
+		t.Fatalf("events = %v", data["events"])
 	}
 }

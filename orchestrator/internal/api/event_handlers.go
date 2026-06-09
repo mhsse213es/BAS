@@ -63,8 +63,27 @@ func (h *Handler) SubmitRunEvents(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// relayRunEvents is a stub until Task 4 wires the browser broadcast.
-func (h *Handler) relayRunEvents(_ []models.RunEvent) {}
+// buildRunEventMsg packages a batch into a browser WS frame. Pure (testable
+// without a hub). Browsers reconcile against GET /events on (re)connect, so a
+// dropped frame is harmless.
+func buildRunEventMsg(batch []models.RunEvent) models.WSMessage {
+	runID := ""
+	if len(batch) > 0 {
+		runID = batch[0].RunID
+	}
+	return models.WSMessage{
+		Type: models.MsgRunEvent,
+		Data: map[string]any{"runId": runID, "events": batch},
+	}
+}
+
+// relayRunEvents pushes the batch to all connected browsers (best-effort).
+func (h *Handler) relayRunEvents(batch []models.RunEvent) {
+	if len(batch) == 0 {
+		return
+	}
+	h.hub.BroadcastBrowsers(buildRunEventMsg(batch))
+}
 
 // ListRunEvents returns a run's events ordered by seq (for browser reconnect /
 // timeline reconstruction). JWT-protected (registered under the auth group).
