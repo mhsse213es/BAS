@@ -43,7 +43,6 @@ A `RunEvent` (agent → server):
   "taskId": "a1b2c3d4",        // empty for run-level events
   "techniqueId": "T1057",      // empty for run-level events
   "ts": "2026-06-09T16:40:12.512Z",
-  "workerId": 4,               // optional; scheduler worker that ran the step
   "payload": { "verdict": "pass", "durationMs": 532, "exitCode": 0 }
 }
 ```
@@ -65,6 +64,8 @@ A `RunEvent` (agent → server):
 
 Note: `payload` carries the verdict/duration/exit/reason — there is **no separate `verdict` column**. Keeping a single opaque `payload jsonb` makes schema evolution painless (new fields never require a migration).
 
+**`workerId` is deliberately excluded from B-1.** Its value is purely diagnostic (host-pool / worker-starvation / timeout-clustering analysis), which none of B-1's goals — live progress, crash resilience, timeline visibility — require. Including it would force the scheduler → Job model → event model → tests to all become aware of worker assignment, violating the spec's core boundary: *the event layer observes execution, it does not influence it.* When that diagnostic need arises, `workerId` is added **inside `payload`** with **zero schema change** (the column stays out of the table). See §13.
+
 ## 5. Persistence
 
 **New table `run_events`** (schema-light, append-only):
@@ -76,7 +77,6 @@ CREATE TABLE IF NOT EXISTS run_events (
     type         text        NOT NULL,
     task_id      text        NOT NULL DEFAULT '',
     technique_id text        NOT NULL DEFAULT '',
-    worker_id    int,
     ts           timestamptz NOT NULL,
     payload      jsonb       NOT NULL DEFAULT '{}',
     PRIMARY KEY (run_id, seq)
@@ -105,8 +105,8 @@ Counter updates are tied to a **successful insert**, never applied blindly — s
 
 ```sql
 WITH ins AS (
-    INSERT INTO run_events (run_id, seq, type, task_id, technique_id, worker_id, ts, payload)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    INSERT INTO run_events (run_id, seq, type, task_id, technique_id, ts, payload)
+    VALUES ($1,$2,$3,$4,$5,$6,$7)
     ON CONFLICT (run_id, seq) DO NOTHING
     RETURNING type, payload
 )
@@ -127,7 +127,7 @@ If the row already existed (`DO NOTHING` → `ins` empty), the `UPDATE … FROM 
 
 ## 6. Agent: event emitter
 
-`runScenario` already tracks queued/started/completed per step (indexed results + an atomic completion counter) and knows the scheduler `workerId` context — so the emitter hooks the existing lifecycle points rather than adding new bookkeeping:
+`runScenario` already tracks queued/started/completed per step (indexed results + an atomic completion counter) — so the emitter hooks the existing lifecycle points rather than adding new bookkeeping:
 
 - before the scheduler runs: `run_started` (with `stepsTotal`);
 - a job is enqueued → `queued`; a job begins → `started`; a job ends → `completed` / `timeout` / `killed`, with the verdict derived from the step's `ExecResult` (`TimedOut` → `timeout`; `parentCtx` cancel → `killed`; `Blocked` → verdict `blocked`; else `pass`/`fail` by exit code);
@@ -196,7 +196,33 @@ Because terminal step events are persisted as they land, an agent or server cras
 - `agent/agent.go` — bounded buffered emitter; hook emit points in `runScenario`; advertise capability.
 - `orchestrator/wwwroot/` — run-detail live timeline + progress (done/total, failed, running).
 
+## 12a. Implementation order
+
+Build the **server side end-to-end first**, so the full ingest path is exercisable with curl/Postman-generated event batches before the agent is touched — which keeps feedback loops short and isolates failures to one side at a time:
+
+1. **DB migration** — `run_events` table + `scenario_runs` summary columns.
+2. **Server ingest endpoint** — `POST /api/scenarios/events` (batch).
+3. **Progress summary updates** — the idempotent insert+counter statement (§5.1).
+4. **WS relay** — broadcast received batches to browsers.
+5. **Agent emitter** — bounded buffered emitter + hook emit points in `runScenario`.
+6. **Capability negotiation** — advertise `protocolVersion`/`emitsEvents`.
+7. **UI** — live timeline + progress.
+8. **Tests** — the §11 set plus the §12b demos.
+
+(Capability negotiation comes **after** the emitter: the emitter is independently testable, and negotiation only gates whether it runs.)
+
+## 12b. Success criteria (acceptance demos)
+
+B-1 is done when these are demonstrable:
+
+1. **Live progress** — run a normal scenario; the UI shows `queued → started → completed` transitions live.
+2. **Browser reconnect** — kill the browser tab and reconnect; the timeline reconstructs from persisted events (ordered by `seq`).
+3. **Agent crash mid-run** — kill the agent partway; previously completed steps remain visible and correctly counted.
+4. **Duplicate replay** — replay a duplicate event batch; counters remain correct (no double-count).
+5. **Legacy agent** — an agent that emits no events still completes and scores correctly.
+
 ## 13. Non-goals / explicit deferrals
 
 - Output-chunk streaming, batched dispatch, on-demand payloads → **B-2**.
+- `workerId` / worker-identity in events → future enhancement, added inside `payload` (no schema change) when host-pool/worker diagnostics are needed. Keeps the event layer purely observational in B-1.
 - Making events the source of truth / removing the final POST → not now (kept as the simple, robust overlay model).
