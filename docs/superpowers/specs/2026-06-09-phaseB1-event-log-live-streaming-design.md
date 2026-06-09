@@ -81,7 +81,6 @@ CREATE TABLE IF NOT EXISTS run_events (
     payload      jsonb       NOT NULL DEFAULT '{}',
     PRIMARY KEY (run_id, seq)
 );
-CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, seq);
 ```
 
 Ordering is **always** by `(run_id, seq)`, never by arrival/insert time.

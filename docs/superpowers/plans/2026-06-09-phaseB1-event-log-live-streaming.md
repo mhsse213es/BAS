@@ -110,7 +110,6 @@ In `orchestrator/internal/db/postgres.go`, inside `EnsureSchema`'s `stmts := []s
 			payload      jsonb       NOT NULL DEFAULT '{}',
 			PRIMARY KEY (run_id, seq)
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, seq)`,
 
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_total   int NOT NULL DEFAULT 0`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_done    int NOT NULL DEFAULT 0`,
