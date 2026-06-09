@@ -270,6 +270,19 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	}
 	defer pool.Close()
 
+	// Phase B-1: best-effort live event stream. nextSeq is the per-run monotonic
+	// sequence; emit() never blocks the run.
+	var nextSeq int64
+	seq := func() int64 { return atomic.AddInt64(&nextSeq, 1) }
+	emitter := newEventEmitter(
+		func(b []RunEvent) error { return a.postJSON("/api/scenarios/events", b) },
+		1000, 300*time.Millisecond,
+	)
+	defer emitter.close()
+	emit := func(ev RunEvent) { ev.RunID = cmd.RunID; ev.Seq = seq(); emitter.emit(ev) }
+
+	emit(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total, "mode": cmd.Mode}})
+
 	jobs := make([]sched.Job, total)
 	for i := range cmd.Steps {
 		step := cmd.Steps[i] // per-job copy (PayloadDir/Env set below)
@@ -283,6 +296,8 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 			schedSec = step.Timeout.ScheduleSec
 			schedDur = time.Duration(schedSec) * time.Second
 		}
+
+		emit(RunEvent{Type: "queued", TaskID: step.TaskID, TechniqueID: step.TechniqueID})
 
 		jobs[i] = sched.Job{
 			Resource: step.Resource,
@@ -299,6 +314,8 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 					TimedOut:   true,
 				}
 				ran[i] = true
+				emit(RunEvent{Type: "timeout", TaskID: step.TaskID, TechniqueID: step.TechniqueID,
+					Payload: map[string]any{"reason": "schedule"}})
 			},
 			Run: func(ctx context.Context) {
 				n := atomic.AddInt64(&completed, 1)
@@ -306,6 +323,8 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 				log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, total, step.TechniqueID, step.Executor, step.Name)
 				a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
 					"scenario_step", fmt.Sprintf("[%d/%d] %s executor=%s", i+1, total, step.Name, step.Executor))
+
+				emit(RunEvent{Type: "started", TaskID: step.TaskID, TechniqueID: step.TechniqueID})
 
 				// Stage payloads into a per-step subdir so concurrent steps never
 				// collide on BAS_PAYLOAD_DIR. Steps without payloads use the run dir.
@@ -330,6 +349,8 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 								ExecutedAt:    time.Now(),
 							}
 							ran[i] = true
+							emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID,
+								Payload: map[string]any{"verdict": "blocked"}})
 							return
 						}
 						log.Printf("[*]   staged %d payload(s) to %s", len(step.Payloads), stepDir)
@@ -347,6 +368,15 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 				log.Printf("[*]   → exit=%d dur=%dms%s", r.ExitCode, r.DurationMs, evtSummary)
 				results[i] = r
 				ran[i] = true
+				typ, verdict := eventForResult(r)
+				payload := map[string]any{"durationMs": r.DurationMs, "exitCode": r.ExitCode}
+				if verdict != "" {
+					payload["verdict"] = verdict
+				}
+				if typ == "timeout" {
+					payload["reason"] = "execute"
+				}
+				emit(RunEvent{Type: typ, TaskID: step.TaskID, TechniqueID: step.TechniqueID, Payload: payload})
 			},
 		}
 	}
@@ -362,6 +392,12 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		}
 	}
 	partial := ctx.Err() != nil
+
+	if partial {
+		emit(RunEvent{Type: "run_cancelled", Payload: map[string]any{"stepsDone": len(final)}})
+	} else {
+		emit(RunEvent{Type: "run_completed", Payload: map[string]any{"stepsDone": len(final), "partial": false}})
+	}
 
 	elapsed := time.Since(start).Round(time.Millisecond)
 	if partial {
