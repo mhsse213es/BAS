@@ -46,8 +46,20 @@ func BuildStepMeta(steps []ScenarioStep) map[string]StepMeta {
 }
 
 // BuildSteps converts a Scenario into concrete ScenarioSteps the agent executes.
-// Modes are checked in priority order (see Scenario type comment).
+// Modes are checked in priority order (see Scenario type comment). Every built
+// step is then labelled with its curated resource profile so the agent scheduler
+// can run independent steps concurrently; unlabeled steps stay serial.
 func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore) ([]ScenarioStep, error) {
+	steps, err := buildStepsRaw(sc, calderaURL, calderaKey, artStore)
+	if err != nil {
+		return nil, err
+	}
+	AttachResourceProfiles(steps)
+	return steps, nil
+}
+
+// buildStepsRaw produces concrete steps without resource labels.
+func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore) ([]ScenarioStep, error) {
 	if calderaURL != "" {
 		if sc.CalderaAllWindows {
 			return buildCalderaAllWindowsSteps(calderaURL, calderaKey)

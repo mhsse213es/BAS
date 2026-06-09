@@ -130,6 +130,9 @@ type ScenarioStep struct {
 	TimeoutSec  int       `json:"timeoutSec"`
 	Payloads    []Payload `json:"payloads,omitempty"` // files to stage before executing
 	Cleanup     string    `json:"cleanup,omitempty"`  // cleanup command run after step (pass or fail)
+	// Resource is the step's curated lock profile. nil → the agent runs the step
+	// serially (always safe). Set centrally by AttachResourceProfiles at dispatch.
+	Resource *ResourceProfile `json:"resource,omitempty"`
 }
 
 // ScenarioCommand is sent to an agent via WebSocket.
