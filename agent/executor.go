@@ -48,7 +48,7 @@ func CheckPayloadQuarantine(payloads []Payload, dir string) string {
 	return ""
 }
 
-func execStep(parentCtx context.Context, step ScenarioStep) ExecResult {
+func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) ExecResult {
 	timeout := step.TimeoutSec
 	if timeout <= 0 {
 		timeout = 120
@@ -58,6 +58,21 @@ func execStep(parentCtx context.Context, step ScenarioStep) ExecResult {
 	defer cancel()
 
 	before := time.Now()
+
+	// Fast path: read-only PowerShell discovery steps run on a warm pooled host,
+	// skipping per-step process cold start. Each runs in a fresh runspace, so it is
+	// isolated from other steps. A pool miss (ok=false) falls through to the robust
+	// per-process path below — safe because only idempotent steps are pooled.
+	if pool != nil && pooledCandidate(step) {
+		if r, ok := pool.Run(ctx, step); ok {
+			r.Events = collectRecentEvents(parentCtx, before)
+			if step.Cleanup != "" {
+				go runCleanup(step)
+			}
+			return r
+		}
+	}
+
 	cmd := buildCmd(ctx, step)
 
 	var stdout, stderr bytes.Buffer

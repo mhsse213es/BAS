@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -260,6 +261,15 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		workers = sched.DefaultWorkers()
 	}
 
+	// Warm PowerShell host pool for read-only discovery steps (skips per-step
+	// process cold start). Created only if the scenario has a pooled candidate,
+	// sized to the worker count, and torn down after the scheduler drains.
+	var pool *HostPool
+	if slices.ContainsFunc(cmd.Steps, pooledCandidate) {
+		pool = NewHostPool(workers)
+	}
+	defer pool.Close()
+
 	jobs := make([]sched.Job, total)
 	for i := range cmd.Steps {
 		step := cmd.Steps[i] // per-job copy (PayloadDir/Env set below)
@@ -303,7 +313,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 
 				step.PayloadDir = stepDir
 				step.Env = policyEnv
-				r := execStep(ctx, step)
+				r := execStep(ctx, step, pool)
 
 				evtSummary := ""
 				if len(r.Events) > 0 {
