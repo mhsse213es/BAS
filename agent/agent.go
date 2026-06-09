@@ -9,10 +9,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/audspect/bas-agent/sched"
 	"github.com/gorilla/websocket"
 )
 
@@ -242,71 +245,104 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	}()
 
 	start := time.Now()
-	results := make([]ExecResult, 0, len(cmd.Steps))
+	total := len(cmd.Steps)
 
-	for i, step := range cmd.Steps {
-		select {
-		case <-ctx.Done():
-			log.Printf("[*] scenario interrupted at step %d/%d — submitting partial results", i+1, len(cmd.Steps))
-			reverted := revertFromSnapshot(snap)
-			if len(reverted) > 0 {
-				log.Printf("[*] reverted %d change(s) after partial run", len(reverted))
-			}
-			a.submitResults(cmd, results, true, reverted)
-			a.setStatus("idle")
-			a.sendHeartbeat("idle")
-			return
-		default:
-		}
+	// Steps run through the resource-lock scheduler: independent steps execute
+	// concurrently, conflicting ones serialize, and unlabeled steps run serially.
+	// Results are written to a fixed index per step so the submitted order is
+	// deterministic (identical to a serial run) regardless of completion order.
+	results := make([]ExecResult, total)
+	ran := make([]bool, total)
+	var completed int64
 
-		a.localSt.UpdateProgress(i, len(cmd.Steps), "Execution")
-		log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, len(cmd.Steps), step.TechniqueID, step.Executor, step.Name)
-		a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
-			"scenario_step", fmt.Sprintf("[%d/%d] %s executor=%s", i+1, len(cmd.Steps), step.Name, step.Executor))
-
-		if len(step.Payloads) > 0 {
-			if err := StagePayloads(step.Payloads, payloadDir); err != nil {
-				log.Printf("[!]   payload stage: %v", err)
-			} else {
-				// Check if AV/EDR quarantined a payload immediately after staging
-				if name := CheckPayloadQuarantine(step.Payloads, payloadDir); name != "" {
-					log.Printf("[!]   payload quarantined by security control: %s", name)
-					results = append(results, ExecResult{
-						TaskID:        step.TaskID,
-						ExitCode:      -1,
-						Blocked:       true,
-						BlockedReason: fmt.Sprintf("payload '%s' quarantined by security control before execution", name),
-						ExecutedAt:    time.Now(),
-					})
-					continue
-				}
-				log.Printf("[*]   staged %d payload(s) to %s", len(step.Payloads), payloadDir)
-			}
-		}
-
-		step.PayloadDir = payloadDir
-		step.Env = policyEnv
-		r := execStep(ctx, step)
-
-		evtSummary := ""
-		if len(r.Events) > 0 {
-			evtSummary = fmt.Sprintf(" events=%d", len(r.Events))
-		}
-		log.Printf("[*]   → exit=%d dur=%dms%s", r.ExitCode, r.DurationMs, evtSummary)
-		results = append(results, r)
+	workers := cmd.Workers
+	if workers < 1 {
+		workers = sched.DefaultWorkers()
 	}
 
+	jobs := make([]sched.Job, total)
+	for i := range cmd.Steps {
+		step := cmd.Steps[i] // per-job copy (PayloadDir/Env set below)
+		jobs[i] = sched.Job{
+			Resource: step.Resource,
+			Run: func(ctx context.Context) {
+				n := atomic.AddInt64(&completed, 1)
+				a.localSt.UpdateProgress(int(n), total, "Execution")
+				log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, total, step.TechniqueID, step.Executor, step.Name)
+				a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
+					"scenario_step", fmt.Sprintf("[%d/%d] %s executor=%s", i+1, total, step.Name, step.Executor))
+
+				// Stage payloads into a per-step subdir so concurrent steps never
+				// collide on BAS_PAYLOAD_DIR. Steps without payloads use the run dir.
+				stepDir := payloadDir
+				if len(step.Payloads) > 0 {
+					stepDir = filepath.Join(payloadDir, fmt.Sprintf("step-%d", i))
+					if err := os.MkdirAll(stepDir, 0o700); err != nil {
+						log.Printf("[!]   payload dir: %v", err)
+						stepDir = payloadDir
+					}
+					if err := StagePayloads(step.Payloads, stepDir); err != nil {
+						log.Printf("[!]   payload stage: %v", err)
+					} else {
+						// AV/EDR may quarantine a payload immediately after staging.
+						if name := CheckPayloadQuarantine(step.Payloads, stepDir); name != "" {
+							log.Printf("[!]   payload quarantined by security control: %s", name)
+							results[i] = ExecResult{
+								TaskID:        step.TaskID,
+								ExitCode:      -1,
+								Blocked:       true,
+								BlockedReason: fmt.Sprintf("payload '%s' quarantined by security control before execution", name),
+								ExecutedAt:    time.Now(),
+							}
+							ran[i] = true
+							return
+						}
+						log.Printf("[*]   staged %d payload(s) to %s", len(step.Payloads), stepDir)
+					}
+				}
+
+				step.PayloadDir = stepDir
+				step.Env = policyEnv
+				r := execStep(ctx, step)
+
+				evtSummary := ""
+				if len(r.Events) > 0 {
+					evtSummary = fmt.Sprintf(" events=%d", len(r.Events))
+				}
+				log.Printf("[*]   → exit=%d dur=%dms%s", r.ExitCode, r.DurationMs, evtSummary)
+				results[i] = r
+				ran[i] = true
+			},
+		}
+	}
+
+	sched.Run(ctx, workers, sched.NewLockManager(), jobs)
+
+	// Collect completed results in submission order. On cancellation the
+	// scheduler skips not-yet-started jobs, so some indices stay unran.
+	final := make([]ExecResult, 0, total)
+	for i := range total {
+		if ran[i] {
+			final = append(final, results[i])
+		}
+	}
+	partial := ctx.Err() != nil
+
 	elapsed := time.Since(start).Round(time.Millisecond)
-	log.Printf("[*] scenario done: run=%s steps=%d elapsed=%v", cmd.RunID, len(results), elapsed)
-	a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, "", "", "scenario_done",
-		fmt.Sprintf("completed: steps=%d elapsed=%v", len(results), elapsed))
-	a.logger.Metric("scenario_duration_ms", float64(elapsed.Milliseconds()), "ms")
+	if partial {
+		log.Printf("[*] scenario interrupted — %d/%d steps completed, submitting partial results", len(final), total)
+	} else {
+		log.Printf("[*] scenario done: run=%s steps=%d elapsed=%v (workers=%d)", cmd.RunID, len(final), elapsed, workers)
+		a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, "", "", "scenario_done",
+			fmt.Sprintf("completed: steps=%d elapsed=%v", len(final), elapsed))
+		a.logger.Metric("scenario_duration_ms", float64(elapsed.Milliseconds()), "ms")
+	}
 
 	reverted := revertFromSnapshot(snap)
 	if len(reverted) > 0 {
 		log.Printf("[*] reverted %d change(s) after run", len(reverted))
 	}
-	a.submitResults(cmd, results, false, reverted)
+	a.submitResults(cmd, final, partial, reverted)
 	a.setStatus("idle")
 	a.sendHeartbeat("idle")
 }

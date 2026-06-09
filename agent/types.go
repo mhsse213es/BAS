@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/audspect/bas-agent/sched"
 )
 
 // ── Wire Protocol ─────────────────────────────────────────────────────────────
@@ -72,6 +74,10 @@ type ScenarioCommand struct {
 	Steps      []ScenarioStep `json:"steps"`
 	Mode       string         `json:"mode,omitempty"`   // telemetry | lab (live runs)
 	Policy     *LivePolicy    `json:"policy,omitempty"` // guardrails enforced by the agent
+	// Workers caps concurrent step execution. 0 → the agent picks a default
+	// (one per CPU, capped). Steps still run only as concurrently as their
+	// resource profiles allow; unlabeled steps run serially regardless.
+	Workers int `json:"workers,omitempty"`
 }
 
 // LivePolicy mirrors the server-side guardrails the agent must honour for live runs.
@@ -128,6 +134,9 @@ type ScenarioStep struct {
 	Payloads    []Payload `json:"payloads,omitempty"`
 	Cleanup     string    `json:"cleanup,omitempty"`
 	PayloadDir  string    `json:"-"`
+	// Resource is the step's lock profile, used by the scheduler to decide which
+	// steps may run concurrently. nil → the step runs serially (always safe).
+	Resource *sched.ResourceProfile `json:"resource,omitempty"`
 	// Env holds runtime-only policy variables (BAS_RUN_MODE, BAS_MAX_SPRAY_ATTEMPTS,
 	// BAS_SPRAY_ALLOWLIST) injected by the runner; never wire-serialised.
 	Env map[string]string `json:"-"`
