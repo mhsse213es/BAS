@@ -175,6 +175,7 @@ const (
 	MsgPatchStatus     = "patch_status_update"
 	MsgCommandPatches  = "command_install_patches"
 	MsgPolicyUpdate    = "policy_update"
+	MsgRunEvent        = "run_event"
 )
 
 // ── ATT&CK Normalisation ──────────────────────────────────────────────────────
