@@ -1,14 +1,15 @@
 ﻿id: art-full-windows
 name: Atomic Red Team â€” Full Windows Sweep
 description: >
-  Runs EVERY Windows atomic test in the Atomic Red Team library.
-  The orchestrator fetches the ART index from GitHub at run time,
-  finds all techniques with PowerShell or cmd executors, and sends
-  one step per technique to the agent. Each step runs ALL atomic tests
-  for that technique via Invoke-AtomicTest (no -TestNumbers = all tests).
-  Coverage: ~500-600 techniques, ~1500-2000 individual atomic tests.
-  Requires Invoke-AtomicRedTeam module on the endpoint:
-    Install-Module -Name invoke-atomicredteam -Scope CurrentUser -Force
+  Broad ATT&CK breadth sweep — runs ONE representative Windows atomic per
+  technique across the entire seeded Atomic Red Team library. Content is served
+  from the platform database (seeded offline at install), so no GitHub access is
+  needed at run time. The orchestrator resolves one PowerShell/cmd atomic for each
+  technique and dispatches them as individual steps to the agent.
+  Coverage: every technique with a Windows atomic (~one step each). Use the
+  Selective scenario to run EVERY atomic for a chosen set of techniques (depth).
+  Note: this is a large run — expect tens of minutes on a single endpoint. An
+  agent runs one scenario at a time; starting another mid-run is rejected.
 author: Audspect Research
 supported_os: [windows]
 tags:

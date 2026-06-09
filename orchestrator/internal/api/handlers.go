@@ -556,6 +556,12 @@ func (h *Handler) GetScenario(w http.ResponseWriter, r *http.Request) {
 	respond(w, sc)
 }
 
+// staleRunGuard is how long a scenario_run may sit in 'running' before the
+// concurrency guard treats it as abandoned (agent died mid-run) and allows a new
+// run to proceed. It must comfortably exceed the longest legitimate run; the full
+// ART sweep (one representative atomic per technique) completes well within this.
+const staleRunGuard = 2 * time.Hour
+
 // POST /api/scenarios/{id}/run — dispatches scenario to a connected agent
 func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	scenarioID := chi.URLParam(r, "id")
@@ -662,6 +668,30 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "outside the approved execution window ("+sc.LivePolicy.ExecutionWindow+") for live execution", http.StatusBadRequest)
 			return
 		}
+	}
+
+	// ── Concurrency guard ─────────────────────────────────────────────────────
+	// An agent executes one scenario at a time; dispatching a new one cancels the
+	// in-flight run on the agent (silent truncation → partial results). Reject the
+	// new run instead — unless the existing run is stale (the agent likely died
+	// mid-run), in which case we mark it failed so it stops blocking and proceed.
+	var runningID string
+	var runningStarted time.Time
+	if qErr := h.db.QueryRow(r.Context(),
+		`SELECT id, started_at FROM scenario_runs
+		  WHERE agent_id = $1 AND status = 'running'
+		  ORDER BY started_at DESC LIMIT 1`, req.AgentID,
+	).Scan(&runningID, &runningStarted); qErr == nil && runningID != "" {
+		if time.Since(runningStarted) < staleRunGuard {
+			jsonError(w, "agent busy — a scenario is already running on this agent; wait for it to finish before starting another", http.StatusConflict)
+			return
+		}
+		// Stale: free the abandoned run so this agent isn't locked out.
+		_, _ = h.db.Exec(r.Context(),
+			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW()
+			  WHERE id = $1 AND status = 'running'`, runningID)
+		log.Printf("[scenario] freed stale running run %s on agent %s (started %s)",
+			runningID, req.AgentID, runningStarted.UTC().Format(time.RFC3339))
 	}
 
 	// Create a run record in RUNNING state, stamped with the requesting user

@@ -156,7 +156,25 @@ func buildARTAllWindowsSteps(artStore *ARTStore) ([]ScenarioStep, error) {
 	if len(techniques) == 0 {
 		return nil, fmt.Errorf("ART store is empty — verify ART_DIR was loaded at startup")
 	}
-	return buildARTTechniquesSteps(techniques, artStore)
+	// Breadth sweep: dispatch ONE representative atomic per technique (the first
+	// Windows test), not every test. Running all tests across all techniques is
+	// well over a thousand steps and multi-hour on a single endpoint, which made
+	// the sweep impractical and prone to being cancelled mid-run. One-per-technique
+	// preserves full ATT&CK breadth while keeping the run bounded. Use the Selective
+	// scenario to run every atomic for a chosen set of techniques (depth).
+	steps := make([]ScenarioStep, 0, len(techniques))
+	for _, t := range techniques {
+		s := artStore.GetSteps(strings.ToUpper(strings.TrimSpace(t)))
+		if len(s) == 0 {
+			log.Printf("[ART] no Windows steps for %s — skipped", t)
+			continue
+		}
+		steps = append(steps, artStore.materialize(s[0]))
+	}
+	if len(steps) == 0 {
+		return nil, fmt.Errorf("ART: no Windows steps found across %d techniques", len(techniques))
+	}
+	return steps, nil
 }
 
 func buildARTTechniquesSteps(techniques []string, artStore *ARTStore) ([]ScenarioStep, error) {
