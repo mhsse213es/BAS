@@ -43,6 +43,7 @@ type eventEmitter struct {
 	interval  time.Duration
 	done      chan struct{}
 	wg        sync.WaitGroup
+	closeOnce sync.Once
 	dropMu    sync.Mutex
 	dropped   int
 	lastDropL time.Time
@@ -65,8 +66,15 @@ func newEventEmitter(send func([]RunEvent) error, maxQueue int, interval time.Du
 }
 
 // emit enqueues an event without ever blocking. On a full queue it drops the
-// OLDEST event (to keep the most recent state) and counts the drop.
+// OLDEST event (to keep the most recent state) and counts the drop. After close()
+// it is a no-op. The caller is responsible for setting RunID and Seq; only Ts is
+// auto-filled here.
 func (e *eventEmitter) emit(ev RunEvent) {
+	select {
+	case <-e.done:
+		return // emitter closed — best-effort, discard
+	default:
+	}
 	if ev.Ts.IsZero() {
 		ev.Ts = time.Now()
 	}
@@ -135,6 +143,6 @@ func (e *eventEmitter) loop() {
 
 // close flushes remaining events and stops the loop.
 func (e *eventEmitter) close() {
-	close(e.done)
+	e.closeOnce.Do(func() { close(e.done) })
 	e.wg.Wait()
 }
