@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/audspect/bas/internal/models"
@@ -28,11 +29,11 @@ func (h *Handler) SubmitRunEvents(w http.ResponseWriter, r *http.Request) {
 		if e.RunID == "" || e.Type == "" {
 			continue
 		}
-		payload, _ := json.Marshal(e.Payload)
-		if len(payload) == 0 {
-			payload = []byte("{}")
+		payload := []byte("{}")
+		if e.Payload != nil {
+			payload, _ = json.Marshal(e.Payload)
 		}
-		_, _ = h.db.Exec(ctx, `
+		if _, err := h.db.Exec(ctx, `
 			WITH ins AS (
 				INSERT INTO run_events (run_id, seq, type, task_id, technique_id, ts, payload)
 				VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -52,7 +53,9 @@ func (h *Handler) SubmitRunEvents(w http.ResponseWriter, r *http.Request) {
 				steps_timeout = s.steps_timeout + CASE WHEN ins.type='timeout' THEN 1 ELSE 0 END
 			FROM ins
 			WHERE s.id = $1`,
-			e.RunID, e.Seq, e.Type, e.TaskID, e.TechniqueID, e.Ts, payload)
+			e.RunID, e.Seq, e.Type, e.TaskID, e.TechniqueID, e.Ts, payload); err != nil {
+			log.Printf("[events] ingest run %s seq %d: %v", e.RunID, e.Seq, err)
+		}
 	}
 
 	h.relayRunEvents(batch)
