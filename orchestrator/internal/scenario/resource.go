@@ -26,6 +26,32 @@ type ResourceLock struct {
 	Key    string `json:"key,omitempty"`
 }
 
+// TimeoutProfile bounds a step's schedule/execute/grace windows. Its JSON shape
+// MUST match the agent's sched.TimeoutProfile. We attach it only to fast
+// read-only discovery steps; every other step keeps a nil profile so the agent
+// honours that step's own configured timeout (never silently overridden).
+type TimeoutProfile struct {
+	ScheduleSec int `json:"scheduleSec,omitempty"`
+	ExecuteSec  int `json:"executeSec,omitempty"`
+	GraceSec    int `json:"graceSec,omitempty"`
+}
+
+// discoveryTimeout: discovery atomics enumerate host state and return in well
+// under a second. A tight execute bound makes a hung discovery step fail fast
+// instead of stalling the sweep for the old blanket 120s; the schedule bound
+// keeps a parallel step from waiting forever on a wedged sibling's locks.
+var discoveryTimeout = &TimeoutProfile{ScheduleSec: 30, ExecuteSec: 20, GraceSec: 3}
+
+// TimeoutProfileFor returns the curated timeout for a technique, or nil when the
+// technique is not in the conservative discovery set (→ the agent uses the step's
+// own timeout / engine default).
+func TimeoutProfileFor(techniqueID string) *TimeoutProfile {
+	if ResourceProfileFor(techniqueID) != nil {
+		return discoveryTimeout
+	}
+	return nil
+}
+
 // Resource domains and risk levels — kept in sync with the agent's sched package.
 const (
 	domRegistry   = "registry"
@@ -90,10 +116,12 @@ func ResourceProfileFor(techniqueID string) *ResourceProfile {
 	return nil
 }
 
-// AttachResourceProfiles labels every step with its curated resource profile in
-// place. Steps with no curated entry keep a nil profile and run serially.
-func AttachResourceProfiles(steps []ScenarioStep) {
+// AttachProfiles labels every step with its curated resource and timeout profiles
+// in place. Steps with no curated entry keep nil profiles: they run serially and
+// the agent honours their own configured timeout.
+func AttachProfiles(steps []ScenarioStep) {
 	for i := range steps {
 		steps[i].Resource = ResourceProfileFor(steps[i].TechniqueID)
+		steps[i].Timeout = TimeoutProfileFor(steps[i].TechniqueID)
 	}
 }

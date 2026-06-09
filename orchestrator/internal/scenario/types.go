@@ -131,8 +131,11 @@ type ScenarioStep struct {
 	Payloads    []Payload `json:"payloads,omitempty"` // files to stage before executing
 	Cleanup     string    `json:"cleanup,omitempty"`  // cleanup command run after step (pass or fail)
 	// Resource is the step's curated lock profile. nil → the agent runs the step
-	// serially (always safe). Set centrally by AttachResourceProfiles at dispatch.
+	// serially (always safe). Set centrally by AttachProfiles at dispatch.
 	Resource *ResourceProfile `json:"resource,omitempty"`
+	// Timeout is the step's curated schedule/execute/grace bounds. nil → the agent
+	// uses the step's own timeout / engine default. Set by AttachProfiles.
+	Timeout *TimeoutProfile `json:"timeout,omitempty"`
 }
 
 // ScenarioCommand is sent to an agent via WebSocket.
@@ -156,6 +159,9 @@ type ExecResult struct {
 	ExecutedAt time.Time `json:"executedAt"`
 	// Events are Windows Event IDs observed during step execution (e.g. "4688:Security", "1:Microsoft-Windows-Sysmon/Operational").
 	Events []string `json:"events,omitempty"`
+	// TimedOut marks a step that exceeded its execute/schedule timeout — an
+	// explicit "ran, did not return" verdict, distinct from a clean skip.
+	TimedOut bool `json:"timedOut,omitempty"`
 }
 
 // SimCheckResult carries the pre-interpreted result of a single built-in local check.

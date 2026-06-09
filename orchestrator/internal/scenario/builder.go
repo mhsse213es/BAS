@@ -54,7 +54,7 @@ func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore)
 	if err != nil {
 		return nil, err
 	}
-	AttachResourceProfiles(steps)
+	AttachProfiles(steps)
 	return steps, nil
 }
 

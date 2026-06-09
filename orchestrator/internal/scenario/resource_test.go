@@ -45,17 +45,37 @@ func TestResourceProfileForUnlabeledIsSerial(t *testing.T) {
 	}
 }
 
-func TestAttachResourceProfiles(t *testing.T) {
+func TestAttachProfiles(t *testing.T) {
 	steps := []ScenarioStep{
-		{TechniqueID: "T1057"}, // labelled
-		{TechniqueID: "T1003"}, // unlabeled
+		{TechniqueID: "T1057"},                  // labelled discovery
+		{TechniqueID: "T1003", TimeoutSec: 300}, // unlabeled, custom timeout
 	}
-	AttachResourceProfiles(steps)
-	if steps[0].Resource == nil {
-		t.Error("T1057 step should have a profile attached")
+	AttachProfiles(steps)
+	if steps[0].Resource == nil || steps[0].Timeout == nil {
+		t.Error("T1057 should get both resource and timeout profiles")
 	}
-	if steps[1].Resource != nil {
-		t.Error("T1003 step must stay unlabeled (serial)")
+	if steps[1].Resource != nil || steps[1].Timeout != nil {
+		t.Error("T1003 must stay unlabeled so the agent keeps its own 300s timeout")
+	}
+}
+
+func TestTimeoutProfileForOnlyDiscovery(t *testing.T) {
+	if TimeoutProfileFor("T1082") == nil {
+		t.Error("discovery technique should get a curated timeout")
+	}
+	if TimeoutProfileFor("T1003") != nil {
+		t.Error("non-discovery technique must not get a curated timeout (keeps its own)")
+	}
+}
+
+func TestTimeoutWireShapeMatchesAgent(t *testing.T) {
+	raw, err := json.Marshal(TimeoutProfileFor("T1057"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"scheduleSec":30,"executeSec":20,"graceSec":3}`
+	if string(raw) != want {
+		t.Errorf("timeout wire shape drift:\n got %s\nwant %s", raw, want)
 	}
 }
 
