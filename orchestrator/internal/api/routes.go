@@ -30,6 +30,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 	r.Post("/api/agents/events", h.ReceiveEvents)
 	r.Post("/api/heartbeat", h.Heartbeat)
 	r.Post("/api/scenarios/result", h.SubmitScenarioResult)
+	r.Post("/api/scenarios/events", h.SubmitRunEvents)
 
 	// WebSocket — agents connect here.
 	// Validates agentSecret query param / X-Agent-Token header when configured.
@@ -81,6 +82,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/scenarios/runs/{runId}/report", h.GetRunReport)
 		r.Get("/api/scenarios/runs/{runId}/report.json", h.GetRunReportData)
 		r.Get("/api/scenarios/runs/{runId}/export", h.ExportRunJSON)
+		r.Get("/api/scenarios/runs/{runId}/events", h.ListRunEvents)
 		r.Get("/api/scenarios/runs/{runId}/pdf", h.GetRunPDF)
 		r.Get("/api/agents/{agentId}/logs/operational", h.GetOpLogs)
 		r.Get("/api/agents/{agentId}/logs/security", h.GetSecLogs)
