@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -9,9 +10,22 @@ import (
 	"time"
 )
 
+// The template resolves fields by their json-tag name, not their Go field name.
+// The orchestrator is built with garble, which renames Go struct fields while
+// preserving json tags (so API responses stay stable). html/template looks up
+// fields by Go name via reflection, so rendering structs directly fails under
+// obfuscation ("can't evaluate field Hostname …"). We therefore render from a
+// json round-tripped map[string]any whose keys are the stable tag names. All
+// numbers arrive as float64 and all times as RFC3339 strings — the funcs below
+// are typed accordingly.
 var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
-	"fmtTime": func(t time.Time) string {
-		if t.IsZero() {
+	"fmtTime": func(v any) string {
+		s, _ := v.(string)
+		if s == "" {
+			return "—"
+		}
+		t, err := time.Parse(time.RFC3339, s)
+		if err != nil || t.IsZero() {
 			return "—"
 		}
 		return t.UTC().Format("02 Jan 2006, 15:04 UTC")
@@ -44,7 +58,7 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return "#6e7681"
 	},
-	"tacticColor": func(pct int) string {
+	"tacticColor": func(pct float64) string {
 		switch {
 		case pct >= 80:
 			return "#238636"
@@ -78,24 +92,40 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 }).Parse(reportHTML))
 
 // GenerateHTML writes a self-contained HTML report to w.
+//
+// It renders from a json-tag-keyed map rather than the FullReport struct
+// directly: under garble obfuscation the Go field names are renamed but the
+// json tags are preserved, and html/template resolves fields by name via
+// reflection. The json round-trip yields stable, tag-named keys the template
+// can resolve regardless of obfuscation. Consequently every type reachable from
+// here must carry json tags on the fields the template uses.
 func GenerateHTML(w io.Writer, r *FullReport, compliance []ComplianceSummaryRow) error {
-	data := struct {
+	payload := struct {
 		*FullReport
-		Compliance []ComplianceSummaryRow
+		Compliance []ComplianceSummaryRow `json:"compliance"`
 	}{r, compliance}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return err
+	}
 	return reportTmpl.Execute(w, data)
 }
 
-// ComplianceSummaryRow is one framework row in the compliance table.
+// ComplianceSummaryRow is one framework row in the compliance table. The json
+// tags are load-bearing — see GenerateHTML (template renders by tag name).
 type ComplianceSummaryRow struct {
-	Framework     string
-	TotalControls int
-	Tested        int
-	Passing       int
-	Failing       int
-	Untested      int
-	CompliancePct float64
-	CoveragePct   float64
+	Framework     string  `json:"framework"`
+	TotalControls int     `json:"totalControls"`
+	Tested        int     `json:"tested"`
+	Passing       int     `json:"passing"`
+	Failing       int     `json:"failing"`
+	Untested      int     `json:"untested"`
+	CompliancePct float64 `json:"compliancePct"`
+	CoveragePct   float64 `json:"coveragePct"`
 }
 
 // ── Template ──────────────────────────────────────────────────────────────────
@@ -104,7 +134,7 @@ const reportHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>BAS Security Assessment Report — {{.Agent.Hostname}}</title>
+<title>BAS Security Assessment Report — {{.agent.hostname}}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a2e;background:#fff;line-height:1.5}
@@ -183,20 +213,20 @@ tr:last-child td{border-bottom:none}
   <div class="cover-title">Security Assessment Report</div>
   <div class="cover-sub">Breach &amp; Attack Simulation — Endpoint Posture Report</div>
   <table class="cover-table">
-    <tr><td>Agent</td><td><strong>{{.Agent.Hostname}}</strong> ({{.Agent.IPAddress}})</td></tr>
-    <tr><td>OS / Username</td><td>{{.Agent.OSVersion}} &nbsp;·&nbsp; {{.Agent.Username}}</td></tr>
-    <tr><td>Environment</td><td>{{.Agent.EnvLabel}}</td></tr>
-    <tr><td>Assessment Date</td><td>{{fmtTime .Summary.LastRunAt}}</td></tr>
-    <tr><td>Report Generated</td><td>{{fmtTime .GeneratedAt}}</td></tr>
-    <tr><td>Total Runs</td><td>{{.Summary.TotalRuns}}</td></tr>
-    <tr><td>Last Scenario</td><td>{{.Summary.LastScenarioName}}</td></tr>
+    <tr><td>Agent</td><td><strong>{{.agent.hostname}}</strong> ({{.agent.ipAddress}})</td></tr>
+    <tr><td>OS / Username</td><td>{{.agent.osVersion}} &nbsp;·&nbsp; {{.agent.username}}</td></tr>
+    <tr><td>Environment</td><td>{{.agent.envLabel}}</td></tr>
+    <tr><td>Assessment Date</td><td>{{fmtTime .summary.lastRunAt}}</td></tr>
+    <tr><td>Report Generated</td><td>{{fmtTime .generatedAt}}</td></tr>
+    <tr><td>Total Runs</td><td>{{.summary.totalRuns}}</td></tr>
+    <tr><td>Last Scenario</td><td>{{.summary.lastScenarioName}}</td></tr>
   </table>
   <div class="confidential">⚠ CONFIDENTIAL — For authorized use only</div>
 </div>
 <div class="footer">
   <span>Audspect BAS Platform</span>
   <span>Classification: Confidential</span>
-  <span>{{fmtTime .GeneratedAt}}</span>
+  <span>{{fmtTime .generatedAt}}</span>
 </div>
 </div>
 
@@ -204,83 +234,83 @@ tr:last-child td{border-bottom:none}
 <div class="page">
 <h1>1. Executive Summary</h1>
 
-<div class="risk-badge" style="color:{{riskColor .Summary.Classification}};border-color:{{riskColor .Summary.Classification}};background:{{riskColor .Summary.Classification}}18">
-  <span style="font-size:1.8rem">{{.Summary.RiskScore}}</span>
-  <span>Risk Score / 100&emsp;—&emsp;{{.Summary.Classification}}</span>
+<div class="risk-badge" style="color:{{riskColor .summary.classification}};border-color:{{riskColor .summary.classification}};background:{{riskColor .summary.classification}}18">
+  <span style="font-size:1.8rem">{{.summary.riskScore}}</span>
+  <span>Risk Score / 100&emsp;—&emsp;{{.summary.classification}}</span>
 </div>
 
 <div class="score-row">
   <div class="scard">
     <div class="scard-label">Prevention Score</div>
-    <div class="scard-value" style="color:#238636">{{fmtScore .Summary.PreventionScore}}%</div>
-    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .Summary.PreventionScore}}%;background:#238636"></div></div>
+    <div class="scard-value" style="color:#238636">{{fmtScore .summary.preventionScore}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.preventionScore}}%;background:#238636"></div></div>
     <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Severity-weighted pass rate</div>
   </div>
   <div class="scard">
     <div class="scard-label">Exposure Score</div>
-    <div class="scard-value" style="color:{{riskColor .Summary.Classification}}">{{fmtScore .Summary.ExposureScore}}%</div>
-    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .Summary.ExposureScore}}%;background:#da3633"></div></div>
+    <div class="scard-value" style="color:{{riskColor .summary.classification}}">{{fmtScore .summary.exposureScore}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.exposureScore}}%;background:#da3633"></div></div>
     <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Higher = worse. Tactic-weighted fail rate</div>
   </div>
   <div class="scard">
     <div class="scard-label">Tactic Coverage</div>
-    <div class="scard-value" style="color:#2f81f7">{{fmtScore .Summary.KillChainCoverage}}%</div>
-    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .Summary.KillChainCoverage}}%;background:#2f81f7"></div></div>
+    <div class="scard-value" style="color:#2f81f7">{{fmtScore .summary.killChainCoverage}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.killChainCoverage}}%;background:#2f81f7"></div></div>
     <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Breadth — of 14 ATT&amp;CK tactics tested</div>
   </div>
   <div class="scard">
     <div class="scard-label">Defense Rate</div>
-    <div class="scard-value" style="color:#238636">{{fmtScore .Summary.CoverageScore}}%</div>
-    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .Summary.CoverageScore}}%;background:#238636"></div></div>
+    <div class="scard-value" style="color:#238636">{{fmtScore .summary.coverageScore}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.coverageScore}}%;background:#238636"></div></div>
     <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Tactics fully blocked (zero failures)</div>
   </div>
   <div class="scard">
     <div class="scard-label">Kill-Chain Amplifier</div>
-    <div class="scard-value" style="color:#d29922">{{fmtScore .Summary.KillChainAmplifier}}×</div>
-    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .Summary.KillChainAmplifier}}%;background:#d29922"></div></div>
+    <div class="scard-value" style="color:#d29922">{{fmtScore .summary.killChainAmplifier}}×</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.killChainAmplifier}}%;background:#d29922"></div></div>
     <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Consecutive kill-chain phase multiplier</div>
   </div>
 </div>
 
 <table>
   <tr><th colspan="2">Assessment Statistics</th></tr>
-  <tr><td>Total Techniques Tested</td><td><strong>{{.Summary.TotalTechniques}}</strong></td></tr>
-  <tr><td>Techniques Passed</td><td style="color:#238636"><strong>{{.Summary.PassedTechniques}}</strong></td></tr>
-  <tr><td>Techniques Failed</td><td style="color:#da3633"><strong>{{.Summary.FailedTechniques}}</strong></td></tr>
-  <tr><td>Trend vs. Previous Run</td><td><strong>{{.Summary.Trend}}</strong></td></tr>
-  <tr><td>Last Run At</td><td>{{fmtTime .Summary.LastRunAt}}</td></tr>
-  <tr><td>Last Scenario</td><td>{{.Summary.LastScenarioName}}</td></tr>
-  <tr><td>Total Runs on Record</td><td>{{.Summary.TotalRuns}}</td></tr>
+  <tr><td>Total Techniques Tested</td><td><strong>{{.summary.totalTechniques}}</strong></td></tr>
+  <tr><td>Techniques Passed</td><td style="color:#238636"><strong>{{.summary.passedTechniques}}</strong></td></tr>
+  <tr><td>Techniques Failed</td><td style="color:#da3633"><strong>{{.summary.failedTechniques}}</strong></td></tr>
+  <tr><td>Trend vs. Previous Run</td><td><strong>{{.summary.trend}}</strong></td></tr>
+  <tr><td>Last Run At</td><td>{{fmtTime .summary.lastRunAt}}</td></tr>
+  <tr><td>Last Scenario</td><td>{{.summary.lastScenarioName}}</td></tr>
+  <tr><td>Total Runs on Record</td><td>{{.summary.totalRuns}}</td></tr>
 </table>
 
 <h2>Key Recommendations</h2>
 <ol style="padding-left:20px;line-height:1.9">
-{{range .Summary.Recommendations}}<li>{{.}}</li>{{end}}
+{{range .summary.recommendations}}<li>{{.}}</li>{{end}}
 </ol>
 
 <div class="footer">
-  <span>{{.Agent.Hostname}} — Executive Summary</span><span>Page 2</span>
+  <span>{{.agent.hostname}} — Executive Summary</span><span>Page 2</span>
 </div>
 </div>
 
 <!-- ═══ 2. CRITICAL & HIGH FINDINGS ════════════════════════════════════ -->
 <div class="page">
 <h1>2. Critical &amp; High Findings</h1>
-{{if .TopFindings}}
+{{if .topFindings}}
 <p style="color:#6e7681;margin-bottom:14px">The following techniques succeeded against this endpoint — meaning the associated security controls did <strong>not</strong> prevent or detect the attack.</p>
 <table>
   <thead><tr>
     <th>Severity</th><th>Technique</th><th>Tactic</th><th>Details &amp; Remediation</th>
   </tr></thead>
   <tbody>
-  {{range .TopFindings}}
+  {{range .topFindings}}
   <tr>
-    <td><span class="dot" style="background:{{sevColor .Severity}}"></span>{{.Severity}}</td>
-    <td><code>{{.TechniqueID}}</code><br>{{.TechniqueName}}</td>
-    <td>{{.Tactic}}</td>
+    <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
+    <td><code>{{.techniqueId}}</code><br>{{.techniqueName}}</td>
+    <td>{{.tactic}}</td>
     <td>
-      {{.Details}}
-      {{if .Remediation}}<div class="remediation">{{.Remediation}}</div>{{end}}
+      {{.details}}
+      {{if .remediation}}<div class="remediation">{{.remediation}}</div>{{end}}
     </td>
   </tr>
   {{end}}
@@ -291,7 +321,7 @@ tr:last-child td{border-bottom:none}
 {{end}}
 
 <div class="footer">
-  <span>{{.Agent.Hostname}} — Critical Findings</span><span>Page 3</span>
+  <span>{{.agent.hostname}} — Critical Findings</span><span>Page 3</span>
 </div>
 </div>
 
@@ -299,23 +329,23 @@ tr:last-child td{border-bottom:none}
 <div class="page">
 <h1>3. MITRE ATT&amp;CK Tactic Coverage</h1>
 <p style="color:#6e7681;margin-bottom:14px">Tactic-level pass/fail breakdown from the latest scenario run. Tactics with no tested techniques are omitted.</p>
-{{if .TacticHeatmap}}
+{{if .tacticHeatmap}}
 <table>
   <thead><tr>
     <th>Tactic</th><th>Risk Weight</th><th>Passed</th><th>Failed</th><th>Total</th><th>Pass Rate</th><th style="min-width:120px">Coverage Bar</th>
   </tr></thead>
   <tbody>
-  {{range .TacticHeatmap}}
+  {{range .tacticHeatmap}}
   <tr>
-    <td style="font-weight:600">{{.Tactic}}</td>
-    <td><span class="dot" style="background:{{sevColor .Weight}}"></span>{{.Weight}}</td>
-    <td style="color:#238636">{{.Passed}}</td>
-    <td style="color:{{if gt .Failed 0}}#da3633{{else}}#238636{{end}}">{{.Failed}}</td>
-    <td>{{.Total}}</td>
-    <td style="font-weight:700;color:{{tacticColor .PassPct}}">{{.PassPct}}%</td>
+    <td style="font-weight:600">{{.tactic}}</td>
+    <td><span class="dot" style="background:{{sevColor .weight}}"></span>{{.weight}}</td>
+    <td style="color:#238636">{{.passed}}</td>
+    <td style="color:{{if gt .failed 0.0}}#da3633{{else}}#238636{{end}}">{{.failed}}</td>
+    <td>{{.total}}</td>
+    <td style="font-weight:700;color:{{tacticColor .passPct}}">{{.passPct}}%</td>
     <td>
       <div class="tbar-wrap">
-        <div class="tbar-fill" style="width:{{.PassPct}}%;background:{{tacticColor .PassPct}}"></div>
+        <div class="tbar-fill" style="width:{{.passPct}}%;background:{{tacticColor .passPct}}"></div>
       </div>
     </td>
   </tr>
@@ -327,7 +357,7 @@ tr:last-child td{border-bottom:none}
 {{end}}
 
 <div class="footer">
-  <span>{{.Agent.Hostname}} — ATT&amp;CK Coverage</span><span>Page 4</span>
+  <span>{{.agent.hostname}} — ATT&amp;CK Coverage</span><span>Page 4</span>
 </div>
 </div>
 
@@ -335,22 +365,22 @@ tr:last-child td{border-bottom:none}
 <div class="page">
 <h1>4. Regulatory Compliance Status</h1>
 <p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run.</p>
-{{if .Compliance}}
+{{if .compliance}}
 <table>
   <thead><tr>
     <th>Framework</th><th>Total Controls</th><th>Tested</th><th>Passing</th><th>Failing</th><th>Untested</th><th>Compliance</th><th>Coverage</th>
   </tr></thead>
   <tbody>
-  {{range .Compliance}}
+  {{range .compliance}}
   <tr>
-    <td style="font-weight:600">{{.Framework}}</td>
-    <td>{{.TotalControls}}</td>
-    <td>{{.Tested}}</td>
-    <td style="color:#238636">{{.Passing}}</td>
-    <td style="color:{{if gt .Failing 0}}#da3633{{else}}#238636{{end}}">{{.Failing}}</td>
-    <td style="color:#6e7681">{{.Untested}}</td>
-    <td class="comp-pct" style="color:{{compColor .CompliancePct}}">{{pct .CompliancePct}}</td>
-    <td style="color:#2f81f7">{{pct .CoveragePct}}</td>
+    <td style="font-weight:600">{{.framework}}</td>
+    <td>{{.totalControls}}</td>
+    <td>{{.tested}}</td>
+    <td style="color:#238636">{{.passing}}</td>
+    <td style="color:{{if gt .failing 0.0}}#da3633{{else}}#238636{{end}}">{{.failing}}</td>
+    <td style="color:#6e7681">{{.untested}}</td>
+    <td class="comp-pct" style="color:{{compColor .compliancePct}}">{{pct .compliancePct}}</td>
+    <td style="color:#2f81f7">{{pct .coveragePct}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -360,22 +390,22 @@ tr:last-child td{border-bottom:none}
 {{end}}
 
 <div class="footer">
-  <span>{{.Agent.Hostname}} — Compliance Status</span><span>Page 5</span>
+  <span>{{.agent.hostname}} — Compliance Status</span><span>Page 5</span>
 </div>
 </div>
 
 <!-- ═══ 5. SECURITY CONTROLS INVENTORY ══════════════════════════════════ -->
 <div class="page">
 <h1>5. Detection Coverage by Tactic</h1>
-{{if .DetectionCategories}}
+{{if .detectionCategories}}
 <p style="color:#6e7681;margin-bottom:14px">Per-tactic verdict derived from this run's executed checks: <strong>PASS</strong> when every check in the tactic was prevented, <strong>FAIL</strong> when any check succeeded against the endpoint, <strong>UNKNOWN</strong> when the tactic was only skipped.</p>
 <table>
   <thead><tr><th>Tactic</th><th>Verdict</th></tr></thead>
   <tbody>
-  {{range .DetectionCategories}}
+  {{range .detectionCategories}}
   <tr>
-    <td>{{.Name}}</td>
-    <td style="font-weight:600;color:{{if eq .Result "pass"}}#238636{{else if eq .Result "fail"}}#da3633{{else}}#6e7681{{end}}">{{upper .Result}}</td>
+    <td>{{.name}}</td>
+    <td style="font-weight:600;color:{{if eq .result "pass"}}#238636{{else if eq .result "fail"}}#da3633{{else}}#6e7681{{end}}">{{upper .result}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -385,30 +415,30 @@ tr:last-child td{border-bottom:none}
 {{end}}
 
 <div class="footer">
-  <span>{{.Agent.Hostname}} — Security Inventory</span><span>Page 6</span>
+  <span>{{.agent.hostname}} — Security Inventory</span><span>Page 6</span>
 </div>
 </div>
 
 <!-- ═══ 6. SCENARIO RUN HISTORY ═════════════════════════════════════════ -->
 <div class="page">
 <h1>6. Scenario Run History</h1>
-{{if .Runs}}
+{{if .runs}}
 <table>
   <thead><tr>
     <th>Date</th><th>Scenario</th><th>Status</th><th>Risk Score</th><th>Classification</th><th>Prevention</th><th>Exposure</th><th>Tested</th><th>Failed</th>
   </tr></thead>
   <tbody>
-  {{range .Runs}}
+  {{range .runs}}
   <tr>
-    <td style="white-space:nowrap">{{fmtTime .StartedAt}}</td>
-    <td>{{.ScenarioName}}</td>
-    <td>{{.Status}}</td>
-    <td style="font-weight:700">{{.RiskScore}}</td>
-    <td>{{.Classification}}</td>
-    <td>{{fmtScore .PreventionScore}}%</td>
-    <td>{{fmtScore .ExposureScore}}%</td>
-    <td>{{.TotalTechniques}}</td>
-    <td style="color:{{if gt .FailedTechniques 0}}#da3633{{else}}#238636{{end}}">{{.FailedTechniques}}</td>
+    <td style="white-space:nowrap">{{fmtTime .startedAt}}</td>
+    <td>{{.scenarioName}}</td>
+    <td>{{.status}}</td>
+    <td style="font-weight:700">{{.riskScore}}</td>
+    <td>{{.classification}}</td>
+    <td>{{fmtScore .preventionScore}}%</td>
+    <td>{{fmtScore .exposureScore}}%</td>
+    <td>{{.totalTechniques}}</td>
+    <td style="color:{{if gt .failedTechniques 0.0}}#da3633{{else}}#238636{{end}}">{{.failedTechniques}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -418,8 +448,8 @@ tr:last-child td{border-bottom:none}
 {{end}}
 
 <div class="footer">
-  <span>{{.Agent.Hostname}} — Run History</span>
-  <span>Generated {{fmtTime .GeneratedAt}} &nbsp;·&nbsp; Audspect BAS Platform &nbsp;·&nbsp; CONFIDENTIAL</span>
+  <span>{{.agent.hostname}} — Run History</span>
+  <span>Generated {{fmtTime .generatedAt}} &nbsp;·&nbsp; Audspect BAS Platform &nbsp;·&nbsp; CONFIDENTIAL</span>
 </div>
 </div>
 
