@@ -87,6 +87,26 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_agent ON scenario_runs(agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_scenario ON scenario_runs(scenario_id)`,
 
+		// ── Phase B-1: run-event stream + denormalized progress summary ───────
+		`CREATE TABLE IF NOT EXISTS run_events (
+			run_id       text        NOT NULL,
+			seq          bigint      NOT NULL,
+			type         text        NOT NULL,
+			task_id      text        NOT NULL DEFAULT '',
+			technique_id text        NOT NULL DEFAULT '',
+			ts           timestamptz NOT NULL,
+			payload      jsonb       NOT NULL DEFAULT '{}',
+			PRIMARY KEY (run_id, seq)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, seq)`,
+
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_total   int NOT NULL DEFAULT 0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_done    int NOT NULL DEFAULT 0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_running int NOT NULL DEFAULT 0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_passed  int NOT NULL DEFAULT 0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_failed  int NOT NULL DEFAULT 0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_timeout int NOT NULL DEFAULT 0`,
+
 		// ── Agent logging tables ──────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS agent_op_logs (
 			id         bigserial    PRIMARY KEY,
