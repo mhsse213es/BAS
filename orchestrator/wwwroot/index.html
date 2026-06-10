@@ -1792,7 +1792,10 @@ function loadRuns() {
         '<td style="color:var(--muted);font-size:0.78rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
         '<td>' + (function() {
           var acts = '';
-          if (r.id) acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
+          // Live is only meaningful for runs that stream events (ART/Caldera live
+          // runs) — running, or finished with a progress summary. Posture/local-check
+          // runs never emit events, so don't offer an empty Live panel for them.
+          if (r.id && (r.status === 'running' || r.progress)) acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
           if (r.id && r.status === 'running') acts += '<button class="btn btn-outline-red btn-sm" onclick="stopRun(\'' + x(r.id) + '\')" title="Stop this run — keeps completed steps, marks the run partial">&#9632; Stop</button> ';
           if (cnt) acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
           return acts || '—';
