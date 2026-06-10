@@ -104,6 +104,33 @@ func TestInterpretARTExecutionErrors(t *testing.T) {
 	}
 }
 
+// Custom/posture checks: a check whose own PowerShell crashed (parse error) is
+// a BAS problem → ERROR, not a security FAIL. Strings are verbatim from the Full
+// Security Posture Scan report. Structured PASS:/FAIL:/SKIP: verdicts and benign
+// non-zero exits are unaffected.
+func TestInterpretCustomClassifiesScriptCrash(t *testing.T) {
+	cases := []struct {
+		name   string
+		r      ExecResult
+		stdout string
+		want   models.CheckResult
+	}{
+		{"missing terminator", ExecResult{ExitCode: 1}, `The string is missing the terminator: ".`, models.ResultError},
+		{"stray token cmdlet", ExecResult{ExitCode: 1}, "s : The term 's' is not recognized as the name of a cmdlet, function, script file, or operable program.", models.ResultError},
+		{"structured FAIL stays fail", ExecResult{ExitCode: 0}, "FAIL: UAC DISABLED — silent elevation possible", models.ResultFail},
+		{"structured PASS stays pass", ExecResult{ExitCode: 0}, "PASS: WDigest disabled", models.ResultPass},
+		{"benign nonzero, no parse error", ExecResult{ExitCode: 1}, "value not present", models.ResultFail},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, detail := interpretCustom(c.r, c.stdout)
+			if got != c.want {
+				t.Errorf("interpretCustom(%q, exit=%d) = %q, want %q (detail=%q)", c.stdout, c.r.ExitCode, got, c.want, detail)
+			}
+		})
+	}
+}
+
 // A non-zero exit that still shows the technique executed (e.g. a trailing
 // cleanup line failed) is a genuine FAIL, not an execution error.
 func TestInterpretARTRanToCompletionIsFail(t *testing.T) {

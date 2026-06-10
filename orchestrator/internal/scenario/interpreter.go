@@ -183,6 +183,12 @@ func interpretCustom(r ExecResult, combined string) (models.CheckResult, string)
 	if strings.Contains(lower2, "access denied") || strings.Contains(lower2, "blocked") {
 		return models.ResultPass, "Blocked by security controls: " + first
 	}
+	// A check whose own script could not execute (parse error, timeout, missing
+	// prerequisite, …) is a BAS problem, not a security finding — record ERROR so
+	// it is excluded from scoring rather than inflating the failure count.
+	if reason := classifyExecutionError(lower2, r.ExitCode); reason != ErrNone {
+		return models.ResultError, "Execution error (" + errorReasonLabel(reason) + "): " + first
+	}
 	return models.ResultFail, fmt.Sprintf("Step failed (exit %d): %s", r.ExitCode, first)
 }
 

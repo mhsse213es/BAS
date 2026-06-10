@@ -98,11 +98,17 @@ func classifyExecutionError(lower string, exitCode int) ErrorReason {
 		strings.Contains(lower, "cannot find the path"):
 		return ErrMissingPrerequisite
 
-	// Malformed atomic content — parser/loader/shell rejected it.
+	// Malformed content — parser/loader/shell rejected it before the technique
+	// could run. Includes PowerShell/cmd parse errors (a crashed check script is
+	// a BAS problem, not a security outcome).
 	case strings.Contains(lower, "error: invalid syntax"),
 		strings.Contains(lower, "error: invalid key name"),
 		strings.Contains(lower, "incorrect format"),
-		strings.Contains(lower, "could not load file or assembly"):
+		strings.Contains(lower, "could not load file or assembly"),
+		strings.Contains(lower, "missing the terminator"),
+		strings.Contains(lower, "unexpected token"),
+		strings.Contains(lower, "parsererror"),
+		strings.Contains(lower, "is not recognized as a cmdlet"):
 		return ErrMalformedContent
 	}
 
