@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/audspect/bas/internal/models"
 )
 
 func TestArtResolvePayloads(t *testing.T) {
@@ -124,16 +126,20 @@ func TestInterpretARTSkipAndPrereq(t *testing.T) {
 	cases := []struct {
 		name   string
 		stdout string
+		want   models.CheckResult
 	}{
-		{"explicit skip marker", "SKIP: requires external payload gsecdump.exe"},
-		{"not recognized", "'foo.exe' is not recognized as an internal or external command"},
-		{"cannot find path", "cd : Cannot find path 'C:\\x' because it does not exist."},
+		// An explicit skip marker (e.g. missing external payload) stays SKIPPED.
+		{"explicit skip marker", "SKIP: requires external payload gsecdump.exe", models.ResultSkipped},
+		// A missing binary/path means the test could not execute — that is an
+		// ERROR (BAS problem), not a security finding and not a deliberate skip.
+		{"not recognized", "'foo.exe' is not recognized as an internal or external command", models.ResultError},
+		{"cannot find path", "cd : Cannot find path 'C:\\x' because it does not exist.", models.ResultError},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got, _ := interpretART(ExecResult{ExitCode: 1}, c.stdout)
-			if got != "skipped" {
-				t.Errorf("interpretART(%q) = %q, want skipped", c.stdout, got)
+			if got != c.want {
+				t.Errorf("interpretART(%q) = %q, want %q", c.stdout, got, c.want)
 			}
 		})
 	}

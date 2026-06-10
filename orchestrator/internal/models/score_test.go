@@ -10,6 +10,44 @@ func res(tactic string, r CheckResult) SimulationResult {
 	}
 }
 
+// ResultError (BAS could not execute) must be excluded from the prevention
+// score exactly like ResultSkipped — it is not a security finding. Here one
+// real fail + one error must read as 0% prevention over a single executed
+// technique, with the error surfaced in its own count, not as a failure.
+func TestComputeScoreExcludesErrorFromScoring(t *testing.T) {
+	results := []SimulationResult{
+		res("execution", ResultFail),  // genuine finding
+		res("execution", ResultError), // BAS problem — excluded
+		res("execution", ResultPass),  // blocked
+	}
+	s := ComputeScore(results, nil)
+
+	if s.ErroredTechniques != 1 {
+		t.Errorf("ErroredTechniques = %d, want 1", s.ErroredTechniques)
+	}
+	if s.FailedTechniques != 1 {
+		t.Errorf("FailedTechniques = %d, want 1 (error must not count as fail)", s.FailedTechniques)
+	}
+	if s.PassedTechniques != 1 {
+		t.Errorf("PassedTechniques = %d, want 1", s.PassedTechniques)
+	}
+	// Prevention denominator excludes the error: 1 pass of 2 executed = 50%.
+	if s.PreventionScore != 50 {
+		t.Errorf("PreventionScore = %.1f, want 50 (error excluded from denominator)", s.PreventionScore)
+	}
+}
+
+// An ERROR must never become a critical finding, even at Critical severity.
+func TestComputeScoreErrorIsNotACriticalFinding(t *testing.T) {
+	results := []SimulationResult{
+		{Technique: AttackTechnique{Tactic: "credential-access"}, Result: ResultError, Severity: "Critical"},
+	}
+	s := ComputeScore(results, nil)
+	if len(s.CriticalFailures) != 0 {
+		t.Errorf("CriticalFailures = %d, want 0 (errors are not findings)", len(s.CriticalFailures))
+	}
+}
+
 // KillChainCoverage is breadth: distinct tactics tested ÷ 14, independent of
 // pass/fail. A run where every technique fails should still report non-zero
 // coverage — this is the bug the metric split fixes.

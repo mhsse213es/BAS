@@ -58,6 +58,8 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		executed int
 		passed   int
 		failed   int
+		errored  int
+		skipped  int
 
 		weightedPassed float64
 		weightedTotal  float64
@@ -77,7 +79,15 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		tactic := r.Technique.Tactic
 		tw := tacticExposureWeight(tactic)
 
-		if r.Result == ResultSkipped {
+		// ResultError (BAS could not execute) and ResultSkipped (intentionally not
+		// run) are excluded from the security score — they answer "did the BAS hit
+		// a problem", not "did a control allow the technique".
+		switch r.Result {
+		case ResultSkipped:
+			skipped++
+			continue
+		case ResultError:
+			errored++
 			continue
 		}
 		executed++
@@ -242,9 +252,11 @@ func ComputeScore(results []SimulationResult, prev *Score) Score {
 		TacticBreakdown:         tacticBreakdown,
 		CriticalFailures:        criticalFailures,
 
-		TotalTechniques:  total,
-		PassedTechniques: passed,
-		FailedTechniques: failed,
+		TotalTechniques:   total,
+		PassedTechniques:  passed,
+		FailedTechniques:  failed,
+		ErroredTechniques: errored,
+		SkippedTechniques: skipped,
 
 		RiskScore:               riskScore,
 		Classification:          classify(riskScore),

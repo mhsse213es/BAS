@@ -15,6 +15,12 @@ const (
 	ResultFail    CheckResult = "fail"
 	ResultSkipped CheckResult = "skipped"
 	ResultBlocked CheckResult = "blocked"
+	// ResultError means the BAS engine could not execute the technique correctly
+	// (timeout, scheduler contention, missing prerequisite, malformed content,
+	// interactive prompt, …). It is NOT a security outcome and is excluded from
+	// the prevention/exposure score — it answers "did the BAS hit a problem",
+	// never "did a control allow the technique".
+	ResultError CheckResult = "error"
 )
 
 // AttackTechnique is a MITRE ATT&CK technique reference.
@@ -101,9 +107,11 @@ type Score struct {
 	CriticalFailures        []CriticalFailure      `json:"criticalFailures"`        // Critical/High severity fails, shown prominently
 
 	// ── Aggregate counts ─────────────────────────────────────────────────────
-	TotalTechniques  int `json:"totalTechniques"`
-	PassedTechniques int `json:"passedTechniques"`
-	FailedTechniques int `json:"failedTechniques"`
+	TotalTechniques   int `json:"totalTechniques"`
+	PassedTechniques  int `json:"passedTechniques"`
+	FailedTechniques  int `json:"failedTechniques"`
+	ErroredTechniques int `json:"erroredTechniques"` // could not execute correctly — excluded from scoring
+	SkippedTechniques int `json:"skippedTechniques"` // intentionally not run — excluded from scoring
 
 	// ── Legacy / backward-compat fields ──────────────────────────────────────
 	RiskScore               int    `json:"riskScore"`               // = round(ExposureScore * amplifier), clamped 0–100

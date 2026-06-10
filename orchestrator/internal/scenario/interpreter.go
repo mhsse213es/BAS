@@ -72,46 +72,24 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 // The orchestrator now resolves commands locally and sends raw PowerShell/cmd —
 // no Invoke-AtomicTest on the endpoint, so output is plain shell output.
 //
-//   - access denied / blocked by control  → PASS  (control worked)
-//   - exit 0 / technique ran              → FAIL  (control did not stop it)
-//   - exit non-zero without clear signal  → FAIL  (attempted; outcome uncertain)
+// Classification is delegated to classifyExecution (outcome.go), which separates
+// a real security outcome from a BAS execution problem:
+//   - blocked by a control                → PASS  (control worked)
+//   - technique ran (exit 0 / completion) → FAIL  (control did not stop it)
+//   - timeout/contention/missing/malformed → ERROR (BAS could not execute)
+//   - explicit skip marker                → SKIPPED
 func interpretART(r ExecResult, combined string) (models.CheckResult, string) {
-	lower := strings.ToLower(combined)
-
-	// Explicit SKIP marker (e.g. missing external payload, technique not in store).
-	if first := strings.TrimSpace(firstLine(combined)); len(first) >= 5 && strings.EqualFold(first[:5], "skip:") {
-		return models.ResultSkipped, strings.TrimSpace(first[5:])
+	outcome, _, detail := classifyExecution(r, combined)
+	switch outcome {
+	case OutcomeSkipped:
+		return models.ResultSkipped, detail
+	case OutcomeBlocked:
+		return models.ResultPass, detail
+	case OutcomeError:
+		return models.ResultError, detail
+	default: // OutcomeExecuted
+		return models.ResultFail, detail
 	}
-
-	if sig := blockSignature(lower); sig != "" {
-		return models.ResultPass, "Security control blocked the technique (" + sig + "): " + firstLine(combined)
-	}
-
-	// Prerequisite/setup failures mean the test could not run — they are NOT a
-	// security outcome, so record them as skipped rather than pass/fail.
-	if isPrereqFailure(lower) {
-		return models.ResultSkipped, "Test prerequisite missing — not executed: " + firstLine(combined)
-	}
-
-	// Silent blocks: EDR/AV often kills or denies the process without printing a
-	// recognizable message. Treat well-known access-denied / termination exit
-	// codes as a PASS so a real prevention is not mis-scored as a failure.
-	if isBlockExitCode(r.ExitCode) {
-		out := firstLine(combined)
-		if out == "" {
-			out = "process terminated before completion"
-		}
-		return models.ResultPass, fmt.Sprintf("Security control blocked the technique (exit 0x%X): %s", uint32(r.ExitCode), out)
-	}
-
-	if r.ExitCode == 0 {
-		out := firstLine(combined)
-		if out == "" {
-			out = "technique ran to completion"
-		}
-		return models.ResultFail, "Technique executed: " + out
-	}
-	return models.ResultFail, fmt.Sprintf("Technique exited %d: %s", r.ExitCode, firstLine(combined))
 }
 
 // blockSignature returns a short label when the output contains a known
@@ -144,20 +122,6 @@ func blockSignature(lower string) string {
 	return ""
 }
 
-// isPrereqFailure reports whether output indicates the test could not run
-// because a binary, file, path or module it depends on was missing — a setup
-// failure, not a security outcome. lower must already be lower-cased.
-func isPrereqFailure(lower string) bool {
-	return strings.Contains(lower, "is not recognized as an internal or external command") ||
-		strings.Contains(lower, "is not recognized as the name of a cmdlet") ||
-		strings.Contains(lower, "cannot find path") ||
-		strings.Contains(lower, "could not find") ||
-		strings.Contains(lower, "no such file or directory") ||
-		strings.Contains(lower, "the system cannot find the file") ||
-		strings.Contains(lower, "the system cannot find the path") ||
-		strings.Contains(lower, "cannot find the path")
-}
-
 // isBlockExitCode reports whether an exit code indicates the process was denied
 // or terminated by a security control rather than run to completion.
 //   - 5            ERROR_ACCESS_DENIED (Win32)
@@ -185,8 +149,13 @@ func interpretCaldera(r ExecResult, combined string) (models.CheckResult, string
 		strings.Contains(lower, "restricted") {
 		return models.ResultPass, "Ability was blocked by security controls: " + firstLine(combined)
 	}
+	// A BAS execution problem (timeout, contention, missing prereq, malformed) is
+	// not a security outcome — record it as ERROR, not a finding.
+	if reason := classifyExecutionError(lower, r.ExitCode); reason != ErrNone {
+		return models.ResultError, "Execution error (" + errorReasonLabel(reason) + "): " + firstLine(combined)
+	}
 	if r.ExitCode != 0 {
-		return models.ResultFail, fmt.Sprintf("Ability exited with code %d: %s", r.ExitCode, firstLine(combined))
+		return models.ResultError, fmt.Sprintf("Execution error (exit %d): %s", r.ExitCode, firstLine(combined))
 	}
 	return models.ResultFail, "Ability executed: " + firstLine(combined)
 }
