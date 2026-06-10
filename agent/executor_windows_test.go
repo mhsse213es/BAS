@@ -4,11 +4,44 @@ package main
 
 import (
 	"context"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/audspect/bas-agent/sched"
 )
+
+// A console command that prompts on stdin (here cmd's `set /p`, the same pattern
+// reg.exe uses for "Overwrite (Yes/No)?") must be answered by declinePromptInput
+// and complete promptly — not hang reading the NUL device until killed.
+func TestDeclinePromptInputAnswersConsolePrompt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// set /p blocks until it reads a line from stdin; echo proves what it got.
+	// /v:on enables delayed expansion so !ANS! reflects the value read at runtime
+	// (plain %ANS% would expand at parse time, before set /p runs).
+	cmd := exec.CommandContext(ctx, "cmd", "/v:on", "/c", "set /p ANS=Overwrite? & echo ANS=[!ANS!]")
+	cmd.Stdin = declinePromptInput()
+
+	done := make(chan struct{})
+	var out []byte
+	var err error
+	go func() { out, err = cmd.CombinedOutput(); close(done) }()
+
+	select {
+	case <-done:
+	case <-time.After(6 * time.Second):
+		t.Fatal("prompting command hung on stdin — declinePromptInput did not answer it")
+	}
+	if err != nil {
+		t.Fatalf("command error: %v (out=%q)", err, out)
+	}
+	if !strings.Contains(string(out), "ANS=[n]") {
+		t.Errorf("prompt was not answered with 'n'; output=%q", string(out))
+	}
+}
 
 // TestExecStepExecuteTimeout verifies layer 2: a command that runs past its
 // execute timeout is killed and returns an explicit TimedOut verdict (exit -1)

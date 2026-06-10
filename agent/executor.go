@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -14,6 +15,19 @@ import (
 )
 
 const maxOutputBytes = 8192
+
+// declinePromptInput answers any interactive console prompt a scenario step
+// might raise (e.g. reg.exe's `Overwrite (Yes/No)?`) with a safe "No" plus a
+// newline, so the child proceeds or aborts instead of blocking on stdin until
+// the step timeout. Without a real stdin the child reads the NUL device, gets
+// EOF, and a Yes/No loop re-prompts in a tight loop — flooding output and
+// burning the full 120s (seen in T1003.002 SAM dumping). "No" is the
+// conservative answer: it declines destructive actions. Bounded (fits the OS
+// pipe buffer, so it never deadlocks a step that ignores stdin) and ends at EOF
+// so a pathological re-prompt loop still terminates.
+func declinePromptInput() io.Reader {
+	return strings.NewReader(strings.Repeat("n\r\n", 256))
+}
 
 func StagePayloads(payloads []Payload, dir string) error {
 	for _, p := range payloads {
@@ -100,6 +114,8 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	// Never let an interactive prompt block the step on stdin (see helper).
+	cmd.Stdin = declinePromptInput()
 
 	if step.PayloadDir != "" || len(step.Env) > 0 {
 		env := os.Environ()
