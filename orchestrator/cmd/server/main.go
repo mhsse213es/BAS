@@ -205,7 +205,9 @@ func main() {
 // last heartbeat is older than 90 seconds. Broadcasts each change so the
 // dashboard reflects the real status without a manual refresh.
 func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
-	const staleAfter = 90 * time.Second
+	// Single source of truth for the offline threshold, shared with the API's
+	// read-path (effectiveAgentStatus) and dispatch-path (runIsStale) checks.
+	staleAfter := api.AgentOfflineAfter
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {

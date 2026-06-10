@@ -212,6 +212,7 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
+	now := time.Now()
 	var agents []models.Agent
 	for rows.Next() {
 		var a models.Agent
@@ -222,6 +223,9 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 			&stateStr, &policyRaw, &a.EnrolledAt); err != nil {
 			continue
 		}
+		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
+		// last_update, so surface it as offline rather than its frozen last status.
+		a.Status = effectiveAgentStatus(a.Status, a.LastUpdate, now)
 		a.State = models.AgentState(stateStr)
 		var p models.PolicyBundle
 		if err := json.Unmarshal([]byte(policyRaw), &p); err == nil {
@@ -677,22 +681,27 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	// new run instead — unless the existing run is stale (the agent likely died
 	// mid-run), in which case we mark it failed so it stops blocking and proceed.
 	var runningID string
-	var runningStarted time.Time
+	var runningStarted, agentLastUpdate time.Time
 	if qErr := h.db.QueryRow(r.Context(),
-		`SELECT id, started_at FROM scenario_runs
-		  WHERE agent_id = $1 AND status = 'running'
-		  ORDER BY started_at DESC LIMIT 1`, req.AgentID,
-	).Scan(&runningID, &runningStarted); qErr == nil && runningID != "" {
-		if time.Since(runningStarted) < staleRunGuard {
+		`SELECT sr.id, sr.started_at, a.last_update
+		   FROM scenario_runs sr
+		   JOIN agents a ON a.agent_id = sr.agent_id
+		  WHERE sr.agent_id = $1 AND sr.status = 'running'
+		  ORDER BY sr.started_at DESC LIMIT 1`, req.AgentID,
+	).Scan(&runningID, &runningStarted, &agentLastUpdate); qErr == nil && runningID != "" {
+		if !runIsStale(runningStarted, agentLastUpdate, time.Now()) {
 			jsonError(w, "agent busy — a scenario is already running on this agent; wait for it to finish before starting another", http.StatusConflict)
 			return
 		}
-		// Stale: free the abandoned run so this agent isn't locked out.
+		// Stale (agent offline or past the staleRunGuard ceiling): free the
+		// abandoned run as 'partial' (its steps did run) so this agent isn't
+		// locked out.
 		_, _ = h.db.Exec(r.Context(),
-			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW()
+			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
 			  WHERE id = $1 AND status = 'running'`, runningID)
-		log.Printf("[scenario] freed stale running run %s on agent %s (started %s)",
-			runningID, req.AgentID, runningStarted.UTC().Format(time.RFC3339))
+		log.Printf("[scenario] freed stale running run %s on agent %s (started %s, agent last seen %s)",
+			runningID, req.AgentID, runningStarted.UTC().Format(time.RFC3339),
+			agentLastUpdate.UTC().Format(time.RFC3339))
 	}
 
 	// Create a run record in RUNNING state, stamped with the requesting user
