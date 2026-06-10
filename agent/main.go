@@ -19,7 +19,10 @@ const (
 )
 
 func main() {
-	log.SetFlags(log.Ltime | log.Lmsgprefix)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmsgprefix)
+	if p := initFileLogging(); p != "" {
+		log.Printf("[*] agent log file: %s", p)
+	}
 
 	flagInstall := flag.Bool("install", false, "Install agent as a system service (requires root/admin)")
 	flagUninstall := flag.Bool("uninstall", false, "Uninstall agent system service")
