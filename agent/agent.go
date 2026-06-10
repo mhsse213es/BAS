@@ -503,6 +503,11 @@ func (a *Agent) runLocalScan(scenarioID, runID string) {
 	log.Printf("[*] local scan started: scenario=%s run=%s", scenarioID, runID)
 	a.setStatus("scanning")
 	a.sendHeartbeat("scanning")
+	// Populate the local operation so the status console's operation panel agrees
+	// with the "Simulation In Progress" banner (the banner is driven by status,
+	// the panel by currentOp — without this the panel reads "No active simulation"
+	// during a posture scan). The ART path does this in runScenario.
+	a.localSt.StartOperation(scenarioID, scenarioID, "", 0)
 
 	categories := RunScenarioChecks(scenarioID)
 
@@ -540,6 +545,11 @@ func (a *Agent) runLocalScan(scenarioID, runID string) {
 	} else {
 		log.Printf("[+] local scan submitted: scenario=%s checks=%d", scenarioID, len(checks))
 	}
+
+	// Close out the local operation so the console shows the completed scan
+	// instead of leaving a stale "running" panel.
+	a.localSt.UpdateProgress(len(checks), len(checks), "Upload")
+	a.localSt.CompleteOperation("Completed", LocalEvidenceStats{EventsCollected: len(checks)})
 
 	a.setStatus("idle")
 	a.sendHeartbeat("idle")
