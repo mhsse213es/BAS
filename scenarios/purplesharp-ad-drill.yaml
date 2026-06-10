@@ -1,4 +1,4 @@
-﻿id: purplesharp-ad-drill
+id: purplesharp-ad-drill
 name: PurpleSharp AD Credential Drill (Three-Tier)
 description: >
   Active Directory credential-access drill based on PurpleSharp methodology with
@@ -8,11 +8,11 @@ description: >
   - Posture (default, safe anywhere): validates the defences (LSA Protection,
     WDigest, Credential Guard, LSASS audit, Kerberos AES, lockout policy).
   - Telemetry (opt-in, production-safe under approval): real, identity-safe
-    techniques â€” AD LDAP enumeration, a single Kerberos TGS request, an LSASS
+    techniques  -  AD LDAP enumeration, a single Kerberos TGS request, an LSASS
     read-handle (no dump), and a lockout-safe single-probe spray. Generates
     authentic 4662/4769/Sysmon-10/4625 telemetry with NO credential access,
     NO cracking, NO persistence.
-  - Lab (opt-in, isolated AD range only): full-fidelity â€” comsvcs LSASS MiniDump
+  - Lab (opt-in, isolated AD range only): full-fidelity  -  comsvcs LSASS MiniDump
     (created+deleted, no extraction) and low-volume spray against ALLOWLISTED
     test accounts, capped below the lockout threshold.
 
@@ -66,13 +66,13 @@ steps:
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $dom = (Get-CimInstance Win32_ComputerSystem).Domain
-      if (-not $dom -or $dom -eq 'WORKGROUP') { Write-Output "SKIP: not domain-joined â€” AD enumeration requires a domain."; return }
+      if (-not $dom -or $dom -eq 'WORKGROUP') { Write-Output "SKIP: not domain-joined  -  AD enumeration requires a domain."; return }
       $ds = New-Object System.DirectoryServices.DirectorySearcher
       $ds.PageSize = 50
       $ds.Filter = '(objectClass=user)';                                  $users = @($ds.FindAll()).Count
       $ds.Filter = '(&(objectClass=user)(servicePrincipalName=*))';       $spns  = @($ds.FindAll()).Count
       $ds.Filter = '(objectClass=computer)';                              $comps = @($ds.FindAll()).Count
-      Write-Output "EXEC: AD LDAP enumeration â€” users=$users SPN-accounts=$spns computers=$comps. Expect directory-service access telemetry (EID 4662). Read-only recon, nothing modified."
+      Write-Output "EXEC: AD LDAP enumeration  -  users=$users SPN-accounts=$spns computers=$comps. Expect directory-service access telemetry (EID 4662). Read-only recon, nothing modified."
     cleanup: ""
 
   - name: "Kerberoasting (single TGS request)"
@@ -92,7 +92,7 @@ steps:
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $dom = (Get-CimInstance Win32_ComputerSystem).Domain
-      if (-not $dom -or $dom -eq 'WORKGROUP') { Write-Output "SKIP: not domain-joined â€” Kerberoasting requires Active Directory."; return }
+      if (-not $dom -or $dom -eq 'WORKGROUP') { Write-Output "SKIP: not domain-joined  -  Kerberoasting requires Active Directory."; return }
       Add-Type -AssemblyName System.IdentityModel
       $searcher = New-Object System.DirectoryServices.DirectorySearcher
       $searcher.Filter = '(&(objectClass=user)(servicePrincipalName=*)(!(objectClass=computer)))'
@@ -100,7 +100,7 @@ steps:
       if (-not $res) { Write-Output "SKIP: no SPN-enabled user accounts found."; return }
       $spn = $res.Properties['serviceprincipalname'][0]
       [void](New-Object System.IdentityModel.Tokens.KerberosRequestorSecurityToken -ArgumentList $spn)
-      Write-Output "EXEC: requested a Kerberos TGS for SPN '$spn' â€” expect Security Event ID 4769. Ticket NOT exported, cracked, or reused."
+      Write-Output "EXEC: requested a Kerberos TGS for SPN '$spn'  -  expect Security Event ID 4769. Ticket NOT exported, cracked, or reused."
     cleanup: |
       klist purge | Out-Null
 
@@ -128,9 +128,9 @@ steps:
       $h = [BasLsa]::OpenProcess(0x0410, $false, $lsass.Id)
       if ($h -ne [IntPtr]::Zero) {
         [void][BasLsa]::CloseHandle($h)
-        Write-Output "EXEC: opened a PROCESS_VM_READ handle to lsass.exe and closed it (no memory read, no dump) â€” expect Sysmon EID 10 / EDR ProcessAccess alert. NO credentials accessed."
+        Write-Output "EXEC: opened a PROCESS_VM_READ handle to lsass.exe and closed it (no memory read, no dump)  -  expect Sysmon EID 10 / EDR ProcessAccess alert. NO credentials accessed."
       } else {
-        Write-Output "PASS: could not open a read handle to lsass â€” access blocked (Credential Guard / RunAsPPL / EDR)."
+        Write-Output "PASS: could not open a read handle to lsass  -  access blocked (Credential Guard / RunAsPPL / EDR)."
       }
     cleanup: ""
 
@@ -151,12 +151,12 @@ steps:
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $dom = (Get-CimInstance Win32_ComputerSystem).Domain
-      if (-not $dom -or $dom -eq 'WORKGROUP') { Write-Output "SKIP: not domain-joined â€” spray requires Active Directory."; return }
+      if (-not $dom -or $dom -eq 'WORKGROUP') { Write-Output "SKIP: not domain-joined  -  spray requires Active Directory."; return }
       Add-Type -AssemblyName System.DirectoryServices.AccountManagement
       $ctx = New-Object System.DirectoryServices.AccountManagement.PrincipalContext('Domain', $dom)
       $probe = "bas_spray_probe_$(Get-Random)"
       [void]$ctx.ValidateCredentials($probe, "BAS-Spray-Test!$(Get-Random)")
-      Write-Output "EXEC: one failed domain auth for non-existent probe '$probe' â€” expect Security Event ID 4625. Lockout-safe (no real account targeted)."
+      Write-Output "EXEC: one failed domain auth for non-existent probe '$probe'  -  expect Security Event ID 4625. Lockout-safe (no real account targeted)."
     cleanup: ""
 
   - name: "LSASS MiniDump (lab-only, create + delete)"
@@ -183,9 +183,9 @@ steps:
       if (Test-Path $out) {
         $sz = (Get-Item $out).Length
         Remove-Item $out -Force
-        Write-Output "FAIL: LSASS MiniDump of $sz bytes created via comsvcs.dll (then deleted, never read) â€” expect Sysmon EID 10. LSASS is NOT protected."
+        Write-Output "FAIL: LSASS MiniDump of $sz bytes created via comsvcs.dll (then deleted, never read)  -  expect Sysmon EID 10. LSASS is NOT protected."
       } else {
-        Write-Output "PASS: LSASS dump produced no file â€” blocked by RunAsPPL / Credential Guard / Defender (good)."
+        Write-Output "PASS: LSASS dump produced no file  -  blocked by RunAsPPL / Credential Guard / Defender (good)."
       }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_lsass_*.dmp') -Force -ErrorAction SilentlyContinue
@@ -209,12 +209,12 @@ steps:
       $dom = (Get-CimInstance Win32_ComputerSystem).Domain
       if (-not $dom -or $dom -eq 'WORKGROUP') { Write-Output "SKIP: not domain-joined."; return }
       $allow = $env:BAS_SPRAY_ALLOWLIST
-      if ([string]::IsNullOrWhiteSpace($allow)) { Write-Output "SKIP: no spray_account_allowlist configured â€” refusing to spray non-allowlisted accounts (lockout safety)."; return }
+      if ([string]::IsNullOrWhiteSpace($allow)) { Write-Output "SKIP: no spray_account_allowlist configured  -  refusing to spray non-allowlisted accounts (lockout safety)."; return }
       $max = [int]$env:BAS_MAX_SPRAY_ATTEMPTS; if ($max -le 0) { $max = 3 }
       $accounts = $allow.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }
       Add-Type -AssemblyName System.DirectoryServices.AccountManagement
       $ctx = New-Object System.DirectoryServices.AccountManagement.PrincipalContext('Domain', $dom)
       $n = 0
       foreach ($acct in $accounts) { if ($n -ge $max) { break }; [void]$ctx.ValidateCredentials($acct, "BAS-Spray-DoNotUse-$(Get-Random)"); $n++ }
-      Write-Output "EXEC: low-volume spray â€” $n single failed attempt(s) against allowlisted test account(s) [$($accounts -join ', ')], capped at $max (below lockout threshold). Expect Security Event ID 4625. One attempt each: no account locked."
+      Write-Output "EXEC: low-volume spray  -  $n single failed attempt(s) against allowlisted test account(s) [$($accounts -join ', ')], capped at $max (below lockout threshold). Expect Security Event ID 4625. One attempt each: no account locked."
     cleanup: ""

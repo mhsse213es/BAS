@@ -1,12 +1,12 @@
-﻿id: lolbin-execution-coverage
-name: LOLBin Execution Coverage â€” Full Three-Tier Orchestration
+id: lolbin-execution-coverage
+name: LOLBin Execution Coverage  -  Full Three-Tier Orchestration
 description: >
   Campaign-grade Living-off-the-Land Binary (LOLBin) adversary emulation.
-  Not isolated atomic tests â€” realistic process ancestry, chained execution,
+  Not isolated atomic tests  -  realistic process ancestry, chained execution,
   and authentic parent-child telemetry for EDR/SIEM/Sysmon pressure-testing.
 
   TIERS:
-  - Posture (default, safe anywhere): five categories â€” LOLBin exposure
+  - Posture (default, safe anywhere): five categories  -  LOLBin exposure
     (AppLocker, WDAC, PS Constrained Language, script interpreter restrictions,
     ASR rules), logging & detection (Sysmon, ScriptBlock, PS transcription,
     command-line auditing, WMI activity logging, AMSI), execution surface
@@ -14,15 +14,15 @@ description: >
     key LOLBin signature verification), parent-child protection (Office/browser
     child-process ASR rules).
   - Telemetry (opt-in, production-safe): 11 LOLBins with authentic parent-child
-    chains and real EDR/Sysmon signals â€” PowerShell (winwordâ†’PS), MSHTA (â†’cmd),
+    chains and real EDR/Sysmon signals  -  PowerShell (winword->PS), MSHTA (->cmd),
     Regsvr32 Squiblydoo (scrobj.dll), Rundll32 (exported function), InstallUtil
-    (.NET assembly), MSBuild (inline task), WMI (WmiPrvSEâ†’cmd), Certutil
-    (encode/decode/hash), Schtasks (create+delete), Cscript/Wscript (â†’cmd),
+    (.NET assembly), MSBuild (inline task), WMI (WmiPrvSE->cmd), Certutil
+    (encode/decode/hash), Schtasks (create+delete), Cscript/Wscript (->cmd),
     BITSAdmin (job create+cancel). No persistence, no destructive payload,
     no external C2.
-  - Lab (opt-in, isolated range only): five full-fidelity chains â€” Office attack
-    chain (winwordâ†’mshtaâ†’PS), Squiblydoo with localhost BAS listener, Rundll32
-    with Alternate Data Stream, service-to-LOLBin (services.exeâ†’rundll32),
+  - Lab (opt-in, isolated range only): five full-fidelity chains  -  Office attack
+    chain (winword->mshta->PS), Squiblydoo with localhost BAS listener, Rundll32
+    with Alternate Data Stream, service-to-LOLBin (services.exe->rundll32),
     WMI remote execution simulation.
 
   DETECTION COVERAGE: every step defines Sysmon EIDs, Windows EIDs, expected
@@ -57,9 +57,9 @@ live_policy:
 
 # Lab chains (Portion 4) to follow.
 steps:
-  # â”€â”€ Telemetry LOLBins 1-6 (Portion 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Telemetry LOLBins 1-6 (Portion 2) --------------------------------------
 
-  - name: "PowerShell LOLBin (T1059.001 â€” winwordâ†’PS chain)"
+  - name: "PowerShell LOLBin (T1059.001  -  winword->PS chain)"
     technique_id: T1059.001
     framework: custom
     executor: powershell
@@ -73,8 +73,8 @@ steps:
       - "Sysmon EID 1: Image=powershell.exe ParentImage=%TEMP%\\winword.exe"
       - "Security EID 4688: powershell.exe with -nop -w hidden -c [BAS-SIM-PS]"
     detection:
-      - "EDR: Office process spawning PowerShell â€” Sigma rule proc_creation_win_office_spawn_process.yml"
-      - "SIEM: winword.exeâ†’powershell.exe parent-child chain"
+      - "EDR: Office process spawning PowerShell  -  Sigma rule proc_creation_win_office_spawn_process.yml"
+      - "SIEM: winword.exe->powershell.exe parent-child chain"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $tmp = Join-Path $env:TEMP 'winword.exe'
@@ -87,11 +87,11 @@ steps:
       $p = [System.Diagnostics.Process]::Start($psi)
       if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $tmp -Force -ErrorAction SilentlyContinue
-      if ($ec -ge 0) { Write-Output "EXEC T1059.001: winword->powershell chain fired (exit $ec) â€” Sysmon EID 1 ParentImage=winword.exe. [BAS-SIM]" } else { Write-Output "PASS: chain blocked â€” AppLocker/WDAC/EDR prevented Officeâ†’PS execution." }
+      if ($ec -ge 0) { Write-Output "EXEC T1059.001: winword->powershell chain fired (exit $ec)  -  Sysmon EID 1 ParentImage=winword.exe. [BAS-SIM]" } else { Write-Output "PASS: chain blocked  -  AppLocker/WDAC/EDR prevented Office->PS execution." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
 
-  - name: "MSHTA LOLBin (T1218.005 â€” mshtaâ†’cmd chain)"
+  - name: "MSHTA LOLBin (T1218.005  -  mshta->cmd chain)"
     technique_id: T1218.005
     framework: custom
     executor: powershell
@@ -105,7 +105,7 @@ steps:
       - "Sysmon EID 1: mshta.exe; then cmd.exe with ParentImage=mshta.exe"
       - "Security EID 4688: mshta.exe + cmd.exe"
     detection:
-      - "EDR: mshta.exe spawning cmd.exe â€” Sigma rule proc_creation_win_mshta_spawn_process.yml"
+      - "EDR: mshta.exe spawning cmd.exe  -  Sigma rule proc_creation_win_mshta_spawn_process.yml"
       - "SIEM: mshta.exe executing file from %TEMP%"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -117,11 +117,11 @@ steps:
       if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $hta -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $hta)
-      if ($ec -ge 0) { Write-Output "EXEC T1218.005: mshta->cmd chain fired (exit $ec, cleaned=$cleaned) â€” Sysmon EID 1 chain mshta->cmd. [BAS-SIM]" } else { Write-Output "PASS: mshta.exe blocked â€” AppLocker/ASR/WDAC prevented HTA execution." }
+      if ($ec -ge 0) { Write-Output "EXEC T1218.005: mshta->cmd chain fired (exit $ec, cleaned=$cleaned)  -  Sysmon EID 1 chain mshta->cmd. [BAS-SIM]" } else { Write-Output "PASS: mshta.exe blocked  -  AppLocker/ASR/WDAC prevented HTA execution." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_lolbin_mshta_*.hta') -Force -ErrorAction SilentlyContinue
 
-  - name: "Regsvr32 Squiblydoo (T1218.010 â€” regsvr32â†’scrobj.dll chain)"
+  - name: "Regsvr32 Squiblydoo (T1218.010  -  regsvr32->scrobj.dll chain)"
     technique_id: T1218.010
     framework: custom
     executor: powershell
@@ -129,14 +129,14 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: medium
-    blast_radius: "Creates empty .sct scriptlet in %TEMP%, loads via regsvr32 /i scrobj.dll (no payload â€” JScript body empty). File deleted after. No remote retrieval."
+    blast_radius: "Creates empty .sct scriptlet in %TEMP%, loads via regsvr32 /i scrobj.dll (no payload  -  JScript body empty). File deleted after. No remote retrieval."
     reversible: true
     telemetry:
       - "Sysmon EID 7: scrobj.dll image load by regsvr32.exe"
       - "Sysmon EID 1: regsvr32.exe with /s /n /u /i argument"
       - "Security EID 4688: regsvr32.exe"
     detection:
-      - "EDR: regsvr32 /i:*.sct scrobj.dll â€” Sigma rule proc_creation_win_regsvr32_squiblydoo.yml"
+      - "EDR: regsvr32 /i:*.sct scrobj.dll  -  Sigma rule proc_creation_win_regsvr32_squiblydoo.yml"
       - "SIEM: regsvr32.exe with /i: argument pointing to %TEMP%"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -148,11 +148,11 @@ steps:
       if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $sct -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $sct)
-      if ($ec -ge 0) { Write-Output "EXEC T1218.010: regsvr32 Squiblydoo loaded scrobj.dll (exit $ec, cleaned=$cleaned) â€” Sysmon EID 7 scrobj.dll. Empty payload. [BAS-SIM]" } else { Write-Output "PASS: regsvr32/scrobj.dll blocked â€” AppLocker/WDAC/ASR prevented Squiblydoo." }
+      if ($ec -ge 0) { Write-Output "EXEC T1218.010: regsvr32 Squiblydoo loaded scrobj.dll (exit $ec, cleaned=$cleaned)  -  Sysmon EID 7 scrobj.dll. Empty payload. [BAS-SIM]" } else { Write-Output "PASS: regsvr32/scrobj.dll blocked  -  AppLocker/WDAC/ASR prevented Squiblydoo." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_lolbin_sct_*.sct') -Force -ErrorAction SilentlyContinue
 
-  - name: "Rundll32 LOLBin (T1218.011 â€” exported function execution)"
+  - name: "Rundll32 LOLBin (T1218.011  -  exported function execution)"
     technique_id: T1218.011
     framework: custom
     executor: powershell
@@ -160,22 +160,22 @@ steps:
     fidelity: telemetry-safe
     production_safe: true
     risk: low
-    blast_radius: "Calls rundll32.exe with advapi32.dll,ProcessIdleTasks â€” valid no-op exported function. No payload, no file write, no network."
+    blast_radius: "Calls rundll32.exe with advapi32.dll,ProcessIdleTasks  -  valid no-op exported function. No payload, no file write, no network."
     reversible: true
     telemetry:
       - "Sysmon EID 1: rundll32.exe with advapi32.dll,ProcessIdleTasks argument"
       - "Security EID 4688: rundll32.exe"
     detection:
-      - "EDR: rundll32.exe with non-standard DLL argument â€” Sigma rule proc_creation_win_rundll32_susp_activity.yml"
+      - "EDR: rundll32.exe with non-standard DLL argument  -  Sigma rule proc_creation_win_rundll32_susp_activity.yml"
       - "SIEM: rundll32.exe invocation from powershell.exe parent"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $p = Start-Process 'rundll32.exe' -ArgumentList 'advapi32.dll,ProcessIdleTasks' -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
       if ($p) { $p.WaitForExit(5000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
-      if ($ec -ge 0) { Write-Output "EXEC T1218.011: rundll32.exe advapi32.dll,ProcessIdleTasks ran (exit $ec) â€” Sysmon EID 1 rundll32 with DLL arg. [BAS-SIM]" } else { Write-Output "PASS: rundll32.exe execution blocked â€” AppLocker/WDAC denied rundll32." }
+      if ($ec -ge 0) { Write-Output "EXEC T1218.011: rundll32.exe advapi32.dll,ProcessIdleTasks ran (exit $ec)  -  Sysmon EID 1 rundll32 with DLL arg. [BAS-SIM]" } else { Write-Output "PASS: rundll32.exe execution blocked  -  AppLocker/WDAC denied rundll32." }
     cleanup: ""
 
-  - name: "InstallUtil LOLBin (T1218.004 â€” .NET assembly load)"
+  - name: "InstallUtil LOLBin (T1218.004  -  .NET assembly load)"
     technique_id: T1218.004
     framework: custom
     executor: powershell
@@ -189,25 +189,25 @@ steps:
       - "Sysmon EID 1: InstallUtil.exe with /logfile= /LogToConsole=false /U argument"
       - "Security EID 4688: InstallUtil.exe"
     detection:
-      - "EDR: InstallUtil.exe loading assembly from %TEMP% â€” Sigma rule proc_creation_win_susp_use_of_installutil.yml"
+      - "EDR: InstallUtil.exe loading assembly from %TEMP%  -  Sigma rule proc_creation_win_susp_use_of_installutil.yml"
       - "SIEM: InstallUtil.exe invoked outside of software install context"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
       $dll = Join-Path $env:TEMP "bas_installutil_$runId.dll"
       $src = 'using System;using System.ComponentModel;public class BASInstall:System.Configuration.Install.Installer{public BASInstall(){} }'
-      try { Add-Type -TypeDefinition $src -OutputAssembly $dll -ReferencedAssemblies 'System.Configuration.Install' -ErrorAction Stop } catch { Write-Output "SKIP: could not compile .NET assembly â€” .NET build tools unavailable."; return }
+      try { Add-Type -TypeDefinition $src -OutputAssembly $dll -ReferencedAssemblies 'System.Configuration.Install' -ErrorAction Stop } catch { Write-Output "SKIP: could not compile .NET assembly  -  .NET build tools unavailable."; return }
       $iu = @("$env:windir\Microsoft.NET\Framework64\v4.0.30319\InstallUtil.exe","$env:windir\Microsoft.NET\Framework\v4.0.30319\InstallUtil.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
-      if (-not $iu) { Remove-Item $dll -Force; Write-Output "SKIP: InstallUtil.exe not found â€” .NET Framework 4.x not installed."; return }
+      if (-not $iu) { Remove-Item $dll -Force; Write-Output "SKIP: InstallUtil.exe not found  -  .NET Framework 4.x not installed."; return }
       $p = Start-Process $iu -ArgumentList "/logfile= /LogToConsole=false /U `"$dll`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
       if ($p) { $p.WaitForExit(15000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $dll -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $dll)
-      if ($ec -ge 0) { Write-Output "EXEC T1218.004: InstallUtil loaded assembly from %TEMP% (exit $ec, cleaned=$cleaned) â€” Sysmon EID 1. [BAS-SIM]" } else { Write-Output "PASS: InstallUtil.exe blocked â€” AppLocker/WDAC restricted .NET assembly loading." }
+      if ($ec -ge 0) { Write-Output "EXEC T1218.004: InstallUtil loaded assembly from %TEMP% (exit $ec, cleaned=$cleaned)  -  Sysmon EID 1. [BAS-SIM]" } else { Write-Output "PASS: InstallUtil.exe blocked  -  AppLocker/WDAC restricted .NET assembly loading." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_installutil_*.dll') -Force -ErrorAction SilentlyContinue
 
-  - name: "MSBuild LOLBin (T1127.001 â€” inline task execution)"
+  - name: "MSBuild LOLBin (T1127.001  -  inline task execution)"
     technique_id: T1127.001
     framework: custom
     executor: powershell
@@ -221,7 +221,7 @@ steps:
       - "Sysmon EID 1: MSBuild.exe with inline task .proj file from %TEMP%"
       - "Security EID 4688: MSBuild.exe"
     detection:
-      - "EDR: MSBuild.exe loading project from %TEMP% â€” Sigma rule proc_creation_win_msbuild_susp_proj.yml"
+      - "EDR: MSBuild.exe loading project from %TEMP%  -  Sigma rule proc_creation_win_msbuild_susp_proj.yml"
       - "SIEM: MSBuild.exe invoked outside of Visual Studio / build pipeline"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -230,18 +230,18 @@ steps:
       $xml = '<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><Target Name="BAS"><BASTask /></Target><UsingTask TaskName="BASTask" TaskFactory="CodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll"><Task><Code Type="Fragment" Language="cs"><![CDATA[Log.LogMessage("[BAS-SIM-MSBUILD] T1127.001 inline task",MessageImportance.High);]]></Code></Task></UsingTask></Project>'
       [System.IO.File]::WriteAllText($proj, $xml, [System.Text.Encoding]::UTF8)
       $mb = @("$env:windir\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe","$env:windir\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe","${env:ProgramFiles(x86)}\MSBuild\14.0\Bin\MSBuild.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
-      if (-not $mb) { Remove-Item $proj -Force; Write-Output "SKIP: MSBuild.exe not found â€” .NET Framework or VS Build Tools not installed."; return }
+      if (-not $mb) { Remove-Item $proj -Force; Write-Output "SKIP: MSBuild.exe not found  -  .NET Framework or VS Build Tools not installed."; return }
       $p = Start-Process $mb -ArgumentList "`"$proj`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
       if ($p) { $p.WaitForExit(30000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $proj -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $proj)
-      if ($ec -ge 0) { Write-Output "EXEC T1127.001: MSBuild inline task executed (exit $ec, cleaned=$cleaned) â€” Sysmon EID 1 MSBuild from %TEMP%. [BAS-SIM]" } else { Write-Output "PASS: MSBuild.exe blocked â€” AppLocker/WDAC restricted inline task execution." }
+      if ($ec -ge 0) { Write-Output "EXEC T1127.001: MSBuild inline task executed (exit $ec, cleaned=$cleaned)  -  Sysmon EID 1 MSBuild from %TEMP%. [BAS-SIM]" } else { Write-Output "PASS: MSBuild.exe blocked  -  AppLocker/WDAC restricted inline task execution." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_msbuild_*.proj') -Force -ErrorAction SilentlyContinue
 
-  # â”€â”€ Telemetry LOLBins 7-11 (Portion 3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Telemetry LOLBins 7-11 (Portion 3) -------------------------------------
 
-  - name: "WMI Execution (T1047 â€” WmiPrvSEâ†’cmd chain)"
+  - name: "WMI Execution (T1047  -  WmiPrvSE->cmd chain)"
     technique_id: T1047
     framework: custom
     executor: wmi
@@ -256,13 +256,13 @@ steps:
       - "Security EID 4688: cmd.exe (parent WmiPrvSE.exe)"
       - "WMI-Activity/Operational EID 5857-5861"
     detection:
-      - "EDR: WmiPrvSE.exe spawning cmd.exe â€” Sigma rule proc_creation_win_wmi_spawn_process.yml"
+      - "EDR: WmiPrvSE.exe spawning cmd.exe  -  Sigma rule proc_creation_win_wmi_spawn_process.yml"
       - "SIEM: WMI process creation from non-system context"
     command: |
-      Write-Output "EXEC T1047: WMI Win32_Process.Create spawned cmd.exe under WmiPrvSE.exe â€” expect Sysmon EID 1 with ParentImage=WmiPrvSE.exe + WMI-Activity EID 5857. [BAS-SIM-WMI]"
+      Write-Output "EXEC T1047: WMI Win32_Process.Create spawned cmd.exe under WmiPrvSE.exe  -  expect Sysmon EID 1 with ParentImage=WmiPrvSE.exe + WMI-Activity EID 5857. [BAS-SIM-WMI]"
     cleanup: ""
 
-  - name: "Certutil LOLBin (T1140 â€” encode + decode + hashfile)"
+  - name: "Certutil LOLBin (T1140  -  encode + decode + hashfile)"
     technique_id: T1140
     framework: custom
     executor: powershell
@@ -276,7 +276,7 @@ steps:
       - "Sysmon EID 1: certutil.exe with -encode / -decode / -hashfile arguments"
       - "Security EID 4688: certutil.exe (three invocations)"
     detection:
-      - "EDR/SIEM: certutil.exe with -encode/-decode/-hashfile â€” Sigma rule proc_creation_win_certutil_decode_file.yml"
+      - "EDR/SIEM: certutil.exe with -encode/-decode/-hashfile  -  Sigma rule proc_creation_win_certutil_decode_file.yml"
       - "SIEM: certutil invoked outside certificate management context"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -290,11 +290,11 @@ steps:
       $hash = & certutil.exe -hashfile $src SHA256 2>&1 | Select-String '^[0-9a-f]{64}' | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value
       Remove-Item $src,$enc,$dec -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $src) -and -not (Test-Path $enc)
-      Write-Output "EXEC T1140: certutil -encode/-decode/-hashfile ran (cleaned=$cleaned, hash=$hash) â€” 3x Sysmon EID 1 certutil.exe invocations. [BAS-SIM]"
+      Write-Output "EXEC T1140: certutil -encode/-decode/-hashfile ran (cleaned=$cleaned, hash=$hash)  -  3x Sysmon EID 1 certutil.exe invocations. [BAS-SIM]"
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_cert_*') -Force -ErrorAction SilentlyContinue
 
-  - name: "Schtasks Persistence (T1053.005 â€” user-context, immediate delete)"
+  - name: "Schtasks Persistence (T1053.005  -  user-context, immediate delete)"
     technique_id: T1053.005
     framework: custom
     executor: powershell
@@ -308,7 +308,7 @@ steps:
       - "Security EID 4698 (task created) + EID 4699 (task deleted)"
       - "Sysmon EID 1: schtasks.exe with /Create and /Delete"
     detection:
-      - "SIEM: EID 4698 task creation from non-maintenance context â€” Sigma rule win_security_schedueld_task_creation.yml"
+      - "SIEM: EID 4698 task creation from non-maintenance context  -  Sigma rule win_security_schedueld_task_creation.yml"
       - "EDR: schtasks.exe invoked by powershell.exe outside of install context"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -318,11 +318,11 @@ steps:
       $created = (& schtasks.exe /Query /TN $tn 2>$null) -ne $null
       & schtasks.exe /Delete /TN $tn /F 2>&1 | Out-Null
       $gone = (& schtasks.exe /Query /TN $tn 2>$null) -eq $null
-      if ($created) { Write-Output "EXEC T1053.005: schtask '$tn' created+deleted (removed=$gone) â€” EID 4698+4699. User context, one-time trigger, never ran. [BAS-SIM]" } else { Write-Output "PASS: schtasks.exe creation blocked â€” AppLocker/policy/restricted token prevented task persistence." }
+      if ($created) { Write-Output "EXEC T1053.005: schtask '$tn' created+deleted (removed=$gone)  -  EID 4698+4699. User context, one-time trigger, never ran. [BAS-SIM]" } else { Write-Output "PASS: schtasks.exe creation blocked  -  AppLocker/policy/restricted token prevented task persistence." }
     cleanup: |
       & schtasks.exe /Delete /TN "BAS-SIM-LOLBIN-*" /F 2>&1 | Out-Null
 
-  - name: "Cscript/Wscript LOLBin (T1059.005 â€” wscriptâ†’cmd chain)"
+  - name: "Cscript/Wscript LOLBin (T1059.005  -  wscript->cmd chain)"
     technique_id: T1059.005
     framework: custom
     executor: powershell
@@ -336,7 +336,7 @@ steps:
       - "Sysmon EID 1: wscript.exe with //B argument; then cmd.exe with ParentImage=wscript.exe"
       - "Security EID 4688: wscript.exe + cmd.exe"
     detection:
-      - "EDR: wscript.exe spawning cmd.exe â€” Sigma rule proc_creation_win_script_host_susp_child_process.yml"
+      - "EDR: wscript.exe spawning cmd.exe  -  Sigma rule proc_creation_win_script_host_susp_child_process.yml"
       - "SIEM: wscript.exe executing VBS from %TEMP%"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -347,11 +347,11 @@ steps:
       if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $vbs -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $vbs)
-      if ($ec -ge 0) { Write-Output "EXEC T1059.005: wscript->cmd chain fired (exit $ec, cleaned=$cleaned) â€” Sysmon EID 1 wscript->cmd. [BAS-SIM]" } else { Write-Output "PASS: wscript.exe blocked â€” AppLocker/ASR/Zone-3 policy prevented VBScript execution." }
+      if ($ec -ge 0) { Write-Output "EXEC T1059.005: wscript->cmd chain fired (exit $ec, cleaned=$cleaned)  -  Sysmon EID 1 wscript->cmd. [BAS-SIM]" } else { Write-Output "PASS: wscript.exe blocked  -  AppLocker/ASR/Zone-3 policy prevented VBScript execution." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_lolbin_wscript_*.vbs') -Force -ErrorAction SilentlyContinue
 
-  - name: "BITSAdmin LOLBin (T1197 â€” BITS job create + cancel)"
+  - name: "BITSAdmin LOLBin (T1197  -  BITS job create + cancel)"
     technique_id: T1197
     framework: custom
     executor: powershell
@@ -366,7 +366,7 @@ steps:
       - "Sysmon EID 3: BITS service network connection attempt to 192.0.2.1"
       - "Microsoft-Windows-Bits-Client EID 59 (BITS job created)"
     detection:
-      - "EDR/SIEM: BITS job created to non-corporate destination â€” Sigma rule proc_creation_win_bitsadmin_download.yml"
+      - "EDR/SIEM: BITS job created to non-corporate destination  -  Sigma rule proc_creation_win_bitsadmin_download.yml"
       - "NDR: BITS outbound attempt to RFC5737 range"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -377,21 +377,21 @@ steps:
       if ($job) {
         Remove-BitsTransfer $job -ErrorAction SilentlyContinue
         Remove-Item $dst -Force -ErrorAction SilentlyContinue
-        Write-Output "EXEC T1197: BITS job '$jobName' created to 192.0.2.1 then cancelled â€” BITS-Client EID 59 + Sysmon EID 3. No file downloaded. [BAS-SIM]"
+        Write-Output "EXEC T1197: BITS job '$jobName' created to 192.0.2.1 then cancelled  -  BITS-Client EID 59 + Sysmon EID 3. No file downloaded. [BAS-SIM]"
       } else {
         & bitsadmin.exe /create $jobName 2>&1 | Out-Null
         & bitsadmin.exe /addfile $jobName 'http://192.0.2.1/bas-sim.txt' $dst 2>&1 | Out-Null
         & bitsadmin.exe /cancel $jobName 2>&1 | Out-Null
-        Write-Output "EXEC T1197: bitsadmin job '$jobName' created+cancelled â€” Sysmon EID 1 bitsadmin.exe + EID 3 network. [BAS-SIM]"
+        Write-Output "EXEC T1197: bitsadmin job '$jobName' created+cancelled  -  Sysmon EID 1 bitsadmin.exe + EID 3 network. [BAS-SIM]"
       }
     cleanup: |
       Get-BitsTransfer -Name "BAS-SIM-BITS-*" -ErrorAction SilentlyContinue | Remove-BitsTransfer -ErrorAction SilentlyContinue
       Remove-Item (Join-Path $env:TEMP 'bas_bits_*.txt') -Force -ErrorAction SilentlyContinue
 
-  # â”€â”€ Lab Chains (Portion 4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Lab Chains (Portion 4) --------------------------------------------------
   # Full-fidelity multi-stage LOLBin chains. Isolated range + snapshot required.
 
-  - name: "Office Attack Chain (lab â€” winwordâ†’mshtaâ†’powershell)"
+  - name: "Office Attack Chain (lab  -  winword->mshta->powershell)"
     technique_id: T1218.005
     framework: custom
     executor: powershell
@@ -402,10 +402,10 @@ steps:
     blast_radius: "Copies cmd.exe to winword.exe, winword spawns mshta with inline VBScript, mshta spawns powershell.exe echo. Three-level chain. All files deleted. Triggers EDR by design."
     reversible: true
     telemetry:
-      - "Sysmon EID 1: chain winword.exeâ†’mshta.exeâ†’powershell.exe"
+      - "Sysmon EID 1: chain winword.exe->mshta.exe->powershell.exe"
       - "Security EID 4688 for each stage (3 events)"
     detection:
-      - "EDR: three-stage Officeâ†’mshtaâ†’PS chain â€” high-confidence APT initial-access pattern"
+      - "EDR: three-stage Office->mshta->PS chain  -  high-confidence APT initial-access pattern"
       - "Sigma: proc_creation_win_office_spawn_process.yml chained with mshta spawn"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -422,11 +422,11 @@ steps:
       $p = [System.Diagnostics.Process]::Start($psi)
       if ($p) { $p.WaitForExit(15000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $ww -Force -ErrorAction SilentlyContinue
-      if ($ec -ge 0) { Write-Output "EXEC LAB: winword->mshta->powershell three-stage chain fired (exit $ec) â€” expect Sysmon EID 1 x3 with full ancestry. [BAS-SIM]" } else { Write-Output "PASS: chain blocked at stage 1 â€” AppLocker/WDAC/EDR prevented Office process spawning." }
+      if ($ec -ge 0) { Write-Output "EXEC LAB: winword->mshta->powershell three-stage chain fired (exit $ec)  -  expect Sysmon EID 1 x3 with full ancestry. [BAS-SIM]" } else { Write-Output "PASS: chain blocked at stage 1  -  AppLocker/WDAC/EDR prevented Office process spawning." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'winword.exe') -Force -ErrorAction SilentlyContinue
 
-  - name: "Squiblydoo with Active JScript Payload (lab â€” cmd.exe spawn)"
+  - name: "Squiblydoo with Active JScript Payload (lab  -  cmd.exe spawn)"
     technique_id: T1218.010
     framework: custom
     executor: powershell
@@ -441,7 +441,7 @@ steps:
       - "Sysmon EID 1: cmd.exe with ParentImage=regsvr32.exe"
       - "Security EID 4688: regsvr32.exe + cmd.exe chain"
     detection:
-      - "EDR: regsvr32â†’scrobj.dllâ†’cmd.exe â€” Sigma proc_creation_win_regsvr32_squiblydoo.yml"
+      - "EDR: regsvr32->scrobj.dll->cmd.exe  -  Sigma proc_creation_win_regsvr32_squiblydoo.yml"
       - "Sysmon: scrobj.dll image load + child cmd.exe from regsvr32 parent"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
@@ -455,11 +455,11 @@ steps:
       if ($p) { $p.WaitForExit(10000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
       Remove-Item $sct -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $sct)
-      if ($ec -ge 0) { Write-Output "EXEC LAB T1218.010: Squiblydoo with active JScript fired (exit $ec, cleaned=$cleaned, src=$iArg) â€” regsvr32->cmd chain. [BAS-SIM]" } else { Write-Output "PASS: Squiblydoo blocked â€” AppLocker/WDAC/ASR prevented scrobj.dll chain." }
+      if ($ec -ge 0) { Write-Output "EXEC LAB T1218.010: Squiblydoo with active JScript fired (exit $ec, cleaned=$cleaned, src=$iArg)  -  regsvr32->cmd chain. [BAS-SIM]" } else { Write-Output "PASS: Squiblydoo blocked  -  AppLocker/WDAC/ASR prevented scrobj.dll chain." }
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_lab_sct_*.sct') -Force -ErrorAction SilentlyContinue
 
-  - name: "Rundll32 + Alternate Data Stream (lab â€” ADS payload)"
+  - name: "Rundll32 + Alternate Data Stream (lab  -  ADS payload)"
     technique_id: T1218.011
     framework: custom
     executor: powershell
@@ -474,8 +474,8 @@ steps:
       - "Sysmon EID 1: rundll32.exe with ADS file path argument"
       - "Security EID 4688: rundll32.exe"
     detection:
-      - "EDR: rundll32.exe loading from ADS path â€” rare and suspicious"
-      - "Sysmon EID 15: ADS creation by powershell.exe â€” MOTW bypass / payload staging"
+      - "EDR: rundll32.exe loading from ADS path  -  rare and suspicious"
+      - "Sysmon EID 15: ADS creation by powershell.exe  -  MOTW bypass / payload staging"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
@@ -488,11 +488,11 @@ steps:
       if ($p) { $p.WaitForExit(3000) | Out-Null }
       Remove-Item $file -Force -ErrorAction SilentlyContinue
       $cleaned = -not (Test-Path $file)
-      Write-Output "EXEC LAB T1218.011+ADS: ADS created (exists=$adsExists), rundll32 invoked with ADS path, file removed (cleaned=$cleaned) â€” Sysmon EID 15 + EID 1. [BAS-SIM]"
+      Write-Output "EXEC LAB T1218.011+ADS: ADS created (exists=$adsExists), rundll32 invoked with ADS path, file removed (cleaned=$cleaned)  -  Sysmon EID 15 + EID 1. [BAS-SIM]"
     cleanup: |
       Remove-Item (Join-Path $env:TEMP 'bas_ads_lolbin_*.txt') -Force -ErrorAction SilentlyContinue
 
-  - name: "Service-to-LOLBin Chain (lab â€” sc.exeâ†’rundll32 service)"
+  - name: "Service-to-LOLBin Chain (lab  -  sc.exe->rundll32 service)"
     technique_id: T1569.002
     framework: custom
     executor: powershell
@@ -507,8 +507,8 @@ steps:
       - "Sysmon EID 1: sc.exe create + rundll32.exe service start"
       - "Security EID 4688: rundll32.exe launched by services.exe"
     detection:
-      - "SIEM: service with LOLBin (rundll32.exe) as binary path â€” Sigma sysmon_suspicious_rundll32_exec.yml"
-      - "EDR: services.exe spawning rundll32.exe â€” service-to-LOLBin lateral-spread chain"
+      - "SIEM: service with LOLBin (rundll32.exe) as binary path  -  Sigma sysmon_suspicious_rundll32_exec.yml"
+      - "EDR: services.exe spawning rundll32.exe  -  service-to-LOLBin lateral-spread chain"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
@@ -522,15 +522,15 @@ steps:
         sc.exe stop $svcName 2>&1 | Out-Null
         sc.exe delete $svcName 2>&1 | Out-Null
         $gone = (Get-Service -Name $svcName -ErrorAction SilentlyContinue) -eq $null
-        Write-Output "EXEC LAB T1569.002: service '$svcName' with rundll32 binpath created+started+deleted (removed=$gone) â€” EID 4697+7045 + services.exe->rundll32 chain. [BAS-SIM]"
+        Write-Output "EXEC LAB T1569.002: service '$svcName' with rundll32 binpath created+started+deleted (removed=$gone)  -  EID 4697+7045 + services.exe->rundll32 chain. [BAS-SIM]"
       } else {
-        Write-Output "PASS: service creation with LOLBin binpath blocked â€” restricted token/AppLocker/WDAC prevented service-to-LOLBin chain."
+        Write-Output "PASS: service creation with LOLBin binpath blocked  -  restricted token/AppLocker/WDAC prevented service-to-LOLBin chain."
       }
     cleanup: |
       sc.exe stop  "BAS-SIM-SVC-*" 2>&1 | Out-Null
       sc.exe delete "BAS-SIM-SVC-*" 2>&1 | Out-Null
 
-  - name: "WMI Remote Execution (lab â€” Invoke-WmiMethod localhost)"
+  - name: "WMI Remote Execution (lab  -  Invoke-WmiMethod localhost)"
     technique_id: T1047
     framework: custom
     executor: powershell
@@ -545,14 +545,14 @@ steps:
       - "WMI-Activity/Operational EID 5857: remote WMI process creation"
       - "Security EID 4688: cmd.exe spawned by WmiPrvSE.exe"
     detection:
-      - "EDR: WmiPrvSE.exe spawning cmd.exe via remote WMI â€” Sigma proc_creation_win_wmi_spawn_process.yml"
-      - "SIEM: Win32_Process.Create from Invoke-WmiMethod to localhost â€” lateral execution simulation"
+      - "EDR: WmiPrvSE.exe spawning cmd.exe via remote WMI  -  Sigma proc_creation_win_wmi_spawn_process.yml"
+      - "SIEM: Win32_Process.Create from Invoke-WmiMethod to localhost  -  lateral execution simulation"
     command: |
       $ErrorActionPreference = 'SilentlyContinue'
       try {
         $result = Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList 'cmd.exe /c echo [BAS-SIM-WMI-REMOTE]' -ComputerName localhost -ErrorAction Stop
-        Write-Output "EXEC LAB T1047: WMI Win32_Process.Create to localhost returned ProcessId=$($result.ProcessId) â€” cmd.exe spawned under WmiPrvSE.exe. WMI-Activity EID 5857. [BAS-SIM]"
+        Write-Output "EXEC LAB T1047: WMI Win32_Process.Create to localhost returned ProcessId=$($result.ProcessId)  -  cmd.exe spawned under WmiPrvSE.exe. WMI-Activity EID 5857. [BAS-SIM]"
       } catch {
-        Write-Output "PASS: WMI remote process creation blocked â€” WinRM/WMI restrictions or network policy prevented Win32_Process.Create to localhost."
+        Write-Output "PASS: WMI remote process creation blocked  -  WinRM/WMI restrictions or network policy prevented Win32_Process.Create to localhost."
       }
     cleanup: ""

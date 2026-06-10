@@ -1,9 +1,9 @@
-﻿id: cis-ubuntu-l1
+id: cis-ubuntu-l1
 name: CIS Ubuntu 26.04 L1 Baseline Hardening Check
 local_check: true
 description: >
   Validates CIS Benchmark Level 1 controls for Ubuntu 26.04 LTS.
-  All checks run on the Linux agent as built-in posture assessments â€”
+  All checks run on the Linux agent as built-in posture assessments  - 
   no external commands are sent. Results are scored against 38 controls
   across kernel hardening, filesystem security, network configuration,
   SSH hardening, service inventory, access control, and password policy.
@@ -16,7 +16,7 @@ tags:
   - compliance
 
 steps:
-  # â”€â”€ Kernel Hardening â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Kernel Hardening --------------------------------------------------------
   - name: "ASLR Enabled (kernel.randomize_va_space)"
     technique_id: T1055
     framework: custom
@@ -45,7 +45,7 @@ steps:
     command: "grep -m1 ' nx ' /proc/cpuinfo"
     timeout_sec: 10
 
-  # â”€â”€ Filesystem Hardening â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Filesystem Hardening ----------------------------------------------------
   - name: "/tmp Mounted noexec"
     technique_id: T1059
     framework: custom
@@ -88,7 +88,7 @@ steps:
     command: "find / -xdev -type d -perm -0002 ! -perm -1000"
     timeout_sec: 30
 
-  # â”€â”€ Network Hardening â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Network Hardening -------------------------------------------------------
   - name: "IP Forwarding Disabled (net.ipv4.ip_forward)"
     technique_id: T1090
     framework: custom
@@ -131,7 +131,7 @@ steps:
     command: "sysctl net.ipv6.conf.all.accept_ra net.ipv6.conf.default.accept_ra"
     timeout_sec: 10
 
-  # â”€â”€ SSH Hardening â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- SSH Hardening -----------------------------------------------------------
   - name: "SSH Root Login Disabled (PermitRootLogin no)"
     technique_id: T1078
     framework: custom
@@ -181,7 +181,7 @@ steps:
     command: "grep -i '^Protocol' /etc/ssh/sshd_config || echo 'not set (defaults to 2)'"
     timeout_sec: 10
 
-  # â”€â”€ Services â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Services ----------------------------------------------------------------
   - name: "Telnet Not Installed/Running"
     technique_id: T1078
     framework: custom
@@ -210,7 +210,7 @@ steps:
     command: "systemctl is-active ssh"
     timeout_sec: 10
 
-  # â”€â”€ Access Control â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Access Control ----------------------------------------------------------
   - name: "Cron Access Restricted to Authorised Users"
     technique_id: T1053
     framework: custom
@@ -246,7 +246,7 @@ steps:
     command: "find /var/log -type f -perm /o+r ! -name '*.gz' -maxdepth 4"
     timeout_sec: 15
 
-  # â”€â”€ Security Tools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Security Tools ----------------------------------------------------------
   - name: "UFW Firewall Enabled"
     technique_id: T1046
     framework: custom
@@ -261,7 +261,7 @@ steps:
     command: "aa-status 2>/dev/null || apparmor_status 2>&1"
     timeout_sec: 10
 
-  # â”€â”€ Password Policy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # -- Password Policy ---------------------------------------------------------
   - name: "Password Minimum Length >= 12 (PASS_MIN_LEN)"
     technique_id: T1110
     framework: custom

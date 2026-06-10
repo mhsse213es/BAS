@@ -1,5 +1,5 @@
-﻿id: art-selective
-name: Atomic Red Team â€” Selective Techniques
+id: art-selective
+name: Atomic Red Team  -  Selective Techniques
 description: >
   Admin-chosen list of ATT&CK technique IDs to run via Atomic Red Team.
   Each technique runs ALL its atomic tests (Invoke-AtomicTest with no -TestNumbers).
