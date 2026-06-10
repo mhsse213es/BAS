@@ -235,8 +235,8 @@ func (d *rpt) executiveSummary(rep *FullReport) {
 	d.text(cMuted)
 	d.pdf.SetFont("Helvetica", "", 8.5)
 	d.pdf.SetXY(margin+6, y+8.5)
-	d.pdf.Cell(contentW-10, 5, fmt.Sprintf("%d techniques executed · %d prevented · %d succeeded · %d critical/high finding(s)",
-		s.TotalTechniques, s.PassedTechniques, s.FailedTechniques, len(s.CriticalFailures)))
+	d.pdf.Cell(contentW-10, 5, fmt.Sprintf("%d techniques · %d prevented · %d succeeded · %d errored · %d skipped · %d critical/high finding(s)",
+		s.TotalTechniques, s.PassedTechniques, s.FailedTechniques, s.ErroredTechniques, s.SkippedTechniques, len(s.CriticalFailures)))
 	d.pdf.SetY(y + 20)
 }
 
@@ -258,6 +258,10 @@ func (d *rpt) narrative(rep *FullReport) string {
 
 	if s.KillChainAmplifier >= 1.3 {
 		fmt.Fprintf(&b, " Consecutive failures across adjacent kill-chain phases amplified exposure by %.1f×, indicating an attacker could chain multiple steps with limited resistance.", s.KillChainAmplifier)
+	}
+	if s.ErroredTechniques > 0 || s.SkippedTechniques > 0 {
+		fmt.Fprintf(&b, " A further %d technique(s) could not be evaluated (execution errors — malformed test content, timeouts, missing prerequisites or scheduler contention) and %d were skipped; both are excluded from the prevention and exposure scores so they neither inflate nor deflate the result.",
+			s.ErroredTechniques, s.SkippedTechniques)
 	}
 	b.WriteString("\n\n")
 
@@ -347,7 +351,7 @@ func (d *rpt) methodology(rep *FullReport, results []models.SimulationResult) {
 		{"Window", rep.Summary.LastRunAt.UTC().Format("02 Jan 2006 15:04 UTC")},
 	}
 	d.keyValueTable(rows)
-	d.body("Each technique is scored as PASS when a security control prevented or blocked it, FAIL when it executed without being stopped, or SKIPPED when it could not run. A FAIL is a finding — it means the simulated adversary behaviour succeeded against this endpoint.")
+	d.body("Each technique is scored as PASS when a security control prevented or blocked it, FAIL when it executed without being stopped, ERROR when the test itself could not execute correctly (malformed content, timeout, missing prerequisite, scheduler contention), or SKIPPED when it was not run. Only PASS and FAIL count toward the score: a FAIL is a finding — the simulated adversary behaviour succeeded against this endpoint — while ERROR and SKIPPED are excluded because they reflect a test-execution problem, not the endpoint's defences.")
 }
 
 func (d *rpt) keyValueTable(rows [][2]string) {
@@ -567,7 +571,8 @@ func (d *rpt) glossary() {
 	defs := [][2]string{
 		{"PASS", "A security control prevented or blocked the simulated technique. More passes is better."},
 		{"FAIL", "The technique executed successfully without being stopped — a finding requiring attention."},
-		{"SKIPPED", "The technique could not run (e.g. prerequisite missing) and was excluded from scoring."},
+		{"ERROR", "The test could not execute correctly (malformed content, timeout, missing prerequisite, scheduler contention). A BAS execution problem, not a security outcome — excluded from scoring."},
+		{"SKIPPED", "The technique was deliberately not run (e.g. external payload not shipped) and was excluded from scoring."},
 		{"Prevention", "Severity-weighted percentage of techniques that were prevented. Higher is better."},
 		{"Exposure", "Tactic-weighted failure rate, amplified by consecutive kill-chain failures. Lower is better."},
 		{"Tactic Coverage", "Breadth of testing: how many of the 14 MITRE ATT&CK Enterprise tactics this run exercised."},
@@ -639,6 +644,8 @@ func (d *rpt) resultColor(res models.CheckResult) rgb {
 		return cSuccess
 	case models.ResultFail:
 		return cDanger
+	case models.ResultError:
+		return cWarning // amber: a BAS execution problem, not a security finding
 	default:
 		return cMuted
 	}

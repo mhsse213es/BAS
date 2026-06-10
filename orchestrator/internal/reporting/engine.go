@@ -47,6 +47,8 @@ type ExecutiveSummary struct {
 	TotalTechniques    int                      `json:"totalTechniques"`
 	PassedTechniques   int                      `json:"passedTechniques"`
 	FailedTechniques   int                      `json:"failedTechniques"`
+	ErroredTechniques  int                      `json:"erroredTechniques"` // BAS could not execute — excluded from scoring
+	SkippedTechniques  int                      `json:"skippedTechniques"` // intentionally not run — excluded from scoring
 	LastRunAt          time.Time                `json:"lastRunAt"`
 	LastScenarioName   string                   `json:"lastScenarioName"`
 	CriticalFailures   []models.CriticalFailure `json:"criticalFailures"`
@@ -180,6 +182,8 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 		TotalTechniques:    latestScore.TotalTechniques,
 		PassedTechniques:   latestScore.PassedTechniques,
 		FailedTechniques:   latestScore.FailedTechniques,
+		ErroredTechniques:  latestScore.ErroredTechniques,
+		SkippedTechniques:  latestScore.SkippedTechniques,
 		LastRunAt:          latestRunAt,
 		LastScenarioName:   latestScenarioName,
 		CriticalFailures:   latestScore.CriticalFailures,
@@ -254,6 +258,8 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 		TotalTechniques:    score.TotalTechniques,
 		PassedTechniques:   score.PassedTechniques,
 		FailedTechniques:   score.FailedTechniques,
+		ErroredTechniques:  score.ErroredTechniques,
+		SkippedTechniques:  score.SkippedTechniques,
 		LastRunAt:          startedAt,
 		LastScenarioName:   scenarioName,
 		CriticalFailures:   score.CriticalFailures,
@@ -293,7 +299,9 @@ func buildTacticHeatmap(results []models.SimulationResult) []TacticEntry {
 	passed := make(map[string]int)
 	failed := make(map[string]int)
 	for _, r := range results {
-		if r.Result == models.ResultSkipped {
+		// ERROR (BAS could not execute) and SKIPPED (not run) are not security
+		// outcomes — they must not taint a tactic as failed.
+		if r.Result == models.ResultSkipped || r.Result == models.ResultError {
 			continue
 		}
 		t := r.Technique.Tactic
@@ -345,7 +353,7 @@ func buildDetectionCategories(results []models.SimulationResult) []Category {
 			a = &agg{}
 			m[t] = a
 		}
-		if r.Result == models.ResultSkipped {
+		if r.Result == models.ResultSkipped || r.Result == models.ResultError {
 			continue
 		}
 		a.exec++

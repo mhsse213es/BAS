@@ -274,9 +274,11 @@ tr:last-child td{border-bottom:none}
 
 <table>
   <tr><th colspan="2">Assessment Statistics</th></tr>
-  <tr><td>Total Techniques Tested</td><td><strong>{{.summary.totalTechniques}}</strong></td></tr>
-  <tr><td>Techniques Passed</td><td style="color:#238636"><strong>{{.summary.passedTechniques}}</strong></td></tr>
-  <tr><td>Techniques Failed</td><td style="color:#da3633"><strong>{{.summary.failedTechniques}}</strong></td></tr>
+  <tr><td>Total Techniques</td><td><strong>{{.summary.totalTechniques}}</strong></td></tr>
+  <tr><td>Techniques Passed (prevented)</td><td style="color:#238636"><strong>{{.summary.passedTechniques}}</strong></td></tr>
+  <tr><td>Techniques Failed (succeeded)</td><td style="color:#da3633"><strong>{{.summary.failedTechniques}}</strong></td></tr>
+  <tr><td>Techniques Errored (excluded from scoring)</td><td style="color:#d29922"><strong>{{.summary.erroredTechniques}}</strong></td></tr>
+  <tr><td>Techniques Skipped (excluded from scoring)</td><td style="color:#6e7681"><strong>{{.summary.skippedTechniques}}</strong></td></tr>
   <tr><td>Trend vs. Previous Run</td><td><strong>{{.summary.trend}}</strong></td></tr>
   <tr><td>Last Run At</td><td>{{fmtTime .summary.lastRunAt}}</td></tr>
   <tr><td>Last Scenario</td><td>{{.summary.lastScenarioName}}</td></tr>
