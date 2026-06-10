@@ -51,8 +51,23 @@ type ScenarioRun struct {
 	Status      string             `json:"status"` // running | completed | partial | failed
 	Results     []SimulationResult `json:"results"`
 	Score       *Score             `json:"score,omitempty"`
+	Progress    *RunProgress       `json:"progress,omitempty"`
 	StartedAt   time.Time          `json:"startedAt"`
 	CompletedAt *time.Time         `json:"completedAt,omitempty"`
+}
+
+// RunProgress is the live/partial step summary maintained from the run-event
+// stream (Phase B-1). It lets the dashboard show a breakdown for runs that have
+// no authoritative Results yet — in flight, or partial because the agent died
+// before submitting the final /result. Derived, not authoritative: the scored
+// Score still comes only from the final result submission.
+type RunProgress struct {
+	StepsTotal   int `json:"stepsTotal"`
+	StepsDone    int `json:"stepsDone"`
+	StepsRunning int `json:"stepsRunning"`
+	StepsPassed  int `json:"stepsPassed"`
+	StepsFailed  int `json:"stepsFailed"`
+	StepsTimeout int `json:"stepsTimeout"`
 }
 
 // TacticScore holds per-tactic pass/fail breakdown.

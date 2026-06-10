@@ -1771,6 +1771,16 @@ function loadRuns() {
         var col2 = cls2 === 'Protected' ? 'var(--success)' : cls2 === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
         scoreHtml = '<span style="font-weight:600;color:' + col2 + '">' + r.score.riskScore + '</span>' +
                     '<span style="color:var(--muted);font-size:0.72rem;margin-left:0.3rem">' + x(cls2) + '</span>';
+      } else if (r.progress && r.progress.stepsDone > 0) {
+        // No authoritative score (in-flight, or partial because the agent died
+        // before submitting results) — show the breakdown derived from events.
+        var pr = r.progress;
+        scoreHtml = '<span style="color:var(--success);font-weight:600">' + pr.stepsPassed + '</span>' +
+                    '<span style="color:var(--muted);font-size:0.6rem">pass</span> / ' +
+                    '<span style="color:var(--danger);font-weight:600">' + pr.stepsFailed + '</span>' +
+                    '<span style="color:var(--muted);font-size:0.6rem">fail</span>' +
+                    (pr.stepsTimeout ? ' / <span style="color:var(--warning);font-weight:600">' + pr.stepsTimeout + '</span><span style="color:var(--muted);font-size:0.6rem">to</span>' : '') +
+                    '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.35rem">' + pr.stepsDone + '/' + pr.stepsTotal + ' partial</span>';
       }
       return '<tr>' +
         '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
