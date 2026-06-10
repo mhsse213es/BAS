@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"runtime"
@@ -295,13 +296,24 @@ func trayMenuSep(menu uintptr) { trayAppendMenu.Call(menu, tMF_SEPARATOR, 0, 0) 
 
 // openStatusWindow spawns the WebView2 console as a separate process so it has
 // its own message loop independent of the tray.
+//
+// The console is a singleton: if one is already open, surface it instead of
+// spawning another bas_agent.exe --status-window. The spawned process also
+// self-guards (statusWindowGuard), so this focus-before-spawn check is
+// belt-and-suspenders that additionally avoids creating a short-lived duplicate
+// process on every tray click.
 func openStatusWindow() {
+	if focusStatusWindow() {
+		return
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return
 	}
 	cmd := exec.Command(exe, "--status-window")
-	_ = cmd.Start()
+	if err := cmd.Start(); err != nil {
+		log.Printf("[tray] open status console: %v", err)
+	}
 }
 
 // trayAlreadyRunning returns true if another tray instance holds the singleton

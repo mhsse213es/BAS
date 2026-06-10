@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/jchv/go-webview2"
@@ -21,6 +22,12 @@ import (
 // If the WebView2 runtime is not installed, NewWithOptions returns nil and we
 // fall back to opening the dashboard in the default browser.
 func runStatusWindow() {
+	// Enforce a single console window. If one is already open, surface it and
+	// exit instead of opening a second WebView2 process.
+	if statusWindowGuard() {
+		return
+	}
+
 	token := readAPIToken()
 	url := "http://127.0.0.1:9001/"
 	if token != "" {
@@ -74,6 +81,74 @@ func runStatusWindow() {
 
 	w.Navigate(url)
 	w.Run()
+}
+
+const (
+	statusWindowMutexName = "BASAgentStatusWindow_singleton"
+	// statusWindowTitle must match the WindowOptions.Title set in
+	// runStatusWindow. The host-window title is set by us (not driven by
+	// document.title), so it is stable for the window's lifetime and safe to
+	// match on. If the title is ever rebranded, update this constant too.
+	statusWindowTitle = "Audspect BAS Agent"
+)
+
+// statusWindowMutex is held for the lifetime of the --status-window process to
+// mark the console singleton. Kept in a package var so the GC never releases the
+// handle — releasing it would drop the mutex and defeat the guard.
+var statusWindowMutex windows.Handle
+
+// statusWindowGuard enforces a single console window. It returns true if another
+// console is already open (after surfacing that window, so the caller should
+// exit), or false after claiming the singleton for this process.
+//
+// Mirrors trayAlreadyRunning(): a session-local named mutex (no Global\ prefix)
+// so it works unprivileged in the user session.
+func statusWindowGuard() bool {
+	name, _ := windows.UTF16PtrFromString(statusWindowMutexName)
+	if h, err := windows.OpenMutex(0x00100000 /*SYNCHRONIZE*/, false, name); err == nil && h != 0 {
+		windows.CloseHandle(h)
+		// Another console holds the singleton. Its window may still be
+		// initializing (WebView2 takes ~1s), so retry focusing briefly before
+		// concluding the holder is stale.
+		for i := 0; i < 10; i++ {
+			if focusStatusWindow() {
+				log.Println("[status] console already open — focusing existing instance")
+				return true
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+		// Mutex present but no window found: a previous console crashed without
+		// releasing cleanly. Fall through and launch a fresh one.
+		log.Println("[status] singleton present but no window found — launching fresh instance")
+	}
+	h, err := windows.CreateMutex(nil, false, name)
+	if err != nil && h == 0 {
+		return false // couldn't create the guard; open anyway
+	}
+	statusWindowMutex = h // held for process lifetime (do not close)
+	return false
+}
+
+// focusStatusWindow brings an existing console window to the foreground,
+// restoring it first if minimized. Returns false if no such window exists.
+func focusStatusWindow() bool {
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	findWindow := user32.NewProc("FindWindowW")
+	showWindow := user32.NewProc("ShowWindow")
+	setForeground := user32.NewProc("SetForegroundWindow")
+	isIconic := user32.NewProc("IsIconic")
+
+	title, _ := windows.UTF16PtrFromString(statusWindowTitle)
+	hwnd, _, _ := findWindow.Call(0, uintptr(unsafe.Pointer(title)))
+	if hwnd == 0 {
+		return false
+	}
+	const swRestore = 9
+	if r, _, _ := isIconic.Call(hwnd); r != 0 {
+		showWindow.Call(hwnd, swRestore)
+	}
+	setForeground.Call(hwnd)
+	return true
 }
 
 type winRect struct{ Left, Top, Right, Bottom int32 }
