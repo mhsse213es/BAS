@@ -11,45 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/audspect/bas/internal/models"
 )
-
-// destructiveTechniques are ATT&CK techniques whose atomics can take a live
-// endpoint down — shutdown/reboot, data/disk destruction, recovery inhibition,
-// service stop, account lockout. They are EXCLUDED from the automated breadth
-// sweep: running them unattended against a production host is unsafe (T1529's
-// atomic rebooted a production endpoint mid-sweep in the field). Operators who
-// must validate impact techniques run them via the Selective scenario in a lab,
-// which is an explicit, deliberate opt-in.
-var destructiveTechniques = map[string]bool{
-	"T1529": true, // System Shutdown/Reboot
-	"T1485": true, // Data Destruction
-	"T1486": true, // Data Encrypted for Impact
-	"T1490": true, // Inhibit System Recovery
-	"T1491": true, // Defacement
-	"T1561": true, // Disk Wipe
-	"T1489": true, // Service Stop
-	"T1531": true, // Account Access Removal
-	"T1565": true, // Data Manipulation
-	"T1495": true, // Firmware Corruption
-}
-
-// isDestructiveTechnique reports whether a technique must be excluded from the
-// automated full sweep: either explicitly denylisted above, or classified under
-// the MITRE "impact" tactic (data destruction, DoS, disk wipe, etc.). The
-// explicit list is a belt-and-suspenders guard in case the tactic map lacks an
-// entry for a destructive technique.
-func isDestructiveTechnique(techID string) bool {
-	base := strings.ToUpper(strings.TrimSpace(techID))
-	if i := strings.IndexByte(base, '.'); i >= 0 {
-		base = base[:i] // strip sub-technique suffix (T1529.001 → T1529)
-	}
-	if destructiveTechniques[base] {
-		return true
-	}
-	return models.LookupTactic(base) == "impact"
-}
 
 // safeID allows only alphanumeric characters, hyphens, and underscores (max 128 chars).
 // This prevents path traversal when IDs are interpolated into Caldera API URLs.
@@ -213,24 +175,13 @@ func buildARTAllWindowsSteps(artStore *ARTStore) ([]ScenarioStep, error) {
 	// preserves full ATT&CK breadth while keeping the run bounded. Use the Selective
 	// scenario to run every atomic for a chosen set of techniques (depth).
 	steps := make([]ScenarioStep, 0, len(techniques))
-	excluded := 0
 	for _, t := range techniques {
-		tech := strings.ToUpper(strings.TrimSpace(t))
-		// Safety: never auto-dispatch destructive Impact-tactic atomics in the
-		// breadth sweep — they can take the endpoint down. Use Selective in a lab.
-		if isDestructiveTechnique(tech) {
-			excluded++
-			continue
-		}
-		s := artStore.GetSteps(tech)
+		s := artStore.GetSteps(strings.ToUpper(strings.TrimSpace(t)))
 		if len(s) == 0 {
 			log.Printf("[ART] no Windows steps for %s — skipped", t)
 			continue
 		}
 		steps = append(steps, artStore.materialize(s[0]))
-	}
-	if excluded > 0 {
-		log.Printf("[ART] full sweep excluded %d destructive technique(s) (impact tactic / denylist) — run these via the Selective scenario in a lab", excluded)
 	}
 	if len(steps) == 0 {
 		return nil, fmt.Errorf("ART: no Windows steps found across %d techniques", len(techniques))
