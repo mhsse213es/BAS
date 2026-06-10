@@ -7,8 +7,40 @@ import (
 	"testing"
 	"time"
 
+	fpdf "github.com/go-pdf/fpdf"
+
 	"github.com/audspect/bas/internal/models"
 )
+
+// The cp1252 translator must convert UTF-8 punctuation to single core-font bytes
+// so it renders correctly. If it is not applied, the raw multi-byte UTF-8
+// sequences survive into the (uncompressed) content stream and render as
+// mojibake (e.g. "—" → "Ã¢â‚¬â€•"). Assert those sequences are absent.
+func TestPDFUnicodeTranslatorEncodesPunctuation(t *testing.T) {
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.SetCompression(false)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "", 12)
+	tr := pdf.UnicodeTranslatorFromDescriptor("")
+	pdf.Cell(0, 10, tr("em—dash mid·dot 2.5× tail…"))
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		t.Fatalf("Output: %v", err)
+	}
+	raw := buf.Bytes()
+	utf8Seqs := map[string][]byte{
+		"em dash (—)":  {0xE2, 0x80, 0x94},
+		"middot (·)":   {0xC2, 0xB7},
+		"multiply (×)": {0xC3, 0x97},
+		"ellipsis (…)": {0xE2, 0x80, 0xA6},
+	}
+	for name, seq := range utf8Seqs {
+		if bytes.Contains(raw, seq) {
+			t.Errorf("PDF still contains raw UTF-8 %s — translator not applied (mojibake)", name)
+		}
+	}
+}
 
 func TestRenderReportPDF(t *testing.T) {
 	now := time.Now().UTC()
@@ -46,7 +78,7 @@ func TestRenderReportPDF(t *testing.T) {
 	results := []models.SimulationResult{
 		{Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"},
 			Result: models.ResultFail, Severity: "High",
-			Details: "Encoded PowerShell command executed successfully.",
+			Details:      "Encoded PowerShell command executed successfully.",
 			ThreatImpact: "An attacker can run arbitrary code in memory, evading file-based AV.",
 			Remediation:  "Enable Constrained Language Mode and script block logging.",
 			Framework:    "art"},
@@ -55,6 +87,13 @@ func TestRenderReportPDF(t *testing.T) {
 			Details: "Access to LSASS was denied by the security control.", Framework: "art"},
 		{Technique: models.AttackTechnique{ID: "T1547", Name: "Boot Autostart", Tactic: "persistence"},
 			Result: models.ResultSkipped, Severity: "Medium", Framework: "art"},
+		// ERROR verdict whose detail carries the punctuation that mojibakes under
+		// the WinAnsi core font (— · × …). Rendering must succeed: a runtime
+		// failure to load the cp1252 translator surfaces as an Output error here.
+		{Technique: models.AttackTechnique{ID: "T1112", Name: "Modify Registry", Tactic: "defense-evasion"},
+			Result: models.ResultError, Severity: "High",
+			Details:   "Execution error (malformed content) — ERROR: Invalid syntax · amplified 2.5× …",
+			Framework: "art"},
 	}
 
 	var buf bytes.Buffer

@@ -39,11 +39,26 @@ const (
 type rpt struct {
 	pdf      *fpdf.Fpdf
 	docTitle string
+	tr       func(string) string // UTF-8 → core-font (CP1252) encoder
 }
 
 func (d *rpt) fill(c rgb) { d.pdf.SetFillColor(c.r, c.g, c.b) }
 func (d *rpt) text(c rgb) { d.pdf.SetTextColor(c.r, c.g, c.b) }
 func (d *rpt) draw(c rgb) { d.pdf.SetDrawColor(c.r, c.g, c.b) }
+
+// cellT / mcellT / cfT are the text-writing entry points. They run every string
+// through tr so UTF-8 punctuation (— · × …) is encoded for the WinAnsi/CP1252
+// core fonts. Writing raw UTF-8 to fpdf's core fonts otherwise renders mojibake
+// (e.g. "—" → "Ã¢â‚¬â€•", "×" → "Ã—"). All PDF text must go through these.
+func (d *rpt) cellT(w, h float64, s string) { fp := d.pdf; fp.Cell(w, h, d.tr(s)) }
+func (d *rpt) mcellT(w, h float64, s, border, align string, fill bool) {
+	fp := d.pdf
+	fp.MultiCell(w, h, d.tr(s), border, align, fill)
+}
+func (d *rpt) cfT(w, h float64, s, border string, ln int, align string, fill bool, link int, linkStr string) {
+	fp := d.pdf
+	fp.CellFormat(w, h, d.tr(s), border, ln, align, fill, link, linkStr)
+}
 
 // RenderReportPDF writes an enterprise-grade assessment PDF to w from the
 // engine's rich FullReport plus the raw per-technique results (which carry
@@ -55,6 +70,7 @@ func RenderReportPDF(w io.Writer, rep *FullReport, results []models.SimulationRe
 	pdf.SetAutoPageBreak(true, 20)
 	pdf.AliasNbPages("")
 	d := &rpt{pdf: pdf, docTitle: rep.Summary.LastScenarioName}
+	d.tr = pdf.UnicodeTranslatorFromDescriptor("") // "" → cp1252 (built-in)
 
 	pdf.SetHeaderFunc(func() {
 		if pdf.PageNo() == 1 { // no header on the cover
@@ -63,12 +79,12 @@ func RenderReportPDF(w io.Writer, rep *FullReport, results []models.SimulationRe
 		d.text(cMuted)
 		pdf.SetFont("Helvetica", "", 7.5)
 		pdf.SetXY(margin, 8)
-		pdf.CellFormat(contentW/2, 5, "Audspect BAS — Confidential", "", 0, "L", false, 0, "")
+		d.cfT(contentW/2, 5, "Audspect BAS — Confidential", "", 0, "L", false, 0, "")
 		title := d.docTitle
 		if len(title) > 60 {
 			title = title[:60] + "…"
 		}
-		pdf.CellFormat(contentW/2, 5, title, "", 0, "R", false, 0, "")
+		d.cfT(contentW/2, 5, title, "", 0, "R", false, 0, "")
 		d.draw(cLine)
 		pdf.SetLineWidth(0.2)
 		pdf.Line(margin, 14, pageW-margin, 14)
@@ -80,8 +96,8 @@ func RenderReportPDF(w io.Writer, rep *FullReport, results []models.SimulationRe
 		d.text(cMuted)
 		pdf.SetFont("Helvetica", "", 7.5)
 		pdf.SetY(-14)
-		pdf.CellFormat(contentW/2, 6, "Audspect Breach & Attack Simulation", "", 0, "L", false, 0, "")
-		pdf.CellFormat(contentW/2, 6, fmt.Sprintf("Page %d of {nb}", pdf.PageNo()), "", 0, "R", false, 0, "")
+		d.cfT(contentW/2, 6, "Audspect Breach & Attack Simulation", "", 0, "L", false, 0, "")
+		d.cfT(contentW/2, 6, fmt.Sprintf("Page %d of {nb}", pdf.PageNo()), "", 0, "R", false, 0, "")
 	})
 
 	d.coverPage(rep)
@@ -114,16 +130,16 @@ func (d *rpt) coverPage(rep *FullReport) {
 	d.text(cWhite)
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.SetXY(margin, 30)
-	pdf.Cell(0, 8, "AUDSPECT")
+	d.cellT(0, 8, "AUDSPECT")
 	pdf.SetFont("Helvetica", "", 9)
 	d.text(cMuted)
 	pdf.SetXY(margin, 38)
-	pdf.Cell(0, 6, "Breach & Attack Simulation Platform")
+	d.cellT(0, 6, "Breach & Attack Simulation Platform")
 
 	d.text(cWhite)
 	pdf.SetFont("Helvetica", "B", 28)
 	pdf.SetXY(margin, 90)
-	pdf.MultiCell(contentW, 13, "Adversary Simulation\nAssessment Report", "", "L", false)
+	d.mcellT(contentW, 13, "Adversary Simulation\nAssessment Report", "", "L", false)
 
 	scenario := rep.Summary.LastScenarioName
 	if scenario == "" {
@@ -132,7 +148,7 @@ func (d *rpt) coverPage(rep *FullReport) {
 	pdf.SetFont("Helvetica", "", 13)
 	d.text(rgb{180, 195, 215})
 	pdf.SetXY(margin, 128)
-	pdf.MultiCell(contentW, 7, scenario, "", "L", false)
+	d.mcellT(contentW, 7, scenario, "", "L", false)
 
 	// Classification banner.
 	cls := rep.Summary.Classification
@@ -143,7 +159,7 @@ func (d *rpt) coverPage(rep *FullReport) {
 	d.text(cWhite)
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.SetXY(margin+4, 152)
-	pdf.Cell(62, 7, "RISK: "+strings.ToUpper(emptyDash(cls)))
+	d.cellT(62, 7, "RISK: "+strings.ToUpper(emptyDash(cls)))
 
 	// Metadata block near the bottom.
 	rows := [][2]string{
@@ -159,11 +175,11 @@ func (d *rpt) coverPage(rep *FullReport) {
 		d.text(cMuted)
 		pdf.SetFont("Helvetica", "", 9)
 		pdf.SetXY(margin, y)
-		pdf.Cell(45, 6, r[0])
+		d.cellT(45, 6, r[0])
 		d.text(cWhite)
 		pdf.SetFont("Helvetica", "B", 9)
 		pdf.SetXY(margin+45, y)
-		pdf.Cell(contentW-45, 6, r[1])
+		d.cellT(contentW-45, 6, r[1])
 		y += 8
 	}
 
@@ -173,7 +189,7 @@ func (d *rpt) coverPage(rep *FullReport) {
 	d.text(cWhite)
 	pdf.SetFont("Helvetica", "B", 8)
 	pdf.SetXY(margin, 288)
-	pdf.Cell(contentW, 6, "CONFIDENTIAL — Contains sensitive security assessment findings. Distribute on a need-to-know basis only.")
+	d.cellT(contentW, 6, "CONFIDENTIAL — Contains sensitive security assessment findings. Distribute on a need-to-know basis only.")
 }
 
 // ── Section primitives ──────────────────────────────────────────────────────
@@ -187,7 +203,7 @@ func (d *rpt) sectionTitle(n int, title string) {
 	d.text(cNavy)
 	pdf.SetFont("Helvetica", "B", 13)
 	pdf.SetXY(margin+5, y-0.5)
-	pdf.Cell(contentW-5, 8, fmt.Sprintf("%d.  %s", n, title))
+	d.cellT(contentW-5, 8, fmt.Sprintf("%d.  %s", n, title))
 	pdf.SetY(y + 10)
 	d.draw(cLine)
 	pdf.SetLineWidth(0.2)
@@ -199,7 +215,7 @@ func (d *rpt) body(s string) {
 	d.text(cInk)
 	d.pdf.SetFont("Helvetica", "", 9.5)
 	d.pdf.SetX(margin)
-	d.pdf.MultiCell(contentW, 5, s, "", "L", false)
+	d.mcellT(contentW, 5, s, "", "L", false)
 	d.pdf.Ln(1)
 }
 
@@ -230,12 +246,12 @@ func (d *rpt) executiveSummary(rep *FullReport) {
 	d.text(cNavy)
 	d.pdf.SetFont("Helvetica", "B", 10)
 	d.pdf.SetXY(margin+6, y+2.5)
-	d.pdf.Cell(contentW-10, 5, fmt.Sprintf("Overall posture: %s  (risk score %d / 100, %s)",
+	d.cellT(contentW-10, 5, fmt.Sprintf("Overall posture: %s  (risk score %d / 100, %s)",
 		emptyDash(s.Classification), s.RiskScore, s.Trend))
 	d.text(cMuted)
 	d.pdf.SetFont("Helvetica", "", 8.5)
 	d.pdf.SetXY(margin+6, y+8.5)
-	d.pdf.Cell(contentW-10, 5, fmt.Sprintf("%d techniques · %d prevented · %d succeeded · %d errored · %d skipped · %d critical/high finding(s)",
+	d.cellT(contentW-10, 5, fmt.Sprintf("%d techniques · %d prevented · %d succeeded · %d errored · %d skipped · %d critical/high finding(s)",
 		s.TotalTechniques, s.PassedTechniques, s.FailedTechniques, s.ErroredTechniques, s.SkippedTechniques, len(s.CriticalFailures)))
 	d.pdf.SetY(y + 20)
 }
@@ -304,15 +320,15 @@ func (d *rpt) scorecard(rep *FullReport) {
 		d.text(cMuted)
 		d.pdf.SetFont("Helvetica", "B", 7)
 		d.pdf.SetXY(x+3, y+3)
-		d.pdf.Cell(cw-6, 4, strings.ToUpper(c.label))
+		d.cellT(cw-6, 4, strings.ToUpper(c.label))
 		d.text(c.col)
 		d.pdf.SetFont("Helvetica", "B", 17)
 		d.pdf.SetXY(x+3, y+8)
-		d.pdf.Cell(cw-6, 9, c.value)
+		d.cellT(cw-6, 9, c.value)
 		d.text(cMuted)
 		d.pdf.SetFont("Helvetica", "", 6.5)
 		d.pdf.SetXY(x+3, y+18)
-		d.pdf.MultiCell(cw-5, 3, c.note, "", "L", false)
+		d.mcellT(cw-5, 3, c.note, "", "L", false)
 	}
 	d.pdf.SetY(y + 30)
 }
@@ -362,11 +378,11 @@ func (d *rpt) keyValueTable(rows [][2]string) {
 		d.text(cMuted)
 		pdf.SetFont("Helvetica", "B", 8.5)
 		pdf.SetXY(margin, y)
-		pdf.Cell(45, 6, r[0])
+		d.cellT(45, 6, r[0])
 		d.text(cInk)
 		pdf.SetFont("Helvetica", "", 8.5)
 		pdf.SetX(margin + 45)
-		pdf.MultiCell(contentW-45, 6, r[1], "", "L", false)
+		d.mcellT(contentW-45, 6, r[1], "", "L", false)
 		d.draw(rgb{235, 239, 244})
 		pdf.SetLineWidth(0.15)
 		pdf.Line(margin, pdf.GetY(), pageW-margin, pdf.GetY())
@@ -390,7 +406,7 @@ func (d *rpt) tacticBreakdown(rep *FullReport) {
 		d.text(cInk)
 		pdf.SetFont("Helvetica", "B", 8.5)
 		pdf.SetXY(margin, y)
-		pdf.Cell(55, 5, capTactic(t.Tactic))
+		d.cellT(55, 5, capTactic(t.Tactic))
 		// Bar track.
 		barX, barW := margin+58, 86.0
 		d.fill(rgb{233, 237, 242})
@@ -411,11 +427,11 @@ func (d *rpt) tacticBreakdown(rep *FullReport) {
 		d.text(col)
 		pdf.SetFont("Helvetica", "B", 8.5)
 		pdf.SetXY(barX+barW+3, y)
-		pdf.Cell(14, 5, fmt.Sprintf("%d%%", pct))
+		d.cellT(14, 5, fmt.Sprintf("%d%%", pct))
 		d.text(cMuted)
 		pdf.SetFont("Helvetica", "", 7.5)
 		pdf.SetXY(barX+barW+18, y)
-		pdf.Cell(0, 5, fmt.Sprintf("%d pass · %d fail", t.Passed, t.Failed))
+		d.cellT(0, 5, fmt.Sprintf("%d pass · %d fail", t.Passed, t.Failed))
 		pdf.SetY(y + 7)
 	}
 	pdf.Ln(1)
@@ -445,11 +461,11 @@ func (d *rpt) finding(n int, f Finding) {
 	pdf.SetFont("Helvetica", "B", 9.5)
 	pdf.SetXY(margin+24, yStart-0.3)
 	title := fmt.Sprintf("F-%02d  %s — %s", n, emptyDash(f.TechniqueID), emptyDash(f.TechniqueName))
-	pdf.MultiCell(contentW-24, 5, title, "", "L", false)
+	d.mcellT(contentW-24, 5, title, "", "L", false)
 	d.text(cMuted)
 	pdf.SetFont("Helvetica", "", 7.5)
 	pdf.SetX(margin + 24)
-	pdf.Cell(0, 4, capTactic(f.Tactic))
+	d.cellT(0, 4, capTactic(f.Tactic))
 	pdf.Ln(5)
 
 	if f.Details != "" {
@@ -495,7 +511,7 @@ func (d *rpt) resultBlock(r models.SimulationResult) {
 	pdf.SetXY(margin+22, yStart-0.3)
 	name := emptyDash(r.Technique.Name)
 	head := fmt.Sprintf("%s — %s", emptyDash(r.Technique.ID), name)
-	pdf.MultiCell(contentW-22, 4.6, head, "", "L", false)
+	d.mcellT(contentW-22, 4.6, head, "", "L", false)
 	d.text(cMuted)
 	pdf.SetFont("Helvetica", "", 7.5)
 	pdf.SetX(margin + 22)
@@ -503,7 +519,7 @@ func (d *rpt) resultBlock(r models.SimulationResult) {
 	if r.Severity != "" {
 		meta += "  ·  " + r.Severity
 	}
-	pdf.Cell(0, 4, meta)
+	d.cellT(0, 4, meta)
 	pdf.Ln(5)
 
 	if r.Details != "" {
@@ -530,11 +546,11 @@ func (d *rpt) labelled(label, value string) {
 	d.text(cMuted)
 	pdf.SetFont("Helvetica", "B", 7.5)
 	pdf.SetX(margin + 4)
-	pdf.Cell(24, 4.4, label)
+	d.cellT(24, 4.4, label)
 	d.text(cInk)
 	pdf.SetFont("Helvetica", "", 8.5)
 	pdf.SetX(margin + 28)
-	pdf.MultiCell(contentW-28, 4.4, value, "", "L", false)
+	d.mcellT(contentW-28, 4.4, value, "", "L", false)
 }
 
 // ── 7. Recommendations ──────────────────────────────────────────────────────
@@ -555,11 +571,11 @@ func (d *rpt) recommendations(rep *FullReport) {
 		d.text(cWhite)
 		pdf.SetFont("Helvetica", "B", 8)
 		pdf.SetXY(margin, y+0.4)
-		pdf.CellFormat(5, 5, fmt.Sprintf("%d", i+1), "", 0, "C", false, 0, "")
+		d.cfT(5, 5, fmt.Sprintf("%d", i+1), "", 0, "C", false, 0, "")
 		d.text(cInk)
 		pdf.SetFont("Helvetica", "", 9)
 		pdf.SetX(margin + 8)
-		pdf.MultiCell(contentW-8, 4.8, rec, "", "L", false)
+		d.mcellT(contentW-8, 4.8, rec, "", "L", false)
 		pdf.SetY(pdf.GetY() + 2)
 	}
 }
@@ -596,7 +612,7 @@ func (d *rpt) chip(x, y float64, label string, c rgb) {
 	d.text(c)
 	pdf.SetFont("Helvetica", "B", 7)
 	pdf.SetXY(x, y+0.2)
-	pdf.CellFormat(w, 4.2, label, "", 0, "C", false, 0, "")
+	d.cfT(w, 4.2, label, "", 0, "C", false, 0, "")
 }
 
 func (d *rpt) separator() {
