@@ -148,6 +148,9 @@ type Heartbeat struct {
 	BinaryHash    string `json:"binaryHash,omitempty"`
 	AgentVersion  string `json:"agentVersion,omitempty"`
 	SchemaVersion int    `json:"schemaVersion,omitempty"`
+
+	ProtocolVersion int  `json:"protocolVersion,omitempty"`
+	EmitsEvents     bool `json:"emitsEvents,omitempty"`
 }
 
 // HeartbeatResponse is returned to the agent after each heartbeat.

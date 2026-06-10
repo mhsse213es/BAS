@@ -150,6 +150,9 @@ func (a *Agent) sendHeartbeat(status string) {
 		BinaryHash:    a.binaryHash,
 		AgentVersion:  version,
 		SchemaVersion: schemaVersion,
+
+		ProtocolVersion: protocolVersion,
+		EmitsEvents:     true,
 	}
 	t0 := time.Now()
 	var resp HeartbeatResponse

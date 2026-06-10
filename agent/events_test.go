@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -87,4 +88,17 @@ func TestEmitterBoundedDropsAndNeverBlocks(t *testing.T) {
 		t.Fatal("emit blocked — bounded queue must drop, never block the run")
 	}
 	em.close()
+}
+
+func TestHeartbeatAdvertisesCapability(t *testing.T) {
+	hb := Heartbeat{AgentID: "a", ProtocolVersion: protocolVersion, EmitsEvents: true}
+	raw, _ := json.Marshal(hb)
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	if m["protocolVersion"] != float64(2) {
+		t.Errorf("protocolVersion = %v, want 2", m["protocolVersion"])
+	}
+	if m["emitsEvents"] != true {
+		t.Errorf("emitsEvents = %v, want true", m["emitsEvents"])
+	}
 }

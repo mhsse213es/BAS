@@ -311,20 +311,21 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 
 	_, err := h.db.Exec(r.Context(), `
 		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username, status, env_label,
-		                    binary_hash, binary_trusted, state, last_update)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', NOW())
+		                    binary_hash, binary_trusted, protocol_version, state, last_update)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', NOW())
 		ON CONFLICT (agent_id) DO UPDATE SET
-			hostname       = EXCLUDED.hostname,
-			ip_address     = EXCLUDED.ip_address,
-			os_version     = EXCLUDED.os_version,
-			username       = EXCLUDED.username,
-			status         = EXCLUDED.status,
-			env_label      = EXCLUDED.env_label,
-			binary_hash    = EXCLUDED.binary_hash,
-			binary_trusted = EXCLUDED.binary_trusted,
-			last_update    = NOW()`,
+			hostname         = EXCLUDED.hostname,
+			ip_address       = EXCLUDED.ip_address,
+			os_version       = EXCLUDED.os_version,
+			username         = EXCLUDED.username,
+			status           = EXCLUDED.status,
+			env_label        = EXCLUDED.env_label,
+			binary_hash      = EXCLUDED.binary_hash,
+			binary_trusted   = EXCLUDED.binary_trusted,
+			protocol_version = EXCLUDED.protocol_version,
+			last_update      = NOW()`,
 		hb.AgentID, hb.Hostname, hb.IPAddr, hb.OSVer, hb.Username, hb.Status, hb.EnvLabel,
-		hb.BinaryHash, trusted,
+		hb.BinaryHash, trusted, hb.ProtocolVersion,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

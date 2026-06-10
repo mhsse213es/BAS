@@ -12,6 +12,10 @@ import (
 // schemaVersion is bumped whenever the wire protocol changes in a breaking way.
 const schemaVersion = 1
 
+// protocolVersion advertises the agent's run-protocol capabilities to the server.
+// 2 = emits run-event stream (Phase B-1).
+const protocolVersion = 2
+
 type Heartbeat struct {
 	AgentID       string `json:"agentId"`
 	Hostname      string `json:"hostname"`
@@ -23,6 +27,9 @@ type Heartbeat struct {
 	BinaryHash    string `json:"binaryHash,omitempty"`
 	AgentVersion  string `json:"agentVersion,omitempty"`
 	SchemaVersion int    `json:"schemaVersion,omitempty"`
+
+	ProtocolVersion int  `json:"protocolVersion,omitempty"`
+	EmitsEvents     bool `json:"emitsEvents,omitempty"`
 }
 
 // HeartbeatResponse is returned by the server on every POST /api/heartbeat.
