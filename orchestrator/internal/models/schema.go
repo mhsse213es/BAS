@@ -189,6 +189,7 @@ const (
 	MsgCommandScan     = "command_scan"
 	MsgCommandScenario = "command_scenario"
 	MsgCommandSimulate = "command_simulate"
+	MsgCommandCancel   = "command_cancel"
 	MsgScenarioResult  = "scenario_result"
 	MsgPatchStatus     = "patch_status_update"
 	MsgCommandPatches  = "command_install_patches"

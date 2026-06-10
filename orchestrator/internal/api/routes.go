@@ -97,6 +97,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 			r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleAnalyst))
 			r.Post("/api/scan/{agentId}", h.TriggerScan)
 			r.Post("/api/scenarios/{id}/run", h.RunScenario)
+			r.Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
 
 			// Custom scenario builder
 			r.Post("/api/scenarios", h.CreateScenario)

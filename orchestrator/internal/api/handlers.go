@@ -1173,6 +1173,42 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	respond(w, runs)
 }
 
+// POST /api/scenarios/runs/{runId}/cancel — ask the agent to stop an in-flight
+// run. The agent cancels the run context (drains the scheduler, emits
+// run_cancelled, submits partial results). If the agent is unreachable it can't
+// report, so the run is marked partial here.
+func (h *Handler) CancelRun(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runId")
+	var agentID, status string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT agent_id, status FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&agentID, &status); err != nil {
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	}
+	if status != "running" {
+		jsonError(w, "run is not running (status: "+status+")", http.StatusConflict)
+		return
+	}
+
+	sent := h.hub.SendToAgent(agentID, models.WSMessage{
+		Type:    models.MsgCommandCancel,
+		AgentID: agentID,
+		Data:    map[string]string{"runId": runID},
+	})
+	if !sent {
+		// Agent offline — it won't submit partial results, so mark it now.
+		_, _ = h.db.Exec(r.Context(),
+			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
+			  WHERE id = $1 AND status = 'running'`, runID)
+		log.Printf("[scenario] cancel run %s — agent %s offline, marked partial", runID, agentID)
+		respond(w, map[string]string{"runId": runID, "status": "partial"})
+		return
+	}
+	log.Printf("[scenario] cancel requested for run %s → agent %s", runID, agentID)
+	respond(w, map[string]string{"runId": runID, "status": "cancelling"})
+}
+
 // ── Reports ───────────────────────────────────────────────────────────────────
 
 // ── Config (admin only) ──────────────────────────────────────────────────────

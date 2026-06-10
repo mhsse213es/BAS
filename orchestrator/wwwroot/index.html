@@ -1793,6 +1793,7 @@ function loadRuns() {
         '<td>' + (function() {
           var acts = '';
           if (r.id) acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
+          if (r.id && r.status === 'running') acts += '<button class="btn btn-outline-red btn-sm" onclick="stopRun(\'' + x(r.id) + '\')" title="Stop this run — keeps completed steps, marks the run partial">&#9632; Stop</button> ';
           if (cnt) acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
           return acts || '—';
         })() + '</td>' +
@@ -2510,6 +2511,18 @@ function closeResults() { document.getElementById('results-overlay').classList.r
 })();
 
 function closeRunLive() { document.getElementById('run-live-overlay').classList.remove('open'); }
+
+// Stop an in-flight run. The agent cancels gracefully (completed steps are kept;
+// the run is marked partial). If the agent is offline the server marks it partial.
+function stopRun(runId) {
+  if (!confirm('Stop this run?\n\nCompleted steps are kept and the run is marked partial. Remaining steps will not execute.')) return;
+  apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/cancel', { method: 'POST' })
+    .then(function(res) {
+      showToast('Run ' + (res && res.status === 'partial' ? 'stopped (agent offline)' : 'stopping…'), 'ok');
+      loadRuns();
+    })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
 
 function exportRunJSON(runId) {
   var a = document.createElement('a');

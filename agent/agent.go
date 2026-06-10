@@ -179,6 +179,20 @@ func (a *Agent) sendHeartbeat(status string) {
 	log.Printf("[~] heartbeat: %s (state=%s latency=%.0fms)", status, resp.State, latencyMs)
 }
 
+// cancelCurrentScenario cancels the in-flight scenario run, if any. The run's
+// context cancellation makes runScenario drain the scheduler, emit run_cancelled,
+// and submit partial results. Returns true if a run was active. Safe to call when
+// idle (cancelling an already-finished context is a no-op).
+func (a *Agent) cancelCurrentScenario() bool {
+	a.scenarioMu.Lock()
+	defer a.scenarioMu.Unlock()
+	if a.cancelScenario == nil {
+		return false
+	}
+	a.cancelScenario()
+	return true
+}
+
 func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	// Local state guard — defense-in-depth alongside server-side enforcement.
 	a.mu.Lock()
@@ -599,6 +613,14 @@ func (a *Agent) connectWS() {
 					continue
 				}
 				go a.runLocalScan(sim.ScenarioID, sim.RunID)
+
+			case "command_cancel":
+				if a.cancelCurrentScenario() {
+					log.Printf("[*] scenario cancelled by operator")
+					a.logger.Op("warn", "lifecycle", "scenario stopped by operator request")
+				} else {
+					log.Printf("[~] command_cancel received but no scenario is running")
+				}
 
 			default:
 				log.Printf("[~] WS: unhandled message type %q", msg.Type)
