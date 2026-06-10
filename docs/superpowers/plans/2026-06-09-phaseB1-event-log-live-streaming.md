@@ -1214,8 +1214,22 @@ git push origin main
   # then re-run the same curl; counts must not change
   ```
 - [ ] **Demo 5 — Legacy agent:** run a scenario with an agent build that does NOT emit events (pre-B-1 binary); confirm the run still completes and scores correctly via the final POST, with no live timeline.
+- [ ] **Demo 6 — Full ART sweep timing (Phase A regression check):** run the `art-full-windows` scenario end-to-end against one endpoint and record wall-clock + completion. This is the original "1210 steps, only ~10 finished, very slow" problem; confirm it is closed *with a number*, not just "feels faster".
+  - **Completeness:** the run reaches `completed` (not `partial`) and `steps_done == steps_total`. Verify no truncation:
+    ```bash
+    psql "$DATABASE_URL" -c "SELECT status, steps_total, steps_done, steps_failed, steps_timeout FROM scenario_runs WHERE id='<runId>';"
+    ```
+    Expect `status=completed` and `steps_done = steps_total` (one representative atomic per technique, ~full ATT&CK breadth — NOT 1210).
+  - **Concurrency guard:** while the sweep is running, POST a second run to the same agent and confirm **409** (the in-flight sweep is not cancelled/truncated):
+    ```bash
+    curl -s -o /dev/null -w '%{http_code}\n' -X POST "$SERVER/api/scenarios/art-full-windows/run" \
+      -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" \
+      -d '{"agentId":"<agentId>"}'   # expect 409 while the sweep is still running
+    ```
+  - **Wall-clock:** capture start→finish from the run row (`startedAt`/`completedAt`) and record minutes in the PR. If a pre-Phase-A baseline run exists, note the before/after; otherwise this run is the new baseline.
+  - **No hangs:** `steps_timeout` should be small/zero; any timeout is an explicit verdict (supervisor working), not a stalled run.
 
-- [ ] **Commit (docs):** record demo evidence in the PR; no code commit required.
+- [ ] **Commit (docs):** record demo evidence (including Demo 6 wall-clock) in the PR; no code commit required.
 
 ---
 
