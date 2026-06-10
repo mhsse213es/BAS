@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/audspect/bas/internal/models"
 	"github.com/gorilla/websocket"
@@ -15,6 +16,18 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 4096,
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
+
+const (
+	// Keepalive: writePump sends a ping every pingPeriod; readPump declares the
+	// peer dead if no frame (ping reply/pong or app message) arrives within
+	// pongWait. This drops half-open connections — e.g. an agent whose host went
+	// away, or a browser tab that was killed — and frees the slot. The agent
+	// mirrors this with its own read deadline so it reconnects after a server
+	// restart instead of hanging on a half-open TCP socket.
+	writeWait  = 10 * time.Second
+	pongWait   = 60 * time.Second
+	pingPeriod = 25 * time.Second // must be < pongWait
+)
 
 // Hub manages all active WebSocket connections — both endpoint agents and browser dashboards.
 type Hub struct {
@@ -134,10 +147,28 @@ func (h *Hub) ConnectedAgents() []string {
 }
 
 func (c *conn) writePump() {
-	defer c.ws.Close()
-	for msg := range c.send {
-		if err := c.ws.WriteMessage(websocket.TextMessage, msg); err != nil {
-			return
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.ws.Close()
+	}()
+	for {
+		select {
+		case msg, ok := <-c.send:
+			c.ws.SetWriteDeadline(time.Now().Add(writeWait))
+			if !ok {
+				// readPump closed the channel — the connection is gone.
+				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			if err := c.ws.WriteMessage(websocket.TextMessage, msg); err != nil {
+				return
+			}
+		case <-ticker.C:
+			c.ws.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -147,11 +178,20 @@ func (c *conn) readPump(onMessage func(models.WSMessage)) {
 		c.ws.Close()
 		close(c.send)
 	}()
+	// Keepalive: declare the peer dead if nothing arrives within pongWait. The
+	// pong handler (and any inbound frame) extends the deadline. Browsers and the
+	// agent both auto-reply to our pings, so a healthy peer keeps resetting it.
+	c.ws.SetReadDeadline(time.Now().Add(pongWait))
+	c.ws.SetPongHandler(func(string) error {
+		c.ws.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 	for {
 		_, b, err := c.ws.ReadMessage()
 		if err != nil {
 			return
 		}
+		c.ws.SetReadDeadline(time.Now().Add(pongWait))
 		if onMessage != nil {
 			var msg models.WSMessage
 			if json.Unmarshal(b, &msg) == nil {

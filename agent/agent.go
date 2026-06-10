@@ -573,6 +573,22 @@ func (a *Agent) connectWS() {
 		// Flush events buffered while the connection was down.
 		go a.logger.Flush()
 
+		// Keepalive: arm a read deadline and reset it whenever the server pings.
+		// The agent never sends app frames over the WS (heartbeats/events go over
+		// HTTP), and ReadMessage does NOT return for ping control frames — so the
+		// ping handler is what keeps a healthy connection alive. If the server
+		// dies, pings stop, the deadline fires, ReadMessage errors, and we
+		// reconnect. We reply with a pong (mirroring gorilla's default handler).
+		conn.SetReadDeadline(time.Now().Add(wsPongWait))
+		conn.SetPingHandler(func(appData string) error {
+			conn.SetReadDeadline(time.Now().Add(wsPongWait))
+			err := conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(wsWriteWait))
+			if err == websocket.ErrCloseSent {
+				return nil
+			}
+			return err
+		})
+
 		for {
 			_, data, err := conn.ReadMessage()
 			if err != nil {
@@ -581,6 +597,8 @@ func (a *Agent) connectWS() {
 				conn.Close()
 				break
 			}
+			// Any inbound frame is also proof of life — extend the deadline.
+			conn.SetReadDeadline(time.Now().Add(wsPongWait))
 
 			var msg WSMessage
 			if err := json.Unmarshal(data, &msg); err != nil {

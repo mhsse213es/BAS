@@ -16,6 +16,13 @@ const (
 	version           = "2.1.0"
 	heartbeatInterval = 30 * time.Second
 	wsReconnectDelay  = 5 * time.Second
+	// WS keepalive: the server pings every ~25s; if no ping (or any frame)
+	// arrives within wsPongWait the read deadline fires, ReadMessage errors, and
+	// the reconnect loop kicks in. This lets the agent recover from a dead server
+	// (e.g. an orchestrator restart) in ~60s instead of hanging on a half-open
+	// TCP connection until the OS times out.
+	wsPongWait  = 60 * time.Second
+	wsWriteWait = 10 * time.Second
 )
 
 func main() {
