@@ -126,6 +126,27 @@ func TestBuildDetectionSummary(t *testing.T) {
 	if s.ExecutedUnprevented != 4 || s.Detected != 1 || s.LoggedOnly != 2 || s.Undetected != 1 {
 		t.Errorf("summary = %+v; want {Exec:4 Detected:1 Logged:2 Undetected:1}", s)
 	}
+	if !s.TelemetryObserved {
+		t.Errorf("TelemetryObserved = false; want true (some results carried events)")
+	}
+}
+
+// When NO result in the run carried any telemetry, the summary must flag that
+// detection was not measurable — so the report does not claim the FAILs "evaded"
+// the SOC when in truth nothing was collected (old agent build / Defender off).
+func TestBuildDetectionSummaryNoTelemetry(t *testing.T) {
+	results := []models.SimulationResult{
+		{Result: models.ResultFail, Events: nil},
+		{Result: models.ResultFail, Events: nil},
+		{Result: models.ResultPass, Events: nil},
+	}
+	s := buildDetectionSummary(results)
+	if s.TelemetryObserved {
+		t.Errorf("TelemetryObserved = true; want false (no result carried events)")
+	}
+	if s.ExecutedUnprevented != 2 || s.Undetected != 2 {
+		t.Errorf("summary = %+v; want {Exec:2 Undetected:2}", s)
+	}
 }
 
 // Business-objective risk bands: High when most tested techniques in a tactic

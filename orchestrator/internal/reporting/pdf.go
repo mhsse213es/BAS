@@ -282,6 +282,25 @@ func (d *rpt) preventionDetection(s DetectionSummary) {
 		"did not stop execution — not that the attacker's end objective was independently verified. "+
 		"Of those that executed:", s.ExecutedUnprevented), "", "L", false)
 	pdf.Ln(1)
+	// Honest caveat: with zero telemetry for the whole run, detection was not
+	// measurable — do NOT present the FAILs as having "evaded" the SOC.
+	if !s.TelemetryObserved {
+		d.text(cDanger)
+		pdf.SetFont("Helvetica", "B", 8.5)
+		pdf.SetX(margin)
+		d.mcellT(contentW, 4.4, "Detection results unavailable: no host telemetry was collected during this run.", "", "L", false)
+		d.text(cMuted)
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetX(margin)
+		d.mcellT(contentW, 4.2, "This is a measurement gap, not proof the techniques evaded detection. Confirm the agent build collects "+
+			"event-log telemetry and that Microsoft Defender (or Sysmon) is enabled on the endpoint, then re-run. The figures below "+
+			"reflect prevention only; the detection split cannot be trusted until telemetry is collected.", "", "L", false)
+		pdf.Ln(1.5)
+	}
+	undetectedNote := "no telemetry observed — executed unseen (worst case)"
+	if !s.TelemetryObserved {
+		undetectedNote = "detection not measured — no telemetry collected this run (see caveat above)"
+	}
 	rows := []struct {
 		label, note string
 		val         int
@@ -289,7 +308,7 @@ func (d *rpt) preventionDetection(s DetectionSummary) {
 	}{
 		{"Detected", "an alert fired (Microsoft Defender) — a SOC would see this", s.Detected, cWarning},
 		{"Logged only", "telemetry exists but no alert was raised", s.LoggedOnly, cAccent},
-		{"Undetected", "no telemetry observed — executed unseen (worst case)", s.Undetected, cDanger},
+		{"Undetected", undetectedNote, s.Undetected, cDanger},
 	}
 	for _, rrow := range rows {
 		d.ensure(6)
@@ -462,6 +481,85 @@ func (d *rpt) scorecard(rep *FullReport) {
 		d.mcellT(cw-5, 3, c.note, "", "L", false)
 	}
 	d.pdf.SetY(y + 30)
+	d.controlMaturity(rep)
+}
+
+// controlMaturity presents a per-category maturity score (0–10) management reads
+// faster than ATT&CK IDs or raw percentages. Prevention categories are derived
+// from this run's per-tactic prevention rate; the Detection category is derived
+// from the detection telemetry — and is honestly shown as "not measured" when no
+// telemetry was collected this run, rather than scored as zero.
+func (d *rpt) controlMaturity(rep *FullReport) {
+	if len(rep.TacticHeatmap) == 0 {
+		return
+	}
+	pdf := d.pdf
+	d.ensure(16)
+	d.text(cNavy)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin)
+	d.cellT(0, 5, "Control Maturity by Category")
+	pdf.Ln(5.2)
+	d.text(cMuted)
+	pdf.SetFont("Helvetica", "", 7.5)
+	pdf.SetX(margin)
+	d.mcellT(contentW, 4, "Maturity (0–10) per control family, from this run's prevention rate — a management view of which controls held and which need investment. Derived from tested techniques only.", "", "L", false)
+	pdf.Ln(1.5)
+
+	type mrow struct {
+		label string
+		text  string // "8 / 10" or "not measured"
+		score int    // 0..10 for the bar; <0 = not measured
+		col   rgb
+	}
+	var rows []mrow
+	for _, t := range rep.TacticHeatmap {
+		sc := maturityScore(t.PassPct)
+		rows = append(rows, mrow{
+			label: capTactic(t.Tactic) + " Controls",
+			text:  fmt.Sprintf("%d / 10", sc),
+			score: sc,
+			col:   d.gradeHigh(float64(t.PassPct)),
+		})
+	}
+	// Detection controls — only scored when telemetry was actually collected.
+	det := rep.Detection
+	if det.TelemetryObserved && det.ExecutedUnprevented > 0 {
+		seen := (det.Detected + det.LoggedOnly) * 100 / det.ExecutedUnprevented
+		sc := maturityScore(seen)
+		rows = append(rows, mrow{label: "Detection Controls", text: fmt.Sprintf("%d / 10", sc), score: sc, col: d.gradeHigh(float64(seen))})
+	} else {
+		rows = append(rows, mrow{label: "Detection Controls", text: "not measured (no telemetry)", score: -1, col: cMuted})
+	}
+
+	for _, m := range rows {
+		d.ensure(7)
+		y := pdf.GetY()
+		d.text(cInk)
+		pdf.SetFont("Helvetica", "", 8.5)
+		pdf.SetXY(margin+2, y)
+		d.cellT(60, 5, m.label)
+		// Bar track (only for measured rows).
+		barX, barW := margin+64, 70.0
+		d.fill(rgb{233, 237, 242})
+		pdf.RoundedRect(barX, y+0.6, barW, 3.6, 1, "1234", "F")
+		if m.score >= 0 {
+			d.fill(m.col)
+			fillW := barW * float64(m.score) / 10
+			if fillW < 1 && m.score > 0 {
+				fillW = 1
+			}
+			if fillW > 0 {
+				pdf.RoundedRect(barX, y+0.6, fillW, 3.6, 1, "1234", "F")
+			}
+		}
+		d.text(m.col)
+		pdf.SetFont("Helvetica", "B", 8)
+		pdf.SetXY(barX+barW+3, y)
+		d.cellT(0, 5, m.text)
+		pdf.SetY(y + 6.4)
+	}
+	pdf.Ln(1)
 }
 
 // ── 3. Methodology & scope ──────────────────────────────────────────────────
@@ -496,7 +594,9 @@ func (d *rpt) methodology(rep *FullReport, results []models.SimulationResult) {
 		{"Framework", "MITRE ATT&CK (Enterprise)"},
 		{"Engines", strings.Join(fws, ", ")},
 		{"Target endpoint", emptyDash(rep.Agent.Hostname) + " — " + emptyDash(rep.Agent.OSVersion)},
+		{"Asset class", assetClass(rep.Agent.OSVersion)},
 		{"Environment", emptyDash(rep.Agent.EnvLabel)},
+		{"Business criticality", businessCriticality(rep.Agent.EnvLabel)},
 		{"Security context", secCtx},
 		{"Techniques executed", fmt.Sprintf("%d", rep.Summary.TotalTechniques)},
 		{"Tactics exercised", fmt.Sprintf("%d of 14 ATT&CK tactics", len(rep.TacticHeatmap))},
@@ -738,7 +838,7 @@ func (d *rpt) executionRow(r models.SimulationResult) {
 		pdf.SetFont("Helvetica", "B", 7.5)
 		pdf.SetX(margin + 24)
 		d.mcellT(contentW-24, 4, "Detection: "+det.Detail, "", "L", false)
-		if ev := evidenceLine(r.RawOutput); ev != "" {
+		if ev := humanizeEvidence(r); ev != "" {
 			d.text(cMuted)
 			pdf.SetFont("Helvetica", "", 7.5)
 			pdf.SetX(margin + 24)
@@ -992,6 +1092,83 @@ func evidenceLine(raw string) string {
 		s = s[:max] + "…"
 	}
 	return s
+}
+
+// benignOutputSignatures are common harness/atomic stdout lines that confirm a
+// command merely ran but carry no security meaning (e.g. "Hello from PowerShell").
+// We suppress them from the Evidence line so it stays a security statement, not a
+// console transcript — the ART review flagged raw output as noise.
+var benignOutputSignatures = []string{
+	"hello from",
+	"the operation completed successfully",
+	"the command completed successfully",
+	"completed successfully",
+}
+
+// humanizeEvidence returns the Evidence string for a FAIL row. The verdict and the
+// row's detail already establish the technique was not prevented, so raw console
+// chatter adds nothing; we show the captured output ONLY when it is genuinely
+// informative (an error, an artefact path, a value), and drop benign confirmations.
+// Honest by design: we filter noise, we never invent meaning the output does not
+// carry. Applies to every framework, not just ART.
+func humanizeEvidence(r models.SimulationResult) string {
+	raw := evidenceLine(r.RawOutput)
+	if raw == "" || isBenignOutput(raw) {
+		return ""
+	}
+	return raw
+}
+
+func isBenignOutput(s string) bool {
+	low := strings.ToLower(strings.TrimSpace(s))
+	for _, sig := range benignOutputSignatures {
+		if strings.Contains(low, sig) {
+			return true
+		}
+	}
+	return false
+}
+
+// maturityScore maps a per-category prevention percentage to a 0–10 maturity
+// figure management reads faster than raw percentages (round to nearest).
+func maturityScore(passPct int) int {
+	s := (passPct + 5) / 10
+	if s > 10 {
+		s = 10
+	}
+	if s < 0 {
+		s = 0
+	}
+	return s
+}
+
+// assetClass infers the endpoint class from the OS string. Honest: labelled
+// "(inferred from OS)" because the agent does not report an explicit asset type.
+func assetClass(os string) string {
+	low := strings.ToLower(strings.TrimSpace(os))
+	switch {
+	case low == "":
+		return "—"
+	case strings.Contains(low, "server"):
+		return "Server (inferred from OS)"
+	case strings.Contains(low, "windows"):
+		return "Workstation (inferred from OS)"
+	default:
+		return "Endpoint (inferred from OS)"
+	}
+}
+
+// businessCriticality derives a criticality band from the environment label so the
+// same finding reads differently on a production endpoint vs a test box. Derived
+// from the environment tag — not an independent asset-management classification.
+func businessCriticality(env string) string {
+	if isProductionEnv(env) {
+		return "High — production endpoint"
+	}
+	if strings.TrimSpace(env) == "" {
+		return "Not classified"
+	}
+	return "Standard — non-production"
 }
 
 // testKind labels how a result was obtained so the report does not present a

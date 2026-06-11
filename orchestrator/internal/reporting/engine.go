@@ -113,8 +113,8 @@ type ExecutiveSummary struct {
 	Classification     string                   `json:"classification"`
 	PreventionScore    float64                  `json:"preventionScore"`
 	ExposureScore      float64                  `json:"exposureScore"`
-	CoverageScore      float64                  `json:"coverageScore"`      // defense rate — tactics fully blocked
-	KillChainCoverage  float64                  `json:"killChainCoverage"`  // breadth — % of 14 ATT&CK tactics exercised
+	CoverageScore      float64                  `json:"coverageScore"`     // defense rate — tactics fully blocked
+	KillChainCoverage  float64                  `json:"killChainCoverage"` // breadth — % of 14 ATT&CK tactics exercised
 	KillChainAmplifier float64                  `json:"killChainAmplifier"`
 	Trend              string                   `json:"trend"`
 	TotalRuns          int                      `json:"totalRuns"`
@@ -493,15 +493,26 @@ func classifyDetection(events []string) Detection {
 // sharply depending on whether it was also detected. This reframes a raw FAIL
 // count into the actionable "prevented? detected?" matrix a BAS buyer expects.
 type DetectionSummary struct {
-	ExecutedUnprevented int // FAIL count — prevention controls did not stop execution
-	Detected            int // …of which a detection alert fired (Microsoft Defender)
-	LoggedOnly          int // …of which telemetry exists but no alert was raised
-	Undetected          int // …of which no telemetry was observed (executed unseen)
+	ExecutedUnprevented int  // FAIL count — prevention controls did not stop execution
+	Detected            int  // …of which a detection alert fired (Microsoft Defender)
+	LoggedOnly          int  // …of which telemetry exists but no alert was raised
+	Undetected          int  // …of which no telemetry was observed (executed unseen)
+	TelemetryObserved   bool // any host telemetry was collected this run at all
 }
 
+// buildDetectionSummary tallies the prevention/detection matrix and records
+// whether ANY host telemetry was collected during the run. The distinction is
+// critical and honest: when no events were collected for the entire run (an old
+// agent build, the agent offline, or Defender disabled), "Undetected" does NOT
+// mean the techniques evaded detection — it means detection could not be measured
+// at all. The report must say so rather than implying every technique slipped past
+// the SOC. When telemetry exists, an undetected FAIL is a genuine visibility gap.
 func buildDetectionSummary(results []models.SimulationResult) DetectionSummary {
 	var s DetectionSummary
 	for _, r := range results {
+		if len(r.Events) > 0 {
+			s.TelemetryObserved = true
+		}
 		if r.Result != models.ResultFail {
 			continue
 		}
