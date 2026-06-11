@@ -450,26 +450,9 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 			}
 		}
 	}
-	// Derive overall result label for the local status display.
-	resultLabel := "Completed"
-	if partial {
-		resultLabel = "Partial"
-	} else {
-		blocked := 0
-		for _, r := range results {
-			if r.Blocked {
-				blocked++
-			}
-		}
-		switch {
-		case blocked == len(results) && len(results) > 0:
-			resultLabel = "Detected"
-		case blocked > 0:
-			resultLabel = "Partial"
-		default:
-			resultLabel = "Evaded"
-		}
-	}
+	// Derive overall result label for the local status display, aligned with the
+	// server's 4-verdict taxonomy (ERROR steps are excluded, never counted as Evaded).
+	resultLabel := deriveLocalResultLabel(results, partial)
 	a.localSt.UpdateProgress(len(results), len(results), "Upload")
 	a.localSt.CompleteOperation(resultLabel, ev)
 
@@ -489,6 +472,44 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 		log.Printf("[!] result submit (%s): %v", label, err)
 	} else {
 		log.Printf("[+] results submitted (%s): run=%s steps=%d", label, cmd.RunID, len(results))
+	}
+}
+
+// deriveLocalResultLabel rolls per-step results up to the single label shown on
+// the agent's local console. It mirrors the server's 4-verdict taxonomy
+// (PASS/FAIL/ERROR/SKIPPED): a step the agent could not conclusively execute —
+// it timed out, or exited non-zero without being blocked — is an ERROR and is
+// excluded from the Detected/Evaded decision, exactly as the server excludes
+// ERROR/SKIPPED from scoring. The agent stays a dumb executor: it classifies
+// only on the signals it owns (Blocked / TimedOut / ExitCode), never by
+// re-parsing command output — that interpretation is the server's job.
+func deriveLocalResultLabel(results []ExecResult, partial bool) string {
+	if partial {
+		return "Partial" // run was cancelled before finishing
+	}
+	blocked, evaded := 0, 0
+	for _, r := range results {
+		switch {
+		case r.Blocked:
+			blocked++ // a control stopped the technique → PASS
+		case r.TimedOut:
+			// ran but never returned → ERROR, excluded from scoring
+		case r.ExitCode == 0:
+			evaded++ // technique ran cleanly and unblocked → FAIL
+		default:
+			// non-zero exit, not blocked → inconclusive → ERROR, excluded
+		}
+	}
+	scored := blocked + evaded // ERROR steps excluded, mirroring the server
+	switch {
+	case scored == 0:
+		return "Error" // nothing executed conclusively — inconclusive run
+	case blocked == scored:
+		return "Detected"
+	case blocked > 0:
+		return "Partial"
+	default:
+		return "Evaded"
 	}
 }
 

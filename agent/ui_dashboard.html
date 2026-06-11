@@ -169,6 +169,7 @@
   .r-detected{background:rgba(63,185,80,.14);color:#8be79a;border:1px solid rgba(63,185,80,.3)}
   .r-evaded{background:rgba(244,86,74,.14);color:#ff9b92;border:1px solid rgba(244,86,74,.3)}
   .r-partial{background:rgba(227,160,8,.14);color:#f6cf6a;border:1px solid rgba(227,160,8,.3)}
+  .r-error{background:rgba(110,118,129,.16);color:#c2cad6;border:1px solid rgba(110,118,129,.4)}
 
   /* control chips */
   .chips{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
@@ -477,7 +478,7 @@
       bar.classList.add("idle"); fill.style.width="100%";
       $("opPhase").textContent="COMPLETE"; $("opPct").textContent="100%";
       var r=(last.result||"").toLowerCase();
-      var cls=r==="detected"?"r-detected":r==="evaded"?"r-evaded":"r-partial";
+      var cls=r==="detected"?"r-detected":r==="evaded"?"r-evaded":r==="error"?"r-error":"r-partial";
       if(last.result) $("opResultWrap").innerHTML='<span class="result-tag '+cls+'">Result: '+escapeHtml(last.result)+'</span>';
     } else {
       $("opTitle").textContent="No active simulation";
