@@ -81,3 +81,34 @@ func TestBuildTopFindingsDedupesByTechnique(t *testing.T) {
 		t.Errorf("findings = [%s, %s], want [T1003.001, T1486]", f[0].TechniqueID, f[1].TechniqueID)
 	}
 }
+
+// Business-objective risk bands: High when most tested techniques in a tactic
+// went unprevented, Low when all were blocked. Untested objectives and
+// ERROR/SKIPPED results are excluded.
+func TestBuildObjectiveRisks(t *testing.T) {
+	results := []models.SimulationResult{
+		// credential-access: 2 of 2 failed -> High
+		{Technique: models.AttackTechnique{Tactic: "credential-access"}, Result: models.ResultFail},
+		{Technique: models.AttackTechnique{Tactic: "credential-access"}, Result: models.ResultFail},
+		// persistence: 0 of 2 failed -> Low
+		{Technique: models.AttackTechnique{Tactic: "persistence"}, Result: models.ResultPass},
+		{Technique: models.AttackTechnique{Tactic: "persistence"}, Result: models.ResultBlocked},
+		// execution: 1 of 3 failed -> Medium
+		{Technique: models.AttackTechnique{Tactic: "execution"}, Result: models.ResultFail},
+		{Technique: models.AttackTechnique{Tactic: "execution"}, Result: models.ResultPass},
+		{Technique: models.AttackTechnique{Tactic: "execution"}, Result: models.ResultPass},
+		// discovery: only ERROR/SKIPPED -> excluded entirely
+		{Technique: models.AttackTechnique{Tactic: "discovery"}, Result: models.ResultError},
+		{Technique: models.AttackTechnique{Tactic: "discovery"}, Result: models.ResultSkipped},
+	}
+	got := buildObjectiveRisks(results)
+	want := map[string]string{"Credential Theft": "High", "Persistence": "Low", "Code Execution": "Medium"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d objectives, want %d (%v)", len(got), len(want), got)
+	}
+	for _, o := range got {
+		if want[o.Objective] != o.Risk {
+			t.Errorf("%s risk = %q, want %q (failed %d/%d)", o.Objective, o.Risk, want[o.Objective], o.Failed, o.Tested)
+		}
+	}
+}

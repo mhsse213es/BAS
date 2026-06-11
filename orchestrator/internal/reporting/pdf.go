@@ -254,6 +254,55 @@ func (d *rpt) executiveSummary(rep *FullReport) {
 	d.cellT(contentW-10, 5, fmt.Sprintf("%d techniques · %d prevented · %d succeeded · %d errored · %d skipped · %d critical/high finding(s)",
 		s.TotalTechniques, s.PassedTechniques, s.FailedTechniques, s.ErroredTechniques, s.SkippedTechniques, len(s.CriticalFailures)))
 	d.pdf.SetY(y + 20)
+
+	d.objectiveRisks(rep.ObjectiveRisks)
+}
+
+// objectiveRisks renders the run in business terms an executive reads first
+// (Credential Theft, Privilege Escalation, …) with a colour-coded risk band per
+// objective, instead of leaving them to infer risk from raw percentages.
+func (d *rpt) objectiveRisks(risks []ObjectiveRisk) {
+	if len(risks) == 0 {
+		return
+	}
+	pdf := d.pdf
+	d.ensure(16)
+	d.text(cNavy)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin)
+	d.cellT(0, 5, "Business-Objective Risk")
+	pdf.Ln(5.4)
+	d.text(cMuted)
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetX(margin)
+	d.mcellT(contentW, 4.2, "What an attacker could achieve against this endpoint, by objective — derived from the tested techniques in each area (execution errors excluded).", "", "L", false)
+	pdf.Ln(1.5)
+	for _, o := range risks {
+		d.ensure(7)
+		yy := pdf.GetY()
+		d.text(cInk)
+		pdf.SetFont("Helvetica", "", 9)
+		pdf.SetXY(margin+2, yy)
+		d.cellT(64, 5, o.Objective)
+		d.chip(margin+66, yy, strings.ToUpper(o.Risk)+" RISK", d.riskColor(o.Risk))
+		d.text(cMuted)
+		pdf.SetFont("Helvetica", "", 7.5)
+		pdf.SetXY(margin+112, yy+0.7)
+		d.cellT(0, 5, fmt.Sprintf("%d of %d technique(s) unprevented", o.Failed, o.Tested))
+		pdf.Ln(6)
+	}
+	pdf.Ln(1)
+}
+
+func (d *rpt) riskColor(band string) rgb {
+	switch band {
+	case "High":
+		return cDanger
+	case "Medium":
+		return cWarning
+	default:
+		return cSuccess
+	}
 }
 
 func (d *rpt) narrative(rep *FullReport) string {
@@ -286,8 +335,8 @@ func (d *rpt) narrative(rep *FullReport) string {
 	} else {
 		b.WriteString("No critical or high-severity techniques went unprevented during this run. ")
 	}
-	fmt.Fprintf(&b, "Testing exercised %.0f%% of the ATT&CK enterprise kill chain; broadening scenario coverage in future runs will increase assurance. Prioritised recommendations are provided in section 7.",
-		s.KillChainCoverage)
+	fmt.Fprintf(&b, "Testing exercised %d of the 14 MITRE ATT&CK Enterprise tactics across %d technique(s) — this is the breadth of THIS run, not a measure of overall MITRE ATT&CK coverage. Broadening scenario coverage in future runs will increase assurance. Prioritised recommendations are provided in section 7.",
+		len(rep.TacticHeatmap), s.TotalTechniques)
 	return b.String()
 }
 
@@ -303,7 +352,7 @@ func (d *rpt) scorecard(rep *FullReport) {
 	cards := []card{
 		{"Prevention", fmt.Sprintf("%.0f%%", s.PreventionScore), "techniques blocked (higher is better)", d.gradeHigh(s.PreventionScore)},
 		{"Exposure", fmt.Sprintf("%.0f", s.ExposureScore), "weighted fail rate (lower is better)", d.gradeLow(s.ExposureScore)},
-		{"Tactic Coverage", fmt.Sprintf("%.0f%%", s.KillChainCoverage), "breadth — of 14 ATT&CK tactics", cAccent},
+		{"Tactic Breadth", fmt.Sprintf("%d / 14", len(rep.TacticHeatmap)), "ATT&CK tactics exercised (run breadth, not ATT&CK %)", cAccent},
 		{"Defense Rate", fmt.Sprintf("%.0f%%", s.CoverageScore), "tactics with zero failures", d.gradeHigh(s.CoverageScore)},
 	}
 	d.ensure(30)
@@ -672,7 +721,7 @@ func (d *rpt) glossary() {
 		{"Active Adversary Behavioral Test", "An ART or Caldera test that actually executes the technique on the endpoint — it confirms whether deployed controls stop a live attack, not just whether they are configured."},
 		{"Prevention", "Severity-weighted percentage of techniques that were prevented. Higher is better."},
 		{"Exposure", "Tactic-weighted failure rate, amplified by consecutive kill-chain failures. Lower is better."},
-		{"Tactic Coverage", "Breadth of testing: how many of the 14 MITRE ATT&CK Enterprise tactics this run exercised."},
+		{"Tactic Breadth", "Breadth of THIS run: how many of the 14 MITRE ATT&CK Enterprise tactics it exercised. Not a measure of overall MITRE ATT&CK technique coverage — running more Atomics in a tactic does not increase ATT&CK coverage."},
 		{"Defense Rate", "Share of tested tactics in which every technique was blocked (zero failures)."},
 		{"Kill-chain amplifier", "Multiplier (1.0–2.5×) reflecting consecutive unprevented kill-chain phases."},
 		{"Risk classification", "Overall posture band derived from the amplified exposure score."},

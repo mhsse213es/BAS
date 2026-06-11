@@ -31,6 +31,77 @@ type FullReport struct {
 	Runs                []RunSummary     `json:"runs"`
 	SecurityTools       []string         `json:"securityTools"`
 	DetectionCategories []Category       `json:"detectionCategories"`
+	ObjectiveRisks      []ObjectiveRisk  `json:"objectiveRisks"`
+}
+
+// ObjectiveRisk expresses the run's outcome in business terms an executive cares
+// about ("Can credentials be stolen?") rather than raw percentages. Derived from
+// the per-tactic pass/fail of the run; ERROR/SKIPPED are excluded.
+type ObjectiveRisk struct {
+	Objective string `json:"objective"`
+	Tactic    string `json:"tactic"`
+	Risk      string `json:"risk"` // High | Medium | Low
+	Tested    int    `json:"tested"`
+	Failed    int    `json:"failed"`
+}
+
+// objectiveByTactic maps an ATT&CK tactic to the business objective an attacker
+// achieves with it, in the order executives read risk.
+var objectiveByTactic = []struct{ tactic, objective string }{
+	{"credential-access", "Credential Theft"},
+	{"privilege-escalation", "Privilege Escalation"},
+	{"persistence", "Persistence"},
+	{"lateral-movement", "Lateral Movement"},
+	{"command-and-control", "Command & Control"},
+	{"exfiltration", "Data Exfiltration"},
+	{"impact", "Ransomware / Impact"},
+	{"defense-evasion", "Defense Evasion"},
+	{"execution", "Code Execution"},
+	{"discovery", "Discovery"},
+}
+
+// buildObjectiveRisks rolls per-tactic results up to a business-objective risk
+// band: High when most tested techniques in the objective went unprevented,
+// Medium when some did, Low when all were blocked. Objectives with no executed
+// techniques are omitted (we do not assert risk for untested objectives).
+func buildObjectiveRisks(results []models.SimulationResult) []ObjectiveRisk {
+	type agg struct{ tested, failed int }
+	m := make(map[string]*agg)
+	for _, r := range results {
+		if r.Result == models.ResultError || r.Result == models.ResultSkipped {
+			continue
+		}
+		a := m[r.Technique.Tactic]
+		if a == nil {
+			a = &agg{}
+			m[r.Technique.Tactic] = a
+		}
+		a.tested++
+		if r.Result == models.ResultFail {
+			a.failed++
+		}
+	}
+	var out []ObjectiveRisk
+	for _, o := range objectiveByTactic {
+		a := m[o.tactic]
+		if a == nil || a.tested == 0 {
+			continue
+		}
+		risk := "Low"
+		switch {
+		case a.failed == 0:
+			risk = "Low"
+		case a.failed*100/a.tested >= 50:
+			risk = "High"
+		default:
+			risk = "Medium"
+		}
+		out = append(out, ObjectiveRisk{
+			Objective: o.objective, Tactic: o.tactic, Risk: risk,
+			Tested: a.tested, Failed: a.failed,
+		})
+	}
+	return out
 }
 
 // ExecutiveSummary is the top-level risk picture derived from the latest run.
@@ -167,6 +238,7 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 
 	// ── 5. Top findings (Critical + High failures) from latest run ────────
 	report.TopFindings = buildTopFindings(latestResults, latestScenarioName)
+	report.ObjectiveRisks = buildObjectiveRisks(latestResults)
 
 	// ── 6. Executive summary ─────────────────────────────────────────────
 	report.Summary = ExecutiveSummary{
@@ -244,6 +316,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	report.TacticHeatmap = buildTacticHeatmap(results)
 	report.DetectionCategories = buildDetectionCategories(results)
 	report.TopFindings = buildTopFindings(results, scenarioName)
+	report.ObjectiveRisks = buildObjectiveRisks(results)
 
 	report.Summary = ExecutiveSummary{
 		RiskScore:          score.RiskScore,

@@ -98,6 +98,11 @@ func TestRenderReportPDF(t *testing.T) {
 				Remediation: "Enable Credential Guard and LSA protection."},
 		},
 		Runs: []RunSummary{{ID: "run-abcdef123456", ScenarioName: "RBI Ransomware Resilience Sweep"}},
+		ObjectiveRisks: []ObjectiveRisk{
+			{Objective: "Credential Theft", Tactic: "credential-access", Risk: "High", Tested: 3, Failed: 3},
+			{Objective: "Persistence", Tactic: "persistence", Risk: "Low", Tested: 2, Failed: 0},
+			{Objective: "Code Execution", Tactic: "execution", Risk: "Medium", Tested: 3, Failed: 1},
+		},
 	}
 	results := []models.SimulationResult{
 		{Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"},
