@@ -1060,13 +1060,22 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resultsJSON, _ := json.Marshal(simResults)
+	// Persist the agent's post-run cleanup list (registry/file changes reverted
+	// from the snapshot) for the report's cleanup-verification section. Guard the
+	// nil case: json.Marshal(nil slice) is "null", and `'[]'::jsonb || 'null'`
+	// yields [null] — an empty list must stay an empty array.
+	revertedJSON := []byte("[]")
+	if len(raw.Reverted) > 0 {
+		revertedJSON, _ = json.Marshal(raw.Reverted)
+	}
 	// Append new results to whatever already exists (handles partial submissions).
 	var dbErr error
 	_, dbErr = h.db.Exec(r.Context(),
 		`UPDATE scenario_runs
-		 SET status = $1, results = results || $2::jsonb, completed_at = NOW()
+		 SET status = $1, results = results || $2::jsonb,
+		     reverted = reverted || $4::jsonb, completed_at = NOW()
 		 WHERE id = $3`,
-		status, resultsJSON, raw.RunID,
+		status, resultsJSON, raw.RunID, revertedJSON,
 	)
 	if dbErr != nil {
 		jsonError(w, dbErr.Error(), http.StatusInternalServerError)

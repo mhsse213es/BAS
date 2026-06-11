@@ -32,6 +32,7 @@ type FullReport struct {
 	SecurityTools       []string         `json:"securityTools"`
 	DetectionCategories []Category       `json:"detectionCategories"`
 	ObjectiveRisks      []ObjectiveRisk  `json:"objectiveRisks"`
+	Reverted            []string         `json:"reverted"` // endpoint changes rolled back post-run (cleanup evidence)
 }
 
 // ObjectiveRisk expresses the run's outcome in business terms an executive cares
@@ -223,14 +224,15 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	var latestScore models.Score
 
 	latestRow := e.db.QueryRow(ctx,
-		`SELECT name, results, score, started_at
+		`SELECT name, results, score, started_at, reverted
 		 FROM scenario_runs
 		 WHERE agent_id = $1 AND status IN ('completed','partial')
 		 ORDER BY started_at DESC LIMIT 1`, agentID)
-	var resultsRaw, scoreRaw2 []byte
-	if err := latestRow.Scan(&latestScenarioName, &resultsRaw, &scoreRaw2, &latestRunAt); err == nil {
+	var resultsRaw, scoreRaw2, revertedRaw []byte
+	if err := latestRow.Scan(&latestScenarioName, &resultsRaw, &scoreRaw2, &latestRunAt, &revertedRaw); err == nil {
 		json.Unmarshal(resultsRaw, &latestResults)
 		json.Unmarshal(scoreRaw2, &latestScore)
+		json.Unmarshal(revertedRaw, &report.Reverted)
 	}
 
 	// ── 4. Tactic heatmap from latest run ────────────────────────────────
@@ -285,10 +287,11 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	var startedAt time.Time
 	var completedAt *time.Time
 
+	var revertedRaw []byte
 	err := e.db.QueryRow(ctx,
-		`SELECT agent_id, name, status, results, score, started_at, completed_at
+		`SELECT agent_id, name, status, results, score, started_at, completed_at, reverted
 		 FROM scenario_runs WHERE id = $1`, runID,
-	).Scan(&agentID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt)
+	).Scan(&agentID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt, &revertedRaw)
 	if err != nil {
 		return nil, fmt.Errorf("run %s not found: %w", runID, err)
 	}
@@ -297,6 +300,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	var score models.Score
 	json.Unmarshal(resultsRaw, &results)
 	json.Unmarshal(scoreRaw, &score)
+	json.Unmarshal(revertedRaw, &report.Reverted)
 
 	// Agent metadata
 	row := e.db.QueryRow(ctx,

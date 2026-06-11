@@ -194,4 +194,5 @@ type RawRunResult struct {
 	Results    []ExecResult     `json:"results"`
 	Checks     []SimCheckResult `json:"checks,omitempty"` // local_check scenarios only
 	Partial    bool             `json:"partial,omitempty"`
+	Reverted   []string         `json:"reverted,omitempty"` // endpoint changes rolled back post-run
 }

@@ -103,6 +103,10 @@ func TestRenderReportPDF(t *testing.T) {
 			{Objective: "Persistence", Tactic: "persistence", Risk: "Low", Tested: 2, Failed: 0},
 			{Objective: "Code Execution", Tactic: "execution", Risk: "Medium", Tested: 3, Failed: 1},
 		},
+		Reverted: []string{
+			`Registry: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\AtomicTest (deleted)`,
+			`File: C:\Windows\TEMP\nanodump.dmp (deleted)`,
+		},
 	}
 	results := []models.SimulationResult{
 		{Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"},

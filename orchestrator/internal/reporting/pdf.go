@@ -109,6 +109,7 @@ func RenderReportPDF(w io.Writer, rep *FullReport, results []models.SimulationRe
 	d.tacticBreakdown(rep)
 	d.keyFindings(rep)
 	d.detailedResults(results)
+	d.changesAndCleanup(rep)
 	d.recommendations(rep)
 	d.glossary()
 
@@ -230,6 +231,7 @@ func (d *rpt) ensure(h float64) {
 
 func (d *rpt) executiveSummary(rep *FullReport) {
 	d.sectionTitle(1, "Executive Summary")
+	d.productionBanner(rep)
 	d.body(d.narrative(rep))
 
 	// Highlight callout for posture.
@@ -305,6 +307,38 @@ func (d *rpt) riskColor(band string) rgb {
 	}
 }
 
+// isProductionEnv reports whether the endpoint's environment label marks it as a
+// production system (where running live adversary techniques carries real risk).
+func isProductionEnv(label string) bool {
+	return strings.Contains(strings.ToLower(label), "prod")
+}
+
+// productionBanner warns the reader, up front, that live techniques ran against a
+// production endpoint and points to the cleanup section.
+func (d *rpt) productionBanner(rep *FullReport) {
+	if !isProductionEnv(rep.Agent.EnvLabel) {
+		return
+	}
+	pdf := d.pdf
+	d.ensure(16)
+	y := pdf.GetY() + 1
+	d.fill(rgb{253, 246, 246})
+	d.draw(cDanger)
+	pdf.SetLineWidth(0.2)
+	pdf.RoundedRect(margin, y, contentW, 13, 2, "1234", "FD")
+	d.fill(cDanger)
+	pdf.Rect(margin, y, 3, 13, "F")
+	d.text(cDanger)
+	pdf.SetFont("Helvetica", "B", 9)
+	pdf.SetXY(margin+6, y+2)
+	d.cellT(contentW-10, 5, "PRODUCTION ENVIRONMENT")
+	d.text(cInk)
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetXY(margin+6, y+6.5)
+	d.mcellT(contentW-10, 4, "This assessment executed live adversary techniques against a production endpoint. Endpoint changes were reverted where the snapshot system captured them — see section 7 (Changes & Cleanup Verification).", "", "L", false)
+	pdf.SetY(y + 16)
+}
+
 func (d *rpt) narrative(rep *FullReport) string {
 	s := rep.Summary
 	host := emptyDash(rep.Agent.Hostname)
@@ -335,7 +369,7 @@ func (d *rpt) narrative(rep *FullReport) string {
 	} else {
 		b.WriteString("No critical or high-severity techniques went unprevented during this run. ")
 	}
-	fmt.Fprintf(&b, "Testing exercised %d of the 14 MITRE ATT&CK Enterprise tactics across %d technique(s) — this is the breadth of THIS run, not a measure of overall MITRE ATT&CK coverage. Broadening scenario coverage in future runs will increase assurance. Prioritised recommendations are provided in section 7.",
+	fmt.Fprintf(&b, "Testing exercised %d of the 14 MITRE ATT&CK Enterprise tactics across %d technique(s) — this is the breadth of THIS run, not a measure of overall MITRE ATT&CK coverage. Broadening scenario coverage in future runs will increase assurance. Prioritised recommendations are provided in section 8.",
 		len(rep.TacticHeatmap), s.TotalTechniques)
 	return b.String()
 }
@@ -681,10 +715,42 @@ func (d *rpt) labelled(label, value string) {
 	d.mcellT(contentW-28, 4.4, value, "", "L", false)
 }
 
-// ── 7. Recommendations ──────────────────────────────────────────────────────
+// ── 7. Changes & cleanup verification ───────────────────────────────────────
+
+func (d *rpt) changesAndCleanup(rep *FullReport) {
+	d.sectionTitle(7, "Changes & Cleanup Verification")
+	n := len(rep.Reverted)
+	if n == 0 {
+		d.body("No endpoint changes were captured for reversal during this run — the " +
+			"snapshot/revert system recorded no residual registry or file artifacts to " +
+			"roll back.")
+	} else {
+		d.body(fmt.Sprintf("The agent reverted %d endpoint change(s) made during the run. "+
+			"Cleanup status: COMPLETED — each captured change was rolled back from the "+
+			"pre-run snapshot.", n))
+		pdf := d.pdf
+		for _, item := range rep.Reverted {
+			d.ensure(6)
+			d.text(cMuted)
+			pdf.SetFont("Helvetica", "", 8.5)
+			pdf.SetX(margin + 4)
+			d.cellT(4, 4.6, "•")
+			d.text(cInk)
+			pdf.SetX(margin + 9)
+			d.mcellT(contentW-9, 4.6, item, "", "L", false)
+		}
+		pdf.Ln(1)
+	}
+	d.body("Scope note: residual-artifact tracking covers changes captured by the pre-run " +
+		"snapshot (registry keys and files the engine instruments). Out-of-band changes a " +
+		"technique may make outside that scope are not tracked here — verify manually for " +
+		"high-impact techniques run in production.")
+}
+
+// ── 8. Recommendations ──────────────────────────────────────────────────────
 
 func (d *rpt) recommendations(rep *FullReport) {
-	d.sectionTitle(7, "Prioritised Recommendations")
+	d.sectionTitle(8, "Prioritised Recommendations")
 	recs := rep.Summary.Recommendations
 	if len(recs) == 0 {
 		d.body("Maintain the current security posture and schedule the next assessment within 30 days.")
@@ -708,10 +774,10 @@ func (d *rpt) recommendations(rep *FullReport) {
 	}
 }
 
-// ── 8. Glossary ─────────────────────────────────────────────────────────────
+// ── 9. Glossary ─────────────────────────────────────────────────────────────
 
 func (d *rpt) glossary() {
-	d.sectionTitle(8, "Appendix — Metric Definitions")
+	d.sectionTitle(9, "Appendix — Metric Definitions")
 	defs := [][2]string{
 		{"PASS", "A security control prevented or blocked the simulated technique. More passes is better."},
 		{"FAIL", "The technique executed successfully without being stopped — a finding requiring attention."},
