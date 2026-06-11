@@ -676,6 +676,20 @@ func (d *rpt) executionRow(r models.SimulationResult) {
 	pdf.SetXY(margin+24, y-0.3)
 	d.mcellT(contentW-24, 4.4, emptyDash(r.Details), "", "L", false)
 	if r.Result == models.ResultFail {
+		// Detection correlation: even when prevention failed, surface whether the
+		// attack was DETECTED (Defender) or merely logged / unseen.
+		det := classifyDetection(r.Events)
+		dc := cMuted
+		switch det.Status {
+		case "Detected":
+			dc = cWarning
+		case "None":
+			dc = cDanger
+		}
+		d.text(dc)
+		pdf.SetFont("Helvetica", "B", 7.5)
+		pdf.SetX(margin + 24)
+		d.mcellT(contentW-24, 4, "Detection: "+det.Detail, "", "L", false)
 		if ev := evidenceLine(r.RawOutput); ev != "" {
 			d.text(cMuted)
 			pdf.SetFont("Helvetica", "", 7.5)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -420,6 +421,78 @@ func groupResultsByTechnique(results []models.SimulationResult) []TechniqueGroup
 		}
 	}
 	return groups
+}
+
+// Detection is the per-technique detection verdict derived from the event-log
+// telemetry the agent collected during the step. It answers the ART review's
+// "was the attack detected, and by what" — honestly limited to what is locally
+// observable (Microsoft Defender + Sysmon/Security); third-party EDR alerts are
+// never asserted because they are not locally queryable.
+type Detection struct {
+	Detected bool   // a real detection alert fired (Defender)
+	Status   string // "Detected" | "Logged" | "None"
+	Source   string // "Microsoft Defender" | "Sysmon" | "Windows Security" | ""
+	Detail   string // human phrase for the report
+}
+
+// defenderDetectIDs are Microsoft Defender Operational event IDs that mean a
+// threat was detected / acted on (not benign update/scan noise).
+var defenderDetectIDs = map[string]bool{
+	"1006": true, "1007": true, "1008": true, "1009": true, "1010": true,
+	"1011": true, "1012": true, "1015": true, "1116": true, "1117": true,
+	"1118": true, "1119": true,
+}
+
+// classifyDetection maps the agent's raw "id:log" event tokens to a detection
+// verdict. A Defender detection event = Detected; any other telemetry (Sysmon,
+// Security, benign Defender events) = Logged (visibility, no alert); nothing =
+// None. Interpretation lives here on the server, not on the agent.
+func classifyDetection(events []string) Detection {
+	loggedSource := ""
+	for _, ev := range events {
+		id, logName, ok := splitEventToken(ev)
+		if !ok {
+			continue
+		}
+		llog := strings.ToLower(logName)
+		switch {
+		case strings.Contains(llog, "defender"):
+			if defenderDetectIDs[id] {
+				return Detection{
+					Detected: true, Status: "Detected", Source: "Microsoft Defender",
+					Detail: "Microsoft Defender raised a detection (event " + id + ")",
+				}
+			}
+			if loggedSource == "" {
+				loggedSource = "Microsoft Defender"
+			}
+		case strings.Contains(llog, "sysmon"):
+			if loggedSource == "" {
+				loggedSource = "Sysmon"
+			}
+		default:
+			if loggedSource == "" {
+				loggedSource = "Windows Security"
+			}
+		}
+	}
+	if loggedSource != "" {
+		return Detection{
+			Status: "Logged", Source: loggedSource,
+			Detail: "Activity logged by " + loggedSource + " — no detection alert raised",
+		}
+	}
+	return Detection{Status: "None", Detail: "No detection telemetry observed"}
+}
+
+// splitEventToken parses a "id:logName" telemetry token. Log names contain no
+// colon, so a split on the first colon is unambiguous.
+func splitEventToken(tok string) (id, logName string, ok bool) {
+	i := strings.IndexByte(tok, ':')
+	if i <= 0 || i >= len(tok)-1 {
+		return "", "", false
+	}
+	return strings.TrimSpace(tok[:i]), strings.TrimSpace(tok[i+1:]), true
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

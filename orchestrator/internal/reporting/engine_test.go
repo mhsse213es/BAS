@@ -82,6 +82,35 @@ func TestBuildTopFindingsDedupesByTechnique(t *testing.T) {
 	}
 }
 
+// Detection correlation: a Defender detection event => Detected; other telemetry
+// => Logged (visibility, no alert); nothing => None. Honest by design — only
+// Defender/Sysmon/Security are observable.
+func TestClassifyDetection(t *testing.T) {
+	cases := []struct {
+		name       string
+		events     []string
+		wantStatus string
+		wantDetect bool
+	}{
+		{"defender threat detected", []string{"4688:Security", "1116:Microsoft-Windows-Windows Defender/Operational"}, "Detected", true},
+		{"defender action taken", []string{"1117:Microsoft-Windows-Windows Defender/Operational"}, "Detected", true},
+		{"sysmon activity only", []string{"1:Microsoft-Windows-Sysmon/Operational"}, "Logged", false},
+		{"security log only", []string{"4688:Security"}, "Logged", false},
+		{"benign defender event is not a detection", []string{"1000:Microsoft-Windows-Windows Defender/Operational"}, "Logged", false},
+		{"no telemetry", nil, "None", false},
+		{"malformed tokens ignored", []string{"", "garbage", ":bad", "bad:"}, "None", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := classifyDetection(c.events)
+			if d.Status != c.wantStatus || d.Detected != c.wantDetect {
+				t.Errorf("classifyDetection(%v) = {Status:%q Detected:%v}, want {%q %v}",
+					c.events, d.Status, d.Detected, c.wantStatus, c.wantDetect)
+			}
+		})
+	}
+}
+
 // Business-objective risk bands: High when most tested techniques in a tactic
 // went unprevented, Low when all were blocked. Untested objectives and
 // ERROR/SKIPPED results are excluded.
