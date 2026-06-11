@@ -108,6 +108,7 @@ func TestRenderReportPDF(t *testing.T) {
 			`File: C:\Windows\TEMP\nanodump.dmp (deleted)`,
 		},
 		SecurityTools: []string{"Microsoft Defender (real-time protection ON)", "EDR: CrowdStrike Falcon", "EDR: Sysmon"},
+		Detection:     DetectionSummary{ExecutedUnprevented: 7, Detected: 2, LoggedOnly: 3, Undetected: 2},
 	}
 	results := []models.SimulationResult{
 		{Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"},
@@ -129,6 +130,8 @@ func TestRenderReportPDF(t *testing.T) {
 			Details:   "Execution error (malformed content) — ERROR: Invalid syntax · amplified 2.5× …",
 			Framework: "art"},
 	}
+	// Give the FAIL result detection telemetry so the per-row Detection line renders.
+	results[0].Events = []string{"1116:Microsoft-Windows-Windows Defender/Operational"}
 
 	var buf bytes.Buffer
 	if err := RenderReportPDF(&buf, rep, results); err != nil {

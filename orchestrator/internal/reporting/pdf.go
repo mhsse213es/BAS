@@ -257,7 +257,55 @@ func (d *rpt) executiveSummary(rep *FullReport) {
 		s.TotalTechniques, s.PassedTechniques, s.FailedTechniques, s.ErroredTechniques, s.SkippedTechniques, len(s.CriticalFailures)))
 	d.pdf.SetY(y + 20)
 
+	d.preventionDetection(rep.Detection)
 	d.objectiveRisks(rep.ObjectiveRisks)
+}
+
+// preventionDetection reframes the raw FAIL count as the defence-in-depth matrix
+// a BAS buyer reads: of the techniques prevention did not stop, how many were
+// still detected (a SOC would see them) versus executed completely unseen.
+func (d *rpt) preventionDetection(s DetectionSummary) {
+	if s.ExecutedUnprevented == 0 {
+		return
+	}
+	pdf := d.pdf
+	d.ensure(20)
+	d.text(cNavy)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin)
+	d.cellT(0, 5, "Prevention & Detection")
+	pdf.Ln(5.4)
+	d.text(cInk)
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetX(margin)
+	d.mcellT(contentW, 4.6, fmt.Sprintf("%d technique(s) executed without being prevented. A FAIL means a prevention control "+
+		"did not stop execution — not that the attacker's end objective was independently verified. "+
+		"Of those that executed:", s.ExecutedUnprevented), "", "L", false)
+	pdf.Ln(1)
+	rows := []struct {
+		label, note string
+		val         int
+		col         rgb
+	}{
+		{"Detected", "an alert fired (Microsoft Defender) — a SOC would see this", s.Detected, cWarning},
+		{"Logged only", "telemetry exists but no alert was raised", s.LoggedOnly, cAccent},
+		{"Undetected", "no telemetry observed — executed unseen (worst case)", s.Undetected, cDanger},
+	}
+	for _, rrow := range rows {
+		d.ensure(6)
+		yy := pdf.GetY()
+		d.chip(margin+2, yy, fmt.Sprintf("%d", rrow.val), rrow.col)
+		d.text(cNavy)
+		pdf.SetFont("Helvetica", "B", 8.5)
+		pdf.SetXY(margin+18, yy+0.4)
+		d.cellT(28, 5, rrow.label)
+		d.text(cMuted)
+		pdf.SetFont("Helvetica", "", 7.5)
+		pdf.SetXY(margin+48, yy+0.7)
+		d.cellT(0, 5, rrow.note)
+		pdf.Ln(6)
+	}
+	pdf.Ln(1)
 }
 
 // objectiveRisks renders the run in business terms an executive reads first
@@ -803,7 +851,8 @@ func (d *rpt) glossary() {
 	d.sectionTitle(9, "Appendix — Metric Definitions")
 	defs := [][2]string{
 		{"PASS", "A security control prevented or blocked the simulated technique. More passes is better."},
-		{"FAIL", "The technique executed successfully without being stopped — a finding requiring attention."},
+		{"FAIL", "A prevention control did not stop the technique from executing — a finding requiring attention. This means execution was permitted; it does NOT independently verify the attacker's end objective was achieved (e.g. that credentials were actually exfiltrated), which is technique-specific. Check the Detection line for whether the execution was also detected."},
+		{"Detection", "Whether the executed technique was seen by locally-observable telemetry: Detected (a Microsoft Defender alert fired), Logged only (Sysmon/Security telemetry exists but no alert), or Undetected (no telemetry). Third-party EDR detection is not locally observable and is never asserted."},
 		{"ERROR", "The test could not execute correctly (malformed content, timeout, missing prerequisite, scheduler contention). A BAS execution problem, not a security outcome — excluded from scoring."},
 		{"SKIPPED", "The technique was deliberately not run (e.g. external payload not shipped) and was excluded from scoring."},
 		{"Policy Configuration Check", "A passive audit that inspects a security setting (registry key, policy, service state) without running an attack — it confirms whether a control is correctly configured."},

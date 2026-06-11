@@ -34,6 +34,7 @@ type FullReport struct {
 	DetectionCategories []Category       `json:"detectionCategories"`
 	ObjectiveRisks      []ObjectiveRisk  `json:"objectiveRisks"`
 	Reverted            []string         `json:"reverted"` // endpoint changes rolled back post-run (cleanup evidence)
+	Detection           DetectionSummary `json:"detection"`
 }
 
 // ObjectiveRisk expresses the run's outcome in business terms an executive cares
@@ -246,6 +247,7 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	// ── 5. Top findings (Critical + High failures) from latest run ────────
 	report.TopFindings = buildTopFindings(latestResults, latestScenarioName)
 	report.ObjectiveRisks = buildObjectiveRisks(latestResults)
+	report.Detection = buildDetectionSummary(latestResults)
 
 	// ── 6. Executive summary ─────────────────────────────────────────────
 	report.Summary = ExecutiveSummary{
@@ -330,6 +332,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	report.DetectionCategories = buildDetectionCategories(results)
 	report.TopFindings = buildTopFindings(results, scenarioName)
 	report.ObjectiveRisks = buildObjectiveRisks(results)
+	report.Detection = buildDetectionSummary(results)
 
 	report.Summary = ExecutiveSummary{
 		RiskScore:          score.RiskScore,
@@ -483,6 +486,36 @@ func classifyDetection(events []string) Detection {
 		}
 	}
 	return Detection{Status: "None", Detail: "No detection telemetry observed"}
+}
+
+// DetectionSummary is the defence-in-depth rollup of executed (FAIL) techniques:
+// a FAIL means prevention did not stop the technique, but the SOC outcome differs
+// sharply depending on whether it was also detected. This reframes a raw FAIL
+// count into the actionable "prevented? detected?" matrix a BAS buyer expects.
+type DetectionSummary struct {
+	ExecutedUnprevented int // FAIL count — prevention controls did not stop execution
+	Detected            int // …of which a detection alert fired (Microsoft Defender)
+	LoggedOnly          int // …of which telemetry exists but no alert was raised
+	Undetected          int // …of which no telemetry was observed (executed unseen)
+}
+
+func buildDetectionSummary(results []models.SimulationResult) DetectionSummary {
+	var s DetectionSummary
+	for _, r := range results {
+		if r.Result != models.ResultFail {
+			continue
+		}
+		s.ExecutedUnprevented++
+		switch classifyDetection(r.Events).Status {
+		case "Detected":
+			s.Detected++
+		case "Logged":
+			s.LoggedOnly++
+		default:
+			s.Undetected++
+		}
+	}
+	return s
 }
 
 // splitEventToken parses a "id:logName" telemetry token. Log names contain no

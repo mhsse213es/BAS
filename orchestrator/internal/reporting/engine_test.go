@@ -111,6 +111,23 @@ func TestClassifyDetection(t *testing.T) {
 	}
 }
 
+// The prevention/detection summary counts only FAILs (executed-unprevented) and
+// splits them by detection outcome. PASS/ERROR/SKIPPED never count.
+func TestBuildDetectionSummary(t *testing.T) {
+	results := []models.SimulationResult{
+		{Result: models.ResultFail, Events: []string{"1116:Microsoft-Windows-Windows Defender/Operational"}}, // Detected
+		{Result: models.ResultFail, Events: []string{"1:Microsoft-Windows-Sysmon/Operational"}},              // Logged
+		{Result: models.ResultFail, Events: nil},                                                              // Undetected
+		{Result: models.ResultFail, Events: []string{"4688:Security"}},                                        // Logged
+		{Result: models.ResultPass, Events: []string{"1116:Microsoft-Windows-Windows Defender/Operational"}},  // ignored (prevented)
+		{Result: models.ResultError, Events: nil},                                                             // ignored
+	}
+	s := buildDetectionSummary(results)
+	if s.ExecutedUnprevented != 4 || s.Detected != 1 || s.LoggedOnly != 2 || s.Undetected != 1 {
+		t.Errorf("summary = %+v; want {Exec:4 Detected:1 Logged:2 Undetected:1}", s)
+	}
+}
+
 // Business-objective risk bands: High when most tested techniques in a tactic
 // went unprevented, Low when all were blocked. Untested objectives and
 // ERROR/SKIPPED results are excluded.
