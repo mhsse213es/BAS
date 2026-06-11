@@ -74,12 +74,40 @@ func Details(result CheckResult, techID, techName, desc, tactic, rawOutput strin
 	return d
 }
 
+// techniqueRemediation holds remediation guidance keyed by ATT&CK technique ID
+// for cases where the tactic-level default is misleading. The tactic of a
+// technique does not always imply the right control (e.g. T1569.002 is tagged
+// "execution" but abuses service DACLs — PowerShell logging is irrelevant; the
+// fix is service-permission hardening). Keys are normalised technique IDs.
+var techniqueRemediation = map[string]string{
+	// Service Execution / SetServiceObjectSecurity — service ACL abuse, not script execution.
+	"T1569.002": "1) Audit service DACLs (sc.exe sdshow / SCM) and remove WRITE_DAC, WRITE_OWNER, and CHANGE_CONFIG from non-admin principals.\n" +
+		"2) Harden SCM permissions; restrict who may create, reconfigure, or change the security descriptor of services.\n" +
+		"3) Review SeTakeOwnershipPrivilege / SeRestorePrivilege assignments — restrict to trusted administrators.\n" +
+		"4) Monitor service DACL changes and service-config modifications (Event IDs 7045, 4697) and alert on non-admin actors.",
+	// Create or Modify System Service — service-based persistence.
+	"T1543.003": "1) Restrict service creation/modification to administrators; audit and baseline all installed services.\n" +
+		"2) Enable alerts on new service installation (Event ID 7045) and unexpected ImagePath changes.\n" +
+		"3) Enforce signed-binary service images via WDAC/AppLocker; block services launching from user-writable paths.\n" +
+		"4) Monitor SCM database (HKLM\\SYSTEM\\CurrentControlSet\\Services) for unauthorised additions.",
+	// Modify Registry — registry-specific monitoring, not generic script logging.
+	"T1112": "1) Audit and baseline security-relevant registry keys (Run keys, policy hives, ASR/Defender settings, LSA).\n" +
+		"2) Enable registry-modification auditing (Sysmon Event IDs 12/13/14) and forward to SIEM.\n" +
+		"3) Restrict write access to sensitive hives; alert on changes to Defender/EDR and policy keys.\n" +
+		"4) Enable tamper protection so security-product registry settings cannot be silently altered.",
+}
+
 // Remediation returns a 4-step numbered remediation guide for a failed check.
 func Remediation(result CheckResult, tactic, techID, techName string) string {
 	if result == ResultPass || result == ResultBlocked {
 		return fmt.Sprintf(
 			"Control validated: %s (%s) was blocked. Maintain current security posture and continue monitoring.",
 			techName, techID)
+	}
+	// Technique-specific guidance overrides the tactic default where the tactic
+	// would otherwise mislead (e.g. service ACL abuse tagged "execution").
+	if r, ok := techniqueRemediation[NormalizeID(techID)]; ok {
+		return r
 	}
 	switch tactic {
 	case "credential-access":
