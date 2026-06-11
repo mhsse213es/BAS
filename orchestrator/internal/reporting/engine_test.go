@@ -2,6 +2,7 @@ package reporting
 
 import (
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/models"
 )
@@ -146,6 +147,64 @@ func TestBuildDetectionSummaryNoTelemetry(t *testing.T) {
 	}
 	if s.ExecutedUnprevented != 2 || s.Undetected != 2 {
 		t.Errorf("summary = %+v; want {Exec:2 Undetected:2}", s)
+	}
+}
+
+// Control attribution: a Defender ASR block event => Defender ASR; a Defender
+// threat-action event => Defender; output signatures => the matching control;
+// nothing evidenced => "" (caller states a control blocked it without guessing).
+func TestAttributeControl(t *testing.T) {
+	cases := []struct {
+		name   string
+		result models.SimulationResult
+		want   string
+	}{
+		{"asr block event", models.SimulationResult{Events: []string{"1121:Microsoft-Windows-Windows Defender/Operational"}}, "Microsoft Defender (ASR rule)"},
+		{"defender threat action", models.SimulationResult{Events: []string{"1117:Microsoft-Windows-Windows Defender/Operational"}}, "Microsoft Defender"},
+		{"output names defender", models.SimulationResult{RawOutput: "Operation did not complete successfully because the file contains a virus"}, "Microsoft Defender (from output)"},
+		{"group policy block", models.SimulationResult{RawOutput: "This program is blocked by group policy."}, "Application Control / Group Policy"},
+		{"constrained language", models.SimulationResult{RawOutput: "Cannot invoke method. Constrained Language mode."}, "PowerShell Constrained Language Mode"},
+		{"no evidence", models.SimulationResult{RawOutput: "Access is denied."}, ""},
+		{"benign defender event is not a block", models.SimulationResult{Events: []string{"1000:Microsoft-Windows-Windows Defender/Operational"}}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := attributeControl(c.result); got != c.want {
+				t.Errorf("attributeControl = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// Trend: newest scored run is "current", the next is "previous"; the delta is
+// current − previous; running/failed runs are excluded; history is oldest-first.
+func TestBuildTrendSummary(t *testing.T) {
+	runs := []RunSummary{ // newest first, as the DB query returns
+		{ID: "r3", Status: "completed", PreventionScore: 41, RiskScore: 60, StartedAt: time.Unix(300, 0)},
+		{ID: "r-running", Status: "running", PreventionScore: 0, StartedAt: time.Unix(250, 0)},
+		{ID: "r2", Status: "partial", PreventionScore: 28, RiskScore: 72, StartedAt: time.Unix(200, 0)},
+		{ID: "r1", Status: "completed", PreventionScore: 20, RiskScore: 80, StartedAt: time.Unix(100, 0)},
+	}
+	tr := buildTrendSummary(runs)
+	if !tr.HasPrevious {
+		t.Fatal("HasPrevious = false; want true")
+	}
+	if tr.CurrentPrevention != 41 || tr.PreviousPrevention != 28 || tr.DeltaPrevention != 13 {
+		t.Errorf("cur/prev/delta = %.0f/%.0f/%.0f; want 41/28/13", tr.CurrentPrevention, tr.PreviousPrevention, tr.DeltaPrevention)
+	}
+	if len(tr.History) != 3 {
+		t.Fatalf("history len = %d; want 3 (running run excluded)", len(tr.History))
+	}
+	if tr.History[0].RunID != "r1" || tr.History[2].RunID != "r3" {
+		t.Errorf("history order = [%s..%s]; want oldest-first r1..r3", tr.History[0].RunID, tr.History[2].RunID)
+	}
+}
+
+// With fewer than two scored runs, no trend is asserted (no invented baseline).
+func TestBuildTrendSummaryFirstRun(t *testing.T) {
+	tr := buildTrendSummary([]RunSummary{{ID: "r1", Status: "completed", PreventionScore: 50}})
+	if tr.HasPrevious {
+		t.Errorf("HasPrevious = true; want false (only one scored run)")
 	}
 }
 

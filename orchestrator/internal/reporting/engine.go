@@ -35,6 +35,71 @@ type FullReport struct {
 	ObjectiveRisks      []ObjectiveRisk  `json:"objectiveRisks"`
 	Reverted            []string         `json:"reverted"` // endpoint changes rolled back post-run (cleanup evidence)
 	Detection           DetectionSummary `json:"detection"`
+	TrendAnalysis       TrendSummary     `json:"trendAnalysis"`
+}
+
+// TrendPoint is one scored assessment in the endpoint's history, for the trend
+// sparkline (oldest → newest).
+type TrendPoint struct {
+	RunID           string    `json:"runId"`
+	Date            time.Time `json:"date"`
+	PreventionScore float64   `json:"preventionScore"`
+	RiskScore       int       `json:"riskScore"`
+}
+
+// TrendSummary answers "are we improving?" — the question a BAS is bought to
+// answer. It compares the current run's prevention effectiveness to the previous
+// scored assessment for the same endpoint and carries a short history for a
+// sparkline. A snapshot becomes a programme metric.
+type TrendSummary struct {
+	HasPrevious        bool         `json:"hasPrevious"`
+	CurrentPrevention  float64      `json:"currentPrevention"`
+	PreviousPrevention float64      `json:"previousPrevention"`
+	DeltaPrevention    float64      `json:"deltaPrevention"` // current − previous (pts)
+	CurrentRisk        int          `json:"currentRisk"`
+	PreviousRisk       int          `json:"previousRisk"`
+	History            []TrendPoint `json:"history"` // oldest → newest, ≤6 points
+}
+
+// buildTrendSummary derives the prevention trend from the endpoint's run history.
+// Only scored runs (completed/partial) count; the newest is "current", the next
+// is "previous". History is capped to the most recent few, oldest-first for
+// display. With fewer than two scored runs the trend is simply marked absent —
+// we never invent a baseline.
+func buildTrendSummary(runs []RunSummary) TrendSummary {
+	var scored []RunSummary
+	for _, r := range runs {
+		if r.Status == "completed" || r.Status == "partial" {
+			scored = append(scored, r)
+		}
+	}
+	var t TrendSummary
+	if len(scored) == 0 {
+		return t
+	}
+	cur := scored[0]
+	t.CurrentPrevention = cur.PreventionScore
+	t.CurrentRisk = cur.RiskScore
+
+	const maxPts = 6
+	pts := scored
+	if len(pts) > maxPts {
+		pts = pts[:maxPts]
+	}
+	for i := len(pts) - 1; i >= 0; i-- {
+		t.History = append(t.History, TrendPoint{
+			RunID: pts[i].ID, Date: pts[i].StartedAt,
+			PreventionScore: pts[i].PreventionScore, RiskScore: pts[i].RiskScore,
+		})
+	}
+	if len(scored) >= 2 {
+		prev := scored[1]
+		t.HasPrevious = true
+		t.PreviousPrevention = prev.PreventionScore
+		t.DeltaPrevention = cur.PreventionScore - prev.PreventionScore
+		t.PreviousRisk = prev.RiskScore
+	}
+	return t
 }
 
 // ObjectiveRisk expresses the run's outcome in business terms an executive cares
@@ -248,6 +313,7 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	report.TopFindings = buildTopFindings(latestResults, latestScenarioName)
 	report.ObjectiveRisks = buildObjectiveRisks(latestResults)
 	report.Detection = buildDetectionSummary(latestResults)
+	report.TrendAnalysis = buildTrendSummary(report.Runs)
 
 	// ── 6. Executive summary ─────────────────────────────────────────────
 	report.Summary = ExecutiveSummary{
@@ -365,6 +431,31 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 		PreventionScore: score.PreventionScore, ExposureScore: score.ExposureScore,
 		TotalTechniques: score.TotalTechniques, FailedTechniques: score.FailedTechniques,
 	}}
+
+	// Trend: a per-run report still shows the endpoint's programme trend, not just
+	// this run in isolation. Pull the agent's scored run history for the comparison.
+	var trendRuns []RunSummary
+	if trows, terr := e.db.Query(ctx,
+		`SELECT id, status, score, started_at
+		   FROM scenario_runs
+		  WHERE agent_id = $1 AND status IN ('completed','partial')
+		  ORDER BY started_at DESC LIMIT 20`, agentID); terr == nil {
+		defer trows.Close()
+		for trows.Next() {
+			var rs RunSummary
+			var scoreRaw []byte
+			trows.Scan(&rs.ID, &rs.Status, &scoreRaw, &rs.StartedAt)
+			if len(scoreRaw) > 0 {
+				var sc models.Score
+				if json.Unmarshal(scoreRaw, &sc) == nil {
+					rs.PreventionScore = sc.PreventionScore
+					rs.RiskScore = sc.RiskScore
+				}
+			}
+			trendRuns = append(trendRuns, rs)
+		}
+	}
+	report.TrendAnalysis = buildTrendSummary(trendRuns)
 
 	return report, nil
 }
@@ -486,6 +577,58 @@ func classifyDetection(events []string) Detection {
 		}
 	}
 	return Detection{Status: "None", Detail: "No detection telemetry observed"}
+}
+
+// asrBlockIDs are Microsoft Defender Operational event IDs that mean an Attack
+// Surface Reduction (or related Defender exploit-guard) rule BLOCKED an action —
+// not merely audited it. Used to attribute a PASS to Defender ASR specifically.
+var asrBlockIDs = map[string]bool{
+	"1121": true, // ASR rule blocked
+	"1123": true, // Controlled folder access blocked
+	"1125": true, // Network protection blocked
+}
+
+// attributeControl names the security control that blocked a technique, when the
+// evidence honestly supports a specific attribution — addressing the ART review's
+// "PASS, but which control?". Order of confidence: Defender Operational events
+// (ASR rule action / threat action), then recognisable block signatures in the
+// captured output. Returns "" when no control can be evidenced; the caller then
+// states a control blocked it WITHOUT guessing a product. We never assert a
+// control we cannot evidence. Framework-agnostic — keys off events and output.
+func attributeControl(r models.SimulationResult) string {
+	for _, ev := range r.Events {
+		id, logName, ok := splitEventToken(ev)
+		if !ok {
+			continue
+		}
+		if strings.Contains(strings.ToLower(logName), "defender") {
+			if asrBlockIDs[id] {
+				return "Microsoft Defender (ASR rule)"
+			}
+			if defenderDetectIDs[id] {
+				return "Microsoft Defender"
+			}
+		}
+	}
+	low := strings.ToLower(r.RawOutput)
+	switch {
+	case strings.Contains(low, "defender"),
+		strings.Contains(low, "antivirus"),
+		strings.Contains(low, "threat detected"),
+		strings.Contains(low, "quarantined"),
+		strings.Contains(low, "operation did not complete successfully"):
+		return "Microsoft Defender (from output)"
+	case strings.Contains(low, "blocked by group policy"),
+		strings.Contains(low, "blocked by your administrator"),
+		strings.Contains(low, "this program is blocked"),
+		strings.Contains(low, "this app has been blocked"):
+		return "Application Control / Group Policy"
+	case strings.Contains(low, "constrained language"):
+		return "PowerShell Constrained Language Mode"
+	case strings.Contains(low, "amsi"):
+		return "Antimalware Scan Interface (AMSI)"
+	}
+	return ""
 }
 
 // DetectionSummary is the defence-in-depth rollup of executed (FAIL) techniques:

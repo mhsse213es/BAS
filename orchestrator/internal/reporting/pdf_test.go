@@ -108,7 +108,16 @@ func TestRenderReportPDF(t *testing.T) {
 			`File: C:\Windows\TEMP\nanodump.dmp (deleted)`,
 		},
 		SecurityTools: []string{"Microsoft Defender (real-time protection ON)", "EDR: CrowdStrike Falcon", "EDR: Sysmon"},
-		Detection:     DetectionSummary{ExecutedUnprevented: 7, Detected: 2, LoggedOnly: 3, Undetected: 2},
+		Detection:     DetectionSummary{ExecutedUnprevented: 7, Detected: 2, LoggedOnly: 3, Undetected: 2, TelemetryObserved: true},
+		TrendAnalysis: TrendSummary{
+			HasPrevious: true, CurrentPrevention: 41, PreviousPrevention: 28, DeltaPrevention: 13,
+			CurrentRisk: 72, PreviousRisk: 84,
+			History: []TrendPoint{
+				{RunID: "r1", Date: now.Add(-48 * time.Hour), PreventionScore: 20, RiskScore: 88},
+				{RunID: "r2", Date: now.Add(-24 * time.Hour), PreventionScore: 28, RiskScore: 84},
+				{RunID: "r3", Date: now, PreventionScore: 41, RiskScore: 72},
+			},
+		},
 	}
 	results := []models.SimulationResult{
 		{Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"},
@@ -132,6 +141,8 @@ func TestRenderReportPDF(t *testing.T) {
 	}
 	// Give the FAIL result detection telemetry so the per-row Detection line renders.
 	results[0].Events = []string{"1116:Microsoft-Windows-Windows Defender/Operational"}
+	// Give the PASS result an ASR block event so the "Blocked by" attribution renders.
+	results[1].Events = []string{"1121:Microsoft-Windows-Windows Defender/Operational"}
 
 	var buf bytes.Buffer
 	if err := RenderReportPDF(&buf, rep, results); err != nil {

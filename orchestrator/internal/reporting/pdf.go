@@ -257,8 +257,82 @@ func (d *rpt) executiveSummary(rep *FullReport) {
 		s.TotalTechniques, s.PassedTechniques, s.FailedTechniques, s.ErroredTechniques, s.SkippedTechniques, len(s.CriticalFailures)))
 	d.pdf.SetY(y + 20)
 
+	d.trendBlock(rep.TrendAnalysis)
 	d.preventionDetection(rep.Detection)
 	d.objectiveRisks(rep.ObjectiveRisks)
+}
+
+// trendBlock answers the question a BAS is bought to answer — "are we improving?"
+// — by comparing this run's prevention effectiveness to the previous scored
+// assessment and showing a short history. With no prior run it says so plainly
+// rather than inventing a baseline.
+func (d *rpt) trendBlock(t TrendSummary) {
+	pdf := d.pdf
+	d.ensure(16)
+	d.text(cNavy)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin)
+	d.cellT(0, 5, "Trend vs Previous Assessment")
+	pdf.Ln(5.4)
+
+	if !t.HasPrevious {
+		d.text(cMuted)
+		pdf.SetFont("Helvetica", "", 8.5)
+		pdf.SetX(margin)
+		d.mcellT(contentW, 4.4, "This is the first scored assessment for this endpoint — a prevention trend will appear once a second assessment completes.", "", "L", false)
+		pdf.Ln(1.5)
+		return
+	}
+
+	delta := t.DeltaPrevention
+	dir, col := "improved", cSuccess
+	switch {
+	case delta < 0:
+		dir, col = "declined", cDanger
+	case delta == 0:
+		dir, col = "unchanged", cMuted
+	}
+	d.text(cInk)
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetX(margin)
+	d.mcellT(contentW, 4.6, fmt.Sprintf("Prevention effectiveness is %.0f%% this run versus %.0f%% in the previous assessment.",
+		t.CurrentPrevention, t.PreviousPrevention), "", "L", false)
+	yy := pdf.GetY()
+	d.chip(margin+2, yy, fmt.Sprintf("%s %+.0f PTS", strings.ToUpper(dir), delta), col)
+	pdf.Ln(7)
+
+	if len(t.History) >= 2 {
+		d.text(cMuted)
+		pdf.SetFont("Helvetica", "", 7.5)
+		pdf.SetX(margin)
+		d.cellT(0, 4, fmt.Sprintf("Prevention over the last %d assessments (oldest to newest):", len(t.History)))
+		pdf.Ln(4.6)
+		for _, p := range t.History {
+			d.ensure(6)
+			y := pdf.GetY()
+			d.text(cMuted)
+			pdf.SetFont("Helvetica", "", 7.5)
+			pdf.SetXY(margin+2, y)
+			d.cellT(28, 4.4, p.Date.UTC().Format("02 Jan 2006"))
+			barX, barW := margin+34, 80.0
+			d.fill(rgb{233, 237, 242})
+			pdf.RoundedRect(barX, y+0.6, barW, 3.4, 1, "1234", "F")
+			d.fill(d.gradeHigh(p.PreventionScore))
+			fw := barW * p.PreventionScore / 100
+			if fw < 1 && p.PreventionScore > 0 {
+				fw = 1
+			}
+			if fw > 0 {
+				pdf.RoundedRect(barX, y+0.6, fw, 3.4, 1, "1234", "F")
+			}
+			d.text(cMuted)
+			pdf.SetFont("Helvetica", "B", 7.5)
+			pdf.SetXY(barX+barW+3, y)
+			d.cellT(0, 4.4, fmt.Sprintf("%.0f%%", p.PreventionScore))
+			pdf.SetY(y + 5)
+		}
+	}
+	pdf.Ln(1)
 }
 
 // preventionDetection reframes the raw FAIL count as the defence-in-depth matrix
@@ -823,6 +897,18 @@ func (d *rpt) executionRow(r models.SimulationResult) {
 	pdf.SetFont("Helvetica", "", 8)
 	pdf.SetXY(margin+24, y-0.3)
 	d.mcellT(contentW-24, 4.4, emptyDash(r.Details), "", "L", false)
+	if r.Result == models.ResultPass || r.Result == models.ResultBlocked {
+		// Attribution: name the control that blocked it when evidence supports it,
+		// else say a control blocked it without guessing a product (honest).
+		ctrl := attributeControl(r)
+		if ctrl == "" {
+			ctrl = "an active security control (not identifiable from local telemetry)"
+		}
+		d.text(cSuccess)
+		pdf.SetFont("Helvetica", "B", 7.5)
+		pdf.SetX(margin + 24)
+		d.mcellT(contentW-24, 4, "Blocked by: "+ctrl, "", "L", false)
+	}
 	if r.Result == models.ResultFail {
 		// Detection correlation: even when prevention failed, surface whether the
 		// attack was DETECTED (Defender) or merely logged / unseen.
@@ -953,6 +1039,8 @@ func (d *rpt) glossary() {
 		{"PASS", "A security control prevented or blocked the simulated technique. More passes is better."},
 		{"FAIL", "A prevention control did not stop the technique from executing — a finding requiring attention. This means execution was permitted; it does NOT independently verify the attacker's end objective was achieved (e.g. that credentials were actually exfiltrated), which is technique-specific. Check the Detection line for whether the execution was also detected."},
 		{"Detection", "Whether the executed technique was seen by locally-observable telemetry: Detected (a Microsoft Defender alert fired), Logged only (Sysmon/Security telemetry exists but no alert), or Undetected (no telemetry). Third-party EDR detection is not locally observable and is never asserted."},
+		{"Blocked by", "The control credited with blocking a technique, when local evidence (a Microsoft Defender event or a recognisable block signature in the output) supports it. Where no control can be evidenced locally, the report states that an active control blocked it without naming a product — it never guesses."},
+		{"Trend", "Change in prevention effectiveness versus the previous scored assessment for this endpoint, with a short history. Appears once a second assessment has completed."},
 		{"ERROR", "The test could not execute correctly (malformed content, timeout, missing prerequisite, scheduler contention). A BAS execution problem, not a security outcome — excluded from scoring."},
 		{"SKIPPED", "The technique was deliberately not run (e.g. external payload not shipped) and was excluded from scoring."},
 		{"Policy Configuration Check", "A passive audit that inspects a security setting (registry key, policy, service state) without running an attack — it confirms whether a control is correctly configured."},
