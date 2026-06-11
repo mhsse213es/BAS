@@ -519,6 +519,7 @@ func (d *rpt) resultBlock(r models.SimulationResult) {
 	if r.Severity != "" {
 		meta += "  ·  " + r.Severity
 	}
+	meta += "  ·  " + testKind(r.Framework)
 	d.cellT(0, 4, meta)
 	pdf.Ln(5)
 
@@ -589,6 +590,8 @@ func (d *rpt) glossary() {
 		{"FAIL", "The technique executed successfully without being stopped — a finding requiring attention."},
 		{"ERROR", "The test could not execute correctly (malformed content, timeout, missing prerequisite, scheduler contention). A BAS execution problem, not a security outcome — excluded from scoring."},
 		{"SKIPPED", "The technique was deliberately not run (e.g. external payload not shipped) and was excluded from scoring."},
+		{"Policy Configuration Check", "A passive audit that inspects a security setting (registry key, policy, service state) without running an attack — it confirms whether a control is correctly configured."},
+		{"Active Adversary Behavioral Test", "An ART or Caldera test that actually executes the technique on the endpoint — it confirms whether deployed controls stop a live attack, not just whether they are configured."},
 		{"Prevention", "Severity-weighted percentage of techniques that were prevented. Higher is better."},
 		{"Exposure", "Tactic-weighted failure rate, amplified by consecutive kill-chain failures. Lower is better."},
 		{"Tactic Coverage", "Breadth of testing: how many of the 14 MITRE ATT&CK Enterprise tactics this run exercised."},
@@ -708,6 +711,20 @@ func emptyDash(s string) string {
 		return "—"
 	}
 	return s
+}
+
+// testKind labels how a result was obtained so the report does not present a
+// passive configuration audit (e.g. "is WDigest disabled?") and an active
+// exploit (e.g. dumping LSASS) as the same kind of evidence. ART and Caldera
+// actually execute the technique on the endpoint; everything else (custom
+// posture checks, sigma) inspects configuration without running an attack.
+func testKind(framework string) string {
+	switch strings.ToLower(strings.TrimSpace(framework)) {
+	case "art", "caldera":
+		return "Active Adversary Behavioral Test"
+	default:
+		return "Policy Configuration Check"
+	}
 }
 
 func runRef(rep *FullReport) string {

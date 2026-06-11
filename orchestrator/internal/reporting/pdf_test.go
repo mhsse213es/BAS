@@ -42,6 +42,30 @@ func TestPDFUnicodeTranslatorEncodesPunctuation(t *testing.T) {
 	}
 }
 
+// The detailed-results report must distinguish a passive configuration audit
+// from an active exploit so a reader does not treat "is WDigest disabled?" and
+// "dump LSASS" as the same evidence. ART/Caldera execute the technique; custom
+// posture checks and everything else only inspect configuration.
+func TestTestKindClassification(t *testing.T) {
+	cases := []struct {
+		framework string
+		want      string
+	}{
+		{"art", "Active Adversary Behavioral Test"},
+		{"ART", "Active Adversary Behavioral Test"},
+		{"caldera", "Active Adversary Behavioral Test"},
+		{"custom", "Policy Configuration Check"},
+		{"sigma", "Policy Configuration Check"},
+		{"", "Policy Configuration Check"},
+		{"  custom  ", "Policy Configuration Check"},
+	}
+	for _, c := range cases {
+		if got := testKind(c.framework); got != c.want {
+			t.Errorf("testKind(%q) = %q, want %q", c.framework, got, c.want)
+		}
+	}
+}
+
 func TestRenderReportPDF(t *testing.T) {
 	now := time.Now().UTC()
 	rep := &FullReport{
