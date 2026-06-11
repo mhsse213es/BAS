@@ -36,6 +36,75 @@ type FullReport struct {
 	Reverted            []string         `json:"reverted"` // endpoint changes rolled back post-run (cleanup evidence)
 	Detection           DetectionSummary `json:"detection"`
 	TrendAnalysis       TrendSummary     `json:"trendAnalysis"`
+	AttackPath          AttackPath       `json:"attackPath"`
+}
+
+// AttackPathStep is one kill-chain phase the endpoint did not prevent, with the
+// unprevented technique(s) in that phase.
+type AttackPathStep struct {
+	Tactic     string   `json:"tactic"`
+	Techniques []string `json:"techniques"` // "T1059.001 — PowerShell"
+}
+
+// AttackPath is the chain of consecutive kill-chain phases this run's unprevented
+// techniques actually form — the executive's-eye view the ART review asked for
+// (attackers chain steps; they do not operate one ATT&CK ID at a time). It is
+// grounded strictly in observed FAILs ordered by kill-chain phase: the path the
+// endpoint's gaps permit, not a hypothetical or inferred causal chain.
+type AttackPath struct {
+	Steps []AttackPathStep `json:"steps"`
+}
+
+// buildAttackPath orders the run's unprevented techniques (FAIL) by kill-chain
+// phase into a single realized path. Techniques are de-duplicated per phase;
+// PASS/ERROR/SKIPPED never appear (they are not part of an attacker's successful
+// chain). Honest by design — no technique→technique causal inference, only the
+// observed traversal across phases.
+func buildAttackPath(results []models.SimulationResult) AttackPath {
+	type acc struct {
+		techs []string
+		seen  map[string]bool
+	}
+	m := make(map[string]*acc)
+	for _, r := range results {
+		if r.Result != models.ResultFail {
+			continue
+		}
+		t := r.Technique.Tactic
+		if t == "" {
+			continue
+		}
+		a := m[t]
+		if a == nil {
+			a = &acc{seen: make(map[string]bool)}
+			m[t] = a
+		}
+		key := r.Technique.ID
+		if key == "" {
+			key = r.Technique.Name
+		}
+		if key == "" || a.seen[key] {
+			continue
+		}
+		a.seen[key] = true
+		label := strings.TrimSpace(r.Technique.Name)
+		switch {
+		case r.Technique.ID != "" && label != "":
+			label = r.Technique.ID + " — " + label
+		case r.Technique.ID != "":
+			label = r.Technique.ID
+		}
+		a.techs = append(a.techs, label)
+	}
+	var ap AttackPath
+	for _, tactic := range tacticOrder {
+		a := m[tactic]
+		if a == nil || len(a.techs) == 0 {
+			continue
+		}
+		ap.Steps = append(ap.Steps, AttackPathStep{Tactic: tactic, Techniques: a.techs})
+	}
+	return ap
 }
 
 // TrendPoint is one scored assessment in the endpoint's history, for the trend
@@ -314,6 +383,7 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	report.ObjectiveRisks = buildObjectiveRisks(latestResults)
 	report.Detection = buildDetectionSummary(latestResults)
 	report.TrendAnalysis = buildTrendSummary(report.Runs)
+	report.AttackPath = buildAttackPath(latestResults)
 
 	// ── 6. Executive summary ─────────────────────────────────────────────
 	report.Summary = ExecutiveSummary{
@@ -399,6 +469,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	report.TopFindings = buildTopFindings(results, scenarioName)
 	report.ObjectiveRisks = buildObjectiveRisks(results)
 	report.Detection = buildDetectionSummary(results)
+	report.AttackPath = buildAttackPath(results)
 
 	report.Summary = ExecutiveSummary{
 		RiskScore:          score.RiskScore,

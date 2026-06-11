@@ -118,10 +118,10 @@ func TestBuildDetectionSummary(t *testing.T) {
 	results := []models.SimulationResult{
 		{Result: models.ResultFail, Events: []string{"1116:Microsoft-Windows-Windows Defender/Operational"}}, // Detected
 		{Result: models.ResultFail, Events: []string{"1:Microsoft-Windows-Sysmon/Operational"}},              // Logged
-		{Result: models.ResultFail, Events: nil},                                                              // Undetected
-		{Result: models.ResultFail, Events: []string{"4688:Security"}},                                        // Logged
-		{Result: models.ResultPass, Events: []string{"1116:Microsoft-Windows-Windows Defender/Operational"}},  // ignored (prevented)
-		{Result: models.ResultError, Events: nil},                                                             // ignored
+		{Result: models.ResultFail, Events: nil},                                                             // Undetected
+		{Result: models.ResultFail, Events: []string{"4688:Security"}},                                       // Logged
+		{Result: models.ResultPass, Events: []string{"1116:Microsoft-Windows-Windows Defender/Operational"}}, // ignored (prevented)
+		{Result: models.ResultError, Events: nil},                                                            // ignored
 	}
 	s := buildDetectionSummary(results)
 	if s.ExecutedUnprevented != 4 || s.Detected != 1 || s.LoggedOnly != 2 || s.Undetected != 1 {
@@ -147,6 +147,35 @@ func TestBuildDetectionSummaryNoTelemetry(t *testing.T) {
 	}
 	if s.ExecutedUnprevented != 2 || s.Undetected != 2 {
 		t.Errorf("summary = %+v; want {Exec:2 Undetected:2}", s)
+	}
+}
+
+// Attack path: only FAILs form the chain, ordered by kill-chain phase, deduped
+// per phase; PASS/ERROR/SKIPPED never appear.
+func TestBuildAttackPath(t *testing.T) {
+	results := []models.SimulationResult{
+		// out of kill-chain order on purpose
+		{Technique: models.AttackTechnique{ID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access"}, Result: models.ResultFail},
+		{Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"}, Result: models.ResultFail},
+		{Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"}, Result: models.ResultFail}, // dup
+		{Technique: models.AttackTechnique{ID: "T1547", Name: "Boot Autostart", Tactic: "persistence"}, Result: models.ResultFail},
+		{Technique: models.AttackTechnique{ID: "T1112", Name: "Modify Registry", Tactic: "defense-evasion"}, Result: models.ResultPass},           // excluded
+		{Technique: models.AttackTechnique{ID: "T1486", Name: "Impact", Tactic: "impact"}, Result: models.ResultError},                            // excluded
+		{Technique: models.AttackTechnique{ID: "T1071", Name: "App Layer Protocol", Tactic: "command-and-control"}, Result: models.ResultSkipped}, // excluded
+	}
+	ap := buildAttackPath(results)
+	// kill-chain order: execution, persistence, credential-access
+	wantTactics := []string{"execution", "persistence", "credential-access"}
+	if len(ap.Steps) != len(wantTactics) {
+		t.Fatalf("got %d steps, want %d (%+v)", len(ap.Steps), len(wantTactics), ap.Steps)
+	}
+	for i, w := range wantTactics {
+		if ap.Steps[i].Tactic != w {
+			t.Errorf("step %d tactic = %q, want %q", i, ap.Steps[i].Tactic, w)
+		}
+	}
+	if len(ap.Steps[0].Techniques) != 1 {
+		t.Errorf("execution techniques = %v, want 1 (deduped)", ap.Steps[0].Techniques)
 	}
 }
 

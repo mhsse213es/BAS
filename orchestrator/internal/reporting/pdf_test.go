@@ -118,6 +118,11 @@ func TestRenderReportPDF(t *testing.T) {
 				{RunID: "r3", Date: now, PreventionScore: 41, RiskScore: 72},
 			},
 		},
+		AttackPath: AttackPath{Steps: []AttackPathStep{
+			{Tactic: "execution", Techniques: []string{"T1059.001 — PowerShell"}},
+			{Tactic: "persistence", Techniques: []string{"T1547 — Boot Autostart"}},
+			{Tactic: "credential-access", Techniques: []string{"T1003 — OS Credential Dumping"}},
+		}},
 	}
 	results := []models.SimulationResult{
 		{Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"},

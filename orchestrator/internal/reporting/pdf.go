@@ -755,6 +755,7 @@ func (d *rpt) tacticBreakdown(rep *FullReport) {
 
 func (d *rpt) keyFindings(rep *FullReport) {
 	d.sectionTitle(5, "Key Findings")
+	d.attackPath(rep.AttackPath)
 	if len(rep.TopFindings) == 0 {
 		d.body("No critical or high-severity findings were identified in this run. Continue periodic testing to maintain assurance.")
 		return
@@ -762,6 +763,51 @@ func (d *rpt) keyFindings(rep *FullReport) {
 	for i, f := range rep.TopFindings {
 		d.finding(i+1, f)
 	}
+}
+
+// attackPath renders the chain of unprevented kill-chain phases as a vertical
+// flow — how an attacker would traverse this endpoint, not a list of isolated
+// ATT&CK IDs. Only shown when the path spans at least two phases (a single phase
+// is a finding, not a path). Connectors are drawn (not glyphs) to stay safe under
+// the WinAnsi core font.
+func (d *rpt) attackPath(ap AttackPath) {
+	if len(ap.Steps) < 2 {
+		return
+	}
+	pdf := d.pdf
+	d.ensure(24)
+	d.text(cNavy)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin)
+	d.cellT(0, 5, "Realized Attack Path")
+	pdf.Ln(5.2)
+	d.text(cMuted)
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetX(margin)
+	d.mcellT(contentW, 4, "The unprevented techniques from this run, ordered by kill-chain phase. An attacker chaining these consecutive "+
+		"phases met limited resistance — this is the path the endpoint's gaps actually permit, derived from observed FAILs (no inferred causal links).", "", "L", false)
+	pdf.Ln(2)
+	for i, s := range ap.Steps {
+		d.ensure(12)
+		d.text(cDanger)
+		pdf.SetFont("Helvetica", "B", 8.5)
+		pdf.SetX(margin + 4)
+		d.cellT(0, 4.6, capTactic(s.Tactic))
+		pdf.Ln(4.4)
+		d.text(cInk)
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetX(margin + 8)
+		d.mcellT(contentW-8, 4.2, strings.Join(s.Techniques, "   ·   "), "", "L", false)
+		if i < len(ap.Steps)-1 {
+			cx := margin + 6
+			d.draw(cMuted)
+			pdf.SetLineWidth(0.4)
+			pdf.Line(cx, pdf.GetY()+0.8, cx, pdf.GetY()+3.6)
+			pdf.SetY(pdf.GetY() + 4.6)
+		}
+		pdf.Ln(0.5)
+	}
+	pdf.Ln(1.5)
 }
 
 func (d *rpt) finding(n int, f Finding) {
