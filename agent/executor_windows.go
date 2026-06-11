@@ -168,9 +168,14 @@ func collectRecentEvents(parentCtx context.Context, since time.Time) []string {
 	time.Sleep(300 * time.Millisecond)
 
 	sinceStr := since.UTC().Format("2006-01-02T15:04:05")
+	// Collect telemetry the server can correlate into a detection verdict. The
+	// Defender Operational log carries real threat detections (event IDs 1116/1117
+	// etc.); Security and Sysmon carry process/activity visibility. We emit raw
+	// "id:log" tokens — interpretation (detected vs merely logged) is the server's
+	// job, keeping the agent a dumb collector.
 	ps := fmt.Sprintf(`
 $since = [datetime]'%s'
-$logs  = @('Security', 'Microsoft-Windows-Sysmon/Operational')
+$logs  = @('Security', 'Microsoft-Windows-Sysmon/Operational', 'Microsoft-Windows-Windows Defender/Operational')
 $out   = @()
 foreach ($log in $logs) {
     try {
