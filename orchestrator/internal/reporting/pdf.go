@@ -440,16 +440,25 @@ func (d *rpt) methodology(rep *FullReport, results []models.SimulationResult) {
 		fws = []string{"MITRE ATT&CK techniques"}
 	}
 
+	secCtx := "Not reported by the agent"
+	if len(rep.SecurityTools) > 0 {
+		secCtx = strings.Join(rep.SecurityTools, ", ")
+	}
 	rows := [][2]string{
 		{"Framework", "MITRE ATT&CK (Enterprise)"},
 		{"Engines", strings.Join(fws, ", ")},
 		{"Target endpoint", emptyDash(rep.Agent.Hostname) + " — " + emptyDash(rep.Agent.OSVersion)},
 		{"Environment", emptyDash(rep.Agent.EnvLabel)},
+		{"Security context", secCtx},
 		{"Techniques executed", fmt.Sprintf("%d", rep.Summary.TotalTechniques)},
 		{"Tactics exercised", fmt.Sprintf("%d of 14 ATT&CK tactics", len(rep.TacticHeatmap))},
 		{"Window", rep.Summary.LastRunAt.UTC().Format("02 Jan 2006 15:04 UTC")},
 	}
 	d.keyValueTable(rows)
+	if len(rep.SecurityTools) > 0 {
+		d.body("Security context lists the AV/EDR products detected on the endpoint (presence only). " +
+			"Detection by third-party EDR is not locally observable and is therefore never asserted in this report.")
+	}
 	d.body("Each technique is scored as PASS when a security control prevented or blocked it, FAIL when it executed without being stopped, ERROR when the test itself could not execute correctly (malformed content, timeout, missing prerequisite, scheduler contention), or SKIPPED when it was not run. Only PASS and FAIL count toward the score: a FAIL is a finding — the simulated adversary behaviour succeeded against this endpoint — while ERROR and SKIPPED are excluded because they reflect a test-execution problem, not the endpoint's defences.")
 }
 

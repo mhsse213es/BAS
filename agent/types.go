@@ -30,6 +30,8 @@ type Heartbeat struct {
 
 	ProtocolVersion int  `json:"protocolVersion,omitempty"`
 	EmitsEvents     bool `json:"emitsEvents,omitempty"`
+
+	SecurityProducts []string `json:"securityProducts,omitempty"` // installed AV/EDR inventory (presence only)
 }
 
 // HeartbeatResponse is returned by the server on every POST /api/heartbeat.

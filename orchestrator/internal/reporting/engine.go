@@ -178,16 +178,20 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	// ── 1. Agent metadata ─────────────────────────────────────────────────
 	row := e.db.QueryRow(ctx,
 		`SELECT agent_id, hostname, ip_address, os_version, username,
-		        status, env_label, has_report, binary_hash, binary_trusted, last_update
+		        status, env_label, has_report, binary_hash, binary_trusted, last_update,
+		        security_products
 		 FROM agents WHERE agent_id = $1`, agentID)
+	var agentSecProducts []byte
 	if err := row.Scan(
 		&report.Agent.AgentID, &report.Agent.Hostname, &report.Agent.IPAddress,
 		&report.Agent.OSVersion, &report.Agent.Username, &report.Agent.Status,
 		&report.Agent.EnvLabel, &report.Agent.HasReport,
 		&report.Agent.BinaryHash, &report.Agent.BinaryTrusted, &report.Agent.LastUpdate,
+		&agentSecProducts,
 	); err != nil {
 		report.Agent.AgentID = agentID
 	}
+	json.Unmarshal(agentSecProducts, &report.SecurityTools)
 
 	// ── 2. Scenario run history (last 20) ─────────────────────────────────
 	rows, err := e.db.Query(ctx,
@@ -305,14 +309,18 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	// Agent metadata
 	row := e.db.QueryRow(ctx,
 		`SELECT agent_id, hostname, ip_address, os_version, username,
-		        status, env_label, has_report, binary_hash, binary_trusted, last_update
+		        status, env_label, has_report, binary_hash, binary_trusted, last_update,
+		        security_products
 		 FROM agents WHERE agent_id = $1`, agentID)
+	var agentSecProducts []byte
 	row.Scan(
 		&report.Agent.AgentID, &report.Agent.Hostname, &report.Agent.IPAddress,
 		&report.Agent.OSVersion, &report.Agent.Username, &report.Agent.Status,
 		&report.Agent.EnvLabel, &report.Agent.HasReport,
 		&report.Agent.BinaryHash, &report.Agent.BinaryTrusted, &report.Agent.LastUpdate,
+		&agentSecProducts,
 	)
+	json.Unmarshal(agentSecProducts, &report.SecurityTools)
 	if report.Agent.AgentID == "" {
 		report.Agent.AgentID = agentID
 	}

@@ -107,6 +107,7 @@ func TestRenderReportPDF(t *testing.T) {
 			`Registry: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\AtomicTest (deleted)`,
 			`File: C:\Windows\TEMP\nanodump.dmp (deleted)`,
 		},
+		SecurityTools: []string{"Microsoft Defender (real-time protection ON)", "EDR: CrowdStrike Falcon", "EDR: Sysmon"},
 	}
 	results := []models.SimulationResult{
 		{Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"},

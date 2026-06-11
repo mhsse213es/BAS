@@ -174,6 +174,8 @@ type Heartbeat struct {
 
 	ProtocolVersion int  `json:"protocolVersion,omitempty"`
 	EmitsEvents     bool `json:"emitsEvents,omitempty"`
+
+	SecurityProducts []string `json:"securityProducts,omitempty"` // installed AV/EDR inventory (presence only)
 }
 
 // HeartbeatResponse is returned to the agent after each heartbeat.

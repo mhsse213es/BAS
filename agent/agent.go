@@ -32,6 +32,7 @@ type Agent struct {
 	binaryHash     string            // SHA-256 of own binary, computed once at startup
 	logger         *Logger           // 3-tier structured logger
 	localSt        *LocalAgentState  // in-memory state for local status API
+	secProducts    []string          // installed security products, enumerated once at startup (guarded by mu)
 }
 
 func newAgent(cfg Config, id Identity) *Agent {
@@ -49,6 +50,17 @@ func newAgent(cfg Config, id Identity) *Agent {
 	} else {
 		log.Printf("[!] could not hash binary: %v", err)
 	}
+	// Enumerate installed security products once, off the startup path (the WMI /
+	// Defender queries can take a few seconds). Cached for the heartbeat.
+	go func() {
+		products := enumerateSecurityProducts()
+		a.mu.Lock()
+		a.secProducts = products
+		a.mu.Unlock()
+		if len(products) > 0 {
+			log.Printf("[*] security products detected: %s", strings.Join(products, ", "))
+		}
+	}()
 	a.logger.Op("info", "lifecycle", fmt.Sprintf("agent started v%s hash=%s...", version, func() string {
 		if len(a.binaryHash) >= 16 {
 			return a.binaryHash[:16]
@@ -139,6 +151,9 @@ func (a *Agent) enrollWithServer() {
 }
 
 func (a *Agent) sendHeartbeat(status string) {
+	a.mu.Lock()
+	products := a.secProducts
+	a.mu.Unlock()
 	hb := Heartbeat{
 		AgentID:       a.id.AgentID,
 		Hostname:      a.id.Hostname,
@@ -151,8 +166,9 @@ func (a *Agent) sendHeartbeat(status string) {
 		AgentVersion:  version,
 		SchemaVersion: schemaVersion,
 
-		ProtocolVersion: protocolVersion,
-		EmitsEvents:     true,
+		ProtocolVersion:  protocolVersion,
+		EmitsEvents:      true,
+		SecurityProducts: products,
 	}
 	t0 := time.Now()
 	var resp HeartbeatResponse

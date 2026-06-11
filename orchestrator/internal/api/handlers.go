@@ -336,6 +336,17 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Persist the security-product inventory only when the heartbeat carries one
+	// (enumeration completes shortly after startup, so early heartbeats omit it —
+	// don't clobber a known inventory with an empty list).
+	if len(hb.SecurityProducts) > 0 {
+		if sp, e := json.Marshal(hb.SecurityProducts); e == nil {
+			_, _ = h.db.Exec(r.Context(),
+				`UPDATE agents SET security_products = $2 WHERE agent_id = $1`,
+				hb.AgentID, sp)
+		}
+	}
+
 	// Quarantine if manifest is loaded and the binary hash is not recognised.
 	// Only transition active→quarantined, never overwrite an already-quarantined agent.
 	if hb.BinaryHash != "" && h.manifest != nil && h.manifest.Loaded() && !trusted {
