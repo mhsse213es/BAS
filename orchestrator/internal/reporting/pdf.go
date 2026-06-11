@@ -526,6 +526,14 @@ func (d *rpt) resultBlock(r models.SimulationResult) {
 	if r.Details != "" {
 		d.labelled("Details", r.Details)
 	}
+	// Raw command output is evidence, not the verdict — show it under a neutral
+	// "Evidence" label (truncated) so a benign validation string is never mistaken
+	// for proof the attack succeeded. Only for executed techniques (FAIL).
+	if r.Result == models.ResultFail {
+		if ev := evidenceLine(r.RawOutput); ev != "" {
+			d.labelled("Evidence", ev)
+		}
+	}
 	if r.ThreatImpact != "" {
 		d.labelled("Threat impact", r.ThreatImpact)
 	}
@@ -709,6 +717,22 @@ func capTactic(t string) string {
 func emptyDash(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return "—"
+	}
+	return s
+}
+
+// evidenceLine condenses raw command output into a short single-line evidence
+// string for the report: collapse whitespace/newlines and cap the length so the
+// "Evidence" row stays a readable trace, not a wall of console text.
+func evidenceLine(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	s = strings.Join(strings.Fields(s), " ")
+	const max = 240
+	if len(s) > max {
+		s = s[:max] + "…"
 	}
 	return s
 }

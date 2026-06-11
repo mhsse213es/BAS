@@ -1,6 +1,7 @@
 package scenario
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/models"
@@ -161,11 +162,19 @@ func TestInterpretARTAtomicArtifactsAreErrors(t *testing.T) {
 // Guard against over-matching: a benign validation payload that genuinely ran
 // (PowerShell/CMD executed unblocked, exit 0, no error text) is a real FAIL —
 // the control did not prevent code execution. It must NOT be swept into ERROR.
+// The FAIL detail must state the SECURITY meaning, not echo the raw command
+// output ("Hello, from PowerShell!") as if malware succeeded.
 func TestInterpretARTBenignExecutionStaysFail(t *testing.T) {
 	for _, out := range []string{"Hello, from PowerShell!", "Hello, from CMD!"} {
 		got, detail := interpretART(ExecResult{ExitCode: 0}, out)
 		if got != models.ResultFail {
 			t.Errorf("interpretART(%q, exit=0) = %q, want fail (detail=%q)", out, got, detail)
+		}
+		if strings.Contains(detail, "Hello") {
+			t.Errorf("interpretART(%q) detail echoes raw output (%q) — should state the security outcome", out, detail)
+		}
+		if !strings.Contains(strings.ToLower(detail), "did not prevent") {
+			t.Errorf("interpretART(%q) detail = %q, want the security-outcome framing", out, detail)
 		}
 	}
 }

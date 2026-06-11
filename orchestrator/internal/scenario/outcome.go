@@ -148,6 +148,11 @@ func ranToCompletion(lower string) bool {
 		strings.Contains(lower, "technique ran to completion")
 }
 
+// executedDetail is the headline for a technique that ran without being stopped.
+// It reports the security outcome (control did not prevent it), not the raw
+// command output — the raw output is shown separately as labelled evidence.
+const executedDetail = "Security control did not prevent this technique — it executed without being blocked."
+
 // classifyExecution maps a raw ART ExecResult to a coarse ExecutionOutcome plus,
 // for errors, a reason. The returned detail is the report's "What happened" line.
 func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorReason, string) {
@@ -176,16 +181,16 @@ func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorRe
 	}
 
 	// Clear evidence the technique executed, even on a non-zero trailing exit.
+	// State the SECURITY meaning — the control did not prevent it — rather than
+	// echoing the raw command output (e.g. "Hello, from PowerShell!") as the
+	// headline, which misreads as a successful malware run. The raw output is
+	// preserved in RawOutput and surfaced separately as labelled evidence.
 	if ranToCompletion(lower) {
-		return OutcomeExecuted, ErrNone, "Technique executed: " + firstLine(combined)
+		return OutcomeExecuted, ErrNone, executedDetail
 	}
 
 	if r.ExitCode == 0 {
-		out := firstLine(combined)
-		if out == "" {
-			out = "technique ran to completion"
-		}
-		return OutcomeExecuted, ErrNone, "Technique executed: " + out
+		return OutcomeExecuted, ErrNone, executedDetail
 	}
 
 	// Non-zero exit with no recognizable signal: the technique did not reach a
