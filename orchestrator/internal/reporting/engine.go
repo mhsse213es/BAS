@@ -280,6 +280,63 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	return report, nil
 }
 
+// TechniqueGroup aggregates every result for one ATT&CK technique so the report
+// shows a single rolled-up entry with counts, instead of repeating the same
+// technique (and its identical threat/remediation) dozens of times — the
+// "report fatigue" the ART selective review flagged.
+type TechniqueGroup struct {
+	TechniqueID string
+	Name        string
+	Tactic      string
+	Severity    string
+	Executed    int // FAIL — ran without being blocked
+	Blocked     int // PASS / BLOCKED — a control stopped it
+	Errored     int // ERROR — BAS could not execute (excluded from scoring)
+	Skipped     int // SKIPPED — intentionally not run
+	Total       int
+	Results     []models.SimulationResult
+}
+
+// groupResultsByTechnique rolls results up by technique ID (falling back to name
+// for non-ATT&CK checks), preserving first-seen order. Counts are tallied per the
+// 4-verdict taxonomy so the report can summarise ERROR/SKIPPED noise rather than
+// rendering a block for each one.
+func groupResultsByTechnique(results []models.SimulationResult) []TechniqueGroup {
+	idx := make(map[string]int)
+	var groups []TechniqueGroup
+	for _, r := range results {
+		key := r.Technique.ID
+		if key == "" {
+			key = r.Technique.Name
+		}
+		i, ok := idx[key]
+		if !ok {
+			i = len(groups)
+			idx[key] = i
+			groups = append(groups, TechniqueGroup{
+				TechniqueID: r.Technique.ID,
+				Name:        r.Technique.Name,
+				Tactic:      r.Technique.Tactic,
+				Severity:    r.Severity,
+			})
+		}
+		g := &groups[i]
+		g.Total++
+		g.Results = append(g.Results, r)
+		switch r.Result {
+		case models.ResultFail:
+			g.Executed++
+		case models.ResultPass, models.ResultBlocked:
+			g.Blocked++
+		case models.ResultError:
+			g.Errored++
+		case models.ResultSkipped:
+			g.Skipped++
+		}
+	}
+	return groups
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 var tacticOrder = []string{
@@ -382,6 +439,10 @@ func buildDetectionCategories(results []models.SimulationResult) []Category {
 
 func buildTopFindings(results []models.SimulationResult, scenarioName string) []Finding {
 	var findings []Finding
+	// Deduplicate by technique: the same technique failing across several atomic
+	// tests is ONE finding, not the "Critical, Critical, Critical…" repetition the
+	// ART review flagged. Keep the first occurrence (first-seen order).
+	seen := make(map[string]bool)
 	for _, r := range results {
 		if r.Result != models.ResultFail {
 			continue
@@ -389,6 +450,14 @@ func buildTopFindings(results []models.SimulationResult, scenarioName string) []
 		if r.Severity != "Critical" && r.Severity != "High" {
 			continue
 		}
+		key := r.Technique.ID
+		if key == "" {
+			key = r.Technique.Name
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		findings = append(findings, Finding{
 			TechniqueID:   r.Technique.ID,
 			TechniqueName: r.Technique.Name,

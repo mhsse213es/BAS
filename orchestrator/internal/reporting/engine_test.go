@@ -34,3 +34,50 @@ func TestReportExcludesErrorFromOutcomes(t *testing.T) {
 		}
 	}
 }
+
+// The same ATT&CK technique run many times must collapse into ONE group with a
+// per-verdict tally, in first-seen order — so the report stops repeating the same
+// "Critical" finding dozens of times.
+func TestGroupResultsByTechnique(t *testing.T) {
+	results := []models.SimulationResult{
+		{Technique: models.AttackTechnique{ID: "T1003.001", Name: "LSASS Memory"}, Result: models.ResultFail, Severity: "Critical"},
+		{Technique: models.AttackTechnique{ID: "T1112", Name: "Modify Registry"}, Result: models.ResultPass},
+		{Technique: models.AttackTechnique{ID: "T1003.001", Name: "LSASS Memory"}, Result: models.ResultError},
+		{Technique: models.AttackTechnique{ID: "T1003.001", Name: "LSASS Memory"}, Result: models.ResultBlocked},
+		{Technique: models.AttackTechnique{ID: "T1112", Name: "Modify Registry"}, Result: models.ResultSkipped},
+	}
+
+	groups := groupResultsByTechnique(results)
+	if len(groups) != 2 {
+		t.Fatalf("got %d groups, want 2 (one per technique)", len(groups))
+	}
+	if groups[0].TechniqueID != "T1003.001" || groups[1].TechniqueID != "T1112" {
+		t.Errorf("group order = [%s, %s], want first-seen [T1003.001, T1112]", groups[0].TechniqueID, groups[1].TechniqueID)
+	}
+	g := groups[0]
+	if g.Total != 3 || g.Executed != 1 || g.Blocked != 1 || g.Errored != 1 || g.Skipped != 0 {
+		t.Errorf("T1003.001 tally = total %d exec %d blocked %d err %d skip %d; want 3/1/1/1/0",
+			g.Total, g.Executed, g.Blocked, g.Errored, g.Skipped)
+	}
+	if groups[1].Blocked != 1 || groups[1].Skipped != 1 {
+		t.Errorf("T1112 tally = blocked %d skip %d; want 1/1", groups[1].Blocked, groups[1].Skipped)
+	}
+}
+
+// The same Critical technique failing across several atomics must surface as ONE
+// top finding, not a repeated "Critical, Critical, Critical…" list.
+func TestBuildTopFindingsDedupesByTechnique(t *testing.T) {
+	results := []models.SimulationResult{
+		{Technique: models.AttackTechnique{ID: "T1003.001", Name: "LSASS Memory", Tactic: "credential-access"}, Result: models.ResultFail, Severity: "Critical"},
+		{Technique: models.AttackTechnique{ID: "T1003.001", Name: "LSASS Memory", Tactic: "credential-access"}, Result: models.ResultFail, Severity: "Critical"},
+		{Technique: models.AttackTechnique{ID: "T1003.001", Name: "LSASS Memory", Tactic: "credential-access"}, Result: models.ResultFail, Severity: "Critical"},
+		{Technique: models.AttackTechnique{ID: "T1486", Name: "Data Encrypted for Impact", Tactic: "impact"}, Result: models.ResultFail, Severity: "High"},
+	}
+	f := buildTopFindings(results, "scenario")
+	if len(f) != 2 {
+		t.Fatalf("buildTopFindings = %d findings, want 2 (deduped by technique)", len(f))
+	}
+	if f[0].TechniqueID != "T1003.001" || f[1].TechniqueID != "T1486" {
+		t.Errorf("findings = [%s, %s], want [T1003.001, T1486]", f[0].TechniqueID, f[1].TechniqueID)
+	}
+}

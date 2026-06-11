@@ -487,65 +487,135 @@ func (d *rpt) finding(n int, f Finding) {
 
 func (d *rpt) detailedResults(results []models.SimulationResult) {
 	d.sectionTitle(6, "Detailed Technique Results")
-	executed := 0
-	for _, r := range results {
-		if r.Result == models.ResultSkipped {
+	d.body("Results are grouped by ATT&CK technique. Each technique shows how many " +
+		"of its tests executed, were blocked, or errored. ERROR tests (a BAS " +
+		"execution problem, not a security outcome) are summarised in the counts " +
+		"and excluded from scoring.")
+	groups := groupResultsByTechnique(results)
+	rendered := 0
+	for _, g := range groups {
+		// A group that only errored or was skipped carries no security finding,
+		// but we still surface it so the reader sees the technique was attempted.
+		if g.Total == 0 {
 			continue
 		}
-		executed++
-		d.resultBlock(r)
+		d.techniqueGroup(g)
+		rendered++
 	}
-	if executed == 0 {
+	if rendered == 0 {
 		d.body("No techniques were executed in this run.")
 	}
 }
 
-func (d *rpt) resultBlock(r models.SimulationResult) {
+// techniqueGroup renders one rolled-up ATT&CK technique: a header with the
+// per-verdict tally, the threat impact and remediation shown ONCE, then a
+// compact row per security-relevant execution (FAIL / PASS / BLOCKED). ERROR and
+// SKIPPED runs are represented by the tally only, to avoid report fatigue.
+func (d *rpt) techniqueGroup(g TechniqueGroup) {
 	pdf := d.pdf
-	d.ensure(18)
-	rc := d.resultColor(r.Result)
+	d.ensure(22)
 	yStart := pdf.GetY()
-	d.chip(margin, yStart, strings.ToUpper(string(r.Result)), rc)
+
 	d.text(cNavy)
-	pdf.SetFont("Helvetica", "B", 9)
-	pdf.SetXY(margin+22, yStart-0.3)
-	name := emptyDash(r.Technique.Name)
-	head := fmt.Sprintf("%s — %s", emptyDash(r.Technique.ID), name)
-	d.mcellT(contentW-22, 4.6, head, "", "L", false)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin + 2)
+	d.mcellT(contentW-2, 4.8, fmt.Sprintf("%s — %s", emptyDash(g.TechniqueID), emptyDash(g.Name)), "", "L", false)
+
 	d.text(cMuted)
 	pdf.SetFont("Helvetica", "", 7.5)
-	pdf.SetX(margin + 22)
-	meta := capTactic(r.Technique.Tactic)
-	if r.Severity != "" {
-		meta += "  ·  " + r.Severity
+	pdf.SetX(margin + 2)
+	meta := capTactic(g.Tactic)
+	if g.Severity != "" {
+		meta += "  ·  " + g.Severity
 	}
-	meta += "  ·  " + testKind(r.Framework)
+	meta += "  ·  " + testKind(groupFramework(g))
 	d.cellT(0, 4, meta)
+	pdf.Ln(4.4)
+
+	pdf.SetX(margin + 2)
+	d.text(cInk)
+	pdf.SetFont("Helvetica", "B", 7.5)
+	d.cellT(0, 4, fmt.Sprintf("%d test(s):  %d executed · %d blocked · %d errored · %d skipped",
+		g.Total, g.Executed, g.Blocked, g.Errored, g.Skipped))
 	pdf.Ln(5)
 
-	if r.Details != "" {
-		d.labelled("Details", r.Details)
+	// Threat impact + remediation once per technique (identical across its tests);
+	// prefer a FAIL result so the remediation is the actionable one, not the
+	// "control validated" message attached to a blocked test.
+	rep := groupRepresentative(g)
+	if rep.ThreatImpact != "" {
+		d.labelled("Threat impact", rep.ThreatImpact)
 	}
-	// Raw command output is evidence, not the verdict — show it under a neutral
-	// "Evidence" label (truncated) so a benign validation string is never mistaken
-	// for proof the attack succeeded. Only for executed techniques (FAIL).
-	if r.Result == models.ResultFail {
-		if ev := evidenceLine(r.RawOutput); ev != "" {
-			d.labelled("Evidence", ev)
+	if rep.Remediation != "" {
+		d.labelled("Remediation", rep.Remediation)
+	}
+
+	for _, r := range g.Results {
+		if r.Result != models.ResultFail && r.Result != models.ResultPass && r.Result != models.ResultBlocked {
+			continue
 		}
+		d.executionRow(r)
 	}
-	if r.ThreatImpact != "" {
-		d.labelled("Threat impact", r.ThreatImpact)
-	}
-	if r.Remediation != "" {
-		d.labelled("Remediation", r.Remediation)
+
+	stripe := cWarning
+	if g.Executed > 0 {
+		stripe = d.resultColor(models.ResultFail)
+	} else if g.Blocked > 0 {
+		stripe = d.resultColor(models.ResultPass)
 	}
 	yEnd := pdf.GetY()
 	if yEnd > yStart {
-		d.fill(rc)
+		d.fill(stripe)
 		pdf.Rect(margin-2.5, yStart, 1.2, yEnd-yStart-1, "F")
 	}
 	d.separator()
+}
+
+// executionRow renders one execution within a technique group: a verdict chip
+// plus its detail (and, for a FAIL, the raw evidence) — without repeating the
+// technique name, threat, or remediation already shown at the group header.
+func (d *rpt) executionRow(r models.SimulationResult) {
+	pdf := d.pdf
+	d.ensure(8)
+	y := pdf.GetY()
+	d.chip(margin+2, y, strings.ToUpper(string(r.Result)), d.resultColor(r.Result))
+	d.text(cInk)
+	pdf.SetFont("Helvetica", "", 8)
+	pdf.SetXY(margin+24, y-0.3)
+	d.mcellT(contentW-24, 4.4, emptyDash(r.Details), "", "L", false)
+	if r.Result == models.ResultFail {
+		if ev := evidenceLine(r.RawOutput); ev != "" {
+			d.text(cMuted)
+			pdf.SetFont("Helvetica", "", 7.5)
+			pdf.SetX(margin + 24)
+			d.mcellT(contentW-24, 4, "Evidence: "+ev, "", "L", false)
+		}
+	}
+	pdf.Ln(1.5)
+}
+
+// groupFramework returns the framework of the group's first test (all tests for a
+// technique share the same framework in practice).
+func groupFramework(g TechniqueGroup) string {
+	if len(g.Results) > 0 {
+		return g.Results[0].Framework
+	}
+	return ""
+}
+
+// groupRepresentative picks the result whose threat/remediation best represents
+// the technique: a FAIL if any (carries the actionable remediation), else the
+// first result.
+func groupRepresentative(g TechniqueGroup) models.SimulationResult {
+	for _, r := range g.Results {
+		if r.Result == models.ResultFail {
+			return r
+		}
+	}
+	if len(g.Results) > 0 {
+		return g.Results[0]
+	}
+	return models.SimulationResult{}
 }
 
 // labelled renders an indented "Label: value" block with a wrapped value.
