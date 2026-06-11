@@ -33,6 +33,7 @@ const (
 	ErrDNSFailure          ErrorReason = "dns-failure"
 	ErrInteractivePrompt   ErrorReason = "interactive-prompt"
 	ErrMalformedContent    ErrorReason = "malformed-content"
+	ErrEnvArtifact         ErrorReason = "environmental-artifact"
 	ErrExecution           ErrorReason = "execution-error"
 )
 
@@ -53,6 +54,8 @@ func errorReasonLabel(r ErrorReason) string {
 		return "blocked on an interactive prompt"
 	case ErrMalformedContent:
 		return "malformed atomic content"
+	case ErrEnvArtifact:
+		return "environmental artifact (resource already present)"
 	default:
 		return "execution error"
 	}
@@ -89,18 +92,26 @@ func classifyExecutionError(lower string, exitCode int) ErrorReason {
 		strings.Contains(lower, "curl: cannot open"):
 		return ErrBinaryMissing
 
-	// Prerequisite path/file missing.
+	// Prerequisite path/file/runtime-dependency missing. The technique never ran
+	// because something it needed was absent — not a security outcome. Includes
+	// the PowerShell IWR/Internet-Explorer-engine dependency (T1105-class tests)
+	// which fails with exit 0 yet did nothing.
 	case strings.Contains(lower, "cannot find path"),
 		strings.Contains(lower, "could not find"),
 		strings.Contains(lower, "no such file or directory"),
 		strings.Contains(lower, "the system cannot find the file"),
 		strings.Contains(lower, "the system cannot find the path"),
-		strings.Contains(lower, "cannot find the path"):
+		strings.Contains(lower, "cannot find the path"),
+		strings.Contains(lower, "internet explorer engine is not available"),
+		strings.Contains(lower, "response content cannot be parsed"):
 		return ErrMissingPrerequisite
 
-	// Malformed content — parser/loader/shell rejected it before the technique
-	// could run. Includes PowerShell/cmd parse errors (a crashed check script is
-	// a BAS problem, not a security outcome).
+	// Malformed content — parser/loader/shell rejected it, or the atomic passed a
+	// bad path/argument, before the technique could run. Many of these surface on
+	// a ZERO exit code (a PowerShell non-terminating error prints to the stream
+	// but leaves $LASTEXITCODE 0), so they must be caught here — not assumed to be
+	// a successful execution. A crashed/malformed step is a BAS problem, not a
+	// security finding.
 	case strings.Contains(lower, "error: invalid syntax"),
 		strings.Contains(lower, "error: invalid key name"),
 		strings.Contains(lower, "incorrect format"),
@@ -108,8 +119,18 @@ func classifyExecutionError(lower string, exitCode int) ErrorReason {
 		strings.Contains(lower, "missing the terminator"),
 		strings.Contains(lower, "unexpected token"),
 		strings.Contains(lower, "parsererror"),
-		strings.Contains(lower, "is not recognized as a cmdlet"):
+		strings.Contains(lower, "is not recognized as a cmdlet"),
+		strings.Contains(lower, "is invalid"),
+		strings.Contains(lower, "is not valid"),
+		strings.Contains(lower, "not a valid win32 application"):
 		return ErrMalformedContent
+
+	// Environmental artifact — the resource the atomic tried to create was already
+	// present, so the create was a no-op. This is prior state, not proof the
+	// technique succeeded (e.g. a persistence key/file that already existed).
+	case strings.Contains(lower, "already exists"),
+		strings.Contains(lower, "cannot create a file when that file already exists"):
+		return ErrEnvArtifact
 	}
 
 	// MSI / installer "invalid command line" surfaces as 1639 with no clear text.

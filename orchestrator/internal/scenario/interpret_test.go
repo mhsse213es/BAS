@@ -131,6 +131,45 @@ func TestInterpretCustomClassifiesScriptCrash(t *testing.T) {
 	}
 }
 
+// The Atomic Red Team selective report marked many test/atomic artifacts as FAIL
+// (Technique Executed). They are NOT successful attacks — a bad path, a missing
+// runtime dependency, or a resource that already existed. Critically, several of
+// these surface on a ZERO exit code (PowerShell non-terminating errors), so they
+// must classify as ERROR, not FAIL. Strings are verbatim from the report.
+func TestInterpretARTAtomicArtifactsAreErrors(t *testing.T) {
+	cases := []struct {
+		name   string
+		r      ExecResult
+		stdout string
+	}{
+		{"F-02 invalid dump path (exit 0)", ExecResult{ExitCode: 0}, `The path 'C:\Windows\system32\"C:\Windows\TEMP\nanodump.dmp"' is invalid.`},
+		{"F-03 IWR IE engine missing (exit 0)", ExecResult{ExitCode: 0}, "IWR : The response content cannot be parsed because the Internet Explorer engine is not available, or Internet Explorer's first-launch configuration is not complete."},
+		{"F-06 SilentProcessExit folder invalid (exit 0)", ExecResult{ExitCode: 0}, "SilentProcessExit folder is not valid"},
+		{"F-105 item already exists (exit 0)", ExecResult{ExitCode: 0}, "New-Item : The item already exists."},
+		{"not a valid win32 application", ExecResult{ExitCode: 1}, "The program or feature could not be started because it is not a valid Win32 application."},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, detail := interpretART(c.r, c.stdout)
+			if got != models.ResultError {
+				t.Errorf("interpretART(%q, exit=%d) = %q, want error (detail=%q)", c.stdout, c.r.ExitCode, got, detail)
+			}
+		})
+	}
+}
+
+// Guard against over-matching: a benign validation payload that genuinely ran
+// (PowerShell/CMD executed unblocked, exit 0, no error text) is a real FAIL —
+// the control did not prevent code execution. It must NOT be swept into ERROR.
+func TestInterpretARTBenignExecutionStaysFail(t *testing.T) {
+	for _, out := range []string{"Hello, from PowerShell!", "Hello, from CMD!"} {
+		got, detail := interpretART(ExecResult{ExitCode: 0}, out)
+		if got != models.ResultFail {
+			t.Errorf("interpretART(%q, exit=0) = %q, want fail (detail=%q)", out, got, detail)
+		}
+	}
+}
+
 // A non-zero exit that still shows the technique executed (e.g. a trailing
 // cleanup line failed) is a genuine FAIL, not an execution error.
 func TestInterpretARTRanToCompletionIsFail(t *testing.T) {
