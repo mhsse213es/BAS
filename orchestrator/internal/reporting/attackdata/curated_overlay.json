@@ -1,0 +1,16 @@
+{
+  "_README": {
+    "notes": "ANALYST-MAINTAINED, ILLUSTRATIVE OVERLAY — NOT authoritative. There is no authoritative per-technique mapping for CVE/KEV/OWASP/CWE; entries here are curated by the security team to add context and are labelled 'illustrative' in the report. Add/edit entries keyed by ATT&CK technique ID. Keys starting with '_' are ignored."
+  },
+  "T1548.002": {
+    "owasp": ["A05:2021 — Security Misconfiguration"],
+    "cwe": ["CWE-269 — Improper Privilege Management"],
+    "cves": ["CVE-2024-30088 (CVSS 7.8)", "CVE-2023-21768 (CVSS 8.8)"],
+    "kev": true,
+    "notes": "UAC bypass is commonly chained after initial execution to gain administrative context before credential access or persistence."
+  },
+  "T1003.001": {
+    "cwe": ["CWE-522 — Insufficiently Protected Credentials"],
+    "notes": "LSASS credential theft is a top precursor to lateral movement in BFSI intrusions; prioritise Credential Guard / LSA protection."
+  }
+}

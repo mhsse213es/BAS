@@ -763,6 +763,7 @@ func (d *rpt) keyFindings(rep *FullReport) {
 	for i, f := range rep.TopFindings {
 		d.finding(i+1, f)
 	}
+	d.knowledgeGraph(rep)
 }
 
 // attackPath renders the chain of unprevented kill-chain phases as a vertical
@@ -834,6 +835,7 @@ func (d *rpt) finding(n int, f Finding) {
 	if f.Remediation != "" {
 		d.labelled("Remediation", f.Remediation)
 	}
+	d.threatIntel(f.TechniqueID)
 	// Accent left bar spanning the block (same page only).
 	yEnd := pdf.GetY()
 	if yEnd > yStart {
@@ -1087,6 +1089,7 @@ func (d *rpt) glossary() {
 		{"Detection", "Whether the executed technique was seen by locally-observable telemetry: Detected (a Microsoft Defender alert fired), Logged only (Sysmon/Security telemetry exists but no alert), or Undetected (no telemetry). Third-party EDR detection is not locally observable and is never asserted."},
 		{"Blocked by", "The control credited with blocking a technique, when local evidence (a Microsoft Defender event or a recognisable block signature in the output) supports it. Where no control can be evidenced locally, the report states that an active control blocked it without naming a product — it never guesses."},
 		{"Trend", "Change in prevention effectiveness versus the previous scored assessment for this endpoint, with a short history. Appears once a second assessment has completed."},
+		{"Threat Intelligence", "Per-technique context from MITRE ATT&CK® (threat actors, malware/tools, mitigations) — authoritative, published by MITRE. CVE/KEV/OWASP/CWE shown as 'illustrative' are analyst-curated context, not an authoritative per-technique mapping, and should be read as examples, not an exhaustive list."},
 		{"ERROR", "The test could not execute correctly (malformed content, timeout, missing prerequisite, scheduler contention). A BAS execution problem, not a security outcome — excluded from scoring."},
 		{"SKIPPED", "The technique was deliberately not run (e.g. external payload not shipped) and was excluded from scoring."},
 		{"Policy Configuration Check", "A passive audit that inspects a security setting (registry key, policy, service state) without running an attack — it confirms whether a control is correctly configured."},
