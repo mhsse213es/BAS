@@ -34,14 +34,15 @@ log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 
 # ── Garble detection ──────────────────────────────────────────────────────────
-# garble v0.12.1 — compatible with Go 1.23.  Install with:
-#   go install mvdan.cc/garble@v0.12.1
+# garble @latest — required for the Go toolchain in go.mod (v0.16.0+ for Go 1.26;
+# older garble cannot build Go 1.26).  Install with:
+#   go install mvdan.cc/garble@latest
 if command -v garble &>/dev/null; then
   log "garble found — orchestrator will be obfuscated (-literals -tiny)"
   GOBUILD_ORCH="garble -literals -tiny build -ldflags=-s -w -X main.Version=${VERSION}"
 else
   warn "garble not found — building orchestrator without obfuscation."
-  echo "  Install: go install mvdan.cc/garble@v0.12.1"
+  echo "  Install: go install mvdan.cc/garble@latest"
   GOBUILD_ORCH="go build -trimpath -ldflags=-s -w -X main.Version=${VERSION}"
 fi
 # Agent uses plain stripped build: golang.org/x/sys assembly is incompatible with garble.
