@@ -505,12 +505,19 @@
 
     // Overall posture
     if(!s.serverConnected){
-      setPill("bad","Disconnected");
-      if(s.status && s.status!=="idle"){
-        // The agent is a local executor: a lost link does NOT pause the run. Say so,
-        // so this hero agrees with the progress bar that keeps advancing below.
-        setHero("bad","Disconnected — Simulation Continuing","Lost contact with the BAS server. The simulation keeps running on this endpoint; results are buffered locally and sync automatically when the link is restored.");
+      if(s.paused){
+        // A lost link does NOT freeze the run — the agent is a local executor, so the
+        // atomics keep going and the progress bar below keeps advancing. We label that
+        // honestly as "Paused": the run continues locally, but if the link doesn't
+        // return within the grace window the agent stops it and submits a Partial.
+        setPill("warn","Paused");
+        var remain=Math.max(0,(s.graceSec||90)-(s.disconnectedSec||0));
+        var tail=remain>0
+          ? "If the link is not restored in ~"+remain+"s, the run is stopped and submitted as Partial."
+          : "Grace period elapsed — finalizing this run as Partial now.";
+        setHero("warn","Paused — Server Link Lost","Lost contact with the BAS server. The simulation keeps running on this endpoint and results are buffered locally. "+tail);
       } else {
+        setPill("bad","Disconnected");
         setHero("bad","Disconnected","Cannot reach the BAS server. The agent will keep retrying; any results are buffered locally until the link is restored.");
       }
     }

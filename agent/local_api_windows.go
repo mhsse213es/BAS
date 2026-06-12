@@ -124,6 +124,12 @@ func (a *Agent) handleLocalStatus(w http.ResponseWriter, _ *http.Request) {
 		lastHBField = lastHB
 	}
 
+	// A running simulation with a lost link is "Paused": it keeps executing locally,
+	// but the agent will finalize it as Partial once the outage passes the grace
+	// period. Surface how long the link has been down so the console can count down.
+	disconnectedSec := int(a.disconnectedFor().Seconds())
+	paused := !connected && status != "" && status != "idle"
+
 	localJSON(w, map[string]interface{}{
 		"agentVersion":    version,
 		"agentId":         a.id.AgentID,
@@ -138,6 +144,9 @@ func (a *Agent) handleLocalStatus(w http.ResponseWriter, _ *http.Request) {
 		"lastUploadTime":  lastUpTime,
 		"uptimeSec":       int(time.Since(start).Seconds()),
 		"ramMB":           ms.Sys / (1024 * 1024),
+		"paused":          paused,
+		"disconnectedSec": disconnectedSec,
+		"graceSec":        int(disconnectGracePeriod.Seconds()),
 	})
 }
 

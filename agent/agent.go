@@ -35,6 +35,10 @@ type Agent struct {
 	secProducts    []string         // installed security products, enumerated once at startup (guarded by mu)
 	spoolMu        sync.Mutex       // serializes spool drains so a tick and a reconnect-kick can't double-send
 	spoolKick      chan struct{}    // buffered (cap 1): nudges the drainer to deliver immediately on reconnect
+
+	// Disconnect tracking for the pause-then-finalize watchdog (guarded by mu).
+	disconnectedSince time.Time // when the server link was lost; zero = connected
+	watchdogTripped   bool      // the watchdog already finalized the run for this outage (one-shot)
 }
 
 func newAgent(cfg Config, id Identity) *Agent {
@@ -178,9 +182,21 @@ func (a *Agent) sendHeartbeat(status string) {
 	if err := a.postJSONDecode("/api/heartbeat", hb, &resp); err != nil {
 		log.Printf("[!] heartbeat: %v", err)
 		a.logger.Op("warn", "connectivity", fmt.Sprintf("heartbeat failed: %v", err))
+		// Stamp the start of the outage so the watchdog can measure how long a
+		// running simulation has been without a server link.
+		a.mu.Lock()
+		if a.disconnectedSince.IsZero() {
+			a.disconnectedSince = time.Now()
+		}
+		a.mu.Unlock()
 		a.localSt.SetConnected(false)
 		return
 	}
+	// Link restored — clear the outage clock and re-arm the watchdog.
+	a.mu.Lock()
+	a.disconnectedSince = time.Time{}
+	a.watchdogTripped = false
+	a.mu.Unlock()
 	a.localSt.SetConnected(true)
 	// The link is up — nudge the drainer so any results buffered during an outage
 	// ship now rather than waiting for its next tick.
@@ -213,6 +229,61 @@ func (a *Agent) cancelCurrentScenario() bool {
 	}
 	a.cancelScenario()
 	return true
+}
+
+const (
+	// disconnectGracePeriod is how long a running simulation may continue without a
+	// server link before the agent finalizes it as Partial. It matches the server's
+	// AgentOfflineAfter, so the agent stops itself at the same instant the server
+	// would flag it offline — and the spooled partial then delivers the real
+	// outcome instead of a synthesized one.
+	disconnectGracePeriod = 90 * time.Second
+	watchdogInterval      = 5 * time.Second
+)
+
+// disconnectedFor reports how long the server link has been down, or 0 if connected.
+func (a *Agent) disconnectedFor() time.Duration {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.disconnectedSince.IsZero() {
+		return 0
+	}
+	return time.Since(a.disconnectedSince)
+}
+
+// runDisconnectWatchdog finalizes a simulation that has run too long without a
+// server link. A lost link does NOT freeze the run — the agent is a local executor,
+// so the atomics keep going and the dashboard shows the run "Paused". But an
+// endpoint the console can't reach can't be observed or stopped, so a sim must not
+// run there unbounded: once the outage passes disconnectGracePeriod the agent stops
+// the run itself. Cancellation makes runScenario submit a Partial, which the spool
+// holds until the link returns. The trip is one-shot per outage (re-armed only when
+// a heartbeat reconnects), so it can't re-fire while the run is winding down. The
+// idle+disconnected case is intentionally left to the server's offline reaper —
+// there is no local run to finalize.
+func (a *Agent) runDisconnectWatchdog() {
+	t := time.NewTicker(watchdogInterval)
+	defer t.Stop()
+	for range t.C {
+		if a.getStatus() == "idle" {
+			continue // nothing running to finalize
+		}
+		if a.disconnectedFor() < disconnectGracePeriod {
+			continue
+		}
+		a.mu.Lock()
+		if a.watchdogTripped {
+			a.mu.Unlock()
+			continue
+		}
+		a.watchdogTripped = true
+		a.mu.Unlock()
+
+		log.Printf("[!] server link down for >%s while a simulation is running — stopping the run and finalizing as Partial", disconnectGracePeriod)
+		a.logger.Op("warn", "lifecycle", fmt.Sprintf("server unreachable for >%s mid-simulation — finalizing as Partial", disconnectGracePeriod))
+		a.localSt.RecordActivity("Server link lost for over 90s — simulation finalized as Partial")
+		a.cancelCurrentScenario()
+	}
 }
 
 func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {

@@ -101,6 +101,7 @@ func main() {
 	go agent.connectWS()
 	go agent.startLocalAPI()
 	go agent.runSpoolDrainer()
+	go agent.runDisconnectWatchdog()
 	agent.sendHeartbeat("idle")
 
 	quit := make(chan os.Signal, 1)
