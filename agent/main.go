@@ -115,13 +115,8 @@ func main() {
 		case <-ticker.C:
 			agent.sendHeartbeat(agent.getStatus())
 		case <-quit:
-			log.Println("[*] Shutting down — interrupting active scenario if any...")
-			agent.scenarioMu.Lock()
-			if agent.cancelScenario != nil {
-				agent.cancelScenario()
-			}
-			agent.scenarioMu.Unlock()
-			time.Sleep(3 * time.Second)
+			log.Println("[*] Shutting down — finalizing active scenario if any...")
+			agent.shutdownFinalize(shutdownGrace)
 			agent.sendHeartbeat("offline")
 			platformRestoreOnShutdown()
 			return

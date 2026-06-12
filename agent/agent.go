@@ -39,6 +39,8 @@ type Agent struct {
 	// Disconnect tracking for the pause-then-finalize watchdog (guarded by mu).
 	disconnectedSince time.Time // when the server link was lost; zero = connected
 	watchdogTripped   bool      // the watchdog already finalized the run for this outage (one-shot)
+
+	runWG sync.WaitGroup // tracks in-flight scenario/scan goroutines so shutdown can wait for them to spool a Partial
 }
 
 func newAgent(cfg Config, id Identity) *Agent {
@@ -239,7 +241,31 @@ const (
 	// outcome instead of a synthesized one.
 	disconnectGracePeriod = 90 * time.Second
 	watchdogInterval      = 5 * time.Second
+	// shutdownGrace bounds how long a Stop/Shutdown waits for an in-flight run to
+	// finalize and spool its Partial. The Windows SCM is told this via WaitHint.
+	shutdownGrace = 15 * time.Second
 )
+
+// shutdownFinalize stops any in-flight simulation on agent shutdown and waits,
+// bounded by grace, for it to finalize so its Partial result is written to the
+// durable spool before the process exits. The spool delivers that Partial on the
+// next start. Without this, stopping or closing the agent mid-run would discard
+// everything executed so far instead of reporting it as Partial.
+func (a *Agent) shutdownFinalize(grace time.Duration) {
+	if a.getStatus() == "idle" {
+		return // nothing running
+	}
+	log.Println("[*] interrupting active simulation — finalizing partial results before exit")
+	a.cancelCurrentScenario()
+	done := make(chan struct{})
+	go func() { a.runWG.Wait(); close(done) }()
+	select {
+	case <-done:
+		log.Println("[*] in-flight simulation finalized; partial result spooled for delivery")
+	case <-time.After(grace):
+		log.Printf("[!] simulation did not finalize within %s — partial may be incomplete", grace)
+	}
+}
 
 // disconnectedFor reports how long the server link has been down, or 0 if connected.
 func (a *Agent) disconnectedFor() time.Duration {
@@ -760,7 +786,8 @@ func (a *Agent) connectWS() {
 				}
 				a.cancelScenario = cancel
 				a.scenarioMu.Unlock()
-				go a.runScenario(ctx, cmd)
+				a.runWG.Add(1)
+				go func() { defer a.runWG.Done(); a.runScenario(ctx, cmd) }()
 
 			case "command_simulate":
 				var sim struct {
@@ -771,7 +798,8 @@ func (a *Agent) connectWS() {
 					log.Printf("[!] WS: bad command_simulate payload: %v", err)
 					continue
 				}
-				go a.runLocalScan(sim.ScenarioID, sim.RunID)
+				a.runWG.Add(1)
+				go func() { defer a.runWG.Done(); a.runLocalScan(sim.ScenarioID, sim.RunID) }()
 
 			case "command_cancel":
 				if a.cancelCurrentScenario() {

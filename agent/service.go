@@ -44,6 +44,8 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 
 	go agent.connectWS()
 	go agent.startLocalAPI()
+	go agent.runSpoolDrainer()
+	go agent.runDisconnectWatchdog()
 	agent.sendHeartbeat("idle")
 
 	ticker := time.NewTicker(heartbeatInterval)
@@ -61,7 +63,10 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 		case c := <-r:
 			switch c.Cmd {
 			case svc.Stop, svc.Shutdown:
-				status <- svc.Status{State: svc.StopPending}
+				// Tell the SCM how long we may take so it doesn't kill us before an
+				// in-flight run finalizes its Partial to the spool.
+				status <- svc.Status{State: svc.StopPending, WaitHint: uint32((shutdownGrace + 5*time.Second) / time.Millisecond)}
+				agent.shutdownFinalize(shutdownGrace)
 				agent.sendHeartbeat("offline")
 				RestoreSystemDialogs()
 				return false, 0
