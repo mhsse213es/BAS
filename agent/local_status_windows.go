@@ -66,13 +66,18 @@ func (s *LocalAgentState) appendActivity(event string) {
 	}
 }
 
-// SetConnected records the heartbeat result.
+// SetConnected records the heartbeat result. lastHeartbeat is advanced only on a
+// SUCCESSFUL round-trip — a heartbeat is by definition a completed exchange, so a
+// failed attempt must not refresh it. Otherwise the dashboard's "last heartbeat"
+// readout keeps showing a few seconds even while disconnected, contradicting the
+// "Disconnected" banner; leaving it stale lets the relative-time display grow and
+// honestly corroborate the lost link.
 func (s *LocalAgentState) SetConnected(ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.serverConnected = ok
-	s.lastHeartbeat = time.Now()
 	if ok {
+		s.lastHeartbeat = time.Now()
 		s.appendActivity("Heartbeat OK")
 	}
 }

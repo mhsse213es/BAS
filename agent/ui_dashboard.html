@@ -504,7 +504,16 @@
     $("rId").textContent=(s.agentId||"—");
 
     // Overall posture
-    if(!s.serverConnected){ setPill("bad","Disconnected"); setHero("bad","Disconnected","Cannot reach the BAS server. Simulations are paused until the link is restored."); }
+    if(!s.serverConnected){
+      setPill("bad","Disconnected");
+      if(s.status && s.status!=="idle"){
+        // The agent is a local executor: a lost link does NOT pause the run. Say so,
+        // so this hero agrees with the progress bar that keeps advancing below.
+        setHero("bad","Disconnected — Simulation Continuing","Lost contact with the BAS server. The simulation keeps running on this endpoint; results are buffered locally and sync automatically when the link is restored.");
+      } else {
+        setHero("bad","Disconnected","Cannot reach the BAS server. The agent will keep retrying; any results are buffered locally until the link is restored.");
+      }
+    }
     else if(s.state==="quarantined"){ setPill("bad","Quarantined"); setHero("bad","Quarantined","This agent was quarantined by the server. Contact your administrator."); }
     else if(s.state==="restricted"){ setPill("warn","Restricted"); setHero("warn","Restricted","Operating under restricted policy. Some simulations are disabled."); }
     else if(s.status && s.status!=="idle"){ setPill("warn","Simulation Running"); setHero("warn","Simulation In Progress","A breach &amp; attack simulation is executing on this endpoint."); }

@@ -117,6 +117,13 @@ func (a *Agent) handleLocalStatus(w http.ResponseWriter, _ *http.Request) {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 
+	// Emit null (not a zero year-0001 time) when no heartbeat has yet succeeded,
+	// so the dashboard renders "—" rather than a bogus old timestamp.
+	var lastHBField interface{}
+	if !lastHB.IsZero() {
+		lastHBField = lastHB
+	}
+
 	localJSON(w, map[string]interface{}{
 		"agentVersion":    version,
 		"agentId":         a.id.AgentID,
@@ -125,7 +132,7 @@ func (a *Agent) handleLocalStatus(w http.ResponseWriter, _ *http.Request) {
 		"status":          status,
 		"serverUrl":       a.cfg.ServerURL,
 		"serverConnected": connected,
-		"lastHeartbeat":   lastHB,
+		"lastHeartbeat":   lastHBField,
 		"serviceRunning":  true,
 		"lastUploadOk":    lastUpOK,
 		"lastUploadTime":  lastUpTime,
