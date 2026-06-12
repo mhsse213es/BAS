@@ -14,6 +14,8 @@ package attackdata
 import (
 	_ "embed"
 	"encoding/json"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -34,6 +36,14 @@ type Mitigation struct {
 	Description string `json:"desc,omitempty"`
 }
 
+// D3fendCM is a MITRE D3FEND defensive countermeasure mapped to an offensive
+// ATT&CK technique. Authoritative — sourced from the MITRE D3FEND ATT&CK
+// mappings at build time, never hand-derived.
+type D3fendCM struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // Enrichment is the threat-intelligence context for one ATT&CK technique.
 type Enrichment struct {
 	// Authoritative (MITRE ATT&CK).
@@ -47,6 +57,19 @@ type Enrichment struct {
 	Mitigations []Mitigation `json:"mitigations,omitempty"`
 	Detection   string       `json:"detection,omitempty"`
 
+	// Authoritative ATT&CK technique metadata (from the STIX bundle, via gen).
+	Version             string   `json:"version,omitempty"`     // x_mitre_version, e.g. "2.1"
+	Created             string   `json:"created,omitempty"`     // YYYY-MM-DD
+	Modified            string   `json:"modified,omitempty"`    // YYYY-MM-DD
+	Platforms           []string `json:"platforms,omitempty"`   // x_mitre_platforms
+	PermissionsRequired []string `json:"permissions,omitempty"` // x_mitre_permissions_required
+	DataSources         []string `json:"dataSources,omitempty"` // x_mitre_data_sources
+	CAPEC               []string `json:"capec,omitempty"`       // external_references (source_name "capec")
+
+	// Authoritative, sourced from separate MITRE/community datasets at build time.
+	D3FEND     []D3fendCM `json:"d3fend,omitempty"`     // MITRE D3FEND ATT&CK mappings
+	SigmaRules int        `json:"sigmaRules,omitempty"` // SigmaHQ rules tagged for this technique
+
 	// Curated overlay (illustrative, analyst-maintained — NOT authoritative).
 	OWASP        []string `json:"owasp,omitempty"`
 	CWE          []string `json:"cwe,omitempty"`
@@ -58,7 +81,95 @@ type Enrichment struct {
 
 // HasAuthoritative reports whether MITRE-derived enrichment exists.
 func (e *Enrichment) HasAuthoritative() bool {
-	return len(e.Groups) > 0 || len(e.Software) > 0 || len(e.Mitigations) > 0 || e.Description != ""
+	return len(e.Groups) > 0 || len(e.Software) > 0 || len(e.Mitigations) > 0 ||
+		e.Description != "" || len(e.DataSources) > 0 || len(e.D3FEND) > 0 ||
+		len(e.CAPEC) > 0 || len(e.Platforms) > 0
+}
+
+// cvssRe extracts a CVSS base score embedded in a curated CVE string such as
+// "CVE-2024-30088 (CVSS 7.8)".
+var cvssRe = regexp.MustCompile(`(?i)CVSS\s*([0-9]{1,2}(?:\.[0-9])?)`)
+
+// AvgCVSS averages the CVSS base scores the analyst recorded alongside the
+// curated CVEs. It NEVER invents a score: only CVEs that carry an explicit
+// "(CVSS x.x)" are counted, and it returns (0,0) when none do — so the report
+// can omit the line rather than imply a severity that was never supplied.
+func (e *Enrichment) AvgCVSS() (avg float64, n int) {
+	var sum float64
+	for _, c := range e.CVEs {
+		m := cvssRe.FindStringSubmatch(c)
+		if m == nil {
+			continue
+		}
+		if v, err := strconv.ParseFloat(m[1], 64); err == nil {
+			sum += v
+			n++
+		}
+	}
+	if n == 0 {
+		return 0, 0
+	}
+	return sum / float64(n), n
+}
+
+// dataSourceEventIDs maps an ATT&CK data component (matched as a lowercase
+// substring) to the standard Windows telemetry that records it: Sysmon event IDs
+// and Windows Event Log IDs. This is a fixed, documented reference table (Sysmon
+// schema + Microsoft Windows Security/System auditing) — deterministic and
+// factual, NOT a per-technique MITRE assertion. First match per data source wins
+// the listed IDs; results are de-duplicated in first-seen order.
+var dataSourceEventIDs = []struct {
+	match string
+	ids   []string
+}{
+	{"command execution", []string{"Sysmon 1", "Windows Security 4688", "PowerShell 4104"}},
+	{"process creation", []string{"Sysmon 1", "Windows Security 4688"}},
+	{"process termination", []string{"Sysmon 5"}},
+	{"process access", []string{"Sysmon 10"}},
+	{"os api execution", []string{"Sysmon 1", "Windows Security 4688"}},
+	{"script", []string{"PowerShell 4104"}},
+	{"network connection", []string{"Sysmon 3", "Windows Security 5156"}},
+	{"network traffic", []string{"Sysmon 3", "Windows Security 5156"}},
+	{"registry", []string{"Sysmon 12-14", "Windows Security 4657"}},
+	{"module load", []string{"Sysmon 7"}},
+	{"image load", []string{"Sysmon 7"}},
+	{"driver", []string{"Sysmon 6"}},
+	{"file creation", []string{"Sysmon 11"}},
+	{"file modification", []string{"Sysmon 11"}},
+	{"file deletion", []string{"Sysmon 23", "Sysmon 26"}},
+	{"file access", []string{"Windows Security 4663"}},
+	{"dns", []string{"Sysmon 22"}},
+	{"named pipe", []string{"Sysmon 17", "Sysmon 18"}},
+	{"wmi", []string{"Sysmon 19", "Sysmon 20", "Sysmon 21"}},
+	{"service creation", []string{"System 7045", "Windows Security 4697"}},
+	{"service modification", []string{"System 7040"}},
+	{"scheduled job", []string{"Windows Security 4698"}},
+	{"scheduled task", []string{"Windows Security 4698"}},
+	{"logon", []string{"Windows Security 4624", "Windows Security 4625"}},
+	{"user account", []string{"Windows Security 4720", "Windows Security 4726"}},
+}
+
+// DetectionEventIDs translates this technique's authoritative ATT&CK data
+// sources into the concrete Windows telemetry (Sysmon + Windows Event Log) that
+// records them, via dataSourceEventIDs. Returns nil when no data source maps.
+func (e *Enrichment) DetectionEventIDs() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, ds := range e.DataSources {
+		low := strings.ToLower(ds)
+		for _, row := range dataSourceEventIDs {
+			if !strings.Contains(low, row.match) {
+				continue
+			}
+			for _, id := range row.ids {
+				if !seen[id] {
+					seen[id] = true
+					out = append(out, id)
+				}
+			}
+		}
+	}
+	return out
 }
 
 type overlayEntry struct {

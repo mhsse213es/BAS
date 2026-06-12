@@ -40,6 +40,34 @@ func (d *rpt) threatIntel(techID string) {
 		}
 		d.tiLine("Mitigations (ATT&CK)", strings.Join(capStr(names, 6), "; "), cInk)
 	}
+	if len(e.Platforms) > 0 {
+		d.tiLine("Platforms", strings.Join(e.Platforms, ", "), cInk)
+	}
+	if len(e.PermissionsRequired) > 0 {
+		d.tiLine("Permissions required", strings.Join(e.PermissionsRequired, ", "), cInk)
+	}
+	if len(e.CAPEC) > 0 {
+		d.tiLine("CAPEC", strings.Join(capStr(e.CAPEC, 6), ", "), cInk)
+	}
+	if len(e.DataSources) > 0 {
+		d.tiLine("Detection data sources", strings.Join(capStr(e.DataSources, 8), "; "), cInk)
+		if ids := e.DetectionEventIDs(); len(ids) > 0 {
+			d.tiLine("Windows telemetry (Sysmon/WEL)", strings.Join(ids, ", "), cMuted)
+		}
+	}
+	if e.SigmaRules > 0 {
+		d.tiLine("Sigma detection rules", fmt.Sprintf("%d rule(s) tagged for this technique (SigmaHQ)", e.SigmaRules), cInk)
+	}
+	if len(e.D3FEND) > 0 {
+		names := make([]string, 0, len(e.D3FEND))
+		for _, c := range e.D3FEND {
+			names = append(names, c.Name+" ("+c.ID+")")
+		}
+		d.tiLine("D3FEND countermeasures", strings.Join(capStr(names, 6), "; "), cInk)
+	}
+	if v := tiVersionLine(e); v != "" {
+		d.tiLine("ATT&CK version", v, cMuted)
+	}
 	if e.URL != "" {
 		d.tiLine("ATT&CK reference", e.URL, cAccent)
 	}
@@ -51,6 +79,9 @@ func (d *rpt) threatIntel(techID string) {
 		}
 		if len(e.CVEs) > 0 {
 			parts = append(parts, "CVEs: "+strings.Join(e.CVEs, ", "))
+		}
+		if avg, n := e.AvgCVSS(); n > 0 {
+			parts = append(parts, fmt.Sprintf("Avg CVSS: %.1f (%d CVEs)", avg, n))
 		}
 		if e.KEV {
 			parts = append(parts, "CISA KEV: listed")
@@ -66,6 +97,22 @@ func (d *rpt) threatIntel(techID string) {
 		}
 	}
 	pdf.Ln(0.5)
+}
+
+// tiVersionLine composes the one-line ATT&CK provenance string ("v2.1 · created
+// 2017-12-14 · updated 2025-01-15") from whichever metadata fields are present.
+func tiVersionLine(e *attackdata.Enrichment) string {
+	var meta []string
+	if e.Version != "" {
+		meta = append(meta, "v"+e.Version)
+	}
+	if e.Created != "" {
+		meta = append(meta, "created "+e.Created)
+	}
+	if e.Modified != "" {
+		meta = append(meta, "updated "+e.Modified)
+	}
+	return strings.Join(meta, " · ")
 }
 
 // tiLine renders one indented "label: value" line inside a threat-intel block.
