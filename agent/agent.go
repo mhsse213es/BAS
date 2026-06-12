@@ -484,11 +484,48 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 	if partial {
 		label = "partial"
 	}
-	if err := a.postJSON("/api/scenarios/result", payload); err != nil {
-		log.Printf("[!] result submit (%s): %v", label, err)
+	a.submitRunResult(payload, label)
+}
+
+// submitRunResult durably delivers a run's authoritative results to the server. A
+// lost server link must never lose an assessment: the first attempt is inline (the
+// common, online case), and on failure it retries in the background with capped
+// backoff until delivery succeeds. The payload is a COMPLETE snapshot and the server
+// REPLACES (never appends), so re-delivery is idempotent — a retry after a dropped
+// response, or a late submission that reconciles a run the server already flagged
+// 'partial', converges to the same final state. Backgrounding keeps the agent
+// responsive (heartbeats and the next tasking) during a sustained outage. In-memory
+// only: a process restart mid-outage still loses the pending submission (a future
+// on-disk spool would close that gap).
+func (a *Agent) submitRunResult(payload RawRunResult, label string) {
+	if err := a.postJSON("/api/scenarios/result", payload); err == nil {
+		log.Printf("[+] results submitted (%s): run=%s", label, payload.RunID)
+		return
 	} else {
-		log.Printf("[+] results submitted (%s): run=%s steps=%d", label, cmd.RunID, len(results))
+		log.Printf("[!] result submit (%s) run=%s: %v — retrying in background", label, payload.RunID, err)
 	}
+	go func() {
+		backoff := 5 * time.Second
+		const maxBackoff = 60 * time.Second
+		// Retry for up to the server's stale-run ceiling; past that the server frees
+		// the run anyway, so a late submission can no longer reconcile it.
+		deadline := time.Now().Add(2 * time.Hour)
+		for attempt := 1; time.Now().Before(deadline); attempt++ {
+			time.Sleep(backoff)
+			if err := a.postJSON("/api/scenarios/result", payload); err != nil {
+				log.Printf("[!] result submit retry %d (%s) run=%s: %v", attempt, label, payload.RunID, err)
+				if backoff < maxBackoff {
+					if backoff *= 2; backoff > maxBackoff {
+						backoff = maxBackoff
+					}
+				}
+				continue
+			}
+			log.Printf("[+] results submitted on retry %d (%s): run=%s", attempt, label, payload.RunID)
+			return
+		}
+		log.Printf("[x] result submit gave up after 2h (%s) run=%s — results not delivered; run stays 'partial'", label, payload.RunID)
+	}()
 }
 
 // deriveLocalResultLabel rolls per-step results up to the single label shown on
@@ -577,11 +614,7 @@ func (a *Agent) runLocalScan(scenarioID, runID string) {
 		AgentID:    a.id.AgentID,
 		Checks:     checks,
 	}
-	if err := a.postJSON("/api/scenarios/result", payload); err != nil {
-		log.Printf("[!] local scan submit: %v", err)
-	} else {
-		log.Printf("[+] local scan submitted: scenario=%s checks=%d", scenarioID, len(checks))
-	}
+	a.submitRunResult(payload, "scan")
 
 	// Close out the local operation so the console shows the completed scan
 	// instead of leaving a stale "running" panel.

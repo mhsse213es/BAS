@@ -1079,12 +1079,17 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	if len(raw.Reverted) > 0 {
 		revertedJSON, _ = json.Marshal(raw.Reverted)
 	}
-	// Append new results to whatever already exists (handles partial submissions).
+	// The agent always submits a COMPLETE snapshot of its results (never deltas) and
+	// retries delivery until it lands — so REPLACE, never append. This makes delivery
+	// idempotent: a retry after a lost response, or a late submission reconciling a run
+	// the staleness monitor already flipped to 'partial', converges to the same state
+	// instead of duplicating rows. There is no status guard, so a late submission for a
+	// 'partial' (or 'failed') run is accepted and flips it back to 'completed' here.
 	var dbErr error
 	_, dbErr = h.db.Exec(r.Context(),
 		`UPDATE scenario_runs
-		 SET status = $1, results = results || $2::jsonb,
-		     reverted = reverted || $4::jsonb, completed_at = NOW()
+		 SET status = $1, results = $2::jsonb,
+		     reverted = $4::jsonb, completed_at = NOW()
 		 WHERE id = $3`,
 		status, resultsJSON, raw.RunID, revertedJSON,
 	)
@@ -1093,7 +1098,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Compute score from all accumulated results (including prior partial submissions).
+	// Compute score from the submitted snapshot (now the authoritative full result set).
 	var allResultsJSON []byte
 	h.db.QueryRow(r.Context(),
 		`SELECT results FROM scenario_runs WHERE id = $1`, raw.RunID,
