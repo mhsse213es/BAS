@@ -29,20 +29,23 @@ type Agent struct {
 	client         *http.Client
 	cancelScenario context.CancelFunc
 	scenarioMu     sync.Mutex
-	binaryHash     string            // SHA-256 of own binary, computed once at startup
-	logger         *Logger           // 3-tier structured logger
-	localSt        *LocalAgentState  // in-memory state for local status API
-	secProducts    []string          // installed security products, enumerated once at startup (guarded by mu)
+	binaryHash     string           // SHA-256 of own binary, computed once at startup
+	logger         *Logger          // 3-tier structured logger
+	localSt        *LocalAgentState // in-memory state for local status API
+	secProducts    []string         // installed security products, enumerated once at startup (guarded by mu)
+	spoolMu        sync.Mutex       // serializes spool drains so a tick and a reconnect-kick can't double-send
+	spoolKick      chan struct{}    // buffered (cap 1): nudges the drainer to deliver immediately on reconnect
 }
 
 func newAgent(cfg Config, id Identity) *Agent {
 	a := &Agent{
-		cfg:     cfg,
-		id:      id,
-		status:  "idle",
-		client:  &http.Client{Timeout: 30 * time.Second},
-		logger:  NewLogger(id.AgentID, cfg.ServerURL, cfg.AgentSecret),
-		localSt: newLocalAgentState(),
+		cfg:       cfg,
+		id:        id,
+		status:    "idle",
+		client:    &http.Client{Timeout: 30 * time.Second},
+		logger:    NewLogger(id.AgentID, cfg.ServerURL, cfg.AgentSecret),
+		localSt:   newLocalAgentState(),
+		spoolKick: make(chan struct{}, 1),
 	}
 	if h, err := SelfHash(); err == nil {
 		a.binaryHash = h
@@ -179,6 +182,9 @@ func (a *Agent) sendHeartbeat(status string) {
 		return
 	}
 	a.localSt.SetConnected(true)
+	// The link is up — nudge the drainer so any results buffered during an outage
+	// ship now rather than waiting for its next tick.
+	a.kickSpool()
 	latencyMs := float64(time.Since(t0).Milliseconds())
 	a.logger.Metric("heartbeat_latency_ms", latencyMs, "ms")
 
@@ -488,44 +494,28 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 }
 
 // submitRunResult durably delivers a run's authoritative results to the server. A
-// lost server link must never lose an assessment: the first attempt is inline (the
-// common, online case), and on failure it retries in the background with capped
-// backoff until delivery succeeds. The payload is a COMPLETE snapshot and the server
-// REPLACES (never appends), so re-delivery is idempotent — a retry after a dropped
-// response, or a late submission that reconciles a run the server already flagged
-// 'partial', converges to the same final state. Backgrounding keeps the agent
-// responsive (heartbeats and the next tasking) during a sustained outage. In-memory
-// only: a process restart mid-outage still loses the pending submission (a future
-// on-disk spool would close that gap).
+// lost server link must never lose an assessment, and neither must a process or
+// endpoint restart: the result is FIRST persisted to the on-disk spool, then the
+// drainer is triggered to ship it. In the common online case it leaves immediately;
+// during an outage it stays on disk and the drainer retries on its tick and on the
+// next reconnect — across restarts. The payload is a COMPLETE snapshot and the
+// server REPLACES (never appends), so re-delivery is idempotent: a retry after a
+// dropped response, or a late delivery that reconciles a run the server already
+// flagged 'partial', converges to the same final state. See spool.go.
 func (a *Agent) submitRunResult(payload RawRunResult, label string) {
-	if err := a.postJSON("/api/scenarios/result", payload); err == nil {
-		log.Printf("[+] results submitted (%s): run=%s", label, payload.RunID)
-		return
-	} else {
-		log.Printf("[!] result submit (%s) run=%s: %v — retrying in background", label, payload.RunID, err)
-	}
-	go func() {
-		backoff := 5 * time.Second
-		const maxBackoff = 60 * time.Second
-		// Retry for up to the server's stale-run ceiling; past that the server frees
-		// the run anyway, so a late submission can no longer reconcile it.
-		deadline := time.Now().Add(2 * time.Hour)
-		for attempt := 1; time.Now().Before(deadline); attempt++ {
-			time.Sleep(backoff)
-			if err := a.postJSON("/api/scenarios/result", payload); err != nil {
-				log.Printf("[!] result submit retry %d (%s) run=%s: %v", attempt, label, payload.RunID, err)
-				if backoff < maxBackoff {
-					if backoff *= 2; backoff > maxBackoff {
-						backoff = maxBackoff
-					}
-				}
-				continue
-			}
-			log.Printf("[+] results submitted on retry %d (%s): run=%s", attempt, label, payload.RunID)
-			return
+	if _, err := a.spoolWrite(payload, label); err != nil {
+		// Could not persist — fall back to a direct best-effort send so an online
+		// agent still delivers even if the spool dir is unwritable.
+		log.Printf("[!] could not spool result run=%s: %v — attempting direct delivery", payload.RunID, err)
+		if err := a.postJSON("/api/scenarios/result", payload); err != nil {
+			log.Printf("[x] result submit (%s) run=%s failed and could not be spooled: %v", label, payload.RunID, err)
+		} else {
+			log.Printf("[+] results submitted (%s): run=%s", label, payload.RunID)
 		}
-		log.Printf("[x] result submit gave up after 2h (%s) run=%s — results not delivered; run stays 'partial'", label, payload.RunID)
-	}()
+		return
+	}
+	// Persisted durably; let the drainer deliver and delete on success.
+	a.drainSpool()
 }
 
 // deriveLocalResultLabel rolls per-step results up to the single label shown on
