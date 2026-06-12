@@ -69,7 +69,11 @@ WORKDIR /src
 COPY orchestrator/go.mod orchestrator/go.sum ./
 RUN go mod download
 COPY orchestrator/ .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+# GOGARBLE scopes obfuscation to our own module only. Obfuscating third-party
+# deps (esp. github.com/go-pdf/fpdf) renames their reflection-driven struct
+# fields and breaks PDF font loading ("font has not been set") — and protects no
+# IP, since those libs are public OSS.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
     garble -literals -tiny build \
     -ldflags="-s -w" \
     -o /bin/orchestrator ./cmd/server

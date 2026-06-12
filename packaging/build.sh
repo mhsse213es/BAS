@@ -50,7 +50,11 @@ GOBUILD_AGENT="go build -trimpath -ldflags=-s -w"
 # ── 1. Build orchestrator binary ───────────────────────────────────────────────
 log "Building bas-orchestrator ${VERSION} for linux/amd64..."
 cd "${REPO_ROOT}/orchestrator"
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+# GOGARBLE scopes obfuscation to our own module only. Obfuscating third-party
+# deps (esp. github.com/go-pdf/fpdf) renames their reflection-driven struct
+# fields and breaks PDF font loading ("font has not been set") — and protects no
+# IP, since those libs are public OSS. (Ignored by the plain go-build fallback.)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
   ${GOBUILD_ORCH} \
   -o "${DIST_DIR}/bas-orchestrator-linux-amd64" \
   ./cmd/server/

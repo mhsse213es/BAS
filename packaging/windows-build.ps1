@@ -56,6 +56,8 @@ Log "  Go OK: $(go version)"
 $OrchestratorTag = "bas-orchestrator:$Version"
 
 if (-not $SkipBuild) {
+    # Obfuscation (garble -literals -tiny, scoped to our module via GOGARBLE) runs
+    # inside orchestrator/Dockerfile — see that file for the GOGARBLE rationale.
     Log "Building $OrchestratorTag (garble -literals -tiny - this takes 5-10 min)..."
     docker build -t $OrchestratorTag --build-arg BAS_VERSION=$Version -f "$RepoRoot\orchestrator\Dockerfile" $RepoRoot
     if ($LASTEXITCODE -ne 0) { Err "Docker build failed." }
