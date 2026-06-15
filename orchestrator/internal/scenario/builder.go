@@ -129,6 +129,10 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 			command = fmt.Sprintf(`Write-Output "SKIP: ART technique %s not in local store"`, s.TechniqueID)
 		}
 	case "caldera":
+		// NOTE: this static-YAML path resolves only the command; unlike the
+		// dynamic build paths it does NOT auto-detect ability payloads. If a
+		// caldera step ships real payloads, declare `fidelity: lab-only` in the
+		// scenario YAML — it is propagated via Step.Fidelity below.
 		command = buildCalderaCommand(s, calderaURL, calderaKey)
 	default: // "custom" or unset
 		command = s.Command
@@ -158,6 +162,7 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 		TimeoutSec:  timeout,
 		Payloads:    payloads,
 		Cleanup:     s.Cleanup,
+		Fidelity:    s.Fidelity,
 	}, nil
 }
 

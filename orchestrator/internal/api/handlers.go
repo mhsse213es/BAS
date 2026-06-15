@@ -834,7 +834,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	// outside lab mode — drop them in posture/telemetry. (Static sc.Steps are
 	// already fidelity-filtered above before the build.)
 	if mode != "lab" {
-		kept := steps[:0]
+		kept := make([]scenario.ScenarioStep, 0, len(steps))
 		for _, st := range steps {
 			if st.Fidelity == "lab-only" {
 				continue
