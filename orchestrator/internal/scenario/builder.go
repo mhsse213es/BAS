@@ -395,6 +395,7 @@ func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]Scena
 			Executor:    "powershell",
 			Command:     cmd,
 			TimeoutSec:  60,
+			Fidelity:    calderaStepFidelity(*ab),
 		})
 	}
 
@@ -431,6 +432,7 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 			Executor:    "powershell",
 			Command:     cmd,
 			TimeoutSec:  60,
+			Fidelity:    calderaStepFidelity(*ab),
 		})
 	}
 	if len(steps) == 0 {
@@ -440,6 +442,18 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 			len(abilityIDs))
 	}
 	return steps, nil
+}
+
+// calderaStepFidelity returns "lab-only" if any of the ability's executors ships
+// a payload (real tooling), else "". Conservative: any payload across any executor
+// gates the whole ability to lab mode.
+func calderaStepFidelity(ab calderaAbilityFull) string {
+	for _, e := range ab.Executors {
+		if len(e.Payloads) > 0 {
+			return "lab-only"
+		}
+	}
+	return ""
 }
 
 // buildCalderaAllWindowsSteps fetches the entire Caldera ability library and
@@ -485,6 +499,7 @@ func buildCalderaAllWindowsSteps(calderaURL, apiKey string) ([]ScenarioStep, err
 			Executor:    "powershell",
 			Command:     cmd,
 			TimeoutSec:  60,
+			Fidelity:    calderaStepFidelity(ab),
 		})
 	}
 	if len(steps) == 0 {
