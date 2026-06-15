@@ -2186,6 +2186,17 @@ func (h *Handler) GetARTContentStatus(w http.ResponseWriter, r *http.Request) {
 	if h.artStore != nil {
 		loaded = h.artStore.Count()
 	}
+	// Atomic-test total (Windows-executable tests across all techniques) and the
+	// seeded CISA KEV CVE catalog size. Both are advisory counts — a failed query
+	// must not break the status call, so errors are logged and the count stays 0.
+	testCount := 0
+	if err := h.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM art_atomic_tests`).Scan(&testCount); err != nil {
+		log.Printf("[content] atomic-test count failed: %v", err)
+	}
+	kevCount := 0
+	if err := h.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM cves WHERE source = 'cisa-kev'`).Scan(&kevCount); err != nil {
+		log.Printf("[content] KEV count failed: %v", err)
+	}
 	// Payload basenames the loaded atomics reference but we don't ship — the exact
 	// filenames an operator would rename a binary to in order to enable those tests.
 	missing, err := scenario.MissingPayloads(r.Context(), h.db)
@@ -2197,7 +2208,9 @@ func (h *Handler) GetARTContentStatus(w http.ResponseWriter, r *http.Request) {
 		"seeded":              true,
 		"version":             version,
 		"techniqueCount":      techCount,
+		"testCount":           testCount,
 		"payloadCount":        payloadCount,
+		"kevCount":            kevCount,
 		"source":              source,
 		"importedAt":          importedAt,
 		"techniquesLoaded":    loaded,

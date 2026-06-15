@@ -1025,8 +1025,16 @@ code {
               <span id="cs-art-techniques" class="conn-cfg-val">—</span>
             </div>
             <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Atomic Tests</span>
+              <span id="cs-art-tests" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
               <span class="conn-cfg-label">Payloads</span>
               <span id="cs-art-payloads" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
+              <span class="conn-cfg-label">CISA KEV (CVEs)</span>
+              <span id="cs-art-kev" class="conn-cfg-val">—</span>
             </div>
             <div class="conn-cfg-row">
               <span class="conn-cfg-label">Source</span>
@@ -3229,7 +3237,11 @@ function loadARTContentStatus() {
     document.getElementById('cs-art-techniques').textContent =
       (d.techniquesLoaded != null ? d.techniquesLoaded : (d.techniqueCount || 0)) + ' loaded' +
       (d.techniqueCount != null ? ' / ' + d.techniqueCount + ' in DB' : '');
+    document.getElementById('cs-art-tests').textContent =
+      (d.testCount != null ? d.testCount : 0) + ' Windows atomics';
     document.getElementById('cs-art-payloads').textContent = (d.payloadCount || 0) + ' indexed';
+    document.getElementById('cs-art-kev').textContent =
+      (d.kevCount != null ? d.kevCount : 0) + ' known-exploited';
     document.getElementById('cs-art-source').textContent = d.source || '—';
     document.getElementById('cs-art-imported').textContent =
       d.importedAt ? new Date(d.importedAt).toLocaleString() : '—';
