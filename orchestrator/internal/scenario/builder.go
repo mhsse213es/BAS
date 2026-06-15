@@ -236,13 +236,19 @@ func buildCalderaCommand(s Step, calderaURL, calderaKey string) string {
 
 // ── Caldera REST API ──────────────────────────────────────────────────────────
 
+// calderaExecutor is one platform executor of a Caldera ability. Payloads lists
+// the files the ability stages on the target; a non-empty list means the ability
+// ships real tooling and must be gated to lab mode.
+type calderaExecutor struct {
+	Platform string   `json:"platform"`
+	Name     string   `json:"name"`
+	Command  string   `json:"command"`
+	Payloads []string `json:"payloads"`
+}
+
 type calderaAbility struct {
-	AbilityID string `json:"ability_id"`
-	Executors []struct {
-		Platform string `json:"platform"`
-		Name     string `json:"name"`
-		Command  string `json:"command"`
-	} `json:"executors"`
+	AbilityID string            `json:"ability_id"`
+	Executors []calderaExecutor `json:"executors"`
 }
 
 func fetchCalderaCommand(calderaURL, apiKey, abilityID, preferredExecutor string) (string, error) {
@@ -299,11 +305,7 @@ func calderaGet(client *http.Client, url, apiKey, preferredExecutor string) (str
 	return pickExecutorCommand(ab.Executors, preferredExecutor), nil
 }
 
-func pickExecutorCommand(executors []struct {
-	Platform string `json:"platform"`
-	Name     string `json:"name"`
-	Command  string `json:"command"`
-}, preferred string) string {
+func pickExecutorCommand(executors []calderaExecutor, preferred string) string {
 	if preferred == "" {
 		preferred = "psh"
 	}
@@ -333,15 +335,11 @@ type calderaAdversary struct {
 }
 
 type calderaAbilityFull struct {
-	AbilityID   string `json:"ability_id"`
-	Name        string `json:"name"`
-	TechniqueID string `json:"technique_id"`
-	Tactic      string `json:"tactic"`
-	Executors   []struct {
-		Platform string `json:"platform"`
-		Name     string `json:"name"`
-		Command  string `json:"command"`
-	} `json:"executors"`
+	AbilityID   string            `json:"ability_id"`
+	Name        string            `json:"name"`
+	TechniqueID string            `json:"technique_id"`
+	Tactic      string            `json:"tactic"`
+	Executors   []calderaExecutor `json:"executors"`
 }
 
 // buildCalderaAdversarySteps fetches an adversary profile from Caldera,
