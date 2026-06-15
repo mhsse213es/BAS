@@ -470,6 +470,14 @@ _do_install_steps() {
   if [[ -d "${SCRIPT_DIR}/scenarios" ]]; then
     cp -r "${SCRIPT_DIR}/scenarios/." "${INSTALL_DIR}/scenarios/"
   fi
+  # The orchestrator runs as the distroless 'nonroot' user (uid/gid 65532) and
+  # writes into this bind-mounted dir: scenarios/custom (clone + save) and
+  # scenarios/intel (threat-intel connector). Pre-create those subdirs and hand
+  # the whole scenarios tree to 65532 so MkdirAll/WriteFile from the container
+  # don't fail with EACCES ("create custom dir: permission denied"). Builtin
+  # YAMLs stay readable; only ownership changes.
+  mkdir -p "${INSTALL_DIR}/scenarios/custom" "${INSTALL_DIR}/scenarios/intel"
+  chown -R 65532:65532 "${INSTALL_DIR}/scenarios"
   if [[ -d "${SCRIPT_DIR}/wwwroot" ]]; then
     cp -r "${SCRIPT_DIR}/wwwroot/." "${INSTALL_DIR}/wwwroot/"
   fi
