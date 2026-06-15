@@ -9,3 +9,15 @@ library baked in (the `emu` plugin), so APT kill-chains load air-gapped.
   `bas-caldera-*.tar` in the bundle) WILL be flagged by AV/EDR. See
   `docs/CALDERA_EMU.md` for the client AV-allowlist guidance.
 - Rebuild when upgrading Caldera or refreshing the emulation library.
+
+## Verify after build
+
+```sh
+docker run --rm -d --name emu-check -e API_KEY_RED=devkey -p 8899:8888 bas-caldera:<tag>
+sleep 45
+curl -s -H "KEY: devkey" http://localhost:8899/api/v2/abilities  | python -c "import sys,json;print(len(json.load(sys.stdin)))"
+curl -s -H "KEY: devkey" http://localhost:8899/api/v2/adversaries | python -c "import sys,json;print(len(json.load(sys.stdin)))"
+docker rm -f emu-check
+```
+
+Expect abilities well above 166 and adversaries > 0.
