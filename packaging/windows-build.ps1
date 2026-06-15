@@ -75,6 +75,12 @@ Log "Pulling ghcr.io/mitre/caldera:latest..."
 docker pull ghcr.io/mitre/caldera:latest
 if ($LASTEXITCODE -ne 0) { Warn "Failed to pull Caldera image - bundle will exclude it." }
 
+# Build the custom Caldera image with the adversary-emulation library baked in.
+# This is the only place the emulation library is cloned (build host has internet).
+Log "Building bas-caldera:$Version (emu library)..."
+docker build -t "bas-caldera:$Version" "$RepoRoot\packaging\caldera"
+if ($LASTEXITCODE -ne 0) { Warn "Failed to build bas-caldera image - bundle will fall back to stock Caldera." }
+
 # -- 3. Create output directory structure -------------------------------------
 Log "Staging delivery package: $OutDir"
 if (Test-Path $OutDir) { Remove-Item -Recurse -Force $OutDir }
@@ -94,13 +100,20 @@ Log "  Saving postgres:16-alpine..."
 docker save postgres:16-alpine -o "$OutDir\images\postgres-16-alpine.tar"
 Log "  Saved: postgres-16-alpine.tar"
 
-$calderaExists = docker image inspect "ghcr.io/mitre/caldera:latest" 2>$null
-if ($calderaExists) {
-    Log "  Saving ghcr.io/mitre/caldera:latest..."
-    docker save ghcr.io/mitre/caldera:latest -o "$OutDir\images\caldera-latest.tar"
-    Log "  Saved: caldera-latest.tar"
+$basCalderaExists = docker image inspect "bas-caldera:$Version" 2>$null
+if ($basCalderaExists) {
+    Log "  Saving bas-caldera:$Version..."
+    docker save "bas-caldera:$Version" -o "$OutDir\images\bas-caldera-$Version.tar"
+    Log "  Saved: bas-caldera-$Version.tar"
 } else {
-    Warn "Caldera image not available - skipping. Setup will pull it if internet is available."
+    $calderaExists = docker image inspect "ghcr.io/mitre/caldera:latest" 2>$null
+    if ($calderaExists) {
+        Log "  Saving fallback ghcr.io/mitre/caldera:latest..."
+        docker save ghcr.io/mitre/caldera:latest -o "$OutDir\images\caldera-latest.tar"
+        Log "  Saved: caldera-latest.tar"
+    } else {
+        Warn "No Caldera image available - skipping."
+    }
 }
 
 # -- 5a. Build Windows agent binary + installer EXE ---------------------------

@@ -829,6 +829,31 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Dynamically-built Caldera abilities carry their own fidelity tag. Payload-
+	// bearing abilities (e.g. emu APT chains) are "lab-only" and must never fire
+	// outside lab mode — drop them in posture/telemetry. (Static sc.Steps are
+	// already fidelity-filtered above before the build.)
+	if mode != "lab" {
+		kept := make([]scenario.ScenarioStep, 0, len(steps))
+		for _, st := range steps {
+			if st.Fidelity == "lab-only" {
+				continue
+			}
+			kept = append(kept, st)
+		}
+		dropped := len(steps) - len(kept)
+		steps = kept
+		if dropped > 0 {
+			log.Printf("[scenario] run %s: dropped %d lab-only step(s) for mode=%s", runID, dropped, mode)
+		}
+		if len(steps) == 0 {
+			_, _ = h.db.Exec(context.Background(),
+				`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+			jsonError(w, "every step in this scenario is lab-only (ships real payloads) — run it in lab mode against an isolated range", http.StatusUnprocessableEntity)
+			return
+		}
+	}
+
 	h.persistStepMeta(r.Context(), runID, steps)
 
 	cmd := scenario.ScenarioCommand{

@@ -129,6 +129,10 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 			command = fmt.Sprintf(`Write-Output "SKIP: ART technique %s not in local store"`, s.TechniqueID)
 		}
 	case "caldera":
+		// NOTE: this static-YAML path resolves only the command; unlike the
+		// dynamic build paths it does NOT auto-detect ability payloads. If a
+		// caldera step ships real payloads, declare `fidelity: lab-only` in the
+		// scenario YAML — it is propagated via Step.Fidelity below.
 		command = buildCalderaCommand(s, calderaURL, calderaKey)
 	default: // "custom" or unset
 		command = s.Command
@@ -158,6 +162,7 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 		TimeoutSec:  timeout,
 		Payloads:    payloads,
 		Cleanup:     s.Cleanup,
+		Fidelity:    s.Fidelity,
 	}, nil
 }
 
@@ -236,13 +241,19 @@ func buildCalderaCommand(s Step, calderaURL, calderaKey string) string {
 
 // ── Caldera REST API ──────────────────────────────────────────────────────────
 
+// calderaExecutor is one platform executor of a Caldera ability. Payloads lists
+// the files the ability stages on the target; a non-empty list means the ability
+// ships real tooling and must be gated to lab mode.
+type calderaExecutor struct {
+	Platform string   `json:"platform"`
+	Name     string   `json:"name"`
+	Command  string   `json:"command"`
+	Payloads []string `json:"payloads"`
+}
+
 type calderaAbility struct {
-	AbilityID string `json:"ability_id"`
-	Executors []struct {
-		Platform string `json:"platform"`
-		Name     string `json:"name"`
-		Command  string `json:"command"`
-	} `json:"executors"`
+	AbilityID string            `json:"ability_id"`
+	Executors []calderaExecutor `json:"executors"`
 }
 
 func fetchCalderaCommand(calderaURL, apiKey, abilityID, preferredExecutor string) (string, error) {
@@ -299,11 +310,7 @@ func calderaGet(client *http.Client, url, apiKey, preferredExecutor string) (str
 	return pickExecutorCommand(ab.Executors, preferredExecutor), nil
 }
 
-func pickExecutorCommand(executors []struct {
-	Platform string `json:"platform"`
-	Name     string `json:"name"`
-	Command  string `json:"command"`
-}, preferred string) string {
+func pickExecutorCommand(executors []calderaExecutor, preferred string) string {
 	if preferred == "" {
 		preferred = "psh"
 	}
@@ -333,15 +340,11 @@ type calderaAdversary struct {
 }
 
 type calderaAbilityFull struct {
-	AbilityID   string `json:"ability_id"`
-	Name        string `json:"name"`
-	TechniqueID string `json:"technique_id"`
-	Tactic      string `json:"tactic"`
-	Executors   []struct {
-		Platform string `json:"platform"`
-		Name     string `json:"name"`
-		Command  string `json:"command"`
-	} `json:"executors"`
+	AbilityID   string            `json:"ability_id"`
+	Name        string            `json:"name"`
+	TechniqueID string            `json:"technique_id"`
+	Tactic      string            `json:"tactic"`
+	Executors   []calderaExecutor `json:"executors"`
 }
 
 // buildCalderaAdversarySteps fetches an adversary profile from Caldera,
@@ -397,6 +400,7 @@ func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]Scena
 			Executor:    "powershell",
 			Command:     cmd,
 			TimeoutSec:  60,
+			Fidelity:    calderaStepFidelity(*ab),
 		})
 	}
 
@@ -433,6 +437,7 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 			Executor:    "powershell",
 			Command:     cmd,
 			TimeoutSec:  60,
+			Fidelity:    calderaStepFidelity(*ab),
 		})
 	}
 	if len(steps) == 0 {
@@ -442,6 +447,18 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 			len(abilityIDs))
 	}
 	return steps, nil
+}
+
+// calderaStepFidelity returns "lab-only" if any of the ability's executors ships
+// a payload (real tooling), else "". Conservative: any payload across any executor
+// gates the whole ability to lab mode.
+func calderaStepFidelity(ab calderaAbilityFull) string {
+	for _, e := range ab.Executors {
+		if len(e.Payloads) > 0 {
+			return "lab-only"
+		}
+	}
+	return ""
 }
 
 // buildCalderaAllWindowsSteps fetches the entire Caldera ability library and
@@ -487,6 +504,7 @@ func buildCalderaAllWindowsSteps(calderaURL, apiKey string) ([]ScenarioStep, err
 			Executor:    "powershell",
 			Command:     cmd,
 			TimeoutSec:  60,
+			Fidelity:    calderaStepFidelity(ab),
 		})
 	}
 	if len(steps) == 0 {
