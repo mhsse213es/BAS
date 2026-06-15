@@ -37,12 +37,17 @@ services:
     networks:
       - bas-internal
     restart: unless-stopped
+    # The MITRE Caldera image is Python-based and ships no wget/curl, so the old
+    # wget probe always failed → the container flapped "unhealthy" even though the
+    # API was fine. Use python3 (the container's own runtime) against the auth-free
+    # root page. start_period is generous because Caldera loads its plugin/ability
+    # library on boot and isn't ready to serve until that finishes.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8888/api/v2/health || exit 1"]
-      interval: 20s
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8888/').read()\" || exit 1"]
+      interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 180s
 
   # ── BAS Orchestrator ─────────────────────────────────────────────────────────
   orchestrator:
