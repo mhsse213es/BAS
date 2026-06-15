@@ -1698,7 +1698,16 @@ func (h *Handler) GetCalderaAbilities(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		jsonError(w, fmt.Sprintf("Caldera returned HTTP %d", resp.StatusCode), http.StatusBadGateway)
+		msg := fmt.Sprintf("Caldera returned HTTP %d for /api/v2/abilities", resp.StatusCode)
+		if resp.StatusCode == http.StatusUnauthorized {
+			// Settings can still show green because /api/v2/health does not validate
+			// the key — but the abilities API does. This is almost always a key mismatch.
+			msg = "Caldera rejected the API key (HTTP 401) on /api/v2/abilities. " +
+				"The Settings page shows green because the health check doesn't validate the key. " +
+				"On the server, confirm CALDERA_API_KEY in .env matches API_KEY_RED in the bas-caldera container: " +
+				"docker inspect bas-caldera | grep API_KEY_RED"
+		}
+		jsonError(w, msg, http.StatusBadGateway)
 		return
 	}
 	var raw []struct {

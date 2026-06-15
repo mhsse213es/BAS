@@ -1641,12 +1641,14 @@ function stripeColor(id) {
 // (e.g. Caldera offline) just leaves that count blank — it never blocks the UI.
 // Re-renders the scenario grid once loaded so counts appear without a refresh.
 function loadCatalogs() {
+  // apicall resolves even on HTTP errors (the body is the JSON error object), so
+  // guard with Array.isArray — an error body must not be mistaken for a catalog.
   apicall('/api/art/techniques').then(function(d) {
-    artCatalog = d || [];
+    artCatalog = Array.isArray(d) ? d : [];
     if (scenarios.length) renderScenarios();
   }).catch(function() {});
   apicall('/api/caldera/abilities').then(function(d) {
-    calderaCatalog = d || [];
+    calderaCatalog = Array.isArray(d) ? d : [];
     if (scenarios.length) renderScenarios();
   }).catch(function() {});
 }
@@ -2052,11 +2054,30 @@ function openPicker(scId, fw) {
   if (!sc) { showToast('Scenario not found', 'err'); return; }
   fw = fw || scenarioFramework(sc);
   if (!fw) { showToast('This scenario has no selectable items', 'err'); return; }
-  _pickerItems = (fw === 'art') ? artCatalog : calderaCatalog;
-  if (!_pickerItems.length) {
-    showToast(fw === 'art' ? 'ART catalog not loaded yet' : 'Caldera catalog unavailable — is the engine online?', 'err');
-    return;
-  }
+  var have = (fw === 'art') ? artCatalog : calderaCatalog;
+  if (have.length) { openPickerWith(scId, fw, sc, have); return; }
+  // Catalog not loaded (or a prior fetch failed silently) — fetch on demand and
+  // surface the actual reason instead of a generic "unavailable" message.
+  var url = (fw === 'art') ? '/api/art/techniques' : '/api/caldera/abilities';
+  apicall(url).then(function(d) {
+    if (!Array.isArray(d)) {
+      showToast((d && d.error) ? d.error : 'Catalog unavailable', 'err');
+      return;
+    }
+    if (fw === 'art') artCatalog = d; else calderaCatalog = d;
+    if (scenarios.length) renderScenarios();
+    if (!d.length) {
+      showToast(fw === 'art' ? 'ART catalog is empty — reseed ART content' : 'Caldera returned no abilities', 'err');
+      return;
+    }
+    openPickerWith(scId, fw, sc, d);
+  }).catch(function(e) {
+    showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err');
+  });
+}
+
+function openPickerWith(scId, fw, sc, items) {
+  _pickerItems = items;
   _pickerScId = scId; _pickerFw = fw; _pickerSel = {};
   // Pre-check priority: a pending run selection > the scenario's explicit list > all (sweep).
   var pre = null;
