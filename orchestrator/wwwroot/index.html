@@ -437,6 +437,8 @@ code {
   margin-top: 0.2rem; padding-top: 0.6rem; border-top: 1px solid var(--border);
 }
 .card-meta { font-size: 0.72rem; color: var(--muted); }
+.desc-toggle { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.desc-toggle:hover { text-decoration: underline; }
 
 /* ── Modals ────────────────────────────────────────────────── */
 .overlay {
@@ -1661,6 +1663,37 @@ function renderScenarios() {
   grid.innerHTML = matches.map(scenarioCardHTML).join('');
 }
 
+// Collapsible description: shows a short preview with a "Read more" / "Read less"
+// toggle (WhatsApp style) so long scenario paragraphs don't bloat the cards.
+var descSeq = 0;
+function descHtml(desc, sid, opts) {
+  desc = (desc || '').trim();
+  opts = opts || {};
+  var limit = opts.limit || 140;
+  var style = opts.style || '';
+  if (desc.length <= limit) {
+    return '<p style="' + style + '">' + x(desc) + '</p>';
+  }
+  // trim the preview back to the last whole word so we don't cut mid-word
+  var preview = desc.substring(0, limit).replace(/\s+\S*$/, '');
+  var id = 'desc-' + String(sid || 'x').replace(/[^a-zA-Z0-9_-]/g, '') + '-' + (descSeq++);
+  return '<p style="' + style + '">' +
+    '<span id="' + id + '-s">' + x(preview) + '&hellip; </span>' +
+    '<span id="' + id + '-f" style="display:none">' + x(desc) + ' </span>' +
+    '<a href="javascript:void(0)" class="desc-toggle" ' +
+      'onclick="toggleDesc(\'' + id + '\',this);return false;">Read more</a>' +
+    '</p>';
+}
+function toggleDesc(id, el) {
+  var sEl = document.getElementById(id + '-s');
+  var fEl = document.getElementById(id + '-f');
+  if (!sEl || !fEl) return;
+  var expanded = (fEl.style.display !== 'none');
+  sEl.style.display = expanded ? 'inline' : 'none';
+  fEl.style.display = expanded ? 'none' : 'inline';
+  el.textContent = expanded ? 'Read more' : 'Read less';
+}
+
 function scenarioCardHTML(s) {
       var color = stripeColor(s.id);
       var visibleTags = (s.tags || []).filter(function(t) {
@@ -1685,7 +1718,7 @@ function scenarioCardHTML(s) {
           '<div class="card-stripe" style="background:#2f81f7"></div>' +
           '<div>' + intelBadge + '</div>' +
           '<h3>' + x(s.name) + '</h3>' +
-          '<p style="font-size:0.78rem;color:var(--muted)">' + x((s.description || '').substring(0,120)) + '</p>' +
+          descHtml(s.description, s.id, {limit:120, style:'font-size:0.78rem;color:var(--muted)'}) +
           '<div class="tags">' + tags + '</div>' +
           '<div class="card-footer">' +
             '<div class="card-meta">' + footerMeta + '</div>' +
@@ -1732,7 +1765,7 @@ function scenarioCardHTML(s) {
         '<div class="card-stripe" style="background:' + color + '"></div>' +
         '<div>' + customBadge + '</div>' +
         '<h3>' + x(s.name) + '</h3>' +
-        '<p>' + x(s.description || '') + '</p>' +
+        descHtml(s.description, s.id, {limit:140}) +
         '<div class="tags">' + osBadge + tags + '</div>' +
         '<div class="card-footer">' +
           '<div class="card-meta">' + modeMeta + '</div>' +
