@@ -157,6 +157,47 @@ func (s *ARTStore) ListTechniques() []string {
 	return out
 }
 
+// TechniqueMeta is a lightweight catalog entry for the dashboard technique picker
+// and the real-time card count.
+type TechniqueMeta struct {
+	ID    string `json:"id"`    // ATT&CK technique ID, e.g. T1003.001
+	Name  string `json:"name"`  // representative atomic name (first Windows test)
+	Tests int    `json:"tests"` // number of Windows atomic tests for this technique
+}
+
+// ListTechniqueMeta returns one catalog entry per technique that has at least one
+// Windows step, sorted by technique ID. Drives the live count shown on sweep cards
+// and the selectable technique picker.
+func (s *ARTStore) ListTechniqueMeta() []TechniqueMeta {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]TechniqueMeta, 0, len(s.steps))
+	for id, steps := range s.steps {
+		name := ""
+		if len(steps) > 0 {
+			name = steps[0].Name
+		}
+		out = append(out, TechniqueMeta{ID: id, Name: name, Tests: len(steps)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// UnknownTechniques returns the subset of the given technique IDs that are NOT
+// present in the store (case-insensitive). An empty result means all are valid.
+// Used to validate an operator-selected technique subset before dispatch.
+func (s *ARTStore) UnknownTechniques(ids []string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var missing []string
+	for _, id := range ids {
+		if _, ok := s.steps[strings.ToUpper(strings.TrimSpace(id))]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	return missing
+}
+
 func parseARTFile(path string) (string, []ScenarioStep, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

@@ -1178,6 +1178,12 @@ code {
     <label class="modal-lbl">Target Agent</label>
     <select id="modal-agent" onchange="renderRunMode()"></select>
 
+    <!-- Customize — only shown for ART/Caldera scenarios -->
+    <div id="modal-customize-wrap" style="display:none;margin-top:0.5rem">
+      <a href="javascript:void(0)" class="desc-toggle" id="modal-customize-link" onclick="openPickerFromModal();return false;">&#9881; Customize</a>
+    </div>
+    <div id="modal-selection" style="display:none;margin-top:0.6rem;padding:0.5rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.78rem;background:var(--elevated);color:var(--text)"></div>
+
     <!-- Execution mode — only shown for hybrid (executable) scenarios -->
     <div id="modal-mode-wrap" style="display:none;margin-top:0.75rem">
       <label class="modal-lbl">Execution mode</label>
@@ -1197,6 +1203,26 @@ code {
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeModal()">Cancel</button>
       <button id="modal-run-btn" class="btn btn-outline-green btn-sm" onclick="confirmRun()">&#9654; Run</button>
+    </div>
+  </div>
+</div>
+
+<!-- Technique / Ability Picker -->
+<div id="picker-overlay" class="overlay">
+  <div class="modal" style="width:580px;display:flex;flex-direction:column;max-height:88vh">
+    <h3 id="picker-title">Select techniques</h3>
+    <p class="sub2" id="picker-sub">Tick the items you want to run. Use search to narrow the list.</p>
+    <input type="text" id="picker-search" placeholder="Filter by ID, name, or tactic…" oninput="renderPickerList()" autocomplete="off"
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;margin-bottom:0.6rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;font-size:0.78rem">
+      <span><a href="javascript:void(0)" class="desc-toggle" onclick="pickerSelectAll(true);return false;">Select all</a>
+        &nbsp;·&nbsp; <a href="javascript:void(0)" class="desc-toggle" onclick="pickerSelectAll(false);return false;">None</a></span>
+      <span id="picker-count" class="card-meta"></span>
+    </div>
+    <div id="picker-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.25rem"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closePicker()">Cancel</button>
+      <button id="picker-apply" class="btn btn-outline-green btn-sm" onclick="applyPicker()">&#9654; Use selection</button>
     </div>
   </div>
 </div>
@@ -1419,8 +1445,11 @@ var ROLE     = localStorage.getItem('bas_role')  || '';
 var socket   = null;
 var scenarios = [];
 var agents   = [];
+var artCatalog = [];      // live ART catalog: [{id,name,tests}]
+var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
 var _toast;
 var _modalScId = null;
+var _runSelection = null;  // {scId, fw:'art'|'caldera', ids:[]} — operator-chosen subset for the next run
 var _editUserId = null;
 var _pwForced = false;
 
@@ -1488,6 +1517,7 @@ function bootApp() {
   }
   connectWS();
   loadAgents();
+  loadCatalogs();
   loadScenarios();
   loadRuns();
   if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
@@ -1604,6 +1634,21 @@ function stripeColor(id) {
   var h = 0;
   for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
   return STRIPE_COLORS[h % STRIPE_COLORS.length];
+}
+
+// loadCatalogs fetches the live ART + Caldera catalogs so sweep cards show a
+// real technique/ability count and the picker has data. Best-effort: a failure
+// (e.g. Caldera offline) just leaves that count blank — it never blocks the UI.
+// Re-renders the scenario grid once loaded so counts appear without a refresh.
+function loadCatalogs() {
+  apicall('/api/art/techniques').then(function(d) {
+    artCatalog = d || [];
+    if (scenarios.length) renderScenarios();
+  }).catch(function() {});
+  apicall('/api/caldera/abilities').then(function(d) {
+    calderaCatalog = d || [];
+    if (scenarios.length) renderScenarios();
+  }).catch(function() {});
 }
 
 function loadScenarios() {
@@ -1737,10 +1782,28 @@ function scenarioCardHTML(s) {
           editBtns += '<button class="btn btn-sm" style="background:rgba(218,54,51,0.12);color:#f85149" onclick="deleteCustomScenario(\'' + x(s.id) + '\')" title="Delete">&#10005;</button> ';
         }
       }
-      var modeMeta = s.localCheck ? 'local check'
-        : (s.artTechniques || []).length ? (s.artTechniques.length + ' ART techniques')
-        : (s.calderaAbilities || []).length ? (s.calderaAbilities.length + ' Caldera abilities')
-        : ((s.steps || []).length + ' steps');
+      // Mode label — describe what the scenario actually runs. Sweep scenarios
+      // carry an empty technique/ability list (the real set is resolved live on
+      // the server), so they must be detected by their flags, not list length —
+      // otherwise they fall through to a meaningless "0 steps". Live catalog
+      // counts get appended in Phase B.
+      var modeMeta;
+      var stepN = (s.steps || []).length;
+      if (s.localCheck) {
+        modeMeta = 'Posture check';
+      } else if (s.artAllWindows) {
+        modeMeta = 'Full ART sweep' + (artCatalog.length ? ' · ' + artCatalog.length + ' techniques' : '');
+      } else if (s.calderaAllWindows) {
+        modeMeta = 'Full Caldera sweep' + (calderaCatalog.length ? ' · ' + calderaCatalog.length + ' abilities' : '');
+      } else if ((s.artTechniques || []).length) {
+        modeMeta = s.artTechniques.length + ' ART techniques';
+      } else if ((s.calderaAbilities || []).length) {
+        modeMeta = s.calderaAbilities.length + ' Caldera abilities';
+      } else if (stepN) {
+        modeMeta = stepN + (stepN === 1 ? ' step' : ' steps');
+      } else {
+        modeMeta = '—';
+      }
 
       // OS platform badge
       var osArr = s.supportedOs || [];
@@ -1761,6 +1824,17 @@ function scenarioCardHTML(s) {
         }).join('') + ' ';
       }
 
+      // Customize: ART/Caldera scenarios can be narrowed to a chosen subset of
+      // techniques/abilities before running. Detect the framework from the flags
+      // or the explicit list.
+      var fw = (s.artAllWindows || (s.artTechniques || []).length) ? 'art'
+             : (s.calderaAllWindows || (s.calderaAbilities || []).length) ? 'caldera'
+             : '';
+      var customizeBtn = fw
+        ? '<button class="btn btn-outline btn-sm" onclick="openPicker(\'' + x(s.id) + '\',\'' + fw + '\')" ' +
+          'title="Choose which ' + (fw === 'art' ? 'techniques' : 'abilities') + ' to run">&#9881; Customize</button> '
+        : '';
+
       return '<div class="card">' +
         '<div class="card-stripe" style="background:' + color + '"></div>' +
         '<div>' + customBadge + '</div>' +
@@ -1770,7 +1844,7 @@ function scenarioCardHTML(s) {
         '<div class="card-footer">' +
           '<div class="card-meta">' + modeMeta + '</div>' +
           '<div style="display:flex;gap:0.3rem;flex-wrap:wrap;justify-content:flex-end">' +
-            editBtns +
+            editBtns + customizeBtn +
             '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
           '</div>' +
         '</div></div>';
@@ -1867,6 +1941,7 @@ function openModal(scenarioId, preAgent) {
 // renderRunMode shows the Posture/Live selector only for executable (hybrid)
 // scenarios, and toggles the live-execution warning.
 function renderRunMode() {
+  renderModalSelection();
   var id = _modalScId || document.getElementById('modal-sc').value;
   var sc = scenarios.find(function(s) { return s.id === id; });
   var wrap = document.getElementById('modal-mode-wrap');
@@ -1959,7 +2034,141 @@ function renderRunMode() {
     btn.innerHTML = '&#9654; Run';
   }
 }
-function closeModal() { document.getElementById('run-overlay').classList.remove('open'); _modalScId = null; }
+function closeModal() { document.getElementById('run-overlay').classList.remove('open'); _modalScId = null; _runSelection = null; }
+
+/* ── Technique / Ability Picker ────────────────────────────── */
+// scenarioFramework returns 'art' | 'caldera' | '' for a scenario object.
+function scenarioFramework(sc) {
+  if (!sc) return '';
+  if (sc.artAllWindows || (sc.artTechniques || []).length) return 'art';
+  if (sc.calderaAllWindows || (sc.calderaAbilities || []).length) return 'caldera';
+  return '';
+}
+
+var _pickerScId = null, _pickerFw = '', _pickerItems = [], _pickerSel = {}, _pickerFiltered = [];
+
+function openPicker(scId, fw) {
+  var sc = scenarios.find(function(s) { return s.id === scId; });
+  if (!sc) { showToast('Scenario not found', 'err'); return; }
+  fw = fw || scenarioFramework(sc);
+  if (!fw) { showToast('This scenario has no selectable items', 'err'); return; }
+  _pickerItems = (fw === 'art') ? artCatalog : calderaCatalog;
+  if (!_pickerItems.length) {
+    showToast(fw === 'art' ? 'ART catalog not loaded yet' : 'Caldera catalog unavailable — is the engine online?', 'err');
+    return;
+  }
+  _pickerScId = scId; _pickerFw = fw; _pickerSel = {};
+  // Pre-check priority: a pending run selection > the scenario's explicit list > all (sweep).
+  var pre = null;
+  if (_runSelection && _runSelection.scId === scId && _runSelection.fw === fw) {
+    pre = _runSelection.ids;
+  } else if (fw === 'art' && (sc.artTechniques || []).length) {
+    pre = sc.artTechniques.map(function(t) { return String(t).toUpperCase(); });
+  } else if (fw === 'caldera' && (sc.calderaAbilities || []).length) {
+    pre = sc.calderaAbilities.slice();
+  }
+  if (pre) { pre.forEach(function(id) { _pickerSel[id] = true; }); }
+  else { _pickerItems.forEach(function(it) { _pickerSel[it.id] = true; }); }
+  document.getElementById('picker-title').textContent =
+    (fw === 'art' ? 'Select ART techniques' : 'Select Caldera abilities') + ' — ' + sc.name;
+  document.getElementById('picker-sub').textContent = (fw === 'art')
+    ? 'Tick the ATT&CK techniques to run. Search by ID or atomic name.'
+    : 'Tick the Caldera abilities to run. Search by name, tactic, or technique.';
+  document.getElementById('picker-search').value = '';
+  renderPickerList();
+  document.getElementById('picker-overlay').classList.add('open');
+}
+
+function openPickerFromModal() {
+  openPicker(_modalScId || document.getElementById('modal-sc').value);
+}
+
+function renderPickerList() {
+  var q = (document.getElementById('picker-search').value || '').trim().toLowerCase();
+  var fw = _pickerFw;
+  _pickerFiltered = _pickerItems.filter(function(it) {
+    if (!q) return true;
+    return (it.id + ' ' + (it.name || '') + ' ' + (it.tactic || '') + ' ' + (it.technique || '')).toLowerCase().indexOf(q) !== -1;
+  });
+  var rows = _pickerFiltered.map(function(it) {
+    var checked = _pickerSel[it.id] ? ' checked' : '';
+    var meta = (fw === 'art')
+      ? (it.tests ? (it.tests + (it.tests === 1 ? ' test' : ' tests')) : '')
+      : [it.tactic, it.technique].filter(Boolean).join(' · ');
+    return '<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.8rem">' +
+      '<input type="checkbox" data-id="' + x(it.id) + '"' + checked + ' onchange="pickerToggle(this)" style="margin-top:2px">' +
+      '<span style="flex:1">' +
+        '<span style="font-weight:600;color:var(--accent)">' + x(it.id) + '</span>' +
+        (it.name ? ' <span>' + x(it.name) + '</span>' : '') +
+        (meta ? '<br><span class="card-meta">' + x(meta) + '</span>' : '') +
+      '</span></label>';
+  }).join('');
+  document.getElementById('picker-list').innerHTML = rows || '<p class="empty" style="padding:1rem">No matches.</p>';
+  updatePickerCount();
+}
+
+function pickerToggle(el) {
+  var id = el.getAttribute('data-id');
+  if (el.checked) _pickerSel[id] = true; else delete _pickerSel[id];
+  updatePickerCount();
+}
+
+function pickerSelectAll(on) {
+  _pickerFiltered.forEach(function(it) {
+    if (on) _pickerSel[it.id] = true; else delete _pickerSel[it.id];
+  });
+  renderPickerList();
+}
+
+function pickerSelectedIds() { return Object.keys(_pickerSel); }
+
+function updatePickerCount() {
+  var n = pickerSelectedIds().length;
+  var total = _pickerItems.length;
+  var shown = _pickerFiltered.length;
+  var txt = n + ' of ' + total + ' selected';
+  if (shown !== total) txt += ' · ' + shown + ' shown';
+  document.getElementById('picker-count').textContent = txt;
+  var btn = document.getElementById('picker-apply');
+  btn.disabled = (n === 0);
+  btn.innerHTML = '&#9654; Use selection (' + n + ')';
+}
+
+function applyPicker() {
+  var ids = pickerSelectedIds();
+  if (!ids.length) { showToast('Select at least one item', 'err'); return; }
+  _runSelection = { scId: _pickerScId, fw: _pickerFw, ids: ids };
+  closePicker();
+  openModal(_pickerScId, null);
+}
+
+function closePicker() { document.getElementById('picker-overlay').classList.remove('open'); }
+
+function clearSelection() { _runSelection = null; renderModalSelection(); }
+
+// renderModalSelection shows the Customize link + a note of the chosen subset
+// inside the Run modal, reflecting the current scenario and pending selection.
+function renderModalSelection() {
+  var cw = document.getElementById('modal-customize-wrap');
+  var note = document.getElementById('modal-selection');
+  var link = document.getElementById('modal-customize-link');
+  if (!cw || !note || !link) return;
+  var id = _modalScId || document.getElementById('modal-sc').value;
+  var sc = scenarios.find(function(s) { return s.id === id; });
+  var fw = scenarioFramework(sc);
+  if (!sc || !fw) { cw.style.display = 'none'; note.style.display = 'none'; return; }
+  var noun = (fw === 'art') ? 'techniques' : 'abilities';
+  var has = _runSelection && _runSelection.scId === id && _runSelection.fw === fw && _runSelection.ids.length > 0;
+  cw.style.display = 'block';
+  link.innerHTML = '&#9881; ' + (has ? 'Change selection' : 'Customize — select ' + noun + ' to run');
+  if (has) {
+    note.style.display = 'block';
+    note.innerHTML = '&#9989; Running a selected subset: <strong>' + _runSelection.ids.length + '</strong> ' + noun +
+      ' <a href="javascript:void(0)" class="desc-toggle" style="margin-left:8px" onclick="clearSelection();return false;">Clear</a>';
+  } else {
+    note.style.display = 'none';
+  }
+}
 
 /* ── Scenario Builder ──────────────────────────────────────── */
 var _bldEditId = null;
@@ -2597,8 +2806,13 @@ function confirmRun() {
   }
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl) ? reasonEl.value.trim() : '';
+  var body = { agentId: agentId, mode: mode, confirmLive: confirmLive, confirmLab: confirmLab, reason: reason };
+  if (_runSelection && _runSelection.scId === scenarioId && _runSelection.ids.length) {
+    if (_runSelection.fw === 'art') body.techniques = _runSelection.ids;
+    else if (_runSelection.fw === 'caldera') body.abilities = _runSelection.ids;
+  }
   apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
-    method: 'POST', body: JSON.stringify({ agentId: agentId, mode: mode, confirmLive: confirmLive, confirmLab: confirmLab, reason: reason })
+    method: 'POST', body: JSON.stringify(body)
   }).then(function(res) {
     if (res && res.error) { showToast('Run failed: ' + res.error, 'err'); return; }
     closeModal();

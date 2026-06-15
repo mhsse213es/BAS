@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -582,11 +584,13 @@ const staleRunGuard = 2 * time.Hour
 func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	scenarioID := chi.URLParam(r, "id")
 	var req struct {
-		AgentID     string `json:"agentId"`
-		Mode        string `json:"mode"`        // posture (default) | telemetry | lab
-		ConfirmLive bool   `json:"confirmLive"` // required ack for any live run (telemetry/lab)
-		ConfirmLab  bool   `json:"confirmLab"`  // second-stage approval, required for lab mode
-		Reason      string `json:"reason"`      // optional operator justification (audited)
+		AgentID     string   `json:"agentId"`
+		Mode        string   `json:"mode"`        // posture (default) | telemetry | lab
+		ConfirmLive bool     `json:"confirmLive"` // required ack for any live run (telemetry/lab)
+		ConfirmLab  bool     `json:"confirmLab"`  // second-stage approval, required for lab mode
+		Reason      string   `json:"reason"`      // optional operator justification (audited)
+		Techniques  []string `json:"techniques"`  // optional ART technique subset (overrides the scenario's set)
+		Abilities   []string `json:"abilities"`   // optional Caldera ability subset (overrides the scenario's set)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -597,6 +601,21 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		jsonError(w, "scenario not found", http.StatusNotFound)
 		return
+	}
+
+	// Validate any operator-selected ART technique subset against the live catalog
+	// before we touch the database, so a bad request can't leave a dangling run.
+	// (Caldera ability IDs are validated downstream by BuildSteps, which resolves
+	// each ability against the live library and errors on an unknown one.)
+	if len(req.Techniques) > 0 {
+		if h.artStore == nil {
+			jsonError(w, "ART store unavailable — cannot run a technique subset", http.StatusServiceUnavailable)
+			return
+		}
+		if missing := h.artStore.UnknownTechniques(req.Techniques); len(missing) > 0 {
+			jsonError(w, "unknown ART techniques: "+strings.Join(missing, ", "), http.StatusBadRequest)
+			return
+		}
 	}
 
 	// ── Agent state gate ─────────────────────────────────────────────────────
@@ -769,21 +788,38 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 			mode, who, scenarioID, req.AgentID, runID, reason)
 	}
 
-	// Filter steps by fidelity for the requested tier: telemetry excludes
-	// lab-only steps; lab includes everything. Build from a filtered copy so the
-	// original scenario is untouched.
+	// Build from a copy so the registered scenario is never mutated. Two optional
+	// transforms apply: (1) live-fidelity filtering drops lab-only steps for
+	// telemetry mode; (2) an operator-selected technique/ability subset narrows a
+	// sweep (or selective) scenario to just the chosen items.
+	subset := len(req.Techniques) > 0 || len(req.Abilities) > 0
 	buildSc := sc
-	if live {
-		filtered := *sc
-		kept := make([]scenario.Step, 0, len(sc.Steps))
-		for _, st := range sc.Steps {
-			if mode == "telemetry" && st.Fidelity == "lab-only" {
-				continue
+	if live || subset {
+		c := *sc
+		if live {
+			kept := make([]scenario.Step, 0, len(sc.Steps))
+			for _, st := range sc.Steps {
+				if mode == "telemetry" && st.Fidelity == "lab-only" {
+					continue
+				}
+				kept = append(kept, st)
 			}
-			kept = append(kept, st)
+			c.Steps = kept
 		}
-		filtered.Steps = kept
-		buildSc = &filtered
+		if len(req.Techniques) > 0 {
+			c.ARTTechniques = req.Techniques
+			c.ARTAllWindows = false
+		}
+		if len(req.Abilities) > 0 {
+			c.CalderaAbilities = req.Abilities
+			c.CalderaAllWindows = false
+			c.CalderaAdversaryID = ""
+		}
+		buildSc = &c
+	}
+	if subset {
+		log.Printf("[scenario] run %s uses operator-selected subset: %d ART technique(s), %d Caldera ability(ies)",
+			runID, len(req.Techniques), len(req.Abilities))
 	}
 
 	// Build concrete commands — all framework logic resolved server-side
@@ -1599,6 +1635,95 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 		AbilityCount: abilityCount,
 		LatencyMs:    latencyMs,
 	})
+}
+
+// ── Framework Catalogs (Viewer+) ───────────────────────────────────────────────
+// Real-time technique/ability catalogs that drive the dashboard's sweep counts
+// and the selectable run picker. Read-only, no execution.
+
+// GET /api/art/techniques — live ART catalog (technique id, representative name,
+// atomic-test count). Returns an empty list if the ART store isn't loaded.
+func (h *Handler) GetARTTechniques(w http.ResponseWriter, r *http.Request) {
+	if h.artStore == nil {
+		respond(w, []scenario.TechniqueMeta{})
+		return
+	}
+	respond(w, h.artStore.ListTechniqueMeta())
+}
+
+// CalderaAbility is a catalog entry for the dashboard ability picker.
+type CalderaAbility struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Tactic    string `json:"tactic,omitempty"`
+	Technique string `json:"technique,omitempty"`
+}
+
+// calderaAbilityCache memoizes the Caldera ability catalog so opening the picker
+// (or rendering sweep counts) doesn't hit Caldera on every request. The library
+// changes rarely, so a short TTL is plenty.
+var calderaAbilityCache struct {
+	mu      sync.Mutex
+	at      time.Time
+	entries []CalderaAbility
+}
+
+// GET /api/caldera/abilities — live Caldera ability catalog (cached ~60s).
+// Returns an empty list when Caldera is not configured.
+func (h *Handler) GetCalderaAbilities(w http.ResponseWriter, r *http.Request) {
+	if h.calderaURL == "" {
+		respond(w, []CalderaAbility{})
+		return
+	}
+
+	calderaAbilityCache.mu.Lock()
+	if calderaAbilityCache.entries != nil && time.Since(calderaAbilityCache.at) < 60*time.Second {
+		cached := calderaAbilityCache.entries
+		calderaAbilityCache.mu.Unlock()
+		respond(w, cached)
+		return
+	}
+	calderaAbilityCache.mu.Unlock()
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	base := strings.TrimRight(h.calderaURL, "/")
+	req, _ := http.NewRequest(http.MethodGet, base+"/api/v2/abilities", nil)
+	if h.calderaKey != "" {
+		req.Header.Set("KEY", h.calderaKey)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		jsonError(w, "cannot reach Caldera: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		jsonError(w, fmt.Sprintf("Caldera returned HTTP %d", resp.StatusCode), http.StatusBadGateway)
+		return
+	}
+	var raw []struct {
+		AbilityID   string `json:"ability_id"`
+		Name        string `json:"name"`
+		Tactic      string `json:"tactic"`
+		TechniqueID string `json:"technique_id"`
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &raw); err != nil {
+		jsonError(w, "parse abilities: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	out := make([]CalderaAbility, 0, len(raw))
+	for _, a := range raw {
+		out = append(out, CalderaAbility{ID: a.AbilityID, Name: a.Name, Tactic: a.Tactic, Technique: a.TechniqueID})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+
+	calderaAbilityCache.mu.Lock()
+	calderaAbilityCache.at = time.Now()
+	calderaAbilityCache.entries = out
+	calderaAbilityCache.mu.Unlock()
+
+	respond(w, out)
 }
 
 // ── Threat-Intel Connector (Admin only) ───────────────────────────────────────
