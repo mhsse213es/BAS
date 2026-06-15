@@ -5,16 +5,30 @@
 // STIX bundle present (the deployed product stays air-gapped — only the distilled
 // JSON ships):
 //
-//	curl -L -o enterprise-attack.json \
-//	  https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json
-//	go run ./internal/reporting/attackdata/gen enterprise-attack.json \
+//	curl -L -o enterprise-attack-16.1.json \
+//	  https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack-16.1.json
+//	go run ./internal/reporting/attackdata/gen enterprise-attack-16.1.json \
 //	  internal/reporting/attackdata/attack_enrichment.json \
 //	  [--d3fend=d3fend-attack-map.json] [--sigma=path/to/sigma/rules]
+//
+// ⚠ PIN THE BUNDLE TO v16.1 — DO NOT use the generic `.../master/.../enterprise-attack.json`.
+// MITRE removed the inline technique fields this tool reads (`x_mitre_data_sources`,
+// `x_mitre_permissions_required`) from attack-pattern objects in ATT&CK v17 (2025).
+// On v17+ those fields are gone, so this tool emits EMPTY data sources / permissions
+// and the report's detection-telemetry block silently goes blank. v16.1 (Oct 2024)
+// is the last release that still carries them inline. CAPEC is already absent from
+// live techniques in every modern bundle (MITRE dropped technique→CAPEC links years
+// ago) — capec will be empty regardless; that is honest, not a bug.
+//
+// Long-term fix (later sprint): rework this tool to reconstruct data sources from
+// the new model — index `x-mitre-data-component`/`x-mitre-data-source` objects and
+// walk the `detects` relationships — so it can consume the latest bundle without
+// losing the fields. Until then, v16.1 is the required input.
 //
 // Authoritative, technique-keyed facts emitted from the STIX bundle: threat-actor
 // groups, associated software/malware, mitigations, detection guidance,
 // description, ATT&CK URL, technique version/created/modified, platforms,
-// permissions required, data sources, and CAPEC ids.
+// permissions required, data sources, and CAPEC ids (capec empty on v16.1+).
 //
 // Optional authoritative side-inputs (empty when omitted — never fabricated):
 //   - --d3fend=FILE : a normalized export of the MITRE D3FEND ATT&CK mappings,
