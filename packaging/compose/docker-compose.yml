@@ -27,7 +27,7 @@ services:
 
   # ── Caldera (MITRE ATT&CK simulation engine) ─────────────────────────────────
   caldera:
-    image: ghcr.io/mitre/caldera:latest
+    image: ${REGISTRY:-}bas-caldera:${BAS_VERSION:-latest}
     container_name: bas-caldera
     environment:
       API_KEY_RED:  ${CALDERA_API_KEY:-BASPlatform2024}
