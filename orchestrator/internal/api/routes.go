@@ -95,6 +95,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		// selectable technique/ability picker. Read-only, Viewer+.
 		r.Get("/api/art/techniques", h.GetARTTechniques)
 		r.Get("/api/caldera/abilities", h.GetCalderaAbilities)
+		r.Get("/api/posture/catalog", h.GetPostureCatalog)
 
 		// Analyst + Admin only — can trigger scans, run scenarios, and
 		// author custom scenarios from the dashboard.

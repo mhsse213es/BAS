@@ -1708,6 +1708,36 @@ func (h *Handler) GetARTTechniques(w http.ResponseWriter, r *http.Request) {
 	respond(w, h.artStore.ListTechniqueMeta())
 }
 
+// GetPostureCatalog returns the selectable posture checks for a scenario, as
+// reported by the given agent at enroll time. The catalog is per-agent because
+// the check set is compiled into the agent and varies by OS. Viewer+.
+// Staleness note: this reflects what the agent advertised at its last enroll —
+// an agent upgraded with new checks must re-enroll for changes to appear here.
+// GET /api/posture/catalog?agentId=<id>&scenario=<id>
+func (h *Handler) GetPostureCatalog(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agentId")
+	scenarioID := r.URL.Query().Get("scenario")
+	if agentID == "" || scenarioID == "" {
+		jsonError(w, "agentId and scenario are required", http.StatusBadRequest)
+		return
+	}
+	var raw []byte
+	err := h.db.QueryRow(r.Context(),
+		`SELECT COALESCE(posture_catalog,'{}')::text FROM agents WHERE agent_id = $1`, agentID,
+	).Scan(&raw)
+	if err != nil {
+		jsonError(w, "agent not found", http.StatusNotFound)
+		return
+	}
+	var cat map[string][]map[string]any
+	_ = json.Unmarshal(raw, &cat)
+	checks := cat[scenarioID]
+	if checks == nil {
+		checks = []map[string]any{}
+	}
+	respond(w, checks)
+}
+
 // CalderaAbility is a catalog entry for the dashboard ability picker.
 type CalderaAbility struct {
 	ID        string `json:"id"`
