@@ -2712,6 +2712,55 @@ function renderRunReportExtra(rep) {
   var hdr = 'font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.45rem';
   var html = '';
 
+  // Detection coverage — purple-team verdicts from the agent's post-run alert
+  // sweep, correlated server-side. Empty until detections are submitted; the most
+  // valuable BAS metric here is Undetected Rate (succeeded with NO alert = blind spot).
+  var sum = rep.summary || {};
+  var dTechs = rep.detectionTechniques || [];
+  if (typeof sum.detectionRate !== 'undefined' && (dTechs.length > 0 || sum.detectionRate || sum.undetectedRate)) {
+    var dimStyle2 = 'background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.55rem 0.7rem';
+    var labelStyle2 = 'color:var(--muted);font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:0.2rem';
+    var bigStyle2 = 'font-size:1.3rem;font-weight:700;line-height:1.1';
+    var detCol = sum.detectionRate >= 70 ? 'var(--success)' : sum.detectionRate >= 40 ? 'var(--warning)' : 'var(--danger)';
+    var undCol = sum.undetectedRate <= 20 ? 'var(--success)' : sum.undetectedRate <= 50 ? 'var(--warning)' : 'var(--danger)';
+    var cards =
+      '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">Detection Rate</div>' +
+        '<div style="' + bigStyle2 + ';color:' + detCol + '">' + (sum.detectionRate || 0) + '%</div>' +
+        '<div style="font-size:0.62rem;color:var(--muted);margin-top:0.1rem">of executed, not prevented</div></div>' +
+      '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">Undetected</div>' +
+        '<div style="' + bigStyle2 + ';color:' + undCol + '">' + (sum.undetectedRate || 0) + '%</div>' +
+        '<div style="font-size:0.62rem;color:var(--muted);margin-top:0.1rem">succeeded, no alert — blind spot</div></div>';
+    if (sum.mttdMs) {
+      cards += '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">MTTD</div>' +
+        '<div style="' + bigStyle2 + ';color:var(--text)">' + Math.round(sum.mttdMs / 1000) + 's</div>' +
+        '<div style="font-size:0.62rem;color:var(--muted);margin-top:0.1rem">mean time to detect</div></div>';
+    }
+    var detHtml = '<div style="' + panel + '"><div style="' + hdr + '">Detection Coverage</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(' + (sum.mttdMs ? 3 : 2) + ',1fr);gap:0.5rem">' + cards + '</div>';
+
+    if (dTechs.length > 0) {
+      var rows2 = dTechs.map(function(d) {
+        var bg, fg, lbl;
+        if (d.verdict === 'prevented') { bg = 'rgba(35,134,54,0.15)'; fg = 'var(--success)'; lbl = 'Prevented'; }
+        else if (d.verdict === 'detected') {
+          var hi = (d.confidence === 'high');
+          bg = hi ? 'rgba(47,129,247,0.15)' : 'rgba(210,153,34,0.15)';
+          fg = hi ? 'var(--accent)' : 'var(--warning)';
+          lbl = 'Detected' + (d.confidence ? ' · ' + d.confidence : '');
+        } else { bg = 'rgba(218,54,51,0.15)'; fg = 'var(--danger)'; lbl = '⚠ Undetected'; }
+        var ttd = (d.verdict === 'detected' && d.timeToDetectMs) ? '<span style="font-size:0.62rem;color:var(--muted);margin-left:auto">' + Math.round(d.timeToDetectMs / 1000) + 's</span>' : '';
+        return '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.28rem 0;border-bottom:1px solid rgba(34,50,74,0.45)">' +
+          '<code style="font-size:0.68rem;color:var(--muted);min-width:88px">' + x(d.techniqueId || '—') + '</code>' +
+          '<span style="font-size:0.62rem;font-weight:700;text-transform:capitalize;background:' + bg + ';color:' + fg + ';border-radius:3px;padding:1px 7px">' + x(lbl) + '</span>' +
+          ttd +
+        '</div>';
+      }).join('');
+      detHtml += '<div style="margin-top:0.6rem">' + rows2 + '</div>';
+    }
+    detHtml += '</div>';
+    html += detHtml;
+  }
+
   if (findings.length > 0) {
     var rows = findings.map(function(f, i) {
       var sc = f.severity === 'Critical' ? 'var(--danger)' : f.severity === 'High' ? '#e5534b' : 'var(--warning)';

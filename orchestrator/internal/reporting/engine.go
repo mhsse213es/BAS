@@ -38,6 +38,18 @@ type FullReport struct {
 	Detection           DetectionSummary `json:"detection"`
 	TrendAnalysis       TrendSummary     `json:"trendAnalysis"`
 	AttackPath          AttackPath       `json:"attackPath"`
+	// DetectionTechniques is the per-technique purple-team verdict from the agent's
+	// post-run alert sweep (prevented|detected|undetected + confidence). Empty until
+	// the agent submits detections for the run. Sourced from scenario_runs.detection_summary.
+	DetectionTechniques []DetectionTechnique `json:"detectionTechniques,omitempty"`
+}
+
+// DetectionTechnique is one per-technique detection verdict surfaced to the UI.
+type DetectionTechnique struct {
+	TechniqueID    string `json:"techniqueId"`
+	Verdict        string `json:"verdict"`              // prevented|detected|undetected
+	Confidence     string `json:"confidence,omitempty"` // high|low when detected
+	TimeToDetectMs int64  `json:"timeToDetectMs,omitempty"`
 }
 
 // AttackPathStep is one kill-chain phase the endpoint did not prevent, with the
@@ -434,17 +446,25 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	var startedAt time.Time
 	var completedAt *time.Time
 
-	var revertedRaw []byte
+	var revertedRaw, detSummaryRaw []byte
 	var detRate, undetRate *int
 	var mttd *int64
 	err := e.db.QueryRow(ctx,
 		`SELECT agent_id, name, status, results, score, started_at, completed_at, reverted,
-		        detection_rate, undetected_rate, mttd_ms
+		        detection_rate, undetected_rate, mttd_ms, detection_summary
 		 FROM scenario_runs WHERE id = $1`, runID,
 	).Scan(&agentID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt, &revertedRaw,
-		&detRate, &undetRate, &mttd)
+		&detRate, &undetRate, &mttd, &detSummaryRaw)
 	if err != nil {
 		return nil, fmt.Errorf("run %s not found: %w", runID, err)
+	}
+	if len(detSummaryRaw) > 0 {
+		var ds struct {
+			Techniques []DetectionTechnique `json:"techniques"`
+		}
+		if json.Unmarshal(detSummaryRaw, &ds) == nil {
+			report.DetectionTechniques = ds.Techniques
+		}
 	}
 
 	var results []models.SimulationResult
