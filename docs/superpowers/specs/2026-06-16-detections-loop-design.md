@@ -1,8 +1,17 @@
 # Detections Loop — Design (v1)
 
 **Date:** 2026-06-16
-**Status:** Approved (design review in `detection.txt` — all 10 additions incorporated)
+**Status:** Approved (design review in `detection.txt` — all 10 additions incorporated; revised to **extend the existing detection pipeline in place** after discovering a coarse v0 already ships).
 **Branch:** `feat/detections-loop`
+
+## Existing subsystem this extends (discovered during planning)
+
+A coarse detection pipeline already exists and **must be extended, not duplicated**:
+
+- **Agent** — `collectRecentEvents(ctx, since) []string` (`agent/executor_windows.go:161`, posix no-op stub at `agent/executor_posix.go:33`) collects Defender Operational / Sysmon / Security events as `"eventId:log"` tokens, called per step at `agent/executor.go:104,229`, carried on `ExecResult.Events []string` (`agent/types.go:176`) → `models.SimulationResult.Events` (`internal/models/schema.go:48`) through the existing durable result path. **Weakness:** it sleeps only 300 ms, so it misses the 30–120 s late Defender/EDR alerts.
+- **Server** — `internal/reporting/engine.go` already has `type Detection{Detected,Status,Source,Detail}`, `classifyDetection(events []string)` returning **Detected / Logged / None** with a source, `defenderDetectIDs` + `asrBlockIDs` maps, `attributeControl()`, `splitEventToken()`, and `buildDetectionCategories(results)` feeding the report's "Detection coverage by tactic" section (used by both `Build` and `BuildFromRun`).
+
+**Consequence:** the **Logged** tier is already implemented (Change #7 is partly done — keep it, don't "reserve" it). v1 enriches collection (rich records + 90 s grace sweep), extends `classifyDetection` (confidence, `matchedBy`, EDR provider regex), and adds the headline metrics + per-technique badges + retention. It reuses `defenderDetectIDs`/`asrBlockIDs`/`attributeControl`/`buildDetectionCategories` rather than adding a parallel classifier.
 
 ## Goal
 
@@ -34,6 +43,16 @@ whether the EDR/AV *saw* it.
    One collection pass after a grace wait; the server owns all correlation and
    verdict logic (honors the "agent is a dumb executor, server interprets"
    architecture).
+6. **Extend in place, not parallel.** v1 enriches the existing collector and
+   `classifyDetection`/`buildDetectionCategories` rather than building a second
+   detection system. The grace-swept rich alerts are delivered on a new
+   post-result route (plumbing only — the result is already submitted before the
+   90 s grace elapses, so detections must arrive separately and idempotently); the
+   server's classification/scoring/report logic stays **unified** in
+   `internal/reporting` (+ a small pure `internal/detect` scoring unit). The coarse
+   per-step `ExecResult.Events []string` is retained as an immediate, backward-
+   compatible fallback when no rich sweep arrives — a graceful fallback, not a
+   parallel system.
 
 ## Agent architecture boundary (non-negotiable)
 
@@ -102,13 +121,14 @@ run_end + correlation_window)`, and POSTs. Failure is logged and dropped.
 Pure, independently testable units:
 
 ```go
-// Verdict per executed technique. Logged is reserved for a future telemetry tier
-// (not populated in v1) so the enum/storage need no redesign later.
+// Verdict per executed technique. Logged already exists in classifyDetection
+// (telemetry present, no alert) — v1 keeps it. Aligns with the report's existing
+// Detection.Status values ("Detected"/"Logged"/"None").
 type Verdict string
 const (
     VerdictPrevented  Verdict = "prevented"  // control blocked it (maps to existing PASS)
     VerdictDetected   Verdict = "detected"   // a defensive alert fired in-window
-    VerdictLogged     Verdict = "logged"     // RESERVED v-next: telemetry present, no alert
+    VerdictLogged     Verdict = "logged"     // telemetry present, no alert (existing tier)
     VerdictUndetected Verdict = "undetected" // executed, not prevented, no alert (blind spot)
 )
 
@@ -261,6 +281,6 @@ Defender Operational `1006/1007/1015/1116/1117`, AppLocker `8003/8004`, WDAC
 - **Precise technique→event mapping** beyond the opportunistic corroboration.
 - The fleet-wide **Detections nav dashboard** (ATT&CK heatmap, cross-run trends).
   The `detection_summary` + denormalized rates are stored to make this cheap later.
-- **Linux/macOS** collection (stubs return empty in v1).
-- The **Logged** telemetry tier — enum value and storage are reserved now so
-  adding it later needs no schema redesign.
+- **Linux/macOS** collection (the posix `collectRecentEvents` stub stays a no-op).
+- (Not deferred — already present: the **Logged** telemetry tier exists in
+  `classifyDetection` and is retained.)
