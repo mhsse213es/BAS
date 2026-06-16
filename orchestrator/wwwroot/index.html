@@ -656,6 +656,23 @@ code {
 .cmdk-item { padding:9px 11px; border-radius:7px; font-size:0.85rem; color:var(--text); cursor:pointer; }
 .cmdk-item.active { background:var(--elevated); }
 .cmdk-empty { padding:26px; text-align:center; color:var(--muted); font-size:0.85rem; }
+
+/* ── Run wizard (stepped run modal) ──────────────────────────────────────── */
+.wz-modal { min-width: 460px; }
+.wz-steps { display:flex; gap:6px; margin:0.5rem 0 1.1rem; }
+.wz-pip { flex:1; display:flex; align-items:center; gap:7px; font-size:0.72rem; color:var(--muted); padding-bottom:7px; border-bottom:2px solid var(--border); transition:color .12s, border-color .12s; }
+.wz-pip-n { width:18px; height:18px; border-radius:50%; background:var(--elevated); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:0.66rem; font-weight:700; flex-shrink:0; }
+.wz-pip.active { color:var(--text); border-bottom-color:var(--accent); }
+.wz-pip.active .wz-pip-n { background:var(--accent); border-color:var(--accent); color:#fff; }
+.wz-pip.done { color:var(--text-dim); border-bottom-color:var(--success); }
+.wz-pip.done .wz-pip-n { background:var(--success); border-color:var(--success); color:#fff; }
+.wz-body { min-height:128px; }
+.wz-actions { display:flex; align-items:center; gap:0.5rem; }
+.wz-rev-row { display:flex; justify-content:space-between; gap:1rem; padding:0.45rem 0; border-bottom:1px solid var(--border); font-size:0.82rem; }
+.wz-rev-row:last-child { border-bottom:none; }
+.wz-rev-row span:first-child { color:var(--muted); }
+.wz-rev-row span:last-child { color:var(--text); font-weight:500; text-align:right; }
+.wz-rev-warn { margin-top:0.7rem; padding:0.6rem 0.75rem; border-radius:var(--radius); font-size:0.78rem; line-height:1.45; border:1px solid rgba(210,153,34,0.5); background:rgba(210,153,34,0.1); color:#d29922; }
 </style>
 </head>
 <body>
@@ -1239,41 +1256,70 @@ code {
 
 <!-- Run Modal -->
 <div id="run-overlay" class="overlay">
-  <div class="modal">
+  <div class="modal wz-modal">
     <h3 id="modal-title">Run Scenario</h3>
-    <p class="sub2">Select scenario and target agent, then click Run.</p>
-    <div id="modal-sc-wrap">
-      <label class="modal-lbl">Scenario</label>
-      <select id="modal-sc" onchange="renderRunMode()"></select>
+    <div class="wz-steps">
+      <div class="wz-pip" data-pip="1"><span class="wz-pip-n">1</span><span>Scenario</span></div>
+      <div class="wz-pip" data-pip="2"><span class="wz-pip-n">2</span><span>Target</span></div>
+      <div class="wz-pip" data-pip="3"><span class="wz-pip-n">3</span><span>Options</span></div>
+      <div class="wz-pip" data-pip="4"><span class="wz-pip-n">4</span><span>Review</span></div>
     </div>
-    <label class="modal-lbl">Target Agent</label>
-    <select id="modal-agent" onchange="renderRunMode()"></select>
 
-    <!-- Customize — only shown for ART/Caldera scenarios -->
-    <div id="modal-customize-wrap" style="display:none;margin-top:0.5rem">
-      <a href="javascript:void(0)" class="desc-toggle" id="modal-customize-link" onclick="openPickerFromModal();return false;">&#9881; Customize</a>
-    </div>
-    <div id="modal-selection" style="display:none;margin-top:0.6rem;padding:0.5rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.78rem;background:var(--elevated);color:var(--text)"></div>
+    <div class="wz-body">
+      <!-- Step 1: Scenario -->
+      <div class="wz-pane" data-pane="1">
+        <div id="modal-sc-wrap">
+          <label class="modal-lbl">Scenario</label>
+          <select id="modal-sc" onchange="renderRunMode()"></select>
+        </div>
+        <p class="sub2" style="margin-top:0.55rem">Choose the adversary emulation to run.</p>
+      </div>
 
-    <!-- Execution mode — only shown for hybrid (executable) scenarios -->
-    <div id="modal-mode-wrap" style="display:none;margin-top:0.75rem">
-      <label class="modal-lbl">Execution mode</label>
-      <select id="modal-mode" onchange="renderRunMode()">
-        <option value="posture">Posture — read-only, safe on any host</option>
-        <option value="telemetry">Telemetry — real identity-safe techniques (production-safe under approval)</option>
-        <option value="lab">Lab — full-fidelity emulation (isolated range only)</option>
-      </select>
-      <div id="modal-mode-warn" style="display:none;margin-top:0.6rem;padding:0.6rem 0.75rem;border-radius:var(--radius);font-size:0.78rem;line-height:1.45"></div>
-      <div id="modal-reason-wrap" style="display:none;margin-top:0.6rem">
-        <label class="modal-lbl">Reason / change reference (audited, optional)</label>
-        <input type="text" id="modal-reason" placeholder="e.g. CR-1234 detection validation" autocomplete="off"
-               style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+      <!-- Step 2: Target -->
+      <div class="wz-pane" data-pane="2" style="display:none">
+        <label class="modal-lbl">Target Agent</label>
+        <select id="modal-agent" onchange="renderRunMode()"></select>
+        <p class="sub2" style="margin-top:0.55rem">The endpoint that will execute this run.</p>
+      </div>
+
+      <!-- Step 3: Options (customize subset + execution mode) -->
+      <div class="wz-pane" data-pane="3" style="display:none">
+        <!-- Customize — only shown for ART/Caldera/steps/posture scenarios -->
+        <div id="modal-customize-wrap" style="display:none">
+          <a href="javascript:void(0)" class="desc-toggle" id="modal-customize-link" onclick="openPickerFromModal();return false;">&#9881; Customize</a>
+        </div>
+        <div id="modal-selection" style="display:none;margin-top:0.6rem;padding:0.5rem 0.7rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.78rem;background:var(--elevated);color:var(--text)"></div>
+
+        <!-- Execution mode — only shown for hybrid (executable) scenarios -->
+        <div id="modal-mode-wrap" style="display:none;margin-top:0.75rem">
+          <label class="modal-lbl">Execution mode</label>
+          <select id="modal-mode" onchange="renderRunMode()">
+            <option value="posture">Posture — read-only, safe on any host</option>
+            <option value="telemetry">Telemetry — real identity-safe techniques (production-safe under approval)</option>
+            <option value="lab">Lab — full-fidelity emulation (isolated range only)</option>
+          </select>
+          <div id="modal-mode-warn" style="display:none;margin-top:0.6rem;padding:0.6rem 0.75rem;border-radius:var(--radius);font-size:0.78rem;line-height:1.45"></div>
+          <div id="modal-reason-wrap" style="display:none;margin-top:0.6rem">
+            <label class="modal-lbl">Reason / change reference (audited, optional)</label>
+            <input type="text" id="modal-reason" placeholder="e.g. CR-1234 detection validation" autocomplete="off"
+                   style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+          </div>
+        </div>
+        <div id="wz-mode-note" class="sub2" style="display:none;margin-top:0.5rem">This scenario runs in read-only posture mode — safe on any host.</div>
+      </div>
+
+      <!-- Step 4: Review -->
+      <div class="wz-pane" data-pane="4" style="display:none">
+        <div id="wz-review"></div>
       </div>
     </div>
 
-    <div class="modal-actions">
+    <div class="modal-actions wz-actions">
       <button class="btn btn-outline btn-sm" onclick="closeModal()">Cancel</button>
-      <button id="modal-run-btn" class="btn btn-outline-green btn-sm" onclick="confirmRun()">&#9654; Run</button>
+      <span style="flex:1"></span>
+      <button id="wz-back" class="btn btn-outline btn-sm" onclick="wizardNav(-1)" style="display:none">&#8592; Back</button>
+      <button id="wz-next" class="btn btn-primary btn-sm" onclick="wizardNav(1)">Next &#8594;</button>
+      <button id="modal-run-btn" class="btn btn-outline-green btn-sm" onclick="confirmRun()" style="display:none">&#9654; Run</button>
     </div>
   </div>
 </div>
@@ -2022,6 +2068,14 @@ function openModal(scenarioId, preAgent) {
   document.getElementById('modal-mode').value = 'posture'; // always default to safe
   renderRunMode();
   document.getElementById('run-overlay').classList.add('open');
+  // Wizard: skip the Scenario step when launched for a specific scenario; jump
+  // straight to Options after a picker selection so the chosen subset shows in context.
+  _wzMin = scenarioId ? 2 : 1;
+  var pip1 = document.querySelector('[data-pip="1"]');
+  if (pip1) pip1.style.display = scenarioId ? 'none' : '';
+  var effId = scenarioId || document.getElementById('modal-sc').value;
+  var start = (_runSelection && _runSelection.scId === effId && _runSelection.ids && _runSelection.ids.length) ? 3 : _wzMin;
+  wizardSet(start);
 }
 
 // renderRunMode shows the Posture/Live selector only for executable (hybrid)
@@ -2121,6 +2175,60 @@ function renderRunMode() {
   }
 }
 function closeModal() { document.getElementById('run-overlay').classList.remove('open'); _modalScId = null; _runSelection = null; }
+
+/* ── Run wizard navigation ─────────────────────────────────────────────────
+   Pure presentational layer over the existing run-modal controls — every element
+   ID and the renderRunMode / renderModalSelection / confirmRun logic is unchanged.
+   Steps: 1 Scenario · 2 Target · 3 Options (customize + mode) · 4 Review. */
+var _wzStep = 1, _wzMin = 1;
+function wizardSet(step) {
+  if (step < _wzMin) step = _wzMin;
+  if (step > 4) step = 4;
+  _wzStep = step;
+  [1, 2, 3, 4].forEach(function(n) {
+    var pane = document.querySelector('[data-pane="' + n + '"]');
+    if (pane) pane.style.display = (n === step) ? 'block' : 'none';
+    var pip = document.querySelector('[data-pip="' + n + '"]');
+    if (pip) { pip.classList.toggle('active', n === step); pip.classList.toggle('done', n < step); }
+  });
+  document.getElementById('wz-back').style.display = (step > _wzMin) ? '' : 'none';
+  document.getElementById('wz-next').style.display = (step < 4) ? '' : 'none';
+  document.getElementById('modal-run-btn').style.display = (step === 4) ? '' : 'none';
+  if (step === 3) {
+    renderRunMode();
+    var mw = document.getElementById('modal-mode-wrap');
+    document.getElementById('wz-mode-note').style.display = (mw.style.display === 'none') ? 'block' : 'none';
+  }
+  if (step === 4) renderWizardReview();
+}
+function wizardNav(dir) { wizardSet(_wzStep + dir); }
+function renderWizardReview() {
+  renderRunMode(); // refresh the OS-mismatch / mode warning + Run button state
+  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var sc = scenarios.find(function(s) { return s.id === scId; });
+  var agSel = document.getElementById('modal-agent');
+  var agTxt = (agSel.options[agSel.selectedIndex] || {}).text || agSel.value;
+  var modeWrap = document.getElementById('modal-mode-wrap');
+  var mode = (modeWrap.style.display !== 'none') ? document.getElementById('modal-mode').value : 'posture';
+  var modeLabel = { posture: 'Posture — read-only', telemetry: 'Telemetry — identity-safe', lab: 'Lab — full-fidelity' }[mode] || mode;
+  var fw = scenarioFramework(sc);
+  var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
+  var subset = (_runSelection && _runSelection.scId === scId && _runSelection.ids.length)
+    ? (_runSelection.ids.length + ' ' + noun + ' (subset)') : 'All ' + noun;
+  var reasonEl = document.getElementById('modal-reason');
+  var reason = (mode !== 'posture' && reasonEl && reasonEl.value.trim()) ? reasonEl.value.trim() : '';
+  var row = function(k, v) { return '<div class="wz-rev-row"><span>' + k + '</span><span>' + v + '</span></div>'; };
+  var html = row('Scenario', x(sc ? sc.name : scId)) +
+             row('Target agent', x(agTxt)) +
+             row('Mode', x(modeLabel)) +
+             row('Scope', x(subset)) +
+             (reason ? row('Reason', x(reason)) : '');
+  var warnEl = document.getElementById('modal-mode-warn');
+  if (warnEl.style.display !== 'none' && warnEl.innerHTML.trim()) {
+    html += '<div class="wz-rev-warn">' + warnEl.innerHTML + '</div>';
+  }
+  document.getElementById('wz-review').innerHTML = html;
+}
 
 /* ── Technique / Ability Picker ────────────────────────────── */
 // scenarioFramework returns 'art' | 'caldera' | 'steps' | 'posture' | '' for a scenario object.
