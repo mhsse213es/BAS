@@ -13,6 +13,7 @@ func TestDeriveStatus(t *testing.T) {
 		want    string
 	}{
 		{"stopped wins", []ChildRun{mk("running")}, 0, true, "stopped"},
+		{"stopped with no children", nil, 3, true, "stopped"},
 		{"no children all skipped", nil, 3, false, "empty"},
 		{"any running", []ChildRun{mk("completed"), mk("running")}, 1, false, "running"},
 		{"all completed", []ChildRun{mk("completed"), mk("completed")}, 0, false, "completed"},
@@ -21,8 +22,10 @@ func TestDeriveStatus(t *testing.T) {
 		{"completed+failed is partial", []ChildRun{mk("completed"), mk("failed")}, 0, false, "partial"},
 	}
 	for _, c := range cases {
-		if got := DeriveStatus(c.runs, c.skips, c.stopped); got != c.want {
-			t.Errorf("%s: got %q want %q", c.name, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			if got := DeriveStatus(c.runs, c.skips, c.stopped); got != c.want {
+				t.Errorf("got %q want %q", got, c.want)
+			}
+		})
 	}
 }
