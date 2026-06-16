@@ -60,6 +60,18 @@ type EnrollRequest struct {
 	EnvLabel     string `json:"envLabel"`
 	BinaryHash   string `json:"binaryHash,omitempty"`
 	AgentVersion string `json:"agentVersion,omitempty"`
+
+	// PostureCatalog maps each local-check scenarioId to its selectable checks.
+	PostureCatalog map[string][]PostureCheckMeta `json:"postureCatalog,omitempty"`
+}
+
+// PostureCheckMeta is one selectable posture check (no result — catalog only).
+type PostureCheckMeta struct {
+	ID          string `json:"id"`
+	Phase       string `json:"phase"`
+	TechniqueID string `json:"techniqueId"`
+	Name        string `json:"name"`
+	Severity    string `json:"severity"`
 }
 
 // EnrollResponse is returned by POST /api/agents/enroll.

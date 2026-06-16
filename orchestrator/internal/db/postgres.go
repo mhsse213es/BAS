@@ -65,6 +65,7 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// security_products: installed AV/EDR inventory reported by the agent
 		// heartbeat (presence only) — shown as the report's security context.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS security_products jsonb NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS posture_catalog jsonb NOT NULL DEFAULT '{}'`,
 
 		`CREATE TABLE IF NOT EXISTS scenario_runs (
 			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,

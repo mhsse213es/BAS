@@ -384,14 +384,15 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		AgentID      string `json:"agentId"`
-		Hostname     string `json:"hostname"`
-		IPAddress    string `json:"ipAddress"`
-		OSVersion    string `json:"osVersion"`
-		Username     string `json:"username"`
-		EnvLabel     string `json:"envLabel"`
-		BinaryHash   string `json:"binaryHash"`
-		AgentVersion string `json:"agentVersion"`
+		AgentID        string          `json:"agentId"`
+		Hostname       string          `json:"hostname"`
+		IPAddress      string          `json:"ipAddress"`
+		OSVersion      string          `json:"osVersion"`
+		Username       string          `json:"username"`
+		EnvLabel       string          `json:"envLabel"`
+		BinaryHash     string          `json:"binaryHash"`
+		AgentVersion   string          `json:"agentVersion"`
+		PostureCatalog json.RawMessage `json:"postureCatalog"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "invalid enrollment payload — agentId required", http.StatusBadRequest)
@@ -413,13 +414,18 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	policyJSON, _ := json.Marshal(policy)
 
+	postureCatalog := req.PostureCatalog
+	if len(postureCatalog) == 0 {
+		postureCatalog = json.RawMessage("{}")
+	}
+
 	// Upsert: preserve quarantined/retired state on re-enroll — operator must
 	// explicitly clear quarantine via the dashboard before the agent can run.
 	_, err := h.db.Exec(r.Context(), `
 		INSERT INTO agents (agent_id, hostname, ip_address, os_version, username,
 		                    status, env_label, binary_hash, binary_trusted,
-		                    state, policy_json, enrolled_at, last_update)
-		VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $8, 'active', $9, NOW(), NOW())
+		                    state, policy_json, posture_catalog, enrolled_at, last_update)
+		VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $8, 'active', $9, $10, NOW(), NOW())
 		ON CONFLICT (agent_id) DO UPDATE SET
 			hostname       = EXCLUDED.hostname,
 			ip_address     = EXCLUDED.ip_address,
@@ -433,10 +439,11 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 			                   ELSE 'active'
 			                 END,
 			policy_json    = EXCLUDED.policy_json,
+			posture_catalog = EXCLUDED.posture_catalog,
 			enrolled_at    = COALESCE(agents.enrolled_at, NOW()),
 			last_update    = NOW()`,
 		req.AgentID, req.Hostname, req.IPAddress, req.OSVersion, req.Username,
-		req.EnvLabel, req.BinaryHash, trusted, policyJSON,
+		req.EnvLabel, req.BinaryHash, trusted, policyJSON, postureCatalog,
 	)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -592,6 +599,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Techniques  []string `json:"techniques"`  // optional ART technique subset (overrides the scenario's set)
 		Abilities   []string `json:"abilities"`   // optional Caldera ability subset (overrides the scenario's set)
 		Steps       []int    `json:"steps"`       // optional step subset — indices into the scenario's step list (custom/step scenarios)
+		Checks      []string `json:"checks"`      // optional posture-check subset (local_check scenarios)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -770,7 +778,11 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		sent := h.hub.SendToAgent(req.AgentID, models.WSMessage{
 			Type:    models.MsgCommandSimulate,
 			AgentID: req.AgentID,
-			Data:    map[string]string{"scenarioId": scenarioID, "runId": runID},
+			Data: map[string]any{
+				"scenarioId": scenarioID,
+				"runId":      runID,
+				"checks":     req.Checks, // nil/empty → agent runs all
+			},
 		})
 		if !sent {
 			_, _ = h.db.Exec(context.Background(),
@@ -1699,6 +1711,36 @@ func (h *Handler) GetARTTechniques(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, h.artStore.ListTechniqueMeta())
+}
+
+// GetPostureCatalog returns the selectable posture checks for a scenario, as
+// reported by the given agent at enroll time. The catalog is per-agent because
+// the check set is compiled into the agent and varies by OS. Viewer+.
+// Staleness note: this reflects what the agent advertised at its last enroll —
+// an agent upgraded with new checks must re-enroll for changes to appear here.
+// GET /api/posture/catalog?agentId=<id>&scenario=<id>
+func (h *Handler) GetPostureCatalog(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agentId")
+	scenarioID := r.URL.Query().Get("scenario")
+	if agentID == "" || scenarioID == "" {
+		jsonError(w, "agentId and scenario are required", http.StatusBadRequest)
+		return
+	}
+	var raw []byte
+	err := h.db.QueryRow(r.Context(),
+		`SELECT COALESCE(posture_catalog,'{}')::text FROM agents WHERE agent_id = $1`, agentID,
+	).Scan(&raw)
+	if err != nil {
+		jsonError(w, "agent not found", http.StatusNotFound)
+		return
+	}
+	var cat map[string][]map[string]any
+	_ = json.Unmarshal(raw, &cat)
+	checks := cat[scenarioID]
+	if checks == nil {
+		checks = []map[string]any{}
+	}
+	respond(w, checks)
 }
 
 // CalderaAbility is a catalog entry for the dashboard ability picker.

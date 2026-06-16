@@ -133,14 +133,15 @@ func (a *Agent) postJSON(path string, body interface{}) error {
 // Failure is non-fatal — the agent continues and will retry on next heartbeat.
 func (a *Agent) enrollWithServer() {
 	req := EnrollRequest{
-		AgentID:      a.id.AgentID,
-		Hostname:     a.id.Hostname,
-		IPAddress:    a.id.IPAddress,
-		OSVersion:    a.id.OSVersion,
-		Username:     a.id.Username,
-		EnvLabel:     a.cfg.EnvLabel,
-		BinaryHash:   a.binaryHash,
-		AgentVersion: version,
+		AgentID:        a.id.AgentID,
+		Hostname:       a.id.Hostname,
+		IPAddress:      a.id.IPAddress,
+		OSVersion:      a.id.OSVersion,
+		Username:       a.id.Username,
+		EnvLabel:       a.cfg.EnvLabel,
+		BinaryHash:     a.binaryHash,
+		AgentVersion:   version,
+		PostureCatalog: BuildPostureCatalog(),
 	}
 	var resp EnrollResponse
 	if err := a.postJSONDecode("/api/agents/enroll", req, &resp); err != nil {
@@ -653,7 +654,7 @@ func deriveLocalResultLabel(results []ExecResult, partial bool) string {
 	}
 }
 
-func (a *Agent) runLocalScan(scenarioID, runID string) {
+func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 	a.mu.Lock()
 	st := a.state
 	a.mu.Unlock()
@@ -671,6 +672,15 @@ func (a *Agent) runLocalScan(scenarioID, runID string) {
 	a.localSt.StartOperation(scenarioID, scenarioID, "", 0)
 
 	categories := RunScenarioChecks(scenarioID)
+
+	sel := make(map[string]bool, len(selected))
+	for _, id := range selected {
+		sel[id] = true
+	}
+	categories = runChecks(categories, sel) // execute (filtered) — checks no longer run at list time
+	if len(categories) == 0 {
+		log.Printf("[!] local scan %s: no checks matched selection (%d ids) — nothing to run", runID, len(selected))
+	}
 
 	// Submit full SimCheck metadata so the orchestrator can correctly populate
 	// technique ID, tactic, severity, threat impact, and remediation without
@@ -791,15 +801,16 @@ func (a *Agent) connectWS() {
 
 			case "command_simulate":
 				var sim struct {
-					ScenarioID string `json:"scenarioId"`
-					RunID      string `json:"runId"`
+					ScenarioID string   `json:"scenarioId"`
+					RunID      string   `json:"runId"`
+					Checks     []string `json:"checks"`
 				}
 				if err := json.Unmarshal(msg.Data, &sim); err != nil || sim.ScenarioID == "" {
 					log.Printf("[!] WS: bad command_simulate payload: %v", err)
 					continue
 				}
 				a.runWG.Add(1)
-				go func() { defer a.runWG.Done(); a.runLocalScan(sim.ScenarioID, sim.RunID) }()
+				go func() { defer a.runWG.Done(); a.runLocalScan(sim.ScenarioID, sim.RunID, sim.Checks) }()
 
 			case "command_cancel":
 				if a.cancelCurrentScenario() {

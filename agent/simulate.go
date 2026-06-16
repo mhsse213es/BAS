@@ -25,6 +25,7 @@ type SimCheck struct {
 	DurationMs   int64     `json:"durationMs"`
 	ExecutedAt   time.Time `json:"executedAt"`
 	Framework    string    `json:"framework"`
+	fn           func() (result, details string) // deferred execution; never serialized
 }
 
 // Tech is a MITRE ATT&CK technique reference.
@@ -42,18 +43,81 @@ func checkID(techID, name string) string {
 func check(techID, name, tactic, severity, threat, fix string,
 	fn func() (result, details string)) SimCheck {
 
-	start := time.Now()
-	result, details := fn()
 	return SimCheck{
 		ID:           checkID(techID, name),
 		Technique:    Tech{ID: techID, Name: name, Tactic: tactic},
-		Result:       result,
 		Severity:     severity,
 		ThreatImpact: threat,
-		Details:      details,
 		Remediation:  fix,
-		DurationMs:   time.Since(start).Milliseconds(),
-		ExecutedAt:   time.Now(),
 		Framework:    "custom",
+		fn:           fn,
 	}
+}
+
+// run executes the deferred check, filling result fields. No-op if already run
+// or if fn is nil (defensive).
+func (c *SimCheck) run() {
+	if c.fn == nil {
+		return
+	}
+	start := time.Now()
+	c.Result, c.Details = c.fn()
+	c.DurationMs = time.Since(start).Milliseconds()
+	c.ExecutedAt = time.Now()
+}
+
+// runChecks executes the checks in cats. When selected is non-empty, only checks
+// whose ID is in selected are run AND kept; categories left empty are dropped.
+// When selected is nil/empty, every check is run and all are kept.
+func runChecks(cats []SimCategory, selected map[string]bool) []SimCategory {
+	out := make([]SimCategory, 0, len(cats))
+	for _, cat := range cats {
+		kept := make([]SimCheck, 0, len(cat.Checks))
+		for i := range cat.Checks {
+			if len(selected) > 0 && !selected[cat.Checks[i].ID] {
+				continue
+			}
+			cat.Checks[i].run()
+			kept = append(kept, cat.Checks[i])
+		}
+		if len(kept) > 0 {
+			out = append(out, SimCategory{Phase: cat.Phase, Checks: kept})
+		}
+	}
+	return out
+}
+
+// knownPostureScenarios lists the local-check scenario IDs this agent build
+// recognizes. It is the UNION of the RunScenarioChecks switch cases across all
+// OS builds (e.g. cis-ubuntu-l1 is Linux-only) — harvesting a scenario this OS
+// doesn't specialize just yields RunAllChecks(), which is exactly what would run
+// for it. Keep in sync with the per-OS switches in simulate_{windows,linux,darwin}.go.
+func knownPostureScenarios() []string {
+	return []string{
+		"safe-simulation", "cis-ubuntu-l1", "apt36-spearphish", "apt36-kill-chain",
+		"ransomware-drill", "ad-credential-access", "upi-fraud-killchain",
+		"cscrf-mii-drill", "purplesharp-ad-drill", "lolbin-execution",
+		"lolbin-execution-coverage",
+	}
+}
+
+// BuildPostureCatalog harvests selectable-check metadata for every known posture
+// scenario WITHOUT executing any check (checks are deferred since Part A).
+func BuildPostureCatalog() map[string][]PostureCheckMeta {
+	out := make(map[string][]PostureCheckMeta)
+	for _, sid := range knownPostureScenarios() {
+		var metas []PostureCheckMeta
+		for _, cat := range RunScenarioChecks(sid) {
+			for _, c := range cat.Checks {
+				metas = append(metas, PostureCheckMeta{
+					ID: c.ID, Phase: cat.Phase, TechniqueID: c.Technique.ID,
+					Name: c.Technique.Name, Severity: c.Severity,
+				})
+			}
+		}
+		if len(metas) > 0 {
+			out[sid] = metas
+		}
+	}
+	return out
 }
