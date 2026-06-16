@@ -1810,7 +1810,11 @@ function scenarioCardHTML(s) {
       } else if ((s.calderaAbilities || []).length) {
         modeMeta = s.calderaAbilities.length + ' Caldera abilities';
       } else if (stepN) {
-        modeMeta = stepN + (stepN === 1 ? ' step' : ' steps');
+        // The step count is a live entry point to the step picker — operators can
+        // click it to choose which steps to run (steps come straight from the YAML).
+        modeMeta = '<a href="javascript:void(0)" class="desc-toggle" title="Choose which steps to run" ' +
+          'onclick="openPicker(\'' + x(s.id) + '\',\'steps\');return false;">' +
+          stepN + (stepN === 1 ? ' step' : ' steps') + '</a>';
       } else {
         modeMeta = '—';
       }
@@ -1839,10 +1843,12 @@ function scenarioCardHTML(s) {
       // or the explicit list.
       var fw = (s.artAllWindows || (s.artTechniques || []).length) ? 'art'
              : (s.calderaAllWindows || (s.calderaAbilities || []).length) ? 'caldera'
+             : (!s.localCheck && stepN) ? 'steps'
              : '';
+      var fwNoun = fw === 'art' ? 'techniques' : fw === 'caldera' ? 'abilities' : 'steps';
       var customizeBtn = fw
         ? '<button class="btn btn-outline btn-sm" onclick="openPicker(\'' + x(s.id) + '\',\'' + fw + '\')" ' +
-          'title="Choose which ' + (fw === 'art' ? 'techniques' : 'abilities') + ' to run">&#9881; Customize</button> '
+          'title="Choose which ' + fwNoun + ' to run">&#9881; Customize</button> '
         : '';
 
       return '<div class="card">' +
@@ -2047,11 +2053,12 @@ function renderRunMode() {
 function closeModal() { document.getElementById('run-overlay').classList.remove('open'); _modalScId = null; _runSelection = null; }
 
 /* ── Technique / Ability Picker ────────────────────────────── */
-// scenarioFramework returns 'art' | 'caldera' | '' for a scenario object.
+// scenarioFramework returns 'art' | 'caldera' | 'steps' | '' for a scenario object.
 function scenarioFramework(sc) {
   if (!sc) return '';
   if (sc.artAllWindows || (sc.artTechniques || []).length) return 'art';
   if (sc.calderaAllWindows || (sc.calderaAbilities || []).length) return 'caldera';
+  if ((sc.steps || []).length) return 'steps';
   return '';
 }
 
@@ -2062,6 +2069,18 @@ function openPicker(scId, fw) {
   if (!sc) { showToast('Scenario not found', 'err'); return; }
   fw = fw || scenarioFramework(sc);
   if (!fw) { showToast('This scenario has no selectable items', 'err'); return; }
+  // Step-based scenarios carry their full step list in the loaded scenario
+  // object (parsed from the YAML) — no server catalog needed. Build the picker
+  // items straight from sc.steps, indexed by position so the run request can map
+  // each selection back to its step.
+  if (fw === 'steps') {
+    var items = (sc.steps || []).map(function(st, i) {
+      return { id: String(i), name: st.name || ('Step ' + (i + 1)), technique: st.techniqueId || '', tactic: '' };
+    });
+    if (!items.length) { showToast('This scenario has no steps', 'err'); return; }
+    openPickerWith(scId, fw, sc, items);
+    return;
+  }
   var have = (fw === 'art') ? artCatalog : calderaCatalog;
   if (have.length) { openPickerWith(scId, fw, sc, have); return; }
   // Catalog not loaded (or a prior fetch failed silently) — fetch on demand and
@@ -2098,11 +2117,14 @@ function openPickerWith(scId, fw, sc, items) {
   }
   if (pre) { pre.forEach(function(id) { _pickerSel[id] = true; }); }
   else { _pickerItems.forEach(function(it) { _pickerSel[it.id] = true; }); }
-  document.getElementById('picker-title').textContent =
-    (fw === 'art' ? 'Select ART techniques' : 'Select Caldera abilities') + ' — ' + sc.name;
-  document.getElementById('picker-sub').textContent = (fw === 'art')
-    ? 'Tick the ATT&CK techniques to run. Search by ID or atomic name.'
-    : 'Tick the Caldera abilities to run. Search by name, tactic, or technique.';
+  var titleNoun = fw === 'art' ? 'Select ART techniques'
+                : fw === 'caldera' ? 'Select Caldera abilities'
+                : 'Select steps';
+  document.getElementById('picker-title').textContent = titleNoun + ' — ' + sc.name;
+  document.getElementById('picker-sub').textContent =
+      fw === 'art'     ? 'Tick the ATT&CK techniques to run. Search by ID or atomic name.'
+    : fw === 'caldera' ? 'Tick the Caldera abilities to run. Search by name, tactic, or technique.'
+    :                    'Tick the steps to run. Steps run in the order shown. Search by name or technique.';
   document.getElementById('picker-search').value = '';
   renderPickerList();
   document.getElementById('picker-overlay').classList.add('open');
@@ -2121,13 +2143,18 @@ function renderPickerList() {
   });
   var rows = _pickerFiltered.map(function(it) {
     var checked = _pickerSel[it.id] ? ' checked' : '';
+    // Steps are index-keyed (id = "0","1",…), so show a 1-based step number as
+    // the prominent label and the technique ID as meta, not the raw index.
+    var label = (fw === 'steps') ? ('Step ' + (Number(it.id) + 1)) : it.id;
     var meta = (fw === 'art')
       ? (it.tests ? (it.tests + (it.tests === 1 ? ' test' : ' tests')) : '')
+      : (fw === 'steps')
+      ? (it.technique || '')
       : [it.tactic, it.technique].filter(Boolean).join(' · ');
     return '<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.8rem">' +
       '<input type="checkbox" data-id="' + x(it.id) + '"' + checked + ' onchange="pickerToggle(this)" style="margin-top:2px">' +
       '<span style="flex:1">' +
-        '<span style="font-weight:600;color:var(--accent)">' + x(it.id) + '</span>' +
+        '<span style="font-weight:600;color:var(--accent)">' + x(label) + '</span>' +
         (it.name ? ' <span>' + x(it.name) + '</span>' : '') +
         (meta ? '<br><span class="card-meta">' + x(meta) + '</span>' : '') +
       '</span></label>';
@@ -2186,7 +2213,7 @@ function renderModalSelection() {
   var sc = scenarios.find(function(s) { return s.id === id; });
   var fw = scenarioFramework(sc);
   if (!sc || !fw) { cw.style.display = 'none'; note.style.display = 'none'; return; }
-  var noun = (fw === 'art') ? 'techniques' : 'abilities';
+  var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : 'steps';
   var has = _runSelection && _runSelection.scId === id && _runSelection.fw === fw && _runSelection.ids.length > 0;
   cw.style.display = 'block';
   link.innerHTML = '&#9881; ' + (has ? 'Change selection' : 'Customize — select ' + noun + ' to run');
@@ -2839,6 +2866,7 @@ function confirmRun() {
   if (_runSelection && _runSelection.scId === scenarioId && _runSelection.ids.length) {
     if (_runSelection.fw === 'art') body.techniques = _runSelection.ids;
     else if (_runSelection.fw === 'caldera') body.abilities = _runSelection.ids;
+    else if (_runSelection.fw === 'steps') body.steps = _runSelection.ids.map(Number);
   }
   apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
     method: 'POST', body: JSON.stringify(body)

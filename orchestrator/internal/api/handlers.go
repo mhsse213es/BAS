@@ -591,6 +591,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Reason      string   `json:"reason"`      // optional operator justification (audited)
 		Techniques  []string `json:"techniques"`  // optional ART technique subset (overrides the scenario's set)
 		Abilities   []string `json:"abilities"`   // optional Caldera ability subset (overrides the scenario's set)
+		Steps       []int    `json:"steps"`       // optional step subset — indices into the scenario's step list (custom/step scenarios)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -615,6 +616,18 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		if missing := h.artStore.UnknownTechniques(req.Techniques); len(missing) > 0 {
 			jsonError(w, "unknown ART techniques: "+strings.Join(missing, ", "), http.StatusBadRequest)
 			return
+		}
+	}
+
+	// Validate any operator-selected step subset (indices into the scenario's
+	// step list, matching what the picker shows) before creating the run record,
+	// so a bad index can't leave a dangling run.
+	if len(req.Steps) > 0 {
+		for _, idx := range req.Steps {
+			if idx < 0 || idx >= len(sc.Steps) {
+				jsonError(w, fmt.Sprintf("step index %d out of range — scenario has %d step(s)", idx, len(sc.Steps)), http.StatusBadRequest)
+				return
+			}
 		}
 	}
 
@@ -792,13 +805,25 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	// transforms apply: (1) live-fidelity filtering drops lab-only steps for
 	// telemetry mode; (2) an operator-selected technique/ability subset narrows a
 	// sweep (or selective) scenario to just the chosen items.
-	subset := len(req.Techniques) > 0 || len(req.Abilities) > 0
+	subset := len(req.Techniques) > 0 || len(req.Abilities) > 0 || len(req.Steps) > 0
 	buildSc := sc
 	if live || subset {
 		c := *sc
+		// Operator-selected step subset (index-based against the scenario's full
+		// step list — the same order the picker shows). Apply it first so the
+		// live lab-only filter below operates on the chosen steps.
+		base := sc.Steps
+		if len(req.Steps) > 0 {
+			sel := make([]scenario.Step, 0, len(req.Steps))
+			for _, idx := range req.Steps { // already range-validated above
+				sel = append(sel, sc.Steps[idx])
+			}
+			base = sel
+			c.Steps = sel
+		}
 		if live {
-			kept := make([]scenario.Step, 0, len(sc.Steps))
-			for _, st := range sc.Steps {
+			kept := make([]scenario.Step, 0, len(base))
+			for _, st := range base {
 				if mode == "telemetry" && st.Fidelity == "lab-only" {
 					continue
 				}
@@ -818,8 +843,8 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		buildSc = &c
 	}
 	if subset {
-		log.Printf("[scenario] run %s uses operator-selected subset: %d ART technique(s), %d Caldera ability(ies)",
-			runID, len(req.Techniques), len(req.Abilities))
+		log.Printf("[scenario] run %s uses operator-selected subset: %d ART technique(s), %d Caldera ability(ies), %d step(s)",
+			runID, len(req.Techniques), len(req.Abilities), len(req.Steps))
 	}
 
 	// Build concrete commands — all framework logic resolved server-side
