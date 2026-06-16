@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/models"
 )
 
@@ -261,6 +262,9 @@ type ExecutiveSummary struct {
 	LastScenarioName   string                   `json:"lastScenarioName"`
 	CriticalFailures   []models.CriticalFailure `json:"criticalFailures"`
 	Recommendations    []string                 `json:"recommendations"`
+	DetectionRate      int                      `json:"detectionRate"`  // detected ÷ executed-not-prevented
+	UndetectedRate     int                      `json:"undetectedRate"` // blind spots — succeeded with no alert
+	MTTDMs             int64                    `json:"mttdMs"`         // mean time-to-detect across detected techniques
 }
 
 // TacticEntry is one row of the ATT&CK tactic heatmap.
@@ -431,10 +435,14 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	var completedAt *time.Time
 
 	var revertedRaw []byte
+	var detRate, undetRate *int
+	var mttd *int64
 	err := e.db.QueryRow(ctx,
-		`SELECT agent_id, name, status, results, score, started_at, completed_at, reverted
+		`SELECT agent_id, name, status, results, score, started_at, completed_at, reverted,
+		        detection_rate, undetected_rate, mttd_ms
 		 FROM scenario_runs WHERE id = $1`, runID,
-	).Scan(&agentID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt, &revertedRaw)
+	).Scan(&agentID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt, &revertedRaw,
+		&detRate, &undetRate, &mttd)
 	if err != nil {
 		return nil, fmt.Errorf("run %s not found: %w", runID, err)
 	}
@@ -493,6 +501,15 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	}
 	if report.Summary.Classification == "" {
 		report.Summary.Classification = "No Data"
+	}
+	if detRate != nil {
+		report.Summary.DetectionRate = *detRate
+	}
+	if undetRate != nil {
+		report.Summary.UndetectedRate = *undetRate
+	}
+	if mttd != nil {
+		report.Summary.MTTDMs = *mttd
 	}
 
 	report.Runs = []RunSummary{{
@@ -634,6 +651,11 @@ func classifyDetection(events []string) Detection {
 		case strings.Contains(llog, "sysmon"):
 			if loggedSource == "" {
 				loggedSource = "Sysmon"
+			}
+		case detect.IsEDRProvider(logName):
+			return Detection{
+				Detected: true, Status: "Detected", Source: logName,
+				Detail: "Third-party EDR raised a detection (" + logName + " event " + id + ")",
 			}
 		default:
 			if loggedSource == "" {
