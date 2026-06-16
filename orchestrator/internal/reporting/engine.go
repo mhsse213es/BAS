@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -42,6 +43,9 @@ type FullReport struct {
 	// post-run alert sweep (prevented|detected|undetected + confidence). Empty until
 	// the agent submits detections for the run. Sourced from scenario_runs.detection_summary.
 	DetectionTechniques []DetectionTechnique `json:"detectionTechniques,omitempty"`
+	// KillChain is the run's adversary actions paired with the defensive outcome,
+	// ordered by ATT&CK kill-chain phase — the dual-rail purple-team timeline.
+	KillChain []KillChainStep `json:"killChain,omitempty"`
 }
 
 // DetectionTechnique is one per-technique detection verdict surfaced to the UI.
@@ -50,6 +54,21 @@ type DetectionTechnique struct {
 	Verdict        string `json:"verdict"`              // prevented|detected|undetected
 	Confidence     string `json:"confidence,omitempty"` // high|low when detected
 	TimeToDetectMs int64  `json:"timeToDetectMs,omitempty"`
+}
+
+// KillChainStep is one step of the purple-team kill chain: an adversary action
+// paired with the defensive outcome. Ordered by ATT&CK kill-chain phase. PASS/
+// BLOCKED render as Prevented; FAIL as Detected (an alert fired) or Missed (none).
+// ERROR/SKIPPED are excluded — they are not security outcomes.
+type KillChainStep struct {
+	Phase       string `json:"phase"`       // tactic slug (frontend humanizes)
+	TechniqueID string `json:"techniqueId"`
+	Technique   string `json:"technique"`   // technique name
+	Action      string `json:"action"`      // adversary action / intent
+	Outcome     string `json:"outcome"`     // prevented | detected | missed
+	Detail      string `json:"detail"`      // defensive response text
+	Confidence  string `json:"confidence,omitempty"` // high|low for detected
+	LatencyMs   int64  `json:"latencyMs,omitempty"`   // time-to-detect for detected
 }
 
 // AttackPathStep is one kill-chain phase the endpoint did not prevent, with the
@@ -118,6 +137,87 @@ func buildAttackPath(results []models.SimulationResult) AttackPath {
 		ap.Steps = append(ap.Steps, AttackPathStep{Tactic: tactic, Techniques: a.techs})
 	}
 	return ap
+}
+
+// buildKillChain fuses the run's per-step verdicts with the detection verdicts
+// into the dual-rail timeline (adversary action ↔ defensive outcome), ordered by
+// kill-chain phase and, within a phase, by execution time. PASS/BLOCKED →
+// "prevented"; FAIL → "detected" when an alert fired (the agent's detection sweep
+// first, falling back to the coarse per-step events), else "missed". ERROR/SKIPPED
+// and tactic-less steps are excluded. Honest: no detected verdict without evidence.
+func buildKillChain(results []models.SimulationResult, dets []DetectionTechnique) []KillChainStep {
+	detByTech := make(map[string]DetectionTechnique, len(dets))
+	for _, d := range dets {
+		if d.TechniqueID != "" {
+			detByTech[d.TechniqueID] = d
+		}
+	}
+	byTactic := make(map[string][]models.SimulationResult)
+	for _, r := range results {
+		if r.Result == models.ResultError || r.Result == models.ResultSkipped {
+			continue
+		}
+		if r.Technique.Tactic == "" {
+			continue
+		}
+		byTactic[r.Technique.Tactic] = append(byTactic[r.Technique.Tactic], r)
+	}
+	var out []KillChainStep
+	for _, tactic := range tacticOrder {
+		rs := byTactic[tactic]
+		if len(rs) == 0 {
+			continue
+		}
+		sort.SliceStable(rs, func(i, j int) bool { return rs[i].ExecutedAt.Before(rs[j].ExecutedAt) })
+		for _, r := range rs {
+			step := KillChainStep{
+				Phase: tactic, TechniqueID: r.Technique.ID,
+				Technique: r.Technique.Name, Action: killChainAction(r),
+			}
+			if r.Result == models.ResultPass || r.Result == models.ResultBlocked {
+				step.Outcome = "prevented"
+				if ctrl := attributeControl(r); ctrl != "" {
+					step.Detail = "Blocked by " + ctrl
+				} else {
+					step.Detail = "Prevented by a control"
+				}
+			} else if d, ok := detByTech[r.Technique.ID]; ok && d.Verdict == "detected" {
+				step.Outcome = "detected"
+				step.Confidence = d.Confidence
+				step.LatencyMs = d.TimeToDetectMs
+				step.Detail = "Detection alert raised"
+			} else if cd := classifyDetection(r.Events); cd.Status == "Detected" {
+				step.Outcome = "detected"
+				step.Detail = cd.Detail
+			} else {
+				step.Outcome = "missed"
+				step.Detail = "No detection — executed unseen"
+			}
+			out = append(out, step)
+		}
+	}
+	return out
+}
+
+// killChainAction renders a concise adversary-action label for a kill-chain node.
+func killChainAction(r models.SimulationResult) string {
+	for _, s := range []string{r.ThreatImpact, r.Details} {
+		if s = strings.TrimSpace(s); s != "" {
+			return truncateStr(s, 110)
+		}
+	}
+	if r.Technique.Name != "" {
+		return "Executed " + r.Technique.Name
+	}
+	return "Technique executed"
+}
+
+func truncateStr(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
 }
 
 // TrendPoint is one scored assessment in the endpoint's history, for the trend
@@ -498,6 +598,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	report.ObjectiveRisks = buildObjectiveRisks(results)
 	report.Detection = buildDetectionSummary(results)
 	report.AttackPath = buildAttackPath(results)
+	report.KillChain = buildKillChain(results, report.DetectionTechniques)
 
 	report.Summary = ExecutiveSummary{
 		RiskScore:          score.RiskScore,
