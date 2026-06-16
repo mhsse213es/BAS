@@ -36,3 +36,20 @@ func TestRunChecksFiltersBySelection(t *testing.T) {
 		t.Fatalf("selected check not executed: %+v", out[0].Checks[0])
 	}
 }
+
+func TestBuildPostureCatalogHarvestsWithoutRunning(t *testing.T) {
+	cat := BuildPostureCatalog()
+	if len(cat) == 0 {
+		t.Fatal("expected at least one posture scenario in catalog")
+	}
+	for sid, checks := range cat {
+		if len(checks) == 0 {
+			t.Errorf("scenario %s has no checks", sid)
+		}
+		for _, c := range checks {
+			if c.ID == "" || c.Name == "" {
+				t.Errorf("scenario %s has a check with empty id/name: %+v", sid, c)
+			}
+		}
+	}
+}

@@ -86,3 +86,36 @@ func runChecks(cats []SimCategory, selected map[string]bool) []SimCategory {
 	}
 	return out
 }
+
+// knownPostureScenarios lists the local-check scenario IDs this agent build
+// recognizes (mirrors the RunScenarioChecks switch). Unknown IDs yield
+// RunAllChecks on that OS, which is exactly what would run for them.
+func knownPostureScenarios() []string {
+	return []string{
+		"safe-simulation", "apt36-spearphish", "apt36-kill-chain",
+		"ransomware-drill", "ad-credential-access", "upi-fraud-killchain",
+		"cscrf-mii-drill", "purplesharp-ad-drill", "lolbin-execution",
+		"lolbin-execution-coverage",
+	}
+}
+
+// BuildPostureCatalog harvests selectable-check metadata for every known posture
+// scenario WITHOUT executing any check (checks are deferred since Part A).
+func BuildPostureCatalog() map[string][]PostureCheckMeta {
+	out := make(map[string][]PostureCheckMeta)
+	for _, sid := range knownPostureScenarios() {
+		var metas []PostureCheckMeta
+		for _, cat := range RunScenarioChecks(sid) {
+			for _, c := range cat.Checks {
+				metas = append(metas, PostureCheckMeta{
+					ID: c.ID, Phase: cat.Phase, TechniqueID: c.Technique.ID,
+					Name: c.Technique.Name, Severity: c.Severity,
+				})
+			}
+		}
+		if len(metas) > 0 {
+			out[sid] = metas
+		}
+	}
+	return out
+}
