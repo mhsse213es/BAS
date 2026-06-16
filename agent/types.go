@@ -181,3 +181,30 @@ type ExecResult struct {
 	// never conflated with a clean skip or a security block.
 	TimedOut bool `json:"timedOut,omitempty"`
 }
+
+// AlertRecord is one raw defensive event collected from the endpoint. The agent
+// fills every field it can extract; the SERVER interprets them (verdict,
+// confidence). The agent never classifies. Mirrored server-side in internal/detect.
+type AlertRecord struct {
+	Channel     string    `json:"channel"`
+	Provider    string    `json:"provider"`
+	EventID     int       `json:"eventId"`
+	Level       string    `json:"level"`
+	Timestamp   time.Time `json:"timestamp"`
+	ThreatName  string    `json:"threatName,omitempty"`
+	ProcessName string    `json:"processName,omitempty"`
+	ProcessPath string    `json:"processPath,omitempty"`
+	CommandLine string    `json:"commandLine,omitempty"`
+	User        string    `json:"user,omitempty"`
+	Message     string    `json:"message,omitempty"`
+}
+
+// RunDetections is the agent's post-result detection submission for one run.
+type RunDetections struct {
+	RunID      string        `json:"runId"`
+	AgentID    string        `json:"agentId"`
+	Alerts     []AlertRecord `json:"alerts"`
+	WindowFrom time.Time     `json:"windowFrom"`
+	WindowTo   time.Time     `json:"windowTo"`
+	Truncated  bool          `json:"truncated"`
+}
