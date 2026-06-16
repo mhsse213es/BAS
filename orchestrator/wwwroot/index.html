@@ -2213,9 +2213,14 @@ function updatePickerCount() {
 function applyPicker() {
   var ids = pickerSelectedIds();
   if (!ids.length) { showToast('Select at least one item', 'err'); return; }
-  _runSelection = { scId: _pickerScId, fw: _pickerFw, ids: ids };
+  // Preserve the agent chosen in the Run modal. For posture the catalog (and its
+  // check IDs) is per-agent/per-OS, so reopening the modal must NOT reset to the
+  // first agent — otherwise the selection would dispatch to the wrong endpoint.
+  var agEl = document.getElementById('modal-agent');
+  var ag = agEl ? agEl.value : '';
+  _runSelection = { scId: _pickerScId, fw: _pickerFw, ids: ids, agentId: ag };
   closePicker();
-  openModal(_pickerScId, null);
+  openModal(_pickerScId, ag || null);
 }
 
 function closePicker() { document.getElementById('picker-overlay').classList.remove('open'); }
@@ -2233,6 +2238,13 @@ function renderModalSelection() {
   var sc = scenarios.find(function(s) { return s.id === id; });
   var fw = scenarioFramework(sc);
   if (!sc || !fw) { cw.style.display = 'none'; note.style.display = 'none'; return; }
+  // A posture selection is tied to the agent whose catalog produced it (check IDs
+  // are per-OS). If the operator switched agents, the stale subset would no longer
+  // match — drop it so the run reverts to "all checks" rather than an empty run.
+  if (fw === 'posture' && _runSelection && _runSelection.scId === id &&
+      _runSelection.agentId && _runSelection.agentId !== document.getElementById('modal-agent').value) {
+    _runSelection = null;
+  }
   var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
   var has = _runSelection && _runSelection.scId === id && _runSelection.fw === fw && _runSelection.ids.length > 0;
   cw.style.display = 'block';

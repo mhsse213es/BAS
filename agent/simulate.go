@@ -88,11 +88,13 @@ func runChecks(cats []SimCategory, selected map[string]bool) []SimCategory {
 }
 
 // knownPostureScenarios lists the local-check scenario IDs this agent build
-// recognizes (mirrors the RunScenarioChecks switch). Unknown IDs yield
-// RunAllChecks on that OS, which is exactly what would run for them.
+// recognizes. It is the UNION of the RunScenarioChecks switch cases across all
+// OS builds (e.g. cis-ubuntu-l1 is Linux-only) — harvesting a scenario this OS
+// doesn't specialize just yields RunAllChecks(), which is exactly what would run
+// for it. Keep in sync with the per-OS switches in simulate_{windows,linux,darwin}.go.
 func knownPostureScenarios() []string {
 	return []string{
-		"safe-simulation", "apt36-spearphish", "apt36-kill-chain",
+		"safe-simulation", "cis-ubuntu-l1", "apt36-spearphish", "apt36-kill-chain",
 		"ransomware-drill", "ad-credential-access", "upi-fraud-killchain",
 		"cscrf-mii-drill", "purplesharp-ad-drill", "lolbin-execution",
 		"lolbin-execution-coverage",
