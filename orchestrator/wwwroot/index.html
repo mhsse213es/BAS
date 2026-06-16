@@ -1800,7 +1800,8 @@ function scenarioCardHTML(s) {
       var modeMeta;
       var stepN = (s.steps || []).length;
       if (s.localCheck) {
-        modeMeta = 'Posture check';
+        modeMeta = '<a href="javascript:void(0)" class="desc-toggle" title="Choose which posture checks to run" ' +
+          'onclick="openModal(\'' + x(s.id) + '\',null);return false;">Posture check &#9881;</a>';
       } else if (s.artAllWindows) {
         modeMeta = 'Full ART sweep' + (artCatalog.length ? ' · ' + artCatalog.length + ' techniques' : '');
       } else if (s.calderaAllWindows) {
@@ -2053,9 +2054,10 @@ function renderRunMode() {
 function closeModal() { document.getElementById('run-overlay').classList.remove('open'); _modalScId = null; _runSelection = null; }
 
 /* ── Technique / Ability Picker ────────────────────────────── */
-// scenarioFramework returns 'art' | 'caldera' | 'steps' | '' for a scenario object.
+// scenarioFramework returns 'art' | 'caldera' | 'steps' | 'posture' | '' for a scenario object.
 function scenarioFramework(sc) {
   if (!sc) return '';
+  if (sc.localCheck) return 'posture';
   if (sc.artAllWindows || (sc.artTechniques || []).length) return 'art';
   if (sc.calderaAllWindows || (sc.calderaAbilities || []).length) return 'caldera';
   if ((sc.steps || []).length) return 'steps';
@@ -2079,6 +2081,18 @@ function openPicker(scId, fw) {
     });
     if (!items.length) { showToast('This scenario has no steps', 'err'); return; }
     openPickerWith(scId, fw, sc, items);
+    return;
+  }
+  if (fw === 'posture') {
+    var agentId = document.getElementById('modal-agent').value;
+    if (!agentId) { showToast('Select a target agent first', 'err'); return; }
+    var url = '/api/posture/catalog?agentId=' + encodeURIComponent(agentId) +
+              '&scenario=' + encodeURIComponent(scId);
+    apicall(url).then(function(d) {
+      if (!Array.isArray(d)) { showToast((d && d.error) ? d.error : 'Posture catalog unavailable', 'err'); return; }
+      if (!d.length) { showToast('This agent reported no posture checks for this scenario (it may need to re-enroll)', 'err'); return; }
+      openPickerWith(scId, 'posture', sc, d);
+    }).catch(function(e) { showToast('Posture catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
     return;
   }
   var have = (fw === 'art') ? artCatalog : calderaCatalog;
@@ -2119,11 +2133,13 @@ function openPickerWith(scId, fw, sc, items) {
   else { _pickerItems.forEach(function(it) { _pickerSel[it.id] = true; }); }
   var titleNoun = fw === 'art' ? 'Select ART techniques'
                 : fw === 'caldera' ? 'Select Caldera abilities'
+                : fw === 'posture' ? 'Select posture checks'
                 : 'Select steps';
   document.getElementById('picker-title').textContent = titleNoun + ' — ' + sc.name;
   document.getElementById('picker-sub').textContent =
       fw === 'art'     ? 'Tick the ATT&CK techniques to run. Search by ID or atomic name.'
     : fw === 'caldera' ? 'Tick the Caldera abilities to run. Search by name, tactic, or technique.'
+    : fw === 'posture' ? 'Tick the posture checks to run. Search by name, technique, or phase.'
     :                    'Tick the steps to run. Steps run in the order shown. Search by name or technique.';
   document.getElementById('picker-search').value = '';
   renderPickerList();
@@ -2139,17 +2155,21 @@ function renderPickerList() {
   var fw = _pickerFw;
   _pickerFiltered = _pickerItems.filter(function(it) {
     if (!q) return true;
-    return (it.id + ' ' + (it.name || '') + ' ' + (it.tactic || '') + ' ' + (it.technique || '')).toLowerCase().indexOf(q) !== -1;
+    return (it.id + ' ' + (it.name || '') + ' ' + (it.tactic || '') + ' ' + (it.technique || '') + ' ' + (it.phase || '') + ' ' + (it.techniqueId || '')).toLowerCase().indexOf(q) !== -1;
   });
   var rows = _pickerFiltered.map(function(it) {
     var checked = _pickerSel[it.id] ? ' checked' : '';
     // Steps are index-keyed (id = "0","1",…), so show a 1-based step number as
     // the prominent label and the technique ID as meta, not the raw index.
-    var label = (fw === 'steps') ? ('Step ' + (Number(it.id) + 1)) : it.id;
+    var label = (fw === 'steps') ? ('Step ' + (Number(it.id) + 1))
+              : (fw === 'posture') ? (it.techniqueId || it.name || it.id)
+              : it.id;
     var meta = (fw === 'art')
       ? (it.tests ? (it.tests + (it.tests === 1 ? ' test' : ' tests')) : '')
       : (fw === 'steps')
       ? (it.technique || '')
+      : (fw === 'posture')
+      ? [it.phase, it.severity].filter(Boolean).join(' · ')
       : [it.tactic, it.technique].filter(Boolean).join(' · ');
     return '<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.8rem">' +
       '<input type="checkbox" data-id="' + x(it.id) + '"' + checked + ' onchange="pickerToggle(this)" style="margin-top:2px">' +
@@ -2213,10 +2233,18 @@ function renderModalSelection() {
   var sc = scenarios.find(function(s) { return s.id === id; });
   var fw = scenarioFramework(sc);
   if (!sc || !fw) { cw.style.display = 'none'; note.style.display = 'none'; return; }
-  var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : 'steps';
+  var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
   var has = _runSelection && _runSelection.scId === id && _runSelection.fw === fw && _runSelection.ids.length > 0;
   cw.style.display = 'block';
-  link.innerHTML = '&#9881; ' + (has ? 'Change selection' : 'Customize — select ' + noun + ' to run');
+  if (fw === 'posture' && !document.getElementById('modal-agent').value) {
+    link.innerHTML = '&#9881; Customize — select a target agent first';
+    link.style.opacity = '0.5';
+    link.style.pointerEvents = 'none';
+  } else {
+    link.style.opacity = '';
+    link.style.pointerEvents = '';
+    link.innerHTML = '&#9881; ' + (has ? 'Change selection' : 'Customize — select ' + noun + ' to run');
+  }
   if (has) {
     note.style.display = 'block';
     note.innerHTML = '&#9989; Running a selected subset: <strong>' + _runSelection.ids.length + '</strong> ' + noun +
@@ -2867,6 +2895,7 @@ function confirmRun() {
     if (_runSelection.fw === 'art') body.techniques = _runSelection.ids;
     else if (_runSelection.fw === 'caldera') body.abilities = _runSelection.ids;
     else if (_runSelection.fw === 'steps') body.steps = _runSelection.ids.map(Number);
+    else if (_runSelection.fw === 'posture') body.checks = _runSelection.ids;
   }
   apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
     method: 'POST', body: JSON.stringify(body)
