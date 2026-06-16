@@ -599,6 +599,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Techniques  []string `json:"techniques"`  // optional ART technique subset (overrides the scenario's set)
 		Abilities   []string `json:"abilities"`   // optional Caldera ability subset (overrides the scenario's set)
 		Steps       []int    `json:"steps"`       // optional step subset — indices into the scenario's step list (custom/step scenarios)
+		Checks      []string `json:"checks"`      // optional posture-check subset (local_check scenarios)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -777,7 +778,11 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		sent := h.hub.SendToAgent(req.AgentID, models.WSMessage{
 			Type:    models.MsgCommandSimulate,
 			AgentID: req.AgentID,
-			Data:    map[string]string{"scenarioId": scenarioID, "runId": runID},
+			Data: map[string]any{
+				"scenarioId": scenarioID,
+				"runId":      runID,
+				"checks":     req.Checks, // nil/empty → agent runs all
+			},
 		})
 		if !sent {
 			_, _ = h.db.Exec(context.Background(),
