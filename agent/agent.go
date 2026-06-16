@@ -589,6 +589,49 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 		label = "partial"
 	}
 	a.submitRunResult(payload, label)
+
+	// After results are durably queued, fire a grace-delayed detection sweep in a
+	// tracked goroutine. Best-effort: never affects the authoritative run result.
+	if cmd.RunID != "" {
+		runStart := time.Now()
+		for _, r := range results {
+			if !r.ExecutedAt.IsZero() && r.ExecutedAt.Before(runStart) {
+				runStart = r.ExecutedAt
+			}
+		}
+		a.runWG.Add(1)
+		go func() { defer a.runWG.Done(); a.collectAndSubmitDetections(cmd.RunID, runStart) }()
+	}
+}
+
+// collectAndSubmitDetections runs AFTER results are delivered. It waits a grace
+// period (defenders alert seconds-to-minutes late), sweeps the run's time window
+// once for rich alerts, and posts them. Best-effort: any failure is logged and
+// dropped — it never affects the authoritative run result.
+func (a *Agent) collectAndSubmitDetections(runID string, runStart time.Time) {
+	const graceWait = 90 * time.Second
+	const windowPad = 300 * time.Second // catch late alerts up to 5 min after the run
+	const maxEvents = 500
+	const maxBytes = 512 * 1024
+
+	time.Sleep(graceWait)
+	from := runStart.Add(-5 * time.Second)
+	to := time.Now()
+	alerts, truncated := collectAlerts(from, to, maxEvents, maxBytes)
+	if len(alerts) == 0 {
+		log.Printf("[detect] run %s: no alerts collected in window", runID)
+		return
+	}
+	payload := RunDetections{
+		RunID: runID, AgentID: a.id.AgentID, Alerts: alerts,
+		WindowFrom: from, WindowTo: to, Truncated: truncated,
+	}
+	if err := a.postJSON("/api/scenarios/runs/"+runID+"/detections", payload); err != nil {
+		log.Printf("[detect] run %s: detection submit failed: %v", runID, err)
+		return
+	}
+	log.Printf("[detect] run %s: submitted %d alert(s)", runID, len(alerts))
+	_ = windowPad
 }
 
 // submitRunResult durably delivers a run's authoritative results to the server. A
