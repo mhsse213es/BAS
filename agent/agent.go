@@ -133,14 +133,15 @@ func (a *Agent) postJSON(path string, body interface{}) error {
 // Failure is non-fatal — the agent continues and will retry on next heartbeat.
 func (a *Agent) enrollWithServer() {
 	req := EnrollRequest{
-		AgentID:      a.id.AgentID,
-		Hostname:     a.id.Hostname,
-		IPAddress:    a.id.IPAddress,
-		OSVersion:    a.id.OSVersion,
-		Username:     a.id.Username,
-		EnvLabel:     a.cfg.EnvLabel,
-		BinaryHash:   a.binaryHash,
-		AgentVersion: version,
+		AgentID:        a.id.AgentID,
+		Hostname:       a.id.Hostname,
+		IPAddress:      a.id.IPAddress,
+		OSVersion:      a.id.OSVersion,
+		Username:       a.id.Username,
+		EnvLabel:       a.cfg.EnvLabel,
+		BinaryHash:     a.binaryHash,
+		AgentVersion:   version,
+		PostureCatalog: BuildPostureCatalog(),
 	}
 	var resp EnrollResponse
 	if err := a.postJSONDecode("/api/agents/enroll", req, &resp); err != nil {
