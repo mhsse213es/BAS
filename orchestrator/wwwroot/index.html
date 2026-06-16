@@ -531,6 +531,8 @@ code {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 1rem 1.1rem;
 }
+.kpi-card[onclick] { cursor: pointer; transition: border-color .12s, transform .12s; }
+.kpi-card[onclick]:hover { border-color: var(--accent); transform: translateY(-1px); }
 .kpi-label {
   font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.4rem;
@@ -812,25 +814,32 @@ code {
       <!-- Dashboard -->
       <div id="tab-dashboard" style="display:none">
         <div class="kpi-row">
-          <div class="kpi-card">
+          <div class="kpi-card" onclick="showTab('agents')" title="View agents">
             <div class="kpi-label">Agents Online</div>
             <div class="kpi-value" id="kpi-agents-val">—</div>
             <div class="kpi-sub" id="kpi-agents-sub">of 0 registered</div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card" onclick="showTab('runs')" title="View runs">
             <div class="kpi-label">Prevention Score</div>
             <div class="kpi-value" id="kpi-score-val">—</div>
             <div class="kpi-sub" id="kpi-score-sub">no runs yet</div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card" onclick="showTab('runs')" title="View runs">
             <div class="kpi-label">Exposure Score</div>
             <div class="kpi-value" id="kpi-prev-val">—</div>
             <div class="kpi-sub" id="kpi-prev-sub">tactic-weighted risk</div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card" onclick="showTab('runs')" title="View runs">
             <div class="kpi-label">Total Runs</div>
             <div class="kpi-value" id="kpi-runs-val">—</div>
             <div class="kpi-sub" id="kpi-runs-sub">all time</div>
+          </div>
+        </div>
+
+        <div class="dash-panel" style="margin-bottom:1.25rem">
+          <div class="dash-panel-hdr">Control Effectiveness</div>
+          <div class="dash-panel-body" id="dash-donut" style="padding:1.1rem 1.25rem">
+            <div class="empty">No run data yet.</div>
           </div>
         </div>
 
@@ -3272,6 +3281,21 @@ function doResetPassword(id, username) {
   .catch(function(e) { showToast(e.message, 'err'); });
 }
 
+// donutSVG renders a stacked donut from [{v,color}] segments (no chart lib).
+function donutSVG(segs, size, stroke) {
+  size = size || 124; stroke = stroke || 16;
+  var r = (size - stroke) / 2, cx = size / 2, cy = size / 2, C = 2 * Math.PI * r;
+  var total = segs.reduce(function(s, x) { return s + x.v; }, 0) || 1, off = 0;
+  var c = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--elevated)" stroke-width="' + stroke + '"/>';
+  segs.forEach(function(s) {
+    var len = s.v / total * C;
+    c += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + s.color + '" stroke-width="' + stroke +
+         '" stroke-dasharray="' + len + ' ' + (C - len) + '" stroke-dashoffset="' + (-off) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>';
+    off += len;
+  });
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' + c + '</svg>';
+}
+
 function loadDashboard() {
   Promise.all([apicall('/api/agents'), apicall('/api/scenarios/runs')])
   .then(function(res) {
@@ -3303,6 +3327,49 @@ function loadDashboard() {
     var completed = runs.filter(function(r) { return r.status === 'completed'; }).length;
     document.getElementById('kpi-runs-val').textContent = runs.length;
     document.getElementById('kpi-runs-sub').textContent = completed + ' completed';
+
+    // Control effectiveness donut — aggregate verdicts across all runs.
+    // Prevented = pass|blocked, Failed = fail, Not scored = error|skipped.
+    var eff = { prevented: 0, failed: 0, other: 0 };
+    runs.forEach(function(r) {
+      (r.results || []).forEach(function(c) {
+        if (c.result === 'pass' || c.result === 'blocked') eff.prevented++;
+        else if (c.result === 'fail') eff.failed++;
+        else eff.other++;
+      });
+    });
+    var effTotal = eff.prevented + eff.failed + eff.other;
+    var donutEl = document.getElementById('dash-donut');
+    if (!effTotal) {
+      donutEl.innerHTML = '<div class="empty">No run data yet.</div>';
+    } else {
+      var prevPctEff = Math.round(eff.prevented / (eff.prevented + eff.failed || 1) * 100);
+      var lg = function(color, label, val) {
+        return '<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.82rem">' +
+          '<span style="width:10px;height:10px;border-radius:3px;background:' + color + ';flex-shrink:0"></span>' +
+          label + '<span style="margin-left:auto;font-weight:600;color:var(--text)">' + val + '</span></div>';
+      };
+      donutEl.style.display = 'flex';
+      donutEl.style.gap = '1.5rem';
+      donutEl.style.alignItems = 'center';
+      donutEl.innerHTML =
+        '<div style="position:relative;flex-shrink:0">' +
+          donutSVG([
+            { v: eff.prevented, color: 'var(--success)' },
+            { v: eff.failed, color: 'var(--danger)' },
+            { v: eff.other, color: 'var(--elevated)' }
+          ]) +
+          '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">' +
+            '<span style="font-size:1.5rem;font-weight:700;line-height:1;color:' + (prevPctEff >= 80 ? 'var(--success)' : prevPctEff >= 50 ? 'var(--warning)' : 'var(--danger)') + '">' + prevPctEff + '%</span>' +
+            '<span style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)">prevented</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="flex:1;display:flex;flex-direction:column;gap:0.55rem;min-width:160px">' +
+          lg('var(--success)', 'Prevented', eff.prevented) +
+          lg('var(--danger)', 'Failed (executed)', eff.failed) +
+          lg('var(--elevated)', 'Not scored', eff.other) +
+        '</div>';
+    }
 
     // Recent runs (last 5)
     var recent = runs.slice(0, 5);
