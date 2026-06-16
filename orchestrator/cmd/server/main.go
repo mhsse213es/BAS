@@ -19,6 +19,7 @@ import (
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
@@ -171,6 +172,11 @@ func main() {
 	// Marks agents offline if no heartbeat received within 90 seconds and
 	// broadcasts the change so the dashboard updates in real time.
 	go runStalenessMonitor(pool, hub)
+
+	// ── Detection Retention ───────────────────────────────────────────────
+	// Prunes raw detection alert blobs older than 30 days daily (summaries are
+	// kept forever) so large BAS environments don't accumulate huge JSON blobs.
+	detect.StartRetention(context.Background(), pool)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
