@@ -15,6 +15,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -226,6 +227,28 @@ func Lookup(id string) *Enrichment {
 		}
 	}
 	return nil
+}
+
+// TechniqueRef is the minimal matrix projection of a technique.
+type TechniqueRef struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Tactics []string `json:"tactics"`
+}
+
+// All returns every loaded technique (the authoritative ATT&CK set), id-sorted.
+// Used to build the coverage matrix; coverage status is overlaid by the caller.
+func All() []TechniqueRef {
+	once.Do(load)
+	out := make([]TechniqueRef, 0, len(data))
+	for _, e := range data {
+		if e == nil || e.TechniqueID == "" || e.Name == "" {
+			continue
+		}
+		out = append(out, TechniqueRef{ID: e.TechniqueID, Name: e.Name, Tactics: e.Tactics})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
 func normalize(id string) string {
