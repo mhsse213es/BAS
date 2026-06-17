@@ -120,6 +120,27 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS undetected_rate  int`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS mttd_ms          bigint`,
 
+		`CREATE TABLE IF NOT EXISTS campaigns (
+			id            text PRIMARY KEY,
+			name          text NOT NULL,
+			scenario_id   text NOT NULL,
+			scenario_name text NOT NULL DEFAULT '',
+			mode          text NOT NULL DEFAULT 'posture',
+			subset        jsonb NOT NULL DEFAULT '{}',
+			reason        text NOT NULL DEFAULT '',
+			targets       jsonb NOT NULL DEFAULT '[]',
+			skips         jsonb NOT NULL DEFAULT '[]',
+			notes         text NOT NULL DEFAULT '',
+			tags          jsonb NOT NULL DEFAULT '[]',
+			created_by    text,
+			created_at    timestamptz NOT NULL DEFAULT NOW(),
+			started_at    timestamptz NOT NULL DEFAULT NOW(),
+			completed_at  timestamptz,
+			stopped_at    timestamptz
+		)`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS campaign_id text`,
+		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_campaign ON scenario_runs (campaign_id)`,
+
 		// ── Agent logging tables ──────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS agent_op_logs (
 			id         bigserial    PRIMARY KEY,

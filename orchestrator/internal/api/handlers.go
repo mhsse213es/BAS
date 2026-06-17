@@ -587,6 +587,249 @@ func (h *Handler) GetScenario(w http.ResponseWriter, r *http.Request) {
 // ART sweep (one representative atomic per technique) completes well within this.
 const staleRunGuard = 2 * time.Hour
 
+// dispatchOpts carries everything dispatchRun needs to dispatch one run on one
+// agent. It is the agent-independent slice of a run request — built once by the
+// single-run handler and once per target by the campaign fan-out.
+type dispatchOpts struct {
+	Mode        string // already-normalized: posture | telemetry | lab
+	ConfirmLive bool
+	ConfirmLab  bool
+	Reason      string
+	Techniques  []string
+	Abilities   []string
+	Steps       []int
+	Checks      []string
+	CampaignID  string  // "" for ad-hoc single runs
+	InitiatedBy *string // requesting user id (nil if unauthenticated)
+}
+
+// nullIfEmpty maps "" to a SQL NULL so an ad-hoc run leaves campaign_id null
+// rather than storing an empty string.
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// dispatchRun creates and dispatches ONE run of sc on agentID, applying the
+// agent-state gate, OS-compat check, busy guard, run-row insert, and WS dispatch
+// — the per-agent core shared by the single-run endpoint and the campaign
+// launcher. On success it returns the new run id. When the agent simply cannot
+// accept the run it returns ("", skipReason, nil) — skipReason is one of
+// "offline", "agent busy", "agent <state>", "os mismatch" — leaving no run row
+// (or a failed one, for a lost WS send). err is non-nil only for genuine
+// failures (DB / build). Request- and scenario-level guardrails (mode validity,
+// confirmLive/confirmLab, executable, execution window) are the caller's job.
+func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
+	live := o.Mode == "telemetry" || o.Mode == "lab"
+
+	// ── Agent state gate ─────────────────────────────────────────────────────
+	// Only active agents may run scenarios. Quarantined / restricted / retired
+	// agents are skipped regardless of mode — operators resolve the state first.
+	var agentState string
+	h.db.QueryRow(ctx,
+		`SELECT COALESCE(state,'active') FROM agents WHERE agent_id = $1`, agentID,
+	).Scan(&agentState)
+	if agentState != "" && agentState != string(models.AgentStateActive) {
+		return "", "agent " + agentState, nil
+	}
+
+	// ── OS compatibility check ────────────────────────────────────────────────
+	// Live runs (telemetry/lab) are skipped on an OS mismatch. Posture runs
+	// proceed on any host (they return "not applicable" per check); the single-run
+	// caller surfaces that as an osWarning.
+	var agentOSVersion string
+	h.db.QueryRow(ctx,
+		`SELECT os_version FROM agents WHERE agent_id = $1`, agentID,
+	).Scan(&agentOSVersion)
+	agentOS := classifyAgentOS(agentOSVersion)
+	if live && len(sc.SupportedOS) > 0 && agentOS != "" {
+		supported := false
+		for _, o := range sc.SupportedOS {
+			if strings.EqualFold(o, agentOS) {
+				supported = true
+				break
+			}
+		}
+		if !supported {
+			return "", "os mismatch", nil
+		}
+	}
+
+	// ── Concurrency guard ─────────────────────────────────────────────────────
+	// An agent executes one scenario at a time. A live, non-stale run blocks a new
+	// one (skip "agent busy"); a stale run (agent died mid-run) is freed as
+	// 'partial' so this agent isn't locked out.
+	var runningID string
+	var runningStarted, agentLastUpdate time.Time
+	if qErr := h.db.QueryRow(ctx,
+		`SELECT sr.id, sr.started_at, a.last_update
+		   FROM scenario_runs sr
+		   JOIN agents a ON a.agent_id = sr.agent_id
+		  WHERE sr.agent_id = $1 AND sr.status = 'running'
+		  ORDER BY sr.started_at DESC LIMIT 1`, agentID,
+	).Scan(&runningID, &runningStarted, &agentLastUpdate); qErr == nil && runningID != "" {
+		if !runIsStale(runningStarted, agentLastUpdate, time.Now()) {
+			return "", "agent busy", nil
+		}
+		_, _ = h.db.Exec(ctx,
+			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
+			  WHERE id = $1 AND status = 'running'`, runningID)
+		log.Printf("[scenario] freed stale running run %s on agent %s (started %s, agent last seen %s)",
+			runningID, agentID, runningStarted.UTC().Format(time.RFC3339),
+			agentLastUpdate.UTC().Format(time.RFC3339))
+	}
+
+	// Create a run record in RUNNING state, stamped with the requesting user and
+	// (for fan-out) its campaign.
+	runID = newID()
+	_, err = h.db.Exec(ctx,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6)`,
+		runID, sc.ID, agentID, sc.Name, o.InitiatedBy, nullIfEmpty(o.CampaignID),
+	)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Posture mode (default): local_check scenarios use built-in read-only agent
+	// checks — no ART/Caldera and no system changes.
+	if !live && sc.LocalCheck {
+		sent := h.hub.SendToAgent(agentID, models.WSMessage{
+			Type:    models.MsgCommandSimulate,
+			AgentID: agentID,
+			Data: map[string]any{
+				"scenarioId": sc.ID,
+				"runId":      runID,
+				"checks":     o.Checks, // nil/empty → agent runs all
+			},
+		})
+		if !sent {
+			_, _ = h.db.Exec(context.Background(),
+				`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+			return "", "offline", nil
+		}
+		log.Printf("[scenario] dispatched posture-check %s → agent %s (run %s)", sc.ID, agentID, runID)
+		return runID, "", nil
+	}
+
+	if live {
+		who := "unknown"
+		if o.InitiatedBy != nil {
+			who = *o.InitiatedBy
+		}
+		reason := o.Reason
+		if reason == "" {
+			reason = "(none provided)"
+		}
+		// Audit record for every live execution — who/what/where/when/why.
+		log.Printf("[AUDIT] live-execution dispatched: mode=%s user=%s scenario=%s agent=%s run=%s reason=%q",
+			o.Mode, who, sc.ID, agentID, runID, reason)
+	}
+
+	// Build from a copy so the registered scenario is never mutated. Two optional
+	// transforms apply: (1) live-fidelity filtering drops lab-only steps for
+	// telemetry mode; (2) an operator-selected technique/ability/step subset
+	// narrows a sweep (or selective) scenario to just the chosen items.
+	subset := len(o.Techniques) > 0 || len(o.Abilities) > 0 || len(o.Steps) > 0
+	buildSc := sc
+	if live || subset {
+		c := *sc
+		base := sc.Steps
+		if len(o.Steps) > 0 {
+			sel := make([]scenario.Step, 0, len(o.Steps))
+			for _, idx := range o.Steps {
+				if idx < 0 || idx >= len(sc.Steps) {
+					continue // defensive — single-run validates upstream
+				}
+				sel = append(sel, sc.Steps[idx])
+			}
+			base = sel
+			c.Steps = sel
+		}
+		if live {
+			kept := make([]scenario.Step, 0, len(base))
+			for _, st := range base {
+				if o.Mode == "telemetry" && st.Fidelity == "lab-only" {
+					continue
+				}
+				kept = append(kept, st)
+			}
+			c.Steps = kept
+		}
+		if len(o.Techniques) > 0 {
+			c.ARTTechniques = o.Techniques
+			c.ARTAllWindows = false
+		}
+		if len(o.Abilities) > 0 {
+			c.CalderaAbilities = o.Abilities
+			c.CalderaAllWindows = false
+			c.CalderaAdversaryID = ""
+		}
+		buildSc = &c
+	}
+	if subset {
+		log.Printf("[scenario] run %s uses operator-selected subset: %d ART technique(s), %d Caldera ability(ies), %d step(s)",
+			runID, len(o.Techniques), len(o.Abilities), len(o.Steps))
+	}
+
+	// Build concrete commands — all framework logic resolved server-side.
+	steps, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore)
+	if err != nil {
+		_, _ = h.db.Exec(context.Background(),
+			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		return "", "", fmt.Errorf("build steps: %w", err)
+	}
+
+	// Dynamically-built Caldera abilities carry their own fidelity tag. Payload-
+	// bearing abilities (e.g. emu APT chains) are "lab-only" and must never fire
+	// outside lab mode — drop them in posture/telemetry.
+	if o.Mode != "lab" {
+		kept := make([]scenario.ScenarioStep, 0, len(steps))
+		for _, st := range steps {
+			if st.Fidelity == "lab-only" {
+				continue
+			}
+			kept = append(kept, st)
+		}
+		dropped := len(steps) - len(kept)
+		steps = kept
+		if dropped > 0 {
+			log.Printf("[scenario] run %s: dropped %d lab-only step(s) for mode=%s", runID, dropped, o.Mode)
+		}
+		if len(steps) == 0 {
+			_, _ = h.db.Exec(context.Background(),
+				`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+			return "", "", fmt.Errorf("every step in this scenario is lab-only (ships real payloads) — run it in lab mode against an isolated range")
+		}
+	}
+
+	h.persistStepMeta(ctx, runID, steps)
+
+	cmd := scenario.ScenarioCommand{
+		RunID:      runID,
+		ScenarioID: sc.ID,
+		Name:       sc.Name,
+		Steps:      steps,
+		Mode:       o.Mode,
+		Policy:     sc.LivePolicy,
+	}
+	sent := h.hub.SendToAgent(agentID, models.WSMessage{
+		Type:    models.MsgCommandScenario,
+		AgentID: agentID,
+		Data:    cmd,
+	})
+	if !sent {
+		_, _ = h.db.Exec(context.Background(),
+			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		return "", "offline", nil
+	}
+
+	log.Printf("[scenario] dispatched %s → agent %s (run %s)", sc.ID, agentID, runID)
+	return runID, "", nil
+}
+
 // POST /api/scenarios/{id}/run — dispatches scenario to a connected agent
 func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	scenarioID := chi.URLParam(r, "id")
@@ -726,195 +969,45 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ── Concurrency guard ─────────────────────────────────────────────────────
-	// An agent executes one scenario at a time; dispatching a new one cancels the
-	// in-flight run on the agent (silent truncation → partial results). Reject the
-	// new run instead — unless the existing run is stale (the agent likely died
-	// mid-run), in which case we mark it failed so it stops blocking and proceed.
-	var runningID string
-	var runningStarted, agentLastUpdate time.Time
-	if qErr := h.db.QueryRow(r.Context(),
-		`SELECT sr.id, sr.started_at, a.last_update
-		   FROM scenario_runs sr
-		   JOIN agents a ON a.agent_id = sr.agent_id
-		  WHERE sr.agent_id = $1 AND sr.status = 'running'
-		  ORDER BY sr.started_at DESC LIMIT 1`, req.AgentID,
-	).Scan(&runningID, &runningStarted, &agentLastUpdate); qErr == nil && runningID != "" {
-		if !runIsStale(runningStarted, agentLastUpdate, time.Now()) {
-			jsonError(w, "agent busy — a scenario is already running on this agent; wait for it to finish before starting another", http.StatusConflict)
-			return
-		}
-		// Stale (agent offline or past the staleRunGuard ceiling): free the
-		// abandoned run as 'partial' (its steps did run) so this agent isn't
-		// locked out.
-		_, _ = h.db.Exec(r.Context(),
-			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
-			  WHERE id = $1 AND status = 'running'`, runningID)
-		log.Printf("[scenario] freed stale running run %s on agent %s (started %s, agent last seen %s)",
-			runningID, req.AgentID, runningStarted.UTC().Format(time.RFC3339),
-			agentLastUpdate.UTC().Format(time.RFC3339))
-	}
-
-	// Create a run record in RUNNING state, stamped with the requesting user
-	runID := newID()
+	// The per-agent dispatch core (concurrency guard, run-row insert, step build,
+	// WS dispatch) is shared with the campaign fan-out via dispatchRun. The gates
+	// above (agent state, OS, mode/confirm/window) have already run and produced
+	// their precise single-run error responses, so dispatchRun's own guards are a
+	// no-op here and only ever surface "agent busy" / "offline".
 	var initiatedBy *string
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		initiatedBy = &c.UserID
 	}
-	_, err := h.db.Exec(r.Context(),
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW())`,
-		runID, scenarioID, req.AgentID, sc.Name, initiatedBy,
-	)
+	runID, skip, err := h.dispatchRun(r.Context(), sc, req.AgentID, dispatchOpts{
+		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab, Reason: req.Reason,
+		Techniques: req.Techniques, Abilities: req.Abilities, Steps: req.Steps, Checks: req.Checks,
+		InitiatedBy: initiatedBy,
+	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// Posture mode (default): local_check scenarios use built-in read-only agent
-	// checks — no ART/Caldera and no system changes. Live mode skips this and runs
-	// the real steps below.
-	if !live && sc.LocalCheck {
-		sent := h.hub.SendToAgent(req.AgentID, models.WSMessage{
-			Type:    models.MsgCommandSimulate,
-			AgentID: req.AgentID,
-			Data: map[string]any{
-				"scenarioId": scenarioID,
-				"runId":      runID,
-				"checks":     req.Checks, // nil/empty → agent runs all
-			},
-		})
-		if !sent {
-			_, _ = h.db.Exec(context.Background(),
-				`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+	if skip != "" {
+		switch {
+		case skip == "agent busy":
+			jsonError(w, "agent busy — a scenario is already running on this agent; wait for it to finish before starting another", http.StatusConflict)
+		case skip == "offline":
 			jsonError(w, "agent not connected", http.StatusServiceUnavailable)
-			return
+		case skip == "os mismatch":
+			jsonError(w, skip, http.StatusForbidden)
+		case strings.HasPrefix(skip, "agent "):
+			jsonError(w, skip, http.StatusForbidden)
+		default:
+			jsonError(w, skip, http.StatusServiceUnavailable)
 		}
-		log.Printf("[scenario] dispatched posture-check %s → agent %s (run %s)", scenarioID, req.AgentID, runID)
-		res := map[string]string{"runId": runID, "status": "dispatched", "mode": "posture"}
-		if osWarning != "" {
-			res["osWarning"] = osWarning
-		}
-		respond(w, res)
 		return
 	}
 
-	if live {
-		who := "unknown"
-		if initiatedBy != nil {
-			who = *initiatedBy
-		}
-		reason := req.Reason
-		if reason == "" {
-			reason = "(none provided)"
-		}
-		// Audit record for every live execution — who/what/where/when/why.
-		log.Printf("[AUDIT] live-execution dispatched: mode=%s user=%s scenario=%s agent=%s run=%s reason=%q",
-			mode, who, scenarioID, req.AgentID, runID, reason)
+	res := map[string]string{"runId": runID, "status": "dispatched", "mode": mode}
+	if osWarning != "" {
+		res["osWarning"] = osWarning
 	}
-
-	// Build from a copy so the registered scenario is never mutated. Two optional
-	// transforms apply: (1) live-fidelity filtering drops lab-only steps for
-	// telemetry mode; (2) an operator-selected technique/ability subset narrows a
-	// sweep (or selective) scenario to just the chosen items.
-	subset := len(req.Techniques) > 0 || len(req.Abilities) > 0 || len(req.Steps) > 0
-	buildSc := sc
-	if live || subset {
-		c := *sc
-		// Operator-selected step subset (index-based against the scenario's full
-		// step list — the same order the picker shows). Apply it first so the
-		// live lab-only filter below operates on the chosen steps.
-		base := sc.Steps
-		if len(req.Steps) > 0 {
-			sel := make([]scenario.Step, 0, len(req.Steps))
-			for _, idx := range req.Steps { // already range-validated above
-				sel = append(sel, sc.Steps[idx])
-			}
-			base = sel
-			c.Steps = sel
-		}
-		if live {
-			kept := make([]scenario.Step, 0, len(base))
-			for _, st := range base {
-				if mode == "telemetry" && st.Fidelity == "lab-only" {
-					continue
-				}
-				kept = append(kept, st)
-			}
-			c.Steps = kept
-		}
-		if len(req.Techniques) > 0 {
-			c.ARTTechniques = req.Techniques
-			c.ARTAllWindows = false
-		}
-		if len(req.Abilities) > 0 {
-			c.CalderaAbilities = req.Abilities
-			c.CalderaAllWindows = false
-			c.CalderaAdversaryID = ""
-		}
-		buildSc = &c
-	}
-	if subset {
-		log.Printf("[scenario] run %s uses operator-selected subset: %d ART technique(s), %d Caldera ability(ies), %d step(s)",
-			runID, len(req.Techniques), len(req.Abilities), len(req.Steps))
-	}
-
-	// Build concrete commands — all framework logic resolved server-side
-	steps, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore)
-	if err != nil {
-		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
-
-	// Dynamically-built Caldera abilities carry their own fidelity tag. Payload-
-	// bearing abilities (e.g. emu APT chains) are "lab-only" and must never fire
-	// outside lab mode — drop them in posture/telemetry. (Static sc.Steps are
-	// already fidelity-filtered above before the build.)
-	if mode != "lab" {
-		kept := make([]scenario.ScenarioStep, 0, len(steps))
-		for _, st := range steps {
-			if st.Fidelity == "lab-only" {
-				continue
-			}
-			kept = append(kept, st)
-		}
-		dropped := len(steps) - len(kept)
-		steps = kept
-		if dropped > 0 {
-			log.Printf("[scenario] run %s: dropped %d lab-only step(s) for mode=%s", runID, dropped, mode)
-		}
-		if len(steps) == 0 {
-			_, _ = h.db.Exec(context.Background(),
-				`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
-			jsonError(w, "every step in this scenario is lab-only (ships real payloads) — run it in lab mode against an isolated range", http.StatusUnprocessableEntity)
-			return
-		}
-	}
-
-	h.persistStepMeta(r.Context(), runID, steps)
-
-	cmd := scenario.ScenarioCommand{
-		RunID:      runID,
-		ScenarioID: scenarioID,
-		Name:       sc.Name,
-		Steps:      steps,
-		Mode:       mode,
-		Policy:     sc.LivePolicy,
-	}
-	sent := h.hub.SendToAgent(req.AgentID, models.WSMessage{
-		Type:    models.MsgCommandScenario,
-		AgentID: req.AgentID,
-		Data:    cmd,
-	})
-	if !sent {
-		_, _ = h.db.Exec(context.Background(),
-			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
-		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
-		return
-	}
-
-	log.Printf("[scenario] dispatched %s → agent %s (run %s)", scenarioID, req.AgentID, runID)
-	respond(w, map[string]string{"runId": runID, "status": "dispatched"})
+	respond(w, res)
 }
 
 // POST /api/scenarios — create a new custom scenario from a JSON body.
