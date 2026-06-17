@@ -171,6 +171,20 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_findings_status_sev ON findings (status, severity)`,
 		`CREATE INDEX IF NOT EXISTS idx_findings_campaign ON findings (last_campaign_id)`,
 
+		// ── Reports: lightweight, metadata-only generation log (no artifacts) ──
+		`CREATE TABLE IF NOT EXISTS report_log (
+			id            text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			report_type   text NOT NULL,
+			format        text NOT NULL DEFAULT '',
+			scope_label   text NOT NULL DEFAULT '',
+			parameters    jsonb NOT NULL DEFAULT '{}',
+			source        text NOT NULL DEFAULT 'reports_hub',
+			status        text NOT NULL DEFAULT 'generated',
+			generated_by  text,
+			generated_at  timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_report_log_time ON report_log (generated_at DESC)`,
+
 		// ── Agent logging tables ──────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS agent_op_logs (
 			id         bigserial    PRIMARY KEY,
