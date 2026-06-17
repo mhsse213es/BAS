@@ -286,3 +286,44 @@ func (h *Handler) SetFindingStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, map[string]any{"status": req.Status})
 }
+
+// ListRemediations groups open findings into per-technique remediations and
+// attaches authoritative ATT&CK mitigations + detection guidance. Computed on
+// read — no remediations table. GET /api/remediations
+func (h *Handler) ListRemediations(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(),
+		`SELECT technique_id, technique_name, tactic, severity, control_class, exposure_state, agent_id
+		   FROM findings WHERE status='open'`)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var refs []findings.FindingRef
+	for rows.Next() {
+		var f findings.FindingRef
+		if rows.Scan(&f.TechniqueID, &f.TechniqueName, &f.Tactic, &f.Severity, &f.ControlClass, &f.ExposureState, &f.AgentID) == nil {
+			refs = append(refs, f)
+		}
+	}
+	rows.Close()
+
+	out := []map[string]any{}
+	for _, rem := range findings.Remediations(refs) {
+		mits := []map[string]string{}
+		detection := ""
+		if e := attackdata.Lookup(rem.TechniqueID); e != nil {
+			for _, m := range e.Mitigations {
+				mits = append(mits, map[string]string{"id": "", "name": m.Name, "description": m.Description})
+			}
+			detection = e.Detection
+		}
+		out = append(out, map[string]any{
+			"techniqueId": rem.TechniqueID, "techniqueName": rem.TechniqueName, "tactic": rem.Tactic,
+			"severity": rem.Severity, "controlClasses": rem.ControlClasses,
+			"findingCount": rem.FindingCount, "agentCount": rem.AgentCount,
+			"missed": rem.Missed, "detectedOnly": rem.DetectedOnly,
+			"recommendedTargets": rem.RecommendedTargets, "mitigations": mits, "detection": detection,
+		})
+	}
+	respond(w, out)
+}
