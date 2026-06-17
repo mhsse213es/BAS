@@ -943,12 +943,12 @@ code {
           </div>
         </div>
         <div class="kpi-row">
-          <div class="kpi-card stat-tile dash-soon" title="Findings triage — coming soon">
+          <div class="kpi-card stat-tile" onclick="showTab('findings')" title="View findings">
             <div class="stat-top">
               <div><div class="kpi-label">Open findings</div><div class="kpi-value" id="kpi-findings-val">—</div></div>
-              <div class="stat-icon" style="background:rgba(154,169,188,0.12);color:var(--muted)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 14V2.5h8L9.5 5.5 11 8.5H3"/></svg></div>
+              <div class="stat-icon" style="background:rgba(218,54,51,0.12);color:var(--danger)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 14V2.5h8L9.5 5.5 11 8.5H3"/></svg></div>
             </div>
-            <div class="kpi-sub">awaiting triage backend</div>
+            <div class="kpi-sub" id="kpi-findings-sub">awaiting triage</div>
           </div>
           <div class="kpi-card stat-tile" onclick="showTab('runs')" title="View runs">
             <div class="stat-top">
@@ -2336,15 +2336,38 @@ function openCampaignDetail(id) {
       : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Campaign report export — coming soon">Export report · soon</button>' +
         '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run campaign — coming soon">Re-run · soon</button>';
     document.getElementById('results-export').innerHTML = actions;
-    // Recommended next steps — greyed until a campaign-level remediation backend exists.
-    var recs = '<div class="dash-soon" style="margin-top:0.9rem;border:1px dashed var(--border);border-radius:var(--radius-lg);padding:0.6rem 0.75rem;position:relative">' +
-      '<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.3rem">Recommended next steps</div>' +
-      '<div class="tiny muted">Prioritised remediations for this campaign’s gaps will appear here once the findings backend lands.</div></div>';
+    // Recommended next steps — filled async from this campaign's findings.
     document.getElementById('results-body').innerHTML = head + mix +
       '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0.5rem 0">Per-agent runs</div>' +
-      runs + skips + recs;
+      runs + skips +
+      '<div id="cmp-recs" style="margin-top:0.9rem"></div>';
     document.getElementById('results-overlay').classList.add('open');
+    renderCampaignRecs(c.id);
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+// renderCampaignRecs shows this campaign's Top Open findings and Top Regressions
+// (not the whole fleet) — the actionable next steps for the run.
+function renderCampaignRecs(campaignId) {
+  apicall('/api/findings').then(function(fs) {
+    var el = document.getElementById('cmp-recs');
+    if (!el) return;
+    var mine = (fs || []).filter(function(f) { return f.lastCampaignId === campaignId; });
+    var open = mine.filter(function(f) { return f.status === 'open'; }).slice(0, 5);
+    var regr = mine.filter(function(f) { return f.reopenedCount > 0 && f.status === 'open'; }).slice(0, 3);
+    var hdr = function(t) { return '<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0.5rem 0 0.3rem">' + t + '</div>'; };
+    var rowf = function(f) {
+      return '<div class="lrow" style="cursor:pointer" onclick="showTab(\'findings\');setTimeout(function(){openFinding(\'' + x(f.id) + '\')},150)">' +
+        '<div class="lmain"><div class="lt">' + x(f.techniqueName || f.techniqueId) + '</div>' +
+        '<div class="ls"><span class="tech-id">' + x(f.techniqueId) + '</span> · ' + x(f.controlClass) + ' · ' + x(f.agentId) + '</div></div>' +
+        '<div class="lr">' + findingSevBadge(f.severity, f.exposureState) + '</div></div>';
+    };
+    if (!open.length && !regr.length) {
+      el.innerHTML = hdr('Recommended next steps') + '<div class="tiny muted">No open findings for this campaign.</div>';
+      return;
+    }
+    el.innerHTML = (open.length ? hdr('Top open findings') + open.map(rowf).join('') : '') +
+      (regr.length ? hdr('Top regressions') + regr.map(rowf).join('') : '');
+  }).catch(function() {});
 }
 function openRunFromCampaign(runId) {
   apicall('/api/scenarios/runs').then(function(runs) {
@@ -4331,6 +4354,29 @@ function loadDashboard() {
           '</div>';
       }).join('');
     }
+
+    // Open findings KPI + Top exposure gaps
+    apicall('/api/findings').then(function(fs) {
+      var open = (fs || []).filter(function(f) { return f.status === 'open'; });
+      var el = document.getElementById('kpi-findings-val');
+      if (el) { el.textContent = open.length; el.style.color = open.length ? 'var(--danger)' : 'var(--success)'; }
+      var sub = document.getElementById('kpi-findings-sub');
+      if (sub) { var crit = open.filter(function(f) { return f.severity === 'Critical'; }).length; sub.textContent = crit ? crit + ' critical' : (open.length ? 'awaiting triage' : 'none open'); }
+      var gaps = document.getElementById('dash-gaps');
+      if (gaps) {
+        gaps.classList.remove('dash-soon');
+        var bodyEl = gaps.querySelector('.dash-panel-body');
+        var top = open.slice(0, 5);
+        if (bodyEl) {
+          bodyEl.innerHTML = top.length ? top.map(function(f) {
+            return '<div class="lrow" style="cursor:pointer" onclick="showTab(\'findings\');setTimeout(function(){openFinding(\'' + x(f.id) + '\')},150)">' +
+              '<div class="lmain"><div class="lt">' + x(f.techniqueName || f.techniqueId) + '</div>' +
+              '<div class="ls"><span class="tech-id">' + x(f.techniqueId) + '</span> · ' + x(f.controlClass) + ' · ' + x(f.agentId) + '</div></div>' +
+              '<div class="lr">' + findingSevBadge(f.severity, f.exposureState) + '</div></div>';
+          }).join('') : '<div class="empty" style="padding:1.5rem">No open findings.</div>';
+        }
+      }
+    }).catch(function() {});
 
     // Recent campaigns
     apicall('/api/campaigns').then(function(cs) {
