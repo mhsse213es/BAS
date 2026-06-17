@@ -555,6 +555,53 @@ code {
 .kpi-value { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; margin-bottom: 0.25rem; }
 .kpi-sub { font-size: 0.72rem; color: var(--muted); }
 
+/* ── Dashboard north-star primitives ──────────────────────────────────────── */
+/* Stat tile: KPI card with a sparkline footer + trend chip. */
+.stat-tile { position: relative; display: flex; flex-direction: column; }
+.stat-tile .stat-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+.stat-tile .stat-icon {
+  width: 28px; height: 28px; border-radius: var(--radius); display: flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+}
+.stat-tile .stat-spark { margin-top: 0.55rem; line-height: 0; }
+.trend { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.68rem; font-weight: 600; }
+.trend.up   { color: var(--success); }
+.trend.down { color: var(--danger); }
+.trend.flat { color: var(--muted); }
+.dot-live {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 6px var(--accent); display: inline-block; animation: blink 1.5s infinite;
+}
+
+/* Ring gauge: centred value overlaid on the gauge SVG. */
+.ring { position: relative; width: 124px; height: 124px; flex-shrink: 0; }
+.ring-c {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 0.05rem;
+}
+.ring-c .rv { font-family: var(--font-display); font-size: 1.7rem; font-weight: 700; line-height: 1; }
+.ring-c .rl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+
+/* Live row: campaign/finding row with icon + progress. */
+.lrow { display: flex; align-items: center; gap: 0.7rem; padding: 0.55rem 0; border-bottom: 1px solid rgba(34,50,74,0.45); }
+.lrow:last-child { border-bottom: none; }
+.lrow .lic { width: 30px; height: 30px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.lrow .lmain { flex: 1; min-width: 0; }
+.lrow .lt { font-size: 0.8rem; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 0.4rem; }
+.lrow .ls { font-size: 0.7rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lrow .lr { text-align: right; flex-shrink: 0; }
+.prog { height: 5px; border-radius: 3px; background: var(--elevated); overflow: hidden; margin-top: 0.4rem; }
+.prog > i { display: block; height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.4s ease; }
+
+/* Greyed "coming soon" placeholder for not-yet-built sections. */
+.dash-soon { position: relative; opacity: 0.55; }
+.dash-soon::after {
+  content: "Coming soon"; position: absolute; top: 0.55rem; right: 0.7rem;
+  font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); border: 1px dashed var(--border); border-radius: 999px; padding: 0.1rem 0.45rem;
+}
+.dash-panel.dash-soon, .stat-tile.dash-soon, .kpi-card.dash-soon { border-style: dashed; }
+
 .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; margin-bottom: 0.875rem; }
 .dash-panel {
   background: var(--surface); border: 1px solid var(--border);
@@ -3617,6 +3664,45 @@ function donutSVG(segs, size, stroke) {
     off += len;
   });
   return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' + c + '</svg>';
+}
+
+// sparkSVG — minimal sparkline (polyline + soft fill) for KPI tiles.
+function sparkSVG(data, w, h, color) {
+  w = w || 110; h = h || 32; color = color || 'var(--accent)';
+  if (!data || data.length < 2) return '<svg width="' + w + '" height="' + h + '"></svg>';
+  var max = Math.max.apply(null, data), min = Math.min.apply(null, data), rng = (max - min) || 1;
+  var pts = data.map(function(v, i) { return [i / (data.length - 1) * w, h - ((v - min) / rng) * (h - 6) - 3]; });
+  var d = pts.map(function(p, i) { return (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' ');
+  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
+    '<path d="' + d + ' L' + w + ' ' + h + ' L0 ' + h + ' Z" fill="' + color + '" opacity="0.12"/>' +
+    '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
+// gaugeSVG — 270° arc gauge for a 0–100 value. Colour reflects the band.
+function gaugeSVG(value, size, stroke) {
+  size = size || 124; stroke = stroke || 14;
+  var r = (size - stroke) / 2, cx = size / 2, cy = size / 2, C = 2 * Math.PI * r;
+  var arc = C * 0.75, len = Math.max(0, Math.min(100, value)) / 100 * arc;
+  var col = value >= 75 ? 'var(--success)' : value >= 50 ? 'var(--warning)' : 'var(--danger)';
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--elevated)" stroke-width="' + stroke +
+      '" stroke-dasharray="' + arc + ' ' + C + '" stroke-linecap="round" transform="rotate(135 ' + cx + ' ' + cy + ')"/>' +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + col + '" stroke-width="' + stroke +
+      '" stroke-dasharray="' + len + ' ' + C + '" stroke-linecap="round" transform="rotate(135 ' + cx + ' ' + cy + ')" style="transition:stroke-dasharray .8s cubic-bezier(.2,.8,.2,1)"/></svg>';
+}
+
+// miniBars — small labelled bar chart (e.g. score across recent runs).
+function miniBars(data, w, h) {
+  w = w || 300; h = h || 70;
+  if (!data || !data.length) return '<svg width="100%" height="' + h + '"></svg>';
+  var max = Math.max.apply(null, data.map(function(d) { return d.v; })) || 1, bw = w / data.length, out = '';
+  data.forEach(function(d, i) {
+    var bh = d.v / max * (h - 16);
+    out += '<rect x="' + (i * bw + bw * 0.18).toFixed(1) + '" y="' + (h - bh - 12).toFixed(1) + '" width="' + (bw * 0.64).toFixed(1) +
+      '" height="' + bh.toFixed(1) + '" rx="2" fill="' + (d.color || 'var(--accent)') + '"/>' +
+      '<text x="' + (i * bw + bw / 2).toFixed(1) + '" y="' + (h - 2) + '" text-anchor="middle" font-size="8.5" fill="var(--muted)" font-family="var(--font-mono)">' + x(d.l) + '</text>';
+  });
+  return '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' + out + '</svg>';
 }
 
 function loadDashboard() {
