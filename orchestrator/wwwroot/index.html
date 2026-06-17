@@ -414,6 +414,10 @@ code {
 .s-dispatched::before { background: #6aabff; }
 .s-partial    { background: rgba(210,153,34,0.1);  color: #e8b84b; border: 1px solid rgba(210,153,34,0.2); }
 .s-partial::before { background: #e8b84b; }
+.s-empty      { background: rgba(154,169,188,0.08); color: var(--muted); border: 1px solid rgba(154,169,188,0.14); }
+.s-empty::before { background: var(--muted); }
+.s-stopped    { background: rgba(210,153,34,0.1);  color: #e8b84b; border: 1px solid rgba(210,153,34,0.2); }
+.s-stopped::before { background: #e8b84b; }
 
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
@@ -751,6 +755,12 @@ code {
           </svg>
           Live Runs
         </div>
+        <div class="nav-item" data-tab="campaigns" onclick="showTab('campaigns')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M2 13V3M2 13h12M5 11V7M8.5 11V5M12 11V8"/>
+          </svg>
+          Campaigns
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Visibility</div>
@@ -884,6 +894,11 @@ code {
               <div class="empty" style="padding:1.5rem">No data yet.</div>
             </div>
           </div>
+        </div>
+
+        <div class="dash-panel" style="margin-bottom:1.25rem">
+          <div class="dash-panel-hdr">Recent Campaigns</div>
+          <div class="dash-panel-body" id="dash-campaigns"><div class="empty" style="padding:1.5rem">No campaigns yet.</div></div>
         </div>
 
         <div class="dash-panel">
@@ -1175,6 +1190,23 @@ code {
         </div>
       </div>
 
+      <!-- Campaigns -->
+      <div id="tab-campaigns" style="display:none">
+        <div class="sec-hdr">
+          <h2>Campaigns <span id="campaign-cnt" class="cnt">0</span></h2>
+          <div>
+            <button class="btn btn-outline btn-sm" onclick="loadCampaigns()">Refresh</button>
+            <button class="btn btn-primary btn-sm" id="campaign-new-btn" onclick="openCampaignLaunch()">&#9654; New campaign</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Campaign</th><th>Scenario</th><th>Targets</th><th>Status</th><th>Result mix</th><th>Started</th></tr></thead>
+            <tbody id="campaigns-body"><tr><td colspan="6" class="empty">No campaigns yet.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Users -->
       <div id="tab-users" style="display:none">
         <div class="sec-hdr">
@@ -1340,6 +1372,36 @@ code {
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closePicker()">Cancel</button>
       <button id="picker-apply" class="btn btn-outline-green btn-sm" onclick="applyPicker()">&#9654; Use selection</button>
+    </div>
+  </div>
+</div>
+
+<!-- Launch Campaign Modal -->
+<div id="campaign-overlay" class="overlay">
+  <div class="modal" style="min-width:480px">
+    <h3>New Campaign</h3>
+    <label class="modal-lbl">Name</label>
+    <input id="cmp-name" type="text" placeholder="e.g. Q2 Ransomware Readiness" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:inherit">
+    <label class="modal-lbl">Scenario</label>
+    <select id="cmp-scenario"></select>
+    <label class="modal-lbl">Execution mode</label>
+    <select id="cmp-mode">
+      <option value="posture">Posture — read-only, safe on any host</option>
+      <option value="telemetry">Telemetry — identity-safe (approved windows)</option>
+      <option value="lab">Lab — full-fidelity (isolated range only)</option>
+    </select>
+    <label class="modal-lbl">Targets <span class="tiny muted" id="cmp-target-cnt">(0 selected)</span></label>
+    <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem">
+      <select id="cmp-filter-os" onchange="renderCampaignTargets()" style="flex:1"><option value="">All OS</option><option value="windows">Windows</option><option value="linux">Linux</option><option value="darwin">macOS</option></select>
+      <select id="cmp-filter-env" onchange="renderCampaignTargets()" style="flex:1"><option value="">All environments</option></select>
+      <button class="btn btn-outline btn-sm" onclick="cmpSelectAllFiltered()">Select all</button>
+    </div>
+    <div id="cmp-targets" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
+    <label class="modal-lbl">Notes (optional)</label>
+    <input id="cmp-notes" type="text" placeholder="optional" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:inherit">
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeCampaignLaunch()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="submitCampaign()">&#9654; Launch</button>
     </div>
   </div>
 </div>
@@ -1554,7 +1616,7 @@ code {
 <div id="toast"></div>
 
 <script>
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', users:'Users', compliance:'Compliance', settings:'Settings' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', users:'Users', compliance:'Compliance', settings:'Settings' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#238636','#8957e5','#1a9f8a'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -1649,7 +1711,7 @@ function bootApp() {
 }
 
 function showTab(name) {
-  ['dashboard','agents','scenarios','runs','users','compliance','settings'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','users','compliance','settings'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -1658,6 +1720,7 @@ function showTab(name) {
   var titleEl = document.getElementById('header-page-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
   if (name === 'users') loadUsers();
+  if (name === 'campaigns') loadCampaigns();
   if (name === 'dashboard') loadDashboard();
   if (name === 'compliance') initComplianceTab();
   if (name === 'settings' && ROLE === 'admin') { loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
@@ -1980,6 +2043,147 @@ function scenarioCardHTML(s) {
             '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
           '</div>' +
         '</div></div>';
+}
+
+// ── Campaigns ────────────────────────────────────────────────────────────────
+function campaignMixBar(s) {
+  var seg = function(v, c) { return v > 0 ? '<i style="flex:' + v + ';background:' + c + '"></i>' : ''; };
+  var total = (s.prevented || 0) + (s.detected || 0) + (s.missed || 0);
+  if (!total) return '<span class="tiny muted">—</span>';
+  return '<div class="seg-bar" title="Prevented ' + (s.prevented || 0) + ' · Detected ' + (s.detected || 0) + ' · Missed ' + (s.missed || 0) +
+    (s.skipped ? ' · Skipped ' + s.skipped + ' agents' : '') + '" style="display:flex;height:8px;border-radius:5px;overflow:hidden;background:var(--elevated);min-width:120px">' +
+    seg(s.prevented, 'var(--success)') + seg(s.detected, 'var(--warning)') + seg(s.missed, 'var(--danger)') + '</div>';
+}
+function loadCampaigns() {
+  apicall('/api/campaigns').then(function(list) {
+    list = list || [];
+    document.getElementById('campaign-cnt').textContent = list.length;
+    var tb = document.getElementById('campaigns-body');
+    if (!list.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">No campaigns yet.</td></tr>'; return; }
+    tb.innerHTML = list.map(function(c) {
+      var s = c.summary || {};
+      var prog = (s.status === 'running') ? ' <span class="tiny muted">' + (s.progress || 0) + '%</span>' : '';
+      return '<tr style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
+        '<td class="cell-main">' + x(c.name) + '</td>' +
+        '<td class="tiny muted">' + x(c.scenarioName) + '</td>' +
+        '<td class="tiny">' + (s.dispatched || 0) + '/' + (s.targets || 0) + (s.skipped ? ' <span class="tiny muted">(' + s.skipped + ' skipped)</span>' : '') + '</td>' +
+        '<td><span class="sbadge s-' + x(s.status || 'running') + '">' + x(s.status || '—') + '</span>' + prog + '</td>' +
+        '<td>' + campaignMixBar(s) + '</td>' +
+        '<td class="tiny muted">' + fmtDate(c.startedAt) + '</td></tr>';
+    }).join('');
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function openCampaignDetail(id) {
+  apicall('/api/campaigns/' + encodeURIComponent(id)).then(function(c) {
+    var s = c.summary || {};
+    document.getElementById('results-title').textContent = c.name + ' — Campaign';
+    var tile = function(lbl, val, col) {
+      return '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-lg);padding:0.6rem 0.75rem">' +
+        '<div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">' + lbl + '</div>' +
+        '<div style="font-size:1.3rem;font-weight:700;font-family:var(--font-display);color:' + (col || 'var(--text)') + '">' + val + '</div></div>';
+    };
+    var head = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.9rem">' +
+      tile('Status', x(s.status || '—')) +
+      tile('Progress', (s.progress || 0) + '%', 'var(--accent)') +
+      tile('Dispatched', (s.dispatched || 0) + '/' + (s.targets || 0)) +
+      tile('Skipped', s.skipped || 0, s.skipped ? 'var(--warning)' : 'var(--muted)') + '</div>';
+    var mix = '<div style="margin-bottom:0.9rem">' + campaignMixBar(s) + '</div>';
+    var runs = (c.runs || []).map(function(rn) {
+      var col = rn.status === 'completed' ? 'var(--success)' : rn.status === 'failed' ? 'var(--danger)' : 'var(--muted)';
+      return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border)">' +
+        '<span class="sbadge s-' + x(rn.status) + '">' + x(rn.status) + '</span>' +
+        '<code style="font-size:0.72rem">' + x(rn.agentId) + '</code>' +
+        '<span style="margin-left:auto;font-weight:600;color:' + col + '">' + (rn.preventionScore ? Math.round(rn.preventionScore) + '%' : '—') + '</span>' +
+        '<button class="btn btn-outline btn-sm" onclick="openRunFromCampaign(\'' + x(rn.runId) + '\')">Results</button></div>';
+    }).join('') || '<div class="empty">No child runs dispatched.</div>';
+    var skips = (c.skips || []).length
+      ? '<div style="margin-top:0.9rem"><div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.4rem">Skipped targets</div>' +
+        c.skips.map(function(k) { return '<div style="display:flex;gap:0.6rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><code>' + x(k.agentId) + '</code><span class="tiny muted" style="margin-left:auto">' + x(k.reason) + '</span></div>'; }).join('') + '</div>'
+      : '';
+    var actions = (s.status === 'running')
+      ? '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>' : '';
+    document.getElementById('results-export').innerHTML = actions;
+    document.getElementById('results-body').innerHTML = head + mix +
+      '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0.5rem 0">Per-agent runs</div>' +
+      runs + skips;
+    document.getElementById('results-overlay').classList.add('open');
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+function openRunFromCampaign(runId) {
+  apicall('/api/scenarios/runs').then(function(runs) {
+    var r = (runs || []).find(function(x) { return x.id === runId; });
+    if (r) viewRunResults(r); else showToast('Run not found', 'err');
+  });
+}
+function stopCampaign(id) {
+  if (!confirm('Stop this campaign? Running child runs will be marked partial.')) return;
+  apicall('/api/campaigns/' + encodeURIComponent(id) + '/stop', { method: 'POST' })
+    .then(function() { showToast('Campaign stopped', 'ok'); openCampaignDetail(id); loadCampaigns(); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+var _cmpSel = {};
+function openCampaignLaunch() {
+  if (!scenarios.length) { showToast('Scenarios not loaded yet', 'err'); return; }
+  if (!agents.length) { showToast('No agents registered yet', 'err'); return; }
+  document.getElementById('cmp-name').value = '';
+  document.getElementById('cmp-notes').value = '';
+  document.getElementById('cmp-scenario').innerHTML = scenarios.map(function(s) {
+    return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>';
+  }).join('');
+  document.getElementById('cmp-mode').value = 'posture';
+  var envs = {};
+  agents.forEach(function(a) { if (a.envLabel) envs[a.envLabel] = true; });
+  document.getElementById('cmp-filter-env').innerHTML = '<option value="">All environments</option>' +
+    Object.keys(envs).map(function(e) { return '<option value="' + x(e) + '">' + x(e) + '</option>'; }).join('');
+  _cmpSel = {};
+  renderCampaignTargets();
+  document.getElementById('campaign-overlay').classList.add('open');
+}
+function closeCampaignLaunch() { document.getElementById('campaign-overlay').classList.remove('open'); }
+function cmpAgentOS(a) { var o = (a.osVersion || '').toLowerCase(); return o.indexOf('windows') >= 0 ? 'windows' : (o.indexOf('darwin') >= 0 || o.indexOf('macos') >= 0) ? 'darwin' : 'linux'; }
+function cmpFiltered() {
+  var os = document.getElementById('cmp-filter-os').value, env = document.getElementById('cmp-filter-env').value;
+  return agents.filter(function(a) {
+    if (a.status === 'offline') return false;
+    if (os && cmpAgentOS(a) !== os) return false;
+    if (env && a.envLabel !== env) return false;
+    return true;
+  });
+}
+function renderCampaignTargets() {
+  var list = cmpFiltered();
+  document.getElementById('cmp-targets').innerHTML = list.length ? list.map(function(a) {
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+      '<input type="checkbox" ' + (_cmpSel[a.agentId] ? 'checked' : '') + ' onchange="_cmpSel[\'' + x(a.agentId) + '\']=this.checked;cmpUpdateCount()">' +
+      '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' · ' + cmpAgentOS(a) + '</span></label>';
+  }).join('') : '<div class="empty tiny">No online agents match the filter.</div>';
+  cmpUpdateCount();
+}
+function cmpSelectAllFiltered() { cmpFiltered().forEach(function(a) { _cmpSel[a.agentId] = true; }); renderCampaignTargets(); }
+function cmpUpdateCount() {
+  var n = Object.keys(_cmpSel).filter(function(k) { return _cmpSel[k]; }).length;
+  document.getElementById('cmp-target-cnt').textContent = '(' + n + ' selected)';
+}
+function submitCampaign() {
+  var name = document.getElementById('cmp-name').value.trim();
+  var agentIds = Object.keys(_cmpSel).filter(function(k) { return _cmpSel[k]; });
+  if (!name) { showToast('Campaign name required', 'err'); return; }
+  if (!agentIds.length) { showToast('Select at least one target agent', 'err'); return; }
+  var mode = document.getElementById('cmp-mode').value;
+  if (mode !== 'posture' && !confirm(mode.toUpperCase() + ' mode runs real techniques and will generate alerts. Continue?')) return;
+  var body = {
+    name: name, scenarioId: document.getElementById('cmp-scenario').value, agentIds: agentIds,
+    mode: mode, confirmLive: mode !== 'posture', confirmLab: mode === 'lab',
+    notes: document.getElementById('cmp-notes').value.trim()
+  };
+  apicall('/api/campaigns', { method: 'POST', body: JSON.stringify(body) }).then(function(res) {
+    if (res && res.error) { showToast('Launch failed: ' + res.error, 'err'); return; }
+    closeCampaignLaunch();
+    showToast('Campaign launched — ' + res.dispatched + ' dispatched, ' + res.skipped + ' skipped', 'ok');
+    showTab('campaigns'); loadCampaigns();
+  }).catch(function(e) { showToast('Launch failed: ' + e.message, 'err'); });
 }
 
 function loadRuns() {
@@ -3578,6 +3782,22 @@ function loadDashboard() {
           '</div>';
       }).join('');
     }
+
+    // Recent campaigns
+    apicall('/api/campaigns').then(function(cs) {
+      var el = document.getElementById('dash-campaigns');
+      if (!el) return;
+      var recent = (cs || []).slice(0, 5);
+      if (!recent.length) { el.innerHTML = '<div class="empty" style="padding:1.5rem">No campaigns yet.</div>'; return; }
+      el.innerHTML = recent.map(function(c) {
+        var s = c.summary || {};
+        return '<div class="dash-run-row" style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
+          '<span class="sbadge s-' + x(s.status || 'running') + '" style="flex-shrink:0">' + x(s.status || '—') + '</span>' +
+          '<span class="dash-run-name">' + x(c.name) + '</span>' +
+          '<span class="tiny muted">' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents</span>' +
+          '<span style="font-size:0.8rem;font-weight:600;flex-shrink:0">' + (s.progress || 0) + '%</span></div>';
+      }).join('');
+    }).catch(function() {});
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
 }
