@@ -941,10 +941,26 @@ code {
           </div>
         </div>
 
-        <div class="dash-panel" style="margin-bottom:1.25rem">
-          <div class="dash-panel-hdr">Control Effectiveness</div>
-          <div class="dash-panel-body" id="dash-donut" style="padding:1.1rem 1.25rem">
-            <div class="empty">No run data yet.</div>
+        <div class="dash-grid" style="grid-template-columns:1.3fr 1fr;margin-bottom:1.25rem">
+          <div class="dash-panel">
+            <div class="dash-panel-hdr">Posture Score</div>
+            <div class="dash-panel-body" style="display:flex;gap:1.25rem;align-items:center;padding:1.1rem 1.25rem">
+              <div class="ring" id="dash-gauge"><div class="empty" style="font-size:0.7rem">—</div></div>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;justify-content:space-between;margin-bottom:0.6rem">
+                  <div><div class="kpi-label">Trend</div><div id="dash-posture-trend" style="font-family:var(--font-display);font-size:1.05rem;font-weight:600">—</div></div>
+                  <div style="text-align:right;opacity:0.55"><div class="kpi-label">vs target</div><div style="font-family:var(--font-display);font-size:1.05rem;font-weight:600;color:var(--muted)">— <span style="font-size:0.6rem">soon</span></div></div>
+                </div>
+                <div id="dash-posture-bars"></div>
+                <div class="tiny muted" id="dash-posture-cap" style="margin-top:0.5rem;font-size:0.7rem">Based on recent validated runs.</div>
+              </div>
+            </div>
+          </div>
+          <div class="dash-panel">
+            <div class="dash-panel-hdr">Control Effectiveness</div>
+            <div class="dash-panel-body" id="dash-donut" style="padding:1.1rem 1.25rem">
+              <div class="empty">No run data yet.</div>
+            </div>
           </div>
         </div>
 
@@ -3765,6 +3781,21 @@ function loadDashboard() {
       else                              tEl.innerHTML = '<span class="trend flat">—</span> ';
       var prevSeries = scored.slice(0, 8).map(prevPctOf).reverse();
       document.getElementById('kpi-score-spark').innerHTML = sparkSVG(prevSeries, 110, 30, 'var(--success)');
+
+      // Posture card — ring gauge + trend + run-history mini-bars.
+      document.getElementById('dash-gauge').innerHTML = gaugeSVG(prevPct, 124, 14) +
+        '<div class="ring-c"><span class="rv" style="color:' + prevCol + '">' + prevPct + '</span><span class="rl">of 100</span></div>';
+      document.getElementById('dash-posture-trend').textContent = s.trend || 'Stable';
+      var barRuns = scored.slice(0, 6).reverse();
+      var barData = barRuns.map(function(r) {
+        var d = new Date(r.completedAt || r.startedAt);
+        var v = prevPctOf(r);
+        return { l: isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate(), v: v,
+                 color: v >= 80 ? 'var(--success)' : v >= 50 ? 'var(--warning)' : 'var(--danger)' };
+      });
+      document.getElementById('dash-posture-bars').innerHTML = miniBars(barData, 320, 64);
+      document.getElementById('dash-posture-cap').textContent = 'Prevention across the last ' + barRuns.length +
+        ' validated run' + (barRuns.length === 1 ? '' : 's') + '.';
     }
 
     // KPI — ATT&CK coverage: share of distinct exercised techniques prevented at
