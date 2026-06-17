@@ -845,6 +845,12 @@ code {
           </svg>
           Findings
         </div>
+        <div class="nav-item" data-tab="remediation" onclick="showTab('remediation')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M6.5 2.5l3 3-4.5 4.5-3-3z"/><path d="M9 6l3.5-3.5a2 2 0 0 0-2.8-2.8L6 3"/><path d="M4.5 11.5l-2.5 2.5"/>
+          </svg>
+          Remediation
+        </div>
         <div class="nav-item" data-tab="compliance" onclick="showTab('compliance')">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <rect x="2" y="1" width="12" height="14" rx="1"/>
@@ -1409,6 +1415,16 @@ code {
         </div>
       </div>
 
+      <!-- Remediation -->
+      <div id="tab-remediation" style="display:none">
+        <div style="margin-bottom:1rem">
+          <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Remediation</h1>
+          <div style="font-size:0.8rem;color:var(--muted)">Prioritized fixes from your open findings, with authoritative MITRE ATT&amp;CK mitigations. Re-validate after applying a fix.</div>
+        </div>
+        <div class="kpi-row" id="rem-tiles"></div>
+        <div id="rem-list"><div class="empty" style="padding:2rem">Loading…</div></div>
+      </div>
+
       <!-- Users -->
       <div id="tab-users" style="display:none">
         <div class="sec-hdr">
@@ -1818,7 +1834,7 @@ code {
 <div id="toast"></div>
 
 <script>
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', users:'Users', compliance:'Compliance', settings:'Settings' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', users:'Users', compliance:'Compliance', settings:'Settings' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#238636','#8957e5','#1a9f8a'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -1916,7 +1932,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','users','compliance','settings'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','users','compliance','settings'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -1932,6 +1948,7 @@ function showTab(name) {
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'coverage') loadCoverage();
   if (name === 'findings') loadFindings();
+  if (name === 'remediation') loadRemediations();
   if (name === 'dashboard') loadDashboard();
   if (name === 'compliance') initComplianceTab();
   if (name === 'settings' && ROLE === 'admin') { loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
@@ -2651,6 +2668,71 @@ function setFindingStatus(id, status) {
   apicall('/api/findings/' + encodeURIComponent(id) + '/status', { method: 'POST', body: JSON.stringify({ status: status }) })
     .then(function() { showToast('Finding ' + status.replace('_', ' '), 'ok'); openFinding(id); loadFindings(); })
     .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// ── Remediation ──────────────────────────────────────────────────────────────
+function loadRemediations() {
+  apicall('/api/remediations').then(function(list) {
+    window._rems = list || [];
+    renderRemTiles(); renderRemList();
+  }).catch(function(e) { document.getElementById('rem-list').innerHTML = '<div class="empty" style="padding:2rem">' + x(e.message) + '</div>'; });
+}
+function renderRemTiles() {
+  var l = window._rems || [];
+  var findingsTotal = l.reduce(function(s, r) { return s + (r.findingCount || 0); }, 0);
+  var crit = l.filter(function(r) { return r.severity === 'Critical'; }).length;
+  var tile = function(lbl, val, col) {
+    return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
+      '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
+  };
+  document.getElementById('rem-tiles').innerHTML =
+    tile('Open remediations', l.length, l.length ? 'var(--warning)' : 'var(--success)') +
+    tile('Affected findings', findingsTotal, findingsTotal ? 'var(--danger)' : 'var(--success)') +
+    tile('Critical remediations', crit, crit ? 'var(--danger)' : 'var(--muted)');
+}
+function renderRemList() {
+  var l = window._rems || [];
+  var el = document.getElementById('rem-list');
+  if (!l.length) { el.innerHTML = '<div class="empty" style="padding:2rem">No open remediations — nothing to fix right now.</div>'; return; }
+  el.innerHTML = l.map(function(r, i) {
+    return '<div class="dash-panel" style="margin-bottom:0.75rem"><div class="dash-panel-body" style="display:flex;gap:0.9rem;align-items:flex-start">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem">' + findingSevBadge(r.severity, '') +
+          ' <span class="tech-id">' + x(r.techniqueId) + '</span></div>' +
+        '<div style="font-weight:600;color:var(--text);margin-bottom:0.3rem">' + x(r.techniqueName) + '</div>' +
+        '<div class="tiny muted" style="display:flex;gap:1rem;flex-wrap:wrap">' +
+          '<span>' + (r.controlClasses || []).map(x).join(', ') + '</span>' +
+          '<span>Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + ' on ' + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's') + '</span>' +
+          '<span>Missed: ' + r.missed + ' · Detected only: ' + r.detectedOnly + '</span></div>' +
+      '</div>' +
+      '<button class="btn btn-outline btn-sm" style="flex-shrink:0" onclick="openRemediation(' + i + ')">View</button>' +
+      '<button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="revalidateRemediation(\'' + x(r.techniqueId) + '\')">&#8635; Re-validate</button>' +
+      '</div></div>';
+  }).join('');
+}
+function openRemediation(i) {
+  var r = (window._rems || [])[i];
+  if (!r) return;
+  document.getElementById('results-title').textContent = r.techniqueId + ' — Remediation';
+  document.getElementById('results-export').innerHTML =
+    '<button class="btn btn-primary btn-sm" onclick="revalidateRemediation(\'' + x(r.techniqueId) + '\')">&#8635; Re-validate</button>';
+  var mits = (r.mitigations || []).map(function(m) {
+    return '<div style="padding:0.4rem 0;border-bottom:1px solid var(--border)"><div style="font-weight:600;font-size:0.8rem">' + x(m.name) + '</div>' +
+      (m.description ? '<div class="tiny muted" style="margin-top:0.2rem;line-height:1.5">' + x(m.description) + '</div>' : '') + '</div>';
+  }).join('') || '<div class="tiny muted">No ATT&CK mitigations listed for this technique.</div>';
+  var head = function(t) { return '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0.7rem 0 0.3rem">' + t + '</div>'; };
+  document.getElementById('results-body').innerHTML =
+    '<div style="margin-bottom:0.6rem">' + findingSevBadge(r.severity, '') + ' <span class="tech-id">' + x(r.techniqueId) + '</span> ' + x(r.techniqueName) + '</div>' +
+    '<div class="tiny muted">Closes ' + r.findingCount + ' finding(s) on ' + r.agentCount + ' agent(s) · Missed ' + r.missed + ' · Detected only ' + r.detectedOnly + '</div>' +
+    head('ATT&CK Mitigations') + mits +
+    (r.detection ? head('ATT&CK Detection Guidance') + '<div class="tiny" style="color:var(--text-dim);line-height:1.55">' + x(r.detection) + '</div>' : '') +
+    head('Affected agents') + '<div class="tiny muted">' + (r.recommendedTargets || []).map(x).join(', ') + '</div>' +
+    '<div class="tiny muted" style="margin-top:0.8rem;opacity:0.8">Mitigation &amp; detection content © MITRE ATT&CK&reg;.</div>';
+  document.getElementById('results-overlay').classList.add('open');
+}
+function revalidateRemediation(techniqueId) {
+  showToast('Re-validate ' + techniqueId + ' — pick a scenario + target', 'ok');
+  openModal();
 }
 
 function loadRuns() {
