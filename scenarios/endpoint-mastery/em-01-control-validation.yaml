@@ -1,0 +1,194 @@
+id: em-01-control-validation
+name: "Endpoint Mastery 01 — Endpoint Security Control Validation"
+description: >
+  ENDPOINT MASTERY — Layer 1. Validates that the endpoint's preventive controls
+  are present, configured, and actually enforcing — the question most BAS tools
+  skip. Read-only posture probes only: no attack is executed, nothing is changed.
+
+  Coverage: EDR/AV real-time protection, AV signature freshness, tamper
+  protection, host firewall (all profiles), Attack Surface Reduction (ASR) rules,
+  application control (AppLocker/WDAC), and BitLocker drive encryption.
+
+  VERDICTS: PASS = control present and enforcing. FAIL = control absent, disabled,
+  or weak (a real exposure). SKIP = control not applicable on this host/SKU.
+  SAFETY: every step is read-only (Get-* / query APIs). Production-safe anywhere.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-1
+  - control-validation
+  - posture
+  - edr
+  - hardening
+mitre_phases:
+  - defense-evasion
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+
+steps:
+  - name: "EDR/AV real-time protection enforcing (Defender or 3rd-party AV)"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: queries Get-MpComputerStatus / SecurityCenter2 AntiVirusProduct. No change."
+    telemetry:
+      - "No attack telemetry — posture query only"
+    detection:
+      - "Config assurance: real-time protection must be ON"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $rtp = $null
+      try { $rtp = (Get-MpComputerStatus).RealTimeProtectionEnabled } catch {}
+      if ($rtp -eq $true) { Write-Output "PASS: Microsoft Defender real-time protection is ENABLED and enforcing. [BAS-SIM]"; return }
+      # Fall back to any registered 3rd-party AV reporting "enabled" via SecurityCenter2.
+      $av = Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction SilentlyContinue
+      foreach ($p in $av) { if (($p.productState -band 0x1000) -ne 0) { Write-Output "PASS: 3rd-party AV '$($p.displayName)' reports real-time protection ENABLED. [BAS-SIM]"; return } }
+      if ($rtp -eq $false) { Write-Output "FAIL: Defender real-time protection is DISABLED — endpoint is unprotected against on-access threats."; return }
+      Write-Output "FAIL: No active real-time AV/EDR protection detected on this endpoint."
+    cleanup: ""
+
+  - name: "Antivirus signature freshness (definitions not stale)"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: Get-MpComputerStatus signature age. No change."
+    telemetry:
+      - "No attack telemetry — posture query only"
+    detection:
+      - "Config assurance: AV signatures should be <= 3 days old"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $age = $null
+      try { $age = (Get-MpComputerStatus).AntivirusSignatureAge } catch {}
+      if ($age -eq $null) { Write-Output "SKIP: signature age unavailable — Defender not the active AV (check 3rd-party AV console)."; return }
+      if ($age -le 3) { Write-Output "PASS: AV signatures are $age day(s) old — within freshness window. [BAS-SIM]" }
+      else { Write-Output "FAIL: AV signatures are $age days old — stale definitions miss recent threats. Force an update." }
+    cleanup: ""
+
+  - name: "Defender Tamper Protection enabled"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: Get-MpComputerStatus IsTamperProtected. No change."
+    telemetry:
+      - "No attack telemetry — posture query only"
+    detection:
+      - "Config assurance: Tamper Protection stops attackers disabling the AV"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $tp = $null
+      try { $tp = (Get-MpComputerStatus).IsTamperProtected } catch {}
+      if ($tp -eq $null) { Write-Output "SKIP: Tamper Protection state unavailable — not a Defender-managed endpoint."; return }
+      if ($tp -eq $true) { Write-Output "PASS: Defender Tamper Protection is ENABLED — AV settings are locked against attacker tampering. [BAS-SIM]" }
+      else { Write-Output "FAIL: Tamper Protection is OFF — an attacker with admin can silently disable the AV before attacking." }
+    cleanup: ""
+
+  - name: "Host firewall enabled on all profiles (Domain/Private/Public)"
+    technique_id: T1562.004
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: Get-NetFirewallProfile. No rule change."
+    telemetry:
+      - "No attack telemetry — posture query only"
+    detection:
+      - "Config assurance: all three firewall profiles must be enabled"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $profiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+      if (-not $profiles) { Write-Output "SKIP: Windows Firewall service not queryable (3rd-party firewall may be in use)."; return }
+      $off = $profiles | Where-Object { -not $_.Enabled } | Select-Object -ExpandProperty Name
+      if (-not $off) { Write-Output "PASS: Host firewall is ENABLED on all profiles (Domain/Private/Public). [BAS-SIM]" }
+      else { Write-Output "FAIL: Host firewall is DISABLED on profile(s): $($off -join ', ') — lateral movement and C2 face no host-level filtering." }
+    cleanup: ""
+
+  - name: "Attack Surface Reduction (ASR) rules configured"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: Get-MpPreference ASR rule ids/actions. No change."
+    telemetry:
+      - "No attack telemetry — posture query only"
+    detection:
+      - "Config assurance: ASR rules in Block mode blunt Office/script abuse"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $pref = Get-MpPreference -ErrorAction SilentlyContinue
+      if (-not $pref) { Write-Output "SKIP: ASR state unavailable — Defender not the active engine."; return }
+      $ids = @($pref.AttackSurfaceReductionRules_Ids)
+      $acts = @($pref.AttackSurfaceReductionRules_Actions)
+      $blocking = 0; for ($i=0; $i -lt $acts.Count; $i++) { if ($acts[$i] -eq 1) { $blocking++ } }
+      if ($ids.Count -eq 0) { Write-Output "FAIL: No ASR rules configured — Office/script/LOLBin abuse has no surface-reduction control."; return }
+      if ($blocking -gt 0) { Write-Output "PASS: $blocking of $($ids.Count) ASR rule(s) in Block mode. [BAS-SIM]" }
+      else { Write-Output "FAIL: $($ids.Count) ASR rule(s) present but NONE in Block mode (audit-only) — they observe but do not stop attacks." }
+    cleanup: ""
+
+  - name: "Application control present (AppLocker or WDAC)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: AppLocker policy + CI/WDAC status query. No change."
+    telemetry:
+      - "No attack telemetry — posture query only"
+    detection:
+      - "Config assurance: allowlisting is the strongest execution control"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $hasAppLocker = $false
+      try { $pol = Get-AppLockerPolicy -Effective -ErrorAction Stop; if ($pol.RuleCollections | Where-Object { $_.Count -gt 0 }) { $hasAppLocker = $true } } catch {}
+      $wdac = $false
+      try { $ci = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\Microsoft\Windows\DeviceGuard' -ErrorAction Stop; if ($ci.CodeIntegrityPolicyEnforcementStatus -ge 1) { $wdac = $true } } catch {}
+      if ($hasAppLocker -and $wdac) { Write-Output "PASS: Both AppLocker rules and WDAC code-integrity enforcement are active. [BAS-SIM]"; return }
+      if ($hasAppLocker) { Write-Output "PASS: AppLocker policy with active rule collections is enforced. [BAS-SIM]"; return }
+      if ($wdac) { Write-Output "PASS: WDAC code-integrity policy is enforced. [BAS-SIM]"; return }
+      Write-Output "FAIL: No application control (AppLocker/WDAC) detected — any binary or script is allowed to execute."
+    cleanup: ""
+
+  - name: "BitLocker drive encryption on the system volume"
+    technique_id: T1486
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only: Get-BitLockerVolume on the system drive. No change."
+    telemetry:
+      - "No attack telemetry — posture query only"
+    detection:
+      - "Config assurance: system drive must be encrypted (data-at-rest)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sys = $env:SystemDrive
+      $vol = $null
+      try { $vol = Get-BitLockerVolume -MountPoint $sys -ErrorAction Stop } catch {}
+      if (-not $vol) { Write-Output "SKIP: BitLocker not queryable on $sys (feature absent or 3rd-party FDE in use)."; return }
+      if ($vol.ProtectionStatus -eq 'On' -or $vol.VolumeStatus -eq 'FullyEncrypted') { Write-Output "PASS: BitLocker is ON for system drive $sys (status=$($vol.VolumeStatus)). [BAS-SIM]" }
+      else { Write-Output "FAIL: System drive $sys is NOT encrypted (protection=$($vol.ProtectionStatus)) — data-at-rest is exposed on theft/loss." }
+    cleanup: ""

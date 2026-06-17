@@ -1,0 +1,171 @@
+id: em-03-memory-attacks
+name: "Endpoint Mastery 03 — Memory-Based Attacks"
+description: >
+  ENDPOINT MASTERY — Layer 3. Most endpoint products claim memory protection;
+  few organizations ever validate it. This exercises the memory-tampering
+  primitives advanced EDRs are judged on — LSASS handle access, cross-process
+  memory read, cross-process memory write (injection precursor), and a suspended-
+  process spawn (hollowing precursor).
+
+  TIERS:
+  - telemetry-safe (production-safe): read-only handle/memory-access probes that
+    generate Sysmon EID 10 without modifying any target.
+  - lab-only (isolated range): cross-process memory WRITE and CREATE_SUSPENDED
+    spawn — benign markers only, no remote thread, no code execution, but they
+    trip EDR by design.
+
+  VERDICTS: FAIL = the memory operation succeeded unblocked (the control allowed
+  it). PASS = a control (RunAsPPL/Credential Guard/EDR) denied it. SKIP = the
+  target/primitive was unavailable.
+  SAFETY: no shellcode, no remote thread, no payload execution. All spawned
+  helper processes are benign and terminated. [BAS-SIM] tagged.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-3
+  - memory
+  - process-injection
+  - t1055
+  - credential-access
+  - lsass
+mitre_phases:
+  - defense-evasion
+  - privilege-escalation
+  - credential-access
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+
+steps:
+  - name: "LSASS handle access (PROCESS_VM_READ) — RunAsPPL / Credential Guard test"
+    technique_id: T1003.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Opens a read handle to lsass.exe with PROCESS_VM_READ, then immediately closes it. No memory is read or dumped. Generates Sysmon EID 10."
+    telemetry:
+      - "Sysmon EID 10: SourceImage=powershell.exe TargetImage=lsass.exe GrantedAccess=0x1010"
+      - "Defender/EDR: LSASS access alert if credential-theft protection active"
+    detection:
+      - "EDR: handle to LSASS with VM_READ — Sigma sysmon_lsass_memdump.yml family"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sig = @'
+      using System;
+      using System.Runtime.InteropServices;
+      public static class BasMem {
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint a, bool i, int pid);
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr h);
+      }
+      '@
+      try { Add-Type -TypeDefinition $sig -ErrorAction Stop } catch { Write-Output "SKIP: could not compile P/Invoke probe (no .NET compiler available)."; return }
+      $lsass = Get-Process lsass -ErrorAction SilentlyContinue | Select-Object -First 1
+      if (-not $lsass) { Write-Output "SKIP: lsass.exe not found."; return }
+      $h = [BasMem]::OpenProcess(0x1010, $false, $lsass.Id)  # PROCESS_VM_READ|PROCESS_QUERY_INFORMATION
+      if ($h -ne [IntPtr]::Zero) {
+        [void][BasMem]::CloseHandle($h)
+        Write-Output "FAIL: opened a PROCESS_VM_READ handle to LSASS unblocked — credential memory is reachable. Enable RunAsPPL/Credential Guard + EDR LSASS protection. Sysmon EID 10 expected."
+      } else {
+        $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        Write-Output "PASS: access to LSASS was DENIED (Win32 error $err) — RunAsPPL/Credential Guard/EDR protected LSASS memory. [BAS-SIM]"
+      }
+    cleanup: ""
+
+  - name: "Cross-process memory read handle to benign target (OpenProcess VM_READ)"
+    technique_id: T1055
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Spawns a benign suspended-free notepad, opens it with PROCESS_VM_READ, closes the handle, terminates notepad. No memory read."
+    telemetry:
+      - "Sysmon EID 10: process access to the helper process"
+      - "Sysmon EID 1: notepad.exe (helper) spawn + termination"
+    detection:
+      - "EDR: cross-process handle acquisition with VM_READ from a script host"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sig = @'
+      using System;
+      using System.Runtime.InteropServices;
+      public static class BasMem2 {
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint a, bool i, int pid);
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr h);
+      }
+      '@
+      try { Add-Type -TypeDefinition $sig -ErrorAction Stop } catch { Write-Output "SKIP: could not compile P/Invoke probe."; return }
+      $t = Start-Process 'notepad.exe' -WindowStyle Hidden -PassThru
+      Start-Sleep -Milliseconds 300
+      if (-not $t) { Write-Output "SKIP: could not start helper process."; return }
+      $h = [BasMem2]::OpenProcess(0x0010, $false, $t.Id)  # PROCESS_VM_READ
+      $ok = $h -ne [IntPtr]::Zero
+      if ($ok) { [void][BasMem2]::CloseHandle($h) }
+      Stop-Process -Id $t.Id -Force -ErrorAction SilentlyContinue
+      if ($ok) { Write-Output "FAIL: cross-process VM_READ handle to a benign target succeeded unblocked — process-access tampering is unrestricted. Sysmon EID 10 expected. [BAS-SIM]" }
+      else { Write-Output "PASS: cross-process memory-read handle was denied — EDR/policy restricts process access. [BAS-SIM]" }
+    cleanup: |
+      Get-Process notepad -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq '' } | Stop-Process -Force -ErrorAction SilentlyContinue
+
+  - name: "Cross-process memory WRITE (injection precursor, benign marker) [lab]"
+    technique_id: T1055
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    reversible: true
+    blast_radius: "Spawns benign notepad, VirtualAllocEx + WriteProcessMemory writes a [BAS-SIM] marker string into it. NO remote thread, NO execution. Terminates notepad. Trips EDR by design."
+    telemetry:
+      - "Sysmon EID 10: process access with VM_WRITE|VM_OPERATION"
+      - "EDR: VirtualAllocEx + WriteProcessMemory into a remote process (RWX allocation)"
+    detection:
+      - "EDR: classic injection precursor (alloc+write without legitimate reason)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sig = @'
+      using System;
+      using System.Runtime.InteropServices;
+      using System.Text;
+      public static class BasInj {
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint a, bool i, int pid);
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr VirtualAllocEx(IntPtr h, IntPtr addr, uint size, uint type, uint prot);
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern bool WriteProcessMemory(IntPtr h, IntPtr addr, byte[] buf, uint size, out UIntPtr written);
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern bool VirtualFreeEx(IntPtr h, IntPtr addr, uint size, uint type);
+        [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr h);
+      }
+      '@
+      try { Add-Type -TypeDefinition $sig -ErrorAction Stop } catch { Write-Output "SKIP: could not compile P/Invoke probe."; return }
+      $t = Start-Process 'notepad.exe' -WindowStyle Hidden -PassThru
+      Start-Sleep -Milliseconds 300
+      if (-not $t) { Write-Output "SKIP: could not start helper process."; return }
+      $h = [BasInj]::OpenProcess(0x002A, $false, $t.Id)  # VM_OPERATION|VM_WRITE|VM_READ
+      $wrote = $false
+      if ($h -ne [IntPtr]::Zero) {
+        $buf = [System.Text.Encoding]::ASCII.GetBytes('[BAS-SIM-INJECT] T1055 marker - no code, no thread')
+        $rem = [BasInj]::VirtualAllocEx($h, [IntPtr]::Zero, [uint32]$buf.Length, 0x3000, 0x04)  # MEM_COMMIT|RESERVE, PAGE_READWRITE
+        if ($rem -ne [IntPtr]::Zero) {
+          $written = [UIntPtr]::Zero
+          $wrote = [BasInj]::WriteProcessMemory($h, $rem, $buf, [uint32]$buf.Length, [ref]$written)
+          [void][BasInj]::VirtualFreeEx($h, $rem, 0, 0x8000)  # MEM_RELEASE
+        }
+        [void][BasInj]::CloseHandle($h)
+      }
+      Stop-Process -Id $t.Id -Force -ErrorAction SilentlyContinue
+      if ($wrote) { Write-Output "FAIL: VirtualAllocEx + WriteProcessMemory into a remote process succeeded unblocked — code-injection primitives are available. EDR should have alerted. [BAS-SIM]" }
+      else { Write-Output "PASS: remote memory allocation/write was denied or prevented — EDR blocked the injection precursor. [BAS-SIM]" }
+    cleanup: |
+      Get-Process notepad -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq '' } | Stop-Process -Force -ErrorAction SilentlyContinue
+
+  - name: "Suspended-process spawn (process-hollowing precursor) [lab]"
+    technique_id: T1055.012
+    framework: custom

@@ -1,0 +1,181 @@
+id: em-02-attack-behavioral-depth
+name: "Endpoint Mastery 02 — ATT&CK Behavioral Validation (variant depth)"
+description: >
+  ENDPOINT MASTERY — Layer 2. Most BAS tools test one PowerShell technique once.
+  This validates DEPTH: the same execution technique (T1059.001) across the
+  variant matrix attackers actually use — encoded, obfuscated, AMSI-probe,
+  download-cradle pattern, reflective in-memory load, and a v2 downgrade attempt.
+  A control that catches plain PowerShell but misses the encoded/obfuscated
+  variant is a real, common gap this surfaces.
+
+  VERDICTS: FAIL = the variant executed unblocked (a control allowed it).
+  PASS = a control (AMSI/ASR/CLM/EDR) blocked or prevented it. SKIP = variant
+  not applicable on this host.
+  SAFETY: every payload is benign ([BAS-SIM] echo / harmless reflection). No
+  network egress, no file drop, no persistence. Telemetry-safe, production-safe.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-2
+  - execution
+  - powershell
+  - t1059.001
+  - amsi
+  - behavioral
+mitre_phases:
+  - execution
+  - defense-evasion
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+
+steps:
+  - name: "PowerShell encoded command (-EncodedCommand benign)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs powershell.exe -EncodedCommand with a base64 'Write-Output [BAS-SIM-ENC]'. No payload."
+    telemetry:
+      - "Sysmon EID 1 / Security EID 4688: powershell.exe with -EncodedCommand"
+      - "PowerShell EID 4104: decoded script block"
+    detection:
+      - "EDR/SIEM: powershell.exe -enc base64 — Sigma proc_creation_win_powershell_base64_encoded.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('Write-Output "[BAS-SIM-ENC] T1059.001 encoded"'))
+      $p = Start-Process 'powershell.exe' -ArgumentList "-nop -w hidden -EncodedCommand $b64" -PassThru -WindowStyle Hidden
+      if ($p) { $p.WaitForExit(8000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      if ($ec -eq 0) { Write-Output "FAIL: encoded PowerShell executed unblocked — no control stopped -EncodedCommand. Expect Sysmon EID 1 + PS 4104." }
+      else { Write-Output "PASS: encoded PowerShell was blocked/prevented (exit $ec) — AMSI/ASR/CLM/EDR caught the encoded variant. [BAS-SIM]" }
+    cleanup: ""
+
+  - name: "AMSI inspection probe (benign AMSI test marker)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Evaluates the documented benign AMSI test marker string in-session. No malware; tests whether AMSI is inspecting and the AV responds."
+    telemetry:
+      - "Defender EID 1116/1117 (AMSI detection) if AMSI is active"
+      - "PowerShell EID 4104: script block containing the test marker"
+    detection:
+      - "Validates AMSI is wired to the AV and inspecting script content"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $marker = 'AMSI Test ' + 'Sample: 7e72c3ce-861b-4339-8740-0ac1484c1386'
+      $blocked = $false
+      try { $sb = [ScriptBlock]::Create('$x = "' + $marker + '"; Write-Output "[BAS-SIM-AMSI] evaluated"'); & $sb | Out-Null }
+      catch { $blocked = $true }
+      if ($blocked) { Write-Output "PASS: AMSI/AV inspected and blocked the benign AMSI test marker — script-content scanning is active. [BAS-SIM]" }
+      else { Write-Output "FAIL: AMSI test marker evaluated without interception — AMSI is not inspecting PowerShell content (or AV not registered as a provider)." }
+    cleanup: ""
+
+  - name: "Obfuscated PowerShell (string-concat / format-operator)"
+    technique_id: T1027
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Builds a benign command via concatenation + the -f format operator, then invokes it. No payload."
+    telemetry:
+      - "PowerShell EID 4104: de-obfuscated script block"
+      - "Sysmon EID 1: powershell.exe"
+    detection:
+      - "EDR/SIEM: obfuscation heuristics (concat/format/backtick) — Sigma posh_ps_obfuscation_*"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $blocked = $false
+      try { $cmd = ('W'+'rite-Out'+'put'); $arg = ('{0}{1}{2}' -f '[BAS','-SIM-','OBF]'); & $cmd $arg | Out-Null }
+      catch { $blocked = $true }
+      if ($blocked) { Write-Output "PASS: obfuscated PowerShell was blocked — AMSI/EDR de-obfuscation caught it. [BAS-SIM]" }
+      else { Write-Output "FAIL: obfuscated PowerShell (concat + format operator) executed unblocked — obfuscation defeated content inspection." }
+    cleanup: ""
+
+  - name: "Download-cradle pattern (IEX over in-memory string)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Invoke-Expression of a benign in-memory string mimicking a (Net.WebClient).DownloadString IEX cradle. NO network call — string is local."
+    telemetry:
+      - "PowerShell EID 4104: IEX / Invoke-Expression on dynamic content"
+      - "Sysmon EID 1: powershell.exe"
+    detection:
+      - "EDR/SIEM: IEX of dynamic content — Sigma posh_ps_download_iex.yml family"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $blocked = $false
+      $cradle = 'Write-Output "[BAS-SIM-CRADLE] T1059.001 IEX pattern (no network)"'
+      try { Invoke-Expression $cradle | Out-Null }
+      catch { $blocked = $true }
+      if ($blocked) { Write-Output "PASS: IEX download-cradle pattern was blocked — Constrained Language Mode / AMSI / EDR intercepted Invoke-Expression. [BAS-SIM]" }
+      else { Write-Output "FAIL: IEX cradle pattern executed unblocked — dynamic code execution via Invoke-Expression is unrestricted." }
+    cleanup: ""
+
+  - name: "Reflective in-memory assembly load"
+    technique_id: T1620
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Loads an already-present benign .NET assembly (mscorlib) reflectively via [Reflection.Assembly]::Load. No disk artifact, no malicious code."
+    telemetry:
+      - "PowerShell EID 4104: [Reflection.Assembly]::Load usage"
+      - "Sysmon EID 7: in-process assembly/module activity"
+    detection:
+      - "EDR: reflective .NET load from PowerShell — fileless execution heuristic"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $blocked = $false
+      try {
+        $bytes = [System.IO.File]::ReadAllBytes([System.Reflection.Assembly]::GetAssembly([int]).Location)
+        $asm = [System.Reflection.Assembly]::Load($bytes)
+        if (-not $asm) { throw 'load returned null' }
+      } catch { $blocked = $true }
+      if ($blocked) { Write-Output "PASS: reflective in-memory assembly load was blocked — CLM/EDR prevented fileless .NET loading. [BAS-SIM]" }
+      else { Write-Output "FAIL: reflective [Reflection.Assembly]::Load executed unblocked — fileless in-memory code loading is unrestricted." }
+    cleanup: ""
+
+  - name: "PowerShell v2 downgrade attempt (AMSI/CLM bypass vector)"
+    technique_id: T1059.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Launches powershell.exe -version 2 with a benign echo. PSv2 lacks AMSI/ScriptBlock logging — its mere availability is the finding."
+    telemetry:
+      - "Sysmon EID 1 / Security EID 4688: powershell.exe -version 2"
+      - "Absence of PS 4104 for the child = blind-spot confirmation"
+    detection:
+      - "EDR/SIEM: powershell -version 2 — Sigma proc_creation_win_powershell_downgrade.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = Start-Process 'powershell.exe' -ArgumentList '-version 2 -nop -c "Write-Output [BAS-SIM-PSv2]"' -PassThru -WindowStyle Hidden
+      if ($p) { $p.WaitForExit(8000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      if ($ec -eq 0) { Write-Output "FAIL: PowerShell v2 launched successfully — a downgrade AMSI/ScriptBlock-logging bypass is available on this host. Remove the PSv2 engine feature." }
+      else { Write-Output "PASS: PowerShell v2 downgrade was blocked/unavailable (exit $ec) — the .NET 2.0/PSv2 engine is not present. [BAS-SIM]" }
+    cleanup: ""
