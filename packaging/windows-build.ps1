@@ -38,6 +38,19 @@ function Log  { param($msg) Write-Host "[+] $msg" -ForegroundColor Green  }
 function Warn { param($msg) Write-Host "[!] $msg" -ForegroundColor Yellow }
 function Err  { param($msg) Write-Host "[x] $msg" -ForegroundColor Red; exit 1 }
 
+# ConvertToLF rewrites a file with Unix (LF) line endings, no BOM. The build
+# host may check shell/config files out as CRLF (core.autocrlf); these run on
+# the client's Linux box, where a CRLF is fatal (bash reads `set -o pipefail\r`
+# and rejects `pipefail\r`). Normalize on copy so the bundle is always LF
+# regardless of the host's git settings.
+function ConvertToLF {
+    param($path)
+    if (Test-Path $path) {
+        $t = (Get-Content $path -Raw) -replace "`r`n", "`n"
+        [System.IO.File]::WriteAllText($path, $t)
+    }
+}
+
 # -- 0. Verify prerequisites --------------------------------------------------
 Log "Verifying prerequisites..."
 
@@ -214,6 +227,15 @@ Copy-Item "$ComposeDir\.env.example"            "$OutDir\.env.example"
 Copy-Item "$ComposeDir\systemd\bas-compose.service" "$OutDir\systemd\bas-compose.service"
 
 Copy-Item "$ComposeDir\setup.conf" "$OutDir\setup.conf"
+
+# Normalize the Linux-targeted scripts/config to LF. (verify.sh / verify-sig.sh
+# are normalized at their own copy sites below.)
+foreach ($f in @("setup.sh", "setup.conf", ".env.example",
+                 "docker-compose.yml", "docker-compose.prod.yml",
+                 "systemd\bas-compose.service")) {
+    ConvertToLF (Join-Path $OutDir $f)
+}
+Log "  Normalized bundled shell/config files to LF"
 
 # -- 6. Copy scenarios and wwwroot (if present) --------------------------------
 $ScenariosDir = Join-Path $RepoRoot "scenarios"
