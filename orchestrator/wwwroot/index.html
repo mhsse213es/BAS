@@ -1342,13 +1342,18 @@ code {
 
       <!-- Campaigns -->
       <div id="tab-campaigns" style="display:none">
-        <div class="sec-hdr">
-          <h2>Campaigns <span id="campaign-cnt" class="cnt">0</span></h2>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
           <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Campaigns <span id="campaign-cnt" class="cnt">0</span></h1>
+            <div style="font-size:0.8rem;color:var(--muted)">One scenario fanned out across many agents. Open a campaign for the per-agent breakdown and result mix.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0">
+            <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Scheduled campaigns — coming soon">Schedule · soon</button>
             <button class="btn btn-outline btn-sm" onclick="loadCampaigns()">Refresh</button>
             <button class="btn btn-primary btn-sm" id="campaign-new-btn" onclick="openCampaignLaunch()">&#9654; New campaign</button>
           </div>
         </div>
+        <div id="campaign-toolbar" style="margin-bottom:0.9rem"></div>
         <div class="tbl-wrap">
           <table>
             <thead><tr><th>Campaign</th><th>Scenario</th><th>Targets</th><th>Status</th><th>Result mix</th><th>Started</th></tr></thead>
@@ -2222,24 +2227,43 @@ function campaignMixBar(s) {
     (s.skipped ? ' · Skipped ' + s.skipped + ' agents' : '') + '" style="display:flex;height:8px;border-radius:5px;overflow:hidden;background:var(--elevated);min-width:120px">' +
     seg(s.prevented, 'var(--success)') + seg(s.detected, 'var(--warning)') + seg(s.missed, 'var(--danger)') + '</div>';
 }
+var CAMPAIGN_TAB = 'all';
 function loadCampaigns() {
   apicall('/api/campaigns').then(function(list) {
-    list = list || [];
-    document.getElementById('campaign-cnt').textContent = list.length;
-    var tb = document.getElementById('campaigns-body');
-    if (!list.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">No campaigns yet.</td></tr>'; return; }
-    tb.innerHTML = list.map(function(c) {
-      var s = c.summary || {};
-      var prog = (s.status === 'running') ? ' <span class="tiny muted">' + (s.progress || 0) + '%</span>' : '';
-      return '<tr style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
-        '<td class="cell-main">' + x(c.name) + '</td>' +
-        '<td class="tiny muted">' + x(c.scenarioName) + '</td>' +
-        '<td class="tiny">' + (s.dispatched || 0) + '/' + (s.targets || 0) + (s.skipped ? ' <span class="tiny muted">(' + s.skipped + ' skipped)</span>' : '') + '</td>' +
-        '<td><span class="sbadge s-' + x(s.status || 'running') + '">' + x(s.status || '—') + '</span>' + prog + '</td>' +
-        '<td>' + campaignMixBar(s) + '</td>' +
-        '<td class="tiny muted">' + fmtDate(c.startedAt) + '</td></tr>';
-    }).join('');
+    window._campaigns = list || [];
+    document.getElementById('campaign-cnt').textContent = window._campaigns.length;
+    renderCampaignToolbar();
+    renderCampaignRows();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+function renderCampaignToolbar() {
+  var list = window._campaigns || [];
+  var count = function(k) { return k === 'all' ? list.length : list.filter(function(c) { return (c.summary || {}).status === k; }).length; };
+  var seg = [['all', 'All'], ['running', 'Running'], ['completed', 'Completed'], ['partial', 'Partial'], ['failed', 'Failed'], ['stopped', 'Stopped'], ['empty', 'Empty']]
+    .filter(function(o) { return o[0] === 'all' || count(o[0]) > 0; })
+    .map(function(o) { return '<button class="' + (CAMPAIGN_TAB === o[0] ? 'on' : '') + '" onclick="setCampaignTab(\'' + o[0] + '\')">' + o[1] + ' <span style="opacity:.6">' + count(o[0]) + '</span></button>'; }).join('');
+  document.getElementById('campaign-toolbar').innerHTML = '<div class="cov-seg">' + seg + '</div>';
+}
+function setCampaignTab(v) { CAMPAIGN_TAB = v; renderCampaignToolbar(); renderCampaignRows(); }
+function renderCampaignRows() {
+  var list = (window._campaigns || []).filter(function(c) { return CAMPAIGN_TAB === 'all' || (c.summary || {}).status === CAMPAIGN_TAB; });
+  var tb = document.getElementById('campaigns-body');
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">No campaigns' + (CAMPAIGN_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
+  tb.innerHTML = list.map(function(c) {
+    var s = c.summary || {};
+    var status = '<span class="sbadge s-' + x(s.status || 'running') + '">' + x(s.status || '—') + '</span>';
+    if (s.status === 'running') {
+      status += '<div class="prog" style="width:90px;margin-top:5px"><i style="width:' + (s.progress || 0) + '%"></i></div>' +
+        '<span class="tiny muted">' + (s.progress || 0) + '%</span>';
+    }
+    return '<tr style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
+      '<td><div class="cell-main">' + x(c.name) + '</div><div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem">' + x(c.id) + '</div></td>' +
+      '<td class="tiny muted">' + x(c.scenarioName) + '</td>' +
+      '<td class="tiny">' + (s.dispatched || 0) + '/' + (s.targets || 0) + (s.skipped ? ' <span class="tiny muted">(' + s.skipped + ' skipped)</span>' : '') + '</td>' +
+      '<td>' + status + '</td>' +
+      '<td>' + campaignMixBar(s) + '</td>' +
+      '<td class="tiny muted">' + fmtDate(c.startedAt) + '</td></tr>';
+  }).join('');
 }
 
 function openCampaignDetail(id) {
