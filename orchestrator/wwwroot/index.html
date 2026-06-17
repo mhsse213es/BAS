@@ -909,25 +909,35 @@ code {
           </div>
         </div>
         <div class="kpi-row">
-          <div class="kpi-card" onclick="showTab('agents')" title="View agents">
-            <div class="kpi-label">Agents Online</div>
-            <div class="kpi-value" id="kpi-agents-val">—</div>
-            <div class="kpi-sub" id="kpi-agents-sub">of 0 registered</div>
+          <div class="kpi-card stat-tile dash-soon" title="Findings triage — coming soon">
+            <div class="stat-top">
+              <div><div class="kpi-label">Open findings</div><div class="kpi-value" id="kpi-findings-val">—</div></div>
+              <div class="stat-icon" style="background:rgba(154,169,188,0.12);color:var(--muted)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 14V2.5h8L9.5 5.5 11 8.5H3"/></svg></div>
+            </div>
+            <div class="kpi-sub">awaiting triage backend</div>
           </div>
-          <div class="kpi-card" onclick="showTab('runs')" title="View runs">
-            <div class="kpi-label">Prevention Score</div>
-            <div class="kpi-value" id="kpi-score-val">—</div>
-            <div class="kpi-sub" id="kpi-score-sub">no runs yet</div>
+          <div class="kpi-card stat-tile" onclick="showTab('runs')" title="View runs">
+            <div class="stat-top">
+              <div><div class="kpi-label">Prevention score</div><div class="kpi-value" id="kpi-score-val">—</div></div>
+              <div class="stat-icon" style="background:rgba(35,134,54,0.12);color:var(--success)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/></svg></div>
+            </div>
+            <div class="kpi-sub"><span id="kpi-score-trend"></span><span id="kpi-score-sub">no runs yet</span></div>
+            <div class="stat-spark" id="kpi-score-spark"></div>
           </div>
-          <div class="kpi-card" onclick="showTab('runs')" title="View runs">
-            <div class="kpi-label">Exposure Score</div>
-            <div class="kpi-value" id="kpi-prev-val">—</div>
-            <div class="kpi-sub" id="kpi-prev-sub">tactic-weighted risk</div>
+          <div class="kpi-card stat-tile" onclick="showTab('runs')" title="ATT&CK coverage">
+            <div class="stat-top">
+              <div><div class="kpi-label">ATT&amp;CK coverage</div><div class="kpi-value" id="kpi-cov-val">—</div></div>
+              <div class="stat-icon" style="background:rgba(210,153,34,0.12);color:var(--warning)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.4"/></svg></div>
+            </div>
+            <div class="kpi-sub" id="kpi-cov-sub">tactic coverage</div>
+            <div class="stat-spark" id="kpi-cov-spark"></div>
           </div>
-          <div class="kpi-card" onclick="showTab('runs')" title="View runs">
-            <div class="kpi-label">Total Runs</div>
-            <div class="kpi-value" id="kpi-runs-val">—</div>
-            <div class="kpi-sub" id="kpi-runs-sub">all time</div>
+          <div class="kpi-card stat-tile" onclick="showTab('campaigns')" title="View campaigns">
+            <div class="stat-top">
+              <div><div class="kpi-label">Active campaigns</div><div class="kpi-value" id="kpi-campaigns-val">—</div></div>
+              <div class="stat-icon" style="background:rgba(47,129,247,0.12);color:var(--accent)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>
+            </div>
+            <div class="kpi-sub"><span class="dot-live"></span> <span id="kpi-campaigns-sub">—</span></div>
           </div>
         </div>
 
@@ -3738,32 +3748,49 @@ function loadDashboard() {
         (lastStr ? ' Last assessment ' + lastStr + '.' : ' No runs yet.');
     }
 
-    // KPI — Agents
-    var online = ag.filter(function(a) { return a.status !== 'offline'; }).length;
-    document.getElementById('kpi-agents-val').textContent = online;
-    document.getElementById('kpi-agents-sub').textContent = 'of ' + ag.length + ' registered';
-
-    // KPI — Latest score
+    // KPI — Prevention score (latest scored run) + trend chip + sparkline of the
+    // last ~8 scored runs (oldest→newest).
     var scored = runs.filter(function(r) { return r.score && (r.score.preventionScore != null || r.score.riskScore != null); });
+    var prevPctOf = function(r) { return Math.round(r.score.preventionScore != null ? r.score.preventionScore : r.score.preventionEffectiveness || 0); };
     if (scored.length) {
       var s = scored[0].score;
-      var prevPct = Math.round(s.preventionScore != null ? s.preventionScore : s.preventionEffectiveness || 0);
+      var prevPct = prevPctOf(scored[0]);
       var prevCol = prevPct >= 80 ? 'var(--success)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
-      var trendStr = s.trend ? ' · ' + s.trend : '';
       document.getElementById('kpi-score-val').textContent = prevPct + '%';
       document.getElementById('kpi-score-val').style.color = prevCol;
-      document.getElementById('kpi-score-sub').textContent = (s.classification || '') + trendStr;
-      var expVal = Math.round(s.exposureScore != null ? s.exposureScore : s.riskScore || 0);
-      var expCol = expVal <= 20 ? 'var(--success)' : expVal <= 50 ? 'var(--warning)' : 'var(--danger)';
-      document.getElementById('kpi-prev-val').textContent = expVal;
-      document.getElementById('kpi-prev-val').style.color = expCol;
-      document.getElementById('kpi-prev-sub').textContent = 'exposure score';
+      document.getElementById('kpi-score-sub').textContent = s.classification || 'latest run';
+      var tEl = document.getElementById('kpi-score-trend');
+      if (s.trend === 'Improving')      tEl.innerHTML = '<span class="trend up">▲</span> ';
+      else if (s.trend === 'Degrading') tEl.innerHTML = '<span class="trend down">▼</span> ';
+      else                              tEl.innerHTML = '<span class="trend flat">—</span> ';
+      var prevSeries = scored.slice(0, 8).map(prevPctOf).reverse();
+      document.getElementById('kpi-score-spark').innerHTML = sparkSVG(prevSeries, 110, 30, 'var(--success)');
     }
 
-    // KPI — Runs
-    var completed = runs.filter(function(r) { return r.status === 'completed'; }).length;
-    document.getElementById('kpi-runs-val').textContent = runs.length;
-    document.getElementById('kpi-runs-sub').textContent = completed + ' completed';
+    // KPI — ATT&CK coverage: share of distinct exercised techniques prevented at
+    // least once (pass|blocked). Sparkline = per-run prevention rate, last ~8.
+    var techCov = {};
+    runs.forEach(function(r) {
+      (r.results || []).forEach(function(c) {
+        var id = c.technique && c.technique.id;
+        if (!id) return;
+        if (c.result === 'pass' || c.result === 'blocked') { techCov[id] = techCov[id] || {}; techCov[id].exercised = true; techCov[id].prevented = true; }
+        else if (c.result === 'fail') { techCov[id] = techCov[id] || {}; techCov[id].exercised = true; }
+      });
+    });
+    var exIds = Object.keys(techCov).filter(function(k) { return techCov[k].exercised; });
+    var prevIds = exIds.filter(function(k) { return techCov[k].prevented; });
+    var covPct = exIds.length ? Math.round(prevIds.length / exIds.length * 100) : 0;
+    var covCol = covPct >= 80 ? 'var(--success)' : covPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    document.getElementById('kpi-cov-val').textContent = exIds.length ? covPct + '%' : '—';
+    document.getElementById('kpi-cov-val').style.color = exIds.length ? covCol : '';
+    document.getElementById('kpi-cov-sub').textContent = exIds.length + ' technique' + (exIds.length === 1 ? '' : 's') + ' tested';
+    var covSeries = runs.slice(0, 8).map(function(r) {
+      var p = 0, f = 0;
+      (r.results || []).forEach(function(c) { if (c.result === 'pass' || c.result === 'blocked') p++; else if (c.result === 'fail') f++; });
+      return (p + f) ? Math.round(p / (p + f) * 100) : 0;
+    }).reverse();
+    document.getElementById('kpi-cov-spark').innerHTML = sparkSVG(covSeries, 110, 30, 'var(--warning)');
 
     // Control effectiveness donut — aggregate verdicts across all runs.
     // Prevented = pass|blocked, Failed = fail, Not scored = error|skipped.
@@ -3899,6 +3926,10 @@ function loadDashboard() {
 
     // Recent campaigns
     apicall('/api/campaigns').then(function(cs) {
+      // KPI — Active campaigns (running now).
+      var running = (cs || []).filter(function(c) { return c.summary && c.summary.status === 'running'; }).length;
+      var cvEl = document.getElementById('kpi-campaigns-val');
+      if (cvEl) { cvEl.textContent = running; document.getElementById('kpi-campaigns-sub').textContent = running ? 'running now' : 'none running'; }
       var el = document.getElementById('dash-campaigns');
       if (!el) return;
       var recent = (cs || []).slice(0, 5);
