@@ -88,6 +88,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/campaigns", h.ListCampaigns)
 		r.Get("/api/campaigns/{id}", h.GetCampaign)
 		r.Get("/api/campaigns/{id}/summary", h.CampaignSummary)
+		r.Get("/api/findings", h.ListFindings)
+		r.Get("/api/findings/{id}", h.GetFinding)
 		r.Get("/api/agents/{agentId}/logs/operational", h.GetOpLogs)
 		r.Get("/api/agents/{agentId}/logs/security", h.GetSecLogs)
 		r.Get("/api/agents/{agentId}/telemetry", h.GetTelemetry)
@@ -115,6 +117,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 			r.Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
 			r.Post("/api/campaigns", h.CreateCampaign)
 			r.Post("/api/campaigns/{id}/stop", h.StopCampaign)
+			r.Post("/api/findings/{id}/status", h.SetFindingStatus)
 
 			// Custom scenario builder
 			r.Post("/api/scenarios", h.CreateScenario)

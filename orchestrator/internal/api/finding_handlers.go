@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"time"
 
+	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/findings"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/go-chi/chi/v5"
 )
 
 // findingAgg is the worst per-run outcome for one (technique, control) key,
@@ -161,4 +164,125 @@ func (h *Handler) applyFinding(ctx context.Context, agentID string, a *findingAg
 		o.RunID, campaignID, o.ObservedAt,
 		clearResolved, resolvedAtSet, resolvedBy, resolvedReason,
 		agentID, a.techID, a.control)
+}
+
+// findingScanner is satisfied by pgx.Rows — lets scanFindings stay storage-agnostic.
+type findingScanner interface {
+	Next() bool
+	Scan(dest ...any) error
+}
+
+const findingCols = `id, agent_id, technique_id, control_class, technique_name, tactic,
+	severity, exposure_state, status, source_type, occurrence_count, reopened_count,
+	last_campaign_id, first_seen, last_seen, resolved_reason`
+
+func scanFindings(rows findingScanner) []map[string]any {
+	out := []map[string]any{}
+	for rows.Next() {
+		var id, agentID, techID, control, name, tactic, severity, exposure, status, source string
+		var occ, reopened int
+		var firstSeen, lastSeen time.Time
+		var lastCampaign, resolvedReason *string
+		if rows.Scan(&id, &agentID, &techID, &control, &name, &tactic, &severity, &exposure, &status, &source,
+			&occ, &reopened, &lastCampaign, &firstSeen, &lastSeen, &resolvedReason) != nil {
+			continue
+		}
+		m := map[string]any{
+			"id": id, "agentId": agentID, "techniqueId": techID, "controlClass": control,
+			"techniqueName": name, "tactic": tactic, "severity": severity, "exposureState": exposure,
+			"status": status, "sourceType": source, "occurrenceCount": occ, "reopenedCount": reopened,
+			"firstSeen": firstSeen, "lastSeen": lastSeen,
+		}
+		if lastCampaign != nil {
+			m["lastCampaignId"] = *lastCampaign
+		}
+		if resolvedReason != nil {
+			m["resolvedReason"] = *resolvedReason
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// ListFindings returns findings, filterable by status/severity/agentId, ordered
+// by severity then recency. GET /api/findings
+func (h *Handler) ListFindings(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	rows, err := h.db.Query(r.Context(),
+		`SELECT `+findingCols+` FROM findings
+		  WHERE ($1='' OR status=$1) AND ($2='' OR severity=$2) AND ($3='' OR agent_id=$3)
+		  ORDER BY CASE severity WHEN 'Critical' THEN 0 WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END,
+		           last_seen DESC`,
+		q.Get("status"), q.Get("severity"), q.Get("agentId"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	respond(w, scanFindings(rows))
+}
+
+// GetFinding returns one finding plus authoritative enrichment, the agent's
+// product snapshot, and the raw ATT&CK data sources. GET /api/findings/{id}
+func (h *Handler) GetFinding(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(), `SELECT `+findingCols+` FROM findings WHERE id=$1`, chi.URLParam(r, "id"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	list := scanFindings(rows)
+	rows.Close()
+	if len(list) == 0 {
+		jsonError(w, "finding not found", http.StatusNotFound)
+		return
+	}
+	f := list[0]
+	if e := attackdata.Lookup(f["techniqueId"].(string)); e != nil {
+		f["enrichment"] = e
+	}
+	var prodRaw, dsRaw []byte
+	h.db.QueryRow(r.Context(), `SELECT security_product_snapshot, attack_data_source FROM findings WHERE id=$1`,
+		f["id"]).Scan(&prodRaw, &dsRaw)
+	var prod, ds []any
+	_ = json.Unmarshal(prodRaw, &prod)
+	_ = json.Unmarshal(dsRaw, &ds)
+	f["productSnapshot"] = prod
+	f["dataSources"] = ds
+	respond(w, f)
+}
+
+// SetFindingStatus sets an analyst-chosen status. POST /api/findings/{id}/status
+// body {status, reason?}. Analyst+.
+func (h *Handler) SetFindingStatus(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Status string `json:"status"`
+		Reason string `json:"reason"`
+	}
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		jsonError(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	valid := map[string]bool{"open": true, "triaged": true, "remediated": true, "risk_accepted": true}
+	if !valid[req.Status] {
+		jsonError(w, "invalid status — use open | triaged | remediated | risk_accepted", http.StatusBadRequest)
+		return
+	}
+	by := "unknown"
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+		by = c.UserID
+	}
+	ct, err := h.db.Exec(r.Context(),
+		`UPDATE findings SET status=$1, resolved_by=$2, resolved_reason=$3,
+		        resolved_at = CASE WHEN $1='remediated' THEN NOW() ELSE NULL END
+		   WHERE id=$4`,
+		req.Status, by, req.Reason, chi.URLParam(r, "id"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if ct.RowsAffected() == 0 {
+		jsonError(w, "finding not found", http.StatusNotFound)
+		return
+	}
+	respond(w, map[string]any{"status": req.Status})
 }
