@@ -602,6 +602,28 @@ code {
 }
 .dash-panel.dash-soon, .stat-tile.dash-soon, .kpi-card.dash-soon { border-style: dashed; }
 
+/* ── ATT&CK Coverage matrix ───────────────────────────────────────────────── */
+.mx { display: flex; gap: 7px; min-width: max-content; align-items: flex-start; }
+.mx-col { width: 150px; flex-shrink: 0; }
+.mx-col-h { font-size: 0.66rem; padding: 0.4rem 0.5rem; border-bottom: 2px solid var(--border); margin-bottom: 0.4rem; }
+.mx-col-h .tac-name { font-weight: 600; color: var(--text); }
+.mx-col-h .tac-cnt { color: var(--muted); margin-top: 0.15rem; }
+.mx-cell {
+  position: relative; font-size: 0.6rem; line-height: 1.25; padding: 0.3rem 0.4rem;
+  margin-bottom: 3px; border-radius: 4px; border: 1px solid var(--border);
+  cursor: pointer; background: var(--elevated); transition: opacity .12s, border-color .12s;
+}
+.mx-cell:hover { border-color: var(--accent); }
+.mx-cell .mc-id { display: block; font-family: var(--font-mono); font-size: 0.56rem; color: var(--muted); }
+.mx-cell.cov  { border-left: 3px solid var(--success); }
+.mx-cell.part { border-left: 3px solid var(--warning); }
+.mx-cell.gap  { border-left: 3px solid var(--danger); }
+.mx-cell.none { border-left: 3px solid var(--border); opacity: 0.7; }
+.cov-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.cov-seg button { background: var(--surface); color: var(--muted); border: none; padding: 0.3rem 0.7rem; font-size: 0.72rem; cursor: pointer; font-family: inherit; }
+.cov-seg button:not(:last-child) { border-right: 1px solid var(--border); }
+.cov-seg button.on { background: var(--accent); color: #fff; }
+
 .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; margin-bottom: 0.875rem; }
 .dash-panel {
   background: var(--surface); border: 1px solid var(--border);
@@ -807,6 +829,12 @@ code {
             <path d="M2 13V3M2 13h12M5 11V7M8.5 11V5M12 11V8"/>
           </svg>
           Campaigns
+        </div>
+        <div class="nav-item" data-tab="coverage" onclick="showTab('coverage')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.4"/>
+          </svg>
+          Coverage
         </div>
       </div>
       <div class="nav-group">
@@ -1329,6 +1357,23 @@ code {
         </div>
       </div>
 
+      <!-- ATT&CK Coverage -->
+      <div id="tab-coverage" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">MITRE ATT&amp;CK Coverage</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Enterprise matrix coloured by your validated control effectiveness — last result per technique, not theoretical inventory.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0">
+            <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="ATT&amp;CK Navigator export — coming soon">Export layer · soon</button>
+            <button class="btn btn-primary btn-sm" onclick="openModal()">&#9654; Test coverage gaps</button>
+          </div>
+        </div>
+        <div id="cov-toolbar" style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;flex-wrap:wrap"></div>
+        <div class="dash-panel"><div class="dash-panel-body" id="cov-matrix" style="overflow-x:auto;padding:0.75rem"><div class="empty" style="padding:2rem">Loading matrix…</div></div></div>
+        <div class="tiny muted" id="cov-foot" style="margin-top:0.75rem"></div>
+      </div>
+
       <!-- Users -->
       <div id="tab-users" style="display:none">
         <div class="sec-hdr">
@@ -1738,7 +1783,7 @@ code {
 <div id="toast"></div>
 
 <script>
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', users:'Users', compliance:'Compliance', settings:'Settings' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', users:'Users', compliance:'Compliance', settings:'Settings' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#238636','#8957e5','#1a9f8a'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -1833,7 +1878,7 @@ function bootApp() {
 }
 
 function showTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','users','compliance','settings'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','users','compliance','settings'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -1843,6 +1888,7 @@ function showTab(name) {
   if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
   if (name === 'users') loadUsers();
   if (name === 'campaigns') loadCampaigns();
+  if (name === 'coverage') loadCoverage();
   if (name === 'dashboard') loadDashboard();
   if (name === 'compliance') initComplianceTab();
   if (name === 'settings' && ROLE === 'admin') { loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
