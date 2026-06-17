@@ -2816,12 +2816,36 @@ function openPickerWith(scId, fw, sc, items) {
     : fw === 'posture' ? 'Tick the posture checks to run. Search by name, technique, or phase.'
     :                    'Tick the steps to run. Steps run in the order shown. Search by name or technique.';
   document.getElementById('picker-search').value = '';
-  renderPickerList();
+  ensureCovStatus(renderPickerList);
   document.getElementById('picker-overlay').classList.add('open');
 }
 
 function openPickerFromModal() {
   openPicker(_modalScId || document.getElementById('modal-sc').value);
+}
+
+// ensureCovStatus populates window._covSt (technique→last-verdict) once, so the
+// picker can show coverage badges even if the Coverage tab was never opened.
+function ensureCovStatus(cb) {
+  if (window._covSt) { cb(); return; }
+  apicall('/api/scenarios/runs').then(function(runs) {
+    window._covSt = covStatusMap(runs || []);
+  }).catch(function() {
+    window._covSt = window._covSt || {};
+  }).then(cb, cb);
+}
+// pickerTechId resolves the ATT&CK technique id for a picker item per framework.
+function pickerTechId(it, fw) {
+  if (fw === 'art') return it.id;
+  if (fw === 'caldera' || fw === 'steps') return it.technique || it.techniqueId || '';
+  return '';
+}
+// covBadge renders this technique's last validated result (none for untested).
+function covBadge(techId) {
+  if (!techId) return '';
+  var m = { cov: ['Prevented', 'var(--success)'], part: ['Detected', 'var(--warning)'], gap: ['Missed', 'var(--danger)'] }[(window._covSt || {})[techId]];
+  if (!m) return '';
+  return ' <span class="sbadge" style="background:transparent;border:1px solid ' + m[1] + ';color:' + m[1] + ';font-size:0.55rem;padding:1px 5px">' + m[0] + '</span>';
 }
 
 function renderPickerList() {
@@ -2845,11 +2869,12 @@ function renderPickerList() {
       : (fw === 'posture')
       ? [it.phase, it.severity].filter(Boolean).join(' · ')
       : [it.tactic, it.technique].filter(Boolean).join(' · ');
+    var cbadge = covBadge(pickerTechId(it, fw));
     return '<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.8rem">' +
       '<input type="checkbox" data-id="' + x(it.id) + '"' + checked + ' onchange="pickerToggle(this)" style="margin-top:2px">' +
       '<span style="flex:1">' +
         '<span style="font-weight:600;color:var(--accent)">' + x(label) + '</span>' +
-        (it.name ? ' <span>' + x(it.name) + '</span>' : '') +
+        (it.name ? ' <span>' + x(it.name) + '</span>' : '') + cbadge +
         (meta ? '<br><span class="card-meta">' + x(meta) + '</span>' : '') +
       '</span></label>';
   }).join('');
