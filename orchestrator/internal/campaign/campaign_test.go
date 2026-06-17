@@ -1,8 +1,20 @@
 package campaign
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/audspect/bas/internal/models"
+)
 
 func mk(status string) ChildRun { return ChildRun{Status: status} }
+
+// res builds a SimulationResult with the given verdict and technique ID.
+func res(verdict models.CheckResult, techID string) models.SimulationResult {
+	return models.SimulationResult{
+		Technique: models.AttackTechnique{ID: techID},
+		Result:    verdict,
+	}
+}
 
 func TestDeriveStatus(t *testing.T) {
 	cases := []struct {
@@ -27,5 +39,68 @@ func TestDeriveStatus(t *testing.T) {
 				t.Errorf("got %q want %q", got, c.want)
 			}
 		})
+	}
+}
+
+func TestAggregate(t *testing.T) {
+	// Two dispatched children + two skipped targets.
+	//  child A (completed): T1 pass → Prevented; T2 fail, detected → Detected
+	//  child B (completed): T3 blocked → Prevented; T4 fail, detected → Detected
+	runs := []ChildRun{
+		{
+			Status:        "completed",
+			Results:       []models.SimulationResult{res(models.ResultPass, "T1"), res(models.ResultFail, "T2")},
+			DetectedTechs: map[string]bool{"T2": true},
+		},
+		{
+			Status:        "completed",
+			Results:       []models.SimulationResult{res(models.ResultBlocked, "T3"), res(models.ResultFail, "T4")},
+			DetectedTechs: map[string]bool{"T4": true},
+		},
+	}
+	skips := []Skip{{AgentID: "a3", Reason: "offline"}, {AgentID: "a4", Reason: "busy"}}
+
+	got := Aggregate(runs, skips)
+	want := Summary{
+		Status:     "completed",
+		Progress:   100,
+		Targets:    4,
+		Dispatched: 2,
+		Skipped:    2,
+		Prevented:  2,
+		Detected:   2,
+		Missed:     0,
+		Errored:    0,
+	}
+	if got != want {
+		t.Errorf("Aggregate()\n got  %+v\n want %+v", got, want)
+	}
+}
+
+func TestAggregateMissAndProgress(t *testing.T) {
+	// One running, one completed → 50% progress, status running.
+	// completed child: T1 fail, NOT detected → Missed; T2 error → Errored.
+	runs := []ChildRun{
+		{Status: "running"},
+		{
+			Status:  "completed",
+			Results: []models.SimulationResult{res(models.ResultFail, "T1"), res(models.ResultError, "T2")},
+		},
+	}
+	got := Aggregate(runs, nil)
+	if got.Progress != 50 {
+		t.Errorf("Progress = %d, want 50", got.Progress)
+	}
+	if got.Status != "running" {
+		t.Errorf("Status = %q, want running", got.Status)
+	}
+	if got.Missed != 1 {
+		t.Errorf("Missed = %d, want 1", got.Missed)
+	}
+	if got.Errored != 1 {
+		t.Errorf("Errored = %d, want 1", got.Errored)
+	}
+	if got.Detected != 0 {
+		t.Errorf("Detected = %d, want 0", got.Detected)
 	}
 }
