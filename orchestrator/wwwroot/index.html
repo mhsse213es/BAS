@@ -839,6 +839,12 @@ code {
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Visibility</div>
+        <div class="nav-item" data-tab="findings" onclick="showTab('findings')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M3 14V2.5h8L9.5 5.5 11 8.5H3"/>
+          </svg>
+          Findings
+        </div>
         <div class="nav-item" data-tab="compliance" onclick="showTab('compliance')">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <rect x="2" y="1" width="12" height="14" rx="1"/>
@@ -1379,6 +1385,27 @@ code {
         <div class="tiny muted" id="cov-foot" style="margin-top:0.75rem"></div>
       </div>
 
+      <!-- Findings -->
+      <div id="tab-findings" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Findings</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Security gaps surfaced by simulations — each is a technique that executed without being prevented. Triage and re-validate.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0">
+            <button class="btn btn-outline btn-sm" onclick="loadFindings()">Refresh</button>
+          </div>
+        </div>
+        <div class="kpi-row" id="findings-tiles"></div>
+        <div id="findings-toolbar" style="margin-bottom:0.9rem"></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Finding</th><th>Technique</th><th>Severity</th><th>Control</th><th>Agent</th><th>Status</th><th>Age</th></tr></thead>
+            <tbody id="findings-body"><tr><td colspan="7" class="empty">No findings yet.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Users -->
       <div id="tab-users" style="display:none">
         <div class="sec-hdr">
@@ -1788,7 +1815,7 @@ code {
 <div id="toast"></div>
 
 <script>
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', users:'Users', compliance:'Compliance', settings:'Settings' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', users:'Users', compliance:'Compliance', settings:'Settings' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#238636','#8957e5','#1a9f8a'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -1883,7 +1910,7 @@ function bootApp() {
 }
 
 function showTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','users','compliance','settings'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','users','compliance','settings'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -1894,6 +1921,7 @@ function showTab(name) {
   if (name === 'users') loadUsers();
   if (name === 'campaigns') loadCampaigns();
   if (name === 'coverage') loadCoverage();
+  if (name === 'findings') loadFindings();
   if (name === 'dashboard') loadDashboard();
   if (name === 'compliance') initComplianceTab();
   if (name === 'settings' && ROLE === 'admin') { loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
@@ -2477,6 +2505,91 @@ function openTechnique(id) {
     document.getElementById('results-body').innerHTML = body;
     document.getElementById('results-overlay').classList.add('open');
   }).catch(function(err) { showToast(err.message, 'err'); });
+}
+
+// ── Findings ─────────────────────────────────────────────────────────────────
+var FINDING_TAB = 'all';
+function findingSevBadge(sev, exp) {
+  var col = { Critical: 'var(--danger)', High: '#e0873a', Medium: 'var(--warning)', Low: 'var(--muted)' }[sev] || 'var(--muted)';
+  var ex = exp === 'detected_only' ? ' <span class="tiny muted">· Detected only</span>' : '';
+  return '<span class="sbadge" style="background:transparent;border:1px solid ' + col + ';color:' + col + '">' + x(sev) + '</span>' + ex;
+}
+function findingStatusClass(st) { return st === 'open' ? 'failed' : st === 'remediated' ? 'completed' : 'partial'; }
+function loadFindings() {
+  apicall('/api/findings').then(function(list) {
+    window._findings = list || [];
+    renderFindingsTiles(); renderFindingsTabs(); renderFindingsRows();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+function renderFindingsTiles() {
+  var l = window._findings || [];
+  var open = l.filter(function(f) { return f.status === 'open'; }).length;
+  var crit = l.filter(function(f) { return f.status === 'open' && f.severity === 'Critical'; }).length;
+  var reopened = l.filter(function(f) { return f.status === 'open' && f.reopenedCount > 0; }).length;
+  var since = Date.now() - 30 * 864e5;
+  var remediated = l.filter(function(f) { return f.status === 'remediated' && new Date(f.lastSeen) >= since; }).length;
+  var tile = function(lbl, val, col) {
+    return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
+      '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
+  };
+  document.getElementById('findings-tiles').innerHTML =
+    tile('Open findings', open, open ? 'var(--danger)' : 'var(--success)') +
+    tile('Critical', crit, crit ? 'var(--danger)' : 'var(--muted)') +
+    tile('Reopened', reopened, reopened ? 'var(--warning)' : 'var(--muted)') +
+    tile('Remediated · 30d', remediated, 'var(--success)');
+}
+function renderFindingsTabs() {
+  var l = window._findings || [];
+  var c = function(k) { return k === 'all' ? l.length : l.filter(function(f) { return f.status === k; }).length; };
+  document.getElementById('findings-toolbar').innerHTML = '<div class="cov-seg">' +
+    [['all', 'All'], ['open', 'Open'], ['triaged', 'Triaged'], ['remediated', 'Remediated'], ['risk_accepted', 'Risk-accepted']]
+      .map(function(o) { return '<button class="' + (FINDING_TAB === o[0] ? 'on' : '') + '" onclick="setFindingTab(\'' + o[0] + '\')">' + o[1] + ' <span style="opacity:.6">' + c(o[0]) + '</span></button>'; }).join('') + '</div>';
+}
+function setFindingTab(v) { FINDING_TAB = v; renderFindingsTabs(); renderFindingsRows(); }
+function renderFindingsRows() {
+  var l = (window._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
+  var tb = document.getElementById('findings-body');
+  if (!l.length) { tb.innerHTML = '<tr><td colspan="7" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
+  tb.innerHTML = l.map(function(f) {
+    return '<tr style="cursor:pointer" onclick="openFinding(\'' + x(f.id) + '\')">' +
+      '<td class="cell-main">' + x(f.techniqueName || f.techniqueId) + (f.reopenedCount > 0 ? ' <span class="sbadge s-partial">reopened</span>' : '') + '</td>' +
+      '<td><span class="tech-id">' + x(f.techniqueId) + '</span></td>' +
+      '<td>' + findingSevBadge(f.severity, f.exposureState) + '</td>' +
+      '<td class="tiny muted">' + x(f.controlClass) + '</td>' +
+      '<td class="tiny muted" style="font-family:var(--font-mono)">' + x(f.agentId) + '</td>' +
+      '<td><span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></td>' +
+      '<td class="tiny muted">' + ago(f.lastSeen) + '</td></tr>';
+  }).join('');
+}
+function openFinding(id) {
+  apicall('/api/findings/' + encodeURIComponent(id)).then(function(f) {
+    var e = f.enrichment || {};
+    document.getElementById('results-title').textContent = (f.techniqueName || f.techniqueId) + ' — Finding';
+    var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:140px">' + k + '</span><span style="flex:1">' + v + '</span></div>' : ''; };
+    var list = function(a) { return (a || []).map(x).join(', '); };
+    var actions = (ROLE === 'admin' || ROLE === 'analyst')
+      ? ['open', 'triaged', 'remediated', 'risk_accepted'].filter(function(st) { return st !== f.status; })
+          .map(function(st) { return '<button class="btn btn-outline btn-sm" onclick="setFindingStatus(\'' + x(f.id) + '\',\'' + st + '\')">' + st.replace('_', ' ') + '</button>'; }).join(' ')
+      : '';
+    document.getElementById('results-export').innerHTML = actions;
+    document.getElementById('results-body').innerHTML =
+      '<div style="margin-bottom:0.9rem">' + findingSevBadge(f.severity, f.exposureState) +
+        ' <span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +
+      row('Technique', '<span class="tech-id">' + x(f.techniqueId) + '</span> ' + x(f.techniqueName)) +
+      row('Tactic', x(f.tactic)) + row('Expected control', x(f.controlClass)) +
+      row('Agent', x(f.agentId)) + row('Installed product', list(f.productSnapshot)) +
+      row('ATT&CK data sources', list(f.dataSources)) + row('Source', x(f.sourceType)) +
+      row('Occurrences', String(f.occurrenceCount) + (f.reopenedCount > 0 ? ' · reopened ' + f.reopenedCount + '×' : '')) +
+      row('First seen', fmtDate(f.firstSeen)) + row('Last seen', fmtDate(f.lastSeen)) +
+      (e.description ? '<div style="margin-top:0.8rem;font-size:0.8rem;color:var(--text-dim);line-height:1.5">' + x(e.description) + '</div>' : '') +
+      (e.url ? '<div style="margin-top:0.6rem"><a href="' + x(e.url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">View on attack.mitre.org →</a></div>' : '');
+    document.getElementById('results-overlay').classList.add('open');
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+function setFindingStatus(id, status) {
+  apicall('/api/findings/' + encodeURIComponent(id) + '/status', { method: 'POST', body: JSON.stringify({ status: status }) })
+    .then(function() { showToast('Finding ' + status.replace('_', ' '), 'ok'); openFinding(id); loadFindings(); })
+    .catch(function(e) { showToast(e.message, 'err'); });
 }
 
 function loadRuns() {
