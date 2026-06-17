@@ -51,6 +51,35 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Live-execution guardrails — enforced once for the whole fan-out, mirroring
+	// RunScenario. A campaign multiplies a live run across the fleet, so these
+	// matter more here, not less: an un-gated lab campaign would ship real
+	// payloads to every selected agent.
+	live := mode == "telemetry" || mode == "lab"
+	if live && !sc.Executable {
+		jsonError(w, "scenario does not support live execution — run the campaign in posture mode", http.StatusBadRequest)
+		return
+	}
+	if live && !req.ConfirmLive {
+		jsonError(w, "live execution requires explicit acknowledgement (confirmLive=true) — it runs real techniques across every target", http.StatusBadRequest)
+		return
+	}
+	if mode == "lab" && !req.ConfirmLab {
+		jsonError(w, "lab mode is a second approval gate (confirmLab=true) — full-fidelity emulation must target an isolated AD range only", http.StatusBadRequest)
+		return
+	}
+	if live && sc.LivePolicy != nil && sc.LivePolicy.ExecutionWindow != "" {
+		ok, werr := withinWindow(sc.LivePolicy.ExecutionWindow, time.Now())
+		if werr != nil {
+			jsonError(w, "invalid execution_window in scenario policy: "+werr.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			jsonError(w, "outside the approved execution window ("+sc.LivePolicy.ExecutionWindow+") for live execution", http.StatusBadRequest)
+			return
+		}
+	}
+
 	var initiatedBy *string
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		initiatedBy = &c.UserID
