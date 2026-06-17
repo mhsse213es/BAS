@@ -898,6 +898,16 @@ code {
     <main>
       <!-- Dashboard -->
       <div id="tab-dashboard" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Security Posture</h1>
+            <div id="dash-subtitle" style="font-size:0.8rem;color:var(--muted)">Loading continuous-validation summary…</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0">
+            <button class="btn btn-outline btn-sm" onclick="showTab('compliance')">Generate report</button>
+            <button class="btn btn-primary btn-sm" onclick="openModal()">&#9654; New simulation</button>
+          </div>
+        </div>
         <div class="kpi-row">
           <div class="kpi-card" onclick="showTab('agents')" title="View agents">
             <div class="kpi-label">Agents Online</div>
@@ -3709,6 +3719,24 @@ function loadDashboard() {
   Promise.all([apicall('/api/agents'), apicall('/api/scenarios/runs')])
   .then(function(res) {
     var ag = res[0] || [], runs = res[1] || [];
+
+    // Hero subtitle — agents, distinct techniques exercised, and last assessment.
+    var techSet = {};
+    runs.forEach(function(r) {
+      (r.results || []).forEach(function(c) {
+        var id = c.technique && c.technique.id;
+        if (id) techSet[id] = true;
+      });
+    });
+    var techCount = Object.keys(techSet).length;
+    var lastRun = runs[0];
+    var lastStr = lastRun ? ago(lastRun.completedAt || lastRun.startedAt) : '';
+    var subEl = document.getElementById('dash-subtitle');
+    if (subEl) {
+      subEl.textContent = 'Continuous validation across ' + ag.length + ' agent' + (ag.length === 1 ? '' : 's') +
+        ' and ' + techCount + ' ATT&CK technique' + (techCount === 1 ? '' : 's') + '.' +
+        (lastStr ? ' Last assessment ' + lastStr + '.' : ' No runs yet.');
+    }
 
     // KPI — Agents
     var online = ag.filter(function(a) { return a.status !== 'offline'; }).length;
