@@ -80,3 +80,36 @@ func TestApply(t *testing.T) {
 		t.Fatalf("prevented-noop: %v %+v", tr, none)
 	}
 }
+
+func TestRemediations(t *testing.T) {
+	refs := []FindingRef{
+		{TechniqueID: "T1003", TechniqueName: "OS Credential Dumping", Tactic: "credential-access", Severity: "Critical", ControlClass: "Endpoint", ExposureState: "missed", AgentID: "WIN-01"},
+		{TechniqueID: "T1003", TechniqueName: "OS Credential Dumping", Tactic: "credential-access", Severity: "High", ControlClass: "Endpoint", ExposureState: "detected_only", AgentID: "WIN-02"},
+		{TechniqueID: "T1003", TechniqueName: "OS Credential Dumping", Tactic: "credential-access", Severity: "Critical", ControlClass: "Identity", ExposureState: "missed", AgentID: "WIN-01"},
+		{TechniqueID: "T1059", TechniqueName: "Command Interpreter", Tactic: "execution", Severity: "Critical", ControlClass: "Endpoint", ExposureState: "missed", AgentID: "WIN-09"},
+	}
+	got := Remediations(refs)
+	if len(got) != 2 {
+		t.Fatalf("want 2 remediations, got %d", len(got))
+	}
+	// T1003 sorts first: same Critical severity but more missed (2 vs 1).
+	r := got[0]
+	if r.TechniqueID != "T1003" {
+		t.Fatalf("want T1003 first, got %s", r.TechniqueID)
+	}
+	if r.Severity != "Critical" {
+		t.Errorf("severity = %q, want Critical (worst)", r.Severity)
+	}
+	if r.FindingCount != 3 || r.AgentCount != 2 {
+		t.Errorf("counts: findings=%d agents=%d, want 3/2", r.FindingCount, r.AgentCount)
+	}
+	if r.Missed != 2 || r.DetectedOnly != 1 {
+		t.Errorf("exposure: missed=%d detected=%d, want 2/1", r.Missed, r.DetectedOnly)
+	}
+	if len(r.ControlClasses) != 2 {
+		t.Errorf("control classes = %v, want 2 distinct", r.ControlClasses)
+	}
+	if len(r.RecommendedTargets) != 2 { // WIN-01 (deduped) + WIN-02
+		t.Errorf("targets = %v, want 2 distinct agents", r.RecommendedTargets)
+	}
+}

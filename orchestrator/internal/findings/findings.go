@@ -7,6 +7,7 @@
 package findings
 
 import (
+	"sort"
 	"strings"
 	"time"
 )
@@ -144,4 +145,93 @@ func Apply(s State, o Observation) (State, Transition) {
 	s.OccurrenceCount++
 	s.ExposureState = worse(s.ExposureState, o.Outcome)
 	return s, Recurred
+}
+
+// FindingRef is the open-finding projection the remediation grouper consumes.
+type FindingRef struct {
+	TechniqueID, TechniqueName, Tactic, Severity, ControlClass, ExposureState, AgentID string
+}
+
+// Remediation is one per-technique fix derived from open findings (computed; not
+// stored). ATT&CK mitigations/detection are attached by the caller.
+type Remediation struct {
+	TechniqueID        string   `json:"techniqueId"`
+	TechniqueName      string   `json:"techniqueName"`
+	Tactic             string   `json:"tactic"`
+	Severity           string   `json:"severity"`
+	ControlClasses     []string `json:"controlClasses"`
+	FindingCount       int      `json:"findingCount"`
+	AgentCount         int      `json:"agentCount"`
+	Missed             int      `json:"missed"`
+	DetectedOnly       int      `json:"detectedOnly"`
+	RecommendedTargets []string `json:"recommendedTargets"`
+}
+
+func sevRank(s string) int {
+	switch s {
+	case "Critical":
+		return 4
+	case "High":
+		return 3
+	case "Medium":
+		return 2
+	case "Low":
+		return 1
+	}
+	return 0
+}
+
+// Remediations groups open-finding refs into per-technique remediations: worst
+// severity, distinct control classes + agents, missed/detected-only split, and
+// recommended targets. Sorted severity DESC, then missed DESC, then agents DESC.
+func Remediations(refs []FindingRef) []Remediation {
+	type acc struct {
+		r        *Remediation
+		controls map[string]bool
+		agents   map[string]bool
+	}
+	byTech := map[string]*acc{}
+	order := []string{}
+	for _, f := range refs {
+		a := byTech[f.TechniqueID]
+		if a == nil {
+			a = &acc{r: &Remediation{TechniqueID: f.TechniqueID, TechniqueName: f.TechniqueName, Tactic: f.Tactic, Severity: f.Severity},
+				controls: map[string]bool{}, agents: map[string]bool{}}
+			byTech[f.TechniqueID] = a
+			order = append(order, f.TechniqueID)
+		}
+		a.r.FindingCount++
+		if sevRank(f.Severity) > sevRank(a.r.Severity) {
+			a.r.Severity = f.Severity
+		}
+		if f.ExposureState == "detected_only" {
+			a.r.DetectedOnly++
+		} else {
+			a.r.Missed++
+		}
+		if f.ControlClass != "" && !a.controls[f.ControlClass] {
+			a.controls[f.ControlClass] = true
+			a.r.ControlClasses = append(a.r.ControlClasses, f.ControlClass)
+		}
+		if f.AgentID != "" && !a.agents[f.AgentID] {
+			a.agents[f.AgentID] = true
+			a.r.RecommendedTargets = append(a.r.RecommendedTargets, f.AgentID)
+		}
+	}
+	out := make([]Remediation, 0, len(order))
+	for _, id := range order {
+		a := byTech[id]
+		a.r.AgentCount = len(a.agents)
+		out = append(out, *a.r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if a, b := sevRank(out[i].Severity), sevRank(out[j].Severity); a != b {
+			return a > b
+		}
+		if out[i].Missed != out[j].Missed {
+			return out[i].Missed > out[j].Missed
+		}
+		return out[i].AgentCount > out[j].AgentCount
+	})
+	return out
 }
