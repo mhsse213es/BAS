@@ -157,6 +157,7 @@ type Agent struct {
 	Policy        *PolicyBundle `json:"policy,omitempty"`
 	EnrolledAt    *time.Time    `json:"enrolledAt,omitempty"`
 	LastUpdate    time.Time     `json:"lastUpdate"`
+	Sims          int           `json:"sims"` // scenario runs dispatched to this agent (all time)
 }
 
 // Heartbeat is sent by agents periodically.

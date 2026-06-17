@@ -204,10 +204,11 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // GET /api/agents
 func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
-		`SELECT agent_id, hostname, ip_address, os_version, username, status, env_label,
-		        has_report, binary_hash, binary_trusted, last_update,
-		        COALESCE(state, 'active'), COALESCE(policy_json::text, '{}'), enrolled_at
-		 FROM agents ORDER BY last_update DESC`)
+		`SELECT a.agent_id, a.hostname, a.ip_address, a.os_version, a.username, a.status, a.env_label,
+		        a.has_report, a.binary_hash, a.binary_trusted, a.last_update,
+		        COALESCE(a.state, 'active'), COALESCE(a.policy_json::text, '{}'), a.enrolled_at,
+		        (SELECT COUNT(*) FROM scenario_runs sr WHERE sr.agent_id = a.agent_id) AS sims
+		 FROM agents a ORDER BY a.last_update DESC`)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -222,7 +223,7 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&a.AgentID, &a.Hostname, &a.IPAddress, &a.OSVersion,
 			&a.Username, &a.Status, &a.EnvLabel, &a.HasReport,
 			&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate,
-			&stateStr, &policyRaw, &a.EnrolledAt); err != nil {
+			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims); err != nil {
 			continue
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
