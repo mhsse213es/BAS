@@ -750,6 +750,12 @@ var defenderDetectIDs = map[string]bool{
 // verdict. A Defender detection event = Detected; any other telemetry (Sysmon,
 // Security, benign Defender events) = Logged (visibility, no alert); nothing =
 // None. Interpretation lives here on the server, not on the agent.
+// ClassifyDetectionStatus returns the coarse detection status ("Detected" |
+// "Logged" | "None") for a step's events. Exported so the campaign rollup can
+// reuse the same event-token heuristic the kill-chain uses, without duplicating
+// it.
+func ClassifyDetectionStatus(events []string) string { return classifyDetection(events).Status }
+
 func classifyDetection(events []string) Detection {
 	loggedSource := ""
 	for _, ev := range events {

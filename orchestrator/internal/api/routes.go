@@ -85,6 +85,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/scenarios/runs/{runId}/export", h.ExportRunJSON)
 		r.Get("/api/scenarios/runs/{runId}/events", h.ListRunEvents)
 		r.Get("/api/scenarios/runs/{runId}/pdf", h.GetRunPDF)
+		r.Get("/api/campaigns", h.ListCampaigns)
+		r.Get("/api/campaigns/{id}", h.GetCampaign)
+		r.Get("/api/campaigns/{id}/summary", h.CampaignSummary)
 		r.Get("/api/agents/{agentId}/logs/operational", h.GetOpLogs)
 		r.Get("/api/agents/{agentId}/logs/security", h.GetSecLogs)
 		r.Get("/api/agents/{agentId}/telemetry", h.GetTelemetry)
@@ -105,6 +108,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 			r.Post("/api/scan/{agentId}", h.TriggerScan)
 			r.Post("/api/scenarios/{id}/run", h.RunScenario)
 			r.Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
+			r.Post("/api/campaigns", h.CreateCampaign)
+			r.Post("/api/campaigns/{id}/stop", h.StopCampaign)
 
 			// Custom scenario builder
 			r.Post("/api/scenarios", h.CreateScenario)
