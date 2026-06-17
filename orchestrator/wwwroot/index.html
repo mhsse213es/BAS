@@ -1079,15 +1079,22 @@ code {
 
       <!-- Agents -->
       <div id="tab-agents" style="display:none">
-        <div class="sec-hdr">
-          <h2>Registered Agents <span id="agent-cnt" class="cnt">0</span></h2>
-          <button class="btn btn-outline btn-sm" onclick="loadAgents()">Refresh</button>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Simulation agents <span id="agent-cnt" class="cnt">0</span></h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Lightweight collectors across your environment — they execute safe emulations locally and stream telemetry back.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0">
+            <button class="btn btn-outline btn-sm" onclick="loadAgents()">Refresh</button>
+            <button class="btn btn-primary btn-sm" onclick="showAgentDownload()">&#8595; Deploy agent</button>
+          </div>
         </div>
+        <div class="kpi-row" id="agent-tiles"></div>
+        <div id="agent-toolbar" style="margin-bottom:0.9rem"></div>
         <div class="tbl-wrap">
           <table>
             <thead><tr>
-              <th>Agent ID</th><th>Hostname</th><th>OS</th>
-              <th>User</th><th>Status</th><th>Environment</th><th>Last Seen</th><th>Actions</th>
+              <th>Host</th><th>OS</th><th>IP address</th><th>Group</th><th>Status</th><th>Last seen</th><th>Sims</th><th>Actions</th>
             </tr></thead>
             <tbody id="agents-body">
               <tr><td colspan="8" class="empty">No agents registered yet.</td></tr>
@@ -1989,6 +1996,7 @@ function activateTab(name) {
 function showTab(name) {
   activateTab(name);
   if (name === 'users') loadUsers();
+  if (name === 'agents') loadAgents();
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'coverage') loadCoverage();
   if (name === 'findings') loadFindings();
@@ -2010,37 +2018,80 @@ function apicall(path, opts) {
   });
 }
 
+var AGENT_FILTER = 'all';
+// agentBucket: online = reachable + active; degraded = reachable but lifecycle
+// state ≠ active (quarantined/restricted/retired); offline = no heartbeat.
+function agentBucket(a) {
+  if (a.status === 'offline') return 'offline';
+  if (a.state && a.state !== 'active') return 'degraded';
+  return 'online';
+}
+function agentDotColor(b) { return b === 'online' ? 'var(--success)' : b === 'degraded' ? 'var(--warning)' : 'var(--muted)'; }
 function loadAgents() {
   apicall('/api/agents').then(function(data) {
-    agents = data;
+    agents = data || [];
     document.getElementById('agent-cnt').textContent = agents.length;
-    var tbody = document.getElementById('agents-body');
-    if (!agents.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty">No agents registered yet.</td></tr>';
-      return;
-    }
-    tbody.innerHTML = agents.map(function(a) {
-      return '<tr>' +
-        '<td><code>' + x(a.agentId) + '</code></td>' +
-        '<td>' + x(a.hostname) + '</td>' +
-        '<td style="color:var(--muted);font-size:0.78rem">' + x(a.osVersion || '—') + '</td>' +
-        '<td>' + x(a.username || '—') + '</td>' +
-        '<td>' +
-          '<span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span>' +
-          (a.state && a.state !== 'active' ? ' <span class="sbadge s-' + x(a.state) + '" title="Lifecycle state">' + x(a.state) + '</span>' : '') +
-        '</td>' +
-        '<td><span class="tag">' + x(a.envLabel || '—') + '</span></td>' +
-        '<td style="color:var(--muted);font-size:0.78rem">' + ago(a.lastUpdate) + '</td>' +
-        '<td style="white-space:nowrap">' +
-          '<button class="btn btn-outline btn-sm" onclick="openAgentDetail(\'' + x(a.agentId) + '\')" title="View agent detail, logs, scenarios, health">&#128269; Detail</button>' +
-          ' <button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run</button>' +
-          ' <button class="btn btn-outline btn-sm" onclick="safeScan(\'' + x(a.agentId) + '\')" title="Read-only simulation — makes no changes to the endpoint">&#128737; Safe Scan</button>' +
-          ' <button class="btn btn-outline btn-sm" onclick="openFullReport(\'' + x(a.agentId) + '\')" title="Open HTML report in new tab">&#128196; Report</button>' +
-          ' <button class="btn btn-outline btn-sm" onclick="downloadFullReportPDF(\'' + x(a.agentId) + '\')" title="Download enterprise PDF report">&#8659; PDF</button>' +
-          ' <button class="btn btn-outline btn-sm" onclick="downloadAuditPack(\'' + x(a.agentId) + '\')" title="Download audit pack ZIP">&#8659; Audit Pack</button>' +
-        '</td></tr>';
-    }).join('');
+    renderAgentTiles(); renderAgentToolbar(); renderAgentRows();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+function renderAgentTiles() {
+  var b = { online: 0, degraded: 0, offline: 0 };
+  agents.forEach(function(a) { b[agentBucket(a)]++; });
+  var tile = function(lbl, val, col) {
+    return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
+      '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
+  };
+  var el = document.getElementById('agent-tiles');
+  if (el) el.innerHTML =
+    tile('Total agents', agents.length, 'var(--text)') +
+    tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +
+    tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +
+    tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)');
+}
+function renderAgentToolbar() {
+  var c = function(k) { return k === 'all' ? agents.length : agents.filter(function(a) { return agentBucket(a) === k; }).length; };
+  var el = document.getElementById('agent-toolbar');
+  if (el) el.innerHTML = '<div class="cov-seg">' +
+    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline']]
+      .map(function(o) { return '<button class="' + (AGENT_FILTER === o[0] ? 'on' : '') + '" onclick="setAgentFilter(\'' + o[0] + '\')">' + o[1] + ' <span style="opacity:.6">' + c(o[0]) + '</span></button>'; }).join('') + '</div>';
+}
+function setAgentFilter(v) { AGENT_FILTER = v; renderAgentToolbar(); renderAgentRows(); }
+function renderAgentRows() {
+  var list = agents.filter(function(a) { return AGENT_FILTER === 'all' || agentBucket(a) === AGENT_FILTER; });
+  var tbody = document.getElementById('agents-body');
+  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.') + '</td></tr>'; return; }
+  tbody.innerHTML = list.map(function(a) {
+    var dot = agentDotColor(agentBucket(a));
+    return '<tr>' +
+      '<td><div style="display:flex;align-items:center;gap:0.5rem"><span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + dot + '"></span>' +
+        '<div><div class="cell-main" style="font-family:var(--font-mono);font-size:0.78rem">' + x(a.hostname || a.agentId) + '</div>' +
+        '<div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem">' + x(a.agentId) + '</div></div></div></td>' +
+      '<td style="color:var(--muted);font-size:0.78rem">' + x(a.osVersion || '—') + '</td>' +
+      '<td class="tiny muted" style="font-family:var(--font-mono)">' + x(a.ipAddress || '—') + '</td>' +
+      '<td><span class="tag">' + x(a.envLabel || '—') + '</span></td>' +
+      '<td>' +
+        '<span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span>' +
+        (a.state && a.state !== 'active' ? ' <span class="sbadge s-' + x(a.state) + '" title="Lifecycle state">' + x(a.state) + '</span>' : '') +
+      '</td>' +
+      '<td style="color:var(--muted);font-size:0.78rem">' + ago(a.lastUpdate) + '</td>' +
+      '<td class="tiny" style="font-family:var(--font-mono)">' + (a.sims || 0) + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-outline btn-sm" onclick="openAgentDetail(\'' + x(a.agentId) + '\')" title="View agent detail, logs, scenarios, health">&#128269; Detail</button>' +
+        ' <button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run</button>' +
+        ' <button class="btn btn-outline btn-sm" onclick="safeScan(\'' + x(a.agentId) + '\')" title="Read-only simulation — makes no changes to the endpoint">&#128737; Safe Scan</button>' +
+        ' <button class="btn btn-outline btn-sm" onclick="openFullReport(\'' + x(a.agentId) + '\')" title="Open HTML report in new tab">&#128196; Report</button>' +
+        ' <button class="btn btn-outline btn-sm" onclick="downloadFullReportPDF(\'' + x(a.agentId) + '\')" title="Download enterprise PDF report">&#8659; PDF</button>' +
+        ' <button class="btn btn-outline btn-sm" onclick="downloadAuditPack(\'' + x(a.agentId) + '\')" title="Download audit pack ZIP">&#8659; Audit Pack</button>' +
+      '</td></tr>';
+  }).join('');
+}
+// Deploy agent → reveal the in-page Connection Config / download section.
+function showAgentDownload() {
+  var w = document.getElementById('conn-cfg-wrap');
+  if (!w) return;
+  w.style.display = '';
+  if (typeof loadConnectionConfig === 'function') loadConnectionConfig();
+  w.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function injectServerURL() {
