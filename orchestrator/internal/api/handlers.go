@@ -1343,7 +1343,7 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, scenario_id, agent_id, name, status, results, score, initiated_by, started_at, completed_at,
-		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout
+		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout, detection_summary
 		 FROM scenario_runs
 		 WHERE ($1 = '' OR agent_id = $1)
 		   AND ($2 = '' OR scenario_id = $2)
@@ -1359,21 +1359,29 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	type runRow struct {
 		models.ScenarioRun
 		InitiatedBy *string `json:"initiatedBy"`
+		// DetectedTechs is the set of technique ids whose FAIL the blue team still
+		// caught (from the run's detection_summary, with the coarse event-token
+		// fallback) — same classification the campaign rollup and kill-chain use.
+		// Lets the dashboard split fails into "detected" vs "missed" honestly.
+		DetectedTechs map[string]bool `json:"detectedTechs,omitempty"`
 	}
 	var runs []runRow
 	for rows.Next() {
 		var run runRow
-		var resultsJSON, scoreRaw []byte
+		var resultsJSON, scoreRaw, detRaw []byte
 		var p models.RunProgress
 		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.Name,
 			&run.Status, &resultsJSON, &scoreRaw, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt,
-			&p.StepsTotal, &p.StepsDone, &p.StepsRunning, &p.StepsPassed, &p.StepsFailed, &p.StepsTimeout); err != nil {
+			&p.StepsTotal, &p.StepsDone, &p.StepsRunning, &p.StepsPassed, &p.StepsFailed, &p.StepsTimeout, &detRaw); err != nil {
 			log.Printf("[api] list runs scan: %v", err)
 			continue
 		}
 		json.Unmarshal(resultsJSON, &run.Results)
 		if len(scoreRaw) > 0 {
 			json.Unmarshal(scoreRaw, &run.Score)
+		}
+		if d := detectedTechs(detRaw, run.Results); len(d) > 0 {
+			run.DetectedTechs = d
 		}
 		// Attach the derived step breakdown only when there's something to show
 		// (a run that has emitted events). Lets the UI surface partial progress

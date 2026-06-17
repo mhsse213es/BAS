@@ -3823,22 +3823,27 @@ function loadDashboard() {
     }).reverse();
     document.getElementById('kpi-cov-spark').innerHTML = sparkSVG(covSeries, 110, 30, 'var(--warning)');
 
-    // Control effectiveness donut — aggregate verdicts across all runs.
-    // Prevented = pass|blocked, Failed = fail, Not scored = error|skipped.
-    var eff = { prevented: 0, failed: 0, other: 0 };
+    // Control effectiveness donut — 4-way verdict split across all runs.
+    // Prevented = pass|blocked; a fail is Detected-only when the blue team still
+    // caught it (run.detectedTechs[id]) else Missed; Not-tested = error|skipped.
+    var eff = { prevented: 0, detected: 0, missed: 0, other: 0 };
     runs.forEach(function(r) {
+      var det = r.detectedTechs || {};
       (r.results || []).forEach(function(c) {
         if (c.result === 'pass' || c.result === 'blocked') eff.prevented++;
-        else if (c.result === 'fail') eff.failed++;
+        else if (c.result === 'fail') {
+          var id = c.technique && c.technique.id;
+          if (id && det[id]) eff.detected++; else eff.missed++;
+        }
         else eff.other++;
       });
     });
-    var effTotal = eff.prevented + eff.failed + eff.other;
+    var effTotal = eff.prevented + eff.detected + eff.missed + eff.other;
     var donutEl = document.getElementById('dash-donut');
     if (!effTotal) {
       donutEl.innerHTML = '<div class="empty">No run data yet.</div>';
     } else {
-      var prevPctEff = Math.round(eff.prevented / (eff.prevented + eff.failed || 1) * 100);
+      var prevPctEff = Math.round(eff.prevented / (eff.prevented + eff.detected + eff.missed || 1) * 100);
       var lg = function(color, label, val) {
         return '<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.82rem">' +
           '<span style="width:10px;height:10px;border-radius:3px;background:' + color + ';flex-shrink:0"></span>' +
@@ -3851,7 +3856,8 @@ function loadDashboard() {
         '<div style="position:relative;flex-shrink:0">' +
           donutSVG([
             { v: eff.prevented, color: 'var(--success)' },
-            { v: eff.failed, color: 'var(--danger)' },
+            { v: eff.detected, color: 'var(--warning)' },
+            { v: eff.missed, color: 'var(--danger)' },
             { v: eff.other, color: 'var(--elevated)' }
           ]) +
           '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">' +
@@ -3861,8 +3867,9 @@ function loadDashboard() {
         '</div>' +
         '<div style="flex:1;display:flex;flex-direction:column;gap:0.55rem;min-width:160px">' +
           lg('var(--success)', 'Prevented', eff.prevented) +
-          lg('var(--danger)', 'Failed (executed)', eff.failed) +
-          lg('var(--elevated)', 'Not scored', eff.other) +
+          lg('var(--warning)', 'Detected only', eff.detected) +
+          lg('var(--danger)', 'Missed', eff.missed) +
+          lg('var(--elevated)', 'Not tested', eff.other) +
         '</div>';
     }
 
