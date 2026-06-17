@@ -141,6 +141,36 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS campaign_id text`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_campaign ON scenario_runs (campaign_id)`,
 
+		// ── Findings: persistent, de-duplicated, analyst-triaged exposures ────
+		`CREATE TABLE IF NOT EXISTS findings (
+			id                        text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			agent_id                  text NOT NULL,
+			technique_id              text NOT NULL,
+			control_class             text NOT NULL,
+			technique_name            text NOT NULL DEFAULT '',
+			tactic                    text NOT NULL DEFAULT '',
+			severity                  text NOT NULL DEFAULT 'Medium',
+			exposure_state            text NOT NULL DEFAULT 'missed',
+			status                    text NOT NULL DEFAULT 'open',
+			source_type               text NOT NULL DEFAULT '',
+			attack_data_source        jsonb NOT NULL DEFAULT '[]',
+			security_product_snapshot jsonb NOT NULL DEFAULT '[]',
+			occurrence_count          int NOT NULL DEFAULT 1,
+			reopened_count            int NOT NULL DEFAULT 0,
+			last_run_id               text,
+			last_campaign_id          text,
+			first_seen                timestamptz NOT NULL DEFAULT NOW(),
+			last_seen                 timestamptz NOT NULL DEFAULT NOW(),
+			last_observed_at          timestamptz NOT NULL DEFAULT NOW(),
+			resolved_at               timestamptz,
+			resolved_by               text,
+			resolved_reason           text,
+			created_at                timestamptz NOT NULL DEFAULT NOW(),
+			CONSTRAINT uq_finding UNIQUE (agent_id, technique_id, control_class)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_findings_status_sev ON findings (status, severity)`,
+		`CREATE INDEX IF NOT EXISTS idx_findings_campaign ON findings (last_campaign_id)`,
+
 		// ── Agent logging tables ──────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS agent_op_logs (
 			id         bigserial    PRIMARY KEY,
