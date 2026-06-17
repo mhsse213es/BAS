@@ -101,6 +101,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/caldera/abilities", h.GetCalderaAbilities)
 		r.Get("/api/posture/catalog", h.GetPostureCatalog)
 
+		// ATT&CK Coverage matrix — authoritative enterprise structure + per-technique
+		// enrichment; coverage status is overlaid client-side from run data.
+		r.Get("/api/attack/matrix", h.AttackMatrix)
+		r.Get("/api/attack/technique/{id}", h.AttackTechnique)
+
 		// Analyst + Admin only — can trigger scans, run scenarios, and
 		// author custom scenarios from the dashboard.
 		r.Group(func(r chi.Router) {
