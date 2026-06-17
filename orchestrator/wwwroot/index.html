@@ -1010,6 +1010,19 @@ code {
           </div>
         </div>
 
+        <div class="dash-panel" style="margin-bottom:1.25rem">
+          <div class="dash-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem">
+            <span id="dash-attackflow-title">Attack flow</span>
+            <span style="display:flex;gap:0.7rem;align-items:center;font-weight:400">
+              <span style="font-size:0.6rem;color:#7ee08a">&#9632; Prevented</span>
+              <span style="font-size:0.6rem;color:#e6c069">&#9632; Detected</span>
+              <span style="font-size:0.6rem;color:var(--muted)">&#9632; Missed</span>
+              <a class="tiny" id="dash-attackflow-open" style="color:var(--accent);cursor:pointer;font-weight:500;display:none">Open run →</a>
+            </span>
+          </div>
+          <div class="dash-panel-body" id="dash-attackflow" style="padding:0.4rem 0.75rem"><div class="empty" style="padding:1.5rem">No completed runs yet.</div></div>
+        </div>
+
         <div class="dash-panel">
           <div class="dash-panel-hdr">ATT&amp;CK Tactic Coverage</div>
           <div class="tactic-grid" id="dash-attck">
@@ -3192,6 +3205,33 @@ function viewRunResults(run) {
   }
 }
 
+// Renders the dual-rail kill-chain step nodes from rep.killChain. Shared by the
+// run drawer and the dashboard Attack-flow card so both rails stay identical.
+function killChainNodes(kc) {
+  kc = kc || [];
+  var kcOut = { prevented:{cls:'def-prevented',l:'Prevented'}, detected:{cls:'def-detected',l:'Detected'}, missed:{cls:'def-missed',l:'Missed'} };
+  return kc.map(function(s, i) {
+    var o = kcOut[s.outcome] || kcOut.missed;
+    var lbl = o.l;
+    if (s.outcome === 'detected' && s.confidence) lbl += ' · ' + s.confidence;
+    var defText = x(s.detail || o.l);
+    if (s.outcome === 'detected' && s.latencyMs) defText += ' (' + Math.round(s.latencyMs / 1000) + 's)';
+    var conn = i < kc.length - 1 ? '<div class="kc-conn">&rarr;</div>' : '';
+    return '<div class="kc-step">' +
+      '<div class="kc-phase">' + x((s.phase || '').replace(/-/g, ' ')) + '</div>' +
+      '<div class="kc-rail"></div>' +
+      '<div class="kc-node">' +
+        (s.techniqueId ? '<div class="kc-tech">' + x(s.techniqueId) + '</div>' : '') +
+        '<div class="kc-name">' + x(s.technique || '—') + '</div>' +
+        '<div class="kc-rails">' +
+          '<div class="kc-r atk"><span class="ri"></span>' + x(s.action || 'Executed') + '</div>' +
+          '<div class="kc-r ' + o.cls + '"><span class="ri"></span>' + defText + '<span class="rv">' + x(lbl) + '</span></div>' +
+        '</div>' +
+      '</div>' + conn +
+    '</div>';
+  }).join('');
+}
+
 // Builds the Key Findings + Prioritised Recommendations blocks for the run drawer
 // from the report-engine payload. Each block renders only when non-empty.
 function renderRunReportExtra(rep) {
@@ -3207,27 +3247,7 @@ function renderRunReportExtra(rep) {
   // The signature purple-team timeline; sourced from rep.killChain (BuildFromRun).
   var kc = rep.killChain || [];
   if (kc.length > 0) {
-    var kcOut = { prevented:{cls:'def-prevented',l:'Prevented'}, detected:{cls:'def-detected',l:'Detected'}, missed:{cls:'def-missed',l:'Missed'} };
-    var nodes = kc.map(function(s, i) {
-      var o = kcOut[s.outcome] || kcOut.missed;
-      var lbl = o.l;
-      if (s.outcome === 'detected' && s.confidence) lbl += ' · ' + s.confidence;
-      var defText = x(s.detail || o.l);
-      if (s.outcome === 'detected' && s.latencyMs) defText += ' (' + Math.round(s.latencyMs / 1000) + 's)';
-      var conn = i < kc.length - 1 ? '<div class="kc-conn">&rarr;</div>' : '';
-      return '<div class="kc-step">' +
-        '<div class="kc-phase">' + x((s.phase || '').replace(/-/g, ' ')) + '</div>' +
-        '<div class="kc-rail"></div>' +
-        '<div class="kc-node">' +
-          (s.techniqueId ? '<div class="kc-tech">' + x(s.techniqueId) + '</div>' : '') +
-          '<div class="kc-name">' + x(s.technique || '—') + '</div>' +
-          '<div class="kc-rails">' +
-            '<div class="kc-r atk"><span class="ri"></span>' + x(s.action || 'Executed') + '</div>' +
-            '<div class="kc-r ' + o.cls + '"><span class="ri"></span>' + defText + '<span class="rv">' + x(lbl) + '</span></div>' +
-          '</div>' +
-        '</div>' + conn +
-      '</div>';
-    }).join('');
+    var nodes = killChainNodes(kc);
     html += '<div style="' + panel + '">' +
       '<div style="' + hdr + ';display:flex;align-items:center;gap:10px">Attack Flow &mdash; Adversary vs Defense' +
         '<span style="margin-left:auto;display:flex;gap:9px;font-weight:400;text-transform:none;letter-spacing:0">' +
@@ -3897,6 +3917,21 @@ function loadDashboard() {
           lg('var(--danger)', 'Missed', eff.missed) +
           lg('var(--elevated)', 'Not tested', eff.other) +
         '</div>';
+    }
+
+    // Attack flow — dual-rail kill-chain of the latest completed/partial run.
+    var afEl = document.getElementById('dash-attackflow');
+    var lastDone = runs.filter(function(r) { return r.status === 'completed' || r.status === 'partial'; })[0];
+    if (afEl && lastDone) {
+      document.getElementById('dash-attackflow-title').textContent = 'Attack flow · ' + (lastDone.name || lastDone.scenarioId || 'latest run');
+      apicall('/api/scenarios/runs/' + encodeURIComponent(lastDone.id) + '/report.json').then(function(rep) {
+        if (document.getElementById('dash-attackflow') !== afEl) return;
+        var kc = (rep && rep.killChain) || [];
+        if (!kc.length) { afEl.innerHTML = '<div class="empty" style="padding:1.5rem">No kill-chain data for the latest run.</div>'; return; }
+        afEl.innerHTML = '<div class="killchain">' + killChainNodes(kc) + '</div>';
+        var openLink = document.getElementById('dash-attackflow-open');
+        if (openLink) { openLink.style.display = ''; openLink.onclick = function() { viewRunResults(lastDone); }; }
+      }).catch(function() { afEl.innerHTML = '<div class="empty" style="padding:1.5rem">Attack flow unavailable.</div>'; });
     }
 
     // Recent runs (last 5)
