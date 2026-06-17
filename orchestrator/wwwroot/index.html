@@ -1348,24 +1348,27 @@ code {
 
       <!-- Campaigns -->
       <div id="tab-campaigns" style="display:none">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
-          <div>
-            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Campaigns <span id="campaign-cnt" class="cnt">0</span></h1>
-            <div style="font-size:0.8rem;color:var(--muted)">One scenario fanned out across many agents. Open a campaign for the per-agent breakdown and result mix.</div>
+        <div id="campaigns-list">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+            <div>
+              <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Campaigns <span id="campaign-cnt" class="cnt">0</span></h1>
+              <div style="font-size:0.8rem;color:var(--muted)">One scenario fanned out across many agents. Open a campaign for the per-agent breakdown and result mix.</div>
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-shrink:0">
+              <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Scheduled campaigns — coming soon">Schedule · soon</button>
+              <button class="btn btn-outline btn-sm" onclick="loadCampaigns()">Refresh</button>
+              <button class="btn btn-primary btn-sm" id="campaign-new-btn" onclick="openCampaignLaunch()">&#9654; New campaign</button>
+            </div>
           </div>
-          <div style="display:flex;gap:0.5rem;flex-shrink:0">
-            <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Scheduled campaigns — coming soon">Schedule · soon</button>
-            <button class="btn btn-outline btn-sm" onclick="loadCampaigns()">Refresh</button>
-            <button class="btn btn-primary btn-sm" id="campaign-new-btn" onclick="openCampaignLaunch()">&#9654; New campaign</button>
+          <div id="campaign-toolbar" style="margin-bottom:0.9rem"></div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Campaign</th><th>Scenario</th><th>Targets</th><th>Status</th><th>Result mix</th><th>Started</th></tr></thead>
+              <tbody id="campaigns-body"><tr><td colspan="6" class="empty">No campaigns yet.</td></tr></tbody>
+            </table>
           </div>
         </div>
-        <div id="campaign-toolbar" style="margin-bottom:0.9rem"></div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Campaign</th><th>Scenario</th><th>Targets</th><th>Status</th><th>Result mix</th><th>Started</th></tr></thead>
-            <tbody id="campaigns-body"><tr><td colspan="6" class="empty">No campaigns yet.</td></tr></tbody>
-          </table>
-        </div>
+        <div id="campaigns-detail" style="display:none"></div>
       </div>
 
       <!-- ATT&CK Coverage -->
@@ -1909,7 +1912,10 @@ function bootApp() {
   }
 }
 
-function showTab(name) {
+// activateTab toggles which tab view + nav item is visible, without running any
+// data loaders — so callers like openCampaignDetail can switch to a tab and then
+// render their own sub-view without the tab's loader resetting it.
+function activateTab(name) {
   ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','users','compliance','settings'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
@@ -1918,8 +1924,12 @@ function showTab(name) {
   });
   var titleEl = document.getElementById('header-page-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
+}
+
+function showTab(name) {
+  activateTab(name);
   if (name === 'users') loadUsers();
-  if (name === 'campaigns') loadCampaigns();
+  if (name === 'campaigns') closeCampaignDetail();
   if (name === 'coverage') loadCoverage();
   if (name === 'findings') loadFindings();
   if (name === 'dashboard') loadDashboard();
@@ -2285,7 +2295,7 @@ function renderCampaignRows() {
         '<span class="tiny muted">' + (s.progress || 0) + '%</span>';
     }
     return '<tr style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
-      '<td><div class="cell-main">' + x(c.name) + '</div><div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem">' + x(c.id) + '</div></td>' +
+      '<td><div class="cell-main">' + x(c.name) + '</div><div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem">' + x(c.id) + (c.createdBy ? ' · ' + x(c.createdBy) : '') + '</div></td>' +
       '<td class="tiny muted">' + x(c.scenarioName) + '</td>' +
       '<td class="tiny">' + (s.dispatched || 0) + '/' + (s.targets || 0) + (s.skipped ? ' <span class="tiny muted">(' + s.skipped + ' skipped)</span>' : '') + '</td>' +
       '<td>' + status + '</td>' +
@@ -2294,54 +2304,82 @@ function renderCampaignRows() {
   }).join('');
 }
 
+function closeCampaignDetail() {
+  document.getElementById('campaigns-detail').style.display = 'none';
+  document.getElementById('campaigns-list').style.display = '';
+  loadCampaigns();
+}
 function openCampaignDetail(id) {
   apicall('/api/campaigns/' + encodeURIComponent(id)).then(function(c) {
     var s = c.summary || {};
-    document.getElementById('results-title').textContent = c.name + ' — Campaign';
-    var tile = function(lbl, val, col) {
-      return '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius-lg);padding:0.6rem 0.75rem">' +
-        '<div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">' + lbl + '</div>' +
-        '<div style="font-size:1.3rem;font-weight:700;font-family:var(--font-display);color:' + (col || 'var(--text)') + '">' + val + '</div></div>';
+    var status = x(s.status || '—');
+    var liveDot = s.status === 'running' ? '<span class="dot-live"></span> ' : '';
+    // ── stat tiles ──
+    var tile = function(lbl, val, col, foot) {
+      return '<div class="kpi-card stat-tile"><div class="stat-top"><div>' +
+        '<div class="kpi-label">' + lbl + '</div>' +
+        '<div class="kpi-value" style="color:' + (col || 'var(--text)') + '">' + val + '</div></div></div>' +
+        (foot ? '<div class="kpi-sub">' + foot + '</div>' : '') + '</div>';
     };
-    var head = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.5rem">' +
-      tile('Status', x(s.status || '—')) +
-      tile('Progress', (s.progress || 0) + '%', 'var(--accent)') +
-      tile('Dispatched', (s.dispatched || 0) + '/' + (s.targets || 0)) +
-      tile('Skipped', s.skipped || 0, s.skipped ? 'var(--warning)' : 'var(--muted)') + '</div>';
-    // Result-mix tiles — weighted effectiveness mirrors the kill-chain scoring
-    // (prevented full credit, detected-only half, missed none).
     var mt = (s.prevented || 0) + (s.detected || 0) + (s.missed || 0);
     var eff = mt ? Math.round(((s.prevented || 0) * 100 + (s.detected || 0) * 50) / mt) : 0;
     var effCol = eff >= 60 ? 'var(--success)' : eff >= 40 ? 'var(--warning)' : 'var(--danger)';
-    head += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.9rem">' +
-      tile('Effectiveness', mt ? eff : '—', mt ? effCol : 'var(--muted)') +
-      tile('Prevented', s.prevented || 0, 'var(--success)') +
-      tile('Detected only', s.detected || 0, 'var(--warning)') +
-      tile('Missed', s.missed || 0, (s.missed ? 'var(--danger)' : 'var(--muted)')) + '</div>';
-    var mix = '<div style="margin-bottom:0.9rem">' + campaignMixBar(s) + '</div>';
-    var runs = (c.runs || []).map(function(rn) {
-      var col = rn.status === 'completed' ? 'var(--success)' : rn.status === 'failed' ? 'var(--danger)' : 'var(--muted)';
-      return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border)">' +
-        '<span class="sbadge s-' + x(rn.status) + '">' + x(rn.status) + '</span>' +
-        '<code style="font-size:0.72rem">' + x(rn.agentId) + '</code>' +
-        '<span style="margin-left:auto;font-weight:600;color:' + col + '">' + (rn.preventionScore ? Math.round(rn.preventionScore) + '%' : '—') + '</span>' +
-        '<button class="btn btn-outline btn-sm" onclick="openRunFromCampaign(\'' + x(rn.runId) + '\')">Results</button></div>';
-    }).join('') || '<div class="empty">No child runs dispatched.</div>';
-    var skips = (c.skips || []).length
-      ? '<div style="margin-top:0.9rem"><div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.4rem">Skipped targets</div>' +
-        c.skips.map(function(k) { return '<div style="display:flex;gap:0.6rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><code>' + x(k.agentId) + '</code><span class="tiny muted" style="margin-left:auto">' + x(k.reason) + '</span></div>'; }).join('') + '</div>'
+    var tiles = '<div class="kpi-row" style="margin-bottom:1.25rem">' +
+      tile('Effectiveness', mt ? eff : '—', mt ? effCol : 'var(--muted)', 'weighted result') +
+      tile('Prevented', s.prevented || 0, 'var(--success)', 'blocked') +
+      tile('Detected only', s.detected || 0, 'var(--warning)', 'alerted, not blocked') +
+      tile('Missed', s.missed || 0, (s.missed ? 'var(--danger)' : 'var(--muted)'), 'no control response') + '</div>';
+    // ── running banner ──
+    var banner = (s.status === 'running')
+      ? '<div class="dash-panel" style="margin-bottom:1.25rem;border-color:var(--accent)"><div class="dash-panel-body" style="display:flex;align-items:center;gap:1rem">' +
+        '<span class="dot-live"></span><div style="flex:1"><div style="font-weight:600">Campaign in progress — ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents dispatched</div>' +
+        '<div class="prog" style="margin-top:0.5rem"><i style="width:' + (s.progress || 0) + '%"></i></div></div>' +
+        '<div style="font-family:var(--font-display);font-size:1.4rem;font-weight:700">' + (s.progress || 0) + '%</div></div></div>'
       : '';
+    // ── per-agent results table (our fan-out equivalent of the mockup step table) ──
+    var rows = (c.runs || []).map(function(rn) {
+      var col = rn.status === 'completed' ? 'var(--success)' : rn.status === 'failed' ? 'var(--danger)' : 'var(--muted)';
+      return '<tr><td><span class="sbadge s-' + x(rn.status) + '">' + x(rn.status) + '</span></td>' +
+        '<td style="font-family:var(--font-mono);font-size:0.72rem">' + x(rn.agentId) + '</td>' +
+        '<td style="font-weight:600;color:' + col + '">' + (rn.preventionScore ? Math.round(rn.preventionScore) + '%' : '—') + '</td>' +
+        '<td class="td-r"><button class="btn btn-outline btn-sm" onclick="openRunFromCampaign(\'' + x(rn.runId) + '\')">Results &rarr;</button></td></tr>';
+    }).join('') || '<tr><td colspan="4" class="empty">No child runs dispatched.</td></tr>';
+    var perAgent = '<div class="dash-panel" style="margin-bottom:1.25rem"><div class="dash-panel-hdr">Per-agent results</div>' +
+      '<div class="dash-panel-body" style="padding:0"><div class="tbl-wrap"><table>' +
+      '<thead><tr><th>Status</th><th>Agent</th><th>Prevention</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div></div>';
+    // ── skipped targets ──
+    var skips = (c.skips || []).length
+      ? '<div class="dash-panel" style="margin-bottom:1.25rem"><div class="dash-panel-hdr">Skipped targets (' + c.skips.length + ')</div><div class="dash-panel-body">' +
+        c.skips.map(function(k) { return '<div style="display:flex;gap:0.6rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><code>' + x(k.agentId) + '</code><span class="tiny muted" style="margin-left:auto">' + x(k.reason) + '</span></div>'; }).join('') + '</div></div>'
+      : '';
+    // ── run summary ──
+    var kv = function(k, v) { return '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span style="flex:1">' + v + '</span></div>'; };
+    var summary = '<div class="dash-panel"><div class="dash-panel-hdr">Run summary</div><div class="dash-panel-body">' +
+      kv('Campaign ID', '<code>' + x(c.id) + '</code>') + kv('Scenario', x(c.scenarioName)) +
+      kv('Targets', (s.dispatched || 0) + ' dispatched · ' + (s.skipped || 0) + ' skipped of ' + (s.targets || 0)) +
+      kv('Mode', x(c.mode || '—')) + kv('Initiated by', x(c.createdBy || '—')) +
+      kv('Result mix', campaignMixBar(s)) + '</div></div>';
+    // ── actions ──
     var actions = (s.status === 'running')
       ? '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>'
       : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Campaign report export — coming soon">Export report · soon</button>' +
-        '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run campaign — coming soon">Re-run · soon</button>';
-    document.getElementById('results-export').innerHTML = actions;
-    // Recommended next steps — filled async from this campaign's findings.
-    document.getElementById('results-body').innerHTML = head + mix +
-      '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0.5rem 0">Per-agent runs</div>' +
-      runs + skips +
-      '<div id="cmp-recs" style="margin-top:0.9rem"></div>';
-    document.getElementById('results-overlay').classList.add('open');
+        ' <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run campaign — coming soon">Re-run · soon</button>';
+
+    document.getElementById('campaigns-detail').innerHTML =
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">' +
+        '<div><a class="tiny" style="color:var(--accent);cursor:pointer" onclick="closeCampaignDetail()">&larr; Campaigns</a>' +
+        '<h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0.3rem 0;color:var(--text)">' + x(c.name) + ' <span class="sbadge s-' + x(s.status || 'running') + '" style="font-size:0.7rem;vertical-align:middle">' + liveDot + status + '</span></h1>' +
+        '<div style="font-size:0.8rem;color:var(--muted)">' + x(c.scenarioName) + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents · started ' + fmtDate(c.startedAt) + (c.createdBy ? ' by ' + x(c.createdBy) : '') + '</div></div>' +
+        '<div style="display:flex;gap:0.5rem;flex-shrink:0">' + actions + '</div>' +
+      '</div>' +
+      banner + tiles +
+      '<div class="dash-grid" style="grid-template-columns:1.5fr 1fr;align-items:start">' +
+        '<div>' + perAgent + skips + '</div>' +
+        '<div>' + summary + '<div id="cmp-recs" style="margin-top:1.25rem"></div></div>' +
+      '</div>';
+    activateTab('campaigns'); // in case opened from the dashboard
+    document.getElementById('campaigns-list').style.display = 'none';
+    document.getElementById('campaigns-detail').style.display = '';
     renderCampaignRecs(c.id);
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -2378,7 +2416,7 @@ function openRunFromCampaign(runId) {
 function stopCampaign(id) {
   if (!confirm('Stop this campaign? Running child runs will be marked partial.')) return;
   apicall('/api/campaigns/' + encodeURIComponent(id) + '/stop', { method: 'POST' })
-    .then(function() { showToast('Campaign stopped', 'ok'); openCampaignDetail(id); loadCampaigns(); })
+    .then(function() { showToast('Campaign stopped', 'ok'); openCampaignDetail(id); })
     .catch(function(e) { showToast(e.message, 'err'); });
 }
 

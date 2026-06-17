@@ -273,8 +273,8 @@ func (h *Handler) ListCampaigns(w http.ResponseWriter, r *http.Request) {
 		}
 		s, _, _ := h.summaryFor(r.Context(), c)
 		out = append(out, map[string]any{
-			"id": c.ID, "name": c.Name, "scenarioName": c.ScenarioName, "mode": c.Mode,
-			"startedAt": c.StartedAt, "summary": s,
+			"id": c.ID, "name": c.Name, "scenarioId": c.ScenarioID, "scenarioName": c.ScenarioName,
+			"mode": c.Mode, "createdBy": c.CreatedBy, "startedAt": c.StartedAt, "summary": s,
 		})
 	}
 	respond(w, out)
