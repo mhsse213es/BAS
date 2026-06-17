@@ -61,6 +61,9 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Refresh findings now that detection verdicts are known — fails that were
+	// caught flip missed → detected_only (same-run refinement, idempotent).
+	h.upsertFindingsForRun(r.Context(), runID)
 	respond(w, map[string]any{"runId": runID, "detectionRate": sum.DetectionRate,
 		"undetectedRate": sum.UndetectedRate, "mttdMs": sum.MTTDMs, "alerts": len(body.Alerts)})
 }

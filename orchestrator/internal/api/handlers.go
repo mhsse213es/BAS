@@ -1321,6 +1321,10 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			`UPDATE scenario_runs SET score = $1 WHERE id = $2`, scoreJSON, raw.RunID)
 	}
 
+	// Derive/refresh persistent findings from this run's results (detection data,
+	// if any, is folded in by the detection-ingest hook). Idempotent.
+	h.upsertFindingsForRun(r.Context(), raw.RunID)
+
 	// Notify connected dashboards in real time
 	h.hub.BroadcastBrowsers(models.WSMessage{
 		Type:    models.MsgScenarioResult,
