@@ -2275,11 +2275,21 @@ function openCampaignDetail(id) {
         '<div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">' + lbl + '</div>' +
         '<div style="font-size:1.3rem;font-weight:700;font-family:var(--font-display);color:' + (col || 'var(--text)') + '">' + val + '</div></div>';
     };
-    var head = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.9rem">' +
+    var head = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.5rem">' +
       tile('Status', x(s.status || '—')) +
       tile('Progress', (s.progress || 0) + '%', 'var(--accent)') +
       tile('Dispatched', (s.dispatched || 0) + '/' + (s.targets || 0)) +
       tile('Skipped', s.skipped || 0, s.skipped ? 'var(--warning)' : 'var(--muted)') + '</div>';
+    // Result-mix tiles — weighted effectiveness mirrors the kill-chain scoring
+    // (prevented full credit, detected-only half, missed none).
+    var mt = (s.prevented || 0) + (s.detected || 0) + (s.missed || 0);
+    var eff = mt ? Math.round(((s.prevented || 0) * 100 + (s.detected || 0) * 50) / mt) : 0;
+    var effCol = eff >= 60 ? 'var(--success)' : eff >= 40 ? 'var(--warning)' : 'var(--danger)';
+    head += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.9rem">' +
+      tile('Effectiveness', mt ? eff : '—', mt ? effCol : 'var(--muted)') +
+      tile('Prevented', s.prevented || 0, 'var(--success)') +
+      tile('Detected only', s.detected || 0, 'var(--warning)') +
+      tile('Missed', s.missed || 0, (s.missed ? 'var(--danger)' : 'var(--muted)')) + '</div>';
     var mix = '<div style="margin-bottom:0.9rem">' + campaignMixBar(s) + '</div>';
     var runs = (c.runs || []).map(function(rn) {
       var col = rn.status === 'completed' ? 'var(--success)' : rn.status === 'failed' ? 'var(--danger)' : 'var(--muted)';
@@ -2294,11 +2304,17 @@ function openCampaignDetail(id) {
         c.skips.map(function(k) { return '<div style="display:flex;gap:0.6rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><code>' + x(k.agentId) + '</code><span class="tiny muted" style="margin-left:auto">' + x(k.reason) + '</span></div>'; }).join('') + '</div>'
       : '';
     var actions = (s.status === 'running')
-      ? '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>' : '';
+      ? '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>'
+      : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Campaign report export — coming soon">Export report · soon</button>' +
+        '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run campaign — coming soon">Re-run · soon</button>';
     document.getElementById('results-export').innerHTML = actions;
+    // Recommended next steps — greyed until a campaign-level remediation backend exists.
+    var recs = '<div class="dash-soon" style="margin-top:0.9rem;border:1px dashed var(--border);border-radius:var(--radius-lg);padding:0.6rem 0.75rem;position:relative">' +
+      '<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.3rem">Recommended next steps</div>' +
+      '<div class="tiny muted">Prioritised remediations for this campaign’s gaps will appear here once the findings backend lands.</div></div>';
     document.getElementById('results-body').innerHTML = head + mix +
       '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0.5rem 0">Per-agent runs</div>' +
-      runs + skips;
+      runs + skips + recs;
     document.getElementById('results-overlay').classList.add('open');
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
