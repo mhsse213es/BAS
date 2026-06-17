@@ -279,7 +279,10 @@ if (Test-Path $PayloadDir) {
 }
 
 # -- 7. Write VERSION file ----------------------------------------------------
-$Version | Out-File -FilePath "$OutDir\VERSION" -Encoding utf8 -NoNewline
+# WriteAllText → UTF-8 without BOM. setup.sh reads this to tag the images in
+# .env; a BOM here (which Out-File -Encoding utf8 adds on PS 5.1) would corrupt
+# the version string and break compose image resolution.
+[System.IO.File]::WriteAllText("$OutDir\VERSION", $Version)
 
 # -- 7b. Air-gap integrity: verify.sh + per-file SHA-256 manifest --------------
 # Gives bas-install the same offline integrity guarantees as the dedicated

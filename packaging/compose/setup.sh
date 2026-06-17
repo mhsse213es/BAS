@@ -21,13 +21,23 @@ ZKTftlLSAELFxhi81iDw7789G53Ur0+PQTcf9wCVFAPFk7DjCykHNcMf3c05vTdn
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 readonly TITLE="BAS Platform Setup"
-readonly BAS_VERSION="1.6.0"
 readonly DEFAULT_INSTALL_DIR="/opt/bas-platform"
 readonly DEFAULT_PORT="9000"
 readonly MIN_RAM_MB=3800
 readonly MIN_DISK_MB=5120
 readonly SERVICE_NAME="bas-compose"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Version is read from the bundle's VERSION file (written by the packager) so the
+# .env image tag ALWAYS matches the images shipped in THIS bundle — never a
+# hardcoded guess that drifts from the -Version used at build time. Strip a
+# possible UTF-8 BOM / CR / surrounding whitespace. Fallback only applies when
+# setup.sh is run outside a bundle (no VERSION file).
+_bas_version="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null || true)"
+_bas_version="${_bas_version#$'\xEF\xBB\xBF'}"
+_bas_version="${_bas_version//$'\r'/}"
+_bas_version="${_bas_version//[[:space:]]/}"
+readonly BAS_VERSION="${_bas_version:-latest}"
 
 # Set by --offline flag; skips docker pull (images already loaded)
 OFFLINE=false
