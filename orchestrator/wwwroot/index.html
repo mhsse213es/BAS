@@ -673,6 +673,18 @@ code {
 .rem-meta svg { opacity:0.75; flex-shrink:0; }
 .rem-actions { display:flex; flex-direction:column; gap:0.4rem; flex-shrink:0; align-items:stretch; min-width:104px; }
 .rem-actions .btn { justify-content:center; }
+/* remediation detail drawer */
+.rem-stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin:0.2rem 0 0.4rem; }
+.rem-stat { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:0.55rem 0.7rem; }
+.rem-stat .lbl { font-size:0.58rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+.rem-stat .val { font-size:0.9rem; font-weight:600; color:var(--text); margin-top:0.25rem; }
+.rem-eyebrow { font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--accent); margin:1rem 0 0.5rem; }
+.rem-step { display:flex; gap:0.6rem; padding:0.55rem 0; border-bottom:1px solid var(--border); }
+.rem-step:last-child { border-bottom:none; }
+.rem-step-n { width:20px; height:20px; border-radius:50%; flex-shrink:0; background:var(--accent); color:#fff; font-size:0.64rem; font-weight:700; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+.rem-step-tx .nm { font-size:0.8rem; font-weight:600; color:var(--text); }
+.rem-step-tx .ds { font-size:0.72rem; color:var(--muted); margin-top:0.25rem; line-height:1.5; }
+.rem-tip { background:rgba(35,134,54,0.1); border:1px solid rgba(35,134,54,0.3); border-radius:var(--radius); padding:0.6rem 0.75rem; font-size:0.74rem; color:#7ee08a; display:flex; gap:0.5rem; align-items:flex-start; margin-top:0.9rem; line-height:1.5; }
 
 /* ── Compliance ────────────────────────────────────────────────────────── */
 .cmp-meta { font-size:0.8rem; color:var(--muted); margin-bottom:1rem; padding:0.5rem 0; border-bottom:1px solid var(--border); }
@@ -2889,17 +2901,33 @@ function openRemediation(i) {
   document.getElementById('results-title').textContent = r.techniqueId + ' — Remediation';
   document.getElementById('results-export').innerHTML =
     '<button class="btn btn-primary btn-sm" onclick="revalidateRemediation(\'' + x(r.techniqueId) + '\')">&#8635; Re-validate</button>';
-  var mits = (r.mitigations || []).map(function(m) {
-    return '<div style="padding:0.4rem 0;border-bottom:1px solid var(--border)"><div style="font-weight:600;font-size:0.8rem">' + x(m.name) + '</div>' +
-      (m.description ? '<div class="tiny muted" style="margin-top:0.2rem;line-height:1.5">' + x(m.description) + '</div>' : '') + '</div>';
+  var ctrls = (r.controlClasses || []).map(x).join(', ') || '—';
+  var stat = function(l, v) { return '<div class="rem-stat"><div class="lbl">' + l + '</div><div class="val">' + v + '</div></div>'; };
+  var statGrid = '<div class="rem-stat-grid">' +
+    '<div class="rem-stat"><div class="lbl">Severity</div><div class="val">' + findingSevBadge(r.severity, '') + '</div></div>' +
+    stat('Findings closed', r.findingCount) +
+    stat('Agents affected', r.agentCount) +
+    stat('Control class', ctrls) +
+    '</div>';
+  var steps = (r.mitigations || []).map(function(m, idx) {
+    return '<div class="rem-step"><div class="rem-step-n">' + (idx + 1) + '</div>' +
+      '<div class="rem-step-tx"><div class="nm">' + x(m.name) + '</div>' +
+      (m.description ? '<div class="ds">' + x(m.description) + '</div>' : '') + '</div></div>';
   }).join('') || '<div class="tiny muted">No ATT&CK mitigations listed for this technique.</div>';
-  var head = function(t) { return '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0.7rem 0 0.3rem">' + t + '</div>'; };
+  var agents = (r.recommendedTargets || []).map(function(a) { return '<span class="tool-tag">' + x(a) + '</span>'; }).join(' ') || '<span class="tiny muted">—</span>';
+  var detection = r.detection
+    ? '<div class="rem-eyebrow">ATT&amp;CK Detection Guidance</div><div class="tiny" style="color:var(--text-dim);line-height:1.55">' + x(r.detection) + '</div>'
+    : '';
+  var checkSvg = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="flex-shrink:0;margin-top:1px"><path d="M3 8.5l3.2 3.2L13 5"/></svg>';
   document.getElementById('results-body').innerHTML =
-    '<div style="margin-bottom:0.6rem">' + findingSevBadge(r.severity, '') + ' <span class="tech-id">' + x(r.techniqueId) + '</span> ' + x(r.techniqueName) + '</div>' +
-    '<div class="tiny muted">Closes ' + r.findingCount + ' finding(s) on ' + r.agentCount + ' agent(s) · Missed ' + r.missed + ' · Detected only ' + r.detectedOnly + '</div>' +
-    head('ATT&CK Mitigations') + mits +
-    (r.detection ? head('ATT&CK Detection Guidance') + '<div class="tiny" style="color:var(--text-dim);line-height:1.55">' + x(r.detection) + '</div>' : '') +
-    head('Affected agents') + '<div class="tiny muted">' + (r.recommendedTargets || []).map(x).join(', ') + '</div>' +
+    '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem">' + findingSevBadge(r.severity, '') + ' <span class="tech-id">' + x(r.techniqueId) + '</span></div>' +
+    '<div style="font-weight:600;font-size:0.98rem;color:var(--text);margin-bottom:0.25rem;line-height:1.3">' + x(r.techniqueName) + '</div>' +
+    '<div class="tiny muted" style="margin-bottom:0.6rem">Closes ' + r.findingCount + ' finding' + (r.findingCount === 1 ? '' : 's') + ' on ' + r.agentCount + ' agent' + (r.agentCount === 1 ? '' : 's') + ' · Missed ' + r.missed + ' · Detected only ' + r.detectedOnly + '</div>' +
+    statGrid +
+    '<div class="rem-eyebrow">Implementation Steps — ATT&amp;CK Mitigations</div>' + steps +
+    detection +
+    '<div class="rem-eyebrow">Affected Agents</div><div>' + agents + '</div>' +
+    '<div class="rem-tip">' + checkSvg + '<span>After applying these mitigations, re-run the linked scenario to confirm the gap is closed and posture improves.</span></div>' +
     '<div class="tiny muted" style="margin-top:0.8rem;opacity:0.8">Mitigation &amp; detection content © MITRE ATT&CK&reg;.</div>';
   document.getElementById('results-overlay').classList.add('open');
 }
