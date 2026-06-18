@@ -239,6 +239,16 @@ tr:last-child td{border-bottom:none}
 <div class="cover">
   <div class="cover-logo">Aud<span>spect</span> BAS</div>
   <div class="cover-title">Security Assessment Report</div>
+  {{if .scope}}
+  <div class="cover-sub">Breach &amp; Attack Simulation — {{.scope.subtitle}}</div>
+  <table class="cover-table">
+    <tr><td>Campaign</td><td><strong>{{.scope.title}}</strong></td></tr>
+    <tr><td>Scenario</td><td>{{.scope.scenario}}</td></tr>
+    <tr><td>Endpoints</td><td>{{.scope.agentCount}} agent(s) &nbsp;·&nbsp; {{.scope.runCount}} run(s)</td></tr>
+    <tr><td>Assessment Date</td><td>{{fmtTime .summary.lastRunAt}}</td></tr>
+    <tr><td>Report Generated</td><td>{{fmtTime .generatedAt}}</td></tr>
+  </table>
+  {{else}}
   <div class="cover-sub">Breach &amp; Attack Simulation — Endpoint Posture Report</div>
   <table class="cover-table">
     <tr><td>Agent</td><td><strong>{{.agent.hostname}}</strong> ({{.agent.ipAddress}})</td></tr>
@@ -249,6 +259,7 @@ tr:last-child td{border-bottom:none}
     <tr><td>Total Runs</td><td>{{.summary.totalRuns}}</td></tr>
     <tr><td>Last Scenario</td><td>{{.summary.lastScenarioName}}</td></tr>
   </table>
+  {{end}}
   <div class="confidential">⚠ CONFIDENTIAL — For authorized use only</div>
 </div>
 <div class="footer">
@@ -412,6 +423,29 @@ tr:last-child td{border-bottom:none}
 <!-- ═══ 5. ASSET CONTEXT ════════════════════════════════════════════════ -->
 <div class="page">
 <h1>5. Asset Context</h1>
+{{if .scope}}
+<table>
+  <tr><td>Campaign</td><td><strong>{{.scope.title}}</strong></td></tr>
+  <tr><td>Scenario</td><td>{{.scope.scenario}}</td></tr>
+  <tr><td>Endpoints Assessed</td><td>{{.scope.agentCount}}</td></tr>
+  <tr><td>Runs Aggregated</td><td>{{.scope.runCount}}</td></tr>
+</table>
+<h3>Per-Agent Breakdown</h3>
+<table>
+  <thead><tr><th>Endpoint</th><th>Status</th><th>Prevention</th><th>Tested</th><th>Failed</th></tr></thead>
+  <tbody>
+  {{range .campaignAgents}}
+  <tr>
+    <td style="font-weight:600">{{.hostname}}</td>
+    <td>{{.status}}</td>
+    <td style="font-weight:700;color:{{tacticColor .preventionScore}}">{{fmtScore .preventionScore}}%</td>
+    <td>{{.tested}}</td>
+    <td style="color:{{if gt .failed 0.0}}#da3633{{else}}#238636{{end}}">{{.failed}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
 <table>
   <tr><td>Hostname</td><td><strong>{{.agent.hostname}}</strong></td></tr>
   <tr><td>IP Address</td><td>{{.agent.ipAddress}}</td></tr>
@@ -421,6 +455,7 @@ tr:last-child td{border-bottom:none}
   <tr><td>Agent Status</td><td>{{.agent.status}}</td></tr>
   <tr><td>Last Update</td><td>{{fmtTime .agent.lastUpdate}}</td></tr>
 </table>
+{{end}}
 {{if .securityTools}}
 <h3>Reported Security Tooling</h3>
 <div>{{range .securityTools}}<span class="tool-tag">{{.}}</span>{{end}}</div>

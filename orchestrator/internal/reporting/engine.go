@@ -53,6 +53,30 @@ type FullReport struct {
 	ActionPlan          []ActionItem    `json:"actionPlan"`
 	Reliability         Reliability     `json:"reliability"`
 	Glossary            []GlossaryEntry `json:"glossary"`
+	// Scope is set for fleet-wide (campaign) reports; nil for single-agent/run
+	// reports. When present the cover and Asset Context render the campaign scope
+	// and the per-agent breakdown instead of single-agent metadata.
+	Scope          *ReportScope       `json:"scope,omitempty"`
+	CampaignAgents []CampaignAgentRow `json:"campaignAgents,omitempty"`
+}
+
+// ReportScope describes a fleet-wide (campaign) report's subject.
+type ReportScope struct {
+	Kind       string `json:"kind"`     // "campaign"
+	Title      string `json:"title"`    // campaign name
+	Subtitle   string `json:"subtitle"` // "Campaign Assessment — <scenario>"
+	Scenario   string `json:"scenario"`
+	AgentCount int    `json:"agentCount"`
+	RunCount   int    `json:"runCount"`
+}
+
+// CampaignAgentRow is one endpoint's result inside a campaign's per-agent breakdown.
+type CampaignAgentRow struct {
+	Hostname        string  `json:"hostname"`
+	Status          string  `json:"status"`
+	PreventionScore float64 `json:"preventionScore"`
+	Tested          int     `json:"tested"`
+	Failed          int     `json:"failed"`
 }
 
 // DetectionTechnique is one per-technique detection verdict surfaced to the UI.
@@ -689,6 +713,109 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	// Executive-grade derivations — per-run detection verdicts carry latency, so
 	// MTTD-per-tactic is available here (unlike the agent posture Build).
 	deriveExecutive(report, results, report.DetectionTechniques)
+
+	return report, nil
+}
+
+// BuildFromCampaign constructs a fleet-wide FullReport for a campaign by
+// aggregating every child run's results into one assessment, then reusing the
+// same derivations and renderers as the single-agent report. The Scope +
+// per-agent breakdown carry the campaign framing; scores are computed over the
+// union of all child-run results so the headline reflects the whole fleet.
+func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*FullReport, error) {
+	report := &FullReport{GeneratedAt: time.Now().UTC()}
+
+	var campName, scenarioName string
+	var startedAt time.Time
+	if err := e.db.QueryRow(ctx,
+		`SELECT name, scenario_name, started_at FROM campaigns WHERE id = $1`, campaignID,
+	).Scan(&campName, &scenarioName, &startedAt); err != nil {
+		return nil, fmt.Errorf("campaign %s not found: %w", campaignID, err)
+	}
+
+	rows, err := e.db.Query(ctx,
+		`SELECT sr.id, sr.agent_id, COALESCE(a.hostname,''), sr.status, sr.results, sr.score,
+		        sr.started_at, sr.completed_at
+		   FROM scenario_runs sr LEFT JOIN agents a ON a.agent_id = sr.agent_id
+		  WHERE sr.campaign_id = $1 ORDER BY sr.started_at`, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var allResults []models.SimulationResult
+	agentSet := map[string]bool{}
+	var runCount int
+	for rows.Next() {
+		var rid, agentID, hostname, status string
+		var resultsRaw, scoreRaw []byte
+		var sAt time.Time
+		var cAt *time.Time
+		if rows.Scan(&rid, &agentID, &hostname, &status, &resultsRaw, &scoreRaw, &sAt, &cAt) != nil {
+			continue
+		}
+		runCount++
+		agentSet[agentID] = true
+		if len(resultsRaw) > 0 {
+			var results []models.SimulationResult
+			if json.Unmarshal(resultsRaw, &results) == nil {
+				allResults = append(allResults, results...)
+			}
+		}
+		var sc models.Score
+		if len(scoreRaw) > 0 {
+			_ = json.Unmarshal(scoreRaw, &sc)
+		}
+		host := hostname
+		if host == "" {
+			host = agentID
+		}
+		report.CampaignAgents = append(report.CampaignAgents, CampaignAgentRow{
+			Hostname: host, Status: status, PreventionScore: sc.PreventionScore,
+			Tested: sc.PassedTechniques + sc.FailedTechniques, Failed: sc.FailedTechniques,
+		})
+		report.Runs = append(report.Runs, RunSummary{
+			ID: rid, ScenarioName: scenarioName, Status: status, StartedAt: sAt, CompletedAt: cAt,
+			RiskScore: sc.RiskScore, Classification: sc.Classification,
+			PreventionScore: sc.PreventionScore, ExposureScore: sc.ExposureScore,
+			TotalTechniques: sc.TotalTechniques, FailedTechniques: sc.FailedTechniques,
+		})
+	}
+
+	// Fleet score = ComputeScore over the union of all child-run results.
+	score := models.ComputeScore(allResults, nil)
+	report.TacticHeatmap = buildTacticHeatmap(allResults)
+	report.TopFindings = buildTopFindings(allResults, scenarioName)
+	report.ObjectiveRisks = buildObjectiveRisks(allResults)
+	report.Detection = buildDetectionSummary(allResults)
+	report.AttackPath = buildAttackPath(allResults)
+
+	report.Summary = ExecutiveSummary{
+		RiskScore: score.RiskScore, Classification: score.Classification,
+		PreventionScore: score.PreventionScore, ExposureScore: score.ExposureScore,
+		CoverageScore: score.CoverageScore, KillChainCoverage: score.KillChainCoverage,
+		KillChainAmplifier: score.KillChainAmplifier, Trend: score.Trend,
+		TotalRuns: runCount, TotalTechniques: score.TotalTechniques,
+		PassedTechniques: score.PassedTechniques, FailedTechniques: score.FailedTechniques,
+		ErroredTechniques: score.ErroredTechniques, SkippedTechniques: score.SkippedTechniques,
+		LastRunAt: startedAt, LastScenarioName: scenarioName,
+		CriticalFailures: score.CriticalFailures,
+		Recommendations:  buildRecommendations(score, report.TacticHeatmap),
+	}
+	if report.Summary.Classification == "" {
+		report.Summary.Classification = "No Data"
+	}
+	// Agent.Hostname backs the page footers and fallbacks; set it to the campaign.
+	report.Agent.Hostname = campName
+	report.Scope = &ReportScope{
+		Kind: "campaign", Title: campName,
+		Subtitle: "Campaign Assessment — " + scenarioName,
+		Scenario: scenarioName, AgentCount: len(agentSet), RunCount: runCount,
+	}
+
+	// Campaign aggregates multiple runs, so per-tactic detection latency (MTTD)
+	// is not meaningful here — pass nil dets (MTTD renders "—").
+	deriveExecutive(report, allResults, nil)
 
 	return report, nil
 }

@@ -105,6 +105,7 @@ func RenderReportPDF(w io.Writer, rep *FullReport, results []models.SimulationRe
 	pdf.AddPage()
 	d.executiveSummary(rep)
 	d.scorecard(rep)
+	d.campaignBreakdown(rep)
 	d.methodology(rep, results)
 	d.tacticBreakdown(rep)
 	d.keyFindings(rep)
@@ -162,14 +163,25 @@ func (d *rpt) coverPage(rep *FullReport) {
 	pdf.SetXY(margin+4, 152)
 	d.cellT(62, 7, "RISK: "+strings.ToUpper(emptyDash(cls)))
 
-	// Metadata block near the bottom.
-	rows := [][2]string{
-		{"Prepared for", emptyDash(rep.Agent.Hostname)},
-		{"Endpoint", emptyDash(rep.Agent.OSVersion)},
-		{"Environment", emptyDash(rep.Agent.EnvLabel)},
-		{"Assessment date", rep.Summary.LastRunAt.UTC().Format("02 January 2006, 15:04 UTC")},
-		{"Report generated", rep.GeneratedAt.UTC().Format("02 January 2006, 15:04 UTC")},
-		{"Run reference", runRef(rep)},
+	// Metadata block near the bottom — campaign scope when fleet-wide, else agent.
+	var rows [][2]string
+	if rep.Scope != nil {
+		rows = [][2]string{
+			{"Campaign", emptyDash(rep.Scope.Title)},
+			{"Scenario", emptyDash(rep.Scope.Scenario)},
+			{"Endpoints", fmt.Sprintf("%d agent(s) · %d run(s)", rep.Scope.AgentCount, rep.Scope.RunCount)},
+			{"Assessment date", rep.Summary.LastRunAt.UTC().Format("02 January 2006, 15:04 UTC")},
+			{"Report generated", rep.GeneratedAt.UTC().Format("02 January 2006, 15:04 UTC")},
+		}
+	} else {
+		rows = [][2]string{
+			{"Prepared for", emptyDash(rep.Agent.Hostname)},
+			{"Endpoint", emptyDash(rep.Agent.OSVersion)},
+			{"Environment", emptyDash(rep.Agent.EnvLabel)},
+			{"Assessment date", rep.Summary.LastRunAt.UTC().Format("02 January 2006, 15:04 UTC")},
+			{"Report generated", rep.GeneratedAt.UTC().Format("02 January 2006, 15:04 UTC")},
+			{"Run reference", runRef(rep)},
+		}
 	}
 	y := 210.0
 	for _, r := range rows {
@@ -575,6 +587,67 @@ func (d *rpt) scorecard(rep *FullReport) {
 
 	d.insightsBlock(rep.Insights)
 	d.controlMaturity(rep)
+}
+
+// campaignBreakdown renders the per-agent results table for a fleet-wide
+// (campaign) report. No-op for single-agent reports.
+func (d *rpt) campaignBreakdown(rep *FullReport) {
+	if rep.Scope == nil || len(rep.CampaignAgents) == 0 {
+		return
+	}
+	pdf := d.pdf
+	d.ensure(16)
+	d.text(cNavy)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin)
+	d.cellT(0, 5, "Per-Agent Breakdown")
+	pdf.Ln(5.6)
+	// Header row.
+	d.fill(cNavy)
+	d.text(cWhite)
+	pdf.SetFont("Helvetica", "B", 8)
+	y := pdf.GetY()
+	cols := []struct {
+		label string
+		w     float64
+	}{{"Endpoint", 70}, {"Status", 30}, {"Prevention", 28}, {"Tested", 23}, {"Failed", 23}}
+	x := margin
+	for _, c := range cols {
+		pdf.Rect(x, y, c.w, 6, "F")
+		pdf.SetXY(x+2, y+1)
+		d.cellT(c.w-2, 4, c.label)
+		x += c.w
+	}
+	pdf.SetY(y + 6)
+	pdf.SetFont("Helvetica", "", 8)
+	for _, a := range rep.CampaignAgents {
+		d.ensure(6)
+		yy := pdf.GetY()
+		d.text(cInk)
+		pdf.SetXY(margin+2, yy+1)
+		d.cellT(68, 4, a.Hostname)
+		pdf.SetXY(margin+70+2, yy+1)
+		d.cellT(28, 4, a.Status)
+		d.text(d.gradeHigh(a.PreventionScore))
+		pdf.SetFont("Helvetica", "B", 8)
+		pdf.SetXY(margin+100+2, yy+1)
+		d.cellT(26, 4, fmt.Sprintf("%.0f%%", a.PreventionScore))
+		pdf.SetFont("Helvetica", "", 8)
+		d.text(cInk)
+		pdf.SetXY(margin+128+2, yy+1)
+		d.cellT(21, 4, fmt.Sprintf("%d", a.Tested))
+		if a.Failed > 0 {
+			d.text(cDanger)
+		}
+		pdf.SetXY(margin+151+2, yy+1)
+		d.cellT(21, 4, fmt.Sprintf("%d", a.Failed))
+		d.text(cInk)
+		d.draw(cLine)
+		pdf.SetLineWidth(0.1)
+		pdf.Line(margin, yy+6, pageW-margin, yy+6)
+		pdf.SetY(yy + 6)
+	}
+	pdf.Ln(3)
 }
 
 // insightsBlock renders the most/least-protected callout — the single fastest
