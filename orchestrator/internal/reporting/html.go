@@ -187,9 +187,15 @@ strong{font-weight:650}
 /* Page layout */
 .page{padding:42px 48px;max-width:900px;margin:0 auto}
 @media print{
-  .page{page-break-after:always;padding:30px 30px}
+  .page{page-break-after:always;padding:30px 32px}
   .page:last-child{page-break-after:avoid}
   body{font-size:10.5px}
+  /* Clean page breaks — never split a row, card, or glossary entry; keep a
+     heading with the content that follows it; repeat table headers on overflow. */
+  tr,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
+  thead{display:table-header-group}
+  h1,h2,h3{page-break-after:avoid;break-after:avoid}
+  .footer{page-break-inside:avoid}
 }
 
 /* Cover */
@@ -717,7 +723,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
 {{range .glossary}}
-<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">
+<div class="gloss-item" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">
   <h3 style="margin:0 0 4px"><code>{{.techniqueId}}</code> — {{.name}} <span style="font-weight:400;color:#6e7681;font-size:0.8rem">({{humanize .tactic}})</span></h3>
   {{if .description}}<p style="font-size:0.82rem;color:#444">{{.description}}</p>{{end}}
   {{if .detection}}<p style="font-size:0.8rem;color:#444"><strong>Detection:</strong> {{.detection}}</p>{{end}}
