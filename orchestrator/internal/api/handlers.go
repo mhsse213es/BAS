@@ -2092,6 +2092,43 @@ func (h *Handler) GetFullReportPDF(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GET /api/report/full/csv?agentId=X
+// Streams the forensic CSV (one row per technique result) for the agent's latest
+// completed/partial run — the SOC/auditor evidence layer beside the executive report.
+func (h *Handler) GetFullReportCSV(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	agentID := r.URL.Query().Get("agentId")
+	if agentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	var resultsRaw []byte
+	var scenarioName, hostname string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT sr.name, sr.results, COALESCE(a.hostname,'')
+		   FROM scenario_runs sr LEFT JOIN agents a ON a.agent_id = sr.agent_id
+		  WHERE sr.agent_id = $1 AND sr.status IN ('completed','partial')
+		  ORDER BY sr.started_at DESC LIMIT 1`, agentID,
+	).Scan(&scenarioName, &resultsRaw, &hostname); err != nil {
+		jsonError(w, "no completed run found for agent", http.StatusNotFound)
+		return
+	}
+	var results []models.SimulationResult
+	if len(resultsRaw) > 0 {
+		json.Unmarshal(resultsRaw, &results)
+	}
+	if hostname == "" {
+		hostname = agentID
+	}
+	fname := fmt.Sprintf("bas-forensic-%s-%s.csv", sanitizeFilename(hostname), time.Now().UTC().Format("2006-01-02"))
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	reporting.WriteForensicCSV(w, scenarioName, results)
+}
+
 // GET /api/report/audit-pack?agentId=X
 // Streams a ZIP containing the full audit pack.
 func (h *Handler) GetAuditPack(w http.ResponseWriter, r *http.Request) {

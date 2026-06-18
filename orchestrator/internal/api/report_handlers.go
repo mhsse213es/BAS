@@ -20,8 +20,11 @@ func reportDownloadPath(reportType, format, agentID, framework string) (string, 
 			return "", errors.New("agentId required")
 		}
 		f := "pdf"
-		if format == "html" {
+		switch format {
+		case "html":
 			f = "html"
+		case "csv": // forensic evidence layer — one row per technique result
+			f = "csv"
 		}
 		return "/api/report/full/" + f + "?agentId=" + url.QueryEscape(agentID), nil
 	case "audit":

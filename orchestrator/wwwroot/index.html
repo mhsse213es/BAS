@@ -2903,9 +2903,11 @@ function openReportGen(type) {
   document.getElementById('rep-agent').innerHTML = agents.map(function(a) {
     return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
   }).join('');
-  var fmts = type === 'compliance' ? ['html', 'pdf', 'csv'] : type === 'audit' ? [''] : ['pdf', 'html'];
+  var fmts = type === 'compliance' ? ['html', 'pdf', 'csv'] : type === 'audit' ? [''] : ['pdf', 'html', 'csv'];
   document.getElementById('rep-format').innerHTML = fmts.map(function(f) {
-    return '<option value="' + f + '">' + (f ? f.toUpperCase() : 'Package') + '</option>';
+    var lbl = f ? f.toUpperCase() : 'Package';
+    if (type === 'posture' && f === 'csv') lbl = 'CSV (forensic)';
+    return '<option value="' + f + '">' + lbl + '</option>';
   }).join('');
   var fwWrap = document.getElementById('rep-fw-wrap');
   if (type === 'compliance') {
