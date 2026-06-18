@@ -1996,41 +1996,50 @@ func (h *Handler) GetFullReportHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build compliance summaries for the HTML report
-	var compRows []reporting.ComplianceSummaryRow
-	if h.complianceMapper != nil {
-		var resultsRaw []byte
-		h.db.QueryRow(r.Context(),
-			`SELECT results FROM scenario_runs
-			  WHERE agent_id = $1 AND status IN ('completed','partial')
-			  ORDER BY started_at DESC LIMIT 1`, agentID,
-		).Scan(&resultsRaw)
-		var results []models.SimulationResult
-		if len(resultsRaw) > 0 {
-			json.Unmarshal(resultsRaw, &results)
-		}
-		for _, fw := range h.complianceMapper.Frameworks() {
-			cr, err := h.complianceMapper.GenerateReport(results, fw.ID, agentID, "", "")
-			if err != nil {
-				continue
-			}
-			compRows = append(compRows, reporting.ComplianceSummaryRow{
-				Framework:     fw.Name + " " + fw.Version,
-				TotalControls: cr.Summary.TotalControls,
-				Tested:        cr.Summary.TestedControls,
-				Passing:       cr.Summary.PassingControls,
-				Failing:       cr.Summary.FailingControls,
-				Untested:      cr.Summary.UntestedControls,
-				CompliancePct: cr.Summary.CompliancePercent,
-				CoveragePct:   cr.Summary.CoveragePercent,
-			})
-		}
-	}
+	compRows := h.complianceRows(r.Context(), agentID)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := reporting.GenerateHTML(w, report, compRows); err != nil {
 		log.Printf("[api] generate HTML report: %v", err)
 	}
+}
+
+// complianceRows builds the per-framework compliance summary rows for an agent's
+// latest completed/partial run — shared by the HTML report and the PDF (so the
+// PDF, rendered from that HTML, carries the same compliance section).
+func (h *Handler) complianceRows(ctx context.Context, agentID string) []reporting.ComplianceSummaryRow {
+	if h.complianceMapper == nil {
+		return nil
+	}
+	var resultsRaw []byte
+	h.db.QueryRow(ctx,
+		`SELECT results FROM scenario_runs
+		  WHERE agent_id = $1 AND status IN ('completed','partial')
+		  ORDER BY started_at DESC LIMIT 1`, agentID,
+	).Scan(&resultsRaw)
+	var results []models.SimulationResult
+	if len(resultsRaw) > 0 {
+		json.Unmarshal(resultsRaw, &results)
+	}
+	var rows []reporting.ComplianceSummaryRow
+	for _, fw := range h.complianceMapper.Frameworks() {
+		cr, err := h.complianceMapper.GenerateReport(results, fw.ID, agentID, "", "")
+		if err != nil {
+			continue
+		}
+		rows = append(rows, reporting.ComplianceSummaryRow{
+			Framework:     fw.Name + " " + fw.Version,
+			TotalControls: cr.Summary.TotalControls,
+			Manual:        cr.Summary.ManualControls,
+			Tested:        cr.Summary.TestedControls,
+			Passing:       cr.Summary.PassingControls,
+			Failing:       cr.Summary.FailingControls,
+			Untested:      cr.Summary.UntestedControls,
+			CompliancePct: cr.Summary.CompliancePercent,
+			CoveragePct:   cr.Summary.CoveragePercent,
+		})
+	}
+	return rows
 }
 
 // sanitizeFilename keeps only filename-safe characters, capped at 32 chars.
@@ -2087,7 +2096,8 @@ func (h *Handler) GetFullReportPDF(w http.ResponseWriter, r *http.Request) {
 	fname := fmt.Sprintf("bas-report-%s-%s.pdf", sanitizeFilename(host), time.Now().UTC().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
-	if err := reporting.RenderReportPDF(w, report, results); err != nil {
+	// Render from the styled HTML via the Chromium sidecar (falls back to fpdf).
+	if err := h.reportingEngine.PDFFromReport(r.Context(), w, report, h.complianceRows(r.Context(), agentID), results); err != nil {
 		log.Printf("[api] full report pdf: %v", err)
 	}
 }
@@ -2307,7 +2317,7 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
-	if err := reporting.RenderReportPDF(w, rep, results); err != nil {
+	if err := h.reportingEngine.PDFFromReport(r.Context(), w, rep, nil, results); err != nil {
 		log.Printf("[api] pdf output: %v", err)
 	}
 }

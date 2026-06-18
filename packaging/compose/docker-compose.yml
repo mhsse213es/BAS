@@ -49,6 +49,25 @@ services:
       retries: 5
       start_period: 180s
 
+  # ── Headless Chromium (renders the styled HTML report to PDF) ────────────────
+  # The orchestrator runs in a hardened distroless image that can't host Chrome,
+  # so PDF generation prints the report HTML via this sidecar over CDP. If this
+  # service is absent the orchestrator falls back to its built-in PDF renderer.
+  chrome:
+    image: chromedp/headless-shell:latest
+    container_name: bas-chrome
+    command:
+      - "--no-sandbox"
+      - "--disable-gpu"
+      - "--disable-dev-shm-usage"
+      - "--remote-debugging-address=0.0.0.0"
+      - "--remote-debugging-port=9222"
+      - "--remote-allow-origins=*"
+    shm_size: "512m"
+    networks:
+      - bas-internal
+    restart: unless-stopped
+
   # ── BAS Orchestrator ─────────────────────────────────────────────────────────
   orchestrator:
     image: ${REGISTRY:-}bas-orchestrator:${BAS_VERSION:-latest}
@@ -57,6 +76,8 @@ services:
       postgres:
         condition: service_healthy
       caldera:
+        condition: service_started
+      chrome:
         condition: service_started
     environment:
       DATABASE_URL:     "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=disable"
@@ -68,6 +89,9 @@ services:
       CALDERA_URL:      "${CALDERA_URL:-http://caldera:8888}"
       CALDERA_API_KEY:  ${CALDERA_API_KEY:-BASPlatform2024}
       BAS_ADMIN_PASSWORD: ${BAS_ADMIN_PASSWORD:-}
+      # Headless-Chromium sidecar for HTML→PDF report rendering (CDP). Falls back
+      # to the built-in PDF renderer if unset/unreachable.
+      CHROME_WS_URL:    "${CHROME_WS_URL:-http://chrome:9222}"
       # ── Threat-Intel Connector (optional — leave blank to disable) ──
       MISP_URL:                ${MISP_URL:-}
       MISP_API_KEY:            ${MISP_API_KEY:-}

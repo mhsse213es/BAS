@@ -17,6 +17,18 @@ services:
           memory: 1G
           cpus:   "1.0"
 
+  chrome:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file:  "2"
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus:   "1.0"
+
   orchestrator:
     logging:
       driver: "json-file"

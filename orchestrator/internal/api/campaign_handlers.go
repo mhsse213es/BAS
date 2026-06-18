@@ -332,7 +332,7 @@ func (h *Handler) GetCampaignPDF(w http.ResponseWriter, r *http.Request) {
 	fname := fmt.Sprintf("bas-campaign-%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), time.Now().UTC().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
-	if err := reporting.RenderReportPDF(w, rep, nil); err != nil {
+	if err := h.reportingEngine.PDFFromReport(r.Context(), w, rep, nil, nil); err != nil {
 		log.Printf("[api] campaign report pdf: %v", err)
 	}
 }

@@ -88,6 +88,10 @@ Log "Pulling ghcr.io/mitre/caldera:latest..."
 docker pull ghcr.io/mitre/caldera:latest
 if ($LASTEXITCODE -ne 0) { Warn "Failed to pull Caldera image - bundle will exclude it." }
 
+Log "Pulling chromedp/headless-shell:latest (HTML->PDF report renderer)..."
+docker pull chromedp/headless-shell:latest
+if ($LASTEXITCODE -ne 0) { Warn "Failed to pull headless-shell - PDF reports will fall back to the built-in renderer." }
+
 # Build the custom Caldera image with the adversary-emulation library baked in.
 # This is the only place the emulation library is cloned (build host has internet).
 Log "Building bas-caldera:$Version (emu library)..."
@@ -112,6 +116,16 @@ Log "  Saved: bas-orchestrator-$Version.tar (${sizeMB}MB)"
 Log "  Saving postgres:16-alpine..."
 docker save postgres:16-alpine -o "$OutDir\images\postgres-16-alpine.tar"
 Log "  Saved: postgres-16-alpine.tar"
+
+$chromeExists = docker image inspect "chromedp/headless-shell:latest" 2>$null
+if ($chromeExists) {
+    Log "  Saving chromedp/headless-shell:latest..."
+    docker save chromedp/headless-shell:latest -o "$OutDir\images\headless-shell.tar"
+    $csMB = [math]::Round((Get-Item "$OutDir\images\headless-shell.tar").Length / 1MB)
+    Log "  Saved: headless-shell.tar (${csMB}MB)"
+} else {
+    Warn "  headless-shell image not present - PDF reports will use the built-in fallback renderer."
+}
 
 $basCalderaExists = docker image inspect "bas-caldera:$Version" 2>$null
 if ($basCalderaExists) {
