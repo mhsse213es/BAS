@@ -29,19 +29,44 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 			KillChainCoverage: 21, KillChainAmplifier: 1.8, Trend: "Baseline",
 			TotalRuns: 1, TotalTechniques: 12, PassedTechniques: 5, FailedTechniques: 7,
 			LastRunAt: now, LastScenarioName: "RBI Ransomware Resilience Sweep",
-			Recommendations: []string{"Enable Credential Guard and LSA protection."},
+			ExposureLevel: "High", DetectionScore: 50, DetectionMeasured: true,
+			PenetrationTested: 12, PenetrationFailed: 7, PenetrationPct: 58,
+			MTTDMs: 192000,
+		},
+		ExecutiveConclusion: "This assessment executed 12 techniques against the endpoint, of which 7 were not prevented.",
+		TopRiskDrivers: []RiskDriver{
+			{TechniqueID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access",
+				Severity: "Critical", Failures: 3, ScorePoints: 30},
+		},
+		Insights: Insights{
+			HasData: true,
+			Least:   &TacticInsight{Tactic: "credential-access", PassPct: 0, Tested: 3},
+			Most:    &TacticInsight{Tactic: "execution", PassPct: 100, Tested: 2},
+		},
+		ActionPlan: []ActionItem{
+			{Tactic: "credential-access", Objective: "Credential Theft", Failures: 3, ScorePoints: 30,
+				Recommendation: "Enable Credential Guard / LSASS protection and alert on LSASS access."},
+		},
+		Reliability: Reliability{Attempted: 12, Valid: 12, Confidence: "High"},
+		Glossary: []GlossaryEntry{
+			{TechniqueID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access",
+				Description: "Adversaries may dump credentials from the OS.", Detection: "Monitor LSASS access."},
 		},
 		TacticHeatmap: []TacticEntry{
-			{Tactic: "credential-access", Passed: 0, Failed: 3, Total: 3, PassPct: 0, Weight: "Critical"},
+			{Tactic: "credential-access", Passed: 0, Failed: 3, Total: 3, PassPct: 0,
+				Detected: 1, DetectedPct: 33, MTTDMs: 192000, Weight: "Critical"},
 		},
 		TopFindings: []Finding{
 			{TechniqueID: "T1003", TechniqueName: "OS Credential Dumping", Tactic: "credential-access",
 				Severity: "Critical", Details: "LSASS memory was read without being blocked.",
 				Remediation: "Enable Credential Guard."},
 		},
-		DetectionCategories: []Category{
-			{Name: "credential-access", Result: "fail"},
+		ObjectiveRisks: []ObjectiveRisk{
+			{Objective: "Credential Theft", Tactic: "credential-access", Risk: "High", Tested: 3, Failed: 3},
 		},
+		AttackPath: AttackPath{Steps: []AttackPathStep{
+			{Tactic: "credential-access", Techniques: []string{"T1003 — OS Credential Dumping"}},
+		}},
 		Runs: []RunSummary{
 			{ID: "run-1", ScenarioName: "RBI Ransomware Resilience Sweep", Status: "completed",
 				StartedAt: now, RiskScore: 72, Classification: "High Risk",
@@ -59,15 +84,22 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{
-		"BANK-WS-01",                      // agent.hostname
-		"10.0.0.5",                        // agent.ipAddress
-		"High Risk",                       // summary.classification
-		"Enable Credential Guard and LSA", // summary.recommendations
-		"OS Credential Dumping",           // topFindings.techniqueName
-		"credential-access",               // tacticHeatmap.tactic / detectionCategories.name
-		"FAIL",                            // upper(detectionCategories.result)
-		"SEBI CSCRF 1.0",                  // compliance.framework
-		"09 Jun 2026, 10:30 UTC",          // fmtTime(generatedAt)
+		"BANK-WS-01",              // agent.hostname
+		"10.0.0.5",                // agent.ipAddress
+		"High Risk",               // summary.classification
+		"Assessment Summary",      // §2 heading
+		"Detection Score",         // elevated alongside prevention
+		"Exposure: High",          // exposure level chip
+		"7/12",                    // penetration ratio
+		"Top Risk Drivers",        // §3 heading
+		"Credential Access",       // humanized tactic
+		"Action Plan",             // §9 heading
+		"Enable Credential Guard", // action-plan recommendation
+		"Technical Appendix",      // §13 glossary heading
+		"OS Credential Dumping",   // topFindings / glossary technique
+		"Most Protected",          // insights
+		"SEBI CSCRF 1.0",          // compliance.framework
+		"09 Jun 2026, 10:30 UTC",  // fmtTime(generatedAt)
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered report missing %q (output %d bytes)", want, len(out))
