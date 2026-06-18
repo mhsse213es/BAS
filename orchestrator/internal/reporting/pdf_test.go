@@ -79,7 +79,10 @@ func TestRenderReportPDF(t *testing.T) {
 			PreventionScore: 41, ExposureScore: 63,
 			CoverageScore: 0, KillChainCoverage: 21, KillChainAmplifier: 1.8,
 			Trend: "Baseline", TotalTechniques: 12, PassedTechniques: 5, FailedTechniques: 7,
-			LastRunAt: now, LastScenarioName: "RBI Ransomware Resilience Sweep",
+			ErroredTechniques: 2,
+			LastRunAt:         now, LastScenarioName: "RBI Ransomware Resilience Sweep",
+			ExposureLevel: "High", DetectionScore: 28.6, DetectionMeasured: true,
+			PenetrationTested: 12, PenetrationFailed: 7, PenetrationPct: 58, MTTDMs: 192000,
 			CriticalFailures: []models.CriticalFailure{
 				{TechniqueID: "T1486", Name: "Data Encrypted for Impact", Tactic: "impact", Severity: "Critical"},
 			},
@@ -87,6 +90,20 @@ func TestRenderReportPDF(t *testing.T) {
 				"Deploy application allow-listing to block unsigned binaries.",
 				"Enable tamper protection on the EDR agent.",
 			},
+		},
+		Reliability: Reliability{Attempted: 14, Valid: 12, Errored: 2, Confidence: "Medium"},
+		Insights: Insights{
+			HasData: true,
+			Most:    &TacticInsight{Tactic: "execution", PassPct: 66, Tested: 3},
+			Least:   &TacticInsight{Tactic: "credential-access", PassPct: 0, Tested: 3},
+		},
+		TopRiskDrivers: []RiskDriver{
+			{TechniqueID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access", Severity: "Critical", Failures: 3, ScorePoints: 30},
+			{TechniqueID: "T1059.001", Name: "PowerShell", Tactic: "execution", Severity: "High", Failures: 1, ScorePoints: 7.5},
+		},
+		ActionPlan: []ActionItem{
+			{Tactic: "credential-access", Objective: "Credential Theft", Failures: 3, ScorePoints: 30, Recommendation: "Enable Credential Guard / LSASS protection and alert on LSASS access."},
+			{Tactic: "execution", Objective: "Code Execution", Failures: 1, ScorePoints: 7.5, Recommendation: "Constrain script engines (PowerShell CLM, WSH) and enforce application control."},
 		},
 		TacticHeatmap: []TacticEntry{
 			{Tactic: "execution", Passed: 2, Failed: 1, Total: 3, PassPct: 66, Weight: "High"},

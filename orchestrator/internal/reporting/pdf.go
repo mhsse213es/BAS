@@ -524,11 +524,18 @@ func (d *rpt) scorecard(rep *FullReport) {
 		label, value, note string
 		col                rgb
 	}
+	// Cymulate-priority headline cards: Prevention · Detection · Exposure · Penetration.
+	detVal, detNote, detCol := "N/A", "no telemetry — not measurable", cMuted
+	if s.DetectionMeasured {
+		detVal = fmt.Sprintf("%.0f%%", s.DetectionScore)
+		detNote = "alerts on unprevented techniques"
+		detCol = d.gradeHigh(s.DetectionScore)
+	}
 	cards := []card{
 		{"Prevention", fmt.Sprintf("%.0f%%", s.PreventionScore), "techniques blocked (higher is better)", d.gradeHigh(s.PreventionScore)},
-		{"Exposure", fmt.Sprintf("%.0f", s.ExposureScore), "weighted fail rate (lower is better)", d.gradeLow(s.ExposureScore)},
-		{"Tactic Breadth", fmt.Sprintf("%d / 14", len(rep.TacticHeatmap)), "ATT&CK tactics exercised (run breadth, not ATT&CK %)", cAccent},
-		{"Defense Rate", fmt.Sprintf("%.0f%%", s.CoverageScore), "tactics with zero failures", d.gradeHigh(s.CoverageScore)},
+		{"Detection", detVal, detNote, detCol},
+		{"Exposure", emptyDash(s.ExposureLevel), "posture band (lower is better)", d.exposureColor(s.ExposureLevel)},
+		{"Penetration", fmt.Sprintf("%d / %d", s.PenetrationFailed, s.PenetrationTested), fmt.Sprintf("%d%% of executed got through", s.PenetrationPct), d.gradeLow(float64(s.PenetrationPct))},
 	}
 	d.ensure(30)
 	y := d.pdf.GetY()
@@ -555,7 +562,69 @@ func (d *rpt) scorecard(rep *FullReport) {
 		d.mcellT(cw-5, 3, c.note, "", "L", false)
 	}
 	d.pdf.SetY(y + 30)
+
+	// Secondary metrics + result confidence on one compact line.
+	s2 := rep.Summary
+	d.text(cMuted)
+	d.pdf.SetFont("Helvetica", "", 8)
+	d.pdf.SetX(margin)
+	d.cellT(0, 5, fmt.Sprintf("Tactic breadth: %d / 14   ·   Defense rate: %.0f%%   ·   Mean time-to-detect: %s   ·   Result confidence: %s (%d valid of %d attempted, %d errored)",
+		len(rep.TacticHeatmap), s2.CoverageScore, fmtMTTD(s2.MTTDMs), emptyDash(rep.Reliability.Confidence),
+		rep.Reliability.Valid, rep.Reliability.Attempted, rep.Reliability.Errored))
+	d.pdf.Ln(7)
+
+	d.insightsBlock(rep.Insights)
 	d.controlMaturity(rep)
+}
+
+// insightsBlock renders the most/least-protected callout — the single fastest
+// takeaway in the report.
+func (d *rpt) insightsBlock(ins Insights) {
+	if !ins.HasData || (ins.Most == nil && ins.Least == nil) {
+		return
+	}
+	pdf := d.pdf
+	d.ensure(16)
+	d.text(cNavy)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin)
+	d.cellT(0, 5, "Assessment Insights")
+	pdf.Ln(5.4)
+	half := (contentW - 4) / 2
+	y := pdf.GetY()
+	if ins.Most != nil {
+		d.fill(d.tint(cSuccess))
+		pdf.RoundedRect(margin, y, half, 14, 2, "1234", "F")
+		d.text(cSuccess)
+		pdf.SetFont("Helvetica", "B", 7)
+		pdf.SetXY(margin+3, y+2)
+		d.cellT(half-6, 4, "MOST PROTECTED")
+		d.text(cNavy)
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.SetXY(margin+3, y+6)
+		d.cellT(half-6, 5, fmt.Sprintf("%s (%d%%)", capTactic(ins.Most.Tactic), ins.Most.PassPct))
+	}
+	if ins.Least != nil {
+		x := margin + half + 4
+		d.fill(d.tint(cDanger))
+		pdf.RoundedRect(x, y, half, 14, 2, "1234", "F")
+		d.text(cDanger)
+		pdf.SetFont("Helvetica", "B", 7)
+		pdf.SetXY(x+3, y+2)
+		d.cellT(half-6, 4, "LEAST PROTECTED")
+		d.text(cNavy)
+		pdf.SetFont("Helvetica", "B", 10)
+		pdf.SetXY(x+3, y+6)
+		d.cellT(half-6, 5, fmt.Sprintf("%s (%d%%)", capTactic(ins.Least.Tactic), ins.Least.PassPct))
+	}
+	pdf.SetY(y + 16)
+	if ins.TelemetryNote != "" {
+		d.text(cMuted)
+		pdf.SetFont("Helvetica", "", 7.5)
+		pdf.SetX(margin)
+		d.mcellT(contentW, 3.8, ins.TelemetryNote, "", "L", false)
+		pdf.Ln(1)
+	}
 }
 
 // controlMaturity presents a per-category maturity score (0–10) management reads
@@ -755,6 +824,7 @@ func (d *rpt) tacticBreakdown(rep *FullReport) {
 
 func (d *rpt) keyFindings(rep *FullReport) {
 	d.sectionTitle(5, "Key Findings")
+	d.topRiskDrivers(rep.TopRiskDrivers)
 	d.attackPath(rep.AttackPath)
 	if len(rep.TopFindings) == 0 {
 		d.body("No critical or high-severity findings were identified in this run. Continue periodic testing to maintain assurance.")
@@ -764,6 +834,46 @@ func (d *rpt) keyFindings(rep *FullReport) {
 		d.finding(i+1, f)
 	}
 	d.knowledgeGraph(rep)
+}
+
+// topRiskDrivers lists the techniques whose failures account for the most lost
+// prevention points — answering "why is my score low?". Score points are
+// severity-weighted attribution, consistent with the headline score.
+func (d *rpt) topRiskDrivers(drivers []RiskDriver) {
+	if len(drivers) == 0 {
+		return
+	}
+	pdf := d.pdf
+	d.ensure(16)
+	d.text(cNavy)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin)
+	d.cellT(0, 5, "Top Risk Drivers")
+	pdf.Ln(5.4)
+	d.text(cMuted)
+	pdf.SetFont("Helvetica", "", 7.5)
+	pdf.SetX(margin)
+	d.mcellT(contentW, 3.8, "Techniques whose failures account for the most lost prevention points (the points each accounts for, not a promised gain from any single fix).", "", "L", false)
+	pdf.Ln(1)
+	for i, dr := range drivers {
+		d.ensure(7)
+		y := pdf.GetY()
+		d.text(cMuted)
+		pdf.SetFont("Helvetica", "B", 8)
+		pdf.SetXY(margin+1, y)
+		d.cellT(6, 5, fmt.Sprintf("%d.", i+1))
+		d.text(cNavy)
+		pdf.SetFont("Helvetica", "", 8.5)
+		pdf.SetXY(margin+8, y)
+		label := dr.Name
+		if dr.TechniqueID != "" {
+			label = dr.TechniqueID + "  " + dr.Name
+		}
+		d.cellT(contentW-8-46, 5, label+"  ("+capTactic(dr.Tactic)+")")
+		d.chip(pageW-margin-44, y+0.2, fmt.Sprintf("%.1f PTS · %dF · %s", dr.ScorePoints, dr.Failures, strings.ToUpper(dr.Severity)), d.sevColor(dr.Severity))
+		pdf.SetY(y + 6)
+	}
+	pdf.Ln(1.5)
 }
 
 // attackPath renders the chain of unprevented kill-chain phases as a vertical
@@ -1055,27 +1165,72 @@ func (d *rpt) changesAndCleanup(rep *FullReport) {
 // ── 8. Recommendations ──────────────────────────────────────────────────────
 
 func (d *rpt) recommendations(rep *FullReport) {
-	d.sectionTitle(8, "Prioritised Recommendations")
+	d.sectionTitle(8, "Action Plan")
+	pdf := d.pdf
+
+	// Score-impact-ranked action plan: each tactic's failures and the prevention
+	// points they ACCOUNT FOR (not a promised gain — a single control may not
+	// resolve every underlying finding).
+	if len(rep.ActionPlan) > 0 {
+		d.text(cMuted)
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetX(margin)
+		d.mcellT(contentW, 4, "Ordered by the prevention-score points each tactic's failures account for (severity-weighted, the same weighting as the headline score). The points quantify current exposure — not a guaranteed score gain.", "", "L", false)
+		pdf.Ln(1.5)
+		for i, a := range rep.ActionPlan {
+			d.ensure(16)
+			y := pdf.GetY()
+			d.fill(cAccent)
+			pdf.RoundedRect(margin, y+0.4, 5, 5, 1, "1234", "F")
+			d.text(cWhite)
+			pdf.SetFont("Helvetica", "B", 8)
+			pdf.SetXY(margin, y+0.4)
+			d.cfT(5, 5, fmt.Sprintf("%d", i+1), "", 0, "C", false, 0, "")
+			d.text(cNavy)
+			pdf.SetFont("Helvetica", "B", 9)
+			pdf.SetXY(margin+8, y)
+			title := capTactic(a.Tactic)
+			if a.Objective != "" {
+				title += " — " + a.Objective
+			}
+			d.cellT(contentW-8-30, 5, title)
+			d.chip(pageW-margin-30, y+0.2, fmt.Sprintf("%.1f PTS · %dF", a.ScorePoints, a.Failures), cDanger)
+			pdf.SetXY(margin+8, y+5.2)
+			d.text(cInk)
+			pdf.SetFont("Helvetica", "", 8.5)
+			d.mcellT(contentW-8, 4.4, a.Recommendation, "", "L", false)
+			pdf.SetY(pdf.GetY() + 2)
+		}
+	}
+
+	// Supplementary narrative guidance (programme-level), if any.
 	recs := rep.Summary.Recommendations
-	if len(recs) == 0 {
+	if len(rep.ActionPlan) == 0 && len(recs) == 0 {
 		d.body("Maintain the current security posture and schedule the next assessment within 30 days.")
 		return
 	}
-	pdf := d.pdf
-	for i, rec := range recs {
-		d.ensure(12)
-		y := pdf.GetY()
-		d.fill(cAccent)
-		pdf.RoundedRect(margin, y+0.4, 5, 5, 1, "1234", "F")
-		d.text(cWhite)
-		pdf.SetFont("Helvetica", "B", 8)
-		pdf.SetXY(margin, y+0.4)
-		d.cfT(5, 5, fmt.Sprintf("%d", i+1), "", 0, "C", false, 0, "")
-		d.text(cInk)
-		pdf.SetFont("Helvetica", "", 9)
-		pdf.SetX(margin + 8)
-		d.mcellT(contentW-8, 4.8, rec, "", "L", false)
-		pdf.SetY(pdf.GetY() + 2)
+	if len(recs) > 0 {
+		d.ensure(10)
+		d.text(cNavy)
+		pdf.SetFont("Helvetica", "B", 9.5)
+		pdf.SetX(margin)
+		d.cellT(0, 5, "Additional Guidance")
+		pdf.Ln(5.4)
+		for i, rec := range recs {
+			d.ensure(12)
+			y := pdf.GetY()
+			d.fill(cMuted)
+			pdf.RoundedRect(margin, y+0.4, 5, 5, 1, "1234", "F")
+			d.text(cWhite)
+			pdf.SetFont("Helvetica", "B", 8)
+			pdf.SetXY(margin, y+0.4)
+			d.cfT(5, 5, fmt.Sprintf("%d", i+1), "", 0, "C", false, 0, "")
+			d.text(cInk)
+			pdf.SetFont("Helvetica", "", 9)
+			pdf.SetX(margin + 8)
+			d.mcellT(contentW-8, 4.8, rec, "", "L", false)
+			pdf.SetY(pdf.GetY() + 2)
+		}
 	}
 }
 
@@ -1105,6 +1260,33 @@ func (d *rpt) glossary() {
 }
 
 // ── small helpers ───────────────────────────────────────────────────────────
+
+// exposureColor maps the plain-English exposure band to a status colour.
+func (d *rpt) exposureColor(level string) rgb {
+	switch level {
+	case "Low":
+		return cSuccess
+	case "Medium":
+		return cWarning
+	case "High":
+		return rgb{240, 136, 62}
+	case "Critical":
+		return cDanger
+	}
+	return cMuted
+}
+
+// fmtMTTD renders a mean-time-to-detect in ms as a short human string.
+func fmtMTTD(ms int64) string {
+	if ms <= 0 {
+		return "—"
+	}
+	s := ms / 1000
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	return fmt.Sprintf("%dm %02ds", s/60, s%60)
+}
 
 func (d *rpt) chip(x, y float64, label string, c rgb) {
 	pdf := d.pdf
