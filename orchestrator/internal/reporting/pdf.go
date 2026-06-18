@@ -23,7 +23,7 @@ var (
 	cMuted   = rgb{110, 124, 143}
 	cInk     = rgb{30, 41, 59}
 	cLine    = rgb{210, 217, 226}
-	cSuccess = rgb{30, 122, 50}
+	cSuccess = rgb{13, 148, 136} // teal (brand "good/prevented")
 	cWarning = rgb{176, 124, 12}
 	cDanger  = rgb{200, 38, 36}
 	cWhite   = rgb{255, 255, 255}

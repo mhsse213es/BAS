@@ -35,9 +35,9 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 	"riskColor": func(cls string) string {
 		switch strings.ToLower(cls) {
 		case "protected":
-			return "#238636"
+			return "#0d9488"
 		case "low risk":
-			return "#3fb950"
+			return "#0d9488"
 		case "medium risk":
 			return "#d29922"
 		case "high risk":
@@ -61,7 +61,7 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 	"tacticColor": func(pct float64) string {
 		switch {
 		case pct >= 80:
-			return "#238636"
+			return "#0d9488"
 		case pct >= 50:
 			return "#d29922"
 		default:
@@ -81,7 +81,7 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 	"compColor": func(pct float64) string {
 		switch {
 		case pct >= 70:
-			return "#238636"
+			return "#0d9488"
 		case pct >= 40:
 			return "#d29922"
 		default:
@@ -106,7 +106,7 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 	"exposureColor": func(level string) string {
 		switch level {
 		case "Low":
-			return "#238636"
+			return "#0d9488"
 		case "Medium":
 			return "#d29922"
 		case "High":
@@ -165,71 +165,90 @@ const reportHTML = `<!DOCTYPE html>
 <title>BAS Security Assessment Report — {{.agent.hostname}}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a2e;background:#fff;line-height:1.5}
-a{color:#1a56db}
-h1{font-size:1.4rem;color:#0b1420;border-bottom:2px solid #2f81f7;padding-bottom:6px;margin:28px 0 16px}
-h2{font-size:1.05rem;color:#152338;margin:20px 0 10px}
-h3{font-size:0.9rem;color:#152338;margin:14px 0 8px}
-p{margin-bottom:8px}
+:root{
+  --ink:#1b2433; --muted:#6b7689; --faint:#9aa5b5;
+  --navy:#0b1420; --line:#e7eaf0; --line2:#eef1f6; --panel:#f7f9fc;
+  --accent:#2563eb; --teal:#0d9488;
+}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:12.5px;color:var(--ink);background:#fff;line-height:1.6;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+a{color:var(--accent);text-decoration:none}
+h1{font-size:1.32rem;font-weight:700;color:var(--navy);letter-spacing:-0.015em;line-height:1.2;
+  margin:0 0 18px;padding-left:12px;border-left:3px solid var(--teal)}
+h2{font-size:1rem;font-weight:650;color:var(--navy);letter-spacing:-0.01em;margin:22px 0 10px}
+h3{font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:18px 0 9px}
+p{margin-bottom:9px}
+em{color:var(--muted);font-style:normal}
+code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:0.85em;color:var(--navy);background:var(--panel);padding:1px 5px;border-radius:4px}
+strong{font-weight:650}
 
 /* Page layout */
-.page{padding:32px 40px;max-width:960px;margin:0 auto}
+.page{padding:42px 48px;max-width:900px;margin:0 auto}
 @media print{
-  .page{page-break-after:always;padding:24px 28px}
+  .page{page-break-after:always;padding:30px 30px}
   .page:last-child{page-break-after:avoid}
-  body{font-size:11px}
+  body{font-size:10.5px}
 }
 
 /* Cover */
-.cover{display:flex;flex-direction:column;min-height:80vh;justify-content:center;border-bottom:3px solid #2f81f7}
-.cover-logo{font-size:1.6rem;font-weight:900;color:#0b1420;letter-spacing:-0.04em;margin-bottom:32px}
-.cover-logo span{color:#2f81f7}
-.cover-title{font-size:2.2rem;font-weight:700;color:#0b1420;margin-bottom:8px}
-.cover-sub{font-size:1rem;color:#6e7681;margin-bottom:32px}
-.cover-table td{padding:6px 16px 6px 0;color:#444;font-size:0.88rem}
-.cover-table td:first-child{font-weight:600;color:#0b1420;min-width:120px}
-.confidential{display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;
-  padding:3px 10px;border-radius:3px;font-size:0.75rem;font-weight:700;margin-top:24px}
+.cover{min-height:90vh;display:flex;flex-direction:column}
+.cover-band{background:var(--navy);margin:-42px -48px 0;padding:36px 48px 30px;border-bottom:3px solid var(--teal)}
+.cover-logo{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:-0.02em}
+.cover-logo span{color:var(--teal)}
+.cover-kicker{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.16em;color:#8aa0b8;margin-top:5px}
+.cover-mid{flex:1;display:flex;flex-direction:column;justify-content:center;padding:46px 0}
+.cover-title{font-size:2.4rem;font-weight:750;color:var(--navy);letter-spacing:-0.03em;line-height:1.04;margin-bottom:10px}
+.cover-sub{font-size:1.02rem;color:var(--muted);margin-bottom:30px}
+.cover-meta{border-top:1px solid var(--line)}
+.cover-meta .crow{display:flex;padding:11px 2px;border-bottom:1px solid var(--line);font-size:0.86rem}
+.cover-meta .crow .k{width:170px;color:var(--muted);font-weight:600}
+.cover-meta .crow .v{flex:1;color:var(--ink);font-weight:500}
+.confidential{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;
+  background:#fff6e6;color:#92610a;border:1px solid #f0c674;padding:6px 13px;border-radius:20px;
+  font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:28px}
 
 /* Risk badge */
-.risk-badge{display:inline-flex;align-items:center;gap:12px;padding:12px 20px;
-  border-radius:6px;font-size:1rem;font-weight:700;margin-bottom:20px;border:1.5px solid currentColor}
+.risk-badge{display:inline-flex;align-items:center;gap:14px;padding:14px 22px;border-radius:10px;
+  font-weight:600;margin-bottom:22px;border:1px solid var(--line);background:var(--panel)}
 
 /* Score cards */
-.score-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
-.scard{border:1px solid #e5e7eb;border-radius:8px;padding:14px;background:#f9fafb}
-.scard-label{font-size:0.75rem;color:#6e7681;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
-.scard-value{font-size:1.6rem;font-weight:700;margin-bottom:8px}
-.scard-bar{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden}
+.score-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:22px}
+.scard{border:1px solid var(--line);border-radius:12px;padding:15px 16px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,0.04)}
+.scard-label{font-size:0.66rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);font-weight:700;margin-bottom:8px}
+.scard-value{font-size:1.6rem;font-weight:750;letter-spacing:-0.02em;line-height:1;margin-bottom:10px}
+.scard-bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden}
 .scard-bar-fill{height:100%;border-radius:3px}
 
 /* Tables */
-table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:0.82rem}
-th{background:#0b1420;color:#fff;padding:8px 10px;text-align:left;font-weight:600;font-size:0.78rem}
-td{padding:7px 10px;border-bottom:1px solid #e5e7eb;vertical-align:top}
-tr:nth-child(even) td{background:#f9fafb}
-tr:last-child td{border-bottom:none}
+table{width:100%;border-collapse:collapse;margin:6px 0 16px;font-size:0.82rem}
+thead th{background:var(--panel);color:var(--muted);text-transform:uppercase;font-size:0.66rem;
+  letter-spacing:0.05em;font-weight:700;text-align:left;padding:9px 12px;border-bottom:1.5px solid var(--line)}
+td{padding:9px 12px;border-bottom:1px solid var(--line2);vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even) td{background:#fbfcfe}
 
 /* Severity dots */
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 
 /* Tactic bar */
-.tbar-wrap{width:100%;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;display:inline-block;min-width:80px;vertical-align:middle}
+.tbar-wrap{width:100%;height:7px;background:var(--line);border-radius:4px;overflow:hidden;display:inline-block;min-width:80px;vertical-align:middle}
 .tbar-fill{height:100%;border-radius:4px}
 
 /* Compliance table */
 .comp-pct{font-weight:700}
 
 /* Findings */
-.remediation{background:#f9fafb;border-left:3px solid #2f81f7;padding:6px 10px;font-size:0.78rem;color:#444;margin-top:4px;border-radius:0 4px 4px 0}
+.remediation{background:var(--panel);border-left:3px solid var(--teal);padding:8px 12px;font-size:0.78rem;color:var(--muted);margin-top:6px;border-radius:0 6px 6px 0;line-height:1.55}
 
 /* Tools list */
-.tool-tag{display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;
-  padding:2px 8px;border-radius:12px;font-size:0.75rem;margin:3px}
+.tool-tag{display:inline-block;background:#eef4ff;color:#2353c4;border:1px solid #cfe0ff;
+  padding:3px 10px;border-radius:20px;font-size:0.72rem;margin:2px 3px 2px 0}
 
 /* Footer */
-.footer{border-top:1px solid #e5e7eb;padding:16px 0;font-size:0.72rem;color:#9ca3af;
-  display:flex;justify-content:space-between;margin-top:32px}
+.footer{border-top:1px solid var(--line);padding:13px 0 0;font-size:0.7rem;color:var(--faint);
+  display:flex;justify-content:space-between;margin-top:34px}
 </style>
 </head>
 <body>
@@ -237,30 +256,34 @@ tr:last-child td{border-bottom:none}
 <!-- ═══ COVER PAGE ════════════════════════════════════════════════════════ -->
 <div class="page">
 <div class="cover">
-  <div class="cover-logo">Aud<span>spect</span> BAS</div>
-  <div class="cover-title">Security Assessment Report</div>
-  {{if .scope}}
-  <div class="cover-sub">Breach &amp; Attack Simulation — {{.scope.subtitle}}</div>
-  <table class="cover-table">
-    <tr><td>Campaign</td><td><strong>{{.scope.title}}</strong></td></tr>
-    <tr><td>Scenario</td><td>{{.scope.scenario}}</td></tr>
-    <tr><td>Endpoints</td><td>{{.scope.agentCount}} agent(s) &nbsp;·&nbsp; {{.scope.runCount}} run(s)</td></tr>
-    <tr><td>Assessment Date</td><td>{{fmtTime .summary.lastRunAt}}</td></tr>
-    <tr><td>Report Generated</td><td>{{fmtTime .generatedAt}}</td></tr>
-  </table>
-  {{else}}
-  <div class="cover-sub">Breach &amp; Attack Simulation — Endpoint Posture Report</div>
-  <table class="cover-table">
-    <tr><td>Agent</td><td><strong>{{.agent.hostname}}</strong> ({{.agent.ipAddress}})</td></tr>
-    <tr><td>OS / Username</td><td>{{.agent.osVersion}} &nbsp;·&nbsp; {{.agent.username}}</td></tr>
-    <tr><td>Environment</td><td>{{.agent.envLabel}}</td></tr>
-    <tr><td>Assessment Date</td><td>{{fmtTime .summary.lastRunAt}}</td></tr>
-    <tr><td>Report Generated</td><td>{{fmtTime .generatedAt}}</td></tr>
-    <tr><td>Total Runs</td><td>{{.summary.totalRuns}}</td></tr>
-    <tr><td>Last Scenario</td><td>{{.summary.lastScenarioName}}</td></tr>
-  </table>
-  {{end}}
-  <div class="confidential">⚠ CONFIDENTIAL — For authorized use only</div>
+  <div class="cover-band">
+    <div class="cover-logo">Aud<span>spect</span> BAS</div>
+    <div class="cover-kicker">Breach &amp; Attack Simulation Platform</div>
+  </div>
+  <div class="cover-mid">
+    <div class="cover-title">Security Assessment Report</div>
+    {{if .scope}}
+    <div class="cover-sub">{{.scope.subtitle}}</div>
+    <div class="cover-meta">
+      <div class="crow"><div class="k">Campaign</div><div class="v"><strong>{{.scope.title}}</strong></div></div>
+      <div class="crow"><div class="k">Scenario</div><div class="v">{{.scope.scenario}}</div></div>
+      <div class="crow"><div class="k">Endpoints</div><div class="v">{{.scope.agentCount}} agent(s) &nbsp;·&nbsp; {{.scope.runCount}} run(s)</div></div>
+      <div class="crow"><div class="k">Assessment Date</div><div class="v">{{fmtTime .summary.lastRunAt}}</div></div>
+      <div class="crow"><div class="k">Report Generated</div><div class="v">{{fmtTime .generatedAt}}</div></div>
+    </div>
+    {{else}}
+    <div class="cover-sub">Endpoint Posture Report</div>
+    <div class="cover-meta">
+      <div class="crow"><div class="k">Agent</div><div class="v"><strong>{{.agent.hostname}}</strong> ({{.agent.ipAddress}})</div></div>
+      <div class="crow"><div class="k">OS / Username</div><div class="v">{{.agent.osVersion}} &nbsp;·&nbsp; {{.agent.username}}</div></div>
+      <div class="crow"><div class="k">Environment</div><div class="v">{{.agent.envLabel}}</div></div>
+      <div class="crow"><div class="k">Assessment Date</div><div class="v">{{fmtTime .summary.lastRunAt}}</div></div>
+      <div class="crow"><div class="k">Report Generated</div><div class="v">{{fmtTime .generatedAt}}</div></div>
+      <div class="crow"><div class="k">Last Scenario</div><div class="v">{{.summary.lastScenarioName}} &nbsp;·&nbsp; {{.summary.totalRuns}} run(s) on record</div></div>
+    </div>
+    {{end}}
+    <div class="confidential">⚠ CONFIDENTIAL — For authorized use only</div>
+  </div>
 </div>
 <div class="footer">
   <span>Audspect BAS Platform</span>
@@ -294,8 +317,8 @@ tr:last-child td{border-bottom:none}
 <div class="score-row">
   <div class="scard">
     <div class="scard-label">Prevention Score</div>
-    <div class="scard-value" style="color:#238636">{{fmtScore .summary.preventionScore}}%</div>
-    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.preventionScore}}%;background:#238636"></div></div>
+    <div class="scard-value" style="color:#0d9488">{{fmtScore .summary.preventionScore}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.preventionScore}}%;background:#0d9488"></div></div>
     <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Severity-weighted pass rate</div>
   </div>
   <div class="scard">
@@ -325,7 +348,7 @@ tr:last-child td{border-bottom:none}
   <div class="scard">
     <div class="scard-label">Trend vs. Previous</div>
     {{if .trendAnalysis.hasPrevious}}
-    <div class="scard-value" style="color:{{if gt .trendAnalysis.deltaPrevention 0.0}}#238636{{else if lt .trendAnalysis.deltaPrevention 0.0}}#da3633{{else}}#6e7681{{end}}">
+    <div class="scard-value" style="color:{{if gt .trendAnalysis.deltaPrevention 0.0}}#0d9488{{else if lt .trendAnalysis.deltaPrevention 0.0}}#da3633{{else}}#6e7681{{end}}">
       {{if gt .trendAnalysis.deltaPrevention 0.0}}▲ +{{fmtScore .trendAnalysis.deltaPrevention}}{{else if lt .trendAnalysis.deltaPrevention 0.0}}▼ {{fmtScore .trendAnalysis.deltaPrevention}}{{else}}no change{{end}}
     </div>
     <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Prevention pts vs previous ({{fmtScore .trendAnalysis.previousPrevention}}% → {{fmtScore .trendAnalysis.currentPrevention}}%)</div>
@@ -352,10 +375,10 @@ tr:last-child td{border-bottom:none}
 <p style="color:#6e7681;margin-bottom:8px">A high environmental-error rate lowers confidence in the result — it means the BAS could not execute techniques, <strong>not</strong> that the endpoint blocked them. ERROR and SKIPPED are excluded from all scores.</p>
 <table>
   <tr><td>Attempted</td><td><strong>{{.reliability.attempted}}</strong></td>
-      <td>Valid (scored)</td><td style="color:#238636"><strong>{{.reliability.valid}}</strong></td></tr>
+      <td>Valid (scored)</td><td style="color:#0d9488"><strong>{{.reliability.valid}}</strong></td></tr>
   <tr><td>Environmental Errors</td><td style="color:#d29922"><strong>{{.reliability.errored}}</strong></td>
       <td>Skipped</td><td style="color:#6e7681"><strong>{{.reliability.skipped}}</strong></td></tr>
-  <tr><td>Result Confidence</td><td colspan="3"><strong style="color:{{if eq .reliability.confidence "High"}}#238636{{else if eq .reliability.confidence "Medium"}}#d29922{{else}}#da3633{{end}}">{{.reliability.confidence}}</strong></td></tr>
+  <tr><td>Result Confidence</td><td colspan="3"><strong style="color:{{if eq .reliability.confidence "High"}}#0d9488{{else if eq .reliability.confidence "Medium"}}#d29922{{else}}#da3633{{end}}">{{.reliability.confidence}}</strong></td></tr>
 </table>
 
 <div class="footer">
@@ -384,7 +407,7 @@ tr:last-child td{border-bottom:none}
   </tbody>
 </table>
 {{else}}
-<p style="color:#238636;font-weight:600">✓ No techniques penetrated this endpoint — there are no risk drivers to rank.</p>
+<p style="color:#0d9488;font-weight:600">✓ No techniques penetrated this endpoint — there are no risk drivers to rank.</p>
 {{end}}
 
 <div class="footer">
@@ -406,7 +429,7 @@ tr:last-child td{border-bottom:none}
     <td>{{humanize .tactic}}</td>
     <td><span class="dot" style="background:{{sevColor .risk}}"></span>{{.risk}}</td>
     <td>{{.tested}}</td>
-    <td style="color:{{if gt .failed 0.0}}#da3633{{else}}#238636{{end}}">{{.failed}}</td>
+    <td style="color:{{if gt .failed 0.0}}#da3633{{else}}#0d9488{{end}}">{{.failed}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -440,7 +463,7 @@ tr:last-child td{border-bottom:none}
     <td>{{.status}}</td>
     <td style="font-weight:700;color:{{tacticColor .preventionScore}}">{{fmtScore .preventionScore}}%</td>
     <td>{{.tested}}</td>
-    <td style="color:{{if gt .failed 0.0}}#da3633{{else}}#238636{{end}}">{{.failed}}</td>
+    <td style="color:{{if gt .failed 0.0}}#da3633{{else}}#0d9488{{end}}">{{.failed}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -487,7 +510,7 @@ tr:last-child td{border-bottom:none}
   </tbody>
 </table>
 {{else}}
-<p style="color:#238636;font-weight:600">✓ No unprevented techniques formed a traversable attack path this run.</p>
+<p style="color:#0d9488;font-weight:600">✓ No unprevented techniques formed a traversable attack path this run.</p>
 {{end}}
 
 <div class="footer">
@@ -537,9 +560,9 @@ tr:last-child td{border-bottom:none}
 {{if .insights.hasData}}
 <div class="score-row">
   {{if .insights.most}}
-  <div class="scard" style="border-left:3px solid #238636">
+  <div class="scard" style="border-left:3px solid #0d9488">
     <div class="scard-label">Most Protected</div>
-    <div class="scard-value" style="color:#238636;font-size:1.2rem">{{humanize .insights.most.tactic}}</div>
+    <div class="scard-value" style="color:#0d9488;font-size:1.2rem">{{humanize .insights.most.tactic}}</div>
     <div style="font-size:0.8rem;color:#6e7681">{{.insights.most.passPct}}% prevented across {{.insights.most.tested}} techniques</div>
   </div>
   {{end}}
@@ -581,7 +604,7 @@ tr:last-child td{border-bottom:none}
   </tbody>
 </table>
 {{else}}
-<p style="color:#238636;font-weight:600">✓ No failing tactics — no remediation actions required from this assessment.</p>
+<p style="color:#0d9488;font-weight:600">✓ No failing tactics — no remediation actions required from this assessment.</p>
 {{end}}
 
 <div class="footer">
@@ -605,8 +628,8 @@ tr:last-child td{border-bottom:none}
     <td>{{.totalControls}}</td>
     <td style="color:#6e7681">{{.manual}}</td>
     <td>{{.tested}}</td>
-    <td style="color:#238636">{{.passing}}</td>
-    <td style="color:{{if gt .failing 0.0}}#da3633{{else}}#238636{{end}}">{{.failing}}</td>
+    <td style="color:#0d9488">{{.passing}}</td>
+    <td style="color:{{if gt .failing 0.0}}#da3633{{else}}#0d9488{{end}}">{{.failing}}</td>
     <td style="color:#6e7681">{{.untested}}</td>
     <td class="comp-pct" style="color:{{compColor .compliancePct}}">{{pct .compliancePct}}</td>
     <td style="color:#2f81f7">{{pct .coveragePct}}</td>
@@ -642,7 +665,7 @@ tr:last-child td{border-bottom:none}
     <td>{{fmtScore .preventionScore}}%</td>
     <td>{{fmtScore .exposureScore}}%</td>
     <td>{{.totalTechniques}}</td>
-    <td style="color:{{if gt .failedTechniques 0.0}}#da3633{{else}}#238636{{end}}">{{.failedTechniques}}</td>
+    <td style="color:{{if gt .failedTechniques 0.0}}#da3633{{else}}#0d9488{{end}}">{{.failedTechniques}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -680,7 +703,7 @@ tr:last-child td{border-bottom:none}
   </tbody>
 </table>
 {{else}}
-<p style="color:#238636;font-weight:600">✓ No Critical or High severity failures in the latest run. Continue to validate with future assessments.</p>
+<p style="color:#0d9488;font-weight:600">✓ No Critical or High severity failures in the latest run. Continue to validate with future assessments.</p>
 {{end}}
 
 <div class="footer">
