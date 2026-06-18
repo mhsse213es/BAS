@@ -20,6 +20,8 @@
   --text:      #dce8f5;
   --text-dim:  #b8cce0;
   --success:   #238636;
+  --teal:      #2fd8c3;
+  --teal-soft: rgba(47,216,195,0.13);
   --warning:   #d29922;
   --danger:    #da3633;
   --radius:    6px;
@@ -743,8 +745,8 @@ code {
 .kc-r .rv { margin-left:auto; font-weight:700; white-space:nowrap; }
 .kc-r.atk { background:rgba(218,54,51,0.13); color:#f3a3a0; }
 .kc-r.atk .ri { background:var(--danger); }
-.kc-r.def-prevented { background:rgba(35,134,54,0.15); color:#7ee08a; }
-.kc-r.def-prevented .ri { background:var(--success); }
+.kc-r.def-prevented { background:rgba(47,216,195,0.14); color:#5cead8; }
+.kc-r.def-prevented .ri { background:var(--teal); }
 .kc-r.def-detected { background:rgba(210,153,34,0.15); color:#e6c069; }
 .kc-r.def-detected .ri { background:var(--warning); }
 .kc-r.def-missed { background:var(--surface); color:var(--muted); border:1px dashed var(--border); }
@@ -988,7 +990,7 @@ code {
           <div class="kpi-card stat-tile" onclick="showTab('runs')" title="View runs">
             <div class="stat-top">
               <div><div class="kpi-label">Prevention score</div><div class="kpi-value" id="kpi-score-val">—</div></div>
-              <div class="stat-icon" style="background:rgba(35,134,54,0.12);color:var(--success)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/></svg></div>
+              <div class="stat-icon" style="background:var(--teal-soft);color:var(--teal)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/></svg></div>
             </div>
             <div class="kpi-sub"><span id="kpi-score-trend"></span><span id="kpi-score-sub">no runs yet</span></div>
             <div class="stat-spark" id="kpi-score-spark"></div>
@@ -1083,7 +1085,7 @@ code {
           <div class="dash-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem">
             <span id="dash-attackflow-title">Attack flow</span>
             <span style="display:flex;gap:0.7rem;align-items:center;font-weight:400">
-              <span style="font-size:0.6rem;color:#7ee08a">&#9632; Prevented</span>
+              <span style="font-size:0.6rem;color:#5cead8">&#9632; Prevented</span>
               <span style="font-size:0.6rem;color:#e6c069">&#9632; Detected</span>
               <span style="font-size:0.6rem;color:var(--muted)">&#9632; Missed</span>
               <a class="tiny" id="dash-attackflow-open" style="color:var(--accent);cursor:pointer;font-weight:500;display:none">Open run →</a>
@@ -3015,7 +3017,7 @@ function loadRuns() {
         var prevPct = Math.round(r.score.preventionScore || 0);
         var expVal  = Math.round(r.score.exposureScore || 0);
         var cls     = r.score.classification || '';
-        var prevCol = prevPct >= 80 ? 'var(--success)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+        var prevCol = prevPct >= 80 ? 'var(--teal)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
         var expCol  = expVal  <= 20 ? 'var(--success)' : expVal  <= 50 ? 'var(--warning)' : 'var(--danger)';
         var trend   = r.score.trend || '';
         var trendBadge = trend === 'Improving' ? '<span style="color:var(--success);font-size:0.65rem;margin-left:0.3rem">↑</span>' :
@@ -3970,7 +3972,7 @@ function renderRunReportExtra(rep) {
     html += '<div style="' + panel + '">' +
       '<div style="' + hdr + ';display:flex;align-items:center;gap:10px">Attack Flow &mdash; Adversary vs Defense' +
         '<span style="margin-left:auto;display:flex;gap:9px;font-weight:400;text-transform:none;letter-spacing:0">' +
-          '<span style="font-size:0.6rem;color:#7ee08a">&#9632; Prevented</span>' +
+          '<span style="font-size:0.6rem;color:#5cead8">&#9632; Prevented</span>' +
           '<span style="font-size:0.6rem;color:#e6c069">&#9632; Detected</span>' +
           '<span style="font-size:0.6rem;color:var(--muted)">&#9632; Missed</span>' +
         '</span></div>' +
@@ -4006,7 +4008,7 @@ function renderRunReportExtra(rep) {
     if (dTechs.length > 0) {
       var rows2 = dTechs.map(function(d) {
         var bg, fg, lbl;
-        if (d.verdict === 'prevented') { bg = 'rgba(35,134,54,0.15)'; fg = 'var(--success)'; lbl = 'Prevented'; }
+        if (d.verdict === 'prevented') { bg = 'rgba(47,216,195,0.15)'; fg = 'var(--teal)'; lbl = 'Prevented'; }
         else if (d.verdict === 'detected') {
           var hi = (d.confidence === 'high');
           bg = hi ? 'rgba(47,129,247,0.15)' : 'rgba(210,153,34,0.15)';
@@ -4507,7 +4509,7 @@ function gaugeSVG(value, size, stroke) {
   size = size || 124; stroke = stroke || 14;
   var r = (size - stroke) / 2, cx = size / 2, cy = size / 2, C = 2 * Math.PI * r;
   var arc = C * 0.75, len = Math.max(0, Math.min(100, value)) / 100 * arc;
-  var col = value >= 75 ? 'var(--success)' : value >= 50 ? 'var(--warning)' : 'var(--danger)';
+  var col = value >= 75 ? 'var(--teal)' : value >= 50 ? 'var(--warning)' : 'var(--danger)';
   return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' +
     '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--elevated)" stroke-width="' + stroke +
       '" stroke-dasharray="' + arc + ' ' + C + '" stroke-linecap="round" transform="rotate(135 ' + cx + ' ' + cy + ')"/>' +
@@ -4559,7 +4561,7 @@ function loadDashboard() {
     if (scored.length) {
       var s = scored[0].score;
       var prevPct = prevPctOf(scored[0]);
-      var prevCol = prevPct >= 80 ? 'var(--success)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+      var prevCol = prevPct >= 80 ? 'var(--teal)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
       document.getElementById('kpi-score-val').textContent = prevPct + '%';
       document.getElementById('kpi-score-val').style.color = prevCol;
       document.getElementById('kpi-score-sub').textContent = s.classification || 'latest run';
@@ -4568,7 +4570,7 @@ function loadDashboard() {
       else if (s.trend === 'Degrading') tEl.innerHTML = '<span class="trend down">▼</span> ';
       else                              tEl.innerHTML = '<span class="trend flat">—</span> ';
       var prevSeries = scored.slice(0, 8).map(prevPctOf).reverse();
-      document.getElementById('kpi-score-spark').innerHTML = sparkSVG(prevSeries, 110, 30, 'var(--success)');
+      document.getElementById('kpi-score-spark').innerHTML = sparkSVG(prevSeries, 110, 30, 'var(--teal)');
 
       // Posture card — ring gauge + trend + run-history mini-bars.
       document.getElementById('dash-gauge').innerHTML = gaugeSVG(prevPct, 124, 14) +
@@ -4579,7 +4581,7 @@ function loadDashboard() {
         var d = new Date(r.completedAt || r.startedAt);
         var v = prevPctOf(r);
         return { l: isNaN(d) ? '' : (d.getMonth() + 1) + '/' + d.getDate(), v: v,
-                 color: v >= 80 ? 'var(--success)' : v >= 50 ? 'var(--warning)' : 'var(--danger)' };
+                 color: v >= 80 ? 'var(--teal)' : v >= 50 ? 'var(--warning)' : 'var(--danger)' };
       });
       document.getElementById('dash-posture-bars').innerHTML = miniBars(barData, 320, 64);
       document.getElementById('dash-posture-cap').textContent = 'Prevention across the last ' + barRuns.length +
@@ -4600,7 +4602,7 @@ function loadDashboard() {
     var exIds = Object.keys(techCov).filter(function(k) { return techCov[k].exercised; });
     var prevIds = exIds.filter(function(k) { return techCov[k].prevented; });
     var covPct = exIds.length ? Math.round(prevIds.length / exIds.length * 100) : 0;
-    var covCol = covPct >= 80 ? 'var(--success)' : covPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    var covCol = covPct >= 80 ? 'var(--teal)' : covPct >= 50 ? 'var(--warning)' : 'var(--danger)';
     document.getElementById('kpi-cov-val').textContent = exIds.length ? covPct + '%' : '—';
     document.getElementById('kpi-cov-val').style.color = exIds.length ? covCol : '';
     document.getElementById('kpi-cov-sub').textContent = exIds.length + ' technique' + (exIds.length === 1 ? '' : 's') + ' tested';
@@ -4643,18 +4645,18 @@ function loadDashboard() {
       donutEl.innerHTML =
         '<div style="position:relative;flex-shrink:0">' +
           donutSVG([
-            { v: eff.prevented, color: 'var(--success)' },
+            { v: eff.prevented, color: 'var(--teal)' },
             { v: eff.detected, color: 'var(--warning)' },
             { v: eff.missed, color: 'var(--danger)' },
             { v: eff.other, color: 'var(--elevated)' }
           ]) +
           '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">' +
-            '<span style="font-size:1.5rem;font-weight:700;line-height:1;color:' + (prevPctEff >= 80 ? 'var(--success)' : prevPctEff >= 50 ? 'var(--warning)' : 'var(--danger)') + '">' + prevPctEff + '%</span>' +
+            '<span style="font-size:1.5rem;font-weight:700;line-height:1;color:' + (prevPctEff >= 80 ? 'var(--teal)' : prevPctEff >= 50 ? 'var(--warning)' : 'var(--danger)') + '">' + prevPctEff + '%</span>' +
             '<span style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted)">prevented</span>' +
           '</div>' +
         '</div>' +
         '<div style="flex:1;display:flex;flex-direction:column;gap:0.55rem;min-width:160px">' +
-          lg('var(--success)', 'Prevented', eff.prevented) +
+          lg('var(--teal)', 'Prevented', eff.prevented) +
           lg('var(--warning)', 'Detected only', eff.detected) +
           lg('var(--danger)', 'Missed', eff.missed) +
           lg('var(--elevated)', 'Not tested', eff.other) +
@@ -4691,10 +4693,10 @@ function loadDashboard() {
           var pp = Math.round(r.score.preventionScore);
           var ta = r.score.trend === 'Improving' ? ' ↑' : r.score.trend === 'Degrading' ? ' ↓' : '';
           scoreStr = pp + '%' + ta;
-          scol = pp >= 80 ? 'var(--success)' : pp >= 50 ? 'var(--warning)' : 'var(--danger)';
+          scol = pp >= 80 ? 'var(--teal)' : pp >= 50 ? 'var(--warning)' : 'var(--danger)';
         } else if (r.score && r.score.riskScore != null) {
           scoreStr = r.score.riskScore;
-          scol = r.score.classification === 'Protected' ? 'var(--success)' :
+          scol = r.score.classification === 'Protected' ? 'var(--teal)' :
                  r.score.classification === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
         }
         return '<div class="dash-run-row">' +
