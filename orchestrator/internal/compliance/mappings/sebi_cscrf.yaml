@@ -10,12 +10,14 @@ controls:
     domain: Govern
     category: Governance
     techniques: [T1078, T1098]
+    testable: false
 
   - id: GOV-02
     name: Third-party and supply chain risk management
     domain: Govern
     category: Governance
     techniques: [T1195, T1199]
+    testable: false
 
   # ── Identify ─────────────────────────────────────────────────────────────
   - id: ID-01
@@ -23,18 +25,21 @@ controls:
     domain: Identify
     category: Asset Management
     techniques: [T1518, T1082]
+    testable: false
 
   - id: ID-02
     name: Risk assessment — formal risk assessment conducted annually
     domain: Identify
     category: Risk Management
     techniques: [T1190, T1566]
+    testable: false
 
   - id: ID-03
     name: Vulnerability assessment — quarterly VAPT on critical systems and internet-facing apps
     domain: Identify
     category: Vulnerability Management
     techniques: [T1190, T1203, T1068]
+    testable: false
 
   # ── Protect ───────────────────────────────────────────────────────────────
   - id: PR-01
@@ -42,6 +47,7 @@ controls:
     domain: Protect
     category: Data Protection
     techniques: [T1005, T1039, T1114]
+    testable: false
 
   - id: PR-02
     name: Vulnerability management — critical vulnerabilities patched within 15 days
@@ -54,6 +60,7 @@ controls:
     domain: Protect
     category: Data Security
     techniques: [T1041, T1048, T1005]
+    testable: false
 
   - id: PR-04
     name: Access controls — role-based access; regular access reviews; no shared accounts
@@ -128,12 +135,14 @@ controls:
     domain: Respond
     category: Incident Response
     techniques: [T1486, T1490, T1485]
+    testable: false
 
   - id: RS-02
     name: Forensic investigation — digital forensics capability for post-incident analysis
     domain: Respond
     category: Forensics
     techniques: [T1003, T1070, T1550]
+    testable: false
 
   # ── Recover ───────────────────────────────────────────────────────────────
   - id: RC-01
@@ -141,9 +150,11 @@ controls:
     domain: Recover
     category: Recovery
     techniques: [T1490, T1486]
+    testable: false
 
   - id: RC-02
     name: Business continuity — alternate processing site; crisis communication plan
     domain: Recover
     category: Business Continuity
     techniques: [T1485, T1489, T1529]
+    testable: false

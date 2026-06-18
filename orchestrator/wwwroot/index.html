@@ -672,6 +672,9 @@ code {
 .cmp-status-dot.pass { background:#238636; }
 .cmp-status-dot.fail { background:#da3633; }
 .cmp-status-dot.untested { background:#4a5568; }
+.cmp-status-dot.manual { background:#8957e5; }
+.cmp-manual-tag { font-size:0.66rem; font-weight:600; color:#b392f0; background:rgba(137,87,229,0.13); border:1px solid rgba(137,87,229,0.3); border-radius:4px; padding:1px 6px; white-space:nowrap; }
+.cmp-note { font-size:0.76rem; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-left:3px solid #8957e5; border-radius:6px; padding:0.6rem 0.8rem; margin-bottom:1rem; line-height:1.45; }
 .cmp-evidence { display:none; padding:0.6rem 1rem; background:rgba(0,0,0,0.2); font-size:0.78rem; }
 .cmp-evidence.open { display:block; }
 .cmp-ev-row { display:flex; gap:0.5rem; padding:0.25rem 0; border-bottom:1px solid rgba(255,255,255,0.04); }
@@ -865,14 +868,6 @@ code {
           </svg>
           Reports
         </div>
-        <div class="nav-item" data-tab="compliance" onclick="showTab('compliance')">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
-            <rect x="2" y="1" width="12" height="14" rx="1"/>
-            <path d="M5 5h6M5 8h6M5 11h3"/>
-            <path d="M10 10l1.5 1.5L14 9" stroke-width="1.6"/>
-          </svg>
-          Compliance
-        </div>
         <div class="nav-item disabled">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/>
@@ -952,7 +947,7 @@ code {
             <div id="dash-subtitle" style="font-size:0.8rem;color:var(--muted)">Loading continuous-validation summary…</div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0">
-            <button class="btn btn-outline btn-sm" onclick="showTab('compliance')">Generate report</button>
+            <button class="btn btn-outline btn-sm" onclick="showTab('reports')">Generate report</button>
             <button class="btn btn-primary btn-sm" onclick="openModal()">&#9654; New simulation</button>
           </div>
         </div>
@@ -1495,7 +1490,7 @@ code {
         <div class="dash-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:1.25rem">
           <div class="dash-panel" style="cursor:pointer" onclick="openReportGen('posture')"><div class="dash-panel-body"><div class="kpi-label">Posture report</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Full per-agent posture</div><div class="tiny muted">Prevention, detection, kill-chain — HTML or PDF</div></div></div>
           <div class="dash-panel" style="cursor:pointer" onclick="openReportGen('audit')"><div class="dash-panel-body"><div class="kpi-label">Audit pack</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Evidence bundle</div><div class="tiny muted">Per-agent audit-ready package</div></div></div>
-          <div class="dash-panel" style="cursor:pointer" onclick="openReportGen('compliance')"><div class="dash-panel-body"><div class="kpi-label">Compliance evidence</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Framework mapping</div><div class="tiny muted">SEBI/NIST/etc — HTML, PDF or CSV</div></div></div>
+          <div class="dash-panel" style="cursor:pointer" onclick="showTab('compliance')"><div class="dash-panel-body"><div class="kpi-label">Compliance evidence</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Framework mapping</div><div class="tiny muted">SEBI/RBI/IRDAI/CERT-In/ISO/NIST — view on-screen, export JSON/CSV/PDF</div></div></div>
         </div>
         <div class="tbl-wrap">
           <table>
@@ -1505,9 +1500,11 @@ code {
         </div>
       </div>
 
-      <!-- Users -->
-      <!-- Compliance -->
+      <!-- Compliance (reached from the Reports hub) -->
       <div id="tab-compliance" style="display:none">
+        <div style="margin-bottom:0.75rem">
+          <a class="tiny" style="color:var(--accent);cursor:pointer;text-decoration:none" onclick="showTab('reports')">&lsaquo; Reports</a>
+        </div>
         <div class="sec-hdr">
           <h2>Compliance Report</h2>
           <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
@@ -1543,6 +1540,7 @@ code {
                 <button class="btn btn-sm" style="background:rgba(35,134,54,0.15);color:#3fb950" onclick="filterControls('pass')">Pass</button>
                 <button class="btn btn-sm" style="background:rgba(218,54,51,0.15);color:#f85149" onclick="filterControls('fail')">Fail</button>
                 <button class="btn btn-sm" style="background:rgba(154,169,188,0.15);color:var(--muted)" onclick="filterControls('untested')">Untested</button>
+                <button class="btn btn-sm" style="background:rgba(137,87,229,0.15);color:#b392f0" onclick="filterControls('manual')">Manual</button>
                 <button class="btn btn-sm btn-outline" onclick="filterControls('')">All</button>
               </div>
             </div>
@@ -5215,20 +5213,28 @@ function loadComplianceReport() {
 }
 
 function renderComplianceReport(r) {
-  // Meta
+  // Meta + honest scope note
+  var s = r.summary;
   document.getElementById('cmp-meta').innerHTML =
     '<strong>' + r.framework.name + ' ' + r.framework.version + '</strong>' +
     ' &nbsp;·&nbsp; Agent: <strong>' + (r.agentId) + '</strong>' +
-    ' &nbsp;·&nbsp; Run: <strong>' + (r.scenarioName || r.runId) + '</strong>' +
-    ' &nbsp;·&nbsp; Generated: ' + new Date(r.generatedAt).toLocaleString();
+    ' &nbsp;·&nbsp; Scope: <strong>' + (r.scenarioName || r.runId) + '</strong>' +
+    ' &nbsp;·&nbsp; Generated: ' + new Date(r.generatedAt).toLocaleString() +
+    '<div class="cmp-note">' +
+      '<strong>' + s.testableControls + ' of ' + s.totalControls + '</strong> controls in this framework are <strong>BAS-testable</strong> — ' +
+      'their posture is validated by executing the mapped ATT&CK techniques. The remaining <strong>' + s.manualControls + '</strong> are ' +
+      'governance/process controls (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that ' +
+      'cannot be proven by simulation and require <strong>manual attestation</strong>. Compliance and Coverage percentages below are ' +
+      'computed over the BAS-testable subset only — manual controls are never scored as pass/fail.' +
+    '</div>';
 
   // Summary cards
-  var s = r.summary;
   var cards = [
     { label:'Compliance', value: s.compliancePct.toFixed(1) + '%', sub: s.passingControls + '/' + s.testedControls + ' tested controls passing', color: s.compliancePct >= 70 ? 'var(--success)' : s.compliancePct >= 40 ? 'var(--warning)' : 'var(--danger)' },
-    { label:'Coverage', value: s.coveragePct.toFixed(1) + '%', sub: s.testedControls + ' of ' + s.totalControls + ' controls have BAS test evidence', color: 'var(--accent)' },
+    { label:'Coverage', value: s.coveragePct.toFixed(1) + '%', sub: s.testedControls + ' of ' + s.testableControls + ' BAS-testable controls validated', color: 'var(--accent)' },
     { label:'Failing Controls', value: s.failingControls, sub: 'controls with at least one failed technique', color: s.failingControls > 0 ? 'var(--danger)' : 'var(--success)' },
-    { label:'Untested Controls', value: s.untestedControls, sub: 'controls with no BAS evidence yet', color: 'var(--muted)' },
+    { label:'Untested Controls', value: s.untestedControls, sub: 'BAS-testable, no evidence yet', color: 'var(--muted)' },
+    { label:'Manual Controls', value: s.manualControls, sub: 'require manual attestation', color: '#b392f0' },
   ];
   document.getElementById('cmp-summary-cards').innerHTML = cards.map(function(c) {
     return '<div class="score-card"><div class="score-label">' + c.label + '</div>' +
@@ -5246,7 +5252,7 @@ function renderComplianceReport(r) {
       '<span class="cmp-domain-name">' + d.name + '</span>' +
       '<div class="cmp-domain-bar-wrap"><div class="cmp-domain-bar" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
       '<span class="cmp-domain-pct" style="color:' + barColor + '">' + (tested > 0 ? pct.toFixed(0) + '%' : '—') + '</span>' +
-      '<span style="font-size:0.75rem;color:var(--muted)">' + d.passing + 'P / ' + d.failing + 'F / ' + d.untested + 'U</span>' +
+      '<span style="font-size:0.75rem;color:var(--muted)">' + d.passing + 'P / ' + d.failing + 'F / ' + d.untested + 'U / ' + (d.manual || 0) + 'M</span>' +
       '</div>';
   }).join('');
 
@@ -5258,6 +5264,17 @@ function renderControlsTable(controls, filter) {
   var rows = controls.filter(function(c) { return !filter || c.status === filter; });
   document.getElementById('cmp-controls-body').innerHTML = rows.map(function(c, i) {
     var dotClass = 'cmp-status-dot ' + c.status;
+    // Manual-attestation controls carry no BAS evidence — show them as such
+    // rather than as 0/0/0 (which reads like "untested").
+    if (c.status === 'manual') {
+      return '<tr>' +
+        '<td><span class="' + dotClass + '"></span></td>' +
+        '<td style="font-family:monospace;white-space:nowrap">' + c.id + '</td>' +
+        '<td>' + c.name + ' <span class="cmp-manual-tag">manual attestation</span></td>' +
+        '<td><span style="font-size:0.75rem;color:var(--muted)">' + c.domain + '</span></td>' +
+        '<td colspan="3" style="font-size:0.75rem;color:var(--muted)">Not validated by simulation — verify via policy/evidence review</td>' +
+        '</tr>';
+    }
     var evidenceId = 'cmp-ev-' + i;
     var hasEvidence = c.evidence && c.evidence.length > 0;
     var evRows = (c.evidence || []).map(function(ev) {
@@ -5305,13 +5322,16 @@ function exportCompliance(format) {
   var agentId = document.getElementById('cmp-agent-sel').value;
   var framework = document.getElementById('cmp-fw-sel').value;
   if (!agentId || !framework) return;
-  var url = '/api/compliance/report?agentId=' + encodeURIComponent(agentId) +
-            '&framework=' + encodeURIComponent(framework) +
-            '&format=' + format;
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = 'compliance-' + framework + '-' + agentId + '.' + format;
-  a.click();
+  // Log to the Reports history (report_log) and download via the reconstructed
+  // path the server returns — keeps compliance exports in the unified Reports
+  // history alongside posture/audit packs.
+  apicall('/api/reports', { method: 'POST', body: JSON.stringify({
+    reportType: 'compliance', format: format, agentId: agentId, framework: framework
+  }) }).then(function(res) {
+    if (res && res.error) { showToast('Export failed: ' + res.error, 'err'); return; }
+    window.open(res.downloadPath, '_blank');
+    showToast('Compliance ' + format.toUpperCase() + ' exported', 'ok');
+  }).catch(function(e) { showToast('Export failed: ' + e.message, 'err'); });
 }
 </script>
 </body>

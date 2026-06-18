@@ -25,7 +25,16 @@ type ControlDef struct {
 	Domain     string   `yaml:"domain"`
 	Category   string   `yaml:"category"`
 	Techniques []string `yaml:"techniques"` // MITRE technique IDs (base or sub)
+	// Testable marks whether a control's posture can be validated by executing
+	// the mapped ATT&CK techniques. Governance/process/policy controls (board
+	// policy, asset inventory, risk-assessment cadence, data residency, IR/DR
+	// planning) CANNOT be proven by running an attack — they require manual
+	// attestation. Omitted/nil ⇒ true (the technical-control default).
+	Testable *bool `yaml:"testable"`
 }
+
+// IsTestable reports whether the control is BAS-testable (default true).
+func (c ControlDef) IsTestable() bool { return c.Testable == nil || *c.Testable }
 
 // ComplianceReport is the full output for one framework + one scenario run.
 type ComplianceReport struct {
@@ -40,13 +49,20 @@ type ComplianceReport struct {
 }
 
 // ComplianceSummary holds the top-level aggregate numbers.
+//
+// TotalControls counts every control in the framework. Of those, TestableControls
+// are BAS-validatable and ManualControls require manual attestation. The tested/
+// passing/failing/untested tallies and both percentages are computed over the
+// TESTABLE subset only — manual controls are never scored as pass/fail.
 type ComplianceSummary struct {
 	TotalControls     int     `json:"totalControls"`
+	TestableControls  int     `json:"testableControls"`
+	ManualControls    int     `json:"manualControls"`
 	TestedControls    int     `json:"testedControls"`
 	PassingControls   int     `json:"passingControls"`
 	FailingControls   int     `json:"failingControls"`
 	UntestedControls  int     `json:"untestedControls"`
-	CoveragePercent   float64 `json:"coveragePct"`   // TestedControls / TotalControls * 100
+	CoveragePercent   float64 `json:"coveragePct"`   // TestedControls / TestableControls * 100
 	CompliancePercent float64 `json:"compliancePct"` // PassingControls / TestedControls * 100
 }
 
@@ -57,6 +73,7 @@ type DomainResult struct {
 	Passing       int     `json:"passing"`
 	Failing       int     `json:"failing"`
 	Untested      int     `json:"untested"`
+	Manual        int     `json:"manual"`
 	CompliancePct float64 `json:"compliancePct"`
 }
 
@@ -66,7 +83,8 @@ type ControlResult struct {
 	Name     string              `json:"name"`
 	Domain   string              `json:"domain"`
 	Category string              `json:"category"`
-	Status   string              `json:"status"` // pass | fail | untested
+	Testable bool                `json:"testable"`
+	Status   string              `json:"status"` // pass | fail | untested | manual
 	Tested   int                 `json:"tested"`
 	Passed   int                 `json:"passed"`
 	Failed   int                 `json:"failed"`

@@ -51,6 +51,7 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 			compSummaries = append(compSummaries, ComplianceSummaryRow{
 				Framework:     fw.Name + " " + fw.Version,
 				TotalControls: cr.Summary.TotalControls,
+				Manual:        cr.Summary.ManualControls,
 				Tested:        cr.Summary.TestedControls,
 				Passing:       cr.Summary.PassingControls,
 				Failing:       cr.Summary.FailingControls,

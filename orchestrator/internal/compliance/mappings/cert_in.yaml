@@ -10,12 +10,14 @@ controls:
     domain: Incident Reporting
     category: Mandatory Reporting
     techniques: [T1486, T1490, T1078, T1566, T1003]
+    testable: false
 
   - id: CI-02
     name: Incident types requiring reporting — data breach, ransomware, unauthorised access, DDoS
     domain: Incident Reporting
     category: Incident Scope
     techniques: [T1486, T1485, T1078, T1003, T1498]
+    testable: false
 
   # ── Log Management ────────────────────────────────────────────────────────
   - id: CI-03
@@ -23,6 +25,7 @@ controls:
     domain: Log Management
     category: Log Retention
     techniques: [T1070, T1562.002, T1070.001]
+    testable: false
 
   - id: CI-04
     name: Log integrity — logs protected from modification and deletion
@@ -36,6 +39,7 @@ controls:
     domain: System Configuration
     category: Time Synchronisation
     techniques: [T1070]
+    testable: false
 
   # ── Access Control ────────────────────────────────────────────────────────
   - id: CI-06
@@ -49,6 +53,7 @@ controls:
     domain: Access Control
     category: Identity Verification
     techniques: [T1078, T1110]
+    testable: false
 
   # ── Vulnerability Management ──────────────────────────────────────────────
   - id: CI-08
@@ -56,6 +61,7 @@ controls:
     domain: Vulnerability Management
     category: Vulnerability Assessment
     techniques: [T1190, T1203, T1068]
+    testable: false
 
   - id: CI-09
     name: Patch management — security patches applied within timelines per criticality
@@ -69,12 +75,14 @@ controls:
     domain: Data Protection
     category: Data Residency
     techniques: [T1041, T1048, T1567]
+    testable: false
 
   - id: CI-11
     name: Encryption — sensitive data encrypted at rest and in transit
     domain: Data Protection
     category: Encryption
     techniques: [T1041, T1048, T1005]
+    testable: false
 
   # ── Endpoint and Network Security ─────────────────────────────────────────
   - id: CI-12
@@ -101,3 +109,4 @@ controls:
     domain: Audit & Forensics
     category: Forensics
     techniques: [T1003, T1070, T1550, T1055]
+    testable: false

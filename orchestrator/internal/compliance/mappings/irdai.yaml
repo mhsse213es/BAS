@@ -10,12 +10,14 @@ controls:
     domain: Governance
     category: Governance & Oversight
     techniques: [T1078, T1098]
+    testable: false
 
   - id: CS.1.2
     name: Third-party IT service provider risk management
     domain: Governance
     category: Third-Party Risk
     techniques: [T1195, T1199]
+    testable: false
 
   # ── Identification ────────────────────────────────────────────────────────
   - id: CS.2.1
@@ -23,18 +25,21 @@ controls:
     domain: Identification
     category: Asset Management
     techniques: [T1518, T1082]
+    testable: false
 
   - id: CS.2.2
     name: Cyber risk assessment — formal risk assessment; critical insurance data prioritised
     domain: Identification
     category: Risk Assessment
     techniques: [T1190, T1566, T1078]
+    testable: false
 
   - id: CS.2.3
     name: Vulnerability assessment and penetration testing — VAPT annually on critical systems
     domain: Identification
     category: Vulnerability Management
     techniques: [T1190, T1203, T1068]
+    testable: false
 
   # ── Protection ────────────────────────────────────────────────────────────
   - id: CS.3.1
@@ -122,12 +127,14 @@ controls:
     domain: Response
     category: Incident Management
     techniques: [T1486, T1490, T1485]
+    testable: false
 
   - id: CS.5.2
     name: Forensics capability — digital forensics for post-incident investigation
     domain: Response
     category: Forensics
     techniques: [T1003, T1070, T1550]
+    testable: false
 
   # ── Recovery ──────────────────────────────────────────────────────────────
   - id: CS.6.1
@@ -135,9 +142,11 @@ controls:
     domain: Recovery
     category: Recovery
     techniques: [T1490, T1486]
+    testable: false
 
   - id: CS.6.2
     name: Post-incident review — lessons learned documented; controls updated
     domain: Recovery
     category: Improvement
     techniques: [T1485, T1489]
+    testable: false

@@ -101,58 +101,68 @@ func (m *Mapper) GenerateReport(
 	domainMap := make(map[string]*DomainResult)
 	controlResults := make([]ControlResult, 0, len(fw.Controls))
 
-	var totalControls, testedControls, passingControls, failingControls int
+	var totalControls, testableControls, manualControls int
+	var testedControls, passingControls, failingControls int
 
 	for _, ctrl := range fw.Controls {
+		testable := ctrl.IsTestable()
 		cr := ControlResult{
 			ID:       ctrl.ID,
 			Name:     ctrl.Name,
 			Domain:   ctrl.Domain,
 			Category: ctrl.Category,
+			Testable: testable,
 			Status:   "untested",
 		}
 
-		seen := make(map[string]bool) // deduplicate by result.ID
-		for _, tech := range ctrl.Techniques {
-			tech = strings.ToUpper(tech)
-			var matched []models.SimulationResult
+		// Manual controls (governance/process/policy) cannot be validated by
+		// running attack techniques — mark them and skip technique matching so
+		// they are never scored as pass/fail by unrelated simulations.
+		if !testable {
+			cr.Status = "manual"
+		} else {
+			seen := make(map[string]bool) // deduplicate by result.ID
+			for _, tech := range ctrl.Techniques {
+				tech = strings.ToUpper(tech)
+				var matched []models.SimulationResult
 
-			if strings.Contains(tech, ".") {
-				// Sub-technique: exact match only
-				matched = exactIdx[tech]
-			} else {
-				// Base technique: match any sub-technique T1003 → T1003, T1003.001…
-				matched = baseIdx[tech]
+				if strings.Contains(tech, ".") {
+					// Sub-technique: exact match only
+					matched = exactIdx[tech]
+				} else {
+					// Base technique: match any sub-technique T1003 → T1003, T1003.001…
+					matched = baseIdx[tech]
+				}
+
+				for _, r := range matched {
+					if seen[r.ID] {
+						continue
+					}
+					seen[r.ID] = true
+					cr.Tested++
+					ev := TechniqueEvidence{
+						TechniqueID:   r.Technique.ID,
+						TechniqueName: r.Technique.Name,
+						Result:        string(r.Result),
+						Details:       r.Details,
+						Remediation:   r.Remediation,
+					}
+					cr.Evidence = append(cr.Evidence, ev)
+					switch r.Result {
+					case models.ResultPass, models.ResultBlocked:
+						cr.Passed++
+					case models.ResultFail:
+						cr.Failed++
+					}
+				}
 			}
 
-			for _, r := range matched {
-				if seen[r.ID] {
-					continue
+			if cr.Tested > 0 {
+				if cr.Failed > 0 {
+					cr.Status = "fail"
+				} else {
+					cr.Status = "pass"
 				}
-				seen[r.ID] = true
-				cr.Tested++
-				ev := TechniqueEvidence{
-					TechniqueID:   r.Technique.ID,
-					TechniqueName: r.Technique.Name,
-					Result:        string(r.Result),
-					Details:       r.Details,
-					Remediation:   r.Remediation,
-				}
-				cr.Evidence = append(cr.Evidence, ev)
-				switch r.Result {
-				case models.ResultPass, models.ResultBlocked:
-					cr.Passed++
-				case models.ResultFail:
-					cr.Failed++
-				}
-			}
-		}
-
-		if cr.Tested > 0 {
-			if cr.Failed > 0 {
-				cr.Status = "fail"
-			} else {
-				cr.Status = "pass"
 			}
 		}
 
@@ -166,14 +176,20 @@ func (m *Mapper) GenerateReport(
 
 		switch cr.Status {
 		case "pass":
+			testableControls++
 			testedControls++
 			passingControls++
 			d.Passing++
 		case "fail":
+			testableControls++
 			testedControls++
 			failingControls++
 			d.Failing++
-		default:
+		case "manual":
+			manualControls++
+			d.Manual++
+		default: // untested (testable, but no BAS evidence yet)
+			testableControls++
 			d.Untested++
 		}
 
@@ -190,9 +206,11 @@ func (m *Mapper) GenerateReport(
 	}
 	sort.Slice(domains, func(i, j int) bool { return domains[i].Name < domains[j].Name })
 
+	// Coverage and compliance are measured over the BAS-testable subset only —
+	// manual-attestation controls are excluded from both denominators.
 	coveragePct := 0.0
-	if totalControls > 0 {
-		coveragePct = round2(float64(testedControls) / float64(totalControls) * 100)
+	if testableControls > 0 {
+		coveragePct = round2(float64(testedControls) / float64(testableControls) * 100)
 	}
 	compliancePct := 0.0
 	if testedControls > 0 {
@@ -209,10 +227,12 @@ func (m *Mapper) GenerateReport(
 		GeneratedAt:  time.Now().UTC(),
 		Summary: ComplianceSummary{
 			TotalControls:     totalControls,
+			TestableControls:  testableControls,
+			ManualControls:    manualControls,
 			TestedControls:    testedControls,
 			PassingControls:   passingControls,
 			FailingControls:   failingControls,
-			UntestedControls:  totalControls - testedControls,
+			UntestedControls:  testableControls - testedControls,
 			CoveragePercent:   coveragePct,
 			CompliancePercent: compliancePct,
 		},
@@ -226,7 +246,7 @@ func WriteCSV(w io.Writer, r *ComplianceReport) {
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{
 		"Framework", "Version", "Control ID", "Control Name",
-		"Domain", "Category", "Status", "Tested", "Passed", "Failed", "Failing Techniques",
+		"Domain", "Category", "Validation", "Status", "Tested", "Passed", "Failed", "Failing Techniques",
 	})
 	for _, ctrl := range r.Controls {
 		var failing []string
@@ -235,6 +255,10 @@ func WriteCSV(w io.Writer, r *ComplianceReport) {
 				failing = append(failing, ev.TechniqueID)
 			}
 		}
+		validation := "Automated (BAS)"
+		if !ctrl.Testable {
+			validation = "Manual attestation"
+		}
 		_ = cw.Write([]string{
 			r.Framework.Name,
 			r.Framework.Version,
@@ -242,6 +266,7 @@ func WriteCSV(w io.Writer, r *ComplianceReport) {
 			ctrl.Name,
 			ctrl.Domain,
 			ctrl.Category,
+			validation,
 			ctrl.Status,
 			strconv.Itoa(ctrl.Tested),
 			strconv.Itoa(ctrl.Passed),

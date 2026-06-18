@@ -10,6 +10,7 @@ controls:
     domain: Govern
     category: Risk Management Strategy
     techniques: [T1195, T1199]
+    testable: false
 
   # ── Identify ─────────────────────────────────────────────────────────────
   - id: ID.AM-05
@@ -17,24 +18,28 @@ controls:
     domain: Identify
     category: Asset Management
     techniques: [T1518, T1082]
+    testable: false
 
   - id: ID.AM-08
     name: Systems, hardware, software, and services are managed throughout their life cycles
     domain: Identify
     category: Asset Management
     techniques: [T1195, T1505]
+    testable: false
 
   - id: ID.RA-01
     name: Vulnerabilities in assets are identified, validated, and recorded
     domain: Identify
     category: Risk Assessment
     techniques: [T1190, T1203, T1068]
+    testable: false
 
   - id: ID.RA-05
     name: Threats, vulnerabilities, likelihoods, and impacts are used to understand inherent risk
     domain: Identify
     category: Risk Assessment
     techniques: [T1566, T1078, T1190]
+    testable: false
 
   # ── Protect ───────────────────────────────────────────────────────────────
   - id: PR.AA-01
@@ -48,6 +53,7 @@ controls:
     domain: Protect
     category: Identity Management, Authentication, and Access Control
     techniques: [T1078, T1110]
+    testable: false
 
   - id: PR.AA-03
     name: Users, services, and hardware are authenticated
@@ -72,6 +78,7 @@ controls:
     domain: Protect
     category: Awareness and Training
     techniques: [T1566, T1204]
+    testable: false
 
   - id: PR.DS-01
     name: The confidentiality, integrity, and availability of data-at-rest are protected
@@ -90,6 +97,7 @@ controls:
     domain: Protect
     category: Data Security
     techniques: [T1485, T1565]
+    testable: false
 
   - id: PR.IR-01
     name: Networks and environments are protected from unauthorized logical access and usage
@@ -102,6 +110,7 @@ controls:
     domain: Protect
     category: Technology Infrastructure Resilience
     techniques: [T1490, T1486]
+    testable: false
 
   - id: PR.PS-01
     name: Configuration management practices are established and applied
@@ -114,6 +123,7 @@ controls:
     domain: Protect
     category: Platform Security
     techniques: [T1218, T1027]
+    testable: false
 
   - id: PR.PS-04
     name: Log records are generated and made available for continuous monitoring
@@ -132,6 +142,7 @@ controls:
     domain: Protect
     category: Platform Security
     techniques: [T1195, T1505]
+    testable: false
 
   # ── Detect ────────────────────────────────────────────────────────────────
   - id: DE.AE-02
@@ -163,6 +174,7 @@ controls:
     domain: Detect
     category: Continuous Monitoring
     techniques: [T1195, T1199]
+    testable: false
 
   - id: DE.CM-09
     name: Computing hardware, runtime environments, and their data are monitored
@@ -176,6 +188,7 @@ controls:
     domain: Respond
     category: Incident Analysis
     techniques: [T1003, T1558, T1550]
+    testable: false
 
   - id: RS.MI-02
     name: Incidents are contained
@@ -189,3 +202,4 @@ controls:
     domain: Recover
     category: Incident Recovery Plan Execution
     techniques: [T1490, T1486]
+    testable: false

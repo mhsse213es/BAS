@@ -2150,10 +2150,15 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── Fetch simulation results from DB ─────────────────────────────────────
-	var resultsJSON []byte
+	// A single run touches only a handful of techniques, so scoring against one
+	// run leaves most controls "untested". When no specific runId is requested
+	// we aggregate ALL of the agent's completed/partial runs so the report
+	// reflects the agent's full validation history.
+	var results []models.SimulationResult
 	var scenarioName, resolvedRunID, resolvedAgentID string
 
 	if runID != "" {
+		var resultsJSON []byte
 		err := h.db.QueryRow(r.Context(),
 			`SELECT id, agent_id, name, results FROM scenario_runs WHERE id = $1`, runID,
 		).Scan(&resolvedRunID, &resolvedAgentID, &scenarioName, &resultsJSON)
@@ -2161,21 +2166,41 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "run not found", http.StatusNotFound)
 			return
 		}
+		if len(resultsJSON) > 0 {
+			_ = json.Unmarshal(resultsJSON, &results)
+		}
 	} else {
-		err := h.db.QueryRow(r.Context(),
-			`SELECT id, agent_id, name, results FROM scenario_runs
+		rows, err := h.db.Query(r.Context(),
+			`SELECT results FROM scenario_runs
 			  WHERE agent_id = $1 AND status IN ('completed','partial')
-			  ORDER BY started_at DESC LIMIT 1`, agentID,
-		).Scan(&resolvedRunID, &resolvedAgentID, &scenarioName, &resultsJSON)
+			  ORDER BY started_at DESC`, agentID)
 		if err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+		var n int
+		for rows.Next() {
+			var rj []byte
+			if rows.Scan(&rj) != nil {
+				continue
+			}
+			n++
+			if len(rj) == 0 {
+				continue
+			}
+			var rs []models.SimulationResult
+			if json.Unmarshal(rj, &rs) == nil {
+				results = append(results, rs...)
+			}
+		}
+		if n == 0 {
 			jsonError(w, "no completed run found for agent", http.StatusNotFound)
 			return
 		}
-	}
-
-	var results []models.SimulationResult
-	if len(resultsJSON) > 0 {
-		_ = json.Unmarshal(resultsJSON, &results)
+		resolvedAgentID = agentID
+		resolvedRunID = ""
+		scenarioName = fmt.Sprintf("Aggregated across %d run(s)", n)
 	}
 
 	// ── Generate report ───────────────────────────────────────────────────────

@@ -120,6 +120,7 @@ func GenerateHTML(w io.Writer, r *FullReport, compliance []ComplianceSummaryRow)
 type ComplianceSummaryRow struct {
 	Framework     string  `json:"framework"`
 	TotalControls int     `json:"totalControls"`
+	Manual        int     `json:"manual"`
 	Tested        int     `json:"tested"`
 	Passing       int     `json:"passing"`
 	Failing       int     `json:"failing"`
@@ -366,17 +367,18 @@ tr:last-child td{border-bottom:none}
 <!-- ═══ 4. COMPLIANCE STATUS ════════════════════════════════════════════ -->
 <div class="page">
 <h1>4. Regulatory Compliance Status</h1>
-<p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run.</p>
+<p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
 {{if .compliance}}
 <table>
   <thead><tr>
-    <th>Framework</th><th>Total Controls</th><th>Tested</th><th>Passing</th><th>Failing</th><th>Untested</th><th>Compliance</th><th>Coverage</th>
+    <th>Framework</th><th>Total Controls</th><th>Manual</th><th>Tested</th><th>Passing</th><th>Failing</th><th>Untested</th><th>Compliance</th><th>Coverage</th>
   </tr></thead>
   <tbody>
   {{range .compliance}}
   <tr>
     <td style="font-weight:600">{{.framework}}</td>
     <td>{{.totalControls}}</td>
+    <td style="color:#6e7681">{{.manual}}</td>
     <td>{{.tested}}</td>
     <td style="color:#238636">{{.passing}}</td>
     <td style="color:{{if gt .failing 0.0}}#da3633{{else}}#238636{{end}}">{{.failing}}</td>

@@ -85,12 +85,14 @@ controls:
     domain: Data Security
     category: Encryption
     techniques: [T1005, T1039, T1025]
+    testable: false
 
   - id: DAT-02
     name: Data encryption in transit — TLS 1.2+ enforced for all data transmission
     domain: Data Security
     category: Encryption
     techniques: [T1041, T1048]
+    testable: false
 
   - id: DAT-03
     name: Data loss prevention — DLP controls on email, USB, and cloud upload channels
@@ -103,6 +105,7 @@ controls:
     domain: Data Security
     category: Data Classification
     techniques: [T1005, T1114, T1213]
+    testable: false
 
   # ── Security Monitoring ───────────────────────────────────────────────────
   - id: MON-01
@@ -135,6 +138,7 @@ controls:
     domain: Incident Management
     category: Response
     techniques: [T1486, T1490, T1485]
+    testable: false
 
   # ── Business Continuity ───────────────────────────────────────────────────
   - id: BCP-01
@@ -148,6 +152,7 @@ controls:
     domain: Business Continuity
     category: Disaster Recovery
     techniques: [T1485, T1489, T1529]
+    testable: false
 
   # ── Application Security ──────────────────────────────────────────────────
   - id: APP-01
@@ -155,6 +160,7 @@ controls:
     domain: Application Security
     category: Secure Development
     techniques: [T1190, T1505]
+    testable: false
 
   - id: APP-02
     name: Web application firewall — WAF deployed before all internet-facing applications
