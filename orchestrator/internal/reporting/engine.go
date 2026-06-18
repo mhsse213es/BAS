@@ -46,6 +46,13 @@ type FullReport struct {
 	// KillChain is the run's adversary actions paired with the defensive outcome,
 	// ordered by ATT&CK kill-chain phase — the dual-rail purple-team timeline.
 	KillChain []KillChainStep `json:"killChain,omitempty"`
+	// Executive-grade derivations (Cymulate-style report).
+	ExecutiveConclusion string          `json:"executiveConclusion"`
+	TopRiskDrivers      []RiskDriver    `json:"topRiskDrivers"`
+	Insights            Insights        `json:"insights"`
+	ActionPlan          []ActionItem    `json:"actionPlan"`
+	Reliability         Reliability     `json:"reliability"`
+	Glossary            []GlossaryEntry `json:"glossary"`
 }
 
 // DetectionTechnique is one per-technique detection verdict surfaced to the UI.
@@ -61,14 +68,14 @@ type DetectionTechnique struct {
 // BLOCKED render as Prevented; FAIL as Detected (an alert fired) or Missed (none).
 // ERROR/SKIPPED are excluded — they are not security outcomes.
 type KillChainStep struct {
-	Phase       string `json:"phase"`       // tactic slug (frontend humanizes)
+	Phase       string `json:"phase"` // tactic slug (frontend humanizes)
 	TechniqueID string `json:"techniqueId"`
-	Technique   string `json:"technique"`   // technique name
-	Action      string `json:"action"`      // adversary action / intent
-	Outcome     string `json:"outcome"`     // prevented | detected | missed
-	Detail      string `json:"detail"`      // defensive response text
+	Technique   string `json:"technique"`            // technique name
+	Action      string `json:"action"`               // adversary action / intent
+	Outcome     string `json:"outcome"`              // prevented | detected | missed
+	Detail      string `json:"detail"`               // defensive response text
 	Confidence  string `json:"confidence,omitempty"` // high|low for detected
-	LatencyMs   int64  `json:"latencyMs,omitempty"`   // time-to-detect for detected
+	LatencyMs   int64  `json:"latencyMs,omitempty"`  // time-to-detect for detected
 }
 
 // AttackPathStep is one kill-chain phase the endpoint did not prevent, with the
@@ -377,16 +384,26 @@ type ExecutiveSummary struct {
 	DetectionRate      int                      `json:"detectionRate"`  // detected ÷ executed-not-prevented
 	UndetectedRate     int                      `json:"undetectedRate"` // blind spots — succeeded with no alert
 	MTTDMs             int64                    `json:"mttdMs"`         // mean time-to-detect across detected techniques
+	// Executive framing (Cymulate-style).
+	ExposureLevel     string  `json:"exposureLevel"`     // Low | Medium | High | Critical (from prevention)
+	DetectionScore    float64 `json:"detectionScore"`    // detected ÷ executed-unprevented, %
+	DetectionMeasured bool    `json:"detectionMeasured"` // false ⇒ no telemetry ⇒ render N/A
+	PenetrationTested int     `json:"penetrationTested"` // executed (PASS+FAIL)
+	PenetrationFailed int     `json:"penetrationFailed"` // penetrated (FAIL)
+	PenetrationPct    int     `json:"penetrationPct"`    // failed ÷ tested
 }
 
 // TacticEntry is one row of the ATT&CK tactic heatmap.
 type TacticEntry struct {
-	Tactic  string `json:"tactic"`
-	Passed  int    `json:"passed"`
-	Failed  int    `json:"failed"`
-	Total   int    `json:"total"`
-	PassPct int    `json:"passPct"`
-	Weight  string `json:"weight"` // Critical | High | Medium | Low
+	Tactic      string `json:"tactic"`
+	Passed      int    `json:"passed"`
+	Failed      int    `json:"failed"`
+	Total       int    `json:"total"` // Coverage — techniques tested in this tactic
+	PassPct     int    `json:"passPct"`
+	Detected    int    `json:"detected"`    // of the FAILs, how many raised a detection alert
+	DetectedPct int    `json:"detectedPct"` // detected ÷ failed
+	MTTDMs      int64  `json:"mttdMs"`      // mean time-to-detect (per-run only; 0 when unavailable)
+	Weight      string `json:"weight"`      // Critical | High | Medium | Low
 }
 
 // Finding is a single Critical or High severity failure surfaced in the report.
@@ -533,6 +550,9 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	// no live source, so it is intentionally left empty.
 	report.DetectionCategories = buildDetectionCategories(latestResults)
 
+	// ── 8. Executive-grade derivations (exposure, insights, action plan, …) ─
+	deriveExecutive(report, latestResults, nil)
+
 	return report, nil
 }
 
@@ -665,6 +685,10 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 		}
 	}
 	report.TrendAnalysis = buildTrendSummary(trendRuns)
+
+	// Executive-grade derivations — per-run detection verdicts carry latency, so
+	// MTTD-per-tactic is available here (unlike the agent posture Build).
+	deriveExecutive(report, results, report.DetectionTechniques)
 
 	return report, nil
 }

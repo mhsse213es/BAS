@@ -278,6 +278,13 @@ func severityWeight(sev string) int {
 	}
 }
 
+// SeverityWeight exposes the severity weight used by PreventionScore so the
+// reporting layer can attribute lost score points to a group of failures with
+// the exact same weighting the score itself uses. Keeping one source of truth
+// means an "accounts for N points" claim is mathematically consistent with the
+// headline score.
+func SeverityWeight(sev string) int { return severityWeight(sev) }
+
 func classify(riskScore int) string {
 	switch {
 	case riskScore <= 20:
