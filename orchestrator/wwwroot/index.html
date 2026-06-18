@@ -19,7 +19,7 @@
   --muted:     #9aa9bc;
   --text:      #dce8f5;
   --text-dim:  #b8cce0;
-  --success:   #238636;
+  --success:   #2fd8c3;
   --teal:      #2fd8c3;
   --teal-soft: rgba(47,216,195,0.13);
   --warning:   #d29922;
@@ -185,7 +185,7 @@ body {
   width: 100%; justify-content: center; padding: 0.65rem; font-size: 0.875rem;
 }
 .btn-primary:hover { background: #2570e0; opacity: 1; }
-.btn-outline-green { background: transparent; color: #4caf72; border-color: #1f4a30; }
+.btn-outline-green { background: transparent; color: #5cead8; border-color: #14534b; }
 .btn-outline-red   { background: transparent; color: #e07070; border-color: #4a1f1f; }
 .btn-outline       { background: transparent; color: var(--muted); border-color: var(--border); }
 .btn-sm { padding: 0.28rem 0.65rem; font-size: 0.78rem; }
@@ -407,8 +407,8 @@ code {
 .s-offline::before { background: #e07070; }
 .s-running    { background: rgba(47,129,247,0.1);  color: #6aabff; border: 1px solid rgba(47,129,247,0.2); }
 .s-running::before { background: #6aabff; box-shadow: 0 0 6px #6aabff; animation: blink 1.5s infinite; }
-.s-completed  { background: rgba(35,134,54,0.1);  color: #4caf72; border: 1px solid rgba(35,134,54,0.2); }
-.s-completed::before { background: #4caf72; box-shadow: 0 0 6px rgba(76,175,114,0.8); }
+.s-completed  { background: rgba(47,216,195,0.1);  color: #5cead8; border: 1px solid rgba(47,216,195,0.2); }
+.s-completed::before { background: #5cead8; box-shadow: 0 0 6px rgba(47,216,195,0.8); }
 .s-scanning::before { box-shadow: 0 0 6px #6aabff; }
 .s-failed     { background: rgba(218,54,51,0.09);  color: #e07070; border: 1px solid rgba(218,54,51,0.18); }
 .s-failed::before { background: #e07070; }
@@ -484,7 +484,7 @@ code {
 
 /* ── Agent state badges ────────────────────────────────────── */
 .sbadge.s-enrolling   { background:rgba(47,129,247,.15);  color:#7ab8ff;  border-color:#2f81f7; }
-.sbadge.s-active      { background:rgba(35,134,54,.15);   color:#56d364;  border-color:#238636; }
+.sbadge.s-active      { background:rgba(47,216,195,.15);   color:#5cead8;  border-color:#2fd8c3; }
 .sbadge.s-restricted  { background:rgba(210,153,34,.15);  color:#e3b341;  border-color:#d29922; }
 .sbadge.s-quarantined { background:rgba(218,54,51,.15);   color:#ff7b72;  border-color:#da3633; }
 .sbadge.s-retired     { background:rgba(110,118,129,.15); color:#8b949e;  border-color:#6e7681; }
@@ -686,7 +686,7 @@ code {
 .rem-step-n { width:20px; height:20px; border-radius:50%; flex-shrink:0; background:var(--accent); color:#fff; font-size:0.64rem; font-weight:700; display:flex; align-items:center; justify-content:center; margin-top:1px; }
 .rem-step-tx .nm { font-size:0.8rem; font-weight:600; color:var(--text); }
 .rem-step-tx .ds { font-size:0.72rem; color:var(--muted); margin-top:0.25rem; line-height:1.5; }
-.rem-tip { background:rgba(35,134,54,0.1); border:1px solid rgba(35,134,54,0.3); border-radius:var(--radius); padding:0.6rem 0.75rem; font-size:0.74rem; color:#7ee08a; display:flex; gap:0.5rem; align-items:flex-start; margin-top:0.9rem; line-height:1.5; }
+.rem-tip { background:rgba(47,216,195,0.1); border:1px solid rgba(47,216,195,0.3); border-radius:var(--radius); padding:0.6rem 0.75rem; font-size:0.74rem; color:#5cead8; display:flex; gap:0.5rem; align-items:flex-start; margin-top:0.9rem; line-height:1.5; }
 
 /* ── Compliance ────────────────────────────────────────────────────────── */
 .cmp-meta { font-size:0.8rem; color:var(--muted); margin-bottom:1rem; padding:0.5rem 0; border-bottom:1px solid var(--border); }
@@ -697,7 +697,7 @@ code {
 .cmp-domain-bar { height:100%; border-radius:4px; transition:width 0.4s; }
 .cmp-domain-pct { min-width:40px; text-align:right; font-size:0.8rem; font-weight:600; }
 .cmp-status-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
-.cmp-status-dot.pass { background:#238636; }
+.cmp-status-dot.pass { background:#2fd8c3; }
 .cmp-status-dot.fail { background:#da3633; }
 .cmp-status-dot.untested { background:#4a5568; }
 .cmp-status-dot.manual { background:#8957e5; }
@@ -709,7 +709,7 @@ code {
 .cmp-ev-row:last-child { border-bottom:none; }
 .cmp-ev-tech { min-width:90px; font-family:var(--font-mono); color:var(--accent); }
 .cmp-ev-result { min-width:52px; font-weight:600; }
-.cmp-ev-result.pass { color:#3fb950; }
+.cmp-ev-result.pass { color:#5cead8; }
 .cmp-ev-result.fail { color:#f85149; }
 .cmp-ev-result.blocked { color:#58a6ff; }
 .cmp-ev-detail { color:var(--muted); }
@@ -725,7 +725,7 @@ code {
   table { border-collapse:collapse; }
   th, td { border:1px solid #ddd !important; color:#111 !important; }
   .cmp-evidence.open { display:block !important; }
-  .cmp-status-dot.pass { background:#238636 !important; -webkit-print-color-adjust:exact; }
+  .cmp-status-dot.pass { background:#2fd8c3 !important; -webkit-print-color-adjust:exact; }
   .cmp-status-dot.fail { background:#da3633 !important; -webkit-print-color-adjust:exact; }
   .score-card { border:1px solid #ddd !important; background:#fff !important; }
 }
@@ -777,7 +777,7 @@ code {
 .wz-pip.active { color:var(--text); border-bottom-color:var(--accent); }
 .wz-pip.active .wz-pip-n { background:var(--accent); border-color:var(--accent); color:#fff; }
 .wz-pip.done { color:var(--text-dim); border-bottom-color:var(--success); }
-.wz-pip.done .wz-pip-n { background:var(--success); border-color:var(--success); color:#fff; }
+.wz-pip.done .wz-pip-n { background:var(--success); border-color:var(--success); color:#06231f; }
 .wz-body { min-height:128px; }
 .wz-actions { display:flex; align-items:center; gap:0.5rem; }
 .wz-rev-row { display:flex; justify-content:space-between; gap:1rem; padding:0.45rem 0; border-bottom:1px solid var(--border); font-size:0.82rem; }
@@ -1565,7 +1565,7 @@ code {
             <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
               <span>Controls</span>
               <div style="display:flex;gap:0.5rem">
-                <button class="btn btn-sm" style="background:rgba(35,134,54,0.15);color:#3fb950" onclick="filterControls('pass')">Pass</button>
+                <button class="btn btn-sm" style="background:rgba(47,216,195,0.15);color:#5cead8" onclick="filterControls('pass')">Pass</button>
                 <button class="btn btn-sm" style="background:rgba(218,54,51,0.15);color:#f85149" onclick="filterControls('fail')">Fail</button>
                 <button class="btn btn-sm" style="background:rgba(154,169,188,0.15);color:var(--muted)" onclick="filterControls('untested')">Untested</button>
                 <button class="btn btn-sm" style="background:rgba(137,87,229,0.15);color:#b392f0" onclick="filterControls('manual')">Manual</button>
@@ -2330,7 +2330,7 @@ function scenarioCardHTML(s) {
       var tags = visibleTags.map(function(t) { return '<span class="tag">' + x(t) + '</span>'; }).join('');
       var intelBadge = '';
       if (s.intelSource) {
-        var confColor = s.intelConfidence === 'high' ? '#3fb950' : s.intelConfidence === 'medium' ? '#d29922' : '#9aa9bc';
+        var confColor = s.intelConfidence === 'high' ? '#5cead8' : s.intelConfidence === 'medium' ? '#d29922' : '#9aa9bc';
         intelBadge = '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(47,129,247,0.12);' +
           'border:1px solid rgba(47,129,247,0.35);border-radius:4px;padding:2px 7px;font-size:0.72rem;color:#58a6ff;font-weight:600;margin-bottom:6px">' +
           '&#128268; Intel &nbsp;·&nbsp; ' + x(s.intelActor) +
@@ -2355,7 +2355,7 @@ function scenarioCardHTML(s) {
       }
       var canEdit = (ROLE === 'admin' || ROLE === 'analyst');
       var customBadge = s.source === 'custom'
-        ? '<span class="tag" style="background:rgba(35,134,54,0.15);color:#3fb950;border-color:rgba(35,134,54,0.4)">custom</span> '
+        ? '<span class="tag" style="background:rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)">custom</span> '
         : '';
       var editBtns = '';
       if (canEdit) {
@@ -2400,7 +2400,7 @@ function scenarioCardHTML(s) {
         var osIcons = { windows: '⊞', linux: '🐧', darwin: '⌘' };
         var osColors = {
           windows: 'rgba(47,129,247,0.15);color:#58a6ff;border-color:rgba(47,129,247,0.4)',
-          linux:   'rgba(35,134,54,0.15);color:#3fb950;border-color:rgba(35,134,54,0.4)',
+          linux:   'rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)',
           darwin:  'rgba(154,169,188,0.15);color:#9aa9bc;border-color:rgba(154,169,188,0.4)'
         };
         var osOnly = (osArr.length === 1);
@@ -4900,7 +4900,7 @@ function loadConnectorStatus() {
     document.getElementById('cs-next').textContent = s.nextSyncAt ? new Date(s.nextSyncAt).toLocaleString() : '—';
     var statusEl = document.getElementById('cs-status');
     statusEl.textContent = s.lastSyncStatus || 'never';
-    statusEl.style.color = s.lastSyncStatus === 'ok' ? '#3fb950' : s.lastSyncStatus === 'error' ? '#f85149' : 'var(--muted)';
+    statusEl.style.color = s.lastSyncStatus === 'ok' ? '#5cead8' : s.lastSyncStatus === 'error' ? '#f85149' : 'var(--muted)';
     var errEl = document.getElementById('cs-error');
     if (s.lastError) { errEl.textContent = s.lastError; errEl.style.display = ''; }
     else { errEl.style.display = 'none'; }
@@ -5184,7 +5184,7 @@ function loadAgtHealth(agentId) {
     var dots = points.map(function(p, i) {
       var px = pad + i * scaleX;
       var py = svgH - pad - (p.value - minVal) * scaleY;
-      var col = p.value > 500 ? '#da3633' : p.value > 150 ? '#d29922' : '#238636';
+      var col = p.value > 500 ? '#da3633' : p.value > 150 ? '#d29922' : '#2fd8c3';
       return '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="3" fill="' + col + '" opacity="0.7"><title>' + Math.round(p.value) + 'ms · ' + fmtTs(p.createdAt) + '</title></circle>';
     }).join('');
     pane.innerHTML =
@@ -5336,7 +5336,7 @@ function renderComplianceReport(r) {
   document.getElementById('cmp-domains').innerHTML = (r.domains || []).map(function(d) {
     var tested = d.passing + d.failing;
     var pct = tested > 0 ? d.compliancePct : 0;
-    var barColor = pct >= 70 ? '#238636' : pct >= 40 ? '#d29922' : '#da3633';
+    var barColor = pct >= 70 ? '#2fd8c3' : pct >= 40 ? '#d29922' : '#da3633';
     if (tested === 0) barColor = '#4a5568';
     return '<div class="cmp-domain-row">' +
       '<span class="cmp-domain-name">' + d.name + '</span>' +
@@ -5383,7 +5383,7 @@ function renderControlsTable(controls, filter) {
       '<td>' + c.name + ' ' + expandBtn + '<div class="cmp-evidence" id="' + evidenceId + '">' + evRows + '</div></td>' +
       '<td><span style="font-size:0.75rem;color:var(--muted)">' + c.domain + '</span></td>' +
       '<td>' + c.tested + '</td>' +
-      '<td style="color:#3fb950">' + c.passed + '</td>' +
+      '<td style="color:#5cead8">' + c.passed + '</td>' +
       '<td style="color:' + (c.failed > 0 ? '#f85149' : 'var(--muted)') + '">' + c.failed + '</td>' +
       '</tr>';
   }).join('');
