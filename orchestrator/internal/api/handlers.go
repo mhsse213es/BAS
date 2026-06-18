@@ -2312,6 +2312,32 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GET /api/scenarios/runs/{runId}/forensic.csv
+// Streams the forensic CSV (one row per technique result) for a single run.
+func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runId")
+	var name string
+	var resultsRaw []byte
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT name, results FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&name, &resultsRaw); err != nil {
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	}
+	var results []models.SimulationResult
+	if len(resultsRaw) > 0 {
+		json.Unmarshal(resultsRaw, &results)
+	}
+	idShort := runID
+	if len(idShort) > 8 {
+		idShort = idShort[:8]
+	}
+	fname := fmt.Sprintf("bas-forensic-%s-%s.csv", sanitizeFilename(name), idShort)
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	reporting.WriteForensicCSV(w, name, results)
+}
+
 // classifyAgentOS maps a raw os_version string to "windows", "linux", or "darwin".
 // Returns "" if the OS cannot be determined.
 func classifyAgentOS(osVersion string) string {

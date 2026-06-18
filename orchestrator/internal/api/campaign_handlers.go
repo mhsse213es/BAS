@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -127,12 +129,12 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 // campaignRow mirrors the stored campaign for JSON output and rollup.
 type campaignRow struct {
 	ID, Name, ScenarioID, ScenarioName, Mode, Reason, Notes, CreatedBy string
-	Targets   []string
-	Skips     []campaign.Skip
-	Tags      []string
-	CreatedAt time.Time
-	StartedAt time.Time
-	Stopped   bool
+	Targets                                                            []string
+	Skips                                                              []campaign.Skip
+	Tags                                                               []string
+	CreatedAt                                                          time.Time
+	StartedAt                                                          time.Time
+	Stopped                                                            bool
 }
 
 // childRunOut is the per-agent breakdown row returned in a campaign's detail.
@@ -293,6 +295,83 @@ func (h *Handler) CampaignSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, s)
+}
+
+// GET /api/campaigns/{id}/report
+// Fleet-wide HTML assessment report for a campaign (aggregates all child runs).
+func (h *Handler) GetCampaignReport(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	rep, err := h.reportingEngine.BuildFromCampaign(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := reporting.GenerateHTML(w, rep, nil); err != nil {
+		log.Printf("[api] campaign report html: %v", err)
+	}
+}
+
+// GET /api/campaigns/{id}/pdf — fleet-wide PDF report.
+// Detailed per-technique results are omitted (they live in the per-run reports
+// and the campaign forensic CSV); the campaign PDF is the fleet rollup + per-agent
+// breakdown.
+func (h *Handler) GetCampaignPDF(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	rep, err := h.reportingEngine.BuildFromCampaign(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	fname := fmt.Sprintf("bas-campaign-%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), time.Now().UTC().Format("2006-01-02"))
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	if err := reporting.RenderReportPDF(w, rep, nil); err != nil {
+		log.Printf("[api] campaign report pdf: %v", err)
+	}
+}
+
+// GET /api/campaigns/{id}/forensic.csv — one row per technique result across all
+// the campaign's child runs (the fleet evidence layer).
+func (h *Handler) GetCampaignCSV(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var campName, scenarioName string
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT name, scenario_name FROM campaigns WHERE id = $1`, id,
+	).Scan(&campName, &scenarioName); err != nil {
+		jsonError(w, "campaign not found", http.StatusNotFound)
+		return
+	}
+	rows, err := h.db.Query(r.Context(),
+		`SELECT results FROM scenario_runs WHERE campaign_id = $1 ORDER BY started_at`, id)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	var all []models.SimulationResult
+	for rows.Next() {
+		var raw []byte
+		if rows.Scan(&raw) != nil {
+			continue
+		}
+		if len(raw) > 0 {
+			var rs []models.SimulationResult
+			if json.Unmarshal(raw, &rs) == nil {
+				all = append(all, rs...)
+			}
+		}
+	}
+	fname := fmt.Sprintf("bas-campaign-forensic-%s-%s.csv", sanitizeFilename(campName), time.Now().UTC().Format("2006-01-02"))
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	reporting.WriteForensicCSV(w, scenarioName, all)
 }
 
 // GetCampaign returns a campaign with its rollup and per-agent breakdown.

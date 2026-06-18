@@ -2518,7 +2518,9 @@ function openCampaignDetail(id) {
     // ── actions ──
     var actions = (s.status === 'running')
       ? '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>'
-      : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Campaign report export — coming soon">Export report · soon</button>' +
+      : '<button class="btn btn-outline btn-sm" onclick="openCampaignReport(\'' + x(c.id) + '\')" title="Open the fleet-wide HTML report">&#8595; HTML</button>' +
+        ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignPDF(\'' + x(c.id) + '\')" title="Download the fleet-wide PDF report">&#8595; PDF</button>' +
+        ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignCSV(\'' + x(c.id) + '\')" title="Download the fleet forensic CSV (one row per technique across all agents)">&#8595; CSV</button>' +
         ' <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run campaign — coming soon">Re-run · soon</button>';
 
     document.getElementById('campaigns-detail').innerHTML =
@@ -3704,6 +3706,7 @@ function viewRunResults(run) {
         '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">↓ JSON</button>' +
         '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">↓ HTML Report</button>' +
         '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">↓ PDF</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">↓ CSV</button>' +
       '</div>';
   }
   document.getElementById('results-export').innerHTML = exportHtml;
@@ -4126,6 +4129,29 @@ function exportRunJSON(runId) {
 }
 function openRunReport(runId) {
   window.open('/api/scenarios/runs/' + encodeURIComponent(runId) + '/report', '_blank');
+}
+function openCampaignReport(id) {
+  window.open('/api/campaigns/' + encodeURIComponent(id) + '/report', '_blank');
+}
+function downloadCampaignPDF(id) {
+  var a = document.createElement('a');
+  a.href = '/api/campaigns/' + encodeURIComponent(id) + '/pdf';
+  a.download = 'bas-campaign-' + id.substring(0, 8) + '.pdf';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function downloadCampaignCSV(id) {
+  var a = document.createElement('a');
+  a.href = '/api/campaigns/' + encodeURIComponent(id) + '/forensic.csv';
+  a.download = 'bas-campaign-forensic-' + id.substring(0, 8) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function downloadRunCSV(runId) {
+  var a = document.createElement('a');
+  a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/forensic.csv';
+  a.download = 'bas-forensic-' + runId.substring(0, 8) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 function downloadRunPDF(runId) {
   var a = document.createElement('a');
