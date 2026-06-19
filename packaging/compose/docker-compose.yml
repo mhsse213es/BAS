@@ -98,6 +98,8 @@ services:
       OPENCTI_URL:             ${OPENCTI_URL:-}
       OPENCTI_API_KEY:         ${OPENCTI_API_KEY:-}
       THREAT_INTEL_POLL_HOURS: ${THREAT_INTEL_POLL_HOURS:-24}
+      # ── SharpHound AD collector (optional — see volumes above) ──────────────
+      BAS_SHARPHOUND_PATH:     ${BAS_SHARPHOUND_PATH:-}
     volumes:
       # scenarios is read-write: the threat-intel connector writes generated
       # YAMLs into scenarios/intel/. Keep writable even if connector is unused.
@@ -107,6 +109,11 @@ services:
       # ART external payloads (gsecdump, etc.) — drop binaries in ./art-payloads
       # on the host to enable payload-dependent atomics; empty by default.
       - ./art-payloads:/art-payloads:ro
+      # SharpHound (OPTIONAL) — drop SharpHound.exe in ./sharphound/ on the host
+      # and set BAS_SHARPHOUND_PATH=/sharphound/SharpHound.exe in .env to enable
+      # AD graph collection from domain-joined agents. Volume is safe to omit when
+      # SharpHound is not used.
+      - ${SHARPHOUND_DIR:-./sharphound}:/sharphound:ro
     ports:
       - "${DASHBOARD_PORT:-9000}:9000"
     networks:
