@@ -1329,6 +1329,43 @@ code {
           <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Settings</h1>
           <div style="font-size:0.8rem;color:var(--muted)">Manage team access, the simulation engine, threat-intel sync, and content.</div>
         </div>
+        <!-- ── Simulation Coverage KPI card ────────────────────────────────── -->
+        <div id="sim-cov-card" class="conn-cfg-card" onclick="toggleSimCoverage()"
+             style="margin-bottom:1.25rem;cursor:pointer;user-select:none;transition:box-shadow .15s"
+             onmouseenter="this.style.boxShadow='0 0 0 1px var(--accent)'"
+             onmouseleave="this.style.boxShadow=''">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:0.3rem">Total Simulations</div>
+              <div style="font-size:2.1rem;font-weight:800;letter-spacing:-0.03em;color:var(--text);line-height:1" id="sim-total">—</div>
+              <div id="sim-sub" style="font-size:0.74rem;color:var(--muted);margin-top:0.35rem">Loading coverage…</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.2rem">Click for breakdown</div>
+              <div id="sim-caret" style="font-size:1.1rem;color:var(--accent)">&#9654;</div>
+            </div>
+          </div>
+        </div>
+        <div id="sim-cov-detail" style="display:none;margin-bottom:1.25rem">
+          <div class="conn-cfg-card" style="padding:0">
+            <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border)">
+                  <th style="padding:0.55rem 0.9rem;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700">Source</th>
+                  <th style="padding:0.55rem 0.9rem;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700">Count</th>
+                  <th style="padding:0.55rem 0.9rem;text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700">Notes</th>
+                </tr>
+              </thead>
+              <tbody id="sim-cov-body">
+                <tr><td colspan="3" class="empty" style="padding:1rem">Loading…</td></tr>
+              </tbody>
+            </table>
+            <div style="padding:0.6rem 0.9rem;border-top:1px solid var(--border);font-size:0.72rem;color:var(--muted)">
+              Total = ART atomic tests + Caldera adversary-emulation abilities + custom &amp; intel scenarios. Base techniques are the source from which atomic variants are generated (not counted separately in total).
+            </div>
+          </div>
+        </div>
+
         <div class="settings-layout">
           <div class="settings-nav">
             <a class="sset active" data-set="users" onclick="showSettingsSection('users')">Users &amp; roles</a>
@@ -2235,7 +2272,7 @@ function showTab(name) {
   if (name === 'attackpath') loadAttackPath();
   if (name === 'dashboard') loadDashboard();
   if (name === 'compliance') initComplianceTab();
-  if (name === 'settings' && ROLE === 'admin') showSettingsSection(SETTINGS_SECTION);
+  if (name === 'settings' && ROLE === 'admin') { showSettingsSection(SETTINGS_SECTION); loadSimCoverage(); }
 }
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
@@ -3481,7 +3518,8 @@ function openModal(scenarioId, preAgent) {
   var scSel = document.getElementById('modal-sc');
   var scWrap = document.getElementById('modal-sc-wrap');
   scSel.innerHTML = scenarios.map(function(s) {
-    return '<option value="' + x(s.id) + '"' + (s.id === scenarioId ? ' selected' : '') + '>' + x(s.name) + '</option>';
+    var desc = s.description ? ' — ' + (s.description.length > 90 ? s.description.substring(0, 87) + '...' : s.description) : '';
+    return '<option value="' + x(s.id) + '"' + (s.id === scenarioId ? ' selected' : '') + '>' + x(s.name) + x(desc) + '</option>';
   }).join('');
   scWrap.style.display = scenarioId ? 'none' : 'block';
   var sc = scenarioId ? scenarios.find(function(s) { return s.id === scenarioId; }) : null;
@@ -5376,6 +5414,78 @@ function loadARTContentStatus() {
       '<span style="color:var(--danger)">Error checking status</span>';
   }).finally(function() {
     if (btn) btn.disabled = false;
+  });
+}
+
+var SIM_COV_OPEN = false;
+function toggleSimCoverage() {
+  SIM_COV_OPEN = !SIM_COV_OPEN;
+  var det = document.getElementById('sim-cov-detail');
+  var car = document.getElementById('sim-caret');
+  if (det) det.style.display = SIM_COV_OPEN ? '' : 'none';
+  if (car) car.innerHTML = SIM_COV_OPEN ? '&#9660;' : '&#9654;';
+}
+function loadSimCoverage() {
+  var totalEl = document.getElementById('sim-total');
+  var subEl   = document.getElementById('sim-sub');
+  var bodyEl  = document.getElementById('sim-cov-body');
+  if (!totalEl) return;
+  totalEl.textContent = '…';
+  Promise.all([
+    apicall('/api/art/content/status').catch(function() { return {}; }),
+    apicall('/api/caldera/abilities').catch(function() { return []; }),
+    apicall('/api/scenarios').catch(function() { return []; })
+  ]).then(function(res) {
+    var art  = res[0] || {};
+    var cal  = Array.isArray(res[1]) ? res[1] : [];
+    var scen = Array.isArray(res[2]) ? res[2] : [];
+
+    var artTechniques = art.techniqueCount || 0;
+    var artTests      = art.testCount      || 0;
+    var artPayloads   = art.payloadCount   || 0;
+    var kevCount      = art.kevCount       || 0;
+    var calCount      = cal.length;
+    var builtinScen   = scen.filter(function(s) { return s.source === 'builtin'; }).length;
+    var customScen    = scen.filter(function(s) { return s.source === 'custom';  }).length;
+    var intelScen     = scen.filter(function(s) { return s.source === 'intel';   }).length;
+
+    var total = artTests + calCount + customScen + intelScen + builtinScen;
+
+    totalEl.textContent = total.toLocaleString();
+    if (subEl) subEl.textContent =
+      artTests.toLocaleString() + ' ART atomics · ' +
+      calCount.toLocaleString() + ' Caldera abilities · ' +
+      (customScen + intelScen + builtinScen) + ' scenarios';
+
+    if (bodyEl) {
+      var rows = [
+        ['ART base techniques',              artTechniques, 'Source techniques — each generates multiple atomic variants'],
+        ['ART atomic tests (variants)',       artTests,      'Executable test instances (Windows); counted in total'],
+        ['ART payload-backed tests',          artPayloads,   'Atomics with a bundled binary payload (subset of atomics above)'],
+        ['Caldera adversary-emulation',       calCount,      'MITRE ATT&CK emulation abilities (CTID emu library); counted in total'],
+        ['Built-in scenarios',               builtinScen,   'Signed YAML scenarios shipped with the platform; counted in total'],
+        ['Custom / operator scenarios',       customScen,    'Operator-authored scenarios; counted in total'],
+        ['Threat-intel scenarios',            intelScen,     'Auto-generated from MISP / OpenCTI; counted in total'],
+        ['CISA KEV CVEs tracked',             kevCount,      'Known-exploited vulnerabilities — prioritised for CVE-template simulations'],
+      ];
+      bodyEl.innerHTML = rows.map(function(r, i) {
+        var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
+        var bold = (r[0].indexOf('total') !== -1 || r[0].indexOf('Total') !== -1) ? 'font-weight:700;color:var(--text)' : 'color:var(--text)';
+        return '<tr style="' + bg + '">' +
+          '<td style="padding:0.5rem 0.9rem;' + bold + '">' + r[0] + '</td>' +
+          '<td style="padding:0.5rem 0.9rem;font-family:var(--font-mono);font-size:0.78rem;color:var(--accent)">' + (r[1] || 0).toLocaleString() + '</td>' +
+          '<td style="padding:0.5rem 0.9rem;font-size:0.74rem;color:var(--muted)">' + r[2] + '</td>' +
+        '</tr>';
+      }).join('') +
+      '<tr style="border-top:1px solid var(--border);background:rgba(47,129,247,.06)">' +
+        '<td style="padding:0.55rem 0.9rem;font-weight:700;color:var(--text)">Total actionable simulations</td>' +
+        '<td style="padding:0.55rem 0.9rem;font-family:var(--font-mono);font-size:0.9rem;font-weight:800;color:var(--accent)">' + total.toLocaleString() + '</td>' +
+        '<td style="padding:0.55rem 0.9rem;font-size:0.74rem;color:var(--muted)">ART atomics + Caldera + all scenarios</td>' +
+      '</tr>';
+    }
+  }).catch(function() {
+    if (totalEl) totalEl.textContent = '—';
+    if (subEl) subEl.textContent = 'Could not load coverage data';
   });
 }
 
