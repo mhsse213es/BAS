@@ -123,6 +123,7 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 	skipsJSON, _ := json.Marshal(skips)
 	_, _ = h.db.Exec(r.Context(), `UPDATE campaigns SET skips=$1 WHERE id=$2`, skipsJSON, id)
 
+	h.auditLog(r, "campaign.create", id, map[string]any{"name": req.Name, "scenarioId": req.ScenarioID, "agents": len(req.AgentIDs), "mode": mode, "dispatched": dispatched}, "ok")
 	respond(w, map[string]any{"campaignId": id, "dispatched": dispatched, "skipped": len(skips)})
 }
 
@@ -429,5 +430,6 @@ func (h *Handler) StopCampaign(w http.ResponseWriter, r *http.Request) {
 		_, _ = h.db.Exec(r.Context(),
 			`UPDATE scenario_runs SET status='partial', completed_at=NOW() WHERE id=$1 AND status='running'`, rid)
 	}
+	h.auditLog(r, "campaign.stop", id, map[string]any{"cancelledRuns": len(runIDs)}, "ok")
 	respond(w, map[string]any{"stopped": true, "cancelled": len(runIDs)})
 }
