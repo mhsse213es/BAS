@@ -234,12 +234,13 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// agent_id so the newest collection replaces the old — matching the
 		// idempotent, at-least-once delivery the rest of the pipeline uses.
 		`CREATE TABLE IF NOT EXISTS attackpath_collections (
-			agent_id     text        PRIMARY KEY,
+			agent_id     text        NOT NULL,
 			hostname     text        NOT NULL DEFAULT '',
 			source       text        NOT NULL DEFAULT 'agent',
 			collected_at timestamptz NOT NULL DEFAULT NOW(),
 			payload      jsonb       NOT NULL DEFAULT '{}',
-			updated_at   timestamptz NOT NULL DEFAULT NOW()
+			updated_at   timestamptz NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (agent_id, source)
 		)`,
 	}
 
