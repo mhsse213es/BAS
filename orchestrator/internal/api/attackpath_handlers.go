@@ -1,12 +1,17 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/audspect/bas/internal/attackpath"
+	"github.com/audspect/bas/internal/models"
+	"github.com/go-chi/chi/v5"
 )
 
 // SubmitAttackPathCollection ingests one agent's attack-path recon payload
@@ -64,6 +69,58 @@ func (h *Handler) storeAttackPathCollection(r *http.Request, c attackpath.Collec
 		       collected_at=EXCLUDED.collected_at, payload=EXCLUDED.payload, updated_at=NOW()`,
 		c.AgentID, c.Hostname, c.Source, c.CollectedAt, payload)
 	return err
+}
+
+// DispatchAttackPathCollect tells a connected agent to run an attack-path
+// collection: probe an explicit target allowlist and (optionally, where domain-
+// joined) run SharpHound. Operator-authed (Analyst+). Recon only — never
+// scanning beyond the provided targets.
+//
+// The SharpHound binary is delivered in the command when BAS_SHARPHOUND_PATH
+// points at a readable file; otherwise the agent runs reachability + local
+// identity only and skips SharpHound.
+// POST /api/attackpath/collect/{agentId}
+func (h *Handler) DispatchAttackPathCollect(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	var body struct {
+		Targets       []string `json:"targets"`
+		Segment       string   `json:"segment"`
+		RunSharpHound bool     `json:"runSharpHound"`
+		SharpHoundArgs string  `json:"sharpHoundArgs"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	cmd := map[string]any{
+		"collectId":      fmt.Sprintf("ap-%d", time.Now().UnixMilli()),
+		"targets":        body.Targets,
+		"segment":        body.Segment,
+		"runSharpHound":  body.RunSharpHound,
+		"sharpHoundArgs": body.SharpHoundArgs,
+	}
+	sharpHoundLoaded := false
+	if body.RunSharpHound {
+		if p := os.Getenv("BAS_SHARPHOUND_PATH"); p != "" {
+			if raw, err := os.ReadFile(p); err == nil {
+				cmd["sharpHoundPayload"] = map[string]string{
+					"name":    "SharpHound.exe",
+					"content": base64.StdEncoding.EncodeToString(raw),
+				}
+				sharpHoundLoaded = true
+			}
+		}
+	}
+
+	sent := h.hub.SendToAgent(agentID, models.WSMessage{
+		Type: models.MsgCommandAttackPathCollect, AgentID: agentID, Data: cmd,
+	})
+	if !sent {
+		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
+		return
+	}
+	respond(w, map[string]any{
+		"agentId": agentID, "targets": len(body.Targets),
+		"sharpHound": body.RunSharpHound, "sharpHoundDelivered": sharpHoundLoaded,
+	})
 }
 
 // SubmitAttackPathSharpHound ingests a RAW SharpHound collection zip from a

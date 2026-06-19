@@ -855,6 +855,15 @@ func (a *Agent) connectWS() {
 				a.runWG.Add(1)
 				go func() { defer a.runWG.Done(); a.runLocalScan(sim.ScenarioID, sim.RunID, sim.Checks) }()
 
+			case "command_attackpath_collect":
+				var apc AttackPathCollectCommand
+				if err := json.Unmarshal(msg.Data, &apc); err != nil {
+					log.Printf("[!] WS: bad attackpath collect payload: %v", err)
+					continue
+				}
+				a.runWG.Add(1)
+				go func() { defer a.runWG.Done(); a.runAttackPathCollect(apc) }()
+
 			case "command_cancel":
 				if a.cancelCurrentScenario() {
 					log.Printf("[*] scenario cancelled by operator")

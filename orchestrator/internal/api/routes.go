@@ -122,6 +122,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleAnalyst))
 			r.Post("/api/scan/{agentId}", h.TriggerScan)
+			r.Post("/api/attackpath/collect/{agentId}", h.DispatchAttackPathCollect)
 			r.Post("/api/scenarios/{id}/run", h.RunScenario)
 			r.Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
 			r.Post("/api/campaigns", h.CreateCampaign)

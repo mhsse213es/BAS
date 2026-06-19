@@ -216,6 +216,7 @@ const (
 	MsgCommandPatches  = "command_install_patches"
 	MsgPolicyUpdate    = "policy_update"
 	MsgRunEvent        = "run_event"
+	MsgCommandAttackPathCollect = "command_attackpath_collect"
 )
 
 // ── ATT&CK Normalisation ──────────────────────────────────────────────────────
