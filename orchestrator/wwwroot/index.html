@@ -1372,6 +1372,7 @@ code {
             <a class="sset" data-set="engine" onclick="showSettingsSection('engine')">Caldera engine</a>
             <a class="sset" data-set="intel" onclick="showSettingsSection('intel')">Threat intel</a>
             <a class="sset" data-set="art" onclick="showSettingsSection('art')">ART content</a>
+            <a class="sset" data-set="audit" onclick="showSettingsSection('audit')">Audit logs</a>
           </div>
           <div class="settings-body">
 
@@ -1520,6 +1521,61 @@ code {
             </div>
           </div>
         </div>
+          </div>
+
+          <!-- Audit Logs -->
+          <div id="set-audit" class="set-section" style="display:none">
+            <div class="sec-hdr" style="margin-bottom:0.8rem">
+              <h2>Audit Logs</h2>
+              <div style="display:flex;gap:0.5rem;align-items:center">
+                <input id="audit-search-actor" type="search" placeholder="Filter by user…"
+                       style="padding:0.4rem 0.65rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:inherit;width:160px"
+                       oninput="loadAuditLogs()">
+                <select id="audit-filter-action"
+                        style="padding:0.4rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:inherit"
+                        onchange="loadAuditLogs()">
+                  <option value="">All actions</option>
+                  <option value="user.login">Login</option>
+                  <option value="user.create">User created</option>
+                  <option value="user.update">User updated</option>
+                  <option value="user.delete">User deleted</option>
+                  <option value="user.change_password">Password changed</option>
+                  <option value="user.reset_password">Password reset</option>
+                  <option value="scenario.run">Scenario run</option>
+                  <option value="scenario.cancel">Scenario cancelled</option>
+                  <option value="attackpath.collect">Attack path collected</option>
+                  <option value="attackpath.schedule_update">AP schedule updated</option>
+                  <option value="tamper.acknowledge">Tamper acknowledged</option>
+                  <option value="tamper.acknowledge_all">Tamper ack all</option>
+                  <option value="connector.sync">Connector sync</option>
+                  <option value="art.reseed">ART reseed</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="loadAuditLogs()">Refresh</button>
+                <button class="btn btn-outline btn-sm" onclick="exportAuditLogs()">&#8659; Export CSV</button>
+              </div>
+            </div>
+            <div class="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:155px">Time</th>
+                    <th style="width:120px">User</th>
+                    <th style="width:160px">Action</th>
+                    <th>Resource / Detail</th>
+                    <th style="width:130px">IP Address</th>
+                    <th style="width:70px">Outcome</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-body"></tbody>
+              </table>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.75rem;align-items:center">
+              <span id="audit-range-label" style="font-size:0.78rem;color:var(--muted)"></span>
+              <button class="btn btn-outline btn-sm" id="audit-prev-btn" onclick="auditPage(-1)" disabled>&#8249; Prev</button>
+              <button class="btn btn-outline btn-sm" id="audit-next-btn" onclick="auditPage(1)" disabled>Next &#8250;</button>
+            </div>
+          </div>
+
           </div>
           </div>
         </div>
@@ -2272,7 +2328,7 @@ function showTab(name) {
   if (name === 'attackpath') loadAttackPath();
   if (name === 'dashboard') loadDashboard();
   if (name === 'compliance') initComplianceTab();
-  if (name === 'settings' && ROLE === 'admin') { showSettingsSection(SETTINGS_SECTION); loadSimCoverage(); }
+  if (name === 'settings' && ROLE === 'admin') { showSettingsSection(SETTINGS_SECTION); loadSimCoverage(); if (SETTINGS_SECTION === 'audit') loadAuditLogs(); }
 }
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
@@ -2458,7 +2514,7 @@ var SETTINGS_SECTION = 'users';
 // Settings sub-section switcher — toggles the body panels + lazily loads each.
 function showSettingsSection(name) {
   SETTINGS_SECTION = name;
-  ['users', 'engine', 'intel', 'art'].forEach(function(s) {
+  ['users', 'engine', 'intel', 'art', 'audit'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
     if (el) el.style.display = s === name ? '' : 'none';
     var nav = document.querySelector('[data-set="' + s + '"]');
@@ -2468,6 +2524,7 @@ function showSettingsSection(name) {
   else if (name === 'engine') loadCalderaStatus();
   else if (name === 'intel') loadConnectorStatus();
   else if (name === 'art') loadARTContentStatus();
+  else if (name === 'audit') loadAuditLogs();
 }
 
 function apicall(path, opts) {
@@ -5504,6 +5561,127 @@ function reseedART() {
     .finally(function() {
       if (btn) { btn.disabled = false; btn.textContent = 'Reseed from Pack'; }
     });
+}
+
+// ── Audit Logs ────────────────────────────────────────────────────────────────
+var AUDIT_OFFSET = 0;
+var AUDIT_LIMIT  = 50;
+var AUDIT_TOTAL  = 0;
+
+var AUDIT_ACTION_LABELS = {
+  'user.login':                'Login',
+  'user.create':               'User created',
+  'user.update':               'User updated',
+  'user.delete':               'User deleted',
+  'user.change_password':      'Password changed',
+  'user.reset_password':       'Password reset',
+  'scenario.run':              'Scenario run',
+  'scenario.cancel':           'Scenario cancelled',
+  'attackpath.collect':        'AP collected',
+  'attackpath.schedule_update':'AP schedule updated',
+  'tamper.acknowledge':        'Tamper ack',
+  'tamper.acknowledge_all':    'Tamper ack all',
+  'connector.sync':            'Connector sync',
+  'art.reseed':                'ART reseed',
+};
+
+function loadAuditLogs() {
+  AUDIT_OFFSET = 0;
+  fetchAuditPage();
+}
+
+function auditPage(dir) {
+  AUDIT_OFFSET = Math.max(0, AUDIT_OFFSET + dir * AUDIT_LIMIT);
+  fetchAuditPage();
+}
+
+function fetchAuditPage() {
+  var action = document.getElementById('audit-filter-action').value || '';
+  var actor  = (document.getElementById('audit-search-actor').value || '').trim();
+  var qs = '?limit=' + AUDIT_LIMIT + '&offset=' + AUDIT_OFFSET;
+  if (action) qs += '&action=' + encodeURIComponent(action);
+  if (actor)  qs += '&actor='  + encodeURIComponent(actor);
+  apicall('/api/audit-logs' + qs).then(function(d) {
+    var entries = d.entries || [];
+    AUDIT_TOTAL = entries.length; // approximate
+    var tbody = document.getElementById('audit-body');
+    if (!tbody) return;
+    if (!entries.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">No audit records found.</td></tr>';
+    } else {
+      tbody.innerHTML = entries.map(function(e) {
+        var ts = new Date(e.ts);
+        var tsStr = ts.toLocaleDateString() + ' ' + ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        var actionLabel = AUDIT_ACTION_LABELS[e.action] || e.action;
+        var outcomeStyle = e.outcome === 'ok'
+          ? 'background:rgba(35,134,54,.18);color:#3fb950;border:1px solid rgba(35,134,54,.35)'
+          : 'background:rgba(218,54,51,.18);color:#f85149;border:1px solid rgba(218,54,51,.35)';
+        var detail = '';
+        try {
+          var d2 = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
+          var parts = [];
+          if (d2.username) parts.push('user: ' + d2.username);
+          if (d2.role) parts.push('role: ' + d2.role);
+          if (d2.scenarioId) parts.push('scenario: ' + d2.scenarioId);
+          if (d2.mode) parts.push('mode: ' + d2.mode);
+          if (d2.agentId) parts.push('agent: ' + d2.agentId);
+          if (d2.reason) parts.push('reason: ' + d2.reason);
+          if (d2.version) parts.push('v: ' + d2.version);
+          if (d2.techniqueCount != null) parts.push('techniques: ' + d2.techniqueCount);
+          if (d2.enabled != null) parts.push('enabled: ' + d2.enabled);
+          if (d2.intervalMinutes) parts.push('interval: ' + d2.intervalMinutes + 'min');
+          detail = parts.join(' · ');
+          if (!detail && e.resource) detail = e.resource;
+        } catch(ex) { detail = e.resource || ''; }
+        return '<tr>' +
+          '<td style="font-size:0.77rem;color:var(--muted);white-space:nowrap">' + tsStr + '</td>' +
+          '<td style="font-size:0.8rem;font-weight:500">' + escHtml(e.actorName) + '</td>' +
+          '<td style="font-size:0.8rem">' + escHtml(actionLabel) + '</td>' +
+          '<td style="font-size:0.77rem;color:var(--muted)">' + escHtml(detail) + '</td>' +
+          '<td style="font-size:0.75rem;color:var(--muted);font-family:var(--font-mono)">' + escHtml(e.ip || '') + '</td>' +
+          '<td><span style="display:inline-block;padding:0.18rem 0.55rem;border-radius:10px;font-size:0.72rem;font-weight:600;' + outcomeStyle + '">' + escHtml(e.outcome) + '</span></td>' +
+        '</tr>';
+      }).join('');
+    }
+    var rangeEl = document.getElementById('audit-range-label');
+    if (rangeEl) {
+      var from = AUDIT_OFFSET + 1;
+      var to = AUDIT_OFFSET + entries.length;
+      rangeEl.textContent = entries.length ? from + '–' + to + ' shown' : '';
+    }
+    var prevBtn = document.getElementById('audit-prev-btn');
+    var nextBtn = document.getElementById('audit-next-btn');
+    if (prevBtn) prevBtn.disabled = AUDIT_OFFSET === 0;
+    if (nextBtn) nextBtn.disabled = entries.length < AUDIT_LIMIT;
+  }).catch(function() {
+    var tbody = document.getElementById('audit-body');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:2rem">Failed to load audit logs.</td></tr>';
+  });
+}
+
+function exportAuditLogs() {
+  var action = document.getElementById('audit-filter-action').value || '';
+  var actor  = (document.getElementById('audit-search-actor').value || '').trim();
+  apicall('/api/audit-logs?limit=500&offset=0' +
+    (action ? '&action=' + encodeURIComponent(action) : '') +
+    (actor  ? '&actor='  + encodeURIComponent(actor)  : '')
+  ).then(function(d) {
+    var rows = (d.entries || []);
+    var csv = 'Time,User,Action,Resource,Detail,IP,Outcome\n' + rows.map(function(e) {
+      var det = '';
+      try { det = JSON.stringify(e.detail); } catch(x) {}
+      return [e.ts, e.actorName, e.action, e.resource, det, e.ip, e.outcome]
+        .map(function(v) { return '"' + String(v||'').replace(/"/g,'""') + '"'; }).join(',');
+    }).join('\n');
+    var a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'audit-logs-' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+  }).catch(function(e) { showToast('Export failed: ' + e.message, 'err'); });
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function deleteIntelScenario(id) {

@@ -134,6 +134,7 @@ func (h *Handler) AcknowledgeTamperEvent(w http.ResponseWriter, r *http.Request)
 		integrity.DispatchBlocked.Store(false)
 	}
 
+	h.auditLog(r, "tamper.acknowledge", id, nil, "ok")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"ok":true}`))
 }
@@ -153,6 +154,7 @@ func (h *Handler) AcknowledgeAllTamperEvents(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
+	h.auditLog(r, "tamper.acknowledge_all", "", nil, "ok")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"ok":true}`))
 }

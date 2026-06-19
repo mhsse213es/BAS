@@ -243,6 +243,21 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			PRIMARY KEY (agent_id, source)
 		)`,
 
+		// attackpath_schedule: single-row config for periodic fleet collection.
+		// When enabled, the orchestrator re-dispatches the stored target list to
+		// every connected agent every interval_minutes.
+		`CREATE TABLE IF NOT EXISTS attackpath_schedule (
+			id               int         PRIMARY KEY DEFAULT 1,
+			enabled          boolean     NOT NULL DEFAULT false,
+			interval_minutes int         NOT NULL DEFAULT 1440,
+			targets          jsonb       NOT NULL DEFAULT '[]',
+			segment          text        NOT NULL DEFAULT '',
+			run_sharphound   boolean     NOT NULL DEFAULT false,
+			last_run_at      timestamptz,
+			updated_at       timestamptz NOT NULL DEFAULT NOW(),
+			CONSTRAINT attackpath_schedule_singleton CHECK (id = 1)
+		)`,
+
 		// attackpath_asset_tags: operator-supplied host metadata (crown-jewel tag,
 		// network segment, tier-0 override) the collectors cannot know. Keyed by
 		// normalized hostname so a tag survives reconciliation to the SID node.
@@ -254,6 +269,39 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			high_value  boolean     NOT NULL DEFAULT false,
 			updated_at  timestamptz NOT NULL DEFAULT NOW()
 		)`,
+
+		// ── Tamper events: filesystem integrity violations ─────────────────────
+		// Populated by integrity.StartWatcher when any protected file is modified,
+		// deleted, or created unexpectedly. Acknowledged by an admin via the dashboard.
+		`CREATE TABLE IF NOT EXISTS tamper_events (
+			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			detected_at   timestamptz NOT NULL DEFAULT NOW(),
+			path          text        NOT NULL,
+			event_type    text        NOT NULL,   -- 'write' | 'remove' | 'create'
+			severity      text        NOT NULL,   -- 'critical' | 'warning'
+			acknowledged  boolean     NOT NULL DEFAULT false,
+			acked_by      text        REFERENCES users(id) ON DELETE SET NULL,
+			acked_at      timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_tamper_events_ack ON tamper_events (acknowledged, detected_at DESC)`,
+
+		// audit_logs: immutable, append-only record of every significant operator
+		// action. actor_id references users(id) but is stored as plain text so
+		// deleted users' entries are preserved (no FK cascade). Username is resolved
+		// via LEFT JOIN at query time so we never need to store it redundantly.
+		`CREATE TABLE IF NOT EXISTS audit_logs (
+			id         bigserial   PRIMARY KEY,
+			ts         timestamptz NOT NULL DEFAULT NOW(),
+			actor_id   text        NOT NULL DEFAULT '',
+			action     text        NOT NULL,
+			resource   text        NOT NULL DEFAULT '',
+			detail     jsonb       NOT NULL DEFAULT '{}',
+			ip         text        NOT NULL DEFAULT '',
+			outcome    text        NOT NULL DEFAULT 'ok'
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_logs_ts     ON audit_logs (ts DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_logs_actor  ON audit_logs (actor_id, ts DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs (action, ts DESC)`,
 	}
 
 	for _, s := range stmts {

@@ -187,6 +187,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Get("/api/tamper-events", h.GetTamperEvents)
 			r.Post("/api/tamper-events/{id}/acknowledge", h.AcknowledgeTamperEvent)
 			r.Post("/api/tamper-events/acknowledge-all", h.AcknowledgeAllTamperEvents)
+
+			// Audit log — append-only record of all operator actions
+			r.Get("/api/audit-logs", h.GetAuditLogs)
 		})
 	})
 

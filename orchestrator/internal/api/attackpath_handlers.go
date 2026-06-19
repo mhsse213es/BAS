@@ -255,6 +255,7 @@ func (h *Handler) DispatchAttackPathCollect(w http.ResponseWriter, r *http.Reque
 		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
 		return
 	}
+	h.auditLog(r, "attackpath.collect", agentID, map[string]any{"targets": len(body.Targets), "sharpHound": body.RunSharpHound}, "ok")
 	respond(w, map[string]any{
 		"agentId": agentID, "targets": len(body.Targets),
 		"sharpHound": body.RunSharpHound, "sharpHoundDelivered": sharpHoundLoaded,
@@ -318,6 +319,7 @@ func (h *Handler) SetAttackPathSchedule(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.auditLog(r, "attackpath.schedule_update", "", map[string]any{"enabled": s.Enabled, "intervalMinutes": s.IntervalMinutes}, "ok")
 	respond(w, map[string]any{"ok": true, "enabled": s.Enabled, "intervalMinutes": s.IntervalMinutes})
 }
 

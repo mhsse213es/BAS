@@ -154,10 +154,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, password_hash, role, is_active, must_change_pw FROM users WHERE username = $1`, req.Username,
 	).Scan(&id, &hash, &role, &isActive, &mustChangePw)
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)) != nil {
+		h.auditLogAs(r, "", "user.login", req.Username, map[string]any{"username": req.Username, "reason": "invalid credentials"}, "fail")
 		jsonError(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
 	if !isActive {
+		h.auditLogAs(r, id, "user.login", id, map[string]any{"username": req.Username, "reason": "account disabled"}, "fail")
 		jsonError(w, "account is disabled — contact your administrator", http.StatusForbidden)
 		return
 	}
@@ -178,6 +180,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   86400,
 	})
+	h.auditLogAs(r, id, "user.login", id, map[string]any{"role": role}, "ok")
 	respond(w, map[string]interface{}{
 		"token":        token, // kept for backward compat with CLI/API clients
 		"role":         role,
@@ -1004,6 +1007,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.auditLog(r, "scenario.run", runID, map[string]any{"scenarioId": scenarioID, "agentId": req.AgentID, "mode": mode}, "ok")
 	res := map[string]string{"runId": runID, "status": "dispatched", "mode": mode}
 	if osWarning != "" {
 		res["osWarning"] = osWarning
@@ -1431,10 +1435,12 @@ func (h *Handler) CancelRun(w http.ResponseWriter, r *http.Request) {
 			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
 			  WHERE id = $1 AND status = 'running'`, runID)
 		log.Printf("[scenario] cancel run %s — agent %s offline, marked partial", runID, agentID)
+		h.auditLog(r, "scenario.cancel", runID, map[string]any{"agentId": agentID, "outcome": "partial"}, "ok")
 		respond(w, map[string]string{"runId": runID, "status": "partial"})
 		return
 	}
 	log.Printf("[scenario] cancel requested for run %s → agent %s", runID, agentID)
+	h.auditLog(r, "scenario.cancel", runID, map[string]any{"agentId": agentID}, "ok")
 	respond(w, map[string]string{"runId": runID, "status": "cancelling"})
 }
 
@@ -1531,6 +1537,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.auditLog(r, "user.create", id, map[string]any{"username": req.Username, "role": req.Role}, "ok")
 	w.WriteHeader(http.StatusCreated)
 	respond(w, map[string]string{"id": id, "username": req.Username, "role": req.Role})
 }
@@ -1570,6 +1577,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if req.IsActive != nil {
 		h.db.Exec(r.Context(), `UPDATE users SET is_active = $1 WHERE id = $2`, *req.IsActive, targetID)
 	}
+	h.auditLog(r, "user.update", targetID, nil, "ok")
 	w.WriteHeader(http.StatusOK)
 	respond(w, map[string]string{"status": "updated"})
 }
@@ -1586,6 +1594,7 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.auditLog(r, "user.delete", targetID, nil, "ok")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1630,6 +1639,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		`UPDATE users SET password_hash = $1, must_change_pw = false WHERE id = $2`,
 		string(newHash), claims.UserID)
 
+	h.auditLog(r, "user.change_password", claims.UserID, nil, "ok")
 	respond(w, map[string]string{"status": "password updated"})
 }
 
@@ -1655,6 +1665,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	h.db.Exec(r.Context(),
 		`UPDATE users SET password_hash = $1, must_change_pw = true WHERE id = $2`,
 		string(hash), targetID)
+	h.auditLog(r, "user.reset_password", targetID, nil, "ok")
 	respond(w, map[string]string{"status": "password reset — user must change on next login"})
 }
 
@@ -1954,6 +1965,7 @@ func (h *Handler) TriggerConnectorSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.scheduler.TriggerSync()
+	h.auditLog(r, "connector.sync", "", nil, "ok")
 	respond(w, map[string]bool{"queued": true})
 }
 
@@ -2404,6 +2416,7 @@ func (h *Handler) GetRunReportData(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]any{
 		"topFindings":     report.TopFindings,
 		"recommendations": report.Summary.Recommendations,
+		"killChain":       report.KillChain,
 	})
 }
 
@@ -2542,6 +2555,7 @@ func (h *Handler) ReseedART(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[content] reseed via API: %d techniques, %d payloads (version %q)", tc, pc, version)
+	h.auditLog(r, "art.reseed", "", map[string]any{"version": version, "techniqueCount": tc, "payloadCount": pc}, "ok")
 	respond(w, map[string]any{
 		"status":           "ok",
 		"version":          version,
