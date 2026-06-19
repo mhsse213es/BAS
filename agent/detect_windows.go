@@ -20,6 +20,7 @@ var alertChannels = []string{
 	"Microsoft-Windows-AppLocker/EXE and DLL",
 	"Microsoft-Windows-AppLocker/MSI and Script",
 	"Microsoft-Windows-CodeIntegrity/Operational",
+	"Microsoft-Windows-Sysmon/Operational",
 	"Application",
 	"System",
 }

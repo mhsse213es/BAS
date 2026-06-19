@@ -52,12 +52,40 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 	dets := detect.Correlate(steps, body.Alerts, 5*time.Minute, detect.DefenderDetectIDs())
 	sum := detect.Score(dets)
 
+	// Merge per-technique detection verdicts into SimulationResult so reports
+	// show PREVENTED / DETECTED / UNDETECTED alongside the execution verdict.
+	detIdx := make(map[string]detect.TechniqueDetection, len(dets))
+	for _, d := range dets {
+		detIdx[d.TechniqueID] = d
+	}
+	for i := range results {
+		d, ok := detIdx[results[i].Technique.ID]
+		if !ok {
+			continue
+		}
+		results[i].DetectionVerdict = d.Verdict
+		if d.Alert != nil {
+			results[i].DetectionAlert = &models.DetectionAlert{
+				Channel:     d.Alert.Channel,
+				Provider:    d.Alert.Provider,
+				EventID:     d.Alert.EventID,
+				ThreatName:  d.Alert.ThreatName,
+				ProcessName: d.Alert.ProcessName,
+				CommandLine: d.Alert.CommandLine,
+				Timestamp:   d.Alert.Timestamp,
+				Confidence:  d.Confidence,
+				MTTDMs:      d.TimeToDetectMs,
+			}
+		}
+	}
+	updatedResultsJSON, _ := json.Marshal(results)
+
 	rawJSON, _ := json.Marshal(body.Alerts)
 	summaryJSON, _ := json.Marshal(map[string]any{"summary": sum, "techniques": dets, "truncated": body.Truncated})
 	if _, err := h.db.Exec(r.Context(),
 		`UPDATE scenario_runs SET detections_raw=$1, detection_summary=$2,
-		        detection_rate=$3, undetected_rate=$4, mttd_ms=$5 WHERE id=$6`,
-		rawJSON, summaryJSON, sum.DetectionRate, sum.UndetectedRate, sum.MTTDMs, runID); err != nil {
+		        detection_rate=$3, undetected_rate=$4, mttd_ms=$5, results=$6 WHERE id=$7`,
+		rawJSON, summaryJSON, sum.DetectionRate, sum.UndetectedRate, sum.MTTDMs, updatedResultsJSON, runID); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

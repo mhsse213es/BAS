@@ -44,8 +44,25 @@ type SimulationResult struct {
 	RawOutput    string          `json:"rawOutput,omitempty"`
 	DurationMs   int64           `json:"durationMs"`
 	ExecutedAt   time.Time       `json:"executedAt"`
-	Framework    string          `json:"framework"`        // art | caldera | sigma | custom
-	Events       []string        `json:"events,omitempty"` // Windows Event IDs observed
+	Framework        string          `json:"framework"`               // art | caldera | sigma | custom
+	Events           []string        `json:"events,omitempty"`        // Windows Event IDs observed (per-step tokens)
+	DetectionVerdict string          `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
+	DetectionAlert   *DetectionAlert `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
+}
+
+// DetectionAlert is the alert record that matched this technique during the
+// post-run detection sweep. Mirrors detect.AlertRecord (server-side package)
+// but kept in models so it serialises cleanly with SimulationResult.
+type DetectionAlert struct {
+	Channel     string    `json:"channel"`
+	Provider    string    `json:"provider"`
+	EventID     int       `json:"eventId"`
+	ThreatName  string    `json:"threatName,omitempty"`
+	ProcessName string    `json:"processName,omitempty"`
+	CommandLine string    `json:"commandLine,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
+	Confidence  string    `json:"confidence"`           // high | low
+	MTTDMs      int64     `json:"mttdMs,omitempty"`     // ms from step execution to alert
 }
 
 // ScenarioRun is a complete execution of a named scenario against one agent.
@@ -217,6 +234,9 @@ const (
 	MsgPolicyUpdate    = "policy_update"
 	MsgRunEvent        = "run_event"
 	MsgCommandAttackPathCollect = "command_attackpath_collect"
+	// MsgTamperAlert is broadcast to all browser sessions when the filesystem
+	// watcher detects an unexpected modification to a protected file.
+	MsgTamperAlert = "tamper_alert"
 )
 
 // ── ATT&CK Normalisation ──────────────────────────────────────────────────────
