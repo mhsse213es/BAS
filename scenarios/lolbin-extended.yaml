@@ -1,0 +1,279 @@
+id: lolbin-extended
+name: LOLBin Execution — Extended Coverage (Phase 2)
+description: >
+  Phase 2 extension covering five LOLBin techniques absent from lolbin-execution-coverage:
+  Msiexec proxy execution (T1218.007), Regasm/Regsvcs .NET assembly loading (T1218.009),
+  WMIC XSL Script Processing (T1220), Compiled HTML File via hh.exe (T1218.001), and
+  CMSTP connection manager installer (T1218.003).
+
+  All steps are production-safe telemetry tier: no real payload executed, no persistence,
+  no destructive action. Each generates authentic Sysmon EID 1 process-create events and
+  parent-child chains sufficient for EDR/SIEM signature validation.
+  [BAS-SIM] tags are injected into every command line, temp filename, and network label
+  so defenders can confirm their tooling fires on real LOLBin invocations rather than
+  simulations.
+
+  SAFETY: Windows only. All temp files are self-cleaned. No external network required.
+  No file survives after the cleanup block. These steps WILL trigger alert-tier events
+  by design — that is the validation objective.
+author: Audspect Research
+executable: true
+local_check: true
+supported_os: [windows]
+tags:
+  - lolbin
+  - defense-evasion
+  - execution
+  - t1218
+  - t1220
+  - phase2
+  - mitre
+mitre_phases:
+  - execution
+  - defense-evasion
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+  # ---------------------------------------------------------------------------
+  # 1. Msiexec proxy execution (T1218.007)
+  # ---------------------------------------------------------------------------
+  - name: "Msiexec Proxy Execution (T1218.007  -  localhost package request)"
+    technique_id: T1218.007
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Launches msiexec.exe /quiet /i with a loopback URL (127.0.0.1:52999). Msiexec starts, attempts local connection, immediately fails (no listener), exits. No MSI downloaded, no package installed. Generates Sysmon EID 1 msiexec + EID 3 loopback connection attempt."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: msiexec.exe with /quiet /i argument"
+      - "Sysmon EID 3: loopback TCP to 127.0.0.1:52999 (BITS/Msiexec download attempt)"
+      - "Security EID 4688: msiexec.exe"
+    detection:
+      - "EDR: msiexec.exe spawned with /i URL argument  -  Sigma rule proc_creation_win_msiexec_install_remote.yml"
+      - "SIEM: msiexec.exe invoked from PowerShell with remote URL  -  high-confidence delivery IOC"
+      - "NDR: msiexec.exe outbound HTTP not to patch management system"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # /quiet /i with loopback — no listener, so msiexec fails fast (exit 1619 / ERROR_INSTALL_PACKAGE_OPEN_FAILED)
+      # Still generates Sysmon EID 1 (process create) and EID 3 (TCP attempt) before failure.
+      $p = Start-Process 'msiexec.exe' -ArgumentList '/quiet /i http://127.0.0.1:52999/bas-sim-nonexistent.msi' -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) {
+        $p.WaitForExit(8000) | Out-Null
+        $ec = $p.ExitCode
+        Write-Output "EXEC T1218.007: msiexec.exe /quiet /i launched (exit $ec)  -  Sysmon EID 1 msiexec.exe + EID 3 loopback. No package installed. [BAS-SIM-MSIEXEC]"
+      } else {
+        Write-Output "PASS: msiexec.exe execution blocked  -  AppLocker/WDAC/ASR prevented proxy execution."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # 2. Regasm proxy execution (T1218.009)
+  # ---------------------------------------------------------------------------
+  - name: "Regasm .NET Assembly Proxy Execution (T1218.009  -  ComRegisterFunction)"
+    technique_id: T1218.009
+    framework: custom
+    executor: powershell
+    timeout_sec: 60
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Compiles a minimal .NET DLL with [ComRegisterFunction] that writes [BAS-SIM-REGASM] to a log file. Runs regasm.exe /nologo /codebase on it, then deletes the DLL. No COM object persists in the registry (immediate /unregister follows). Generates Sysmon EID 1 regasm.exe + EID 7 DLL image load."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: regasm.exe (Framework64\\v4.0.30319\\RegAsm.exe) with .dll argument"
+      - "Sysmon EID 7: bas_regasm_<id>.dll image load by regasm.exe"
+      - "Security EID 4688: regasm.exe"
+    detection:
+      - "EDR: regasm.exe loading assembly from %TEMP%  -  Sigma rule proc_creation_win_regasm_regsvcs.yml"
+      - "SIEM: regasm.exe invoked outside of .NET Framework install context"
+      - "AppLocker: .NET CLR assembly loaded from %TEMP% — may block via Software Restriction Policy"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $dll = Join-Path $env:TEMP "bas_regasm_$runId.dll"
+      $log = Join-Path $env:TEMP "bas_regasm_$runId.log"
+      $src = 'using System;using System.Runtime.InteropServices;using System.IO;' +
+             '[ComVisible(true),Guid("11111111-1111-1111-1111-111111111111"),ProgId("BASSim.Probe")]' +
+             'public class BASRegasmProbe{' +
+             '[ComRegisterFunction]public static void Register(Type t){' +
+             'try{File.WriteAllText(System.Environment.GetEnvironmentVariable("BAS_REGASM_LOG")??"bas_regasm.log","[BAS-SIM-REGASM] T1218.009 invoked by regasm.exe\n");}catch{}}' +
+             '[ComUnregisterFunction]public static void Unregister(Type t){}}'
+      try {
+        Add-Type -TypeDefinition $src -OutputAssembly $dll -ErrorAction Stop
+      } catch {
+        Write-Output "SKIP: .NET compilation failed  -  missing compiler or restricted execution. $_"
+        return
+      }
+      $ra = @(
+        "$env:windir\Microsoft.NET\Framework64\v4.0.30319\RegAsm.exe",
+        "$env:windir\Microsoft.NET\Framework\v4.0.30319\RegAsm.exe"
+      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+      if (-not $ra) {
+        Remove-Item $dll -Force -ErrorAction SilentlyContinue
+        Write-Output "SKIP: RegAsm.exe not found  -  .NET Framework 4.x not installed."
+        return
+      }
+      $env:BAS_REGASM_LOG = $log
+      $p = Start-Process $ra -ArgumentList "/nologo /codebase `"$dll`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(15000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      # Immediately unregister to ensure no COM entry persists
+      $pu = Start-Process $ra -ArgumentList "/nologo /unregister `"$dll`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($pu) { $pu.WaitForExit(10000) | Out-Null }
+      Remove-Item $dll,$log -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $dll)
+      if ($ec -ge 0) {
+        Write-Output "EXEC T1218.009: regasm.exe loaded assembly from %TEMP% (exit $ec, cleaned=$cleaned)  -  Sysmon EID 1+7 regasm+DLL. COM entry unregistered. [BAS-SIM-REGASM]"
+      } else {
+        Write-Output "PASS: regasm.exe blocked  -  AppLocker/WDAC/CLR policy prevented .NET assembly loading."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_regasm_*') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # 3. WMIC XSL Script Processing (T1220)
+  # ---------------------------------------------------------------------------
+  - name: "WMIC XSL Script Processing (T1220  -  /format:xsl local file)"
+    technique_id: T1220
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a benign XSLT stylesheet to %TEMP% that outputs a plain text string. Invokes wmic process list brief /format:<path>. XSL executes via wmic's built-in XSLT engine. No script body, no WScript.Shell, no child process spawn. File deleted after. Generates Sysmon EID 1 wmic.exe with /format argument."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: wmic.exe with 'process list brief /format:<temppath>.xsl'"
+      - "Security EID 4688: wmic.exe"
+      - "Sysmon EID 7: xsltproc engine DLL load inside wmic.exe"
+    detection:
+      - "EDR: wmic.exe with /format: argument pointing to non-system path  -  Sigma rule proc_creation_win_wmic_xsl_execution.yml"
+      - "SIEM: wmic.exe /format: with local or UNC path  -  T1220 classic IOC"
+      - "EDR: wmi activity with custom XSL transform  -  APT32 / Cobalt Strike TTPs"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $xsl = Join-Path $env:TEMP "bas_xsl_$runId.xsl"
+      # Minimal XSLT 1.0 — literal text node, no scripting body, no COM object
+      $xslContent = ('<?xml version="1.0"?>' +
+        '<stylesheet version="1.0" xmlns="http://www.w3.org/1999/XSL/Transform">' +
+        '<output method="text"/><template match="/">BAS-SIM-XSL T1220 probe</template>' +
+        '</stylesheet>')
+      [System.IO.File]::WriteAllText($xsl, $xslContent, [System.Text.Encoding]::UTF8)
+      # wmic process list brief with local XSL — triggers T1220 Sysmon signature
+      $p = Start-Process 'wmic.exe' -ArgumentList "process list brief /format:`"$xsl`"" -PassThru -WindowStyle Hidden -RedirectStandardOutput $null -ErrorAction SilentlyContinue
+      if ($p) { $p.WaitForExit(15000) | Out-Null; $ec = $p.ExitCode } else { $ec = -1 }
+      Remove-Item $xsl -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $xsl)
+      if ($ec -ge 0) {
+        Write-Output "EXEC T1220: wmic.exe /format:$xsl executed (exit $ec, cleaned=$cleaned)  -  Sysmon EID 1 wmic+/format arg. No child process. [BAS-SIM-XSL]"
+      } else {
+        Write-Output "PASS: wmic.exe /format: blocked  -  AppLocker/WDAC/ASR prevented WMIC XSL execution."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_xsl_*.xsl') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # 4. Compiled HTML File via hh.exe (T1218.001)
+  # ---------------------------------------------------------------------------
+  - name: "Compiled HTML File Execution via hh.exe (T1218.001)"
+    technique_id: T1218.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Launches hh.exe with a non-existent .chm path. hh.exe starts (Sysmon EID 1), fails to open the file, and exits cleanly. No CHM content executes. No file written. Validates EDR visibility into hh.exe process creation outside of help-system context."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: hh.exe with non-system .chm argument"
+      - "Security EID 4688: hh.exe launched by powershell.exe"
+    detection:
+      - "EDR: hh.exe spawned from non-help-center context  -  Sigma rule proc_creation_win_hh_chm_execution.yml"
+      - "SIEM: hh.exe invoked by user process outside help system  -  T1218.001 delivery IOC"
+      - "EDR: hh.exe parent process is powershell/cmd  -  APT41, Lazarus TTP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      # hh.exe non-existent path: validates process creation visibility with zero risk
+      # (no CHM body, no ActiveX, no WScript.Shell)
+      $fakePath = Join-Path $env:TEMP "bas_sim_hh_$runId.chm"
+      $hhPath = Join-Path $env:SystemRoot 'System32\hh.exe'
+      if (-not (Test-Path $hhPath)) {
+        Write-Output "SKIP: hh.exe not found at $hhPath  -  Windows Help not installed."
+        return
+      }
+      $p = Start-Process $hhPath -ArgumentList "`"$fakePath`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) {
+        $p.WaitForExit(5000) | Out-Null
+        if (-not $p.HasExited) { $p.Kill() | Out-Null }
+        $ec = $p.ExitCode
+        Write-Output "EXEC T1218.001: hh.exe spawned (exit $ec)  -  Sysmon EID 1 hh.exe. Non-existent CHM path, no content executed. [BAS-SIM-HH]"
+      } else {
+        Write-Output "PASS: hh.exe execution blocked  -  AppLocker/WDAC prevented compiled HTML file loader."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # 5. CMSTP Connection Manager Installer (T1218.003)
+  # ---------------------------------------------------------------------------
+  - name: "CMSTP Connection Manager Installer (T1218.003  -  benign INF silent install)"
+    technique_id: T1218.003
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a minimal connection-manager .inf stub (no ServiceInstall, no RunPreSetupCommandsSection, no RunPostSetupCommandsSection) and invokes cmstp.exe /s (silent, no GUI). CMSTP reads the INF, finds nothing to install, and exits cleanly. No network profile created. Generates Sysmon EID 1 cmstp.exe with .inf argument. INF deleted on exit."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: cmstp.exe with /s and .inf argument from %TEMP%"
+      - "Security EID 4688: cmstp.exe spawned by powershell.exe"
+    detection:
+      - "EDR: cmstp.exe with /s /ns argument and user-supplied INF  -  Sigma rule proc_creation_win_cmstp.yml"
+      - "SIEM: cmstp.exe invoked outside of network provisioning context  -  T1218.003 IOC"
+      - "EDR: cmstp.exe parent is powershell.exe  -  Empire, Cobalt Strike UAC-bypass TTP"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $inf = Join-Path $env:TEMP "bas_cmstp_$runId.inf"
+      $cmstpPath = Join-Path $env:SystemRoot 'System32\cmstp.exe'
+      if (-not (Test-Path $cmstpPath)) {
+        Write-Output "SKIP: cmstp.exe not found  -  may have been removed by hardening policy."
+        return
+      }
+      # Minimal stub INF — no ServiceInstall, no RunPreSetupCommandsSection,
+      # nothing to execute. String concat avoids YAML block-scalar indent issues.
+      $sig = '$' + 'chicago$'
+      $infContent = ("[version]`r`nSignature=$sig`r`nAdvancedINF=2.5`r`n`r`n" +
+        "[DefaultInstall]`r`nCustomDestination=BAS_CustomDest`r`n`r`n" +
+        "[BAS_CustomDest]`r`n49000,49001=BAS_Dir,8`r`n`r`n" +
+        "[BAS_Dir]`r`n49000=%ProgramFiles%\BAS-SIM-CMSTP-$runId`r`n`r`n" +
+        "[Strings]`r`nAppAlt=[BAS-SIM-CMSTP] T1218.003 telemetry probe")
+      [System.IO.File]::WriteAllText($inf, $infContent, [System.Text.Encoding]::ASCII)
+      # /s = silent; no GUI prompt; /ns = no save-password checkbox
+      $p = Start-Process $cmstpPath -ArgumentList "/s /ns `"$inf`"" -PassThru -WindowStyle Hidden -ErrorAction SilentlyContinue
+      if ($p) {
+        $p.WaitForExit(8000) | Out-Null
+        if (-not $p.HasExited) { $p.Kill() | Out-Null }
+        $ec = $p.ExitCode
+        Remove-Item $inf -Force -ErrorAction SilentlyContinue
+        $cleaned = -not (Test-Path $inf)
+        Write-Output "EXEC T1218.003: cmstp.exe /s /ns ran (exit $ec, cleaned=$cleaned)  -  Sysmon EID 1 cmstp+INF. No profile created. [BAS-SIM-CMSTP]"
+      } else {
+        Remove-Item $inf -Force -ErrorAction SilentlyContinue
+        Write-Output "PASS: cmstp.exe execution blocked  -  AppLocker/WDAC prevented CMSTP installer."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_cmstp_*.inf') -Force -ErrorAction SilentlyContinue
