@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/attackpath"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/models"
 )
@@ -58,6 +59,12 @@ type FullReport struct {
 	// and the per-agent breakdown instead of single-agent metadata.
 	Scope          *ReportScope       `json:"scope,omitempty"`
 	CampaignAgents []CampaignAgentRow `json:"campaignAgents,omitempty"`
+	// AttackPathValidation is the native attack-path engine's lateral-movement /
+	// blast-radius / crown-jewel analysis for the subject. nil until the
+	// attackpath.collect task has produced edges and the graph has been analyzed
+	// (Phase 1 collection). When present the report renders the Attack Path
+	// Validation section; otherwise that section shows a "not yet collected" state.
+	AttackPathValidation *attackpath.Summary `json:"attackPathValidation,omitempty"`
 }
 
 // ReportScope describes a fleet-wide (campaign) report's subject.

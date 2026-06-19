@@ -116,6 +116,21 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return "#6e7681"
 	},
+	// pctFrac formats a 0..1 fraction as a whole-percent string (e.g. 0.72→"72%").
+	"pctFrac": func(f float64) string { return fmt.Sprintf("%.0f%%", f*100) },
+	// scoreColor colors an attack-path-style score where HIGHER is better.
+	"scoreColor": func(f float64) string {
+		switch {
+		case f >= 80:
+			return "#0d9488"
+		case f >= 60:
+			return "#d29922"
+		case f >= 40:
+			return "#f0883e"
+		default:
+			return "#da3633"
+		}
+	},
 }).Parse(reportHTML))
 
 // GenerateHTML writes a self-contained HTML report to w.
@@ -499,9 +514,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 6. ATTACK PATH ANALYSIS ═════════════════════════════════════════ -->
+<!-- ═══ 6. KILL-CHAIN PATH ══════════════════════════════════════════════ -->
 <div class="page">
-<h1>6. Attack Path Analysis</h1>
+<h1>6. Kill-Chain Path</h1>
 <p style="color:#6e7681;margin-bottom:14px">The chain of kill-chain phases this endpoint's gaps actually permit — built strictly from observed unprevented techniques, ordered by ATT&amp;CK phase. No hypothetical or inferred steps.</p>
 {{if .attackPath.steps}}
 <table>
@@ -516,17 +531,106 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </tbody>
 </table>
 {{else}}
-<p style="color:#0d9488;font-weight:600">✓ No unprevented techniques formed a traversable attack path this run.</p>
+<p style="color:#0d9488;font-weight:600">✓ No unprevented techniques formed a traversable kill-chain path this run.</p>
 {{end}}
 
 <div class="footer">
-  <span>{{.agent.hostname}} — Attack Path</span>
+  <span>{{.agent.hostname}} — Kill-Chain Path</span>
 </div>
 </div>
 
-<!-- ═══ 7. TACTIC SUMMARY ═══════════════════════════════════════════════ -->
+<!-- ═══ 7. ATTACK PATH VALIDATION ═══════════════════════════════════════ -->
 <div class="page">
-<h1>7. MITRE ATT&amp;CK Tactic Summary</h1>
+<h1>7. Attack Path Validation</h1>
+<p style="color:#6e7681;margin-bottom:14px">Lateral-movement reachability mapped as a graph of hosts, users and groups. Recon/relationship analysis only — no exploitation, no propagation. It answers what ART and Caldera cannot: if a host is compromised, how far can an attacker move and can they reach Domain Admin or a crown jewel?</p>
+{{with .attackPathValidation}}
+<div class="score-row">
+  <div class="scard" style="border-left:3px solid {{scoreColor .attackPathScore}}">
+    <div class="scard-label">Attack Path Score</div>
+    <div class="scard-value" style="color:{{scoreColor .attackPathScore}}">{{.attackPathScore}}<span style="font-size:0.9rem;color:#6e7681">/100</span></div>
+    <div style="font-size:0.8rem;color:{{exposureColor .band}};font-weight:600">{{.band}} risk · higher is safer</div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Lateral Movement</div>
+    <div class="scard-value" style="color:{{exposureColor .lateralMovementBand}};font-size:1.2rem">{{.lateralMovementBand}}</div>
+    <div style="font-size:0.8rem;color:#6e7681">avg {{fmtScore .avgBlastRadius}} · max {{.maxBlastRadius}} hosts per entry</div>
+  </div>
+  <div class="scard" style="border-left:3px solid {{if .domainCompromise}}#da3633{{else}}#0d9488{{end}}">
+    <div class="scard-label">Domain Compromise</div>
+    <div class="scard-value" style="color:{{if .domainCompromise}}#da3633{{else}}#0d9488{{end}};font-size:1.2rem">{{if .domainCompromise}}Reachable{{else}}Not Reachable{{end}}</div>
+    <div style="font-size:0.8rem;color:#6e7681">{{if .domainCompromise}}a host can reach Domain Admin / Tier-0{{else}}no path to Domain Admin found{{end}}</div>
+  </div>
+</div>
+<p style="color:#6e7681;font-size:0.82rem;margin:6px 0 14px">Graph scope: {{.hosts}} hosts · {{.users}} users · {{.groups}} groups · {{.edges}} relationship edges.</p>
+
+{{if .domainCompromise}}{{if .shortestDomainAdminPath}}
+<h3>Representative Path to Domain Admin</h3>
+<p style="color:#6e7681;font-size:0.82rem">Worst-case shortest path from the highest-blast-radius entry host. Difficulty: <strong style="color:{{exposureColor .shortestDomainAdminDifficulty}}">{{.shortestDomainAdminDifficulty}}</strong>.</p>
+<table>
+  <thead><tr><th>Step</th><th>From</th><th>Via</th><th>To</th></tr></thead>
+  <tbody>
+  {{range $i, $e := .shortestDomainAdminPath}}
+  <tr><td>{{add1 $i}}</td><td style="font-weight:600">{{$e.from}}</td><td>{{upper $e.kind}}</td><td style="font-weight:600">{{$e.to}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}{{end}}
+
+{{if .crownJewels}}
+<h3>Crown-Jewel Exposure</h3>
+<table>
+  <thead><tr><th>Asset</th><th>Tag</th><th>Reachable</th><th>Entry Hosts</th><th>Min Hops</th></tr></thead>
+  <tbody>
+  {{range .crownJewels}}
+  <tr>
+    <td style="font-weight:600">{{.node}}</td>
+    <td>{{.tag}}</td>
+    <td style="font-weight:700;color:{{if .reachable}}#da3633{{else}}#0d9488{{end}}">{{if .reachable}}Yes{{else}}No{{end}}</td>
+    <td>{{if .reachable}}{{.entryHosts}}{{else}}—{{end}}</td>
+    <td>{{if .reachable}}{{.minHops}}{{else}}—{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if .chokePoints}}
+<h3>Attack Choke Points</h3>
+<p style="color:#6e7681;font-size:0.82rem">Nodes most attacker paths funnel through. Remediating one can eliminate many paths at once.</p>
+<table>
+  <thead><tr><th>Node</th><th>On Paths</th><th>Path Coverage</th></tr></thead>
+  <tbody>
+  {{range .chokePoints}}
+  <tr><td style="font-weight:600">{{.label}}</td><td>{{.onPaths}}</td><td style="font-weight:700;color:#d29922">{{pctFrac .coverage}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if .segmentationViolations}}
+<h3>Segmentation Violations</h3>
+<p style="color:#6e7681;font-size:0.82rem">Lateral-movement reachability that crosses a network-segment boundary — flat-network exposure that should be filtered.</p>
+<table>
+  <thead><tr><th>From</th><th>Segment</th><th>Via</th><th>To</th><th>Segment</th></tr></thead>
+  <tbody>
+  {{range .segmentationViolations}}
+  <tr><td style="font-weight:600">{{.from}}</td><td>{{.fromSegment}}</td><td>{{upper .kind}}</td><td style="font-weight:600">{{.to}}</td><td>{{.toSegment}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+{{else}}
+<p style="color:#6e7681">No attack-path data has been collected yet. Enable the <code>attackpath.collect</code> task on enrolled agents to map lateral-movement reachability, blast radius, segmentation, and crown-jewel exposure across the fleet.</p>
+{{end}}
+
+<div class="footer">
+  <span>{{.agent.hostname}} — Attack Path Validation</span>
+</div>
+</div>
+
+<!-- ═══ 8. TACTIC SUMMARY ═══════════════════════════════════════════════ -->
+<div class="page">
+<h1>8. MITRE ATT&amp;CK Tactic Summary</h1>
 <p style="color:#6e7681;margin-bottom:14px">Per-tactic coverage (techniques tested), prevention rate, detection rate, and mean time-to-detect. MTTD shows "—" when detection latency was not measured. Tactics with no tested techniques are omitted.</p>
 {{if .tacticHeatmap}}
 <table>
@@ -560,9 +664,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 8. ASSESSMENT INSIGHTS ══════════════════════════════════════════ -->
+<!-- ═══ 9. ASSESSMENT INSIGHTS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>8. Assessment Insights</h1>
+<h1>9. Assessment Insights</h1>
 {{if .insights.hasData}}
 <div class="score-row">
   {{if .insights.most}}
@@ -590,9 +694,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 9. ACTION PLAN ══════════════════════════════════════════════════ -->
+<!-- ═══ 10. ACTION PLAN ═════════════════════════════════════════════════ -->
 <div class="page">
-<h1>9. Action Plan</h1>
+<h1>10. Action Plan</h1>
 <p style="color:#6e7681;margin-bottom:14px">Remediations ordered by the prevention-score points their failures account for. The points quantify current exposure attributable to each tactic — they are not a promised score gain, since a single control may not resolve every underlying finding.</p>
 {{if .actionPlan}}
 <table>
@@ -618,9 +722,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 10. COMPLIANCE STATUS ═══════════════════════════════════════════ -->
+<!-- ═══ 11. COMPLIANCE STATUS ═══════════════════════════════════════════ -->
 <div class="page">
-<h1>10. Regulatory Compliance Status</h1>
+<h1>11. Regulatory Compliance Status</h1>
 <p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
 {{if .compliance}}
 <table>
@@ -652,9 +756,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 11. SCENARIO RUN HISTORY ════════════════════════════════════════ -->
+<!-- ═══ 12. SCENARIO RUN HISTORY ════════════════════════════════════════ -->
 <div class="page">
-<h1>11. Scenario Run History</h1>
+<h1>12. Scenario Run History</h1>
 {{if .runs}}
 <table>
   <thead><tr>
@@ -685,9 +789,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 12. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
+<!-- ═══ 13. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>12. Technical Findings</h1>
+<h1>13. Technical Findings</h1>
 {{if .topFindings}}
 <p style="color:#6e7681;margin-bottom:14px">Critical and High severity techniques that succeeded against this endpoint — the associated security controls did <strong>not</strong> prevent the attack. De-duplicated by technique.</p>
 <table>
@@ -717,9 +821,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 13. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
+<!-- ═══ 14. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
 <div class="page">
-<h1>13. Technical Appendix — ATT&amp;CK Glossary</h1>
+<h1>14. Technical Appendix — ATT&amp;CK Glossary</h1>
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
 {{range .glossary}}

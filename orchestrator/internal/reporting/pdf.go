@@ -8,6 +8,7 @@ import (
 
 	fpdf "github.com/go-pdf/fpdf"
 
+	"github.com/audspect/bas/internal/attackpath"
 	"github.com/audspect/bas/internal/models"
 )
 
@@ -907,6 +908,49 @@ func (d *rpt) keyFindings(rep *FullReport) {
 		d.finding(i+1, f)
 	}
 	d.knowledgeGraph(rep)
+	d.attackPathValidation(rep.AttackPathValidation)
+}
+
+// attackPathValidation renders the native attack-path engine's lateral-movement
+// summary in the fpdf fallback. The HTML→Chromium pipeline renders the full
+// section (score card, paths, crown jewels, choke points); this keeps the
+// fallback PDF in parity. Guarded — renders nothing until attackpath.collect has
+// produced a graph for the subject.
+func (d *rpt) attackPathValidation(s *attackpath.Summary) {
+	if s == nil {
+		return
+	}
+	pdf := d.pdf
+	d.ensure(22)
+	d.text(cNavy)
+	pdf.SetFont("Helvetica", "B", 9.5)
+	pdf.SetX(margin)
+	d.cellT(0, 5, "Attack Path Validation")
+	pdf.Ln(5.4)
+	dc := "no path to Domain Admin found"
+	if s.DomainCompromise {
+		dc = "a host can reach Domain Admin / Tier-0"
+	}
+	d.body(fmt.Sprintf("Attack Path Score: %d/100 (%s risk — higher is safer). Lateral movement: %s, averaging %.1f and at most %d hosts compromisable per entry host. Domain compromise: %s.",
+		s.AttackPathScore, s.Band, s.LateralMovementBand, s.AvgBlastRadius, s.MaxBlastRadius, dc))
+	d.body(fmt.Sprintf("Graph scope: %d hosts, %d users, %d groups, %d relationship edges.", s.Hosts, s.Users, s.Groups, s.Edges))
+	if len(s.CrownJewels) > 0 {
+		reach := 0
+		for _, cj := range s.CrownJewels {
+			if cj.Reachable {
+				reach++
+			}
+		}
+		d.body(fmt.Sprintf("Crown jewels: %d of %d reachable from the fleet.", reach, len(s.CrownJewels)))
+	}
+	if n := len(s.SegmentationViols); n > 0 {
+		d.body(fmt.Sprintf("Segmentation: %d lateral-movement edge(s) cross a network-segment boundary.", n))
+	}
+	if len(s.ChokePoints) > 0 {
+		c := s.ChokePoints[0]
+		d.body(fmt.Sprintf("Top choke point: %s appears on %.0f%% of attacker paths — remediating it eliminates many at once.", c.Label, c.Coverage*100))
+	}
+	pdf.Ln(1.5)
 }
 
 // topRiskDrivers lists the techniques whose failures account for the most lost

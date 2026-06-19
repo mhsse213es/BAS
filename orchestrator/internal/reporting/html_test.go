@@ -6,8 +6,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/attackpath"
 	"github.com/audspect/bas/internal/models"
 )
+
+// apSummary builds a small attack-path graph and analyzes it for report tests.
+func apSummary() *attackpath.Summary {
+	g := attackpath.New()
+	g.AddNode(attackpath.Node{ID: "WS01", Kind: attackpath.KindHost, Label: "WS01", Role: attackpath.RoleEndpoint, Segment: "user-vlan"})
+	g.AddNode(attackpath.Node{ID: "JUMP01", Kind: attackpath.KindHost, Label: "JUMP01", Role: attackpath.RoleServer, Segment: "dmz-vlan"})
+	g.AddNode(attackpath.Node{ID: "FILE01", Kind: attackpath.KindHost, Label: "FILE01", Role: attackpath.RoleServer, Segment: "server-vlan", CrownJewel: "FileServer"})
+	g.AddNode(attackpath.Node{ID: "DC01", Kind: attackpath.KindHost, Label: "DC01", Role: attackpath.RoleDC, Segment: "server-vlan"})
+	g.AddNode(attackpath.Node{ID: "alice", Kind: attackpath.KindUser, Label: "alice@corp"})
+	g.AddNode(attackpath.Node{ID: "DA", Kind: attackpath.KindGroup, Label: "Domain Admins", HighValue: true})
+	g.AddEdge(attackpath.Edge{From: "WS01", To: "JUMP01", Kind: attackpath.EdgeWinRM})
+	g.AddEdge(attackpath.Edge{From: "JUMP01", To: "FILE01", Kind: attackpath.EdgeSMB})
+	g.AddEdge(attackpath.Edge{From: "FILE01", To: "alice", Kind: attackpath.EdgeHasSession})
+	g.AddEdge(attackpath.Edge{From: "alice", To: "DA", Kind: attackpath.EdgeMemberOf})
+	g.AddEdge(attackpath.Edge{From: "DA", To: "DC01", Kind: attackpath.EdgeAdminTo})
+	s := g.Analyze()
+	return &s
+}
 
 // TestGenerateHTMLRendersAllSections renders a fully-populated report and
 // asserts each section's data appears in the output. It guards the garble-safe
@@ -67,6 +86,7 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 		AttackPath: AttackPath{Steps: []AttackPathStep{
 			{Tactic: "credential-access", Techniques: []string{"T1003 — OS Credential Dumping"}},
 		}},
+		AttackPathValidation: apSummary(),
 		Runs: []RunSummary{
 			{ID: "run-1", ScenarioName: "RBI Ransomware Resilience Sweep", Status: "completed",
 				StartedAt: now, RiskScore: 72, Classification: "High Risk",
@@ -93,9 +113,17 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 		"7/12",                    // penetration ratio
 		"Top Risk Drivers",        // §3 heading
 		"Credential Access",       // humanized tactic
-		"Action Plan",             // §9 heading
+		"Action Plan",             // action-plan heading
 		"Enable Credential Guard", // action-plan recommendation
-		"Technical Appendix",      // §13 glossary heading
+		"Kill-Chain Path",         // renamed §6 (was "Attack Path Analysis")
+		"Attack Path Validation",  // new §7 section heading
+		"Attack Path Score",       // attack-path scorecard label
+		"Crown-Jewel Exposure",    // crown-jewel table from the graph
+		"FileServer",              // crown-jewel tag rendered from the summary
+		"Choke Points",            // choke-point table
+		"JUMP01",                  // choke-point node label
+		"Segmentation Violations", // segmentation table
+		"Technical Appendix",      // glossary heading
 		"OS Credential Dumping",   // topFindings / glossary technique
 		"Most Protected",          // insights
 		"SEBI CSCRF 1.0",          // compliance.framework

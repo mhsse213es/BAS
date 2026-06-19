@@ -113,6 +113,16 @@ type Score struct {
 	ErroredTechniques int `json:"erroredTechniques"` // could not execute correctly — excluded from scoring
 	SkippedTechniques int `json:"skippedTechniques"` // intentionally not run — excluded from scoring
 
+	// ── Attack Path Validation (native graph engine) ──────────────────────────
+	// AttackPathScore is the lateral-movement / domain-compromise verdict from the
+	// attack-path engine (0–100, higher = less exposed). It is NOT derived from
+	// SimulationResults — it comes from the relationship/reachability graph the
+	// agents collect — so ComputeScore leaves it nil; callers that have run an
+	// attack-path analysis set it (and AttackPathBand, the inverse risk band) from
+	// internal/attackpath.Summary. nil when no attack-path collection has run.
+	AttackPathScore *int   `json:"attackPathScore,omitempty"`
+	AttackPathBand  string `json:"attackPathBand,omitempty"` // Critical | High | Medium | Low
+
 	// ── Legacy / backward-compat fields ──────────────────────────────────────
 	RiskScore               int    `json:"riskScore"`               // = round(ExposureScore * amplifier), clamped 0–100
 	Classification          string `json:"classification"`          // Protected | Low Risk | Medium Risk | High Risk | Critical
