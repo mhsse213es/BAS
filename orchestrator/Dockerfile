@@ -63,6 +63,10 @@ RUN bash /build-packages.sh
 
 # ── Go Orchestrator ───────────────────────────────────────────────────────────
 FROM golang:1.26-alpine AS builder
+# BAS_WWWROOT_HASH: SHA-256 of wwwroot/index.html, computed by windows-build.ps1
+# and injected here so StaticHandler() halts on mismatch at startup. Empty in
+# dev/manual builds — hash check is silently disabled when the value is "".
+ARG BAS_WWWROOT_HASH=""
 RUN apk add --no-cache git && \
     go install mvdan.cc/garble@latest
 WORKDIR /src
@@ -75,7 +79,7 @@ COPY orchestrator/ .
 # IP, since those libs are public OSS.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
     garble -literals -tiny build \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X main.expectedWWWRootHash=${BAS_WWWROOT_HASH}" \
     -o /bin/orchestrator ./cmd/server
 
 FROM gcr.io/distroless/static-debian12

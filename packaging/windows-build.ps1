@@ -65,18 +65,100 @@ if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
 }
 Log "  Go OK: $(go version)"
 
+# -- 0b. Content signing: scenarios + manifest + wwwroot hash -----------------
+# Must run BEFORE docker build so signed artifacts travel into the image via
+# the COPY context. The private key never leaves this host — only the public
+# key (compiled into the binary) is distributed to clients.
+#
+# Key lifecycle:
+#   First run: generates RSA-4096 private_key.pem in orchestrator\ and injects
+#              the matching public key into orchestrator\internal\integrity\signing.go
+#   Subsequent runs: re-uses existing key (skips keygen)
+#   CRITICAL: back up orchestrator\private_key.pem — losing it means scenarios
+#             can never be validly re-signed.
+
+$OrchestratorDir = Join-Path $RepoRoot "orchestrator"
+$PrivKeyPath     = Join-Path $OrchestratorDir "private_key.pem"
+$ScenariosDir    = Join-Path $RepoRoot "scenarios"
+
+Log "Content signing pre-build..."
+
+# 0b-i. RSA keypair — idempotent: only runs once per install.
+if (-not (Test-Path $PrivKeyPath)) {
+    Log "  No private_key.pem found. Generating RSA-4096 keypair..."
+    Push-Location $OrchestratorDir
+    go run scripts/signer.go keygen
+    $kgExit = $LASTEXITCODE
+    Pop-Location
+    if ($kgExit -ne 0) { Err "RSA keygen failed — check Go is installed and orchestrator/scripts/signer.go exists." }
+    Log "  Keypair generated. BACK UP $PrivKeyPath before deleting or reformatting this machine."
+} else {
+    Log "  Found existing private_key.pem"
+}
+
+# 0b-ii. Sign every scenario YAML (re-signs on each build to capture any edits).
+#         .sig files are created alongside each .yaml and travel into the Docker
+#         image via 'COPY scenarios /scenarios'.
+if (Test-Path $ScenariosDir) {
+    $yamls = Get-ChildItem -Path $ScenariosDir -Filter "*.yaml" -Recurse -File
+    Log "  Signing $($yamls.Count) scenario YAML(s)..."
+    foreach ($yaml in $yamls) {
+        Push-Location $OrchestratorDir
+        go run scripts/signer.go sign private_key.pem $yaml.FullName
+        $signExit = $LASTEXITCODE
+        Pop-Location
+        if ($signExit -ne 0) { Err "Failed to sign scenario: $($yaml.Name)" }
+    }
+    Log "  All scenarios signed."
+} else {
+    Warn "  No scenarios\ directory found at repo root — skipping scenario signing."
+}
+
+# 0b-iii. Sign BINARIES.sha256 manifest (if present).
+$ManifestFile = Join-Path $OrchestratorDir "agents\BINARIES.sha256"
+if (Test-Path $ManifestFile) {
+    Log "  Signing BINARIES.sha256 manifest..."
+    Push-Location $OrchestratorDir
+    go run scripts/signer.go sign private_key.pem "agents\BINARIES.sha256"
+    $manExit = $LASTEXITCODE
+    Pop-Location
+    if ($manExit -ne 0) { Err "Failed to sign BINARIES.sha256." }
+    Log "  Manifest signed."
+} else {
+    Warn "  No agents\BINARIES.sha256 found — skipping manifest signing."
+}
+
+# 0b-iv. SHA-256 hash of wwwroot/index.html, injected into the binary via
+#        --build-arg BAS_WWWROOT_HASH so StaticHandler() halts on mismatch.
+$WWWRootHash = ""
+$IndexHtmlPath = Join-Path $OrchestratorDir "wwwroot\index.html"
+if (Test-Path $IndexHtmlPath) {
+    $WWWRootHash = (Get-FileHash -Path $IndexHtmlPath -Algorithm SHA256).Hash.ToLower()
+    Log "  wwwroot/index.html hash: $($WWWRootHash.Substring(0,16))..."
+} else {
+    Warn "  wwwroot/index.html not found — UI tamper-detection will be DISABLED in this build."
+}
+
 # -- 1. Build Docker image ----------------------------------------------------
 $OrchestratorTag = "bas-orchestrator:$Version"
 
 if (-not $SkipBuild) {
     # Obfuscation (garble -literals -tiny, scoped to our module via GOGARBLE) runs
     # inside orchestrator/Dockerfile — see that file for the GOGARBLE rationale.
+    # BAS_WWWROOT_HASH is injected via -X ldflags so StaticHandler() verifies the
+    # dashboard SPA hash at startup. BAS_SIGNING_KEY is not needed — the public key
+    # was already compiled into signing.go by step 0b-i above.
     Log "Building $OrchestratorTag (garble -literals -tiny - this takes 5-10 min)..."
-    docker build -t $OrchestratorTag --build-arg BAS_VERSION=$Version -f "$RepoRoot\orchestrator\Dockerfile" $RepoRoot
+    $buildExtraArgs = @("--build-arg", "BAS_VERSION=$Version")
+    if ($WWWRootHash -ne "") {
+        $buildExtraArgs += @("--build-arg", "BAS_WWWROOT_HASH=$WWWRootHash")
+    }
+    docker build -t $OrchestratorTag @buildExtraArgs -f "$RepoRoot\orchestrator\Dockerfile" $RepoRoot
     if ($LASTEXITCODE -ne 0) { Err "Docker build failed." }
     Log "Image built: $OrchestratorTag"
 } else {
     Warn "Skipping image build (-SkipBuild). Using existing $OrchestratorTag."
+    if ($WWWRootHash -eq "") { Warn "  (UI tamper hash was not computed — existing image retains its compiled hash)" }
 }
 
 # -- 2. Pull dependency images ------------------------------------------------
