@@ -32,6 +32,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 	r.Post("/api/scenarios/result", h.SubmitScenarioResult)
 	r.Post("/api/scenarios/events", h.SubmitRunEvents)
 	r.Post("/api/scenarios/runs/{runId}/detections", h.SubmitRunDetections)
+	r.Post("/api/attackpath/collect", h.SubmitAttackPathCollection)
 
 	// WebSocket — agents connect here.
 	// Validates agentSecret query param / X-Agent-Token header when configured.

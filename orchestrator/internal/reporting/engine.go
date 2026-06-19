@@ -584,7 +584,39 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	// ── 8. Executive-grade derivations (exposure, insights, action plan, …) ─
 	deriveExecutive(report, latestResults, nil)
 
+	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
+
 	return report, nil
+}
+
+// loadAttackPathSummary builds the fleet attack-path graph from every agent's
+// stored collection and analyzes it. Returns nil when no collection exists yet
+// (the report then renders the "not yet collected" state) and never fails a
+// report on a DB error. Attack paths are inherently fleet-wide — lateral
+// movement spans hosts — so the same summary attaches to per-agent, per-run, and
+// campaign reports alike.
+func (e *Engine) loadAttackPathSummary(ctx context.Context) *attackpath.Summary {
+	rows, err := e.db.Query(ctx, `SELECT payload FROM attackpath_collections`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var cols []attackpath.Collection
+	for rows.Next() {
+		var raw []byte
+		if rows.Scan(&raw) != nil {
+			continue
+		}
+		var c attackpath.Collection
+		if json.Unmarshal(raw, &c) == nil {
+			cols = append(cols, c)
+		}
+	}
+	if len(cols) == 0 {
+		return nil
+	}
+	s := attackpath.BuildGraph(cols...).Analyze()
+	return &s
 }
 
 // BuildFromRun constructs a FullReport scoped to a single scenario run.
@@ -721,6 +753,8 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	// MTTD-per-tactic is available here (unlike the agent posture Build).
 	deriveExecutive(report, results, report.DetectionTechniques)
 
+	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
+
 	return report, nil
 }
 
@@ -823,6 +857,8 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*Ful
 	// Campaign aggregates multiple runs, so per-tactic detection latency (MTTD)
 	// is not meaningful here — pass nil dets (MTTD renders "—").
 	deriveExecutive(report, allResults, nil)
+
+	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
 
 	return report, nil
 }

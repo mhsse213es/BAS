@@ -227,6 +227,20 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_telemetry_agent_time ON agent_telemetry(agent_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_telemetry_metric     ON agent_telemetry(agent_id, metric, created_at DESC)`,
+
+		// attackpath_collections: one row per agent holding its latest attack-path
+		// recon payload (nodes + edges as JSONB). The server rebuilds the fleet
+		// graph by loading every row and running the analytics engine. Upserted on
+		// agent_id so the newest collection replaces the old — matching the
+		// idempotent, at-least-once delivery the rest of the pipeline uses.
+		`CREATE TABLE IF NOT EXISTS attackpath_collections (
+			agent_id     text        PRIMARY KEY,
+			hostname     text        NOT NULL DEFAULT '',
+			source       text        NOT NULL DEFAULT 'agent',
+			collected_at timestamptz NOT NULL DEFAULT NOW(),
+			payload      jsonb       NOT NULL DEFAULT '{}',
+			updated_at   timestamptz NOT NULL DEFAULT NOW()
+		)`,
 	}
 
 	for _, s := range stmts {
