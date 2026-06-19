@@ -615,8 +615,27 @@ func (e *Engine) loadAttackPathSummary(ctx context.Context) *attackpath.Summary 
 	if len(cols) == 0 {
 		return nil
 	}
-	s := attackpath.BuildGraph(cols...).Analyze()
+	s := attackpath.BuildAndAnalyze(cols, e.loadAssetTags(ctx))
 	return &s
+}
+
+// loadAssetTags reads operator-supplied host tags (crown jewel / segment /
+// tier-0) so the report's attack-path section reflects them. Best-effort.
+func (e *Engine) loadAssetTags(ctx context.Context) []attackpath.AssetTag {
+	rows, err := e.db.Query(ctx,
+		`SELECT host_key, label, crown_jewel, segment, high_value FROM attackpath_asset_tags`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var tags []attackpath.AssetTag
+	for rows.Next() {
+		var t attackpath.AssetTag
+		if rows.Scan(&t.HostKey, &t.Label, &t.CrownJewel, &t.Segment, &t.HighValue) == nil {
+			tags = append(tags, t)
+		}
+	}
+	return tags
 }
 
 // BuildFromRun constructs a FullReport scoped to a single scenario run.

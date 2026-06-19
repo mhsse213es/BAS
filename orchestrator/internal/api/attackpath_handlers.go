@@ -71,15 +71,11 @@ func (h *Handler) storeAttackPathCollection(r *http.Request, c attackpath.Collec
 	return err
 }
 
-// GetAttackPathSummary builds the fleet attack-path graph from every stored
-// collection and returns the analyzed Summary for the dashboard. Read-only
-// (Viewer+). Returns {collected:false} when nothing has been collected yet.
-// GET /api/attackpath/summary
-func (h *Handler) GetAttackPathSummary(w http.ResponseWriter, r *http.Request) {
+// loadAttackPathCollections reads every stored agent collection.
+func (h *Handler) loadAttackPathCollections(r *http.Request) []attackpath.Collection {
 	rows, err := h.db.Query(r.Context(), `SELECT payload FROM attackpath_collections`)
 	if err != nil {
-		respond(w, map[string]any{"collected": false})
-		return
+		return nil
 	}
 	defer rows.Close()
 	var cols []attackpath.Collection
@@ -93,12 +89,115 @@ func (h *Handler) GetAttackPathSummary(w http.ResponseWriter, r *http.Request) {
 			cols = append(cols, c)
 		}
 	}
+	return cols
+}
+
+// loadAssetTags reads every operator asset tag.
+func (h *Handler) loadAssetTags(r *http.Request) []attackpath.AssetTag {
+	rows, err := h.db.Query(r.Context(),
+		`SELECT host_key, label, crown_jewel, segment, high_value FROM attackpath_asset_tags`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var tags []attackpath.AssetTag
+	for rows.Next() {
+		var t attackpath.AssetTag
+		if rows.Scan(&t.HostKey, &t.Label, &t.CrownJewel, &t.Segment, &t.HighValue) == nil {
+			tags = append(tags, t)
+		}
+	}
+	return tags
+}
+
+// GetAttackPathSummary builds the fleet attack-path graph from every stored
+// collection (with operator asset tags overlaid) and returns the analyzed
+// Summary for the dashboard. Read-only (Viewer+). Returns {collected:false}
+// when nothing has been collected yet.
+// GET /api/attackpath/summary
+func (h *Handler) GetAttackPathSummary(w http.ResponseWriter, r *http.Request) {
+	cols := h.loadAttackPathCollections(r)
 	if len(cols) == 0 {
 		respond(w, map[string]any{"collected": false})
 		return
 	}
-	s := attackpath.BuildGraph(cols...).Analyze()
+	s := attackpath.BuildAndAnalyze(cols, h.loadAssetTags(r))
 	respond(w, map[string]any{"collected": true, "agents": len(cols), "summary": s})
+}
+
+// GetAttackPathAssets returns the host inventory — every host in the current
+// fleet graph with its effective tags — so the operator can assign crown-jewel,
+// segment, and tier-0 metadata. Read-only (Viewer+).
+// GET /api/attackpath/assets
+func (h *Handler) GetAttackPathAssets(w http.ResponseWriter, r *http.Request) {
+	cols := h.loadAttackPathCollections(r)
+	g := attackpath.BuildGraph(cols...)
+	// Apply tags so the inventory reflects current assignments, including tags
+	// for hosts not (yet) present in any collection.
+	tags := h.loadAssetTags(r)
+	inv := g.HostInventory()
+	// Merge in tags whose host has not been collected yet so the operator still
+	// sees and can edit them.
+	seen := map[string]bool{}
+	for _, a := range inv {
+		seen[attackpath.NormalizeHostKey(a.HostKey)] = true
+	}
+	for _, t := range tags {
+		k := attackpath.NormalizeHostKey(t.HostKey)
+		if !seen[k] {
+			inv = append(inv, t)
+		}
+	}
+	// Overlay stored tag values onto the inventory rows (HostInventory reflects
+	// graph state; stored tags are authoritative for the editable fields).
+	idx := map[string]attackpath.AssetTag{}
+	for _, t := range tags {
+		idx[attackpath.NormalizeHostKey(t.HostKey)] = t
+	}
+	for i := range inv {
+		if t, ok := idx[attackpath.NormalizeHostKey(inv[i].HostKey)]; ok {
+			inv[i].CrownJewel = t.CrownJewel
+			inv[i].Segment = t.Segment
+			inv[i].HighValue = t.HighValue
+		}
+	}
+	respond(w, map[string]any{"assets": inv})
+}
+
+// SetAttackPathAsset upserts (or clears) one host's operator tag. Sending all
+// fields empty/false deletes the tag. Analyst+.
+// POST /api/attackpath/assets   {hostKey, label, crownJewel, segment, highValue}
+func (h *Handler) SetAttackPathAsset(w http.ResponseWriter, r *http.Request) {
+	var t attackpath.AssetTag
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		jsonError(w, "invalid asset tag payload", http.StatusBadRequest)
+		return
+	}
+	key := attackpath.NormalizeHostKey(t.HostKey)
+	if key == "" {
+		jsonError(w, "hostKey is required", http.StatusBadRequest)
+		return
+	}
+	// An empty tag clears the assignment.
+	if t.CrownJewel == "" && t.Segment == "" && !t.HighValue {
+		if _, err := h.db.Exec(r.Context(), `DELETE FROM attackpath_asset_tags WHERE host_key=$1`, key); err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		respond(w, map[string]any{"hostKey": key, "cleared": true})
+		return
+	}
+	if _, err := h.db.Exec(r.Context(),
+		`INSERT INTO attackpath_asset_tags (host_key, label, crown_jewel, segment, high_value, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,NOW())
+		 ON CONFLICT (host_key) DO UPDATE
+		   SET label=EXCLUDED.label, crown_jewel=EXCLUDED.crown_jewel,
+		       segment=EXCLUDED.segment, high_value=EXCLUDED.high_value, updated_at=NOW()`,
+		key, t.Label, t.CrownJewel, t.Segment, t.HighValue); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, map[string]any{"hostKey": key, "crownJewel": t.CrownJewel, "segment": t.Segment, "highValue": t.HighValue})
 }
 
 // DispatchAttackPathCollect tells a connected agent to run an attack-path

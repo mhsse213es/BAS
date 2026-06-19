@@ -119,6 +119,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 
 		// Attack Path Validation — fleet lateral-movement graph summary.
 		r.Get("/api/attackpath/summary", h.GetAttackPathSummary)
+		r.Get("/api/attackpath/assets", h.GetAttackPathAssets)
 
 		// Analyst + Admin only — can trigger scans, run scenarios, and
 		// author custom scenarios from the dashboard.
@@ -126,6 +127,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 			r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleAnalyst))
 			r.Post("/api/scan/{agentId}", h.TriggerScan)
 			r.Post("/api/attackpath/collect/{agentId}", h.DispatchAttackPathCollect)
+			r.Post("/api/attackpath/assets", h.SetAttackPathAsset)
 			r.Post("/api/scenarios/{id}/run", h.RunScenario)
 			r.Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
 			r.Post("/api/campaigns", h.CreateCampaign)

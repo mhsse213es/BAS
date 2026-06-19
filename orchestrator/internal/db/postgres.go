@@ -242,6 +242,18 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at   timestamptz NOT NULL DEFAULT NOW(),
 			PRIMARY KEY (agent_id, source)
 		)`,
+
+		// attackpath_asset_tags: operator-supplied host metadata (crown-jewel tag,
+		// network segment, tier-0 override) the collectors cannot know. Keyed by
+		// normalized hostname so a tag survives reconciliation to the SID node.
+		`CREATE TABLE IF NOT EXISTS attackpath_asset_tags (
+			host_key    text        PRIMARY KEY,
+			label       text        NOT NULL DEFAULT '',
+			crown_jewel text        NOT NULL DEFAULT '',
+			segment     text        NOT NULL DEFAULT '',
+			high_value  boolean     NOT NULL DEFAULT false,
+			updated_at  timestamptz NOT NULL DEFAULT NOW()
+		)`,
 	}
 
 	for _, s := range stmts {
