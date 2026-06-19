@@ -462,6 +462,10 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 		req.AgentID, req.Hostname, finalState, trusted, req.AgentVersion)
 	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: req.AgentID})
 
+	h.auditLogAs(r, "", "agent.enroll", req.AgentID, map[string]any{
+		"hostname": req.Hostname, "ip": req.IPAddress, "os": req.OSVersion,
+		"trusted": trusted, "state": finalState, "version": req.AgentVersion,
+	}, "ok")
 	respond(w, map[string]interface{}{
 		"agentId": req.AgentID,
 		"state":   finalState,
@@ -1032,6 +1036,7 @@ func (h *Handler) CreateScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[scenario] created custom scenario %s", sc.ID)
+	h.auditLog(r, "scenario.create", sc.ID, map[string]any{"name": sc.Name}, "ok")
 	respondStatus(w, &sc, http.StatusCreated)
 }
 
@@ -1059,6 +1064,7 @@ func (h *Handler) UpdateScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[scenario] updated custom scenario %s", id)
+	h.auditLog(r, "scenario.update", id, map[string]any{"name": sc.Name}, "ok")
 	respond(w, &sc)
 }
 
@@ -1129,6 +1135,7 @@ func (h *Handler) UploadScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[scenario] uploaded custom scenario %s", sc.ID)
+	h.auditLog(r, "scenario.create", sc.ID, map[string]any{"name": sc.Name, "via": "upload"}, "ok")
 	respondStatus(w, sc, http.StatusCreated)
 }
 
@@ -1150,6 +1157,7 @@ func (h *Handler) DeleteScenario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("[scenario] deleted custom scenario %s", id)
+	h.auditLog(r, "scenario.delete", id, nil, "ok")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1985,6 +1993,7 @@ func (h *Handler) DeleteIntelScenario(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.auditLog(r, "scenario.delete", id, map[string]any{"source": "intel"}, "ok")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2167,6 +2176,7 @@ func (h *Handler) GetAuditPack(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 
+	h.auditLog(r, "report.export", agentID, map[string]any{"format": "zip", "type": "audit_pack"}, "ok")
 	if err := h.reportingEngine.WriteAuditPack(r.Context(), agentID, h.complianceMapper, w); err != nil {
 		log.Printf("[api] audit pack: %v", err)
 	}
@@ -2327,6 +2337,7 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	fname := fmt.Sprintf("bas-report-%s-%s.pdf", sanitizeFilename(runName), idShort)
 
+	h.auditLog(r, "report.export", runID, map[string]any{"format": "pdf", "type": "run"}, "ok")
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	if err := h.reportingEngine.PDFFromReport(r.Context(), w, rep, nil, results); err != nil {
@@ -2355,6 +2366,7 @@ func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 		idShort = idShort[:8]
 	}
 	fname := fmt.Sprintf("bas-forensic-%s-%s.csv", sanitizeFilename(name), idShort)
+	h.auditLog(r, "report.export", runID, map[string]any{"format": "csv", "type": "run"}, "ok")
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	reporting.WriteForensicCSV(w, name, results)
@@ -2391,6 +2403,7 @@ func (h *Handler) GetRunReport(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	h.auditLog(r, "report.export", runID, map[string]any{"format": "html", "type": "run"}, "ok")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := reporting.GenerateHTML(w, report, nil); err != nil {
 		log.Printf("[api] generate run report HTML: %v", err)

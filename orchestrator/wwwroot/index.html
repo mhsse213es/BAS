@@ -1545,8 +1545,15 @@ code {
                   <option value="scenario.cancel">Scenario cancelled</option>
                   <option value="campaign.create">Campaign created</option>
                   <option value="campaign.stop">Campaign stopped</option>
+                  <option value="scenario.create">Scenario created</option>
+                  <option value="scenario.update">Scenario updated</option>
+                  <option value="scenario.delete">Scenario deleted</option>
+                  <option value="finding.status_change">Finding status change</option>
+                  <option value="agent.enroll">Agent enrolled</option>
                   <option value="attackpath.collect">Attack path collected</option>
                   <option value="attackpath.schedule_update">AP schedule updated</option>
+                  <option value="attackpath.asset_tag">Asset tagged</option>
+                  <option value="report.export">Report exported</option>
                   <option value="tamper.acknowledge">Tamper acknowledged</option>
                   <option value="tamper.acknowledge_all">Tamper ack all</option>
                   <option value="connector.sync">Connector sync</option>
@@ -5581,8 +5588,15 @@ var AUDIT_ACTION_LABELS = {
   'scenario.cancel':           'Scenario cancelled',
   'campaign.create':           'Campaign created',
   'campaign.stop':             'Campaign stopped',
+  'scenario.create':           'Scenario created',
+  'scenario.update':           'Scenario updated',
+  'scenario.delete':           'Scenario deleted',
+  'finding.status_change':     'Finding status changed',
+  'agent.enroll':              'Agent enrolled',
   'attackpath.collect':        'AP collected',
   'attackpath.schedule_update':'AP schedule updated',
+  'attackpath.asset_tag':      'Asset tagged',
+  'report.export':             'Report exported',
   'tamper.acknowledge':        'Tamper ack',
   'tamper.acknowledge_all':    'Tamper ack all',
   'connector.sync':            'Connector sync',
@@ -5627,13 +5641,25 @@ function fetchAuditPage() {
           if (d2.username) parts.push('user: ' + d2.username);
           if (d2.role) parts.push('role: ' + d2.role);
           if (d2.scenarioId) parts.push('scenario: ' + d2.scenarioId);
+          if (d2.name) parts.push('name: ' + d2.name);
           if (d2.mode) parts.push('mode: ' + d2.mode);
           if (d2.agentId) parts.push('agent: ' + d2.agentId);
+          if (d2.hostname) parts.push('host: ' + d2.hostname);
+          if (d2.ip) parts.push('ip: ' + d2.ip);
+          if (d2.trusted != null) parts.push('trusted: ' + d2.trusted);
+          if (d2.state) parts.push('state: ' + d2.state);
           if (d2.reason) parts.push('reason: ' + d2.reason);
+          if (d2.status) parts.push('status: ' + d2.status);
+          if (d2.format) parts.push('format: ' + d2.format);
+          if (d2.type) parts.push('type: ' + d2.type);
+          if (d2.crownJewel) parts.push('crown-jewel: ' + d2.crownJewel);
+          if (d2.highValue) parts.push('high-value');
           if (d2.version) parts.push('v: ' + d2.version);
           if (d2.techniqueCount != null) parts.push('techniques: ' + d2.techniqueCount);
           if (d2.enabled != null) parts.push('enabled: ' + d2.enabled);
           if (d2.intervalMinutes) parts.push('interval: ' + d2.intervalMinutes + 'min');
+          if (d2.agents != null) parts.push('agents: ' + d2.agents);
+          if (d2.dispatched != null) parts.push('dispatched: ' + d2.dispatched);
           detail = parts.join(' · ');
           if (!detail && e.resource) detail = e.resource;
         } catch(ex) { detail = e.resource || ''; }

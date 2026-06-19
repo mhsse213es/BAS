@@ -184,6 +184,7 @@ func (h *Handler) SetAttackPathAsset(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		h.auditLog(r, "attackpath.asset_tag", key, map[string]any{"action": "clear"}, "ok")
 		respond(w, map[string]any{"hostKey": key, "cleared": true})
 		return
 	}
@@ -197,6 +198,7 @@ func (h *Handler) SetAttackPathAsset(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.auditLog(r, "attackpath.asset_tag", key, map[string]any{"crownJewel": t.CrownJewel, "segment": t.Segment, "highValue": t.HighValue, "label": t.Label}, "ok")
 	respond(w, map[string]any{"hostKey": key, "crownJewel": t.CrownJewel, "segment": t.Segment, "highValue": t.HighValue})
 }
 

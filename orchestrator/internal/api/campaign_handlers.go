@@ -310,6 +310,7 @@ func (h *Handler) GetCampaignReport(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	h.auditLog(r, "report.export", chi.URLParam(r, "id"), map[string]any{"format": "html", "type": "campaign"}, "ok")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := reporting.GenerateHTML(w, rep, nil); err != nil {
 		log.Printf("[api] campaign report html: %v", err)
@@ -333,6 +334,7 @@ func (h *Handler) GetCampaignPDF(w http.ResponseWriter, r *http.Request) {
 	fname := fmt.Sprintf("bas-campaign-%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), time.Now().UTC().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	h.auditLog(r, "report.export", chi.URLParam(r, "id"), map[string]any{"format": "pdf", "type": "campaign"}, "ok")
 	if err := h.reportingEngine.PDFFromReport(r.Context(), w, rep, nil, nil); err != nil {
 		log.Printf("[api] campaign report pdf: %v", err)
 	}
@@ -370,6 +372,7 @@ func (h *Handler) GetCampaignCSV(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	fname := fmt.Sprintf("bas-campaign-forensic-%s-%s.csv", sanitizeFilename(campName), time.Now().UTC().Format("2006-01-02"))
+	h.auditLog(r, "report.export", id, map[string]any{"format": "csv", "type": "campaign"}, "ok")
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	reporting.WriteForensicCSV(w, scenarioName, all)

@@ -284,6 +284,7 @@ func (h *Handler) SetFindingStatus(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "finding not found", http.StatusNotFound)
 		return
 	}
+	h.auditLog(r, "finding.status_change", chi.URLParam(r, "id"), map[string]any{"status": req.Status, "reason": req.Reason}, "ok")
 	respond(w, map[string]any{"status": req.Status})
 }
 
