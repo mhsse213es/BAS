@@ -48,6 +48,7 @@ func BuildGraph(cols ...Collection) *Graph {
 			g.AddEdge(e)
 		}
 	}
+	g.reconcileHosts()
 	return g
 }
 
