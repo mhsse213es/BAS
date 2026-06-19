@@ -200,6 +200,33 @@ func (h *Handler) SetAttackPathAsset(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]any{"hostKey": key, "crownJewel": t.CrownJewel, "segment": t.Segment, "highValue": t.HighValue})
 }
 
+// buildCollectCmd assembles the command_attackpath_collect WS payload, loading
+// the SharpHound binary from BAS_SHARPHOUND_PATH when a SharpHound run is
+// requested. Returns the payload and whether the binary was delivered. Shared by
+// the operator dispatch handler and the periodic scheduler.
+func buildCollectCmd(targets []string, segment string, runSharpHound bool, sharpHoundArgs string) (map[string]any, bool) {
+	cmd := map[string]any{
+		"collectId":      fmt.Sprintf("ap-%d", time.Now().UnixMilli()),
+		"targets":        targets,
+		"segment":        segment,
+		"runSharpHound":  runSharpHound,
+		"sharpHoundArgs": sharpHoundArgs,
+	}
+	loaded := false
+	if runSharpHound {
+		if p := os.Getenv("BAS_SHARPHOUND_PATH"); p != "" {
+			if raw, err := os.ReadFile(p); err == nil {
+				cmd["sharpHoundPayload"] = map[string]string{
+					"name":    "SharpHound.exe",
+					"content": base64.StdEncoding.EncodeToString(raw),
+				}
+				loaded = true
+			}
+		}
+	}
+	return cmd, loaded
+}
+
 // DispatchAttackPathCollect tells a connected agent to run an attack-path
 // collection: probe an explicit target allowlist and (optionally, where domain-
 // joined) run SharpHound. Operator-authed (Analyst+). Recon only — never
@@ -219,25 +246,7 @@ func (h *Handler) DispatchAttackPathCollect(w http.ResponseWriter, r *http.Reque
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
-	cmd := map[string]any{
-		"collectId":      fmt.Sprintf("ap-%d", time.Now().UnixMilli()),
-		"targets":        body.Targets,
-		"segment":        body.Segment,
-		"runSharpHound":  body.RunSharpHound,
-		"sharpHoundArgs": body.SharpHoundArgs,
-	}
-	sharpHoundLoaded := false
-	if body.RunSharpHound {
-		if p := os.Getenv("BAS_SHARPHOUND_PATH"); p != "" {
-			if raw, err := os.ReadFile(p); err == nil {
-				cmd["sharpHoundPayload"] = map[string]string{
-					"name":    "SharpHound.exe",
-					"content": base64.StdEncoding.EncodeToString(raw),
-				}
-				sharpHoundLoaded = true
-			}
-		}
-	}
+	cmd, sharpHoundLoaded := buildCollectCmd(body.Targets, body.Segment, body.RunSharpHound, body.SharpHoundArgs)
 
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
 		Type: models.MsgCommandAttackPathCollect, AgentID: agentID, Data: cmd,
@@ -250,6 +259,66 @@ func (h *Handler) DispatchAttackPathCollect(w http.ResponseWriter, r *http.Reque
 		"agentId": agentID, "targets": len(body.Targets),
 		"sharpHound": body.RunSharpHound, "sharpHoundDelivered": sharpHoundLoaded,
 	})
+}
+
+// attackPathSchedule is the wire type for the schedule singleton.
+type attackPathSchedule struct {
+	Enabled         bool      `json:"enabled"`
+	IntervalMinutes int       `json:"intervalMinutes"`
+	Targets         []string  `json:"targets"`
+	Segment         string    `json:"segment"`
+	RunSharpHound   bool      `json:"runSharpHound"`
+	LastRunAt       *time.Time `json:"lastRunAt,omitempty"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+}
+
+// GetAttackPathSchedule returns the current periodic-collection config.
+// Viewer+. Returns defaults when not yet configured.
+// GET /api/attackpath/schedule
+func (h *Handler) GetAttackPathSchedule(w http.ResponseWriter, r *http.Request) {
+	var s attackPathSchedule
+	var targetsRaw []byte
+	err := h.db.QueryRow(r.Context(),
+		`SELECT enabled, interval_minutes, targets, segment, run_sharphound, last_run_at, updated_at
+		 FROM attackpath_schedule WHERE id = 1`).
+		Scan(&s.Enabled, &s.IntervalMinutes, &targetsRaw, &s.Segment, &s.RunSharpHound, &s.LastRunAt, &s.UpdatedAt)
+	if err != nil {
+		// Not yet configured — return safe defaults.
+		respond(w, attackPathSchedule{Enabled: false, IntervalMinutes: 1440, Targets: []string{}})
+		return
+	}
+	if err := json.Unmarshal(targetsRaw, &s.Targets); err != nil {
+		s.Targets = []string{}
+	}
+	respond(w, s)
+}
+
+// SetAttackPathSchedule upserts the periodic-collection singleton config.
+// Admin only.
+// POST /api/attackpath/schedule
+func (h *Handler) SetAttackPathSchedule(w http.ResponseWriter, r *http.Request) {
+	var s attackPathSchedule
+	if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
+		jsonError(w, "invalid schedule payload", http.StatusBadRequest)
+		return
+	}
+	if s.IntervalMinutes <= 0 {
+		s.IntervalMinutes = 1440
+	}
+	targetsRaw, err := json.Marshal(s.Targets)
+	if err != nil {
+		targetsRaw = []byte("[]")
+	}
+	if _, err := h.db.Exec(r.Context(),
+		`INSERT INTO attackpath_schedule (id, enabled, interval_minutes, targets, segment, run_sharphound, updated_at)
+		 VALUES (1, $1, $2, $3, $4, $5, NOW())
+		 ON CONFLICT (id) DO UPDATE
+		   SET enabled=$1, interval_minutes=$2, targets=$3, segment=$4, run_sharphound=$5, updated_at=NOW()`,
+		s.Enabled, s.IntervalMinutes, targetsRaw, s.Segment, s.RunSharpHound); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, map[string]any{"ok": true, "enabled": s.Enabled, "intervalMinutes": s.IntervalMinutes})
 }
 
 // SubmitAttackPathSharpHound ingests a RAW SharpHound collection zip from a

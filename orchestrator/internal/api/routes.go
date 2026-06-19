@@ -11,7 +11,9 @@ import (
 )
 
 // Mount builds the full HTTP router and returns it.
-func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler {
+// staticHandler serves the dashboard SPA — pass StaticHandler() in production
+// (embedded FS) or http.FileServer(http.Dir("./wwwroot")) in tests/dev.
+func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler http.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
@@ -120,6 +122,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		// Attack Path Validation — fleet lateral-movement graph summary.
 		r.Get("/api/attackpath/summary", h.GetAttackPathSummary)
 		r.Get("/api/attackpath/assets", h.GetAttackPathAssets)
+		r.Get("/api/attackpath/schedule", h.GetAttackPathSchedule)
 
 		// Analyst + Admin only — can trigger scans, run scenarios, and
 		// author custom scenarios from the dashboard.
@@ -173,14 +176,22 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 			r.Post("/api/connector/sync", h.TriggerConnectorSync)
 			r.Delete("/api/connector/scenarios/{id}", h.DeleteIntelScenario)
 
+			// Attack-path schedule config — enables periodic fleet collection.
+			r.Post("/api/attackpath/schedule", h.SetAttackPathSchedule)
+
 			// ART content: status + content-pack reseed (no image rebuild)
 			r.Get("/api/art/content/status", h.GetARTContentStatus)
 			r.Post("/api/art/content/reseed", h.ReseedART)
+
+			// Filesystem integrity — tamper event log + acknowledgement
+			r.Get("/api/tamper-events", h.GetTamperEvents)
+			r.Post("/api/tamper-events/{id}/acknowledge", h.AcknowledgeTamperEvent)
+			r.Post("/api/tamper-events/acknowledge-all", h.AcknowledgeAllTamperEvents)
 		})
 	})
 
-	// Static files — serve the dashboard SPA
-	r.Handle("/*", http.FileServer(http.Dir("./wwwroot")))
+	// Static files — serve the dashboard SPA from the embedded FS (tamper-proof).
+	r.Handle("/*", staticHandler)
 
 	return r
 }

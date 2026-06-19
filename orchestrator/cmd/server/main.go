@@ -120,9 +120,14 @@ func main() {
 	}
 
 	// ── Binary integrity manifest ─────────────────────────────────────────
-	manifest := integrity.LoadManifest("./agents/BINARIES.sha256")
+	// LoadManifestVerified checks BINARIES.sha256.sig before parsing.
+	// A tampered or unsigned manifest is fatal — never trust it silently.
+	manifest, manifestErr := integrity.LoadManifestVerified("./agents/BINARIES.sha256")
+	if manifestErr != nil {
+		log.Fatalf("[FATAL] binary integrity manifest tampered or invalid: %v", manifestErr)
+	}
 	if manifest.Loaded() {
-		log.Println("[+] Binary integrity manifest loaded — agent hash verification enabled")
+		log.Println("[+] Binary integrity manifest loaded and signature verified — agent hash verification enabled")
 	} else {
 		log.Println("[~] No binary manifest found — agent hash verification disabled")
 	}
@@ -166,12 +171,33 @@ func main() {
 		WithCompliance(complianceMapper).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler)
-	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret)
+	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler())
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
 	// Marks agents offline if no heartbeat received within 90 seconds and
 	// broadcasts the change so the dashboard updates in real time.
 	go runStalenessMonitor(pool, hub)
+
+	// ── Attack-Path Scheduler ─────────────────────────────────────────────
+	// Ticks every 60 s and re-dispatches fleet-wide attack-path collection
+	// when the operator-configured interval has elapsed.
+	api.StartAttackPathScheduler(context.Background(), pool, hub)
+
+	// ── Filesystem Integrity Watcher ──────────────────────────────────────
+	// Polls protected on-disk paths every 15 seconds. Any unexpected
+	// modification, deletion, or creation is logged, persisted to
+	// tamper_events, and broadcast to all dashboard browsers via WebSocket.
+	// Builtin scenario & manifest changes also set DispatchBlocked to true.
+	integrity.WatchPaths([]struct {
+		Path     string
+		Severity string
+	}{
+		{Path: "./agents/BINARIES.sha256", Severity: "critical"},
+		{Path: cfg.LicensePath, Severity: "critical"},
+	})
+	integrity.WatchDir(cfg.ScenariosDir, "critical")
+	go integrity.StartWatcher(context.Background(), pool, hub)
+	log.Println("[+] Filesystem integrity watcher started")
 
 	// ── Detection Retention ───────────────────────────────────────────────
 	// Prunes raw detection alert blobs older than 30 days daily (summaries are
