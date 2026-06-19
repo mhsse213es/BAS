@@ -904,6 +904,13 @@ code {
           </svg>
           Reports
         </div>
+        <div class="nav-item" data-tab="attackpath" onclick="showTab('attackpath')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="3" cy="3" r="1.6"/><circle cx="13" cy="3" r="1.6"/><circle cx="8" cy="13" r="1.6"/>
+            <path d="M4.3 4.2 6.8 11.6M11.7 4.2 9.2 11.6M4.4 3h7.2"/>
+          </svg>
+          Attack Paths
+        </div>
         <div class="nav-item disabled">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/>
@@ -1484,6 +1491,40 @@ code {
         <div id="cov-toolbar" style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;flex-wrap:wrap"></div>
         <div class="dash-panel"><div class="dash-panel-body" id="cov-matrix" style="overflow-x:auto;padding:0.75rem"><div class="empty" style="padding:2rem">Loading matrix…</div></div></div>
         <div class="tiny muted" id="cov-foot" style="margin-top:0.75rem"></div>
+      </div>
+
+      <!-- Attack Paths -->
+      <div id="tab-attackpath" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Attack Path Validation</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Fleet lateral-movement graph — reachability, blast radius, choke points, and paths to Domain Admin. Recon only: relationship mapping, no exploitation or propagation.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0">
+            <button class="btn btn-outline btn-sm" onclick="loadAttackPath()">Refresh</button>
+            <button class="btn btn-primary btn-sm" id="ap-collect-btn" onclick="openAPCollect()">&#9654; Run Collection</button>
+          </div>
+        </div>
+        <div id="ap-collect" class="dash-panel" style="display:none;margin-bottom:1rem">
+          <div class="dash-panel-body" style="padding:1rem;max-width:560px">
+            <div style="font-weight:700;margin-bottom:0.35rem;color:var(--text)">Run Attack-Path Collection</div>
+            <div class="tiny muted" style="margin-bottom:0.75rem">The agent probes only the hosts you list (TCP connect — no network scanning) and maps local admins/sessions. SharpHound runs where domain-joined if enabled and the binary is configured on the server.</div>
+            <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Agent</label>
+            <select id="ap-agent" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-size:0.8rem"></select>
+            <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Targets — one host or IP per line</label>
+            <textarea id="ap-targets" rows="4" placeholder="DC01&#10;FILE01&#10;10.0.0.20" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-family:var(--font-mono);font-size:0.78rem"></textarea>
+            <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Network segment tag (optional)</label>
+            <input id="ap-segment" placeholder="user-vlan" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-size:0.8rem">
+            <label style="display:flex;align-items:center;gap:0.45rem;font-size:0.8rem;color:var(--text);margin-bottom:0.8rem;cursor:pointer">
+              <input type="checkbox" id="ap-sharphound"> Run SharpHound (domain-joined hosts only)
+            </label>
+            <div style="display:flex;gap:0.5rem">
+              <button class="btn btn-primary btn-sm" onclick="dispatchAPCollect()">Dispatch</button>
+              <button class="btn btn-outline btn-sm" onclick="document.getElementById('ap-collect').style.display='none'">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <div id="ap-body"><div class="empty" style="padding:2rem">Loading…</div></div>
       </div>
 
       <!-- Findings -->
@@ -2069,9 +2110,116 @@ function showTab(name) {
   if (name === 'findings') loadFindings();
   if (name === 'remediation') loadRemediations();
   if (name === 'reports') loadReports();
+  if (name === 'attackpath') loadAttackPath();
   if (name === 'dashboard') loadDashboard();
   if (name === 'compliance') initComplianceTab();
   if (name === 'settings' && ROLE === 'admin') showSettingsSection(SETTINGS_SECTION);
+}
+
+// ── Attack Path Validation ─────────────────────────────────────────────────
+function loadAttackPath() {
+  var body = document.getElementById('ap-body');
+  if (body) body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
+  apicall('/api/attackpath/summary').then(renderAttackPath).catch(function(e) { showToast(e.message, 'err'); });
+}
+function apColor(score) {
+  return score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : score >= 40 ? '#f0883e' : 'var(--danger)';
+}
+function apBandColor(band) {
+  return band === 'Low' ? 'var(--success)' : band === 'Medium' ? 'var(--warning)' : band === 'High' ? '#f0883e' : 'var(--danger)';
+}
+function apCard(label, val, col, sub) {
+  return '<div class="kpi-card"><div class="kpi-label">' + label + '</div>' +
+    '<div class="kpi-value" style="color:' + col + '">' + val + '</div>' +
+    '<div class="tiny muted">' + (sub || '') + '</div></div>';
+}
+function apNodePill(name, isTarget) {
+  var col = isTarget ? 'var(--danger)' : 'var(--border)';
+  var bg = isTarget ? 'rgba(218,54,51,0.12)' : 'var(--surface)';
+  return '<span style="display:inline-block;padding:0.3rem 0.6rem;border:1px solid ' + col + ';background:' + bg +
+    ';border-radius:6px;font-family:var(--font-mono);font-size:0.74rem;color:var(--text);white-space:nowrap">' + x(name) + '</span>';
+}
+function apArrow(kind) {
+  return '<span style="display:inline-flex;flex-direction:column;align-items:center;color:var(--muted);margin:0 0.1rem">' +
+    '<span style="font-size:0.55rem;text-transform:uppercase;letter-spacing:0.04em">' + x(kind) + '</span>' +
+    '<span style="font-size:1rem;line-height:0.7">&rarr;</span></span>';
+}
+function apTable(title, cols, rows) {
+  var h = '<div class="tbl-wrap" style="margin-bottom:1rem"><div style="font-weight:700;color:var(--text);padding:0.6rem 0.2rem">' + title + '</div><table><thead><tr>';
+  cols.forEach(function(c) { h += '<th>' + c + '</th>'; });
+  h += '</tr></thead><tbody>';
+  rows.forEach(function(r) { h += '<tr>' + r.map(function(c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; });
+  return h + '</tbody></table></div>';
+}
+function renderAttackPath(d) {
+  var body = document.getElementById('ap-body');
+  if (!body) return;
+  if (!d || !d.collected) {
+    body.innerHTML = '<div class="dash-panel"><div class="dash-panel-body" style="padding:2rem;text-align:center">' +
+      '<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:0.4rem">No attack-path data collected yet</div>' +
+      '<div class="tiny muted" style="max-width:520px;margin:0 auto 1rem">Run a collection on an enrolled agent to map lateral-movement reachability, blast radius, segmentation, and crown-jewel exposure across the fleet.</div>' +
+      '<button class="btn btn-primary btn-sm" onclick="openAPCollect()">&#9654; Run Collection</button></div></div>';
+    return;
+  }
+  var s = d.summary || {};
+  var h = '<div class="kpi-row" style="margin-bottom:1rem">';
+  h += apCard('Attack Path Score', (s.attackPathScore != null ? s.attackPathScore : '—') + '<span style="font-size:0.9rem;color:var(--muted)">/100</span>', apColor(s.attackPathScore), (s.band || '') + ' risk · higher is safer');
+  h += apCard('Lateral Movement', x(s.lateralMovementBand || '—'), apBandColor(s.lateralMovementBand), 'avg ' + (s.avgBlastRadius || 0).toFixed(1) + ' · max ' + (s.maxBlastRadius || 0) + ' hosts/entry');
+  h += apCard('Domain Compromise', s.domainCompromise ? 'Reachable' : 'Not Reachable', s.domainCompromise ? 'var(--danger)' : 'var(--success)', s.domainCompromise ? 'a host can reach Domain Admin' : 'no path to Domain Admin');
+  h += apCard('Graph Scope', (s.hosts || 0) + ' hosts', 'var(--text)', (s.users || 0) + ' users · ' + (s.groups || 0) + ' groups · ' + (s.edges || 0) + ' edges');
+  h += '</div>';
+
+  if (s.domainCompromise && s.shortestDomainAdminPath && s.shortestDomainAdminPath.length) {
+    var p = s.shortestDomainAdminPath;
+    h += '<div class="dash-panel" style="margin-bottom:1rem"><div class="dash-panel-body" style="padding:1rem">';
+    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.2rem">Representative Path to Domain Admin</div>';
+    h += '<div class="tiny muted" style="margin-bottom:0.8rem">Shortest path from the highest-blast-radius entry host. Difficulty: <strong style="color:' + apBandColor(s.shortestDomainAdminDifficulty) + '">' + x(s.shortestDomainAdminDifficulty || '') + '</strong></div>';
+    h += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:0.25rem">' + apNodePill(p[0].from);
+    for (var i = 0; i < p.length; i++) { h += apArrow(p[i].kind) + apNodePill(p[i].to, i === p.length - 1); }
+    h += '</div></div></div>';
+  }
+
+  var cj = (s.crownJewels || []).filter(function(c) { return c.reachable; });
+  if (cj.length) {
+    h += apTable('Crown-Jewel Exposure', ['Asset', 'Tag', 'Entry Hosts', 'Min Hops'], cj.map(function(c) {
+      return [x(c.node), x(c.tag), c.entryHosts, c.minHops];
+    }));
+  }
+  if ((s.chokePoints || []).length) {
+    h += apTable('Attack Choke Points', ['Node', 'On Paths', 'Path Coverage'], s.chokePoints.slice(0, 10).map(function(c) {
+      return [x(c.label), c.onPaths, Math.round((c.coverage || 0) * 100) + '%'];
+    }));
+  }
+  if ((s.segmentationViolations || []).length) {
+    h += apTable('Segmentation Violations', ['From', 'Segment', 'Via', 'To', 'Segment'], s.segmentationViolations.map(function(v) {
+      return [x(v.from), x(v.fromSegment), (v.kind || '').toUpperCase(), x(v.to), x(v.toSegment)];
+    }));
+  }
+  body.innerHTML = h;
+}
+function openAPCollect() {
+  var sel = document.getElementById('ap-agent');
+  var panel = document.getElementById('ap-collect');
+  function fill() {
+    sel.innerHTML = (agents || []).map(function(a) {
+      return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + (a.status === 'offline' ? ' (offline)' : '') + '</option>';
+    }).join('') || '<option value="">No agents enrolled</option>';
+    panel.style.display = '';
+  }
+  if (!agents || !agents.length) {
+    apicall('/api/agents').then(function(d) { agents = d || []; fill(); }).catch(function(e) { showToast(e.message, 'err'); });
+  } else fill();
+}
+function dispatchAPCollect() {
+  var agentId = document.getElementById('ap-agent').value;
+  if (!agentId) { showToast('Select an agent', 'err'); return; }
+  var targets = document.getElementById('ap-targets').value.split('\n').map(function(t) { return t.trim(); }).filter(Boolean);
+  var payload = { targets: targets, segment: document.getElementById('ap-segment').value.trim(), runSharpHound: document.getElementById('ap-sharphound').checked };
+  apicall('/api/attackpath/collect/' + encodeURIComponent(agentId), { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
+    document.getElementById('ap-collect').style.display = 'none';
+    var sh = r.sharpHound ? (r.sharpHoundDelivered ? ' + SharpHound' : ' (SharpHound binary not configured server-side)') : '';
+    showToast('Collection dispatched to ' + agentId + sh + '. Refresh in a moment.', 'ok');
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
 var SETTINGS_SECTION = 'users';

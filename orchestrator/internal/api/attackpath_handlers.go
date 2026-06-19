@@ -71,6 +71,36 @@ func (h *Handler) storeAttackPathCollection(r *http.Request, c attackpath.Collec
 	return err
 }
 
+// GetAttackPathSummary builds the fleet attack-path graph from every stored
+// collection and returns the analyzed Summary for the dashboard. Read-only
+// (Viewer+). Returns {collected:false} when nothing has been collected yet.
+// GET /api/attackpath/summary
+func (h *Handler) GetAttackPathSummary(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(), `SELECT payload FROM attackpath_collections`)
+	if err != nil {
+		respond(w, map[string]any{"collected": false})
+		return
+	}
+	defer rows.Close()
+	var cols []attackpath.Collection
+	for rows.Next() {
+		var raw []byte
+		if rows.Scan(&raw) != nil {
+			continue
+		}
+		var c attackpath.Collection
+		if json.Unmarshal(raw, &c) == nil {
+			cols = append(cols, c)
+		}
+	}
+	if len(cols) == 0 {
+		respond(w, map[string]any{"collected": false})
+		return
+	}
+	s := attackpath.BuildGraph(cols...).Analyze()
+	respond(w, map[string]any{"collected": true, "agents": len(cols), "summary": s})
+}
+
 // DispatchAttackPathCollect tells a connected agent to run an attack-path
 // collection: probe an explicit target allowlist and (optionally, where domain-
 // joined) run SharpHound. Operator-authed (Analyst+). Recon only — never

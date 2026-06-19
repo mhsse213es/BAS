@@ -117,6 +117,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string) http.Handler 
 		r.Get("/api/attack/matrix", h.AttackMatrix)
 		r.Get("/api/attack/technique/{id}", h.AttackTechnique)
 
+		// Attack Path Validation — fleet lateral-movement graph summary.
+		r.Get("/api/attackpath/summary", h.GetAttackPathSummary)
+
 		// Analyst + Admin only — can trigger scans, run scenarios, and
 		// author custom scenarios from the dashboard.
 		r.Group(func(r chi.Router) {
