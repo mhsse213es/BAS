@@ -116,6 +116,42 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return "#6e7681"
 	},
+	// detVerdictColor maps a detection verdict to a CSS color.
+	"detVerdictColor": func(v string) string {
+		switch v {
+		case "prevented":
+			return "#0d9488" // green — EDR/AV blocked before execution
+		case "detected":
+			return "#2f81f7" // blue — executed, EDR alert raised
+		case "undetected":
+			return "#da3633" // red — executed, no alert
+		}
+		return "#6e7681" // grey — no detection data
+	},
+	// detVerdictLabel maps a detection verdict to a display label.
+	"detVerdictLabel": func(v string) string {
+		switch v {
+		case "prevented":
+			return "PREVENTED"
+		case "detected":
+			return "DETECTED"
+		case "undetected":
+			return "UNDETECTED"
+		}
+		return "NO DATA"
+	},
+	// execVerdictColor maps an execution verdict to a CSS color.
+	"execVerdictColor": func(v string) string {
+		switch v {
+		case "pass", "blocked":
+			return "#0d9488"
+		case "fail":
+			return "#da3633"
+		case "error":
+			return "#d29922"
+		}
+		return "#6e7681"
+	},
 	// pctFrac formats a 0..1 fraction as a whole-percent string (e.g. 0.72→"72%").
 	"pctFrac": func(f float64) string { return fmt.Sprintf("%.0f%%", f*100) },
 	// scoreColor colors an attack-path-style score where HIGHER is better.
@@ -821,9 +857,52 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 14. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
+<!-- ═══ 14. DETECTION VALIDATION ════════════════════════════════════════ -->
 <div class="page">
-<h1>14. Technical Appendix — ATT&amp;CK Glossary</h1>
+<h1>14. Detection Validation</h1>
+<p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
+{{if .techniqueMatrix}}
+<table>
+  <thead><tr>
+    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th>
+  </tr></thead>
+  <tbody>
+  {{range .techniqueMatrix}}
+  <tr>
+    <td><code style="font-size:0.78rem">{{.techniqueId}}</code><br><span style="font-size:0.8rem">{{.techniqueName}}</span></td>
+    <td style="font-size:0.8rem;color:#6e7681">{{humanize .tactic}}</td>
+    <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
+    <td><span style="font-size:0.78rem;font-weight:600;color:{{execVerdictColor .execVerdict}}">{{upper .execVerdict}}</span></td>
+    <td>
+      {{if .detectionVerdict}}
+      <span style="font-size:0.78rem;font-weight:700;color:{{detVerdictColor .detectionVerdict}}">{{detVerdictLabel .detectionVerdict}}</span>
+      {{if eq .confidence "high"}}<span style="font-size:0.68rem;color:#6e7681;margin-left:4px">high conf</span>{{end}}
+      {{else}}
+      <span style="font-size:0.78rem;color:#6e7681">NO DATA</span>
+      {{end}}
+    </td>
+    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all">{{.alertProvider}}{{if and .alertProvider .alertChannel}}<br>{{end}}{{.alertChannel}}</td>
+    <td style="font-size:0.78rem;text-align:center">{{if .alertEventId}}{{.alertEventId}}{{else}}—{{end}}</td>
+    <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
+      {{if .alertThreatName}}<strong>{{.alertThreatName}}</strong>{{if .alertCommandLine}}<br>{{end}}{{end}}
+      {{if .alertCommandLine}}<span style="color:#6e7681">{{.alertCommandLine}}</span>{{end}}
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap">{{if .mttdMs}}{{mttd .mttdMs}}{{else}}—{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
+<p style="color:#6e7681">No technique results available for this run.</p>
+{{end}}
+<div class="footer">
+  <span>{{.agent.hostname}} — Detection Validation</span>
+</div>
+</div>
+
+<!-- ═══ 15. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
+<div class="page">
+<h1>15. Technical Appendix — ATT&amp;CK Glossary</h1>
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
 {{range .glossary}}
@@ -841,7 +920,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{end}}
 
 <div class="footer">
-  <span>{{.agent.hostname}} — Technical Appendix</span>
+  <span>{{.agent.hostname}} — ATT&amp;CK Glossary</span>
   <span>Generated {{fmtTime .generatedAt}} &nbsp;·&nbsp; Audspect BAS Platform &nbsp;·&nbsp; CONFIDENTIAL</span>
 </div>
 </div>

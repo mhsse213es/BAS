@@ -47,6 +47,9 @@ type FullReport struct {
 	// KillChain is the run's adversary actions paired with the defensive outcome,
 	// ordered by ATT&CK kill-chain phase — the dual-rail purple-team timeline.
 	KillChain []KillChainStep `json:"killChain,omitempty"`
+	// TechniqueMatrix is the per-step detection validation table: execution result
+	// combined with post-run EDR alert correlation for every technique in the run.
+	TechniqueMatrix []TechniqueRow `json:"techniqueMatrix,omitempty"`
 	// Executive-grade derivations (Cymulate-style report).
 	ExecutiveConclusion string          `json:"executiveConclusion"`
 	TopRiskDrivers      []RiskDriver    `json:"topRiskDrivers"`
@@ -92,6 +95,25 @@ type DetectionTechnique struct {
 	Verdict        string `json:"verdict"`              // prevented|detected|undetected
 	Confidence     string `json:"confidence,omitempty"` // high|low when detected
 	TimeToDetectMs int64  `json:"timeToDetectMs,omitempty"`
+}
+
+// TechniqueRow is one row in the Detection Validation table — execution verdict
+// combined with post-run EDR/alert correlation for the same technique.
+type TechniqueRow struct {
+	TechniqueID      string `json:"techniqueId"`
+	TechniqueName    string `json:"techniqueName"`
+	Tactic           string `json:"tactic"`
+	Severity         string `json:"severity"`
+	ExecVerdict      string `json:"execVerdict"`               // pass|fail|blocked|error|skipped
+	DetectionVerdict string `json:"detectionVerdict,omitempty"` // prevented|detected|undetected
+	AlertChannel     string `json:"alertChannel,omitempty"`
+	AlertProvider    string `json:"alertProvider,omitempty"`
+	AlertEventID     int    `json:"alertEventId,omitempty"`
+	AlertThreatName  string `json:"alertThreatName,omitempty"`
+	AlertCommandLine string `json:"alertCommandLine,omitempty"`
+	Confidence       string `json:"confidence,omitempty"` // high|low
+	MTTDMs           int64  `json:"mttdMs,omitempty"`
+	DurationMs       int64  `json:"durationMs"`
 }
 
 // KillChainStep is one step of the purple-team kill chain: an adversary action
@@ -235,6 +257,46 @@ func buildKillChain(results []models.SimulationResult, dets []DetectionTechnique
 		}
 	}
 	return out
+}
+
+// buildTechniqueMatrix combines each step's execution verdict with its post-run
+// EDR/alert detection verdict into a single flat row for the Detection Validation
+// table. DetectionVerdict in results (written by SubmitRunDetections) is preferred;
+// the DetectionTechnique slice (from detection_summary) is the fallback.
+func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTechnique) []TechniqueRow {
+	detIdx := make(map[string]DetectionTechnique, len(dets))
+	for _, d := range dets {
+		detIdx[d.TechniqueID] = d
+	}
+	rows := make([]TechniqueRow, 0, len(results))
+	for _, r := range results {
+		row := TechniqueRow{
+			TechniqueID:   r.Technique.ID,
+			TechniqueName: r.Technique.Name,
+			Tactic:        r.Technique.Tactic,
+			Severity:      r.Severity,
+			ExecVerdict:   string(r.Result),
+			DurationMs:    r.DurationMs,
+		}
+		if r.DetectionVerdict != "" {
+			row.DetectionVerdict = r.DetectionVerdict
+			if r.DetectionAlert != nil {
+				row.AlertChannel = r.DetectionAlert.Channel
+				row.AlertProvider = r.DetectionAlert.Provider
+				row.AlertEventID = r.DetectionAlert.EventID
+				row.AlertThreatName = r.DetectionAlert.ThreatName
+				row.AlertCommandLine = truncateStr(r.DetectionAlert.CommandLine, 80)
+				row.Confidence = r.DetectionAlert.Confidence
+				row.MTTDMs = r.DetectionAlert.MTTDMs
+			}
+		} else if d, ok := detIdx[r.Technique.ID]; ok {
+			row.DetectionVerdict = d.Verdict
+			row.Confidence = d.Confidence
+			row.MTTDMs = d.TimeToDetectMs
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 // killChainAction renders a concise adversary-action label for a kill-chain node.
@@ -701,6 +763,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	report.Detection = buildDetectionSummary(results)
 	report.AttackPath = buildAttackPath(results)
 	report.KillChain = buildKillChain(results, report.DetectionTechniques)
+	report.TechniqueMatrix = buildTechniqueMatrix(results, report.DetectionTechniques)
 
 	report.Summary = ExecutiveSummary{
 		RiskScore:          score.RiskScore,
