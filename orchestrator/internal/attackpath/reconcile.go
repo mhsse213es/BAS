@@ -1,6 +1,9 @@
 package attackpath
 
-import "strings"
+import (
+	"net"
+	"strings"
+)
 
 // reconcileHosts collapses host nodes that refer to the same physical machine but
 // were reported under different identities by different collectors. Reachability
@@ -122,8 +125,13 @@ func resolve(id string, remap map[string]string) string {
 
 func isSID(id string) bool { return strings.HasPrefix(strings.ToUpper(id), "S-1-") }
 
-// shortHost strips a DNS suffix: "DC01.corp.local" → "DC01".
+// shortHost strips a DNS suffix: "DC01.corp.local" → "DC01". IP literals are
+// left whole — an address is its own identity and must not be truncated to its
+// first octet (which would collide every host in a /8).
 func shortHost(h string) string {
+	if net.ParseIP(h) != nil {
+		return h
+	}
 	if i := strings.IndexByte(h, '.'); i > 0 {
 		return h[:i]
 	}

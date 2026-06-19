@@ -184,8 +184,13 @@ func tcpReachable(host, port string) bool {
 	return true
 }
 
-// shortHostname strips a DNS suffix: "DC01.corp.local" → "DC01".
+// shortHostname strips a DNS suffix: "DC01.corp.local" → "DC01". IP literals are
+// left whole so an address is never truncated to its first octet (which would
+// make every host in a /8 share one node ID).
 func shortHostname(h string) string {
+	if net.ParseIP(h) != nil {
+		return h
+	}
 	if i := strings.IndexByte(h, '.'); i > 0 {
 		return h[:i]
 	}

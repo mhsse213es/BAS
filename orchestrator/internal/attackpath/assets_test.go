@@ -49,7 +49,7 @@ func TestNormalizeHostKey(t *testing.T) {
 	for in, want := range map[string]string{
 		"DC01.corp.local": "DC01",
 		"  file01  ":      "FILE01",
-		"10.0.0.5":        "10",
+		"10.0.0.5":        "10.0.0.5", // IP literals are not truncated
 	} {
 		if got := NormalizeHostKey(in); got != want {
 			t.Errorf("NormalizeHostKey(%q)=%q, want %q", in, got, want)
