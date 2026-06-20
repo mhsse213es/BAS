@@ -1876,6 +1876,110 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 // Real-time technique/ability catalogs that drive the dashboard's sweep counts
 // and the selectable run picker. Read-only, no execution.
 
+// UnifiedTechnique is one deduplicated ATT&CK technique entry merging ART,
+// Caldera-emu, Caldera-atomic, and BAS-native scenario coverage into a single row.
+type UnifiedTechnique struct {
+	TechniqueID   string `json:"techniqueId"`
+	Name          string `json:"name,omitempty"`
+	Tactic        string `json:"tactic,omitempty"`
+	ARTCount      int    `json:"artCount"`    // atomic test variants
+	EmuCount      int    `json:"emuCount"`    // CTID emu abilities
+	AtomicCount   int    `json:"atomicCount"` // Caldera atomic-plugin abilities
+	BASCount      int    `json:"basCount"`    // BAS-native scenario steps
+	TotalVariants int    `json:"totalVariants"`
+}
+
+// GET /api/techniques/unified — deduplicated technique catalog across all execution
+// sources (ART, Caldera emu, Caldera atomic, BAS-native steps). Uses the in-memory
+// ART store and the Caldera ability cache — no live Caldera call. Viewer+.
+func (h *Handler) GetUnifiedTechniques(w http.ResponseWriter, r *http.Request) {
+	type entry struct {
+		name   string
+		tactic string
+		art    int
+		emu    int
+		atomic int
+		bas    int
+	}
+	m := map[string]*entry{}
+
+	// 1. ART techniques from the in-process store.
+	if h.artStore != nil {
+		for _, t := range h.artStore.ListTechniqueMeta() {
+			tid := strings.ToUpper(strings.TrimSpace(t.ID))
+			if tid == "" {
+				continue
+			}
+			e := m[tid]
+			if e == nil {
+				e = &entry{name: t.Name}
+				m[tid] = e
+			}
+			e.art += t.Tests
+		}
+	}
+
+	// 2. Caldera abilities from the shared cache (no network call).
+	calderaAbilityCache.mu.Lock()
+	abilities := calderaAbilityCache.entries
+	calderaAbilityCache.mu.Unlock()
+	for _, ab := range abilities {
+		tid := strings.ToUpper(strings.TrimSpace(ab.Technique))
+		if tid == "" {
+			continue
+		}
+		e := m[tid]
+		if e == nil {
+			e = &entry{}
+			m[tid] = e
+		}
+		if e.name == "" && ab.Name != "" {
+			e.name = ab.Name
+		}
+		if e.tactic == "" && ab.Tactic != "" {
+			e.tactic = ab.Tactic
+		}
+		switch ab.Plugin {
+		case "emu":
+			e.emu++
+		case "atomic":
+			e.atomic++
+		}
+	}
+
+	// 3. BAS-native scenario steps from the in-process engine.
+	for _, sc := range h.engine.List() {
+		for _, step := range sc.Steps {
+			tid := strings.ToUpper(strings.TrimSpace(step.TechniqueID))
+			if tid == "" {
+				continue
+			}
+			e := m[tid]
+			if e == nil {
+				e = &entry{}
+				m[tid] = e
+			}
+			e.bas++
+		}
+	}
+
+	out := make([]UnifiedTechnique, 0, len(m))
+	for tid, e := range m {
+		out = append(out, UnifiedTechnique{
+			TechniqueID:   tid,
+			Name:          e.name,
+			Tactic:        e.tactic,
+			ARTCount:      e.art,
+			EmuCount:      e.emu,
+			AtomicCount:   e.atomic,
+			BASCount:      e.bas,
+			TotalVariants: e.art + e.emu + e.atomic + e.bas,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].TechniqueID < out[j].TechniqueID })
+	respond(w, out)
+}
+
 // GET /api/art/techniques — live ART catalog (technique id, representative name,
 // atomic-test count). Returns an empty list if the ART store isn't loaded.
 func (h *Handler) GetARTTechniques(w http.ResponseWriter, r *http.Request) {

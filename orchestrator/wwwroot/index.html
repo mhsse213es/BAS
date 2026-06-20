@@ -498,6 +498,13 @@ code {
 .pfbtn { padding: 2px 8px; font-size: 0.72rem; font-family: inherit; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); cursor: pointer; white-space: nowrap; }
 .pfbtn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .pfbtn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+.utl-badge { display:inline-block; padding:1px 6px; border-radius:4px; font-size:0.66rem; font-weight:700; letter-spacing:.03em; }
+.utl-bas    { background:rgba(47,129,247,.15);  border:1px solid rgba(47,129,247,.4);  color:#2f81f7; }
+.utl-art    { background:rgba(35,134,54,.15);   border:1px solid rgba(35,134,54,.4);   color:#56d364; }
+.utl-emu    { background:rgba(163,113,247,.15); border:1px solid rgba(163,113,247,.4); color:#a371f7; }
+.utl-atomic { background:rgba(210,153,34,.15);  border:1px solid rgba(210,153,34,.4);  color:#d29922; }
+.utl-num  { font-family:var(--font-mono); font-size:0.8rem; }
+.utl-zero { color:var(--muted); opacity:0.35; }
 
 /* ── Modals ────────────────────────────────────────────────── */
 .overlay {
@@ -1743,6 +1750,63 @@ code {
         <div id="cov-toolbar" style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;flex-wrap:wrap"></div>
         <div class="dash-panel"><div class="dash-panel-body" id="cov-matrix" style="overflow-x:auto;padding:0.75rem"><div class="empty" style="padding:2rem">Loading matrix…</div></div></div>
         <div class="tiny muted" id="cov-foot" style="margin-top:0.75rem"></div>
+
+        <!-- Unified Technique Library — deduplicated view across all execution sources -->
+        <div class="dash-panel" style="margin-top:1.25rem">
+          <div class="dash-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">
+            <span>Unified Technique Library</span>
+            <span id="utl-summary" class="card-meta" style="font-weight:400"></span>
+          </div>
+          <div class="dash-panel-body" style="padding:0.75rem 0.9rem">
+            <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem">
+              Each row is one ATT&amp;CK technique ID. Counts show how many execution variants exist per source — not whether any were run. The <em>Detected</em> column comes from actual run results.
+            </div>
+            <!-- Source filter chips -->
+            <div style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-bottom:0.6rem;align-items:center">
+              <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Source</span>
+              <button class="pfbtn active" data-uf="src" data-val="all"    onclick="setUTLFilter('src','all')">All</button>
+              <button class="pfbtn"        data-uf="src" data-val="bas"    onclick="setUTLFilter('src','bas')">BAS</button>
+              <button class="pfbtn"        data-uf="src" data-val="art"    onclick="setUTLFilter('src','art')">ART</button>
+              <button class="pfbtn"        data-uf="src" data-val="emu"    onclick="setUTLFilter('src','emu')">Emu</button>
+              <button class="pfbtn"        data-uf="src" data-val="atomic" onclick="setUTLFilter('src','atomic')">Atomic</button>
+              <button class="pfbtn"        data-uf="src" data-val="multi"  onclick="setUTLFilter('src','multi')">Multi-source</button>
+              <span style="color:var(--border);margin:0 4px">|</span>
+              <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Tactic</span>
+              <select id="utl-tactic" onchange="renderUTL()"
+                      style="padding:2px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
+                <option value="all">All tactics</option>
+              </select>
+              <input id="utl-search" type="text" placeholder="Filter technique…" oninput="renderUTL()" autocomplete="off"
+                     style="padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit;min-width:160px">
+            </div>
+            <!-- Source legend -->
+            <div style="display:flex;gap:0.65rem;flex-wrap:wrap;margin-bottom:0.6rem;font-size:0.7rem;color:var(--muted)">
+              <span><span class="utl-badge utl-bas">BAS</span> Native scenario step</span>
+              <span><span class="utl-badge utl-art">ART</span> Atomic Red Team test</span>
+              <span><span class="utl-badge utl-emu">Emu</span> CTID adversary-emulation ability</span>
+              <span><span class="utl-badge utl-atomic">Atomic</span> Caldera atomic-plugin ability</span>
+            </div>
+            <div class="tbl-wrap" id="utl-wrap">
+              <table id="utl-table">
+                <thead>
+                  <tr>
+                    <th style="min-width:100px">Technique</th>
+                    <th style="min-width:200px">Name</th>
+                    <th style="min-width:100px">Tactic</th>
+                    <th style="text-align:center;min-width:50px">BAS</th>
+                    <th style="text-align:center;min-width:50px">ART</th>
+                    <th style="text-align:center;min-width:50px">Emu</th>
+                    <th style="text-align:center;min-width:55px">Atomic</th>
+                    <th style="text-align:center;min-width:55px">Total</th>
+                    <th style="text-align:center;min-width:55px">Sources</th>
+                  </tr>
+                </thead>
+                <tbody id="utl-body"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+              </table>
+            </div>
+            <div id="utl-foot" class="tiny muted" style="margin-top:0.5rem;text-align:right"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Attack Paths -->
@@ -2437,7 +2501,7 @@ function showTab(name) {
   activateTab(name);
   if (name === 'agents') loadAgents();
   if (name === 'campaigns') closeCampaignDetail();
-  if (name === 'coverage') loadCoverage();
+  if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); }
   if (name === 'findings') loadFindings();
   if (name === 'remediation') loadRemediations();
   if (name === 'reports') loadReports();
@@ -3486,6 +3550,100 @@ function confirmAdversaryRun() {
     if (btn) btn.disabled = false;
   });
 }
+
+// ── Unified Technique Library ─────────────────────────────────────────────────
+var _utlData = [];          // raw response from /api/techniques/unified
+var _utlFilter = { src: 'all' }; // active source filter
+
+function loadUnifiedTechniques() {
+  apicall('/api/techniques/unified').catch(function() { return []; }).then(function(d) {
+    _utlData = Array.isArray(d) ? d : [];
+    // Populate tactic dropdown.
+    var sel = document.getElementById('utl-tactic');
+    if (sel) {
+      var tacSet = {};
+      _utlData.forEach(function(t) { if (t.tactic) tacSet[t.tactic] = true; });
+      sel.innerHTML = '<option value="all">All tactics</option>' +
+        Object.keys(tacSet).sort().map(function(t) { return '<option value="' + x(t) + '">' + x(t) + '</option>'; }).join('');
+    }
+    renderUTL();
+  });
+}
+
+function setUTLFilter(dim, val) {
+  _utlFilter[dim] = val;
+  document.querySelectorAll('.pfbtn[data-uf="' + dim + '"]').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-val') === val);
+  });
+  renderUTL();
+}
+
+function srcCount(t) {
+  return (t.basCount > 0 ? 1 : 0) + (t.artCount > 0 ? 1 : 0) +
+         (t.emuCount > 0 ? 1 : 0) + (t.atomicCount > 0 ? 1 : 0);
+}
+
+function renderUTL() {
+  var q = ((document.getElementById('utl-search') || {}).value || '').trim().toLowerCase();
+  var tactic = ((document.getElementById('utl-tactic') || {}).value) || 'all';
+  var src = _utlFilter.src;
+
+  var filtered = _utlData.filter(function(t) {
+    if (q && (t.techniqueId + ' ' + (t.name || '') + ' ' + (t.tactic || '')).toLowerCase().indexOf(q) === -1) return false;
+    if (tactic !== 'all' && (t.tactic || '') !== tactic) return false;
+    if (src === 'bas'    && !t.basCount)   return false;
+    if (src === 'art'    && !t.artCount)   return false;
+    if (src === 'emu'    && !t.emuCount)   return false;
+    if (src === 'atomic' && !t.atomicCount) return false;
+    if (src === 'multi'  && srcCount(t) < 2) return false;
+    return true;
+  });
+
+  // Summary header.
+  var sumEl = document.getElementById('utl-summary');
+  var totBAS = 0, totART = 0, totEmu = 0, totAtomic = 0;
+  _utlData.forEach(function(t) {
+    if (t.basCount)   totBAS++;
+    if (t.artCount)   totART++;
+    if (t.emuCount)   totEmu++;
+    if (t.atomicCount) totAtomic++;
+  });
+  if (sumEl) sumEl.textContent = _utlData.length.toLocaleString() + ' unique techniques — ' +
+    'BAS ' + totBAS + ' · ART ' + totART + ' · Emu ' + totEmu + ' · Atomic ' + totAtomic;
+
+  var cov = window._covSt || {};
+  var rows = filtered.map(function(t, i) {
+    var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
+    var verdict = cov[t.techniqueId] || '';
+    var vdot = verdict === 'pass'  ? '<span style="color:var(--success)">●</span>' :
+               verdict === 'fail'  ? '<span style="color:var(--danger)">●</span>'  :
+               verdict === 'error' ? '<span style="color:var(--muted)">●</span>'   : '';
+    function cell(n, cls) {
+      return '<td style="text-align:center">' +
+        (n > 0 ? '<span class="utl-num"><span class="utl-badge ' + cls + '">' + n + '</span></span>'
+               : '<span class="utl-zero">—</span>') + '</td>';
+    }
+    var nsrc = srcCount(t);
+    var srcBadge = '<span style="font-size:0.7rem;color:' + (nsrc > 1 ? 'var(--accent)' : 'var(--muted)') + '">' + nsrc + (nsrc === 1 ? ' src' : ' srcs') + '</span>';
+    return '<tr style="' + bg + '">' +
+      '<td style="font-family:var(--font-mono);font-size:0.8rem;color:var(--accent)">' + x(t.techniqueId) + ' ' + vdot + '</td>' +
+      '<td style="font-size:0.8rem;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + x(t.name || '') + '">' + x(t.name || '—') + '</td>' +
+      '<td style="font-size:0.75rem;color:var(--muted)">' + x(t.tactic || '—') + '</td>' +
+      cell(t.basCount,   'utl-bas') +
+      cell(t.artCount,   'utl-art') +
+      cell(t.emuCount,   'utl-emu') +
+      cell(t.atomicCount,'utl-atomic') +
+      '<td style="text-align:center;font-family:var(--font-mono);font-size:0.78rem;color:var(--text)">' + t.totalVariants + '</td>' +
+      '<td style="text-align:center">' + srcBadge + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var body = document.getElementById('utl-body');
+  if (body) body.innerHTML = rows || '<tr><td colspan="9" class="empty">No techniques match.</td></tr>';
+  var foot = document.getElementById('utl-foot');
+  if (foot) foot.textContent = 'Showing ' + filtered.length.toLocaleString() + ' of ' + _utlData.length.toLocaleString() + ' techniques';
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function loadCoverage() {
   Promise.all([apicall('/api/attack/matrix'), apicall('/api/scenarios/runs')]).then(function(res) {
