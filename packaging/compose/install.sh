@@ -387,7 +387,7 @@ mode_install() {
 
   local LOG_FILE="${DATA_DIR}/install.log"
 
-  step "1/8  Prerequisite checks"
+  step "1/9  Prerequisite checks"
   local results=()
   results+=( "$(_check_os)" )
   results+=( "$(_check_docker)" )
@@ -402,12 +402,12 @@ mode_install() {
   results+=( "$(_check_licence "$LIC_PATH")" )
   render_checks "${results[@]}" || exit 1
 
-  step "2/8  Creating data directories"
+  step "2/9  Creating data directories"
   mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound}
   chmod 750 "${DATA_DIR}"
   log "Created: ${DATA_DIR}"
 
-  step "3/8  Loading Docker images (air-gap safe — no pull)"
+  step "3/9  Loading Docker images (air-gap safe — no pull)"
   local images_dir="${SCRIPT_DIR}/images"
   if [[ -d "$images_dir" ]]; then
     for tar in "${images_dir}"/*.tar; do
@@ -420,7 +420,7 @@ mode_install() {
     warn "images/ directory not found — Docker will attempt to pull (requires internet)"
   fi
 
-  step "4/8  Staging bundle files"
+  step "4/9  Staging bundle files"
   # Scenarios
   if [[ -d "${SCRIPT_DIR}/scenarios" ]]; then
     cp -r "${SCRIPT_DIR}/scenarios/." "${DATA_DIR}/scenarios/"
@@ -451,20 +451,26 @@ mode_install() {
     log "TLS certificates installed"
   fi
 
-  step "5/8  Writing .env (root-readable only)"
+  step "5/9  Writing .env (root-readable only)"
   _write_env
   log ".env written to ${DATA_DIR}/.env"
 
-  step "6/8  Installing docker-compose.yml"
+  step "6/9  Installing docker-compose.yml"
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
   log "Compose file installed"
 
-  step "7/8  Starting stack"
-  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
-  log "Stack started"
+  step "7/9  Installing systemd service (auto-start on boot)"
+  _write_systemd_unit
+  systemctl daemon-reload
+  systemctl enable "${SERVICE_NAME}"
+  log "Systemd service enabled: ${SERVICE_NAME}.service"
+
+  step "8/9  Starting stack"
+  systemctl start "${SERVICE_NAME}"
+  log "Stack started via systemd"
   _wait_healthy
 
-  step "8/8  Creating admin user"
+  step "9/9  Creating admin user"
   _create_admin
 
   _write_install_log "$LOG_FILE"
@@ -513,11 +519,14 @@ mode_upgrade() {
   [[ -d "${SCRIPT_DIR}/art-payloads"]] && cp -r "${SCRIPT_DIR}/art-payloads/." "${DATA_DIR}/art-payloads/"
   [[ -f "$LIC_PATH"                 ]] && { cp "$LIC_PATH" "${DATA_DIR}/bas.lic"; chmod 640 "${DATA_DIR}/bas.lic"; }
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
-  _write_env   # refreshes BAS_VERSION; preserves existing secrets via load_config
+  _write_env        # refreshes BAS_VERSION; preserves existing secrets via load_config
+  _write_systemd_unit  # refresh WorkingDirectory in case DATA_DIR changed
+  systemctl daemon-reload
   log "Files updated"
 
   step "4/5  Rolling restart"
-  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
+  systemctl restart "${SERVICE_NAME}" 2>/dev/null \
+    || (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
   log "Stack restarted"
   _wait_healthy
 
@@ -706,6 +715,33 @@ mode_uninstall() {
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+_write_systemd_unit() {
+  local unit_file="/etc/systemd/system/${SERVICE_NAME}.service"
+  cat > "$unit_file" << EOF
+[Unit]
+Description=Audspect BAS Platform (Docker Compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=${DATA_DIR}
+EnvironmentFile=${DATA_DIR}/.env
+ExecStart=/usr/bin/docker compose -p ${COMPOSE_PROJECT} up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -p ${COMPOSE_PROJECT} down
+TimeoutStartSec=300
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  chmod 644 "$unit_file"
+}
+
 _write_env() {
   local env_file="${DATA_DIR}/.env"
   cat > "$env_file" << EOF

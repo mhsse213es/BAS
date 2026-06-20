@@ -1,6 +1,10 @@
+# NOTE: This file is a reference template only.
+# The installer writes the actual unit to /etc/systemd/system/audspect.service
+# with the correct WorkingDirectory for your DATA_DIR.
+# Do not install this file manually — run: sudo bash install.sh --install --config setup.conf
+
 [Unit]
-Description=BAS Platform (Docker Compose)
-Documentation=https://github.com/audspect/bas
+Description=Audspect BAS Platform (Docker Compose)
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
@@ -8,17 +12,12 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/bas-platform
-EnvironmentFile=/opt/bas-platform/.env
-
-ExecStartPre=-/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml pull --quiet
-ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
-ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml down
-ExecReload=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml pull --quiet
-ExecReload=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
-
+WorkingDirectory=/opt/audspect
+EnvironmentFile=/opt/audspect/.env
+ExecStart=/usr/bin/docker compose -p audspect up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -p audspect down
 TimeoutStartSec=300
-TimeoutStopSec=60
+TimeoutStopSec=120
 Restart=on-failure
 RestartSec=10
 
