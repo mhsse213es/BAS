@@ -243,11 +243,11 @@ if (-not (Test-Path $rsrcBin)) {
 }
 if (Test-Path $rsrcBin) {
     Push-Location $AgentDir
-    & $rsrcBin -manifest bas_agent.exe.manifest -arch amd64 -o rsrc.syso
+    & $rsrcBin -manifest bas_agent.exe.manifest -ico logo.ico -arch amd64 -o rsrc.syso
     $rsrcExit = $LASTEXITCODE
     Pop-Location
-    if ($rsrcExit -eq 0) { Log "    rsrc.syso generated - manifest embedded" }
-    else { Warn "    rsrc failed - manifest will not be embedded" }
+    if ($rsrcExit -eq 0) { Log "    rsrc.syso generated - manifest + icon embedded" }
+    else { Warn "    rsrc failed - manifest + icon will not be embedded" }
 } else {
     Warn "    rsrc not available - agent will runtime-elevate via ShellExecuteW"
 }
@@ -264,11 +264,11 @@ Log "Building installer EXE (embeds the single agent binary)..."
 Log "  Embedding UAC manifest into installer..."
 if (Test-Path $rsrcBin) {
     Push-Location $InstallerDir
-    & $rsrcBin -manifest installer.exe.manifest -arch amd64 -o rsrc.syso
+    & $rsrcBin -manifest installer.exe.manifest -ico logo.ico -arch amd64 -o rsrc.syso
     $rsrcInstExit = $LASTEXITCODE
     Pop-Location
-    if ($rsrcInstExit -eq 0) { Log "    rsrc.syso generated - installer manifest embedded" }
-    else { Warn "    rsrc failed for installer - manifest will not be embedded" }
+    if ($rsrcInstExit -eq 0) { Log "    rsrc.syso generated - installer manifest + icon embedded" }
+    else { Warn "    rsrc failed for installer - manifest + icon will not be embedded" }
 } else {
     Warn "    rsrc not available - installer will use runtime self-elevation"
 }
@@ -316,19 +316,16 @@ Log "  Manifest copied: bas_agent_windows.exe.manifest (side-by-side fallback)"
 Log "Copying installer files..."
 
 $ComposeDir = Join-Path $RepoRoot "packaging\compose"
-Copy-Item "$ComposeDir\setup.sh"                "$OutDir\setup.sh"
+Copy-Item "$ComposeDir\install.sh"              "$OutDir\install.sh"
+Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf.template"
 Copy-Item "$ComposeDir\docker-compose.yml"      "$OutDir\docker-compose.yml"
-Copy-Item "$ComposeDir\docker-compose.prod.yml" "$OutDir\docker-compose.prod.yml"
 Copy-Item "$ComposeDir\.env.example"            "$OutDir\.env.example"
 Copy-Item "$ComposeDir\systemd\bas-compose.service" "$OutDir\systemd\bas-compose.service"
 
-Copy-Item "$ComposeDir\setup.conf" "$OutDir\setup.conf"
-
 # Normalize the Linux-targeted scripts/config to LF. (verify.sh / verify-sig.sh
 # are normalized at their own copy sites below.)
-foreach ($f in @("setup.sh", "setup.conf", ".env.example",
-                 "docker-compose.yml", "docker-compose.prod.yml",
-                 "systemd\bas-compose.service")) {
+foreach ($f in @("install.sh", "setup.conf.template", ".env.example",
+                 "docker-compose.yml", "systemd\bas-compose.service")) {
     ConvertToLF (Join-Path $OutDir $f)
 }
 Log "  Normalized bundled shell/config files to LF"
@@ -350,7 +347,7 @@ if (Test-Path $WwwrootDir) {
 
 # -- 6b. Copy ART external payloads (gsecdump, etc.) ---------------------------
 # Binaries staged on the build host in packaging\art-payloads are baked into the
-# bundle; setup.sh stages them and compose bind-mounts them to /art-payloads, so
+# bundle; install.sh stages them and compose bind-mounts them to /art-payloads, so
 # the client gets them automatically. Empty is fine (payload atomics skip).
 $PayloadDir = Join-Path $RepoRoot "packaging\art-payloads"
 $PayloadOut = Join-Path $OutDir "art-payloads"
@@ -375,7 +372,7 @@ if (Test-Path $PayloadDir) {
 }
 
 # -- 7. Write VERSION file ----------------------------------------------------
-# WriteAllText → UTF-8 without BOM. setup.sh reads this to tag the images in
+# WriteAllText → UTF-8 without BOM. install.sh reads this to tag the images in
 # .env; a BOM here (which Out-File -Encoding utf8 adds on PS 5.1) would corrupt
 # the version string and break compose image resolution.
 [System.IO.File]::WriteAllText("$OutDir\VERSION", $Version)
@@ -542,5 +539,7 @@ if ($Signed) {
 }
 Write-Host "    unzip $zipLeaf"
 Write-Host "    cd $OutName && bash verify.sh                       # verify file integrity"
-Write-Host "    sudo bash setup.sh --offline"
+Write-Host "    cp setup.conf.template setup.conf && vi setup.conf  # fill in values"
+Write-Host "    sudo bash install.sh --check --config setup.conf    # attach output to CAB"
+Write-Host "    sudo bash install.sh --install --config setup.conf"
 Write-Host ""

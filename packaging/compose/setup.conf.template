@@ -1,0 +1,73 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Audspect BAS Platform — Installation Configuration Template
+#
+# Copy this file to setup.conf and fill in your values before the maintenance
+# window. All required fields are marked with  ← REQUIRED.
+# Run prereq check:   sudo bash install.sh --check --config setup.conf
+# Run install:        sudo bash install.sh --install --config setup.conf
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── [network] ──────────────────────────────────────────────────────────────────
+# BAS_HOST is informational only (used in report URLs and setup summary).
+# BAS_PORT is the external TCP port the orchestrator dashboard binds to.
+# Default 9443 avoids collisions with common enterprise products
+# (Trellix ePO 8443/8444, Splunk 8089, CrowdStrike 443).
+# BAS_TLS enables HTTPS termination inside the orchestrator (requires TLS_CERT
+# and TLS_KEY below). Leave false if TLS is handled by an upstream load-balancer.
+
+BAS_HOST=                         # ← REQUIRED  e.g. bas.corp.internal
+BAS_PORT=9443                     # Default: 9443
+BAS_TLS=false                     # true | false
+
+# ── [tls] ──────────────────────────────────────────────────────────────────────
+# Required only when BAS_TLS=true. Paths are on the SERVER (not the bundle).
+# The installer copies these files into ${DATA_DIR}/certs/ and sets chmod 640.
+# Supported: PEM-encoded certificate + private key (RSA or ECDSA).
+
+TLS_CERT=                         # e.g. /etc/pki/tls/certs/bas.crt
+TLS_KEY=                          # e.g. /etc/pki/tls/private/bas.key
+
+# ── [storage] ──────────────────────────────────────────────────────────────────
+# DATA_DIR is the root directory for all runtime data (Postgres data, logs,
+# backups, scenarios). Minimum 10 GB free on the target partition.
+# The installer creates sub-directories and sets chmod 750.
+
+DATA_DIR=/opt/audspect            # Default: /opt/audspect
+
+# ── [database] ─────────────────────────────────────────────────────────────────
+# Password for the internal Postgres user (bas_user).
+# Minimum 8 characters. Generated once; do not change after first install
+# without a full DB re-initialisation or manual ALTER ROLE.
+# Postgres is NEVER exposed externally — only reachable inside Docker bridge.
+
+DB_PASSWORD=                      # ← REQUIRED  min 8 chars
+
+# ── [logging] ──────────────────────────────────────────────────────────────────
+# Log retention window in days. Logs older than this are pruned on each restart.
+# SEBI CSCRF / RBI ISMS mandates typically require 180+ days for MII/NBFC.
+# Set to 0 to disable automatic pruning.
+
+LOG_RETENTION_DAYS=90             # Default: 90
+
+# ── [security] ─────────────────────────────────────────────────────────────────
+# JWT_SECRET signs all dashboard session tokens. Minimum 32 hex chars.
+# AGENT_SECRET authenticates enrolled BAS agents. Minimum 24 hex chars.
+# Both are AUTO-GENERATED if left blank. Pre-set them here to ensure a
+# deterministic value across a clustered or DR deployment.
+# Values are written to ${DATA_DIR}/.env (chmod 600, readable by root only).
+
+JWT_SECRET=                       # Auto-generated if blank  (recommended)
+AGENT_SECRET=                     # Auto-generated if blank  (recommended)
+
+# ── [admin] ────────────────────────────────────────────────────────────────────
+# First-run admin account. Created once at install; ignored on upgrade.
+# Use a service account email owned by the security operations team.
+
+ADMIN_EMAIL=                      # ← REQUIRED  e.g. bas-admin@corp.internal
+ADMIN_PASSWORD=                   # ← REQUIRED  min 10 chars
+
+# ── [licence] ──────────────────────────────────────────────────────────────────
+# Path to the Audspect licence file (.lic) delivered with the bundle.
+# The installer copies it to ${DATA_DIR}/bas.lic (chmod 640).
+
+LIC_PATH=                         # ← REQUIRED  e.g. /home/ubuntu/client.lic

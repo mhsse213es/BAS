@@ -1,20 +1,20 @@
 version: "3.9"
 
-# BAS Platform — Docker Compose (single-server / SMB tier)
-# Generated .env required — run setup.sh to create it.
+# BAS Platform — Docker Compose (single-server / BFSI tier)
+# Generated .env required — run: sudo bash install.sh --install --config setup.conf
 
 services:
 
   # ── PostgreSQL ───────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: bas-postgres
+    container_name: audspect-postgres
     environment:
       POSTGRES_DB:       ${POSTGRES_DB:-bas_platform}
       POSTGRES_USER:     ${POSTGRES_USER:-bas_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - bas-postgres-data:/var/lib/postgresql/data
+      - audspect-postgres-data:/var/lib/postgresql/data
     networks:
       - bas-internal
     restart: unless-stopped
@@ -28,12 +28,12 @@ services:
   # ── Caldera (MITRE ATT&CK simulation engine) ─────────────────────────────────
   caldera:
     image: ${REGISTRY:-}bas-caldera:${BAS_VERSION:-latest}
-    container_name: bas-caldera
+    container_name: audspect-caldera
     environment:
       API_KEY_RED:  ${CALDERA_API_KEY:-BASPlatform2024}
       API_KEY_BLUE: ${CALDERA_API_KEY_BLUE:-BASBlue2024}
-    ports:
-      - "8888:8888"
+    expose:
+      - "8888"
     networks:
       - bas-internal
     restart: unless-stopped
@@ -55,7 +55,7 @@ services:
   # service is absent the orchestrator falls back to its built-in PDF renderer.
   chrome:
     image: chromedp/headless-shell:latest
-    container_name: bas-chrome
+    container_name: audspect-chrome
     command:
       - "--no-sandbox"
       - "--disable-gpu"
@@ -71,7 +71,7 @@ services:
   # ── BAS Orchestrator ─────────────────────────────────────────────────────────
   orchestrator:
     image: ${REGISTRY:-}bas-orchestrator:${BAS_VERSION:-latest}
-    container_name: bas-orchestrator
+    container_name: audspect-orchestrator
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,7 +83,7 @@ services:
       DATABASE_URL:     "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=disable"
       JWT_SECRET:       ${JWT_SECRET}
       AGENT_SECRET:     ${AGENT_SECRET:-}
-      HTTP_PORT:        "9000"
+      HTTP_PORT:        "9443"
       SCENARIOS_DIR:    /scenarios
       BAS_LICENSE_PATH: /etc/bas/bas.lic
       CALDERA_URL:      "${CALDERA_URL:-http://caldera:8888}"
@@ -115,12 +115,12 @@ services:
       # SharpHound is not used.
       - ${SHARPHOUND_DIR:-./sharphound}:/sharphound:ro
     ports:
-      - "${DASHBOARD_PORT:-9000}:9000"
+      - "${BAS_PORT:-9443}:9443"
     networks:
       - bas-internal
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9443/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -131,5 +131,5 @@ networks:
     driver: bridge
 
 volumes:
-  bas-postgres-data:
+  audspect-postgres-data:
     driver: local
