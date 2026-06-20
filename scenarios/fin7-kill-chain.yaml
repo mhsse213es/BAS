@@ -1,0 +1,260 @@
+id: fin7-kill-chain
+name: FIN7 Kill Chain — BFSI Financial Sector Targeting (Phase 7)
+description: >
+  Five-stage telemetry-safe emulation of FIN7 (Carbanak / Navigator Group)
+  post-initial-access tradecraft targeting financial sector endpoints. Based on
+  US DoJ indictment (2018), Mandiant FIN7 reports, and CARBANAK/BABYMETAL
+  technical analysis (2019-2023).
+
+  FIN7 is a financially motivated threat actor with documented targeting of
+  banks, POS terminals, ATM software, and payment processors. In Indian BFSI
+  context: UPI payment platforms, CBS (Core Banking Systems), and SWIFT
+  operator workstations are primary targets.
+
+  KILL CHAIN STAGES:
+    1. Process and Window Enumeration  — tasklist + visible window scan to find CBS/POS processes (T1057)
+    2. System and Network Profiling    — selective systeminfo + adapter enumeration (T1082)
+    3. Screen Capture Surface          — screen enumeration + Drawing assembly load (T1113)
+    4. SMB Admin Share Pivot Readiness — admin share loopback probe for lateral C2 (T1021.002)
+    5. Outbound HTTP Beacon Pattern    — loopback/RFC5737 HTTPS probe to simulate C2 channel (T1071.001)
+
+  SAFETY: No process injection, no keylogger driver, no real C2. Screen
+  capture step ONLY loads System.Drawing assembly and reads screen dimensions
+  (no screenshot taken, no file written). HTTP probe uses localhost:8443 or
+  RFC5737 (192.0.2.x) — guaranteed non-routable. All [BAS-SIM-FIN7] tagged.
+  PRODUCTION-SAFE: all five stages run in telemetry mode.
+  Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - fin7
+  - carbanak
+  - navigator
+  - bfsi
+  - financial
+  - cbs
+  - pos
+  - kill-chain
+  - phase7
+  - t1057
+  - t1082
+  - t1113
+  - t1021
+  - t1071
+  - mitre
+mitre_phases:
+  - discovery
+  - collection
+  - lateral-movement
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Process & Window Enumeration: CBS / POS Targeting (T1057)
+  # ---------------------------------------------------------------------------
+  - name: "FIN7 Stage 1 — Process Enumeration for CBS and Financial Application Targeting (T1057)"
+    technique_id: T1057
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs tasklist /v and Get-Process to enumerate running processes, then checks for names commonly associated with CBS, POS, ATM, and financial middleware (Finacle, BaNCS, Flexcube, etc.). Read-only. FIN7 CARBANAK specifically hunts for financial application processes before deploying keylogger or screen-capture modules."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: tasklist.exe /v (process with verbose output — FIN7 recon pattern)"
+      - "Security EID 4688: tasklist.exe spawned by powershell.exe"
+      - "WMI-Activity EID 5857: Get-Process via WMI Win32_Process"
+    detection:
+      - "EDR: tasklist /v from PowerShell parent  -  Sigma rule proc_creation_win_tasklist_discovery.yml"
+      - "SIEM: tasklist.exe invoked followed by targeted string searches — FIN7/CARBANAK pre-keylog recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $allProcs = & tasklist.exe /v 2>&1 | Out-String
+      $runningProcs = Get-Process -ErrorAction SilentlyContinue | Select-Object Name, Id, MainWindowTitle
+      # FIN7 target process fingerprints (CBS, POS, ATM, payment middleware)
+      $finTargets = @('finacle','tcs','flexcube','temenos','t24','misys','bancs','infosys','sbi','neft','rtgs',
+                      'swift','pos','atm','upi','payment','banking','cbs','wincor','diebold','ncr','nautilus')
+      $matched = $runningProcs | Where-Object {
+        $name = $_.Name.ToLower(); $title = $_.MainWindowTitle.ToLower()
+        $finTargets | Where-Object { $name -match $_ -or $title -match $_ }
+      }
+      $procCount = @($runningProcs).Count
+      $matchCount = @($matched).Count
+      Write-Output "EXEC T1057: $procCount processes enumerated. Financial application processes matched: $matchCount. FIN7 CARBANAK uses this to decide which modules to deploy (keylogger for CBS operator, screen-capture for ATM management console). [BAS-SIM-FIN7-S1]"
+      if ($matchCount -gt 0) {
+        $matchNames = ($matched | Select-Object -ExpandProperty Name) -join ', '
+        Write-Output "FAIL: Financial/banking application process(es) detected on endpoint: [$matchNames]. FIN7 would deploy CARBANAK keylogger module targeting these processes. Isolate CBS workstations to dedicated VLAN with application whitelisting."
+      } else {
+        Write-Output "PASS: No known financial application processes found on this endpoint. FIN7 CBS-targeting recon found no direct payment system exposure. [BAS-SIM-FIN7-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — System and Network Profiling (T1082)
+  # ---------------------------------------------------------------------------
+  - name: "FIN7 Stage 2 — Selective System and Network Profiling (T1082)"
+    technique_id: T1082
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs selective systeminfo queries (OS, domain membership, hotfixes) and Get-NetIPAddress to profile the target. FIN7 CARBANAK uses this to identify: OS version for exploit selection, domain membership for lateral movement, network segment for SWIFT/interbank connectivity. Read-only. Generates Sysmon EID 1 (systeminfo.exe) and ScriptBlock EID 4104."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: systeminfo.exe (system profile recon)"
+      - "PowerShell EID 4104: Get-NetIPAddress / ipconfig"
+      - "Security EID 4688: systeminfo.exe spawned by powershell.exe"
+    detection:
+      - "EDR: systeminfo.exe from PowerShell parent  -  Sigma rule proc_creation_win_systeminfo_recon.yml"
+      - "SIEM: systeminfo.exe + network adapter enumeration in <60s window — FIN7 profiling IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $osName    = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -EA SilentlyContinue).ProductName
+      $osBuild   = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -EA SilentlyContinue).CurrentBuildNumber
+      $domain    = $env:USERDOMAIN
+      $hostname  = $env:COMPUTERNAME
+      $adapters  = Get-NetIPAddress -AddressFamily IPv4 -EA SilentlyContinue | Where-Object { $_.IPAddress -ne '127.0.0.1' }
+      $ipList    = ($adapters | ForEach-Object { $_.IPAddress + '/' + $_.PrefixLength }) -join ', '
+      $hotfixCount = (Get-HotFix -EA SilentlyContinue).Count
+      Write-Output "EXEC T1082: system profile. OS=[$osName build $osBuild], domain=$domain, hostname=$hostname, IPs=[$ipList], hotfixes=$hotfixCount. FIN7 uses OS build to select exploits; domain membership to select lateral-move method; IP range to find SWIFT gateway segments. [BAS-SIM-FIN7-S2]"
+      Write-Output "FAIL: System profiling via PowerShell + registry ran unblocked. Sysmon EID 1 (systeminfo.exe) and EID 4104 should be ingested and correlated with Stage 1 process enumeration for multi-stage FIN7 detection."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Screen Capture Surface: System.Drawing Load (T1113)
+  # ---------------------------------------------------------------------------
+  - name: "FIN7 Stage 3 — Screen Capture Surface Assessment (T1113)"
+    technique_id: T1113
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Loads System.Windows.Forms and System.Drawing assemblies and reads screen dimensions only — no screenshot file created, no pixel data captured. Generates Assembly Load EID (if .NET assembly auditing enabled) and Sysmon EID 7 (image load). FIN7 CARBANAK screen module captures CBS operator screens at timed intervals."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 7: System.Drawing.dll / System.Windows.Forms.dll loaded by powershell.exe"
+      - "PowerShell EID 4104: Add-Type -AssemblyName System.Drawing (ScriptBlock logging)"
+      - ".NET CLR assembly load event (if ETW .NET provider enabled)"
+    detection:
+      - "EDR: System.Drawing assembly loaded by PowerShell — Sigma rule posh_ps_susp_screen_capture.yml"
+      - "SIEM: Add-Type System.Drawing or System.Windows.Forms in EID 4104 — FIN7/CARBANAK screen module IOC"
+      - "EDR: PowerShell invoking screen capture API chain: Assembly load + Screen.AllScreens"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        Add-Type -AssemblyName 'System.Windows.Forms' -ErrorAction Stop
+        Add-Type -AssemblyName 'System.Drawing' -ErrorAction Stop
+        $screens = [System.Windows.Forms.Screen]::AllScreens
+        $screenInfo = $screens | ForEach-Object {
+          "Display$($screens.IndexOf($_)+1): $($_.Bounds.Width)x$($_.Bounds.Height) primary=$($_.Primary)"
+        }
+        Write-Output "EXEC T1113: screen capture surface assessed. $($screens.Count) display(s): $($screenInfo -join '; '). System.Drawing + System.Windows.Forms loaded — Sysmon EID 7 expected. NO screenshot taken. FIN7 CARBANAK captures 640x480 crops at 10-second intervals on financial operator workstations. [BAS-SIM-FIN7-S3]"
+        Write-Output "FAIL: System.Drawing/Windows.Forms assemblies loaded by PowerShell without EDR block. An EID 4104 ScriptBlock rule matching 'System.Drawing' or 'Screen.AllScreens' should alert. Defender ASR rule 'Block Win32 API calls from Office macros' does not cover standalone PS — EDR coverage gap."
+      } catch {
+        Write-Output "PASS: System.Drawing or Windows.Forms assembly load failed or blocked — $($_.Exception.Message). Screen capture surface is restricted. [BAS-SIM-FIN7-S3]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — SMB Admin Share Pivot Readiness (T1021.002)
+  # ---------------------------------------------------------------------------
+  - name: "FIN7 Stage 4 — SMB Lateral Movement Readiness (T1021.002)"
+    technique_id: T1021.002
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Checks if local admin shares (ADMIN$, C$, IPC$) are accessible via loopback, tests SMB1 enablement, and checks if SMB signing is required. Loopback net use only — no remote hosts. FIN7 CARBANAK propagates via SMB admin shares using stolen credentials to deploy the encryptor or backdoor on additional workstations."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: net.exe use \\\\127.0.0.1\\ADMIN$ (loopback admin share probe)"
+      - "Security EID 5140: network share ADMIN$ accessed (if accessible)"
+      - "Security EID 4624: Logon Type 3 from 127.0.0.1 to ADMIN$"
+    detection:
+      - "EDR: net.exe ADMIN$ loopback from PowerShell — lateral movement readiness IOC"
+      - "SIEM: EID 5140 ADMIN$ access + EID 4624 Type 3 loopback in same session — FIN7 propagation pattern"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $adminOut = & net use '\\127.0.0.1\ADMIN$' 2>&1 | Out-String
+      & net use '\\127.0.0.1\ADMIN$' /delete 2>&1 | Out-Null
+      $adminOk  = $adminOut -match 'command completed successfully'
+      $authFail = $adminOut -match 'System error 5|Access is denied|System error 1326'
+      # SMB1 status
+      $smb1 = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' -Name 'SMB1' -EA SilentlyContinue).SMB1
+      $smb1Enabled = ($smb1 -ne 0)
+      # SMB signing
+      $sigReq = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' -Name 'RequireSecuritySignature' -EA SilentlyContinue).RequireSecuritySignature
+      $smbSigningReq = ($sigReq -eq 1)
+      Write-Output "EXEC T1021.002: ADMIN$_accessible=$adminOk, SMB1_enabled=$smb1Enabled, SMB_signing_required=$smbSigningReq. FIN7 CARBANAK uses ADMIN$ + PsExec pattern to push backdoor binaries laterally. [BAS-SIM-FIN7-S4]"
+      if ($adminOk) {
+        Write-Output "FAIL: ADMIN$ accessible with current token. FIN7 could drop a payload to \\\\<target>\\ADMIN$\\Temp\\ and exec via schtasks. Disable admin shares (AutoShareWks=0 GPO) or enforce LAPS + SMB signing."
+      } elseif ($smb1Enabled) {
+        Write-Output "FAIL: SMB1 is ENABLED. FIN7 can exploit SMB1 vulnerabilities (EternalBlue/WannaCry-family) for lateral movement. Disable SMB1 via GPO immediately."
+      } elseif (-not $smbSigningReq) {
+        Write-Output "WARN: SMB signing is not required. NTLM relay attacks (CARBANAK secondary path) are possible. Set RequireSecuritySignature=1 on all Windows servers and workstations."
+      } else {
+        Write-Output "PASS: ADMIN$ blocked, SMB1 disabled, SMB signing required  -  FIN7 SMB lateral movement vector is hardened. [BAS-SIM-FIN7-S4]"
+      }
+    cleanup: |
+      & net use '\\127.0.0.1\ADMIN$' /delete 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — Outbound HTTPS C2 Beacon (T1071.001)
+  # ---------------------------------------------------------------------------
+  - name: "FIN7 Stage 5 — Outbound HTTPS C2 Beacon Pattern (T1071.001)"
+    technique_id: T1071.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues Invoke-WebRequest to https://192.0.2.1 (RFC 5737 TEST-NET-1 — guaranteed non-routable) to generate Sysmon EID 3 + WinHTTP network telemetry identical to FIN7 CARBANAK HTTPS beacon pattern. No real C2 channel. Also checks proxy bypass list for anomalies. Generates Sysmon EID 3 (TCP 443) and PowerShell EID 4104."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: TCP 443 to 192.0.2.1 (Invoke-WebRequest — CARBANAK HTTPS beacon)"
+      - "PowerShell EID 4104: Invoke-WebRequest HTTPS call (ScriptBlock logging)"
+      - "Windows Firewall EID 5152/5157: outbound TCP 443 to 192.0.2.1 blocked (if firewall logging enabled)"
+    detection:
+      - "EDR: Invoke-WebRequest / Net.WebClient in PowerShell — Sigma rule posh_ps_web_request.yml"
+      - "SIEM: Sysmon EID 3 TCP 443 from powershell.exe to non-standard IP (not CDN/cloud) — FIN7 C2 IOC"
+      - "Proxy: CONNECT to 192.0.2.1:443 should be blocked at egress proxy/firewall and trigger alert"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $beaconUrl = 'https://192.0.2.1/bas-sim-fin7'
+      $result = $null
+      $blocked = $false
+      $timedOut = $false
+      try {
+        $result = Invoke-WebRequest -Uri $beaconUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+      } catch [System.Net.WebException] {
+        $ex = $_
+        if ($ex.Exception.Message -match 'timed out|timeout|TimedOut') { $timedOut = $true }
+        elseif ($ex.Exception.Message -match 'blocked|denied|forbidden|refused|proxy') { $blocked = $true }
+        else { $timedOut = $true }
+      } catch { $blocked = $true }
+      Write-Output "EXEC T1071.001: HTTPS C2 beacon probe to $beaconUrl (RFC5737 non-routable). result_code=$($result.StatusCode), timed_out=$timedOut, blocked=$blocked. Sysmon EID 3 TCP 443 generated. [BAS-SIM-FIN7-S5]"
+      if ($blocked) {
+        Write-Output "PASS: Outbound HTTPS to RFC5737 address was blocked by proxy or firewall  -  FIN7 CARBANAK C2 beacon pattern would be intercepted. [BAS-SIM-FIN7-S5]"
+      } else {
+        Write-Output "FAIL: HTTPS beacon to 192.0.2.1 was NOT blocked by the egress firewall/proxy (timed out or network-unreachable without proxy block). Egress filtering should block all non-approved destinations and generate a SIEM alert on Sysmon EID 3 from powershell.exe to unlisted IPs. Implement explicit proxy allow-list for BFSI workstations."
+      }
+    cleanup: ""

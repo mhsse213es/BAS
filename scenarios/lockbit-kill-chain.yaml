@@ -1,0 +1,254 @@
+id: lockbit-kill-chain
+name: LockBit Kill Chain — Ransomware Emulation (Phase 7)
+description: >
+  Five-stage telemetry-safe emulation of the LockBit 3.0 ransomware kill chain
+  targeting Windows endpoints. Reflects documented LockBit tradecraft validated
+  against CISA AA23-165A, NCA advisory 2023, and DFIR reports.
+
+  KILL CHAIN STAGES:
+    1. Defense Discovery     — security software enumeration (T1518.001)
+    2. Recovery Inhibition   — VSS snapshot enumeration probe (T1490)
+    3. Lateral Movement Prep — SMB admin share reachability check (T1021.002)
+    4. Ransomware Simulation — XOR-encoded benign file + ransom note in %TEMP% (T1486)
+    5. Log Clearing Attempt  — wevtutil cl attempt, blocked or audit (T1070.001)
+
+  SAFETY: No real encryption of user data. XOR is applied to a single BAS-
+  created temp file with [BAS-SIM] content only. Ransom note is cleaned up
+  immediately. wevtutil cl is attempted only against a BAS-created scratch log
+  (not System/Security/Application). Admin share probe uses current token
+  only — no hash or credential injection.
+  PRODUCTION-SAFE: all five stages run in telemetry mode.
+  Windows only. [BAS-SIM] tagged throughout.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - lockbit
+  - ransomware
+  - bfsi
+  - kill-chain
+  - phase7
+  - t1070
+  - t1486
+  - t1490
+  - t1518
+  - t1021
+  - mitre
+mitre_phases:
+  - discovery
+  - defense-evasion
+  - lateral-movement
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Defense Discovery (T1518.001)
+  # ---------------------------------------------------------------------------
+  - name: "LockBit Stage 1 — Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Queries WMI AntiVirusProduct, AntiSpywareProduct, FirewallProduct to enumerate installed security products. Read-only. Generates ScriptBlock EID 4104 and WMI-Activity EID 5857-5861."
+    reversible: true
+    telemetry:
+      - "WMI-Activity EID 5857-5861: Get-WmiObject SecurityCenter2 query"
+      - "PowerShell ScriptBlock EID 4104: AntiVirusProduct WMI class enumeration"
+      - "Sysmon EID 1: powershell.exe WMI query (LockBit reconnaissance pattern)"
+    detection:
+      - "EDR: WMI security product enumeration from PowerShell  -  Sigma rule win_wmi_security_product_discovery.yml"
+      - "SIEM: Get-WmiObject Win32_Product or SecurityCenter2 — pre-ransomware recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $avProducts = Get-WmiObject -Namespace 'root\SecurityCenter2' -Class 'AntiVirusProduct' -ErrorAction SilentlyContinue
+      $fwProducts = Get-WmiObject -Namespace 'root\SecurityCenter2' -Class 'FirewallProduct' -ErrorAction SilentlyContinue
+      $avNames = ($avProducts | ForEach-Object { $_.displayName }) -join ', '
+      $fwNames = ($fwProducts | ForEach-Object { $_.displayName }) -join ', '
+      if ($avProducts -or $fwProducts) {
+        Write-Output "EXEC T1518.001: security software enumerated. AV=[$avNames] FW=[$fwNames]. LockBit uses this to decide whether to proceed or disable controls. [BAS-SIM-LOCKBIT-S1]"
+        Write-Output "FAIL: security product names are enumerable via WMI SecurityCenter2. EDR should alert on this WMI class access from PowerShell."
+      } else {
+        Write-Output "PASS: SecurityCenter2 namespace not accessible or no products registered  -  WMI security product enumeration blocked/empty. [BAS-SIM-LOCKBIT-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Recovery Inhibition: VSS Enumeration (T1490)
+  # ---------------------------------------------------------------------------
+  - name: "LockBit Stage 2 — VSS Snapshot Enumeration (T1490)"
+    technique_id: T1490
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs vssadmin list shadows to enumerate VSS snapshots (READ ONLY). LockBit deletes these via 'vssadmin delete shadows /all /quiet' — we enumerate only to show the attack surface. Generates Sysmon EID 1: vssadmin.exe with 'list' argument."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: vssadmin.exe list shadows (LockBit pre-wipe reconnaissance)"
+      - "Security EID 4688: vssadmin.exe spawned by powershell.exe"
+    detection:
+      - "EDR: vssadmin.exe invoked from PowerShell  -  Sigma rule proc_creation_win_vssadmin_susp_commands.yml"
+      - "SIEM: vssadmin list shadows — pre-ransomware VSS enumeration IOC (LockBit, Conti, BlackCat all do this)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      $shadowCount = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
+      if ($shadowCount -gt 0) {
+        Write-Output "EXEC T1490: $shadowCount VSS shadow copy(ies) enumerated. LockBit would now run 'vssadmin delete shadows /all /quiet' to destroy backups. Sysmon EID 1 vssadmin.exe logged. [BAS-SIM-LOCKBIT-S2]"
+        Write-Output "FAIL: VSS snapshots exist and are enumerable ($shadowCount found). If LockBit reached this stage, backups would be destroyed before encryption. Ensure immutable cloud backup or Veeam hardened repo is NOT reachable from endpoint."
+      } else {
+        Write-Output "PASS: No VSS shadow copies found or vssadmin blocked  -  recovery inhibition surface is reduced. [BAS-SIM-LOCKBIT-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Lateral Movement Prep: SMB Admin Share Probe (T1021.002)
+  # ---------------------------------------------------------------------------
+  - name: "LockBit Stage 3 — SMB Admin Share Lateral Movement Probe (T1021.002)"
+    technique_id: T1021.002
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Tests whether \\127.0.0.1\\ADMIN$ is accessible with the current user token via net use (loopback). Disconnects immediately. Generates Security EID 4624 Type 3 + Sysmon EID 3 loopback. LockBit uses ADMIN$ with harvested credentials to push the encryptor to remote hosts."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: net.exe with use \\\\127.0.0.1\\ADMIN$ argument"
+      - "Security EID 4624: Logon Type 3 (network) from 127.0.0.1 to ADMIN$"
+      - "Security EID 5140: network share ADMIN$ accessed"
+    detection:
+      - "EDR: net use to ADMIN$ from PowerShell  -  Sigma rule proc_creation_win_net_admin_share_access.yml"
+      - "SIEM: EID 5140 access to ADMIN$ outside of IT provisioning window — lateral movement IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $netOut = & net use '\\127.0.0.1\ADMIN$' 2>&1 | Out-String
+      & net use '\\127.0.0.1\ADMIN$' /delete 2>&1 | Out-Null
+      $accessible = $netOut -match 'command completed successfully'
+      $authFailed = $netOut -match 'System error 5|Access is denied|System error 1326|logon failure'
+      if ($accessible) {
+        Write-Output "EXEC T1021.002: \\\\127.0.0.1\\ADMIN$ accessible with current token (disconnected). LockBit would use harvested creds here to push encryptor laterally. Security EID 5140 logged. [BAS-SIM-LOCKBIT-S3]"
+        Write-Output "FAIL: ADMIN$ share accessible from user context — disable admin shares via GPO (AutoShareWks=0) or ensure SMB signing + LAPS is enforced."
+      } elseif ($authFailed) {
+        Write-Output "PASS: ADMIN$ access denied (auth failure or disabled)  -  lateral movement via admin share blocked. [BAS-SIM-LOCKBIT-S3]"
+      } else {
+        Write-Output "INFO: ADMIN$ probe result inconclusive: $($netOut.Trim()). [BAS-SIM-LOCKBIT-S3]"
+      }
+    cleanup: |
+      & net use '\\127.0.0.1\ADMIN$' /delete 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Ransomware Impact Simulation (T1486)
+  # ---------------------------------------------------------------------------
+  - name: "LockBit Stage 4 — Ransomware Payload Simulation (T1486)"
+    technique_id: T1486
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates one BAS-owned plaintext file in %TEMP%, XOR-encodes it (simulating encryption), writes a benign ransom note ([BAS-SIM-LOCKBIT] only), then DELETES BOTH immediately. No user data touched. No real ransomware code. Generates Sysmon EID 11 (file create x2) and EID 23 (file delete x2)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: bas_lockbit_<id>.txt created in %TEMP%"
+      - "Sysmon EID 11: bas_lockbit_<id>.lockbit (encrypted simulation) created"
+      - "Sysmon EID 11: bas_ransom_<id>.txt (ransom note) created"
+      - "Sysmon EID 23: all files deleted in cleanup"
+    detection:
+      - "EDR: high-frequency file create + rename + delete in short window  -  Sigma rule win_security_susp_file_modifications.yml"
+      - "Defender: ransom-pattern file creation heuristic (many .lockbit extension files)"
+      - "EDR: PowerShell creating and immediately deleting files with suspicious extension"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $plainFile = Join-Path $env:TEMP "bas_lockbit_$runId.txt"
+      $encFile   = Join-Path $env:TEMP "bas_lockbit_$runId.lockbit"
+      $noteFile  = Join-Path $env:TEMP "bas_ransom_$runId.txt"
+      $plainContent = '[BAS-SIM-LOCKBIT] T1486 ransomware simulation target file'
+      [System.IO.File]::WriteAllText($plainFile, $plainContent, [System.Text.Encoding]::UTF8)
+      # Simulate XOR encryption (key=0x4C = 'L' for LockBit)
+      $key = 0x4C
+      $bytes = [System.Text.Encoding]::UTF8.GetBytes($plainContent)
+      $enc   = $bytes | ForEach-Object { $_ -bxor $key }
+      [System.IO.File]::WriteAllBytes($encFile, [byte[]]$enc)
+      # Ransom note (benign BAS simulation content only)
+      $note = '[BAS-SIM-LOCKBIT] LockBit 3.0 Ransomware Simulation Note' + [char]13 + [char]10 +
+              'This is a BAS simulation. No real files were encrypted.' + [char]13 + [char]10 +
+              'Run ID: ' + $runId
+      [System.IO.File]::WriteAllText($noteFile, $note, [System.Text.Encoding]::UTF8)
+      $created = (Test-Path $plainFile) -and (Test-Path $encFile) -and (Test-Path $noteFile)
+      Remove-Item $plainFile,$encFile,$noteFile -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $plainFile) -and -not (Test-Path $encFile) -and -not (Test-Path $noteFile)
+      if ($created) {
+        Write-Output "EXEC T1486: ransomware simulation completed — target file XOR-encoded (.lockbit), ransom note written, all cleaned=$cleaned. Sysmon EID 11+23 expected. [BAS-SIM-LOCKBIT-S4]"
+        Write-Output "FAIL: File encryption simulation ran unblocked. Defender ransomware protection and controlled folder access should have flagged this pattern."
+      } else {
+        Write-Output "PASS: Ransomware simulation file creation blocked  -  Controlled Folder Access or EDR prevented file write to %TEMP%. [BAS-SIM-LOCKBIT-S4]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_lockbit_*') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_ransom_*') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — Indicator Removal: Event Log Clearing Attempt (T1070.001)
+  # ---------------------------------------------------------------------------
+  - name: "LockBit Stage 5 — Event Log Clearing Attempt (T1070.001)"
+    technique_id: T1070.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a BAS-owned custom event log (BAS-Sim-LockBit), attempts wevtutil cl on it, then removes the log. Does NOT touch System/Security/Application logs. Generates Security EID 1102 if the clear succeeds, and Sysmon EID 1 wevtutil.exe."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: wevtutil.exe with cl argument (LockBit log-clearing pattern)"
+      - "Security EID 1102: audit log cleared (if wevtutil cl succeeds on custom log)"
+      - "Security EID 4688: wevtutil.exe spawned by powershell.exe"
+    detection:
+      - "EDR: wevtutil.exe with 'cl' argument  -  Sigma rule proc_creation_win_wevtutil_clear_logs.yml"
+      - "SIEM: Security EID 1102 event log cleared  -  high-priority anti-forensics IOC"
+      - "SIEM: wevtutil.exe invoked from PowerShell at unusual time"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $logName = 'BAS-Sim-LockBit'
+      # Create a throwaway custom log so we can test wevtutil cl without touching production logs
+      $exists = [System.Diagnostics.EventLog]::Exists($logName)
+      if (-not $exists) {
+        try { New-EventLog -LogName $logName -Source 'BAS-Sim' -ErrorAction Stop } catch {}
+      }
+      $created = [System.Diagnostics.EventLog]::Exists($logName)
+      if ($created) {
+        # Attempt wevtutil cl on the BAS log only
+        $clOut = & wevtutil.exe cl $logName 2>&1 | Out-String
+        $cleared = $clOut -notmatch 'Access is denied|The specified channel could not be found|error'
+        # Remove the BAS log
+        try { Remove-EventLog -LogName $logName -ErrorAction SilentlyContinue } catch {}
+        if ($cleared) {
+          Write-Output "EXEC T1070.001: wevtutil cl on BAS custom log succeeded (exit 0). LockBit uses 'wevtutil cl System' 'wevtutil cl Security' after ransomware deployment. Sysmon EID 1 wevtutil.exe logged. [BAS-SIM-LOCKBIT-S5]"
+          Write-Output "FAIL: wevtutil cl ran without EDR intervention. Ensure wevtutil.exe invocation from PowerShell triggers an alert. Security EID 1102 should generate a SIEM alert."
+        } else {
+          Write-Output "PASS: wevtutil cl was blocked or failed  -  $($clOut.Trim()). [BAS-SIM-LOCKBIT-S5]"
+        }
+      } else {
+        Write-Output "SKIP: Could not create test event log (insufficient privilege). wevtutil cl test skipped. [BAS-SIM-LOCKBIT-S5]"
+      }
+    cleanup: |
+      try { Remove-EventLog -LogName 'BAS-Sim-LockBit' -ErrorAction SilentlyContinue } catch {}

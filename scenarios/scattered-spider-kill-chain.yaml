@@ -1,0 +1,261 @@
+id: scattered-spider-kill-chain
+name: Scattered Spider Kill Chain — Social Engineering + Insider Escalation (Phase 7)
+description: >
+  Five-stage telemetry-safe emulation of Scattered Spider (UNC3944 / Muddled
+  Libra) post-access tradecraft. Based on CISA AA23-320A, FBI advisory, and
+  post-incident reporting from MGM/Caesars (2023) and Twilio/Okta (2022).
+
+  Scattered Spider is notable for: help-desk social engineering, SIM swapping
+  to bypass MFA, creating new local/cloud accounts, and abusing legitimate
+  remote-access tooling. BFSI applicability: India's banking sector faces
+  identical help-desk impersonation and ATO (Account Takeover) patterns.
+
+  KILL CHAIN STAGES:
+    1. MFA Policy Recon     — check if MFA enforcement and Windows Hello are configured (T1078)
+    2. Create Local Account — net user add + delete to test account creation control (T1136.001)
+    3. RDP Exposure Check   — registry probe for fDenyTSConnections + NLA enforcement (T1021.001)
+    4. LLMNR/NBNS Surface   — check if link-local name resolution poisoning is possible (T1557.001)
+    5. Cloud CLI Discovery  — enumerate AWS/Azure/GCP CLIs installed on the endpoint (T1526)
+
+  SAFETY: Local account is created and immediately deleted. Net user /add
+  generates Security EID 4720/4726. No password spray. No real SIM swap.
+  All steps [BAS-SIM-SPIDER] tagged.
+  PRODUCTION-SAFE: all five stages run in telemetry mode.
+  Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - scattered-spider
+  - unc3944
+  - muddled-libra
+  - social-engineering
+  - ato
+  - bfsi
+  - kill-chain
+  - phase7
+  - t1078
+  - t1136
+  - t1021
+  - t1557
+  - t1526
+  - mitre
+mitre_phases:
+  - initial-access
+  - persistence
+  - lateral-movement
+  - discovery
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — MFA / Valid Accounts Policy Recon (T1078)
+  # ---------------------------------------------------------------------------
+  - name: "Scattered Spider Stage 1 — MFA and Valid Account Policy Recon (T1078)"
+    technique_id: T1078
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Reads registry keys and WMI to check: Windows Hello for Business enrollment status, cached credential count, Password Required flag on local accounts, and whether interactive logon requires Ctrl-Alt-Del. Read-only. Scattered Spider uses this to identify which accounts lack MFA or have weak auth before social engineering the help desk."
+    reversible: true
+    telemetry:
+      - "WMI-Activity EID 5857: Win32_UserAccount query"
+      - "Security EID 4688: powershell.exe registry and WMI read"
+    detection:
+      - "EDR: PowerShell reading InteractiveLogon and Cached Logons policy keys — pre-ATO recon"
+      - "SIEM: WMI Win32_UserAccount enumeration from PowerShell — Scattered Spider recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Check Cached Logons (>0 means offline creds exist — ATO pivot)
+      $cachedLogons = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'CachedLogonsCount' -EA SilentlyContinue).CachedLogonsCount
+      # Check if interactive logon message is set (helps confirm domain vs workgroup)
+      $logonMsg = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'LegalNoticeText' -EA SilentlyContinue).LegalNoticeText
+      # Check accounts without password requirement
+      $noPasswdAccounts = Get-WmiObject Win32_UserAccount -Filter "LocalAccount=True AND PasswordRequired=False AND Disabled=False" -EA SilentlyContinue | Select-Object -ExpandProperty Name
+      $calt = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name 'DisableCAD' -EA SilentlyContinue).DisableCAD
+      $noPasswdList = ($noPasswdAccounts -join ', ')
+      Write-Output "EXEC T1078: MFA policy recon. CachedLogons=$cachedLogons, CAD_disabled=$calt, no-password-required accounts=[$noPasswdList]. Logon banner present=$(($logonMsg -ne $null -and $logonMsg -ne '')). [BAS-SIM-SPIDER-S1]"
+      if ($noPasswdAccounts) {
+        Write-Output "FAIL: $($noPasswdAccounts.Count) local account(s) have no password requirement: [$noPasswdList]. Scattered Spider can use these for persistence or escalation post-ATO."
+      } elseif ([int]($cachedLogons -replace '\D','0') -gt 1) {
+        Write-Output "FAIL: CachedLogons=$cachedLogons — offline credential cache is accessible. Scattered Spider can pivot via cached domain creds after help-desk ATO. Reduce to 0 for BFSI endpoints (SEBI CSCRF requirement)."
+      } else {
+        Write-Output "PASS: No passwordless accounts found and cached logons are minimal. [BAS-SIM-SPIDER-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Create Local Account (T1136.001)
+  # ---------------------------------------------------------------------------
+  - name: "Scattered Spider Stage 2 — Local Account Creation Simulation (T1136.001)"
+    technique_id: T1136.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates local user BAS-SIM-SPIDER with a random complex password, immediately deletes it. Generates Security EID 4720 (account created) and 4726 (account deleted). Scattered Spider creates local or cloud accounts after help-desk social engineering to establish persistence independent of the compromised employee's account."
+    reversible: true
+    telemetry:
+      - "Security EID 4720: user account BAS-SIM-SPIDER created"
+      - "Security EID 4726: user account BAS-SIM-SPIDER deleted"
+      - "Sysmon EID 1: net.exe user BAS-SIM-SPIDER"
+    detection:
+      - "SIEM: EID 4720 new local account creation — high-priority IOC outside change management"
+      - "EDR: net.exe user /add from PowerShell parent  -  Sigma rule proc_creation_win_net_user_add.yml"
+      - "SIEM: EID 4720 immediately followed by 4726 — BAS or attacker cleanup pattern, still alert"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $username = 'BAS-SIM-SPIDER'
+      # Generate a random compliant password (never reused; BAS-only)
+      $password = 'BAS!' + ([System.Guid]::NewGuid().ToString().Replace('-','').Substring(0,10)) + '#Sim'
+      $createOut = & net user $username $password /add 2>&1 | Out-String
+      $created = $createOut -match 'command completed successfully'
+      & net user $username /delete 2>&1 | Out-Null
+      $deleted = -not (& net user $username 2>&1 | Out-String -match $username)
+      if ($created) {
+        Write-Output "EXEC T1136.001: local account '$username' created (EID 4720) then deleted=$deleted (EID 4726). Scattered Spider uses this to maintain access if the compromised employee's account is disabled. [BAS-SIM-SPIDER-S2]"
+        Write-Output "FAIL: Local account creation succeeded without EDR block. Security EID 4720 must trigger a P1 SIEM alert outside approved provisioning windows. Least-privilege GPO should prevent PowerShell from spawning net.exe user /add."
+      } else {
+        Write-Output "PASS: net user /add blocked — $($createOut.Trim()). AppLocker, WDAC, or privilege restriction prevented local account creation. [BAS-SIM-SPIDER-S2]"
+      }
+    cleanup: |
+      & net user 'BAS-SIM-SPIDER' /delete 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — RDP Exposure Assessment (T1021.001)
+  # ---------------------------------------------------------------------------
+  - name: "Scattered Spider Stage 3 — RDP Enabled + NLA Enforcement Check (T1021.001)"
+    technique_id: T1021.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Reads HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server registry to check if RDP is enabled and if Network Level Authentication (NLA) is required. Also probes TCP port 3389 loopback. Read-only / loopback TCP only. Scattered Spider abuses RDP heavily once credentials are obtained via social engineering."
+    reversible: true
+    telemetry:
+      - "Security EID 4688: powershell.exe reading Terminal Server registry"
+      - "Sysmon EID 3: loopback TCP 3389 connection attempt (if probed)"
+    detection:
+      - "EDR: PowerShell reading Terminal Server registry keys — RDP recon"
+      - "SIEM: TCP 3389 loopback probe combined with recent account discovery — Scattered Spider lateral movement prep IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $rdpDisabled = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -EA SilentlyContinue).fDenyTSConnections
+      $nlaSecurity = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -EA SilentlyContinue).UserAuthentication
+      $rdpEnabled = ($rdpDisabled -eq 0)
+      $nlaRequired = ($nlaSecurity -eq 1)
+      # Port probe (loopback only)
+      $portOpen = $false
+      try {
+        $tcp = New-Object System.Net.Sockets.TcpClient
+        $conn = $tcp.BeginConnect('127.0.0.1', 3389, $null, $null)
+        $portOpen = $conn.AsyncWaitHandle.WaitOne(1000)
+        $tcp.Close()
+      } catch {}
+      Write-Output "EXEC T1021.001: RDP_enabled=$rdpEnabled, NLA_required=$nlaRequired, port_3389_open=$portOpen. [BAS-SIM-SPIDER-S3]"
+      if ($rdpEnabled -and -not $nlaRequired) {
+        Write-Output "FAIL: RDP is ENABLED and NLA is NOT enforced. Scattered Spider can brute-force RDP with socially engineered credentials and no MFA challenge. Enable NLA (UserAuthentication=1) and restrict RDP via GPO to jump-server source IPs only."
+      } elseif ($rdpEnabled) {
+        Write-Output "WARN: RDP is enabled but NLA is enforced. Scattered Spider can still use RDP after ATO if NLA credential challenge passes. Ensure RDP is restricted to PAM/jump-server source only."
+      } else {
+        Write-Output "PASS: RDP is disabled (fDenyTSConnections=1). Scattered Spider RDP lateral movement vector is closed. [BAS-SIM-SPIDER-S3]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — LLMNR/NBNS Poisoning Surface (T1557.001)
+  # ---------------------------------------------------------------------------
+  - name: "Scattered Spider Stage 4 — LLMNR and NBNS Poisoning Surface Check (T1557.001)"
+    technique_id: T1557.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 15
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Checks registry keys to determine if LLMNR (EnableMulticast) and NetBIOS over TCP/IP (NetbiosOptions) are enabled on any interface. Read-only. LLMNR/NBNS poisoning is a common Scattered Spider and Responder-tool vector for capturing NTLMv2 hashes after initial endpoint access."
+    reversible: true
+    telemetry:
+      - "Security EID 4688: powershell.exe reading DNS client and NetBT registry"
+    detection:
+      - "EDR: PowerShell reading LLMNR and NetBIOS policy keys — pre-relay recon"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $llmnrVal = (Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient' -Name 'EnableMulticast' -EA SilentlyContinue).EnableMulticast
+      $llmnrEnabled = ($llmnrVal -ne 0)
+      # Check NetBIOS setting on all interfaces (0=default/enabled, 1=enabled, 2=disabled)
+      $netbtKeys = Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces' -EA SilentlyContinue
+      $nbnsExposed = $false
+      foreach ($k in $netbtKeys) {
+        $opt = (Get-ItemProperty $k.PSPath -Name 'NetbiosOptions' -EA SilentlyContinue).NetbiosOptions
+        if ($opt -ne 2) { $nbnsExposed = $true; break }
+      }
+      Write-Output "EXEC T1557.001: LLMNR_enabled=$llmnrEnabled (EnableMulticast=$llmnrVal), NBNS_exposed=$nbnsExposed. [BAS-SIM-SPIDER-S4]"
+      if ($llmnrEnabled) {
+        Write-Output "FAIL: LLMNR is ENABLED (EnableMulticast != 0). An attacker inside the network can run Responder.py to intercept NTLMv2 hashes and relay them for lateral movement. Disable via GPO: Computer Config > Admin Templates > DNS Client > EnableMulticast = 0."
+      } elseif ($nbnsExposed) {
+        Write-Output "FAIL: NetBIOS over TCP/IP is enabled on one or more interfaces (NetbiosOptions != 2). NBNS poisoning (Responder NBT-NS) remains possible. Set NetbiosOptions=2 on all interfaces or disable NetBT at the adapter level."
+      } else {
+        Write-Output "PASS: LLMNR is disabled and NetBIOS is disabled on all interfaces  -  LLMNR/NBNS poisoning attack surface is closed. [BAS-SIM-SPIDER-S4]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — Cloud CLI / Identity Surface Discovery (T1526)
+  # ---------------------------------------------------------------------------
+  - name: "Scattered Spider Stage 5 — Cloud CLI and Credential Surface Discovery (T1526)"
+    technique_id: T1526
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Checks if AWS CLI, Azure CLI, Google Cloud SDK, and cloud credential files (AWS credentials, Azure token cache, GCP ADC) exist on the endpoint. Read-only path check. Scattered Spider targets cloud CLI credentials after endpoint compromise to pivot into cloud infrastructure (S3, Azure AD, GCP projects)."
+    reversible: true
+    telemetry:
+      - "Security EID 4688: powershell.exe enumerating %USERPROFILE%\\.aws, .azure, .config\\gcloud"
+    detection:
+      - "EDR: PowerShell enumerating cloud credential directories  -  Scattered Spider cloud pivot recon IOC"
+      - "SIEM: combined (cloud CLI discovery) + (local account or RDP events) = high-confidence Scattered Spider chain"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $findings = @()
+      # AWS CLI
+      $awsCli     = (Get-Command aws.exe -EA SilentlyContinue) -ne $null
+      $awsCreds   = Test-Path (Join-Path $env:USERPROFILE '.aws\credentials')
+      $awsConfig  = Test-Path (Join-Path $env:USERPROFILE '.aws\config')
+      if ($awsCli)   { $findings += 'AWS CLI installed' }
+      if ($awsCreds) { $findings += ('AWS credentials file found: ' + (Join-Path $env:USERPROFILE '.aws\credentials')) }
+      # Azure CLI
+      $azCli      = (Get-Command az.cmd -EA SilentlyContinue) -ne $null
+      $azTokens   = Test-Path (Join-Path $env:USERPROFILE '.azure\msal_token_cache.json')
+      if ($azCli)    { $findings += 'Azure CLI installed' }
+      if ($azTokens) { $findings += 'Azure CLI token cache found (.azure\msal_token_cache.json)' }
+      # GCP SDK
+      $gcpSdk     = (Get-Command gcloud.cmd -EA SilentlyContinue) -ne $null
+      $gcpAdc     = Test-Path (Join-Path $env:APPDATA 'gcloud\application_default_credentials.json')
+      if ($gcpSdk)   { $findings += 'Google Cloud SDK installed' }
+      if ($gcpAdc)   { $findings += 'GCP Application Default Credentials found' }
+      Write-Output "EXEC T1526: cloud surface discovery complete. Findings: $(if($findings.Count -gt 0){ $findings -join '; ' } else { 'none' }). [BAS-SIM-SPIDER-S5]"
+      if ($findings.Count -gt 0) {
+        Write-Output "FAIL: Cloud CLI credentials present on endpoint ($($findings.Count) finding(s)). Scattered Spider would use these to access cloud resources directly. Remediation: revoke endpoint-stored cloud credentials, use IMDS/workload identity instead, and alert on cloud CLI invocation from suspicious parents."
+      } else {
+        Write-Output "PASS: No cloud CLI credentials found on this endpoint  -  cloud pivot surface via endpoint is minimal. [BAS-SIM-SPIDER-S5]"
+      }
+    cleanup: ""
