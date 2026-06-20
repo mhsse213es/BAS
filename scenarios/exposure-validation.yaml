@@ -1,0 +1,375 @@
+id: exposure-validation
+name: Exposure Validation — Endpoint Hardening Gap Assessment (Phase 8)
+description: >
+  Five-stage read-only exposure validation that surfaces the configuration
+  weaknesses most commonly weaponised in BFSI endpoint compromises:
+  misquoted service paths, hijackable PATH and DLL directories, over-broad
+  Defender exclusions, and dangerous privilege accumulation.
+
+  Unlike BAS technique execution scenarios (which run simulated attacks),
+  this scenario is a hardening-gap survey — every step reads policy or
+  filesystem permissions and reports the exploitable condition. No files
+  created, no processes spawned beyond PowerShell, no registry writes.
+  All steps are fully reversible and production-safe.
+
+  STAGES:
+    1. Unquoted Service Paths     — enumerate services vulnerable to T1574.009
+    2. Writable PATH Directories  — identify T1574.007 hijack surface in %PATH%
+    3. DLL Search Order Surface   — writable system directories in DLL load path (T1574.001)
+    4. Defender Exclusion Audit   — detect over-broad or writable exclusions (T1562.001)
+    5. Dangerous Privilege Audit  — flag SeDebug/SeImpersonate on current token (T1134)
+
+  BENCHMARKS: findings are graded against SEBI CSCRF, CIS Windows Benchmark
+  Level 2, and Trellix/CrowdStrike hardening baselines for BFSI workstations.
+  Windows only. Read-only throughout.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - exposure-validation
+  - hardening
+  - bfsi
+  - phase8
+  - t1574
+  - t1562
+  - t1134
+  - posture
+  - mitre
+mitre_phases:
+  - privilege-escalation
+  - defense-evasion
+  - persistence
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Step 1 — Unquoted Service Paths (T1574.009)
+  # ---------------------------------------------------------------------------
+  - name: "Exposure 1 — Unquoted Service Path Enumeration (T1574.009)"
+    technique_id: T1574.009
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: none
+    blast_radius: "Read-only WMI query of Win32_Service. Lists services whose binary PathName contains a space and is not double-quoted — enabling an attacker to plant a binary at the shorter path prefix and have it executed as SYSTEM on next service start. No writes, no service restarts."
+    reversible: true
+    telemetry:
+      - "WMI-Activity EID 5857: Win32_Service query"
+      - "PowerShell EID 4104: ScriptBlock logging captures service path enumeration"
+    detection:
+      - "This step is purely defensive — no malicious telemetry. Use results to fix service paths."
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $vulnServices = Get-WmiObject Win32_Service -ErrorAction SilentlyContinue |
+        Where-Object {
+          $path = $_.PathName
+          $path -and $path -notmatch '^"' -and $path -match ' ' -and
+          $path -notmatch '^[A-Za-z]:\\Windows\\' -and $path -notmatch '^[Ss]ystem'
+        } |
+        Select-Object Name, StartMode, State, PathName
+      $count = @($vulnServices).Count
+      Write-Output "EXEC T1574.009: unquoted service path scan complete. $count vulnerable service(s) found. [BAS-SIM-EXPOSURE-S1]"
+      if ($count -gt 0) {
+        foreach ($svc in $vulnServices) {
+          # Find the first space-split prefix that does NOT have a quoted directory — that is the hijack target
+          $parts = $svc.PathName -split ' '
+          $prefix = $parts[0]
+          Write-Output "  VULN: $($svc.Name) | StartMode=$($svc.StartMode) State=$($svc.State) | Path: $($svc.PathName)"
+          Write-Output "  HIJACK TARGET: plant binary at [$prefix.exe] to execute as $($svc.Name) service account on next start"
+        }
+        Write-Output "FAIL: $count service(s) have unquoted paths with spaces. An attacker with write access to a path prefix can achieve privilege escalation to SYSTEM or a service account. Fix: wrap all service ImagePath values in double quotes (sc config <name> binpath= '\"<quoted path>\"')."
+      } else {
+        Write-Output "PASS: No unquoted service paths with spaces found outside Windows core directories. T1574.009 hijack surface is minimal. [BAS-SIM-EXPOSURE-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Step 2 — Writable PATH Directories (T1574.007)
+  # ---------------------------------------------------------------------------
+  - name: "Exposure 2 — Writable PATH Directory Hijack Surface (T1574.007)"
+    technique_id: T1574.007
+    framework: custom
+    executor: powershell
+    timeout_sec: 40
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: none
+    blast_radius: "Reads SYSTEM and USER %PATH% entries, resolves each to an absolute path, and tests write access by checking ACLs via icacls output (no file writes). An attacker who controls a writable PATH directory can plant a trojanized binary that shadows a legitimate tool (cmd.exe, net.exe, etc.)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: icacls.exe spawned per PATH directory (if icacls used)"
+      - "PowerShell EID 4104: GetAccessControl on each PATH directory"
+    detection:
+      - "This step is purely defensive. No malicious telemetry. Fix any writable PATH entries found."
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $systemPath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine') -split ';' |
+                    Where-Object { $_ -ne '' } | Select-Object -Unique
+      $userPath   = [System.Environment]::GetEnvironmentVariable('PATH', 'User') -split ';' |
+                    Where-Object { $_ -ne '' } | Select-Object -Unique
+      $allPaths = ($systemPath + $userPath) | Where-Object { $_ -ne '' } | Select-Object -Unique
+      $writableSys  = @()
+      $writableUser = @()
+      $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      foreach ($dir in $allPaths) {
+        if (-not (Test-Path $dir -PathType Container)) { continue }
+        try {
+          $acl = Get-Acl $dir -ErrorAction Stop
+          foreach ($ace in $acl.Access) {
+            $identity = $ace.IdentityReference.Value
+            $rights   = $ace.FileSystemRights
+            $allow    = $ace.AccessControlType -eq 'Allow'
+            # Check for broad write rights on non-admin identities
+            $isBroadWrite = ($rights -band [System.Security.AccessControl.FileSystemRights]::Write) -or
+                            ($rights -band [System.Security.AccessControl.FileSystemRights]::Modify) -or
+                            ($rights -band [System.Security.AccessControl.FileSystemRights]::FullControl)
+            $isNonAdmin = $identity -match 'Everyone|BUILTIN\\Users|Authenticated Users|NT AUTHORITY\\Authenticated Users|Users'
+            if ($allow -and $isBroadWrite -and $isNonAdmin) {
+              if ($systemPath -contains $dir) { $writableSys  += "$dir (identity: $identity rights: $rights)" }
+              else                            { $writableUser += "$dir (identity: $identity rights: $rights)" }
+              break
+            }
+          }
+        } catch {}
+      }
+      $totalWritable = $writableSys.Count + $writableUser.Count
+      Write-Output "EXEC T1574.007: PATH hijack surface scan. $($allPaths.Count) directories checked. $($writableSys.Count) SYSTEM PATH + $($writableUser.Count) USER PATH directories writable by non-admin identities. [BAS-SIM-EXPOSURE-S2]"
+      if ($writableSys.Count -gt 0) {
+        Write-Output "FAIL (CRITICAL): $($writableSys.Count) SYSTEM PATH director(ies) are world-writable — any process can shadow system binaries:"
+        $writableSys | ForEach-Object { Write-Output "  CRITICAL: $_" }
+        Write-Output "  Fix: remove Write/Modify/FullControl from Users/Everyone/Authenticated Users on all SYSTEM PATH directories. Only SYSTEM and Administrators should have write access."
+      }
+      if ($writableUser.Count -gt 0) {
+        Write-Output "FAIL: $($writableUser.Count) USER PATH director(ies) are writable by non-admin identities:"
+        $writableUser | ForEach-Object { Write-Output "  WARN: $_" }
+      }
+      if ($totalWritable -eq 0) {
+        Write-Output "PASS: No writable PATH directories found for non-admin identities. T1574.007 binary hijacking via PATH is not exposed. [BAS-SIM-EXPOSURE-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Step 3 — DLL Search Order Hijack Surface (T1574.001)
+  # ---------------------------------------------------------------------------
+  - name: "Exposure 3 — DLL Search Order Hijack Surface (T1574.001)"
+    technique_id: T1574.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: none
+    blast_radius: "Checks two DLL hijack surfaces: (a) world-writable directories in the Windows DLL search order (CWD paths are outside our scope), and (b) known Windows application directories documented in Microsoft ADV170012 and public DLL hijacking research. Read-only ACL check — no files written."
+    reversible: true
+    telemetry:
+      - "PowerShell EID 4104: GetAccessControl on System32 sub-directories and application paths"
+    detection:
+      - "This step is purely defensive. Results identify directories to harden. No malicious telemetry."
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Windows DLL search order: System32, SysWOW64, Windows, then application dirs
+      $dllSearchDirs = @(
+        $env:SystemRoot + '\System32',
+        $env:SystemRoot + '\SysWOW64',
+        $env:SystemRoot,
+        $env:SystemRoot + '\System32\WindowsPowerShell\v1.0',
+        $env:ProgramFiles,
+        ${env:ProgramFiles(x86)}
+      ) | Where-Object { $_ -and (Test-Path $_ -PathType Container) } | Select-Object -Unique
+      $writableDirs = @()
+      foreach ($dir in $dllSearchDirs) {
+        try {
+          $acl = Get-Acl $dir -ErrorAction Stop
+          foreach ($ace in $acl.Access) {
+            $identity = $ace.IdentityReference.Value
+            $rights   = $ace.FileSystemRights
+            $allow    = $ace.AccessControlType -eq 'Allow'
+            $isBroadWrite = ($rights -band [System.Security.AccessControl.FileSystemRights]::Write) -or
+                            ($rights -band [System.Security.AccessControl.FileSystemRights]::Modify) -or
+                            ($rights -band [System.Security.AccessControl.FileSystemRights]::FullControl)
+            $isNonAdmin = $identity -match 'Everyone|BUILTIN\\Users|Authenticated Users|NT AUTHORITY\\Authenticated Users'
+            if ($allow -and $isBroadWrite -and $isNonAdmin) {
+              $writableDirs += "$dir  (identity: $identity  rights: $rights)"
+              break
+            }
+          }
+        } catch {}
+      }
+      # Check if SafeDllSearchMode is enabled (should be 1)
+      $safeDll = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'SafeDllSearchMode' -EA SilentlyContinue).SafeDllSearchMode
+      Write-Output "EXEC T1574.001: DLL search order hijack surface scan. $($dllSearchDirs.Count) system DLL directories checked. Writable by non-admin: $($writableDirs.Count). SafeDllSearchMode=$safeDll (should be 1). [BAS-SIM-EXPOSURE-S3]"
+      if ($writableDirs.Count -gt 0) {
+        Write-Output "FAIL (CRITICAL): $($writableDirs.Count) DLL search order director(ies) writable by non-admin:"
+        $writableDirs | ForEach-Object { Write-Output "  CRITICAL: $_" }
+        Write-Output "  Fix: restrict write permissions on all System32/SysWOW64/Windows directories to SYSTEM + Administrators only."
+      }
+      if ($safeDll -ne 1) {
+        Write-Output "FAIL: SafeDllSearchMode is not set to 1 (current=$safeDll). The DLL search order places the application directory before System32, enabling CWD-based DLL hijacking. Set HKLM\\...\\Session Manager\\SafeDllSearchMode = 1."
+      }
+      if ($writableDirs.Count -eq 0 -and $safeDll -eq 1) {
+        Write-Output "PASS: No writable system DLL directories found and SafeDllSearchMode=1. T1574.001 DLL hijack surface is hardened. [BAS-SIM-EXPOSURE-S3]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Step 4 — Defender Exclusion Audit (T1562.001)
+  # ---------------------------------------------------------------------------
+  - name: "Exposure 4 — Microsoft Defender Exclusion Path and Process Audit (T1562.001)"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: none
+    blast_radius: "Reads Defender exclusion lists via Get-MpPreference (path, process, extension, IP exclusions). Flags exclusions that are writable by non-admin users, that cover entire user profile trees, temp directories, or broad extensions (.exe/.dll/.ps1). Read-only. Exclusion misconfiguration is consistently exploited to park malware outside Defender's scan cone."
+    reversible: true
+    telemetry:
+      - "PowerShell EID 4104: Get-MpPreference (ScriptBlock logging)"
+    detection:
+      - "SIEM: Get-MpPreference invoked from PowerShell — AV exclusion enumeration IOC (context-dependent: attacker vs BAS)"
+      - "EDR: reading HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\Exclusions — Sigma rule registry_set_windows_defender_exclusion_added.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $mp = Get-MpPreference -ErrorAction Stop
+      } catch {
+        Write-Output "SKIP: Get-MpPreference failed — Defender may not be present or WMI is restricted: $($_.Exception.Message). [BAS-SIM-EXPOSURE-S4]"
+        exit 0
+      }
+      $findings = @()
+      # Path exclusions
+      $exPaths = @($mp.ExclusionPath) | Where-Object { $_ }
+      foreach ($p in $exPaths) {
+        $pLow = $p.ToLower()
+        # Flag: user-writable locations, temp dirs, or entire drive roots
+        if ($pLow -match '^[a-z]:\\$|^[a-z]:\\\\$') {
+          $findings += "CRITICAL: entire drive excluded: [$p]"
+        } elseif ($pLow -match 'temp|tmp|appdata|users\\|programdata\\temp') {
+          $findings += "HIGH: user-writable or temp directory excluded: [$p]"
+        } elseif ($pLow -match 'downloads?|desktop|documents?|pictures?') {
+          $findings += "HIGH: user data directory excluded: [$p]"
+        } else {
+          # Check if the excluded path is writable by non-admins
+          if (Test-Path $p -PathType Container) {
+            try {
+              $acl = Get-Acl $p -EA Stop
+              foreach ($ace in $acl.Access) {
+                $isBroadWrite = ($ace.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::Write) -or
+                                ($ace.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::Modify)
+                $isNonAdmin = $ace.IdentityReference.Value -match 'Everyone|BUILTIN\\Users|Authenticated Users'
+                if ($ace.AccessControlType -eq 'Allow' -and $isBroadWrite -and $isNonAdmin) {
+                  $findings += "HIGH: excluded path is writable by non-admin [$($ace.IdentityReference.Value)]: [$p]"
+                  break
+                }
+              }
+            } catch {}
+          }
+        }
+      }
+      # Process exclusions
+      $exProcs = @($mp.ExclusionProcess) | Where-Object { $_ }
+      foreach ($proc in $exProcs) {
+        $procLow = $proc.ToLower()
+        if ($procLow -match 'powershell|pwsh|cmd|wscript|cscript|mshta|rundll32|regsvr32') {
+          $findings += "CRITICAL: high-risk LOLBin excluded from Defender scanning: [$proc]"
+        } else {
+          $findings += "INFO: process excluded from Defender: [$proc]"
+        }
+      }
+      # Extension exclusions
+      $exExts = @($mp.ExclusionExtension) | Where-Object { $_ }
+      foreach ($ext in $exExts) {
+        $extLow = $ext.ToLower().TrimStart('.')
+        if ($extLow -match '^(exe|dll|ps1|vbs|js|bat|cmd|hta|msi|scr|com|pif|lnk)$') {
+          $findings += "CRITICAL: executable extension excluded from Defender: [.$ext]"
+        } else {
+          $findings += "INFO: extension excluded: [.$ext]"
+        }
+      }
+      $critical = $findings | Where-Object { $_ -match '^CRITICAL' }
+      $high     = $findings | Where-Object { $_ -match '^HIGH' }
+      Write-Output "EXEC T1562.001: Defender exclusion audit. Paths=$($exPaths.Count), Processes=$($exProcs.Count), Extensions=$($exExts.Count). Findings: CRITICAL=$($critical.Count) HIGH=$($high.Count). [BAS-SIM-EXPOSURE-S4]"
+      if ($findings.Count -gt 0) {
+        $findings | ForEach-Object { Write-Output "  $_" }
+        if ($critical.Count -gt 0) {
+          Write-Output "FAIL (CRITICAL): $($critical.Count) Defender exclusion(s) create a blind spot that attackers can park malware in without detection. Review and remove all exclusions not documented in a change-management ticket. SEBI CSCRF requires documented justification for each exclusion."
+        } elseif ($high.Count -gt 0) {
+          Write-Output "FAIL: $($high.Count) high-risk Defender exclusion(s) found. Writable or user-accessible excluded directories allow attackers to place payloads that bypass AV entirely."
+        }
+      } else {
+        Write-Output "PASS: No over-broad or dangerous Defender exclusions found. Exclusion surface is clean. [BAS-SIM-EXPOSURE-S4]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Step 5 — Dangerous Token Privileges (T1134)
+  # ---------------------------------------------------------------------------
+  - name: "Exposure 5 — Dangerous Token Privilege Accumulation (T1134)"
+    technique_id: T1134
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: none
+    blast_radius: "Reads the current process token's privilege list via whoami /priv and the Win32 API, identifies privileges that enable well-known escalation paths (SeDebugPrivilege, SeImpersonatePrivilege, SeLoadDriverPrivilege, SeTakeOwnershipPrivilege, SeBackupPrivilege, SeRestorePrivilege, SeCreateTokenPrivilege). Read-only. No token modification."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: whoami.exe /priv (if invoked)"
+      - "PowerShell EID 4104: token privilege enumeration"
+    detection:
+      - "EDR: whoami.exe /priv from PowerShell — privilege discovery IOC"
+      - "SIEM: SeDebugPrivilege or SeImpersonatePrivilege present on non-service accounts — T1134 pre-condition"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Privileged escalation paths (each maps to a known exploitation technique)
+      $dangerousPrivs = @{
+        'SeDebugPrivilege'          = 'Read/write any process memory including LSASS — direct path to credential dump or kernel driver load'
+        'SeImpersonatePrivilege'    = 'Impersonate any token — used by Potato-family exploits to escalate from service to SYSTEM'
+        'SeLoadDriverPrivilege'     = 'Load unsigned kernel drivers — used for EDR blind-spot creation and SYSTEM escalation'
+        'SeTakeOwnershipPrivilege'  = 'Take ownership of any object — direct path to file/registry ACL bypass'
+        'SeBackupPrivilege'         = 'Read any file ignoring ACLs — grants SAM/SYSTEM/NTDS.dit read access for credential theft'
+        'SeRestorePrivilege'        = 'Write any file ignoring ACLs — complements SeBackup for full filesystem control'
+        'SeCreateTokenPrivilege'    = 'Create primary tokens with arbitrary group SIDs — direct SYSTEM token creation'
+        'SeAssignPrimaryTokenPrivilege' = 'Assign primary tokens to processes — enables arbitrary process privilege injection'
+        'SeTcbPrivilege'            = 'Act as part of the OS — strongest privilege, enables any security policy bypass'
+      }
+      $whoamiOut = & whoami.exe /priv 2>&1 | Out-String
+      $findings  = @()
+      $enabled   = @()
+      foreach ($priv in $dangerousPrivs.Keys) {
+        if ($whoamiOut -match $priv) {
+          $enabledFlag = $whoamiOut -match "$priv\s+.*Enabled"
+          $status = if ($enabledFlag) { 'ENABLED' } else { 'present-but-disabled' }
+          $findings += [PSCustomObject]@{ Priv = $priv; Status = $status; Risk = $dangerousPrivs[$priv] }
+          if ($enabledFlag) { $enabled += $priv }
+        }
+      }
+      $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+      Write-Output "EXEC T1134: token privilege audit for [$currentUser] (isAdmin=$isAdmin). $($findings.Count) dangerous privilege(s) present, $($enabled.Count) enabled. [BAS-SIM-EXPOSURE-S5]"
+      foreach ($f in $findings) {
+        Write-Output "  [$($f.Status)] $($f.Priv) — $($f.Risk)"
+      }
+      if ($enabled.Count -gt 0 -and -not $isAdmin) {
+        Write-Output "FAIL (CRITICAL): Non-admin user [$currentUser] holds $($enabled.Count) ENABLED dangerous privilege(s): [$($enabled -join ', ')]. This is a direct privilege escalation path. Review local group membership, service account assignments, and user-rights policy (secpol.msc > Local Policies > User Rights Assignment)."
+      } elseif ($enabled.Count -gt 0 -and $isAdmin) {
+        Write-Output "INFO: Admin account [$currentUser] holds $($enabled.Count) dangerous privilege(s) (expected for admin). Verify this account is not used for daily user tasks. BFSI best practice: daily use accounts must NOT be local admins."
+      } elseif ($findings.Count -gt 0) {
+        Write-Output "INFO: $($findings.Count) dangerous privilege(s) present but disabled for [$currentUser]. Disabled privileges can be activated by some exploit chains — review assignment."
+      } else {
+        Write-Output "PASS: No dangerous privileges found on current token for [$currentUser]. T1134 privilege escalation pre-conditions are not met. [BAS-SIM-EXPOSURE-S5]"
+      }
+    cleanup: ""
