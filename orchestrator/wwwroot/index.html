@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Audspect — Breach &amp; Attack Simulation</title>
+<link rel="icon" type="image/png" href="/images/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -879,14 +880,8 @@ code {
 <!-- Login -->
 <div id="login-screen">
   <div class="login-left">
-    <div class="login-brand">
-      <div class="login-brand-icon">
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-          <path d="M9 1.5L2.5 5v4.5c0 3.6 2.8 6.9 6.5 7.5 3.7-.6 6.5-3.9 6.5-7.5V5L9 1.5z" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
-          <path d="M6 9l2 2 4-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <div class="login-brand-name">Aud<em>spect</em></div>
+    <div class="login-brand" style="margin-bottom: 2rem;">
+      <img src="/images/logo_name.png" alt="Audspect" style="height: 38px; width: auto;" />
     </div>
     <div class="login-tagline">Continuous Control Validation for Enterprise Security</div>
     <div class="login-sub">On-premise Breach &amp; Attack Simulation platform built for regulated industries. SEBI CSCRF, RBI CSF, and IRDAI aligned.</div>
@@ -918,14 +913,8 @@ code {
 <!-- App -->
 <div id="app">
   <aside id="sidebar">
-    <div class="sidebar-brand">
-      <div class="sidebar-brand-icon">
-        <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
-          <path d="M9 1.5L2.5 5v4.5c0 3.6 2.8 6.9 6.5 7.5 3.7-.6 6.5-3.9 6.5-7.5V5L9 1.5z" stroke="white" stroke-width="1.6" stroke-linejoin="round"/>
-          <path d="M6 9l2 2 4-4" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <div class="sidebar-brand-name">Aud<em>spect</em></div>
+    <div class="sidebar-brand" style="justify-content: center; padding: 0.5rem 1rem;">
+      <img src="/images/logo_name.png" alt="Audspect" style="height: 28px; width: auto;" />
     </div>
     <nav class="sidebar-nav">
       <div class="nav-group">
@@ -1610,7 +1599,86 @@ code {
             <button class="btn btn-outline btn-sm" onclick="loadScenarios()">Refresh</button>
           </div>
         </div>
-        <div id="sc-grid" class="cards"></div>
+
+        <!-- Endpoint Mastery Section -->
+        <div id="em-section" style="margin-bottom: 2rem;">
+          <h3 style="font-size: 1.1rem; color: var(--accent); margin-bottom: 1rem; display: flex; align-items: center; gap: 8px;">
+            <svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z" stroke-width="2" fill="none"/></svg>
+            Endpoint Mastery Scenarios <span id="em-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">0</span>
+          </h3>
+          <div id="sc-grid-em" class="cards"></div>
+        </div>
+
+        <!-- Other Scenarios Section -->
+        <div id="other-section">
+          <h3 id="other-title" style="font-size: 1.1rem; color: var(--muted); margin-bottom: 1rem;">
+            Standard &amp; Custom Scenarios <span id="other-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">0</span>
+          </h3>
+          <div id="sc-grid" class="cards"></div>
+        </div>
+
+        <!-- Threat Actor Library (Caldera emu adversary profiles) -->
+        <div id="adversary-section" style="margin-top:2rem;display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
+            <h3 style="font-size:1.1rem;color:var(--accent);margin:0;display:flex;align-items:center;gap:8px">
+              <svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke-width="2"/><circle cx="9" cy="7" r="4" stroke-width="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke-width="2"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke-width="2"/></svg>
+              Threat Actor Library
+              <span id="adversary-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">0</span>
+            </h3>
+            <div style="display:flex;gap:0.4rem;align-items:center">
+              <input type="search" id="adv-search" placeholder="Search actor…" oninput="renderAdversaryLibrary()"
+                     style="padding:0.4rem 0.65rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:inherit;min-width:160px">
+              <button class="btn btn-outline btn-sm" onclick="loadAdversaries()">Refresh</button>
+            </div>
+          </div>
+          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem">
+            Adversary emulation profiles from the MITRE CTID library — each is a sequenced kill-chain of ATT&amp;CK-mapped abilities. Click a card to see the ability chain; <strong>Run</strong> dispatches the full emulation to an agent.
+          </div>
+          <div id="adv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.75rem"></div>
+        </div>
+      </div>
+
+      <!-- Adversary detail drawer -->
+      <div id="adv-drawer-overlay" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.55)" onclick="closeAdvDrawer()"></div>
+      <div id="adv-drawer" style="display:none;position:fixed;top:0;right:0;height:100%;width:min(480px,95vw);background:var(--surface);border-left:1px solid var(--border);z-index:501;overflow-y:auto;padding:1.5rem 1.25rem;box-shadow:-4px 0 24px rgba(0,0,0,0.3)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
+          <div>
+            <div id="adv-drawer-name" style="font-size:1.15rem;font-weight:700;color:var(--text);margin-bottom:0.25rem"></div>
+            <div id="adv-drawer-desc" style="font-size:0.8rem;color:var(--muted);line-height:1.5"></div>
+          </div>
+          <button onclick="closeAdvDrawer()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:0 0 0 0.5rem">&#10005;</button>
+        </div>
+        <div id="adv-drawer-run-wrap" style="margin-bottom:1.25rem"></div>
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:700;margin-bottom:0.6rem">Ability Chain</div>
+        <div id="adv-drawer-abilities" style="display:flex;flex-direction:column;gap:0.35rem"></div>
+      </div>
+
+      <!-- Adversary quick-run modal -->
+      <div id="adv-run-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;width:min(420px,94vw);box-shadow:0 8px 40px rgba(0,0,0,0.5)">
+          <div style="font-size:1rem;font-weight:700;margin-bottom:0.25rem">Run Adversary Emulation</div>
+          <div id="adv-run-title" style="font-size:0.82rem;color:var(--muted);margin-bottom:1.25rem"></div>
+          <div style="margin-bottom:0.85rem">
+            <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.4rem">Target Agent</label>
+            <select id="adv-run-agent" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit"></select>
+          </div>
+          <div style="margin-bottom:0.85rem">
+            <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.4rem">Execution Mode</label>
+            <select id="adv-run-mode" onchange="renderAdvRunWarn()" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+              <option value="telemetry">Telemetry — real identity-safe techniques (production-safe under approval)</option>
+              <option value="lab">Lab — full-fidelity emulation (isolated range only)</option>
+            </select>
+          </div>
+          <div id="adv-run-warn" style="display:none;padding:0.6rem 0.75rem;border-radius:var(--radius);font-size:0.78rem;line-height:1.45;margin-bottom:0.85rem"></div>
+          <div style="margin-bottom:0.85rem">
+            <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.4rem">Reason / change reference (optional, audited)</label>
+            <input type="text" id="adv-run-reason" placeholder="e.g. CR-1234 detection validation" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;box-sizing:border-box">
+          </div>
+          <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+            <button class="btn btn-outline btn-sm" onclick="closeAdvRunModal()">Cancel</button>
+            <button class="btn btn-primary btn-sm" id="adv-run-confirm-btn" onclick="confirmAdversaryRun()">&#9654; Run</button>
+          </div>
+        </div>
       </div>
 
       <!-- Runs -->
@@ -1766,8 +1834,8 @@ code {
         <div id="findings-toolbar" style="margin-bottom:0.9rem"></div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Finding</th><th>Technique</th><th>Severity</th><th>Control</th><th>Agent</th><th>Status</th><th>Age</th></tr></thead>
-            <tbody id="findings-body"><tr><td colspan="7" class="empty">No findings yet.</td></tr></tbody>
+            <thead><tr><th>Finding</th><th>Technique</th><th>Severity</th><th>Control</th><th>Agent</th><th>Status</th><th>Age</th><th id="findings-th-triage" style="display:none"></th></tr></thead>
+            <tbody id="findings-body"><tr><td colspan="8" class="empty">No findings yet.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2300,6 +2368,7 @@ function bootApp() {
   loadAgents();
   loadCatalogs();
   loadScenarios();
+  loadAdversaries();
   loadRuns();
   if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
   injectServerURL();
@@ -2726,13 +2795,23 @@ function loadScenarios() {
 // filter, then paints the grid. Called on load and whenever a filter changes.
 function renderScenarios() {
   var grid = document.getElementById('sc-grid');
-  if (!grid) return;
-  if (!scenarios.length) { grid.innerHTML = '<p class="empty">No scenarios loaded.</p>'; document.getElementById('sc-cnt').textContent = 0; return; }
+  var gridEm = document.getElementById('sc-grid-em');
+  if (!grid || !gridEm) return;
 
   var searchEl = document.getElementById('sc-search');
   var srcEl = document.getElementById('sc-filter-source');
   var q = (searchEl ? searchEl.value : '').trim().toLowerCase();
   var src = srcEl ? srcEl.value : 'all';
+
+  if (!scenarios.length) {
+    grid.innerHTML = '<p class="empty">No scenarios loaded.</p>';
+    gridEm.innerHTML = '';
+    document.getElementById('sc-cnt').textContent = 0;
+    document.getElementById('em-cnt').textContent = 0;
+    document.getElementById('other-cnt').textContent = 0;
+    document.getElementById('em-section').style.display = 'none';
+    return;
+  }
 
   var matches = scenarios.filter(function(s) {
     if (src !== 'all') {
@@ -2747,8 +2826,36 @@ function renderScenarios() {
   });
 
   document.getElementById('sc-cnt').textContent = matches.length;
-  if (!matches.length) { grid.innerHTML = '<p class="empty">No scenarios match your filter.</p>'; return; }
-  grid.innerHTML = matches.map(scenarioCardHTML).join('');
+
+  var emMatches = matches.filter(function(s) {
+    return (s.id || '').startsWith('em-') || (s.tags || []).indexOf('endpoint-mastery') !== -1;
+  });
+  var otherMatches = matches.filter(function(s) {
+    return !((s.id || '').startsWith('em-') || (s.tags || []).indexOf('endpoint-mastery') !== -1);
+  });
+
+  document.getElementById('em-cnt').textContent = emMatches.length;
+  document.getElementById('other-cnt').textContent = otherMatches.length;
+
+  if (emMatches.length > 0) {
+    document.getElementById('em-section').style.display = 'block';
+    gridEm.innerHTML = emMatches.map(scenarioCardHTML).join('');
+  } else {
+    document.getElementById('em-section').style.display = 'none';
+    gridEm.innerHTML = '';
+  }
+
+  if (otherMatches.length > 0) {
+    document.getElementById('other-section').style.display = 'block';
+    grid.innerHTML = otherMatches.map(scenarioCardHTML).join('');
+  } else {
+    if (emMatches.length === 0) {
+      grid.innerHTML = '<p class="empty">No scenarios match your filter.</p>';
+    } else {
+      document.getElementById('other-section').style.display = 'none';
+      grid.innerHTML = '';
+    }
+  }
 }
 
 // Collapsible description: shows a short preview with a "Read more" / "Read less"
@@ -3148,6 +3255,196 @@ function covStatusMap(runs) {
   });
   return st;
 }
+// ── Threat Actor Library (Caldera emu adversary profiles) ──────────────────────
+
+var _adversaries = [];
+var _advDrawerID = null;
+
+function loadAdversaries() {
+  apicall('/api/caldera/adversaries').then(function(data) {
+    _adversaries = (data || []).filter(function(a) { return a.name; });
+    renderAdversaryLibrary();
+  }).catch(function() { /* Caldera not configured — silently skip */ });
+}
+
+function renderAdversaryLibrary() {
+  var grid = document.getElementById('adv-grid');
+  var section = document.getElementById('adversary-section');
+  var cnt = document.getElementById('adversary-cnt');
+  if (!grid || !section) return;
+
+  var q = (document.getElementById('adv-search') || {value:''}).value.trim().toLowerCase();
+  var filtered = _adversaries.filter(function(a) {
+    if (!q) return true;
+    return (a.name || '').toLowerCase().indexOf(q) !== -1 ||
+           (a.description || '').toLowerCase().indexOf(q) !== -1 ||
+           (a.tactics || []).some(function(t) { return t.toLowerCase().indexOf(q) !== -1; });
+  });
+
+  section.style.display = _adversaries.length ? '' : 'none';
+  if (cnt) cnt.textContent = _adversaries.length;
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div style="color:var(--muted);font-size:0.82rem;padding:0.5rem 0">No threat actors match your search.</div>';
+    return;
+  }
+
+  var tacticColors = {
+    'initial-access':'#2f81f7','execution':'#f0883e','persistence':'#d29922',
+    'privilege-escalation':'#f85149','defense-evasion':'#a371f7','credential-access':'#da3633',
+    'discovery':'#9aa9bc','lateral-movement':'#0d9488','collection':'#56d364',
+    'command-and-control':'#f0883e','exfiltration':'#da3633','impact':'#f85149'
+  };
+  function tacticChip(t) {
+    var col = tacticColors[t] || 'var(--muted)';
+    return '<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:0.68rem;font-weight:600;background:' + col + '22;color:' + col + ';border:1px solid ' + col + '44;white-space:nowrap">' + x(t) + '</span>';
+  }
+
+  grid.innerHTML = filtered.map(function(a) {
+    var tactics = (a.tactics || []).slice(0, 4).map(tacticChip).join(' ');
+    var moreT = a.tactics && a.tactics.length > 4 ? ' <span style="color:var(--muted);font-size:0.68rem">+' + (a.tactics.length - 4) + '</span>' : '';
+    var desc = (a.description || '').length > 100 ? a.description.substring(0, 97) + '…' : (a.description || 'MITRE CTID adversary emulation profile');
+    var canRun = ROLE === 'admin' || ROLE === 'analyst';
+    return '<div class="card" style="cursor:pointer;display:flex;flex-direction:column;gap:0.5rem;border-left:3px solid var(--accent)" onclick="openAdvDrawer(\'' + x(a.id) + '\')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem">' +
+        '<div style="font-size:0.9rem;font-weight:700;color:var(--text)">' + x(a.name) + '</div>' +
+        '<span style="flex-shrink:0;font-size:0.72rem;color:var(--muted);background:var(--elevated);padding:2px 7px;border-radius:9px;border:1px solid var(--border)">' + (a.abilityCount || 0) + ' abilities</span>' +
+      '</div>' +
+      '<div style="font-size:0.78rem;color:var(--muted);line-height:1.45">' + x(desc) + '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:0.25rem">' + tactics + moreT + '</div>' +
+      (canRun ? '<div style="margin-top:0.25rem" onclick="event.stopPropagation()">' +
+        '<button class="btn btn-primary btn-sm" style="width:100%" onclick="openAdvRunModal(\'' + x(a.id) + '\',\'' + x(a.name).replace(/'/g,'\\\'') + '\')">&#9654; Run</button>' +
+      '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+function openAdvDrawer(adversaryId) {
+  _advDrawerID = adversaryId;
+  var adv = _adversaries.find(function(a) { return a.id === adversaryId; });
+  var nameEl = document.getElementById('adv-drawer-name');
+  var descEl = document.getElementById('adv-drawer-desc');
+  var abEl   = document.getElementById('adv-drawer-abilities');
+  var runWrap = document.getElementById('adv-drawer-run-wrap');
+  if (!nameEl) return;
+  nameEl.textContent = adv ? adv.name : adversaryId;
+  descEl.textContent = adv ? (adv.description || '') : '';
+  abEl.innerHTML = '<div style="color:var(--muted);font-size:0.78rem">Loading…</div>';
+  if (runWrap) {
+    var canRun = ROLE === 'admin' || ROLE === 'analyst';
+    runWrap.innerHTML = canRun
+      ? '<button class="btn btn-primary btn-sm" onclick="openAdvRunModal(\'' + x(adversaryId) + '\',\'' + (adv ? x(adv.name).replace(/'/g,'\\\'') : adversaryId) + '\')" style="width:100%">&#9654; Run this adversary</button>'
+      : '';
+  }
+  document.getElementById('adv-drawer-overlay').style.display = '';
+  document.getElementById('adv-drawer').style.display = '';
+
+  apicall('/api/caldera/adversaries/' + encodeURIComponent(adversaryId)).then(function(d) {
+    var abs = (d && d.abilities) || [];
+    if (!abs.length) { abEl.innerHTML = '<div style="color:var(--muted);font-size:0.78rem">No abilities found.</div>'; return; }
+    var tacticColors = {'discovery':'#9aa9bc','execution':'#f0883e','persistence':'#d29922',
+      'privilege-escalation':'#f85149','defense-evasion':'#a371f7','credential-access':'#da3633',
+      'lateral-movement':'#0d9488','collection':'#56d364','command-and-control':'#f0883e',
+      'exfiltration':'#da3633','impact':'#f85149','initial-access':'#2f81f7'};
+    abEl.innerHTML = abs.map(function(ab, i) {
+      var col = tacticColors[ab.tactic] || 'var(--muted)';
+      var labOnly = ab.plugin === 'emu' ? '' : '';
+      return '<div style="display:flex;align-items:flex-start;gap:0.5rem;padding:0.4rem 0.5rem;background:var(--elevated);border-radius:var(--radius);border:1px solid var(--border)">' +
+        '<span style="flex-shrink:0;font-size:0.68rem;font-weight:700;color:var(--muted);padding-top:1px;min-width:20px">' + (i+1) + '</span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:0.8rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + x(ab.name || ab.id) + '</div>' +
+          '<div style="display:flex;gap:0.4rem;margin-top:0.2rem;flex-wrap:wrap">' +
+            (ab.technique ? '<span style="font-size:0.68rem;color:var(--accent);font-family:monospace">' + x(ab.technique) + '</span>' : '') +
+            (ab.tactic ? '<span style="font-size:0.68rem;color:' + col + '">' + x(ab.tactic) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }).catch(function() {
+    abEl.innerHTML = '<div style="color:var(--muted);font-size:0.78rem">Could not load ability chain.</div>';
+  });
+}
+
+function closeAdvDrawer() {
+  document.getElementById('adv-drawer-overlay').style.display = 'none';
+  document.getElementById('adv-drawer').style.display = 'none';
+  _advDrawerID = null;
+}
+
+var _advRunID = null, _advRunName = null;
+
+function openAdvRunModal(adversaryId, adversaryName) {
+  _advRunID = adversaryId; _advRunName = adversaryName;
+  var overlay = document.getElementById('adv-run-overlay');
+  var title   = document.getElementById('adv-run-title');
+  var agSel   = document.getElementById('adv-run-agent');
+  if (!overlay) return;
+  title.textContent = adversaryName;
+  agSel.innerHTML = agents.map(function(a) {
+    var os = a.osVersion ? ' [' + (a.osVersion.toLowerCase().indexOf('windows') !== -1 ? 'Win' : 'Other') + ']' : '';
+    return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + os + '</option>';
+  }).join('');
+  document.getElementById('adv-run-mode').value = 'telemetry';
+  document.getElementById('adv-run-reason').value = '';
+  renderAdvRunWarn();
+  overlay.style.display = 'flex';
+}
+
+function closeAdvRunModal() {
+  var overlay = document.getElementById('adv-run-overlay');
+  if (overlay) overlay.style.display = 'none';
+  _advRunID = null; _advRunName = null;
+}
+
+function renderAdvRunWarn() {
+  var mode = document.getElementById('adv-run-mode').value;
+  var warn = document.getElementById('adv-run-warn');
+  if (!warn) return;
+  if (mode === 'telemetry') {
+    warn.style.display = '';
+    warn.style.background = 'rgba(210,153,34,0.12)';
+    warn.style.border = '1px solid rgba(210,153,34,0.35)';
+    warn.style.color = '#d29922';
+    warn.innerHTML = '&#9888; <strong>TELEMETRY mode</strong> — runs real, identity-safe ATT&amp;CK techniques and <strong>will generate EDR/SIEM alerts</strong>. Only proceed on an approved, monitored endpoint.';
+  } else if (mode === 'lab') {
+    warn.style.display = '';
+    warn.style.background = 'rgba(218,54,51,0.10)';
+    warn.style.border = '1px solid rgba(218,54,51,0.35)';
+    warn.style.color = '#da3633';
+    warn.innerHTML = '&#9888; <strong>LAB mode — FULL FIDELITY</strong>. Payload-bearing abilities (credential tools, lateral movement payloads) will execute. <strong>ISOLATED AD RANGE ONLY — NEVER PRODUCTION.</strong>';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+function confirmAdversaryRun() {
+  if (!_advRunID) return;
+  var agentId = document.getElementById('adv-run-agent').value;
+  var mode    = document.getElementById('adv-run-mode').value;
+  var reason  = document.getElementById('adv-run-reason').value.trim();
+  if (!agentId) { showToast('Select an agent', 'err'); return; }
+  if (mode === 'telemetry') {
+    if (!confirm('TELEMETRY mode will run real ATT&CK techniques and generate EDR/SIEM alerts.\n\nProceed only on an approved, monitored endpoint. Continue?')) return;
+  } else if (mode === 'lab') {
+    if (!confirm('LAB mode runs FULL-FIDELITY emulation (credential dumps, lateral movement payloads).\n\nISOLATED AD RANGE ONLY — never production. Continue?')) return;
+    if (!confirm('Second confirmation required for LAB mode.\n\nConfirm the target is an isolated lab environment with a clean snapshot?')) return;
+  }
+  var btn = document.getElementById('adv-run-confirm-btn');
+  if (btn) btn.disabled = true;
+  apicall('/api/caldera/adversaries/' + encodeURIComponent(_advRunID) + '/run', {
+    method: 'POST',
+    body: JSON.stringify({ agentId: agentId, mode: mode, confirmLive: true, confirmLab: mode === 'lab', reason: reason })
+  }).then(function(res) {
+    closeAdvRunModal();
+    showToast('Dispatched (' + mode + ') — Run ID: ' + res.runId, 'ok');
+    showTab('runs'); loadRuns();
+  }).catch(function(e) {
+    showToast('Run failed: ' + e.message, 'err');
+  }).finally(function() {
+    if (btn) btn.disabled = false;
+  });
+}
+
 function loadCoverage() {
   Promise.all([apicall('/api/attack/matrix'), apicall('/api/scenarios/runs')]).then(function(res) {
     var tactics = (res[0] && res[0].tactics) || [];
@@ -3256,17 +3553,45 @@ function setFindingTab(v) { FINDING_TAB = v; renderFindingsTabs(); renderFinding
 function renderFindingsRows() {
   var l = (window._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
   var tb = document.getElementById('findings-body');
-  if (!l.length) { tb.innerHTML = '<tr><td colspan="7" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
+  var canTriage = (ROLE === 'admin' || ROLE === 'analyst');
+  // Show/hide the Triage column header depending on role
+  var thTriage = document.getElementById('findings-th-triage');
+  if (thTriage) thTriage.style.display = canTriage ? '' : 'none';
+  if (!l.length) { tb.innerHTML = '<tr><td colspan="' + (canTriage ? 8 : 7) + '" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
   tb.innerHTML = l.map(function(f) {
-    return '<tr style="cursor:pointer" onclick="openFinding(\'' + x(f.id) + '\')">' +
-      '<td class="cell-main">' + x(f.techniqueName || f.techniqueId) + (f.reopenedCount > 0 ? ' <span class="sbadge s-partial">reopened</span>' : '') + '</td>' +
-      '<td><span class="tech-id">' + x(f.techniqueId) + '</span></td>' +
-      '<td>' + findingSevBadge(f.severity, f.exposureState) + '</td>' +
-      '<td class="tiny muted">' + x(f.controlClass) + '</td>' +
-      '<td class="tiny muted" style="font-family:var(--font-mono)">' + x(f.agentId) + '</td>' +
-      '<td><span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></td>' +
-      '<td class="tiny muted">' + ago(f.lastSeen) + '</td></tr>';
+    // Inline triage cell — stop click so it does NOT trigger openFinding on the row
+    var triageCell = '';
+    if (canTriage) {
+      var nextStates = ['open', 'triaged', 'remediated', 'risk_accepted'].filter(function(st) { return st !== f.status; });
+      var opts = nextStates.map(function(st) {
+        return '<option value="' + st + '">' + st.replace('_', ' ') + '</option>';
+      }).join('');
+      triageCell = '<td onclick="event.stopPropagation()" style="padding:0.2rem 0.5rem">'
+        + '<select class="triage-sel" onchange="quickTriageFinding(\'' + x(f.id) + '\',this)"'
+        + ' style="font-size:0.72rem;padding:0.2rem 0.35rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer">'
+        + '<option value="">Set\u2026</option>' + opts
+        + '</select></td>';
+    }
+    return '<tr style="cursor:pointer" onclick="openFinding(\'' + x(f.id) + '\')">'
+      + '<td class="cell-main">' + x(f.techniqueName || f.techniqueId) + (f.reopenedCount > 0 ? ' <span class="sbadge s-partial">reopened</span>' : '') + '</td>'
+      + '<td><span class="tech-id">' + x(f.techniqueId) + '</span></td>'
+      + '<td>' + findingSevBadge(f.severity, f.exposureState) + '</td>'
+      + '<td class="tiny muted">' + x(f.controlClass) + '</td>'
+      + '<td class="tiny muted" style="font-family:var(--font-mono)">' + x(f.agentId) + '</td>'
+      + '<td><span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></td>'
+      + '<td class="tiny muted">' + ago(f.lastSeen) + '</td>'
+      + triageCell
+      + '</tr>';
   }).join('');
+}
+// quickTriageFinding — called from the inline triage dropdown in the findings table.
+// Resets the select back to placeholder immediately, then delegates to the existing
+// setFindingStatus which handles the API call, toast, drawer refresh, and table reload.
+function quickTriageFinding(id, sel) {
+  var status = sel.value;
+  if (!status) return;
+  sel.value = ''; // reset to placeholder so it doesn't look stuck
+  setFindingStatus(id, status);
 }
 function openFinding(id) {
   apicall('/api/findings/' + encodeURIComponent(id)).then(function(f) {
@@ -3394,8 +3719,41 @@ function openRemediation(i) {
   document.getElementById('results-overlay').classList.add('open');
 }
 function revalidateRemediation(techniqueId) {
-  showToast('Re-validate ' + techniqueId + ' — pick a scenario + target', 'ok');
-  openModal();
+  // Find the best matching scenario for this technique ID so the modal
+  // opens pre-selected rather than blank.
+  // Priority: (1) custom/builtin scenario whose artTechniques list contains the ID,
+  //           (2) scenario with a step whose techniqueId matches,
+  //           (3) fall back to blank modal with a guiding toast.
+  var tid = (techniqueId || '').toUpperCase();
+  var match = null;
+  // Pass 1 — artTechniques list
+  for (var i = 0; i < scenarios.length; i++) {
+    var s = scenarios[i];
+    var arts = s.artTechniques || [];
+    for (var j = 0; j < arts.length; j++) {
+      if ((arts[j] || '').toUpperCase() === tid) { match = s; break; }
+    }
+    if (match) break;
+  }
+  // Pass 2 — custom steps with a techniqueId field
+  if (!match) {
+    for (var i = 0; i < scenarios.length; i++) {
+      var s = scenarios[i];
+      var steps = s.steps || [];
+      for (var j = 0; j < steps.length; j++) {
+        if ((steps[j].techniqueId || '').toUpperCase() === tid) { match = s; break; }
+      }
+      if (match) break;
+    }
+  }
+  if (match) {
+    showToast('Opening scenario "' + match.name + '" for ' + techniqueId, 'ok');
+    openModal(match.id);
+  } else {
+    // No matching scenario found — open blank modal with a guiding toast
+    showToast('No scenario found for ' + techniqueId + ' — select one manually', 'ok');
+    openModal();
+  }
 }
 
 // ── Reports ──────────────────────────────────────────────────────────────────
@@ -5394,7 +5752,7 @@ function loadCalderaStatus() {
     document.getElementById('cs-caldera-status').innerHTML = dot;
     document.getElementById('cs-caldera-url').textContent = d.url || '(not configured)';
     document.getElementById('cs-caldera-version').textContent = d.version || (d.reachable ? 'unknown' : '—');
-    document.getElementById('cs-caldera-abilities').textContent = d.reachable ? (d.abilityCount + ' abilities') : '—';
+    document.getElementById('cs-caldera-abilities').textContent = d.reachable ? (d.abilityCount + ' abilities · ' + (d.adversaryCount || 0) + ' adversary profiles') : '—';
     document.getElementById('cs-caldera-latency').textContent = d.reachable ? (d.latencyMs + ' ms') : '—';
     var errEl = document.getElementById('cs-caldera-error');
     if (d.error) {

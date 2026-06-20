@@ -1735,13 +1735,14 @@ func newID() string {
 // Lets the admin confirm the integration is working without leaving the dashboard.
 func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 	type CalderaStatus struct {
-		Reachable    bool   `json:"reachable"`
-		URL          string `json:"url"`
-		Version      string `json:"version,omitempty"`
-		AbilityCount int    `json:"abilityCount"`
-		LatencyMs    int64  `json:"latencyMs"`
-		Error        string `json:"error,omitempty"`
-		HttpStatus   int    `json:"httpStatus,omitempty"` // non-zero on non-200 HTTP response
+		Reachable       bool   `json:"reachable"`
+		URL             string `json:"url"`
+		Version         string `json:"version,omitempty"`
+		AbilityCount    int    `json:"abilityCount"`
+		AdversaryCount  int    `json:"adversaryCount"`
+		LatencyMs       int64  `json:"latencyMs"`
+		Error           string `json:"error,omitempty"`
+		HttpStatus      int    `json:"httpStatus,omitempty"` // non-zero on non-200 HTTP response
 	}
 
 	if h.calderaURL == "" {
@@ -1815,12 +1816,30 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Adversary count (best-effort)
+	adversaryCount := 0
+	advReq, _ := http.NewRequest(http.MethodGet, base+"/api/v2/adversaries", nil)
+	if h.calderaKey != "" {
+		advReq.Header.Set("KEY", h.calderaKey)
+	}
+	if advResp, err := client.Do(advReq); err == nil {
+		defer advResp.Body.Close()
+		if advResp.StatusCode == http.StatusOK {
+			var adv []json.RawMessage
+			if body, err := io.ReadAll(advResp.Body); err == nil {
+				json.Unmarshal(body, &adv)
+				adversaryCount = len(adv)
+			}
+		}
+	}
+
 	respond(w, CalderaStatus{
-		Reachable:    true,
-		URL:          h.calderaURL,
-		Version:      health.Version,
-		AbilityCount: abilityCount,
-		LatencyMs:    latencyMs,
+		Reachable:      true,
+		URL:            h.calderaURL,
+		Version:        health.Version,
+		AbilityCount:   abilityCount,
+		AdversaryCount: adversaryCount,
+		LatencyMs:      latencyMs,
 	})
 }
 
@@ -1874,6 +1893,24 @@ type CalderaAbility struct {
 	Name      string `json:"name"`
 	Tactic    string `json:"tactic,omitempty"`
 	Technique string `json:"technique,omitempty"`
+	Plugin    string `json:"plugin,omitempty"` // "emu" | "atomic" | "stockpile"
+}
+
+// CalderaAdversarySummary is one adversary profile from the Caldera library.
+type CalderaAdversarySummary struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description,omitempty"`
+	AbilityCount int      `json:"abilityCount"`
+	Tactics      []string `json:"tactics,omitempty"`
+}
+
+// CalderaAdversaryDetail is a full adversary with its ordered ability chain.
+type CalderaAdversaryDetail struct {
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Abilities   []CalderaAbility `json:"abilities"`
 }
 
 // calderaAbilityCache memoizes the Caldera ability catalog so opening the picker
@@ -1932,6 +1969,7 @@ func (h *Handler) GetCalderaAbilities(w http.ResponseWriter, r *http.Request) {
 		Name        string `json:"name"`
 		Tactic      string `json:"tactic"`
 		TechniqueID string `json:"technique_id"`
+		Plugin      string `json:"plugin"`
 	}
 	body, _ := io.ReadAll(resp.Body)
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -1940,7 +1978,7 @@ func (h *Handler) GetCalderaAbilities(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]CalderaAbility, 0, len(raw))
 	for _, a := range raw {
-		out = append(out, CalderaAbility{ID: a.AbilityID, Name: a.Name, Tactic: a.Tactic, Technique: a.TechniqueID})
+		out = append(out, CalderaAbility{ID: a.AbilityID, Name: a.Name, Tactic: a.Tactic, Technique: a.TechniqueID, Plugin: a.Plugin})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 
@@ -1950,6 +1988,256 @@ func (h *Handler) GetCalderaAbilities(w http.ResponseWriter, r *http.Request) {
 	calderaAbilityCache.mu.Unlock()
 
 	respond(w, out)
+}
+
+// calderaAdversaryCache memoizes the Caldera adversary list (changes rarely).
+var calderaAdversaryCache struct {
+	mu      sync.Mutex
+	at      time.Time
+	entries []CalderaAdversarySummary
+}
+
+// GET /api/caldera/adversaries — list adversary profiles from the Caldera library.
+// Each entry includes name, description, ability count, and unique tactic set.
+// Returns an empty list when Caldera is not configured.
+func (h *Handler) GetCalderaAdversaries(w http.ResponseWriter, r *http.Request) {
+	if h.calderaURL == "" {
+		respond(w, []CalderaAdversarySummary{})
+		return
+	}
+
+	calderaAdversaryCache.mu.Lock()
+	if calderaAdversaryCache.entries != nil && time.Since(calderaAdversaryCache.at) < 60*time.Second {
+		cached := calderaAdversaryCache.entries
+		calderaAdversaryCache.mu.Unlock()
+		respond(w, cached)
+		return
+	}
+	calderaAdversaryCache.mu.Unlock()
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	base := strings.TrimRight(h.calderaURL, "/")
+
+	// Fetch adversary list.
+	advReq, _ := http.NewRequest(http.MethodGet, base+"/api/v2/adversaries", nil)
+	if h.calderaKey != "" {
+		advReq.Header.Set("KEY", h.calderaKey)
+	}
+	advResp, err := client.Do(advReq)
+	if err != nil {
+		jsonError(w, "cannot reach Caldera: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer advResp.Body.Close()
+	if advResp.StatusCode != http.StatusOK {
+		jsonError(w, fmt.Sprintf("Caldera returned HTTP %d for /api/v2/adversaries", advResp.StatusCode), http.StatusBadGateway)
+		return
+	}
+	var rawAdvs []struct {
+		AdversaryID    string   `json:"adversary_id"`
+		Name           string   `json:"name"`
+		Description    string   `json:"description"`
+		AtomicOrdering []string `json:"atomic_ordering"`
+	}
+	advBody, _ := io.ReadAll(advResp.Body)
+	if err := json.Unmarshal(advBody, &rawAdvs); err != nil {
+		jsonError(w, "parse adversaries: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	// Load ability catalog to resolve tactic for each ability in an adversary.
+	calderaAbilityCache.mu.Lock()
+	abilityByID := map[string]CalderaAbility{}
+	for _, ab := range calderaAbilityCache.entries {
+		abilityByID[ab.ID] = ab
+	}
+	calderaAbilityCache.mu.Unlock()
+
+	out := make([]CalderaAdversarySummary, 0, len(rawAdvs))
+	for _, a := range rawAdvs {
+		if a.Name == "" || a.AdversaryID == "" {
+			continue
+		}
+		tacticSet := map[string]struct{}{}
+		for _, abilID := range a.AtomicOrdering {
+			if ab, ok := abilityByID[abilID]; ok && ab.Tactic != "" {
+				tacticSet[ab.Tactic] = struct{}{}
+			}
+		}
+		tactics := make([]string, 0, len(tacticSet))
+		for t := range tacticSet {
+			tactics = append(tactics, t)
+		}
+		sort.Strings(tactics)
+		out = append(out, CalderaAdversarySummary{
+			ID:           a.AdversaryID,
+			Name:         a.Name,
+			Description:  a.Description,
+			AbilityCount: len(a.AtomicOrdering),
+			Tactics:      tactics,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+
+	calderaAdversaryCache.mu.Lock()
+	calderaAdversaryCache.at = time.Now()
+	calderaAdversaryCache.entries = out
+	calderaAdversaryCache.mu.Unlock()
+
+	respond(w, out)
+}
+
+// GET /api/caldera/adversaries/{adversaryId} — single adversary with ability chain.
+func (h *Handler) GetCalderaAdversary(w http.ResponseWriter, r *http.Request) {
+	adversaryID := chi.URLParam(r, "adversaryId")
+	if len(adversaryID) == 0 || len(adversaryID) > 128 {
+		jsonError(w, "invalid adversary ID", http.StatusBadRequest)
+		return
+	}
+	if h.calderaURL == "" {
+		jsonError(w, "Caldera not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	base := strings.TrimRight(h.calderaURL, "/")
+
+	req, _ := http.NewRequest(http.MethodGet, base+"/api/v2/adversaries/"+adversaryID, nil)
+	if h.calderaKey != "" {
+		req.Header.Set("KEY", h.calderaKey)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		jsonError(w, "cannot reach Caldera: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		jsonError(w, "adversary not found", http.StatusNotFound)
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		jsonError(w, fmt.Sprintf("Caldera returned HTTP %d", resp.StatusCode), http.StatusBadGateway)
+		return
+	}
+
+	var raw struct {
+		AdversaryID    string   `json:"adversary_id"`
+		Name           string   `json:"name"`
+		Description    string   `json:"description"`
+		AtomicOrdering []string `json:"atomic_ordering"`
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &raw); err != nil {
+		jsonError(w, "parse adversary: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	// Resolve ability names/tactics from the cached ability list.
+	calderaAbilityCache.mu.Lock()
+	abilityByID := map[string]CalderaAbility{}
+	for _, ab := range calderaAbilityCache.entries {
+		abilityByID[ab.ID] = ab
+	}
+	calderaAbilityCache.mu.Unlock()
+
+	abilities := make([]CalderaAbility, 0, len(raw.AtomicOrdering))
+	for _, id := range raw.AtomicOrdering {
+		if ab, ok := abilityByID[id]; ok {
+			abilities = append(abilities, ab)
+		} else {
+			abilities = append(abilities, CalderaAbility{ID: id, Name: id})
+		}
+	}
+
+	respond(w, CalderaAdversaryDetail{
+		ID:          raw.AdversaryID,
+		Name:        raw.Name,
+		Description: raw.Description,
+		Abilities:   abilities,
+	})
+}
+
+// POST /api/caldera/adversaries/{adversaryId}/run — dispatch an adversary
+// emulation run against a specific agent without requiring a pre-created
+// scenario YAML. Builds a synthetic scenario with CalderaAdversaryID set
+// and delegates to dispatchRun so all the standard guards apply.
+func (h *Handler) RunCalderaAdversary(w http.ResponseWriter, r *http.Request) {
+	adversaryID := chi.URLParam(r, "adversaryId")
+	if len(adversaryID) == 0 || len(adversaryID) > 128 {
+		jsonError(w, "invalid adversary ID", http.StatusBadRequest)
+		return
+	}
+	if h.calderaURL == "" {
+		jsonError(w, "Caldera not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		AgentID     string `json:"agentId"`
+		Mode        string `json:"mode"`
+		ConfirmLive bool   `json:"confirmLive"`
+		ConfirmLab  bool   `json:"confirmLab"`
+		Reason      string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+
+	mode := req.Mode
+	if mode == "" {
+		mode = "telemetry"
+	}
+
+	// Resolve name from the adversary cache for the run record title.
+	adversaryName := adversaryID
+	calderaAdversaryCache.mu.Lock()
+	for _, a := range calderaAdversaryCache.entries {
+		if a.ID == adversaryID {
+			adversaryName = a.Name
+			break
+		}
+	}
+	calderaAdversaryCache.mu.Unlock()
+
+	// Build a synthetic scenario with the adversary ID so BuildSteps resolves the chain.
+	synthSc := &scenario.Scenario{
+		ID:                 "caldera-adversary-" + adversaryID,
+		Name:               adversaryName + " (emu)",
+		Executable:         true,
+		CalderaAdversaryID: adversaryID,
+		SupportedOS:        []string{"windows"},
+	}
+
+	var initiatedBy *string
+	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+		initiatedBy = &c.UserID
+	}
+
+	runID, skipReason, err := h.dispatchRun(r.Context(), synthSc, req.AgentID, dispatchOpts{
+		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab,
+		Reason: req.Reason, InitiatedBy: initiatedBy,
+	})
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if skipReason != "" {
+		switch skipReason {
+		case "agent busy":
+			jsonError(w, "agent busy — a scenario is already running", http.StatusConflict)
+		case "offline":
+			jsonError(w, "agent not connected", http.StatusServiceUnavailable)
+		default:
+			jsonError(w, skipReason, http.StatusServiceUnavailable)
+		}
+		return
+	}
+
+	h.auditLog(r, "caldera.adversary.run", runID, map[string]any{"adversaryId": adversaryID, "adversaryName": adversaryName, "agentId": req.AgentID, "mode": mode}, "ok")
+	log.Printf("[caldera] dispatched adversary %s (%s) → agent %s (run %s, mode %s)", adversaryID, adversaryName, req.AgentID, runID, mode)
+	respond(w, map[string]string{"runId": runID, "status": "dispatched", "mode": mode})
 }
 
 // ── Threat-Intel Connector (Admin only) ───────────────────────────────────────
