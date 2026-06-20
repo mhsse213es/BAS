@@ -113,6 +113,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/art/techniques", h.GetARTTechniques)
 		r.Get("/api/caldera/abilities", h.GetCalderaAbilities)
 		r.Get("/api/techniques/unified", h.GetUnifiedTechniques)
+
+		// Adversary template catalog — curated playbooks mixing BAS + ART + Caldera.
+		r.Get("/api/adversary-templates", h.GetAdversaryTemplates)
 		r.Get("/api/caldera/adversaries", h.GetCalderaAdversaries)
 		r.Get("/api/caldera/adversaries/{adversaryId}", h.GetCalderaAdversary)
 		r.Get("/api/posture/catalog", h.GetPostureCatalog)
@@ -136,6 +139,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Post("/api/attackpath/assets", h.SetAttackPathAsset)
 			r.Post("/api/scenarios/{id}/run", h.RunScenario)
 			r.Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)
+			r.Post("/api/adversary-templates/{id}/run", h.RunAdversaryTemplate)
 			r.Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
 			r.Post("/api/campaigns", h.CreateCampaign)
 			r.Post("/api/campaigns/{id}/stop", h.StopCampaign)

@@ -1876,6 +1876,262 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 // Real-time technique/ability catalogs that drive the dashboard's sweep counts
 // and the selectable run picker. Read-only, no execution.
 
+// ── Adversary Templates ───────────────────────────────────────────────────────
+
+// AdversaryTemplate is a curated BAS playbook that bundles BAS-native scenarios,
+// ART technique sets, and a matching Caldera adversary into one named run template.
+type AdversaryTemplate struct {
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	ShortName      string   `json:"shortName"`            // actor/theme chip label
+	Description    string   `json:"description"`
+	Category       string   `json:"category"`             // apt | ransomware | technique | insider
+	ThreatActor    string   `json:"threatActor,omitempty"`
+	MITREGroup     string   `json:"mitreGroup,omitempty"` // e.g. "G0016"
+	Tactics        []string `json:"tactics"`
+	KeyTechniques  []string `json:"keyTechniques"`        // representative IDs shown in UI
+	Risk           string   `json:"risk"`                 // critical | high | medium
+	EstDuration    string   `json:"estDuration"`
+	// Execution sources — each is optional; UI shows which are configured.
+	BASScenarioID  string   `json:"basScenarioId,omitempty"`
+	ARTTechniques  []string `json:"artTechniques,omitempty"`
+	CalderaAdvName string   `json:"calderaAdversaryName,omitempty"` // name hint for UI matching
+	Tags           []string `json:"tags,omitempty"`
+}
+
+// adversaryTemplates is the built-in template catalog. All references to BAS
+// scenario IDs must exist in the scenarios/ directory; ART technique IDs must
+// be present in the ART store when deployed.
+var adversaryTemplates = []AdversaryTemplate{
+	{
+		ID: "apt29-quick", Name: "APT29 Quick", ShortName: "APT29",
+		Description:  "Five-stage Cozy Bear / NOBELIUM post-compromise tradecraft (domain recon, encoded loader, run-key persistence, scheduled task, DNS C2 beacon). ~15 min, production-safe.",
+		Category: "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
+		Tactics:  []string{"discovery", "execution", "persistence", "command-and-control"},
+		KeyTechniques: []string{"T1059.001", "T1482", "T1087.001", "T1547.001", "T1071.004"},
+		Risk: "high", EstDuration: "~15 min",
+		BASScenarioID: "apt29-kill-chain",
+		ARTTechniques: []string{"T1482", "T1087.001", "T1059.001", "T1547.001", "T1053.005", "T1071.004"},
+		CalderaAdvName: "APT29",
+		Tags: []string{"apt29", "cozy-bear", "nobelium", "kill-chain"},
+	},
+	{
+		ID: "apt29-full", Name: "APT29 Full", ShortName: "APT29",
+		Description:  "Extended APT29 emulation adding credential access, process injection, LOLBin proxy execution, and domain account enumeration on top of the Quick chain. ~45 min.",
+		Category: "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
+		Tactics:  []string{"discovery", "credential-access", "execution", "defense-evasion", "persistence", "command-and-control"},
+		KeyTechniques: []string{"T1003.001", "T1059.001", "T1087.002", "T1218.011", "T1055.001", "T1482"},
+		Risk: "high", EstDuration: "~45 min",
+		BASScenarioID: "apt29-kill-chain",
+		ARTTechniques: []string{"T1482", "T1087.001", "T1087.002", "T1059.001", "T1059.003", "T1003.001", "T1055.001", "T1218.011", "T1547.001", "T1053.005", "T1071.004"},
+		CalderaAdvName: "APT29",
+		Tags: []string{"apt29", "cozy-bear", "nobelium", "full-chain"},
+	},
+	{
+		ID: "ransomware-chain", Name: "Ransomware Chain", ShortName: "Ransomware",
+		Description:  "LockBit 3.0 kill chain: defense enumeration, VSS probe, SMB lateral movement prep, XOR-benign file + ransom note drop, log clearing attempt. No real encryption. ~20 min.",
+		Category: "ransomware", ThreatActor: "LockBit 3.0 / Wizard Spider", MITREGroup: "G0102",
+		Tactics:  []string{"discovery", "defense-evasion", "lateral-movement", "impact"},
+		KeyTechniques: []string{"T1518.001", "T1490", "T1486", "T1021.002", "T1070.001"},
+		Risk: "critical", EstDuration: "~20 min",
+		BASScenarioID: "lockbit-kill-chain",
+		ARTTechniques: []string{"T1518.001", "T1490", "T1486", "T1070.001", "T1021.002"},
+		CalderaAdvName: "Wizard Spider",
+		Tags: []string{"ransomware", "lockbit", "wizard-spider"},
+	},
+	{
+		ID: "credential-theft", Name: "Credential Theft", ShortName: "CredTheft",
+		Description:  "Multi-vector credential harvesting: LSASS, SAM, Kerberoasting, NTLM relay probe, Credential Manager dump, and browser credential access. ~15 min.",
+		Category: "technique",
+		Tactics:  []string{"credential-access"},
+		KeyTechniques: []string{"T1003.001", "T1003.002", "T1558.003", "T1555.003", "T1110.001"},
+		Risk: "high", EstDuration: "~15 min",
+		BASScenarioID: "credential-access",
+		ARTTechniques: []string{"T1003.001", "T1003.002", "T1558.003", "T1555.003", "T1110.001"},
+		CalderaAdvName: "FIN6",
+		Tags: []string{"credential-access", "lsass", "kerberoasting"},
+	},
+	{
+		ID: "lateral-movement", Name: "Lateral Movement", ShortName: "LatMov",
+		Description:  "SMB and WMI-based lateral movement chain with pass-the-hash probe, admin share enumeration, and remote execution simulation. ~20 min.",
+		Category: "technique",
+		Tactics:  []string{"lateral-movement", "credential-access", "execution"},
+		KeyTechniques: []string{"T1021.001", "T1021.002", "T1550.002", "T1047"},
+		Risk: "high", EstDuration: "~20 min",
+		BASScenarioID: "caldera-lateral-movement",
+		ARTTechniques: []string{"T1021.001", "T1021.002", "T1550.002"},
+		CalderaAdvName: "APT29",
+		Tags: []string{"lateral-movement", "smb", "pass-the-hash"},
+	},
+	{
+		ID: "data-exfiltration", Name: "Data Exfiltration", ShortName: "Exfil",
+		Description:  "Staged data collection and exfiltration simulation: local file staging, DNS tunnel probe, HTTPS exfil beacon, and cloud-storage upload attempt. ~15 min.",
+		Category: "technique",
+		Tactics:  []string{"collection", "exfiltration"},
+		KeyTechniques: []string{"T1041", "T1048.003", "T1030", "T1074.001"},
+		Risk: "medium", EstDuration: "~15 min",
+		BASScenarioID: "exposure-validation",
+		ARTTechniques: []string{"T1041", "T1048.003", "T1030", "T1074.001"},
+		CalderaAdvName: "APT36",
+		Tags: []string{"exfiltration", "dns-tunnel", "data-theft"},
+	},
+	{
+		ID: "insider-threat", Name: "Insider Threat", ShortName: "Insider",
+		Description:  "Scattered Spider social-engineering chain simulating privileged-access abuse: MFA fatigue probe, account enumeration, defense tool disablement, staged data access. ~20 min.",
+		Category: "insider", ThreatActor: "Scattered Spider", MITREGroup: "G1015",
+		Tactics:  []string{"initial-access", "discovery", "defense-evasion", "collection"},
+		KeyTechniques: []string{"T1078", "T1087.001", "T1562.001", "T1070.001", "T1048.003"},
+		Risk: "high", EstDuration: "~20 min",
+		BASScenarioID: "scattered-spider-kill-chain",
+		ARTTechniques: []string{"T1078", "T1087.001", "T1562.001", "T1070.001", "T1048.003"},
+		CalderaAdvName: "Scattered Spider",
+		Tags: []string{"insider-threat", "scattered-spider", "social-engineering"},
+	},
+}
+
+func adversaryTemplateByID(id string) (AdversaryTemplate, bool) {
+	for _, t := range adversaryTemplates {
+		if t.ID == id {
+			return t, true
+		}
+	}
+	return AdversaryTemplate{}, false
+}
+
+// GET /api/adversary-templates — returns the built-in adversary template catalog.
+// Viewer+.
+func (h *Handler) GetAdversaryTemplates(w http.ResponseWriter, r *http.Request) {
+	respond(w, adversaryTemplates)
+}
+
+// POST /api/adversary-templates/{id}/run — dispatches one or more runs from a
+// template. Each requested source (bas/art/caldera) is dispatched independently
+// via dispatchRun so all standard guards apply per-source. Analyst+.
+func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	tmpl, ok := adversaryTemplateByID(id)
+	if !ok {
+		jsonError(w, "template not found", http.StatusNotFound)
+		return
+	}
+
+	var req struct {
+		AgentID            string `json:"agentId"`
+		Mode               string `json:"mode"`
+		ConfirmLive        bool   `json:"confirmLive"`
+		ConfirmLab         bool   `json:"confirmLab"`
+		Reason             string `json:"reason"`
+		UseBAS             bool   `json:"useBas"`
+		UseART             bool   `json:"useArt"`
+		CalderaAdversaryID string `json:"calderaAdversaryId"` // frontend resolves name→UUID
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.AgentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+
+	claims, _ := auth.ClaimsFrom(r.Context())
+	var uid *string
+	if claims != nil {
+		uid = &claims.UserID
+	}
+
+	type result struct {
+		Source string `json:"source"`
+		RunID  string `json:"runId,omitempty"`
+		Reason string `json:"reason,omitempty"`
+	}
+	var dispatched, skipped []result
+
+	base := dispatchOpts{
+		Mode: req.Mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab,
+		Reason: req.Reason, InitiatedBy: uid,
+	}
+
+	// BAS-native scenario dispatch.
+	if req.UseBAS && tmpl.BASScenarioID != "" {
+		sc, exists := h.engine.Get(tmpl.BASScenarioID)
+		if !exists {
+			skipped = append(skipped, result{Source: "bas", Reason: "scenario not loaded: " + tmpl.BASScenarioID})
+		} else {
+			runID, skip, err := h.dispatchRun(r.Context(), sc, req.AgentID, base)
+			switch {
+			case err != nil:
+				skipped = append(skipped, result{Source: "bas", Reason: err.Error()})
+			case skip != "":
+				skipped = append(skipped, result{Source: "bas", Reason: skip})
+			default:
+				dispatched = append(dispatched, result{Source: "bas", RunID: runID})
+				h.auditLog(r, "template.run.bas", runID, map[string]any{"template": id, "scenario": tmpl.BASScenarioID}, "ok")
+			}
+		}
+	}
+
+	// ART technique dispatch — uses the art-selective base scenario with the
+	// template's curated technique list as an override.
+	if req.UseART && len(tmpl.ARTTechniques) > 0 {
+		sc, exists := h.engine.Get("art-selective")
+		if !exists {
+			skipped = append(skipped, result{Source: "art", Reason: "art-selective scenario not loaded"})
+		} else {
+			artOpts := base
+			artOpts.Techniques = tmpl.ARTTechniques
+			runID, skip, err := h.dispatchRun(r.Context(), sc, req.AgentID, artOpts)
+			switch {
+			case err != nil:
+				skipped = append(skipped, result{Source: "art", Reason: err.Error()})
+			case skip != "":
+				skipped = append(skipped, result{Source: "art", Reason: skip})
+			default:
+				dispatched = append(dispatched, result{Source: "art", RunID: runID})
+				h.auditLog(r, "template.run.art", runID, map[string]any{"template": id, "techniques": tmpl.ARTTechniques}, "ok")
+			}
+		}
+	}
+
+	// Caldera adversary dispatch — the frontend resolves the name hint to a UUID.
+	if req.CalderaAdversaryID != "" {
+		if len(req.CalderaAdversaryID) > 128 {
+			skipped = append(skipped, result{Source: "caldera", Reason: "adversary ID invalid"})
+		} else {
+			synthSc := &scenario.Scenario{
+				ID:                 "caldera-adversary-" + req.CalderaAdversaryID,
+				CalderaAdversaryID: req.CalderaAdversaryID,
+				Executable:         true,
+				SupportedOS:        []string{"windows"},
+			}
+			runID, skip, err := h.dispatchRun(r.Context(), synthSc, req.AgentID, base)
+			switch {
+			case err != nil:
+				skipped = append(skipped, result{Source: "caldera", Reason: err.Error()})
+			case skip != "":
+				skipped = append(skipped, result{Source: "caldera", Reason: skip})
+			default:
+				dispatched = append(dispatched, result{Source: "caldera", RunID: runID})
+				h.auditLog(r, "template.run.caldera", runID, map[string]any{"template": id, "adversaryId": req.CalderaAdversaryID}, "ok")
+			}
+		}
+	}
+
+	if len(dispatched) == 0 {
+		code := http.StatusBadRequest
+		if len(skipped) > 0 {
+			code = http.StatusUnprocessableEntity
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		json.NewEncoder(w).Encode(map[string]any{"dispatched": dispatched, "skipped": skipped})
+		return
+	}
+	respond(w, map[string]any{"dispatched": dispatched, "skipped": skipped})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 // UnifiedTechnique is one deduplicated ATT&CK technique entry merging ART,
 // Caldera-emu, Caldera-atomic, and BAS-native scenario coverage into a single row.
 type UnifiedTechnique struct {

@@ -505,6 +505,16 @@ code {
 .utl-atomic { background:rgba(210,153,34,.15);  border:1px solid rgba(210,153,34,.4);  color:#d29922; }
 .utl-num  { font-family:var(--font-mono); font-size:0.8rem; }
 .utl-zero { color:var(--muted); opacity:0.35; }
+.tmpl-card { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s; }
+.tmpl-card:hover { border-color:var(--accent); }
+.tmpl-stripe-critical { border-left:4px solid var(--danger); }
+.tmpl-stripe-high     { border-left:4px solid var(--warning); }
+.tmpl-stripe-medium   { border-left:4px solid var(--accent); }
+.tmpl-actor { display:inline-flex;align-items:center;padding:2px 8px;border-radius:9px;font-size:0.68rem;font-weight:700;letter-spacing:.04em;white-space:nowrap; }
+.tmpl-cat-apt        { background:rgba(218,54,51,.15);border:1px solid rgba(218,54,51,.4);color:#f85149; }
+.tmpl-cat-ransomware { background:rgba(240,136,62,.15);border:1px solid rgba(240,136,62,.4);color:#f0883e; }
+.tmpl-cat-technique  { background:rgba(47,129,247,.15);border:1px solid rgba(47,129,247,.4);color:#2f81f7; }
+.tmpl-cat-insider    { background:rgba(163,113,247,.15);border:1px solid rgba(163,113,247,.4);color:#a371f7; }
 
 /* ── Modals ────────────────────────────────────────────────── */
 .overlay {
@@ -1646,6 +1656,63 @@ code {
           </div>
           <div id="adv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.75rem"></div>
         </div>
+
+        <!-- Adversary Templates — curated BAS+ART+Caldera playbooks -->
+        <div id="tmpl-section" style="margin-top:2rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
+            <h3 style="font-size:1.1rem;color:var(--text);margin:0;display:flex;align-items:center;gap:8px">
+              <svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2" stroke-linejoin="round"/></svg>
+              Adversary Templates
+              <span id="tmpl-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">7</span>
+            </h3>
+            <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center">
+              <button class="pfbtn active" data-tf="cat" data-val="all"        onclick="setTmplFilter('cat','all')">All</button>
+              <button class="pfbtn"        data-tf="cat" data-val="apt"        onclick="setTmplFilter('cat','apt')">APT</button>
+              <button class="pfbtn"        data-tf="cat" data-val="ransomware" onclick="setTmplFilter('cat','ransomware')">Ransomware</button>
+              <button class="pfbtn"        data-tf="cat" data-val="technique"  onclick="setTmplFilter('cat','technique')">Technique</button>
+              <button class="pfbtn"        data-tf="cat" data-val="insider"    onclick="setTmplFilter('cat','insider')">Insider</button>
+            </div>
+          </div>
+          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem">
+            Pre-built playbooks that combine BAS-native scenarios, ART technique sweeps, and Caldera adversary emulation into one named threat simulation. Each source is dispatched as a separate run — mix and match based on what's configured.
+          </div>
+          <div id="tmpl-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:0.85rem"></div>
+        </div>
+      </div>
+
+      <!-- Template run modal -->
+      <div id="tmpl-run-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);align-items:center;justify-content:center">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;width:min(480px,96vw);box-shadow:0 8px 40px rgba(0,0,0,0.5);max-height:90vh;overflow-y:auto">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.4rem">
+            <div style="font-size:1rem;font-weight:700;color:var(--text)" id="tmpl-run-title">Launch Template</div>
+            <button onclick="closeTmplRun()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.2rem;padding:0 0 0 0.5rem">&#10005;</button>
+          </div>
+          <div id="tmpl-run-desc" style="font-size:0.8rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.5"></div>
+
+          <!-- Source checkboxes -->
+          <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:0.5rem">Execution Sources</div>
+          <div id="tmpl-run-sources" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1.1rem;padding:0.75rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius)"></div>
+
+          <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Target Agent</label>
+          <select id="tmpl-run-agent" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem"></select>
+
+          <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Execution Mode</label>
+          <select id="tmpl-run-mode" onchange="renderTmplWarn()" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem">
+            <option value="posture">Posture — read-only checks only</option>
+            <option value="telemetry" selected>Telemetry — real execution, production-safe</option>
+            <option value="lab">Lab — full fidelity (isolated range only)</option>
+          </select>
+
+          <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Reason / Ticket</label>
+          <input type="text" id="tmpl-run-reason" placeholder="JIRA-1234 / change-window / drills" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem;font-family:inherit">
+
+          <div id="tmpl-run-warn" style="margin-bottom:0.85rem;font-size:0.78rem"></div>
+
+          <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+            <button class="btn btn-outline btn-sm" onclick="closeTmplRun()">Cancel</button>
+            <button class="btn btn-primary btn-sm" id="tmpl-run-confirm-btn" onclick="confirmTmplRun()">Launch</button>
+          </div>
+        </div>
       </div>
 
       <!-- Adversary detail drawer -->
@@ -2471,6 +2538,7 @@ function bootApp() {
   loadCatalogs();
   loadScenarios();
   loadAdversaries();
+  loadAdversaryTemplates();
   loadRuns();
   if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
   injectServerURL();
@@ -3358,6 +3426,205 @@ function covStatusMap(runs) {
   return st;
 }
 // ── Threat Actor Library (Caldera emu adversary profiles) ──────────────────────
+
+// ── Adversary Templates ───────────────────────────────────────────────────────
+var _templates = [];
+var _tmplFilter = { cat: 'all' };
+var _tmplRunID = null;  // template ID being launched
+var _tmplCalderaID = ''; // resolved caldera adversary ID for current modal
+
+function loadAdversaryTemplates() {
+  apicall('/api/adversary-templates').catch(function() { return []; }).then(function(d) {
+    _templates = Array.isArray(d) ? d : [];
+    renderTemplateGrid();
+  });
+}
+
+function setTmplFilter(dim, val) {
+  _tmplFilter[dim] = val;
+  document.querySelectorAll('.pfbtn[data-tf="' + dim + '"]').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-val') === val);
+  });
+  renderTemplateGrid();
+}
+
+function renderTemplateGrid() {
+  var cat = _tmplFilter.cat;
+  var filtered = _templates.filter(function(t) {
+    return cat === 'all' || t.category === cat;
+  });
+  var catCls = { apt: 'tmpl-cat-apt', ransomware: 'tmpl-cat-ransomware', technique: 'tmpl-cat-technique', insider: 'tmpl-cat-insider' };
+  var riskLabel = { critical: '● Critical', high: '● High', medium: '● Medium' };
+  var riskColor = { critical: 'var(--danger)', high: 'var(--warning)', medium: 'var(--accent)' };
+
+  var html = filtered.map(function(t) {
+    var stripeClass = 'tmpl-stripe-' + (t.risk || 'high');
+    var actorCls = catCls[t.category] || 'tmpl-cat-technique';
+    var tactics = (t.tactics || []).slice(0, 4).map(function(tac) {
+      return '<span style="font-size:0.65rem;padding:1px 6px;border-radius:7px;background:var(--elevated);border:1px solid var(--border);color:var(--muted)">' + x(tac) + '</span>';
+    }).join('');
+    var keyTechs = (t.keyTechniques || []).slice(0, 4).map(function(tid) {
+      return '<span style="font-size:0.65rem;font-family:var(--font-mono);color:var(--accent)">' + x(tid) + '</span>';
+    }).join(' ');
+    // Source availability badges.
+    var srcBAS    = t.basScenarioId    ? '<span class="utl-badge utl-bas">BAS</span>' : '';
+    var srcART    = (t.artTechniques && t.artTechniques.length) ? '<span class="utl-badge utl-art">ART&nbsp;' + t.artTechniques.length + '</span>' : '';
+    var srcCaldera = t.calderaAdversaryName ? '<span class="utl-badge utl-emu">Emu</span>' : '';
+
+    return '<div class="tmpl-card ' + stripeClass + '">' +
+      '<div style="padding:0.9rem 1rem 0.75rem">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;margin-bottom:0.6rem">' +
+          '<div>' +
+            '<span class="tmpl-actor ' + actorCls + '">' + x(t.shortName || t.category) + '</span>' +
+          '</div>' +
+          '<span style="font-size:0.7rem;font-weight:700;color:' + (riskColor[t.risk] || 'var(--muted)') + '">' + (riskLabel[t.risk] || '') + '</span>' +
+        '</div>' +
+        '<div style="font-size:0.9rem;font-weight:700;color:var(--text);margin-bottom:0.3rem">' + x(t.name) + '</div>' +
+        '<div style="font-size:0.75rem;color:var(--muted);line-height:1.45;margin-bottom:0.65rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">' + x(t.description) + '</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.55rem">' + tactics + '</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-bottom:0.5rem">' + keyTechs + '</div>' +
+        '<div style="display:flex;gap:0.3rem;flex-wrap:wrap;align-items:center;justify-content:space-between">' +
+          '<div style="display:flex;gap:0.3rem">' + srcBAS + srcART + srcCaldera + '</div>' +
+          '<span style="font-size:0.7rem;color:var(--muted)">' + x(t.estDuration || '') + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="border-top:1px solid var(--border);padding:0.55rem 1rem;display:flex;gap:0.4rem;justify-content:flex-end">' +
+        '<button class="btn btn-primary btn-sm" onclick="openTmplRun(' + JSON.stringify(t.id) + ')">&#9654; Launch</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  var grid = document.getElementById('tmpl-grid');
+  if (grid) grid.innerHTML = html || '<div class="empty" style="padding:1.5rem">No templates in this category.</div>';
+  var cnt = document.getElementById('tmpl-cnt');
+  if (cnt) cnt.textContent = filtered.length;
+}
+
+function openTmplRun(templateId) {
+  var tmpl = null;
+  for (var i = 0; i < _templates.length; i++) { if (_templates[i].id === templateId) { tmpl = _templates[i]; break; } }
+  if (!tmpl) return;
+  _tmplRunID = templateId;
+  _tmplCalderaID = '';
+
+  document.getElementById('tmpl-run-title').textContent = 'Launch — ' + tmpl.name;
+  document.getElementById('tmpl-run-desc').textContent = tmpl.description;
+
+  // Resolve Caldera adversary name → UUID using loaded adversary list.
+  if (tmpl.calderaAdversaryName) {
+    var name = tmpl.calderaAdversaryName.toLowerCase();
+    for (var j = 0; j < _adversaries.length; j++) {
+      if ((_adversaries[j].name || '').toLowerCase().indexOf(name) !== -1) {
+        _tmplCalderaID = _adversaries[j].id;
+        break;
+      }
+    }
+  }
+
+  // Build source checkboxes.
+  var srcsEl = document.getElementById('tmpl-run-sources');
+  var srcRows = '';
+  if (tmpl.basScenarioId) {
+    srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
+      '<input type="checkbox" id="tmpl-src-bas" checked style="margin-top:2px">' +
+      '<span><span class="utl-badge utl-bas" style="margin-right:4px">BAS</span>' +
+      '<strong>' + x(tmpl.basScenarioId) + '</strong> — native scenario</span></label>';
+  }
+  if (tmpl.artTechniques && tmpl.artTechniques.length) {
+    srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
+      '<input type="checkbox" id="tmpl-src-art" checked style="margin-top:2px">' +
+      '<span><span class="utl-badge utl-art" style="margin-right:4px">ART</span>' +
+      tmpl.artTechniques.length + ' techniques — ' + tmpl.artTechniques.slice(0,3).join(', ') + (tmpl.artTechniques.length > 3 ? '…' : '') + '</span></label>';
+  }
+  if (tmpl.calderaAdversaryName) {
+    var calLabel = _tmplCalderaID
+      ? '<span class="utl-badge utl-emu" style="margin-right:4px">Emu</span>' + x(tmpl.calderaAdversaryName) + ' adversary'
+      : '<span class="utl-badge" style="background:var(--elevated);border-color:var(--border);color:var(--muted);margin-right:4px">Emu</span>' +
+        x(tmpl.calderaAdversaryName) + ' <em style="color:var(--muted)">(not found in Caldera — unchecked)</em>';
+    srcRows += '<label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;font-size:0.82rem">' +
+      '<input type="checkbox" id="tmpl-src-caldera"' + (_tmplCalderaID ? ' checked' : '') + ' style="margin-top:2px">' +
+      '<span>' + calLabel + '</span></label>';
+  }
+  if (srcsEl) srcsEl.innerHTML = srcRows || '<span style="color:var(--muted);font-size:0.8rem">No sources configured for this template.</span>';
+
+  // Populate agent dropdown.
+  var agentSel = document.getElementById('tmpl-run-agent');
+  if (agentSel) {
+    var opts = (_agents || []).filter(function(a) { return a.status === 'online'; })
+      .map(function(a) {
+        var os = a.osVersion ? ' [' + (a.osVersion.toLowerCase().indexOf('windows') !== -1 ? 'Win' : 'Other') + ']' : '';
+        return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + os + '</option>';
+      }).join('');
+    agentSel.innerHTML = opts || '<option value="">No online agents</option>';
+  }
+
+  document.getElementById('tmpl-run-mode').value = 'telemetry';
+  document.getElementById('tmpl-run-reason').value = '';
+  renderTmplWarn();
+  var overlay = document.getElementById('tmpl-run-overlay');
+  if (overlay) { overlay.style.display = 'flex'; }
+}
+
+function closeTmplRun() {
+  var overlay = document.getElementById('tmpl-run-overlay');
+  if (overlay) overlay.style.display = 'none';
+  _tmplRunID = null; _tmplCalderaID = '';
+}
+
+function renderTmplWarn() {
+  var mode = document.getElementById('tmpl-run-mode').value;
+  var warn = document.getElementById('tmpl-run-warn');
+  if (!warn) return;
+  if (mode === 'telemetry') {
+    warn.innerHTML = '<div style="padding:0.55rem 0.75rem;background:rgba(35,134,54,.1);border:1px solid rgba(35,134,54,.3);border-radius:var(--radius);color:#56d364">Telemetry mode — real techniques executed with production-safe guards. All cleanup steps run automatically.</div>';
+  } else if (mode === 'lab') {
+    warn.innerHTML = '<div style="padding:0.55rem 0.75rem;background:rgba(218,54,51,.1);border:1px solid rgba(218,54,51,.3);border-radius:var(--radius);color:#f85149">Lab mode — full fidelity. Run ONLY in isolated lab range. High-risk techniques will execute without production-safe guards.</div>';
+  } else {
+    warn.innerHTML = '';
+  }
+}
+
+function confirmTmplRun() {
+  var agentId = (document.getElementById('tmpl-run-agent') || {}).value;
+  if (!agentId) { showToast('Select a target agent', 'err'); return; }
+  var mode    = document.getElementById('tmpl-run-mode').value;
+  var reason  = (document.getElementById('tmpl-run-reason').value || '').trim();
+  var useBAS  = !!(document.getElementById('tmpl-src-bas') || {}).checked;
+  var useART  = !!(document.getElementById('tmpl-src-art') || {}).checked;
+  var calderaId = (document.getElementById('tmpl-src-caldera') || {}).checked ? _tmplCalderaID : '';
+
+  if (!useBAS && !useART && !calderaId) {
+    showToast('Select at least one execution source', 'err');
+    return;
+  }
+
+  var btn = document.getElementById('tmpl-run-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Launching…'; }
+
+  apicall('/api/adversary-templates/' + encodeURIComponent(_tmplRunID) + '/run', {
+    method: 'POST',
+    body: JSON.stringify({
+      agentId: agentId, mode: mode, confirmLive: true, confirmLab: mode === 'lab',
+      reason: reason || ('Template: ' + _tmplRunID),
+      useBas: useBAS, useArt: useART,
+      calderaAdversaryId: calderaId
+    })
+  }).then(function(r) {
+    closeTmplRun();
+    var n = (r.dispatched || []).length;
+    var skip = (r.skipped || []).length;
+    var msg = n + ' run' + (n !== 1 ? 's' : '') + ' dispatched';
+    if (skip) msg += ' (' + skip + ' skipped)';
+    showToast(msg, 'ok');
+    loadRuns();
+    showTab('runs');
+  }).catch(function(e) {
+    showToast('Launch failed: ' + (e.message || 'unknown error'), 'err');
+  }).finally(function() {
+    if (btn) { btn.disabled = false; btn.textContent = 'Launch'; }
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 var _adversaries = [];
 var _advDrawerID = null;
