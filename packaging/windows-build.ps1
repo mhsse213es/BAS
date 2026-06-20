@@ -197,6 +197,7 @@ Log "  Saved: bas-orchestrator-$Version.tar (${sizeMB}MB)"
 
 Log "  Saving postgres:16-alpine..."
 docker save postgres:16-alpine -o "$OutDir\images\postgres-16-alpine.tar"
+if ($LASTEXITCODE -ne 0) { Err "Failed to save postgres:16-alpine image." }
 Log "  Saved: postgres-16-alpine.tar"
 
 $chromeExists = docker image inspect "chromedp/headless-shell:latest" 2>$null
@@ -435,11 +436,11 @@ Log "  MANIFEST.sha256 generated ($($lines.Count) files indexed)"
 $LicensePath = ""
 if ($Customer -ne "" -and $CustomerID -ne "") {
     Log "Generating license for $Customer ($CustomerID) - valid $Days days..."
-    $LicGenDir   = Join-Path $RepoRoot "packaging\licensing\licensegen"
-    $PrivKeyPath = Join-Path $RepoRoot "packaging\licensing\keys\private.pem"
+    $LicGenDir    = Join-Path $RepoRoot "packaging\licensing\licensegen"
+    $LicPrivKey   = Join-Path $RepoRoot "packaging\licensing\keys\private.pem"
 
-    if (-not (Test-Path $PrivKeyPath)) {
-        Warn "Private key not found at $PrivKeyPath - skipping license generation."
+    if (-not (Test-Path $LicPrivKey)) {
+        Warn "License private key not found at $LicPrivKey - skipping license generation."
         Warn "Run: cd packaging\licensing && bash keygen.sh"
     } else {
         Push-Location $RepoRoot
@@ -447,7 +448,7 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
             -customer $Customer `
             -id       $CustomerID `
             -days     $Days `
-            -key      $PrivKeyPath `
+            -key      $LicPrivKey `
             -out      "$CustomerID.lic"
         Pop-Location
         $LicensePath = Join-Path $RepoRoot "$CustomerID.lic"

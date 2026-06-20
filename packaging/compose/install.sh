@@ -573,7 +573,8 @@ mode_rollback() {
   prev_ver=$(cat "${latest}/VERSION" 2>/dev/null || echo "unknown")
   log "Compose and .env restored (version: ${prev_ver})"
 
-  (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
+  systemctl restart "${SERVICE_NAME}" 2>/dev/null \
+    || (cd "${install_dir}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
   log "Stack restarted with previous version"
   _wait_healthy
   log "Rollback complete (v${BAS_VERSION} → v${prev_ver})"
@@ -615,20 +616,22 @@ mode_status() {
   done
 
   echo ""
-  # Version
+  # Version + port from .env
   local env_file="${data_dir}/.env"
+  local bas_port="9443"
   if [[ -f "$env_file" ]]; then
     local ver
     ver=$(grep -oP '(?<=BAS_VERSION=).+' "$env_file" 2>/dev/null | head -1 || echo "unknown")
     info "Version   : ${ver}"
+    local ep
+    ep=$(grep -oP '(?<=BAS_PORT=).+' "$env_file" 2>/dev/null | head -1 || true)
+    [[ -n "$ep" ]] && bas_port="$ep"
   fi
-  # Port
-  local port
-  port=$(ss -tlnp 2>/dev/null | grep -oP ':\K9[0-9]+(?= )' | head -1 || echo "?")
-  if ss -tlnp 2>/dev/null | grep -qP ':9443 '; then
-    info "Listening : https://$(hostname -f 2>/dev/null || hostname):9443"
-  elif [[ -n "$port" ]]; then
-    info "Listening : http://$(hostname -f 2>/dev/null || hostname):${port}"
+  # Listening URL
+  if ss -tlnp 2>/dev/null | grep -qP ":${bas_port}[[:space:]]"; then
+    info "Listening : http://$(hostname -f 2>/dev/null || hostname):${bas_port}"
+  else
+    info "Listening : port ${bas_port} not yet bound"
   fi
   # systemd
   if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
