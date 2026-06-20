@@ -29,6 +29,13 @@ RUN pip install --no-cache-dir -r plugins/emu/requirements.txt
 #    regenerates it from default.yml (now including emu) AND still receives the
 #    API_KEY_RED/API_KEY_BLUE env injection on boot.
 RUN grep -q '^[[:space:]]*- emu' conf/default.yml || sed -i '/^plugins:/a - emu' conf/default.yml
+
+# 3b. Enable the atomic plugin — adds MITRE ATT&CK Atomic Red Team abilities
+#     on top of emu, raising the ability catalog from ~2,200 to ~3,500-5,000+.
+#     Overlap with emu and ART library is expected; deduplication happens at
+#     the technique level in the dashboard (unique-technique count, not raw count).
+RUN grep -q '^[[:space:]]*- atomic' conf/default.yml || sed -i '/^plugins:/a - atomic' conf/default.yml
+
 RUN rm -f conf/local.yml
 
 # 4. Build-time assertion: fail the build if emu data didn't materialize.

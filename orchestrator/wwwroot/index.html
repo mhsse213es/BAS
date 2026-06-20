@@ -5847,7 +5847,18 @@ function loadCalderaStatus() {
     document.getElementById('cs-caldera-status').innerHTML = dot;
     document.getElementById('cs-caldera-url').textContent = d.url || '(not configured)';
     document.getElementById('cs-caldera-version').textContent = d.version || (d.reachable ? 'unknown' : '—');
-    document.getElementById('cs-caldera-abilities').textContent = d.reachable ? (d.abilityCount + ' abilities · ' + (d.adversaryCount || 0) + ' adversary profiles') : '—';
+    if (d.reachable) {
+      var abLabel = d.abilityCount.toLocaleString() + ' abilities';
+      if (d.byPlugin) {
+        var parts = Object.keys(d.byPlugin).sort().map(function(k) { return k + ': ' + d.byPlugin[k].toLocaleString(); });
+        abLabel += ' (' + parts.join(', ') + ')';
+      }
+      if (d.uniqueTechniques) abLabel += ' · ' + d.uniqueTechniques + ' unique techniques';
+      abLabel += ' · ' + (d.adversaryCount || 0) + ' adversary profiles';
+      document.getElementById('cs-caldera-abilities').textContent = abLabel;
+    } else {
+      document.getElementById('cs-caldera-abilities').textContent = '—';
+    }
     document.getElementById('cs-caldera-latency').textContent = d.reachable ? (d.latencyMs + ' ms') : '—';
     var errEl = document.getElementById('cs-caldera-error');
     if (d.error) {
@@ -5968,12 +5979,28 @@ function loadSimCoverage() {
     var customScen    = scen.filter(function(s) { return s.source === 'custom';  }).length;
     var intelScen     = scen.filter(function(s) { return s.source === 'intel';   }).length;
 
+    // Derive per-plugin breakdown + unique technique counts from the ability catalog.
+    var byPlugin = {}, techSet = {}, subTechSet = {};
+    cal.forEach(function(ab) {
+      var p = ab.plugin || 'other';
+      byPlugin[p] = (byPlugin[p] || 0) + 1;
+      if (ab.technique) {
+        techSet[ab.technique] = true;
+        if (ab.technique.indexOf('.') !== -1) subTechSet[ab.technique] = true;
+      }
+    });
+    var calEmu    = byPlugin['emu']    || 0;
+    var calAtomic = byPlugin['atomic'] || 0;
+    var calOther  = calCount - calEmu - calAtomic;
+    var calUniqTech    = Object.keys(techSet).length;
+    var calUniqSubTech = Object.keys(subTechSet).length;
+
     var total = artTests + calCount + customScen + intelScen + builtinScen;
 
     totalEl.textContent = total.toLocaleString();
     if (subEl) subEl.textContent =
       artTests.toLocaleString() + ' ART atomics · ' +
-      calCount.toLocaleString() + ' Caldera abilities · ' +
+      calCount.toLocaleString() + ' Caldera abilities (' + calUniqTech + ' unique techniques) · ' +
       (customScen + intelScen + builtinScen) + ' scenarios';
 
     if (bodyEl) {
@@ -5981,12 +6008,17 @@ function loadSimCoverage() {
         ['ART base techniques',              artTechniques, 'Source techniques — each generates multiple atomic variants'],
         ['ART atomic tests (variants)',       artTests,      'Executable test instances (Windows); counted in total'],
         ['ART payload-backed tests',          artPayloads,   'Atomics with a bundled binary payload (subset of atomics above)'],
-        ['Caldera adversary-emulation',       calCount,      'MITRE ATT&CK emulation abilities (CTID emu library); counted in total'],
+        ['Caldera abilities — total',         calCount,      'Raw ability count across all enabled plugins; counted in total'],
+        ['  └ emu (CTID adversary-emulation)',calEmu,        'MITRE ATT&CK kill-chain abilities from the adversary-emulation library'],
+        ['  └ atomic (Atomic Red Team)',      calAtomic,     'Atomic Red Team abilities via Caldera atomic plugin'],
+        ['  └ other plugins',                 calOther > 0 ? calOther : null, 'stockpile / other enabled plugins'],
+        ['Caldera unique techniques',         calUniqTech,   'Distinct ATT&CK technique IDs covered across all abilities (raw count overstates coverage — this is the accurate figure)'],
+        ['Caldera unique sub-techniques',     calUniqSubTech,'Distinct sub-techniques (e.g. T1059.001); subset of unique techniques above'],
         ['Built-in scenarios',               builtinScen,   'Signed YAML scenarios shipped with the platform; counted in total'],
         ['Custom / operator scenarios',       customScen,    'Operator-authored scenarios; counted in total'],
         ['Threat-intel scenarios',            intelScen,     'Auto-generated from MISP / OpenCTI; counted in total'],
         ['CISA KEV CVEs tracked',             kevCount,      'Known-exploited vulnerabilities — prioritised for CVE-template simulations'],
-      ];
+      ].filter(function(r) { return r[1] !== null && r[1] !== undefined; });
       bodyEl.innerHTML = rows.map(function(r, i) {
         var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
         var bold = (r[0].indexOf('total') !== -1 || r[0].indexOf('Total') !== -1) ? 'font-weight:700;color:var(--text)' : 'color:var(--text)';

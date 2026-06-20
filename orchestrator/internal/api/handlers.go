@@ -1735,14 +1735,17 @@ func newID() string {
 // Lets the admin confirm the integration is working without leaving the dashboard.
 func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 	type CalderaStatus struct {
-		Reachable       bool   `json:"reachable"`
-		URL             string `json:"url"`
-		Version         string `json:"version,omitempty"`
-		AbilityCount    int    `json:"abilityCount"`
-		AdversaryCount  int    `json:"adversaryCount"`
-		LatencyMs       int64  `json:"latencyMs"`
-		Error           string `json:"error,omitempty"`
-		HttpStatus      int    `json:"httpStatus,omitempty"` // non-zero on non-200 HTTP response
+		Reachable           bool           `json:"reachable"`
+		URL                 string         `json:"url"`
+		Version             string         `json:"version,omitempty"`
+		AbilityCount        int            `json:"abilityCount"`
+		AdversaryCount      int            `json:"adversaryCount"`
+		ByPlugin            map[string]int `json:"byPlugin,omitempty"`
+		UniqueTechniques    int            `json:"uniqueTechniques"`
+		UniqueSubTechniques int            `json:"uniqueSubTechniques"`
+		LatencyMs           int64          `json:"latencyMs"`
+		Error               string         `json:"error,omitempty"`
+		HttpStatus          int            `json:"httpStatus,omitempty"`
 	}
 
 	if h.calderaURL == "" {
@@ -1799,8 +1802,11 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 	healthBody, _ := io.ReadAll(hResp.Body)
 	json.Unmarshal(healthBody, &health)
 
-	// Ability count (best-effort — don't fail the status if this times out)
+	// Ability count + plugin breakdown + unique techniques (best-effort).
 	abilityCount := 0
+	byPlugin := map[string]int{}
+	uniqueTechniques := 0
+	uniqueSubTechniques := 0
 	abReq, _ := http.NewRequest(http.MethodGet, base+"/api/v2/abilities", nil)
 	if h.calderaKey != "" {
 		abReq.Header.Set("KEY", h.calderaKey)
@@ -1808,12 +1814,32 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 	if abResp, err := client.Do(abReq); err == nil {
 		defer abResp.Body.Close()
 		if abResp.StatusCode == http.StatusOK {
-			var abilities []json.RawMessage
-			if body, err := io.ReadAll(abResp.Body); err == nil {
-				json.Unmarshal(body, &abilities)
-				abilityCount = len(abilities)
+			var rawAbs []struct {
+				TechniqueID string `json:"technique_id"`
+				Plugin      string `json:"plugin"`
+			}
+			if body, err := io.ReadAll(abResp.Body); err == nil && json.Unmarshal(body, &rawAbs) == nil {
+				abilityCount = len(rawAbs)
+				techSet := map[string]struct{}{}
+				for _, ab := range rawAbs {
+					if ab.Plugin != "" {
+						byPlugin[ab.Plugin]++
+					}
+					if ab.TechniqueID != "" {
+						techSet[ab.TechniqueID] = struct{}{}
+					}
+				}
+				uniqueTechniques = len(techSet)
+				for t := range techSet {
+					if strings.Contains(t, ".") {
+						uniqueSubTechniques++
+					}
+				}
 			}
 		}
+	}
+	if len(byPlugin) == 0 {
+		byPlugin = nil // omitempty
 	}
 
 	// Adversary count (best-effort)
@@ -1834,12 +1860,15 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respond(w, CalderaStatus{
-		Reachable:      true,
-		URL:            h.calderaURL,
-		Version:        health.Version,
-		AbilityCount:   abilityCount,
-		AdversaryCount: adversaryCount,
-		LatencyMs:      latencyMs,
+		Reachable:           true,
+		URL:                 h.calderaURL,
+		Version:             health.Version,
+		AbilityCount:        abilityCount,
+		AdversaryCount:      adversaryCount,
+		ByPlugin:            byPlugin,
+		UniqueTechniques:    uniqueTechniques,
+		UniqueSubTechniques: uniqueSubTechniques,
+		LatencyMs:           latencyMs,
 	})
 }
 
