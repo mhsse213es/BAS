@@ -10,8 +10,18 @@
 # ── [network] ──────────────────────────────────────────────────────────────────
 # BAS_HOST is informational only (used in report URLs and setup summary).
 # BAS_PORT is the external TCP port the orchestrator dashboard binds to.
-# Default 9443 avoids collisions with common enterprise products
-# (Trellix ePO 8443/8444, Splunk 8089, CrowdStrike 443).
+# Run --check first — it will FAIL if the port is already in use on this host.
+#
+# Known conflicts (change BAS_PORT if any of these run on this server):
+#   8443 / 8444  Trellix/McAfee ePO, Carbon Black, Forcepoint
+#   8834         Tenable Nessus
+#   9000         SonarQube, PHP-FPM
+#   9090         Prometheus, Cockpit
+#   9200         Elasticsearch REST
+#   9443         IBM WebSphere AS default HTTPS  <- common in Indian banking cores
+#
+# Safe alternatives if 9443 conflicts: 9543, 9643, 9743 (typically unclaimed)
+#
 # BAS_TLS enables HTTPS termination inside the orchestrator (requires TLS_CERT
 # and TLS_KEY below). Leave false if TLS is handled by an upstream load-balancer.
 
