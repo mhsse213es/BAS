@@ -492,6 +492,9 @@ type ExecutiveSummary struct {
 	PenetrationTested int     `json:"penetrationTested"` // executed (PASS+FAIL)
 	PenetrationFailed int     `json:"penetrationFailed"` // penetrated (FAIL)
 	PenetrationPct    int     `json:"penetrationPct"`    // failed ÷ tested
+	// Attack path (4th score pillar — nil when no collection has run).
+	AttackPathScore *int   `json:"attackPathScore,omitempty"`
+	AttackPathBand  string `json:"attackPathBand,omitempty"` // Critical | High | Medium | Low
 }
 
 // TacticEntry is one row of the ATT&CK tactic heatmap.
@@ -655,6 +658,7 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	deriveExecutive(report, latestResults, nil)
 
 	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
+	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
 
 	return report, nil
 }
@@ -844,6 +848,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	deriveExecutive(report, results, report.DetectionTechniques)
 
 	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
+	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
 
 	return report, nil
 }
@@ -949,6 +954,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*Ful
 	deriveExecutive(report, allResults, nil)
 
 	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
+	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
 
 	return report, nil
 }
@@ -1343,6 +1349,50 @@ func buildRecommendations(score models.Score, heatmap []TacticEntry) []string {
 	}
 	if len(recs) == 0 {
 		recs = append(recs, "Maintain current security posture. Schedule next BAS assessment within 30 days to verify continued effectiveness.")
+	}
+	return recs
+}
+
+// applyAttackPathToSummary copies the attack-path score into the executive
+// summary and appends lateral-movement recommendations when the graph shows
+// domain compromise, reachable crown jewels, or segmentation violations.
+// Called after loadAttackPathSummary so the summary fields stay consistent.
+func applyAttackPathToSummary(s *ExecutiveSummary, ap *attackpath.Summary) {
+	if ap == nil {
+		return
+	}
+	score := ap.AttackPathScore
+	s.AttackPathScore = &score
+	s.AttackPathBand = ap.Band
+	s.Recommendations = append(s.Recommendations, attackPathRecs(ap)...)
+}
+
+// attackPathRecs returns executive-grade recommendations derived from the
+// attack-path graph analysis. Returns nil when the graph is clean.
+func attackPathRecs(ap *attackpath.Summary) []string {
+	if ap == nil {
+		return nil
+	}
+	var recs []string
+	if ap.DomainCompromise {
+		diff := string(ap.ShortestDADifficulty)
+		recs = append(recs, "Domain compromise path exists (difficulty: "+diff+"). An attacker who gains a foothold on any host can reach Domain Admin / Tier-0 in "+formatInt(len(ap.ShortestDAPath))+" hop(s). Segment the network, enforce tiered administration (PAW/LAPS), and restrict lateral-movement protocols (SMB/WinRM/RDP) to authorised management hosts only.")
+	}
+	reachableCJs := 0
+	for _, cj := range ap.CrownJewels {
+		if cj.Reachable {
+			reachableCJs++
+		}
+	}
+	if reachableCJs > 0 {
+		recs = append(recs, formatInt(reachableCJs)+" of "+formatInt(len(ap.CrownJewels))+" tagged crown-jewel asset(s) are reachable from at least one endpoint. Place crown jewels in a dedicated, firewall-enforced segment with no direct lateral-movement paths from user VLANs.")
+	}
+	if n := len(ap.SegmentationViols); n > 0 {
+		recs = append(recs, formatInt(n)+" lateral-movement edge(s) cross a network-segment boundary — flat network exposure. Apply micro-segmentation or firewall rules to block SMB (445), WinRM (5985/5986), and RDP (3389) between VLANs that have no operational need to communicate.")
+	}
+	if len(ap.ChokePoints) > 0 && ap.ChokePoints[0].Coverage > 0.5 {
+		cp := ap.ChokePoints[0]
+		recs = append(recs, "Choke point '"+cp.Label+"' lies on "+fmt.Sprintf("%.0f%%", cp.Coverage*100)+" of attacker paths to high-value targets. Hardening or removing this single host would eliminate the majority of reachable attack paths — prioritise it for patching, SMB/WinRM lockdown, and local-admin removal.")
 	}
 	return recs
 }

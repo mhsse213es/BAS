@@ -426,6 +426,14 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <div class="scard-bar"><div class="scard-bar-fill" style="width:{{.summary.penetrationPct}}%;background:#da3633"></div></div>
     <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">{{.summary.penetrationPct}}% of executed techniques got through</div>
   </div>
+  {{with .summary.attackPathScore}}
+  <div class="scard" style="border-left:3px solid {{scoreColor .}}">
+    <div class="scard-label">Attack Path Score</div>
+    <div class="scard-value" style="color:{{scoreColor .}}">{{.}}<span style="font-size:0.9rem;color:#6e7681">/100</span></div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .}}%;background:{{scoreColor .}}"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">{{$.summary.attackPathBand}} risk · lateral movement exposure</div>
+  </div>
+  {{end}}
   <div class="scard">
     <div class="scard-label">Trend vs. Previous</div>
     {{if .trendAnalysis.hasPrevious}}
