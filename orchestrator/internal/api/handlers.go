@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -2235,6 +2236,275 @@ func (h *Handler) GetUnifiedTechniques(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(out, func(i, j int) bool { return out[i].TechniqueID < out[j].TechniqueID })
 	respond(w, out)
 }
+
+// ── Coverage Analytics ────────────────────────────────────────────────────────
+
+type analyticsVerdict int
+
+const (
+	verdictMissed      analyticsVerdict = 0
+	verdictDetectedOnly analyticsVerdict = 1
+	verdictPrevented   analyticsVerdict = 2
+)
+
+func verdictString(v analyticsVerdict) string {
+	switch v {
+	case verdictPrevented:
+		return "prevented"
+	case verdictDetectedOnly:
+		return "detectedOnly"
+	default:
+		return "missed"
+	}
+}
+
+// CoverageAnalytics is the aggregate coverage view across a set of runs.
+type CoverageAnalytics struct {
+	RunsAnalyzed int                  `json:"runsAnalyzed"`
+	Summary      AnalyticsSummary     `json:"summary"`
+	ByTechnique  []TechniqueAnalytic  `json:"byTechnique"`
+	ByTactic     []TacticAnalytic     `json:"byTactic"`
+	RecentRuns   []RunAnalyticSummary `json:"recentRuns"`
+}
+
+type AnalyticsSummary struct {
+	Attempted         int `json:"attempted"`
+	Prevented         int `json:"prevented"`
+	DetectedOnly      int `json:"detectedOnly"`
+	Missed            int `json:"missed"`
+	PreventionRate    int `json:"preventionRate"`    // prevented/attempted*100
+	DetectionCoverage int `json:"detectionCoverage"` // (prevented+detected)/attempted*100
+}
+
+type TechniqueAnalytic struct {
+	TechniqueID  string `json:"techniqueId"`
+	Name         string `json:"name,omitempty"`
+	Tactic       string `json:"tactic,omitempty"`
+	BestVerdict  string `json:"bestVerdict"` // prevented | detectedOnly | missed
+	RunCount     int    `json:"runCount"`
+	Prevented    int    `json:"prevented"`
+	DetectedOnly int    `json:"detectedOnly"`
+	Missed       int    `json:"missed"`
+}
+
+type TacticAnalytic struct {
+	Tactic       string `json:"tactic"`
+	Attempted    int    `json:"attempted"`
+	Prevented    int    `json:"prevented"`
+	DetectedOnly int    `json:"detectedOnly"`
+	Missed       int    `json:"missed"`
+}
+
+type RunAnalyticSummary struct {
+	RunID        string    `json:"runId"`
+	ScenarioID   string    `json:"scenarioId"`
+	Name         string    `json:"name"`
+	AgentID      string    `json:"agentId"`
+	StartedAt    time.Time `json:"startedAt"`
+	Attempted    int       `json:"attempted"`
+	Prevented    int       `json:"prevented"`
+	DetectedOnly int       `json:"detectedOnly"`
+	Missed       int       `json:"missed"`
+}
+
+// GET /api/coverage/analytics — aggregate prevention/detection analytics across
+// recent runs. Results are bucketed per technique into prevented / detectedOnly
+// (FAIL but EDR/SIEM caught it) / missed (FAIL, no detection). Error and Skipped
+// outcomes are excluded from counts. Viewer+.
+//
+// Query params:
+//   scenarioId — filter to one scenario (optional)
+//   agentId    — filter to one agent (optional)
+//   limit      — max runs to include, default 20, max 100
+func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
+	scenarioID := r.URL.Query().Get("scenarioId")
+	agentID    := r.URL.Query().Get("agentId")
+	limit := 20
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+
+	rows, err := h.db.Query(r.Context(),
+		`SELECT id, scenario_id, name, agent_id, results, detection_summary, started_at
+		   FROM scenario_runs
+		  WHERE status IN ('completed', 'partial')
+		    AND results IS NOT NULL
+		    AND ($1 = '' OR scenario_id = $1)
+		    AND ($2 = '' OR agent_id = $2)
+		  ORDER BY started_at DESC LIMIT $3`,
+		scenarioID, agentID, limit)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type techEntry struct {
+		name    string
+		tactic  string
+		best    analyticsVerdict // best across all runs
+		runs    int
+		prev    int
+		det     int
+		miss    int
+	}
+	techMap  := map[string]*techEntry{}
+	tacticMap := map[string]*TacticAnalytic{}
+	var recent []RunAnalyticSummary
+	runsAnalyzed := 0
+
+	for rows.Next() {
+		var rid, scID, name, agID string
+		var resRaw, detRaw []byte
+		var startedAt time.Time
+		if err := rows.Scan(&rid, &scID, &name, &agID, &resRaw, &detRaw, &startedAt); err != nil {
+			continue
+		}
+		var results []models.SimulationResult
+		if len(resRaw) > 0 {
+			json.Unmarshal(resRaw, &results)
+		}
+		detected := detectedTechs(detRaw, results)
+		runsAnalyzed++
+
+		runSumm := RunAnalyticSummary{RunID: rid, ScenarioID: scID, Name: name, AgentID: agID, StartedAt: startedAt}
+
+		for _, res := range results {
+			switch res.Result {
+			case models.ResultError, models.ResultSkipped:
+				continue
+			}
+			tid := strings.ToUpper(res.Technique.ID)
+			if tid == "" {
+				continue
+			}
+			var v analyticsVerdict
+			switch res.Result {
+			case models.ResultPass, models.ResultBlocked:
+				v = verdictPrevented
+			case models.ResultFail:
+				if detected[res.Technique.ID] || detected[tid] {
+					v = verdictDetectedOnly
+				} else {
+					v = verdictMissed
+				}
+			default:
+				continue
+			}
+
+			e := techMap[tid]
+			if e == nil {
+				e = &techEntry{name: res.Technique.Name, tactic: res.Technique.Tactic}
+				techMap[tid] = e
+			}
+			if res.Technique.Name != "" && e.name == "" {
+				e.name = res.Technique.Name
+			}
+			if res.Technique.Tactic != "" && e.tactic == "" {
+				e.tactic = res.Technique.Tactic
+			}
+			e.runs++
+			if v > e.best {
+				e.best = v
+			}
+			switch v {
+			case verdictPrevented:
+				e.prev++
+			case verdictDetectedOnly:
+				e.det++
+			default:
+				e.miss++
+			}
+
+			// per-run counts
+			switch v {
+			case verdictPrevented:
+				runSumm.Prevented++
+			case verdictDetectedOnly:
+				runSumm.DetectedOnly++
+			default:
+				runSumm.Missed++
+			}
+			runSumm.Attempted++
+		}
+		recent = append(recent, runSumm)
+	}
+
+	// Build ByTechnique (sorted: missed first, then detectedOnly, then prevented, then by ID).
+	techList := make([]TechniqueAnalytic, 0, len(techMap))
+	for tid, e := range techMap {
+		tacKey := e.tactic
+		if tacKey == "" {
+			tacKey = "unknown"
+		}
+		if tacticMap[tacKey] == nil {
+			tacticMap[tacKey] = &TacticAnalytic{Tactic: tacKey}
+		}
+		tac := tacticMap[tacKey]
+		tac.Attempted++
+		switch e.best {
+		case verdictPrevented:
+			tac.Prevented++
+		case verdictDetectedOnly:
+			tac.DetectedOnly++
+		default:
+			tac.Missed++
+		}
+		techList = append(techList, TechniqueAnalytic{
+			TechniqueID: tid, Name: e.name, Tactic: e.tactic,
+			BestVerdict: verdictString(e.best),
+			RunCount: e.runs, Prevented: e.prev, DetectedOnly: e.det, Missed: e.miss,
+		})
+	}
+	sort.Slice(techList, func(i, j int) bool {
+		bi := techMap[techList[i].TechniqueID].best
+		bj := techMap[techList[j].TechniqueID].best
+		if bi != bj {
+			return bi < bj // missed first
+		}
+		return techList[i].TechniqueID < techList[j].TechniqueID
+	})
+
+	// Build ByTactic (sorted by missed desc).
+	tacList := make([]TacticAnalytic, 0, len(tacticMap))
+	for _, t := range tacticMap {
+		tacList = append(tacList, *t)
+	}
+	sort.Slice(tacList, func(i, j int) bool {
+		if tacList[i].Missed != tacList[j].Missed {
+			return tacList[i].Missed > tacList[j].Missed
+		}
+		return tacList[i].Tactic < tacList[j].Tactic
+	})
+
+	// Summary.
+	var summ AnalyticsSummary
+	for _, t := range techList {
+		summ.Attempted++
+		switch t.BestVerdict {
+		case "prevented":
+			summ.Prevented++
+		case "detectedOnly":
+			summ.DetectedOnly++
+		default:
+			summ.Missed++
+		}
+	}
+	if summ.Attempted > 0 {
+		summ.PreventionRate    = summ.Prevented * 100 / summ.Attempted
+		summ.DetectionCoverage = (summ.Prevented + summ.DetectedOnly) * 100 / summ.Attempted
+	}
+
+	respond(w, CoverageAnalytics{
+		RunsAnalyzed: runsAnalyzed,
+		Summary:      summ,
+		ByTechnique:  techList,
+		ByTactic:     tacList,
+		RecentRuns:   recent,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // GET /api/art/techniques — live ART catalog (technique id, representative name,
 // atomic-test count). Returns an empty list if the ART store isn't loaded.

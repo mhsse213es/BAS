@@ -510,6 +510,16 @@ code {
 .tmpl-stripe-critical { border-left:4px solid var(--danger); }
 .tmpl-stripe-high     { border-left:4px solid var(--warning); }
 .tmpl-stripe-medium   { border-left:4px solid var(--accent); }
+.ca-card { background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);padding:0.7rem 0.9rem; }
+.ca-card-ok   { border-left:3px solid var(--success); }
+.ca-card-warn { border-left:3px solid var(--warning); }
+.ca-card-err  { border-left:3px solid var(--danger); }
+.ca-label { font-size:0.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:0.2rem; }
+.ca-val   { font-size:1.5rem;font-weight:800;font-family:var(--font-mono);color:var(--text);line-height:1.1; }
+.ca-val-ok   { color:var(--success); }
+.ca-val-warn { color:var(--warning); }
+.ca-val-err  { color:var(--danger); }
+.ca-sub   { font-size:0.68rem;color:var(--muted);margin-top:0.15rem; }
 .tmpl-actor { display:inline-flex;align-items:center;padding:2px 8px;border-radius:9px;font-size:0.68rem;font-weight:700;letter-spacing:.04em;white-space:nowrap; }
 .tmpl-cat-apt        { background:rgba(218,54,51,.15);border:1px solid rgba(218,54,51,.4);color:#f85149; }
 .tmpl-cat-ransomware { background:rgba(240,136,62,.15);border:1px solid rgba(240,136,62,.4);color:#f0883e; }
@@ -1804,6 +1814,61 @@ code {
 
       <!-- ATT&CK Coverage -->
       <div id="tab-coverage" style="display:none">
+
+        <!-- Phase 6: Coverage Analytics panel -->
+        <div class="dash-panel" style="margin-bottom:1.25rem">
+          <div class="dash-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem">
+            <span>Coverage Analytics</span>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+              <select id="ca-scenario" onchange="loadCoverageAnalytics()" style="padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
+                <option value="">All scenarios</option>
+              </select>
+              <select id="ca-agent" onchange="loadCoverageAnalytics()" style="padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
+                <option value="">All agents</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="loadCoverageAnalytics()">Refresh</button>
+            </div>
+          </div>
+          <div class="dash-panel-body" style="padding:0.9rem">
+            <!-- 4-metric scorecards -->
+            <div id="ca-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.65rem;margin-bottom:1rem">
+              <div class="ca-card"><div class="ca-label">Techniques Attempted</div><div class="ca-val" id="ca-attempted">—</div><div class="ca-sub" id="ca-runs">0 runs</div></div>
+              <div class="ca-card ca-card-ok"><div class="ca-label">Prevented</div><div class="ca-val ca-val-ok" id="ca-prevented">—</div><div class="ca-sub" id="ca-prev-pct">Control blocked execution</div></div>
+              <div class="ca-card ca-card-warn"><div class="ca-label">Detected Only</div><div class="ca-val ca-val-warn" id="ca-detected">—</div><div class="ca-sub">EDR/SIEM alerted — not blocked</div></div>
+              <div class="ca-card ca-card-err"><div class="ca-label">Missed</div><div class="ca-val ca-val-err" id="ca-missed">—</div><div class="ca-sub">No prevention, no detection</div></div>
+            </div>
+            <!-- Rate bars -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;margin-bottom:1rem" id="ca-rates">
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:3px"><span style="color:var(--muted)">Prevention Rate</span><span id="ca-prev-rate" style="font-weight:700;color:var(--success)">—</span></div>
+                <div style="height:8px;background:var(--elevated);border-radius:4px;overflow:hidden"><div id="ca-prev-bar" style="height:100%;background:var(--success);width:0%;transition:width .4s"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:3px"><span style="color:var(--muted)">Detection Coverage</span><span id="ca-det-rate" style="font-weight:700;color:var(--warning)">—</span></div>
+                <div style="height:8px;background:var(--elevated);border-radius:4px;overflow:hidden"><div id="ca-det-bar" style="height:100%;background:var(--warning);width:0%;transition:width .4s"></div></div>
+              </div>
+            </div>
+            <!-- By-tactic table + Missed techniques side-by-side -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem" id="ca-detail">
+              <div>
+                <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.4rem">By Tactic</div>
+                <div class="tbl-wrap"><table id="ca-tactic-tbl" style="font-size:0.76rem">
+                  <thead><tr><th>Tactic</th><th style="text-align:center">Prevented</th><th style="text-align:center">Detected</th><th style="text-align:center;color:var(--danger)">Missed</th></tr></thead>
+                  <tbody id="ca-tactic-body"><tr><td colspan="4" class="empty">No data</td></tr></tbody>
+                </table></div>
+              </div>
+              <div>
+                <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.4rem">Missed Techniques — prioritize these</div>
+                <div class="tbl-wrap"><table id="ca-missed-tbl" style="font-size:0.76rem">
+                  <thead><tr><th>Technique</th><th>Name</th><th style="text-align:center">Runs</th></tr></thead>
+                  <tbody id="ca-missed-body"><tr><td colspan="3" class="empty">No gaps</td></tr></tbody>
+                </table></div>
+              </div>
+            </div>
+            <div id="ca-empty" style="display:none;text-align:center;padding:1.5rem;color:var(--muted);font-size:0.82rem">No completed runs yet — run a scenario or adversary template to generate analytics.</div>
+          </div>
+        </div>
+
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
           <div>
             <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">MITRE ATT&amp;CK Coverage</h1>
@@ -2569,7 +2634,7 @@ function showTab(name) {
   activateTab(name);
   if (name === 'agents') loadAgents();
   if (name === 'campaigns') closeCampaignDetail();
-  if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); }
+  if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
   if (name === 'findings') loadFindings();
   if (name === 'remediation') loadRemediations();
   if (name === 'reports') loadReports();
@@ -3817,6 +3882,103 @@ function confirmAdversaryRun() {
     if (btn) btn.disabled = false;
   });
 }
+
+// ── Coverage Analytics ────────────────────────────────────────────────────────
+function loadCoverageAnalytics() {
+  var scen  = (document.getElementById('ca-scenario') || {}).value || '';
+  var agent = (document.getElementById('ca-agent')    || {}).value || '';
+  var qs = '?limit=50' + (scen ? '&scenarioId=' + encodeURIComponent(scen) : '') + (agent ? '&agentId=' + encodeURIComponent(agent) : '');
+  apicall('/api/coverage/analytics' + qs).catch(function() { return null; }).then(function(d) {
+    if (!d) return;
+    populateCoverageFilters(d);
+    renderCoverageAnalytics(d);
+  });
+}
+
+// Populate scenario + agent dropdowns once (preserves selection).
+var _caFiltersPopulated = false;
+function populateCoverageFilters(d) {
+  if (_caFiltersPopulated) return;
+  _caFiltersPopulated = true;
+  // Scenario dropdown from loaded scenario list.
+  var scenSel = document.getElementById('ca-scenario');
+  if (scenSel && window.scenarios) {
+    var cur = scenSel.value;
+    scenSel.innerHTML = '<option value="">All scenarios</option>' +
+      (scenarios || []).map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
+    if (cur) scenSel.value = cur;
+  }
+  // Agent dropdown.
+  var agSel = document.getElementById('ca-agent');
+  if (agSel && window._agents) {
+    var cur2 = agSel.value;
+    agSel.innerHTML = '<option value="">All agents</option>' +
+      (_agents || []).map(function(a) { return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + '</option>'; }).join('');
+    if (cur2) agSel.value = cur2;
+  }
+}
+
+function renderCoverageAnalytics(d) {
+  var s = d.summary || {};
+  var hasData = d.runsAnalyzed > 0 && s.attempted > 0;
+  var emEl = document.getElementById('ca-empty');
+  var detEl = document.getElementById('ca-detail');
+  var ratesEl = document.getElementById('ca-rates');
+  if (emEl) emEl.style.display = hasData ? 'none' : '';
+  if (detEl) detEl.style.display = hasData ? '' : 'none';
+  if (ratesEl) ratesEl.style.display = hasData ? '' : 'none';
+
+  // Scorecards.
+  setText('ca-attempted', hasData ? s.attempted : '—');
+  setText('ca-prevented', hasData ? s.prevented : '—');
+  setText('ca-detected',  hasData ? s.detectedOnly : '—');
+  setText('ca-missed',    hasData ? s.missed : '—');
+  setText('ca-runs', d.runsAnalyzed + ' run' + (d.runsAnalyzed !== 1 ? 's' : '') + ' analysed');
+  setText('ca-prev-pct', hasData ? s.preventionRate + '% prevention rate' : 'Control blocked execution');
+
+  // Rate bars.
+  var prevRate = s.preventionRate || 0;
+  var detRate  = s.detectionCoverage || 0;
+  setText('ca-prev-rate', prevRate + '%');
+  setText('ca-det-rate',  detRate + '%');
+  setW('ca-prev-bar', prevRate);
+  setW('ca-det-bar',  detRate);
+
+  // By-tactic table.
+  var tacBody = document.getElementById('ca-tactic-body');
+  if (tacBody) {
+    tacBody.innerHTML = (d.byTactic || []).map(function(t, i) {
+      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
+      var mColor = t.missed > 0 ? 'color:var(--danger);font-weight:700' : 'color:var(--muted)';
+      return '<tr style="' + bg + '">' +
+        '<td>' + x(t.tactic) + '</td>' +
+        '<td style="text-align:center;color:var(--success)">' + t.prevented + '</td>' +
+        '<td style="text-align:center;color:var(--warning)">' + t.detectedOnly + '</td>' +
+        '<td style="text-align:center;' + mColor + '">' + t.missed + '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="4" class="empty">No data</td></tr>';
+  }
+
+  // Missed techniques table (show top 20 missed or detectedOnly).
+  var missedBody = document.getElementById('ca-missed-body');
+  if (missedBody) {
+    var missed = (d.byTechnique || []).filter(function(t) { return t.bestVerdict === 'missed' || t.bestVerdict === 'detectedOnly'; }).slice(0, 20);
+    missedBody.innerHTML = missed.map(function(t, i) {
+      var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
+      var vColor = t.bestVerdict === 'missed' ? 'color:var(--danger)' : 'color:var(--warning)';
+      var vDot   = t.bestVerdict === 'missed' ? '● ' : '◐ ';
+      return '<tr style="' + bg + '">' +
+        '<td style="font-family:var(--font-mono);font-size:0.76rem;' + vColor + '">' + vDot + x(t.techniqueId) + '</td>' +
+        '<td style="font-size:0.76rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(t.name || '—') + '</td>' +
+        '<td style="text-align:center;color:var(--muted);font-size:0.76rem">' + t.runCount + '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="3" class="empty" style="color:var(--success)">✓ No gaps detected</td></tr>';
+  }
+}
+
+function setText(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+function setW(id, pct)  { var el = document.getElementById(id); if (el) el.style.width = Math.min(100, pct) + '%'; }
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Unified Technique Library ─────────────────────────────────────────────────
 var _utlData = [];          // raw response from /api/techniques/unified

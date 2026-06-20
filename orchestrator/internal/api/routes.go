@@ -114,6 +114,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/caldera/abilities", h.GetCalderaAbilities)
 		r.Get("/api/techniques/unified", h.GetUnifiedTechniques)
 
+		// Coverage Analytics — aggregate prevention/detection breakdown across runs.
+		r.Get("/api/coverage/analytics", h.GetCoverageAnalytics)
+
 		// Adversary template catalog — curated playbooks mixing BAS + ART + Caldera.
 		r.Get("/api/adversary-templates", h.GetAdversaryTemplates)
 		r.Get("/api/caldera/adversaries", h.GetCalderaAdversaries)
