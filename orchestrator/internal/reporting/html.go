@@ -140,6 +140,30 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return "NO DATA"
 	},
+	// cleanupVerdictColor maps a cleanup verdict to a CSS color.
+	"cleanupVerdictColor": func(v string) string {
+		switch v {
+		case "reverted":
+			return "#0d9488" // green — cleanup command succeeded
+		case "partial":
+			return "#d29922" // amber — non-zero exit, artifacts may remain
+		case "leaked":
+			return "#da3633" // red — cleanup timed out or failed to start
+		}
+		return "#6e7681" // grey — no cleanup defined
+	},
+	// cleanupVerdictLabel maps a cleanup verdict to a display label.
+	"cleanupVerdictLabel": func(v string) string {
+		switch v {
+		case "reverted":
+			return "REVERTED"
+		case "partial":
+			return "PARTIAL"
+		case "leaked":
+			return "LEAKED"
+		}
+		return "—"
+	},
 	// execVerdictColor maps an execution verdict to a CSS color.
 	"execVerdictColor": func(v string) string {
 		switch v {
@@ -864,7 +888,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{if .techniqueMatrix}}
 <table>
   <thead><tr>
-    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th>
+    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th><th>Cleanup</th>
   </tr></thead>
   <tbody>
   {{range .techniqueMatrix}}
@@ -888,6 +912,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
       {{if .alertCommandLine}}<span style="color:#6e7681">{{.alertCommandLine}}</span>{{end}}
     </td>
     <td style="font-size:0.78rem;white-space:nowrap">{{if .mttdMs}}{{mttd .mttdMs}}{{else}}—{{end}}</td>
+    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:{{cleanupVerdictColor .cleanupVerdict}}">{{cleanupVerdictLabel .cleanupVerdict}}</td>
   </tr>
   {{end}}
   </tbody>

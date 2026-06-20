@@ -180,6 +180,10 @@ type ExecResult struct {
 	// schedule timeout before running). An explicit "ran, did not return" verdict —
 	// never conflated with a clean skip or a security block.
 	TimedOut bool `json:"timedOut,omitempty"`
+	// CleanupVerdict records whether the step's cleanup command restored the host.
+	// "reverted" = cleanup ran and exited 0; "partial" = non-zero exit;
+	// "leaked" = cleanup timed out or failed to start; "" = no cleanup defined.
+	CleanupVerdict string `json:"cleanupVerdict,omitempty"`
 }
 
 // AlertRecord is one raw defensive event collected from the endpoint. The agent

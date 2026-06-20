@@ -48,6 +48,7 @@ type SimulationResult struct {
 	Events           []string        `json:"events,omitempty"`        // Windows Event IDs observed (per-step tokens)
 	DetectionVerdict string          `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
 	DetectionAlert   *DetectionAlert `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
+	CleanupVerdict   string          `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
 }
 
 // DetectionAlert is the alert record that matched this technique during the

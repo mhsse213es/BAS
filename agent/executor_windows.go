@@ -123,7 +123,9 @@ func hostIsDomainController() bool {
 	return strings.Contains(string(out), "LanmanNT")
 }
 
-func runCleanup(step ScenarioStep) {
+// runCleanup executes the step's cleanup command and returns a verdict:
+// "reverted" (exit 0), "partial" (non-zero exit), or "leaked" (start/timeout failure).
+func runCleanup(step ScenarioStep) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "powershell",
@@ -132,7 +134,14 @@ func runCleanup(step ScenarioStep) {
 	if step.PayloadDir != "" {
 		cmd.Env = append(os.Environ(), "BAS_PAYLOAD_DIR="+step.PayloadDir)
 	}
-	_ = cmd.Run()
+	err := cmd.Run()
+	if err == nil {
+		return "reverted"
+	}
+	if ctx.Err() != nil {
+		return "leaked"
+	}
+	return "partial"
 }
 
 // detectSecurityBlock returns true when an EDR/AV terminated the child process.

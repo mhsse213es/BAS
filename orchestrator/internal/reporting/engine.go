@@ -114,6 +114,7 @@ type TechniqueRow struct {
 	Confidence       string `json:"confidence,omitempty"` // high|low
 	MTTDMs           int64  `json:"mttdMs,omitempty"`
 	DurationMs       int64  `json:"durationMs"`
+	CleanupVerdict   string `json:"cleanupVerdict,omitempty"` // reverted|partial|leaked
 }
 
 // KillChainStep is one step of the purple-team kill chain: an adversary action
@@ -271,12 +272,13 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 	rows := make([]TechniqueRow, 0, len(results))
 	for _, r := range results {
 		row := TechniqueRow{
-			TechniqueID:   r.Technique.ID,
-			TechniqueName: r.Technique.Name,
-			Tactic:        r.Technique.Tactic,
-			Severity:      r.Severity,
-			ExecVerdict:   string(r.Result),
-			DurationMs:    r.DurationMs,
+			TechniqueID:    r.Technique.ID,
+			TechniqueName:  r.Technique.Name,
+			Tactic:         r.Technique.Tactic,
+			Severity:       r.Severity,
+			ExecVerdict:    string(r.Result),
+			DurationMs:     r.DurationMs,
+			CleanupVerdict: r.CleanupVerdict,
 		}
 		if r.DetectionVerdict != "" {
 			row.DetectionVerdict = r.DetectionVerdict

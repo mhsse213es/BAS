@@ -166,6 +166,9 @@ type ExecResult struct {
 	// TimedOut marks a step that exceeded its execute/schedule timeout — an
 	// explicit "ran, did not return" verdict, distinct from a clean skip.
 	TimedOut bool `json:"timedOut,omitempty"`
+	// CleanupVerdict is set by the agent after running the step's cleanup command.
+	// "reverted" = exit 0; "partial" = non-zero exit; "leaked" = timeout/start failure.
+	CleanupVerdict string `json:"cleanupVerdict,omitempty"`
 }
 
 // SimCheckResult carries the pre-interpreted result of a single built-in local check.
