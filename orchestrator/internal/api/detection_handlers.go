@@ -77,6 +77,14 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 				MTTDMs:      d.TimeToDetectMs,
 			}
 		}
+		if d.BlockingControl != nil {
+			results[i].BlockingControl = &models.BlockingControl{
+				Name:    d.BlockingControl.Name,
+				RuleID:  d.BlockingControl.RuleID,
+				EventID: d.BlockingControl.EventID,
+				Channel: d.BlockingControl.Channel,
+			}
+		}
 	}
 	updatedResultsJSON, _ := json.Marshal(results)
 

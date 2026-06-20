@@ -46,9 +46,10 @@ type SimulationResult struct {
 	ExecutedAt   time.Time       `json:"executedAt"`
 	Framework        string          `json:"framework"`               // art | caldera | sigma | custom
 	Events           []string        `json:"events,omitempty"`        // Windows Event IDs observed (per-step tokens)
-	DetectionVerdict string          `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
-	DetectionAlert   *DetectionAlert `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
-	CleanupVerdict   string          `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
+	DetectionVerdict string           `json:"detectionVerdict,omitempty"`  // prevented | detected | undetected (populated after agent posts detections)
+	DetectionAlert   *DetectionAlert  `json:"detectionAlert,omitempty"`    // matched EDR/AV alert when DetectionVerdict=detected
+	CleanupVerdict   string           `json:"cleanupVerdict,omitempty"`    // reverted | partial | leaked (populated from agent cleanup exit code)
+	BlockingControl  *BlockingControl `json:"blockingControl,omitempty"`   // specific control that prevented the technique (populated when DetectionVerdict=prevented)
 }
 
 // DetectionAlert is the alert record that matched this technique during the
@@ -64,6 +65,15 @@ type DetectionAlert struct {
 	Timestamp   time.Time `json:"timestamp"`
 	Confidence  string    `json:"confidence"`           // high | low
 	MTTDMs      int64     `json:"mttdMs,omitempty"`     // ms from step execution to alert
+}
+
+// BlockingControl identifies the specific security control that prevented a
+// technique. Mirrors detect.BlockingControl but kept in models for clean JSON.
+type BlockingControl struct {
+	Name    string `json:"name"`             // e.g. "Defender ASR: Block obfuscated scripts"
+	RuleID  string `json:"ruleId,omitempty"` // ASR GUID or AppLocker policy name
+	EventID int    `json:"eventId"`
+	Channel string `json:"channel"`
 }
 
 // ScenarioRun is a complete execution of a named scenario against one agent.

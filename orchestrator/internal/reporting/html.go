@@ -888,7 +888,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{if .techniqueMatrix}}
 <table>
   <thead><tr>
-    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th><th>Cleanup</th>
+    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th><th>Cleanup</th><th>Blocking Control</th>
   </tr></thead>
   <tbody>
   {{range .techniqueMatrix}}
@@ -913,6 +913,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     </td>
     <td style="font-size:0.78rem;white-space:nowrap">{{if .mttdMs}}{{mttd .mttdMs}}{{else}}—{{end}}</td>
     <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:{{cleanupVerdictColor .cleanupVerdict}}">{{cleanupVerdictLabel .cleanupVerdict}}</td>
+    <td style="font-size:0.75rem;max-width:160px">
+      {{if .controlName}}<strong>{{.controlName}}</strong>{{if .controlRuleId}}<br><code style="font-size:0.65rem;color:#6e7681">{{.controlRuleId}}</code>{{end}}{{else}}—{{end}}
+    </td>
   </tr>
   {{end}}
   </tbody>

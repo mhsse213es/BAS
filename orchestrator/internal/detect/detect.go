@@ -1,6 +1,8 @@
 package detect
 
-import "time"
+import (
+	"time"
+)
 
 // AlertRecord mirrors the agent's wire shape (agent/types.go AlertRecord).
 type AlertRecord struct {
@@ -26,12 +28,13 @@ type ExecutedStep struct {
 }
 
 type TechniqueDetection struct {
-	TechniqueID    string       `json:"techniqueId"`
-	Verdict        string       `json:"verdict"`              // prevented|detected|undetected (logged handled by report classifier)
-	Confidence     string       `json:"confidence,omitempty"` // high|low when detected
-	MatchedBy      []string     `json:"matchedBy,omitempty"`
-	Alert          *AlertRecord `json:"alert,omitempty"`
-	TimeToDetectMs int64        `json:"timeToDetectMs,omitempty"`
+	TechniqueID     string           `json:"techniqueId"`
+	Verdict         string           `json:"verdict"`               // prevented|detected|undetected
+	Confidence      string           `json:"confidence,omitempty"`  // high|low when detected
+	MatchedBy       []string         `json:"matchedBy,omitempty"`
+	Alert           *AlertRecord     `json:"alert,omitempty"`
+	TimeToDetectMs  int64            `json:"timeToDetectMs,omitempty"`
+	BlockingControl *BlockingControl `json:"blockingControl,omitempty"` // which control prevented the technique
 }
 
 type DetectionSummary struct {
@@ -70,7 +73,24 @@ func Correlate(steps []ExecutedStep, alerts []AlertRecord, window time.Duration,
 			continue
 		}
 		if isPrevented(s.Verdict) {
-			out = append(out, TechniqueDetection{TechniqueID: s.TechniqueID, Verdict: "prevented"})
+			// Scan alerts in a wider window (block events fire at or just after
+			// process-create denial) to identify which control blocked the technique.
+			blockWinStart := s.ExecutedAt.Add(-10 * time.Second)
+			blockWinEnd := s.ExecutedAt.Add(60 * time.Second)
+			var ctrl *BlockingControl
+			for i := range alerts {
+				ts := alerts[i].Timestamp
+				if (ts.Equal(blockWinStart) || ts.After(blockWinStart)) && !ts.After(blockWinEnd) {
+					if c := AttributeControl(alerts[i]); c != nil {
+						ctrl = c
+						break
+					}
+				}
+			}
+			out = append(out, TechniqueDetection{
+				TechniqueID: s.TechniqueID, Verdict: "prevented",
+				BlockingControl: ctrl,
+			})
 			continue
 		}
 		// not prevented (fail) → look for an in-window alert

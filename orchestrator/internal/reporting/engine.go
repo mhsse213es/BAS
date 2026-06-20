@@ -115,6 +115,8 @@ type TechniqueRow struct {
 	MTTDMs           int64  `json:"mttdMs,omitempty"`
 	DurationMs       int64  `json:"durationMs"`
 	CleanupVerdict   string `json:"cleanupVerdict,omitempty"` // reverted|partial|leaked
+	ControlName      string `json:"controlName,omitempty"`    // specific control that blocked (Defender ASR, AppLocker, WDAC)
+	ControlRuleID    string `json:"controlRuleId,omitempty"`  // ASR GUID or AppLocker policy name
 }
 
 // KillChainStep is one step of the purple-team kill chain: an adversary action
@@ -279,6 +281,10 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 			ExecVerdict:    string(r.Result),
 			DurationMs:     r.DurationMs,
 			CleanupVerdict: r.CleanupVerdict,
+		}
+		if r.BlockingControl != nil {
+			row.ControlName   = r.BlockingControl.Name
+			row.ControlRuleID = r.BlockingControl.RuleID
 		}
 		if r.DetectionVerdict != "" {
 			row.DetectionVerdict = r.DetectionVerdict
