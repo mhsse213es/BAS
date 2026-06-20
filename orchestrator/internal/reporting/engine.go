@@ -68,6 +68,10 @@ type FullReport struct {
 	// (Phase 1 collection). When present the report renders the Attack Path
 	// Validation section; otherwise that section shows a "not yet collected" state.
 	AttackPathValidation *attackpath.Summary `json:"attackPathValidation,omitempty"`
+	// CoverageBreakdown is the 3-bucket prevention/detection breakdown derived from
+	// TechniqueMatrix (DetectionVerdict field). It powers the Coverage Analytics
+	// page and is used in the executive summary score cards.
+	CoverageBreakdown CoverageBreakdown `json:"coverageBreakdown"`
 }
 
 // ReportScope describes a fleet-wide (campaign) report's subject.
@@ -117,6 +121,104 @@ type TechniqueRow struct {
 	CleanupVerdict   string `json:"cleanupVerdict,omitempty"` // reverted|partial|leaked
 	ControlName      string `json:"controlName,omitempty"`    // specific control that blocked (Defender ASR, AppLocker, WDAC)
 	ControlRuleID    string `json:"controlRuleId,omitempty"`  // ASR GUID or AppLocker policy name
+}
+
+// CoverageBreakdown is the 3-bucket summary of all technique-level verdicts
+// within a report. Every technique that was executed (not errored/skipped) lands
+// in exactly one bucket:
+//   Prevented     — execution was blocked (pass/blocked verdict)
+//   DetectedOnly  — execution succeeded but an EDR/SIEM alert fired (fail+detected)
+//   Missed        — execution succeeded with no detection (fail+undetected / no telemetry)
+//
+// Rates are integers 0-100. HasData is false when TechniqueMatrix is empty.
+type CoverageBreakdown struct {
+	HasData           bool              `json:"hasData"`
+	Attempted         int               `json:"attempted"`
+	Prevented         int               `json:"prevented"`
+	DetectedOnly      int               `json:"detectedOnly"`
+	Missed            int               `json:"missed"`
+	PreventionRate    int               `json:"preventionRate"`    // prevented/attempted*100
+	DetectionCoverage int               `json:"detectionCoverage"` // (prevented+detectedOnly)/attempted*100
+	ByTactic          []TacticBreakdown `json:"byTactic"`
+	MissedTechniques  []TechniqueRow    `json:"missedTechniques"`  // top-20 missed+detectedOnly rows, action items
+}
+
+// TacticBreakdown is the per-tactic 3-bucket row for the Coverage Analytics page.
+type TacticBreakdown struct {
+	Tactic       string `json:"tactic"`
+	Attempted    int    `json:"attempted"`
+	Prevented    int    `json:"prevented"`
+	DetectedOnly int    `json:"detectedOnly"`
+	Missed       int    `json:"missed"`
+}
+
+// buildCoverageBreakdown derives the 3-bucket coverage summary from TechniqueMatrix.
+func buildCoverageBreakdown(matrix []TechniqueRow) CoverageBreakdown {
+	if len(matrix) == 0 {
+		return CoverageBreakdown{}
+	}
+	cb := CoverageBreakdown{HasData: true}
+	tacMap := map[string]*TacticBreakdown{}
+	var gapped []TechniqueRow
+	for _, row := range matrix {
+		switch row.DetectionVerdict {
+		case "prevented", "detected", "undetected":
+		default:
+			continue // error/skipped — excluded
+		}
+		cb.Attempted++
+		tac := row.Tactic
+		if tac == "" {
+			tac = "unknown"
+		}
+		if tacMap[tac] == nil {
+			tacMap[tac] = &TacticBreakdown{Tactic: tac}
+		}
+		t := tacMap[tac]
+		t.Attempted++
+		switch row.DetectionVerdict {
+		case "prevented":
+			cb.Prevented++
+			t.Prevented++
+		case "detected":
+			cb.DetectedOnly++
+			t.DetectedOnly++
+			gapped = append(gapped, row)
+		default: // "undetected"
+			cb.Missed++
+			t.Missed++
+			gapped = append(gapped, row)
+		}
+	}
+	if cb.Attempted > 0 {
+		cb.PreventionRate    = cb.Prevented * 100 / cb.Attempted
+		cb.DetectionCoverage = (cb.Prevented + cb.DetectedOnly) * 100 / cb.Attempted
+	}
+	// sort tactics: most missed first, then alpha.
+	for _, t := range tacMap {
+		cb.ByTactic = append(cb.ByTactic, *t)
+	}
+	sort.Slice(cb.ByTactic, func(i, j int) bool {
+		if cb.ByTactic[i].Missed != cb.ByTactic[j].Missed {
+			return cb.ByTactic[i].Missed > cb.ByTactic[j].Missed
+		}
+		return cb.ByTactic[i].Tactic < cb.ByTactic[j].Tactic
+	})
+	// top-20 gapped techniques — missed first, then detectedOnly.
+	sort.SliceStable(gapped, func(i, j int) bool {
+		// missed > detectedOnly
+		mi := gapped[i].DetectionVerdict == "undetected"
+		mj := gapped[j].DetectionVerdict == "undetected"
+		if mi != mj {
+			return mi // missed first
+		}
+		return gapped[i].TechniqueID < gapped[j].TechniqueID
+	})
+	if len(gapped) > 20 {
+		gapped = gapped[:20]
+	}
+	cb.MissedTechniques = gapped
+	return cb
 }
 
 // KillChainStep is one step of the purple-team kill chain: an adversary action
@@ -621,6 +723,9 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	report.Detection = buildDetectionSummary(latestResults)
 	report.TrendAnalysis = buildTrendSummary(report.Runs)
 	report.AttackPath = buildAttackPath(latestResults)
+	// Coverage breakdown: derive from results directly (no detection telemetry in Build()
+	// because the latest-run query omits detection_summary; we use exec verdict only).
+	report.CoverageBreakdown = buildCoverageBreakdown(buildTechniqueMatrix(latestResults, nil))
 
 	// ── 6. Executive summary ─────────────────────────────────────────────
 	report.Summary = ExecutiveSummary{
@@ -776,6 +881,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	report.AttackPath = buildAttackPath(results)
 	report.KillChain = buildKillChain(results, report.DetectionTechniques)
 	report.TechniqueMatrix = buildTechniqueMatrix(results, report.DetectionTechniques)
+	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
 
 	report.Summary = ExecutiveSummary{
 		RiskScore:          score.RiskScore,
@@ -925,6 +1031,8 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*Ful
 	report.ObjectiveRisks = buildObjectiveRisks(allResults)
 	report.Detection = buildDetectionSummary(allResults)
 	report.AttackPath = buildAttackPath(allResults)
+	report.TechniqueMatrix = buildTechniqueMatrix(allResults, nil)
+	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
 
 	report.Summary = ExecutiveSummary{
 		RiskScore: score.RiskScore, Classification: score.Classification,

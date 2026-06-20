@@ -178,6 +178,17 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 	},
 	// pctFrac formats a 0..1 fraction as a whole-percent string (e.g. 0.72→"72%").
 	"pctFrac": func(f float64) string { return fmt.Sprintf("%.0f%%", f*100) },
+	// pctOf returns the integer percentage of numerator/denominator (0 when denom=0).
+	"pctOf": func(num, denom float64) int {
+		if denom == 0 {
+			return 0
+		}
+		v := int(num * 100 / denom)
+		if v > 100 {
+			return 100
+		}
+		return v
+	},
 	// scoreColor colors an attack-path-style score where HIGHER is better.
 	"scoreColor": func(f float64) string {
 		switch {
@@ -381,6 +392,51 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <span style="font-size:1.8rem">{{.summary.riskScore}}</span>
   <span>Risk Score / 100&emsp;—&emsp;{{.summary.classification}}</span>
   <span style="margin-left:auto;padding:4px 12px;border-radius:4px;font-size:0.85rem;color:#fff;background:{{exposureColor .summary.exposureLevel}}">Exposure: {{.summary.exposureLevel}}</span>
+</div>
+
+<!-- 4 KPI cards — give CISOs the numbers at a glance before the prose -->
+<div class="score-row" style="margin-bottom:16px">
+  <div class="scard">
+    <div class="scard-label">Prevention Score</div>
+    <div class="scard-value" style="color:#0d9488">{{fmtScore .summary.preventionScore}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.preventionScore}}%;background:#0d9488"></div></div>
+  </div>
+  {{if .summary.detectionMeasured}}
+  <div class="scard">
+    <div class="scard-label">Detection Score</div>
+    <div class="scard-value" style="color:#2f81f7">{{fmtScore .summary.detectionScore}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.detectionScore}}%;background:#2f81f7"></div></div>
+  </div>
+  {{else}}
+  <div class="scard">
+    <div class="scard-label">Detection Score</div>
+    <div class="scard-value" style="color:#6e7681">N/A</div>
+    <div class="scard-bar"></div>
+  </div>
+  {{end}}
+  {{if .coverageBreakdown.hasData}}
+  <div class="scard" style="border-left:3px solid #da3633">
+    <div class="scard-label">Techniques Missed</div>
+    <div class="scard-value" style="color:#da3633">{{.coverageBreakdown.missed}}<span style="font-size:0.9rem;color:#6e7681"> / {{.coverageBreakdown.attempted}}</span></div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.exposureScore}}%;background:#da3633"></div></div>
+  </div>
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Techniques Prevented</div>
+    <div class="scard-value" style="color:#0d9488">{{.coverageBreakdown.prevented}}<span style="font-size:0.9rem;color:#6e7681"> / {{.coverageBreakdown.attempted}}</span></div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{.coverageBreakdown.preventionRate}}%;background:#0d9488"></div></div>
+  </div>
+  {{else}}
+  <div class="scard">
+    <div class="scard-label">Exposure Score</div>
+    <div class="scard-value" style="color:{{exposureColor .summary.exposureLevel}}">{{fmtScore .summary.exposureScore}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.exposureScore}}%;background:{{exposureColor .summary.exposureLevel}}"></div></div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Penetration Ratio</div>
+    <div class="scard-value" style="color:#da3633">{{.summary.penetrationFailed}}/{{.summary.penetrationTested}}</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{.summary.penetrationPct}}%;background:#da3633"></div></div>
+  </div>
+  {{end}}
 </div>
 
 <h2>Executive Conclusion</h2>
@@ -703,7 +759,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{if .tacticHeatmap}}
 <table>
   <thead><tr>
-    <th>Tactic</th><th>Weight</th><th>Coverage</th><th>Prevented</th><th>Detected</th><th>MTTD</th><th style="min-width:110px">Prevention</th>
+    <th>Tactic</th><th>Weight</th><th>Coverage</th><th>Prevented</th><th>Detected</th><th>MTTD</th><th style="min-width:110px">Prevented / Detected / Missed</th>
   </tr></thead>
   <tbody>
   {{range .tacticHeatmap}}
@@ -715,8 +771,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td>{{if gt .failed 0.0}}{{.detectedPct}}% <span style="color:#6e7681">({{.detected}}/{{.failed}})</span>{{else}}—{{end}}</td>
     <td>{{mttd .mttdMs}}</td>
     <td>
-      <div class="tbar-wrap">
-        <div class="tbar-fill" style="width:{{.passPct}}%;background:{{tacticColor .passPct}}"></div>
+      {{/* stacked 3-part bar: prevented (green) | detected-only (amber) | missed (red) */}}
+      <div class="tbar-wrap" style="height:9px;position:relative">
+        <div style="position:absolute;left:0;top:0;height:100%;width:{{.passPct}}%;background:#0d9488;border-radius:4px 0 0 4px"></div>
+        <div style="position:absolute;left:{{.passPct}}%;top:0;height:100%;width:{{.detectedPct}}%;background:#d29922"></div>
       </div>
     </td>
   </tr>
@@ -936,9 +994,140 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 15. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
+<!-- ═══ 15. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>15. Technical Appendix — ATT&amp;CK Glossary</h1>
+<h1>15. Coverage Analytics</h1>
+<p style="color:#6e7681;margin-bottom:14px">
+  3-bucket breakdown of every technique executed in this assessment.
+  <strong style="color:#0d9488">Prevented</strong> — a control blocked execution (PASS/BLOCKED).
+  <strong style="color:#d29922">Detected Only</strong> — execution succeeded but an EDR or SIEM alert fired (FAIL + detection).
+  <strong style="color:#da3633">Missed</strong> — execution succeeded with no detection signal (highest risk, immediate remediation priority).
+  ERROR and SKIPPED results are excluded.
+</p>
+
+{{if .coverageBreakdown.hasData}}
+
+<!-- KPI row -->
+<div class="score-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px">
+  <div class="scard">
+    <div class="scard-label">Techniques Attempted</div>
+    <div class="scard-value">{{.coverageBreakdown.attempted}}</div>
+    <div class="scard-bar"></div>
+  </div>
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Prevented</div>
+    <div class="scard-value" style="color:#0d9488">{{.coverageBreakdown.prevented}}</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{.coverageBreakdown.preventionRate}}%;background:#0d9488"></div></div>
+  </div>
+  <div class="scard" style="border-left:3px solid #d29922">
+    <div class="scard-label">Detected Only</div>
+    <div class="scard-value" style="color:#d29922">{{.coverageBreakdown.detectedOnly}}</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{.coverageBreakdown.detectionCoverage}}%;background:#d29922"></div></div>
+  </div>
+  <div class="scard" style="border-left:3px solid #da3633">
+    <div class="scard-label">Missed (Blind Spots)</div>
+    <div class="scard-value" style="color:#da3633">{{.coverageBreakdown.missed}}</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{barWidth .summary.exposureScore}}%;background:#da3633"></div></div>
+  </div>
+</div>
+
+<!-- Rate bars -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+  <div>
+    <div style="display:flex;justify-content:space-between;font-size:0.74rem;margin-bottom:4px">
+      <span style="color:#6e7681;font-weight:600">Prevention Rate</span>
+      <strong style="color:#0d9488">{{.coverageBreakdown.preventionRate}}%</strong>
+    </div>
+    <div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:{{.coverageBreakdown.preventionRate}}%;background:#0d9488;border-radius:4px"></div>
+    </div>
+  </div>
+  <div>
+    <div style="display:flex;justify-content:space-between;font-size:0.74rem;margin-bottom:4px">
+      <span style="color:#6e7681;font-weight:600">Detection Coverage (prevented + detected)</span>
+      <strong style="color:#d29922">{{.coverageBreakdown.detectionCoverage}}%</strong>
+    </div>
+    <div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:{{.coverageBreakdown.detectionCoverage}}%;background:#d29922;border-radius:4px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Per-tactic 3-bucket table -->
+{{if .coverageBreakdown.byTactic}}
+<h3 style="margin-bottom:6px">By Tactic</h3>
+<table>
+  <thead><tr>
+    <th>Tactic</th>
+    <th style="text-align:center;color:#0d9488">Prevented</th>
+    <th style="text-align:center;color:#d29922">Detected Only</th>
+    <th style="text-align:center;color:#da3633">Missed</th>
+    <th style="min-width:130px">Breakdown</th>
+  </tr></thead>
+  <tbody>
+  {{range .coverageBreakdown.byTactic}}
+  <tr>
+    <td style="font-weight:600">{{humanize .tactic}}</td>
+    <td style="text-align:center;color:#0d9488;font-weight:700">{{.prevented}}</td>
+    <td style="text-align:center;color:#d29922;font-weight:700">{{.detectedOnly}}</td>
+    <td style="text-align:center;{{if gt .missed 0}}color:#da3633;font-weight:700{{else}}color:#6e7681{{end}}">{{.missed}}</td>
+    <td>
+      <div class="tbar-wrap" style="height:9px;position:relative">
+        {{if gt .attempted 0}}
+        <div style="position:absolute;left:0;top:0;height:100%;width:{{pctOf .prevented .attempted}}%;background:#0d9488;border-radius:4px 0 0 4px"></div>
+        <div style="position:absolute;left:{{pctOf .prevented .attempted}}%;top:0;height:100%;width:{{pctOf .detectedOnly .attempted}}%;background:#d29922"></div>
+        {{end}}
+      </div>
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+<!-- Top action items: missed + detectedOnly techniques -->
+{{if .coverageBreakdown.missedTechniques}}
+<h3 style="margin-bottom:6px;margin-top:18px">Remediation Priority — Gaps to Close</h3>
+<p style="color:#6e7681;font-size:0.82rem;margin-bottom:8px">Techniques that reached the endpoint undetected (●) or were detected but not prevented (◐). Sorted by risk — missed first.</p>
+<table>
+  <thead><tr>
+    <th style="width:110px">Technique ID</th>
+    <th>Name</th>
+    <th>Tactic</th>
+    <th>Severity</th>
+    <th>Gap</th>
+  </tr></thead>
+  <tbody>
+  {{range .coverageBreakdown.missedTechniques}}
+  <tr>
+    <td style="font-family:monospace;font-size:0.8rem;font-weight:700;
+      {{if eq .detectionVerdict "undetected"}}color:#da3633{{else}}color:#d29922{{end}}">
+      {{if eq .detectionVerdict "undetected"}}●{{else}}◐{{end}} {{.techniqueId}}
+    </td>
+    <td style="font-weight:600">{{.techniqueName}}</td>
+    <td>{{humanize .tactic}}</td>
+    <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
+    <td style="font-size:0.78rem;color:#6e7681">
+      {{if eq .detectionVerdict "undetected"}}No prevention, no detection alert{{else}}Detected by EDR/SIEM — not blocked{{end}}
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{else}}
+<p style="color:#6e7681">No technique execution data available. Run a scenario to populate coverage analytics.</p>
+{{end}}
+
+<div class="footer">
+  <span>{{.agent.hostname}} — Coverage Analytics</span>
+</div>
+</div>
+
+<!-- ═══ 16. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
+<div class="page">
+<h1>16. Technical Appendix — ATT&amp;CK Glossary</h1>
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
 {{range .glossary}}
