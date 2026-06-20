@@ -295,22 +295,54 @@ Pop-Location
 $exeSizeMB = [math]::Round((Get-Item "$OutDir\BASAgent-Setup-$Version.exe").Length / 1MB, 1)
 Log "  Installer EXE: BASAgent-Setup-$Version.exe (${exeSizeMB}MB)"
 
-# Also build standalone agent EXE for manual install / Linux/macOS
-Log "Building standalone agent binaries..."
+# Also build standalone Windows agent (for manual / side-by-side deploy)
+Log "Building standalone Windows agent binary..."
 Push-Location $AgentDir
-$env:GOOS = "windows"; $env:GOARCH = "amd64"
-go build -ldflags="-s -w" -o "$OutDir\bas_agent_windows.exe" . 2>&1
-$env:GOOS = "linux"; $env:GOARCH = "amd64"
-go build -ldflags="-s -w" -o "$OutDir\bas_agent_linux" . 2>&1
-$env:GOOS = ""; $env:GOARCH = ""
+$env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+go build -ldflags="-s -w" -o "$OutDir\bas-agent-windows-amd64.exe" . 2>&1
+if ($LASTEXITCODE -ne 0) { Warn "Standalone Windows agent build failed." }
+else {
+    $wSizeMB = [math]::Round((Get-Item "$OutDir\bas-agent-windows-amd64.exe").Length / 1MB, 1)
+    Log "  bas-agent-windows-amd64.exe (${wSizeMB}MB)"
+}
+$env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
 Pop-Location
-Log "  Agent binaries built."
+
+# -- 5b. Build Linux agent binaries (amd64 + arm64) --------------------------
+# CGO_ENABLED=0: required for cross-compile from Windows. All platform-specific
+# code (webview2, tray, UAC) lives in *_windows.go files — excluded automatically
+# by the Go toolchain when GOOS=linux. The Linux binary is self-installing:
+# running it as root copies itself to /usr/local/bin/bas-agent and writes
+# /etc/systemd/system/bas-agent.service (see agent/service_linux.go).
+Log "Building Linux agent binaries..."
+Push-Location $AgentDir
+
+$env:GOOS = "linux"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+go build -ldflags="-s -w" -o "$OutDir\bas-agent-linux-amd64" . 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Warn "Linux amd64 agent build failed."
+} else {
+    $la64MB = [math]::Round((Get-Item "$OutDir\bas-agent-linux-amd64").Length / 1MB, 1)
+    Log "  bas-agent-linux-amd64 (${la64MB}MB)"
+}
+
+$env:GOOS = "linux"; $env:GOARCH = "arm64"; $env:CGO_ENABLED = "0"
+go build -ldflags="-s -w" -o "$OutDir\bas-agent-linux-arm64" . 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Warn "Linux arm64 agent build failed."
+} else {
+    $la32MB = [math]::Round((Get-Item "$OutDir\bas-agent-linux-arm64").Length / 1MB, 1)
+    Log "  bas-agent-linux-arm64 (${la32MB}MB)"
+}
+
+$env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
+Pop-Location
 
 # Copy manifest alongside the standalone Windows exe as a side-by-side fallback.
 # If rsrc.syso was not generated, Windows will use this external manifest file
 # when the user runs bas_agent_windows.exe directly.
-Copy-Item "$AgentDir\bas_agent.exe.manifest" "$OutDir\bas_agent_windows.exe.manifest" -ErrorAction SilentlyContinue
-Log "  Manifest copied: bas_agent_windows.exe.manifest (side-by-side fallback)"
+Copy-Item "$AgentDir\bas_agent.exe.manifest" "$OutDir\bas-agent-windows-amd64.exe.manifest" -ErrorAction SilentlyContinue
+Log "  Manifest copied: bas-agent-windows-amd64.exe.manifest (side-by-side fallback)"
 
 # -- 5. Copy installer files --------------------------------------------------
 Log "Copying installer files..."
