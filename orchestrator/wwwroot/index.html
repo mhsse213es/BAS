@@ -495,6 +495,9 @@ code {
 .card-meta { font-size: 0.72rem; color: var(--muted); }
 .desc-toggle { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .desc-toggle:hover { text-decoration: underline; }
+.pfbtn { padding: 2px 8px; font-size: 0.72rem; font-family: inherit; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.pfbtn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.pfbtn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
 
 /* ── Modals ────────────────────────────────────────────────── */
 .overlay {
@@ -2014,7 +2017,42 @@ code {
     <h3 id="picker-title">Select techniques</h3>
     <p class="sub2" id="picker-sub">Tick the items you want to run. Use search to narrow the list.</p>
     <input type="text" id="picker-search" placeholder="Filter by ID, name, or tactic…" oninput="renderPickerList()" autocomplete="off"
-           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;margin-bottom:0.6rem">
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;margin-bottom:0.5rem">
+
+    <!-- Caldera-only metadata filters (hidden for ART/steps/posture) -->
+    <div id="picker-caldera-filters" style="display:none;margin-bottom:0.5rem;border:1px solid var(--border);border-radius:var(--radius);padding:0.55rem 0.65rem;background:var(--elevated);font-size:0.78rem">
+      <div style="display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center;margin-bottom:0.4rem">
+        <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Plugin</span>
+        <button class="pfbtn active" data-pf="plugin" data-val="all"     onclick="setPF('plugin','all')">All</button>
+        <button class="pfbtn"        data-pf="plugin" data-val="emu"     onclick="setPF('plugin','emu')">emu</button>
+        <button class="pfbtn"        data-pf="plugin" data-val="atomic"  onclick="setPF('plugin','atomic')">atomic</button>
+        <button class="pfbtn"        data-pf="plugin" data-val="stockpile" onclick="setPF('plugin','stockpile')">stockpile</button>
+        <span style="color:var(--border);margin:0 2px">|</span>
+        <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Payload</span>
+        <button class="pfbtn active" data-pf="payload" data-val="all" onclick="setPF('payload','all')">All</button>
+        <button class="pfbtn"        data-pf="payload" data-val="yes" onclick="setPF('payload','yes')">Required</button>
+        <button class="pfbtn"        data-pf="payload" data-val="no"  onclick="setPF('payload','no')">None</button>
+        <span style="color:var(--border);margin:0 2px">|</span>
+        <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Admin</span>
+        <button class="pfbtn active" data-pf="admin" data-val="all" onclick="setPF('admin','all')">All</button>
+        <button class="pfbtn"        data-pf="admin" data-val="yes" onclick="setPF('admin','yes')">Required</button>
+        <button class="pfbtn"        data-pf="admin" data-val="no"  onclick="setPF('admin','no')">Not required</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center">
+        <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Platform</span>
+        <button class="pfbtn active" data-pf="platform" data-val="all"     onclick="setPF('platform','all')">All</button>
+        <button class="pfbtn"        data-pf="platform" data-val="windows" onclick="setPF('platform','windows')">Windows</button>
+        <button class="pfbtn"        data-pf="platform" data-val="linux"   onclick="setPF('platform','linux')">Linux</button>
+        <button class="pfbtn"        data-pf="platform" data-val="darwin"  onclick="setPF('platform','darwin')">macOS</button>
+        <span style="color:var(--border);margin:0 2px">|</span>
+        <span style="color:var(--muted);font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-right:2px">Tactic</span>
+        <select id="picker-tactic-sel" onchange="renderPickerList()"
+                style="padding:2px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:0.76rem;font-family:inherit">
+          <option value="all">All tactics</option>
+        </select>
+      </div>
+    </div>
+
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;font-size:0.78rem">
       <span><a href="javascript:void(0)" class="desc-toggle" onclick="pickerSelectAll(true);return false;">Select all</a>
         &nbsp;·&nbsp; <a href="javascript:void(0)" class="desc-toggle" onclick="pickerSelectAll(false);return false;">None</a></span>
@@ -3348,14 +3386,18 @@ function openAdvDrawer(adversaryId) {
       'exfiltration':'#da3633','impact':'#f85149','initial-access':'#2f81f7'};
     abEl.innerHTML = abs.map(function(ab, i) {
       var col = tacticColors[ab.tactic] || 'var(--muted)';
-      var labOnly = ab.plugin === 'emu' ? '' : '';
+      var badges = '';
+      if ((ab.platforms || []).length) badges += '<span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:var(--surface);border:1px solid var(--border);color:var(--muted)">' + x(ab.platforms.join('/')) + '</span>';
+      if (ab.requiresPayload) badges += '<span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:rgba(218,54,51,0.12);border:1px solid rgba(218,54,51,0.3);color:#da3633">payload</span>';
+      if (ab.requiresAdmin)   badges += '<span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:rgba(240,136,62,0.12);border:1px solid rgba(240,136,62,0.3);color:#f0883e">admin</span>';
       return '<div style="display:flex;align-items:flex-start;gap:0.5rem;padding:0.4rem 0.5rem;background:var(--elevated);border-radius:var(--radius);border:1px solid var(--border)">' +
         '<span style="flex-shrink:0;font-size:0.68rem;font-weight:700;color:var(--muted);padding-top:1px;min-width:20px">' + (i+1) + '</span>' +
         '<div style="flex:1;min-width:0">' +
           '<div style="font-size:0.8rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + x(ab.name || ab.id) + '</div>' +
-          '<div style="display:flex;gap:0.4rem;margin-top:0.2rem;flex-wrap:wrap">' +
+          '<div style="display:flex;gap:0.35rem;margin-top:0.25rem;flex-wrap:wrap;align-items:center">' +
             (ab.technique ? '<span style="font-size:0.68rem;color:var(--accent);font-family:monospace">' + x(ab.technique) + '</span>' : '') +
             (ab.tactic ? '<span style="font-size:0.68rem;color:' + col + '">' + x(ab.tactic) + '</span>' : '') +
+            badges +
           '</div>' +
         '</div>' +
       '</div>';
@@ -4134,6 +4176,8 @@ function scenarioFramework(sc) {
 }
 
 var _pickerScId = null, _pickerFw = '', _pickerItems = [], _pickerSel = {}, _pickerFiltered = [];
+// Caldera picker filter state
+var _pf = { plugin: 'all', payload: 'all', admin: 'all', platform: 'all', tactic: 'all' };
 
 function openPicker(scId, fw) {
   var sc = scenarios.find(function(s) { return s.id === scId; });
@@ -4211,8 +4255,39 @@ function openPickerWith(scId, fw, sc, items) {
     : fw === 'posture' ? 'Tick the posture checks to run. Search by name, technique, or phase.'
     :                    'Tick the steps to run. Steps run in the order shown. Search by name or technique.';
   document.getElementById('picker-search').value = '';
+  // Show / hide metadata filters and populate tactic dropdown for Caldera.
+  var filtersEl = document.getElementById('picker-caldera-filters');
+  if (filtersEl) filtersEl.style.display = fw === 'caldera' ? '' : 'none';
+  if (fw === 'caldera') {
+    // Reset all filter chips to 'all'.
+    _pf = { plugin: 'all', payload: 'all', admin: 'all', platform: 'all', tactic: 'all' };
+    document.querySelectorAll('.pfbtn').forEach(function(b) {
+      b.classList.toggle('active', b.getAttribute('data-val') === 'all');
+    });
+    // Populate tactic dropdown from the items list.
+    var tacticSel = document.getElementById('picker-tactic-sel');
+    if (tacticSel) {
+      var tacticSet = {};
+      items.forEach(function(it) { if (it.tactic) tacticSet[it.tactic] = true; });
+      var tacticOpts = Object.keys(tacticSet).sort().map(function(t) {
+        return '<option value="' + x(t) + '">' + x(t) + '</option>';
+      }).join('');
+      tacticSel.innerHTML = '<option value="all">All tactics</option>' + tacticOpts;
+      tacticSel.value = 'all';
+    }
+  }
   ensureCovStatus(renderPickerList);
   document.getElementById('picker-overlay').classList.add('open');
+}
+
+// setPF updates one Caldera picker filter dimension and refreshes the list.
+function setPF(dim, val) {
+  _pf[dim] = val;
+  // Toggle active class on buttons for this dimension.
+  document.querySelectorAll('.pfbtn[data-pf="' + dim + '"]').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-val') === val);
+  });
+  renderPickerList();
 }
 
 function openPickerFromModal() {
@@ -4246,9 +4321,21 @@ function covBadge(techId) {
 function renderPickerList() {
   var q = (document.getElementById('picker-search').value || '').trim().toLowerCase();
   var fw = _pickerFw;
+  // Read tactic dropdown value (can't store in _pf because it changes independently).
+  var tacticSel = document.getElementById('picker-tactic-sel');
+  var pfTactic = (fw === 'caldera' && tacticSel) ? (tacticSel.value || 'all') : 'all';
   _pickerFiltered = _pickerItems.filter(function(it) {
-    if (!q) return true;
-    return (it.id + ' ' + (it.name || '') + ' ' + (it.tactic || '') + ' ' + (it.technique || '') + ' ' + (it.phase || '') + ' ' + (it.techniqueId || '')).toLowerCase().indexOf(q) !== -1;
+    if (q && (it.id + ' ' + (it.name || '') + ' ' + (it.tactic || '') + ' ' + (it.technique || '') + ' ' + (it.phase || '') + ' ' + (it.techniqueId || '')).toLowerCase().indexOf(q) === -1) return false;
+    if (fw === 'caldera') {
+      if (_pf.plugin   !== 'all' && (it.plugin || '') !== _pf.plugin) return false;
+      if (pfTactic     !== 'all' && (it.tactic || '') !== pfTactic)   return false;
+      if (_pf.platform !== 'all' && !(it.platforms || []).some(function(p) { return p === _pf.platform; })) return false;
+      if (_pf.payload  === 'yes' && !it.requiresPayload)  return false;
+      if (_pf.payload  === 'no'  && it.requiresPayload)   return false;
+      if (_pf.admin    === 'yes' && !it.requiresAdmin)    return false;
+      if (_pf.admin    === 'no'  && it.requiresAdmin)     return false;
+    }
+    return true;
   });
   var rows = _pickerFiltered.map(function(it) {
     var checked = _pickerSel[it.id] ? ' checked' : '';
@@ -4265,11 +4352,19 @@ function renderPickerList() {
       ? [it.phase, it.severity].filter(Boolean).join(' · ')
       : [it.tactic, it.technique].filter(Boolean).join(' · ');
     var cbadge = covBadge(pickerTechId(it, fw));
+    // Extra metadata badges for Caldera abilities.
+    var extraBadges = '';
+    if (fw === 'caldera') {
+      if (it.plugin) extraBadges += ' <span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:var(--elevated);border:1px solid var(--border);color:var(--muted)">' + x(it.plugin) + '</span>';
+      if ((it.platforms || []).length) extraBadges += ' <span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:var(--elevated);border:1px solid var(--border);color:var(--muted)">' + x(it.platforms.join('/')) + '</span>';
+      if (it.requiresPayload) extraBadges += ' <span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:rgba(218,54,51,0.12);border:1px solid rgba(218,54,51,0.3);color:#da3633">payload</span>';
+      if (it.requiresAdmin)   extraBadges += ' <span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:rgba(240,136,62,0.12);border:1px solid rgba(240,136,62,0.3);color:#f0883e">admin</span>';
+    }
     return '<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.8rem">' +
       '<input type="checkbox" data-id="' + x(it.id) + '"' + checked + ' onchange="pickerToggle(this)" style="margin-top:2px">' +
       '<span style="flex:1">' +
         '<span style="font-weight:600;color:var(--accent)">' + x(label) + '</span>' +
-        (it.name ? ' <span>' + x(it.name) + '</span>' : '') + cbadge +
+        (it.name ? ' <span>' + x(it.name) + '</span>' : '') + cbadge + extraBadges +
         (meta ? '<br><span class="card-meta">' + x(meta) + '</span>' : '') +
       '</span></label>';
   }).join('');

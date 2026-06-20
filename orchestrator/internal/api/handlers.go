@@ -1889,11 +1889,15 @@ func (h *Handler) GetPostureCatalog(w http.ResponseWriter, r *http.Request) {
 
 // CalderaAbility is a catalog entry for the dashboard ability picker.
 type CalderaAbility struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Tactic    string `json:"tactic,omitempty"`
-	Technique string `json:"technique,omitempty"`
-	Plugin    string `json:"plugin,omitempty"` // "emu" | "atomic" | "stockpile"
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Tactic          string   `json:"tactic,omitempty"`
+	Technique       string   `json:"technique,omitempty"`
+	Plugin          string   `json:"plugin,omitempty"`          // "emu" | "atomic" | "stockpile"
+	Platforms       []string `json:"platforms,omitempty"`       // ["windows","linux","darwin"]
+	Executors       []string `json:"executors,omitempty"`       // ["psh","sh","cmd",…]
+	RequiresPayload bool     `json:"requiresPayload,omitempty"` // true ⟹ at least one executor ships files
+	RequiresAdmin   bool     `json:"requiresAdmin,omitempty"`   // true ⟹ Caldera privilege == "Elevated"
 }
 
 // CalderaAdversarySummary is one adversary profile from the Caldera library.
@@ -1970,6 +1974,12 @@ func (h *Handler) GetCalderaAbilities(w http.ResponseWriter, r *http.Request) {
 		Tactic      string `json:"tactic"`
 		TechniqueID string `json:"technique_id"`
 		Plugin      string `json:"plugin"`
+		Privilege   string `json:"privilege"` // "Elevated" → requiresAdmin
+		Executors   []struct {
+			Platform string   `json:"platform"`
+			Name     string   `json:"name"`
+			Payloads []string `json:"payloads"`
+		} `json:"executors"`
 	}
 	body, _ := io.ReadAll(resp.Body)
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -1978,7 +1988,35 @@ func (h *Handler) GetCalderaAbilities(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]CalderaAbility, 0, len(raw))
 	for _, a := range raw {
-		out = append(out, CalderaAbility{ID: a.AbilityID, Name: a.Name, Tactic: a.Tactic, Technique: a.TechniqueID, Plugin: a.Plugin})
+		platSet := map[string]struct{}{}
+		execSet := map[string]struct{}{}
+		hasPayload := false
+		for _, ex := range a.Executors {
+			if p := strings.ToLower(ex.Platform); p != "" {
+				platSet[p] = struct{}{}
+			}
+			if n := strings.ToLower(ex.Name); n != "" {
+				execSet[n] = struct{}{}
+			}
+			if len(ex.Payloads) > 0 {
+				hasPayload = true
+			}
+		}
+		plats := make([]string, 0, len(platSet))
+		for p := range platSet {
+			plats = append(plats, p)
+		}
+		sort.Strings(plats)
+		execs := make([]string, 0, len(execSet))
+		for e := range execSet {
+			execs = append(execs, e)
+		}
+		sort.Strings(execs)
+		out = append(out, CalderaAbility{
+			ID: a.AbilityID, Name: a.Name, Tactic: a.Tactic, Technique: a.TechniqueID,
+			Plugin: a.Plugin, Platforms: plats, Executors: execs,
+			RequiresPayload: hasPayload, RequiresAdmin: a.Privilege == "Elevated",
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 
