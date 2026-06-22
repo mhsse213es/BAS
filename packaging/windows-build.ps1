@@ -467,7 +467,7 @@ $verifyText = (Get-Content "$OutDir\verify.sh" -Raw) -replace "`r`n", "`n"
 $ManifestPath = Join-Path $OutDir "MANIFEST.sha256"
 $prefixLen = $OutDir.Length + 1
 $lines = Get-ChildItem -Path $OutDir -Recurse -File |
-    Where-Object { $_.Name -ne "MANIFEST.sha256" } |
+    Where-Object { $_.Name -ne "MANIFEST.sha256" -and $_.Name -ne "setup.conf" } |
     ForEach-Object {
         $rel = $_.FullName.Substring($prefixLen).Replace('\', '/')
         $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
