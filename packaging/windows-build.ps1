@@ -335,22 +335,30 @@ Pop-Location
 # The manifest is then RSA-signed so the orchestrator can detect tampering.
 Log "Extracting BINARIES.sha256 from Docker image..."
 $BinManifestPath = Join-Path $OutDir "BINARIES.sha256"
-docker run --rm --entrypoint cat $OrchestratorTag /agents/BINARIES.sha256 | Out-File -Encoding ASCII -FilePath $BinManifestPath
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path $BinManifestPath) -or (Get-Item $BinManifestPath).Length -eq 0) {
-    Warn "  Could not extract BINARIES.sha256 from image - agent integrity checks disabled."
+# distroless has no shell/cat - use docker create+cp which works at filesystem level.
+$tmpCID = docker create $OrchestratorTag 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Warn "  docker create failed - cannot extract manifest. Agent integrity checks disabled."
 } else {
-    $entryCount = (Get-Content $BinManifestPath | Where-Object { $_ -ne "" }).Count
-    Log "  $entryCount entries extracted from image"
-
-    # RSA-sign so the orchestrator verifies the manifest was not tampered in transit.
-    Push-Location $OrchestratorDir
-    go run scripts/signer.go sign private_key.pem $BinManifestPath
-    $binManExit = $LASTEXITCODE
-    Pop-Location
-    if ($binManExit -ne 0) {
-        Warn "  RSA signing of BINARIES.sha256 failed."
+    docker cp "${tmpCID}:/agents/BINARIES.sha256" $BinManifestPath 2>&1 | Out-Null
+    $cpExit = $LASTEXITCODE
+    docker rm $tmpCID 2>&1 | Out-Null
+    if ($cpExit -ne 0 -or -not (Test-Path $BinManifestPath) -or (Get-Item $BinManifestPath).Length -eq 0) {
+        Warn "  Could not extract BINARIES.sha256 from image - agent integrity checks disabled."
     } else {
-        Log "  BINARIES.sha256.sig written."
+        $entryCount = (Get-Content $BinManifestPath | Where-Object { $_ -ne "" }).Count
+        Log "  $entryCount entries extracted from image"
+
+        # RSA-sign so the orchestrator verifies the manifest was not tampered in transit.
+        Push-Location $OrchestratorDir
+        go run scripts/signer.go sign private_key.pem $BinManifestPath
+        $binManExit = $LASTEXITCODE
+        Pop-Location
+        if ($binManExit -ne 0) {
+            Warn "  RSA signing of BINARIES.sha256 failed."
+        } else {
+            Log "  BINARIES.sha256.sig written."
+        }
     }
 }
 
