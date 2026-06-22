@@ -174,7 +174,12 @@ func runTray() {
 		0, 0, trayHInst, 0,
 	)
 
-	trayIcon, _, _ = trayLoadImage.Call(0, tIDI_SHIELD, tIMAGE_ICON, 0, 0, tLR_SHARED)
+	// Try loading our custom icon from the executable's resources (ID 1),
+	// falling back to standard shield if not present.
+	trayIcon, _, _ = trayLoadImage.Call(trayHInst, 1, tIMAGE_ICON, 0, 0, tLR_SHARED)
+	if trayIcon == 0 {
+		trayIcon, _, _ = trayLoadImage.Call(0, tIDI_SHIELD, tIMAGE_ICON, 0, 0, tLR_SHARED)
+	}
 	trayAddIcon("Audspect BAS Agent")
 
 	var msg trayWinMsg

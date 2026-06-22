@@ -202,4 +202,11 @@ type RawRunResult struct {
 	Checks     []SimCheckResult `json:"checks,omitempty"` // local_check scenarios only
 	Partial    bool             `json:"partial,omitempty"`
 	Reverted   []string         `json:"reverted,omitempty"` // endpoint changes rolled back post-run
+
+	PerfCPUBefore  float64 `json:"perfCpuBefore,omitempty"`
+	PerfCPUAfter   float64 `json:"perfCpuAfter,omitempty"`
+	PerfRAMBefore  float64 `json:"perfRamBefore,omitempty"`
+	PerfRAMAfter   float64 `json:"perfRamAfter,omitempty"`
+	PerfDiskBefore float64 `json:"perfDiskBefore,omitempty"`
+	PerfDiskAfter  float64 `json:"perfDiskAfter,omitempty"`
 }

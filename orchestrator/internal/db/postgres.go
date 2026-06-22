@@ -140,6 +140,15 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS campaign_id text`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_campaign ON scenario_runs (campaign_id)`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS alerts_total int NOT NULL DEFAULT 0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS alerts_high_fidelity int NOT NULL DEFAULT 0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS noise_score double precision NOT NULL DEFAULT 0.0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS perf_cpu_before double precision NOT NULL DEFAULT 0.0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS perf_cpu_after double precision NOT NULL DEFAULT 0.0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS perf_ram_before double precision NOT NULL DEFAULT 0.0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS perf_ram_after double precision NOT NULL DEFAULT 0.0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS perf_disk_before double precision NOT NULL DEFAULT 0.0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS perf_disk_after double precision NOT NULL DEFAULT 0.0`,
 
 		// ── Findings: persistent, de-duplicated, analyst-triaged exposures ────
 		`CREATE TABLE IF NOT EXISTS findings (

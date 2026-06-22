@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/audspect/bas/internal/integrity"
 )
 
 // idPattern restricts custom scenario IDs to a filesystem-safe slug so a user
@@ -55,6 +57,17 @@ func (e *Engine) Load() error {
 			return nil
 		}
 		s.Source = e.sourceForPath(path)
+
+		// Signature verification: only builtin (vendor-shipped) scenarios must be
+		// signed. Custom and intel scenarios are operator/connector-created and
+		// intentionally have no signature — they are always accepted.
+		if s.Source == "builtin" {
+			if err := integrity.VerifyScenarioFile(path); err != nil {
+				log.Printf("[!] TAMPER ALERT: builtin scenario %s failed signature verification: %v — refusing to load", path, err)
+				return nil // skip — do not add tampered scenario to the map
+			}
+		}
+
 		e.scenarios[s.ID] = &s
 		return nil
 	})

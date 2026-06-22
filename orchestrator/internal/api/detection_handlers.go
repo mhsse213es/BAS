@@ -88,18 +88,53 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 	}
 	updatedResultsJSON, _ := json.Marshal(results)
 
+	totalAlerts := len(body.Alerts)
+	highFidelity := 0
+	detectIDs := detect.DefenderDetectIDs()
+	for _, alert := range body.Alerts {
+		isHigh := false
+		if detectIDs[alert.EventID] {
+			isHigh = true
+		}
+		if alert.ThreatName != "" {
+			isHigh = true
+		}
+		if detect.IsEDRProvider(alert.Provider) && alert.ThreatName != "" {
+			isHigh = true
+		}
+		if isHigh {
+			highFidelity++
+		}
+	}
+	var noiseScore float64
+	if totalAlerts > 0 {
+		noiseScore = float64(totalAlerts-highFidelity) / float64(totalAlerts) * 100.0
+	} else {
+		noiseScore = 0.0
+	}
+
 	rawJSON, _ := json.Marshal(body.Alerts)
 	summaryJSON, _ := json.Marshal(map[string]any{"summary": sum, "techniques": dets, "truncated": body.Truncated})
 	if _, err := h.db.Exec(r.Context(),
 		`UPDATE scenario_runs SET detections_raw=$1, detection_summary=$2,
-		        detection_rate=$3, undetected_rate=$4, mttd_ms=$5, results=$6 WHERE id=$7`,
-		rawJSON, summaryJSON, sum.DetectionRate, sum.UndetectedRate, sum.MTTDMs, updatedResultsJSON, runID); err != nil {
+		        detection_rate=$3, undetected_rate=$4, mttd_ms=$5, results=$6,
+		        alerts_total=$7, alerts_high_fidelity=$8, noise_score=$9 WHERE id=$10`,
+		rawJSON, summaryJSON, sum.DetectionRate, sum.UndetectedRate, sum.MTTDMs, updatedResultsJSON,
+		totalAlerts, highFidelity, noiseScore, runID); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	// Refresh findings now that detection verdicts are known — fails that were
 	// caught flip missed → detected_only (same-run refinement, idempotent).
 	h.upsertFindingsForRun(r.Context(), runID)
-	respond(w, map[string]any{"runId": runID, "detectionRate": sum.DetectionRate,
-		"undetectedRate": sum.UndetectedRate, "mttdMs": sum.MTTDMs, "alerts": len(body.Alerts)})
+	respond(w, map[string]any{
+		"runId":              runID,
+		"detectionRate":      sum.DetectionRate,
+		"undetectedRate":     sum.UndetectedRate,
+		"mttdMs":             sum.MTTDMs,
+		"alerts":             totalAlerts,
+		"alertsTotal":        totalAlerts,
+		"alertsHighFidelity": highFidelity,
+		"noiseScore":         noiseScore,
+	})
 }

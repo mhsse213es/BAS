@@ -135,6 +135,21 @@ func (h *Hub) BroadcastBrowsers(msg models.WSMessage) {
 	}
 }
 
+// BroadcastTamperAlert pushes a tamper-detection event to all browser sessions.
+// Satisfies the integrity.TamperBroadcaster interface so the watcher package
+// does not need to import ws (avoiding an import cycle).
+func (h *Hub) BroadcastTamperAlert(path, eventType, severity string) {
+	msg := models.WSMessage{
+		Type: models.MsgTamperAlert,
+		Data: map[string]string{
+			"path":      path,
+			"eventType": eventType,
+			"severity":  severity,
+		},
+	}
+	h.BroadcastBrowsers(msg)
+}
+
 // ConnectedAgents returns the IDs of all currently connected agents.
 func (h *Hub) ConnectedAgents() []string {
 	h.mu.RLock()

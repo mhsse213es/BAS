@@ -42,6 +42,23 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 			AgentID: "agent-123", Hostname: "BANK-WS-01", IPAddress: "10.0.0.5",
 			OSVersion: "Windows 11 Pro 23H2", Username: "svc-bas", EnvLabel: "Production",
 		},
+		AttackSurfaceAge:       147,
+		OldestFindingName:      "OS Credential Dumping",
+		OldestFindingID:        "T1003",
+		OldestFindingSeverity:  "Critical",
+		AttackSurfaceSLAStatus: "critical-sla",
+		DetectionSources: []DetectionSource{
+			{Product: "Trellix", Detections: 18, MinMTTDMs: 4500, AvgMTTDMs: 8200},
+			{Product: "Defender", Detections: 14, MinMTTDMs: 2100, AvgMTTDMs: 4900},
+		},
+		PerfCPUBefore:          2.1,
+		PerfCPUAfter:           2.3,
+		PerfRAMBefore:          5.4,
+		PerfRAMAfter:           5.4,
+		PerfDiskBefore:         62.5,
+		PerfDiskAfter:          62.5,
+		CleanupFailed:          true,
+		CleanupFailedCount:     2,
 		Summary: ExecutiveSummary{
 			RiskScore: 72, Classification: "High Risk",
 			PreventionScore: 41, ExposureScore: 63, CoverageScore: 0,
@@ -128,6 +145,8 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 		"Most Protected",          // insights
 		"SEBI CSCRF 1.0",          // compliance.framework
 		"09 Jun 2026, 10:30 UTC",  // fmtTime(generatedAt)
+		"Attack Surface Age",
+		"147 days",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered report missing %q (output %d bytes)", want, len(out))

@@ -88,6 +88,17 @@ type ScenarioRun struct {
 	Progress    *RunProgress       `json:"progress,omitempty"`
 	StartedAt   time.Time          `json:"startedAt"`
 	CompletedAt *time.Time         `json:"completedAt,omitempty"`
+
+	AlertsTotal        int     `json:"alertsTotal"`
+	AlertsHighFidelity int     `json:"alertsHighFidelity"`
+	NoiseScore         float64 `json:"noiseScore"`
+
+	PerfCPUBefore  float64 `json:"perfCpuBefore"`
+	PerfCPUAfter   float64 `json:"perfCpuAfter"`
+	PerfRAMBefore  float64 `json:"perfRamBefore"`
+	PerfRAMAfter   float64 `json:"perfRamAfter"`
+	PerfDiskBefore float64 `json:"perfDiskBefore"`
+	PerfDiskAfter  float64 `json:"perfDiskAfter"`
 }
 
 // RunProgress is the live/partial step summary maintained from the run-event

@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 )
 
@@ -43,11 +44,15 @@ func Load(path string) (*Config, error) {
 	}
 
 	// Try file first (local dev)
+	var jwtFromFile, agentFromFile bool
 	if f, err := os.Open(path); err == nil {
 		defer f.Close()
 		if err := json.NewDecoder(f).Decode(cfg); err != nil {
 			return nil, fmt.Errorf("decode config: %w", err)
 		}
+		// Track which secrets came from the JSON file so we can warn below.
+		jwtFromFile = cfg.JWTSecret != ""
+		agentFromFile = cfg.AgentSecret != ""
 	}
 
 	// Environment variables override file values (Kubernetes / Docker)
@@ -112,5 +117,18 @@ func Load(path string) (*Config, error) {
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("jwt_secret required (set JWT_SECRET env var or config file)")
 	}
+
+	// ── Security: warn when sensitive secrets live in the JSON file ────────
+	// Secrets in config.json are readable by anyone with filesystem access.
+	// Best practice: move them to environment variables or a secrets manager.
+	if jwtFromFile && os.Getenv("JWT_SECRET") == "" {
+		log.Println("[security] WARNING: jwt_secret found in config.json — " +
+			"move to JWT_SECRET env var or a secrets manager to harden this deployment")
+	}
+	if agentFromFile && os.Getenv("AGENT_SECRET") == "" {
+		log.Println("[security] WARNING: agent_secret found in config.json — " +
+			"move to AGENT_SECRET env var to harden this deployment")
+	}
+
 	return cfg, nil
 }

@@ -174,7 +174,7 @@ type findingScanner interface {
 
 const findingCols = `id, agent_id, technique_id, control_class, technique_name, tactic,
 	severity, exposure_state, status, source_type, occurrence_count, reopened_count,
-	last_campaign_id, first_seen, last_seen, resolved_reason`
+	last_campaign_id, first_seen, last_seen, resolved_reason, resolved_at`
 
 func scanFindings(rows findingScanner) []map[string]any {
 	out := []map[string]any{}
@@ -183,8 +183,9 @@ func scanFindings(rows findingScanner) []map[string]any {
 		var occ, reopened int
 		var firstSeen, lastSeen time.Time
 		var lastCampaign, resolvedReason *string
+		var resolvedAt *time.Time
 		if rows.Scan(&id, &agentID, &techID, &control, &name, &tactic, &severity, &exposure, &status, &source,
-			&occ, &reopened, &lastCampaign, &firstSeen, &lastSeen, &resolvedReason) != nil {
+			&occ, &reopened, &lastCampaign, &firstSeen, &lastSeen, &resolvedReason, &resolvedAt) != nil {
 			continue
 		}
 		m := map[string]any{
@@ -198,6 +199,9 @@ func scanFindings(rows findingScanner) []map[string]any {
 		}
 		if resolvedReason != nil {
 			m["resolvedReason"] = *resolvedReason
+		}
+		if resolvedAt != nil {
+			m["resolvedAt"] = *resolvedAt
 		}
 		out = append(out, m)
 	}
