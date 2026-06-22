@@ -114,7 +114,9 @@ if (Test-Path $ScenariosDir) {
     Warn "  No scenarios\ directory found at repo root  -  skipping scenario signing."
 }
 
-# 0b-iii. Sign BINARIES.sha256 manifest - runs after step 5c stages the file.
+# 0b-iii. Sign BINARIES.sha256 manifest - file is extracted from the Docker
+# image in step 5c (after the build), then signed there. Signing confirmed below.
+Log "  BINARIES.sha256: will be extracted from image and signed in step 5c."
 
 # 0b-iv. SHA-256 hash of wwwroot/index.html, injected into the binary via
 #        --build-arg BAS_WWWROOT_HASH so StaticHandler() halts on mismatch.
