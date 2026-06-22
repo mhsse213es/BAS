@@ -121,6 +121,7 @@ load_config() {
   while IFS='=' read -r key val; do
     # strip comments and blank lines
     key="${key%%#*}"
+    val="${val%%[[:space:]]#*}"
     [[ -z "${key// }" ]] && continue
     # trim whitespace
     key="${key#"${key%%[![:space:]]*}"}"; key="${key%"${key##*[![:space:]]}"}"
