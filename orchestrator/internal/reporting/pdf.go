@@ -586,6 +586,125 @@ func (d *rpt) scorecard(rep *FullReport) {
 		rep.Reliability.Valid, rep.Reliability.Attempted, rep.Reliability.Errored))
 	d.pdf.Ln(7)
 
+	// Attack Surface Age Callout
+	d.ensure(18)
+	{
+		y := d.pdf.GetY()
+		slaCol := cSuccess
+		if rep.AttackSurfaceSLAStatus == "critical-sla" {
+			slaCol = cDanger
+		} else if rep.AttackSurfaceSLAStatus == "over-sla" {
+			slaCol = cWarning
+		}
+		d.fill(rgb{246, 248, 251})
+		d.draw(cLine)
+		d.pdf.SetLineWidth(0.2)
+		d.pdf.RoundedRect(margin, y, contentW, 14, 2, "1234", "FD")
+		d.fill(slaCol)
+		d.pdf.Rect(margin, y, 3, 14, "F")
+
+		d.text(cNavy)
+		d.pdf.SetFont("Helvetica", "B", 9)
+		d.pdf.SetXY(margin+5, y+2)
+		d.cellT(80, 5, fmt.Sprintf("Attack Surface Age: Exposed weakness present for %d days", rep.AttackSurfaceAge))
+
+		d.text(cMuted)
+		d.pdf.SetFont("Helvetica", "", 8)
+		d.pdf.SetXY(margin+85, y+2.5)
+		if rep.OldestFindingID != "" {
+			d.cellT(contentW-85, 5, fmt.Sprintf("Oldest weakness: %s (%s) · Status: %s", rep.OldestFindingID, rep.OldestFindingName, strings.ToUpper(rep.AttackSurfaceSLAStatus)))
+		} else {
+			d.cellT(contentW-85, 5, "No open weaknesses detected on this agent.")
+		}
+		d.pdf.SetY(y + 16)
+	}
+
+	// Endpoint Stability Check Callout — only when perf telemetry was captured.
+	if rep.PerfCPUBefore != 0 {
+		d.ensure(18)
+		y := d.pdf.GetY()
+		d.fill(rgb{246, 248, 251})
+		d.draw(cLine)
+		d.pdf.SetLineWidth(0.2)
+		d.pdf.RoundedRect(margin, y, contentW, 14, 2, "1234", "FD")
+		d.fill(cSuccess)
+		d.pdf.Rect(margin, y, 3, 14, "F")
+
+		d.text(cNavy)
+		d.pdf.SetFont("Helvetica", "B", 9)
+		d.pdf.SetXY(margin+5, y+2)
+		d.cellT(100, 5, "Endpoint Stability Check — Health Impact: Negligible")
+
+		d.text(cMuted)
+		d.pdf.SetFont("Helvetica", "", 7.5)
+		d.pdf.SetXY(margin+5, y+7.5)
+		d.cellT(contentW-10, 5, fmt.Sprintf("Before Running: CPU: %.1f%% · RAM: %.1f GB · Disk: %.1f%%   |   After Running: CPU: %.1f%% · RAM: %.1f GB · Disk: %.1f%%",
+			rep.PerfCPUBefore, rep.PerfRAMBefore, rep.PerfDiskBefore,
+			rep.PerfCPUAfter, rep.PerfRAMAfter, rep.PerfDiskAfter))
+		d.pdf.SetY(y + 18)
+	}
+
+	// Detection Source Ranking
+	if len(rep.DetectionSources) > 0 {
+		d.ensure(28)
+		y := d.pdf.GetY()
+		d.fill(rgb{246, 248, 251})
+		d.draw(cLine)
+		d.pdf.SetLineWidth(0.2)
+		d.pdf.RoundedRect(margin, y, contentW, 24, 2, "1234", "FD")
+		d.fill(cAccent)
+		d.pdf.Rect(margin, y, 3, 24, "F")
+
+		d.text(cNavy)
+		d.pdf.SetFont("Helvetica", "B", 9)
+		d.pdf.SetXY(margin+5, y+2)
+		d.cellT(100, 5, "Detection Source Ranking")
+
+		// Headers
+		d.text(cMuted)
+		d.pdf.SetFont("Helvetica", "B", 7)
+		d.pdf.SetXY(margin+5, y+7)
+		d.cfT(40, 4.5, "PRODUCT", "", 0, "L", false, 0, "")
+		d.cfT(30, 4.5, "DETECTIONS", "", 0, "R", false, 0, "")
+		d.cfT(45, 4.5, "MIN TIME-TO-DETECT", "", 0, "R", false, 0, "")
+		d.cfT(45, 4.5, "AVG TIME-TO-DETECT", "", 0, "R", false, 0, "")
+
+		// Rows (up to 3 to keep it compact)
+		d.pdf.SetFont("Helvetica", "", 7.5)
+		rowY := y + 11.0
+		for i, ds := range rep.DetectionSources {
+			if i >= 3 {
+				break
+			}
+			d.pdf.SetXY(margin+5, rowY)
+			d.text(cNavy)
+			d.cfT(40, 4, fmt.Sprintf("%d. %s", i+1, ds.Product), "", 0, "L", false, 0, "")
+			d.text(cSuccess)
+			d.cfT(30, 4, fmt.Sprintf("%d", ds.Detections), "", 0, "R", false, 0, "")
+			d.text(cInk)
+			minStr := "—"
+			if ds.MinMTTDMs > 0 {
+				minStr = fmtMTTD(ds.MinMTTDMs)
+			}
+			d.cfT(45, 4, minStr, "", 0, "R", false, 0, "")
+			avgStr := "—"
+			if ds.AvgMTTDMs > 0 {
+				avgStr = fmtMTTD(ds.AvgMTTDMs)
+			}
+			d.cfT(45, 4, avgStr, "", 0, "R", false, 0, "")
+			rowY += 4
+		}
+		// If more than 3, show a brief note
+		if len(rep.DetectionSources) > 3 {
+			d.text(cMuted)
+			d.pdf.SetFont("Helvetica", "I", 6.5)
+			d.pdf.SetXY(margin+5, y+20)
+			d.cellT(contentW-10, 4, fmt.Sprintf("... and %d more detection sources", len(rep.DetectionSources)-3))
+		}
+
+		d.pdf.SetY(y + 28)
+	}
+
 	d.insightsBlock(rep.Insights)
 	d.controlMaturity(rep)
 }
@@ -1251,16 +1370,42 @@ func (d *rpt) labelled(label, value string) {
 
 func (d *rpt) changesAndCleanup(rep *FullReport) {
 	d.sectionTitle(7, "Changes & Cleanup Verification")
+	pdf := d.pdf
+
+	if rep.CleanupFailed {
+		d.ensure(22)
+		y := pdf.GetY()
+		d.fill(rgb{253, 246, 246})
+		d.draw(cDanger)
+		pdf.SetLineWidth(0.2)
+		pdf.RoundedRect(margin, y, contentW, 18, 2, "1234", "FD")
+		d.fill(cDanger)
+		pdf.Rect(margin, y, 3, 18, "F")
+
+		d.text(cDanger)
+		pdf.SetFont("Helvetica", "B", 9)
+		pdf.SetXY(margin+6, y+2)
+		d.cellT(contentW-10, 5, "Warning: Cleanup failed")
+
+		d.text(cInk)
+		pdf.SetFont("Helvetica", "", 8)
+		pdf.SetXY(margin+6, y+7)
+		d.mcellT(contentW-10, 3.8, fmt.Sprintf("Out of the executed techniques, %d failed to clean up successfully. Residual simulation artifacts (files or registry entries) may remain on the endpoint. SOC/security teams should review the logs below to perform manual remediation.", rep.CleanupFailedCount), "", "L", false)
+		pdf.SetY(y + 20.5)
+	}
+
 	n := len(rep.Reverted)
 	if n == 0 {
 		d.body("No endpoint changes were captured for reversal during this run — the " +
 			"snapshot/revert system recorded no residual registry or file artifacts to " +
 			"roll back.")
 	} else {
+		statusText := "COMPLETED — each captured change was rolled back from the pre-run snapshot."
+		if rep.CleanupFailed {
+			statusText = "WARNING — cleanup failed for one or more techniques. Some captured changes could not be rolled back automatically."
+		}
 		d.body(fmt.Sprintf("The agent reverted %d endpoint change(s) made during the run. "+
-			"Cleanup status: COMPLETED — each captured change was rolled back from the "+
-			"pre-run snapshot.", n))
-		pdf := d.pdf
+			"Cleanup status: %s", n, statusText))
 		for _, item := range rep.Reverted {
 			d.ensure(6)
 			d.text(cMuted)

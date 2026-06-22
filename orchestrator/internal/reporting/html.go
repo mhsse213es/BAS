@@ -532,6 +532,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 
+{{if .perfCpuBefore}}
 <div class="score-row" style="margin-top:20px;margin-bottom:20px">
   <div class="scard" style="flex:1;min-width:100%;border-left:4px solid #0d9488;background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
     <div class="scard-label" style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Endpoint Stability Check</div>
@@ -539,16 +540,16 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
       <div style="flex:1;min-width:180px">
         <div style="font-size:0.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px">Before Running</div>
         <div style="font-size:0.8rem;color:var(--navy)">
-          CPU: <strong>{{printf "%.1f" .perfCpuBefore}}%</strong> &middot; 
-          RAM: <strong>{{printf "%.1f" .perfRamBefore}} GB</strong> &middot; 
+          CPU: <strong>{{printf "%.1f" .perfCpuBefore}}%</strong> &middot;
+          RAM: <strong>{{printf "%.1f" .perfRamBefore}} GB</strong> &middot;
           Disk: <strong>{{printf "%.1f" .perfDiskBefore}}%</strong>
         </div>
       </div>
       <div style="flex:1;min-width:180px">
         <div style="font-size:0.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px">After Running</div>
         <div style="font-size:0.8rem;color:var(--navy)">
-          CPU: <strong>{{printf "%.1f" .perfCpuAfter}}%</strong> &middot; 
-          RAM: <strong>{{printf "%.1f" .perfRamAfter}} GB</strong> &middot; 
+          CPU: <strong>{{printf "%.1f" .perfCpuAfter}}%</strong> &middot;
+          RAM: <strong>{{printf "%.1f" .perfRamAfter}} GB</strong> &middot;
           Disk: <strong>{{printf "%.1f" .perfDiskAfter}}%</strong>
         </div>
       </div>
@@ -559,6 +560,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     </div>
   </div>
 </div>
+{{end}}
 
 <h3>Secondary Metrics</h3>
 <table>
