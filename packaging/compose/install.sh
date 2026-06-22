@@ -440,7 +440,7 @@ mode_install() {
   # Licence
   if [[ -f "$LIC_PATH" ]]; then
     cp "$LIC_PATH" "${DATA_DIR}/bas.lic"
-    chmod 640 "${DATA_DIR}/bas.lic"
+    chmod 644 "${DATA_DIR}/bas.lic"
     log "Licence installed"
   fi
   # TLS certs
@@ -518,7 +518,7 @@ mode_upgrade() {
   [[ -d "${SCRIPT_DIR}/scenarios"   ]] && cp -r "${SCRIPT_DIR}/scenarios/."   "${DATA_DIR}/scenarios/"
   [[ -d "${SCRIPT_DIR}/wwwroot"     ]] && cp -r "${SCRIPT_DIR}/wwwroot/."     "${DATA_DIR}/wwwroot/"
   [[ -d "${SCRIPT_DIR}/art-payloads" ]] && cp -r "${SCRIPT_DIR}/art-payloads/." "${DATA_DIR}/art-payloads/"
-  [[ -f "$LIC_PATH"                 ]] && { cp "$LIC_PATH" "${DATA_DIR}/bas.lic"; chmod 640 "${DATA_DIR}/bas.lic"; }
+  [[ -f "$LIC_PATH"                 ]] && { cp "$LIC_PATH" "${DATA_DIR}/bas.lic"; chmod 644 "${DATA_DIR}/bas.lic"; }
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
   _write_env        # refreshes BAS_VERSION; preserves existing secrets via load_config
   _write_systemd_unit  # refresh WorkingDirectory in case DATA_DIR changed
