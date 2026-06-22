@@ -114,19 +114,8 @@ if (Test-Path $ScenariosDir) {
     Warn "  No scenarios\ directory found at repo root  -  skipping scenario signing."
 }
 
-# 0b-iii. Sign BINARIES.sha256 manifest (if present).
-$ManifestFile = Join-Path $OrchestratorDir "agents\BINARIES.sha256"
-if (Test-Path $ManifestFile) {
-    Log "  Signing BINARIES.sha256 manifest..."
-    Push-Location $OrchestratorDir
-    go run scripts/signer.go sign private_key.pem "agents\BINARIES.sha256"
-    $manExit = $LASTEXITCODE
-    Pop-Location
-    if ($manExit -ne 0) { Err "Failed to sign BINARIES.sha256." }
-    Log "  Manifest signed."
-} else {
-    Warn "  No agents\BINARIES.sha256 found  -  skipping manifest signing."
-}
+# 0b-iii. BINARIES.sha256 is generated in step 5c (after agents are built).
+# Signing happens there too so the manifest reflects the binaries just compiled.
 
 # 0b-iv. SHA-256 hash of wwwroot/index.html, injected into the binary via
 #        --build-arg BAS_WWWROOT_HASH so StaticHandler() halts on mismatch.
@@ -338,6 +327,49 @@ if ($LASTEXITCODE -ne 0) {
 
 $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
 Pop-Location
+
+# -- 5c. Generate + RSA-sign BINARIES.sha256 --------------------------------
+# The orchestrator loads this at startup (main.go LoadManifestVerified) and
+# checks every connecting agent's binary hash against it. Generated here -
+# after all agent binaries are compiled - so the hashes are always current.
+Log "Generating BINARIES.sha256 agent manifest..."
+$agentBins = @(
+    "$OutDir\bas-agent-windows-amd64.exe",
+    "$OutDir\bas-agent-linux-amd64",
+    "$OutDir\bas-agent-linux-arm64"
+) | Where-Object { Test-Path $_ }
+
+if ($agentBins.Count -gt 0) {
+    $manifestLines = $agentBins | ForEach-Object {
+        $h = (Get-FileHash -Path $_ -Algorithm SHA256).Hash.ToLower()
+        "$h  $(Split-Path -Leaf $_)"
+    }
+    $BinManifestPath = Join-Path $OutDir "BINARIES.sha256"
+    [System.IO.File]::WriteAllText($BinManifestPath, ($manifestLines -join "`n") + "`n")
+    Log "  $($agentBins.Count) binaries indexed in BINARIES.sha256"
+
+    # RSA-sign so the orchestrator can verify the manifest was not tampered.
+    Push-Location $OrchestratorDir
+    go run scripts/signer.go sign private_key.pem $BinManifestPath
+    $binManExit = $LASTEXITCODE
+    Pop-Location
+    if ($binManExit -ne 0) {
+        Warn "  RSA signing of BINARIES.sha256 failed - agent integrity checks disabled."
+    } else {
+        Log "  BINARIES.sha256.sig written."
+    }
+
+    # Stage in orchestrator/agents/ so the next Docker build bakes it into the image.
+    $AgentsStageDir = Join-Path $OrchestratorDir "agents"
+    New-Item -ItemType Directory -Force -Path $AgentsStageDir | Out-Null
+    Copy-Item $BinManifestPath "$AgentsStageDir\BINARIES.sha256" -Force
+    if (Test-Path "$BinManifestPath.sig") {
+        Copy-Item "$BinManifestPath.sig" "$AgentsStageDir\BINARIES.sha256.sig" -Force
+    }
+    Log "  Staged in orchestrator/agents/ for next Docker build"
+} else {
+    Warn "  No agent binaries built - skipping BINARIES.sha256 generation."
+}
 
 # Copy manifest alongside the standalone Windows exe as a side-by-side fallback.
 # If rsrc.syso was not generated, Windows will use this external manifest file
