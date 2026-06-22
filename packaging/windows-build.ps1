@@ -114,8 +114,19 @@ if (Test-Path $ScenariosDir) {
     Warn "  No scenarios\ directory found at repo root  -  skipping scenario signing."
 }
 
-# 0b-iii. BINARIES.sha256 is generated in step 5c (after agents are built).
-# Signing happens there too so the manifest reflects the binaries just compiled.
+# 0b-iii. Sign BINARIES.sha256 manifest (if present).
+$ManifestFile = Join-Path $OrchestratorDir "agents\BINARIES.sha256"
+if (Test-Path $ManifestFile) {
+    Log "  Signing BINARIES.sha256 manifest..."
+    Push-Location $OrchestratorDir
+    go run scripts/signer.go sign private_key.pem "agents\BINARIES.sha256"
+    $manExit = $LASTEXITCODE
+    Pop-Location
+    if ($manExit -ne 0) { Err "Failed to sign BINARIES.sha256." }
+    Log "  Manifest signed."
+} else {
+    Warn "  No agents\BINARIES.sha256 found  -  skipping manifest signing."
+}
 
 # 0b-iv. SHA-256 hash of wwwroot/index.html, injected into the binary via
 #        --build-arg BAS_WWWROOT_HASH so StaticHandler() halts on mismatch.
