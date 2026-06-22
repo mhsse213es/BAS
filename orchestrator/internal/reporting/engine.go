@@ -814,6 +814,14 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	report.PerfDiskBefore = diskBefore
 	report.PerfDiskAfter = diskAfter
 
+	var latestDetSum []byte
+	e.db.QueryRow(ctx,
+		`SELECT detection_summary FROM scenario_runs
+		 WHERE agent_id = $1 AND status IN ('completed','partial') AND completed_at IS NOT NULL
+		 ORDER BY completed_at DESC LIMIT 1`, agentID,
+	).Scan(&latestDetSum)
+	report.DetectionSources = buildDetectionSourcesFromSummary(latestDetSum)
+
 	return report, nil
 }
 
@@ -907,6 +915,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 			report.DetectionTechniques = ds.Techniques
 		}
 	}
+	report.DetectionSources = buildDetectionSourcesFromSummary(detSummaryRaw)
 
 	var results []models.SimulationResult
 	var score models.Score
@@ -1139,6 +1148,57 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*Ful
 	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
 
 	e.populateCampaignAttackSurfaceAge(ctx, report, campaignID)
+
+	// Aggregate detection sources across all campaign runs.
+	dRows, _ := e.db.Query(ctx,
+		`SELECT detection_summary FROM scenario_runs
+		 WHERE campaign_id = $1 AND detection_summary IS NOT NULL`, campaignID)
+	if dRows != nil {
+		defer dRows.Close()
+		type pacc struct {
+			count int
+			minMs int64
+			sumMs int64
+		}
+		prodMap := map[string]*pacc{}
+		for dRows.Next() {
+			var raw []byte
+			if dRows.Scan(&raw) != nil {
+				continue
+			}
+			for _, src := range buildDetectionSourcesFromSummary(raw) {
+				pa, ok := prodMap[src.Product]
+				if !ok {
+					pa = &pacc{}
+					prodMap[src.Product] = pa
+				}
+				pa.count += src.Detections
+				pa.sumMs += src.AvgMTTDMs * int64(src.Detections)
+				if src.MinMTTDMs > 0 && (pa.minMs == 0 || src.MinMTTDMs < pa.minMs) {
+					pa.minMs = src.MinMTTDMs
+				}
+			}
+		}
+		if len(prodMap) > 0 {
+			dsList := make([]DetectionSource, 0, len(prodMap))
+			for prod, pa := range prodMap {
+				var avg int64
+				if pa.count > 0 {
+					avg = pa.sumMs / int64(pa.count)
+				}
+				dsList = append(dsList, DetectionSource{
+					Product:    prod,
+					Detections: pa.count,
+					MinMTTDMs:  pa.minMs,
+					AvgMTTDMs:  avg,
+				})
+			}
+			sort.Slice(dsList, func(i, j int) bool {
+				return dsList[i].Detections > dsList[j].Detections
+			})
+			report.DetectionSources = dsList
+		}
+	}
 
 	return report, nil
 }
@@ -1583,6 +1643,69 @@ func attackPathRecs(ap *attackpath.Summary) []string {
 
 func formatInt(n int) string {
 	return fmt.Sprintf("%d", n)
+}
+
+// buildDetectionSourcesFromSummary parses a scenario_runs.detection_summary JSON blob
+// and returns security products ranked by detection count (descending), with min and
+// average time-to-detect per product. Only "detected" verdicts with a named provider
+// contribute; prevented/undetected techniques are excluded.
+func buildDetectionSourcesFromSummary(raw []byte) []DetectionSource {
+	if len(raw) == 0 {
+		return nil
+	}
+	var ds struct {
+		Techniques []struct {
+			Verdict        string `json:"verdict"`
+			TimeToDetectMs int64  `json:"timeToDetectMs"`
+			Alert          *struct {
+				Provider string `json:"provider"`
+			} `json:"alert"`
+		} `json:"techniques"`
+	}
+	if json.Unmarshal(raw, &ds) != nil {
+		return nil
+	}
+	type acc struct {
+		count int
+		minMs int64
+		sumMs int64
+	}
+	m := map[string]*acc{}
+	for _, t := range ds.Techniques {
+		if t.Verdict != "detected" || t.Alert == nil || t.Alert.Provider == "" {
+			continue
+		}
+		a, ok := m[t.Alert.Provider]
+		if !ok {
+			a = &acc{}
+			m[t.Alert.Provider] = a
+		}
+		a.count++
+		a.sumMs += t.TimeToDetectMs
+		if t.TimeToDetectMs > 0 && (a.minMs == 0 || t.TimeToDetectMs < a.minMs) {
+			a.minMs = t.TimeToDetectMs
+		}
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	out := make([]DetectionSource, 0, len(m))
+	for product, a := range m {
+		var avg int64
+		if a.count > 0 {
+			avg = a.sumMs / int64(a.count)
+		}
+		out = append(out, DetectionSource{
+			Product:    product,
+			Detections: a.count,
+			MinMTTDMs:  a.minMs,
+			AvgMTTDMs:  avg,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Detections > out[j].Detections
+	})
+	return out
 }
 
 func (e *Engine) populateAttackSurfaceAge(ctx context.Context, report *FullReport, agentID string) {
