@@ -269,7 +269,7 @@ _check_bundle_integrity() {
   fi
   local fail=0
   while IFS='  ' read -r hash rel; do
-    [[ -z "$hash" || -z "$rel" ]] && continue
+    if [[ -z "$hash" || -z "$rel" ]]; then continue; fi
     local fp="${SCRIPT_DIR}/${rel}"
     if [[ ! -f "$fp" ]]; then
       echo "FAIL:Bundle — missing file: $rel"
@@ -282,7 +282,7 @@ _check_bundle_integrity() {
       fail=1
     fi
   done < "$manifest"
-  [[ $fail -eq 0 ]] && echo "PASS:Bundle integrity — all files verified"
+  if [[ $fail -eq 0 ]]; then echo "PASS:Bundle integrity — all files verified"; fi
 }
 
 _check_tls_certs() {
@@ -372,8 +372,8 @@ mode_check() {
   results+=( "$(_check_port "$check_port")" )
   results+=( "$(_check_openssl)" )
   results+=( "$(_check_bundle_integrity)" )
-  [[ -n "$check_cert" || -n "$CONFIG_FILE" ]] && results+=( "$(_check_tls_certs "$check_cert" "$check_key")" )
-  [[ -n "$check_lic"  || -n "$CONFIG_FILE" ]] && results+=( "$(_check_licence "$check_lic")" )
+  if [[ -n "$check_cert" || -n "$CONFIG_FILE" ]]; then results+=( "$(_check_tls_certs "$check_cert" "$check_key")" ); fi
+  if [[ -n "$check_lic"  || -n "$CONFIG_FILE" ]]; then results+=( "$(_check_licence "$check_lic")" ); fi
 
   render_checks "${results[@]}"
 }
@@ -398,7 +398,7 @@ mode_install() {
   results+=( "$(_check_port "$BAS_PORT")" )
   results+=( "$(_check_openssl)" )
   results+=( "$(_check_bundle_integrity)" )
-  [[ "$BAS_TLS" == "true" ]] && results+=( "$(_check_tls_certs "$TLS_CERT" "$TLS_KEY")" )
+  if [[ "$BAS_TLS" == "true" ]]; then results+=( "$(_check_tls_certs "$TLS_CERT" "$TLS_KEY")" ); fi
   results+=( "$(_check_licence "$LIC_PATH")" )
   render_checks "${results[@]}" || exit 1
 
