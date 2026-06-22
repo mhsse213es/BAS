@@ -68,10 +68,28 @@ type FullReport struct {
 	// (Phase 1 collection). When present the report renders the Attack Path
 	// Validation section; otherwise that section shows a "not yet collected" state.
 	AttackPathValidation *attackpath.Summary `json:"attackPathValidation,omitempty"`
+	AttackSurfaceAge       int                `json:"attackSurfaceAge"`
+	OldestFindingName      string             `json:"oldestFindingName"`
+	OldestFindingID        string             `json:"oldestFindingID"`
+	OldestFindingSeverity  string             `json:"oldestFindingSeverity"`
+	AttackSurfaceSLAStatus string             `json:"attackSurfaceSLAStatus"`
+	DetectionSources       []DetectionSource  `json:"detectionSources,omitempty"`
+	PerfCPUBefore          float64            `json:"perfCpuBefore"`
+	PerfCPUAfter           float64            `json:"perfCpuAfter"`
+	PerfRAMBefore          float64            `json:"perfRamBefore"`
+	PerfRAMAfter           float64            `json:"perfRamAfter"`
+	PerfDiskBefore         float64            `json:"perfDiskBefore"`
+	PerfDiskAfter          float64            `json:"perfDiskAfter"`
+	CleanupFailed          bool               `json:"cleanupFailed"`
+	CleanupFailedCount     int                `json:"cleanupFailedCount"`
 	// CoverageBreakdown is the 3-bucket prevention/detection breakdown derived from
 	// TechniqueMatrix (DetectionVerdict field). It powers the Coverage Analytics
 	// page and is used in the executive summary score cards.
 	CoverageBreakdown CoverageBreakdown `json:"coverageBreakdown"`
+	// Alert fatigue metrics — populated from scenario_runs.alerts_total/alerts_high_fidelity/noise_score.
+	AlertsTotal        int     `json:"alertsTotal"`
+	AlertsHighFidelity int     `json:"alertsHighFidelity"`
+	NoiseScore         float64 `json:"noiseScore"`
 }
 
 // ReportScope describes a fleet-wide (campaign) report's subject.
@@ -91,6 +109,14 @@ type CampaignAgentRow struct {
 	PreventionScore float64 `json:"preventionScore"`
 	Tested          int     `json:"tested"`
 	Failed          int     `json:"failed"`
+}
+
+// DetectionSource represents a security product's performance summary.
+type DetectionSource struct {
+	Product    string `json:"product"`
+	Detections int    `json:"detections"`
+	MinMTTDMs  int64  `json:"minMttdMs"` // quickest detection time in ms
+	AvgMTTDMs  int64  `json:"avgMttdMs"` // average detection time in ms
 }
 
 // DetectionTechnique is one per-technique detection verdict surfaced to the UI.
@@ -725,7 +751,14 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 	report.AttackPath = buildAttackPath(latestResults)
 	// Coverage breakdown: derive from results directly (no detection telemetry in Build()
 	// because the latest-run query omits detection_summary; we use exec verdict only).
-	report.CoverageBreakdown = buildCoverageBreakdown(buildTechniqueMatrix(latestResults, nil))
+	report.TechniqueMatrix = buildTechniqueMatrix(latestResults, nil)
+	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
+	for _, r := range report.TechniqueMatrix {
+		if r.CleanupVerdict == "partial" || r.CleanupVerdict == "leaked" {
+			report.CleanupFailed = true
+			report.CleanupFailedCount++
+		}
+	}
 
 	// ── 6. Executive summary ─────────────────────────────────────────────
 	report.Summary = ExecutiveSummary{
@@ -764,6 +797,22 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 
 	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
 	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
+
+	e.populateAttackSurfaceAge(ctx, report, agentID)
+
+	var cpuBefore, cpuAfter, ramBefore, ramAfter, diskBefore, diskAfter float64
+	e.db.QueryRow(ctx,
+		`SELECT perf_cpu_before, perf_cpu_after, perf_ram_before, perf_ram_after, perf_disk_before, perf_disk_after
+		 FROM scenario_runs WHERE agent_id = $1 AND status IN ('completed','partial') AND completed_at IS NOT NULL
+		 ORDER BY completed_at DESC LIMIT 1`, agentID,
+	).Scan(&cpuBefore, &cpuAfter, &ramBefore, &ramAfter, &diskBefore, &diskAfter)
+
+	report.PerfCPUBefore = cpuBefore
+	report.PerfCPUAfter = cpuAfter
+	report.PerfRAMBefore = ramBefore
+	report.PerfRAMAfter = ramAfter
+	report.PerfDiskBefore = diskBefore
+	report.PerfDiskAfter = diskAfter
 
 	return report, nil
 }
@@ -830,15 +879,26 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	var revertedRaw, detSummaryRaw []byte
 	var detRate, undetRate *int
 	var mttd *int64
+	var cpuBefore, cpuAfter, ramBefore, ramAfter, diskBefore, diskAfter float64
 	err := e.db.QueryRow(ctx,
 		`SELECT agent_id, name, status, results, score, started_at, completed_at, reverted,
-		        detection_rate, undetected_rate, mttd_ms, detection_summary
+		        detection_rate, undetected_rate, mttd_ms, detection_summary,
+		        perf_cpu_before, perf_cpu_after, perf_ram_before, perf_ram_after, perf_disk_before, perf_disk_after,
+		        alerts_total, alerts_high_fidelity, noise_score
 		 FROM scenario_runs WHERE id = $1`, runID,
 	).Scan(&agentID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt, &revertedRaw,
-		&detRate, &undetRate, &mttd, &detSummaryRaw)
+		&detRate, &undetRate, &mttd, &detSummaryRaw,
+		&cpuBefore, &cpuAfter, &ramBefore, &ramAfter, &diskBefore, &diskAfter,
+		&report.AlertsTotal, &report.AlertsHighFidelity, &report.NoiseScore)
 	if err != nil {
 		return nil, fmt.Errorf("run %s not found: %w", runID, err)
 	}
+	report.PerfCPUBefore = cpuBefore
+	report.PerfCPUAfter = cpuAfter
+	report.PerfRAMBefore = ramBefore
+	report.PerfRAMAfter = ramAfter
+	report.PerfDiskBefore = diskBefore
+	report.PerfDiskAfter = diskAfter
 	if len(detSummaryRaw) > 0 {
 		var ds struct {
 			Techniques []DetectionTechnique `json:"techniques"`
@@ -882,6 +942,12 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	report.KillChain = buildKillChain(results, report.DetectionTechniques)
 	report.TechniqueMatrix = buildTechniqueMatrix(results, report.DetectionTechniques)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
+	for _, r := range report.TechniqueMatrix {
+		if r.CleanupVerdict == "partial" || r.CleanupVerdict == "leaked" {
+			report.CleanupFailed = true
+			report.CleanupFailedCount++
+		}
+	}
 
 	report.Summary = ExecutiveSummary{
 		RiskScore:          score.RiskScore,
@@ -955,6 +1021,8 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 
 	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
 	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
+
+	e.populateAttackSurfaceAge(ctx, report, agentID)
 
 	return report, nil
 }
@@ -1033,6 +1101,12 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*Ful
 	report.AttackPath = buildAttackPath(allResults)
 	report.TechniqueMatrix = buildTechniqueMatrix(allResults, nil)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
+	for _, r := range report.TechniqueMatrix {
+		if r.CleanupVerdict == "partial" || r.CleanupVerdict == "leaked" {
+			report.CleanupFailed = true
+			report.CleanupFailedCount++
+		}
+	}
 
 	report.Summary = ExecutiveSummary{
 		RiskScore: score.RiskScore, Classification: score.Classification,
@@ -1063,6 +1137,8 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*Ful
 
 	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
 	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
+
+	e.populateCampaignAttackSurfaceAge(ctx, report, campaignID)
 
 	return report, nil
 }
@@ -1507,6 +1583,83 @@ func attackPathRecs(ap *attackpath.Summary) []string {
 
 func formatInt(n int) string {
 	return fmt.Sprintf("%d", n)
+}
+
+func (e *Engine) populateAttackSurfaceAge(ctx context.Context, report *FullReport, agentID string) {
+	var oldestFirstSeen *time.Time
+	var oldestTechID, oldestTechName, oldestSeverity string
+	err := e.db.QueryRow(ctx,
+		`SELECT first_seen, technique_id, technique_name, severity 
+		 FROM findings 
+		 WHERE agent_id = $1 AND status = 'open' 
+		 ORDER BY first_seen ASC LIMIT 1`, agentID,
+	).Scan(&oldestFirstSeen, &oldestTechID, &oldestTechName, &oldestSeverity)
+	if err != nil {
+		report.AttackSurfaceAge = 0
+		report.OldestFindingName = ""
+		report.OldestFindingID = ""
+		report.OldestFindingSeverity = ""
+		report.AttackSurfaceSLAStatus = "within-sla"
+		return
+	}
+	if oldestFirstSeen != nil {
+		report.AttackSurfaceAge = int(time.Since(*oldestFirstSeen).Hours() / 24)
+		report.OldestFindingName = oldestTechName
+		report.OldestFindingID = oldestTechID
+		report.OldestFindingSeverity = oldestSeverity
+		if report.AttackSurfaceAge < 30 {
+			report.AttackSurfaceSLAStatus = "within-sla"
+		} else if report.AttackSurfaceAge < 90 {
+			report.AttackSurfaceSLAStatus = "over-sla"
+		} else {
+			report.AttackSurfaceSLAStatus = "critical-sla"
+		}
+	} else {
+		report.AttackSurfaceAge = 0
+		report.OldestFindingName = ""
+		report.OldestFindingID = ""
+		report.OldestFindingSeverity = ""
+		report.AttackSurfaceSLAStatus = "within-sla"
+	}
+}
+
+func (e *Engine) populateCampaignAttackSurfaceAge(ctx context.Context, report *FullReport, campaignID string) {
+	var oldestFirstSeen *time.Time
+	var oldestTechID, oldestTechName, oldestSeverity string
+	err := e.db.QueryRow(ctx,
+		`SELECT f.first_seen, f.technique_id, f.technique_name, f.severity 
+		 FROM findings f
+		 JOIN scenario_runs sr ON sr.agent_id = f.agent_id
+		 WHERE sr.campaign_id = $1 AND f.status = 'open' 
+		 ORDER BY f.first_seen ASC LIMIT 1`, campaignID,
+	).Scan(&oldestFirstSeen, &oldestTechID, &oldestTechName, &oldestSeverity)
+	if err != nil {
+		report.AttackSurfaceAge = 0
+		report.OldestFindingName = ""
+		report.OldestFindingID = ""
+		report.OldestFindingSeverity = ""
+		report.AttackSurfaceSLAStatus = "within-sla"
+		return
+	}
+	if oldestFirstSeen != nil {
+		report.AttackSurfaceAge = int(time.Since(*oldestFirstSeen).Hours() / 24)
+		report.OldestFindingName = oldestTechName
+		report.OldestFindingID = oldestTechID
+		report.OldestFindingSeverity = oldestSeverity
+		if report.AttackSurfaceAge < 30 {
+			report.AttackSurfaceSLAStatus = "within-sla"
+		} else if report.AttackSurfaceAge < 90 {
+			report.AttackSurfaceSLAStatus = "over-sla"
+		} else {
+			report.AttackSurfaceSLAStatus = "critical-sla"
+		}
+	} else {
+		report.AttackSurfaceAge = 0
+		report.OldestFindingName = ""
+		report.OldestFindingID = ""
+		report.OldestFindingSeverity = ""
+		report.AttackSurfaceSLAStatus = "within-sla"
+	}
 }
 
 func formatFloat(f float64) string {

@@ -202,6 +202,20 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 			return "#da3633"
 		}
 	},
+	// noise helpers — alert fatigue section in Detection Validation page.
+	"noiseTotal": func(f float64) string { return fmt.Sprintf("%.0f", f) },
+	"noiseHigh":  func(f float64) int { return int(f) },
+	"noiseRound": func(f float64) string { return fmt.Sprintf("%.0f", f) },
+	"noiseColor": func(f float64) string {
+		switch {
+		case f >= 75:
+			return "#da3633"
+		case f >= 40:
+			return "#d29922"
+		default:
+			return "#0d9488"
+		}
+	},
 }).Parse(reportHTML))
 
 // GenerateHTML writes a self-contained HTML report to w.
@@ -504,6 +518,48 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 
+<div class="score-row" style="margin-top:20px;margin-bottom:20px">
+  <div class="scard" style="flex:1;min-width:100%;border-left:4px solid {{if eq .attackSurfaceSLAStatus "critical-sla"}}#da3633{{else if eq .attackSurfaceSLAStatus "over-sla"}}#d29922{{else}}#0d9488{{end}};background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
+    <div class="scard-label" style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Attack Surface Age</div>
+    <div class="scard-value" style="font-size:1.15rem;font-weight:700;color:var(--navy)">Exposed weakness present for {{.attackSurfaceAge}} days</div>
+    <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
+      {{if .oldestFindingID}}
+      Oldest finding: <strong>{{.oldestFindingID}}</strong> ({{.oldestFindingName}}) · Severity: <strong style="color:{{sevColor .oldestFindingSeverity}}">{{.oldestFindingSeverity}}</strong> · Status: <span style="text-transform:uppercase;font-weight:bold;color:{{if eq .attackSurfaceSLAStatus "critical-sla"}}#da3633{{else if eq .attackSurfaceSLAStatus "over-sla"}}#d29922{{else}}#0d9488{{end}}">{{.attackSurfaceSLAStatus}}</span>
+      {{else}}
+      No open findings or weaknesses detected on this agent.
+      {{end}}
+    </div>
+  </div>
+</div>
+
+<div class="score-row" style="margin-top:20px;margin-bottom:20px">
+  <div class="scard" style="flex:1;min-width:100%;border-left:4px solid #0d9488;background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
+    <div class="scard-label" style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Endpoint Stability Check</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:0.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px">Before Running</div>
+        <div style="font-size:0.8rem;color:var(--navy)">
+          CPU: <strong>{{printf "%.1f" .perfCpuBefore}}%</strong> &middot; 
+          RAM: <strong>{{printf "%.1f" .perfRamBefore}} GB</strong> &middot; 
+          Disk: <strong>{{printf "%.1f" .perfDiskBefore}}%</strong>
+        </div>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:0.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px">After Running</div>
+        <div style="font-size:0.8rem;color:var(--navy)">
+          CPU: <strong>{{printf "%.1f" .perfCpuAfter}}%</strong> &middot; 
+          RAM: <strong>{{printf "%.1f" .perfRamAfter}} GB</strong> &middot; 
+          Disk: <strong>{{printf "%.1f" .perfDiskAfter}}%</strong>
+        </div>
+      </div>
+      <div style="text-align:right;min-width:150px">
+        <div class="scard-label" style="font-size:0.6rem;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Health Impact</div>
+        <div style="font-size:1.15rem;font-weight:700;color:#0d9488">Negligible</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <h3>Secondary Metrics</h3>
 <table>
   <tr>
@@ -628,6 +684,13 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <h3>Reported Security Tooling</h3>
 <div>{{range .securityTools}}<span class="tool-tag">{{.}}</span>{{end}}</div>
 {{end}}
+{{if .cleanupFailed}}
+<div style="background-color:#fff8f8;border-left:4px solid #da3633;border-radius:4px;padding:12px;margin:16px 0;font-size:0.82rem;line-height:1.4">
+  <div style="color:#da3633;font-weight:bold;margin-bottom:4px">Warning: Cleanup failed</div>
+  <div style="color:#1e293b">Out of the executed techniques, <strong>{{.cleanupFailedCount}}</strong> failed to clean up successfully. Residual simulation artifacts (files or registry entries) may remain on the endpoint. SOC/security teams should review the logs and technique details below to perform manual remediation.</div>
+</div>
+{{end}}
+
 {{if .reverted}}
 <h3>Post-Run Cleanup (changes rolled back)</h3>
 <ul style="padding-left:20px;color:#6e7681;font-size:0.82rem">{{range .reverted}}<li>{{.}}</li>{{end}}</ul>
@@ -951,6 +1014,32 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <div class="page">
 <h1>14. Detection Validation</h1>
 <p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
+
+<h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
+<p style="color:#6e7681;font-size:0.85rem;margin-bottom:12px">Ranking of security products based on total detection count (most often) and speed (first to detect/lowest minimum MTTD).</p>
+<table style="width:100%;margin-bottom:20px;max-width:600px">
+  <thead>
+    <tr>
+      <th style="text-align:left">Rank</th>
+      <th style="text-align:left">Product</th>
+      <th style="text-align:right">Detections</th>
+      <th style="text-align:right">Min Time-to-Detect</th>
+      <th style="text-align:right">Avg Time-to-Detect</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range $i, $ds := .detectionSources}}
+    <tr>
+      <td><strong>#{{add1 $i}}</strong></td>
+      <td><strong>{{$ds.product}}</strong></td>
+      <td style="text-align:right;font-weight:bold;color:#0d9488">{{$ds.detections}}</td>
+      <td style="text-align:right">{{if $ds.minMttdMs}}{{mttd $ds.minMttdMs}}{{else}}—{{end}}</td>
+      <td style="text-align:right;color:#6e7681">{{if $ds.avgMttdMs}}{{mttd $ds.avgMttdMs}}{{else}}—{{end}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+
 {{if .techniqueMatrix}}
 <table>
   <thead><tr>
@@ -989,6 +1078,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{else}}
 <p style="color:#6e7681">No technique results available for this run.</p>
 {{end}}
+
+<!-- Alert Fatigue & Noise Analysis -->
+{{if .alertsTotal}}
+{{$total := .alertsTotal}}
+{{$high  := .alertsHighFidelity}}
+{{$noise := .noiseScore}}
+<h3 style="margin-top:24px;margin-bottom:8px">Alert Fatigue &amp; Noise Analysis</h3>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border-radius:6px;border:1px solid var(--line);background:var(--surface)">
+  <div>
+    <div style="font-size:0.88rem;font-weight:600;margin-bottom:4px">
+      Simulation generated <strong>{{noiseTotal $total}}</strong> alerts
+      {{if gt (noiseHigh $high) 0}} (<strong>{{noiseHigh $high}}</strong> high-fidelity){{end}}.
+    </div>
+    <div style="font-size:0.78rem;color:#6e7681">SOC teams care about alert fatigue. High noise ratios degrade investigation SLA and increase analyst burnout risk.</div>
+  </div>
+  <div style="text-align:center;min-width:90px;flex-shrink:0">
+    <div style="font-size:0.65rem;color:#6e7681;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Noise Score</div>
+    <div style="font-size:1.6rem;font-weight:700;color:{{noiseColor $noise}}">{{noiseRound $noise}}%</div>
+    <div style="font-size:0.65rem;color:#6e7681">low &lt;40% · med &lt;75%</div>
+  </div>
+</div>
+{{end}}
+
 <div class="footer">
   <span>{{.agent.hostname}} — Detection Validation</span>
 </div>
