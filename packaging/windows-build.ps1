@@ -328,47 +328,30 @@ if ($LASTEXITCODE -ne 0) {
 $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
 Pop-Location
 
-# -- 5c. Generate + RSA-sign BINARIES.sha256 --------------------------------
-# The orchestrator loads this at startup (main.go LoadManifestVerified) and
-# checks every connecting agent's binary hash against it. Generated here -
-# after all agent binaries are compiled - so the hashes are always current.
-Log "Generating BINARIES.sha256 agent manifest..."
-$agentBins = @(
-    "$OutDir\bas-agent-windows-amd64.exe",
-    "$OutDir\bas-agent-linux-amd64",
-    "$OutDir\bas-agent-linux-arm64"
-) | Where-Object { Test-Path $_ }
+# -- 5c. Extract BINARIES.sha256 from the Docker image ----------------------
+# BINARIES.sha256 is generated inside the Docker agent-builder stage (see
+# Dockerfile) from the same binaries that endpoints download. Extracting from
+# the image here ensures the bundle's manifest matches what agents actually run.
+# The manifest is then RSA-signed so the orchestrator can detect tampering.
+Log "Extracting BINARIES.sha256 from Docker image..."
+$BinManifestPath = Join-Path $OutDir "BINARIES.sha256"
+docker run --rm --entrypoint cat $OrchestratorTag /agents/BINARIES.sha256 | Out-File -Encoding ASCII -FilePath $BinManifestPath
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $BinManifestPath) -or (Get-Item $BinManifestPath).Length -eq 0) {
+    Warn "  Could not extract BINARIES.sha256 from image - agent integrity checks disabled."
+} else {
+    $entryCount = (Get-Content $BinManifestPath | Where-Object { $_ -ne "" }).Count
+    Log "  $entryCount entries extracted from image"
 
-if ($agentBins.Count -gt 0) {
-    $manifestLines = $agentBins | ForEach-Object {
-        $h = (Get-FileHash -Path $_ -Algorithm SHA256).Hash.ToLower()
-        "$h  $(Split-Path -Leaf $_)"
-    }
-    $BinManifestPath = Join-Path $OutDir "BINARIES.sha256"
-    [System.IO.File]::WriteAllText($BinManifestPath, ($manifestLines -join "`n") + "`n")
-    Log "  $($agentBins.Count) binaries indexed in BINARIES.sha256"
-
-    # RSA-sign so the orchestrator can verify the manifest was not tampered.
+    # RSA-sign so the orchestrator verifies the manifest was not tampered in transit.
     Push-Location $OrchestratorDir
     go run scripts/signer.go sign private_key.pem $BinManifestPath
     $binManExit = $LASTEXITCODE
     Pop-Location
     if ($binManExit -ne 0) {
-        Warn "  RSA signing of BINARIES.sha256 failed - agent integrity checks disabled."
+        Warn "  RSA signing of BINARIES.sha256 failed."
     } else {
         Log "  BINARIES.sha256.sig written."
     }
-
-    # Stage in orchestrator/agents/ so the next Docker build bakes it into the image.
-    $AgentsStageDir = Join-Path $OrchestratorDir "agents"
-    New-Item -ItemType Directory -Force -Path $AgentsStageDir | Out-Null
-    Copy-Item $BinManifestPath "$AgentsStageDir\BINARIES.sha256" -Force
-    if (Test-Path "$BinManifestPath.sig") {
-        Copy-Item "$BinManifestPath.sig" "$AgentsStageDir\BINARIES.sha256.sig" -Force
-    }
-    Log "  Staged in orchestrator/agents/ for next Docker build"
-} else {
-    Warn "  No agent binaries built - skipping BINARIES.sha256 generation."
 }
 
 # Copy manifest alongside the standalone Windows exe as a side-by-side fallback.

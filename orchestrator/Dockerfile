@@ -34,6 +34,12 @@ RUN CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" 
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-windows-amd64.exe . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-amd64  . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-arm64  .
+# Generate BINARIES.sha256 from the binaries just compiled so the orchestrator
+# can verify connecting agents at runtime. Must be generated here - from the
+# same build - so hashes match what endpoints actually download and run.
+RUN cd /agents && sha256sum bas-agent-linux-amd64 bas-agent-linux-arm64 \
+        bas-agent-windows-amd64.exe bas-agent-darwin-amd64 bas-agent-darwin-arm64 \
+    > /agents/BINARIES.sha256
 # Windows GUI installer — embeds the single Windows agent binary built above.
 # The agent contains the tray + status-window UI (run via --tray / --status-window),
 # so there is no separate tray executable to build.
