@@ -67,14 +67,14 @@ Log "  Go OK: $(go version)"
 
 # -- 0b. Content signing: scenarios + manifest + wwwroot hash -----------------
 # Must run BEFORE docker build so signed artifacts travel into the image via
-# the COPY context. The private key never leaves this host — only the public
+# the COPY context. The private key never leaves this host  -  only the public
 # key (compiled into the binary) is distributed to clients.
 #
 # Key lifecycle:
 #   First run: generates RSA-4096 private_key.pem in orchestrator\ and injects
 #              the matching public key into orchestrator\internal\integrity\signing.go
 #   Subsequent runs: re-uses existing key (skips keygen)
-#   CRITICAL: back up orchestrator\private_key.pem — losing it means scenarios
+#   CRITICAL: back up orchestrator\private_key.pem  -  losing it means scenarios
 #             can never be validly re-signed.
 
 $OrchestratorDir = Join-Path $RepoRoot "orchestrator"
@@ -83,14 +83,14 @@ $ScenariosDir    = Join-Path $RepoRoot "scenarios"
 
 Log "Content signing pre-build..."
 
-# 0b-i. RSA keypair — idempotent: only runs once per install.
+# 0b-i. RSA keypair  -  idempotent: only runs once per install.
 if (-not (Test-Path $PrivKeyPath)) {
     Log "  No private_key.pem found. Generating RSA-4096 keypair..."
     Push-Location $OrchestratorDir
     go run scripts/signer.go keygen
     $kgExit = $LASTEXITCODE
     Pop-Location
-    if ($kgExit -ne 0) { Err "RSA keygen failed — check Go is installed and orchestrator/scripts/signer.go exists." }
+    if ($kgExit -ne 0) { Err "RSA keygen failed  -  check Go is installed and orchestrator/scripts/signer.go exists." }
     Log "  Keypair generated. BACK UP $PrivKeyPath before deleting or reformatting this machine."
 } else {
     Log "  Found existing private_key.pem"
@@ -111,7 +111,7 @@ if (Test-Path $ScenariosDir) {
     }
     Log "  All scenarios signed."
 } else {
-    Warn "  No scenarios\ directory found at repo root — skipping scenario signing."
+    Warn "  No scenarios\ directory found at repo root  -  skipping scenario signing."
 }
 
 # 0b-iii. Sign BINARIES.sha256 manifest (if present).
@@ -125,7 +125,7 @@ if (Test-Path $ManifestFile) {
     if ($manExit -ne 0) { Err "Failed to sign BINARIES.sha256." }
     Log "  Manifest signed."
 } else {
-    Warn "  No agents\BINARIES.sha256 found — skipping manifest signing."
+    Warn "  No agents\BINARIES.sha256 found  -  skipping manifest signing."
 }
 
 # 0b-iv. SHA-256 hash of wwwroot/index.html, injected into the binary via
@@ -136,7 +136,7 @@ if (Test-Path $IndexHtmlPath) {
     $WWWRootHash = (Get-FileHash -Path $IndexHtmlPath -Algorithm SHA256).Hash.ToLower()
     Log "  wwwroot/index.html hash: $($WWWRootHash.Substring(0,16))..."
 } else {
-    Warn "  wwwroot/index.html not found — UI tamper-detection will be DISABLED in this build."
+    Warn "  wwwroot/index.html not found  -  UI tamper-detection will be DISABLED in this build."
 }
 
 # -- 1. Build Docker image ----------------------------------------------------
@@ -144,9 +144,9 @@ $OrchestratorTag = "bas-orchestrator:$Version"
 
 if (-not $SkipBuild) {
     # Obfuscation (garble -literals -tiny, scoped to our module via GOGARBLE) runs
-    # inside orchestrator/Dockerfile — see that file for the GOGARBLE rationale.
+    # inside orchestrator/Dockerfile  -  see that file for the GOGARBLE rationale.
     # BAS_WWWROOT_HASH is injected via -X ldflags so StaticHandler() verifies the
-    # dashboard SPA hash at startup. BAS_SIGNING_KEY is not needed — the public key
+    # dashboard SPA hash at startup. BAS_SIGNING_KEY is not needed  -  the public key
     # was already compiled into signing.go by step 0b-i above.
     Log "Building $OrchestratorTag (garble -literals -tiny - this takes 5-10 min)..."
     $buildExtraArgs = @("--build-arg", "BAS_VERSION=$Version")
@@ -158,7 +158,7 @@ if (-not $SkipBuild) {
     Log "Image built: $OrchestratorTag"
 } else {
     Warn "Skipping image build (-SkipBuild). Using existing $OrchestratorTag."
-    if ($WWWRootHash -eq "") { Warn "  (UI tamper hash was not computed — existing image retains its compiled hash)" }
+    if ($WWWRootHash -eq "") { Warn "  (UI tamper hash was not computed  -  existing image retains its compiled hash)" }
 }
 
 # -- 2. Pull dependency images ------------------------------------------------
@@ -311,7 +311,7 @@ Pop-Location
 
 # -- 5b. Build Linux agent binaries (amd64 + arm64) --------------------------
 # CGO_ENABLED=0: required for cross-compile from Windows. All platform-specific
-# code (webview2, tray, UAC) lives in *_windows.go files — excluded automatically
+# code (webview2, tray, UAC) lives in *_windows.go files  -  excluded automatically
 # by the Go toolchain when GOOS=linux. The Linux binary is self-installing:
 # running it as root copies itself to /usr/local/bin/bas-agent and writes
 # /etc/systemd/system/bas-agent.service (see agent/service_linux.go).
@@ -386,7 +386,7 @@ $PayloadDir = Join-Path $RepoRoot "packaging\art-payloads"
 $PayloadOut = Join-Path $OutDir "art-payloads"
 New-Item -ItemType Directory -Force -Path $PayloadOut | Out-Null
 if (Test-Path $PayloadDir) {
-    # Only real executables/scripts are bundled — the staging folder may also hold
+    # Only real executables/scripts are bundled  -  the staging folder may also hold
     # tool source trees, zips, installers and PDBs, none of which an atomic invokes.
     # Flattened, first-wins on duplicate basenames, matching the server's importer.
     $allow = @('.exe', '.dll', '.ps1', '.psm1', '.bat', '.cmd', '.vbs', '.js',
@@ -405,7 +405,7 @@ if (Test-Path $PayloadDir) {
 }
 
 # -- 7. Write VERSION file ----------------------------------------------------
-# WriteAllText → UTF-8 without BOM. install.sh reads this to tag the images in
+# WriteAllText ? UTF-8 without BOM. install.sh reads this to tag the images in
 # .env; a BOM here (which Out-File -Encoding utf8 adds on PS 5.1) would corrupt
 # the version string and break compose image resolution.
 [System.IO.File]::WriteAllText("$OutDir\VERSION", $Version)
