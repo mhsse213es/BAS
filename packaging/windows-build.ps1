@@ -378,6 +378,25 @@ if ($LASTEXITCODE -ne 0) {
         Pop-Location
         if ($manExit -ne 0) { Err "Failed to sign BINARIES.sha256." }
         else { Log "  Manifest signed." }
+
+        # Bake BINARIES.sha256.sig into the orchestrator image.
+        # The sig is generated here (after the first build) so it cannot be
+        # included in the initial docker build. A one-layer patch image adds it
+        # without rebuilding the orchestrator — fast (no recompilation).
+        if (Test-Path "$BinManifestPath.sig") {
+            Log "Baking BINARIES.sha256.sig into orchestrator image..."
+            $patchCtx = Join-Path $env:TEMP "bas-sig-patch-$(Get-Random)"
+            New-Item -ItemType Directory -Force -Path $patchCtx | Out-Null
+            Copy-Item "$BinManifestPath.sig" "$patchCtx\BINARIES.sha256.sig"
+            [System.IO.File]::WriteAllText(
+                "$patchCtx\Dockerfile",
+                "FROM $OrchestratorTag`nCOPY BINARIES.sha256.sig /agents/BINARIES.sha256.sig`n"
+            )
+            docker build -t $OrchestratorTag $patchCtx 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { Warn "  Patch build failed - sig must be volume-mounted at deploy time." }
+            else { Log "  BINARIES.sha256.sig baked into $OrchestratorTag." }
+            Remove-Item -Recurse -Force $patchCtx -ErrorAction SilentlyContinue
+        }
     }
 }
 
