@@ -114,19 +114,7 @@ if (Test-Path $ScenariosDir) {
     Warn "  No scenarios\ directory found at repo root  -  skipping scenario signing."
 }
 
-# 0b-iii. Sign BINARIES.sha256 manifest (if present).
-$ManifestFile = Join-Path $OrchestratorDir "agents\BINARIES.sha256"
-if (Test-Path $ManifestFile) {
-    Log "  Signing BINARIES.sha256 manifest..."
-    Push-Location $OrchestratorDir
-    go run scripts/signer.go sign private_key.pem "agents\BINARIES.sha256"
-    $manExit = $LASTEXITCODE
-    Pop-Location
-    if ($manExit -ne 0) { Err "Failed to sign BINARIES.sha256." }
-    Log "  Manifest signed."
-} else {
-    Warn "  No agents\BINARIES.sha256 found  -  skipping manifest signing."
-}
+# 0b-iii. Sign BINARIES.sha256 manifest - runs after step 5c stages the file.
 
 # 0b-iv. SHA-256 hash of wwwroot/index.html, injected into the binary via
 #        --build-arg BAS_WWWROOT_HASH so StaticHandler() halts on mismatch.
@@ -371,13 +359,23 @@ if ($LASTEXITCODE -ne 0) {
             Log "  BINARIES.sha256.sig written."
         }
 
-        # Stage back into orchestrator/agents/ so step 0b-iii finds it on the next build.
+        # Stage into orchestrator/agents/ for the Docker image and step 0b-iii signing.
         $AgentsStageDir = Join-Path $OrchestratorDir "agents"
         New-Item -ItemType Directory -Force -Path $AgentsStageDir | Out-Null
         Copy-Item $BinManifestPath "$AgentsStageDir\BINARIES.sha256" -Force
         if (Test-Path "$BinManifestPath.sig") {
             Copy-Item "$BinManifestPath.sig" "$AgentsStageDir\BINARIES.sha256.sig" -Force
         }
+
+        # 0b-iii. Sign the staged manifest with the RSA key (runs here so the
+        # file is guaranteed to exist - it was just written by the extract above).
+        Log "  Signing BINARIES.sha256 manifest..."
+        Push-Location $OrchestratorDir
+        go run scripts/signer.go sign private_key.pem "agents\BINARIES.sha256"
+        $manExit = $LASTEXITCODE
+        Pop-Location
+        if ($manExit -ne 0) { Err "Failed to sign BINARIES.sha256." }
+        else { Log "  Manifest signed." }
     }
 }
 
