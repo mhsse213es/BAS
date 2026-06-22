@@ -516,7 +516,7 @@ mode_upgrade() {
   step "3/5  Updating bundle files"
   [[ -d "${SCRIPT_DIR}/scenarios"   ]] && cp -r "${SCRIPT_DIR}/scenarios/."   "${DATA_DIR}/scenarios/"
   [[ -d "${SCRIPT_DIR}/wwwroot"     ]] && cp -r "${SCRIPT_DIR}/wwwroot/."     "${DATA_DIR}/wwwroot/"
-  [[ -d "${SCRIPT_DIR}/art-payloads"]] && cp -r "${SCRIPT_DIR}/art-payloads/." "${DATA_DIR}/art-payloads/"
+  [[ -d "${SCRIPT_DIR}/art-payloads" ]] && cp -r "${SCRIPT_DIR}/art-payloads/." "${DATA_DIR}/art-payloads/"
   [[ -f "$LIC_PATH"                 ]] && { cp "$LIC_PATH" "${DATA_DIR}/bas.lic"; chmod 640 "${DATA_DIR}/bas.lic"; }
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
   _write_env        # refreshes BAS_VERSION; preserves existing secrets via load_config
