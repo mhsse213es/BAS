@@ -370,6 +370,14 @@ if ($LASTEXITCODE -ne 0) {
         } else {
             Log "  BINARIES.sha256.sig written."
         }
+
+        # Stage back into orchestrator/agents/ so step 0b-iii finds it on the next build.
+        $AgentsStageDir = Join-Path $OrchestratorDir "agents"
+        New-Item -ItemType Directory -Force -Path $AgentsStageDir | Out-Null
+        Copy-Item $BinManifestPath "$AgentsStageDir\BINARIES.sha256" -Force
+        if (Test-Path "$BinManifestPath.sig") {
+            Copy-Item "$BinManifestPath.sig" "$AgentsStageDir\BINARIES.sha256.sig" -Force
+        }
     }
 }
 
