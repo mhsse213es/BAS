@@ -1107,6 +1107,13 @@ body.theme-slate {
           </svg>
           Variants
         </div>
+        <div class="nav-item" data-tab="em" onclick="showTab('em')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M8 1.5l5 2v4c0 3-2 5.2-5 6.5C5 12.7 3 10.5 3 7.5v-4z"/>
+            <path d="M5.5 8l1.5 1.5 3-3"/>
+          </svg>
+          Endpoint Mastery
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Visibility</div>
@@ -2405,6 +2412,36 @@ body.theme-slate {
           <div id="vex-coverage"><div class="empty" style="padding:1.5rem">Loading…</div></div>
         </div>
       </div>
+
+      <!-- ── Endpoint Mastery ─────────────────────────────────────────────── -->
+      <div id="tab-em" style="display:none">
+        <div class="sec-hdr">
+          <div>
+            <h2>Endpoint Mastery</h2>
+            <div class="tiny muted" style="margin-top:0.2rem">14 validation layers — from control presence to adversary emulation</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <button class="btn btn-outline btn-sm" onclick="loadEmTab()">&#x21bb; Refresh</button>
+            <button class="btn btn-primary btn-sm" onclick="runEmSweep()">&#9654; Run Full Sweep</button>
+          </div>
+        </div>
+
+        <!-- Score summary bar -->
+        <div class="dash-panel" style="margin-bottom:1.25rem">
+          <div class="dash-panel-hdr" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Overall Coverage</span>
+            <span id="em-summary-badge" style="font-size:0.75rem;color:var(--muted)"></span>
+          </div>
+          <div class="dash-panel-body" id="em-summary" style="padding:1rem 1.25rem">
+            <div class="empty" style="padding:0.5rem">Run scenarios to populate coverage.</div>
+          </div>
+        </div>
+
+        <!-- 14-layer grid -->
+        <div id="em-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem">
+          <div class="empty" style="grid-column:1/-1;padding:2rem">Loading Endpoint Mastery layers…</div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -2844,7 +2881,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', users:'Users', compliance:'Compliance', settings:'Settings' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -2957,7 +2994,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','compliance','settings'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','compliance','settings','variants','em'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -2977,6 +3014,7 @@ function showTab(name) {
   if (name === 'reports') loadReports();
   if (name === 'attackpath') loadAttackPath();
   if (name === 'variants') loadVariantTab();
+  if (name === 'em') loadEmTab();
   if (name === 'dashboard') {
     loadDashboard();
     // Start a periodic campaign-status poll so the "Live campaigns" tiles
@@ -8302,6 +8340,162 @@ function runRansomwareDrill() {
     showTab('agents'); return;
   }
   openModal(drillId, agents[0].agentId);
+}
+
+// ── Endpoint Mastery ──────────────────────────────────────────────────────────
+
+var EM_CATALOG = [
+  { id:'em-01-control-validation',     num:'01', name:'Control Validation',        desc:'EDR/AV presence, tamper protection, real-time enforcement' },
+  { id:'em-02-attack-behavioral-depth',num:'02', name:'Behavioral Depth',          desc:'PowerShell variant matrix — encoded, obfuscated, AMSI, reflective' },
+  { id:'em-03-memory-attacks',         num:'03', name:'Memory-Based Attacks',      desc:'LSASS handle, cross-process R/W, process hollowing precursor' },
+  { id:'em-04-credential-theft',       num:'04', name:'Credential Theft',          desc:'LSASS, SAM hive, DPAPI master key accessibility' },
+  { id:'em-05-persistence-validation', num:'05', name:'Persistence Validation',    desc:'Run keys, startup folder, scheduled task mutations' },
+  { id:'em-06-defense-evasion',        num:'06', name:'Defense Evasion',           desc:'LOLBin proxy execution, structural bypasses' },
+  { id:'em-07-ransomware-readiness',   num:'07', name:'Ransomware Readiness',      desc:'Full kill chain — canary XOR, shadow copy, backup destruction' },
+  { id:'em-08-exploit-mitigation',     num:'08', name:'Exploit Mitigation',        desc:'DEP, ASLR, SEHOP configuration posture' },
+  { id:'em-09-browser-attack',         num:'09', name:'Browser Attack',            desc:'Credential store / cookie directory isolation' },
+  { id:'em-10-endpoint-exfiltration',  num:'10', name:'Exfiltration Channels',     desc:'DNS / egress channel boundary monitoring' },
+  { id:'em-11-hardening-validation',   num:'11', name:'Hardening Validation',      desc:'LAPS, Credential Guard, kernel integrity features' },
+  { id:'em-12-adversary-emulation',    num:'12', name:'Adversary Emulation',       desc:'APT29 profile — recon + discovery operational signatures' },
+  { id:'em-13-product-validation',     num:'13', name:'Product Health',            desc:'Security product process / driver / self-defense audit' },
+  { id:'em-14-continuous-validation',  num:'14', name:'Posture Drift Engine',      desc:'Continuous differential validation against control baseline' }
+];
+
+function loadEmTab() {
+  Promise.all([apicall('/api/scenarios/runs'), apicall('/api/agents')])
+  .then(function(res) {
+    var runs = res[0] || [];
+    var agentList = res[1] || [];
+
+    // Build map: scenarioId → most-recent run with results
+    var lastRunMap = {};
+    runs.forEach(function(r) {
+      var sid = r.scenarioId;
+      if (!sid || EM_CATALOG.every(function(e) { return e.id !== sid; })) return;
+      if (!lastRunMap[sid] && (r.results || []).length) lastRunMap[sid] = r;
+    });
+
+    // Overall summary stats
+    var layersRun = 0, layersPass = 0, layersFail = 0, totalPass = 0, totalFail = 0;
+    EM_CATALOG.forEach(function(e) {
+      var r = lastRunMap[e.id];
+      if (!r) return;
+      layersRun++;
+      var p = 0, f = 0;
+      (r.results || []).forEach(function(c) {
+        if (c.result === 'pass' || c.result === 'blocked') p++;
+        else if (c.result === 'fail') f++;
+      });
+      totalPass += p; totalFail += f;
+      if (p + f > 0 && Math.round(p / (p + f) * 100) >= 60) layersPass++; else if (p + f > 0) layersFail++;
+    });
+
+    var summaryEl = document.getElementById('em-summary');
+    var badgeEl   = document.getElementById('em-summary-badge');
+    if (badgeEl) badgeEl.textContent = layersRun + ' / 14 layers run';
+
+    if (summaryEl) {
+      if (!layersRun) {
+        summaryEl.innerHTML = '<div class="empty" style="padding:0.5rem">Run one or more EM scenarios to generate coverage data.</div>';
+      } else {
+        var overallPct = (totalPass + totalFail) ? Math.round(totalPass / (totalPass + totalFail) * 100) : 0;
+        var col = overallPct >= 80 ? 'var(--success)' : overallPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+        summaryEl.innerHTML =
+          '<div style="display:flex;align-items:center;gap:2rem;flex-wrap:wrap">' +
+            emSummaryBig(overallPct + '%', 'Overall Score', col) +
+            emSummaryBig(layersRun + '/14', 'Layers Run', 'var(--text)') +
+            emSummaryBig(layersPass + '', 'Layers Passing', 'var(--success)') +
+            emSummaryBig(layersFail + '', 'Layers Failing', layersFail ? 'var(--danger)' : 'var(--muted)') +
+            emSummaryBig((14 - layersRun) + '', 'Not Yet Run', 'var(--muted)') +
+          '</div>' +
+          '<div style="margin-top:0.75rem;height:6px;background:var(--elevated);border-radius:3px;overflow:hidden">' +
+            '<div style="height:100%;width:' + Math.round(layersRun / 14 * 100) + '%;background:' + col + ';border-radius:3px;transition:width .6s ease"></div>' +
+          '</div>' +
+          '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem">' + Math.round(layersRun / 14 * 100) + '% of Endpoint Mastery layers exercised</div>';
+      }
+    }
+
+    // Layer cards
+    var gridEl = document.getElementById('em-grid');
+    if (!gridEl) return;
+    gridEl.innerHTML = EM_CATALOG.map(function(e) {
+      var run = lastRunMap[e.id];
+      var p = 0, f = 0;
+      if (run) {
+        (run.results || []).forEach(function(c) {
+          if (c.result === 'pass' || c.result === 'blocked') p++;
+          else if (c.result === 'fail') f++;
+        });
+      }
+      var pct = (p + f) ? Math.round(p / (p + f) * 100) : null;
+      var col = pct === null ? 'var(--muted)' : pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+      var statusHtml = pct !== null
+        ? '<span class="sbadge" style="background:' + (pct >= 80 ? 'rgba(35,134,54,0.15)' : pct >= 50 ? 'rgba(210,153,34,0.15)' : 'rgba(218,54,51,0.15)') + ';color:' + col + '">' + pct + '% pass</span>'
+        : '<span class="sbadge" style="background:var(--elevated);color:var(--muted)">Not run</span>';
+      var runTs = run ? '<div style="font-size:0.68rem;color:var(--muted);margin-top:0.3rem">Last: ' + ago(run.completedAt || run.startedAt) + (run.agentId ? ' · ' + x(run.agentId) : '') + '</div>' : '';
+      var barHtml = pct !== null
+        ? '<div style="height:3px;background:var(--elevated);border-radius:2px;margin:0.5rem 0 0;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:' + col + ';border-radius:2px"></div></div>'
+        : '';
+      var canRun = agentList.length > 0;
+      return '<div class="dash-panel" style="padding:0">' +
+        '<div style="display:flex;align-items:flex-start;gap:0.75rem;padding:0.85rem 1rem">' +
+          '<div style="flex-shrink:0;width:36px;height:36px;border-radius:8px;background:rgba(47,129,247,0.12);color:var(--accent);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:0.75rem;font-weight:700">' + x(e.num) + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;flex-wrap:wrap">' +
+              '<span style="font-weight:600;font-size:0.9rem;color:var(--text)">' + x(e.name) + '</span>' +
+              statusHtml +
+            '</div>' +
+            '<div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem;line-height:1.4">' + x(e.desc) + '</div>' +
+            barHtml +
+            runTs +
+          '</div>' +
+        '</div>' +
+        '<div style="border-top:1px solid var(--border);padding:0.5rem 1rem;display:flex;gap:0.5rem;align-items:center">' +
+          (run ? '<a style="font-size:0.75rem;color:var(--accent);cursor:pointer" onclick="viewRunResults(' + JSON.stringify(run) + ')">View report →</a>' : '') +
+          '<span style="flex:1"></span>' +
+          (canRun ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem" onclick="emRunLayer(\'' + x(e.id) + '\')" title="Run this layer">&#9654; Run</button>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  })
+  .catch(function(e) { showToast('Endpoint Mastery load failed: ' + e.message, 'err'); });
+}
+
+function emSummaryBig(val, label, col) {
+  return '<div style="text-align:center;min-width:80px">' +
+    '<div style="font-size:1.5rem;font-weight:700;line-height:1;color:' + col + '">' + val + '</div>' +
+    '<div style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem;text-transform:uppercase;letter-spacing:0.04em">' + label + '</div>' +
+  '</div>';
+}
+
+function emRunLayer(scenarioId) {
+  if (!agents.length) { showToast('No agents enrolled.', 'err'); showTab('agents'); return; }
+  openModal(scenarioId, agents[0].agentId);
+}
+
+function runEmSweep() {
+  // Dispatch each EM layer as an individual posture run against the first enrolled agent.
+  // The endpoint is POST /api/scenarios/{id}/run — one scenario at a time.
+  if (!agents.length) { showToast('No agents enrolled.', 'err'); showTab('agents'); return; }
+  var agentId = agents[0].agentId;
+  apicall('/api/scenarios').then(function(srv) {
+    var srvIds = (srv || []).map(function(s) { return s.id; });
+    var toRun = EM_CATALOG.map(function(e) { return e.id; }).filter(function(id) { return srvIds.indexOf(id) !== -1; });
+    if (!toRun.length) { showToast('No EM scenarios loaded on server yet. Reload the server with the latest scenarios.', 'err'); return; }
+    var dispatched = 0, failed = 0;
+    var next = function(i) {
+      if (i >= toRun.length) {
+        showToast('EM Sweep queued: ' + dispatched + ' layer' + (dispatched === 1 ? '' : 's') + (failed ? ', ' + failed + ' failed' : '') + '.', dispatched ? 'ok' : 'err');
+        if (dispatched) { setTimeout(function() { showTab('runs'); }, 600); }
+        return;
+      }
+      apicall('/api/scenarios/' + encodeURIComponent(toRun[i]) + '/run', {
+        method: 'POST', body: JSON.stringify({ agentId: agentId, mode: 'posture' })
+      }).then(function() { dispatched++; next(i + 1); })
+        .catch(function() { failed++; next(i + 1); });
+    };
+    next(0);
+  }).catch(function(e) { showToast('Failed to fetch scenarios: ' + e.message, 'err'); });
 }
 
 </script>
