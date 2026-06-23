@@ -62,7 +62,7 @@
   --font-mono:    'JetBrains Mono', 'DM Mono', ui-monospace, Consolas, monospace;
 }
 
-html, body { height: 100%; overflow-x: hidden; }
+html, body { height: 100%; }
 body {
   font-family: var(--font-ui);
   background: var(--bg);
@@ -224,7 +224,7 @@ body {
 .btn-sm { padding: 0.28rem 0.65rem; font-size: 0.78rem; }
 
 /* ── App shell ─────────────────────────────────────────────── */
-#app { display: none; height: 100vh; overflow: hidden; width: 100%; }
+#app { display: none; min-height: 100vh; width: 100%; }
 
 /* ── Sidebar ───────────────────────────────────────────────── */
 #sidebar {
@@ -292,14 +292,14 @@ body {
 /* ── Main wrapper ──────────────────────────────────────────── */
 .main-wrapper {
   margin-left: var(--sidebar-w);
-  flex: 1;
   min-width: 0;
-  height: 100vh;
-  display: flex; flex-direction: column; overflow: hidden;
+  min-height: 100vh;
+  display: flex; flex-direction: column;
 }
 
 /* ── Header ────────────────────────────────────────────────── */
 header {
+  position: sticky; top: 0; z-index: 40;
   height: var(--header-h);
   background: linear-gradient(90deg, rgba(15,26,46,0.97) 0%, rgba(12,20,36,0.97) 100%);
   border-bottom: 1px solid var(--border);
@@ -333,7 +333,7 @@ header {
 }
 
 /* ── Main content ──────────────────────────────────────────── */
-main { flex: 1; min-height: 0; overflow-y: auto; padding: 1.5rem; }
+main { flex: 1; padding: 1.5rem; }
 main::-webkit-scrollbar { width: 5px; }
 main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
@@ -2839,7 +2839,20 @@ function showTab(name) {
   if (name === 'remediation') loadRemediations();
   if (name === 'reports') loadReports();
   if (name === 'attackpath') loadAttackPath();
-  if (name === 'dashboard') loadDashboard();
+  if (name === 'dashboard') {
+    loadDashboard();
+    // Start a periodic campaign-status poll so the "Live campaigns" tiles
+    // stay current without the user manually refreshing.
+    clearInterval(_dashCampPoll);
+    _dashCampPoll = setInterval(function() {
+      var dash = document.getElementById('tab-dashboard');
+      if (dash && dash.style.display !== 'none') {
+        refreshDashboardCampaigns();
+      } else {
+        clearInterval(_dashCampPoll);
+      }
+    }, 15000);
+  }
   if (name === 'compliance') initComplianceTab();
   if (name === 'settings') {
     if (ROLE === 'admin') {
@@ -6235,7 +6248,7 @@ function connectWS() {
       var msg = JSON.parse(evt.data);
       if (msg.type === 'run_event')       { window.onRunEvent(msg); return; }
       if (msg.type === 'agentUpdate')     loadAgents();
-      if (msg.type === 'scenario_result') { loadRuns(); loadAgents(); }
+      if (msg.type === 'scenario_result') { loadRuns(); loadAgents(); refreshDashboardCampaigns(); }
       if (msg.type === 'tamper_alert')    { showTamperBanner(msg.data); }
     } catch(e) {}
   };
@@ -6779,39 +6792,46 @@ function loadDashboard() {
       }
     }).catch(function() {});
 
-    // Recent campaigns
-    apicall('/api/campaigns').then(function(cs) {
-      // KPI — Active campaigns (running now).
-      var running = (cs || []).filter(function(c) { return c.summary && c.summary.status === 'running'; }).length;
-      var cvEl = document.getElementById('kpi-campaigns-val');
-      if (cvEl) {
-        cvEl.textContent = running;
-        document.getElementById('kpi-campaigns-sub').textContent = running ? 'running now' : 'none running';
-        // Update both dots: blink+accent when active, solid red when idle
-        var kpiDot = document.getElementById('kpi-campaigns-dot');
-        var panelDot = document.getElementById('dash-campaigns-dot');
-        if (running) {
-          [kpiDot, panelDot].forEach(function(d) { if (d) { d.className = 'dot-live'; d.style.background = ''; d.style.boxShadow = ''; d.style.animation = ''; } });
-        } else {
-          [kpiDot, panelDot].forEach(function(d) { if (d) { d.className = ''; d.style.cssText = 'display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--danger);vertical-align:middle;flex-shrink:0;'; } });
-        }
-      }
-      var el = document.getElementById('dash-campaigns');
-      if (!el) return;
-      var liveList = (cs || []).filter(function(c) { return c.summary && c.summary.status === 'running'; });
-      if (!liveList.length) { el.innerHTML = '<div class="empty" style="padding:1.5rem">No campaigns running.</div>'; return; }
-      el.innerHTML = liveList.map(function(c) {
-        var s = c.summary || {};
-        return '<div class="lrow" style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
-          '<div class="lic" style="color:var(--accent);background:rgba(47,129,247,0.1)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>' +
-          '<div class="lmain"><div class="lt">' + x(c.name) + ' <span class="sbadge s-' + x(s.status || 'running') + '">' + x(s.status || '—') + '</span></div>' +
-            '<div class="ls">' + x(c.scenarioName || '') + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents</div>' +
-            '<div class="prog"><i style="width:' + (s.progress || 0) + '%"></i></div></div>' +
-          '<div class="lr"><div style="font-family:var(--font-display);font-size:1rem;font-weight:700">' + (s.progress || 0) + '%</div></div></div>';
-      }).join('');
-    }).catch(function() {});
+    refreshDashboardCampaigns();
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
+}
+
+// refreshDashboardCampaigns — standalone fn so it can be called from the WS
+// handler and the periodic poll without running the full dashboard reload.
+var _dashCampPoll = null;
+function refreshDashboardCampaigns() {
+  apicall('/api/campaigns').then(function(cs) {
+    // KPI tile — Active campaigns (running now).
+    var running = (cs || []).filter(function(c) { return c.summary && c.summary.status === 'running'; }).length;
+    var cvEl = document.getElementById('kpi-campaigns-val');
+    if (cvEl) {
+      cvEl.textContent = running;
+      document.getElementById('kpi-campaigns-sub').textContent = running ? 'running now' : 'none running';
+      // Update both dots: blink+accent when active, solid grey when idle
+      var kpiDot = document.getElementById('kpi-campaigns-dot');
+      var panelDot = document.getElementById('dash-campaigns-dot');
+      if (running) {
+        [kpiDot, panelDot].forEach(function(d) { if (d) { d.className = 'dot-live'; d.removeAttribute('style'); } });
+      } else {
+        [kpiDot, panelDot].forEach(function(d) { if (d) { d.className = ''; d.style.cssText = 'display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);vertical-align:middle;flex-shrink:0;'; } });
+      }
+    }
+    // Live campaigns panel.
+    var el = document.getElementById('dash-campaigns');
+    if (!el) return;
+    var liveList = (cs || []).filter(function(c) { return c.summary && c.summary.status === 'running'; });
+    if (!liveList.length) { el.innerHTML = '<div class="empty" style="padding:1.5rem">No campaigns running.</div>'; return; }
+    el.innerHTML = liveList.map(function(c) {
+      var s = c.summary || {};
+      return '<div class="lrow" style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
+        '<div class="lic" style="color:var(--accent);background:rgba(47,129,247,0.1)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>' +
+        '<div class="lmain"><div class="lt">' + x(c.name) + ' <span class="sbadge s-' + x(s.status || 'running') + '">' + x(s.status || '—') + '</span></div>' +
+          '<div class="ls">' + x(c.scenarioName || '') + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents</div>' +
+          '<div class="prog"><i style="width:' + (s.progress || 0) + '%"></i></div></div>' +
+        '<div class="lr"><div style="font-family:var(--font-display);font-size:1rem;font-weight:700">' + (s.progress || 0) + '%</div></div></div>';
+    }).join('');
+  }).catch(function() {});
 }
 
 function openChangePassword() {
