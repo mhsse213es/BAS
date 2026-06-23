@@ -66,6 +66,8 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		Framework:      framework,
 		Events:         result.Events,
 		CleanupVerdict: result.CleanupVerdict,
+		RequestedPriv:  result.RequestedPriv,
+		ExecutedAs:     result.ExecutedAs,
 	}
 }
 

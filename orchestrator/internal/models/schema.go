@@ -50,6 +50,12 @@ type SimulationResult struct {
 	DetectionAlert   *DetectionAlert  `json:"detectionAlert,omitempty"`    // matched EDR/AV alert when DetectionVerdict=detected
 	CleanupVerdict   string           `json:"cleanupVerdict,omitempty"`    // reverted | partial | leaked (populated from agent cleanup exit code)
 	BlockingControl  *BlockingControl `json:"blockingControl,omitempty"`   // specific control that prevented the technique (populated when DetectionVerdict=prevented)
+	// RequestedPriv mirrors the step's requires_priv YAML field. Empty ("") means
+	// the step was unannotated (legacy — runs in agent's own context).
+	RequestedPriv string `json:"requestedPriv,omitempty"`
+	// ExecutedAs records the actual privilege tier used: "user" | "user→admin" |
+	// "admin" | "system" | "" (empty = legacy unannotated step).
+	ExecutedAs string `json:"executedAs,omitempty"`
 }
 
 // DetectionAlert is the alert record that matched this technique during the

@@ -176,6 +176,8 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return "#6e7681"
 	},
+	// contains reports whether substr appears in s (used for privilege fallback detection).
+	"contains": func(s, substr string) bool { return strings.Contains(s, substr) },
 	// pctFrac formats a 0..1 fraction as a whole-percent string (e.g. 0.72→"72%").
 	"pctFrac": func(f float64) string { return fmt.Sprintf("%.0f%%", f*100) },
 	// pctOf returns the integer percentage of numerator/denominator (0 when denom=0).
@@ -582,6 +584,16 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <tr><td>Environmental Errors</td><td style="color:#d29922"><strong>{{.reliability.errored}}</strong></td>
       <td>Skipped</td><td style="color:#6e7681"><strong>{{.reliability.skipped}}</strong></td></tr>
   <tr><td>Result Confidence</td><td colspan="3"><strong style="color:{{if eq .reliability.confidence "High"}}#0d9488{{else if eq .reliability.confidence "Medium"}}#d29922{{else}}#da3633{{end}}">{{.reliability.confidence}}</strong></td></tr>
+</table>
+
+<h3>Execution Context (Privilege)</h3>
+<p style="color:#6e7681;margin-bottom:8px">Per-step privilege context from multi-context execution. <strong>Legacy</strong> steps ran in the agent's default context (requires_priv not yet annotated). <strong>User→Admin</strong> indicates a requested user-context step that fell back to admin because no interactive session was available.</p>
+<table>
+  <tr><td>User (interactive)</td><td><strong>{{.privilegeSummary.user}}</strong></td>
+      <td>Admin (elevated)</td><td><strong>{{.privilegeSummary.admin}}</strong></td></tr>
+  <tr><td>System (NT AUTHORITY)</td><td><strong>{{.privilegeSummary.system}}</strong></td>
+      <td>Legacy (unannotated)</td><td style="color:#6e7681"><strong>{{.privilegeSummary.legacy}}</strong></td></tr>
+  {{if .privilegeSummary.fallbacks}}<tr><td colspan="2" style="color:#d29922">WTS Fallbacks (User→Admin)</td><td colspan="2" style="color:#d29922"><strong>{{.privilegeSummary.fallbacks}}</strong></td></tr>{{end}}
 </table>
 
 <div class="footer">
@@ -1045,7 +1057,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{if .techniqueMatrix}}
 <table>
   <thead><tr>
-    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th><th>Cleanup</th><th>Blocking Control</th>
+    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Requested Priv</th><th>Executed As</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th><th>Cleanup</th><th>Blocking Control</th>
   </tr></thead>
   <tbody>
   {{range .techniqueMatrix}}
@@ -1054,6 +1066,8 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td style="font-size:0.8rem;color:#6e7681">{{humanize .tactic}}</td>
     <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
     <td><span style="font-size:0.78rem;font-weight:600;color:{{execVerdictColor .execVerdict}}">{{upper .execVerdict}}</span></td>
+    <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">{{.requestedPriv}}</td>
+    <td style="font-size:0.78rem;white-space:nowrap;{{if contains .executedAs "→"}}color:#d29922;font-weight:600{{else if eq .executedAs "Legacy"}}color:#6e7681{{else}}color:#9aa9bc{{end}}">{{.executedAs}}</td>
     <td>
       {{if .detectionVerdict}}
       <span style="font-size:0.78rem;font-weight:700;color:{{detVerdictColor .detectionVerdict}}">{{detVerdictLabel .detectionVerdict}}</span>

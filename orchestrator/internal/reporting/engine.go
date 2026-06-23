@@ -94,6 +94,18 @@ type FullReport struct {
 	// Populated by Build (latest run's name), BuildFromRun, and BuildFromCampaign.
 	// Used by handlers to construct descriptive download filenames.
 	ScenarioName string `json:"scenarioName,omitempty"`
+	// PrivilegeSummary counts steps by execution context across the TechniqueMatrix.
+	// Populated alongside TechniqueMatrix so the summary page can show privilege coverage.
+	PrivilegeSummary PrivilegeSummary `json:"privilegeSummary"`
+}
+
+// PrivilegeSummary is the per-tier step count for the privilege execution context table.
+type PrivilegeSummary struct {
+	User      int `json:"user"`
+	Admin     int `json:"admin"`
+	System    int `json:"system"`
+	Legacy    int `json:"legacy"`    // unannotated steps (requires_priv not set)
+	Fallbacks int `json:"fallbacks"` // steps that requested "user" but fell back to admin (executedAs contains "→")
 }
 
 // ReportScope describes a fleet-wide (campaign) report's subject.
@@ -151,6 +163,12 @@ type TechniqueRow struct {
 	CleanupVerdict   string `json:"cleanupVerdict,omitempty"` // reverted|partial|leaked
 	ControlName      string `json:"controlName,omitempty"`    // specific control that blocked (Defender ASR, AppLocker, WDAC)
 	ControlRuleID    string `json:"controlRuleId,omitempty"`  // ASR GUID or AppLocker policy name
+	// RequestedPriv is the privilege tier declared in the scenario YAML.
+	// "Legacy" when the step was unannotated (Phase 2 not yet applied to this scenario).
+	RequestedPriv string `json:"requestedPriv"`
+	// ExecutedAs is the actual privilege tier used at runtime.
+	// "Legacy" when the step was unannotated. "User→Admin" flags a WTS fallback.
+	ExecutedAs string `json:"executedAs"`
 }
 
 // CoverageBreakdown is the 3-bucket summary of all technique-level verdicts
@@ -394,6 +412,20 @@ func buildKillChain(results []models.SimulationResult, dets []DetectionTechnique
 	return out
 }
 
+// privLabel normalises a raw ExecutedAs/RequestedPriv value to a report-friendly
+// label. Empty (unannotated legacy step) becomes "Legacy"; the value is otherwise
+// title-cased so "user→admin" stays readable and "admin" becomes "Admin".
+func privLabel(raw string) string {
+	if raw == "" {
+		return "Legacy"
+	}
+	// Title-case the first word; preserve the "→" fallback arrow as-is.
+	if len(raw) == 0 {
+		return raw
+	}
+	return strings.ToUpper(raw[:1]) + raw[1:]
+}
+
 // buildTechniqueMatrix combines each step's execution verdict with its post-run
 // EDR/alert detection verdict into a single flat row for the Detection Validation
 // table. DetectionVerdict in results (written by SubmitRunDetections) is preferred;
@@ -413,6 +445,8 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 			ExecVerdict:    string(r.Result),
 			DurationMs:     r.DurationMs,
 			CleanupVerdict: r.CleanupVerdict,
+			RequestedPriv:  privLabel(r.RequestedPriv),
+			ExecutedAs:     privLabel(r.ExecutedAs),
 		}
 		if r.BlockingControl != nil {
 			row.ControlName   = r.BlockingControl.Name
@@ -437,6 +471,29 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// buildPrivilegeSummary counts steps by execution context from a TechniqueMatrix.
+func buildPrivilegeSummary(matrix []TechniqueRow) PrivilegeSummary {
+	var ps PrivilegeSummary
+	for _, r := range matrix {
+		switch r.ExecutedAs {
+		case "Legacy":
+			ps.Legacy++
+		case "System":
+			ps.System++
+		case "Admin":
+			ps.Admin++
+		default:
+			if strings.Contains(r.ExecutedAs, "→") {
+				ps.Fallbacks++
+				ps.Admin++ // fell back to admin
+			} else {
+				ps.User++
+			}
+		}
+	}
+	return ps
 }
 
 // killChainAction renders a concise adversary-action label for a kill-chain node.
@@ -770,6 +827,7 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	// because the latest-run query omits detection_summary; we use exec verdict only).
 	report.TechniqueMatrix = buildTechniqueMatrix(latestResults, nil)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
+	report.PrivilegeSummary = buildPrivilegeSummary(report.TechniqueMatrix)
 	for _, r := range report.TechniqueMatrix {
 		if r.CleanupVerdict == "partial" || r.CleanupVerdict == "leaked" {
 			report.CleanupFailed = true
@@ -986,6 +1044,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	report.KillChain = buildKillChain(results, report.DetectionTechniques)
 	report.TechniqueMatrix = buildTechniqueMatrix(results, report.DetectionTechniques)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
+	report.PrivilegeSummary = buildPrivilegeSummary(report.TechniqueMatrix)
 	for _, r := range report.TechniqueMatrix {
 		if r.CleanupVerdict == "partial" || r.CleanupVerdict == "leaked" {
 			report.CleanupFailed = true
@@ -1148,6 +1207,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 	report.AttackPath = buildAttackPath(allResults)
 	report.TechniqueMatrix = buildTechniqueMatrix(allResults, nil)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
+	report.PrivilegeSummary = buildPrivilegeSummary(report.TechniqueMatrix)
 	for _, r := range report.TechniqueMatrix {
 		if r.CleanupVerdict == "partial" || r.CleanupVerdict == "leaked" {
 			report.CleanupFailed = true
