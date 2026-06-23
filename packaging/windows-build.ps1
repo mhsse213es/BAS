@@ -392,7 +392,7 @@ if ($LASTEXITCODE -ne 0) {
                 "$patchCtx\Dockerfile",
                 "FROM $OrchestratorTag`nCOPY BINARIES.sha256.sig /agents/BINARIES.sha256.sig`n"
             )
-            docker build -t $OrchestratorTag $patchCtx 2>$null | Out-Null
+            docker build -q -t $OrchestratorTag $patchCtx | Out-Null
             if ($LASTEXITCODE -ne 0) { Warn "  Patch build failed - sig must be volume-mounted at deploy time." }
             else { Log "  BINARIES.sha256.sig baked into $OrchestratorTag." }
             Remove-Item -Recurse -Force $patchCtx -ErrorAction SilentlyContinue
