@@ -34,8 +34,20 @@ var expectedWWWRootHash = ""
 // below provides equivalent tamper detection at the cost of serving from
 // disk. A future refactor can move to full embedding by restructuring the
 // cmd/server/ directory.
+// resolveWWWRoot returns the wwwroot directory path, walking up from the CWD
+// so the server works whether launched from orchestrator/ or cmd/server/.
+func resolveWWWRoot() string {
+	candidates := []string{"./wwwroot", "../../wwwroot", "../wwwroot"}
+	for _, c := range candidates {
+		if info, err := os.Stat(filepath.Join(c, "index.html")); err == nil && !info.IsDir() {
+			return c
+		}
+	}
+	return "./wwwroot" // fall back; will 404 with a clear message
+}
+
 func StaticHandler() http.Handler {
-	wwwrootDir := "./wwwroot"
+	wwwrootDir := resolveWWWRoot()
 
 	// Verify index.html hash if a reference hash is compiled in.
 	if expectedWWWRootHash != "" {
