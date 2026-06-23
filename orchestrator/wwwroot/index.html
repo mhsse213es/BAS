@@ -292,6 +292,7 @@ body {
 /* ── Main wrapper ──────────────────────────────────────────── */
 .main-wrapper {
   margin-left: var(--sidebar-w);
+  flex: 1;
   min-width: 0;
   min-height: 100vh;
   display: flex; flex-direction: column;
@@ -299,7 +300,7 @@ body {
 
 /* ── Header ────────────────────────────────────────────────── */
 header {
-  position: sticky; top: 0; z-index: 40;
+  position: sticky; top: 0; z-index: 100;
   height: var(--header-h);
   background: linear-gradient(90deg, rgba(15,26,46,0.97) 0%, rgba(12,20,36,0.97) 100%);
   border-bottom: 1px solid var(--border);
