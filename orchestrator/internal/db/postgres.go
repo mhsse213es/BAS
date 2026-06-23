@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -491,6 +492,26 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		 ('T1033','Local Groups','Local group memberships',
 		  'Get-LocalGroup | ForEach-Object {$g=$_.Name; Get-LocalGroupMember $g -ErrorAction SilentlyContinue | Select-Object @{n="Group";e={$g}},Name,ObjectClass}','recon','SAFE','discovery')
 		 ON CONFLICT (technique_id,name) DO UPDATE SET tactic = EXCLUDED.tactic`,
+
+		// Compliance score snapshots — one row per (agent, framework), upserted
+		// after every run so the dashboard can read scores in O(1) without
+		// recomputing across the full run history on each page load.
+		`CREATE TABLE IF NOT EXISTS compliance_snapshots (
+			agent_id          TEXT         NOT NULL,
+			framework_id      TEXT         NOT NULL,
+			snapshot_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+			run_count         INT          NOT NULL DEFAULT 0,
+			compliance_pct    NUMERIC(5,2) NOT NULL DEFAULT 0,
+			coverage_pct      NUMERIC(5,2) NOT NULL DEFAULT 0,
+			total_controls    INT          NOT NULL DEFAULT 0,
+			testable_controls INT          NOT NULL DEFAULT 0,
+			tested_controls   INT          NOT NULL DEFAULT 0,
+			passing_controls  INT          NOT NULL DEFAULT 0,
+			failing_controls  INT          NOT NULL DEFAULT 0,
+			manual_controls   INT          NOT NULL DEFAULT 0,
+			PRIMARY KEY (agent_id, framework_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS compliance_snapshots_agent ON compliance_snapshots (agent_id)`,
 	}
 
 	for _, s := range stmts {
@@ -499,4 +520,116 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 	}
 	return nil
+}
+
+// ── Compliance snapshots ──────────────────────────────────────────────────────
+
+// ComplianceSnapshot is the persisted compliance score for one (agent, framework) pair.
+type ComplianceSnapshot struct {
+	AgentID          string    `json:"agentId"`
+	FrameworkID      string    `json:"frameworkId"`
+	SnapshotAt       time.Time `json:"snapshotAt"`
+	RunCount         int       `json:"runCount"`
+	CompliancePct    float64   `json:"compliancePct"`
+	CoveragePct      float64   `json:"coveragePct"`
+	TotalControls    int       `json:"totalControls"`
+	TestableControls int       `json:"testableControls"`
+	TestedControls   int       `json:"testedControls"`
+	PassingControls  int       `json:"passingControls"`
+	FailingControls  int       `json:"failingControls"`
+	ManualControls   int       `json:"manualControls"`
+}
+
+// UpsertComplianceSnapshot writes (or overwrites) the compliance score snapshot
+// for the given (agent, framework) pair. Called asynchronously after every run.
+func UpsertComplianceSnapshot(ctx context.Context, pool *pgxpool.Pool, s ComplianceSnapshot) error {
+	_, err := pool.Exec(ctx, `
+		INSERT INTO compliance_snapshots
+		  (agent_id, framework_id, snapshot_at, run_count,
+		   compliance_pct, coverage_pct,
+		   total_controls, testable_controls, tested_controls,
+		   passing_controls, failing_controls, manual_controls)
+		VALUES ($1,$2,NOW(),$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		ON CONFLICT (agent_id, framework_id) DO UPDATE SET
+		  snapshot_at       = EXCLUDED.snapshot_at,
+		  run_count         = EXCLUDED.run_count,
+		  compliance_pct    = EXCLUDED.compliance_pct,
+		  coverage_pct      = EXCLUDED.coverage_pct,
+		  total_controls    = EXCLUDED.total_controls,
+		  testable_controls = EXCLUDED.testable_controls,
+		  tested_controls   = EXCLUDED.tested_controls,
+		  passing_controls  = EXCLUDED.passing_controls,
+		  failing_controls  = EXCLUDED.failing_controls,
+		  manual_controls   = EXCLUDED.manual_controls`,
+		s.AgentID, s.FrameworkID, s.RunCount,
+		s.CompliancePct, s.CoveragePct,
+		s.TotalControls, s.TestableControls, s.TestedControls,
+		s.PassingControls, s.FailingControls, s.ManualControls)
+	return err
+}
+
+// GetComplianceScores returns the latest snapshot for every framework for a
+// given agent, ordered by framework_id.
+func GetComplianceScores(ctx context.Context, pool *pgxpool.Pool, agentID string) ([]ComplianceSnapshot, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT agent_id, framework_id, snapshot_at, run_count,
+		       compliance_pct, coverage_pct,
+		       total_controls, testable_controls, tested_controls,
+		       passing_controls, failing_controls, manual_controls
+		FROM compliance_snapshots
+		WHERE agent_id = $1
+		ORDER BY framework_id`, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ComplianceSnapshot
+	for rows.Next() {
+		var s ComplianceSnapshot
+		if err := rows.Scan(&s.AgentID, &s.FrameworkID, &s.SnapshotAt, &s.RunCount,
+			&s.CompliancePct, &s.CoveragePct,
+			&s.TotalControls, &s.TestableControls, &s.TestedControls,
+			&s.PassingControls, &s.FailingControls, &s.ManualControls); err != nil {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+// GetFleetComplianceScores returns the worst-case (minimum) compliance percentage
+// per framework aggregated across all agents — the fleet-wide CISO view.
+func GetFleetComplianceScores(ctx context.Context, pool *pgxpool.Pool) ([]ComplianceSnapshot, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT framework_id,
+		       MIN(snapshot_at)        AS snapshot_at,
+		       SUM(run_count)          AS run_count,
+		       MIN(compliance_pct)     AS compliance_pct,
+		       MIN(coverage_pct)       AS coverage_pct,
+		       MAX(total_controls)     AS total_controls,
+		       MAX(testable_controls)  AS testable_controls,
+		       SUM(tested_controls)    AS tested_controls,
+		       SUM(passing_controls)   AS passing_controls,
+		       SUM(failing_controls)   AS failing_controls,
+		       MAX(manual_controls)    AS manual_controls
+		FROM compliance_snapshots
+		GROUP BY framework_id
+		ORDER BY framework_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ComplianceSnapshot
+	for rows.Next() {
+		var s ComplianceSnapshot
+		s.AgentID = "*"
+		if err := rows.Scan(&s.FrameworkID, &s.SnapshotAt, &s.RunCount,
+			&s.CompliancePct, &s.CoveragePct,
+			&s.TotalControls, &s.TestableControls, &s.TestedControls,
+			&s.PassingControls, &s.FailingControls, &s.ManualControls); err != nil {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out, nil
 }

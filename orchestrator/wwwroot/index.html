@@ -1265,6 +1265,15 @@ body.theme-slate {
           </div>
         </div>
 
+        <!-- Regulatory Compliance score tiles — one per framework, refreshed after each run -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
+          <span style="font-size:0.72rem;font-weight:600;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase">Regulatory Compliance</span>
+          <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" onclick="showTab('compliance')">View details →</a>
+        </div>
+        <div class="kpi-row" id="compliance-tiles" style="flex-wrap:wrap">
+          <div style="color:var(--muted);font-size:0.78rem;padding:0.4rem 0">Loading compliance scores…</div>
+        </div>
+
         <div class="dash-grid" style="grid-template-columns:1.3fr 1fr;margin-bottom:1.25rem">
           <div class="dash-panel">
             <div class="dash-panel-hdr">Posture Score</div>
@@ -7052,8 +7061,79 @@ function loadDashboard() {
 
     loadRansomwareReadiness(runs);
     refreshDashboardCampaigns();
+    loadComplianceScores();
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
+}
+
+// ── Compliance score tiles ─────────────────────────────────────────────────
+// Renders one tile per compliance framework. Scores come from the
+// /api/compliance/scores endpoint which reads compliance_snapshots (O(1)).
+// Called fleet-wide (no agentId) so the dashboard shows the worst-case posture
+// across all enrolled agents — the view a CISO cares about.
+function loadComplianceScores(agentId) {
+  var url = '/api/compliance/scores' + (agentId ? '?agentId=' + encodeURIComponent(agentId) : '');
+  apicall(url).then(function(scores) {
+    var el = document.getElementById('compliance-tiles');
+    if (!el) return;
+    if (!scores || !scores.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:0.78rem;padding:0.4rem 0">No compliance data yet — run a scenario to generate scores.</div>';
+      return;
+    }
+    el.innerHTML = scores.map(complianceTile).join('');
+  }).catch(function() {});
+}
+
+function complianceTile(fw) {
+  var pct     = fw.compliancePct  || 0;
+  var cov     = fw.coveragePct    || 0;
+  var tested  = fw.testedControls || 0;
+  var passing = fw.passingControls || 0;
+  var failing = fw.failingControls || 0;
+  var untested = fw.untestedControls != null ? fw.untestedControls : (fw.testableControls - tested);
+  var hasData  = tested > 0;
+
+  var scoreColor  = !hasData ? 'var(--muted)'
+                  : pct >= 75 ? 'var(--success)'
+                  : pct >= 50 ? 'var(--warning)'
+                  : 'var(--danger)';
+  var borderColor = !hasData ? 'var(--border)'
+                  : pct >= 75 ? 'var(--success)'
+                  : pct >= 50 ? 'var(--warning)'
+                  : 'var(--danger)';
+  var covColor    = cov >= 80 ? 'var(--teal)' : cov >= 50 ? 'var(--warning)' : 'var(--danger)';
+
+  var scoreStr = hasData ? Math.round(pct) + '%' : '—';
+  var subLine  = hasData
+    ? passing + ' pass &middot; ' + failing + ' fail &middot; ' + untested + ' untested'
+    : 'No runs yet';
+
+  var covBar = hasData
+    ? '<div style="margin-top:0.5rem">' +
+        '<div style="background:var(--border);border-radius:2px;height:3px;overflow:hidden">' +
+          '<div style="height:3px;width:' + Math.round(cov) + '%;background:' + covColor +
+               ';border-radius:2px;transition:width 0.4s ease"></div>' +
+        '</div>' +
+        '<div style="font-size:0.63rem;color:var(--muted);margin-top:0.2rem">' + Math.round(cov) + '% coverage</div>' +
+      '</div>'
+    : '';
+
+  return '<div class="kpi-card stat-tile" ' +
+    'style="border-left:3px solid ' + borderColor + ';cursor:pointer;min-width:155px;max-width:220px" ' +
+    'onclick="showTab(\'compliance\')" title="' + x(fw.frameworkName) + '">' +
+    '<div class="stat-top">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div class="kpi-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + x(fw.shortName) + '</div>' +
+        '<div class="kpi-value" style="font-size:1.6rem;line-height:1.1;color:' + scoreColor + '">' + scoreStr + '</div>' +
+      '</div>' +
+      '<div style="font-size:0.62rem;text-align:right;color:var(--muted);line-height:1.5;flex-shrink:0;margin-left:0.5rem">' +
+        '<div style="font-weight:600">' + x(fw.regulator) + '</div>' +
+        (hasData ? '<div>' + fw.totalControls + ' controls</div>' : '') +
+      '</div>' +
+    '</div>' +
+    covBar +
+    '<div class="kpi-sub" style="font-size:0.66rem;margin-top:0.3rem;line-height:1.4">' + subLine + '</div>' +
+    '</div>';
 }
 
 // refreshDashboardCampaigns — standalone fn so it can be called from the WS

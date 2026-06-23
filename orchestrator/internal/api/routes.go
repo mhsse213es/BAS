@@ -179,6 +179,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Compliance — Viewer+ role
 		r.Get("/api/compliance/frameworks", h.ListComplianceFrameworks)
 		r.Get("/api/compliance/report", h.GetComplianceReport)
+		r.Get("/api/compliance/scores", h.GetComplianceDashboardScores)
 
 		// Admin only — config + user management + connector
 		r.Group(func(r chi.Router) {

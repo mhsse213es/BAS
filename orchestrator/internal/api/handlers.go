@@ -22,6 +22,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
+	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting"
@@ -1364,6 +1365,11 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 
 	// Auto-populate variant_findings for any ALLOWED results in variant runs.
 	h.upsertVariantFindingsForRun(r.Context(), raw.RunID, raw.ScenarioID, simResults)
+
+	// Refresh compliance snapshots for this agent asynchronously — no-op when
+	// compliance mapper is not loaded. Uses a fresh context because the HTTP
+	// request context will be cancelled by the time the goroutine runs.
+	go h.refreshComplianceSnapshots(context.Background(), raw.AgentID)
 
 	// Notify connected dashboards in real time
 	h.hub.BroadcastBrowsers(models.WSMessage{
@@ -3039,23 +3045,14 @@ func (h *Handler) GetFullReportHTML(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// complianceRows builds the per-framework compliance summary rows for an agent's
-// latest completed/partial run — shared by the HTML report and the PDF (so the
-// PDF, rendered from that HTML, carries the same compliance section).
+// complianceRows builds the per-framework compliance summary rows by aggregating
+// ALL of an agent's completed/partial runs. This gives accurate framework scores
+// because no single scenario exercises every control in a framework.
 func (h *Handler) complianceRows(ctx context.Context, agentID string, filter string) []reporting.ComplianceSummaryRow {
 	if h.complianceMapper == nil {
 		return nil
 	}
-	var resultsRaw []byte
-	h.db.QueryRow(ctx,
-		`SELECT results FROM scenario_runs
-		  WHERE agent_id = $1 AND status IN ('completed','partial')
-		  ORDER BY started_at DESC LIMIT 1`, agentID,
-	).Scan(&resultsRaw)
-	var results []models.SimulationResult
-	if len(resultsRaw) > 0 {
-		json.Unmarshal(resultsRaw, &results)
-	}
+	results := h.aggregateAgentResults(ctx, agentID)
 	results = reporting.FilterResults(results, filter)
 	var rows []reporting.ComplianceSummaryRow
 	for _, fw := range h.complianceMapper.Frameworks() {
@@ -3076,6 +3073,150 @@ func (h *Handler) complianceRows(ctx context.Context, agentID string, filter str
 		})
 	}
 	return rows
+}
+
+// aggregateAgentResults unions all completed/partial run results for an agent,
+// deduplicating by result ID so retried/reconciled runs don't double-count.
+func (h *Handler) aggregateAgentResults(ctx context.Context, agentID string) []models.SimulationResult {
+	rows, err := h.db.Query(ctx,
+		`SELECT results FROM scenario_runs
+		  WHERE agent_id = $1 AND status IN ('completed','partial')
+		    AND results IS NOT NULL`, agentID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	seen := make(map[string]bool)
+	var all []models.SimulationResult
+	for rows.Next() {
+		var b []byte
+		rows.Scan(&b)
+		var batch []models.SimulationResult
+		json.Unmarshal(b, &batch)
+		for _, r := range batch {
+			if r.ID != "" && seen[r.ID] {
+				continue
+			}
+			if r.ID != "" {
+				seen[r.ID] = true
+			}
+			all = append(all, r)
+		}
+	}
+	return all
+}
+
+// refreshComplianceSnapshots recomputes compliance scores for all frameworks
+// from the agent's full run history and persists them to compliance_snapshots.
+// Called as a goroutine after every run completion; no-op when mapper is nil.
+func (h *Handler) refreshComplianceSnapshots(ctx context.Context, agentID string) {
+	if h.complianceMapper == nil || h.db == nil {
+		return
+	}
+	results := h.aggregateAgentResults(ctx, agentID)
+
+	var runCount int
+	h.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM scenario_runs
+		  WHERE agent_id = $1 AND status IN ('completed','partial')`, agentID,
+	).Scan(&runCount)
+
+	for _, fw := range h.complianceMapper.Frameworks() {
+		cr, err := h.complianceMapper.GenerateReport(results, fw.ID, agentID, "", "")
+		if err != nil {
+			continue
+		}
+		s := cr.Summary
+		db.UpsertComplianceSnapshot(ctx, h.db, db.ComplianceSnapshot{
+			AgentID:          agentID,
+			FrameworkID:      fw.ID,
+			RunCount:         runCount,
+			CompliancePct:    s.CompliancePercent,
+			CoveragePct:      s.CoveragePercent,
+			TotalControls:    s.TotalControls,
+			TestableControls: s.TestableControls,
+			TestedControls:   s.TestedControls,
+			PassingControls:  s.PassingControls,
+			FailingControls:  s.FailingControls,
+			ManualControls:   s.ManualControls,
+		})
+	}
+}
+
+// GET /api/compliance/scores[?agentId=X]
+// Returns compliance scores for all frameworks for one agent (agentId provided)
+// or fleet-wide worst-case per framework (no agentId — CISO dashboard view).
+// Scores come from compliance_snapshots — O(1) read, no recomputation.
+// Falls back to zero-state entries when no runs have completed yet, so the
+// dashboard can always render all 6 framework tiles.
+func (h *Handler) GetComplianceDashboardScores(w http.ResponseWriter, r *http.Request) {
+	if h.complianceMapper == nil {
+		jsonError(w, "compliance mapper not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	agentID := r.URL.Query().Get("agentId")
+
+	// Build framework metadata lookup for name enrichment.
+	type fwInfo struct{ name, shortName, regulator string }
+	fwMeta := make(map[string]fwInfo)
+	for _, fw := range h.complianceMapper.Frameworks() {
+		fwMeta[fw.ID] = fwInfo{fw.Name, complianceShortName(fw.ID), fw.Regulator}
+	}
+
+	type scoreResp struct {
+		db.ComplianceSnapshot
+		FrameworkName    string `json:"frameworkName"`
+		ShortName        string `json:"shortName"`
+		Regulator        string `json:"regulator"`
+		UntestedControls int    `json:"untestedControls"`
+	}
+
+	var snaps []db.ComplianceSnapshot
+	var err error
+	if agentID != "" {
+		snaps, err = db.GetComplianceScores(r.Context(), h.db, agentID)
+	} else {
+		snaps, err = db.GetFleetComplianceScores(r.Context(), h.db)
+	}
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Index existing snaps by framework ID.
+	snapIdx := make(map[string]db.ComplianceSnapshot, len(snaps))
+	for _, s := range snaps {
+		snapIdx[s.FrameworkID] = s
+	}
+
+	// Always return an entry for every known framework (zero state when no runs).
+	out := make([]scoreResp, 0, len(fwMeta))
+	for _, fw := range h.complianceMapper.Frameworks() {
+		s := snapIdx[fw.ID]
+		s.FrameworkID = fw.ID
+		meta := fwMeta[fw.ID]
+		out = append(out, scoreResp{
+			ComplianceSnapshot: s,
+			FrameworkName:      meta.name,
+			ShortName:          meta.shortName,
+			Regulator:          meta.regulator,
+			UntestedControls:   s.TestableControls - s.TestedControls,
+		})
+	}
+	respond(w, out)
+}
+
+// complianceShortName returns the dashboard display label for a framework ID.
+func complianceShortName(id string) string {
+	switch id {
+	case "SEBI_CSCRF":     return "SEBI CSCRF"
+	case "RBI_CSF":        return "RBI CSF"
+	case "CERT_IN":        return "CERT-In"
+	case "IRDAI_CSF":      return "IRDAI"
+	case "ISO_27001_2022": return "ISO 27001"
+	case "NIST_CSF_2":     return "NIST CSF"
+	}
+	return id
 }
 
 // sanitizeFilename keeps only filename-safe characters, capped at 32 chars.
