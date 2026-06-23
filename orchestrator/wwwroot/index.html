@@ -62,7 +62,7 @@
   --font-mono:    'JetBrains Mono', 'DM Mono', ui-monospace, Consolas, monospace;
 }
 
-html, body { height: 100%; }
+html, body { height: 100%; overflow-x: hidden; }
 body {
   font-family: var(--font-ui);
   background: var(--bg);
@@ -224,7 +224,7 @@ body {
 .btn-sm { padding: 0.28rem 0.65rem; font-size: 0.78rem; }
 
 /* ── App shell ─────────────────────────────────────────────── */
-#app { display: none; height: 100vh; overflow: hidden; }
+#app { display: none; height: 100vh; overflow: hidden; width: 100%; }
 
 /* ── Sidebar ───────────────────────────────────────────────── */
 #sidebar {
@@ -292,7 +292,8 @@ body {
 /* ── Main wrapper ──────────────────────────────────────────── */
 .main-wrapper {
   margin-left: var(--sidebar-w);
-  width: calc(100vw - var(--sidebar-w));
+  flex: 1;
+  min-width: 0;
   height: 100vh;
   display: flex; flex-direction: column; overflow: hidden;
 }
@@ -878,6 +879,122 @@ code {
 .wz-rev-row span:first-child { color:var(--muted); }
 .wz-rev-row span:last-child { color:var(--text); font-weight:500; text-align:right; }
 .wz-rev-warn { margin-top:0.7rem; padding:0.6rem 0.75rem; border-radius:var(--radius); font-size:0.78rem; line-height:1.45; border:1px solid var(--warning-border); background:var(--warning-dim); color:var(--warning); }
+
+/* ── Theme Definitions ─────────────────────────── */
+body.theme-light {
+  --bg:        #f3f6fa;
+  --surface:   #ffffff;
+  --elevated:  #f8fafc;
+  --border:    #e2e8f0;
+  --border-hi: #cbd5e1;
+
+  --accent:        #3b82f6;
+  --accent-dim:    rgba(59,130,246,0.08);
+  --accent-glow:   rgba(59,130,246,0.15);
+  --accent-border: rgba(59,130,246,0.25);
+
+  --text:      #0f172a;
+  --text-dim:  #334155;
+  --muted:     #64748b;
+  --muted-hi:  #475569;
+}
+body.theme-light {
+  background-image:
+    radial-gradient(ellipse 900px 600px at 20% -10%, rgba(59,130,246,0.05) 0%, transparent 70%),
+    radial-gradient(ellipse 600px 400px at 80% 110%, rgba(34,211,166,0.03) 0%, transparent 70%);
+}
+
+body.theme-cyberpunk {
+  --bg:        #0c0614;
+  --surface:   #140b24;
+  --elevated:  #1d1133;
+  --border:    #351b54;
+  --border-hi: #55278c;
+
+  --accent:        #ff007f;
+  --accent-dim:    rgba(255,0,127,0.12);
+  --accent-glow:   rgba(255,0,127,0.25);
+  --accent-border: rgba(255,0,127,0.4);
+
+  --success:       #00f0ff;
+  --success-dim:   rgba(0,240,255,0.12);
+  --success-glow:  rgba(0,240,255,0.30);
+  --teal:          #00f0ff;
+  --teal-soft:     rgba(0,240,255,0.12);
+
+  --text:      #f5e6ff;
+  --text-dim:  #d8b4f8;
+  --muted:     #8f70b0;
+  --muted-hi:  #aa8cc9;
+}
+body.theme-cyberpunk {
+  background-image:
+    radial-gradient(ellipse 900px 600px at 20% -10%, rgba(255,0,127,0.08) 0%, transparent 70%),
+    radial-gradient(ellipse 600px 400px at 80% 110%, rgba(0,240,255,0.06) 0%, transparent 70%);
+}
+
+body.theme-slate {
+  --bg:        #0f1115;
+  --surface:   #181a1f;
+  --elevated:  #21242c;
+  --border:    #2d313b;
+  --border-hi: #3f4553;
+
+  --accent:        #10b981;
+  --accent-dim:    rgba(16,185,129,0.12);
+  --accent-glow:   rgba(16,185,129,0.25);
+  --accent-border: rgba(16,185,129,0.35);
+
+  --text:      #e2e8f0;
+  --text-dim:  #cbd5e1;
+  --muted:     #64748b;
+  --muted-hi:  #94a3b8;
+}
+body.theme-slate {
+  background-image:
+    radial-gradient(ellipse 900px 600px at 20% -10%, rgba(16,185,129,0.07) 0%, transparent 70%),
+    radial-gradient(ellipse 600px 400px at 80% 110%, rgba(100,116,139,0.04) 0%, transparent 70%);
+}
+
+/* ── Theme Cards ───────────────────────────────────────────── */
+.theme-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.theme-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.theme-card.active {
+  border-color: var(--accent);
+  background: var(--elevated);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.theme-preview {
+  height: 90px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.6rem;
+  transition: all 0.2s ease;
+}
+.theme-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-dim);
+}
+.theme-card.active .theme-name {
+  color: var(--accent);
+}
 </style>
 </head>
 <body>
@@ -1399,6 +1516,7 @@ code {
             <a class="sset" data-set="intel" onclick="showSettingsSection('intel')">Threat intel</a>
             <a class="sset" data-set="art" onclick="showSettingsSection('art')">ART content</a>
             <a class="sset" data-set="audit" onclick="showSettingsSection('audit')">Audit logs</a>
+            <a class="sset" data-set="theme" onclick="showSettingsSection('theme')">Theme &amp; display</a>
           </div>
           <div class="settings-body">
 
@@ -1608,6 +1726,63 @@ code {
               <span id="audit-range-label" style="font-size:0.78rem;color:var(--muted)"></span>
               <button class="btn btn-outline btn-sm" id="audit-prev-btn" onclick="auditPage(-1)" disabled>&#8249; Prev</button>
               <button class="btn btn-outline btn-sm" id="audit-next-btn" onclick="auditPage(1)" disabled>Next &#8250;</button>
+            </div>
+          </div>
+
+          <!-- Theme Preferences -->
+          <div id="set-theme" class="set-section" style="display:none">
+            <div class="sec-hdr">
+              <h2>Theme &amp; Display Preferences</h2>
+            </div>
+            <div style="color:var(--muted);font-size:0.8rem;margin-bottom:1.5rem">Select your preferred user interface theme. Settings will be saved locally in your browser.</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:1rem">
+              <!-- Audspect Dark -->
+              <div class="theme-card active" onclick="selectTheme('dark')" id="theme-card-dark">
+                <div class="theme-preview" style="background:#080d18;border-color:#1e2f47">
+                  <div style="background:#0f1a2e;height:24px;border-bottom:1px solid #1e2f47;display:flex;align-items:center;padding:0 8px"><div style="background:#4f8ef7;width:12px;height:12px;border-radius:3px"></div></div>
+                  <div style="padding:8px;display:flex;flex-direction:column;gap:4px">
+                    <div style="background:#162135;height:10px;border-radius:2px;width:70%"></div>
+                    <div style="background:#1e2f47;height:8px;border-radius:2px;width:90%"></div>
+                  </div>
+                </div>
+                <div class="theme-name">Audspect Dark</div>
+              </div>
+              
+              <!-- Audspect Light -->
+              <div class="theme-card" onclick="selectTheme('light')" id="theme-card-light">
+                <div class="theme-preview" style="background:#f3f6fa;border-color:#e2e8f0">
+                  <div style="background:#ffffff;height:24px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;padding:0 8px"><div style="background:#3b82f6;width:12px;height:12px;border-radius:3px"></div></div>
+                  <div style="padding:8px;display:flex;flex-direction:column;gap:4px">
+                    <div style="background:#f8fafc;height:10px;border-radius:2px;width:70%"></div>
+                    <div style="background:#cbd5e1;height:8px;border-radius:2px;width:90%"></div>
+                  </div>
+                </div>
+                <div class="theme-name">Audspect Light</div>
+              </div>
+
+              <!-- Cyberpunk Neon -->
+              <div class="theme-card" onclick="selectTheme('cyberpunk')" id="theme-card-cyberpunk">
+                <div class="theme-preview" style="background:#0c0614;border-color:#351b54">
+                  <div style="background:#140b24;height:24px;border-bottom:1px solid #351b54;display:flex;align-items:center;padding:0 8px"><div style="background:#ff007f;width:12px;height:12px;border-radius:3px"></div></div>
+                  <div style="padding:8px;display:flex;flex-direction:column;gap:4px">
+                    <div style="background:#1d1133;height:10px;border-radius:2px;width:70%"></div>
+                    <div style="background:#351b54;height:8px;border-radius:2px;width:90%"></div>
+                  </div>
+                </div>
+                <div class="theme-name">Cyberpunk Neon</div>
+              </div>
+
+              <!-- Slate Minimal -->
+              <div class="theme-card" onclick="selectTheme('slate')" id="theme-card-slate">
+                <div class="theme-preview" style="background:#0f1115;border-color:#2d313b">
+                  <div style="background:#181a1f;height:24px;border-bottom:1px solid #2d313b;display:flex;align-items:center;padding:0 8px"><div style="background:#10b981;width:12px;height:12px;border-radius:3px"></div></div>
+                  <div style="padding:8px;display:flex;flex-direction:column;gap:4px">
+                    <div style="background:#21242c;height:10px;border-radius:2px;width:70%"></div>
+                    <div style="background:#2d313b;height:8px;border-radius:2px;width:90%"></div>
+                  </div>
+                </div>
+                <div class="theme-name">Slate Minimal</div>
+              </div>
             </div>
           </div>
 
@@ -2528,6 +2703,10 @@ code {
 <div id="toast"></div>
 
 <script>
+(function() {
+  var t = localStorage.getItem('audspect_theme') || 'dark';
+  if (t !== 'dark') document.body.classList.add('theme-' + t);
+})();
 var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', users:'Users', compliance:'Compliance', settings:'Settings' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
@@ -2597,9 +2776,23 @@ function bootApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('role-badge').textContent = ROLE;
+  document.getElementById('nav-settings').style.display = '';
   if (ROLE === 'admin') {
-    document.getElementById('nav-settings').style.display = '';
+    document.querySelectorAll('.settings-nav a').forEach(function(el) {
+      if (el.getAttribute('data-set') !== 'theme') el.style.display = '';
+    });
+    document.getElementById('sim-cov-card').style.display = '';
+  } else {
+    document.querySelectorAll('.settings-nav a').forEach(function(el) {
+      if (el.getAttribute('data-set') !== 'theme') el.style.display = 'none';
+    });
+    document.getElementById('sim-cov-card').style.display = 'none';
+    document.getElementById('sim-cov-detail').style.display = 'none';
+    if (SETTINGS_SECTION !== 'theme') {
+      SETTINGS_SECTION = 'theme';
+    }
   }
+  selectTheme(localStorage.getItem('audspect_theme') || 'dark');
   // Scenario authoring is Analyst+Admin only — hide builder entry points for viewers.
   if (ROLE !== 'admin' && ROLE !== 'analyst') {
     var nb = document.getElementById('sc-new-btn');     if (nb) nb.style.display = 'none';
@@ -2648,7 +2841,15 @@ function showTab(name) {
   if (name === 'attackpath') loadAttackPath();
   if (name === 'dashboard') loadDashboard();
   if (name === 'compliance') initComplianceTab();
-  if (name === 'settings' && ROLE === 'admin') { showSettingsSection(SETTINGS_SECTION); loadSimCoverage(); if (SETTINGS_SECTION === 'audit') loadAuditLogs(); }
+  if (name === 'settings') {
+    if (ROLE === 'admin') {
+      showSettingsSection(SETTINGS_SECTION);
+      loadSimCoverage();
+      if (SETTINGS_SECTION === 'audit') loadAuditLogs();
+    } else {
+      showSettingsSection('theme');
+    }
+  }
 }
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
@@ -2834,7 +3035,7 @@ var SETTINGS_SECTION = 'users';
 // Settings sub-section switcher — toggles the body panels + lazily loads each.
 function showSettingsSection(name) {
   SETTINGS_SECTION = name;
-  ['users', 'engine', 'intel', 'art', 'audit'].forEach(function(s) {
+  ['users', 'engine', 'intel', 'art', 'audit', 'theme'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
     if (el) el.style.display = s === name ? '' : 'none';
     var nav = document.querySelector('[data-set="' + s + '"]');
@@ -2845,6 +3046,17 @@ function showSettingsSection(name) {
   else if (name === 'intel') loadConnectorStatus();
   else if (name === 'art') loadARTContentStatus();
   else if (name === 'audit') loadAuditLogs();
+}
+
+function selectTheme(themeName) {
+  document.body.classList.remove('theme-light', 'theme-cyberpunk', 'theme-slate');
+  if (themeName !== 'dark') {
+    document.body.classList.add('theme-' + themeName);
+  }
+  localStorage.setItem('audspect_theme', themeName);
+  document.querySelectorAll('.theme-card').forEach(function(c) {
+    c.classList.toggle('active', c.id === 'theme-card-' + themeName);
+  });
 }
 
 function apicall(path, opts) {
