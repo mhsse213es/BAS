@@ -337,13 +337,13 @@ Pop-Location
 Log "Extracting BINARIES.sha256 from Docker image..."
 $BinManifestPath = Join-Path $OutDir "BINARIES.sha256"
 # distroless has no shell/cat - use docker create+cp which works at filesystem level.
-$tmpCID = docker create $OrchestratorTag 2>&1
+$tmpCID = docker create $OrchestratorTag 2>$null
 if ($LASTEXITCODE -ne 0) {
     Warn "  docker create failed - cannot extract manifest. Agent integrity checks disabled."
 } else {
-    docker cp "${tmpCID}:/agents/BINARIES.sha256" $BinManifestPath 2>&1 | Out-Null
+    docker cp "${tmpCID}:/agents/BINARIES.sha256" $BinManifestPath 2>$null | Out-Null
     $cpExit = $LASTEXITCODE
-    docker rm $tmpCID 2>&1 | Out-Null
+    docker rm $tmpCID 2>$null | Out-Null
     if ($cpExit -ne 0 -or -not (Test-Path $BinManifestPath) -or (Get-Item $BinManifestPath).Length -eq 0) {
         Warn "  Could not extract BINARIES.sha256 from image - agent integrity checks disabled."
     } else {
@@ -392,7 +392,7 @@ if ($LASTEXITCODE -ne 0) {
                 "$patchCtx\Dockerfile",
                 "FROM $OrchestratorTag`nCOPY BINARIES.sha256.sig /agents/BINARIES.sha256.sig`n"
             )
-            docker build -t $OrchestratorTag $patchCtx 2>&1 | Out-Null
+            docker build -t $OrchestratorTag $patchCtx 2>$null | Out-Null
             if ($LASTEXITCODE -ne 0) { Warn "  Patch build failed - sig must be volume-mounted at deploy time." }
             else { Log "  BINARIES.sha256.sig baked into $OrchestratorTag." }
             Remove-Item -Recurse -Force $patchCtx -ErrorAction SilentlyContinue
