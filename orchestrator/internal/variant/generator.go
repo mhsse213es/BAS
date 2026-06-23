@@ -12,6 +12,11 @@ import (
 	"unicode/utf16"
 )
 
+// GeneratorVersion is stamped on every Template and variant_run row so that
+// results from different engine versions can be distinguished in the coverage view.
+// Increment when new encodings, contexts, or evasions are added.
+const GeneratorVersion = "2"
+
 // defaultEvasions are the Phase 1 evasion wrappers — safe for all environments
 // including regulated BFSI. They test timing and process-tree controls without
 // any active memory manipulation.
@@ -57,19 +62,20 @@ func Generate(techniqueID, baseType, baseID, baseScript, executor string, includ
 				}
 				tid := TemplateID(techniqueID, baseID, enc, ctx, ev)
 				out = append(out, Template{
-					ID:          tid,
-					TechniqueID: techniqueID,
-					BaseType:    baseType,
-					BaseID:      baseID,
-					Encoding:    enc,
-					ExecContext: ctx,
-					Evasion:     ev,
-					Platform:    "windows",
-					Executor:    agentExecutor,
-					Command:     cmd,
-					RiskLevel:   assignRiskLevel(enc, ev),
-					VariantHash: variantHash(tid),
-					CreatedAt:   now,
+					ID:               tid,
+					TechniqueID:      techniqueID,
+					BaseType:         baseType,
+					BaseID:           baseID,
+					Encoding:         enc,
+					ExecContext:      ctx,
+					Evasion:          ev,
+					Platform:         "windows",
+					Executor:         agentExecutor,
+					Command:          cmd,
+					RiskLevel:        assignRiskLevel(enc, ev),
+					VariantHash:      variantHash(tid),
+					GeneratorVersion: GeneratorVersion,
+					CreatedAt:        now,
 				})
 			}
 		}

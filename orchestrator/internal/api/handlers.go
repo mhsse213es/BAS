@@ -1362,6 +1362,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	// if any, is folded in by the detection-ingest hook). Idempotent.
 	h.upsertFindingsForRun(r.Context(), raw.RunID)
 
+	// Auto-populate variant_findings for any ALLOWED results in variant runs.
+	h.upsertVariantFindingsForRun(r.Context(), raw.RunID, raw.ScenarioID, simResults)
+
 	// Notify connected dashboards in real time
 	h.hub.BroadcastBrowsers(models.WSMessage{
 		Type:    models.MsgScenarioResult,

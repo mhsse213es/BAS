@@ -66,6 +66,7 @@ func (h *Handler) GenerateVariants(w http.ResponseWriter, r *http.Request) {
 // POST /api/variants/run
 // Dispatch all generated variants for a technique to a connected agent.
 // Auto-loads payload families from DB when they exist.
+// executionMode: "sequential" (default) | "adaptive" (stop after first ALLOWED)
 func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AgentID         string `json:"agentId"`
@@ -75,6 +76,7 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 		Command         string `json:"command"`
 		Executor        string `json:"executor"`
 		IncludeAdvanced bool   `json:"includeAdvanced"`
+		ExecutionMode   string `json:"executionMode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid JSON", http.StatusBadRequest)
@@ -97,8 +99,9 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mode := coalesce(req.ExecutionMode, variant.ExecutionSequential)
 	runID, vrID, err := h.dispatchVariantRun(ctx, req.AgentID, req.TechniqueID,
-		coalesce(req.BaseType, "art"), baseID, templates)
+		coalesce(req.BaseType, "art"), baseID, mode, templates)
 	if err != nil {
 		log.Printf("[variant] dispatch failed for %s on %s: %v", req.TechniqueID, req.AgentID, err)
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -110,6 +113,7 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 		"variantRunId":  vrID,
 		"totalVariants": len(templates),
 		"advanced":      req.IncludeAdvanced,
+		"mode":          mode,
 	}, "ok")
 
 	jsonOK(w, map[string]any{
@@ -129,10 +133,12 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 	var completedAt *time.Time
 	err := h.db.QueryRow(ctx,
 		`SELECT id, agent_id, technique_id, base_type, base_id, scenario_run_id,
-		        total_variants, status, created_at, completed_at
+		        total_variants, status, execution_mode, generator_version,
+		        created_at, completed_at
 		   FROM variant_runs WHERE id = $1`, vrID,
 	).Scan(&vr.ID, &vr.AgentID, &vr.TechniqueID, &vr.BaseType, &vr.BaseID,
-		&vr.ScenarioRunID, &vr.TotalVariants, &vr.Status, &vr.CreatedAt, &completedAt)
+		&vr.ScenarioRunID, &vr.TotalVariants, &vr.Status, &vr.ExecutionMode,
+		&vr.GeneratorVersion, &vr.CreatedAt, &completedAt)
 	if err != nil {
 		jsonError(w, "variant run not found", http.StatusNotFound)
 		return
@@ -274,8 +280,16 @@ func (h *Handler) GetVariantCoverage(w http.ResponseWriter, r *http.Request) {
 		var simResults []models.SimulationResult
 		json.Unmarshal(resultsRaw, &simResults)
 
+		// Look up ATT&CK tactic from payload_families for this technique.
+		var tactic string
+		h.db.QueryRow(ctx,
+			`SELECT COALESCE(MAX(tactic),'') FROM payload_families WHERE technique_id = $1`,
+			rr.techniqueID,
+		).Scan(&tactic)
+
 		row := variant.CoverageRow{
 			TechniqueID: rr.techniqueID,
+			Tactic:      tactic,
 			BaseType:    rr.baseType,
 			BaseID:      rr.baseID,
 			TotalTested: len(simResults),
@@ -512,12 +526,13 @@ func (h *Handler) resolveBaseCommand(techniqueID, baseID, cmdOverride, execOverr
 // dispatchVariantRun creates DB records and dispatches via the WebSocket pipeline.
 func (h *Handler) dispatchVariantRun(
 	ctx context.Context,
-	agentID, techniqueID, baseType, baseID string,
+	agentID, techniqueID, baseType, baseID, executionMode string,
 	templates []variant.Template,
 ) (scenarioRunID, variantRunID string, err error) {
 
 	syntheticScenarioID := "__variant__" + strings.ToLower(techniqueID)
 	runName := "Variant: " + techniqueID + " (" + baseID + ")"
+	genVersion := variant.GeneratorVersion
 
 	err = h.db.QueryRow(ctx,
 		`INSERT INTO scenario_runs
@@ -532,10 +547,12 @@ func (h *Handler) dispatchVariantRun(
 
 	err = h.db.QueryRow(ctx,
 		`INSERT INTO variant_runs
-			(agent_id, technique_id, base_type, base_id, scenario_run_id, total_variants, status)
-		 VALUES ($1, $2, $3, $4, $5, $6, 'running')
+			(agent_id, technique_id, base_type, base_id, scenario_run_id, total_variants,
+			 status, execution_mode, generator_version)
+		 VALUES ($1, $2, $3, $4, $5, $6, 'running', $7, $8)
 		 RETURNING id`,
 		agentID, techniqueID, baseType, baseID, scenarioRunID, len(templates),
+		executionMode, genVersion,
 	).Scan(&variantRunID)
 	if err != nil {
 		return "", "", fmt.Errorf("create variant_run: %w", err)
@@ -615,4 +632,113 @@ func coalesce(s, fallback string) string {
 func jsonOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+// upsertVariantFindingsForRun is called after SubmitScenarioResult saves results
+// for a variant run (scenario_id starting with "__variant__"). It inserts a row
+// into variant_findings for each ALLOWED (bypassed) result so the coverage view
+// shows which specific combinations defeated the endpoint controls.
+//
+// Also implements adaptive mode: when the variant_run has execution_mode='adaptive'
+// and at least one ALLOWED result arrives, the variant_run is marked completed.
+func (h *Handler) upsertVariantFindingsForRun(ctx context.Context, scenarioRunID, scenarioID string, results []models.SimulationResult) {
+	if !strings.HasPrefix(scenarioID, "__variant__") {
+		return
+	}
+
+	// Look up the variant_run linked to this scenario_run.
+	var vrID, techniqueID, executionMode string
+	if err := h.db.QueryRow(ctx,
+		`SELECT id, technique_id, execution_mode FROM variant_runs WHERE scenario_run_id = $1`,
+		scenarioRunID,
+	).Scan(&vrID, &techniqueID, &executionMode); err != nil {
+		log.Printf("[variant] upsertFindings: no variant_run for scenario_run %s: %v", scenarioRunID, err)
+		return
+	}
+
+	allowedCount := 0
+	for _, res := range results {
+		if res.Result != models.ResultFail {
+			continue
+		}
+		allowedCount++
+		taskID := res.ID // SimulationResult.ID is the task_id set at dispatch time
+
+		// Look up the step dimensions by task_id.
+		var enc, execCtx, evasion, riskLevel string
+		if err := h.db.QueryRow(ctx,
+			`SELECT encoding, exec_context, evasion, risk_level
+			   FROM variant_run_steps
+			  WHERE variant_run_id = $1 AND task_id = $2`,
+			vrID, taskID,
+		).Scan(&enc, &execCtx, &evasion, &riskLevel); err != nil {
+			log.Printf("[variant] step not found for task %s: %v", taskID, err)
+			continue
+		}
+
+		gap := variantGapSummary(techniqueID, enc, execCtx, evasion)
+		rec := variantRecommendation(enc, execCtx, evasion)
+
+		if _, err := h.db.Exec(ctx,
+			`INSERT INTO variant_findings
+				(variant_run_id, task_id, technique_id, encoding, exec_context, evasion,
+				 risk_level, gap_summary, recommendation)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			 ON CONFLICT DO NOTHING`,
+			vrID, taskID, techniqueID, enc, execCtx, evasion, riskLevel, gap, rec,
+		); err != nil {
+			log.Printf("[variant] insert finding for task %s: %v", taskID, err)
+		}
+	}
+
+	// Adaptive mode: close the variant_run as soon as we see the first bypass.
+	if executionMode == variant.ExecutionAdaptive && allowedCount > 0 {
+		h.db.Exec(ctx,
+			`UPDATE variant_runs SET status='completed', completed_at=NOW() WHERE id=$1 AND status='running'`,
+			vrID)
+		log.Printf("[variant] adaptive: first bypass found, closing variant_run %s", vrID)
+	}
+}
+
+// variantGapSummary returns a one-sentence human-readable description of the bypass
+// combination, suitable for the variant_findings.gap_summary column.
+func variantGapSummary(techniqueID, enc, execCtx, evasion string) string {
+	return fmt.Sprintf(
+		"%s executed — %s encoding via %s context with %s evasion bypassed endpoint controls",
+		techniqueID, enc, execCtx, evasion,
+	)
+}
+
+// variantRecommendation returns a short remediation hint for the most actionable
+// dimension of the bypass (encoding > exec_context > evasion, in priority order).
+func variantRecommendation(enc, execCtx, evasion string) string {
+	// Evasion-level recommendations (highest specificity).
+	switch evasion {
+	case variant.EvasionAMSIPatch:
+		return "Enable AMSI audit logging; block PowerShell reflection on amsiInitFailed via ASR rule 'Block execution of potentially obfuscated scripts' (GUID 5BEB7EFE)."
+	case variant.EvasionParentShift:
+		return "Add EDR parent-child rule: alert when powershell.exe spawns from cmd.exe or wmic.exe. Enable 'Audit Process Creation' (Event 4688) with command-line capture."
+	}
+
+	// Encoding-level recommendations.
+	switch enc {
+	case variant.EncBase64:
+		return "Enable PowerShell ScriptBlock logging (Event 4104). Consider ASR rule: Block execution of potentially obfuscated scripts (GUID 5BEB7EFE)."
+	case variant.EncGzipB64:
+		return "Enable AMSI inspection for in-memory decompression. Deploy PowerShell Constrained Language Mode to restrict arbitrary iex."
+	case variant.EncCharCode:
+		return "Deploy PowerShell ScriptBlock logging (Event 4104). Char-array iex invocations appear in script block logs even when obfuscated at the command level."
+	}
+
+	// Exec-context-level recommendations (plain encoding).
+	switch execCtx {
+	case variant.CtxWMI:
+		return "Enable WMI activity auditing (Event 5857–5861). Block wmic.exe via AppLocker or WDAC if WMI process creation is not operationally required."
+	case variant.CtxSchedTask:
+		return "Enable Task Scheduler audit logging. Alert on schtasks.exe creating tasks with /sc once — a common BAS and malware indicator."
+	case variant.CtxCmdPowershell:
+		return "Add EDR alert for cmd.exe spawning powershell.exe with -Command flag. Enable PowerShell Module Logging to capture parameters."
+	default:
+		return "Enable PowerShell Module logging, ScriptBlock logging (Event 4104), and Execution Policy enforcement."
+	}
 }

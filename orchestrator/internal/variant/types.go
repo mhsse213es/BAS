@@ -61,24 +61,39 @@ const (
 	ExecutionAdaptive   ExecutionMode = "adaptive"   // stop early on first ALLOWED (Phase 4)
 )
 
+// ── Simulation Source ─────────────────────────────────────────────────────────
+
+// SimulationSource classifies the origin of a base technique payload.
+// Stored as base_type on variant_runs. Extend this list as new sources are added
+// without breaking existing records.
+const (
+	SourceART             = "art"             // Atomic Red Team
+	SourceCaldera         = "caldera"         // MITRE Caldera ability
+	SourceCustom          = "custom"          // operator-supplied script
+	SourceEndpointMastery = "endpoint_mastery" // built-in Audspect EM scenarios
+	SourceCVE             = "cve"             // CVE-specific PoC payload
+	SourceFamily          = "family"          // payload_families DB entry
+)
+
 // ── Core Types ────────────────────────────────────────────────────────────────
 
 // Template is one fully-transformed version of a base technique step, ready to
 // be dispatched to an agent as a ScenarioStep.
 type Template struct {
-	ID          string    `json:"id"`
-	TechniqueID string    `json:"techniqueId"`
-	BaseType    string    `json:"baseType"`    // "art" | "caldera" | "custom"
-	BaseID      string    `json:"baseId"`      // ART test name / family name / ability_id
-	Encoding    string    `json:"encoding"`
-	ExecContext string    `json:"execContext"`
-	Evasion     string    `json:"evasion"`
-	Platform    string    `json:"platform"`
-	Executor    string    `json:"executor"`    // executor field for ScenarioStep ("powershell"|"cmd")
-	Command     string    `json:"command"`     // fully transformed command sent to agent
-	RiskLevel   RiskLevel `json:"riskLevel"`   // SAFE | MODERATE | ADVANCED
-	VariantHash string    `json:"variantHash"` // sha256[:16] of technique+enc+ctx+evasion+baseID
-	CreatedAt   time.Time `json:"createdAt"`
+	ID               string    `json:"id"`
+	TechniqueID      string    `json:"techniqueId"`
+	BaseType         string    `json:"baseType"`         // see SimulationSource constants
+	BaseID           string    `json:"baseId"`           // ART test name / family name / ability_id
+	Encoding         string    `json:"encoding"`
+	ExecContext      string    `json:"execContext"`
+	Evasion          string    `json:"evasion"`
+	Platform         string    `json:"platform"`
+	Executor         string    `json:"executor"`         // "powershell" | "cmd"
+	Command          string    `json:"command"`          // fully transformed command sent to agent
+	RiskLevel        RiskLevel `json:"riskLevel"`        // SAFE | MODERATE | ADVANCED
+	VariantHash      string    `json:"variantHash"`      // sha256[:16] of TemplateID
+	GeneratorVersion string    `json:"generatorVersion"` // generator version stamp
+	CreatedAt        time.Time `json:"createdAt"`
 }
 
 // PayloadFamily is one named payload script body for a given technique.
@@ -100,16 +115,18 @@ type PayloadFamily struct {
 
 // Run is the server-side record of a dispatched variant execution set.
 type Run struct {
-	ID            string     `json:"id"`
-	AgentID       string     `json:"agentId"`
-	TechniqueID   string     `json:"techniqueId"`
-	BaseType      string     `json:"baseType"`
-	BaseID        string     `json:"baseId"`
-	ScenarioRunID string     `json:"scenarioRunId"`
-	TotalVariants int        `json:"totalVariants"`
-	Status        string     `json:"status"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	CompletedAt   *time.Time `json:"completedAt,omitempty"`
+	ID               string     `json:"id"`
+	AgentID          string     `json:"agentId"`
+	TechniqueID      string     `json:"techniqueId"`
+	BaseType         string     `json:"baseType"`
+	BaseID           string     `json:"baseId"`
+	ScenarioRunID    string     `json:"scenarioRunId"`
+	TotalVariants    int        `json:"totalVariants"`
+	Status           string     `json:"status"`
+	ExecutionMode    string     `json:"executionMode"`    // sequential | parallel | adaptive
+	GeneratorVersion string     `json:"generatorVersion"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	CompletedAt      *time.Time `json:"completedAt,omitempty"`
 }
 
 // StepRecord maps a dispatched step's TaskID to its variant dimensions.
