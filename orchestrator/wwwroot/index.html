@@ -1100,6 +1100,13 @@ body.theme-slate {
           </svg>
           Coverage
         </div>
+        <div class="nav-item" data-tab="variants" onclick="showTab('variants')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/>
+            <rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/>
+          </svg>
+          Variants
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Visibility</div>
@@ -2317,6 +2324,69 @@ body.theme-slate {
           </div>
         </div>
       </div>
+
+      <!-- ── Variant Executor ──────────────────────────────────────────── -->
+      <div id="tab-variants" style="display:none">
+        <div class="sec-hdr">
+          <h2>Variant Executor</h2>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <button class="btn btn-outline btn-sm" onclick="loadVariantTab()">&#x21bb; Refresh</button>
+          </div>
+        </div>
+
+        <!-- Stats row -->
+        <div id="vex-stats" class="score-grid" style="margin-bottom:1rem"></div>
+
+        <!-- Run form + result side-by-side -->
+        <div style="display:grid;grid-template-columns:280px 1fr;gap:1rem;margin-bottom:1rem;align-items:start">
+          <!-- Run form -->
+          <div class="card" style="padding:1rem">
+            <div class="card-title" style="margin-bottom:0.75rem">Run Variants</div>
+            <div style="display:flex;flex-direction:column;gap:0.6rem">
+              <div>
+                <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Agent</label>
+                <select id="vex-agent" class="btn btn-outline" style="width:100%;text-align:left"></select>
+              </div>
+              <div>
+                <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Technique</label>
+                <select id="vex-technique" class="btn btn-outline" style="width:100%;text-align:left"></select>
+              </div>
+              <div>
+                <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Mode</label>
+                <select id="vex-mode" class="btn btn-outline" style="width:100%;text-align:left">
+                  <option value="sequential">Sequential (all variants)</option>
+                  <option value="adaptive">Adaptive (stop on first bypass)</option>
+                </select>
+              </div>
+              <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.82rem;color:var(--muted);margin-top:0.2rem">
+                <input type="checkbox" id="vex-advanced" style="accent-color:var(--accent)">
+                Include Advanced Pack (AMSI bypass)
+              </label>
+              <button id="vex-run-btn" class="btn btn-primary" style="width:100%;margin-top:0.25rem" onclick="runVariants()">Run</button>
+            </div>
+          </div>
+
+          <!-- Result panel -->
+          <div id="vex-result-panel">
+            <div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="width:32px;height:32px;margin:0 auto 0.75rem;display:block;opacity:0.35">
+                <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+              Select an agent and technique, then click <strong>Run</strong> to execute all encoding &times; context &times; evasion variants.
+            </div>
+          </div>
+        </div>
+
+        <!-- Coverage table -->
+        <div class="card">
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+            <span>Coverage</span>
+            <span class="tiny muted">Aggregate bypass results across all variant runs</span>
+          </div>
+          <div id="vex-coverage"><div class="empty" style="padding:1.5rem">Loading…</div></div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -2888,6 +2958,7 @@ function showTab(name) {
   if (name === 'remediation') loadRemediations();
   if (name === 'reports') loadReports();
   if (name === 'attackpath') loadAttackPath();
+  if (name === 'variants') loadVariantTab();
   if (name === 'dashboard') {
     loadDashboard();
     // Start a periodic campaign-status poll so the "Live campaigns" tiles
@@ -7877,6 +7948,203 @@ window.addEventListener('DOMContentLoaded', function() {
     })
     .catch(function() {}); // fail silently if not logged in yet
 });
+
+// ── Variant Executor ───────────────────────────────────────────────────────
+var _vexRunPoll = null;
+
+function loadVariantTab() {
+  loadVariantStats();
+  loadVariantCoverage();
+  populateVexAgents();
+  populateVexTechniques();
+}
+
+function loadVariantStats() {
+  apicall('/api/variants/stats').then(function(s) {
+    var el = document.getElementById('vex-stats');
+    if (!el) return;
+    el.innerHTML =
+      vexStatCard('Executed Variants', s.executedVariants, 'var(--accent)') +
+      vexStatCard('Available Variants', s.availableVariants, 'var(--text)') +
+      vexStatCard('Payload Families', s.payloadFamilyCount, 'var(--text)') +
+      vexStatCard('Techniques Covered', s.techniquesWithFamilies, 'var(--text)');
+  }).catch(function() {});
+}
+
+function vexStatCard(label, val, col) {
+  return '<div class="kpi-card"><div class="kpi-label">' + label + '</div>' +
+    '<div class="kpi-value" style="color:' + col + '">' + (val || 0) + '</div></div>';
+}
+
+function populateVexAgents() {
+  apicall('/api/agents').then(function(agents) {
+    var sel = document.getElementById('vex-agent');
+    if (!sel) return;
+    var online = (agents || []).filter(function(a) { return a.status !== 'offline'; });
+    sel.innerHTML = '<option value="">Select agent…</option>' +
+      online.map(function(a) {
+        return '<option value="' + x(a.id) + '">' + x(a.hostname || a.id) + '</option>';
+      }).join('');
+  }).catch(function() {});
+}
+
+function populateVexTechniques() {
+  apicall('/api/payload-families').then(function(families) {
+    var seen = {}, opts = [];
+    (families || []).forEach(function(f) {
+      if (!seen[f.techniqueId]) {
+        seen[f.techniqueId] = true;
+        opts.push('<option value="' + x(f.techniqueId) + '">' + x(f.techniqueId) + '</option>');
+      }
+    });
+    var sel = document.getElementById('vex-technique');
+    if (!sel) return;
+    sel.innerHTML = opts.length
+      ? '<option value="">Select technique…</option>' + opts.join('')
+      : '<option value="">No payload families loaded</option>';
+  }).catch(function() {});
+}
+
+function loadVariantCoverage() {
+  var el = document.getElementById('vex-coverage');
+  if (!el) return;
+  el.innerHTML = '<div class="empty" style="padding:1.5rem">Loading…</div>';
+  apicall('/api/variants/coverage').then(function(rows) {
+    if (!rows || !rows.length) {
+      el.innerHTML = '<div class="empty" style="padding:1.5rem">No variant runs yet. Run variants on a technique to see coverage here.</div>';
+      return;
+    }
+    var html = '<div class="tbl-wrap"><table><thead><tr>' +
+      '<th>Technique</th><th>Tactic</th><th>Total</th>' +
+      '<th style="color:var(--success)">Prevented</th>' +
+      '<th style="color:var(--danger)">Allowed</th>' +
+      '<th style="color:var(--muted)">Errors</th>' +
+      '<th>First Bypass</th>' +
+      '</tr></thead><tbody>';
+    rows.forEach(function(row) {
+      var fp = row.firstBypass
+        ? '<span style="font-family:var(--font-mono);color:var(--warning);font-size:0.74rem">' + x(row.firstBypass) + '</span>'
+        : '<span style="color:var(--success)">None</span>';
+      html += '<tr>' +
+        '<td><span class="badge badge-mono" style="font-family:var(--font-mono)">' + x(row.techniqueId) + '</span></td>' +
+        '<td style="color:var(--muted);font-size:0.8rem">' + x(row.tactic || '—') + '</td>' +
+        '<td style="text-align:center">' + (row.totalTested || 0) + '</td>' +
+        '<td style="text-align:center;color:var(--success);font-weight:600">' + (row.prevented || 0) + '</td>' +
+        '<td style="text-align:center;color:var(--danger);font-weight:600">' + (row.allowed || 0) + '</td>' +
+        '<td style="text-align:center;color:var(--muted)">' + (row.errored || 0) + '</td>' +
+        '<td>' + fp + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+  }).catch(function(e) {
+    el.innerHTML = '<div class="empty" style="color:var(--danger);padding:1rem">' + x(e.message || 'Error loading coverage') + '</div>';
+  });
+}
+
+function runVariants() {
+  var agentId = document.getElementById('vex-agent') ? document.getElementById('vex-agent').value : '';
+  var techniqueId = document.getElementById('vex-technique') ? document.getElementById('vex-technique').value : '';
+  var mode = document.getElementById('vex-mode') ? document.getElementById('vex-mode').value : 'sequential';
+  var advanced = document.getElementById('vex-advanced') ? document.getElementById('vex-advanced').checked : false;
+  if (!agentId || !techniqueId) {
+    showToast('Select an agent and technique first', 'err');
+    return;
+  }
+  var btn = document.getElementById('vex-run-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Dispatching…'; }
+  apicall('/api/variants/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId: agentId, techniqueId: techniqueId, executionMode: mode, includeAdvanced: advanced })
+  }).then(function(resp) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
+    showToast('Dispatched ' + (resp.totalVariants || 0) + ' variants', 'ok');
+    pollVariantRun(resp.variantRunId);
+  }).catch(function(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
+    showToast(e.message || 'Dispatch failed', 'err');
+  });
+}
+
+function pollVariantRun(vrId) {
+  clearInterval(_vexRunPoll);
+  var panel = document.getElementById('vex-result-panel');
+  if (panel) panel.innerHTML =
+    '<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">' +
+    '<div style="margin-bottom:0.5rem;font-size:0.9rem">Executing variants…</div>' +
+    '<div class="tiny" style="font-family:var(--font-mono)">' + x(vrId) + '</div></div>';
+  _vexRunPoll = setInterval(function() {
+    apicall('/api/variants/run/' + vrId).then(function(detail) {
+      renderVariantRun(detail);
+      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
+        clearInterval(_vexRunPoll);
+        loadVariantCoverage();
+        loadVariantStats();
+      }
+    }).catch(function() {});
+  }, 3000);
+}
+
+function renderVariantRun(detail) {
+  var run = detail.run || {};
+  var results = detail.results || [];
+  var summary = detail.summary || {};
+  var statusCol = run.status === 'completed' ? 'var(--success)' :
+                  run.status === 'failed' ? 'var(--danger)' : 'var(--warning)';
+
+  var html = '<div class="card">';
+  html += '<div class="card-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">';
+  html += '<span>Results — <span style="font-family:var(--font-mono)">' + x(run.techniqueId || '') + '</span></span>';
+  html += '<span class="badge" style="background:' + statusCol + '22;color:' + statusCol + ';border:1px solid ' + statusCol + '44">' + x(run.status || 'running') + '</span>';
+  html += '</div>';
+
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.75rem">';
+  html += vexMini('Total', summary.total, 'var(--text)');
+  html += vexMini('Prevented', summary.prevented, 'var(--success)');
+  html += vexMini('Allowed', summary.allowed, 'var(--danger)');
+  html += vexMini('Pending', summary.pending, 'var(--muted)');
+  html += '</div>';
+
+  if (summary.firstBypass) {
+    html += '<div style="background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.3);border-radius:6px;padding:0.55rem 0.8rem;margin-bottom:0.75rem;font-size:0.82rem">';
+    html += '<span style="color:var(--danger);font-weight:600">First bypass: </span>';
+    html += '<span style="font-family:var(--font-mono);color:var(--text)">' + x(summary.firstBypass) + '</span>';
+    if (summary.firstBypassRisk) {
+      html += ' <span class="badge" style="background:rgba(218,54,51,0.15);color:#f85149;font-size:0.68rem;border-color:transparent">' + x(summary.firstBypassRisk) + '</span>';
+    }
+    html += '</div>';
+  }
+
+  if (results.length > 0) {
+    html += '<div class="tbl-wrap" style="max-height:300px;overflow-y:auto"><table style="font-size:0.77rem">';
+    html += '<thead><tr><th>Encoding</th><th>Context</th><th>Evasion</th><th>Risk</th><th>Verdict</th></tr></thead><tbody>';
+    results.forEach(function(r) {
+      var vc = r.verdict === 'PREVENTED' ? 'var(--success)' :
+               r.verdict === 'ALLOWED' ? 'var(--danger)' :
+               r.verdict === 'ERROR' ? 'var(--muted)' : 'var(--warning)';
+      html += '<tr>' +
+        '<td style="font-family:var(--font-mono)">' + x(r.encoding) + '</td>' +
+        '<td style="font-family:var(--font-mono)">' + x(r.execContext) + '</td>' +
+        '<td style="font-family:var(--font-mono)">' + x(r.evasion) + '</td>' +
+        '<td><span class="badge" style="font-size:0.68rem;border-color:transparent">' + x(r.riskLevel) + '</span></td>' +
+        '<td><span style="color:' + vc + ';font-weight:600;font-size:0.78rem">' + x(r.verdict) + '</span></td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  html += '</div>';
+
+  var panel = document.getElementById('vex-result-panel');
+  if (panel) panel.innerHTML = html;
+}
+
+function vexMini(label, val, col) {
+  return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.45rem;text-align:center">' +
+    '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.15rem">' + label + '</div>' +
+    '<div style="font-size:1.15rem;font-weight:700;color:' + col + '">' + (val || 0) + '</div>' +
+    '</div>';
+}
 
 </script>
 </body>
