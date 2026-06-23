@@ -160,6 +160,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Post("/api/variants/run", h.RunVariants)
 			r.Get("/api/variants/run/{id}", h.GetVariantRun)
 			r.Get("/api/variants/coverage", h.GetVariantCoverage)
+			r.Get("/api/variants/stats", h.GetVariantStats)
+
+			// Payload families (Phase 3) — mutation/delete is Admin only (see below)
+			r.Get("/api/payload-families", h.GetPayloadFamilies)
+			r.Get("/api/payload-families/{techniqueId}", h.GetTechniqueFamilies)
 		})
 
 		// Any authenticated user — self-service password change
@@ -207,6 +212,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 			// Audit log — append-only record of all operator actions
 			r.Get("/api/audit-logs", h.GetAuditLogs)
+
+			// Payload family management — write/delete restricted to Admin
+			r.Post("/api/payload-families", h.CreatePayloadFamily)
+			r.Delete("/api/payload-families/{id}", h.DeletePayloadFamily)
 		})
 	})
 

@@ -345,6 +345,147 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_variant_run_steps_run  ON variant_run_steps (variant_run_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_variant_run_steps_task ON variant_run_steps (task_id)`,
+
+		// Phase 2 migrations: risk classification and dedup fingerprint per step.
+		`ALTER TABLE variant_run_steps ADD COLUMN IF NOT EXISTS risk_level   text NOT NULL DEFAULT 'SAFE'`,
+		`ALTER TABLE variant_run_steps ADD COLUMN IF NOT EXISTS variant_hash text NOT NULL DEFAULT ''`,
+
+		// variant_findings: structured gap findings linked to variant results.
+		// Populated when an ALLOWED result maps to a specific remediation recommendation.
+		`CREATE TABLE IF NOT EXISTS variant_findings (
+			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			variant_run_id text        NOT NULL,
+			task_id        text        NOT NULL,
+			technique_id   text        NOT NULL,
+			encoding       text        NOT NULL,
+			exec_context   text        NOT NULL,
+			evasion        text        NOT NULL,
+			risk_level     text        NOT NULL DEFAULT 'SAFE',
+			gap_summary    text        NOT NULL DEFAULT '',
+			recommendation text        NOT NULL DEFAULT '',
+			created_at     timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_variant_findings_run  ON variant_findings (variant_run_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_variant_findings_tech ON variant_findings (technique_id)`,
+
+		// payload_families: named PS script payloads per technique.
+		// Generate() is applied to each family, so total variants scale with family count.
+		`CREATE TABLE IF NOT EXISTS payload_families (
+			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			technique_id text        NOT NULL,
+			name         text        NOT NULL,
+			description  text        NOT NULL DEFAULT '',
+			payload      text        NOT NULL,
+			purpose      text        NOT NULL DEFAULT 'recon',
+			risk_level   text        NOT NULL DEFAULT 'SAFE',
+			platform     text        NOT NULL DEFAULT 'windows',
+			executor     text        NOT NULL DEFAULT 'powershell',
+			created_at   timestamptz NOT NULL DEFAULT NOW(),
+			CONSTRAINT uq_payload_family UNIQUE (technique_id, name)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_payload_families_tech ON payload_families (technique_id)`,
+
+		// ── Seed: default payload families ───────────────────────────────────────
+		// T1059.001 — PowerShell Execution
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1059.001','Recon - Identity','Current user and group memberships',
+		  'whoami /all','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1059.001','Recon - System Info','Full system information dump',
+		  'systeminfo','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1059.001','Recon - Network Config','IP config and active connections',
+		  'ipconfig /all; netstat -ano','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1059.001','Recon - Process List','Running processes with paths',
+		  'Get-Process | Select-Object Name,Id,Path,CPU | Sort-Object CPU -Descending','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1059.001','Recon - Domain Info','Active Directory domain information',
+		  'try{[System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()}catch{"Not domain-joined"}','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1059.001','Download Stager','Simulates a download cradle (loopback only)',
+		  '$wc=New-Object Net.WebClient;try{$wc.DownloadString(''http://127.0.0.1/bas-test'')}catch{"Connection refused - expected"}','download','MODERATE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		// T1082 — System Information Discovery
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1082','WMI Computer System','Hardware and domain info via WMI',
+		  'Get-WmiObject Win32_ComputerSystem | Select-Object Name,Domain,Manufacturer,Model,TotalPhysicalMemory','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1082','OS Version','Operating system version and build',
+		  'Get-WmiObject Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,LastBootUpTime','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1082','Installed Software','List installed applications',
+		  'Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Select-Object DisplayName,DisplayVersion | Where-Object {$_.DisplayName} | Sort-Object DisplayName','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		// T1016 — System Network Configuration Discovery
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1016','IP Configuration','Full IP configuration of all adapters',
+		  'ipconfig /all','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1016','Routing Table','System routing table',
+		  'route print','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1016','DNS Cache','Cached DNS entries',
+		  'Get-DnsClientCache | Select-Object Entry,Data,TimeToLive','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		// T1057 — Process Discovery
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1057','All Processes','Full process list with owner',
+		  'Get-Process | Select-Object Name,Id,CPU,WorkingSet,Path -ErrorAction SilentlyContinue','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1057','Security Products','Identify running security/AV processes',
+		  'Get-Process | Where-Object {$_.Name -match "defender|sentinel|crowdstrike|trellix|mcafee|symantec|sophos|cylance"} | Select-Object Name,Id,Path','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		// T1049 — System Network Connections Discovery
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1049','Active TCP Connections','All active TCP connections with process IDs',
+		  'netstat -ano','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1049','PowerShell TCP View','Active connections via PowerShell (includes process name)',
+		  'Get-NetTCPConnection -State Established | Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,OwningProcess | Sort-Object OwningProcess','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		// T1033 — System Owner/User Discovery
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1033','Current User','Current user identity and privileges',
+		  'whoami /all','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1033','Local Users','All local user accounts',
+		  'Get-LocalUser | Select-Object Name,Enabled,LastLogon,PasswordRequired','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
+
+		`INSERT INTO payload_families (technique_id,name,description,payload,purpose,risk_level) VALUES
+		 ('T1033','Local Groups','Local group memberships',
+		  'Get-LocalGroup | ForEach-Object {$g=$_.Name; Get-LocalGroupMember $g -ErrorAction SilentlyContinue | Select-Object @{n="Group";e={$g}},Name,ObjectClass}','recon','SAFE')
+		 ON CONFLICT (technique_id,name) DO NOTHING`,
 	}
 
 	for _, s := range stmts {

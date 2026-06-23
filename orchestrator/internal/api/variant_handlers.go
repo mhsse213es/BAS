@@ -25,19 +25,17 @@ func cmdPreview(s string) string {
 }
 
 // POST /api/variants/generate
-// Preview-only: generate and return the variant Templates for a base technique
-// step without dispatching anything to an agent. Useful for the UI picker.
-//
-// Body: { "techniqueId": "T1059.001", "baseType": "art", "baseId": "Mimikatz" }
-// Optionally the caller can supply "command" and "executor" directly; if absent
-// the server looks up the first ART step for techniqueId.
+// Preview all variant Templates for a technique without dispatching to an agent.
+// Auto-loads payload families from DB when they exist (no command override given).
+// Set includeAdvanced=true to include the Advanced Evasion Pack (AMSI bypass).
 func (h *Handler) GenerateVariants(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		TechniqueID string `json:"techniqueId"`
-		BaseType    string `json:"baseType"`
-		BaseID      string `json:"baseId"`
-		Command     string `json:"command"`
-		Executor    string `json:"executor"`
+		TechniqueID     string `json:"techniqueId"`
+		BaseType        string `json:"baseType"`
+		BaseID          string `json:"baseId"`
+		Command         string `json:"command"`
+		Executor        string `json:"executor"`
+		IncludeAdvanced bool   `json:"includeAdvanced"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid JSON", http.StatusBadRequest)
@@ -48,34 +46,35 @@ func (h *Handler) GenerateVariants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd, exec, baseID, err := h.resolveBaseCommand(req.TechniqueID, req.BaseID, req.Command, req.Executor)
+	ctx := r.Context()
+	templates, baseID, err := h.resolveTemplates(ctx, req.TechniqueID, coalesce(req.BaseType, "art"),
+		req.BaseID, req.Command, req.Executor, req.IncludeAdvanced)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	templates := variant.Generate(req.TechniqueID, coalesce(req.BaseType, "art"), baseID, cmd, exec)
 	jsonOK(w, map[string]any{
-		"techniqueId": req.TechniqueID,
-		"baseId":      baseID,
-		"count":       len(templates),
-		"templates":   templates,
+		"techniqueId":     req.TechniqueID,
+		"baseId":          baseID,
+		"count":           len(templates),
+		"includeAdvanced": req.IncludeAdvanced,
+		"templates":       templates,
 	})
 }
 
 // POST /api/variants/run
 // Dispatch all generated variants for a technique to a connected agent.
-// Results flow through the existing scenario result pipeline.
-//
-// Body: { "agentId": "...", "techniqueId": "T1059.001", "baseType": "art", "baseId": "..." }
+// Auto-loads payload families from DB when they exist.
 func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		AgentID     string `json:"agentId"`
-		TechniqueID string `json:"techniqueId"`
-		BaseType    string `json:"baseType"`
-		BaseID      string `json:"baseId"`
-		Command     string `json:"command"`
-		Executor    string `json:"executor"`
+		AgentID         string `json:"agentId"`
+		TechniqueID     string `json:"techniqueId"`
+		BaseType        string `json:"baseType"`
+		BaseID          string `json:"baseId"`
+		Command         string `json:"command"`
+		Executor        string `json:"executor"`
+		IncludeAdvanced bool   `json:"includeAdvanced"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid JSON", http.StatusBadRequest)
@@ -86,20 +85,20 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd, exec, baseID, err := h.resolveBaseCommand(req.TechniqueID, req.BaseID, req.Command, req.Executor)
+	ctx := r.Context()
+	templates, baseID, err := h.resolveTemplates(ctx, req.TechniqueID, coalesce(req.BaseType, "art"),
+		req.BaseID, req.Command, req.Executor, req.IncludeAdvanced)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	templates := variant.Generate(req.TechniqueID, coalesce(req.BaseType, "art"), baseID, cmd, exec)
 	if len(templates) == 0 {
-		jsonError(w, "no variants generated — technique may use an unsupported executor or baseScript is empty", http.StatusUnprocessableEntity)
+		jsonError(w, "no variants generated — technique may use an unsupported executor or script is empty", http.StatusUnprocessableEntity)
 		return
 	}
 
-	ctx := r.Context()
-	runID, vrID, err := h.dispatchVariantRun(ctx, req.AgentID, req.TechniqueID, coalesce(req.BaseType, "art"), baseID, templates)
+	runID, vrID, err := h.dispatchVariantRun(ctx, req.AgentID, req.TechniqueID,
+		coalesce(req.BaseType, "art"), baseID, templates)
 	if err != nil {
 		log.Printf("[variant] dispatch failed for %s on %s: %v", req.TechniqueID, req.AgentID, err)
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -110,6 +109,7 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 		"agentId":       req.AgentID,
 		"variantRunId":  vrID,
 		"totalVariants": len(templates),
+		"advanced":      req.IncludeAdvanced,
 	}, "ok")
 
 	jsonOK(w, map[string]any{
@@ -120,13 +120,11 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/variants/run/:id
-// Returns the variant run detail with per-variant verdicts joined from
-// the scenario_run results.
+// Returns per-variant verdicts joined from the underlying scenario_run results.
 func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 	vrID := chi.URLParam(r, "id")
 	ctx := r.Context()
 
-	// Load the variant_run row.
 	var vr variant.Run
 	var completedAt *time.Time
 	err := h.db.QueryRow(ctx,
@@ -141,76 +139,52 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 	}
 	vr.CompletedAt = completedAt
 
-	// Load the step records (encoding/ctx/evasion per task_id).
-	stepRows, err := h.db.Query(ctx,
-		`SELECT task_id, encoding, exec_context, evasion, executor, cmd_preview
-		   FROM variant_run_steps WHERE variant_run_id = $1
-		  ORDER BY id`, vrID)
-	if err != nil {
-		jsonError(w, "step records unavailable", http.StatusInternalServerError)
-		return
-	}
-	defer stepRows.Close()
-
-	stepMap := make(map[string]variant.StepRecord)
-	for stepRows.Next() {
-		var sr variant.StepRecord
-		if err := stepRows.Scan(&sr.TaskID, &sr.Encoding, &sr.ExecContext, &sr.Evasion, &sr.Executor, &sr.CmdPreview); err != nil {
-			continue
-		}
-		stepMap[sr.TaskID] = sr
-	}
-
-	// Load the scenario_run results JSONB and join with step records.
+	// Load scenario_run status + results JSONB.
 	var resultsRaw []byte
 	var runStatus string
-	err = h.db.QueryRow(ctx,
+	if err := h.db.QueryRow(ctx,
 		`SELECT status, COALESCE(results::text,'[]') FROM scenario_runs WHERE id = $1`,
 		vr.ScenarioRunID,
-	).Scan(&runStatus, &resultsRaw)
-	if err != nil {
+	).Scan(&runStatus, &resultsRaw); err != nil {
 		resultsRaw = []byte("[]")
 	}
 
-	// Update variant_run.status from the underlying scenario_run if it completed.
-	if runStatus == "completed" || runStatus == "failed" {
-		if vr.Status == "running" {
-			now := time.Now().UTC()
-			vr.Status = runStatus
-			vr.CompletedAt = &now
-			h.db.Exec(ctx,
-				`UPDATE variant_runs SET status = $1, completed_at = NOW() WHERE id = $2`,
-				runStatus, vrID)
-		}
+	// Sync variant_run status from underlying scenario_run.
+	if (runStatus == "completed" || runStatus == "failed") && vr.Status == "running" {
+		vr.Status = runStatus
+		now := time.Now().UTC()
+		vr.CompletedAt = &now
+		h.db.Exec(ctx,
+			`UPDATE variant_runs SET status = $1, completed_at = NOW() WHERE id = $2`,
+			runStatus, vrID)
 	}
 
 	var simResults []models.SimulationResult
 	json.Unmarshal(resultsRaw, &simResults)
-
-	// Build result index from scenario results: taskId → SimulationResult.
-	srMap := make(map[string]models.SimulationResult)
+	srMap := make(map[string]models.SimulationResult, len(simResults))
 	for _, sr := range simResults {
 		srMap[sr.ID] = sr
 	}
 
-	// Build per-variant result list ordered by step record insertion order.
-	// We re-query steps to preserve insertion order.
-	stepOrder, err := h.db.Query(ctx,
-		`SELECT task_id, encoding, exec_context, evasion, executor, cmd_preview
+	// Load step records ordered by insertion (= dispatch order).
+	stepRows, err := h.db.Query(ctx,
+		`SELECT task_id, encoding, exec_context, evasion, executor,
+		        cmd_preview, risk_level, variant_hash
 		   FROM variant_run_steps WHERE variant_run_id = $1 ORDER BY id`, vrID)
 	if err != nil {
 		jsonError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	defer stepOrder.Close()
+	defer stepRows.Close()
 
 	var results []variant.Result
 	summary := variant.Summary{}
 	firstBypassSet := false
 
-	for stepOrder.Next() {
+	for stepRows.Next() {
 		var sr variant.StepRecord
-		if err := stepOrder.Scan(&sr.TaskID, &sr.Encoding, &sr.ExecContext, &sr.Evasion, &sr.Executor, &sr.CmdPreview); err != nil {
+		if err := stepRows.Scan(&sr.TaskID, &sr.Encoding, &sr.ExecContext, &sr.Evasion,
+			&sr.Executor, &sr.CmdPreview, &sr.RiskLevel, &sr.VariantHash); err != nil {
 			continue
 		}
 		res := variant.Result{
@@ -220,6 +194,8 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 			Evasion:     sr.Evasion,
 			Executor:    sr.Executor,
 			CmdPreview:  sr.CmdPreview,
+			RiskLevel:   sr.RiskLevel,
+			VariantHash: sr.VariantHash,
 			Verdict:     "PENDING",
 		}
 		summary.Total++
@@ -227,9 +203,12 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 		if sim, found := srMap[sr.TaskID]; found {
 			res.Verdict = simResultToVerdict(sim.Result)
 			res.Detail = sim.Details
-			ts := sim.ExecutedAt
-			if !ts.IsZero() {
-				res.ExecutedAt = &ts
+			if !sim.ExecutedAt.IsZero() {
+				t := sim.ExecutedAt
+				res.ExecutedAt = &t
+			}
+			if sim.DetectionAlert != nil {
+				res.DetectionSource = sim.DetectionAlert.Provider
 			}
 		}
 
@@ -240,6 +219,7 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 			summary.Allowed++
 			if !firstBypassSet {
 				summary.FirstBypass = sr.Encoding + "|" + sr.ExecContext + "|" + sr.Evasion
+				summary.FirstBypassRisk = sr.RiskLevel
 				firstBypassSet = true
 			}
 		case "ERROR":
@@ -269,12 +249,7 @@ func (h *Handler) GetVariantCoverage(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	type runRef struct {
-		techniqueID   string
-		baseType      string
-		baseID        string
-		scenarioRunID string
-	}
+	type runRef struct{ techniqueID, baseType, baseID, scenarioRunID string }
 	var runs []runRef
 	for rows.Next() {
 		var rr runRef
@@ -283,7 +258,6 @@ func (h *Handler) GetVariantCoverage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Aggregate by technique_id — most recent run wins.
 	seen := make(map[string]bool)
 	var coverage []variant.CoverageRow
 	for _, rr := range runs {
@@ -295,8 +269,7 @@ func (h *Handler) GetVariantCoverage(w http.ResponseWriter, r *http.Request) {
 		var resultsRaw []byte
 		h.db.QueryRow(ctx,
 			`SELECT COALESCE(results::text,'[]') FROM scenario_runs WHERE id = $1`,
-			rr.scenarioRunID,
-		).Scan(&resultsRaw)
+			rr.scenarioRunID).Scan(&resultsRaw)
 
 		var simResults []models.SimulationResult
 		json.Unmarshal(resultsRaw, &simResults)
@@ -326,20 +299,199 @@ func (h *Handler) GetVariantCoverage(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, coverage)
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// GET /api/variants/stats
+// Returns executed vs available variant counts for honest dashboard display.
+func (h *Handler) GetVariantStats(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
-// resolveBaseCommand resolves the base command and executor for a variant run.
-// Caller can supply them directly (overrides); otherwise they are looked up from
-// the ART store using techniqueID + baseID (optional ART test name).
-func (h *Handler) resolveBaseCommand(techniqueID, baseID, cmdOverride, execOverride string) (cmd, exec, resolvedBaseID string, err error) {
-	if cmdOverride != "" && execOverride != "" {
-		bid := baseID
-		if bid == "" {
-			bid = "custom"
+	var executed, familyCount, techCount int
+	h.db.QueryRow(ctx,
+		`SELECT COALESCE(SUM(total_variants),0) FROM variant_runs WHERE status = 'completed'`,
+	).Scan(&executed)
+	h.db.QueryRow(ctx, `SELECT COUNT(*) FROM payload_families`).Scan(&familyCount)
+	h.db.QueryRow(ctx, `SELECT COUNT(DISTINCT technique_id) FROM payload_families`).Scan(&techCount)
+
+	perFamily := variant.VariantsPerFamily(false)
+	jsonOK(w, variant.Stats{
+		ExecutedVariants:       executed,
+		AvailableVariants:      familyCount * perFamily,
+		PayloadFamilyCount:     familyCount,
+		TechniquesWithFamilies: techCount,
+		VariantsPerFamily:      perFamily,
+	})
+}
+
+// ── Payload Family CRUD ───────────────────────────────────────────────────────
+
+// GET /api/payload-families
+// List all payload families (all techniques).
+func (h *Handler) GetPayloadFamilies(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rows, err := h.db.Query(ctx,
+		`SELECT id, technique_id, name, description, payload, purpose, risk_level, platform, executor, created_at
+		   FROM payload_families ORDER BY technique_id, name`)
+	if err != nil {
+		jsonError(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	var families []variant.PayloadFamily
+	for rows.Next() {
+		var f variant.PayloadFamily
+		if err := rows.Scan(&f.ID, &f.TechniqueID, &f.Name, &f.Description, &f.Payload,
+			&f.Purpose, &f.RiskLevel, &f.Platform, &f.Executor, &f.CreatedAt); err == nil {
+			families = append(families, f)
 		}
-		return cmdOverride, execOverride, bid, nil
+	}
+	jsonOK(w, families)
+}
+
+// GET /api/payload-families/:techniqueId
+// List payload families for a specific technique.
+func (h *Handler) GetTechniqueFamilies(w http.ResponseWriter, r *http.Request) {
+	techID := chi.URLParam(r, "techniqueId")
+	ctx := r.Context()
+	rows, err := h.db.Query(ctx,
+		`SELECT id, technique_id, name, description, payload, purpose, risk_level, platform, executor, created_at
+		   FROM payload_families WHERE technique_id = $1 ORDER BY name`,
+		strings.ToUpper(strings.TrimSpace(techID)))
+	if err != nil {
+		jsonError(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	var families []variant.PayloadFamily
+	for rows.Next() {
+		var f variant.PayloadFamily
+		if err := rows.Scan(&f.ID, &f.TechniqueID, &f.Name, &f.Description, &f.Payload,
+			&f.Purpose, &f.RiskLevel, &f.Platform, &f.Executor, &f.CreatedAt); err == nil {
+			families = append(families, f)
+		}
+	}
+	jsonOK(w, families)
+}
+
+// POST /api/payload-families
+// Create a new payload family. Admin only.
+func (h *Handler) CreatePayloadFamily(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TechniqueID string `json:"techniqueId"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Payload     string `json:"payload"`
+		Purpose     string `json:"purpose"`
+		RiskLevel   string `json:"riskLevel"`
+		Executor    string `json:"executor"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.TechniqueID == "" || req.Name == "" || req.Payload == "" {
+		jsonError(w, "techniqueId, name, and payload are required", http.StatusBadRequest)
+		return
+	}
+	if req.RiskLevel == "" {
+		req.RiskLevel = variant.RiskSafe
+	}
+	if req.Executor == "" {
+		req.Executor = "powershell"
 	}
 
+	var id string
+	err := h.db.QueryRow(r.Context(),
+		`INSERT INTO payload_families (technique_id, name, description, payload, purpose, risk_level, executor)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+		strings.ToUpper(strings.TrimSpace(req.TechniqueID)), req.Name, req.Description,
+		req.Payload, coalesce(req.Purpose, "recon"), req.RiskLevel, req.Executor,
+	).Scan(&id)
+	if err != nil {
+		if strings.Contains(err.Error(), "uq_payload_family") {
+			jsonError(w, "a family with that name already exists for this technique", http.StatusConflict)
+			return
+		}
+		jsonError(w, "db error", http.StatusInternalServerError)
+		return
+	}
+
+	h.auditLog(r, "payload_family.create", req.TechniqueID,
+		map[string]any{"id": id, "name": req.Name}, "ok")
+	w.WriteHeader(http.StatusCreated)
+	jsonOK(w, map[string]any{"id": id})
+}
+
+// DELETE /api/payload-families/:id
+// Delete a payload family. Admin only.
+func (h *Handler) DeletePayloadFamily(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	tag, err := h.db.Exec(r.Context(), `DELETE FROM payload_families WHERE id = $1`, id)
+	if err != nil || tag.RowsAffected() == 0 {
+		jsonError(w, "family not found", http.StatusNotFound)
+		return
+	}
+	h.auditLog(r, "payload_family.delete", id, nil, "ok")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+// resolveTemplates returns the templates to dispatch for a technique.
+// When the caller provides an explicit command, it generates from that single script.
+// Otherwise, it loads payload families from the DB; if none exist, falls back to the
+// first ART step for the technique.
+func (h *Handler) resolveTemplates(
+	ctx context.Context,
+	techniqueID, baseType, baseID, cmdOverride, execOverride string,
+	includeAdvanced bool,
+) (templates []variant.Template, resolvedBaseID string, err error) {
+
+	// Explicit override: use exactly what the caller provided.
+	if cmdOverride != "" && execOverride != "" {
+		bid := coalesce(baseID, "custom")
+		return variant.Generate(techniqueID, baseType, bid, cmdOverride, execOverride, includeAdvanced), bid, nil
+	}
+
+	// Auto-load payload families when no override is given.
+	families, _ := h.loadPayloadFamilies(ctx, techniqueID)
+	if len(families) > 0 {
+		templates = variant.GenerateFromFamilies(techniqueID, baseType, families, includeAdvanced)
+		return templates, techniqueID, nil
+	}
+
+	// Fall back to ART store lookup.
+	cmd, exec, bid, ferr := h.resolveBaseCommand(techniqueID, baseID, cmdOverride, execOverride)
+	if ferr != nil {
+		return nil, "", ferr
+	}
+	return variant.Generate(techniqueID, baseType, bid, cmd, exec, includeAdvanced), bid, nil
+}
+
+// loadPayloadFamilies loads all payload families for a technique from the DB.
+func (h *Handler) loadPayloadFamilies(ctx context.Context, techniqueID string) ([]variant.PayloadFamily, error) {
+	rows, err := h.db.Query(ctx,
+		`SELECT id, technique_id, name, description, payload, purpose, risk_level, platform, executor, created_at
+		   FROM payload_families WHERE technique_id = $1 ORDER BY name`,
+		strings.ToUpper(strings.TrimSpace(techniqueID)))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []variant.PayloadFamily
+	for rows.Next() {
+		var f variant.PayloadFamily
+		if err := rows.Scan(&f.ID, &f.TechniqueID, &f.Name, &f.Description, &f.Payload,
+			&f.Purpose, &f.RiskLevel, &f.Platform, &f.Executor, &f.CreatedAt); err == nil {
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+
+// resolveBaseCommand is the single-ART-step fallback (used when no payload families exist).
+func (h *Handler) resolveBaseCommand(techniqueID, baseID, cmdOverride, execOverride string) (cmd, exec, resolvedBaseID string, err error) {
+	if cmdOverride != "" && execOverride != "" {
+		return cmdOverride, execOverride, coalesce(baseID, "custom"), nil
+	}
 	if h.artStore == nil {
 		return "", "", "", fmt.Errorf("ART store not loaded")
 	}
@@ -347,8 +499,6 @@ func (h *Handler) resolveBaseCommand(techniqueID, baseID, cmdOverride, execOverr
 	if len(steps) == 0 {
 		return "", "", "", fmt.Errorf("no ART steps found for technique %s", techniqueID)
 	}
-
-	// Pick the step matching baseID (ART test name), or the first step.
 	step := steps[0]
 	for _, s := range steps {
 		if baseID != "" && s.Name == baseID {
@@ -359,15 +509,13 @@ func (h *Handler) resolveBaseCommand(techniqueID, baseID, cmdOverride, execOverr
 	return step.Command, step.Executor, step.Name, nil
 }
 
-// dispatchVariantRun creates the DB records and dispatches the variant scenario
-// to the agent via the existing WebSocket command pipeline.
+// dispatchVariantRun creates DB records and dispatches via the WebSocket pipeline.
 func (h *Handler) dispatchVariantRun(
 	ctx context.Context,
 	agentID, techniqueID, baseType, baseID string,
 	templates []variant.Template,
 ) (scenarioRunID, variantRunID string, err error) {
 
-	// Create scenario_run row (synthetic scenario_id identifies this as a variant run).
 	syntheticScenarioID := "__variant__" + strings.ToLower(techniqueID)
 	runName := "Variant: " + techniqueID + " (" + baseID + ")"
 
@@ -382,7 +530,6 @@ func (h *Handler) dispatchVariantRun(
 		return "", "", fmt.Errorf("create scenario_run: %w", err)
 	}
 
-	// Create variant_run row.
 	err = h.db.QueryRow(ctx,
 		`INSERT INTO variant_runs
 			(agent_id, technique_id, base_type, base_id, scenario_run_id, total_variants, status)
@@ -394,7 +541,6 @@ func (h *Handler) dispatchVariantRun(
 		return "", "", fmt.Errorf("create variant_run: %w", err)
 	}
 
-	// Build ScenarioSteps from templates and record per-step metadata.
 	steps := make([]scenario.ScenarioStep, 0, len(templates))
 	for _, t := range templates {
 		stepName := "variant|" + t.Encoding + "|" + t.ExecContext + "|" + t.Evasion + "|" + t.BaseID
@@ -412,36 +558,33 @@ func (h *Handler) dispatchVariantRun(
 
 		if _, insErr := h.db.Exec(ctx,
 			`INSERT INTO variant_run_steps
-				(variant_run_id, task_id, technique_id, encoding, exec_context, evasion, executor, cmd_preview)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+				(variant_run_id, task_id, technique_id, encoding, exec_context, evasion,
+				 executor, cmd_preview, risk_level, variant_hash)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
 			variantRunID, taskID, t.TechniqueID,
-			t.Encoding, t.ExecContext, t.Evasion, t.Executor, cmdPreview(t.Command),
+			t.Encoding, t.ExecContext, t.Evasion, t.Executor,
+			cmdPreview(t.Command), t.RiskLevel, t.VariantHash,
 		); insErr != nil {
 			log.Printf("[variant] insert step record %s: %v", taskID, insErr)
 		}
 	}
 
-	// Persist step_meta so SubmitScenarioResult can interpret results.
 	h.persistStepMeta(ctx, scenarioRunID, steps)
 
-	// Dispatch to agent via the existing WebSocket command pipeline.
-	cmd := scenario.ScenarioCommand{
-		RunID:      scenarioRunID,
-		ScenarioID: syntheticScenarioID,
-		Name:       runName,
-		Steps:      steps,
-		Mode:       "posture",
-	}
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
 		Type:    models.MsgCommandScenario,
 		AgentID: agentID,
-		Data:    cmd,
+		Data: scenario.ScenarioCommand{
+			RunID:      scenarioRunID,
+			ScenarioID: syntheticScenarioID,
+			Name:       runName,
+			Steps:      steps,
+			Mode:       "posture",
+		},
 	})
 	if !sent {
-		h.db.Exec(ctx,
-			`UPDATE scenario_runs  SET status = 'failed', completed_at = NOW() WHERE id = $1`, scenarioRunID)
-		h.db.Exec(ctx,
-			`UPDATE variant_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, variantRunID)
+		h.db.Exec(ctx, `UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, scenarioRunID)
+		h.db.Exec(ctx, `UPDATE variant_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, variantRunID)
 		return "", "", fmt.Errorf("agent %s not connected", agentID)
 	}
 
@@ -450,11 +593,6 @@ func (h *Handler) dispatchVariantRun(
 	return scenarioRunID, variantRunID, nil
 }
 
-// simResultToVerdict maps a BAS CheckResult to a variant verdict label.
-//   - pass  → PREVENTED  (the control blocked the technique — good for defender)
-//   - fail  → ALLOWED    (the technique executed without being stopped — gap found)
-//   - error → ERROR
-//   - skipped → SKIPPED (treated as ERROR for coverage purposes)
 func simResultToVerdict(r models.CheckResult) string {
 	switch r {
 	case models.ResultPass:
@@ -474,7 +612,6 @@ func coalesce(s, fallback string) string {
 	return fallback
 }
 
-// jsonOK writes a 200 JSON response.
 func jsonOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
