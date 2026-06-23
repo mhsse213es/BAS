@@ -154,6 +154,12 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Post("/api/scenarios/{id}/clone", h.CloneScenario)
 			r.Put("/api/scenarios/{id}", h.UpdateScenario)
 			r.Delete("/api/scenarios/{id}", h.DeleteScenario)
+
+			// Variant executor — multi-variant technique execution
+			r.Post("/api/variants/generate", h.GenerateVariants)
+			r.Post("/api/variants/run", h.RunVariants)
+			r.Get("/api/variants/run/{id}", h.GetVariantRun)
+			r.Get("/api/variants/coverage", h.GetVariantCoverage)
 		})
 
 		// Any authenticated user — self-service password change

@@ -90,6 +90,10 @@ type FullReport struct {
 	AlertsTotal        int     `json:"alertsTotal"`
 	AlertsHighFidelity int     `json:"alertsHighFidelity"`
 	NoiseScore         float64 `json:"noiseScore"`
+	// ScenarioName is the name of the scenario used to build this report.
+	// Populated by Build (latest run's name), BuildFromRun, and BuildFromCampaign.
+	// Used by handlers to construct descriptive download filenames.
+	ScenarioName string `json:"scenarioName,omitempty"`
 }
 
 // ReportScope describes a fleet-wide (campaign) report's subject.
@@ -673,7 +677,7 @@ type Category struct {
 // ── Builder ───────────────────────────────────────────────────────────────────
 
 // Build constructs a FullReport for the given agent from current DB state.
-func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error) {
+func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*FullReport, error) {
 	report := &FullReport{GeneratedAt: time.Now().UTC()}
 
 	// ── 1. Agent metadata ─────────────────────────────────────────────────
@@ -710,6 +714,14 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 			if len(scoreRaw) > 0 {
 				var sc models.Score
 				if json.Unmarshal(scoreRaw, &sc) == nil {
+					if filter != "" && filter != "all" {
+						var runResultsRaw []byte
+						e.db.QueryRow(ctx, `SELECT results FROM scenario_runs WHERE id = $1`, rs.ID).Scan(&runResultsRaw)
+						var runResults []models.SimulationResult
+						json.Unmarshal(runResultsRaw, &runResults)
+						runResults = FilterResults(runResults, filter)
+						sc = models.ComputeScore(runResults, nil)
+					}
 					rs.RiskScore = sc.RiskScore
 					rs.Classification = sc.Classification
 					rs.PreventionScore = sc.PreventionScore
@@ -738,9 +750,14 @@ func (e *Engine) Build(ctx context.Context, agentID string) (*FullReport, error)
 		json.Unmarshal(resultsRaw, &latestResults)
 		json.Unmarshal(scoreRaw2, &latestScore)
 		json.Unmarshal(revertedRaw, &report.Reverted)
+		latestResults = FilterResults(latestResults, filter)
+		if filter != "" && filter != "all" {
+			latestScore = models.ComputeScore(latestResults, nil)
+		}
 	}
 
 	// ── 4. Tactic heatmap from latest run ────────────────────────────────
+	report.ScenarioName = latestScenarioName
 	report.TacticHeatmap = buildTacticHeatmap(latestResults)
 
 	// ── 5. Top findings (Critical + High failures) from latest run ────────
@@ -876,7 +893,7 @@ func (e *Engine) loadAssetTags(ctx context.Context) []attackpath.AssetTag {
 
 // BuildFromRun constructs a FullReport scoped to a single scenario run.
 // Useful for per-run export and HTML report without needing the full agent history.
-func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, error) {
+func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) (*FullReport, error) {
 	report := &FullReport{GeneratedAt: time.Now().UTC()}
 
 	var agentID, scenarioName, status string
@@ -922,6 +939,24 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 	json.Unmarshal(resultsRaw, &results)
 	json.Unmarshal(scoreRaw, &score)
 	json.Unmarshal(revertedRaw, &report.Reverted)
+	results = FilterResults(results, filter)
+	if filter != "" && filter != "all" {
+		score = models.ComputeScore(results, nil)
+		var filteredDet []DetectionTechnique
+		for _, dt := range report.DetectionTechniques {
+			found := false
+			for _, r := range results {
+				if r.Technique.ID == dt.TechniqueID {
+					found = true
+					break
+				}
+			}
+			if found {
+				filteredDet = append(filteredDet, dt)
+			}
+		}
+		report.DetectionTechniques = filteredDet
+	}
 
 	// Agent metadata
 	row := e.db.QueryRow(ctx,
@@ -1041,7 +1076,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string) (*FullReport, e
 // same derivations and renderers as the single-agent report. The Scope +
 // per-agent breakdown carry the campaign framing; scores are computed over the
 // union of all child-run results so the headline reflects the whole fleet.
-func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*FullReport, error) {
+func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filter string) (*FullReport, error) {
 	report := &FullReport{GeneratedAt: time.Now().UTC()}
 
 	var campName, scenarioName string
@@ -1075,14 +1110,17 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*Ful
 		}
 		runCount++
 		agentSet[agentID] = true
+		var results []models.SimulationResult
 		if len(resultsRaw) > 0 {
-			var results []models.SimulationResult
 			if json.Unmarshal(resultsRaw, &results) == nil {
+				results = FilterResults(results, filter)
 				allResults = append(allResults, results...)
 			}
 		}
 		var sc models.Score
-		if len(scoreRaw) > 0 {
+		if filter != "" && filter != "all" {
+			sc = models.ComputeScore(results, nil)
+		} else if len(scoreRaw) > 0 {
 			_ = json.Unmarshal(scoreRaw, &sc)
 		}
 		host := hostname
@@ -1134,6 +1172,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string) (*Ful
 	}
 	// Agent.Hostname backs the page footers and fallbacks; set it to the campaign.
 	report.Agent.Hostname = campName
+	report.ScenarioName = scenarioName
 	report.Scope = &ReportScope{
 		Kind: "campaign", Title: campName,
 		Subtitle: "Campaign Assessment — " + scenarioName,
@@ -1787,4 +1826,21 @@ func (e *Engine) populateCampaignAttackSurfaceAge(ctx context.Context, report *F
 
 func formatFloat(f float64) string {
 	return fmt.Sprintf("%.1f", f)
+}
+
+
+func FilterResults(results []models.SimulationResult, filter string) []models.SimulationResult {
+	if filter == "" || filter == "all" {
+		return results
+	}
+	var filtered []models.SimulationResult
+	for _, r := range results {
+		isPrevented := r.Result == models.ResultPass || r.Result == models.ResultBlocked
+		if filter == "prevented" && isPrevented {
+			filtered = append(filtered, r)
+		} else if filter == "not_prevented" && !isPrevented {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
 }

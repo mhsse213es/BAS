@@ -3021,13 +3021,14 @@ func (h *Handler) GetFullReportHTML(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agentId required", http.StatusBadRequest)
 		return
 	}
-	report, err := h.reportingEngine.Build(r.Context(), agentID)
+	filter := r.URL.Query().Get("filter")
+	report, err := h.reportingEngine.Build(r.Context(), agentID, filter)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	compRows := h.complianceRows(r.Context(), agentID)
+	compRows := h.complianceRows(r.Context(), agentID, filter)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := reporting.GenerateHTML(w, report, compRows); err != nil {
@@ -3038,7 +3039,7 @@ func (h *Handler) GetFullReportHTML(w http.ResponseWriter, r *http.Request) {
 // complianceRows builds the per-framework compliance summary rows for an agent's
 // latest completed/partial run — shared by the HTML report and the PDF (so the
 // PDF, rendered from that HTML, carries the same compliance section).
-func (h *Handler) complianceRows(ctx context.Context, agentID string) []reporting.ComplianceSummaryRow {
+func (h *Handler) complianceRows(ctx context.Context, agentID string, filter string) []reporting.ComplianceSummaryRow {
 	if h.complianceMapper == nil {
 		return nil
 	}
@@ -3052,6 +3053,7 @@ func (h *Handler) complianceRows(ctx context.Context, agentID string) []reportin
 	if len(resultsRaw) > 0 {
 		json.Unmarshal(resultsRaw, &results)
 	}
+	results = reporting.FilterResults(results, filter)
 	var rows []reporting.ComplianceSummaryRow
 	for _, fw := range h.complianceMapper.Frameworks() {
 		cr, err := h.complianceMapper.GenerateReport(results, fw.ID, agentID, "", "")
@@ -3102,7 +3104,8 @@ func (h *Handler) GetFullReportPDF(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agentId required", http.StatusBadRequest)
 		return
 	}
-	report, err := h.reportingEngine.Build(r.Context(), agentID)
+	filter := r.URL.Query().Get("filter")
+	report, err := h.reportingEngine.Build(r.Context(), agentID, filter)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -3119,16 +3122,25 @@ func (h *Handler) GetFullReportPDF(w http.ResponseWriter, r *http.Request) {
 	if len(resultsRaw) > 0 {
 		json.Unmarshal(resultsRaw, &results)
 	}
+	results = reporting.FilterResults(results, filter)
 
 	host := report.Agent.Hostname
 	if host == "" {
 		host = agentID
 	}
-	fname := fmt.Sprintf("bas-report-%s-%s.pdf", sanitizeFilename(host), time.Now().UTC().Format("2006-01-02"))
+	scenPart := sanitizeFilename(report.ScenarioName)
+	if scenPart == "" {
+		scenPart = "report"
+	}
+	filterSuffix := ""
+	if filter != "" && filter != "all" {
+		filterSuffix = "-" + filter
+	}
+	fname := fmt.Sprintf("bas-report-%s-%s%s-%s.pdf", scenPart, sanitizeFilename(host), filterSuffix, time.Now().UTC().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	// Render from the styled HTML via the Chromium sidecar (falls back to fpdf).
-	if err := h.reportingEngine.PDFFromReport(r.Context(), w, report, h.complianceRows(r.Context(), agentID), results); err != nil {
+	if err := h.reportingEngine.PDFFromReport(r.Context(), w, report, h.complianceRows(r.Context(), agentID, filter), results); err != nil {
 		log.Printf("[api] full report pdf: %v", err)
 	}
 }
@@ -3146,6 +3158,7 @@ func (h *Handler) GetFullReportCSV(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agentId required", http.StatusBadRequest)
 		return
 	}
+	filter := r.URL.Query().Get("filter")
 	var resultsRaw []byte
 	var scenarioName, hostname string
 	if err := h.db.QueryRow(r.Context(),
@@ -3161,10 +3174,19 @@ func (h *Handler) GetFullReportCSV(w http.ResponseWriter, r *http.Request) {
 	if len(resultsRaw) > 0 {
 		json.Unmarshal(resultsRaw, &results)
 	}
+	results = reporting.FilterResults(results, filter)
 	if hostname == "" {
 		hostname = agentID
 	}
-	fname := fmt.Sprintf("bas-forensic-%s-%s.csv", sanitizeFilename(hostname), time.Now().UTC().Format("2006-01-02"))
+	scenPart := sanitizeFilename(scenarioName)
+	if scenPart == "" {
+		scenPart = "report"
+	}
+	filterSuffix := ""
+	if filter != "" && filter != "all" {
+		filterSuffix = "-" + filter
+	}
+	fname := fmt.Sprintf("bas-forensic-%s-%s%s-%s.csv", scenPart, sanitizeFilename(hostname), filterSuffix, time.Now().UTC().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	reporting.WriteForensicCSV(w, scenarioName, results)
@@ -3218,6 +3240,7 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 	agentID := r.URL.Query().Get("agentId")
 	runID := r.URL.Query().Get("runId")
 	format := strings.ToLower(r.URL.Query().Get("format"))
+	filter := r.URL.Query().Get("filter")
 
 	if frameworkID == "" {
 		jsonError(w, "framework parameter required", http.StatusBadRequest)
@@ -3282,6 +3305,8 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 		scenarioName = fmt.Sprintf("Aggregated across %d run(s)", n)
 	}
 
+	results = reporting.FilterResults(results, filter)
+
 	// ── Generate report ───────────────────────────────────────────────────────
 	report, err := h.complianceMapper.GenerateReport(results, frameworkID, resolvedAgentID, resolvedRunID, scenarioName)
 	if err != nil {
@@ -3289,8 +3314,12 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fname := fmt.Sprintf("compliance-%s-%s-%s",
-		frameworkID, resolvedAgentID, time.Now().UTC().Format("2006-01-02"))
+	filterSuffix := ""
+	if filter != "" && filter != "all" {
+		filterSuffix = "-" + filter
+	}
+	fname := fmt.Sprintf("compliance-%s-%s%s-%s",
+		frameworkID, resolvedAgentID, filterSuffix, time.Now().UTC().Format("2006-01-02"))
 
 	switch format {
 	case "csv":
@@ -3319,10 +3348,11 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
 		return
 	}
+	filter := r.URL.Query().Get("filter")
 
 	// Rich, structured report model (executive summary, recommendations,
 	// tactic heatmap, top findings) — the same data the HTML report uses.
-	rep, err := h.reportingEngine.BuildFromRun(r.Context(), runID)
+	rep, err := h.reportingEngine.BuildFromRun(r.Context(), runID, filter)
 	if err != nil {
 		jsonError(w, "run not found", http.StatusNotFound)
 		return
@@ -3340,14 +3370,28 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	var results []models.SimulationResult
 	json.Unmarshal(resultsJSON, &results)
+	results = reporting.FilterResults(results, filter)
 
 	idShort := runID
 	if len(idShort) > 8 {
 		idShort = idShort[:8]
 	}
-	fname := fmt.Sprintf("bas-report-%s-%s.pdf", sanitizeFilename(runName), idShort)
+	// Prefer hostname from the report; fall back to the run name.
+	host := rep.Agent.Hostname
+	if host == "" {
+		host = runName
+	}
+	scenPart := sanitizeFilename(rep.ScenarioName)
+	if scenPart == "" {
+		scenPart = sanitizeFilename(runName)
+	}
+	filterSuffix := ""
+	if filter != "" && filter != "all" {
+		filterSuffix = "-" + filter
+	}
+	fname := fmt.Sprintf("bas-report-%s-%s%s-%s.pdf", scenPart, sanitizeFilename(host), filterSuffix, idShort)
 
-	h.auditLog(r, "report.export", runID, map[string]any{"format": "pdf", "type": "run"}, "ok")
+	h.auditLog(r, "report.export", runID, map[string]any{"format": "pdf", "type": "run", "filter": filter}, "ok")
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	if err := h.reportingEngine.PDFFromReport(r.Context(), w, rep, nil, results); err != nil {
@@ -3359,11 +3403,14 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 // Streams the forensic CSV (one row per technique result) for a single run.
 func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runId")
-	var name string
+	filter := r.URL.Query().Get("filter")
+	var name, hostname string
 	var resultsRaw []byte
 	if err := h.db.QueryRow(r.Context(),
-		`SELECT name, results FROM scenario_runs WHERE id = $1`, runID,
-	).Scan(&name, &resultsRaw); err != nil {
+		`SELECT sr.name, sr.results, COALESCE(a.hostname,'')
+		   FROM scenario_runs sr LEFT JOIN agents a ON a.agent_id = sr.agent_id
+		  WHERE sr.id = $1`, runID,
+	).Scan(&name, &resultsRaw, &hostname); err != nil {
 		jsonError(w, "run not found", http.StatusNotFound)
 		return
 	}
@@ -3371,12 +3418,20 @@ func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 	if len(resultsRaw) > 0 {
 		json.Unmarshal(resultsRaw, &results)
 	}
+	results = reporting.FilterResults(results, filter)
 	idShort := runID
 	if len(idShort) > 8 {
 		idShort = idShort[:8]
 	}
-	fname := fmt.Sprintf("bas-forensic-%s-%s.csv", sanitizeFilename(name), idShort)
-	h.auditLog(r, "report.export", runID, map[string]any{"format": "csv", "type": "run"}, "ok")
+	if hostname == "" {
+		hostname = "host"
+	}
+	filterSuffix := ""
+	if filter != "" && filter != "all" {
+		filterSuffix = "-" + filter
+	}
+	fname := fmt.Sprintf("bas-forensic-%s-%s%s-%s.csv", sanitizeFilename(name), sanitizeFilename(hostname), filterSuffix, idShort)
+	h.auditLog(r, "report.export", runID, map[string]any{"format": "csv", "type": "run", "filter": filter}, "ok")
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	reporting.WriteForensicCSV(w, name, results)
@@ -3408,7 +3463,8 @@ func (h *Handler) GetRunReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runID := chi.URLParam(r, "runId")
-	report, err := h.reportingEngine.BuildFromRun(r.Context(), runID)
+	filter := r.URL.Query().Get("filter")
+	report, err := h.reportingEngine.BuildFromRun(r.Context(), runID, filter)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
@@ -3431,7 +3487,8 @@ func (h *Handler) GetRunReportData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runID := chi.URLParam(r, "runId")
-	report, err := h.reportingEngine.BuildFromRun(r.Context(), runID)
+	filter := r.URL.Query().Get("filter")
+	report, err := h.reportingEngine.BuildFromRun(r.Context(), runID, filter)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return

@@ -23,7 +23,7 @@ import (
 //	compliance/NIST_CSF_2.csv  (and other frameworks)
 //	agent-inventory.json
 func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *compliance.Mapper, w io.Writer) error {
-	report, err := e.Build(ctx, agentID)
+	report, err := e.Build(ctx, agentID, "")
 	if err != nil {
 		return fmt.Errorf("build report: %w", err)
 	}

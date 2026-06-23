@@ -13,7 +13,7 @@ import (
 // reportDownloadPath reconstructs the generator URL for a logged report from its
 // type + parameters. Centralised so the URL is never persisted and route changes
 // don't break history rows.
-func reportDownloadPath(reportType, format, agentID, framework string) (string, error) {
+func reportDownloadPath(reportType, format, agentID, framework, filter string) (string, error) {
 	switch reportType {
 	case "posture":
 		if agentID == "" {
@@ -26,12 +26,20 @@ func reportDownloadPath(reportType, format, agentID, framework string) (string, 
 		case "csv": // forensic evidence layer — one row per technique result
 			f = "csv"
 		}
-		return "/api/report/full/" + f + "?agentId=" + url.QueryEscape(agentID), nil
+		query := "?agentId=" + url.QueryEscape(agentID)
+		if filter != "" && filter != "all" {
+			query += "&filter=" + url.QueryEscape(filter)
+		}
+		return "/api/report/full/" + f + query, nil
 	case "audit":
 		if agentID == "" {
 			return "", errors.New("agentId required")
 		}
-		return "/api/report/audit-pack?agentId=" + url.QueryEscape(agentID), nil
+		query := "?agentId=" + url.QueryEscape(agentID)
+		if filter != "" && filter != "all" {
+			query += "&filter=" + url.QueryEscape(filter)
+		}
+		return "/api/report/audit-pack" + query, nil
 	case "compliance":
 		if framework == "" || agentID == "" {
 			return "", errors.New("framework and agentId required")
@@ -40,8 +48,12 @@ func reportDownloadPath(reportType, format, agentID, framework string) (string, 
 		if f == "" {
 			f = "html"
 		}
-		return "/api/compliance/report?framework=" + url.QueryEscape(framework) +
-			"&agentId=" + url.QueryEscape(agentID) + "&format=" + url.QueryEscape(f), nil
+		query := "?framework=" + url.QueryEscape(framework) +
+			"&agentId=" + url.QueryEscape(agentID) + "&format=" + url.QueryEscape(f)
+		if filter != "" && filter != "all" {
+			query += "&filter=" + url.QueryEscape(filter)
+		}
+		return "/api/compliance/report" + query, nil
 	}
 	return "", errors.New("invalid report type — use posture | audit | compliance")
 }
@@ -55,12 +67,13 @@ func (h *Handler) CreateReport(w http.ResponseWriter, r *http.Request) {
 		Format     string `json:"format"`
 		AgentID    string `json:"agentId"`
 		Framework  string `json:"framework"`
+		Filter     string `json:"filter"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil {
 		jsonError(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	path, err := reportDownloadPath(req.ReportType, req.Format, req.AgentID, req.Framework)
+	path, err := reportDownloadPath(req.ReportType, req.Format, req.AgentID, req.Framework, req.Filter)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -74,7 +87,7 @@ func (h *Handler) CreateReport(w http.ResponseWriter, r *http.Request) {
 		scope = req.Framework + " · " + req.AgentID
 	}
 	params, _ := json.Marshal(map[string]any{
-		"agentId": req.AgentID, "framework": req.Framework, "format": req.Format, "campaignId": nil,
+		"agentId": req.AgentID, "framework": req.Framework, "format": req.Format, "filter": req.Filter, "campaignId": nil,
 	})
 	id := newID()
 	if _, e := h.db.Exec(r.Context(),
@@ -111,9 +124,10 @@ func (h *Handler) ListReports(w http.ResponseWriter, r *http.Request) {
 			AgentID   string `json:"agentId"`
 			Framework string `json:"framework"`
 			Format    string `json:"format"`
+			Filter    string `json:"filter"`
 		}
 		_ = json.Unmarshal(paramsRaw, &p)
-		path, _ := reportDownloadPath(rtype, p.Format, p.AgentID, p.Framework)
+		path, _ := reportDownloadPath(rtype, p.Format, p.AgentID, p.Framework, p.Filter)
 		out = append(out, map[string]any{
 			"id": id, "reportType": rtype, "format": format, "scopeLabel": scope,
 			"source": source, "status": status, "generatedBy": by, "generatedAt": at,

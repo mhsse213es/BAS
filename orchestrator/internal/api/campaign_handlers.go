@@ -305,7 +305,8 @@ func (h *Handler) GetCampaignReport(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
 		return
 	}
-	rep, err := h.reportingEngine.BuildFromCampaign(r.Context(), chi.URLParam(r, "id"))
+	filter := r.URL.Query().Get("filter")
+	rep, err := h.reportingEngine.BuildFromCampaign(r.Context(), chi.URLParam(r, "id"), filter)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
@@ -326,12 +327,17 @@ func (h *Handler) GetCampaignPDF(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
 		return
 	}
-	rep, err := h.reportingEngine.BuildFromCampaign(r.Context(), chi.URLParam(r, "id"))
+	filter := r.URL.Query().Get("filter")
+	rep, err := h.reportingEngine.BuildFromCampaign(r.Context(), chi.URLParam(r, "id"), filter)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	fname := fmt.Sprintf("bas-campaign-%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), time.Now().UTC().Format("2006-01-02"))
+	filterSuffix := ""
+	if filter != "" && filter != "all" {
+		filterSuffix = "-" + filter
+	}
+	fname := fmt.Sprintf("bas-campaign-%s-%s%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), sanitizeFilename(rep.ScenarioName), filterSuffix, time.Now().UTC().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	h.auditLog(r, "report.export", chi.URLParam(r, "id"), map[string]any{"format": "pdf", "type": "campaign"}, "ok")
@@ -344,6 +350,7 @@ func (h *Handler) GetCampaignPDF(w http.ResponseWriter, r *http.Request) {
 // the campaign's child runs (the fleet evidence layer).
 func (h *Handler) GetCampaignCSV(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	filter := r.URL.Query().Get("filter")
 	var campName, scenarioName string
 	if err := h.db.QueryRow(r.Context(),
 		`SELECT name, scenario_name FROM campaigns WHERE id = $1`, id,
@@ -367,12 +374,17 @@ func (h *Handler) GetCampaignCSV(w http.ResponseWriter, r *http.Request) {
 		if len(raw) > 0 {
 			var rs []models.SimulationResult
 			if json.Unmarshal(raw, &rs) == nil {
+				rs = reporting.FilterResults(rs, filter)
 				all = append(all, rs...)
 			}
 		}
 	}
-	fname := fmt.Sprintf("bas-campaign-forensic-%s-%s.csv", sanitizeFilename(campName), time.Now().UTC().Format("2006-01-02"))
-	h.auditLog(r, "report.export", id, map[string]any{"format": "csv", "type": "campaign"}, "ok")
+	filterSuffix := ""
+	if filter != "" && filter != "all" {
+		filterSuffix = "-" + filter
+	}
+	fname := fmt.Sprintf("bas-campaign-forensic-%s-%s%s-%s.csv", sanitizeFilename(campName), sanitizeFilename(scenarioName), filterSuffix, time.Now().UTC().Format("2006-01-02"))
+	h.auditLog(r, "report.export", id, map[string]any{"format": "csv", "type": "campaign", "filter": filter}, "ok")
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	reporting.WriteForensicCSV(w, scenarioName, all)

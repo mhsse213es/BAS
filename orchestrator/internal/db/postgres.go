@@ -311,6 +311,40 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_audit_logs_ts     ON audit_logs (ts DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_logs_actor  ON audit_logs (actor_id, ts DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs (action, ts DESC)`,
+
+		// ── Variant executor: multi-variant technique execution ───────────────
+		// variant_runs: one row per dispatched variant set (linked to scenario_runs).
+		`CREATE TABLE IF NOT EXISTS variant_runs (
+			id              text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			agent_id        text        NOT NULL,
+			technique_id    text        NOT NULL,
+			base_type       text        NOT NULL DEFAULT 'art',
+			base_id         text        NOT NULL DEFAULT '',
+			scenario_run_id text        NOT NULL,
+			total_variants  int         NOT NULL DEFAULT 0,
+			status          text        NOT NULL DEFAULT 'running',
+			created_at      timestamptz NOT NULL DEFAULT NOW(),
+			completed_at    timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_variant_runs_agent     ON variant_runs (agent_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_variant_runs_technique ON variant_runs (technique_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_variant_runs_run       ON variant_runs (scenario_run_id)`,
+
+		// variant_run_steps: per-template metadata stored at dispatch time.
+		// Joined with scenario_runs.results on task_id to reconstruct per-variant verdicts.
+		`CREATE TABLE IF NOT EXISTS variant_run_steps (
+			id              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			variant_run_id  text NOT NULL,
+			task_id         text NOT NULL,
+			technique_id    text NOT NULL,
+			encoding        text NOT NULL,
+			exec_context    text NOT NULL,
+			evasion         text NOT NULL,
+			executor        text NOT NULL,
+			cmd_preview     text NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_variant_run_steps_run  ON variant_run_steps (variant_run_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_variant_run_steps_task ON variant_run_steps (task_id)`,
 	}
 
 	for _, s := range stmts {

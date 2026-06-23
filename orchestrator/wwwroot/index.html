@@ -294,6 +294,7 @@ body {
   margin-left: var(--sidebar-w);
   flex: 1;
   min-width: 0;
+  overflow-x: clip;
   min-height: 100vh;
   display: flex; flex-direction: column;
 }
@@ -334,7 +335,7 @@ header {
 }
 
 /* ── Main content ──────────────────────────────────────────── */
-main { flex: 1; padding: 1.5rem; }
+main { flex: 1; padding: 1.5rem; isolation: isolate; }
 main::-webkit-scrollbar { width: 5px; }
 main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
@@ -2487,9 +2488,56 @@ body.theme-slate {
     </div>
     <label class="modal-lbl">Format</label>
     <select id="rep-format"></select>
+    <div id="rep-filter-wrap">
+      <label class="modal-lbl">Results Filter</label>
+      <select id="rep-filter">
+        <option value="all">All simulation results (Default)</option>
+        <option value="prevented">Prevented only</option>
+        <option value="not_prevented">Not prevented only</option>
+        <option value="detected">Detected only</option>
+        <option value="not_detected">Not detected only</option>
+      </select>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeReportGen()">Cancel</button>
       <button class="btn btn-primary btn-sm" onclick="submitReport()">&#9660; Generate &amp; download</button>
+    </div>
+  </div>
+</div>
+
+<!-- Download Options Modal -->
+<div id="download-options-overlay" class="overlay" style="z-index: 10002;">
+  <div class="modal" style="min-width:380px; box-shadow: 0 20px 25px -5px rgba(0,0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.3);">
+    <h3 id="dl-options-title" style="margin-top:0; margin-bottom:1rem; font-family:var(--font-display); font-size:1.2rem; font-weight:600; color:var(--text)">Download Options</h3>
+    
+    <label class="modal-lbl" style="margin-bottom:0.5rem; display:block; font-size:0.8rem; color:var(--muted)">Select results to include in the report:</label>
+    
+    <div style="display:flex; flex-direction:column; gap:0.6rem; margin-bottom:1.5rem;">
+      <label class="dl-opt-row" style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; font-size:0.85rem; color:var(--text); padding:0.4rem; border-radius:var(--radius); transition: background 0.2s;">
+        <input type="radio" name="dl-filter" value="all" checked style="accent-color:var(--accent);">
+        <span>All simulation results (Default)</span>
+      </label>
+      <label class="dl-opt-row" style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; font-size:0.85rem; color:var(--text); padding:0.4rem; border-radius:var(--radius); transition: background 0.2s;">
+        <input type="radio" name="dl-filter" value="prevented" style="accent-color:var(--accent);">
+        <span style="color:#5cead8;">Prevented only</span>
+      </label>
+      <label class="dl-opt-row" style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; font-size:0.85rem; color:var(--text); padding:0.4rem; border-radius:var(--radius); transition: background 0.2s;">
+        <input type="radio" name="dl-filter" value="not_prevented" style="accent-color:var(--accent);">
+        <span style="color:#f85149;">Not prevented only</span>
+      </label>
+      <label class="dl-opt-row" style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; font-size:0.85rem; color:var(--text); padding:0.4rem; border-radius:var(--radius); transition: background 0.2s;">
+        <input type="radio" name="dl-filter" value="detected" style="accent-color:var(--accent);">
+        <span style="color:#a5d6ff;">Detected only</span>
+      </label>
+      <label class="dl-opt-row" style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; font-size:0.85rem; color:var(--text); padding:0.4rem; border-radius:var(--radius); transition: background 0.2s;">
+        <input type="radio" name="dl-filter" value="not_detected" style="accent-color:var(--accent);">
+        <span style="color:#ffb347;">Not detected only</span>
+      </label>
+    </div>
+
+    <div class="modal-actions" style="display:flex; justify-content:flex-end; gap:0.5rem;">
+      <button class="btn btn-outline btn-sm" onclick="closeDownloadOptions()">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="dl-confirm-btn">Confirm &amp; Download</button>
     </div>
   </div>
 </div>
@@ -4698,13 +4746,25 @@ function renderRepHistory() {
 // download — the same path the modal uses, so the per-agent launcher and the
 // tiles share one history.
 function genAgentReport(agentId, type, format) {
-  apicall('/api/reports', { method: 'POST', body: JSON.stringify({ reportType: type, agentId: agentId, format: format }) })
-    .then(function(res) {
-      if (res && res.error) { showToast('Generate failed: ' + res.error, 'err'); return; }
-      window.open(res.downloadPath, '_blank');
-      showToast('Report generating — download opened', 'ok');
-      renderRepHistory();
-    }).catch(function(e) { showToast('Generate failed: ' + e.message, 'err'); });
+  if (type === 'audit') {
+    apicall('/api/reports', { method: 'POST', body: JSON.stringify({ reportType: type, agentId: agentId, format: format, filter: 'all' }) })
+      .then(function(res) {
+        if (res && res.error) { showToast('Generate failed: ' + res.error, 'err'); return; }
+        window.open(res.downloadPath, '_blank');
+        showToast('Report generating — download opened', 'ok');
+        renderRepHistory();
+      }).catch(function(e) { showToast('Generate failed: ' + e.message, 'err'); });
+  } else {
+    showDownloadOptions('Report Options', function(filter) {
+      apicall('/api/reports', { method: 'POST', body: JSON.stringify({ reportType: type, agentId: agentId, format: format, filter: filter }) })
+        .then(function(res) {
+          if (res && res.error) { showToast('Generate failed: ' + res.error, 'err'); return; }
+          window.open(res.downloadPath, '_blank');
+          showToast('Report generating — download opened', 'ok');
+          renderRepHistory();
+        }).catch(function(e) { showToast('Generate failed: ' + e.message, 'err'); });
+    });
+  }
 }
 function openReportGen(type) {
   REPORT_TYPE = type;
@@ -4731,6 +4791,12 @@ function openReportGen(type) {
   } else {
     fwWrap.style.display = 'none';
   }
+  var filterWrap = document.getElementById('rep-filter-wrap');
+  if (type === 'audit') {
+    if (filterWrap) filterWrap.style.display = 'none';
+  } else {
+    if (filterWrap) filterWrap.style.display = '';
+  }
   document.getElementById('report-overlay').classList.add('open');
 }
 function closeReportGen() { document.getElementById('report-overlay').classList.remove('open'); }
@@ -4739,6 +4805,7 @@ function submitReport() {
     reportType: REPORT_TYPE,
     agentId: document.getElementById('rep-agent').value,
     format: document.getElementById('rep-format').value,
+    filter: (REPORT_TYPE !== 'audit') ? document.getElementById('rep-filter').value : 'all',
     framework: REPORT_TYPE === 'compliance' ? document.getElementById('rep-fw').value : ''
   };
   apicall('/api/reports', { method: 'POST', body: JSON.stringify(body) }).then(function(res) {
@@ -6154,6 +6221,36 @@ function stopRun(runId) {
     .catch(function(e) { showToast(e.message, 'err'); });
 }
 
+var _dlCallback = null;
+function showDownloadOptions(title, callback) {
+  document.getElementById('dl-options-title').textContent = title || 'Download Options';
+  var radios = document.getElementsByName('dl-filter');
+  for (var i = 0; i < radios.length; i++) {
+    radios[i].checked = (radios[i].value === 'all');
+  }
+  _dlCallback = callback;
+  document.getElementById('download-options-overlay').classList.add('open');
+}
+function closeDownloadOptions() {
+  document.getElementById('download-options-overlay').classList.remove('open');
+  _dlCallback = null;
+}
+// Set up confirm click handler
+document.getElementById('dl-confirm-btn').onclick = function() {
+  var selected = 'all';
+  var radios = document.getElementsByName('dl-filter');
+  for (var i = 0; i < radios.length; i++) {
+    if (radios[i].checked) {
+      selected = radios[i].value;
+      break;
+    }
+  }
+  closeDownloadOptions();
+  if (_dlCallback) {
+    _dlCallback(selected);
+  }
+};
+
 function exportRunJSON(runId) {
   var a = document.createElement('a');
   a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/export';
@@ -6163,38 +6260,60 @@ function exportRunJSON(runId) {
   document.body.removeChild(a);
 }
 function openRunReport(runId) {
-  window.open('/api/scenarios/runs/' + encodeURIComponent(runId) + '/report', '_blank');
+  showDownloadOptions('Simulation HTML Report', function(filter) {
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    window.open('/api/scenarios/runs/' + encodeURIComponent(runId) + '/report' + query, '_blank');
+  });
 }
 function openCampaignReport(id) {
-  window.open('/api/campaigns/' + encodeURIComponent(id) + '/report', '_blank');
+  showDownloadOptions('Campaign HTML Report', function(filter) {
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    window.open('/api/campaigns/' + encodeURIComponent(id) + '/report' + query, '_blank');
+  });
 }
 function downloadCampaignPDF(id) {
-  var a = document.createElement('a');
-  a.href = '/api/campaigns/' + encodeURIComponent(id) + '/pdf';
-  a.download = 'bas-campaign-' + id.substring(0, 8) + '.pdf';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  showDownloadOptions('Campaign PDF Report', function(filter) {
+    var a = document.createElement('a');
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    a.href = '/api/campaigns/' + encodeURIComponent(id) + '/pdf' + query;
+    var suffix = (filter && filter !== 'all') ? '-' + filter : '';
+    a.download = 'bas-campaign-' + id.substring(0, 8) + suffix + '.pdf';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  });
 }
 function downloadCampaignCSV(id) {
-  var a = document.createElement('a');
-  a.href = '/api/campaigns/' + encodeURIComponent(id) + '/forensic.csv';
-  a.download = 'bas-campaign-forensic-' + id.substring(0, 8) + '.csv';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  showDownloadOptions('Campaign Forensic CSV', function(filter) {
+    var a = document.createElement('a');
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    a.href = '/api/campaigns/' + encodeURIComponent(id) + '/forensic.csv' + query;
+    var suffix = (filter && filter !== 'all') ? '-' + filter : '';
+    a.download = 'bas-campaign-forensic-' + id.substring(0, 8) + suffix + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  });
 }
 function downloadRunCSV(runId) {
-  var a = document.createElement('a');
-  a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/forensic.csv';
-  a.download = 'bas-forensic-' + runId.substring(0, 8) + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  showDownloadOptions('Simulation Forensic CSV', function(filter) {
+    var a = document.createElement('a');
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/forensic.csv' + query;
+    var suffix = (filter && filter !== 'all') ? '-' + filter : '';
+    a.download = 'bas-forensic-' + runId.substring(0, 8) + suffix + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
 }
 function downloadRunPDF(runId) {
-  var a = document.createElement('a');
-  a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/pdf';
-  a.download = 'bas-report-' + runId.substring(0, 8) + '.pdf';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  showDownloadOptions('Simulation PDF Report', function(filter) {
+    var a = document.createElement('a');
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/pdf' + query;
+    var suffix = (filter && filter !== 'all') ? '-' + filter : '';
+    a.download = 'bas-report-' + runId.substring(0, 8) + suffix + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
 }
 
 function confirmRun() {
@@ -7508,16 +7627,23 @@ function safeScan(agentId) {
 }
 
 function openFullReport(agentId) {
-  window.open('/api/report/full/html?agentId=' + encodeURIComponent(agentId), '_blank');
+  showDownloadOptions('Agent Posture HTML Report', function(filter) {
+    var query = filter ? '&filter=' + encodeURIComponent(filter) : '';
+    window.open('/api/report/full/html?agentId=' + encodeURIComponent(agentId) + query, '_blank');
+  });
 }
 
 function downloadFullReportPDF(agentId) {
-  var a = document.createElement('a');
-  a.href = '/api/report/full/pdf?agentId=' + encodeURIComponent(agentId);
-  a.download = 'bas-report-' + agentId + '.pdf';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  showDownloadOptions('Agent Posture PDF Report', function(filter) {
+    var a = document.createElement('a');
+    var query = filter ? '&filter=' + encodeURIComponent(filter) : '';
+    a.href = '/api/report/full/pdf?agentId=' + encodeURIComponent(agentId) + query;
+    var suffix = (filter && filter !== 'all') ? '-' + filter : '';
+    a.download = 'bas-report-' + agentId + suffix + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
 }
 
 function downloadAuditPack(agentId) {
@@ -7702,13 +7828,15 @@ function exportCompliance(format) {
   // Log to the Reports history (report_log) and download via the reconstructed
   // path the server returns — keeps compliance exports in the unified Reports
   // history alongside posture/audit packs.
-  apicall('/api/reports', { method: 'POST', body: JSON.stringify({
-    reportType: 'compliance', format: format, agentId: agentId, framework: framework
-  }) }).then(function(res) {
-    if (res && res.error) { showToast('Export failed: ' + res.error, 'err'); return; }
-    window.open(res.downloadPath, '_blank');
-    showToast('Compliance ' + format.toUpperCase() + ' exported', 'ok');
-  }).catch(function(e) { showToast('Export failed: ' + e.message, 'err'); });
+  showDownloadOptions('Compliance Evidence Options', function(filter) {
+    apicall('/api/reports', { method: 'POST', body: JSON.stringify({
+      reportType: 'compliance', format: format, agentId: agentId, framework: framework, filter: filter
+    }) }).then(function(res) {
+      if (res && res.error) { showToast('Export failed: ' + res.error, 'err'); return; }
+      window.open(res.downloadPath, '_blank');
+      showToast('Compliance ' + format.toUpperCase() + ' exported', 'ok');
+    }).catch(function(e) { showToast('Export failed: ' + e.message, 'err'); });
+  });
 }
 // ── Tamper Alert Banner ────────────────────────────────────────────────────
 var _tamperPaths = [];
