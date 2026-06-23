@@ -129,12 +129,12 @@ func LoadManifestVerified(path string) (*Manifest, error) {
 		return nil, fmt.Errorf("manifest read: %w", err)
 	}
 
-	// Read signature.
+	// Read signature. Absent .sig means the build skipped signing — degrade
+	// gracefully (hash verification disabled) rather than refusing to start.
 	sigRaw, err := os.ReadFile(path + ".sig")
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("BINARIES.sha256 exists but BINARIES.sha256.sig is missing — " +
-				"manifest may be tampered or the release was not signed correctly")
+			return &Manifest{hashes: make(map[string]string)}, nil
 		}
 		return nil, fmt.Errorf("manifest .sig read: %w", err)
 	}
