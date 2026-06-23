@@ -188,9 +188,15 @@ type ExecResult struct {
 	// "reverted" = cleanup ran and exited 0; "partial" = non-zero exit;
 	// "leaked" = cleanup timed out or failed to start; "" = no cleanup defined.
 	CleanupVerdict string `json:"cleanupVerdict,omitempty"`
+	// RequestedPriv is the requires_priv value from the scenario step as declared
+	// by the scenario author. Empty means the step was unannotated (legacy).
+	RequestedPriv string `json:"requestedPriv,omitempty"`
 	// ExecutedAs records the actual privilege context the step ran under:
-	// "user" (non-elevated interactive), "admin" (local admin), or "system".
-	// Empty when context resolution is not supported (non-Windows).
+	//   "user"       → ran as the logged-in interactive user (WTS token)
+	//   "user→admin" → requires_priv=user but no session found; ran as agent
+	//   "admin"      → ran in the agent's elevated context
+	//   "system"     → ran as NT AUTHORITY\SYSTEM
+	//   ""           → unannotated step, ran in agent's own context (legacy)
 	ExecutedAs string `json:"executedAs,omitempty"`
 }
 

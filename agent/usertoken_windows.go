@@ -152,21 +152,37 @@ func resolveInteractiveUserToken() (windows.Token, bool) {
 //   - "system"      → agent's own context (already SYSTEM); token=0.
 //
 // The caller must close a non-zero returned token after the step completes.
+// agentContextFor resolves the execution token and the actual-execution label
+// for a step based on its RequiresPriv declaration.
+//
+//   - ""       → legacy: run in the agent's own context, no label recorded.
+//               This preserves backward compatibility for all existing unannotated
+//               scenarios — they continue to behave exactly as before.
+//   - "user"   → attempt WTS interactive-user token. On success returns the token
+//               and label "user". If no interactive session exists, returns zero
+//               token and label "user→admin" so the fallback is visible in results.
+//   - "admin"  → agent's own elevated context; label "admin".
+//   - "system" → agent's own context (already SYSTEM); label "system".
 func agentContextFor(step ScenarioStep) (windows.Token, string) {
 	switch step.RequiresPriv {
-	case "", "user":
+	case "":
+		// Legacy / unannotated — run in agent's own context, no context label.
+		return 0, ""
+	case "user":
 		tok, ok := activeUserToken()
 		if ok {
 			return tok, "user"
 		}
-		// No interactive session — fall through to agent context.
-		return 0, "admin"
+		// No interactive session — fall back to agent context and record the
+		// fallback explicitly so operators can see what actually executed.
+		return 0, "user→admin"
 	case "admin":
 		return 0, "admin"
 	case "system":
 		return 0, "system"
 	default:
-		return 0, "admin"
+		// Unknown value — treat as legacy to avoid breaking unknown content.
+		return 0, ""
 	}
 }
 

@@ -105,9 +105,12 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 			if step.Cleanup != "" {
 				r.CleanupVerdict = runCleanup(step)
 			}
-			// Pooled steps are always observation-risk discovery; they run in the
-			// agent's own context (no token switch needed for read-only enumeration).
-			r.ExecutedAs = "admin"
+			// Pooled steps are observation-risk discovery running in the agent's
+			// own context. Record what was requested vs what ran.
+			r.RequestedPriv = step.RequiresPriv
+			if step.RequiresPriv != "" {
+				r.ExecutedAs = "admin"
+			}
 			return r
 		}
 	}
@@ -235,6 +238,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 		Blocked:       blocked,
 		BlockedReason: blockedReason,
 		TimedOut:      timedOut,
+		RequestedPriv: step.RequiresPriv,
 		ExecutedAs:    executedAs,
 	}
 

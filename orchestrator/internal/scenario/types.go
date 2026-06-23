@@ -182,6 +182,16 @@ type ExecResult struct {
 	// CleanupVerdict is set by the agent after running the step's cleanup command.
 	// "reverted" = exit 0; "partial" = non-zero exit; "leaked" = timeout/start failure.
 	CleanupVerdict string `json:"cleanupVerdict,omitempty"`
+	// RequestedPriv mirrors the step's requires_priv declaration. Empty for
+	// unannotated (legacy) steps.
+	RequestedPriv string `json:"requestedPriv,omitempty"`
+	// ExecutedAs records the actual privilege context used:
+	//   "user"       → ran as logged-in interactive user
+	//   "user→admin" → requires_priv=user but no session; ran as agent
+	//   "admin"      → agent's elevated context
+	//   "system"     → NT AUTHORITY\SYSTEM
+	//   ""           → unannotated legacy step (agent's own context)
+	ExecutedAs string `json:"executedAs,omitempty"`
 }
 
 // SimCheckResult carries the pre-interpreted result of a single built-in local check.

@@ -5901,8 +5901,14 @@ function viewRunResults(run) {
       var fwBadge = '<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;background:rgba(255,255,255,0.06);color:' + fwColor + ';border-radius:2px;padding:1px 5px;margin-left:3px">' + x(fw) + '</span>';
       var privBadge = '';
       if (c.executedAs) {
+        // "user→admin" = fallback (requested user, ran as admin — amber + tooltip explains)
+        // "user" = blue, "system" = red, "admin" = amber
+        var isFallback = c.executedAs.indexOf('→') !== -1;
         var privCol = c.executedAs === 'user' ? 'var(--accent)' : c.executedAs === 'system' ? 'var(--danger)' : 'var(--warning)';
-        privBadge = '<span style="font-size:0.6rem;font-weight:600;text-transform:uppercase;background:rgba(255,255,255,0.04);color:' + privCol + ';border-radius:2px;padding:1px 5px;margin-left:2px;border:1px solid ' + privCol + '33" title="Executed as: ' + x(c.executedAs) + '">' + x(c.executedAs) + '</span>';
+        var privTitle = isFallback
+          ? 'Requested: ' + x(c.requestedPriv || 'user') + ' — fell back to: admin (no interactive session)'
+          : 'Executed as: ' + x(c.executedAs);
+        privBadge = '<span style="font-size:0.6rem;font-weight:600;text-transform:uppercase;background:rgba(255,255,255,0.04);color:' + privCol + ';border-radius:2px;padding:1px 5px;margin-left:2px;border:1px solid ' + privCol + '33' + (isFallback ? ';text-decoration:line-through' : '') + '" title="' + privTitle + '">' + x(c.executedAs) + '</span>';
       }
       var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.68rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
       return '<div style="padding:0.32rem 0;border-bottom:1px solid rgba(34,50,74,0.45)">' +
