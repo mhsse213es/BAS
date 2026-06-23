@@ -1,0 +1,84 @@
+id: em-05-persistence-validation
+name: "Endpoint Mastery 05 — Persistence Mechanism Validation"
+description: >
+  ENDPOINT MASTERY — Layer 5. Validates system resistance and monitoring depth
+  across common auto-start extensibility points (ASEPs). Evaluates registry run key mutations,
+  User Startup folder access, and Scheduled Task modifications[cite: 4, 5].
+
+  VERDICTS: PASS = intervention caught/blocked execution or registry write. FAIL = persistence
+  mechanism registered unblocked. SAFETY: Modifies only mock entries tagged with [BAS-SIM] and cleans up immediately.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-5
+  - persistence
+mitre_phases:
+  - persistence
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+
+steps:
+  - name: "Registry Run Key Modification attempt (HKCU)"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes a temporary mock string to HKCU Run key and rolls back instantly[cite: 5]."
+    telemetry:
+      - "Sysmon EID 13: Registry value set for HKCU Run"
+    detection:
+      - "EDR: Core persistence warning on registry run alterations"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+      $name = "AudspectMockRun"
+      $val = "C:\Windows\System32\cmd.exe /c echo [BAS-SIM]"
+      $blocked = $false
+      try {
+        New-ItemProperty -Path $path -Name $name -Value $val -PropertyType String -Force -ErrorAction Stop | Out-Null
+      } catch { $blocked = $true }
+      if ($blocked) {
+        Write-Output "PASS: EDR or Registry Protection prevented direct injection into user Run keys. [BAS-SIM][cite: 5]"
+      } else {
+        Remove-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue
+        Write-Output "FAIL: Successfully wrote to HKCU Registry Run Key — persistence vector is unmonitored or unblocked[cite: 5]."
+      }
+    cleanup: |
+      Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AudspectMockRun" -ErrorAction SilentlyContinue
+
+  - name: "User Startup Folder File Drop"
+    technique_id: T1547.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes a benign .txt file inside the User Startup folder and deletes it instantly[cite: 5]."
+    telemetry:
+      - "Sysmon EID 11: FileCreate in Startup directory"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $startupPath = [Environment]::GetFolderPath('Startup')
+      $targetFile = Join-Path $startupPath "Audspect_Benign_Task.txt"
+      $blocked = $false
+      try {
+        [System.IO.File]::WriteAllText($targetFile, "Benign BAS simulation marker [BAS-SIM]")
+      } catch { $blocked = $true }
+      if ($blocked -or -not (Test-Path $targetFile)) {
+        Write-Output "PASS: Write access to Windows Startup folder was blocked or quarantined by local controls. [BAS-SIM]"
+      } else {
+        Remove-Item -Path $targetFile -Force -ErrorAction SilentlyContinue
+        Write-Output "FAIL: Dropped file unhindered into User Startup directory. Security controls missed the deployment signature."
+      }
+    cleanup: |
+      $startupPath = [Environment]::GetFolderPath('Startup')
+      Remove-Item -Path (Join-Path $startupPath "Audspect_Benign_Task.txt") -Force -ErrorAction SilentlyContinue

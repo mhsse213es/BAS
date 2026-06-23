@@ -1,0 +1,64 @@
+id: em-11-hardening-validation
+name: "Endpoint Mastery 11 — Endpoint Hardening Validation"
+description: >
+  ENDPOINT MASTERY — Layer 11. Configuration posture assurance verification. Evaluates the
+  presence and operational status of high-grade platform security features including LAPS,
+  Credential Guard, and kernel integrity settings[cite: 4, 5].
+
+  VERDICTS: PASS = hardening control configured and fully active. FAIL = control absent, exposing the host.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-11
+  - posture
+  - hardening
+mitre_phases:
+  - defense-evasion
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+
+steps:
+  - name: "Windows Defender Credential Guard operational status verification"
+    technique_id: T1562
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries the Win32_DeviceGuard class status properties. Read-only[cite: 1]."
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $dg = Get-CimInstance -ClassName Win32_DeviceGuard -Namespace 'root\Microsoft\Windows\DeviceGuard'
+      if (-not $dg) { Write-Output "FAIL: Device Guard WMI infrastructure unqueryable or feature missing."; return }
+      # SecurityServicesRunning: 1 = Credential Guard
+      if ($dg.SecurityServicesRunning -contains 1) {
+        Write-Output "PASS: Windows Defender Credential Guard is active and isolating LSA memory space. [BAS-SIM][cite: 4, 5]"
+      } else {
+        Write-Output "FAIL: Credential Guard is not running — LSASS memory lacks Virtualization-Based Security (VBS) enclave isolation[cite: 4, 5]."
+      }
+    cleanup: ""
+
+  - name: "Local Administrator Password Solution (LAPS) state audit"
+    technique_id: T1562
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $hasLaps = $false
+      # Check registry footprints for Windows LAPS or legacy LAPS extensions
+      if (Test-Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\LAPS\Config") { $hasLaps = $true }
+      if (Test-Path "HKLM:\Software\Microsoft\Policies\Microsoft\LAPS") { $hasLaps = $true }
+      if ($hasLaps) {
+        Write-Output "PASS: LAPS deployment properties detected on this host. [BAS-SIM]"
+      } else {
+        Write-Output "FAIL: No LAPS registry configuration schemas identified. Local administrator accounts may share static passwords."
+      }
+    cleanup: ""

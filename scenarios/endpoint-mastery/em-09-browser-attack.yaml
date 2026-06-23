@@ -1,0 +1,78 @@
+id: em-09-browser-attack
+name: "Endpoint Mastery 09 — Browser Attack Simulation"
+description: >
+  ENDPOINT MASTERY — Layer 9. Analyzes boundary exposure surrounding local web browser footprints.
+  Validates directory isolation locks on session state assets, credential stores, and cookie files
+  to ensure local spy tools cannot access profile data unchallenged[cite: 4, 5].
+
+  VERDICTS: PASS = access to primary data file path locked or denied by OS/EDR. FAIL = file stream opened unblocked.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-9
+  - browser
+mitre_phases:
+  - credential-access
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+
+steps:
+  - name: "Google Chrome local Cookie database file access check"
+    technique_id: T1539
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Attempts to open a temporary system read handle against the Chrome Default Network profile database[cite: 5]."
+    telemetry:
+      - "PowerShell EID 4104: Path verification activity"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Network\Cookies"
+      if (-not (Test-Path $target)) {
+        Write-Output "SKIP: Google Chrome default user profile data structures not present on this endpoint."
+        return
+      }
+      $unlocked = $false
+      try {
+        $stream = [System.IO.File]::Open($target, 'Open', 'Read', 'ReadWrite')
+        if ($stream) { $unlocked = $true; $stream.Close() }
+      } catch {}
+      if ($unlocked) {
+        Write-Output "FAIL: Chrome Cookie database accessible to local unprivileged processes — susceptible to automated session hijacking tools[cite: 5]."
+      } else {
+        Write-Output "PASS: Target profile files correctly isolated, active process locked, or read attempt flagged by policy. [BAS-SIM][cite: 5]"
+      }
+    cleanup: ""
+
+  - name: "Microsoft Edge profile database read verification"
+    technique_id: T1555.003
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $target = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Login Data"
+      if (-not (Test-Path $target)) {
+        Write-Output "SKIP: Microsoft Edge default profile structures not found."
+        return
+      }
+      $unlocked = $false
+      try {
+        $stream = [System.IO.File]::Open($target, 'Open', 'Read', 'ReadWrite')
+        if ($stream) { $unlocked = $true; $stream.Close() }
+      } catch {}
+      if ($unlocked) {
+        Write-Output "FAIL: Edge local credential storage database accessible to raw read streams."
+      } else {
+        Write-Output "PASS: Edge profile storage database securely isolated against casual file harvesting probes. [BAS-SIM]"
+      }
+    cleanup: ""

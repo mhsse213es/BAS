@@ -1,0 +1,54 @@
+id: em-13-product-validation
+name: "Endpoint Mastery 13 — Security Product Health Validation"
+description: >
+  ENDPOINT MASTERY — Layer 13. Systematically audits active security endpoint product processes,
+  driver services, and self-defense footprints. Ensures underlying agents are genuinely up, running,
+  and communicating instead of being disabled, blind, or unhooked[cite: 4, 5].
+
+  VERDICTS: PASS = critical security products verified active. FAIL = agent services missing or stopped.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-13
+  - product-validation
+mitre_phases:
+  - defense-evasion
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+
+steps:
+  - name: "Security Agent service presence and run state verification"
+    technique_id: T1562.001
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries the operational status of major endpoint protection filters and drivers[cite: 5]."
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Comprehensive array searching for common vendor signatures (Microsoft Defender, CrowdStrike, SentinelOne, Trellix)
+      $targets = @("WinDefend", "CSFalconService", "SentinelAgent", "McAfeeFramework", "macmnsvc", "TrellixAgent")
+      $found = 0
+      $running = 0
+      
+      foreach ($t in $targets) {
+        $svc = Get-Service -Name $t -ErrorAction SilentlyContinue
+        if ($svc) {
+          $found++
+          if ($svc.Status -eq "Running") { $running++ }
+        }
+      }
+      if ($found -eq 0) {
+        Write-Output "FAIL: Zero mapped EDR/AV enterprise agent footprints detected via service enumeration tables[cite: 1, 5]."
+      } elseif ($running -lt $found) {
+        Write-Output "FAIL: Detected security software services, but some are currently STOPPED or inactive. Posture gap present."
+      } else {
+        Write-Output "PASS: Core enterprise security software platforms are present and reporting active RUN states. [BAS-SIM][cite: 5]"
+      }
+    cleanup: ""

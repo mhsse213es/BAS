@@ -1,0 +1,51 @@
+id: em-12-adversary-emulation
+name: "Endpoint Mastery 12 — Adversary Emulation Pack (APT29 Profile)"
+description: >
+  ENDPOINT MASTERY — Layer 12. Models structural step sequences matching specific real-world
+  threat actor behavior patterns. Emulates specific discovery queries and recon signatures
+  associated with historical APT29 operational toolsets[cite: 4, 5].
+
+  VERDICTS: FAIL = profiling logic executed with zero behavioral alarms. PASS = process chains halted or flagged.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-12
+  - adversary-pack
+  - apt29
+mitre_phases:
+  - discovery
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+
+steps:
+  - name: "APT29 Active Domain Trust Discovery pattern (nltest simulation)"
+    technique_id: T1482
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Fires localized non-destructive domain enumeration arguments via nltest.exe to test correlation rules[cite: 5]."
+    telemetry:
+      - "Sysmon EID 1: nltest.exe with /domain_trusts command arguments[cite: 5]"
+    detection:
+      - "EDR: Rule mapping flag on specialized domain trust mapping tools"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $p = Start-Process 'nltest.exe' -ArgumentList '/domain_trusts' -PassThru -WindowStyle Hidden -RedirectStandardOutput NUL
+      if ($p) {
+        $p.WaitForExit(6000) | Out-Null
+        if ($p.ExitCode -eq 0) {
+          Write-Output "FAIL: Domain mapping discovery utility completed without process chain termination or alert hooks[cite: 5]."
+        } else {
+          Write-Output "PASS: Recon command blocked or handled securely by environment profiles. [BAS-SIM][cite: 5]"
+        }
+      } else {
+        Write-Output "PASS: Preemptively terminated execution vector before process start. [BAS-SIM]"
+      }
+    cleanup: ""

