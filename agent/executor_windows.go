@@ -111,6 +111,32 @@ else { Write-Output "WMI_TIMEOUT: inner process did not write output within time
 	}
 }
 
+// applyExecutionContext resolves the privilege context for a step, optionally
+// switches the cmd to run under the logged-in user's token (for "user" steps),
+// and returns the label that should be recorded in ExecResult.ExecutedAs.
+//
+// When token resolution succeeds the caller is responsible for closing the
+// token after the process has started — we close it here because exec.Cmd.Start
+// duplicates the token before the process is created.
+func applyExecutionContext(cmd *exec.Cmd, step ScenarioStep) string {
+	tok, label := agentContextFor(step)
+	if tok == 0 {
+		return label // running in agent's own context — no token switch needed
+	}
+	defer tok.Close()
+
+	env, _ := buildUserEnv(tok, step)
+	cmd.Env = env
+
+	// Set Token on SysProcAttr — exec.Cmd.Start calls CreateProcessAsUserW when
+	// this is non-zero, spawning the child in the user's security context.
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Token = syscall.Token(tok)
+	return label
+}
+
 // hostIsDomainController reports whether this Windows host is a domain controller.
 // The DC role is recorded in ProductOptions\ProductType = "LanmanNT" (DC) vs
 // "WinNT" (workstation) / "ServerNT" (member server).

@@ -153,16 +153,17 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 		framework = "custom"
 	}
 	return ScenarioStep{
-		TaskID:      TaskID(s.TechniqueID, s.Name),
-		TechniqueID: s.TechniqueID,
-		Name:        s.Name,
-		Framework:   framework,
-		Executor:    executor,
-		Command:     command,
-		TimeoutSec:  timeout,
-		Payloads:    payloads,
-		Cleanup:     s.Cleanup,
-		Fidelity:    s.Fidelity,
+		TaskID:       TaskID(s.TechniqueID, s.Name),
+		TechniqueID:  s.TechniqueID,
+		Name:         s.Name,
+		Framework:    framework,
+		Executor:     executor,
+		Command:      command,
+		TimeoutSec:   timeout,
+		Payloads:     payloads,
+		Cleanup:      s.Cleanup,
+		Fidelity:     s.Fidelity,
+		RequiresPriv: s.RequiresPriv,
 	}, nil
 }
 

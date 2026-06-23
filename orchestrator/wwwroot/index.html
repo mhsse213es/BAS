@@ -5899,12 +5899,17 @@ function viewRunResults(run) {
       var fw = (c.framework || 'custom').toLowerCase();
       var fwColor = fw === 'art' ? 'var(--accent)' : fw === 'caldera' ? '#bc8cff' : 'var(--muted)';
       var fwBadge = '<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;background:rgba(255,255,255,0.06);color:' + fwColor + ';border-radius:2px;padding:1px 5px;margin-left:3px">' + x(fw) + '</span>';
+      var privBadge = '';
+      if (c.executedAs) {
+        var privCol = c.executedAs === 'user' ? 'var(--accent)' : c.executedAs === 'system' ? 'var(--danger)' : 'var(--warning)';
+        privBadge = '<span style="font-size:0.6rem;font-weight:600;text-transform:uppercase;background:rgba(255,255,255,0.04);color:' + privCol + ';border-radius:2px;padding:1px 5px;margin-left:2px;border:1px solid ' + privCol + '33" title="Executed as: ' + x(c.executedAs) + '">' + x(c.executedAs) + '</span>';
+      }
       var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.68rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
       return '<div style="padding:0.32rem 0;border-bottom:1px solid rgba(34,50,74,0.45)">' +
         '<div style="display:flex;align-items:baseline;gap:0.45rem;flex-wrap:wrap">' +
           '<span style="color:' + col + ';font-size:0.7rem;font-weight:600;min-width:46px">' + x(c.result) + '</span>' +
           techId + '<span style="font-size:0.8rem">' + x((c.technique && c.technique.name) || c.name || '') + '</span>' +
-          fwBadge + '<span style="color:var(--muted);font-size:0.68rem;margin-left:auto">' + x(c.severity || '') + '</span>' +
+          fwBadge + privBadge + '<span style="color:var(--muted);font-size:0.68rem;margin-left:auto">' + x(c.severity || '') + '</span>' +
         '</div>' +
         (c.details ? '<div style="color:var(--muted);font-size:0.72rem;padding-left:52px;margin-top:0.1rem">' + x(c.details) + '</div>' : '') +
         (c.result === 'fail' && c.threatImpact ? '<div style="color:var(--muted);font-size:0.7rem;padding-left:52px;margin-top:0.1rem">' + x(c.threatImpact) + '</div>' : '') +

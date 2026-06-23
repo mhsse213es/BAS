@@ -105,6 +105,9 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 			if step.Cleanup != "" {
 				r.CleanupVerdict = runCleanup(step)
 			}
+			// Pooled steps are always observation-risk discovery; they run in the
+			// agent's own context (no token switch needed for read-only enumeration).
+			r.ExecutedAs = "admin"
 			return r
 		}
 	}
@@ -117,7 +120,15 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 	// Never let an interactive prompt block the step on stdin (see helper).
 	cmd.Stdin = declinePromptInput()
 
-	if step.PayloadDir != "" || len(step.Env) > 0 {
+	// Resolve execution context (user / admin / system). On Windows this may
+	// switch to the logged-in user's token via WTS; on POSIX it is a no-op.
+	// Must be called BEFORE setting cmd.Env below so user-context env is
+	// established first and step overrides can then be layered on top.
+	executedAs := applyExecutionContext(cmd, step)
+
+	// If applyExecutionContext did not already set cmd.Env (i.e. agent context),
+	// apply step-level env overrides now.
+	if cmd.Env == nil && (step.PayloadDir != "" || len(step.Env) > 0) {
 		env := os.Environ()
 		if step.PayloadDir != "" {
 			env = append(env, "BAS_PAYLOAD_DIR="+step.PayloadDir)
@@ -224,6 +235,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 		Blocked:       blocked,
 		BlockedReason: blockedReason,
 		TimedOut:      timedOut,
+		ExecutedAs:    executedAs,
 	}
 
 	result.Events = collectRecentEvents(parentCtx, before)

@@ -37,6 +37,15 @@ type Step struct {
 	//   "lab-only"             → runs ONLY in lab mode (isolated range; higher risk)
 	Fidelity       string `yaml:"fidelity,omitempty"        json:"fidelity,omitempty"`
 	ProductionSafe bool   `yaml:"production_safe,omitempty" json:"productionSafe,omitempty"`
+
+	// RequiresPriv declares the minimum privilege the step needs to execute:
+	//   ""       → defaults to "user" (non-elevated interactive session)
+	//   "user"   → standard non-elevated user context (realistic phishing/initial-access model)
+	//   "admin"  → local administrator (service/persistence techniques)
+	//   "system" → NT AUTHORITY\SYSTEM (kernel/driver/EDR self-protection tests)
+	// The agent resolves the logged-in user token via WTS for "user" steps; falls back
+	// to its own context if no interactive session is present.
+	RequiresPriv string `yaml:"requires_priv,omitempty" json:"requiresPriv,omitempty"`
 }
 
 // LivePolicy is the per-scenario guardrail set applied to live (telemetry/lab)
@@ -140,6 +149,10 @@ type ScenarioStep struct {
 	// Timeout is the step's curated schedule/execute/grace bounds. nil → the agent
 	// uses the step's own timeout / engine default. Set by AttachProfiles.
 	Timeout *TimeoutProfile `json:"timeout,omitempty"`
+	// RequiresPriv is the privilege tier required to run this step. Mirrors Step.RequiresPriv.
+	// "" and "user" both mean non-elevated user context; "admin" and "system" run in
+	// the agent's own elevated context. Serialised to the agent wire.
+	RequiresPriv string `json:"requiresPriv,omitempty"`
 }
 
 // ScenarioCommand is sent to an agent via WebSocket.

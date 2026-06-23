@@ -164,6 +164,10 @@ type ScenarioStep struct {
 	// Env holds runtime-only policy variables (BAS_RUN_MODE, BAS_MAX_SPRAY_ATTEMPTS,
 	// BAS_SPRAY_ALLOWLIST) injected by the runner; never wire-serialised.
 	Env map[string]string `json:"-"`
+	// RequiresPriv is the privilege tier the server tagged this step with.
+	// "" or "user" → run as the logged-in interactive user (WTS token).
+	// "admin" / "system" → run in the agent's own elevated context.
+	RequiresPriv string `json:"requiresPriv,omitempty"`
 }
 
 type ExecResult struct {
@@ -184,6 +188,10 @@ type ExecResult struct {
 	// "reverted" = cleanup ran and exited 0; "partial" = non-zero exit;
 	// "leaked" = cleanup timed out or failed to start; "" = no cleanup defined.
 	CleanupVerdict string `json:"cleanupVerdict,omitempty"`
+	// ExecutedAs records the actual privilege context the step ran under:
+	// "user" (non-elevated interactive), "admin" (local admin), or "system".
+	// Empty when context resolution is not supported (non-Windows).
+	ExecutedAs string `json:"executedAs,omitempty"`
 }
 
 // AlertRecord is one raw defensive event collected from the endpoint. The agent

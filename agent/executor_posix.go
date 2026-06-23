@@ -47,6 +47,10 @@ func collectRecentEvents(_ context.Context, _ time.Time) []string {
 // Windows Active Directory concept.
 func hostIsDomainController() bool { return false }
 
+// applyExecutionContext is a no-op on non-Windows platforms: no token switching
+// is performed and the step runs in the agent's own process context.
+func applyExecutionContext(_ *exec.Cmd, _ ScenarioStep) string { return "" }
+
 // detectSecurityBlock returns true when an EDR/AV killed the child process.
 // SIGKILL from our own context (timeout/cancel) is excluded by the caller.
 func detectSecurityBlock(exitErr *exec.ExitError, durMs int64) (bool, string) {
