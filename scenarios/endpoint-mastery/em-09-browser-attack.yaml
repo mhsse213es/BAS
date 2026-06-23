@@ -1,4 +1,4 @@
-id: em-09-browser-attack
+﻿id: em-09-browser-attack
 name: "Endpoint Mastery 09 — Browser Attack Simulation"
 description: >
   ENDPOINT MASTERY — Layer 9. Analyzes boundary exposure surrounding local web browser footprints.
@@ -24,6 +24,7 @@ steps:
     technique_id: T1539
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -55,6 +56,7 @@ steps:
     technique_id: T1555.003
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true

@@ -1,4 +1,4 @@
-id: em-05-persistence-validation
+﻿id: em-05-persistence-validation
 name: "Endpoint Mastery 05 — Persistence Mechanism Validation"
 description: >
   ENDPOINT MASTERY — Layer 5. Validates system resistance and monitoring depth
@@ -25,6 +25,7 @@ steps:
     technique_id: T1547.001
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -57,6 +58,7 @@ steps:
     technique_id: T1547.001
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true

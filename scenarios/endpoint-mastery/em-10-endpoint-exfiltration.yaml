@@ -1,4 +1,4 @@
-id: em-10-endpoint-exfiltration
+﻿id: em-10-endpoint-exfiltration
 name: "Endpoint Mastery 10 — Endpoint Data Exfiltration Channels"
 description: >
   ENDPOINT MASTERY — Layer 10. Assesses out-of-band communication monitoring and protocol
@@ -23,6 +23,7 @@ steps:
     technique_id: T1071.004
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true

@@ -1,4 +1,4 @@
-id: em-01-control-validation
+﻿id: em-01-control-validation
 name: "Endpoint Mastery 01 — Endpoint Security Control Validation"
 description: >
   ENDPOINT MASTERY — Layer 1. Validates that the endpoint's preventive controls
@@ -33,6 +33,7 @@ steps:
     technique_id: T1562.001
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     production_safe: true
     risk: low
@@ -58,6 +59,7 @@ steps:
     technique_id: T1562.001
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     production_safe: true
     risk: low
@@ -80,6 +82,7 @@ steps:
     technique_id: T1562.001
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     production_safe: true
     risk: low
@@ -102,6 +105,7 @@ steps:
     technique_id: T1562.004
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     production_safe: true
     risk: low
@@ -124,6 +128,7 @@ steps:
     technique_id: T1562.001
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     production_safe: true
     risk: low
@@ -149,6 +154,7 @@ steps:
     technique_id: T1059.001
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     production_safe: true
     risk: low
@@ -174,6 +180,7 @@ steps:
     technique_id: T1486
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     production_safe: true
     risk: low

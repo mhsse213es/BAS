@@ -1,4 +1,4 @@
-id: apt29-kill-chain
+﻿id: apt29-kill-chain
 name: APT29 Kill Chain — Cozy Bear Tradecraft (Phase 7)
 description: >
   Five-stage telemetry-safe emulation of APT29 (Cozy Bear / NOBELIUM) post-
@@ -56,6 +56,7 @@ steps:
     technique_id: T1482
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -88,6 +89,7 @@ steps:
     technique_id: T1059.001
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
@@ -128,6 +130,7 @@ steps:
     technique_id: T1547.001
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
@@ -167,6 +170,7 @@ steps:
     technique_id: T1053.005
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
@@ -206,6 +210,7 @@ steps:
     technique_id: T1071.004
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true

@@ -1,4 +1,4 @@
-id: em-13-product-validation
+﻿id: em-13-product-validation
 name: "Endpoint Mastery 13 — Security Product Health Validation"
 description: >
   ENDPOINT MASTERY — Layer 13. Systematically audits active security endpoint product processes,
@@ -24,6 +24,7 @@ steps:
     technique_id: T1562.001
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true

@@ -1,4 +1,4 @@
-id: em-12-adversary-emulation
+﻿id: em-12-adversary-emulation
 name: "Endpoint Mastery 12 — Adversary Emulation Pack (APT29 Profile)"
 description: >
   ENDPOINT MASTERY — Layer 12. Models structural step sequences matching specific real-world
@@ -25,6 +25,7 @@ steps:
     technique_id: T1482
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true

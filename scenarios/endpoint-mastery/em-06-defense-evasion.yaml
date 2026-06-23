@@ -1,4 +1,4 @@
-id: em-06-defense-evasion
+﻿id: em-06-defense-evasion
 name: "Endpoint Mastery 06 — Defense Evasion & LOLBin Execution"
 description: >
   ENDPOINT MASTERY — Layer 6. Tests structural bypasses and proxy binary abuse patterns.
@@ -26,6 +26,7 @@ steps:
     technique_id: T1218.010
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -60,6 +61,7 @@ steps:
     technique_id: T1105
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true

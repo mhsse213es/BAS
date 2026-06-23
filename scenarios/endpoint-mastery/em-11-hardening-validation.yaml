@@ -1,4 +1,4 @@
-id: em-11-hardening-validation
+﻿id: em-11-hardening-validation
 name: "Endpoint Mastery 11 — Endpoint Hardening Validation"
 description: >
   ENDPOINT MASTERY — Layer 11. Configuration posture assurance verification. Evaluates the
@@ -25,6 +25,7 @@ steps:
     technique_id: T1562
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -47,6 +48,7 @@ steps:
     technique_id: T1562
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true

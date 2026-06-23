@@ -1,4 +1,4 @@
-id: em-03-memory-attacks
+﻿id: em-03-memory-attacks
 name: "Endpoint Mastery 03 — Memory-Based Attacks"
 description: >
   ENDPOINT MASTERY — Layer 3. Most endpoint products claim memory protection;
@@ -43,6 +43,7 @@ steps:
     technique_id: T1003.001
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -81,6 +82,7 @@ steps:
     technique_id: T1055
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -119,6 +121,7 @@ steps:
     technique_id: T1055
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: lab-only
     production_safe: false
@@ -169,3 +172,4 @@ steps:
   - name: "Suspended-process spawn (process-hollowing precursor) [lab]"
     technique_id: T1055.012
     framework: custom
+    requires_priv: admin

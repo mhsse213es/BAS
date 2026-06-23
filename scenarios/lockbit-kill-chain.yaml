@@ -1,4 +1,4 @@
-id: lockbit-kill-chain
+﻿id: lockbit-kill-chain
 name: LockBit Kill Chain — Ransomware Emulation (Phase 7)
 description: >
   Five-stage telemetry-safe emulation of the LockBit 3.0 ransomware kill chain
@@ -57,6 +57,7 @@ steps:
     technique_id: T1518.001
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -91,6 +92,7 @@ steps:
     technique_id: T1490
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
@@ -122,6 +124,7 @@ steps:
     technique_id: T1021.002
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
@@ -159,6 +162,7 @@ steps:
     technique_id: T1486
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -212,6 +216,7 @@ steps:
     technique_id: T1070.001
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true

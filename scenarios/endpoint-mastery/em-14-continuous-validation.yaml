@@ -1,4 +1,4 @@
-id: em-14-continuous-validation
+﻿id: em-14-continuous-validation
 name: "Endpoint Mastery 14 — Posture Drift Metric Engine"
 description: >
   ENDPOINT MASTERY — Layer 14. Programmatic configuration assurance scoring. Runs continuous
@@ -23,6 +23,7 @@ steps:
     technique_id: T1562
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true

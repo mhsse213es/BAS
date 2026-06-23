@@ -1,4 +1,4 @@
-id: em-07-ransomware-readiness
+﻿id: em-07-ransomware-readiness
 name: "Endpoint Mastery 07 — Ransomware Readiness (Full Kill Chain)"
 description: >
   ENDPOINT MASTERY — Layer 7. Full ransomware kill chain simulation using canary files
@@ -45,6 +45,7 @@ steps:
     technique_id: T1083
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -79,6 +80,7 @@ steps:
     technique_id: T1135
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -104,6 +106,7 @@ steps:
     technique_id: T1562.001
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
@@ -126,6 +129,7 @@ steps:
     technique_id: T1070.001
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
@@ -151,6 +155,7 @@ steps:
     technique_id: T1486
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 45
     fidelity: telemetry-safe
     production_safe: true
@@ -196,6 +201,7 @@ steps:
     technique_id: T1486
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
@@ -232,6 +238,7 @@ steps:
     technique_id: T1490
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -264,6 +271,7 @@ steps:
     technique_id: T1490
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -296,6 +304,7 @@ steps:
     technique_id: T1490
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -332,6 +341,7 @@ steps:
     technique_id: T1489
     framework: custom
     executor: powershell
+    requires_priv: admin
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
