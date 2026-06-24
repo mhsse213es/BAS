@@ -27,6 +27,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -45,9 +46,10 @@ type Handler struct {
 	artKEVFile       string               // CISA KEV catalog JSON (KEV_FILE)
 	artContentVer    string               // recorded content-pack version
 	manifest         *integrity.Manifest  // binary hash manifest — nil means verification disabled
-	complianceMapper *compliance.Mapper   // nil when not loaded
-	reportingEngine  *reporting.Engine    // nil when not loaded
-	scheduler        *connector.Scheduler // nil when no sources configured
+	complianceMapper *compliance.Mapper    // nil when not loaded
+	reportingEngine  *reporting.Engine     // nil when not loaded
+	scheduler        *connector.Scheduler  // nil when no sources configured
+	ticketing        *ticketing.Manager    // nil when no connectors configured
 }
 
 // New creates a Handler.
@@ -70,6 +72,12 @@ func (h *Handler) WithReporting(e *reporting.Engine) *Handler {
 // WithScheduler attaches the threat-intel connector scheduler.
 func (h *Handler) WithScheduler(s *connector.Scheduler) *Handler {
 	h.scheduler = s
+	return h
+}
+
+// WithTicketing attaches the ITSM ticketing manager.
+func (h *Handler) WithTicketing(m *ticketing.Manager) *Handler {
+	h.ticketing = m
 	return h
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -144,6 +145,11 @@ func main() {
 	reportingEngine := reporting.NewEngine(pool)
 	log.Println("[+] Reporting engine ready")
 
+	// ── Ticketing Manager ─────────────────────────────────────────────────
+	ticketingManager := ticketing.NewManager(pool)
+	ticketingManager.Start(context.Background())
+	log.Println("[+] Ticketing manager ready")
+
 	// ── Threat-Intel Connector ────────────────────────────────────────────
 	var mispClient *connector.MISPClient
 	if cfg.MISPUrl != "" && cfg.MISPApiKey != "" {
@@ -170,7 +176,8 @@ func main() {
 		WithManifest(manifest).
 		WithCompliance(complianceMapper).
 		WithReporting(reportingEngine).
-		WithScheduler(scheduler)
+		WithScheduler(scheduler).
+		WithTicketing(ticketingManager)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler())
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────

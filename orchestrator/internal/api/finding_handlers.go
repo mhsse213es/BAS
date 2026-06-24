@@ -141,6 +141,7 @@ func (h *Handler) applyFinding(ctx context.Context, agentID string, a *findingAg
 			 ON CONFLICT (agent_id, technique_id, control_class) DO NOTHING`,
 			agentID, a.techID, a.control, a.name, a.tactic, a.severity, next.ExposureState, a.source, dsJSON, prodRaw,
 			o.RunID, campaignID, o.ObservedAt)
+		h.dispatchTicketing(ctx, agentID, a.techID, a.control, tr)
 		return
 	}
 
@@ -164,6 +165,22 @@ func (h *Handler) applyFinding(ctx context.Context, agentID string, a *findingAg
 		o.RunID, campaignID, o.ObservedAt,
 		clearResolved, resolvedAtSet, resolvedBy, resolvedReason,
 		agentID, a.techID, a.control)
+	h.dispatchTicketing(ctx, agentID, a.techID, a.control, tr)
+}
+
+// dispatchTicketing looks up the finding ID and fires async ticket operations.
+// No-op when no ticketing manager is configured.
+func (h *Handler) dispatchTicketing(ctx context.Context, agentID, techID, control string, tr findings.Transition) {
+	if h.ticketing == nil {
+		return
+	}
+	var findingID string
+	_ = h.db.QueryRow(ctx,
+		`SELECT id FROM findings WHERE agent_id=$1 AND technique_id=$2 AND control_class=$3`,
+		agentID, techID, control).Scan(&findingID)
+	if findingID != "" {
+		h.ticketing.Dispatch(findingID, tr)
+	}
 }
 
 // findingScanner is satisfied by pgx.Rows — lets scanFindings stay storage-agnostic.

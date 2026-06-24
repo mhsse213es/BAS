@@ -68,6 +68,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		hub.ServeBrowserWS(w, req)
 	})
 
+	// ITSM inbound webhook — no JWT auth; connector validates via HMAC or IP allowlist
+	r.Post("/api/ticketing/webhook/{configId}", h.ReceiveTicketingWebhook)
+
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -98,7 +101,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/campaigns/{id}/forensic.csv", h.GetCampaignCSV)
 		r.Get("/api/findings", h.ListFindings)
 		r.Get("/api/findings/{id}", h.GetFinding)
+		r.Get("/api/findings/{id}/tickets", h.GetFindingTickets)
 		r.Get("/api/remediations", h.ListRemediations)
+		r.Get("/api/ticketing/candidates", h.ListTicketCandidates)
+		r.Get("/api/ticketing/revalidation", h.RevalidationStatus)
 		r.Get("/api/reports", h.ListReports)
 		r.Post("/api/reports", h.CreateReport)
 		r.Get("/api/agents/{agentId}/logs/operational", h.GetOpLogs)
@@ -147,6 +153,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Post("/api/campaigns", h.CreateCampaign)
 			r.Post("/api/campaigns/{id}/stop", h.StopCampaign)
 			r.Post("/api/findings/{id}/status", h.SetFindingStatus)
+			r.Post("/api/ticketing/push", h.PushFindingToITSM)
+			r.Post("/api/ticketing/push/bulk", h.BulkPushToITSM)
 
 			// Custom scenario builder
 			r.Post("/api/scenarios", h.CreateScenario)
@@ -213,6 +221,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 			// Audit log — append-only record of all operator actions
 			r.Get("/api/audit-logs", h.GetAuditLogs)
+
+			// Ticketing — ITSM connector management (admin only)
+			r.Get("/api/ticketing/configs", h.ListTicketingConfigs)
+			r.Post("/api/ticketing/configs", h.CreateTicketingConfig)
+			r.Put("/api/ticketing/configs/{id}", h.UpdateTicketingConfig)
+			r.Delete("/api/ticketing/configs/{id}", h.DeleteTicketingConfig)
+			r.Post("/api/ticketing/configs/{id}/test", h.TestTicketingConfig)
+			r.Post("/api/ticketing/sync", h.TriggerTicketingSync)
 
 			// Payload family management — write/delete restricted to Admin
 			r.Post("/api/payload-families", h.CreatePayloadFamily)

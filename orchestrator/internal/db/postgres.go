@@ -512,6 +512,34 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			PRIMARY KEY (agent_id, framework_id)
 		)`,
 		`CREATE INDEX IF NOT EXISTS compliance_snapshots_agent ON compliance_snapshots (agent_id)`,
+
+		// ── Ticketing: ITSM connector configs + per-finding ticket refs ───────
+		`CREATE TABLE IF NOT EXISTS ticketing_configs (
+			id          text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name        text        NOT NULL,
+			provider    text        NOT NULL,
+			enabled     boolean     NOT NULL DEFAULT true,
+			auto_create text        NOT NULL DEFAULT 'off',
+			auto_update boolean     NOT NULL DEFAULT true,
+			auto_close  boolean     NOT NULL DEFAULT true,
+			settings    jsonb       NOT NULL DEFAULT '{}',
+			created_at  timestamptz NOT NULL DEFAULT NOW(),
+			updated_at  timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE TABLE IF NOT EXISTS finding_tickets (
+			id                    text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			finding_id            text        NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+			config_id             text        NOT NULL REFERENCES ticketing_configs(id) ON DELETE CASCADE,
+			ticket_id             text        NOT NULL,
+			ticket_url            text        NOT NULL DEFAULT '',
+			status                text        NOT NULL DEFAULT 'open',
+			revalidation_required boolean     NOT NULL DEFAULT false,
+			last_synced_at        timestamptz,
+			created_at            timestamptz NOT NULL DEFAULT NOW(),
+			CONSTRAINT uq_finding_ticket UNIQUE (finding_id, config_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_finding_tickets_finding ON finding_tickets (finding_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_finding_tickets_status  ON finding_tickets (status)`,
 	}
 
 	for _, s := range stmts {
