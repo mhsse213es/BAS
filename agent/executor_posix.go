@@ -47,9 +47,38 @@ func collectRecentEvents(_ context.Context, _ time.Time) []string {
 // Windows Active Directory concept.
 func hostIsDomainController() bool { return false }
 
-// applyExecutionContext is a no-op on non-Windows platforms: no token switching
-// is performed and the step runs in the agent's own process context.
-func applyExecutionContext(_ *exec.Cmd, _ ScenarioStep) string { return "" }
+// applyExecutionContext resolves the privilege context for a step and, for
+// "user" steps, switches the child process to the interactive user's identity
+// via SysProcAttr.Credential — the POSIX equivalent of CreateProcessAsUser.
+//
+// Requires the agent to be running as root (CAP_SETUID/CAP_SETGID).
+func applyExecutionContext(cmd *exec.Cmd, step ScenarioStep) string {
+	switch step.RequiresPriv {
+	case "":
+		return ""
+	case "admin", "system":
+		return step.RequiresPriv
+	case "user":
+		ctx, ok := activeUserCtx()
+		if !ok {
+			// No interactive session — fall back to agent context, record honestly.
+			return "user→admin"
+		}
+		if cmd.SysProcAttr == nil {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		cmd.SysProcAttr.Credential = &syscall.Credential{
+			Uid:         ctx.uid,
+			Gid:         ctx.gid,
+			Groups:      ctx.groups,
+			NoSetGroups: len(ctx.groups) == 0,
+		}
+		cmd.Env = buildPosixUserEnv(ctx, step)
+		return "user"
+	default:
+		return ""
+	}
+}
 
 // detectSecurityBlock returns true when an EDR/AV killed the child process.
 // SIGKILL from our own context (timeout/cancel) is excluded by the caller.
