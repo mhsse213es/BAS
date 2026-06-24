@@ -366,6 +366,7 @@ func (h *Handler) GetCampaignCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	var all []models.SimulationResult
+	totalCount := 0
 	for rows.Next() {
 		var raw []byte
 		if rows.Scan(&raw) != nil {
@@ -374,8 +375,8 @@ func (h *Handler) GetCampaignCSV(w http.ResponseWriter, r *http.Request) {
 		if len(raw) > 0 {
 			var rs []models.SimulationResult
 			if json.Unmarshal(raw, &rs) == nil {
-				rs = reporting.FilterResults(rs, filter)
-				all = append(all, rs...)
+				totalCount += len(rs)
+				all = append(all, reporting.FilterResults(rs, filter)...)
 			}
 		}
 	}
@@ -387,7 +388,7 @@ func (h *Handler) GetCampaignCSV(w http.ResponseWriter, r *http.Request) {
 	h.auditLog(r, "report.export", id, map[string]any{"format": "csv", "type": "campaign", "filter": filter}, "ok")
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
-	reporting.WriteForensicCSV(w, scenarioName, all)
+	reporting.WriteForensicCSV(w, scenarioName, all, filter, totalCount)
 }
 
 // GetCampaign returns a campaign with its rollup and per-agent breakdown.

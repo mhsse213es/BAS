@@ -3448,6 +3448,7 @@ func (h *Handler) GetFullReportCSV(w http.ResponseWriter, r *http.Request) {
 	if len(resultsRaw) > 0 {
 		json.Unmarshal(resultsRaw, &results)
 	}
+	totalCount := len(results)
 	results = reporting.FilterResults(results, filter)
 	if hostname == "" {
 		hostname = agentID
@@ -3463,7 +3464,7 @@ func (h *Handler) GetFullReportCSV(w http.ResponseWriter, r *http.Request) {
 	fname := fmt.Sprintf("bas-forensic-%s-%s%s-%s.csv", scenPart, sanitizeFilename(hostname), filterSuffix, time.Now().UTC().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
-	reporting.WriteForensicCSV(w, scenarioName, results)
+	reporting.WriteForensicCSV(w, scenarioName, results, filter, totalCount)
 }
 
 // GET /api/report/audit-pack?agentId=X
@@ -3692,6 +3693,7 @@ func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 	if len(resultsRaw) > 0 {
 		json.Unmarshal(resultsRaw, &results)
 	}
+	totalCount := len(results)
 	results = reporting.FilterResults(results, filter)
 	idShort := runID
 	if len(idShort) > 8 {
@@ -3708,7 +3710,7 @@ func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 	h.auditLog(r, "report.export", runID, map[string]any{"format": "csv", "type": "run", "filter": filter}, "ok")
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
-	reporting.WriteForensicCSV(w, name, results)
+	reporting.WriteForensicCSV(w, name, results, filter, totalCount)
 }
 
 // classifyAgentOS maps a raw os_version string to "windows", "linux", or "darwin".

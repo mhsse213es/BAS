@@ -22,7 +22,7 @@ func TestForensicCSV(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	WriteForensicCSV(&buf, "Test Scenario", results)
+	WriteForensicCSV(&buf, "Test Scenario", results, "", 0)
 	out := buf.String()
 
 	for _, want := range []string{
