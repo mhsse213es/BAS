@@ -424,6 +424,9 @@ mode_install() {
   step "2/9  Creating data directories"
   mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound}
   chmod 750 "${DATA_DIR}"
+  # scenarios is written by the orchestrator container (runs as UID 65532 — distroless nonroot).
+  # Without this the UI cannot create or save custom scenarios.
+  chown -R 65532:65532 "${DATA_DIR}/scenarios"
   log "Created: ${DATA_DIR}"
 
   step "3/9  Loading Docker images (air-gap safe — no pull)"
