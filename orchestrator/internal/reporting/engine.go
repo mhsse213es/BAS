@@ -1896,10 +1896,24 @@ func FilterResults(results []models.SimulationResult, filter string) []models.Si
 	var filtered []models.SimulationResult
 	for _, r := range results {
 		isPrevented := r.Result == models.ResultPass || r.Result == models.ResultBlocked
-		if filter == "prevented" && isPrevented {
-			filtered = append(filtered, r)
-		} else if filter == "not_prevented" && !isPrevented {
-			filtered = append(filtered, r)
+		isDetected := r.DetectionVerdict == "detected"
+		switch filter {
+		case "prevented":
+			if isPrevented {
+				filtered = append(filtered, r)
+			}
+		case "not_prevented":
+			if !isPrevented {
+				filtered = append(filtered, r)
+			}
+		case "detected":
+			if isDetected {
+				filtered = append(filtered, r)
+			}
+		case "not_detected":
+			if !isDetected {
+				filtered = append(filtered, r)
+			}
 		}
 	}
 	return filtered

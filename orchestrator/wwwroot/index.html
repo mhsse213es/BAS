@@ -6391,9 +6391,10 @@ document.getElementById('dl-confirm-btn').onclick = function() {
       break;
     }
   }
+  var cb = _dlCallback; // capture before closeDownloadOptions nulls it
   closeDownloadOptions();
-  if (_dlCallback) {
-    _dlCallback(selected);
+  if (cb) {
+    cb(selected);
   }
 };
 
