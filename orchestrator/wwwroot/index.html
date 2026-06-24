@@ -296,7 +296,6 @@ body {
   min-width: 0;
   overflow-x: clip;
   min-height: 100vh;
-  display: flex; flex-direction: column;
 }
 
 /* ── Header ────────────────────────────────────────────────── */
@@ -335,7 +334,7 @@ header {
 }
 
 /* ── Main content ──────────────────────────────────────────── */
-main { flex: 1; padding: 1.5rem; isolation: isolate; }
+main { min-height: calc(100vh - var(--header-h)); padding: 1.5rem; isolation: isolate; }
 main::-webkit-scrollbar { width: 5px; }
 main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
