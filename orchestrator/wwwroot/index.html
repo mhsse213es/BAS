@@ -720,7 +720,7 @@ code {
 .sset { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.7rem; border-radius: var(--radius); color: var(--muted); font-size: 0.82rem; cursor: pointer; border-left: 2px solid transparent; }
 .sset:hover { background: var(--surface); color: var(--text); }
 .sset.active { background: var(--elevated); color: var(--text); font-weight: 600; border-left-color: var(--accent); }
-@media (max-width: 820px) { .settings-layout { grid-template-columns: 1fr; } }
+@media (max-width: 500px) { .settings-layout { grid-template-columns: 1fr; } }
 
 .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; margin-bottom: 0.875rem; }
 .dash-panel {
@@ -2092,6 +2092,36 @@ body.theme-slate {
               </div>
             </div>
             <div id="ca-empty" style="display:none;text-align:center;padding:1.5rem;color:var(--muted);font-size:0.82rem">No completed runs yet — run a scenario or adversary template to generate analytics.</div>
+          </div>
+        </div>
+
+        <!-- Phase 3: Privilege Tier Coverage panel -->
+        <div class="dash-panel" style="margin-bottom:1.25rem" id="priv-cov-panel">
+          <div class="dash-panel-hdr"><span>Privilege Tier Coverage</span><span style="font-size:0.72rem;font-weight:400;color:var(--muted)">Prevention rates by execution context — last 50 runs</span></div>
+          <div class="dash-panel-body" style="padding:0.9rem">
+            <div id="priv-cov-empty" style="text-align:center;padding:1rem;color:var(--muted);font-size:0.82rem">No privilege-annotated runs yet. Annotate scenario steps with requires_priv to enable tier tracking.</div>
+            <div id="priv-cov-content" style="display:none">
+              <!-- Tier scorecards -->
+              <div id="priv-tier-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.65rem;margin-bottom:1rem"></div>
+              <!-- Gap table + tier detail side by side -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+                <div>
+                  <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.4rem">Prevention by Tier</div>
+                  <div class="tbl-wrap"><table id="priv-tier-tbl" style="font-size:0.76rem">
+                    <thead><tr><th>Tier</th><th style="text-align:center">Attempted</th><th style="text-align:center">Prevented</th><th style="text-align:center;color:var(--danger)">Missed</th><th style="text-align:center">Rate</th></tr></thead>
+                    <tbody id="priv-tier-body"><tr><td colspan="5" class="empty">No data</td></tr></tbody>
+                  </table></div>
+                </div>
+                <div>
+                  <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.4rem">Privilege Coverage Gaps — tested elevated only</div>
+                  <div class="tbl-wrap"><table id="priv-gap-tbl" style="font-size:0.76rem">
+                    <thead><tr><th>Technique</th><th>Name</th><th>Tested at</th></tr></thead>
+                    <tbody id="priv-gap-body"><tr><td colspan="3" class="empty" style="color:var(--success)">✓ All techniques tested at user tier</td></tr></tbody>
+                  </table></div>
+                  <div style="font-size:0.7rem;color:var(--muted);margin-top:0.35rem">Gaps = techniques never run as a standard user. Run these at user tier to validate controls aren't solely relying on privilege barriers.</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -4391,6 +4421,89 @@ function renderCoverageAnalytics(d) {
         '<td style="text-align:center;color:var(--muted);font-size:0.76rem">' + t.runCount + '</td>' +
       '</tr>';
     }).join('') || '<tr><td colspan="3" class="empty" style="color:var(--success)">✓ No gaps detected</td></tr>';
+  }
+
+  // Privilege tier coverage panel.
+  renderPrivilegeCoverage(d.privilegeCoverage);
+}
+
+function renderPrivilegeCoverage(pc) {
+  var empty = document.getElementById('priv-cov-empty');
+  var content = document.getElementById('priv-cov-content');
+  var tiers = (pc && pc.byTier) || [];
+  var gaps  = (pc && pc.gapTechs) || [];
+  var hasTiers = tiers.length > 0;
+  if (empty)   empty.style.display   = hasTiers ? 'none' : '';
+  if (content) content.style.display = hasTiers ? ''     : 'none';
+  if (!hasTiers) return;
+
+  // Tier colour map.
+  var tierColor = { user: 'var(--accent)', admin: 'var(--warning)', system: 'var(--danger)', inherited: 'var(--muted)' };
+  var tierLabel = { user: 'User', admin: 'Admin', system: 'SYSTEM', inherited: 'Inherited' };
+
+  // Scorecard tiles.
+  var cards = document.getElementById('priv-tier-cards');
+  if (cards) {
+    cards.innerHTML = tiers.map(function(t) {
+      var col  = tierColor[t.tier] || 'var(--muted)';
+      var lbl  = tierLabel[t.tier] || t.tier;
+      var rate = t.attempted > 0 ? t.preventionRate : 0;
+      var rateColor = rate >= 75 ? 'var(--success)' : rate >= 40 ? 'var(--warning)' : 'var(--danger)';
+      return '<div class="ca-card" style="border-top:2px solid ' + col + '">' +
+        '<div class="ca-label" style="color:' + col + '">' + lbl + '</div>' +
+        '<div class="ca-val" style="font-size:1.5rem;color:' + rateColor + '">' + rate + '%</div>' +
+        '<div class="ca-sub">' + t.prevented + '/' + t.attempted + ' prevented</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // Tier table.
+  var tierBody = document.getElementById('priv-tier-body');
+  if (tierBody) {
+    tierBody.innerHTML = tiers.map(function(t, i) {
+      var bg   = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
+      var col  = tierColor[t.tier] || 'var(--muted)';
+      var lbl  = tierLabel[t.tier] || t.tier;
+      var rate = t.attempted > 0 ? t.preventionRate : 0;
+      var rateColor = rate >= 75 ? 'color:var(--success)' : rate >= 40 ? 'color:var(--warning)' : 'color:var(--danger)';
+      var barW = Math.min(100, rate);
+      return '<tr style="' + bg + '">' +
+        '<td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + col + ';margin-right:5px"></span>' + lbl + '</td>' +
+        '<td style="text-align:center">' + t.attempted + '</td>' +
+        '<td style="text-align:center;color:var(--success)">' + t.prevented + '</td>' +
+        '<td style="text-align:center;color:' + (t.missed > 0 ? 'var(--danger)' : 'var(--muted)') + ';font-weight:' + (t.missed > 0 ? '700' : '400') + '">' + t.missed + '</td>' +
+        '<td style="min-width:90px">' +
+          '<div style="display:flex;align-items:center;gap:4px">' +
+            '<div style="flex:1;height:6px;background:var(--elevated);border-radius:3px;overflow:hidden"><div style="height:100%;width:' + barW + '%;background:' + (col) + ';transition:width .4s"></div></div>' +
+            '<span style="font-size:0.7rem;' + rateColor + ';white-space:nowrap">' + rate + '%</span>' +
+          '</div>' +
+        '</td>' +
+      '</tr>';
+    }).join('') || '<tr><td colspan="5" class="empty">No data</td></tr>';
+  }
+
+  // Gap table.
+  var gapBody = document.getElementById('priv-gap-body');
+  if (gapBody) {
+    if (gaps.length === 0) {
+      gapBody.innerHTML = '<tr><td colspan="3" class="empty" style="color:var(--success)">✓ All annotated techniques tested at user tier</td></tr>';
+    } else {
+      gapBody.innerHTML = gaps.slice(0, 25).map(function(g, i) {
+        var bg = i % 2 ? 'background:rgba(255,255,255,.02)' : '';
+        var tierBadges = (g.tiers || []).map(function(t) {
+          var c = tierColor[t] || 'var(--muted)';
+          return '<span style="font-size:0.65rem;border:1px solid ' + c + ';color:' + c + ';border-radius:2px;padding:1px 4px;margin-right:2px">' + (tierLabel[t] || t) + '</span>';
+        }).join('');
+        return '<tr style="' + bg + '">' +
+          '<td style="font-family:var(--font-mono);font-size:0.76rem;color:var(--warning)">' + x(g.techniqueId) + '</td>' +
+          '<td style="font-size:0.75rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + x(g.name || '') + '">' + x(g.name || '—') + '</td>' +
+          '<td>' + tierBadges + '</td>' +
+        '</tr>';
+      }).join('');
+      if (gaps.length > 25) {
+        gapBody.innerHTML += '<tr><td colspan="3" style="text-align:center;color:var(--muted);font-size:0.72rem;padding:4px">… and ' + (gaps.length - 25) + ' more</td></tr>';
+      }
+    }
   }
 }
 
@@ -8119,7 +8232,7 @@ function showTamperBanner(data) {
   document.body.style.paddingTop = '46px';
 }
 function ackAllTamperEvents() {
-  apiFetch('/api/tamper-events/acknowledge-all', { method: 'POST' })
+  apicall('/api/tamper-events/acknowledge-all', { method: 'POST' })
     .then(function() {
       _tamperPaths = [];
       var banner = document.getElementById('tamper-banner');
@@ -8131,7 +8244,7 @@ function ackAllTamperEvents() {
 // On page load, check for unacknowledged critical events so the banner shows
 // even for admins who logged in after the tamper was detected.
 window.addEventListener('DOMContentLoaded', function() {
-  apiFetch('/api/tamper-events?unacknowledged=true')
+  apicall('/api/tamper-events?unacknowledged=true')
     .then(function(r) { return r.json(); })
     .then(function(events) {
       if (Array.isArray(events) && events.length > 0) {

@@ -587,13 +587,34 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </table>
 
 <h3>Execution Context (Privilege)</h3>
-<p style="color:#6e7681;margin-bottom:8px">Per-step privilege context from multi-context execution. <strong>Legacy</strong> steps ran in the agent's default context (requires_priv not yet annotated). <strong>User→Admin</strong> indicates a requested user-context step that fell back to admin because no interactive session was available.</p>
+<p style="color:#6e7681;margin-bottom:8px">Per-step privilege context from multi-context execution. <strong>Legacy</strong> steps ran in the agent's default context (requires_priv not yet annotated). <strong>User→Admin</strong> indicates a requested user-context step that fell back to admin because no interactive session was available. Prevention rate = steps blocked / steps attempted per tier.</p>
 <table>
-  <tr><td>User (interactive)</td><td><strong>{{.privilegeSummary.user}}</strong></td>
-      <td>Admin (elevated)</td><td><strong>{{.privilegeSummary.admin}}</strong></td></tr>
-  <tr><td>System (NT AUTHORITY)</td><td><strong>{{.privilegeSummary.system}}</strong></td>
-      <td>Legacy (unannotated)</td><td style="color:#6e7681"><strong>{{.privilegeSummary.legacy}}</strong></td></tr>
-  {{if .privilegeSummary.fallbacks}}<tr><td colspan="2" style="color:#d29922">WTS Fallbacks (User→Admin)</td><td colspan="2" style="color:#d29922"><strong>{{.privilegeSummary.fallbacks}}</strong></td></tr>{{end}}
+  <thead><tr><th>Tier</th><th>Steps</th><th>Prevented</th><th>Prevention Rate</th></tr></thead>
+  {{if .privilegeSummary.user}}<tr>
+    <td>User (interactive)</td>
+    <td><strong>{{.privilegeSummary.user}}</strong></td>
+    <td><strong style="color:#0d9488">{{.privilegeSummary.userPrevented}}</strong></td>
+    <td><strong>{{.privilegeSummary.userRate}}%</strong></td>
+  </tr>{{end}}
+  {{if .privilegeSummary.admin}}<tr>
+    <td>Admin (elevated)</td>
+    <td><strong>{{.privilegeSummary.admin}}</strong></td>
+    <td><strong style="color:#0d9488">{{.privilegeSummary.adminPrevented}}</strong></td>
+    <td><strong>{{.privilegeSummary.adminRate}}%</strong></td>
+  </tr>{{end}}
+  {{if .privilegeSummary.system}}<tr>
+    <td>System (NT AUTHORITY)</td>
+    <td><strong>{{.privilegeSummary.system}}</strong></td>
+    <td><strong style="color:#0d9488">{{.privilegeSummary.systemPrevented}}</strong></td>
+    <td><strong>{{.privilegeSummary.systemRate}}%</strong></td>
+  </tr>{{end}}
+  {{if .privilegeSummary.legacy}}<tr style="color:#6e7681">
+    <td>Legacy (unannotated)</td>
+    <td><strong>{{.privilegeSummary.legacy}}</strong></td>
+    <td><strong>{{.privilegeSummary.legacyPrevented}}</strong></td>
+    <td><strong>{{.privilegeSummary.legacyRate}}%</strong></td>
+  </tr>{{end}}
+  {{if .privilegeSummary.fallbacks}}<tr><td colspan="4" style="color:#d29922;font-size:0.85em">WTS Fallbacks (User→Admin): <strong>{{.privilegeSummary.fallbacks}}</strong> step(s) requested user context but fell back to admin — no interactive session was active.</td></tr>{{end}}
 </table>
 
 <div class="footer">

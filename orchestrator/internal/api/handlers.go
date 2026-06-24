@@ -2292,13 +2292,52 @@ func verdictString(v analyticsVerdict) string {
 	}
 }
 
+// normPrivTier maps a raw ExecutedAs value from SimulationResult to one of
+// "user" | "admin" | "system" | "inherited".
+func normPrivTier(executedAs string) string {
+	switch {
+	case executedAs == "":
+		return "inherited"
+	case executedAs == "system":
+		return "system"
+	case executedAs == "admin" || strings.Contains(executedAs, "→"):
+		return "admin"
+	default:
+		return "user"
+	}
+}
+
 // CoverageAnalytics is the aggregate coverage view across a set of runs.
 type CoverageAnalytics struct {
-	RunsAnalyzed int                  `json:"runsAnalyzed"`
-	Summary      AnalyticsSummary     `json:"summary"`
-	ByTechnique  []TechniqueAnalytic  `json:"byTechnique"`
-	ByTactic     []TacticAnalytic     `json:"byTactic"`
-	RecentRuns   []RunAnalyticSummary `json:"recentRuns"`
+	RunsAnalyzed      int                  `json:"runsAnalyzed"`
+	Summary           AnalyticsSummary     `json:"summary"`
+	ByTechnique       []TechniqueAnalytic  `json:"byTechnique"`
+	ByTactic          []TacticAnalytic     `json:"byTactic"`
+	RecentRuns        []RunAnalyticSummary `json:"recentRuns"`
+	PrivilegeCoverage PrivilegeCoverage    `json:"privilegeCoverage"`
+}
+
+// PrivilegeCoverage is the per-execution-tier breakdown of coverage results.
+type PrivilegeCoverage struct {
+	ByTier   []TierStat         `json:"byTier"`
+	GapTechs []PrivGapTechnique `json:"gapTechs"`
+}
+
+// TierStat is the prevention/detection summary for one execution tier.
+type TierStat struct {
+	Tier           string `json:"tier"`           // user | admin | system | inherited
+	Attempted      int    `json:"attempted"`
+	Prevented      int    `json:"prevented"`
+	DetectedOnly   int    `json:"detectedOnly"`
+	Missed         int    `json:"missed"`
+	PreventionRate int    `json:"preventionRate"` // prevented/attempted*100
+}
+
+// PrivGapTechnique is a technique tested only at elevated tier(s), never at user.
+type PrivGapTechnique struct {
+	TechniqueID string   `json:"techniqueId"`
+	Name        string   `json:"name,omitempty"`
+	Tiers       []string `json:"tiers"` // tiers actually tested (e.g. ["admin"])
 }
 
 type AnalyticsSummary struct {
@@ -2381,9 +2420,16 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 		prev    int
 		det     int
 		miss    int
+		// per-tier tallies: tier → [attempted, prevented, detectedOnly, missed]
+		tierStats map[string]*[4]int
 	}
-	techMap  := map[string]*techEntry{}
+	type privTechEntry struct {
+		name  string
+		tiers map[string]bool
+	}
+	techMap   := map[string]*techEntry{}
 	tacticMap := map[string]*TacticAnalytic{}
+	privTechs := map[string]*privTechEntry{} // techniqueID → tiers seen
 	var recent []RunAnalyticSummary
 	runsAnalyzed := 0
 
@@ -2428,7 +2474,7 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 
 			e := techMap[tid]
 			if e == nil {
-				e = &techEntry{name: res.Technique.Name, tactic: res.Technique.Tactic}
+				e = &techEntry{name: res.Technique.Name, tactic: res.Technique.Tactic, tierStats: map[string]*[4]int{}}
 				techMap[tid] = e
 			}
 			if res.Technique.Name != "" && e.name == "" {
@@ -2449,6 +2495,32 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 			default:
 				e.miss++
 			}
+
+			// Privilege tier tracking.
+			tier := normPrivTier(res.ExecutedAs)
+			ts := e.tierStats[tier]
+			if ts == nil {
+				ts = &[4]int{}
+				e.tierStats[tier] = ts
+			}
+			ts[0]++ // attempted
+			switch v {
+			case verdictPrevented:
+				ts[1]++
+			case verdictDetectedOnly:
+				ts[2]++
+			default:
+				ts[3]++
+			}
+			pt := privTechs[tid]
+			if pt == nil {
+				pt = &privTechEntry{name: res.Technique.Name, tiers: map[string]bool{}}
+				privTechs[tid] = pt
+			}
+			if res.Technique.Name != "" && pt.name == "" {
+				pt.name = res.Technique.Name
+			}
+			pt.tiers[tier] = true
 
 			// per-run counts
 			switch v {
@@ -2529,12 +2601,62 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 		summ.DetectionCoverage = (summ.Prevented + summ.DetectedOnly) * 100 / summ.Attempted
 	}
 
+	// Build PrivilegeCoverage: per-tier stats + gap list.
+	tierOrder := []string{"user", "admin", "system", "inherited"}
+	tierAgg := map[string]*[4]int{}
+	for _, e := range techMap {
+		for tier, ts := range e.tierStats {
+			agg := tierAgg[tier]
+			if agg == nil {
+				agg = &[4]int{}
+				tierAgg[tier] = agg
+			}
+			agg[0] += ts[0]
+			agg[1] += ts[1]
+			agg[2] += ts[2]
+			agg[3] += ts[3]
+		}
+	}
+	var tierStats []TierStat
+	for _, tier := range tierOrder {
+		ts := tierAgg[tier]
+		if ts == nil || ts[0] == 0 {
+			continue
+		}
+		pct := 0
+		if ts[0] > 0 {
+			pct = ts[1] * 100 / ts[0]
+		}
+		tierStats = append(tierStats, TierStat{
+			Tier: tier, Attempted: ts[0], Prevented: ts[1],
+			DetectedOnly: ts[2], Missed: ts[3], PreventionRate: pct,
+		})
+	}
+	var gapTechs []PrivGapTechnique
+	for tid, pt := range privTechs {
+		if pt.tiers["user"] {
+			continue // tested at user — not a gap
+		}
+		if !pt.tiers["admin"] && !pt.tiers["system"] {
+			continue // only inherited, not elevated — not a meaningful gap
+		}
+		var tiers []string
+		for _, t := range []string{"admin", "system", "inherited"} {
+			if pt.tiers[t] {
+				tiers = append(tiers, t)
+			}
+		}
+		gapTechs = append(gapTechs, PrivGapTechnique{TechniqueID: tid, Name: pt.name, Tiers: tiers})
+	}
+	sort.Slice(gapTechs, func(i, j int) bool { return gapTechs[i].TechniqueID < gapTechs[j].TechniqueID })
+
 	respond(w, CoverageAnalytics{
 		RunsAnalyzed: runsAnalyzed,
 		Summary:      summ,
 		ByTechnique:  techList,
 		ByTactic:     tacList,
 		RecentRuns:   recent,
+		PrivilegeCoverage: PrivilegeCoverage{ByTier: tierStats, GapTechs: gapTechs},
 	})
 }
 

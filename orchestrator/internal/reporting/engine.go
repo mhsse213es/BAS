@@ -99,13 +99,23 @@ type FullReport struct {
 	PrivilegeSummary PrivilegeSummary `json:"privilegeSummary"`
 }
 
-// PrivilegeSummary is the per-tier step count for the privilege execution context table.
+// PrivilegeSummary is the per-tier step count and prevention breakdown for the privilege table.
 type PrivilegeSummary struct {
 	User      int `json:"user"`
 	Admin     int `json:"admin"`
 	System    int `json:"system"`
 	Legacy    int `json:"legacy"`    // unannotated steps (requires_priv not set)
 	Fallbacks int `json:"fallbacks"` // steps that requested "user" but fell back to admin (executedAs contains "→")
+	// Per-tier prevention counts (steps where exec was blocked/passed).
+	UserPrevented   int `json:"userPrevented"`
+	AdminPrevented  int `json:"adminPrevented"`
+	SystemPrevented int `json:"systemPrevented"`
+	LegacyPrevented int `json:"legacyPrevented"`
+	// Per-tier prevention rates (0-100).
+	UserRate   int `json:"userRate"`
+	AdminRate  int `json:"adminRate"`
+	SystemRate int `json:"systemRate"`
+	LegacyRate int `json:"legacyRate"`
 }
 
 // ReportScope describes a fleet-wide (campaign) report's subject.
@@ -473,26 +483,40 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 	return rows
 }
 
-// buildPrivilegeSummary counts steps by execution context from a TechniqueMatrix.
+// buildPrivilegeSummary counts steps by execution context from a TechniqueMatrix
+// and computes per-tier prevention counts and rates.
 func buildPrivilegeSummary(matrix []TechniqueRow) PrivilegeSummary {
 	var ps PrivilegeSummary
+	prevented := func(execVerdict string) bool {
+		return execVerdict == "pass" || execVerdict == "blocked"
+	}
 	for _, r := range matrix {
+		p := prevented(r.ExecVerdict)
 		switch r.ExecutedAs {
 		case "Legacy":
 			ps.Legacy++
+			if p { ps.LegacyPrevented++ }
 		case "System":
 			ps.System++
+			if p { ps.SystemPrevented++ }
 		case "Admin":
 			ps.Admin++
+			if p { ps.AdminPrevented++ }
 		default:
 			if strings.Contains(r.ExecutedAs, "→") {
 				ps.Fallbacks++
 				ps.Admin++ // fell back to admin
+				if p { ps.AdminPrevented++ }
 			} else {
 				ps.User++
+				if p { ps.UserPrevented++ }
 			}
 		}
 	}
+	if ps.User > 0 { ps.UserRate = ps.UserPrevented * 100 / ps.User }
+	if ps.Admin > 0 { ps.AdminRate = ps.AdminPrevented * 100 / ps.Admin }
+	if ps.System > 0 { ps.SystemRate = ps.SystemPrevented * 100 / ps.System }
+	if ps.Legacy > 0 { ps.LegacyRate = ps.LegacyPrevented * 100 / ps.Legacy }
 	return ps
 }
 
