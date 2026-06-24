@@ -78,6 +78,19 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return v
 	},
+	"filterLabel": func(f string) string {
+		switch f {
+		case "prevented":
+			return "Prevented Only"
+		case "not_prevented":
+			return "Not Prevented"
+		case "detected":
+			return "Detected Only"
+		case "not_detected":
+			return "Not Detected"
+		}
+		return f
+	},
 	"compColor": func(pct float64) string {
 		switch {
 		case pct >= 70:
@@ -316,6 +329,9 @@ strong{font-weight:650}
 .confidential{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;
   background:#fff6e6;color:#92610a;border:1px solid #f0c674;padding:6px 13px;border-radius:20px;
   font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:28px}
+.filter-badge{display:inline-flex;align-items:center;gap:7px;
+  background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;padding:6px 13px;border-radius:20px;
+  font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:10px}
 
 /* Risk badge */
 .risk-badge{display:inline-flex;align-items:center;gap:14px;padding:14px 22px;border-radius:10px;
@@ -391,6 +407,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     </div>
     {{end}}
     <div class="confidential">⚠ CONFIDENTIAL — For authorized use only</div>
+    {{if .activeFilter}}<div class="filter-badge">&#9660; Filtered View: {{filterLabel .activeFilter}} — {{.filterMatchCount}} of {{.filterTotalCount}} techniques shown &nbsp;·&nbsp; Scores reflect the full unfiltered run</div>{{end}}
   </div>
 </div>
 <div class="footer">

@@ -94,6 +94,12 @@ type FullReport struct {
 	// Populated by Build (latest run's name), BuildFromRun, and BuildFromCampaign.
 	// Used by handlers to construct descriptive download filenames.
 	ScenarioName string `json:"scenarioName,omitempty"`
+	// ActiveFilter is set when the report was generated with a result filter
+	// (prevented/not_prevented/detected/not_detected). The score always reflects
+	// the full unfiltered run; only the kill chain and technique matrix are subsetted.
+	ActiveFilter     string `json:"activeFilter,omitempty"`
+	FilterTotalCount int    `json:"filterTotalCount,omitempty"` // total techniques before filter
+	FilterMatchCount int    `json:"filterMatchCount,omitempty"` // techniques matching the filter
 	// PrivilegeSummary counts steps by execution context across the TechniqueMatrix.
 	// Populated alongside TechniqueMatrix so the summary page can show privilege coverage.
 	PrivilegeSummary PrivilegeSummary `json:"privilegeSummary"`
@@ -795,14 +801,6 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 			if len(scoreRaw) > 0 {
 				var sc models.Score
 				if json.Unmarshal(scoreRaw, &sc) == nil {
-					if filter != "" && filter != "all" {
-						var runResultsRaw []byte
-						e.db.QueryRow(ctx, `SELECT results FROM scenario_runs WHERE id = $1`, rs.ID).Scan(&runResultsRaw)
-						var runResults []models.SimulationResult
-						json.Unmarshal(runResultsRaw, &runResults)
-						runResults = FilterResults(runResults, filter)
-						sc = models.ComputeScore(runResults, nil)
-					}
 					rs.RiskScore = sc.RiskScore
 					rs.Classification = sc.Classification
 					rs.PreventionScore = sc.PreventionScore
@@ -831,9 +829,13 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 		json.Unmarshal(resultsRaw, &latestResults)
 		json.Unmarshal(scoreRaw2, &latestScore)
 		json.Unmarshal(revertedRaw, &report.Reverted)
+		if filter != "" && filter != "all" {
+			report.ActiveFilter = filter
+			report.FilterTotalCount = len(latestResults)
+		}
 		latestResults = FilterResults(latestResults, filter)
 		if filter != "" && filter != "all" {
-			latestScore = models.ComputeScore(latestResults, nil)
+			report.FilterMatchCount = len(latestResults)
 		}
 	}
 
@@ -1021,9 +1023,13 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	json.Unmarshal(resultsRaw, &results)
 	json.Unmarshal(scoreRaw, &score)
 	json.Unmarshal(revertedRaw, &report.Reverted)
+	if filter != "" && filter != "all" {
+		report.ActiveFilter = filter
+		report.FilterTotalCount = len(results)
+	}
 	results = FilterResults(results, filter)
 	if filter != "" && filter != "all" {
-		score = models.ComputeScore(results, nil)
+		report.FilterMatchCount = len(results)
 		var filteredDet []DetectionTechnique
 		for _, dt := range report.DetectionTechniques {
 			found := false
@@ -1201,9 +1207,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 			}
 		}
 		var sc models.Score
-		if filter != "" && filter != "all" {
-			sc = models.ComputeScore(results, nil)
-		} else if len(scoreRaw) > 0 {
+		if len(scoreRaw) > 0 {
 			_ = json.Unmarshal(scoreRaw, &sc)
 		}
 		host := hostname
