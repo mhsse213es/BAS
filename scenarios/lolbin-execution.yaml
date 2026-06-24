@@ -39,6 +39,7 @@ steps:
     technique_id: T1047
     framework: custom
     executor: wmi
+    requires_priv: user
     timeout_sec: 45
     risk: low
     blast_radius: "Spawns one benign child process under WmiPrvSE.exe; no files, no persistence."
@@ -56,6 +57,7 @@ steps:
     technique_id: T1218.005
     framework: custom
     executor: mshta
+    requires_priv: user
     timeout_sec: 20
     risk: medium
     blast_radius: "Launches mshta.exe which immediately self-closes; no payload, no file written."
@@ -73,6 +75,7 @@ steps:
     technique_id: T1218.010
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     risk: medium
     blast_radius: "Creates+deletes a temp scriptlet and loads scrobj.dll with an EMPTY payload; nothing is executed from the scriptlet."
@@ -96,6 +99,7 @@ steps:
     technique_id: T1140
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     risk: low
     blast_radius: "Creates+deletes two temp files; no network connection made."
@@ -122,6 +126,7 @@ steps:
     technique_id: T1053.005
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     risk: medium
     blast_radius: "Creates a scheduled task that is immediately deleted; the task runs no payload. EXPLICIT persistence test."

@@ -40,6 +40,7 @@ steps:
       $target = @("finance@target-bank.in","treasury@target-bank.in","ciso@target-bank.in")
       $target | ForEach-Object { Write-Output "  Discovered: $_" }
     executor: powershell
+    requires_priv: user
     timeout_sec: 10
 
   - name: "Initial Access  -  HTA dropper execution (weaponised Office macro)"
@@ -47,6 +48,7 @@ steps:
     framework: art
     test_index: 0
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
 
   - name: "Execution  -  mshta.exe launching VBScript payload"
@@ -54,6 +56,7 @@ steps:
     framework: art
     test_index: 0
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
 
   - name: "Persistence  -  Scheduled task mimicking system task (APT36 style)"
@@ -61,6 +64,7 @@ steps:
     framework: art
     test_index: 0
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
 
   - name: "Credential Access  -  Browser credential theft (payment portal)"
@@ -68,6 +72,7 @@ steps:
     framework: art
     test_index: 0
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
 
   - name: "C2  -  HTTP beacon to attacker infrastructure"
@@ -75,4 +80,5 @@ steps:
     framework: art
     test_index: 0
     executor: powershell
+    requires_priv: user
     timeout_sec: 30

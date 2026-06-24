@@ -47,6 +47,7 @@ steps:
     technique_id: T1218.007
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
@@ -82,6 +83,7 @@ steps:
     technique_id: T1218.009
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 60
     fidelity: telemetry-safe
     production_safe: true
@@ -145,6 +147,7 @@ steps:
     technique_id: T1220
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 30
     fidelity: telemetry-safe
     production_safe: true
@@ -189,6 +192,7 @@ steps:
     technique_id: T1218.001
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 15
     fidelity: telemetry-safe
     production_safe: true
@@ -231,6 +235,7 @@ steps:
     technique_id: T1218.003
     framework: custom
     executor: powershell
+    requires_priv: user
     timeout_sec: 20
     fidelity: telemetry-safe
     production_safe: true
