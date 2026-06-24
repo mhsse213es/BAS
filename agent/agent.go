@@ -434,7 +434,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 			schedDur = time.Duration(schedSec) * time.Second
 		}
 
-		emit(RunEvent{Type: "queued", TaskID: step.TaskID, TechniqueID: step.TechniqueID})
+		emit(RunEvent{Type: "queued", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name})
 
 		jobs[i] = sched.Job{
 			Resource: step.Resource,
@@ -451,7 +451,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 					TimedOut:   true,
 				}
 				ran[i] = true
-				emit(RunEvent{Type: "timeout", TaskID: step.TaskID, TechniqueID: step.TechniqueID,
+				emit(RunEvent{Type: "timeout", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
 					Payload: map[string]any{"reason": "schedule"}})
 			},
 			Run: func(ctx context.Context) {
@@ -461,7 +461,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 				a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
 					"scenario_step", fmt.Sprintf("[%d/%d] %s executor=%s", i+1, total, step.Name, step.Executor))
 
-				emit(RunEvent{Type: "started", TaskID: step.TaskID, TechniqueID: step.TechniqueID})
+				emit(RunEvent{Type: "started", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name})
 
 				// Stage payloads into a per-step subdir so concurrent steps never
 				// collide on BAS_PAYLOAD_DIR. Steps without payloads use the run dir.
@@ -486,7 +486,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 								ExecutedAt:    time.Now(),
 							}
 							ran[i] = true
-							emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID,
+							emit(RunEvent{Type: "completed", TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name,
 								Payload: map[string]any{"verdict": "blocked"}})
 							return
 						}
@@ -513,7 +513,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 				if typ == "timeout" {
 					payload["reason"] = "execute"
 				}
-				emit(RunEvent{Type: typ, TaskID: step.TaskID, TechniqueID: step.TechniqueID, Payload: payload})
+				emit(RunEvent{Type: typ, TaskID: step.TaskID, TechniqueID: step.TechniqueID, StepName: step.Name, Payload: payload})
 			},
 		}
 	}

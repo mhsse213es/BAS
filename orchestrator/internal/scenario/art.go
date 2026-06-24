@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/audspect/bas/internal/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/yaml.v3"
 )
@@ -157,12 +158,13 @@ func (s *ARTStore) ListTechniques() []string {
 	return out
 }
 
-// TechniqueMeta is a lightweight catalog entry for the dashboard technique picker
-// and the real-time card count.
+// TechniqueMeta is a lightweight catalog entry for the dashboard technique picker,
+// real-time live-run timeline enrichment, and card count.
 type TechniqueMeta struct {
-	ID    string `json:"id"`    // ATT&CK technique ID, e.g. T1003.001
-	Name  string `json:"name"`  // representative atomic name (first Windows test)
-	Tests int    `json:"tests"` // number of Windows atomic tests for this technique
+	ID     string `json:"id"`     // ATT&CK technique ID, e.g. T1003.001
+	Name   string `json:"name"`   // representative atomic name (first Windows test)
+	Tests  int    `json:"tests"`  // number of Windows atomic tests for this technique
+	Tactic string `json:"tactic"` // ATT&CK tactic, e.g. "credential-access"
 }
 
 // ListTechniqueMeta returns one catalog entry per technique that has at least one
@@ -177,7 +179,7 @@ func (s *ARTStore) ListTechniqueMeta() []TechniqueMeta {
 		if len(steps) > 0 {
 			name = steps[0].Name
 		}
-		out = append(out, TechniqueMeta{ID: id, Name: name, Tests: len(steps)})
+		out = append(out, TechniqueMeta{ID: id, Name: name, Tests: len(steps), Tactic: models.LookupTactic(id)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out

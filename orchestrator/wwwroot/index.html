@@ -6909,9 +6909,9 @@ function closeResults() { document.getElementById('results-overlay').classList.r
 // Streams run-event frames over the shared browser WS and renders live progress
 // (done/total · failed · running) + a per-step timeline. On open it first replays
 // persisted events (GET .../events) so a late-joining or reconnecting browser
-// reconstructs the same state, then live frames take over. Server summary counters
-// are authoritative on the run row; here we recompute from the step map so a full
-// replay stays correct.
+// reconstructs the same state, then live frames take over. Each step row shows
+// the technique ID, human-readable step name, tactic badge, state, verdict, and
+// duration. Click a row to expand full detail (ATT&CK link, exit code, etc.).
 (function () {
   var state = { runId: null, steps: new Map(), total: 0, done: 0, failed: 0, running: 0 };
 
@@ -6923,6 +6923,31 @@ function closeResults() { document.getElementById('results-overlay').classList.r
     killed:  'var(--danger)',
     blocked: 'var(--warning)'
   };
+
+  var VERDICT_COLOR = { pass: 'var(--success)', fail: 'var(--danger)', blocked: 'var(--warning)', error: 'var(--danger)' };
+  var VERDICT_LABEL = { pass: 'Prevented', fail: 'Not Prevented', blocked: 'Blocked (AV)', error: 'Error', schedule: 'Timeout', execute: 'Timeout' };
+
+  // Looks up ATT&CK technique name + tactic from the ART catalog. Falls back
+  // gracefully when artCatalog hasn't loaded yet (e.g. technique picker not opened).
+  function lookupTech(id) {
+    if (!id || !artCatalog.length) return null;
+    var up = id.toUpperCase();
+    for (var i = 0; i < artCatalog.length; i++) {
+      if (artCatalog[i].id && artCatalog[i].id.toUpperCase() === up) {
+        return { name: artCatalog[i].name || '', tactic: artCatalog[i].tactic || '' };
+      }
+    }
+    return null;
+  }
+
+  function humanTactic(t) {
+    return t ? t.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }) : '';
+  }
+
+  function attackUrl(id) {
+    if (!id) return '';
+    return 'https://attack.mitre.org/techniques/' + id.replace('.', '/') + '/';
+  }
 
   function statCell(value, label, color) {
     return '<div style="flex:1;background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.55rem 0.7rem">' +
@@ -6948,36 +6973,108 @@ function closeResults() { document.getElementById('results-overlay').classList.r
       ul.innerHTML = '<li style="color:var(--muted);font-size:0.78rem;padding:0.4rem 0">Waiting for the first step…</li>';
       return;
     }
+
     var rows = [];
     state.steps.forEach(function (s, task) {
-      var color = STEP_COLOR[s.state] || 'var(--muted)';
-      var blink = s.state === 'running' ? ';animation:blink 1.5s infinite' : '';
-      var verdict = s.verdict ? ' <span style="color:var(--muted)">(' + x(s.verdict) + ')</span>' : '';
+      var color  = STEP_COLOR[s.state] || 'var(--muted)';
+      var blink  = s.state === 'running' ? ';animation:blink 1.5s infinite' : '';
+      var techId = s.tech || task;
+
+      // Verdict badge
+      var vColor = (s.verdict && VERDICT_COLOR[s.verdict]) || color;
+      var vLabel = (s.verdict && VERDICT_LABEL[s.verdict]) || '';
+      var verdictHtml = vLabel
+        ? ' <span style="background:' + vColor + '22;color:' + vColor + ';border:1px solid ' + vColor + '55;border-radius:3px;font-size:0.62rem;padding:0.05rem 0.28rem;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">' + x(vLabel) + '</span>'
+        : '';
+
+      // Tactic badge
+      var tacticHtml = s.tactic
+        ? '<span style="font-size:0.61rem;color:var(--muted);background:var(--elevated);border:1px solid var(--border);border-radius:3px;padding:0.03rem 0.28rem;text-transform:capitalize;flex-shrink:0">' + x(humanTactic(s.tactic)) + '</span>'
+        : '';
+
+      // Duration (only when completed)
+      var durHtml = (s.durationMs != null && (s.state === 'done' || s.state === 'timeout'))
+        ? '<span style="font-size:0.64rem;color:var(--muted)">∼' + s.durationMs + ' ms</span>'
+        : '';
+
+      // Expandable detail block
+      var detailHtml = '';
+      if (s.expanded) {
+        var dl = [];
+        if (s.techName) dl.push('<b>Technique:</b> ' + x(s.techName));
+        if (s.stepName && s.stepName !== s.techName) dl.push('<b>Test:</b> ' + x(s.stepName));
+        if (s.tactic)   dl.push('<b>Tactic:</b> ' + x(humanTactic(s.tactic)));
+        if (vLabel)     dl.push('<b>Verdict:</b> <span style="color:' + vColor + '">' + x(vLabel) + '</span>');
+        if (s.durationMs != null) dl.push('<b>Duration:</b> ' + s.durationMs + ' ms');
+        if (s.exitCode  != null)  dl.push('<b>Exit&nbsp;code:</b> ' + s.exitCode);
+        if (s.tech)     dl.push('<b>ATT&amp;CK:</b> <a href="' + attackUrl(s.tech) + '" target="_blank" style="color:var(--accent)">' + x(s.tech) + ' &#8599;</a>');
+        detailHtml = '<div style="margin:0.3rem 0 0.1rem 1.25rem;padding:0.35rem 0.6rem;background:var(--elevated);border-left:2px solid var(--border);border-radius:0 4px 4px 0;font-size:0.71rem;color:var(--text);line-height:1.75">' +
+          dl.join('<br>') + '</div>';
+      }
+
       rows.push(
-        '<li style="display:flex;align-items:center;gap:0.55rem;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.78rem">' +
-          '<span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + color + blink + '"></span>' +
-          '<span style="flex:1;color:var(--text)">' + x(s.tech || task) + '</span>' +
-          '<span style="color:' + color + ';font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em">' + x(s.state) + '</span>' +
-          verdict +
+        '<li style="border-bottom:1px solid var(--border);padding:0.3rem 0;cursor:pointer" onclick="window.toggleLiveStep(\'' + task.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">' +
+          // Main line: dot · ID · name · state
+          '<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.78rem">' +
+            '<span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + color + blink + '"></span>' +
+            '<span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--accent);flex-shrink:0;min-width:5.2rem">' + x(techId) + '</span>' +
+            '<span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(s.techName || '—') + '</span>' +
+            '<span style="color:' + color + ';font-size:0.67rem;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">' + x(s.state === 'done' ? 'done' : s.state) + '</span>' +
+            verdictHtml +
+          '</div>' +
+          // Sub-line: tactic badge · step name · duration
+          (s.stepName || s.tactic || durHtml
+            ? '<div style="display:flex;align-items:center;gap:0.35rem;margin-top:0.12rem;margin-left:1.25rem;font-size:0.7rem;color:var(--muted);overflow:hidden">' +
+                tacticHtml +
+                (s.stepName ? '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(s.stepName) + '</span>' : '<span style="flex:1"></span>') +
+                durHtml +
+              '</div>'
+            : '') +
+          detailHtml +
         '</li>');
     });
     ul.innerHTML = rows.join('');
   }
 
+  // Toggle expanded detail for a step row (click handler).
+  window.toggleLiveStep = function (taskId) {
+    var s = state.steps.get(taskId);
+    if (!s) return;
+    s.expanded = !s.expanded;
+    state.steps.set(taskId, s);
+    render();
+  };
+
   function applyEvent(e) {
     if (e.type === 'run_started') {
       state.total = (e.payload && e.payload.stepsTotal) || state.total;
     } else if (e.type === 'queued') {
-      state.steps.set(e.taskId, { tech: e.techniqueId, state: 'queued' });
+      var meta = lookupTech(e.techniqueId);
+      state.steps.set(e.taskId, {
+        tech:     e.techniqueId,
+        stepName: e.stepName || '',
+        techName: (meta && meta.name)   || '',
+        tactic:   (meta && meta.tactic) || '',
+        state:    'queued'
+      });
     } else if (e.type === 'started') {
       var s = state.steps.get(e.taskId) || {};
-      s.tech = e.techniqueId || s.tech; s.state = 'running';
+      s.tech = e.techniqueId || s.tech;
+      if (e.stepName && !s.stepName) s.stepName = e.stepName;
+      if (!s.techName || !s.tactic) {
+        var meta = lookupTech(s.tech);
+        if (meta) { s.techName = s.techName || meta.name; s.tactic = s.tactic || meta.tactic; }
+      }
+      s.state = 'running';
       state.steps.set(e.taskId, s);
     } else if (e.type === 'completed' || e.type === 'timeout' || e.type === 'killed') {
       var st = state.steps.get(e.taskId) || {};
       st.tech = e.techniqueId || st.tech;
-      st.state = e.type === 'completed' ? 'done' : e.type;
+      if (e.stepName && !st.stepName) st.stepName = e.stepName;
+      st.state   = e.type === 'completed' ? 'done' : e.type;
       st.verdict = e.payload && (e.payload.verdict || e.payload.reason);
+      if (e.payload && e.payload.durationMs != null) st.durationMs = e.payload.durationMs;
+      if (e.payload && e.payload.exitCode   != null) st.exitCode   = e.payload.exitCode;
       state.steps.set(e.taskId, st);
     }
     var done = 0, failed = 0, running = 0;

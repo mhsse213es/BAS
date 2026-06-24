@@ -13,6 +13,7 @@ type RunEvent struct {
 	Type        string         `json:"type"`
 	TaskID      string         `json:"taskId,omitempty"`
 	TechniqueID string         `json:"techniqueId,omitempty"`
+	StepName    string         `json:"stepName,omitempty"`
 	Ts          time.Time      `json:"ts"`
 	Payload     map[string]any `json:"payload,omitempty"`
 }
