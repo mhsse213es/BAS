@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -356,6 +356,11 @@ main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .conn-cfg-row { display: flex; align-items: center; gap: 0.6rem; }
 .conn-cfg-label { font-size: 0.72rem; font-weight: 600; color: var(--muted); text-transform: uppercase;
   letter-spacing: 0.06em; min-width: 7rem; }
+.inp-sm { background: var(--elevated); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 0.38rem 0.6rem; color: var(--text); font-size: 0.8rem; font-family: inherit;
+  transition: border-color .15s; box-sizing: border-box; }
+.inp-sm:focus { outline: none; border-color: var(--accent); }
+.inp-sm::placeholder { color: var(--muted); }
 .conn-cfg-val {
   flex: 1; font-family: var(--font-mono); font-size: 0.78rem;
   background: var(--elevated); border: 1px solid var(--border); border-radius: 4px;
@@ -1165,12 +1170,12 @@ body.theme-slate {
           </svg>
           Agents
         </div>
-        <div class="nav-item disabled">
+        <div class="nav-item" id="nav-integrations" data-tab="integrations" onclick="showTab('integrations')" style="display:none">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <circle cx="8" cy="8" r="2.5"/>
             <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M3.2 12.8l1.4-1.4M11.4 4.6l1.4-1.4"/>
           </svg>
-          Integrations <span class="coming-tag">Soon</span>
+          Integrations
         </div>
       </div>
       <div class="nav-group">
@@ -1273,6 +1278,15 @@ body.theme-slate {
         </div>
         <div class="kpi-row" id="compliance-tiles" style="flex-wrap:wrap">
           <div style="color:var(--muted);font-size:0.78rem;padding:0.4rem 0">Loading compliance scores…</div>
+        </div>
+
+        <!-- ITSM Tickets — read-only metrics widget; hidden until connectors are configured -->
+        <div id="dash-itsm-section" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
+            <span style="font-size:0.72rem;font-weight:600;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase">ITSM Tickets</span>
+            <a class="tiny" id="dash-itsm-link" style="color:var(--accent);cursor:pointer;font-weight:500" onclick="showTab('integrations')">Manage connectors →</a>
+          </div>
+          <div class="kpi-row" id="dash-itsm-tiles"></div>
         </div>
 
         <div class="dash-grid" style="grid-template-columns:1.3fr 1fr;margin-bottom:1.25rem">
@@ -1831,7 +1845,6 @@ body.theme-slate {
           </div>
 
           </div>
-          </div>
         </div>
       </div>
 
@@ -2282,6 +2295,7 @@ body.theme-slate {
             <div style="font-size:0.8rem;color:var(--muted)">Security gaps surfaced by simulations — each is a technique that executed without being prevented. Triage and re-validate.</div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0">
+            <button class="btn btn-outline btn-sm" id="findings-bulk-btn" style="display:none" onclick="bulkPushSelectedFindings()">Push to ITSM</button>
             <button class="btn btn-outline btn-sm" onclick="loadFindings()">Refresh</button>
           </div>
         </div>
@@ -2289,17 +2303,23 @@ body.theme-slate {
         <div id="findings-toolbar" style="margin-bottom:0.9rem"></div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Finding</th><th>Technique</th><th>Severity</th><th>Control</th><th>Agent</th><th>Status</th><th>Age</th><th id="findings-th-triage" style="display:none"></th></tr></thead>
-            <tbody id="findings-body"><tr><td colspan="8" class="empty">No findings yet.</td></tr></tbody>
+            <thead><tr><th id="findings-th-check" style="display:none;width:28px"><input type="checkbox" id="findings-chk-all" onchange="toggleAllFindingChecks(this.checked)" style="cursor:pointer"></th><th>Finding</th><th>Technique</th><th>Severity</th><th>Control</th><th>Agent</th><th>Status</th><th>Age</th><th id="findings-th-ticket" style="display:none">Ticket</th><th id="findings-th-triage" style="display:none"></th></tr></thead>
+            <tbody id="findings-body"><tr><td colspan="10" class="empty">No findings yet.</td></tr></tbody>
           </table>
         </div>
       </div>
 
       <!-- Remediation -->
       <div id="tab-remediation" style="display:none">
-        <div style="margin-bottom:1rem">
-          <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Remediation</h1>
-          <div style="font-size:0.8rem;color:var(--muted)">Prioritized fixes from your open findings, with authoritative MITRE ATT&amp;CK mitigations. Re-validate after applying a fix.</div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Remediation</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Prioritized fixes from your open findings, with authoritative MITRE ATT&amp;CK mitigations. Re-validate after applying a fix.</div>
+          </div>
+          <div id="rem-ticket-actions" style="display:none;gap:0.5rem;flex-shrink:0">
+            <button class="btn btn-outline btn-sm" onclick="remBulkTicket('critical')">Create Tickets for All Critical</button>
+            <button class="btn btn-outline btn-sm" onclick="remBulkTicket('all')">Create Tickets for All</button>
+          </div>
         </div>
         <div class="kpi-row" id="rem-tiles"></div>
         <div id="rem-list"><div class="empty" style="padding:2rem">Loading…</div></div>
@@ -2325,6 +2345,90 @@ body.theme-slate {
             <thead><tr><th>Report</th><th>Scope</th><th>Format</th><th>Generated by</th><th>Generated</th><th>Status</th><th></th></tr></thead>
             <tbody id="reports-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Integrations (admin only — ITSM connector management) -->
+      <div id="tab-integrations" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Integrations</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Configure ITSM connectors. Analysts create tickets from the Findings tab; BAS can auto-create tickets for critical exposures based on policy.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0" id="integrations-admin-actions">
+            <button class="btn btn-outline btn-sm" onclick="triggerTicketingSync()">Sync Now</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddConnector()">+ Add Connector</button>
+          </div>
+        </div>
+
+        <!-- Connector list -->
+        <div id="integrations-list"><div class="empty" style="padding:2rem">Loading connectors…</div></div>
+
+        <!-- Add / Edit connector drawer (inline form) -->
+        <div id="connector-form-wrap" style="display:none;margin-top:1.25rem">
+          <div class="conn-cfg-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+              <div style="font-size:0.85rem;font-weight:600;color:var(--text)" id="connector-form-title">Add Connector</div>
+              <button class="btn btn-outline btn-sm" onclick="closeConnectorForm()">✕ Cancel</button>
+            </div>
+            <input type="hidden" id="cf-id">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
+              <div>
+                <div class="conn-cfg-label" style="margin-bottom:0.3rem">Name</div>
+                <input id="cf-name" type="text" placeholder="e.g. ServiceNow Production" class="inp-sm" style="width:100%">
+              </div>
+              <div>
+                <div class="conn-cfg-label" style="margin-bottom:0.3rem">Provider</div>
+                <select id="cf-provider" class="inp-sm" style="width:100%" onchange="renderConnectorSettings()">
+                  <option value="servicenow">ServiceNow</option>
+                  <option value="jira">Jira</option>
+                  <option value="webhook">Webhook</option>
+                </select>
+              </div>
+            </div>
+            <div id="cf-settings" style="margin-bottom:0.75rem"></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:0.75rem">
+              <div>
+                <div class="conn-cfg-label" style="margin-bottom:0.3rem">Auto-Create</div>
+                <select id="cf-auto-create" class="inp-sm" style="width:100%">
+                  <option value="off">Off (manual only)</option>
+                  <option value="critical">Critical findings</option>
+                  <option value="critical_high">Critical + High</option>
+                  <option value="all">All findings</option>
+                </select>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:0.5rem;padding-top:0.2rem">
+                <label class="conn-cfg-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+                  <input type="checkbox" id="cf-auto-update"> Auto-update on change
+                </label>
+                <label class="conn-cfg-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+                  <input type="checkbox" id="cf-auto-close"> Auto-close on heal
+                </label>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:0.5rem;padding-top:0.2rem">
+                <label class="conn-cfg-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+                  <input type="checkbox" id="cf-enabled" checked> Enabled
+                </label>
+              </div>
+            </div>
+            <div style="display:flex;gap:0.5rem">
+              <button class="btn btn-outline btn-sm" onclick="testConnectorForm()">Test Connection</button>
+              <button class="btn btn-primary btn-sm" onclick="saveConnectorForm()">Save</button>
+            </div>
+            <div id="cf-test-result" style="margin-top:0.5rem;font-size:0.75rem;display:none"></div>
+          </div>
+        </div>
+
+        <!-- Revalidation summary -->
+        <div id="integrations-reval" style="display:none;margin-top:1.25rem">
+          <div class="conn-cfg-card" style="display:flex;align-items:center;gap:1rem">
+            <div style="font-size:1.5rem;font-weight:800;color:var(--warning)" id="integrations-reval-count">0</div>
+            <div>
+              <div style="font-size:0.82rem;font-weight:600;color:var(--text)">Pending Revalidation</div>
+              <div style="font-size:0.75rem;color:var(--muted)">Tickets resolved in ITSM — run BAS again to confirm prevention before closing finding.</div>
+            </div>
+            <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="showTab('findings')">View Findings →</button>
+          </div>
         </div>
       </div>
 
@@ -2991,6 +3095,9 @@ function bootApp() {
   document.getElementById('app').style.display = 'flex';
   document.getElementById('role-badge').textContent = ROLE;
   document.getElementById('nav-settings').style.display = '';
+  // Integrations nav — admin only
+  var navInt = document.getElementById('nav-integrations');
+  if (navInt) navInt.style.display = ROLE === 'admin' ? '' : 'none';
   if (ROLE === 'admin') {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
       if (el.getAttribute('data-set') !== 'theme') el.style.display = '';
@@ -3012,6 +3119,9 @@ function bootApp() {
     var nb = document.getElementById('sc-new-btn');     if (nb) nb.style.display = 'none';
     var ub = document.getElementById('sc-upload-btn');  if (ub) ub.style.display = 'none';
   }
+  // Remediation bulk ticket actions — analyst+
+  var remTicketActions = document.getElementById('rem-ticket-actions');
+  if (remTicketActions) remTicketActions.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none';
   connectWS();
   loadAgents();
   loadCatalogs();
@@ -3069,6 +3179,7 @@ function showTab(name) {
       }
     }, 15000);
   }
+  if (name === 'integrations') loadIntegrations();
   if (name === 'compliance') initComplianceTab();
   if (name === 'settings') {
     if (ROLE === 'admin') {
@@ -4690,6 +4801,14 @@ function loadFindings() {
   apicall('/api/findings').then(function(list) {
     window._findings = list || [];
     renderFindingsTiles(); renderFindingsTabs(); renderFindingsRows();
+    // Async: load ticket candidates to show ticket badges on rows (analyst+)
+    if (ROLE === 'admin' || ROLE === 'analyst') loadTicketCandidates();
+    // Show/hide bulk push button and ticket column for analysts
+    var bulkBtn = document.getElementById('findings-bulk-btn');
+    var ticketTh = document.getElementById('findings-th-ticket');
+    var canPush = ROLE === 'admin' || ROLE === 'analyst';
+    if (bulkBtn) bulkBtn.style.display = canPush ? '' : 'none';
+    if (ticketTh) ticketTh.style.display = canPush ? '' : 'none';
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function renderFindingsTiles() {
@@ -4728,25 +4847,41 @@ function renderFindingsRows() {
   var l = (window._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
   var tb = document.getElementById('findings-body');
   var canTriage = (ROLE === 'admin' || ROLE === 'analyst');
-  // Show/hide the Triage column header depending on role
+  var canPush = canTriage;
   var thTriage = document.getElementById('findings-th-triage');
+  var thCheck = document.getElementById('findings-th-check');
+  var thTicket = document.getElementById('findings-th-ticket');
   if (thTriage) thTriage.style.display = canTriage ? '' : 'none';
-  if (!l.length) { tb.innerHTML = '<tr><td colspan="' + (canTriage ? 8 : 7) + '" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
+  if (thCheck) thCheck.style.display = (_findingsBulkMode && canPush) ? '' : 'none';
+  if (thTicket) thTicket.style.display = canPush ? '' : 'none';
+  var colCount = 8 + (canTriage ? 1 : 0) + (canPush ? 1 : 0) + (_findingsBulkMode ? 1 : 0);
+  if (!l.length) { tb.innerHTML = '<tr><td colspan="' + colCount + '" class="empty">No findings' + (FINDING_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
   tb.innerHTML = l.map(function(f) {
-    // Inline triage cell — stop click so it does NOT trigger openFinding on the row
+    var checkCell = (_findingsBulkMode && canPush)
+      ? '<td onclick="event.stopPropagation()" style="padding:0.2rem 0.5rem"><input type="checkbox" ' + (_findingsSelected[f.id] ? 'checked' : '') + ' onchange="toggleFindingCheck(\'' + x(f.id) + '\')" style="cursor:pointer"></td>'
+      : '';
+    var isTicketed = _ticketCandidateIds && (f.status === 'open' || f.status === 'triaged') && !_ticketCandidateIds.has(f.id);
+    var ticketCell = '';
+    if (canPush) {
+      ticketCell = '<td onclick="event.stopPropagation()" style="padding:0.2rem 0.5rem">' +
+        (isTicketed
+          ? '<span class="sbadge" style="background:rgba(47,129,247,0.12);color:var(--accent);font-size:0.68rem">ticketed</span>'
+          : (f.status === 'open' || f.status === 'triaged')
+            ? '<button class="btn btn-sm" style="font-size:0.68rem;padding:0.15rem 0.4rem;background:transparent;border:1px solid var(--border);color:var(--muted)" onclick="pushFindingToITSM(\'' + x(f.id) + '\')">+ ticket</button>'
+            : '') +
+        '</td>';
+    }
     var triageCell = '';
     if (canTriage) {
       var nextStates = ['open', 'triaged', 'remediated', 'risk_accepted'].filter(function(st) { return st !== f.status; });
-      var opts = nextStates.map(function(st) {
-        return '<option value="' + st + '">' + st.replace('_', ' ') + '</option>';
-      }).join('');
+      var opts = nextStates.map(function(st) { return '<option value="' + st + '">' + st.replace('_', ' ') + '</option>'; }).join('');
       triageCell = '<td onclick="event.stopPropagation()" style="padding:0.2rem 0.5rem">'
         + '<select class="triage-sel" onchange="quickTriageFinding(\'' + x(f.id) + '\',this)"'
         + ' style="font-size:0.72rem;padding:0.2rem 0.35rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer">'
-        + '<option value="">Set\u2026</option>' + opts
-        + '</select></td>';
+        + '<option value="">Set…</option>' + opts + '</select></td>';
     }
     return '<tr style="cursor:pointer" onclick="openFinding(\'' + x(f.id) + '\')">'
+      + checkCell
       + '<td class="cell-main">' + x(f.techniqueName || f.techniqueId) + (f.reopenedCount > 0 ? ' <span class="sbadge s-partial">reopened</span>' : '') + '</td>'
       + '<td><span class="tech-id">' + x(f.techniqueId) + '</span></td>'
       + '<td>' + findingSevBadge(f.severity, f.exposureState) + '</td>'
@@ -4754,13 +4889,11 @@ function renderFindingsRows() {
       + '<td class="tiny muted" style="font-family:var(--font-mono)">' + x(f.agentId) + '</td>'
       + '<td><span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></td>'
       + '<td class="tiny muted" title="First seen: ' + fmtDate(f.firstSeen) + (f.resolvedAt ? '\nResolved: ' + fmtDate(f.resolvedAt) : '') + '">' + formatFindingAge(f) + '</td>'
+      + ticketCell
       + triageCell
       + '</tr>';
   }).join('');
 }
-// quickTriageFinding — called from the inline triage dropdown in the findings table.
-// Resets the select back to placeholder immediately, then delegates to the existing
-// setFindingStatus which handles the API call, toast, drawer refresh, and table reload.
 function quickTriageFinding(id, sel) {
   var status = sel.value;
   if (!status) return;
@@ -4773,11 +4906,14 @@ function openFinding(id) {
     document.getElementById('results-title').textContent = (f.techniqueName || f.techniqueId) + ' — Finding';
     var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:140px">' + k + '</span><span style="flex:1">' + v + '</span></div>' : ''; };
     var list = function(a) { return (a || []).map(x).join(', '); };
-    var actions = (ROLE === 'admin' || ROLE === 'analyst')
+    var canPush = (ROLE === 'admin' || ROLE === 'analyst');
+    var pushBtn = canPush ? '<button class="btn btn-outline btn-sm" onclick="pushFindingToITSM(\'' + x(f.id) + '\')">+ Ticket</button>' : '';
+    var actions = (canPush
       ? ['open', 'triaged', 'remediated', 'risk_accepted'].filter(function(st) { return st !== f.status; })
           .map(function(st) { return '<button class="btn btn-outline btn-sm" onclick="setFindingStatus(\'' + x(f.id) + '\',\'' + st + '\')">' + st.replace('_', ' ') + '</button>'; }).join(' ')
-      : '';
-    document.getElementById('results-export').innerHTML = actions;
+      : '');
+    document.getElementById('results-export').innerHTML = (actions ? actions + ' ' : '') + pushBtn;
+    var ticketSectionId = 'finding-tickets-' + f.id;
     document.getElementById('results-body').innerHTML =
       '<div style="margin-bottom:0.9rem">' + findingSevBadge(f.severity, f.exposureState) +
         ' <span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +
@@ -4789,8 +4925,17 @@ function openFinding(id) {
       row('First seen', fmtDate(f.firstSeen)) + row('Last seen', fmtDate(f.lastSeen)) +
       row('Exposure age', formatFindingAge(f)) +
       (e.description ? '<div style="margin-top:0.8rem;font-size:0.8rem;color:var(--text-dim);line-height:1.5">' + x(e.description) + '</div>' : '') +
-      (e.url ? '<div style="margin-top:0.6rem"><a href="' + x(e.url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">View on attack.mitre.org →</a></div>' : '');
+      (e.url ? '<div style="margin-top:0.6rem"><a href="' + x(e.url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">View on attack.mitre.org →</a></div>' : '') +
+      (canPush
+        ? '<div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border)">' +
+            '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.4rem">ITSM Tickets</div>' +
+            '<div id="' + ticketSectionId + '"><div class="tiny muted">Loading…</div></div>' +
+          '</div>'
+        : '');
     document.getElementById('results-overlay').classList.add('open');
+    if (canPush) {
+      loadFindingTickets(f.id, document.getElementById(ticketSectionId));
+    }
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function setFindingStatus(id, status) {
@@ -4929,6 +5074,362 @@ function revalidateRemediation(techniqueId) {
     showToast('No scenario found for ' + techniqueId + ' — select one manually', 'ok');
     openModal();
   }
+}
+
+// ── Ticketing ─────────────────────────────────────────────────────────────────
+
+// Loaded once per findings-load; Set of finding IDs with no open ticket (candidates)
+var _ticketCandidateIds = null;
+// Cached ITSM config list (for push dropdowns)
+var _ticketingConfigs = null;
+// Bulk selection state in Findings tab
+var _findingsBulkMode = false;
+var _findingsSelected = {};
+
+function loadTicketCandidates() {
+  apicall('/api/ticketing/candidates').then(function(list) {
+    _ticketCandidateIds = new Set((list || []).map(function(c) { return c.id; }));
+    renderFindingsRows(); // re-render with ticket badges
+  }).catch(function() { _ticketCandidateIds = null; });
+}
+
+function loadTicketingConfigs(cb) {
+  apicall('/api/ticketing/configs').then(function(list) {
+    _ticketingConfigs = list || [];
+    if (cb) cb(_ticketingConfigs);
+  }).catch(function() { _ticketingConfigs = []; if (cb) cb([]); });
+}
+
+// ── Dashboard ITSM widget ───────────────────────────────────────────────────
+function loadDashboardITSM() {
+  apicall('/api/ticketing/summary').then(function(s) {
+    var sec = document.getElementById('dash-itsm-section');
+    if (!sec) return;
+    var open = s.openTickets || 0, resolved = s.resolvedTickets || 0, pend = s.pendingRevalidation || 0;
+    if (open + resolved + pend === 0 && !(s.byProvider && s.byProvider.length)) {
+      sec.style.display = 'none'; return;
+    }
+    sec.style.display = '';
+    var tile = function(lbl, val, col) {
+      return '<div class="kpi-card"><div class="kpi-label">' + lbl + '</div>' +
+        '<div class="kpi-value" style="color:' + col + '">' + val + '</div></div>';
+    };
+    var html = tile('Open tickets', open, open ? 'var(--warning)' : 'var(--success)') +
+      tile('Resolved tickets', resolved, 'var(--success)') +
+      tile('Pending revalidation', pend, pend ? 'var(--danger)' : 'var(--muted)');
+    (s.byProvider || []).forEach(function(p) {
+      html += tile(p.provider, p.count, 'var(--accent)');
+    });
+    document.getElementById('dash-itsm-tiles').innerHTML = html;
+  }).catch(function() {});
+}
+
+// ── Integrations tab ────────────────────────────────────────────────────────
+function loadIntegrations() {
+  loadTicketingConfigs(function(list) {
+    renderConnectorList(list);
+  });
+  apicall('/api/ticketing/revalidation').then(function(r) {
+    var cnt = r.pendingRevalidation || 0;
+    var wrap = document.getElementById('integrations-reval');
+    if (!wrap) return;
+    if (cnt > 0) {
+      wrap.style.display = '';
+      var el = document.getElementById('integrations-reval-count');
+      if (el) el.textContent = cnt;
+    } else {
+      wrap.style.display = 'none';
+    }
+  }).catch(function() {});
+}
+
+var PROVIDER_LABELS = { servicenow: 'ServiceNow', jira: 'Jira', webhook: 'Webhook' };
+var PROVIDER_ICONS = {
+  servicenow: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 14.5v-5l4 2.5-4 2.5z"/></svg>',
+  jira:       '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 11.513H0a5.218 5.218 0 005.232 5.215l2.345.01v2.31A5.215 5.215 0 0012.79 24V12.518a1.005 1.005 0 00-1.22-.005zM12.426.005H.855a5.218 5.218 0 005.232 5.215l2.345.01v2.31A5.215 5.215 0 0013.645 12.8V1.21A1.005 1.005 0 0012.426.005z"/></svg>',
+  webhook:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>'
+};
+
+function renderConnectorList(list) {
+  var el = document.getElementById('integrations-list');
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = '<div class="conn-cfg-card" style="text-align:center;padding:2rem;color:var(--muted)">' +
+      '<div style="margin-bottom:0.5rem">No connectors configured.</div>' +
+      '<div class="tiny">Add a ServiceNow, Jira, or webhook connector to push findings to your ITSM.</div></div>';
+    return;
+  }
+  el.innerHTML = list.map(function(c) {
+    var ac = c.autoCreate === 'off' || !c.autoCreate ? 'Manual only' : c.autoCreate.replace('_', '+');
+    var statusDot = c.enabled
+      ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:5px"></span>Active'
+      : '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);margin-right:5px"></span>Disabled';
+    return '<div class="conn-cfg-card" style="margin-bottom:0.75rem">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">' +
+        '<div style="display:flex;align-items:center;gap:0.75rem">' +
+          '<div style="width:32px;height:32px;border-radius:6px;background:rgba(47,129,247,0.12);color:var(--accent);display:flex;align-items:center;justify-content:center">' + (PROVIDER_ICONS[c.provider] || '') + '</div>' +
+          '<div><div style="font-weight:600;font-size:0.85rem;color:var(--text)">' + x(c.name) + '</div>' +
+            '<div class="tiny muted">' + (PROVIDER_LABELS[c.provider] || c.provider) + ' &nbsp;·&nbsp; Auto-create: ' + x(ac) + '</div></div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:0.65rem">' +
+          '<span class="tiny" style="color:' + (c.enabled ? 'var(--success)' : 'var(--muted)') + '">' + statusDot + '</span>' +
+          '<button class="btn btn-outline btn-sm" onclick="testConnectorById(\'' + x(c.id) + '\',this)">Test</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="openEditConnector(\'' + x(c.id) + '\')">Edit</button>' +
+          '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)" onclick="deleteConnector(\'' + x(c.id) + '\',\'' + x(c.name) + '\')">Delete</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function openAddConnector() {
+  document.getElementById('cf-id').value = '';
+  document.getElementById('cf-name').value = '';
+  document.getElementById('cf-provider').value = 'servicenow';
+  document.getElementById('cf-auto-create').value = 'off';
+  document.getElementById('cf-auto-update').checked = true;
+  document.getElementById('cf-auto-close').checked = true;
+  document.getElementById('cf-enabled').checked = true;
+  document.getElementById('connector-form-title').textContent = 'Add Connector';
+  document.getElementById('cf-test-result').style.display = 'none';
+  renderConnectorSettings();
+  document.getElementById('connector-form-wrap').style.display = '';
+  document.getElementById('connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openEditConnector(id) {
+  var c = (_ticketingConfigs || []).find(function(cfg) { return cfg.id === id; });
+  if (!c) return;
+  document.getElementById('cf-id').value = c.id;
+  document.getElementById('cf-name').value = c.name || '';
+  document.getElementById('cf-provider').value = c.provider || 'servicenow';
+  document.getElementById('cf-auto-create').value = c.autoCreate || 'off';
+  document.getElementById('cf-auto-update').checked = !!c.autoUpdate;
+  document.getElementById('cf-auto-close').checked = !!c.autoClose;
+  document.getElementById('cf-enabled').checked = !!c.enabled;
+  document.getElementById('connector-form-title').textContent = 'Edit Connector';
+  document.getElementById('cf-test-result').style.display = 'none';
+  renderConnectorSettings(c.settings || {});
+  document.getElementById('connector-form-wrap').style.display = '';
+  document.getElementById('connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeConnectorForm() {
+  document.getElementById('connector-form-wrap').style.display = 'none';
+}
+
+var CONNECTOR_FIELDS = {
+  servicenow: [
+    { key: 'instance_url',    label: 'Instance URL',       placeholder: 'https://instance.service-now.com', type: 'text' },
+    { key: 'username',        label: 'Username',           placeholder: 'admin',                            type: 'text' },
+    { key: 'password',        label: 'Password',           placeholder: '••••••',                           type: 'password' },
+    { key: 'category',        label: 'Category',           placeholder: 'Security (optional)',              type: 'text' },
+    { key: 'assignment_group',label: 'Assignment Group',   placeholder: 'SOC (optional)',                   type: 'text' }
+  ],
+  jira: [
+    { key: 'base_url',        label: 'Base URL',           placeholder: 'https://jira.company.com',         type: 'text' },
+    { key: 'username',        label: 'Username/Email',     placeholder: 'user@company.com',                 type: 'text' },
+    { key: 'api_token',       label: 'API Token',          placeholder: '••••••',                           type: 'password' },
+    { key: 'project_key',     label: 'Project Key',        placeholder: 'SEC',                              type: 'text' }
+  ],
+  webhook: [
+    { key: 'url',             label: 'Endpoint URL',       placeholder: 'https://hooks.example.com/bas',    type: 'text' },
+    { key: 'secret',          label: 'HMAC Secret',        placeholder: 'optional — signs X-BAS-Signature', type: 'password' }
+  ]
+};
+
+function renderConnectorSettings(saved) {
+  var prov = document.getElementById('cf-provider').value;
+  var fields = CONNECTOR_FIELDS[prov] || [];
+  var s = saved || {};
+  document.getElementById('cf-settings').innerHTML = fields.map(function(f) {
+    return '<div style="margin-bottom:0.6rem">' +
+      '<div class="conn-cfg-label" style="margin-bottom:0.25rem">' + f.label + '</div>' +
+      '<input type="' + f.type + '" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm" style="width:100%">' +
+      '</div>';
+  }).join('');
+}
+
+function saveConnectorForm() {
+  var id = document.getElementById('cf-id').value;
+  var prov = document.getElementById('cf-provider').value;
+  var fields = CONNECTOR_FIELDS[prov] || [];
+  var settings = {};
+  fields.forEach(function(f) {
+    var v = (document.getElementById('cfs-' + f.key) || {}).value || '';
+    if (v) settings[f.key] = v;
+  });
+  var body = {
+    name:       document.getElementById('cf-name').value,
+    provider:   prov,
+    enabled:    document.getElementById('cf-enabled').checked,
+    autoCreate: document.getElementById('cf-auto-create').value,
+    autoUpdate: document.getElementById('cf-auto-update').checked,
+    autoClose:  document.getElementById('cf-auto-close').checked,
+    settings:   settings
+  };
+  var url = id ? '/api/ticketing/configs/' + encodeURIComponent(id) : '/api/ticketing/configs';
+  var method = id ? 'PUT' : 'POST';
+  apicall(url, { method: method, body: JSON.stringify(body) })
+    .then(function() {
+      showToast('Connector saved', 'ok');
+      closeConnectorForm();
+      loadIntegrations();
+    }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function testConnectorById(id, btn) {
+  var orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
+  apicall('/api/ticketing/configs/' + encodeURIComponent(id) + '/test', { method: 'POST' })
+    .then(function(r) {
+      showToast(r.ok ? 'Connection OK' : 'Failed: ' + (r.error || 'unknown'), r.ok ? 'ok' : 'err');
+    }).catch(function(e) { showToast(e.message, 'err'); })
+    .finally(function() { if (btn) { btn.disabled = false; btn.textContent = orig; } });
+}
+
+function testConnectorForm() {
+  var id = document.getElementById('cf-id').value;
+  var res = document.getElementById('cf-test-result');
+  if (!id) { res.style.display = ''; res.style.color = 'var(--muted)'; res.textContent = 'Save the connector first, then test.'; return; }
+  res.style.display = ''; res.style.color = 'var(--muted)'; res.textContent = 'Testing…';
+  apicall('/api/ticketing/configs/' + encodeURIComponent(id) + '/test', { method: 'POST' })
+    .then(function(r) {
+      res.style.color = r.ok ? 'var(--success)' : 'var(--danger)';
+      res.textContent = r.ok ? 'Connection successful.' : 'Failed: ' + (r.error || 'check credentials');
+    }).catch(function(e) { res.style.color = 'var(--danger)'; res.textContent = e.message; });
+}
+
+function deleteConnector(id, name) {
+  if (!confirm('Delete connector "' + name + '"? This cannot be undone.')) return;
+  apicall('/api/ticketing/configs/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function() { showToast('Connector deleted', 'ok'); loadIntegrations(); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function triggerTicketingSync() {
+  apicall('/api/ticketing/sync', { method: 'POST' })
+    .then(function() { showToast('Sync started', 'ok'); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// ── Findings ticket actions ─────────────────────────────────────────────────
+
+// Loads ticket refs for a finding and renders them in the drawer.
+function loadFindingTickets(findingId, container) {
+  apicall('/api/findings/' + encodeURIComponent(findingId) + '/tickets').then(function(tickets) {
+    if (!container) return;
+    if (!tickets || !tickets.length) {
+      container.innerHTML = '<div class="tiny muted" style="padding:0.3rem 0">No tickets yet.</div>';
+      return;
+    }
+    container.innerHTML = tickets.map(function(t) {
+      var statusColor = t.status === 'resolved' ? 'var(--success)' : t.status === 'open' ? 'var(--warning)' : 'var(--muted)';
+      var link = t.ticketUrl ? '<a href="' + x(t.ticketUrl) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem;margin-left:0.4rem">↗</a>' : '';
+      var reval = t.revalidationRequired ? ' <span class="sbadge" style="background:rgba(218,54,51,0.12);color:var(--danger);font-size:0.65rem">revalidate</span>' : '';
+      return '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.8rem">' +
+        '<span class="tech-id" style="font-size:0.75rem">' + x(t.ticketId) + '</span>' + link +
+        '<span class="tiny" style="color:' + statusColor + ';margin-left:auto">' + x(t.status) + '</span>' + reval +
+        '</div>';
+    }).join('');
+  }).catch(function() { if (container) container.innerHTML = '<div class="tiny muted">Failed to load tickets.</div>'; });
+}
+
+function pushFindingToITSM(findingId) {
+  loadTicketingConfigs(function(cfgs) {
+    if (!cfgs || !cfgs.length) { showToast('No ITSM connectors configured — add one in Integrations first', 'err'); return; }
+    var enabled = cfgs.filter(function(c) { return c.enabled; });
+    if (!enabled.length) { showToast('All connectors are disabled', 'err'); return; }
+    // If only one connector, push directly; otherwise prompt via a simple select
+    var configId = enabled.length === 1 ? enabled[0].id : null;
+    if (!configId) {
+      var chosen = prompt('Multiple connectors:\n' + enabled.map(function(c,i) { return (i+1) + '. ' + c.name; }).join('\n') + '\nEnter number:');
+      var idx = parseInt(chosen, 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= enabled.length) return;
+      configId = enabled[idx].id;
+    }
+    apicall('/api/ticketing/push', { method: 'POST', body: JSON.stringify({ findingId: findingId, configId: configId, recordType: 'incident' }) })
+      .then(function(r) {
+        showToast('Ticket created: ' + (r.ticketId || ''), 'ok');
+        openFinding(findingId); // refresh drawer
+      }).catch(function(e) { showToast(e.message, 'err'); });
+  });
+}
+
+// ── Findings bulk select ────────────────────────────────────────────────────
+function toggleFindingsBulkMode(on) {
+  _findingsBulkMode = on;
+  _findingsSelected = {};
+  var checkCol = document.getElementById('findings-th-check');
+  var bulkBtn = document.getElementById('findings-bulk-btn');
+  if (checkCol) checkCol.style.display = on ? '' : 'none';
+  if (bulkBtn) bulkBtn.style.display = on ? '' : 'none';
+  renderFindingsRows();
+}
+
+function toggleAllFindingChecks(checked) {
+  _findingsSelected = {};
+  if (checked) {
+    var l = (window._findings || []).filter(function(f) { return FINDING_TAB === 'all' || f.status === FINDING_TAB; });
+    l.forEach(function(f) { _findingsSelected[f.id] = true; });
+  }
+  renderFindingsRows();
+}
+
+function toggleFindingCheck(id) {
+  if (_findingsSelected[id]) delete _findingsSelected[id];
+  else _findingsSelected[id] = true;
+}
+
+function bulkPushSelectedFindings() {
+  var ids = Object.keys(_findingsSelected);
+  if (!ids.length) { showToast('Select at least one finding', 'err'); return; }
+  loadTicketingConfigs(function(cfgs) {
+    var enabled = (cfgs || []).filter(function(c) { return c.enabled; });
+    if (!enabled.length) { showToast('No ITSM connectors configured', 'err'); return; }
+    var configId = enabled.length === 1 ? enabled[0].id : null;
+    if (!configId) {
+      var chosen = prompt('Multiple connectors:\n' + enabled.map(function(c,i) { return (i+1) + '. ' + c.name; }).join('\n') + '\nEnter number:');
+      var idx = parseInt(chosen, 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= enabled.length) return;
+      configId = enabled[idx].id;
+    }
+    apicall('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: ids, configId: configId, recordType: 'incident' }) })
+      .then(function(results) {
+        var ok = results.filter(function(r) { return !r.error; }).length;
+        var fail = results.length - ok;
+        showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created' + (fail ? ', ' + fail + ' failed' : ''), ok ? 'ok' : 'err');
+        toggleFindingsBulkMode(false);
+        loadFindings();
+      }).catch(function(e) { showToast(e.message, 'err'); });
+  });
+}
+
+// ── Remediation bulk tickets ─────────────────────────────────────────────────
+function remBulkTicket(filter) {
+  var rems = window._rems || [];
+  var targets = filter === 'critical' ? rems.filter(function(r) { return r.severity === 'Critical'; }) : rems;
+  if (!targets.length) { showToast('No remediations to ticket', 'err'); return; }
+  // Gather finding IDs from remediations
+  var findingIds = [];
+  targets.forEach(function(r) { (r.findingIds || []).forEach(function(id) { findingIds.push(id); }); });
+  if (!findingIds.length) { showToast('Remediations have no finding IDs — re-validate first', 'err'); return; }
+  loadTicketingConfigs(function(cfgs) {
+    var enabled = (cfgs || []).filter(function(c) { return c.enabled; });
+    if (!enabled.length) { showToast('No ITSM connectors configured — add one in Integrations', 'err'); return; }
+    var configId = enabled.length === 1 ? enabled[0].id : null;
+    if (!configId) {
+      var chosen = prompt('Multiple connectors:\n' + enabled.map(function(c,i) { return (i+1) + '. ' + c.name; }).join('\n') + '\nEnter number:');
+      var idx = parseInt(chosen, 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= enabled.length) return;
+      configId = enabled[idx].id;
+    }
+    apicall('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: findingIds, configId: configId, recordType: 'incident' }) })
+      .then(function(results) {
+        var ok = results.filter(function(r) { return !r.error; }).length;
+        showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created', ok ? 'ok' : 'err');
+      }).catch(function(e) { showToast(e.message, 'err'); });
+  });
 }
 
 // ── Reports ──────────────────────────────────────────────────────────────────
@@ -7219,6 +7720,7 @@ function loadDashboard() {
     loadRansomwareReadiness(runs);
     refreshDashboardCampaigns();
     loadComplianceScores();
+    loadDashboardITSM();
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
 }

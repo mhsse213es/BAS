@@ -444,3 +444,35 @@ func (m *Manager) ActiveConfigs() []Config {
 	}
 	return out
 }
+
+// Summary returns dashboard-level ticket counts: open/resolved totals, pending
+// revalidation, and per-provider breakdown.
+func (m *Manager) Summary(ctx context.Context) (map[string]any, error) {
+	var open, resolved, pendingReval int
+	m.db.QueryRow(ctx, `SELECT COUNT(*) FROM finding_tickets WHERE status='open'`).Scan(&open)
+	m.db.QueryRow(ctx, `SELECT COUNT(*) FROM finding_tickets WHERE status='resolved'`).Scan(&resolved)
+	m.db.QueryRow(ctx, `SELECT COUNT(*) FROM finding_tickets WHERE revalidation_required=true`).Scan(&pendingReval)
+
+	rows, _ := m.db.Query(ctx,
+		`SELECT tc.provider, COUNT(*) FROM finding_tickets ft
+		  JOIN ticketing_configs tc ON tc.id = ft.config_id
+		  WHERE ft.status = 'open'
+		  GROUP BY tc.provider`)
+	byProvider := []map[string]any{}
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var provider string
+			var cnt int
+			if rows.Scan(&provider, &cnt) == nil {
+				byProvider = append(byProvider, map[string]any{"provider": provider, "count": cnt})
+			}
+		}
+	}
+	return map[string]any{
+		"openTickets":         open,
+		"resolvedTickets":     resolved,
+		"pendingRevalidation": pendingReval,
+		"byProvider":          byProvider,
+	}, nil
+}

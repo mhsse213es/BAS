@@ -330,6 +330,21 @@ func (h *Handler) ReceiveTicketingWebhook(w http.ResponseWriter, r *http.Request
 
 // ── Revalidation status helper ────────────────────────────────────────────────
 
+// TicketingSummary returns dashboard-level ticket stats (open/resolved/revalidation + per-provider).
+// GET /api/ticketing/summary
+func (h *Handler) TicketingSummary(w http.ResponseWriter, r *http.Request) {
+	if h.ticketing == nil {
+		respond(w, map[string]any{"openTickets": 0, "resolvedTickets": 0, "pendingRevalidation": 0, "byProvider": []any{}})
+		return
+	}
+	summary, err := h.ticketing.Summary(r.Context())
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, summary)
+}
+
 // revalidationStatus returns pending-revalidation count for the dashboard.
 // Findings where an ITSM ticket was resolved but BAS hasn't re-confirmed yet.
 func (h *Handler) RevalidationStatus(w http.ResponseWriter, r *http.Request) {

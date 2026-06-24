@@ -105,6 +105,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/remediations", h.ListRemediations)
 		r.Get("/api/ticketing/candidates", h.ListTicketCandidates)
 		r.Get("/api/ticketing/revalidation", h.RevalidationStatus)
+		r.Get("/api/ticketing/summary", h.TicketingSummary)
 		r.Get("/api/reports", h.ListReports)
 		r.Post("/api/reports", h.CreateReport)
 		r.Get("/api/agents/{agentId}/logs/operational", h.GetOpLogs)
