@@ -557,6 +557,11 @@ if ($Customer -ne "" -and $CustomerID -ne "") {
         if (Test-Path $LicensePath) {
             Log "  License: $LicensePath"
             Copy-Item $LicensePath "$OutDir\$CustomerID.lic"
+            # Also copy as bas.lic — docker-compose.yml mounts ./bas.lic into the
+            # container at /etc/bas/bas.lic. Without this file present, Docker
+            # creates an empty directory at that path and the license check fails.
+            Copy-Item $LicensePath "$OutDir\bas.lic"
+            Log "  Copied as bas.lic (required by docker-compose volume mount)"
         }
     }
 } else {
