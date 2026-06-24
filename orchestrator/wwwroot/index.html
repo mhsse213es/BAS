@@ -224,7 +224,9 @@ body {
 .btn-sm { padding: 0.28rem 0.65rem; font-size: 0.78rem; }
 
 /* ── App shell ─────────────────────────────────────────────── */
-#app { display: none; min-height: 100vh; width: 100%; }
+#app { display: flex; width: 100vw;
+    min-width: 100vw;
+    max-width: none; }
 
 /* ── Sidebar ───────────────────────────────────────────────── */
 #sidebar {
@@ -293,7 +295,7 @@ body {
 .main-wrapper {
   margin-left: var(--sidebar-w);
   flex: 1;
-  min-width: 0;
+  min-width: auto;
   overflow-x: clip;
   min-height: 100vh;
 }
@@ -2371,7 +2373,7 @@ body.theme-slate {
         <div id="vex-stats" class="score-grid" style="margin-bottom:1rem"></div>
 
         <!-- Run form + result side-by-side -->
-        <div style="display:grid;grid-template-columns:280px 1fr;gap:1rem;margin-bottom:1rem;align-items:start">
+        <div style="display:grid;grid-template-columns:minmax(320px,380px) 1fr;width:100%;gap:1rem;margin-bottom:1rem;align-items:start">
           <!-- Run form -->
           <div class="card" style="padding:1rem">
             <div class="card-title" style="margin-bottom:0.75rem">Run Variants</div>
@@ -2446,7 +2448,7 @@ body.theme-slate {
         </div>
 
         <!-- 14-layer grid -->
-        <div id="em-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem">
+        <div id="em-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;width:100%">
           <div class="empty" style="grid-column:1/-1;padding:2rem">Loading Endpoint Mastery layers…</div>
         </div>
       </div>
@@ -5894,6 +5896,45 @@ function viewRunResults(run) {
     }
   }
 
+  // Privilege-tier breakdown — always shown; shows "inherited" for unannotated steps
+  (function() {
+    var tiers = ['user', 'admin', 'system', 'user→admin', 'inherited'];
+    var tierLabel  = { 'user': 'User', 'admin': 'Admin', 'system': 'SYSTEM', 'user→admin': 'User→Admin (fallback)', 'inherited': 'Inherited (unannotated)' };
+    var tierColor  = { 'user': 'var(--accent)', 'admin': 'var(--warning)', 'system': 'var(--danger)', 'user→admin': 'var(--warning)', 'inherited': 'var(--muted)' };
+    var counts = {};
+    tiers.forEach(function(t) { counts[t] = { pass:0, fail:0, error:0, total:0 }; });
+    results.forEach(function(c) {
+      var tier = c.executedAs || 'inherited';
+      if (!counts[tier]) counts[tier] = { pass:0, fail:0, error:0, total:0 };
+      counts[tier].total++;
+      if (c.result === 'pass') counts[tier].pass++;
+      else if (c.result === 'fail') counts[tier].fail++;
+      else if (c.result === 'error') counts[tier].error++;
+    });
+    var used = tiers.filter(function(t) { return counts[t] && counts[t].total > 0; });
+    if (!used.length) return;
+    var rows = used.map(function(t) {
+      var tc = counts[t];
+      var col = tierColor[t] || 'var(--muted)';
+      var failPct = tc.total ? Math.round(tc.fail * 100 / tc.total) : 0;
+      var barBg = t === 'inherited' ? 'var(--border)' : col;
+      return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.28rem 0">' +
+        '<span style="min-width:12px;height:12px;border-radius:2px;background:' + col + ';display:inline-block;flex-shrink:0"></span>' +
+        '<span style="min-width:155px;font-size:0.72rem;color:' + col + '">' + x(tierLabel[t] || t) + '</span>' +
+        '<div style="flex:1;height:7px;background:var(--bg);border-radius:4px;overflow:hidden">' +
+          '<div style="height:100%;width:' + failPct + '%;background:var(--danger)"></div>' +
+        '</div>' +
+        '<span style="min-width:40px;text-align:right;font-size:0.72rem;font-weight:600;color:var(--danger)">' + (failPct ? failPct + '%' : '—') + '</span>' +
+        '<span style="min-width:110px;text-align:right;font-size:0.66rem;color:var(--muted)">' +
+          tc.pass + ' pass · ' + tc.fail + ' fail' + (tc.error ? ' · ' + tc.error + ' err' : '') +
+        '</span>' +
+      '</div>';
+    }).join('');
+    var dimStyle2 = 'background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.6rem 0.75rem;margin-bottom:0.75rem';
+    var labelStyle2 = 'color:var(--muted);font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:0.4rem';
+    scorePanel += '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">Privilege Tier Breakdown</div>' + rows + '</div>';
+  })();
+
   var byTactic = {};
   results.forEach(function(c) {
     var tactic = (c.technique && c.technique.tactic) || 'other';
@@ -5917,6 +5958,9 @@ function viewRunResults(run) {
           ? 'Requested: ' + x(c.requestedPriv || 'user') + ' — fell back to: admin (no interactive session)'
           : 'Executed as: ' + x(c.executedAs);
         privBadge = '<span style="font-size:0.6rem;font-weight:600;text-transform:uppercase;background:rgba(255,255,255,0.04);color:' + privCol + ';border-radius:2px;padding:1px 5px;margin-left:2px;border:1px solid ' + privCol + '33' + (isFallback ? ';text-decoration:line-through' : '') + '" title="' + privTitle + '">' + x(c.executedAs) + '</span>';
+      } else {
+        // Unannotated step — ran in agent's own security context (requires_priv not set in YAML)
+        privBadge = '<span style="font-size:0.6rem;font-weight:500;text-transform:uppercase;background:rgba(255,255,255,0.02);color:var(--muted);border-radius:2px;padding:1px 5px;margin-left:2px;border:1px solid rgba(154,169,188,0.2)" title="Privilege tier not annotated — technique ran in the agent\'s own security context. Add requires_priv: user|admin|system to the scenario step YAML for explicit tracking.">inherited</span>';
       }
       var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.68rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
       return '<div style="padding:0.32rem 0;border-bottom:1px solid rgba(34,50,74,0.45)">' +
