@@ -3157,6 +3157,7 @@ function activateTab(name) {
 function showTab(name) {
   activateTab(name);
   if (name === 'agents') loadAgents();
+  if (name === 'runs') loadRuns();
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
   if (name === 'findings') loadFindings();
@@ -3177,7 +3178,7 @@ function showTab(name) {
       } else {
         clearInterval(_dashCampPoll);
       }
-    }, 15000);
+    }, 5000);
   }
   if (name === 'integrations') loadIntegrations();
   if (name === 'compliance') initComplianceTab();
@@ -4026,6 +4027,7 @@ function submitCampaign() {
     if (res && res.error) { showToast('Launch failed: ' + res.error, 'err'); return; }
     closeCampaignLaunch();
     showToast('Campaign launched — ' + res.dispatched + ' dispatched, ' + res.skipped + ' skipped', 'ok');
+    refreshDashboardCampaigns();
     showTab('campaigns'); loadCampaigns();
   }).catch(function(e) { showToast('Launch failed: ' + e.message, 'err'); });
 }
