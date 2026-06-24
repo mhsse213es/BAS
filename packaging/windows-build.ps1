@@ -411,6 +411,7 @@ Log "Copying installer files..."
 
 $ComposeDir = Join-Path $RepoRoot "packaging\compose"
 Copy-Item "$ComposeDir\install.sh"              "$OutDir\install.sh"
+Copy-Item "$ComposeDir\uninstall.sh"            "$OutDir\uninstall.sh"
 Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf.template"
 # Ship setup.conf as a ready-to-edit copy of the template so operators can
 # run 'nano setup.conf' immediately without a manual cp step first.
@@ -458,7 +459,7 @@ Log "  Generated .env with random secrets (BAS_VERSION=${Version})"
 
 # Normalize the Linux-targeted scripts/config to LF. (verify.sh / verify-sig.sh
 # are normalized at their own copy sites below.)
-foreach ($f in @("install.sh", "setup.conf", "setup.conf.template", ".env.example",
+foreach ($f in @("install.sh", "uninstall.sh", "setup.conf", "setup.conf.template", ".env.example",
                  "docker-compose.yml", "systemd\bas-compose.service")) {
     ConvertToLF (Join-Path $OutDir $f)
 }
