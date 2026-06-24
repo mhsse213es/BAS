@@ -171,9 +171,27 @@ load_config() {
   # Auto-generate secrets if not supplied
   [[ -z "$JWT_SECRET"   ]] && JWT_SECRET=$(openssl rand -hex 32)
   [[ -z "$AGENT_SECRET" ]] && AGENT_SECRET=$(openssl rand -hex 24)
-  local CALDERA_KEY CALDERA_KEY_BLUE
-  CALDERA_KEY=$(openssl rand -hex 20)
-  CALDERA_KEY_BLUE=$(openssl rand -hex 20)
+
+  # Caldera keys — preserve in priority order:
+  #   1. existing .env in DATA_DIR (survives upgrades)
+  #   2. running Caldera container (operator may have set a custom key)
+  #   3. generate fresh random key (first install only)
+  local CALDERA_KEY CALDERA_KEY_BLUE existing_env="${DATA_DIR}/.env"
+  CALDERA_KEY=""
+  CALDERA_KEY_BLUE=""
+
+  if [[ -f "$existing_env" ]]; then
+    CALDERA_KEY=$(grep -oP '(?<=^CALDERA_API_KEY=).+' "$existing_env" 2>/dev/null || true)
+    CALDERA_KEY_BLUE=$(grep -oP '(?<=^CALDERA_API_KEY_BLUE=).+' "$existing_env" 2>/dev/null || true)
+  fi
+
+  if [[ -z "$CALDERA_KEY" ]] && docker inspect audspect-caldera &>/dev/null; then
+    CALDERA_KEY=$(docker exec audspect-caldera grep -oP '(?<=api_key_red:\s).+' conf/local.yml 2>/dev/null | tr -d '[:space:]' || true)
+    CALDERA_KEY_BLUE=$(docker exec audspect-caldera grep -oP '(?<=api_key_blue:\s).+' conf/local.yml 2>/dev/null | tr -d '[:space:]' || true)
+  fi
+
+  [[ -z "$CALDERA_KEY"      ]] && CALDERA_KEY=$(openssl rand -hex 20)
+  [[ -z "$CALDERA_KEY_BLUE" ]] && CALDERA_KEY_BLUE=$(openssl rand -hex 20)
 
   # Expose caldera keys to callers via global
   _CALDERA_KEY="$CALDERA_KEY"
