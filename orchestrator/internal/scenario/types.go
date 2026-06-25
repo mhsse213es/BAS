@@ -153,6 +153,12 @@ type ScenarioStep struct {
 	// "" and "user" both mean non-elevated user context; "admin" and "system" run in
 	// the agent's own elevated context. Serialised to the agent wire.
 	RequiresPriv string `json:"requiresPriv,omitempty"`
+	// ProxyTechniqueID is the ATT&CK technique exercised by the execution context
+	// wrapper when ExecContext is non-direct. Set by ApplyVariant; empty for base steps.
+	//   WMI wrapper      → T1047
+	//   schtasks wrapper → T1053.005
+	//   COM wrapper      → T1559.001
+	ProxyTechniqueID string `json:"proxyTechniqueId,omitempty"`
 }
 
 // ScenarioCommand is sent to an agent via WebSocket.
