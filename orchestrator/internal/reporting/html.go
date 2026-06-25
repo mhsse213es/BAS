@@ -8,6 +8,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/audspect/bas/internal/reporting/attackdata"
 )
 
 // The template resolves fields by their json-tag name, not their Go field name.
@@ -105,6 +107,18 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 	"add1":     func(i int) int { return i + 1 },
 	"humanize": humanizeTactic,
 	"join":     func(s []string) string { return strings.Join(s, ", ") },
+	// techActors returns up to 3 ATT&CK group names that use the given technique ID,
+	// or nil when none are found in the bundled STIX data.
+	"techActors": func(techID string) []string {
+		e := attackdata.Lookup(techID)
+		if e == nil || len(e.Groups) == 0 {
+			return nil
+		}
+		if len(e.Groups) <= 3 {
+			return e.Groups
+		}
+		return e.Groups[:3]
+	},
 	"mttd": func(msF float64) string {
 		ms := int64(msF)
 		if ms <= 0 {
@@ -984,10 +998,71 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 
 
-<!-- ═══ 10. VARIANT COVERAGE ANALYSIS ════════════════════════════════════ -->
+<!-- ═══ 10. THREAT ACTOR READINESS ═════════════════════════════════════════ -->
+{{if .readinessScores}}
+<div class="page">
+<h1>10. Threat Actor Readiness</h1>
+<p style="color:#6e7681;margin-bottom:6px">For each ATT&amp;CK threat group whose techniques overlap this assessment, how well are your controls positioned? Derived from the MITRE ATT&amp;CK knowledge base — no external feed required. Worst prevention readiness shown first.</p>
+<p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">
+  <strong>Prevention Readiness:</strong> % of tested techniques that were blocked.&nbsp;
+  <strong>Detection Readiness:</strong> % of tested techniques that were blocked <em>or</em> detected (alert raised).&nbsp;
+  The gap between the two reveals how much you rely on detection-only coverage.
+</p>
+<table>
+  <thead><tr>
+    <th>Threat Actor / Group</th>
+    <th style="text-align:right">Tested / Total</th>
+    <th style="text-align:right">Coverage</th>
+    <th style="text-align:right">Prevention Readiness</th>
+    <th style="text-align:right">Detection Readiness</th>
+    <th>Readiness</th>
+    <th>Confidence</th>
+  </tr></thead>
+  <tbody>
+  {{range .readinessScores}}
+  <tr>
+    <td style="font-weight:600">{{.groupName}}</td>
+    <td style="text-align:right;font-size:0.82rem;color:#6e7681">{{.testedTechs}} / {{.totalTechs}}</td>
+    <td style="text-align:right;font-size:0.82rem;color:#6e7681">{{printf "%.0f" .coveragePct}}%</td>
+    <td style="text-align:right;font-weight:700;color:{{if gt .preventionReadiness 79.9}}#0d9488{{else if gt .preventionReadiness 49.9}}#d29922{{else}}#da3633{{end}}">
+      {{printf "%.1f" .preventionReadiness}}%
+      <div style="font-size:0.72rem;font-weight:400;color:#6e7681">{{.preventedTechs}} prevented</div>
+    </td>
+    <td style="text-align:right;font-weight:700;color:{{if gt .detectionReadiness 79.9}}#0d9488{{else if gt .detectionReadiness 49.9}}#d29922{{else}}#da3633{{end}}">
+      {{printf "%.1f" .detectionReadiness}}%
+      <div style="font-size:0.72rem;font-weight:400;color:#6e7681">+{{.detectedTechs}} detected</div>
+    </td>
+    <td>
+      <span style="font-size:0.78rem;font-weight:700;border-radius:4px;padding:2px 8px;
+        {{if eq .readinessBand "High"}}background:#f0fdf4;border:1px solid #86efac;color:#15803d
+        {{else if eq .readinessBand "Medium"}}background:#fffbeb;border:1px solid #fde68a;color:#92400e
+        {{else}}background:#fef2f2;border:1px solid #fca5a5;color:#991b1b{{end}}">
+        {{.readinessBand}}
+      </span>
+    </td>
+    <td>
+      <span style="font-size:0.72rem;border-radius:4px;padding:2px 8px;
+        {{if eq .confidenceBand "High"}}background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8
+        {{else if eq .confidenceBand "Medium"}}background:#f8fafc;border:1px solid #cbd5e1;color:#475569
+        {{else}}background:#f8fafc;border:1px solid #cbd5e1;color:#94a3b8{{end}}">
+        {{.confidenceBand}} Confidence
+        <span style="font-size:0.65rem;color:#94a3b8">({{.testedTechs}} tested)</span>
+      </span>
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+<p style="font-size:0.72rem;color:#6e7681;margin-top:10px">Groups with fewer than 3 tested techniques are excluded. Technique attribution sourced from MITRE ATT&amp;CK&reg;. &copy; The MITRE Corporation.</p>
+<div class="footer">
+  <span>{{.agent.hostname}} &#8212; Threat Actor Readiness</span>
+</div>
+</div>
+{{end}}
+<!-- ═══ 11. VARIANT COVERAGE ANALYSIS ════════════════════════════════════ -->
 {{if .variantCoverage}}{{if .variantCoverage.hasData}}
 <div class="page">
-<h1>10. Variant Coverage Analysis</h1>
+<h1>11. Variant Coverage Analysis</h1>
 <p style="color:#6e7681;margin-bottom:14px">Multi-variant evasion testing: encoding obfuscation, execution-context, and privilege-tier combinations per technique. Shows which control gaps allowed bypasses and provides targeted remediation guidance.</p>
 
 <div class="score-row">
@@ -1126,7 +1201,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <!-- ═══ 10b. CAMPAIGN VARIANT COVERAGE TRENDS ═══════════════════════════════ -->
 {{if .campaignVariantCoverage}}{{if .campaignVariantCoverage.hasData}}
 <div class="page">
-<h1>10. Variant Coverage Trends</h1>
+<h1>11. Variant Coverage Trends</h1>
 <p style="color:#6e7681;margin-bottom:14px">Aggregated multi-variant evasion results across {{.campaignVariantCoverage.runCount}} campaign run(s). Identifies recurring control gaps, tactic-level weaknesses, and improvement vs the previous campaign.</p>
 
 {{/* ── Trend banner ── */}}
@@ -1243,9 +1318,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 {{end}}{{end}}
-<!-- ═══ 11. ASSESSMENT INSIGHTS ═════════════════════════════════════════ -->
+<!-- ═══ 12. ASSESSMENT INSIGHTS ═════════════════════════════════════════ -->
 <div class="page">
-<h1>11. Assessment Insights</h1>
+<h1>12. Assessment Insights</h1>
 {{if .insights.hasData}}
 <div class="score-row">
   {{if .insights.most}}
@@ -1273,9 +1348,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 12. ACTION PLAN ═════════════════════════════════════════════════ -->
+<!-- ═══ 13. ACTION PLAN ═════════════════════════════════════════════════ -->
 <div class="page">
-<h1>12. Action Plan</h1>
+<h1>13. Action Plan</h1>
 <p style="color:#6e7681;margin-bottom:14px">Remediations ordered by the prevention-score points their failures account for. The points quantify current exposure attributable to each tactic — they are not a promised score gain, since a single control may not resolve every underlying finding.</p>
 {{if .actionPlan}}
 <table>
@@ -1301,9 +1376,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 13. COMPLIANCE STATUS ═══════════════════════════════════════════ -->
+<!-- ═══ 14. COMPLIANCE STATUS ═══════════════════════════════════════════ -->
 <div class="page">
-<h1>13. Regulatory Compliance Status</h1>
+<h1>14. Regulatory Compliance Status</h1>
 <p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
 {{if .compliance}}
 <table>
@@ -1335,9 +1410,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 14. SCENARIO RUN HISTORY ════════════════════════════════════════ -->
+<!-- ═══ 15. SCENARIO RUN HISTORY ════════════════════════════════════════ -->
 <div class="page">
-<h1>14. Scenario Run History</h1>
+<h1>15. Scenario Run History</h1>
 {{if .runs}}
 <table>
   <thead><tr>
@@ -1368,9 +1443,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 15. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
+<!-- ═══ 16. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>15. Technical Findings</h1>
+<h1>16. Technical Findings</h1>
 {{if .topFindings}}
 <p style="color:#6e7681;margin-bottom:14px">Critical and High severity techniques that succeeded against this endpoint — the associated security controls did <strong>not</strong> prevent the attack. De-duplicated by technique.</p>
 <table>
@@ -1386,6 +1461,12 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td>
       {{.details}}
       {{if .remediation}}<div class="remediation">{{.remediation}}</div>{{end}}
+      {{$actors := techActors .techniqueId}}{{if $actors}}
+      <div style="margin-top:6px;font-size:0.72rem;color:#6e7681">
+        <span style="font-weight:600;color:#374151">Attributed to:</span>
+        {{range $i,$a := $actors}}{{if $i}}, {{end}}<span style="color:#2563eb">{{$a}}</span>{{end}}
+      </div>
+      {{end}}
     </td>
   </tr>
   {{end}}
@@ -1400,10 +1481,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 16. ENVIRONMENT RESTORATION ════════════════════════════════════════ -->
+<!-- ═══ 17. ENVIRONMENT RESTORATION ════════════════════════════════════════ -->
 {{if .envRestoration}}{{if .envRestoration.hasData}}
 <div class="page">
-<h1>16. Environment Restoration</h1>
+<h1>17. Environment Restoration</h1>
 <p style="color:#6e7681;margin-bottom:14px">Documents whether all simulation-induced environment changes were successfully reverted. Answers the key enterprise question: <em>"Did the BAS restore everything it touched?"</em></p>
 
 {{/* ── Headline status card ── */}}
@@ -1522,9 +1603,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 {{end}}{{end}}
-<!-- ═══ 17. DETECTION VALIDATION ════════════════════════════════════════ -->
+<!-- ═══ 18. DETECTION VALIDATION ════════════════════════════════════════ -->
 <div class="page">
-<h1>17. Detection Validation</h1>
+<h1>18. Detection Validation</h1>
 <p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
 
 <h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
@@ -1620,9 +1701,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 18. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
+<!-- ═══ 19. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>18. Coverage Analytics</h1>
+<h1>19. Coverage Analytics</h1>
 <p style="color:#6e7681;margin-bottom:14px">
   3-bucket breakdown of every technique executed in this assessment.
   <strong style="color:#0d9488">Prevented</strong> — a control blocked execution (PASS/BLOCKED).
@@ -1751,9 +1832,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 19. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
+<!-- ═══ 20. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
 <div class="page">
-<h1>19. Technical Appendix — ATT&amp;CK Glossary</h1>
+<h1>20. Technical Appendix — ATT&amp;CK Glossary</h1>
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
 {{range .glossary}}

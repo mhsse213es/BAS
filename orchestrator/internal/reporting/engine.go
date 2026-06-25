@@ -51,6 +51,10 @@ type FullReport struct {
 	// EnvRestoration summarises cleanup success for this run/campaign:
 	// what was touched, what was reverted, and what (if anything) was left behind.
 	EnvRestoration *EnvRestoration `json:"envRestoration,omitempty"`
+	// ReadinessScores is the per-threat-actor readiness analysis: for each ATT&CK
+	// group whose techniques overlap with this run, how well were they prevented
+	// and detected? Nil when <3 techniques overlap with any group.
+	ReadinessScores []ReadinessScore `json:"readinessScores,omitempty"`
 	// DetectionTechniques is the per-technique purple-team verdict from the agent's
 	// post-run alert sweep (prevented|detected|undetected + confidence). Empty until
 	// the agent submits detections for the run. Sourced from scenario_runs.detection_summary.
@@ -1198,6 +1202,7 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 		}
 		report.EnvRestoration = &er
 	}
+	report.ReadinessScores = buildReadinessScores(report.TechniqueMatrix)
 
 	return report, nil
 }
@@ -1446,6 +1451,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 		}
 		report.EnvRestoration = &er
 	}
+	report.ReadinessScores = buildReadinessScores(report.TechniqueMatrix)
 
 	return report, nil
 }
@@ -1633,6 +1639,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 		er.RunsWithIssues = runsTotal - runsClean
 		report.EnvRestoration = &er
 	}
+	report.ReadinessScores = buildReadinessScores(report.TechniqueMatrix)
 
 	return report, nil
 }

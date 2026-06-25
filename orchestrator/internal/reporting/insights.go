@@ -526,3 +526,118 @@ func humanizeTactic(slug string) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// ── Threat Actor Readiness ────────────────────────────────────────────────────
+
+// ReadinessScore captures how well this run's prevention and detection results
+// cover a specific ATT&CK threat group. Derived entirely from the bundled STIX
+// enrichment — no external API required.
+type ReadinessScore struct {
+	GroupName           string  `json:"groupName"`
+	TotalTechs          int     `json:"totalTechs"`          // techniques MITRE attributes to this group
+	TestedTechs         int     `json:"testedTechs"`         // overlap with this run
+	PreventedTechs      int     `json:"preventedTechs"`
+	DetectedTechs       int     `json:"detectedTechs"`       // not prevented but alert raised
+	AllowedTechs        int     `json:"allowedTechs"`        // not prevented, no alert
+	PreventionReadiness float64 `json:"preventionReadiness"` // prevented/tested × 100
+	DetectionReadiness  float64 `json:"detectionReadiness"`  // (prevented+detected)/tested × 100
+	CoveragePct         float64 `json:"coveragePct"`         // tested/totalTechs × 100
+	ReadinessBand       string  `json:"readinessBand"`       // "High"/"Medium"/"Low"
+	ConfidenceBand      string  `json:"confidenceBand"`      // "High"/"Medium"/"Low"
+}
+
+// BuildReadinessScores computes per-threat-group readiness from the run's
+// TechniqueMatrix. Groups with fewer than 3 tested techniques are excluded
+// (too few data points to be meaningful). Results are sorted worst-first by
+// PreventionReadiness so the most urgent gaps appear at the top.
+// Exported so the API handler can call it without building a full report.
+func BuildReadinessScores(matrix []TechniqueRow) []ReadinessScore {
+	return buildReadinessScores(matrix)
+}
+
+func buildReadinessScores(matrix []TechniqueRow) []ReadinessScore {
+	idx := attackdata.GroupTechniqueIndex()
+	if len(idx) == 0 || len(matrix) == 0 {
+		return nil
+	}
+
+	type slot struct{ prevented, detected, allowed bool }
+	rowMap := make(map[string]slot, len(matrix))
+	for _, r := range matrix {
+		tid := strings.ToUpper(strings.TrimSpace(r.TechniqueID))
+		if tid == "" {
+			continue
+		}
+		isPrevented := r.ExecVerdict == "pass" || r.ExecVerdict == "blocked"
+		isDetected  := !isPrevented && r.DetectionVerdict == "detected"
+		isAllowed   := !isPrevented && !isDetected && r.ExecVerdict == "fail"
+		rowMap[tid] = slot{isPrevented, isDetected, isAllowed}
+	}
+
+	scores := make([]ReadinessScore, 0, 32)
+	for group, techIDs := range idx {
+		var prevented, detected, allowed int
+		for _, tid := range techIDs {
+			s, ok := rowMap[strings.ToUpper(tid)]
+			if !ok {
+				continue
+			}
+			switch {
+			case s.prevented:
+				prevented++
+			case s.detected:
+				detected++
+			case s.allowed:
+				allowed++
+			}
+		}
+		tested := prevented + detected + allowed
+		if tested < 3 {
+			continue
+		}
+
+		prevPct := float64(prevented) / float64(tested) * 100
+		detPct  := float64(prevented+detected) / float64(tested) * 100
+		covPct  := 0.0
+		if len(techIDs) > 0 {
+			covPct = float64(tested) / float64(len(techIDs)) * 100
+		}
+
+		readinessBand := "Low"
+		if prevPct >= 80 {
+			readinessBand = "High"
+		} else if prevPct >= 50 {
+			readinessBand = "Medium"
+		}
+
+		confidenceBand := "Low"
+		if tested >= 10 {
+			confidenceBand = "High"
+		} else if tested >= 5 {
+			confidenceBand = "Medium"
+		}
+
+		scores = append(scores, ReadinessScore{
+			GroupName:           group,
+			TotalTechs:          len(techIDs),
+			TestedTechs:         tested,
+			PreventedTechs:      prevented,
+			DetectedTechs:       detected,
+			AllowedTechs:        allowed,
+			PreventionReadiness: prevPct,
+			DetectionReadiness:  detPct,
+			CoveragePct:         covPct,
+			ReadinessBand:       readinessBand,
+			ConfidenceBand:      confidenceBand,
+		})
+	}
+
+	// Worst prevention readiness first — most urgent gaps surface at the top.
+	sort.Slice(scores, func(i, j int) bool {
+		if scores[i].PreventionReadiness != scores[j].PreventionReadiness {
+			return scores[i].PreventionReadiness < scores[j].PreventionReadiness
+		}
+		return scores[i].TestedTechs > scores[j].TestedTechs
+	})
+	return scores
+}

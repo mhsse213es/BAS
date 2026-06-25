@@ -251,6 +251,31 @@ func All() []TechniqueRef {
 	return out
 }
 
+var (
+	groupIdxOnce sync.Once
+	groupIdx     map[string][]string // ATT&CK group name → []techniqueID
+)
+
+// GroupTechniqueIndex returns the inverted index: ATT&CK group name →
+// slice of technique IDs that MITRE attributes to that group. Computed once
+// from the embedded authoritative data; safe for concurrent reads after first call.
+func GroupTechniqueIndex() map[string][]string {
+	once.Do(load)
+	groupIdxOnce.Do(func() {
+		idx := make(map[string][]string, 200)
+		for techID, e := range data {
+			if e == nil {
+				continue
+			}
+			for _, g := range e.Groups {
+				idx[g] = append(idx[g], techID)
+			}
+		}
+		groupIdx = idx
+	})
+	return groupIdx
+}
+
 func normalize(id string) string {
 	return strings.ToUpper(strings.TrimSpace(id))
 }

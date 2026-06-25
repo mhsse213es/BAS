@@ -127,6 +127,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Coverage Analytics — aggregate prevention/detection breakdown across runs.
 		r.Get("/api/coverage/analytics", h.GetCoverageAnalytics)
 
+		// Threat Intelligence — readiness scoring against ATT&CK groups (STIX-native, no external API).
+		r.Get("/api/ti/readiness", h.GetTIReadiness)
+
 		// Adversary template catalog — curated playbooks mixing BAS + ART + Caldera.
 		r.Get("/api/adversary-templates", h.GetAdversaryTemplates)
 		r.Get("/api/caldera/adversaries", h.GetCalderaAdversaries)
