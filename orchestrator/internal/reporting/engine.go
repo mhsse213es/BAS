@@ -144,6 +144,7 @@ type VariantCoverageSection struct {
 	DetectionScore       float64              `json:"detectionScore"`
 	TechniquesWithBypass int                  `json:"techniquesWithBypass"`
 	FirstBypassElapsed   string               `json:"firstBypassElapsed,omitempty"`
+	TrendNote            string               `json:"trendNote,omitempty"`
 	Maturity             VariantMaturityScore `json:"maturity"`
 	Techniques           []VariantTechRow     `json:"techniques"`
 }
@@ -168,6 +169,7 @@ type VariantTechRow struct {
 	Bypassed          int      `json:"bypassed"`
 	BypassRate        float64  `json:"bypassRate"`
 	HasBypass         bool     `json:"hasBypass"`
+	Severity          string   `json:"severity,omitempty"`          // Critical|High|Medium|Low
 	BestBypassLabel   string   `json:"bestBypassLabel,omitempty"`
 	Headline          string   `json:"headline,omitempty"`
 	RemediationPoints []string `json:"remediationPoints,omitempty"`
@@ -2266,6 +2268,7 @@ func (e *Engine) populateVariantCoverage(ctx context.Context, report *FullReport
 			if d, ok := bestBypassDetails[*s.bestBypassID]; ok {
 				t.BestBypassLabel = variantBypassLabel(d.enc, d.execCtx, d.priv)
 				t.Headline, t.RemediationPoints = variantCoverageRecommendation(s.techID, d.enc, d.execCtx, d.priv)
+				t.Severity = variantBypassSeverity(d.priv, d.execCtx)
 			}
 		}
 
@@ -2321,6 +2324,19 @@ func (e *Engine) populateVariantCoverage(ctx context.Context, report *FullReport
 		}
 	}
 
+	// Sort: bypass techniques first by severity DESC, then non-bypass by bypassed count.
+	sort.Slice(sec.Techniques, func(i, j int) bool {
+		ti, tj := sec.Techniques[i], sec.Techniques[j]
+		if ti.HasBypass != tj.HasBypass {
+			return ti.HasBypass
+		}
+		if ti.HasBypass {
+			return variantSeverityScore(ti.Severity) > variantSeverityScore(tj.Severity)
+		}
+		return ti.Bypassed > tj.Bypassed
+	})
+
+	sec.TrendNote = "No prior variant run on record — trend comparison will be available after the next run."
 	sec.Maturity = maturity
 	sec.HasData = true
 	report.VariantCoverage = sec
@@ -2353,6 +2369,47 @@ func variantBypassLabel(enc, execCtx, priv string) string {
 		return "Plain / Direct"
 	}
 	return strings.Join(parts, " + ")
+}
+
+// variantBypassSeverity derives finding severity from privilege tier and execution context.
+// SYSTEM bypass = Critical; Admin = High; User = Medium. WMI/schtasks proxy elevates by one.
+func variantBypassSeverity(priv, execCtx string) string {
+	score := 1 // default Medium
+	switch priv {
+	case "system":
+		score = 3
+	case "admin":
+		score = 2
+	}
+	switch execCtx {
+	case "wmi", "scheduled-task":
+		if score < 3 {
+			score++
+		}
+	}
+	switch score {
+	case 3:
+		return "Critical"
+	case 2:
+		return "High"
+	case 1:
+		return "Medium"
+	default:
+		return "Low"
+	}
+}
+
+func variantSeverityScore(s string) int {
+	switch s {
+	case "Critical":
+		return 3
+	case "High":
+		return 2
+	case "Medium":
+		return 1
+	default:
+		return 0
+	}
 }
 
 // variantCoverageRecommendation returns a headline + remediation bullets for the

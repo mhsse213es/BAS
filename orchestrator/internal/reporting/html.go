@@ -988,7 +988,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{if .variantCoverage}}{{if .variantCoverage.hasData}}
 <div class="page">
 <h1>10. Variant Coverage Analysis</h1>
-<p style="color:#6e7681;margin-bottom:14px">Multi-variant evasion testing: encoding obfuscation, execution-context, and privilege-tier combinations per technique. Identifies control gaps that allowed bypasses and provides targeted remediation guidance.</p>
+<p style="color:#6e7681;margin-bottom:14px">Multi-variant evasion testing: encoding obfuscation, execution-context, and privilege-tier combinations per technique. Shows which control gaps allowed bypasses and provides targeted remediation guidance.</p>
 
 <div class="score-row">
   <div class="scard">
@@ -1028,20 +1028,55 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{if .variantCoverage.techniquesWithBypass}}
 <h2>Bypass Findings</h2>
 {{range .variantCoverage.techniques}}{{if .hasBypass}}
-<div style="border:1px solid #fca5a5;border-left:4px solid #da3633;border-radius:6px;padding:14px 16px;margin-bottom:12px;background:#fff8f8">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+<div style="border:1px solid #fca5a5;border-left:4px solid {{if eq .severity "Critical"}}#7f1d1d{{else if eq .severity "High"}}#da3633{{else}}#d29922{{end}};border-radius:6px;padding:14px 16px;margin-bottom:14px;background:#fff8f8">
+
+  {{/* ── Header: tactic + technique + severity + evidence ── */}}
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;margin-bottom:10px">
     <div>
-      <span style="font-weight:700;color:#0b1420;font-size:0.95rem">{{.techniqueId}}</span>
-      {{if .techniqueName}}<span style="color:#6e7681;margin-left:8px">{{.techniqueName}}</span>{{end}}
+      {{if .tactic}}<span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#6e7681;display:block;margin-bottom:2px">{{humanize .tactic}}</span>{{end}}
+      <span style="font-weight:700;color:#0b1420;font-size:1rem">{{.techniqueId}}</span>
+      {{if .techniqueName}}<span style="color:#6e7681;margin-left:8px;font-size:0.88rem">{{.techniqueName}}</span>{{end}}
     </div>
-    {{if .bestBypassLabel}}<span style="font-size:0.8rem;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;padding:2px 8px;color:#92400e;font-weight:600">{{.bestBypassLabel}}</span>{{end}}
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      {{if .severity}}
+      <span style="font-size:0.78rem;font-weight:700;border-radius:4px;padding:2px 9px;
+        {{if eq .severity "Critical"}}background:#fef2f2;border:1px solid #fca5a5;color:#991b1b
+        {{else if eq .severity "High"}}background:#fff7ed;border:1px solid #fdba74;color:#c2410c
+        {{else if eq .severity "Medium"}}background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8
+        {{else}}background:#f9fafb;border:1px solid #d1d5db;color:#6b7280{{end}}">
+        {{.severity}}
+      </span>
+      {{end}}
+      {{if .bestBypassLabel}}<span style="font-size:0.78rem;background:#fef9c3;border:1px solid #fde047;border-radius:4px;padding:2px 8px;color:#713f12;font-weight:600">{{.bestBypassLabel}}</span>{{end}}
+    </div>
   </div>
-  {{if .headline}}<p style="font-weight:600;color:#da3633;margin-bottom:8px;font-size:0.92rem">{{.headline}}</p>{{end}}
-  {{if .remediationPoints}}
-  <ul style="margin:0;padding-left:18px;color:#374151;font-size:0.83rem">
-    {{range .remediationPoints}}<li style="margin-bottom:3px">{{.}}</li>{{end}}
-  </ul>
+
+  {{/* ── Security Control Gap ── */}}
+  {{if .headline}}
+  <div style="margin-bottom:10px">
+    <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6e7681;margin-bottom:3px">Security Control Gap</div>
+    <p style="font-weight:650;color:#da3633;font-size:0.92rem;margin:0">{{.headline}}</p>
+  </div>
   {{end}}
+
+  {{/* ── Best Bypass evidence ── */}}
+  {{if .bestBypassLabel}}
+  <div style="margin-bottom:10px">
+    <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6e7681;margin-bottom:3px">Best Bypass</div>
+    <p style="font-size:0.85rem;color:#374151;margin:0;font-weight:600">{{.bestBypassLabel}}</p>
+  </div>
+  {{end}}
+
+  {{/* ── Remediation ── */}}
+  {{if .remediationPoints}}
+  <div>
+    <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6e7681;margin-bottom:3px">Remediation</div>
+    <ul style="margin:0;padding-left:18px;color:#374151;font-size:0.83rem">
+      {{range .remediationPoints}}<li style="margin-bottom:3px">{{.}}</li>{{end}}
+    </ul>
+  </div>
+  {{end}}
+
 </div>
 {{end}}{{end}}
 {{end}}
@@ -1050,6 +1085,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <table>
   <thead><tr>
     <th>Technique</th>
+    <th>Tactic</th>
     <th style="text-align:right">Variants</th>
     <th style="text-align:right">Blocked</th>
     <th style="text-align:right">Detected</th>
@@ -1061,12 +1097,13 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   {{range .variantCoverage.techniques}}
   <tr{{if .hasBypass}} style="background:#fff8f8"{{end}}>
     <td style="font-weight:600">{{.techniqueId}}{{if .techniqueName}}<br><span style="font-weight:400;font-size:0.78rem;color:#6e7681">{{.techniqueName}}</span>{{end}}</td>
+    <td style="font-size:0.82rem;color:#6e7681">{{if .tactic}}{{humanize .tactic}}{{else}}&#8212;{{end}}</td>
     <td style="text-align:right">{{.variantsExecuted}}</td>
     <td style="text-align:right;color:#0d9488;font-weight:600">{{.blocked}}</td>
     <td style="text-align:right;color:#d29922">{{.detected}}</td>
     <td style="text-align:right;color:{{if gt .bypassed 0.0}}#da3633{{else}}#6e7681{{end}};font-weight:{{if gt .bypassed 0.0}}700{{else}}400{{end}}">{{.bypassed}}</td>
     <td style="text-align:right;font-weight:700;color:{{if gt .bypassRate 50.0}}#da3633{{else if gt .bypassRate 20.0}}#d29922{{else}}#0d9488{{end}}">{{printf "%.0f" .bypassRate}}%</td>
-    <td style="font-size:0.82rem;color:#6e7681">{{if .bestBypassLabel}}{{.bestBypassLabel}}{{else}}&#8212;{{end}}</td>
+    <td style="font-size:0.82rem">{{if .bestBypassLabel}}<span style="color:#374151;font-weight:600">{{.bestBypassLabel}}</span>{{if .severity}}&nbsp;<span style="font-size:0.72rem;color:{{if eq .severity "Critical"}}#991b1b{{else if eq .severity "High"}}#c2410c{{else}}#1d4ed8{{end}}">({{.severity}})</span>{{end}}{{else}}<span style="color:#6e7681">&#8212;</span>{{end}}</td>
   </tr>
   {{end}}
   </tbody>
@@ -1075,6 +1112,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 {{if .variantCoverage.firstBypassElapsed}}
 <p style="color:#6e7681;font-size:0.82rem;margin-top:10px">First successful bypass occurred <strong>{{.variantCoverage.firstBypassElapsed}}</strong> into the assessment.</p>
 {{end}}
+
+<div style="margin-top:16px;padding:10px 14px;background:#f7f9fc;border:1px solid #e7eaf0;border-radius:6px;font-size:0.8rem;color:#6e7681">
+  <strong>Trend:</strong> {{if .variantCoverage.trendNote}}{{.variantCoverage.trendNote}}{{else}}No prior variant run on record.{{end}}
+</div>
 
 <div class="footer">
   <span>{{.agent.hostname}} &#8212; Variant Coverage Analysis</span>
