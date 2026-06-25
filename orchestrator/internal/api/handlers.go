@@ -3946,6 +3946,12 @@ func (h *Handler) GetARTContentStatus(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM cves WHERE source = 'cisa-kev'`).Scan(&kevCount); err != nil {
 		log.Printf("[content] KEV count failed: %v", err)
 	}
+	// Variant engine: executor breakdown drives the available-variant count.
+	// ps×36 + cmd×12 — not stored in the DB, derived at request time.
+	psCount, cmdCount, variantCount, vErr := scenario.QueryVariantCount(r.Context(), h.db)
+	if vErr != nil {
+		log.Printf("[content] variant count failed: %v", vErr)
+	}
 	// Payload basenames the loaded atomics reference but we don't ship — the exact
 	// filenames an operator would rename a binary to in order to enable those tests.
 	missing, err := scenario.MissingPayloads(r.Context(), h.db)
@@ -3958,6 +3964,9 @@ func (h *Handler) GetARTContentStatus(w http.ResponseWriter, r *http.Request) {
 		"version":             version,
 		"techniqueCount":      techCount,
 		"testCount":           testCount,
+		"psTestCount":         psCount,
+		"cmdTestCount":        cmdCount,
+		"variantCount":        variantCount,
 		"payloadCount":        payloadCount,
 		"kevCount":            kevCount,
 		"source":              source,

@@ -1537,9 +1537,17 @@ body.theme-slate {
              onmouseleave="this.style.boxShadow=''">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
             <div style="flex:1;min-width:0">
-              <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:0.3rem">Total Simulations</div>
-              <div style="font-size:2.1rem;font-weight:800;letter-spacing:-0.03em;color:var(--text);line-height:1" id="sim-total">—</div>
-              <div id="sim-sub" style="font-size:0.74rem;color:var(--muted);margin-top:0.35rem">Loading coverage…</div>
+              <div style="display:flex;align-items:baseline;gap:1.5rem;flex-wrap:wrap">
+                <div>
+                  <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:0.2rem">Base Simulations</div>
+                  <div style="font-size:2.1rem;font-weight:800;letter-spacing:-0.03em;color:var(--text);line-height:1" id="sim-total">—</div>
+                </div>
+                <div>
+                  <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:0.2rem">Available Variants</div>
+                  <div style="font-size:2.1rem;font-weight:800;letter-spacing:-0.03em;color:var(--accent);line-height:1" id="sim-variants">—</div>
+                </div>
+              </div>
+              <div id="sim-sub" style="font-size:0.72rem;color:var(--muted);margin-top:0.4rem">Loading coverage…</div>
             </div>
             <div style="text-align:right;flex-shrink:0">
               <div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.2rem">Click for breakdown</div>
@@ -1562,7 +1570,7 @@ body.theme-slate {
               </tbody>
             </table>
             <div style="padding:0.6rem 0.9rem;border-top:1px solid var(--border);font-size:0.72rem;color:var(--muted)">
-              "Unique ATT&amp;CK endpoint techniques" is the most meaningful coverage figure — it counts distinct MITRE technique IDs across ART + Caldera + scenarios with no double-counting. "Total actionable simulations" is the raw execution-variant count (one technique can have many variants).
+              <strong style="color:var(--text)">Base Simulations</strong> = the raw ART atomic test count (Windows). <strong style="color:var(--text)">Available Variants</strong> = Variant Engine multiplier (PS: 3 encodings × 3 privilege tiers × 4 exec contexts = 36×; CMD: 12×). <strong style="color:var(--text)">Unique ATT&amp;CK techniques</strong> is the most meaningful coverage figure — deduplicated across all sources.
             </div>
           </div>
         </div>
@@ -8229,11 +8237,13 @@ function toggleSimCoverage() {
   if (car) car.innerHTML = SIM_COV_OPEN ? '&#9660;' : '&#9654;';
 }
 function loadSimCoverage() {
-  var totalEl = document.getElementById('sim-total');
-  var subEl   = document.getElementById('sim-sub');
-  var bodyEl  = document.getElementById('sim-cov-body');
+  var totalEl   = document.getElementById('sim-total');
+  var variantEl = document.getElementById('sim-variants');
+  var subEl     = document.getElementById('sim-sub');
+  var bodyEl    = document.getElementById('sim-cov-body');
   if (!totalEl) return;
-  totalEl.textContent = '…';
+  totalEl.textContent = '...';
+  if (variantEl) variantEl.textContent = '...';
   Promise.all([
     apicall('/api/art/content/status').catch(function() { return {}; }),
     apicall('/api/caldera/abilities').catch(function() { return []; }),
@@ -8245,16 +8255,18 @@ function loadSimCoverage() {
     var scen    = Array.isArray(res[2]) ? res[2] : [];
     var unified = Array.isArray(res[3]) ? res[3] : [];
 
-    var artTechniques = art.techniqueCount || 0;
-    var artTests      = art.testCount      || 0;
-    var artPayloads   = art.payloadCount   || 0;
-    var kevCount      = art.kevCount       || 0;
+    var artTechniques = art.techniqueCount  || 0;
+    var artTests      = art.testCount       || 0;
+    var artPS         = art.psTestCount     || 0;
+    var artCMD        = art.cmdTestCount    || 0;
+    var artVariants   = art.variantCount    || 0;
+    var artPayloads   = art.payloadCount    || 0;
+    var kevCount      = art.kevCount        || 0;
     var calCount      = cal.length;
     var builtinScen   = scen.filter(function(s) { return s.source === 'builtin'; }).length;
     var customScen    = scen.filter(function(s) { return s.source === 'custom';  }).length;
     var intelScen     = scen.filter(function(s) { return s.source === 'intel';   }).length;
 
-    // Derive per-plugin breakdown + unique technique counts from the ability catalog.
     var byPlugin = {}, techSet = {}, subTechSet = {};
     var calWin = 0, calLin = 0, calMac = 0;
     cal.forEach(function(ab) {
@@ -8270,69 +8282,94 @@ function loadSimCoverage() {
         if (ab.platforms.indexOf('darwin')  !== -1) calMac++;
       }
     });
-    var calEmu    = byPlugin['emu']    || 0;
-    var calAtomic = byPlugin['atomic'] || 0;
-    var calOther  = calCount - calEmu - calAtomic;
+    var calEmu         = byPlugin['emu']    || 0;
+    var calAtomic      = byPlugin['atomic'] || 0;
+    var calOther       = calCount - calEmu - calAtomic;
     var calUniqTech    = Object.keys(techSet).length;
     var calUniqSubTech = Object.keys(subTechSet).length;
+    var unifiedTotal   = unified.length;
 
-    // Unique endpoint ATT&CK technique IDs across ALL sources (ART + Caldera + BAS scenarios).
-    var unifiedTotal = unified.length;
+    // Base = all executable units before variant expansion
+    var baseTotal = artTests + calCount + customScen + intelScen + builtinScen;
 
-    var total = artTests + calCount + customScen + intelScen + builtinScen;
-
-    totalEl.textContent = total.toLocaleString();
+    totalEl.textContent = baseTotal.toLocaleString();
+    if (variantEl) variantEl.textContent = artVariants > 0 ? artVariants.toLocaleString() + '+' : '--';
     if (subEl) subEl.textContent =
-      artTests.toLocaleString() + ' ART atomics · ' +
-      calCount.toLocaleString() + ' Caldera abilities · ' +
-      (customScen + intelScen + builtinScen) + ' scenarios · ' +
+      artTests.toLocaleString() + ' ART base atomics \xb7 ' +
+      calCount.toLocaleString() + ' Caldera abilities \xb7 ' +
+      (customScen + intelScen + builtinScen) + ' scenarios \xb7 ' +
       unifiedTotal + ' unique ATT&CK techniques';
 
     if (bodyEl) {
       var rows = [
-        ['ART base techniques',              artTechniques, 'Source techniques — each generates multiple atomic variants'],
-        ['ART atomic tests (variants)',       artTests,      'Executable test instances (Windows); counted in total'],
-        ['ART payload-backed tests',          artPayloads,   'Atomics with a bundled binary payload (subset of atomics above)'],
-        ['Caldera abilities — total',         calCount,      'Raw ability count across all enabled plugins; counted in total'],
-        ['  └ emu (CTID adversary-emulation)',calEmu,        'MITRE ATT&CK kill-chain abilities from the adversary-emulation library'],
-        ['  └ atomic (Atomic Red Team)',      calAtomic,     'Atomic Red Team abilities via Caldera atomic plugin'],
-        ['  └ other plugins',                 calOther > 0 ? calOther : null, 'stockpile / other enabled plugins'],
-        ['  └ Windows platform',             calWin || null, 'Caldera abilities with a Windows executor'],
-        ['  └ Linux platform',               calLin || null, 'Caldera abilities with a Linux executor'],
-        ['  └ macOS/Darwin platform',        calMac || null, 'Caldera abilities with a macOS executor'],
-        ['Caldera unique techniques',         calUniqTech,   'Distinct ATT&CK technique IDs covered across all abilities (raw count overstates coverage — this is the accurate figure)'],
-        ['Caldera unique sub-techniques',     calUniqSubTech,'Distinct sub-techniques (e.g. T1059.001); subset of unique techniques above'],
-        ['Built-in scenarios',               builtinScen,   'Signed YAML scenarios shipped with the platform; counted in total'],
-        ['Custom / operator scenarios',       customScen,    'Operator-authored scenarios; counted in total'],
-        ['Threat-intel scenarios',            intelScen,     'Auto-generated from MISP / OpenCTI; counted in total'],
-        ['CISA KEV CVEs tracked',             kevCount,      'Known-exploited vulnerabilities — prioritised for CVE-template simulations'],
+        // ART Base Library
+        ['ART base techniques',                artTechniques,        'Source technique IDs — each maps to 1+ atomic tests'],
+        ['ART atomic tests (base)',            artTests,             'Executable Windows test instances; the base simulation count'],
+        ['  PowerShell executor',              artPS   || null,      'PS steps: 36 variants each (3 encodings x 3 privilege tiers x 4 exec contexts)'],
+        ['  CMD executor',                     artCMD  || null,      'CMD steps: 12 variants each (1 encoding x 3 privilege tiers x 4 exec contexts)'],
+        ['ART payload-backed tests',           artPayloads,          'Atomics requiring a bundled binary payload (subset of atomics above)'],
+        // Variant Engine
+        ['Variant Engine — available variants', artVariants,    'Variant Engine total: all encoding x privilege x exec-context combinations across every ART atomic test'],
+        ['  Encoding variants (PS only)',      artPS * 3 || null,    'plain / base64 (-EncodedCommand) / charcode ([char]N+IEX)'],
+        ['  Privilege variants',               artTests * 3 || null, 'user / admin / system per test'],
+        ['  Exec-context variants',            artTests * 4 || null, 'direct / WMI (T1047) / Scheduled Task (T1053.005) / COM WScript.Shell (T1559.001)'],
+        // Caldera
+        ['Caldera abilities — total',    calCount,              'Raw ability count across all enabled plugins'],
+        ['  emu (CTID adversary-emulation)',   calEmu,               'MITRE ATT&CK kill-chain abilities from the adversary-emulation library'],
+        ['  atomic (Atomic Red Team)',         calAtomic,            'Atomic Red Team abilities via Caldera atomic plugin'],
+        ['  other plugins',                    calOther > 0 ? calOther : null, 'stockpile / other enabled plugins'],
+        ['  Windows platform',                 calWin || null,       'Caldera abilities with a Windows executor'],
+        ['  Linux platform',                   calLin || null,       'Caldera abilities with a Linux executor'],
+        ['  macOS/Darwin platform',            calMac || null,       'Caldera abilities with a macOS executor'],
+        ['Caldera unique techniques',          calUniqTech,          'Distinct ATT&CK technique IDs (raw count overstates coverage — this is accurate)'],
+        ['Caldera unique sub-techniques',      calUniqSubTech,       'Distinct sub-techniques (e.g. T1059.001)'],
+        // Scenarios
+        ['Built-in scenarios',                 builtinScen,          'Signed YAML scenarios shipped with the platform'],
+        ['Custom / operator scenarios',        customScen,           'Operator-authored scenarios'],
+        ['Threat-intel scenarios',             intelScen,            'Auto-generated from MISP / OpenCTI'],
+        ['CISA KEV CVEs tracked',              kevCount,             'Known-exploited vulnerabilities — prioritised for CVE-template simulations'],
       ].filter(function(r) { return r[1] !== null && r[1] !== undefined; });
+
+      var sectionKeys = {
+        'ART base techniques': true,
+        'Variant Engine — available variants': true,
+        'Caldera abilities — total': true,
+        'Built-in scenarios': true,
+      };
+
       bodyEl.innerHTML = rows.map(function(r, i) {
         var bg = i % 2 === 0 ? '' : 'background:rgba(255,255,255,.02)';
-        var bold = (r[0].indexOf('total') !== -1 || r[0].indexOf('Total') !== -1) ? 'font-weight:700;color:var(--text)' : 'color:var(--text)';
+        var isVariantRow = r[0].indexOf('Variant Engine') !== -1;
+        var isSection = !!sectionKeys[r[0]];
+        var textStyle = isVariantRow ? 'font-weight:700;color:var(--accent)'
+                      : isSection    ? 'font-weight:700;color:var(--text)'
+                      :                'color:var(--muted)';
+        var numStyle = isVariantRow
+          ? 'font-family:var(--font-mono);font-size:0.9rem;font-weight:800;color:var(--accent)'
+          : 'font-family:var(--font-mono);font-size:0.78rem;color:' + (isSection ? 'var(--text)' : 'var(--muted)');
         return '<tr style="' + bg + '">' +
-          '<td style="padding:0.5rem 0.9rem;' + bold + '">' + r[0] + '</td>' +
-          '<td style="padding:0.5rem 0.9rem;font-family:var(--font-mono);font-size:0.78rem;color:var(--accent)">' + (r[1] || 0).toLocaleString() + '</td>' +
+          '<td style="padding:0.5rem 0.9rem;' + textStyle + '">' + r[0] + '</td>' +
+          '<td style="padding:0.5rem 0.9rem;' + numStyle + '">' + (r[1] || 0).toLocaleString() + '</td>' +
           '<td style="padding:0.5rem 0.9rem;font-size:0.74rem;color:var(--muted)">' + r[2] + '</td>' +
         '</tr>';
       }).join('') +
       '<tr style="border-top:1px solid var(--border);background:rgba(47,129,247,.06)">' +
         '<td style="padding:0.55rem 0.9rem;font-weight:700;color:var(--text)">Unique ATT&amp;CK endpoint techniques (all sources)</td>' +
         '<td style="padding:0.55rem 0.9rem;font-family:var(--font-mono);font-size:0.9rem;font-weight:800;color:var(--accent)">' + unifiedTotal.toLocaleString() + '</td>' +
-        '<td style="padding:0.55rem 0.9rem;font-size:0.74rem;color:var(--muted)">Deduplicated ATT&amp;CK technique IDs across ART + Caldera + BAS scenarios</td>' +
+        '<td style="padding:0.55rem 0.9rem;font-size:0.74rem;color:var(--muted)">Deduplicated ATT&CK technique IDs across ART + Caldera + BAS scenarios</td>' +
       '</tr>' +
       '<tr style="border-top:1px solid var(--border);background:rgba(47,129,247,.03)">' +
-        '<td style="padding:0.55rem 0.9rem;font-weight:600;color:var(--muted)">Total actionable simulations</td>' +
-        '<td style="padding:0.55rem 0.9rem;font-family:var(--font-mono);font-size:0.78rem;font-weight:700;color:var(--muted)">' + total.toLocaleString() + '</td>' +
-        '<td style="padding:0.55rem 0.9rem;font-size:0.74rem;color:var(--muted)">ART atomics + Caldera + all scenarios (execution variants, not unique techniques)</td>' +
+        '<td style="padding:0.55rem 0.9rem;font-weight:600;color:var(--text)">Base simulations (pre-variant)</td>' +
+        '<td style="padding:0.55rem 0.9rem;font-family:var(--font-mono);font-size:0.78rem;font-weight:700;color:var(--text)">' + baseTotal.toLocaleString() + '</td>' +
+        '<td style="padding:0.55rem 0.9rem;font-size:0.74rem;color:var(--muted)">ART atomics + Caldera + all scenarios, no variant multiplication</td>' +
       '</tr>';
     }
   }).catch(function() {
-    if (totalEl) totalEl.textContent = '—';
+    if (totalEl) totalEl.textContent = '--';
+    if (variantEl) variantEl.textContent = '--';
     if (subEl) subEl.textContent = 'Could not load coverage data';
   });
 }
-
 function reseedART() {
   if (!confirm('Reseed ART content from the server content pack?\n\nThis re-imports atomics + payload metadata into Postgres and hot-reloads the engine. Existing runs are unaffected.')) return;
   var btn = document.getElementById('art-reseed-btn');
