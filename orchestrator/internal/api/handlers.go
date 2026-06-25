@@ -1489,6 +1489,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	// Persist per-variant execution evidence to scenario_variant_results.
 	// Runs without VariantDepth (none) are a no-op (no variant meta in dispatchedMeta).
 	h.persistVariantResults(r.Context(), raw.RunID, raw.ScenarioID, simResults, dispatchedMeta)
+	// Pre-compute per-technique variant summary (best bypass, blocked/bypassed counts).
+	// No-op when run had no variant depth. Writes scenario_variant_technique_summary.
+	go h.computeVariantTechniqueSummary(context.Background(), raw.RunID, simResults, dispatchedMeta)
 
 	// Refresh compliance snapshots for this agent asynchronously — no-op when
 	// compliance mapper is not loaded. Uses a fresh context because the HTTP

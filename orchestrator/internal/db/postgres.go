@@ -129,6 +129,33 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_svr_tech_verdict ON scenario_variant_results (technique_id, verdict)`,
 		`CREATE INDEX IF NOT EXISTS idx_svr_variant_id ON scenario_variant_results (variant_id)`,
 
+		// ── Variant Coverage Report — pre-computed per-technique summary ───────
+		// Stores one row per (run_id, technique_id) with aggregate counts and the
+		// best_bypass_variant_id pre-computed at result submission time so every
+		// subsequent report render is a simple O(1) lookup rather than a re-sort.
+		`CREATE TABLE IF NOT EXISTS scenario_variant_technique_summary (
+			id                      text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			run_id                  text        NOT NULL,
+			technique_id            text        NOT NULL,
+			technique_name          text        NOT NULL DEFAULT '',
+			tactic                  text        NOT NULL DEFAULT '',
+			variants_executed       int         NOT NULL DEFAULT 0,
+			blocked                 int         NOT NULL DEFAULT 0,
+			detected                int         NOT NULL DEFAULT 0,
+			logged                  int         NOT NULL DEFAULT 0,
+			bypassed                int         NOT NULL DEFAULT 0,
+			errors                  int         NOT NULL DEFAULT 0,
+			skipped                 int         NOT NULL DEFAULT 0,
+			best_bypass_variant_id  text,
+			encodings_tested        text[]      NOT NULL DEFAULT '{}',
+			privileges_tested       text[]      NOT NULL DEFAULT '{}',
+			contexts_tested         text[]      NOT NULL DEFAULT '{}',
+			computed_at             timestamptz NOT NULL DEFAULT NOW(),
+			UNIQUE (run_id, technique_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_svts_run_id    ON scenario_variant_technique_summary (run_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_svts_bypassed  ON scenario_variant_technique_summary (run_id, bypassed DESC)`,
+
 		// ── Phase B-1: run-event stream + denormalized progress summary ───────
 		`CREATE TABLE IF NOT EXISTS run_events (
 			run_id       text        NOT NULL,

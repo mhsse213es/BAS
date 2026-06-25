@@ -6469,6 +6469,7 @@ function viewRunResults(run) {
         '<span style="flex:1"></span>' +
         '<button id="rvt-results" class="btn btn-sm" style="background:var(--elevated);color:var(--accent);border:1px solid var(--border);border-bottom:2px solid var(--accent);border-radius:4px 4px 0 0" onclick="switchResultsView(\'table\')">Results</button>' +
         '<button id="rvt-flow" class="btn btn-sm" style="color:var(--muted);border:1px solid transparent;border-radius:4px 4px 0 0" onclick="switchResultsView(\'flow\')">&#9660; Attack Flow</button>' +
+        '<button id="rvt-coverage" class="btn btn-sm" style="color:var(--muted);border:1px solid transparent;border-radius:4px 4px 0 0" onclick="switchResultsView(\'coverage\')">&#9632; Variant Coverage</button>' +
       '</div>';
   }
   document.getElementById('results-export').innerHTML = exportHtml;
@@ -6665,7 +6666,8 @@ function viewRunResults(run) {
     scorePanel +
     '<div id="run-report-extra"></div>' +
     '<div id="rv-table">' + checksHtml + '</div>' +
-    '<div id="rv-flow" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>';
+    '<div id="rv-flow" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>' +
+    '<div id="rv-coverage" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading variant coverage&#8230;</div></div>';
   document.getElementById('results-overlay').classList.add('open');
 
   // Key Findings + Prioritised Recommendations — fetched from the report engine
@@ -6689,30 +6691,245 @@ function viewRunResults(run) {
       var el = document.getElementById('rv-flow');
       if (el) el.innerHTML = '<div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Attack flow unavailable.</div>';
     });
+
+    // Preload variant coverage into rv-coverage (no-op for runs with depth=none).
+    apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/variant-coverage').then(function(cov) {
+      var el = document.getElementById('rv-coverage');
+      if (el) el.innerHTML = renderVariantCoverage(cov);
+    }).catch(function() {
+      var el = document.getElementById('rv-coverage');
+      if (el) el.innerHTML = '<div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Variant coverage unavailable.</div>';
+    });
   }
 }
 
 // Toggles the run-results drawer between the "Results" table view and the
 // "Attack Flow" visualization. Called by the tab buttons in the export bar.
 function switchResultsView(view) {
-  var tableEl = document.getElementById('rv-table');
-  var flowEl  = document.getElementById('rv-flow');
-  var btnT    = document.getElementById('rvt-results');
-  var btnF    = document.getElementById('rvt-flow');
-  if (!tableEl || !flowEl) return;
-  var isFlow = (view === 'flow');
-  tableEl.style.display = isFlow ? 'none' : '';
-  flowEl.style.display  = isFlow ? ''     : 'none';
-  if (btnT) {
-    btnT.style.background   = isFlow ? '' : 'var(--elevated)';
-    btnT.style.color        = isFlow ? 'var(--muted)' : 'var(--accent)';
-    btnT.style.borderBottom = isFlow ? '' : '2px solid var(--accent)';
+  var tableEl    = document.getElementById('rv-table');
+  var flowEl     = document.getElementById('rv-flow');
+  var coverageEl = document.getElementById('rv-coverage');
+  var btnT       = document.getElementById('rvt-results');
+  var btnF       = document.getElementById('rvt-flow');
+  var btnC       = document.getElementById('rvt-coverage');
+  if (!tableEl) return;
+  tableEl.style.display    = (view === 'table'    || !view) ? '' : 'none';
+  if (flowEl)     flowEl.style.display     = (view === 'flow')     ? '' : 'none';
+  if (coverageEl) coverageEl.style.display = (view === 'coverage') ? '' : 'none';
+  var activeStyle   = { background: 'var(--elevated)', color: 'var(--accent)', borderBottom: '2px solid var(--accent)' };
+  var inactiveStyle = { background: '', color: 'var(--muted)', borderBottom: '' };
+  function applyTab(btn, isActive) {
+    if (!btn) return;
+    var s = isActive ? activeStyle : inactiveStyle;
+    btn.style.background   = s.background;
+    btn.style.color        = s.color;
+    btn.style.borderBottom = s.borderBottom;
   }
-  if (btnF) {
-    btnF.style.background   = isFlow ? 'var(--elevated)' : '';
-    btnF.style.color        = isFlow ? 'var(--accent)' : 'var(--muted)';
-    btnF.style.borderBottom = isFlow ? '2px solid var(--accent)' : '';
+  applyTab(btnT, view === 'table' || !view);
+  applyTab(btnF, view === 'flow');
+  applyTab(btnC, view === 'coverage');
+}
+
+// ── Variant Coverage Report rendering ────────────────────────────────────────
+
+function renderVariantCoverage(data) {
+  var nc = ''.replace; // no-op; used for clarity
+  if (!data || data.variantDepth === 'none' || !data.techniques || !data.techniques.length) {
+    return '<div style="color:var(--muted);font-size:0.78rem;padding:2rem 0;text-align:center">' +
+      '<div style="font-size:1.5rem;margin-bottom:0.5rem">&#9633;</div>' +
+      '<div>No variant data for this run.</div>' +
+      '<div style="margin-top:0.4rem;font-size:0.7rem">Re-run with Variant depth: Quick, Standard, or Full.</div>' +
+    '</div>';
   }
+
+  var s = data.summary || {};
+  var techs = data.techniques || [];
+  var VCOL  = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)' };
+  var VBG   = { blocked:'rgba(35,134,54,0.12)', detected:'rgba(210,153,34,0.12)', logged:'rgba(210,153,34,0.08)', bypassed:'rgba(218,54,51,0.12)', error:'rgba(154,169,188,0.06)', skipped:'rgba(154,169,188,0.04)' };
+  var VICON = { blocked:'&#10003;', detected:'&#9888;', logged:'&#9685;', bypassed:'&#10007;', error:'?', skipped:'&#9675;' };
+
+  function x(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function tile(label, val, sub, col) {
+    return '<div style="background:var(--elevated);border:1px solid var(--border);border-top:2px solid ' + col + ';border-radius:4px;padding:0.55rem 0.75rem;flex:1;min-width:100px">' +
+      '<div style="font-size:0.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:0.2rem">' + label + '</div>' +
+      '<div style="font-size:1.35rem;font-weight:700;color:' + col + ';line-height:1.1">' + val + '</div>' +
+      (sub ? '<div style="font-size:0.65rem;color:var(--muted);margin-top:0.1rem">' + sub + '</div>' : '') +
+    '</div>';
+  }
+  function verdictBadge(v) {
+    var col = VCOL[v] || 'var(--muted)';
+    return '<span style="display:inline-flex;align-items:center;gap:3px;background:' + (VBG[v]||'rgba(154,169,188,0.06)') + ';border:1px solid ' + col + ';border-radius:3px;padding:1px 6px;font-size:0.65rem;color:' + col + '">' + (VICON[v]||'?') + ' ' + x(v) + '</span>';
+  }
+  function dimBadges(arr) {
+    return (arr||[]).map(function(d){ return '<span style="display:inline-block;background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-size:0.62rem;color:var(--muted);margin:1px">' + x(d) + '</span>'; }).join('');
+  }
+
+  var bypassPct = (s.bypassRate || 0).toFixed(1);
+  var coverPct  = (s.coverageScore || 0).toFixed(1);
+  var bypassCol = s.bypassRate > 20 ? 'var(--danger)' : s.bypassRate > 5 ? 'var(--warning)' : 'var(--success)';
+  var coverCol  = s.coverageScore >= 90 ? 'var(--success)' : s.coverageScore >= 70 ? 'var(--warning)' : 'var(--danger)';
+
+  // ── Section 1: Summary tiles ─────────────────────────────────────────────
+  var summaryHtml =
+    '<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem">' +
+      tile('Techniques Tested',   s.techniquesTotal || 0, 'via variant engine', 'var(--accent)') +
+      tile('Variants Executed',   s.variantsExecuted || 0, (s.variantDepth||data.variantDepth||'') + ' depth', 'var(--accent)') +
+      tile('Blocked',             s.blocked || 0, (s.blocked + s.detected > 0 ? coverPct + '% prevention' : 'no data'), coverCol) +
+      tile('Bypass Rate',         bypassPct + '%', (s.techniquesWithBypass||0) + ' technique' + (s.techniquesWithBypass===1?'':'s') + ' exposed', bypassCol) +
+    '</div>';
+
+  // ── Section 2: Bypass Findings (only when bypasses exist) ────────────────
+  var bypassedTechs = techs.filter(function(t){ return t.hasBypass; });
+  var bypassHtml = '';
+  if (bypassedTechs.length) {
+    var findings = bypassedTechs.map(function(t, i) {
+      var bb = t.bestBypass;
+      var bypassLabel = bb ? [bb.encoding, bb.executionContext, bb.privilege].filter(Boolean).map(function(d){
+        return d.charAt(0).toUpperCase() + d.slice(1);
+      }).join(' + ') : 'Unknown';
+      var proxyHtml = (bb && bb.proxyTechniqueId) ?
+        '<div style="margin-top:0.3rem"><span style="color:var(--muted);font-size:0.66rem">Proxy Technique</span> <span style="color:var(--accent);font-size:0.72rem;font-weight:600">' + x(bb.proxyTechniqueId) + '</span></div>' : '';
+      var detectionNote = (bb && (bb.verdict === 'detected' || bb.verdict === 'logged')) ? 'Detected' : 'Not Observed';
+      var detCol = (detectionNote === 'Detected') ? 'var(--warning)' : 'var(--muted)';
+
+      var points = (t.remediationPoints || []).slice(0, 4).map(function(p){
+        return '<li style="margin-bottom:0.3rem">' + x(p) + '</li>';
+      }).join('');
+
+      return '<div style="background:var(--elevated);border:1px solid var(--border);border-left:3px solid var(--danger);border-radius:0 4px 4px 0;padding:0.75rem 1rem;margin-bottom:0.75rem">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">' +
+          '<div style="flex:1;min-width:200px">' +
+            '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem">' +
+              '<span style="font-size:0.72rem;font-weight:700;color:var(--accent);letter-spacing:.04em">' + x(t.techniqueId) + '</span>' +
+              '<span style="color:var(--muted);font-size:0.68rem">' + x(t.techniqueName) + '</span>' +
+              verdictBadge('bypassed') +
+            '</div>' +
+            '<div style="font-size:0.7rem;color:var(--fg);margin-bottom:0.25rem"><span style="color:var(--muted)">Best Bypass: </span><strong>' + x(bypassLabel) + '</strong></div>' +
+            proxyHtml +
+            '<div style="margin-top:0.2rem"><span style="color:var(--muted);font-size:0.66rem">Detection: </span><span style="color:' + detCol + ';font-size:0.68rem;font-weight:600">' + detectionNote + '</span></div>' +
+          '</div>' +
+          '<div style="flex:0 0 auto;text-align:right">' +
+            '<div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">Bypass Rate</div>' +
+            '<div style="font-size:1.4rem;font-weight:700;color:var(--danger)">' + (t.bypassRate||0).toFixed(0) + '%</div>' +
+            '<div style="font-size:0.62rem;color:var(--muted)">' + (t.bypassed||0) + '/' + (t.variantsExecuted||0) + ' variants</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="margin-top:0.65rem;padding-top:0.55rem;border-top:1px solid var(--border)">' +
+          '<div style="font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warning);margin-bottom:0.35rem">Recommendation</div>' +
+          '<div style="font-size:0.72rem;color:var(--fg);margin-bottom:0.4rem">' + x(t.headline) + '</div>' +
+          (points ? '<ul style="margin:0;padding-left:1.2em;font-size:0.7rem;color:var(--muted)">' + points + '</ul>' : '') +
+        '</div>' +
+        '<div style="margin-top:0.5rem;display:flex;gap:0.35rem;flex-wrap:wrap;align-items:center">' +
+          '<button class="btn btn-sm btn-outline" style="font-size:0.62rem;padding:2px 8px" onclick="loadVariantMatrix(this,\'' + x(data.runId) + '\',\'' + x(t.techniqueId) + '\')">' +
+            '&#9783; View variant matrix' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    bypassHtml =
+      '<div style="margin-bottom:1rem">' +
+        '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--danger);margin-bottom:0.55rem;padding-bottom:0.3rem;border-bottom:1px solid var(--border)">' +
+          '&#9888; Bypass Findings (' + bypassedTechs.length + ')' +
+        '</div>' +
+        findings +
+      '</div>';
+  }
+
+  // ── Section 3: Technique Coverage table ──────────────────────────────────
+  var rows = techs.map(function(t) {
+    var allowedTotal = (t.bypassed||0) + (t.detected||0) + (t.logged||0);
+    var brCol = t.bypassRate > 20 ? 'var(--danger)' : t.bypassRate > 5 ? 'var(--warning)' : 'var(--success)';
+    var bbShort = '';
+    if (t.bestBypass) {
+      var bb = t.bestBypass;
+      bbShort = [bb.encoding, bb.executionContext, bb.privilege].filter(Boolean).map(function(d){
+        return '<span style="font-size:0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:0px 4px;margin:1px">' + x(d) + '</span>';
+      }).join('');
+    }
+    return '<tr>' +
+      '<td style="font-weight:600;color:var(--accent)">' + x(t.techniqueId) + '<br><span style="font-weight:400;color:var(--muted);font-size:0.65rem">' + x(t.techniqueName) + '</span></td>' +
+      '<td style="text-align:right">' + (t.variantsExecuted||0) + '</td>' +
+      '<td style="text-align:right;color:var(--success)">' + (t.blocked||0) + '</td>' +
+      '<td style="text-align:right;color:var(--warning)">' + (t.detected||0) + '</td>' +
+      '<td style="text-align:right;color:var(--danger)">' + ((t.bypassed||0)+(t.logged||0)) + '</td>' +
+      '<td style="text-align:right;color:' + brCol + ';font-weight:700">' + (t.bypassRate||0).toFixed(1) + '%</td>' +
+      '<td>' + bbShort + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var tableHtml =
+    '<div style="margin-bottom:1rem">' +
+      '<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:0.55rem;padding-bottom:0.3rem;border-bottom:1px solid var(--border)">Technique Coverage</div>' +
+      '<div style="overflow-x:auto">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:0.72rem">' +
+          '<thead><tr style="color:var(--muted);font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border)">' +
+            '<th style="text-align:left;padding:4px 6px">Technique</th>' +
+            '<th style="text-align:right;padding:4px 6px">Tested</th>' +
+            '<th style="text-align:right;padding:4px 6px">Blocked</th>' +
+            '<th style="text-align:right;padding:4px 6px">Detected</th>' +
+            '<th style="text-align:right;padding:4px 6px">Allowed</th>' +
+            '<th style="text-align:right;padding:4px 6px">Bypass%</th>' +
+            '<th style="text-align:left;padding:4px 6px">Best Bypass</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table>' +
+      '</div>' +
+    '</div>';
+
+  return '<div style="padding:0.25rem 0">' + summaryHtml + bypassHtml + tableHtml + '</div>';
+}
+
+// Loads and renders the per-technique variant matrix into an inline container.
+// Called by the "View variant matrix" button inside a bypass finding card.
+function loadVariantMatrix(btn, runId, techniqueId) {
+  var card = btn.closest ? btn.closest('[data-matrix]') : null;
+  var containerId = 'vmatrix-' + techniqueId.replace(/\./g, '-');
+  var existing = document.getElementById(containerId);
+  if (existing) { existing.remove(); btn.textContent = '&#9783; View variant matrix'; return; }
+
+  btn.textContent = 'Loading…';
+  apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/variant-coverage/' + encodeURIComponent(techniqueId))
+    .then(function(data) {
+      btn.textContent = '&#9783; Hide variant matrix';
+      var rows = (data.rows || []);
+      var VCOL = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)' };
+      function x(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+      var trs = rows.map(function(r) {
+        var col = VCOL[r.verdict] || 'var(--muted)';
+        var bestMark = r.isBestBypass ? ' &#9733;' : '';
+        return '<tr style="background:' + (r.isBestBypass ? 'rgba(218,54,51,0.08)' : '') + ';border-bottom:1px solid var(--border)">' +
+          '<td style="padding:3px 6px;color:var(--accent);font-size:0.65rem">' + x(r.encoding) + '</td>' +
+          '<td style="padding:3px 6px;font-size:0.65rem">' + x(r.privilege) + '</td>' +
+          '<td style="padding:3px 6px;font-size:0.65rem">' + x(r.executionContext) + '</td>' +
+          '<td style="padding:3px 6px;font-size:0.65rem;color:var(--muted)">' + x(r.proxyTechniqueId||'—') + '</td>' +
+          '<td style="padding:3px 6px"><span style="font-size:0.62rem;font-weight:600;color:' + col + '">' + x(r.verdict) + bestMark + '</span></td>' +
+          '<td style="padding:3px 6px;font-size:0.62rem;color:var(--muted)">' + (r.durationMs ? r.durationMs + 'ms' : '—') + '</td>' +
+        '</tr>';
+      }).join('');
+
+      var html =
+        '<div id="' + containerId + '" style="margin-top:0.75rem;border:1px solid var(--border);border-radius:4px;overflow:hidden">' +
+          '<div style="background:var(--surface);padding:0.35rem 0.75rem;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Variant Matrix — ' + x(techniqueId) + ' (' + rows.length + ' variants)</div>' +
+          '<div style="overflow-x:auto">' +
+            '<table style="width:100%;border-collapse:collapse;font-size:0.7rem">' +
+              '<thead><tr style="color:var(--muted);font-size:0.58rem;text-transform:uppercase;border-bottom:1px solid var(--border)">' +
+                '<th style="padding:3px 6px;text-align:left">Encoding</th>' +
+                '<th style="padding:3px 6px;text-align:left">Privilege</th>' +
+                '<th style="padding:3px 6px;text-align:left">Context</th>' +
+                '<th style="padding:3px 6px;text-align:left">Proxy Tech</th>' +
+                '<th style="padding:3px 6px;text-align:left">Verdict</th>' +
+                '<th style="padding:3px 6px;text-align:left">Duration</th>' +
+              '</tr></thead>' +
+              '<tbody>' + trs + '</tbody>' +
+            '</table>' +
+          '</div>' +
+        '</div>';
+      btn.insertAdjacentHTML('afterend', html);
+    })
+    .catch(function() {
+      btn.textContent = '&#9783; View variant matrix';
+    });
 }
 
 // Renders the visual attack flow from the /attackflow API response.
