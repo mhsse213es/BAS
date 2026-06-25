@@ -29,18 +29,32 @@ func TaskID(techniqueID, name string) string {
 // definitions are NOT stored in the scenario's static Steps. Persisted with the
 // run and read back when the agent returns results.
 type StepMeta struct {
-	TechniqueID string `json:"techniqueId"`
-	Name        string `json:"name"`
-	Framework   string `json:"framework"`
+	TechniqueID      string       `json:"techniqueId"`
+	Name             string       `json:"name"`
+	Framework        string       `json:"framework"`
+	// Variant fields — populated only for variant steps (BaseTaskID non-empty).
+	// Persisted in scenario_runs.step_meta so the result processor can write
+	// scenario_variant_results without re-querying at submission time.
+	BaseTaskID       string       `json:"baseTaskId,omitempty"`
+	VariantSpec      *VariantSpec `json:"variantSpec,omitempty"`
+	ProxyTechniqueID string       `json:"proxyTechniqueId,omitempty"`
 }
 
 // BuildStepMeta builds a TaskID→StepMeta lookup from the steps actually
-// dispatched to the agent, capturing the technique, name and framework needed
-// to interpret each result correctly.
+// dispatched to the agent, capturing the technique, name, framework and (for
+// variant steps) the base TaskID + VariantSpec needed to write variant findings.
 func BuildStepMeta(steps []ScenarioStep) map[string]StepMeta {
 	m := make(map[string]StepMeta, len(steps))
 	for _, s := range steps {
-		m[s.TaskID] = StepMeta{TechniqueID: s.TechniqueID, Name: s.Name, Framework: s.Framework}
+		meta := StepMeta{
+			TechniqueID:      s.TechniqueID,
+			Name:             s.Name,
+			Framework:        s.Framework,
+			BaseTaskID:       s.BaseTaskID,
+			VariantSpec:      s.VariantSpecRef,
+			ProxyTechniqueID: s.ProxyTechniqueID,
+		}
+		m[s.TaskID] = meta
 	}
 	return m
 }

@@ -159,6 +159,12 @@ type ScenarioStep struct {
 	//   schtasks wrapper → T1053.005
 	//   COM wrapper      → T1559.001
 	ProxyTechniqueID string `json:"proxyTechniqueId,omitempty"`
+	// BaseTaskID is the TaskID of the base step this variant was derived from.
+	// Server-internal — not sent to the agent. Set by ExpandSteps.
+	BaseTaskID string `json:"-"`
+	// VariantSpecRef holds the spec used to generate this step from its base.
+	// Server-internal — not sent to the agent. Set by ExpandSteps/ApplyVariant.
+	VariantSpecRef *VariantSpec `json:"-"`
 }
 
 // ScenarioCommand is sent to an agent via WebSocket.

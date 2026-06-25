@@ -609,16 +609,17 @@ const staleRunGuard = 2 * time.Hour
 // agent. It is the agent-independent slice of a run request — built once by the
 // single-run handler and once per target by the campaign fan-out.
 type dispatchOpts struct {
-	Mode        string // already-normalized: posture | telemetry | lab
-	ConfirmLive bool
-	ConfirmLab  bool
-	Reason      string
-	Techniques  []string
-	Abilities   []string
-	Steps       []int
-	Checks      []string
-	CampaignID  string  // "" for ad-hoc single runs
-	InitiatedBy *string // requesting user id (nil if unauthenticated)
+	Mode         string // already-normalized: posture | telemetry | lab
+	ConfirmLive  bool
+	ConfirmLab   bool
+	Reason       string
+	Techniques   []string
+	Abilities    []string
+	Steps        []int
+	Checks       []string
+	CampaignID   string              // "" for ad-hoc single runs
+	InitiatedBy  *string             // requesting user id (nil if unauthenticated)
+	VariantDepth scenario.VariantDepth // "none"|"quick"|"standard"|"full"; "" == "none"
 }
 
 // nullIfEmpty maps "" to a SQL NULL so an ad-hoc run leaves campaign_id null
@@ -700,12 +701,17 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	}
 
 	// Create a run record in RUNNING state, stamped with the requesting user and
-	// (for fan-out) its campaign.
+	// (for fan-out) its campaign. variant_depth is recorded so the result processor
+	// can skip the scenario_variant_results write for normal (non-variant) runs.
 	runID = newID()
+	vdepth := string(o.VariantDepth)
+	if vdepth == "" {
+		vdepth = "none"
+	}
 	_, err = h.db.Exec(ctx,
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6)`,
-		runID, sc.ID, agentID, sc.Name, o.InitiatedBy, nullIfEmpty(o.CampaignID),
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id, variant_depth)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6, $7)`,
+		runID, sc.ID, agentID, sc.Name, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth,
 	)
 	if err != nil {
 		return "", "", err
@@ -823,6 +829,18 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		}
 	}
 
+	// ── Variant expansion layer ───────────────────────────────────────────────
+	// Each base step is followed by its variant steps (encoding × privilege ×
+	// exec-context combos). The agent sees a flat step list — it has no concept
+	// of variants. StepMeta carries BaseTaskID + VariantSpec so the result
+	// processor can write scenario_variant_results without re-querying here.
+	if o.VariantDepth != scenario.VariantDepthNone && o.VariantDepth != "" {
+		baseCount := len(steps)
+		steps = scenario.ExpandSteps(steps, o.VariantDepth)
+		log.Printf("[scenario] run %s: variant expand depth=%s base=%d expanded=%d",
+			runID, o.VariantDepth, baseCount, len(steps))
+	}
+
 	h.persistStepMeta(ctx, runID, steps)
 
 	cmd := scenario.ScenarioCommand{
@@ -852,15 +870,16 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	scenarioID := chi.URLParam(r, "id")
 	var req struct {
-		AgentID     string   `json:"agentId"`
-		Mode        string   `json:"mode"`        // posture (default) | telemetry | lab
-		ConfirmLive bool     `json:"confirmLive"` // required ack for any live run (telemetry/lab)
-		ConfirmLab  bool     `json:"confirmLab"`  // second-stage approval, required for lab mode
-		Reason      string   `json:"reason"`      // optional operator justification (audited)
-		Techniques  []string `json:"techniques"`  // optional ART technique subset (overrides the scenario's set)
-		Abilities   []string `json:"abilities"`   // optional Caldera ability subset (overrides the scenario's set)
-		Steps       []int    `json:"steps"`       // optional step subset — indices into the scenario's step list (custom/step scenarios)
-		Checks      []string `json:"checks"`      // optional posture-check subset (local_check scenarios)
+		AgentID      string               `json:"agentId"`
+		Mode         string               `json:"mode"`         // posture (default) | telemetry | lab
+		ConfirmLive  bool                 `json:"confirmLive"`  // required ack for any live run (telemetry/lab)
+		ConfirmLab   bool                 `json:"confirmLab"`   // second-stage approval, required for lab mode
+		Reason       string               `json:"reason"`       // optional operator justification (audited)
+		Techniques   []string             `json:"techniques"`   // optional ART technique subset
+		Abilities    []string             `json:"abilities"`    // optional Caldera ability subset
+		Steps        []int                `json:"steps"`        // optional step subset — indices into scenario step list
+		Checks       []string             `json:"checks"`       // optional posture-check subset (local_check scenarios)
+		VariantDepth scenario.VariantDepth `json:"variantDepth"` // ""|"none"|"quick"|"standard"|"full"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -999,7 +1018,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	runID, skip, err := h.dispatchRun(r.Context(), sc, req.AgentID, dispatchOpts{
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab, Reason: req.Reason,
 		Techniques: req.Techniques, Abilities: req.Abilities, Steps: req.Steps, Checks: req.Checks,
-		InitiatedBy: initiatedBy,
+		InitiatedBy: initiatedBy, VariantDepth: req.VariantDepth,
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -1171,6 +1190,100 @@ func (h *Handler) DeleteScenario(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// persistVariantResults writes one row to scenario_variant_results for every
+// result whose step_meta entry is a variant step (BaseTaskID non-empty).
+// Called after SubmitScenarioResult stores the authoritative result snapshot.
+// Idempotent via ON CONFLICT on (run_id, step_id, variant_id) — safe on retry.
+func (h *Handler) persistVariantResults(
+	ctx context.Context,
+	runID, scenarioID string,
+	results []models.SimulationResult,
+	meta map[string]scenario.StepMeta,
+) {
+	if len(meta) == 0 {
+		return
+	}
+	for _, res := range results {
+		m, ok := meta[res.ID]
+		if !ok || m.BaseTaskID == "" || m.VariantSpec == nil {
+			continue // base step or unrecognised — skip
+		}
+		spec := m.VariantSpec
+		variantID := spec.ID(res.Technique.ID)
+
+		verdict := variantVerdictStr(res)
+		rawJSON, _ := json.Marshal(res)
+		var execAt *time.Time
+		if !res.ExecutedAt.IsZero() {
+			t := res.ExecutedAt
+			execAt = &t
+		}
+
+		_, err := h.db.Exec(ctx,
+			`INSERT INTO scenario_variant_results
+				(run_id, scenario_id, step_id, variant_id, technique_id,
+				 proxy_technique_id, encoding, privilege, execution_context, platform,
+				 requested_privilege, actual_privilege, verdict,
+				 duration_ms, executed_at, raw_result)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			 ON CONFLICT (run_id, step_id, variant_id)
+			 DO UPDATE SET
+				verdict          = EXCLUDED.verdict,
+				actual_privilege = EXCLUDED.actual_privilege,
+				duration_ms      = EXCLUDED.duration_ms,
+				executed_at      = EXCLUDED.executed_at,
+				raw_result       = EXCLUDED.raw_result`,
+			runID, scenarioID, m.BaseTaskID, variantID, res.Technique.ID,
+			m.ProxyTechniqueID,
+			normStr(spec.Encoding, "plain"),
+			normStr(spec.Privilege, "user"),
+			normStr(spec.ExecContext, "direct"),
+			normStr(spec.Platform, "windows"),
+			res.RequestedPriv, res.ExecutedAs,
+			verdict,
+			res.DurationMs, execAt, rawJSON,
+		)
+		if err != nil {
+			log.Printf("[variant] persist result for run %s task %s: %v", runID, res.ID, err)
+		}
+	}
+}
+
+// variantVerdictStr derives the 6-category variant verdict from a SimulationResult.
+// Mirrors the attack-flow verdict logic so both views are consistent.
+func variantVerdictStr(r models.SimulationResult) string {
+	switch r.Result {
+	case models.ResultPass:
+		return "blocked"
+	case models.ResultFail:
+		switch r.DetectionVerdict {
+		case "prevented":
+			return "blocked"
+		case "detected":
+			return "detected"
+		case "logged":
+			return "logged"
+		default:
+			if r.DetectionAlert != nil {
+				return "detected"
+			}
+			return "bypassed"
+		}
+	case models.ResultError:
+		return "error"
+	case models.ResultSkipped:
+		return "skipped"
+	}
+	return "error"
+}
+
+func normStr(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
+}
+
 // persistStepMeta saves the TaskID→{technique,name,framework} map for the steps
 // actually dispatched, so results from dynamically-built ART/Caldera steps (not
 // present in the scenario's static Steps) can be interpreted correctly.
@@ -1222,12 +1335,12 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var metaRaw []byte
+	var dispatchedMeta map[string]scenario.StepMeta // hoisted: used again by persistVariantResults
 	if err := h.db.QueryRow(r.Context(),
 		`SELECT step_meta FROM scenario_runs WHERE id = $1`, raw.RunID,
 	).Scan(&metaRaw); err == nil && len(metaRaw) > 0 {
-		var meta map[string]scenario.StepMeta
-		if json.Unmarshal(metaRaw, &meta) == nil {
-			for taskID, m := range meta {
+		if json.Unmarshal(metaRaw, &dispatchedMeta) == nil {
+			for taskID, m := range dispatchedMeta {
 				stepMap[taskID] = scenario.Step{
 					TechniqueID: m.TechniqueID,
 					Name:        m.Name,
@@ -1373,6 +1486,9 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 
 	// Auto-populate variant_findings for any ALLOWED results in variant runs.
 	h.upsertVariantFindingsForRun(r.Context(), raw.RunID, raw.ScenarioID, simResults)
+	// Persist per-variant execution evidence to scenario_variant_results.
+	// Runs without VariantDepth (none) are a no-op (no variant meta in dispatchedMeta).
+	h.persistVariantResults(r.Context(), raw.RunID, raw.ScenarioID, simResults, dispatchedMeta)
 
 	// Refresh compliance snapshots for this agent asynchronously — no-op when
 	// compliance mapper is not loaded. Uses a fresh context because the HTTP

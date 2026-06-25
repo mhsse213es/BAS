@@ -2650,6 +2650,18 @@ body.theme-slate {
           </div>
         </div>
         <div id="wz-mode-note" class="sub2" style="display:none;margin-top:0.5rem">This scenario runs in read-only posture mode — safe on any host.</div>
+
+        <!-- Variant depth — only shown for live (telemetry/lab) ART runs -->
+        <div id="modal-variant-wrap" style="display:none;margin-top:0.75rem">
+          <label class="modal-lbl">Variant depth</label>
+          <select id="modal-variant-depth" onchange="updateVariantDepthNote()">
+            <option value="none">None — base test only (1 per step)</option>
+            <option value="quick">Quick — ~5 per PS step (encoding + privilege + WMI)</option>
+            <option value="standard">Standard — ~15 per PS step (all dimensions, key cross-products)</option>
+            <option value="full">Full — all valid combos (33 per PS step, 11 per CMD step)</option>
+          </select>
+          <div id="modal-variant-note" class="sub2" style="margin-top:0.35rem"></div>
+        </div>
       </div>
 
       <!-- Step 4: Review -->
@@ -5770,7 +5782,42 @@ function renderRunMode() {
     }
     btn.innerHTML = '&#9654; Run';
   }
+
+  // Show variant depth selector for live ART runs only (posture has no variant value).
+  var fw = scenarioFramework(sc);
+  var variantWrap = document.getElementById('modal-variant-wrap');
+  var showVariant = (mode === 'telemetry' || mode === 'lab') && (fw === 'art');
+  if (variantWrap) {
+    variantWrap.style.display = showVariant ? 'block' : 'none';
+    if (showVariant) updateVariantDepthNote();
+  }
 }
+
+// updateVariantDepthNote updates the helper text below the variant depth selector
+// showing the estimated total steps so operators don't accidentally queue 3300 runs.
+function updateVariantDepthNote() {
+  var noteEl = document.getElementById('modal-variant-note');
+  if (!noteEl) return;
+  var sel = document.getElementById('modal-variant-depth');
+  var depth = sel ? sel.value : 'none';
+  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var sc = scenarios.find(function(s) { return s.id === scId; });
+  var baseSteps = sc ? ((sc.artTechniques || []).length || (sc.artAllWindows ? '3,467' : 0)) : '?';
+  var mult = { none: '1', quick: '~5', standard: '~15', full: '33' }[depth] || '1';
+  var notes = {
+    none: 'One test per step — base command only. Fast, low noise.',
+    quick: '~5 tests per PS step: base64 / charcode encoding + admin privilege + WMI proxy (T1047). Best for a first pass.',
+    standard: '~15 tests per PS step. Covers all dimensions and key cross-products. Recommended for detection-gap validation.',
+    full: 'Every valid variant (33 per PS step, 11 per CMD step). Use on a single technique or small step subset — not a 100-step scenario.'
+  };
+  noteEl.textContent = mult + ' tests per step. ' + (notes[depth] || '');
+  if (depth === 'full' && baseSteps !== '?') {
+    noteEl.style.color = typeof baseSteps === 'number' && baseSteps > 50 ? 'var(--danger)' : 'var(--muted)';
+  } else {
+    noteEl.style.color = 'var(--muted)';
+  }
+}
+
 function closeModal() { document.getElementById('run-overlay').classList.remove('open'); _modalScId = null; _runSelection = null; }
 
 /* ── Run wizard navigation ─────────────────────────────────────────────────
@@ -5815,10 +5862,18 @@ function renderWizardReview() {
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl && reasonEl.value.trim()) ? reasonEl.value.trim() : '';
   var row = function(k, v) { return '<div class="wz-rev-row"><span>' + k + '</span><span>' + v + '</span></div>'; };
+  var variantDepthEl2 = document.getElementById('modal-variant-depth');
+  var variantWrap2 = document.getElementById('modal-variant-wrap');
+  var variantLabel = '';
+  if (variantDepthEl2 && variantWrap2 && variantWrap2.style.display !== 'none') {
+    var vd = variantDepthEl2.value || 'none';
+    variantLabel = { none: 'None (base only)', quick: 'Quick (~5 per PS step)', standard: 'Standard (~15 per PS step)', full: 'Full (33 per PS step)' }[vd] || vd;
+  }
   var html = row('Scenario', x(sc ? sc.name : scId)) +
              row('Target agent', x(agTxt)) +
              row('Mode', x(modeLabel)) +
              row('Scope', x(subset)) +
+             (variantLabel ? row('Variant depth', x(variantLabel)) : '') +
              (reason ? row('Reason', x(reason)) : '');
   var warnEl = document.getElementById('modal-mode-warn');
   if (warnEl.style.display !== 'none' && warnEl.innerHTML.trim()) {
@@ -7379,7 +7434,11 @@ function confirmRun() {
   }
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl) ? reasonEl.value.trim() : '';
-  var body = { agentId: agentId, mode: mode, confirmLive: confirmLive, confirmLab: confirmLab, reason: reason };
+  var variantDepthEl = document.getElementById('modal-variant-depth');
+  var variantDepth = (variantDepthEl && document.getElementById('modal-variant-wrap').style.display !== 'none')
+    ? variantDepthEl.value : 'none';
+  var body = { agentId: agentId, mode: mode, confirmLive: confirmLive, confirmLab: confirmLab,
+               reason: reason, variantDepth: variantDepth };
   if (_runSelection && _runSelection.scId === scenarioId && _runSelection.ids.length) {
     if (_runSelection.fw === 'art') body.techniques = _runSelection.ids;
     else if (_runSelection.fw === 'caldera') body.abilities = _runSelection.ids;

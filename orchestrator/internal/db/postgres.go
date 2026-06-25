@@ -92,9 +92,42 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// reverted: list of endpoint changes the agent rolled back after the run
 		// (registry keys, files) — surfaced as the report's cleanup-verification.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS reverted jsonb NOT NULL DEFAULT '[]'`,
+		// variant_depth: depth selected by the operator at dispatch time.
+		// "none" (default) = base test only; "quick" / "standard" / "full" = expanded.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS variant_depth text NOT NULL DEFAULT 'none'`,
 
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_agent ON scenario_runs(agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_scenario ON scenario_runs(scenario_id)`,
+
+		// ── Per-variant execution results ─────────────────────────────────────
+		// One row per executed variant step (not the base step). Written when
+		// SubmitScenarioResult processes a run that had variant_depth != 'none'.
+		// Drives coverage heatmaps, bypass reports, ATT&CK reporting, and the
+		// "best bypass path" findings without any schema change later.
+		`CREATE TABLE IF NOT EXISTS scenario_variant_results (
+			id                  text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			run_id              text        NOT NULL,
+			scenario_id         text        NOT NULL,
+			step_id             text        NOT NULL,       -- base step TaskID
+			variant_id          text        NOT NULL,       -- VariantSpec.ID(techniqueId) 16-hex
+			technique_id        text        NOT NULL,
+			proxy_technique_id  text,                       -- T1047/T1053.005/T1559.001 if non-direct
+			encoding            text        NOT NULL DEFAULT 'plain',
+			privilege           text        NOT NULL DEFAULT 'user',
+			execution_context   text        NOT NULL DEFAULT 'direct',
+			platform            text        NOT NULL DEFAULT 'windows',
+			requested_privilege text,                       -- from ExecResult.RequestedPriv
+			actual_privilege    text,                       -- from ExecResult.ExecutedAs
+			verdict             text        NOT NULL,       -- blocked|detected|logged|bypassed|error|skipped
+			duration_ms         bigint,
+			executed_at         timestamptz,
+			raw_result          jsonb,                      -- full SimulationResult JSON for forensics
+			created_at          timestamptz NOT NULL DEFAULT NOW(),
+			UNIQUE (run_id, step_id, variant_id)            -- idempotent on agent retry
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_svr_run_id    ON scenario_variant_results (run_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_svr_tech_verdict ON scenario_variant_results (technique_id, verdict)`,
+		`CREATE INDEX IF NOT EXISTS idx_svr_variant_id ON scenario_variant_results (variant_id)`,
 
 		// ── Phase B-1: run-event stream + denormalized progress summary ───────
 		`CREATE TABLE IF NOT EXISTS run_events (
