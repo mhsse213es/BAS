@@ -220,6 +220,11 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS campaign_id text`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_campaign ON scenario_runs (campaign_id)`,
+		// leaked_steps: count of steps whose cleanup command exited non-zero or timed out.
+		// hygiene_score: stepsCleaned/(stepsCleaned+leaked)*100; 100.0 when no cleanup steps.
+		// Written at SubmitScenarioResult; used for the Environment Restoration badge in UI.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS leaked_steps int NOT NULL DEFAULT 0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS hygiene_score double precision NOT NULL DEFAULT 100.0`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS alerts_total int NOT NULL DEFAULT 0`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS alerts_high_fidelity int NOT NULL DEFAULT 0`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS noise_score double precision NOT NULL DEFAULT 0.0`,

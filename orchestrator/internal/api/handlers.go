@@ -1481,6 +1481,27 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			`UPDATE scenario_runs SET score = $1 WHERE id = $2`, scoreJSON, raw.RunID)
 	}
 
+	// Environment Restoration — count cleanup failures and write hygiene_score.
+	{
+		var leaked, cleanable int
+		for _, sr := range simResults {
+			switch sr.CleanupVerdict {
+			case "reverted":
+				cleanable++
+			case "partial", "leaked":
+				cleanable++
+				leaked++
+			}
+		}
+		var hygieneScore float64 = 100.0
+		if cleanable > 0 {
+			hygieneScore = float64(cleanable-leaked) / float64(cleanable) * 100
+		}
+		h.db.Exec(r.Context(),
+			`UPDATE scenario_runs SET leaked_steps = $1, hygiene_score = $2 WHERE id = $3`,
+			leaked, hygieneScore, raw.RunID)
+	}
+
 	// Derive/refresh persistent findings from this run's results (detection data,
 	// if any, is folded in by the detection-ingest hook). Idempotent.
 	h.upsertFindingsForRun(r.Context(), raw.RunID)

@@ -48,6 +48,9 @@ type FullReport struct {
 	// CampaignVariantCoverage holds trend-focused multi-variant analysis for campaign reports.
 	// Populated from campaign_variant_summary; nil for non-campaign reports.
 	CampaignVariantCoverage *CampaignVariantSection  `json:"campaignVariantCoverage,omitempty"`
+	// EnvRestoration summarises cleanup success for this run/campaign:
+	// what was touched, what was reverted, and what (if anything) was left behind.
+	EnvRestoration *EnvRestoration `json:"envRestoration,omitempty"`
 	// DetectionTechniques is the per-technique purple-team verdict from the agent's
 	// post-run alert sweep (prevented|detected|undetected + confidence). Empty until
 	// the agent submits detections for the run. Sourced from scenario_runs.detection_summary.
@@ -1185,6 +1188,17 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	).Scan(&latestDetSum)
 	report.DetectionSources = buildDetectionSourcesFromSummary(latestDetSum)
 
+	er := buildEnvRestoration(report.TechniqueMatrix, report.Reverted)
+	if er.HasData {
+		er.RunCount = 1
+		if er.StepsLeaked == 0 {
+			er.RunsClean = 1
+		} else {
+			er.RunsWithIssues = 1
+		}
+		report.EnvRestoration = &er
+	}
+
 	return report, nil
 }
 
@@ -1422,6 +1436,17 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	e.populateAttackSurfaceAge(ctx, report, agentID)
 	e.populateVariantCoverage(ctx, report, runID)
 
+	er := buildEnvRestoration(report.TechniqueMatrix, report.Reverted)
+	if er.HasData {
+		er.RunCount = 1
+		if er.StepsLeaked == 0 {
+			er.RunsClean = 1
+		} else {
+			er.RunsWithIssues = 1
+		}
+		report.EnvRestoration = &er
+	}
+
 	return report, nil
 }
 
@@ -1591,6 +1616,22 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 			})
 			report.DetectionSources = dsList
 		}
+	}
+
+	// Environment Restoration — aggregate per-run breakdown from scenario_runs.
+	er := buildEnvRestoration(report.TechniqueMatrix, report.Reverted)
+	if er.HasData {
+		var runsTotal, runsClean int
+		e.db.QueryRow(ctx,
+			`SELECT COUNT(*),
+			        COALESCE(SUM(CASE WHEN leaked_steps = 0 THEN 1 ELSE 0 END), 0)
+			 FROM scenario_runs
+			 WHERE campaign_id = $1 AND status IN ('completed','partial')`, campaignID,
+		).Scan(&runsTotal, &runsClean)
+		er.RunCount = runsTotal
+		er.RunsClean = runsClean
+		er.RunsWithIssues = runsTotal - runsClean
+		report.EnvRestoration = &er
 	}
 
 	return report, nil
@@ -2540,6 +2581,88 @@ func variantTechExecLang(techID string) string {
 		}
 	}
 	return techID + " execution"
+}
+
+// ── Environment Restoration ───────────────────────────────────────────────────
+
+// EnvRestoration summarises how well the simulation cleaned up after itself.
+// CleanupRate uses only cleanup-capable steps so a run with few cleanable steps
+// cannot inflate the score with "no cleanup needed" steps.
+type EnvRestoration struct {
+	HasData          bool    `json:"hasData"`
+	StepsTotal       int     `json:"stepsTotal"`
+	StepsWithCleanup int     `json:"stepsWithCleanup"`
+	StepsCleaned     int     `json:"stepsCleaned"`
+	StepsLeaked      int     `json:"stepsLeaked"`
+	StepsNoCleanup   int     `json:"stepsNoCleanup"`
+	RevertedCount    int     `json:"revertedCount"`
+	CleanupRate      float64 `json:"cleanupRate"`   // stepsCleaned/(cleaned+leaked)*100
+	CoverageRate     float64 `json:"coverageRate"`  // stepsWithCleanup/stepsTotal*100
+	ImpactLevel      string  `json:"impactLevel"`   // "clean"|"minor"|"persistent"
+	ImpactLabel      string  `json:"impactLabel"`
+	StatusLabel      string  `json:"statusLabel"`   // "Successful"|"Attention Required"|"Failed"
+	ExecSummary      string  `json:"execSummary"`
+	// Campaign-level breakdown (zero for run reports)
+	RunCount       int `json:"runCount,omitempty"`
+	RunsClean      int `json:"runsClean,omitempty"`
+	RunsWithIssues int `json:"runsWithIssues,omitempty"`
+}
+
+// buildEnvRestoration computes Environment Restoration metrics from the
+// per-step cleanup verdicts already present in the TechniqueMatrix.
+func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoration {
+	e := EnvRestoration{
+		StepsTotal:    len(matrix),
+		RevertedCount: len(reverted),
+	}
+	for _, r := range matrix {
+		switch r.CleanupVerdict {
+		case "reverted":
+			e.StepsWithCleanup++
+			e.StepsCleaned++
+		case "partial", "leaked":
+			e.StepsWithCleanup++
+			e.StepsLeaked++
+		default:
+			e.StepsNoCleanup++
+		}
+	}
+
+	// Cleanup Success Rate — denominator excludes steps with no cleanup defined.
+	cleanTotal := e.StepsCleaned + e.StepsLeaked
+	if cleanTotal == 0 {
+		e.CleanupRate = 100.0
+	} else {
+		e.CleanupRate = float64(e.StepsCleaned) / float64(cleanTotal) * 100
+	}
+	if e.StepsTotal > 0 {
+		e.CoverageRate = float64(e.StepsWithCleanup) / float64(e.StepsTotal) * 100
+	}
+
+	switch {
+	case e.StepsLeaked == 0:
+		e.ImpactLevel = "clean"
+		e.ImpactLabel = "No Persistent Changes"
+		e.StatusLabel = "Successful"
+		if e.StepsCleaned > 0 {
+			e.ExecSummary = fmt.Sprintf("All %d simulation-induced changes were reverted. No persistent modifications remain on the endpoint.", e.StepsCleaned)
+		} else {
+			e.ExecSummary = "No environment changes required cleanup. Simulation left no persistent modifications."
+		}
+	case e.StepsLeaked <= 3:
+		e.ImpactLevel = "minor"
+		e.ImpactLabel = fmt.Sprintf("Minor Residual Changes (%d)", e.StepsLeaked)
+		e.StatusLabel = "Attention Required"
+		e.ExecSummary = fmt.Sprintf("%d simulation change(s) were not successfully reverted and may remain on the endpoint.", e.StepsLeaked)
+	default:
+		e.ImpactLevel = "persistent"
+		e.ImpactLabel = fmt.Sprintf("Persistent Changes Detected (%d)", e.StepsLeaked)
+		e.StatusLabel = "Failed"
+		e.ExecSummary = fmt.Sprintf("%d simulation changes were not reverted. Manual endpoint remediation is required.", e.StepsLeaked)
+	}
+
+	e.HasData = e.StepsTotal > 0
+	return e
 }
 
 // ── Campaign Variant Coverage ─────────────────────────────────────────────────

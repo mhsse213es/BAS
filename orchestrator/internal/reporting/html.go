@@ -1400,9 +1400,131 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 16. DETECTION VALIDATION ════════════════════════════════════════ -->
+<!-- ═══ 16. ENVIRONMENT RESTORATION ════════════════════════════════════════ -->
+{{if .envRestoration}}{{if .envRestoration.hasData}}
 <div class="page">
-<h1>16. Detection Validation</h1>
+<h1>16. Environment Restoration</h1>
+<p style="color:#6e7681;margin-bottom:14px">Documents whether all simulation-induced environment changes were successfully reverted. Answers the key enterprise question: <em>"Did the BAS restore everything it touched?"</em></p>
+
+{{/* ── Headline status card ── */}}
+<div style="border-radius:8px;padding:20px 24px;margin-bottom:20px;
+  {{if eq .envRestoration.impactLevel "clean"}}background:#f0fdf4;border:2px solid #86efac
+  {{else if eq .envRestoration.impactLevel "minor"}}background:#fffbeb;border:2px solid #fde68a
+  {{else}}background:#fef2f2;border:2px solid #fca5a5{{end}}">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
+    <div style="font-size:2.4rem;line-height:1;
+      {{if eq .envRestoration.impactLevel "clean"}}color:#15803d{{else if eq .envRestoration.impactLevel "minor"}}color:#d97706{{else}}color:#991b1b{{end}}">
+      {{if eq .envRestoration.impactLevel "clean"}}&#10003;{{else if eq .envRestoration.impactLevel "minor"}}&#9888;{{else}}&#10007;{{end}}
+    </div>
+    <div>
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+        {{if eq .envRestoration.impactLevel "clean"}}color:#15803d{{else if eq .envRestoration.impactLevel "minor"}}color:#92400e{{else}}color:#991b1b{{end}}">
+        Environment Restoration
+      </div>
+      <div style="font-size:1.4rem;font-weight:800;
+        {{if eq .envRestoration.impactLevel "clean"}}color:#15803d{{else if eq .envRestoration.impactLevel "minor"}}color:#92400e{{else}}color:#991b1b{{end}}">
+        {{.envRestoration.statusLabel}}
+      </div>
+      <div style="font-size:0.9rem;font-weight:600;margin-top:2px;
+        {{if eq .envRestoration.impactLevel "clean"}}color:#166534{{else if eq .envRestoration.impactLevel "minor"}}color:#78350f{{else}}color:#7f1d1d{{end}}">
+        {{.envRestoration.impactLabel}}
+      </div>
+    </div>
+  </div>
+  <div style="font-size:0.88rem;line-height:1.5;color:#374151">{{.envRestoration.execSummary}}</div>
+</div>
+
+{{/* ── KPI tiles ── */}}
+<div class="score-row">
+  <div class="scard" style="border-left:3px solid {{if gt .envRestoration.cleanupRate 99.9}}#0d9488{{else if gt .envRestoration.cleanupRate 79.9}}#d29922{{else}}#da3633{{end}}">
+    <div class="scard-label">Cleanup Success Rate</div>
+    <div class="scard-value" style="color:{{if gt .envRestoration.cleanupRate 99.9}}#0d9488{{else if gt .envRestoration.cleanupRate 79.9}}#d29922{{else}}#da3633{{end}}">{{printf "%.1f" .envRestoration.cleanupRate}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{printf "%.0f" .envRestoration.cleanupRate}}%;background:{{if gt .envRestoration.cleanupRate 99.9}}#0d9488{{else if gt .envRestoration.cleanupRate 79.9}}#d29922{{else}}#da3633{{end}}"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">stepsCleaned / (cleaned + leaked)</div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Coverage Rate</div>
+    <div class="scard-value" style="color:#2563eb">{{printf "%.0f" .envRestoration.coverageRate}}%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:{{printf "%.0f" .envRestoration.coverageRate}}%;background:#2563eb"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Steps with cleanup defined</div>
+  </div>
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Steps Cleaned</div>
+    <div class="scard-value" style="color:#0d9488">{{.envRestoration.stepsCleaned}}</div>
+    <div style="font-size:0.78rem;color:#6e7681">of {{.envRestoration.stepsWithCleanup}} cleanup-capable</div>
+  </div>
+  <div class="scard" style="border-left:3px solid {{if gt .envRestoration.stepsLeaked 0.0}}#da3633{{else}}#6e7681{{end}}">
+    <div class="scard-label">Steps Leaked</div>
+    <div class="scard-value" style="color:{{if gt .envRestoration.stepsLeaked 0.0}}#da3633{{else}}#6e7681{{end}}">{{.envRestoration.stepsLeaked}}</div>
+    <div style="font-size:0.78rem;color:#6e7681">cleanup failed or timed out</div>
+  </div>
+  {{if gt .envRestoration.revertedCount 0.0}}
+  <div class="scard">
+    <div class="scard-label">Agent-Confirmed Rollbacks</div>
+    <div class="scard-value" style="color:#0d9488">{{.envRestoration.revertedCount}}</div>
+    <div style="font-size:0.78rem;color:#6e7681">endpoint changes confirmed reverted</div>
+  </div>
+  {{end}}
+  {{if gt .envRestoration.stepsNoCleanup 0.0}}
+  <div class="scard">
+    <div class="scard-label">No Cleanup Defined</div>
+    <div class="scard-value" style="color:#6e7681">{{.envRestoration.stepsNoCleanup}}</div>
+    <div style="font-size:0.78rem;color:#6e7681">steps with no cleanup command</div>
+  </div>
+  {{end}}
+</div>
+
+{{/* ── Campaign run breakdown (only for campaign reports with multi-run data) ── */}}
+{{if gt .envRestoration.runCount 1.0}}
+<div style="background:#f7f9fc;border-radius:6px;padding:12px 16px;margin-top:16px;font-size:0.85rem">
+  <div style="font-weight:700;color:#1e293b;margin-bottom:6px">Campaign Run Breakdown</div>
+  <div style="display:flex;gap:24px;color:#374151">
+    <span>Total Runs: <strong>{{.envRestoration.runCount}}</strong></span>
+    <span style="color:#15803d">Perfect Cleanup: <strong>{{.envRestoration.runsClean}}</strong></span>
+    <span style="color:{{if gt .envRestoration.runsWithIssues 0.0}}#da3633{{else}}#6e7681{{end}}">Residual Changes: <strong>{{.envRestoration.runsWithIssues}}</strong></span>
+  </div>
+</div>
+{{end}}
+
+{{/* ── Leaked steps detail table ── */}}
+{{if gt .envRestoration.stepsLeaked 0.0}}
+<h2 style="margin-top:20px">Steps Requiring Manual Remediation</h2>
+<p style="color:#da3633;font-size:0.82rem;margin-bottom:10px">The following techniques did not successfully revert their cleanup commands. Review and remediate manually.</p>
+<table>
+  <thead><tr>
+    <th>Technique</th>
+    <th>Tactic</th>
+    <th>Verdict</th>
+    <th>Cleanup Status</th>
+  </tr></thead>
+  <tbody>
+  {{range .techniqueMatrix}}{{if or (eq .cleanupVerdict "partial") (eq .cleanupVerdict "leaked")}}
+  <tr>
+    <td style="font-weight:600">{{.techniqueId}}{{if .techniqueName}}<br><span style="font-weight:400;font-size:0.78rem;color:#6e7681">{{.techniqueName}}</span>{{end}}</td>
+    <td style="font-size:0.82rem;color:#6e7681">{{if .tactic}}{{humanize .tactic}}{{end}}</td>
+    <td><span style="font-size:0.78rem;padding:2px 8px;border-radius:4px;font-weight:700;background:{{verdictBg .verdict}};color:{{verdictColor .verdict}}">{{.verdict}}</span></td>
+    <td style="font-weight:700;color:{{cleanupVerdictColor .cleanupVerdict}}">{{cleanupVerdictLabel .cleanupVerdict}}</td>
+  </tr>
+  {{end}}{{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{/* ── Agent-confirmed rollback list ── */}}
+{{if .reverted}}
+<h2 style="margin-top:20px">Agent-Confirmed Rollbacks</h2>
+<p style="color:#6e7681;font-size:0.82rem;margin-bottom:8px">Endpoint changes confirmed reverted by the agent post-run.</p>
+<ul style="padding-left:20px;color:#374151;font-size:0.82rem;line-height:1.8">{{range .reverted}}<li>{{.}}</li>{{end}}</ul>
+{{end}}
+
+<div class="footer">
+  <span>{{.agent.hostname}} &#8212; Environment Restoration</span>
+</div>
+</div>
+{{end}}{{end}}
+<!-- ═══ 17. DETECTION VALIDATION ════════════════════════════════════════ -->
+<div class="page">
+<h1>17. Detection Validation</h1>
 <p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
 
 <h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
@@ -1498,9 +1620,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 17. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
+<!-- ═══ 18. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>17. Coverage Analytics</h1>
+<h1>18. Coverage Analytics</h1>
 <p style="color:#6e7681;margin-bottom:14px">
   3-bucket breakdown of every technique executed in this assessment.
   <strong style="color:#0d9488">Prevented</strong> — a control blocked execution (PASS/BLOCKED).
@@ -1629,9 +1751,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 18. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
+<!-- ═══ 19. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
 <div class="page">
-<h1>18. Technical Appendix — ATT&amp;CK Glossary</h1>
+<h1>19. Technical Appendix — ATT&amp;CK Glossary</h1>
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
 {{range .glossary}}
