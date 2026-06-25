@@ -544,6 +544,13 @@ type ReadinessScore struct {
 	CoveragePct         float64 `json:"coveragePct"`         // tested/totalTechs × 100
 	ReadinessBand       string  `json:"readinessBand"`       // "High"/"Medium"/"Low"
 	ConfidenceBand      string  `json:"confidenceBand"`      // "High"/"Medium"/"Low"
+	// Trend fields — populated by Engine.enrichReadinessTrends when history exists.
+	HasTrend               bool    `json:"hasTrend"`
+	TrendDirection         string  `json:"trendDirection"`          // "up"/"down"/"stable"
+	PreventionDelta        float64 `json:"preventionDelta"`         // signed delta vs previous run
+	DetectionDelta         float64 `json:"detectionDelta"`
+	PrevPreventionReadiness float64 `json:"prevPreventionReadiness"` // previous run value
+	PrevDetectionReadiness  float64 `json:"prevDetectionReadiness"`
 }
 
 // KEVExposure summarises which tested techniques have active CISA KEV CVEs and
@@ -575,6 +582,110 @@ type KEVTechSummary struct {
 // Exported so the API handler can call it without building a full report.
 func BuildReadinessScores(matrix []TechniqueRow) []ReadinessScore {
 	return buildReadinessScores(matrix)
+}
+
+// isRansomwareGroup returns true when an ATT&CK group name matches a known
+// ransomware threat-actor keyword. Case-insensitive substring match so it
+// works across ATT&CK STIX bundle versions without tight coupling to IDs.
+func isRansomwareGroup(name string) bool {
+	lower := strings.ToLower(name)
+	for _, kw := range []string{
+		"lockbit", "clop", "cl0p", "black basta", "conti", "wizard spider",
+		"revil", "gold southfield", "alphv", "blackcat", "scattered spider",
+		"darkside", "carbon spider", "hive", "royal", "akira", "vice society",
+		"play ransomware", "fin11", "ta505", "lazarus",
+	} {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildRansomwareReadiness filters the full readiness scores to known ransomware
+// threat actors, sorted worst prevention readiness first. Returns nil when no
+// ransomware groups overlap the run with ≥3 tested techniques.
+func buildRansomwareReadiness(matrix []TechniqueRow) []ReadinessScore {
+	all := buildReadinessScores(matrix)
+	var out []ReadinessScore
+	for _, s := range all {
+		if isRansomwareGroup(s.GroupName) {
+			out = append(out, s)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].PreventionReadiness != out[j].PreventionReadiness {
+			return out[i].PreventionReadiness < out[j].PreventionReadiness
+		}
+		return out[i].TestedTechs > out[j].TestedTechs
+	})
+	return out
+}
+
+// TechniquePriority scores one tested technique by combining KEV status, EPSS
+// exploitation probability, and ATT&CK group attribution into a Priority Tier.
+// Used by the EPSS Priority Index report section and /api/ti/priority endpoint.
+type TechniquePriority struct {
+	TechniqueID      string  `json:"techniqueId"`
+	Name             string  `json:"name"`
+	Tactic           string  `json:"tactic"`
+	Verdict          string  `json:"verdict"`          // fail/pass/blocked
+	KEV              bool    `json:"kev"`
+	KEVCount         int     `json:"kevCount"`
+	EPSSScore        float64 `json:"epssScore"`        // highest EPSS prob (0–1) among linked CVEs
+	EPSSPercentile   float64 `json:"epssPercentile"`   // percentile × 100 → 0–100 range
+	ThreatActorCount int     `json:"threatActorCount"` // ATT&CK groups that use this technique
+	PriorityScore    int     `json:"priorityScore"`    // 0–100 composite
+	PriorityTier     string  `json:"priorityTier"`     // Critical / High / Medium / Low
+}
+
+// computePriorityScore derives a 0–100 composite from threat signals.
+// KEV: +40; EPSS percentile ≥90: +30, ≥70: +20, ≥50: +10, ≥30: +5;
+// ThreatActors ≥5: +20, ≥2: +10, ≥1: +5; Verdict==fail: +10 bonus.
+func computePriorityScore(kev bool, epssPercentile float64, actors int, verdict string) int {
+	s := 0
+	if kev {
+		s += 40
+	}
+	switch {
+	case epssPercentile >= 90:
+		s += 30
+	case epssPercentile >= 70:
+		s += 20
+	case epssPercentile >= 50:
+		s += 10
+	case epssPercentile >= 30:
+		s += 5
+	}
+	switch {
+	case actors >= 5:
+		s += 20
+	case actors >= 2:
+		s += 10
+	case actors >= 1:
+		s += 5
+	}
+	if verdict == "fail" {
+		s += 10
+	}
+	if s > 100 {
+		s = 100
+	}
+	return s
+}
+
+// priorityTierFor converts a 0–100 score to a display tier label.
+func priorityTierFor(score int) string {
+	switch {
+	case score >= 70:
+		return "Critical"
+	case score >= 40:
+		return "High"
+	case score >= 20:
+		return "Medium"
+	default:
+		return "Low"
+	}
 }
 
 func buildReadinessScores(matrix []TechniqueRow) []ReadinessScore {

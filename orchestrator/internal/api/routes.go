@@ -127,8 +127,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Coverage Analytics — aggregate prevention/detection breakdown across runs.
 		r.Get("/api/coverage/analytics", h.GetCoverageAnalytics)
 
-		// Threat Intelligence — readiness, KEV pack suggestions, and EPSS priority scoring.
+		// Threat Intelligence — readiness, KEV pack suggestions, EPSS priority scoring, and trends.
 		r.Get("/api/ti/readiness", h.GetTIReadiness)
+		r.Get("/api/ti/readiness/history", h.GetTIReadinessHistory)
 		r.Get("/api/ti/suggest-pack", h.GetSuggestPack)
 		r.Get("/api/ti/priority", h.GetTIPriority)
 

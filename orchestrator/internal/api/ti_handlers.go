@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -399,5 +401,136 @@ func (h *Handler) GetTIPriority(w http.ResponseWriter, r *http.Request) {
 			"medium":   medium,
 			"low":      low,
 		},
+	})
+}
+
+// ── Readiness History ─────────────────────────────────────────────────────────
+
+// historyEntry is one row from threat_readiness_history.
+type historyEntry struct {
+	RunID      string  `json:"runId"`
+	ActorName  string  `json:"actorName"`
+	Prevention float64 `json:"prevention"`
+	Detection  float64 `json:"detection"`
+	Tested     int     `json:"tested"`
+	Total      int     `json:"total"`
+	Confidence string  `json:"confidence"`
+	RecordedAt string  `json:"recordedAt"`
+}
+
+// actorTrend aggregates the measurement series for one threat actor and
+// computes the net change from the oldest to most recent entry.
+type actorTrend struct {
+	ActorName          string         `json:"actorName"`
+	Latest             float64        `json:"latestPrevention"`
+	LatestDetection    float64        `json:"latestDetection"`
+	Delta              float64        `json:"preventionDelta"`   // latest - oldest
+	DetectionDelta     float64        `json:"detectionDelta"`
+	Direction          string         `json:"direction"`          // "up"/"down"/"stable"
+	DataPoints         int            `json:"dataPoints"`
+	History            []historyEntry `json:"history"`
+}
+
+// GET /api/ti/readiness/history?agentId=&actor=&limit=
+// Returns per-actor readiness history and trend summary for an agent.
+// actor= filters to a single group; omit for all groups.
+// limit= caps rows per actor (default 10, max 100).
+func (h *Handler) GetTIReadinessHistory(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agentId")
+	if agentID == "" {
+		http.Error(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	actor := r.URL.Query().Get("actor")
+	limit := 10
+	if ls := r.URL.Query().Get("limit"); ls != "" {
+		if n, err := strconv.Atoi(ls); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+
+	var query string
+	var args []interface{}
+	if actor != "" {
+		query = `
+			SELECT run_id, actor_name, prevention, detection, tested, total, confidence, recorded_at
+			FROM threat_readiness_history
+			WHERE agent_id = $1 AND actor_name = $2
+			ORDER BY recorded_at DESC
+			LIMIT $3`
+		args = []interface{}{agentID, actor, limit}
+	} else {
+		query = `
+			SELECT run_id, actor_name, prevention, detection, tested, total, confidence, recorded_at
+			FROM (
+				SELECT *, ROW_NUMBER() OVER (PARTITION BY actor_name ORDER BY recorded_at DESC) AS rn
+				FROM threat_readiness_history
+				WHERE agent_id = $1
+			) sub
+			WHERE rn <= $2
+			ORDER BY actor_name, recorded_at DESC`
+		args = []interface{}{agentID, limit}
+	}
+	rows, err := h.db.Query(r.Context(), query, args...)
+	if err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	actorMap := map[string]*actorTrend{}
+	actorOrder := []string{}
+	for rows.Next() {
+		var e historyEntry
+		var ts time.Time
+		if err := rows.Scan(&e.RunID, &e.ActorName, &e.Prevention, &e.Detection,
+			&e.Tested, &e.Total, &e.Confidence, &ts); err != nil {
+			continue
+		}
+		e.RecordedAt = ts.UTC().Format(time.RFC3339)
+		at, ok := actorMap[e.ActorName]
+		if !ok {
+			at = &actorTrend{ActorName: e.ActorName}
+			actorMap[e.ActorName] = at
+			actorOrder = append(actorOrder, e.ActorName)
+		}
+		at.History = append(at.History, e)
+		at.DataPoints++
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+
+	trends := make([]actorTrend, 0, len(actorOrder))
+	for _, name := range actorOrder {
+		at := actorMap[name]
+		if len(at.History) == 0 {
+			continue
+		}
+		// History is DESC (newest first).
+		at.Latest = at.History[0].Prevention
+		at.LatestDetection = at.History[0].Detection
+		if len(at.History) > 1 {
+			oldest := at.History[len(at.History)-1]
+			at.Delta = math.Round((at.Latest-oldest.Prevention)*10) / 10
+			at.DetectionDelta = math.Round((at.LatestDetection-oldest.Detection)*10) / 10
+		}
+		switch {
+		case at.Delta > 1:
+			at.Direction = "up"
+		case at.Delta < -1:
+			at.Direction = "down"
+		default:
+			at.Direction = "stable"
+		}
+		trends = append(trends, *at)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"agentId": agentID,
+		"trends":  trends,
+		"total":   len(trends),
 	})
 }

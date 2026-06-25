@@ -5,15 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/attackpath"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/reporting/attackdata"
 )
 
 // Engine aggregates data from the DB into structured reports.
@@ -58,6 +61,13 @@ type FullReport struct {
 	// KEVExposure summarises which tested techniques have active CISA KEV CVEs and
 	// how the controls performed against them. Nil when the cves table is empty.
 	KEVExposure *KEVExposure `json:"kevExposure,omitempty"`
+	// RansomwareReadiness is a subset of ReadinessScores filtered to known ransomware
+	// threat actors, sorted worst prevention readiness first.
+	RansomwareReadiness []ReadinessScore `json:"ransomwareReadiness,omitempty"`
+	// PriorityScores ranks each tested technique by combined KEV+EPSS+threat-actor
+	// signal into an actionable tier. Techniques with no signal and verdict!=fail
+	// are excluded. Nil when nothing is testable.
+	PriorityScores []TechniquePriority `json:"priorityScores,omitempty"`
 	// DetectionTechniques is the per-technique purple-team verdict from the agent's
 	// post-run alert sweep (prevented|detected|undetected + confidence). Empty until
 	// the agent submits detections for the run. Sourced from scenario_runs.detection_summary.
@@ -1208,7 +1218,11 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 		report.EnvRestoration = &er
 	}
 	report.ReadinessScores = buildReadinessScores(report.TechniqueMatrix)
+	report.RansomwareReadiness = buildRansomwareReadiness(report.TechniqueMatrix)
+	e.enrichReadinessTrends(ctx, report.Agent.AgentID, report.ReadinessScores, "")
+	e.enrichReadinessTrends(ctx, report.Agent.AgentID, report.RansomwareReadiness, "")
 	e.populateKEVExposure(ctx, report)
+	e.populatePriorityScores(ctx, report)
 
 	return report, nil
 }
@@ -1458,7 +1472,13 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 		report.EnvRestoration = &er
 	}
 	report.ReadinessScores = buildReadinessScores(report.TechniqueMatrix)
+	report.RansomwareReadiness = buildRansomwareReadiness(report.TechniqueMatrix)
+	// Enrich with trends first (compares to previous runs), then persist this run.
+	e.enrichReadinessTrends(ctx, agentID, report.ReadinessScores, runID)
+	e.enrichReadinessTrends(ctx, agentID, report.RansomwareReadiness, runID)
+	e.persistReadinessHistory(ctx, runID, agentID, report.ReadinessScores)
 	e.populateKEVExposure(ctx, report)
+	e.populatePriorityScores(ctx, report)
 
 	return report, nil
 }
@@ -1647,7 +1667,15 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 		report.EnvRestoration = &er
 	}
 	report.ReadinessScores = buildReadinessScores(report.TechniqueMatrix)
+	report.RansomwareReadiness = buildRansomwareReadiness(report.TechniqueMatrix)
+	// For campaigns, use the first agent's history for trend context (best-effort).
+	for aid := range agentSet {
+		e.enrichReadinessTrends(ctx, aid, report.ReadinessScores, "")
+		e.enrichReadinessTrends(ctx, aid, report.RansomwareReadiness, "")
+		break
+	}
 	e.populateKEVExposure(ctx, report)
+	e.populatePriorityScores(ctx, report)
 
 	return report, nil
 }
@@ -2785,6 +2813,207 @@ func (e *Engine) populateKEVExposure(ctx context.Context, report *FullReport) {
 			report.TopFindings[i].KEVCount = kr.count
 		}
 	}
+}
+
+// ── EPSS Priority Scores ──────────────────────────────────────────────────────
+
+// populatePriorityScores computes a composite priority for each tested technique
+// using KEV flag (from DB), EPSS score (from cve_epss via technique_cves), and
+// ATT&CK threat-actor count (from embedded STIX). Techniques with no signal and
+// verdict != fail are omitted. Silent no-op when the cve_epss table is empty.
+func (e *Engine) populatePriorityScores(ctx context.Context, report *FullReport) {
+	if len(report.TechniqueMatrix) == 0 {
+		return
+	}
+
+	ids := make([]string, 0, len(report.TechniqueMatrix))
+	seen := map[string]bool{}
+	for _, r := range report.TechniqueMatrix {
+		tid := strings.ToUpper(r.TechniqueID)
+		if tid != "" && !seen[tid] {
+			ids = append(ids, r.TechniqueID) // preserve original case for DB query
+			seen[tid] = true
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+
+	// KEV count per technique
+	kevMap := map[string]int{}
+	if rows, err := e.db.Query(ctx, `
+		SELECT tc.technique_id, COUNT(*) AS cnt
+		FROM technique_cves tc
+		JOIN cves c ON c.cve_id = tc.cve_id AND c.source = 'cisa-kev'
+		WHERE tc.technique_id = ANY($1)
+		GROUP BY tc.technique_id`, ids); err == nil {
+		for rows.Next() {
+			var tid string
+			var cnt int
+			if rows.Scan(&tid, &cnt) == nil {
+				kevMap[strings.ToUpper(tid)] = cnt
+			}
+		}
+		rows.Close()
+	}
+
+	// EPSS max score + percentile per technique (via technique_cves → cve_epss)
+	type epssData struct{ score, pct float64 }
+	epssMap := map[string]epssData{}
+	if rows, err := e.db.Query(ctx, `
+		SELECT tc.technique_id, MAX(ce.epss_score), MAX(ce.percentile)
+		FROM technique_cves tc
+		JOIN cve_epss ce ON ce.cve_id = tc.cve_id
+		WHERE tc.technique_id = ANY($1)
+		GROUP BY tc.technique_id`, ids); err == nil {
+		for rows.Next() {
+			var tid string
+			var sc, pct float64
+			if rows.Scan(&tid, &sc, &pct) == nil {
+				epssMap[strings.ToUpper(tid)] = epssData{sc, pct * 100}
+			}
+		}
+		rows.Close()
+	}
+
+	// Threat actor count per technique from embedded STIX (already loaded)
+	actorIdx := attackdata.GroupTechniqueIndex()
+	actorCount := make(map[string]int, len(ids))
+	for _, techIDs := range actorIdx {
+		for _, tid := range techIDs {
+			actorCount[strings.ToUpper(tid)]++
+		}
+	}
+
+	// First verdict per technique (matrix is newest-run-first ordered)
+	verdicts := map[string]string{}
+	nameOf := map[string]string{}
+	tacticOf := map[string]string{}
+	for _, row := range report.TechniqueMatrix {
+		tid := strings.ToUpper(row.TechniqueID)
+		if _, done := verdicts[tid]; !done {
+			verdicts[tid] = row.ExecVerdict
+			nameOf[tid] = row.TechniqueName
+			tacticOf[tid] = row.Tactic
+		}
+	}
+
+	var priorities []TechniquePriority
+	for tid, verdict := range verdicts {
+		if verdict == "error" || verdict == "skipped" {
+			continue
+		}
+		kevCnt := kevMap[tid]
+		ep := epssMap[tid]
+		actors := actorCount[tid]
+		score := computePriorityScore(kevCnt > 0, ep.pct, actors, verdict)
+		if score == 0 && verdict != "fail" {
+			continue // passed with no signal — no actionable output
+		}
+		priorities = append(priorities, TechniquePriority{
+			TechniqueID:      tid,
+			Name:             nameOf[tid],
+			Tactic:           tacticOf[tid],
+			Verdict:          verdict,
+			KEV:              kevCnt > 0,
+			KEVCount:         kevCnt,
+			EPSSScore:        ep.score,
+			EPSSPercentile:   ep.pct,
+			ThreatActorCount: actors,
+			PriorityScore:    score,
+			PriorityTier:     priorityTierFor(score),
+		})
+	}
+	if len(priorities) == 0 {
+		return
+	}
+
+	sort.Slice(priorities, func(i, j int) bool {
+		if priorities[i].PriorityScore != priorities[j].PriorityScore {
+			return priorities[i].PriorityScore > priorities[j].PriorityScore
+		}
+		if priorities[i].Verdict != priorities[j].Verdict {
+			return priorities[i].Verdict == "fail"
+		}
+		return priorities[i].TechniqueID < priorities[j].TechniqueID
+	})
+	report.PriorityScores = priorities
+}
+
+// ── Historical Readiness Trends ───────────────────────────────────────────────
+
+// enrichReadinessTrends looks up the most recent prior measurement for each
+// actor in the threat_readiness_history table and fills HasTrend, TrendDirection,
+// PreventionDelta, and DetectionDelta in place. excludeRunID is the current run
+// being reported (excluded so we compare to the PREVIOUS run, not ourselves).
+// Silent no-op on any DB error so a missing table never breaks report generation.
+func (e *Engine) enrichReadinessTrends(ctx context.Context, agentID string, scores []ReadinessScore, excludeRunID string) {
+	if agentID == "" || len(scores) == 0 {
+		return
+	}
+	for i, s := range scores {
+		var prevPrev, prevDet float64
+		var err error
+		if excludeRunID != "" {
+			err = e.db.QueryRow(ctx, `
+				SELECT prevention, detection
+				FROM threat_readiness_history
+				WHERE agent_id = $1 AND actor_name = $2 AND run_id != $3
+				ORDER BY recorded_at DESC
+				LIMIT 1`, agentID, s.GroupName, excludeRunID,
+			).Scan(&prevPrev, &prevDet)
+		} else {
+			err = e.db.QueryRow(ctx, `
+				SELECT prevention, detection
+				FROM threat_readiness_history
+				WHERE agent_id = $1 AND actor_name = $2
+				ORDER BY recorded_at DESC
+				LIMIT 1`, agentID, s.GroupName,
+			).Scan(&prevPrev, &prevDet)
+		}
+		if err != nil {
+			continue // no history yet
+		}
+		delta := s.PreventionReadiness - prevPrev
+		detDelta := s.DetectionReadiness - prevDet
+		dir := "stable"
+		if delta > 1 {
+			dir = "up"
+		} else if delta < -1 {
+			dir = "down"
+		}
+		scores[i].HasTrend = true
+		scores[i].TrendDirection = dir
+		scores[i].PreventionDelta = math.Round(delta*10) / 10
+		scores[i].DetectionDelta = math.Round(detDelta*10) / 10
+		scores[i].PrevPreventionReadiness = prevPrev
+		scores[i].PrevDetectionReadiness = prevDet
+	}
+}
+
+// persistReadinessHistory upserts the current readiness measurements into
+// threat_readiness_history. ON CONFLICT DO NOTHING ensures re-generating a
+// report for the same run never overwrites the original measurement.
+func (e *Engine) persistReadinessHistory(ctx context.Context, runID, agentID string, scores []ReadinessScore) {
+	if runID == "" || agentID == "" || len(scores) == 0 {
+		return
+	}
+	batch := &pgx.Batch{}
+	for _, s := range scores {
+		batch.Queue(`
+			INSERT INTO threat_readiness_history
+				(run_id, agent_id, actor_name, prevention, detection, tested, total, confidence)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			ON CONFLICT (run_id, actor_name) DO NOTHING`,
+			runID, agentID, s.GroupName,
+			s.PreventionReadiness, s.DetectionReadiness,
+			s.TestedTechs, s.TotalTechs, s.ConfidenceBand)
+	}
+	br := e.db.SendBatch(ctx, batch)
+	for range scores {
+		br.Exec() //nolint:errcheck — history write is best-effort
+	}
+	br.Close()
 }
 
 // ── Campaign Variant Coverage ─────────────────────────────────────────────────

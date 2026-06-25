@@ -1298,6 +1298,27 @@ body.theme-slate {
           <div class="kpi-row" id="dash-ti-tiles"></div>
         </div>
 
+        <!-- Readiness Trends — hidden until history data exists -->
+        <div id="dash-trends-section" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
+            <span style="font-size:0.72rem;font-weight:600;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase">Readiness Trends</span>
+            <span id="dash-trends-kpis" style="font-size:0.75rem;color:var(--muted)"></span>
+          </div>
+          <div style="background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border)">
+                  <th style="padding:0.45rem 0.75rem;text-align:left;font-size:0.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">Threat Actor</th>
+                  <th style="padding:0.45rem 0.75rem;text-align:right;font-size:0.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">Prevention</th>
+                  <th style="padding:0.45rem 0.75rem;text-align:right;font-size:0.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">Trend</th>
+                  <th style="padding:0.45rem 0.75rem;text-align:right;font-size:0.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">Runs</th>
+                </tr>
+              </thead>
+              <tbody id="dash-trends-table" style="color:var(--text)"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="dash-grid" style="grid-template-columns:1.3fr 1fr;margin-bottom:1.25rem">
           <div class="dash-panel">
             <div class="dash-panel-hdr">Posture Score</div>
@@ -4134,7 +4155,7 @@ function _selectCmpScenario(id) {
   }).join('');
 }
 
-// loadKEVWidget fetches the KEV pack data and populates the dashboard TI section.
+// loadKEVWidget fetches the KEV pack data and populates the dashboard TI KPI tiles.
 var _kevWidgetLoaded = false;
 function loadKEVWidget() {
   if (_kevWidgetLoaded) return;
@@ -4147,11 +4168,54 @@ function loadKEVWidget() {
       '<div class="kpi-card stat-tile" title="Techniques with CISA KEV CVEs — create a pack to validate them">' +
       '<div class="stat-top"><div><div class="kpi-label">KEV-Linked Techniques</div><div class="kpi-value" style="color:var(--danger)">' + pack.techniqueCount + '</div></div>' +
       '<div class="stat-icon" style="background:rgba(218,54,51,0.10);color:var(--danger)">&#9760;</div></div>' +
-      '<div class="kpi-sub">' + pack.totalKevCves + ' CVEs · ' + pack.ransomwareCount + ' ransomware-linked</div></div>' +
+      '<div class="kpi-sub">' + (pack.totalKevCves||0) + ' CVEs · ' + (pack.ransomwareCount||0) + ' ransomware-linked</div></div>' +
       '<div class="kpi-card stat-tile" title="CISA Known Exploited Vulnerabilities under active real-world exploitation">' +
-      '<div class="stat-top"><div><div class="kpi-label">Total KEV CVEs</div><div class="kpi-value" style="color:var(--warning)">' + pack.totalKevCves + '</div></div>' +
+      '<div class="stat-top"><div><div class="kpi-label">Total KEV CVEs</div><div class="kpi-value" style="color:var(--warning)">' + (pack.totalKevCves||0) + '</div></div>' +
       '<div class="stat-icon" style="background:rgba(210,153,34,0.10);color:var(--warning)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l1.5 3.5H13l-2.75 2 1 3.5L8 9 4.75 11l1-3.5L3 5.5h3.5z"/></svg></div></div>' +
       '<div class="kpi-sub">from CISA KEV catalog</div></div>';
+  }).catch(function() {});
+}
+
+// loadReadinessTrends fetches and renders the per-actor readiness history table
+// for the most recently active agent. Called from loadDashboard.
+var _trendsLoaded = false;
+function loadReadinessTrends() {
+  if (_trendsLoaded) return;
+  var agentId = agents && agents.length > 0 ? agents[0].agentId : null;
+  if (!agentId) return;
+  apicall('/api/ti/readiness/history?agentId=' + encodeURIComponent(agentId) + '&limit=5').then(function(data) {
+    if (!data || !data.trends || data.trends.length === 0) return;
+    _trendsLoaded = true;
+    var sec = document.getElementById('dash-trends-section');
+    if (sec) sec.style.display = '';
+    var el = document.getElementById('dash-trends-table');
+    if (!el) return;
+    var improved = data.trends.filter(function(t) { return t.direction === 'up'; }).length;
+    var regressed = data.trends.filter(function(t) { return t.direction === 'down'; }).length;
+    // Summary KPIs
+    var summary = document.getElementById('dash-trends-kpis');
+    if (summary) {
+      summary.innerHTML =
+        '<span style="margin-right:1rem"><strong style="color:var(--success)">' + improved + '</strong> improved</span>' +
+        '<span style="margin-right:1rem"><strong style="color:var(--danger)">' + regressed + '</strong> regressed</span>' +
+        '<span><strong>' + data.total + '</strong> actors tracked</span>';
+    }
+    // Trend table — show top 10 by most recent prevention, sorted worst-first
+    var rows = data.trends.slice().sort(function(a,b) { return a.latestPrevention - b.latestPrevention; }).slice(0, 10);
+    el.innerHTML = rows.map(function(t) {
+      var arrow = t.direction === 'up'
+        ? '<span style="color:var(--success);font-weight:700">&#8679; +' + t.preventionDelta.toFixed(1) + '%</span>'
+        : t.direction === 'down'
+        ? '<span style="color:var(--danger);font-weight:700">&#8681; ' + t.preventionDelta.toFixed(1) + '%</span>'
+        : '<span style="color:var(--muted)">&#8213;</span>';
+      var prevColor = t.latestPrevention >= 80 ? 'var(--success)' : t.latestPrevention >= 50 ? 'var(--warning)' : 'var(--danger)';
+      return '<tr>' +
+        '<td style="font-size:0.8rem;font-weight:600">' + x(t.actorName) + '</td>' +
+        '<td style="text-align:right;font-weight:700;color:' + prevColor + '">' + t.latestPrevention.toFixed(0) + '%</td>' +
+        '<td style="text-align:right">' + arrow + '</td>' +
+        '<td style="text-align:right;font-size:0.75rem;color:var(--muted)">' + t.dataPoints + ' runs</td>' +
+        '</tr>';
+    }).join('');
   }).catch(function() {});
 }
 function cmpAgentOS(a) { var o = (a.osVersion || '').toLowerCase(); return o.indexOf('windows') >= 0 ? 'windows' : (o.indexOf('darwin') >= 0 || o.indexOf('macos') >= 0) ? 'darwin' : 'linux'; }
@@ -8404,6 +8468,7 @@ function loadDashboard() {
     loadComplianceScores();
     loadDashboardITSM();
     loadKEVWidget();
+    loadReadinessTrends();
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
 }

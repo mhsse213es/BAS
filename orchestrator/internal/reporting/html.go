@@ -1028,6 +1028,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <th style="text-align:right">Coverage</th>
     <th style="text-align:right">Prevention Readiness</th>
     <th style="text-align:right">Detection Readiness</th>
+    <th style="text-align:right">Trend</th>
     <th>Readiness</th>
     <th>Confidence</th>
   </tr></thead>
@@ -1044,6 +1045,21 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td style="text-align:right;font-weight:700;color:{{if gt .detectionReadiness 79.9}}#0d9488{{else if gt .detectionReadiness 49.9}}#d29922{{else}}#da3633{{end}}">
       {{printf "%.1f" .detectionReadiness}}%
       <div style="font-size:0.72rem;font-weight:400;color:#6e7681">+{{.detectedTechs}} detected</div>
+    </td>
+    <td style="text-align:right">
+      {{if .hasTrend}}
+        {{if eq .trendDirection "up"}}
+          <span style="font-size:0.8rem;font-weight:700;color:#0d9488">&#8679; +{{printf "%.1f" .preventionDelta}}%</span>
+          <div style="font-size:0.65rem;color:#6e7681">{{printf "%.1f" .prevPreventionReadiness}}% &#8594; now</div>
+        {{else if eq .trendDirection "down"}}
+          <span style="font-size:0.8rem;font-weight:700;color:#da3633">&#8681; {{printf "%.1f" .preventionDelta}}%</span>
+          <div style="font-size:0.65rem;color:#6e7681">{{printf "%.1f" .prevPreventionReadiness}}% &#8594; now</div>
+        {{else}}
+          <span style="font-size:0.8rem;color:#6e7681">&#8213; stable</span>
+        {{end}}
+      {{else}}
+        <span style="font-size:0.75rem;color:#6e7681">&#8212;</span>
+      {{end}}
     </td>
     <td>
       <span style="font-size:0.78rem;font-weight:700;border-radius:4px;padding:2px 8px;
@@ -1084,6 +1100,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <th style="text-align:right">Tested</th>
     <th style="text-align:right">Prevention</th>
     <th style="text-align:right">Detection</th>
+    <th style="text-align:right">Trend</th>
     <th>Posture</th>
     <th>Confidence</th>
   </tr></thead>
@@ -1104,6 +1121,19 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td style="text-align:right">
       <strong style="font-size:1.05rem;color:{{if gt .detectionReadiness 79.9}}#2f81f7{{else if gt .detectionReadiness 49.9}}#d29922{{else}}#da3633{{end}}">{{printf "%.0f" .detectionReadiness}}%</strong>
       <div style="font-size:0.7rem;color:#6e7681">+{{.detectedTechs}} detected</div>
+    </td>
+    <td style="text-align:right">
+      {{if .hasTrend}}
+        {{if eq .trendDirection "up"}}
+          <span style="font-size:0.8rem;font-weight:700;color:#0d9488">&#8679; +{{printf "%.1f" .preventionDelta}}%</span>
+        {{else if eq .trendDirection "down"}}
+          <span style="font-size:0.8rem;font-weight:700;color:#da3633">&#8681; {{printf "%.1f" .preventionDelta}}%</span>
+        {{else}}
+          <span style="font-size:0.8rem;color:#6e7681">&#8213;</span>
+        {{end}}
+      {{else}}
+        <span style="color:#e5e7eb">—</span>
+      {{end}}
     </td>
     <td>
       <span style="font-size:0.78rem;font-weight:700;border-radius:4px;padding:2px 8px;

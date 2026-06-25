@@ -104,11 +104,39 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE cves ADD COLUMN IF NOT EXISTS date_added        date`,
 		`ALTER TABLE cves ADD COLUMN IF NOT EXISTS known_ransomware  boolean NOT NULL DEFAULT false`,
 		`ALTER TABLE cves ADD COLUMN IF NOT EXISTS source            text NOT NULL DEFAULT ''`,
+		// FIRST EPSS scores — seeded from epss_scores-current.csv or .csv.gz at /content/epss-scores.csv.
+		// Only CVEs that appear in technique_cves are inserted (selective, not the full 220k-row catalog).
+		`CREATE TABLE IF NOT EXISTS cve_epss (
+			cve_id      text        PRIMARY KEY,
+			epss_score  real        NOT NULL DEFAULT 0,  -- raw probability 0.0–1.0
+			percentile  real        NOT NULL DEFAULT 0,  -- raw decimal 0.0–1.0 (× 100 for display)
+			score_date  date,
+			updated_at  timestamptz NOT NULL DEFAULT NOW()
+		)`,
 		`CREATE TABLE IF NOT EXISTS technique_cves (
 			technique_id text NOT NULL REFERENCES techniques(technique_id) ON DELETE CASCADE,
 			cve_id       text NOT NULL REFERENCES cves(cve_id) ON DELETE CASCADE,
 			PRIMARY KEY (technique_id, cve_id)
 		)`,
+		// Threat readiness history — one row per (run, actor) pair, written by the
+		// reporting engine when BuildFromRun generates a report. Powers trend analysis
+		// (are we improving against APT29 / LockBit over time?).
+		`CREATE TABLE IF NOT EXISTS threat_readiness_history (
+			id          bigserial   PRIMARY KEY,
+			run_id      text        NOT NULL,
+			agent_id    text        NOT NULL,
+			actor_name  text        NOT NULL,
+			prevention  real        NOT NULL DEFAULT 0,
+			detection   real        NOT NULL DEFAULT 0,
+			tested      int         NOT NULL DEFAULT 0,
+			total       int         NOT NULL DEFAULT 0,
+			confidence  text        NOT NULL DEFAULT '',
+			recorded_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS trh_run_actor
+			ON threat_readiness_history(run_id, actor_name)`,
+		`CREATE INDEX IF NOT EXISTS trh_agent_actor_time
+			ON threat_readiness_history(agent_id, actor_name, recorded_at DESC)`,
 		`CREATE TABLE IF NOT EXISTS owasp_risks (
 			risk_id       text        PRIMARY KEY,            -- e.g. A03:2021
 			version       text        NOT NULL DEFAULT '',    -- 2013 | 2017 | 2021 | future
