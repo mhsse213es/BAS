@@ -39,7 +39,9 @@ type FullReport struct {
 	Reverted            []string         `json:"reverted"` // endpoint changes rolled back post-run (cleanup evidence)
 	Detection           DetectionSummary `json:"detection"`
 	TrendAnalysis       TrendSummary     `json:"trendAnalysis"`
-	AttackPath          AttackPath       `json:"attackPath"`
+	AttackPath          AttackPath          `json:"attackPath"`
+	AttackFlow          []AttackFlowNode    `json:"attackFlow,omitempty"`
+	AttackFlowSummary   AttackFlowSummary   `json:"attackFlowSummary"`
 	// DetectionTechniques is the per-technique purple-team verdict from the agent's
 	// post-run alert sweep (prevented|detected|undetected + confidence). Empty until
 	// the agent submits detections for the run. Sourced from scenario_runs.detection_summary.
@@ -499,6 +501,39 @@ func BuildAttackFlow(results []models.SimulationResult) []AttackFlowNode {
 	})
 
 	return nodes
+}
+
+// AttackFlowSummary holds pre-computed verdict counts for the attack flow.
+// Stored alongside AttackFlow in ReportData so templates can avoid counting.
+type AttackFlowSummary struct {
+	Total    int `json:"total"`
+	Blocked  int `json:"blocked"`
+	Detected int `json:"detected"`
+	Logged   int `json:"logged"`
+	Bypassed int `json:"bypassed"`
+	Errors   int `json:"errors"`
+	Skipped  int `json:"skipped"`
+}
+
+func summariseAttackFlow(nodes []AttackFlowNode) AttackFlowSummary {
+	s := AttackFlowSummary{Total: len(nodes)}
+	for _, n := range nodes {
+		switch n.Verdict {
+		case "blocked":
+			s.Blocked++
+		case "detected":
+			s.Detected++
+		case "logged":
+			s.Logged++
+		case "bypassed":
+			s.Bypassed++
+		case "error":
+			s.Errors++
+		case "skipped":
+			s.Skipped++
+		}
+	}
+	return s
 }
 
 // buildKillChain fuses the run's per-step verdicts with the detection verdicts
@@ -982,6 +1017,8 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	report.Detection = buildDetectionSummary(latestResults)
 	report.TrendAnalysis = buildTrendSummary(report.Runs)
 	report.AttackPath = buildAttackPath(latestResults)
+	report.AttackFlow = BuildAttackFlow(latestResults)
+	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
 	// Coverage breakdown: derive from results directly (no detection telemetry in Build()
 	// because the latest-run query omits detection_summary; we use exec verdict only).
 	report.TechniqueMatrix = buildTechniqueMatrix(latestResults, nil)
@@ -1204,6 +1241,8 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	report.ObjectiveRisks = buildObjectiveRisks(results)
 	report.Detection = buildDetectionSummary(results)
 	report.AttackPath = buildAttackPath(results)
+	report.AttackFlow = BuildAttackFlow(results)
+	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
 	report.KillChain = buildKillChain(results, report.DetectionTechniques)
 	report.TechniqueMatrix = buildTechniqueMatrix(results, report.DetectionTechniques)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)

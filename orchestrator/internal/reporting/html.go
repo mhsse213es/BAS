@@ -778,9 +778,87 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 7. ATTACK PATH VALIDATION ═══════════════════════════════════════ -->
+<!-- ═══ 7. ATTACK FLOW ═══════════════════════════════════════════════════ -->
 <div class="page">
-<h1>7. Attack Path Validation</h1>
+<h1>7. Attack Flow</h1>
+<p style="color:#6e7681;margin-bottom:14px">Per-technique execution outcome ordered by ATT&amp;CK kill-chain phase. Each row shows which security control acted (or failed to act) on the technique and the resulting verdict: <strong style="color:#238636">Blocked</strong> (control prevented execution), <strong style="color:#d29922">Detected</strong> (logged and alerted but not stopped), <strong style="color:#b58800">Logged</strong> (telemetry captured, no alert), or <strong style="color:#da3633">Bypassed</strong> (no control observed the technique).</p>
+
+{{if .attackFlow}}
+
+<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #238636;border-radius:4px;padding:8px 12px">
+    <div style="font-size:1.3rem;font-weight:700;color:#238636">{{.attackFlowSummary.blocked}}</div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Blocked</div>
+  </div>
+  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #d29922;border-radius:4px;padding:8px 12px">
+    <div style="font-size:1.3rem;font-weight:700;color:#d29922">{{.attackFlowSummary.detected}}</div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Detected</div>
+  </div>
+  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #b58800;border-radius:4px;padding:8px 12px">
+    <div style="font-size:1.3rem;font-weight:700;color:#b58800">{{.attackFlowSummary.logged}}</div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Logged</div>
+  </div>
+  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #da3633;border-radius:4px;padding:8px 12px">
+    <div style="font-size:1.3rem;font-weight:700;color:#da3633">{{.attackFlowSummary.bypassed}}</div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Bypassed</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:9%">Technique</th>
+      <th style="width:25%">Name</th>
+      <th style="width:14%">Tactic</th>
+      <th style="width:14%">Verdict</th>
+      <th>Security Control</th>
+      <th style="width:8%">Severity</th>
+      <th style="width:7%">Duration</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{$prevTactic := ""}}
+  {{range .attackFlow}}
+  {{if ne .tactic $prevTactic}}
+  {{$prevTactic = .tactic}}
+  <tr>
+    <td colspan="7" style="background:#161b22;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#58a6ff;padding:5px 8px;border-left:3px solid #58a6ff">{{humanize .tactic}}</td>
+  </tr>
+  {{end}}
+  {{$vc := "#6e7681"}}
+  {{if eq .verdict "blocked"}}{{$vc = "#238636"}}{{end}}
+  {{if eq .verdict "detected"}}{{$vc = "#d29922"}}{{end}}
+  {{if eq .verdict "logged"}}{{$vc = "#b58800"}}{{end}}
+  {{if eq .verdict "bypassed"}}{{$vc = "#da3633"}}{{end}}
+  {{if eq .verdict "error"}}{{$vc = "#6e7681"}}{{end}}
+  <tr>
+    <td><code>{{.techniqueId}}</code></td>
+    <td>{{.techniqueName}}</td>
+    <td style="font-size:0.7rem;color:#6e7681">{{humanize .tactic}}</td>
+    <td style="font-weight:600;color:{{$vc}}">{{.verdictLabel}}</td>
+    <td>
+      {{if .controlName}}{{.controlName}}{{if .alertName}} <span style="color:#6e7681;font-size:0.75rem">· {{.alertName}}</span>{{end}}{{else}}<span style="color:#6e7681">—</span>{{end}}
+      {{if .isStopPoint}}<div style="font-size:0.68rem;color:#238636;font-weight:600;margin-top:2px">&#9940; Attack stopped here</div>{{end}}
+    </td>
+    <td style="font-size:0.8rem">{{if .severity}}{{.severity}}{{else}}—{{end}}</td>
+    <td style="font-size:0.8rem;color:#6e7681">{{if .durationMs}}{{.durationMs}}ms{{else}}—{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+
+{{else}}
+<p style="color:#0d9488;font-weight:600">&#10003; No techniques were executed in this run.</p>
+{{end}}
+
+<div class="footer">
+  <span>{{.agent.hostname}} — Attack Flow</span>
+</div>
+</div>
+
+<!-- ═══ 8. ATTACK PATH VALIDATION ═══════════════════════════════════════ -->
+<div class="page">
+<h1>8. Attack Path Validation</h1>
 <p style="color:#6e7681;margin-bottom:14px">Lateral-movement reachability mapped as a graph of hosts, users and groups. Recon/relationship analysis only — no exploitation, no propagation. It answers what ART and Caldera cannot: if a host is compromised, how far can an attacker move and can they reach Domain Admin or a crown jewel?</p>
 {{with .attackPathValidation}}
 <div class="score-row">
@@ -867,9 +945,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 8. TACTIC SUMMARY ═══════════════════════════════════════════════ -->
+<!-- ═══ 9. TACTIC SUMMARY ═══════════════════════════════════════════════ -->
 <div class="page">
-<h1>8. MITRE ATT&amp;CK Tactic Summary</h1>
+<h1>9. MITRE ATT&amp;CK Tactic Summary</h1>
 <p style="color:#6e7681;margin-bottom:14px">Per-tactic coverage (techniques tested), prevention rate, detection rate, and mean time-to-detect. MTTD shows "—" when detection latency was not measured. Tactics with no tested techniques are omitted.</p>
 {{if .tacticHeatmap}}
 <table>
@@ -905,9 +983,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 9. ASSESSMENT INSIGHTS ══════════════════════════════════════════ -->
+<!-- ═══ 10. ASSESSMENT INSIGHTS ═════════════════════════════════════════ -->
 <div class="page">
-<h1>9. Assessment Insights</h1>
+<h1>10. Assessment Insights</h1>
 {{if .insights.hasData}}
 <div class="score-row">
   {{if .insights.most}}
@@ -935,9 +1013,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 10. ACTION PLAN ═════════════════════════════════════════════════ -->
+<!-- ═══ 11. ACTION PLAN ═════════════════════════════════════════════════ -->
 <div class="page">
-<h1>10. Action Plan</h1>
+<h1>11. Action Plan</h1>
 <p style="color:#6e7681;margin-bottom:14px">Remediations ordered by the prevention-score points their failures account for. The points quantify current exposure attributable to each tactic — they are not a promised score gain, since a single control may not resolve every underlying finding.</p>
 {{if .actionPlan}}
 <table>
@@ -963,9 +1041,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 11. COMPLIANCE STATUS ═══════════════════════════════════════════ -->
+<!-- ═══ 12. COMPLIANCE STATUS ═══════════════════════════════════════════ -->
 <div class="page">
-<h1>11. Regulatory Compliance Status</h1>
+<h1>12. Regulatory Compliance Status</h1>
 <p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
 {{if .compliance}}
 <table>
@@ -997,9 +1075,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 12. SCENARIO RUN HISTORY ════════════════════════════════════════ -->
+<!-- ═══ 13. SCENARIO RUN HISTORY ════════════════════════════════════════ -->
 <div class="page">
-<h1>12. Scenario Run History</h1>
+<h1>13. Scenario Run History</h1>
 {{if .runs}}
 <table>
   <thead><tr>
@@ -1030,9 +1108,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 13. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
+<!-- ═══ 14. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>13. Technical Findings</h1>
+<h1>14. Technical Findings</h1>
 {{if .topFindings}}
 <p style="color:#6e7681;margin-bottom:14px">Critical and High severity techniques that succeeded against this endpoint — the associated security controls did <strong>not</strong> prevent the attack. De-duplicated by technique.</p>
 <table>
@@ -1062,9 +1140,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 14. DETECTION VALIDATION ════════════════════════════════════════ -->
+<!-- ═══ 15. DETECTION VALIDATION ════════════════════════════════════════ -->
 <div class="page">
-<h1>14. Detection Validation</h1>
+<h1>15. Detection Validation</h1>
 <p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
 
 <h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
@@ -1160,9 +1238,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 15. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
+<!-- ═══ 16. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>15. Coverage Analytics</h1>
+<h1>16. Coverage Analytics</h1>
 <p style="color:#6e7681;margin-bottom:14px">
   3-bucket breakdown of every technique executed in this assessment.
   <strong style="color:#0d9488">Prevented</strong> — a control blocked execution (PASS/BLOCKED).
@@ -1291,9 +1369,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 16. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
+<!-- ═══ 17. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
 <div class="page">
-<h1>16. Technical Appendix — ATT&amp;CK Glossary</h1>
+<h1>17. Technical Appendix — ATT&amp;CK Glossary</h1>
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
 {{range .glossary}}
