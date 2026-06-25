@@ -55,6 +55,9 @@ type FullReport struct {
 	// group whose techniques overlap with this run, how well were they prevented
 	// and detected? Nil when <3 techniques overlap with any group.
 	ReadinessScores []ReadinessScore `json:"readinessScores,omitempty"`
+	// KEVExposure summarises which tested techniques have active CISA KEV CVEs and
+	// how the controls performed against them. Nil when the cves table is empty.
+	KEVExposure *KEVExposure `json:"kevExposure,omitempty"`
 	// DetectionTechniques is the per-technique purple-team verdict from the agent's
 	// post-run alert sweep (prevented|detected|undetected + confidence). Empty until
 	// the agent submits detections for the run. Sourced from scenario_runs.detection_summary.
@@ -1005,6 +1008,8 @@ type Finding struct {
 	Details       string `json:"details"`
 	Remediation   string `json:"remediation"`
 	ScenarioName  string `json:"scenarioName"`
+	KEV           bool   `json:"kev"`      // technique has ≥1 active CISA KEV CVE
+	KEVCount      int    `json:"kevCount"` // number of KEV CVEs linked
 }
 
 // RunSummary is one row in the Scenario Run History table.
@@ -1203,6 +1208,7 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 		report.EnvRestoration = &er
 	}
 	report.ReadinessScores = buildReadinessScores(report.TechniqueMatrix)
+	e.populateKEVExposure(ctx, report)
 
 	return report, nil
 }
@@ -1452,6 +1458,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 		report.EnvRestoration = &er
 	}
 	report.ReadinessScores = buildReadinessScores(report.TechniqueMatrix)
+	e.populateKEVExposure(ctx, report)
 
 	return report, nil
 }
@@ -1640,6 +1647,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 		report.EnvRestoration = &er
 	}
 	report.ReadinessScores = buildReadinessScores(report.TechniqueMatrix)
+	e.populateKEVExposure(ctx, report)
 
 	return report, nil
 }
@@ -2670,6 +2678,113 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 
 	e.HasData = e.StepsTotal > 0
 	return e
+}
+
+// ── KEV Exposure ──────────────────────────────────────────────────────────────
+
+// populateKEVExposure batch-queries technique_cves+cves to determine which
+// techniques in the report have active CISA KEV CVEs, classifies each by control
+// outcome, and enriches report.TopFindings with KEV flags. Silent no-op when the
+// cves table is empty (KEV file not loaded).
+func (e *Engine) populateKEVExposure(ctx context.Context, report *FullReport) {
+	if len(report.TechniqueMatrix) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(report.TechniqueMatrix))
+	seen := map[string]bool{}
+	for _, r := range report.TechniqueMatrix {
+		if r.TechniqueID != "" && !seen[r.TechniqueID] {
+			ids = append(ids, r.TechniqueID)
+			seen[r.TechniqueID] = true
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+
+	type kevRow struct {
+		count      int
+		ransomware bool
+	}
+	kevMap := map[string]kevRow{}
+
+	rows, err := e.db.Query(ctx, `
+		SELECT tc.technique_id, COUNT(*) AS kev_count, bool_or(c.known_ransomware) AS ransomware
+		FROM technique_cves tc
+		JOIN cves c ON c.cve_id = tc.cve_id AND c.source = 'cisa-kev'
+		WHERE tc.technique_id = ANY($1)
+		GROUP BY tc.technique_id`, ids)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tid string
+		var cnt int
+		var rw bool
+		if err := rows.Scan(&tid, &cnt, &rw); err != nil {
+			continue
+		}
+		kevMap[tid] = kevRow{count: cnt, ransomware: rw}
+	}
+	if rows.Err() != nil || len(kevMap) == 0 {
+		return
+	}
+
+	// First verdict seen for each technique (matrix is newest-run-first ordered).
+	verdicts := map[string]string{}
+	tacticOf := map[string]string{}
+	nameOf := map[string]string{}
+	for _, row := range report.TechniqueMatrix {
+		if _, done := verdicts[row.TechniqueID]; !done {
+			verdicts[row.TechniqueID] = row.ExecVerdict
+			tacticOf[row.TechniqueID] = row.Tactic
+			nameOf[row.TechniqueID] = row.TechniqueName
+		}
+	}
+
+	exp := KEVExposure{HasData: true}
+	for techID, kr := range kevMap {
+		v := verdicts[techID]
+		if v == "error" || v == "skipped" {
+			continue
+		}
+		exp.TotalKEVTechs++
+		if kr.ransomware {
+			exp.RansomwareLinked++
+		}
+		if v == "fail" {
+			exp.KEVFailed++
+			exp.FailedTechs = append(exp.FailedTechs, KEVTechSummary{
+				TechniqueID:      techID,
+				Name:             nameOf[techID],
+				Tactic:           tacticOf[techID],
+				KEVCount:         kr.count,
+				RansomwareLinked: kr.ransomware,
+				Verdict:          v,
+			})
+		} else {
+			exp.KEVPassed++
+		}
+	}
+	if exp.TotalKEVTechs == 0 {
+		return
+	}
+	sort.SliceStable(exp.FailedTechs, func(i, j int) bool {
+		if exp.FailedTechs[i].RansomwareLinked != exp.FailedTechs[j].RansomwareLinked {
+			return exp.FailedTechs[i].RansomwareLinked
+		}
+		return exp.FailedTechs[i].KEVCount > exp.FailedTechs[j].KEVCount
+	})
+	report.KEVExposure = &exp
+
+	// Enrich TopFindings with KEV flags.
+	for i := range report.TopFindings {
+		if kr, ok := kevMap[report.TopFindings[i].TechniqueID]; ok {
+			report.TopFindings[i].KEV = true
+			report.TopFindings[i].KEVCount = kr.count
+		}
+	}
 }
 
 // ── Campaign Variant Coverage ─────────────────────────────────────────────────

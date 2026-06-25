@@ -546,6 +546,28 @@ type ReadinessScore struct {
 	ConfidenceBand      string  `json:"confidenceBand"`      // "High"/"Medium"/"Low"
 }
 
+// KEVExposure summarises which tested techniques have active CISA KEV CVEs and
+// how controls performed against them. Populated by Engine.populateKEVExposure
+// via a batch DB query; nil when the cves table is empty (KEV file not loaded).
+type KEVExposure struct {
+	HasData          bool             `json:"hasData"`
+	TotalKEVTechs    int              `json:"totalKevTechs"`    // tested techs with ≥1 KEV CVE
+	KEVFailed        int              `json:"kevFailed"`        // not blocked (FAIL)
+	KEVPassed        int              `json:"kevPassed"`        // blocked (pass/blocked)
+	RansomwareLinked int              `json:"ransomwareLinked"` // subset with known-ransomware CVEs
+	FailedTechs      []KEVTechSummary `json:"failedTechs"`      // ordered: ransomware first, then KEV count desc
+}
+
+// KEVTechSummary is one technique entry inside KEVExposure.
+type KEVTechSummary struct {
+	TechniqueID      string `json:"techniqueId"`
+	Name             string `json:"name"`
+	Tactic           string `json:"tactic"`
+	KEVCount         int    `json:"kevCount"`
+	RansomwareLinked bool   `json:"ransomwareLinked"`
+	Verdict          string `json:"verdict"` // pass/blocked/fail
+}
+
 // BuildReadinessScores computes per-threat-group readiness from the run's
 // TechniqueMatrix. Groups with fewer than 3 tested techniques are excluded
 // (too few data points to be meaningful). Results are sorted worst-first by

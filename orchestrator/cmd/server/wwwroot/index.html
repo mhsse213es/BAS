@@ -1289,6 +1289,15 @@ body.theme-slate {
           <div class="kpi-row" id="dash-itsm-tiles"></div>
         </div>
 
+        <!-- Threat Intelligence — KEV exposure widget; hidden until data is loaded -->
+        <div id="dash-ti-section" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
+            <span style="font-size:0.72rem;font-weight:600;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase">Threat Intelligence</span>
+            <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" onclick="loadKEVPack()">&#9760; Create KEV Pack →</a>
+          </div>
+          <div class="kpi-row" id="dash-ti-tiles"></div>
+        </div>
+
         <div class="dash-grid" style="grid-template-columns:1.3fr 1fr;margin-bottom:1.25rem">
           <div class="dash-panel">
             <div class="dash-panel-hdr">Posture Score</div>
@@ -2742,7 +2751,10 @@ body.theme-slate {
     <label class="modal-lbl">Name</label>
     <input id="cmp-name" type="text" placeholder="e.g. Q2 Ransomware Readiness" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:inherit">
     <label class="modal-lbl">Scenario</label>
-    <select id="cmp-scenario"></select>
+    <div style="display:flex;gap:0.5rem;align-items:center">
+      <select id="cmp-scenario" style="flex:1"></select>
+      <button class="btn btn-outline btn-sm" style="white-space:nowrap;flex-shrink:0" onclick="loadKEVPack()" title="Create a scenario pre-populated with techniques linked to CISA Known Exploited Vulnerabilities">&#9760; KEV Pack</button>
+    </div>
     <label class="modal-lbl">Execution mode</label>
     <select id="cmp-mode">
       <option value="posture">Posture — read-only, safe on any host</option>
@@ -4007,6 +4019,78 @@ function openCampaignLaunch() {
   document.getElementById('campaign-overlay').classList.add('open');
 }
 function closeCampaignLaunch() { document.getElementById('campaign-overlay').classList.remove('open'); }
+
+// ── KEV Pack ──────────────────────────────────────────────────────────────────
+// Fetches CISA KEV technique mappings, creates a custom scenario pre-populated
+// with those techniques, then selects it in the active campaign builder.
+function loadKEVPack() {
+  apicall('/api/ti/suggest-pack?type=kev').then(function(pack) {
+    if (!pack || !pack.hasData) {
+      showToast('KEV data not available — reseed content pack first', 'err');
+      return;
+    }
+    var msg = 'Create "' + pack.suggestedName + '" with ' + pack.techniqueCount + ' KEV-linked techniques' +
+              (pack.ransomwareCount > 0 ? ' (' + pack.ransomwareCount + ' ransomware-linked)' : '') + '?';
+    if (!confirm(msg)) return;
+    apicall('/api/scenarios', { method: 'POST', body: JSON.stringify(pack.suggestedScenario) })
+      .then(function(res) {
+        if (res && res.error) {
+          // 409 = already exists — just select it
+          if (res.error.indexOf('already exists') >= 0) {
+            _selectCmpScenario(pack.suggestedId);
+          } else {
+            showToast('Failed to create KEV Pack: ' + res.error, 'err');
+          }
+          return;
+        }
+        showToast('KEV Exposure Pack created — ' + pack.techniqueCount + ' techniques', 'ok');
+        loadScenarios();
+        setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+      })
+      .catch(function(e) {
+        // Non-2xx response — check if conflict (already exists)
+        if (e && e.status === 409) {
+          showToast('KEV Pack already exists — selecting it', 'ok');
+          loadScenarios();
+          setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+        } else {
+          showToast('Failed to create KEV Pack', 'err');
+        }
+      });
+  }).catch(function() { showToast('Could not fetch KEV data', 'err'); });
+}
+function _selectCmpScenario(id) {
+  var sel = document.getElementById('cmp-scenario');
+  if (!sel) return;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === id) { sel.selectedIndex = i; return; }
+  }
+  // Not in dropdown yet — rebuild it from current scenarios list
+  document.getElementById('cmp-scenario').innerHTML = scenarios.map(function(s) {
+    return '<option value="' + x(s.id) + '"' + (s.id === id ? ' selected' : '') + '>' + x(s.name) + '</option>';
+  }).join('');
+}
+
+// loadKEVWidget fetches the KEV pack data and populates the dashboard TI section.
+var _kevWidgetLoaded = false;
+function loadKEVWidget() {
+  if (_kevWidgetLoaded) return;
+  apicall('/api/ti/suggest-pack?type=kev').then(function(pack) {
+    if (!pack || !pack.hasData) return;
+    _kevWidgetLoaded = true;
+    document.getElementById('dash-ti-section').style.display = '';
+    var tiles = document.getElementById('dash-ti-tiles');
+    tiles.innerHTML =
+      '<div class="kpi-card stat-tile" title="Techniques with CISA KEV CVEs — create a pack to validate them">' +
+      '<div class="stat-top"><div><div class="kpi-label">KEV-Linked Techniques</div><div class="kpi-value" style="color:var(--danger)">' + pack.techniqueCount + '</div></div>' +
+      '<div class="stat-icon" style="background:rgba(218,54,51,0.10);color:var(--danger)">&#9760;</div></div>' +
+      '<div class="kpi-sub">' + pack.totalKevCves + ' CVEs · ' + pack.ransomwareCount + ' ransomware-linked</div></div>' +
+      '<div class="kpi-card stat-tile" title="CISA Known Exploited Vulnerabilities under active real-world exploitation">' +
+      '<div class="stat-top"><div><div class="kpi-label">Total KEV CVEs</div><div class="kpi-value" style="color:var(--warning)">' + pack.totalKevCves + '</div></div>' +
+      '<div class="stat-icon" style="background:rgba(210,153,34,0.10);color:var(--warning)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l1.5 3.5H13l-2.75 2 1 3.5L8 9 4.75 11l1-3.5L3 5.5h3.5z"/></svg></div></div>' +
+      '<div class="kpi-sub">from CISA KEV catalog</div></div>';
+  }).catch(function() {});
+}
 function cmpAgentOS(a) { var o = (a.osVersion || '').toLowerCase(); return o.indexOf('windows') >= 0 ? 'windows' : (o.indexOf('darwin') >= 0 || o.indexOf('macos') >= 0) ? 'darwin' : 'linux'; }
 function cmpFiltered() {
   var os = document.getElementById('cmp-filter-os').value, env = document.getElementById('cmp-filter-env').value;
@@ -8256,6 +8340,7 @@ function loadDashboard() {
     refreshDashboardCampaigns();
     loadComplianceScores();
     loadDashboardITSM();
+    loadKEVWidget();
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
 }

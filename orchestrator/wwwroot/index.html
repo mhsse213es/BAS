@@ -1289,6 +1289,15 @@ body.theme-slate {
           <div class="kpi-row" id="dash-itsm-tiles"></div>
         </div>
 
+        <!-- Threat Intelligence — KEV exposure widget; hidden until data is loaded -->
+        <div id="dash-ti-section" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
+            <span style="font-size:0.72rem;font-weight:600;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase">Threat Intelligence</span>
+            <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" onclick="loadKEVPack()">&#9760; Create KEV Pack →</a>
+          </div>
+          <div class="kpi-row" id="dash-ti-tiles"></div>
+        </div>
+
         <div class="dash-grid" style="grid-template-columns:1.3fr 1fr;margin-bottom:1.25rem">
           <div class="dash-panel">
             <div class="dash-panel-hdr">Posture Score</div>
@@ -2742,7 +2751,10 @@ body.theme-slate {
     <label class="modal-lbl">Name</label>
     <input id="cmp-name" type="text" placeholder="e.g. Q2 Ransomware Readiness" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:inherit">
     <label class="modal-lbl">Scenario</label>
-    <select id="cmp-scenario"></select>
+    <div style="display:flex;gap:0.5rem;align-items:center">
+      <select id="cmp-scenario" style="flex:1"></select>
+      <button class="btn btn-outline btn-sm" style="white-space:nowrap;flex-shrink:0" onclick="loadKEVPack()" title="Create a scenario pre-populated with techniques linked to CISA Known Exploited Vulnerabilities">&#9760; KEV Pack</button>
+    </div>
     <label class="modal-lbl">Execution mode</label>
     <select id="cmp-mode">
       <option value="posture">Posture — read-only, safe on any host</option>
@@ -4007,6 +4019,78 @@ function openCampaignLaunch() {
   document.getElementById('campaign-overlay').classList.add('open');
 }
 function closeCampaignLaunch() { document.getElementById('campaign-overlay').classList.remove('open'); }
+
+// ── KEV Pack ──────────────────────────────────────────────────────────────────
+// Fetches CISA KEV technique mappings, creates a custom scenario pre-populated
+// with those techniques, then selects it in the active campaign builder.
+function loadKEVPack() {
+  apicall('/api/ti/suggest-pack?type=kev').then(function(pack) {
+    if (!pack || !pack.hasData) {
+      showToast('KEV data not available — reseed content pack first', 'err');
+      return;
+    }
+    var msg = 'Create "' + pack.suggestedName + '" with ' + pack.techniqueCount + ' KEV-linked techniques' +
+              (pack.ransomwareCount > 0 ? ' (' + pack.ransomwareCount + ' ransomware-linked)' : '') + '?';
+    if (!confirm(msg)) return;
+    apicall('/api/scenarios', { method: 'POST', body: JSON.stringify(pack.suggestedScenario) })
+      .then(function(res) {
+        if (res && res.error) {
+          // 409 = already exists — just select it
+          if (res.error.indexOf('already exists') >= 0) {
+            _selectCmpScenario(pack.suggestedId);
+          } else {
+            showToast('Failed to create KEV Pack: ' + res.error, 'err');
+          }
+          return;
+        }
+        showToast('KEV Exposure Pack created — ' + pack.techniqueCount + ' techniques', 'ok');
+        loadScenarios();
+        setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+      })
+      .catch(function(e) {
+        // Non-2xx response — check if conflict (already exists)
+        if (e && e.status === 409) {
+          showToast('KEV Pack already exists — selecting it', 'ok');
+          loadScenarios();
+          setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+        } else {
+          showToast('Failed to create KEV Pack', 'err');
+        }
+      });
+  }).catch(function() { showToast('Could not fetch KEV data', 'err'); });
+}
+function _selectCmpScenario(id) {
+  var sel = document.getElementById('cmp-scenario');
+  if (!sel) return;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === id) { sel.selectedIndex = i; return; }
+  }
+  // Not in dropdown yet — rebuild it from current scenarios list
+  document.getElementById('cmp-scenario').innerHTML = scenarios.map(function(s) {
+    return '<option value="' + x(s.id) + '"' + (s.id === id ? ' selected' : '') + '>' + x(s.name) + '</option>';
+  }).join('');
+}
+
+// loadKEVWidget fetches the KEV pack data and populates the dashboard TI section.
+var _kevWidgetLoaded = false;
+function loadKEVWidget() {
+  if (_kevWidgetLoaded) return;
+  apicall('/api/ti/suggest-pack?type=kev').then(function(pack) {
+    if (!pack || !pack.hasData) return;
+    _kevWidgetLoaded = true;
+    document.getElementById('dash-ti-section').style.display = '';
+    var tiles = document.getElementById('dash-ti-tiles');
+    tiles.innerHTML =
+      '<div class="kpi-card stat-tile" title="Techniques with CISA KEV CVEs — create a pack to validate them">' +
+      '<div class="stat-top"><div><div class="kpi-label">KEV-Linked Techniques</div><div class="kpi-value" style="color:var(--danger)">' + pack.techniqueCount + '</div></div>' +
+      '<div class="stat-icon" style="background:rgba(218,54,51,0.10);color:var(--danger)">&#9760;</div></div>' +
+      '<div class="kpi-sub">' + pack.totalKevCves + ' CVEs · ' + pack.ransomwareCount + ' ransomware-linked</div></div>' +
+      '<div class="kpi-card stat-tile" title="CISA Known Exploited Vulnerabilities under active real-world exploitation">' +
+      '<div class="stat-top"><div><div class="kpi-label">Total KEV CVEs</div><div class="kpi-value" style="color:var(--warning)">' + pack.totalKevCves + '</div></div>' +
+      '<div class="stat-icon" style="background:rgba(210,153,34,0.10);color:var(--warning)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l1.5 3.5H13l-2.75 2 1 3.5L8 9 4.75 11l1-3.5L3 5.5h3.5z"/></svg></div></div>' +
+      '<div class="kpi-sub">from CISA KEV catalog</div></div>';
+  }).catch(function() {});
+}
 function cmpAgentOS(a) { var o = (a.osVersion || '').toLowerCase(); return o.indexOf('windows') >= 0 ? 'windows' : (o.indexOf('darwin') >= 0 || o.indexOf('macos') >= 0) ? 'darwin' : 'linux'; }
 function cmpFiltered() {
   var os = document.getElementById('cmp-filter-os').value, env = document.getElementById('cmp-filter-env').value;
@@ -7176,36 +7260,54 @@ function renderRunReportExtra(rep) {
     '</div>';
   }
 
-  // Changes & Cleanup Verification
-  if ((rep.reverted && rep.reverted.length > 0) || rep.cleanupFailed) {
-    var cleanupCol = rep.cleanupFailed ? 'var(--danger)' : 'var(--success)';
-    var cleanupLabel = rep.cleanupFailed ? 'WARNING' : 'COMPLETED';
-    
-    var cleanupDesc = "";
-    if (rep.cleanupFailed) {
-      cleanupDesc = '<div style="background:rgba(218,54,51,0.1);border:1px solid rgba(218,54,51,0.3);border-radius:4px;padding:0.6rem;margin-bottom:0.5rem;color:#f87171;font-size:0.75rem;line-height:1.4">' +
-        '<strong style="color:var(--danger)">Warning: Cleanup failed</strong><br/>' +
-        'Out of the executed techniques, ' + rep.cleanupFailedCount + ' failed to clean up successfully. Residual simulation artifacts may remain on the endpoint. SOC teams appreciate this visibility for manual remediation.' +
-        '</div>';
-    } else {
-      cleanupDesc = '<div style="font-size:0.75rem;color:var(--text);margin-bottom:0.4rem">Cleanup status: <strong>COMPLETED</strong> &mdash; each captured change was rolled back from the pre-run snapshot.</div>';
-    }
+  // Environment Restoration (replaces old cleanup banner — uses envRestoration when available)
+  var envR = rep.envRestoration || null;
+  var hasOldCleanup = (rep.reverted && rep.reverted.length > 0) || rep.cleanupFailed;
+  if (envR || hasOldCleanup) {
+    var erLevel  = envR ? envR.impactLevel  : (rep.cleanupFailed ? 'persistent' : 'clean');
+    var erStatus = envR ? envR.statusLabel  : (rep.cleanupFailed ? 'Attention Required' : 'Successful');
+    var erLabel  = envR ? envR.impactLabel  : (rep.cleanupFailed ? 'Residual Changes (' + (rep.cleanupFailedCount || 1) + ')' : 'No Persistent Changes');
+    var erRate   = envR ? envR.cleanupRate  : (rep.cleanupFailed ? 0 : 100);
+    var erLeaked = envR ? envR.stepsLeaked  : (rep.cleanupFailedCount || 0);
+    var erCleaned= envR ? envR.stepsCleaned : 0;
+    var erSummary= envR ? envR.execSummary  : (rep.cleanupFailed
+      ? (rep.cleanupFailedCount || 1) + ' step(s) did not revert cleanly. Manual remediation may be required.'
+      : 'All simulation-induced changes were reverted successfully.');
 
-    var itemsHtml = "";
+    var erBorderCol = erLevel === 'clean' ? 'var(--success)' : erLevel === 'minor' ? 'var(--warning)' : 'var(--danger)';
+    var erTextCol   = erLevel === 'clean' ? '#15803d' : erLevel === 'minor' ? '#92400e' : '#991b1b';
+    var erBg        = erLevel === 'clean' ? 'rgba(13,148,136,0.07)' : erLevel === 'minor' ? 'rgba(210,153,34,0.1)' : 'rgba(218,54,51,0.08)';
+    var erIcon      = erLevel === 'clean' ? '&#10003;' : erLevel === 'minor' ? '&#9888;' : '&#10007;';
+
+    var erItemsHtml = '';
     if (rep.reverted && rep.reverted.length > 0) {
-      itemsHtml = '<div style="font-size:0.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:0.6rem;margin-bottom:0.35rem">Reverted Artifacts (' + rep.reverted.length + ')</div>' +
-        '<div style="max-height:120px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.5rem;font-family:monospace;font-size:0.72rem;color:var(--text);line-height:1.4">' +
+      erItemsHtml = '<div style="font-size:0.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:0.6rem;margin-bottom:0.35rem">Agent-Confirmed Rollbacks (' + rep.reverted.length + ')</div>' +
+        '<div style="max-height:100px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.5rem;font-family:monospace;font-size:0.72rem;color:var(--text);line-height:1.4">' +
           rep.reverted.map(function(item) {
             return '<div style="margin-bottom:0.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + x(item) + '">&bull; ' + x(item) + '</div>';
           }).join('') +
         '</div>';
     }
 
-    html += '<div style="' + panel + ';border-left:3px solid ' + cleanupCol + '">' +
-      '<div style="' + hdr + ';display:flex;align-items:center;justify-content:space-between">Changes &amp; Cleanup Verification <span style="font-size:0.58rem;font-weight:700;color:' + cleanupCol + '">' + cleanupLabel + '</span></div>' +
-      cleanupDesc +
-      itemsHtml +
-      '</div>';
+    html += '<div style="' + panel + ';border-left:3px solid ' + erBorderCol + ';background:' + erBg + '">' +
+      '<div style="' + hdr + ';display:flex;align-items:center;justify-content:space-between">' +
+        '<span>Environment Restoration</span>' +
+        '<span style="font-size:0.58rem;font-weight:700;color:' + erTextCol + '">' + erStatus.toUpperCase() + '</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:0.5rem">' +
+        '<div style="font-size:1.8rem;line-height:1;color:' + erTextCol + ';flex-shrink:0">' + erIcon + '</div>' +
+        '<div style="flex:1">' +
+          '<div style="font-size:0.92rem;font-weight:700;color:' + erTextCol + '">' + erRate.toFixed(1) + '% Clean &mdash; ' + erLabel + '</div>' +
+          '<div style="font-size:0.75rem;color:var(--text);margin-top:3px;line-height:1.4">' + erSummary + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Cleanup Rate</div>' +
+          '<div style="font-size:1.4rem;font-weight:800;color:' + erBorderCol + '">' + Math.round(erRate) + '%</div>' +
+        '</div>' +
+      '</div>' +
+      (erLeaked > 0 ? '<div style="font-size:0.72rem;color:var(--danger);margin-bottom:4px">&#9888; ' + erLeaked + ' step(s) leaked &nbsp;&#8226;&nbsp; ' + erCleaned + ' cleaned</div>' : '') +
+      erItemsHtml +
+    '</div>';
   }
 
   // Detection coverage — purple-team verdicts from the agent's post-run alert
@@ -8238,6 +8340,7 @@ function loadDashboard() {
     refreshDashboardCampaigns();
     loadComplianceScores();
     loadDashboardITSM();
+    loadKEVWidget();
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
 }

@@ -565,6 +565,19 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 
+{{if .kevExposure}}{{if .kevExposure.hasData}}{{if gt .kevExposure.kevFailed 0.0}}
+<div style="background:#fff5f5;border:1px solid #fca5a5;border-left:4px solid #da3633;border-radius:6px;padding:14px 18px;margin-bottom:20px;display:flex;gap:14px;align-items:flex-start">
+  <span style="color:#da3633;font-size:1.3rem;line-height:1.2;flex-shrink:0">&#9888;</span>
+  <div>
+    <strong style="color:#991b1b;font-size:0.9rem">KEV Exposure Alert</strong>
+    <div style="font-size:0.82rem;color:#374151;margin-top:4px">
+      <strong>{{.kevExposure.kevFailed}}</strong> of <strong>{{.kevExposure.totalKevTechs}}</strong> tested techniques with active CISA Known Exploited Vulnerability (KEV) CVEs were <strong style="color:#991b1b">not blocked</strong> by your controls.{{if gt .kevExposure.ransomwareLinked 0.0}} <strong style="color:#d29922">{{.kevExposure.ransomwareLinked}} are linked to active ransomware campaigns.</strong>{{end}}
+      These vulnerabilities are under real-world active exploitation — prioritise remediation immediately.
+    </div>
+  </div>
+</div>
+{{end}}{{end}}{{end}}
+
 {{if .perfCpuBefore}}
 <div class="score-row" style="margin-top:20px;margin-bottom:20px">
   <div class="scard" style="flex:1;min-width:100%;border-left:4px solid #0d9488;background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
@@ -1456,7 +1469,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   {{range .topFindings}}
   <tr>
     <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
-    <td><code>{{.techniqueId}}</code><br>{{.techniqueName}}</td>
+    <td><code>{{.techniqueId}}</code>{{if .kev}}&nbsp;<span style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:3px;padding:1px 5px;font-size:0.65rem;font-weight:700;vertical-align:middle">KEV{{if gt .kevCount 0.0}}&nbsp;{{.kevCount}}{{end}}</span>{{end}}<br>{{.techniqueName}}</td>
     <td>{{humanize .tactic}}</td>
     <td>
       {{.details}}
