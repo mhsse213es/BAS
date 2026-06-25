@@ -3804,6 +3804,62 @@ func (h *Handler) GetRunReportData(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /api/scenarios/runs/{runId}/attackflow
+// Returns the structured attack flow for a completed run: one node per
+// technique ordered by kill-chain tactic, with control attribution and
+// detection verdict derived from the same evidence pipeline as the reports.
+func (h *Handler) GetRunAttackFlow(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runId")
+	var resultsJSON []byte
+	var runName, agentID string
+	err := h.db.QueryRow(r.Context(),
+		`SELECT name, agent_id, results FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&runName, &agentID, &resultsJSON)
+	if err != nil {
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	}
+	var results []models.SimulationResult
+	if len(resultsJSON) > 0 {
+		_ = json.Unmarshal(resultsJSON, &results)
+	}
+	nodes := reporting.BuildAttackFlow(results)
+
+	// Summary counters
+	var blocked, detected, logged, bypassed, errs, skipped int
+	for _, n := range nodes {
+		switch n.Verdict {
+		case "blocked":
+			blocked++
+		case "detected":
+			detected++
+		case "logged":
+			logged++
+		case "bypassed":
+			bypassed++
+		case "error":
+			errs++
+		case "skipped":
+			skipped++
+		}
+	}
+	respond(w, map[string]any{
+		"runId":        runID,
+		"scenarioName": runName,
+		"agentId":      agentID,
+		"nodes":        nodes,
+		"summary": map[string]any{
+			"total":    len(nodes),
+			"blocked":  blocked,
+			"detected": detected,
+			"logged":   logged,
+			"bypassed": bypassed,
+			"errors":   errs,
+			"skipped":  skipped,
+		},
+	})
+}
+
 // GET /api/scenarios/runs/{runId}/export
 // Downloads a single run's full results as a JSON file.
 func (h *Handler) ExportRunJSON(w http.ResponseWriter, r *http.Request) {

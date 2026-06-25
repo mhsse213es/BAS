@@ -368,6 +368,139 @@ func buildAttackPath(results []models.SimulationResult) AttackPath {
 	return ap
 }
 
+// ── Attack Flow ──────────────────────────────────────────────────────────────
+
+// AttackFlowNode is one technique in the per-run attack flow visualization.
+// Ordered by kill-chain tactic phase; control attribution and detection verdict
+// are derived from the same evidence pipeline used by the kill-chain builder.
+type AttackFlowNode struct {
+	Step          int    `json:"step"`
+	TechniqueID   string `json:"techniqueId"`
+	TechniqueName string `json:"techniqueName"`
+	Tactic        string `json:"tactic"`
+	TacticLabel   string `json:"tacticLabel"`
+	Severity      string `json:"severity"`
+	DurationMs    int64  `json:"durationMs"`
+
+	// Verdict: "blocked" | "detected" | "logged" | "bypassed" | "error" | "skipped"
+	Verdict      string `json:"verdict"`
+	VerdictLabel string `json:"verdictLabel"`
+
+	// ControlName names the security control responsible for this verdict.
+	// Blocked steps: the blocking product/rule. Detected steps: the alerting
+	// EDR/AV. Bypassed steps: empty (no control stopped or observed it).
+	ControlName     string `json:"controlName"`
+	DetectionSource string `json:"detectionSource,omitempty"`
+	AlertName       string `json:"alertName,omitempty"`
+
+	IsStopPoint bool `json:"isStopPoint"` // true when the attack was halted here
+}
+
+// BuildAttackFlow returns an ordered attack flow for a run's results, one node
+// per technique sorted by kill-chain tactic phase then original step order.
+// This is the data source for the dashboard drawer "Attack Flow" tab and the
+// HTML/PDF report attack flow section.
+func BuildAttackFlow(results []models.SimulationResult) []AttackFlowNode {
+	tacticIdx := make(map[string]int, len(tacticOrder))
+	for i, t := range tacticOrder {
+		tacticIdx[t] = i
+	}
+
+	nodes := make([]AttackFlowNode, 0, len(results))
+	for i, r := range results {
+		node := AttackFlowNode{
+			Step:          i + 1,
+			TechniqueID:   r.Technique.ID,
+			TechniqueName: r.Technique.Name,
+			Tactic:        r.Technique.Tactic,
+			TacticLabel:   humanizeTactic(r.Technique.Tactic),
+			Severity:      r.Severity,
+			DurationMs:    r.DurationMs,
+		}
+
+		switch r.Result {
+		case models.ResultPass:
+			node.Verdict = "blocked"
+			node.VerdictLabel = "Blocked"
+			node.IsStopPoint = true
+			if r.BlockingControl != nil && r.BlockingControl.Name != "" {
+				node.ControlName = r.BlockingControl.Name
+			} else if ctrl := attributeControl(r); ctrl != "" {
+				node.ControlName = ctrl
+			} else {
+				node.ControlName = "Security Control"
+			}
+
+		case models.ResultBlocked:
+			node.Verdict = "blocked"
+			node.VerdictLabel = "Blocked (AV Quarantine)"
+			node.IsStopPoint = true
+			node.ControlName = "Antivirus / EDR"
+
+		case models.ResultFail:
+			det := classifyDetection(r.Events)
+			if r.DetectionVerdict == "detected" || r.DetectionAlert != nil {
+				node.Verdict = "detected"
+				node.VerdictLabel = "Detected — Not Stopped"
+				if r.DetectionAlert != nil {
+					node.ControlName = r.DetectionAlert.Provider
+					node.AlertName = r.DetectionAlert.ThreatName
+				} else if det.Detected {
+					node.ControlName = det.Source
+				}
+				node.DetectionSource = det.Source
+			} else if det.Status == "Detected" {
+				node.Verdict = "detected"
+				node.VerdictLabel = "Detected — Not Stopped"
+				node.ControlName = det.Source
+				node.DetectionSource = det.Source
+			} else if det.Status == "Logged" {
+				node.Verdict = "logged"
+				node.VerdictLabel = "Logged — No Alert Raised"
+				node.ControlName = det.Source
+				node.DetectionSource = det.Source
+			} else {
+				node.Verdict = "bypassed"
+				node.VerdictLabel = "Bypassed — Undetected"
+			}
+
+		case models.ResultError:
+			node.Verdict = "error"
+			node.VerdictLabel = "Error"
+			node.ControlName = "—"
+
+		case models.ResultSkipped:
+			node.Verdict = "skipped"
+			node.VerdictLabel = "Skipped"
+			node.ControlName = "—"
+
+		default:
+			node.Verdict = "unknown"
+			node.VerdictLabel = string(r.Result)
+			node.ControlName = "—"
+		}
+
+		nodes = append(nodes, node)
+	}
+
+	sort.SliceStable(nodes, func(i, j int) bool {
+		ti, iOk := tacticIdx[nodes[i].Tactic]
+		tj, jOk := tacticIdx[nodes[j].Tactic]
+		if !iOk {
+			ti = 999
+		}
+		if !jOk {
+			tj = 999
+		}
+		if ti != tj {
+			return ti < tj
+		}
+		return nodes[i].Step < nodes[j].Step
+	})
+
+	return nodes
+}
+
 // buildKillChain fuses the run's per-step verdicts with the detection verdicts
 // into the dual-rail timeline (adversary action ↔ defensive outcome), ordered by
 // kill-chain phase and, within a phase, by execution time. PASS/BLOCKED →

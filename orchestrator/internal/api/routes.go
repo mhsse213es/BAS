@@ -89,6 +89,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/scenarios/runs", h.ListScenarioRuns)
 		r.Get("/api/scenarios/runs/{runId}/report", h.GetRunReport)
 		r.Get("/api/scenarios/runs/{runId}/report.json", h.GetRunReportData)
+		r.Get("/api/scenarios/runs/{runId}/attackflow", h.GetRunAttackFlow)
 		r.Get("/api/scenarios/runs/{runId}/export", h.ExportRunJSON)
 		r.Get("/api/scenarios/runs/{runId}/events", h.ListRunEvents)
 		r.Get("/api/scenarios/runs/{runId}/pdf", h.GetRunPDF)

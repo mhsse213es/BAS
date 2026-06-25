@@ -6391,18 +6391,21 @@ function viewRunResults(run) {
     ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +
     alertText;
 
-  // Export bar — only when run has an ID and is completed/partial
+  // Export bar + view-toggle tabs — only when run has an ID and is completed/partial
   var exportHtml = '';
   var runId = run.id || '';
   if (runId && (run.status === 'completed' || run.status === 'partial')) {
     exportHtml =
-      '<div style="display:flex;gap:0.5rem;align-items:center;padding:0.5rem 0.75rem;margin-bottom:0.75rem;' +
-                  'background:var(--surface);border:1px solid var(--border);border-radius:4px">' +
+      '<div style="display:flex;gap:0.5rem;align-items:center;padding:0.5rem 0.75rem;margin-bottom:0.5rem;' +
+                  'background:var(--surface);border:1px solid var(--border);border-radius:4px;flex-wrap:wrap">' +
         '<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:0.25rem">Export</span>' +
-        '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">↓ JSON</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">↓ HTML Report</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">↓ PDF</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">↓ CSV</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8595; HTML Report</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">&#8595; PDF</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
+        '<span style="flex:1"></span>' +
+        '<button id="rvt-results" class="btn btn-sm" style="background:var(--elevated);color:var(--accent);border:1px solid var(--border);border-bottom:2px solid var(--accent);border-radius:4px 4px 0 0" onclick="switchResultsView(\'table\')">Results</button>' +
+        '<button id="rvt-flow" class="btn btn-sm" style="color:var(--muted);border:1px solid transparent;border-radius:4px 4px 0 0" onclick="switchResultsView(\'flow\')">&#9660; Attack Flow</button>' +
       '</div>';
   }
   document.getElementById('results-export').innerHTML = exportHtml;
@@ -6595,7 +6598,11 @@ function viewRunResults(run) {
       checks + '</div>';
   }).join('');
 
-  document.getElementById('results-body').innerHTML = scorePanel + '<div id="run-report-extra"></div>' + checksHtml;
+  document.getElementById('results-body').innerHTML =
+    scorePanel +
+    '<div id="run-report-extra"></div>' +
+    '<div id="rv-table">' + checksHtml + '</div>' +
+    '<div id="rv-flow" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>';
   document.getElementById('results-overlay').classList.add('open');
 
   // Key Findings + Prioritised Recommendations — fetched from the report engine
@@ -6610,7 +6617,134 @@ function viewRunResults(run) {
         extraEl.innerHTML = renderRunReportExtra(rep);
       }
     }).catch(function() { extraEl.innerHTML = ''; });
+
+    // Preload attack flow into rv-flow so the tab is ready when clicked.
+    apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/attackflow').then(function(af) {
+      var el = document.getElementById('rv-flow');
+      if (el) el.innerHTML = renderAttackFlow(af.nodes || [], af.summary || {});
+    }).catch(function() {
+      var el = document.getElementById('rv-flow');
+      if (el) el.innerHTML = '<div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Attack flow unavailable.</div>';
+    });
   }
+}
+
+// Toggles the run-results drawer between the "Results" table view and the
+// "Attack Flow" visualization. Called by the tab buttons in the export bar.
+function switchResultsView(view) {
+  var tableEl = document.getElementById('rv-table');
+  var flowEl  = document.getElementById('rv-flow');
+  var btnT    = document.getElementById('rvt-results');
+  var btnF    = document.getElementById('rvt-flow');
+  if (!tableEl || !flowEl) return;
+  var isFlow = (view === 'flow');
+  tableEl.style.display = isFlow ? 'none' : '';
+  flowEl.style.display  = isFlow ? ''     : 'none';
+  if (btnT) {
+    btnT.style.background   = isFlow ? '' : 'var(--elevated)';
+    btnT.style.color        = isFlow ? 'var(--muted)' : 'var(--accent)';
+    btnT.style.borderBottom = isFlow ? '' : '2px solid var(--accent)';
+  }
+  if (btnF) {
+    btnF.style.background   = isFlow ? 'var(--elevated)' : '';
+    btnF.style.color        = isFlow ? 'var(--accent)' : 'var(--muted)';
+    btnF.style.borderBottom = isFlow ? '2px solid var(--accent)' : '';
+  }
+}
+
+// Renders the visual attack flow from the /attackflow API response.
+// nodes: AttackFlowNode[] ordered by kill-chain tactic phase.
+// summary: {total, blocked, detected, logged, bypassed, errors, skipped}
+function renderAttackFlow(nodes, summary) {
+  if (!nodes || !nodes.length) {
+    return '<div style="color:var(--muted);text-align:center;padding:2rem 0;font-size:0.78rem">No attack flow data for this run.</div>';
+  }
+
+  var VERDICT_COLOR = { blocked:'var(--success)', detected:'var(--warning)', logged:'#d29922', bypassed:'var(--danger)', error:'var(--muted)', skipped:'var(--muted)' };
+  var VERDICT_BG    = { blocked:'rgba(35,134,54,0.08)', detected:'rgba(210,153,34,0.08)', logged:'rgba(210,153,34,0.05)', bypassed:'rgba(218,54,51,0.08)', error:'rgba(154,169,188,0.05)', skipped:'rgba(154,169,188,0.04)' };
+  var VERDICT_ICON  = { blocked:'&#10003;', detected:'&#9888;', logged:'&#9685;', bypassed:'&#10007;', error:'?', skipped:'&#9675;' };
+
+  function summTile(n, label, color) {
+    return '<div style="flex:1;min-width:68px;background:var(--elevated);border:1px solid var(--border);border-top:2px solid ' + color + ';border-radius:4px;padding:0.35rem 0.55rem">' +
+      '<div style="font-size:1.05rem;font-weight:700;color:' + color + ';line-height:1.2">' + n + '</div>' +
+      '<div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">' + label + '</div>' +
+    '</div>';
+  }
+
+  var s = summary || {};
+  var summaryHtml =
+    '<div style="display:flex;gap:0.4rem;margin-bottom:1rem;flex-wrap:wrap">' +
+      summTile(s.blocked  || 0, 'Blocked',  'var(--success)') +
+      summTile(s.detected || 0, 'Detected', 'var(--warning)') +
+      summTile(s.logged   || 0, 'Logged',   '#d29922') +
+      summTile(s.bypassed || 0, 'Bypassed', 'var(--danger)') +
+      (s.errors > 0 ? summTile(s.errors, 'Error', 'var(--muted)') : '') +
+    '</div>';
+
+  // Group nodes by tactic (they arrive pre-sorted by kill-chain phase)
+  var phases = [];
+  var curTactic = null;
+  var curNodes  = [];
+  nodes.forEach(function(n) {
+    if (n.tactic !== curTactic) {
+      if (curNodes.length) phases.push({ tactic: curTactic, label: curNodes[0].tacticLabel || curTactic, nodes: curNodes });
+      curTactic = n.tactic;
+      curNodes  = [n];
+    } else {
+      curNodes.push(n);
+    }
+  });
+  if (curNodes.length) phases.push({ tactic: curTactic, label: curNodes[0].tacticLabel || curTactic, nodes: curNodes });
+
+  var flowHtml = '';
+  phases.forEach(function(phase, pi) {
+    var anyBypassed = phase.nodes.some(function(n) { return n.verdict === 'bypassed'; });
+    var allBlocked  = phase.nodes.every(function(n) { return n.isStopPoint; });
+    var phaseColor  = allBlocked ? 'var(--success)' : anyBypassed ? 'var(--danger)' : 'var(--warning)';
+
+    flowHtml += '<div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:' + phaseColor + ';padding:0.28rem 0.6rem;background:var(--elevated);border-left:2px solid ' + phaseColor + ';border-radius:0 3px 3px 0;margin-bottom:0.4rem">' + x(phase.label || phase.tactic || 'Unknown') + '</div>';
+
+    phase.nodes.forEach(function(n) {
+      var vc  = VERDICT_COLOR[n.verdict] || 'var(--muted)';
+      var vbg = VERDICT_BG[n.verdict]    || 'rgba(154,169,188,0.04)';
+      var vi  = VERDICT_ICON[n.verdict]  || '&#183;';
+
+      flowHtml +=
+        '<div style="background:' + vbg + ';border:1px solid var(--border);border-left:3px solid ' + vc + ';border-radius:0 4px 4px 0;padding:0.45rem 0.65rem;margin-bottom:0.3rem">' +
+          '<div style="display:flex;align-items:center;gap:0.45rem">' +
+            '<code style="font-size:0.68rem;color:var(--accent);flex-shrink:0;min-width:5.5rem">' + x(n.techniqueId || '—') + '</code>' +
+            '<span style="font-size:0.75rem;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + x(n.techniqueName || '') + '">' + x(n.techniqueName || '') + '</span>' +
+            '<span style="font-size:0.65rem;font-weight:600;color:' + vc + ';border:1px solid ' + vc + '55;border-radius:3px;padding:0.05rem 0.28rem;flex-shrink:0;white-space:nowrap">' + vi + '&nbsp;' + x(n.verdictLabel || n.verdict) + '</span>' +
+          '</div>' +
+          (n.controlName && n.controlName !== '—'
+            ? '<div style="display:flex;align-items:center;gap:0.35rem;margin-top:0.2rem;padding-left:5.95rem">' +
+                '<span style="font-size:0.67rem;color:var(--muted)">&#11042;</span>' +
+                '<span style="font-size:0.68rem;color:' + vc + ';font-weight:500">' + x(n.controlName) + '</span>' +
+                (n.alertName ? '<span style="font-size:0.64rem;color:var(--muted)">&#183; ' + x(n.alertName) + '</span>' : '') +
+                (n.durationMs ? '<span style="font-size:0.62rem;color:var(--muted);margin-left:auto">&#8764;' + n.durationMs + 'ms</span>' : '') +
+              '</div>'
+            : (n.durationMs ? '<div style="text-align:right;font-size:0.62rem;color:var(--muted);margin-top:0.15rem">&#8764;' + n.durationMs + 'ms</div>' : '')) +
+          (n.isStopPoint
+            ? '<div style="margin-top:0.25rem;padding-left:5.95rem;font-size:0.67rem;color:var(--success);font-weight:600">&#9940; Attack stopped here</div>'
+            : '') +
+        '</div>';
+    });
+
+    // Connector between phases (only when the attack continued past this phase)
+    if (pi < phases.length - 1) {
+      var phaseBlocked = phase.nodes.some(function(n) { return n.isStopPoint; });
+      var connColor = phaseBlocked ? 'rgba(210,153,34,0.4)' : 'rgba(218,54,51,0.35)';
+      var connLabel = phaseBlocked ? 'Partially blocked — attack continued' : 'Attack progressed';
+      flowHtml +=
+        '<div style="display:flex;align-items:center;gap:0.5rem;margin:0.45rem 0;padding:0 0.2rem">' +
+          '<div style="flex:1;height:1px;background:' + connColor + '"></div>' +
+          '<span style="font-size:0.6rem;color:var(--muted);white-space:nowrap">' + connLabel + '</span>' +
+          '<div style="flex:1;height:1px;background:' + connColor + '"></div>' +
+        '</div>';
+    }
+  });
+
+  return summaryHtml + flowHtml;
 }
 
 // Renders the dual-rail kill-chain step nodes from rep.killChain. Shared by the
