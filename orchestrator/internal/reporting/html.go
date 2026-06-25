@@ -1,4 +1,4 @@
-package reporting
+﻿package reporting
 
 import (
 	"encoding/json"
@@ -983,9 +983,107 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 10. ASSESSMENT INSIGHTS ═════════════════════════════════════════ -->
+
+<!-- ═══ 10. VARIANT COVERAGE ANALYSIS ════════════════════════════════════ -->
+{{if .variantCoverage}}{{if .variantCoverage.hasData}}
 <div class="page">
-<h1>10. Assessment Insights</h1>
+<h1>10. Variant Coverage Analysis</h1>
+<p style="color:#6e7681;margin-bottom:14px">Multi-variant evasion testing: encoding obfuscation, execution-context, and privilege-tier combinations per technique. Identifies control gaps that allowed bypasses and provides targeted remediation guidance.</p>
+
+<div class="score-row">
+  <div class="scard">
+    <div class="scard-label">Techniques Tested</div>
+    <div class="scard-value">{{.variantCoverage.techniquesTotal}}</div>
+    <div style="font-size:0.78rem;color:#6e7681">{{.variantCoverage.variantsExecuted}} variants executed</div>
+  </div>
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Blocked</div>
+    <div class="scard-value" style="color:#0d9488">{{.variantCoverage.blocked}}</div>
+    <div style="font-size:0.78rem;color:#6e7681">Detected: {{.variantCoverage.detected}}</div>
+  </div>
+  <div class="scard" style="border-left:3px solid #2563eb">
+    <div class="scard-label">Prevention Score</div>
+    <div class="scard-value" style="color:#2563eb">{{printf "%.1f" .variantCoverage.preventionScore}}%</div>
+    <div style="font-size:0.78rem;color:#6e7681">Detection Score: {{printf "%.1f" .variantCoverage.detectionScore}}%</div>
+  </div>
+  <div class="scard" style="border-left:3px solid {{if gt .variantCoverage.bypassRate 20.0}}#da3633{{else if gt .variantCoverage.bypassRate 5.0}}#d29922{{else}}#0d9488{{end}}">
+    <div class="scard-label">Bypass Rate</div>
+    <div class="scard-value" style="color:{{if gt .variantCoverage.bypassRate 20.0}}#da3633{{else if gt .variantCoverage.bypassRate 5.0}}#d29922{{else}}#0d9488{{end}}">{{printf "%.1f" .variantCoverage.bypassRate}}%</div>
+    <div style="font-size:0.78rem;color:#6e7681">{{.variantCoverage.techniquesWithBypass}} technique(s) with bypass</div>
+  </div>
+</div>
+
+<h3>Test Coverage Maturity</h3>
+<table>
+  <thead><tr><th>Dimension</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Execution Variants</td><td>{{if .variantCoverage.maturity.executionTested}}<span style="color:#0d9488;font-weight:600">&#10003; Tested</span>{{else}}<span style="color:#6e7681">&#8212; Not Tested</span>{{end}}</td></tr>
+    <tr><td>Encoding Obfuscation</td><td>{{if .variantCoverage.maturity.encodingTested}}<span style="color:#0d9488;font-weight:600">&#10003; Tested</span>{{else}}<span style="color:#6e7681">&#8212; Not Tested</span>{{end}}</td></tr>
+    <tr><td>Privilege Tiers</td><td>{{if .variantCoverage.maturity.privilegeTested}}<span style="color:#0d9488;font-weight:600">&#10003; Tested</span>{{else}}<span style="color:#6e7681">&#8212; Not Tested</span>{{end}}</td></tr>
+    <tr><td>Proxy Execution</td><td>{{if .variantCoverage.maturity.proxyTested}}<span style="color:#0d9488;font-weight:600">&#10003; Tested</span>{{else}}<span style="color:#6e7681">&#8212; Not Tested</span>{{end}}</td></tr>
+    <tr><td>Advanced Evasion</td><td><span style="color:#6e7681">&#8212; Not Tested</span></td></tr>
+  </tbody>
+</table>
+
+{{if .variantCoverage.techniquesWithBypass}}
+<h2>Bypass Findings</h2>
+{{range .variantCoverage.techniques}}{{if .hasBypass}}
+<div style="border:1px solid #fca5a5;border-left:4px solid #da3633;border-radius:6px;padding:14px 16px;margin-bottom:12px;background:#fff8f8">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+    <div>
+      <span style="font-weight:700;color:#0b1420;font-size:0.95rem">{{.techniqueId}}</span>
+      {{if .techniqueName}}<span style="color:#6e7681;margin-left:8px">{{.techniqueName}}</span>{{end}}
+    </div>
+    {{if .bestBypassLabel}}<span style="font-size:0.8rem;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;padding:2px 8px;color:#92400e;font-weight:600">{{.bestBypassLabel}}</span>{{end}}
+  </div>
+  {{if .headline}}<p style="font-weight:600;color:#da3633;margin-bottom:8px;font-size:0.92rem">{{.headline}}</p>{{end}}
+  {{if .remediationPoints}}
+  <ul style="margin:0;padding-left:18px;color:#374151;font-size:0.83rem">
+    {{range .remediationPoints}}<li style="margin-bottom:3px">{{.}}</li>{{end}}
+  </ul>
+  {{end}}
+</div>
+{{end}}{{end}}
+{{end}}
+
+<h3>Technique Coverage</h3>
+<table>
+  <thead><tr>
+    <th>Technique</th>
+    <th style="text-align:right">Variants</th>
+    <th style="text-align:right">Blocked</th>
+    <th style="text-align:right">Detected</th>
+    <th style="text-align:right">Allowed</th>
+    <th style="text-align:right">Bypass%</th>
+    <th>Best Bypass</th>
+  </tr></thead>
+  <tbody>
+  {{range .variantCoverage.techniques}}
+  <tr{{if .hasBypass}} style="background:#fff8f8"{{end}}>
+    <td style="font-weight:600">{{.techniqueId}}{{if .techniqueName}}<br><span style="font-weight:400;font-size:0.78rem;color:#6e7681">{{.techniqueName}}</span>{{end}}</td>
+    <td style="text-align:right">{{.variantsExecuted}}</td>
+    <td style="text-align:right;color:#0d9488;font-weight:600">{{.blocked}}</td>
+    <td style="text-align:right;color:#d29922">{{.detected}}</td>
+    <td style="text-align:right;color:{{if gt .bypassed 0.0}}#da3633{{else}}#6e7681{{end}};font-weight:{{if gt .bypassed 0.0}}700{{else}}400{{end}}">{{.bypassed}}</td>
+    <td style="text-align:right;font-weight:700;color:{{if gt .bypassRate 50.0}}#da3633{{else if gt .bypassRate 20.0}}#d29922{{else}}#0d9488{{end}}">{{printf "%.0f" .bypassRate}}%</td>
+    <td style="font-size:0.82rem;color:#6e7681">{{if .bestBypassLabel}}{{.bestBypassLabel}}{{else}}&#8212;{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+
+{{if .variantCoverage.firstBypassElapsed}}
+<p style="color:#6e7681;font-size:0.82rem;margin-top:10px">First successful bypass occurred <strong>{{.variantCoverage.firstBypassElapsed}}</strong> into the assessment.</p>
+{{end}}
+
+<div class="footer">
+  <span>{{.agent.hostname}} &#8212; Variant Coverage Analysis</span>
+</div>
+</div>
+{{end}}{{end}}
+<!-- ═══ 11. ASSESSMENT INSIGHTS ═════════════════════════════════════════ -->
+<div class="page">
+<h1>11. Assessment Insights</h1>
 {{if .insights.hasData}}
 <div class="score-row">
   {{if .insights.most}}
@@ -1013,9 +1111,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 11. ACTION PLAN ═════════════════════════════════════════════════ -->
+<!-- ═══ 12. ACTION PLAN ═════════════════════════════════════════════════ -->
 <div class="page">
-<h1>11. Action Plan</h1>
+<h1>12. Action Plan</h1>
 <p style="color:#6e7681;margin-bottom:14px">Remediations ordered by the prevention-score points their failures account for. The points quantify current exposure attributable to each tactic — they are not a promised score gain, since a single control may not resolve every underlying finding.</p>
 {{if .actionPlan}}
 <table>
@@ -1041,9 +1139,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 12. COMPLIANCE STATUS ═══════════════════════════════════════════ -->
+<!-- ═══ 13. COMPLIANCE STATUS ═══════════════════════════════════════════ -->
 <div class="page">
-<h1>12. Regulatory Compliance Status</h1>
+<h1>13. Regulatory Compliance Status</h1>
 <p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
 {{if .compliance}}
 <table>
@@ -1075,9 +1173,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 13. SCENARIO RUN HISTORY ════════════════════════════════════════ -->
+<!-- ═══ 14. SCENARIO RUN HISTORY ════════════════════════════════════════ -->
 <div class="page">
-<h1>13. Scenario Run History</h1>
+<h1>14. Scenario Run History</h1>
 {{if .runs}}
 <table>
   <thead><tr>
@@ -1108,9 +1206,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 14. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
+<!-- ═══ 15. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>14. Technical Findings</h1>
+<h1>15. Technical Findings</h1>
 {{if .topFindings}}
 <p style="color:#6e7681;margin-bottom:14px">Critical and High severity techniques that succeeded against this endpoint — the associated security controls did <strong>not</strong> prevent the attack. De-duplicated by technique.</p>
 <table>
@@ -1140,9 +1238,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 15. DETECTION VALIDATION ════════════════════════════════════════ -->
+<!-- ═══ 16. DETECTION VALIDATION ════════════════════════════════════════ -->
 <div class="page">
-<h1>15. Detection Validation</h1>
+<h1>16. Detection Validation</h1>
 <p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
 
 <h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
@@ -1238,9 +1336,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 16. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
+<!-- ═══ 17. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>16. Coverage Analytics</h1>
+<h1>17. Coverage Analytics</h1>
 <p style="color:#6e7681;margin-bottom:14px">
   3-bucket breakdown of every technique executed in this assessment.
   <strong style="color:#0d9488">Prevented</strong> — a control blocked execution (PASS/BLOCKED).
@@ -1369,9 +1467,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
-<!-- ═══ 17. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
+<!-- ═══ 18. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
 <div class="page">
-<h1>17. Technical Appendix — ATT&amp;CK Glossary</h1>
+<h1>18. Technical Appendix — ATT&amp;CK Glossary</h1>
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
 {{range .glossary}}

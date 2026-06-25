@@ -40,8 +40,11 @@ type FullReport struct {
 	Detection           DetectionSummary `json:"detection"`
 	TrendAnalysis       TrendSummary     `json:"trendAnalysis"`
 	AttackPath          AttackPath          `json:"attackPath"`
-	AttackFlow          []AttackFlowNode    `json:"attackFlow,omitempty"`
-	AttackFlowSummary   AttackFlowSummary   `json:"attackFlowSummary"`
+	AttackFlow          []AttackFlowNode        `json:"attackFlow,omitempty"`
+	AttackFlowSummary   AttackFlowSummary       `json:"attackFlowSummary"`
+	// VariantCoverage holds multi-variant evasion analysis for the HTML/PDF report.
+	// Populated from scenario_variant_technique_summary; nil for runs with no variant depth.
+	VariantCoverage     *VariantCoverageSection `json:"variantCoverage,omitempty"`
 	// DetectionTechniques is the per-technique purple-team verdict from the agent's
 	// post-run alert sweep (prevented|detected|undetected + confidence). Empty until
 	// the agent submits detections for the run. Sourced from scenario_runs.detection_summary.
@@ -124,6 +127,50 @@ type PrivilegeSummary struct {
 	AdminRate  int `json:"adminRate"`
 	SystemRate int `json:"systemRate"`
 	LegacyRate int `json:"legacyRate"`
+}
+
+// VariantCoverageSection is the report section for multi-variant evasion results.
+// Sourced from scenario_variant_technique_summary; populated only for runs with
+// variant depth. All fields carry json tags (garble safety — see GenerateHTML).
+type VariantCoverageSection struct {
+	HasData              bool                 `json:"hasData"`
+	TechniquesTotal      int                  `json:"techniquesTotal"`
+	VariantsExecuted     int                  `json:"variantsExecuted"`
+	Blocked              int                  `json:"blocked"`
+	Detected             int                  `json:"detected"`
+	Bypassed             int                  `json:"bypassed"`
+	BypassRate           float64              `json:"bypassRate"`
+	PreventionScore      float64              `json:"preventionScore"`
+	DetectionScore       float64              `json:"detectionScore"`
+	TechniquesWithBypass int                  `json:"techniquesWithBypass"`
+	FirstBypassElapsed   string               `json:"firstBypassElapsed,omitempty"`
+	Maturity             VariantMaturityScore `json:"maturity"`
+	Techniques           []VariantTechRow     `json:"techniques"`
+}
+
+// VariantMaturityScore flags which test dimensions were exercised in the run.
+type VariantMaturityScore struct {
+	ExecutionTested bool `json:"executionTested"`
+	EncodingTested  bool `json:"encodingTested"`
+	PrivilegeTested bool `json:"privilegeTested"`
+	ProxyTested     bool `json:"proxyTested"`
+	EvasionTested   bool `json:"evasionTested"` // always false (Advanced Evasion Pack not yet implemented)
+}
+
+// VariantTechRow is one technique entry in the variant coverage table.
+type VariantTechRow struct {
+	TechniqueID       string   `json:"techniqueId"`
+	TechniqueName     string   `json:"techniqueName"`
+	Tactic            string   `json:"tactic"`
+	VariantsExecuted  int      `json:"variantsExecuted"`
+	Blocked           int      `json:"blocked"`
+	Detected          int      `json:"detected"`
+	Bypassed          int      `json:"bypassed"`
+	BypassRate        float64  `json:"bypassRate"`
+	HasBypass         bool     `json:"hasBypass"`
+	BestBypassLabel   string   `json:"bestBypassLabel,omitempty"`
+	Headline          string   `json:"headline,omitempty"`
+	RemediationPoints []string `json:"remediationPoints,omitempty"`
 }
 
 // ReportScope describes a fleet-wide (campaign) report's subject.
@@ -1328,6 +1375,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
 
 	e.populateAttackSurfaceAge(ctx, report, agentID)
+	e.populateVariantCoverage(ctx, report, runID)
 
 	return report, nil
 }
@@ -2117,4 +2165,278 @@ func FilterResults(results []models.SimulationResult, filter string) []models.Si
 		}
 	}
 	return filtered
+}
+
+// ── Variant Coverage ──────────────────────────────────────────────────────────
+
+// populateVariantCoverage queries scenario_variant_technique_summary for the run
+// and populates report.VariantCoverage. No-op when no variant rows exist.
+func (e *Engine) populateVariantCoverage(ctx context.Context, report *FullReport, runID string) {
+	rows, err := e.db.Query(ctx, `
+		SELECT technique_id, COALESCE(technique_name,''), COALESCE(tactic,''),
+		       variants_executed, blocked, detected, logged, bypassed, errors,
+		       best_bypass_variant_id,
+		       COALESCE(encodings_tested,'{}'), COALESCE(contexts_tested,'{}'), COALESCE(privileges_tested,'{}')
+		  FROM scenario_variant_technique_summary
+		 WHERE run_id = $1
+		 ORDER BY bypassed DESC, detected DESC, variants_executed DESC`, runID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	type summRow struct {
+		techID, techName, tactic                         string
+		total, blocked, detected, logged, bypassed, errs int
+		bestBypassID                                     *string
+		encodings, contexts, privileges                  []string
+	}
+
+	var summaries []summRow
+	var bestIDs []string
+
+	for rows.Next() {
+		var s summRow
+		if err := rows.Scan(
+			&s.techID, &s.techName, &s.tactic,
+			&s.total, &s.blocked, &s.detected, &s.logged, &s.bypassed, &s.errs,
+			&s.bestBypassID,
+			&s.encodings, &s.contexts, &s.privileges,
+		); err != nil {
+			continue
+		}
+		summaries = append(summaries, s)
+		if s.bestBypassID != nil {
+			bestIDs = append(bestIDs, *s.bestBypassID)
+		}
+	}
+	rows.Close()
+
+	if len(summaries) == 0 {
+		return
+	}
+
+	// Bulk-fetch best bypass variant details (encoding / context / privilege).
+	type bypassDetail struct{ enc, execCtx, priv string }
+	bestBypassDetails := map[string]bypassDetail{}
+	if len(bestIDs) > 0 {
+		phs := make([]string, len(bestIDs))
+		args := make([]any, len(bestIDs))
+		for i, id := range bestIDs {
+			phs[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = id
+		}
+		brows, berr := e.db.Query(ctx,
+			`SELECT id, encoding, execution_context, privilege
+			   FROM scenario_variant_results
+			  WHERE id IN (`+strings.Join(phs, ",")+`)`,
+			args...,
+		)
+		if berr == nil {
+			defer brows.Close()
+			for brows.Next() {
+				var id, enc, execCtxCol, priv string
+				if brows.Scan(&id, &enc, &execCtxCol, &priv) == nil {
+					bestBypassDetails[id] = bypassDetail{enc, execCtxCol, priv}
+				}
+			}
+		}
+	}
+
+	sec := &VariantCoverageSection{}
+	maturity := VariantMaturityScore{ExecutionTested: true}
+
+	for _, s := range summaries {
+		t := VariantTechRow{
+			TechniqueID:      s.techID,
+			TechniqueName:    s.techName,
+			Tactic:           s.tactic,
+			VariantsExecuted: s.total,
+			Blocked:          s.blocked,
+			Detected:         s.detected + s.logged, // merge logged → detected for display
+			Bypassed:         s.bypassed,
+			HasBypass:        s.bypassed > 0,
+		}
+		counted := t.Blocked + t.Detected + t.Bypassed
+		if counted > 0 {
+			t.BypassRate = float64(t.Bypassed) / float64(counted) * 100
+		}
+
+		if s.bestBypassID != nil {
+			if d, ok := bestBypassDetails[*s.bestBypassID]; ok {
+				t.BestBypassLabel = variantBypassLabel(d.enc, d.execCtx, d.priv)
+				t.Headline, t.RemediationPoints = variantCoverageRecommendation(s.techID, d.enc, d.execCtx, d.priv)
+			}
+		}
+
+		// Maturity: track which dimensions were exercised.
+		for _, enc := range s.encodings {
+			if enc != "plain" {
+				maturity.EncodingTested = true
+			}
+		}
+		if len(s.privileges) > 1 || (len(s.privileges) == 1 && s.privileges[0] != "user") {
+			maturity.PrivilegeTested = true
+		}
+		for _, c := range s.contexts {
+			if c != "direct" {
+				maturity.ProxyTested = true
+			}
+		}
+
+		sec.TechniquesTotal++
+		sec.VariantsExecuted += s.total
+		sec.Blocked += t.Blocked
+		sec.Detected += t.Detected
+		sec.Bypassed += t.Bypassed
+		if t.HasBypass {
+			sec.TechniquesWithBypass++
+		}
+		sec.Techniques = append(sec.Techniques, t)
+	}
+
+	// Global rates.
+	counted := sec.Blocked + sec.Detected + sec.Bypassed
+	if counted > 0 {
+		sec.BypassRate = float64(sec.Bypassed) / float64(counted) * 100
+		sec.PreventionScore = float64(sec.Blocked) / float64(counted) * 100
+		nonBlocked := sec.Detected + sec.Bypassed
+		if nonBlocked > 0 {
+			sec.DetectionScore = float64(sec.Detected) / float64(nonBlocked) * 100
+		}
+	}
+
+	// First successful bypass timing (relative to run start).
+	if len(report.Runs) > 0 {
+		var firstBypassAt *time.Time
+		if scanErr := e.db.QueryRow(ctx,
+			`SELECT MIN(executed_at) FROM scenario_variant_results
+			  WHERE run_id = $1 AND verdict = 'bypassed'`, runID,
+		).Scan(&firstBypassAt); scanErr == nil && firstBypassAt != nil {
+			if elapsed := firstBypassAt.Sub(report.Runs[0].StartedAt); elapsed > 0 {
+				mins := int(elapsed.Minutes())
+				secs := int(elapsed.Seconds()) % 60
+				sec.FirstBypassElapsed = fmt.Sprintf("%dm %ds", mins, secs)
+			}
+		}
+	}
+
+	sec.Maturity = maturity
+	sec.HasData = true
+	report.VariantCoverage = sec
+}
+
+// variantBypassLabel formats a best-bypass combination as "Charcode + WMI + Admin".
+func variantBypassLabel(enc, execCtx, priv string) string {
+	var parts []string
+	switch enc {
+	case "base64":
+		parts = append(parts, "Base64")
+	case "charcode":
+		parts = append(parts, "Charcode")
+	}
+	switch execCtx {
+	case "wmi":
+		parts = append(parts, "WMI")
+	case "scheduled-task":
+		parts = append(parts, "Schtasks")
+	case "com":
+		parts = append(parts, "COM")
+	}
+	switch priv {
+	case "admin":
+		parts = append(parts, "Admin")
+	case "system":
+		parts = append(parts, "System")
+	}
+	if len(parts) == 0 {
+		return "Plain / Direct"
+	}
+	return strings.Join(parts, " + ")
+}
+
+// variantCoverageRecommendation returns a headline + remediation bullets for the
+// best bypass combination. Mirrors api.coverageRecommendation for the reporting package.
+func variantCoverageRecommendation(techID, enc, execCtx, priv string) (headline string, points []string) {
+	noun := variantTechExecLang(techID)
+
+	switch execCtx {
+	case "wmi":
+		headline = fmt.Sprintf("%s via WMI (T1047) was not prevented", noun)
+		points = []string{
+			"Enable WMI activity auditing (Events 5857–5861, Microsoft-Windows-WMI-Activity/Operational)",
+			"Block wmic.exe via AppLocker or WDAC if Win32_Process.Create is not operationally required",
+			"Add EDR alert: PowerShell spawning child processes through WMI instead of CreateProcess",
+			"Review EDR WMI execution detection rules and verify they are in Block mode (not Audit)",
+		}
+	case "scheduled-task":
+		headline = fmt.Sprintf("%s via Scheduled Task (T1053.005) was not prevented", noun)
+		points = []string{
+			"Enable Task Scheduler audit logging (Events 4698, 4699, 4702 — Security log)",
+			"Alert on schtasks.exe creating tasks with /sc once — strong BAS and malware indicator",
+			"Consider AppLocker rules restricting schtasks.exe execution in non-administrative contexts",
+			"Review EDR scheduled task detection rules — verify Block mode is active",
+		}
+	case "com":
+		headline = fmt.Sprintf("%s via COM WScript.Shell (T1559.001) was not prevented", noun)
+		points = []string{
+			"Add EDR rule: alert when WScript.Shell.Run spawns child processes (powershell.exe, cmd.exe)",
+			"Enable Script Auditing (Event 4104) to capture WScript-invoked payload content",
+			"Review COM object instantiation policy — restrict New-Object -COM WScript.Shell in Constrained Language Mode",
+		}
+	default:
+		switch enc {
+		case "base64":
+			headline = fmt.Sprintf("%s with Base64 encoding (-EncodedCommand) was not detected", noun)
+			points = []string{
+				"Enable PowerShell ScriptBlock logging (Event 4104) — decodes base64 transparently",
+				"Enable ASR rule: Block execution of potentially obfuscated scripts (GUID 5BEB7EFE)",
+				"Ensure AMSI is functioning and not bypassed — base64 payloads are decoded before AMSI inspection",
+			}
+		case "charcode":
+			headline = fmt.Sprintf("%s with charcode obfuscation (IEX([char]N+...)) was not detected", noun)
+			points = []string{
+				"Enable PowerShell ScriptBlock logging (Event 4104) — charcode is decoded before logging",
+				"Deploy PowerShell Constrained Language Mode to restrict arbitrary IEX invocations",
+				"Enable ASR rule: Block execution of potentially obfuscated scripts (GUID 5BEB7EFE)",
+			}
+		default:
+			headline = fmt.Sprintf("%s executed without triggering a prevention or detection control", noun)
+			points = []string{
+				fmt.Sprintf("Review EDR prevention policy coverage for %s", techID),
+				"Enable PowerShell Module logging (Event 4103) and ScriptBlock logging (Event 4104)",
+				"Verify ASR rules are in Block mode — Audit mode does not prevent execution",
+			}
+		}
+	}
+
+	switch priv {
+	case "admin":
+		points = append(points,
+			"Execution succeeded at local administrator privilege — review privileged access controls and local admin restrictions (LAPS / PAW model)")
+	case "system":
+		points = append(points,
+			"Execution succeeded at SYSTEM privilege — verify privilege escalation path controls and SYSTEM-level execution restrictions")
+	}
+
+	return headline, points
+}
+
+func variantTechExecLang(techID string) string {
+	prefixes := []struct{ prefix, label string }{
+		{"T1059.001", "PowerShell execution"},
+		{"T1059.003", "Windows Command Shell execution"},
+		{"T1059.005", "Visual Basic execution"},
+		{"T1059", "Script/command execution"},
+		{"T1047", "WMI execution"},
+		{"T1053", "Scheduled task execution"},
+		{"T1218", "System binary proxy execution"},
+		{"T1055", "Process injection"},
+	}
+	for _, p := range prefixes {
+		if strings.HasPrefix(techID, p.prefix) {
+			return p.label
+		}
+	}
+	return techID + " execution"
 }
