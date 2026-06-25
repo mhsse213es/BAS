@@ -2750,11 +2750,32 @@ body.theme-slate {
     <h3>New Campaign</h3>
     <label class="modal-lbl">Name</label>
     <input id="cmp-name" type="text" placeholder="e.g. Q2 Ransomware Readiness" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:inherit">
-    <label class="modal-lbl">Scenario</label>
-    <div style="display:flex;gap:0.5rem;align-items:center">
-      <select id="cmp-scenario" style="flex:1"></select>
-      <button class="btn btn-outline btn-sm" style="white-space:nowrap;flex-shrink:0" onclick="loadKEVPack()" title="Create a scenario pre-populated with techniques linked to CISA Known Exploited Vulnerabilities">&#9760; KEV Pack</button>
+
+    <!-- ── Threat-Informed Campaign Builder ── -->
+    <div style="margin:0.9rem 0 0;padding:0.85rem 1rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius)">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);margin-bottom:0.65rem">Threat-Informed Campaigns</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem" id="ti-pack-grid">
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('kev')">&#9760; KEV Exposure</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('ransomware')">&#128274; Ransomware Readiness</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('credential-theft')">&#128272; Credential Theft</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('living-off-the-land')">&#9881; Living-Off-The-Land</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('powershell-abuse')">&#128187; PowerShell Abuse</button>
+        <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('lateral-movement')">&#8596; Lateral Movement</button>
+      </div>
+      <div id="ti-pack-preview" style="display:none;margin-top:0.65rem;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--accent);border-radius:var(--radius)">
+        <div id="ti-pack-info" style="font-size:0.8rem;color:var(--text);margin-bottom:0.5rem"></div>
+        <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateTIScenario()">&#9654; Generate Campaign</button>
+      </div>
     </div>
+
+    <div style="display:flex;align-items:center;gap:0.5rem;margin:0.75rem 0 0.4rem">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:0.7rem;color:var(--muted);white-space:nowrap">or choose an existing scenario</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+
+    <label class="modal-lbl">Scenario</label>
+    <select id="cmp-scenario"></select>
     <label class="modal-lbl">Execution mode</label>
     <select id="cmp-mode">
       <option value="posture">Posture — read-only, safe on any host</option>
@@ -4020,52 +4041,94 @@ function openCampaignLaunch() {
 }
 function closeCampaignLaunch() { document.getElementById('campaign-overlay').classList.remove('open'); }
 
-// ── KEV Pack ──────────────────────────────────────────────────────────────────
-// Fetches CISA KEV technique mappings, creates a custom scenario pre-populated
-// with those techniques, then selects it in the active campaign builder.
-function loadKEVPack() {
-  apicall('/api/ti/suggest-pack?type=kev').then(function(pack) {
+// ── Threat-Informed Campaign Builder ─────────────────────────────────────────
+var _tiPackData = null;
+
+var _tiPackIcons = {
+  'kev': '&#9760;', 'ransomware': '&#128274;', 'credential-theft': '&#128272;',
+  'living-off-the-land': '&#9881;', 'powershell-abuse': '&#128187;', 'lateral-movement': '&#8596;'
+};
+
+// selectTIPack: fetches pack metadata and shows the preview panel.
+function selectTIPack(type) {
+  var preview = document.getElementById('ti-pack-preview');
+  var info = document.getElementById('ti-pack-info');
+  preview.style.display = 'none';
+  info.textContent = 'Loading…';
+  // Highlight selected button
+  document.querySelectorAll('#ti-pack-grid .btn').forEach(function(b) { b.style.borderColor = ''; });
+  event && event.target && (event.target.style.borderColor = 'var(--accent)');
+  apicall('/api/ti/suggest-pack?type=' + encodeURIComponent(type)).then(function(pack) {
+    _tiPackData = pack;
     if (!pack || !pack.hasData) {
-      showToast('KEV data not available — reseed content pack first', 'err');
+      info.innerHTML = '<span style="color:var(--danger)">No data available for this pack — run more scenarios or reseed content first.</span>';
+      preview.style.display = '';
       return;
     }
+    var ransomNote = pack.ransomwareCount > 0 ? ' &middot; <strong style="color:var(--warning)">' + pack.ransomwareCount + ' ransomware-linked</strong>' : '';
+    var kevNote = pack.totalKevCves > 0 ? ' &middot; ' + pack.totalKevCves + ' KEV CVEs' : '';
+    info.innerHTML = (_tiPackIcons[type] || '') + ' <strong>' + x(pack.packName) + '</strong><br>' +
+      '<span style="color:var(--muted)">' + x(pack.description) + '</span><br>' +
+      '<span style="font-size:0.75rem;margin-top:4px;display:inline-block"><strong>' + pack.techniqueCount + '</strong> techniques' + kevNote + ransomNote + '</span>';
+    preview.style.display = '';
+    // Pre-fill campaign name
+    var nameEl = document.getElementById('cmp-name');
+    if (!nameEl.value) nameEl.value = pack.suggestedName || '';
+  }).catch(function() {
+    info.innerHTML = '<span style="color:var(--danger)">Failed to fetch pack data.</span>';
+    preview.style.display = '';
+  });
+}
+
+// generateTIScenario: creates the scenario from _tiPackData and selects it.
+function generateTIScenario() {
+  if (!_tiPackData || !_tiPackData.hasData) { showToast('No pack selected', 'err'); return; }
+  var pack = _tiPackData;
+  apicall('/api/scenarios', { method: 'POST', body: JSON.stringify(pack.suggestedScenario) })
+    .then(function(res) {
+      if (res && res.error) {
+        if (res.error.indexOf('already exists') >= 0) {
+          showToast(pack.packName + ' already exists — selecting it', 'ok');
+          loadScenarios();
+          setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+        } else {
+          showToast('Failed: ' + res.error, 'err');
+        }
+        return;
+      }
+      showToast(pack.packName + ' created — ' + pack.techniqueCount + ' techniques', 'ok');
+      loadScenarios();
+      setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+    })
+    .catch(function() { showToast('Failed to create scenario', 'err'); });
+}
+
+// loadKEVPack: legacy shortcut (dashboard widget "Create KEV Pack" link).
+function loadKEVPack() {
+  apicall('/api/ti/suggest-pack?type=kev').then(function(pack) {
+    if (!pack || !pack.hasData) { showToast('KEV data not available — reseed content pack first', 'err'); return; }
     var msg = 'Create "' + pack.suggestedName + '" with ' + pack.techniqueCount + ' KEV-linked techniques' +
               (pack.ransomwareCount > 0 ? ' (' + pack.ransomwareCount + ' ransomware-linked)' : '') + '?';
     if (!confirm(msg)) return;
     apicall('/api/scenarios', { method: 'POST', body: JSON.stringify(pack.suggestedScenario) })
       .then(function(res) {
         if (res && res.error) {
-          // 409 = already exists — just select it
-          if (res.error.indexOf('already exists') >= 0) {
-            _selectCmpScenario(pack.suggestedId);
-          } else {
-            showToast('Failed to create KEV Pack: ' + res.error, 'err');
-          }
+          if (res.error.indexOf('already exists') >= 0) { _selectCmpScenario(pack.suggestedId); }
+          else { showToast('Failed: ' + res.error, 'err'); }
           return;
         }
         showToast('KEV Exposure Pack created — ' + pack.techniqueCount + ' techniques', 'ok');
-        loadScenarios();
-        setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
-      })
-      .catch(function(e) {
-        // Non-2xx response — check if conflict (already exists)
-        if (e && e.status === 409) {
-          showToast('KEV Pack already exists — selecting it', 'ok');
-          loadScenarios();
-          setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
-        } else {
-          showToast('Failed to create KEV Pack', 'err');
-        }
-      });
+        loadScenarios(); setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+      }).catch(function() { showToast('Failed to create KEV Pack', 'err'); });
   }).catch(function() { showToast('Could not fetch KEV data', 'err'); });
 }
+
 function _selectCmpScenario(id) {
   var sel = document.getElementById('cmp-scenario');
   if (!sel) return;
   for (var i = 0; i < sel.options.length; i++) {
     if (sel.options[i].value === id) { sel.selectedIndex = i; return; }
   }
-  // Not in dropdown yet — rebuild it from current scenarios list
   document.getElementById('cmp-scenario').innerHTML = scenarios.map(function(s) {
     return '<option value="' + x(s.id) + '"' + (s.id === id ? ' selected' : '') + '>' + x(s.name) + '</option>';
   }).join('');

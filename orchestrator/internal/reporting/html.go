@@ -1072,6 +1072,130 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 {{end}}
+<!-- ═══ 10a. RANSOMWARE READINESS ═══════════════════════════════════════════ -->
+{{if .ransomwareReadiness}}
+<div class="page">
+<h1>10a. Ransomware Readiness</h1>
+<p style="color:#6e7681;margin-bottom:6px">Prevention and detection readiness against known ransomware threat actors, derived from MITRE ATT&amp;CK technique attribution. Worst performers shown first — these represent the highest breach risk from currently active ransomware groups.</p>
+<p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">Only groups with ≥3 tested techniques are included. Confidence reflects sample size: <strong>High</strong> ≥10 tested, <strong>Medium</strong> ≥5, <strong>Low</strong> 3–4.</p>
+<table>
+  <thead><tr>
+    <th>Ransomware Group</th>
+    <th style="text-align:right">Tested</th>
+    <th style="text-align:right">Prevention</th>
+    <th style="text-align:right">Detection</th>
+    <th>Posture</th>
+    <th>Confidence</th>
+  </tr></thead>
+  <tbody>
+  {{range .ransomwareReadiness}}
+  <tr>
+    <td>
+      <strong style="font-size:0.92rem">{{.groupName}}</strong>
+      <div style="font-size:0.7rem;color:#6e7681">{{.testedTechs}} of {{.totalTechs}} ATT&amp;CK techniques covered</div>
+    </td>
+    <td style="text-align:right;font-size:0.82rem;color:#6e7681">{{.testedTechs}} / {{.totalTechs}}</td>
+    <td style="text-align:right">
+      <strong style="font-size:1.05rem;color:{{if gt .preventionReadiness 79.9}}#0d9488{{else if gt .preventionReadiness 49.9}}#d29922{{else}}#da3633{{end}}">{{printf "%.0f" .preventionReadiness}}%</strong>
+      <div style="width:80px;height:5px;background:#e5e7eb;border-radius:3px;margin:3px 0 0 auto">
+        <div style="height:5px;border-radius:3px;width:{{printf "%.0f" .preventionReadiness}}%;background:{{if gt .preventionReadiness 79.9}}#0d9488{{else if gt .preventionReadiness 49.9}}#d29922{{else}}#da3633{{end}}"></div>
+      </div>
+    </td>
+    <td style="text-align:right">
+      <strong style="font-size:1.05rem;color:{{if gt .detectionReadiness 79.9}}#2f81f7{{else if gt .detectionReadiness 49.9}}#d29922{{else}}#da3633{{end}}">{{printf "%.0f" .detectionReadiness}}%</strong>
+      <div style="font-size:0.7rem;color:#6e7681">+{{.detectedTechs}} detected</div>
+    </td>
+    <td>
+      <span style="font-size:0.78rem;font-weight:700;border-radius:4px;padding:2px 8px;
+        {{if eq .readinessBand "High"}}background:#f0fdf4;border:1px solid #86efac;color:#15803d
+        {{else if eq .readinessBand "Medium"}}background:#fffbeb;border:1px solid #fde68a;color:#92400e
+        {{else}}background:#fef2f2;border:1px solid #fca5a5;color:#991b1b{{end}}">
+        {{.readinessBand}}
+      </span>
+    </td>
+    <td>
+      <span style="font-size:0.72rem;border-radius:4px;padding:2px 8px;background:#f8fafc;border:1px solid #cbd5e1;color:{{if eq .confidenceBand "High"}}#1d4ed8{{else if eq .confidenceBand "Medium"}}#475569{{else}}#94a3b8{{end}}">
+        {{.confidenceBand}}&nbsp;<span style="color:#94a3b8">({{.testedTechs}})</span>
+      </span>
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+<p style="font-size:0.72rem;color:#6e7681;margin-top:10px">Technique attribution from MITRE ATT&amp;CK&reg; &copy; The MITRE Corporation. Groups identified as ransomware-associated by curated keyword matching.</p>
+<div class="footer">
+  <span>{{.agent.hostname}} &#8212; Ransomware Readiness</span>
+</div>
+</div>
+{{end}}
+
+<!-- ═══ 10b. EPSS PRIORITY INDEX ═══════════════════════════════════════════ -->
+{{if .priorityScores}}
+<div class="page">
+<h1>10b. EPSS Priority Index</h1>
+<p style="color:#6e7681;margin-bottom:6px">Composite prioritisation combining CISA KEV active-exploitation status, FIRST EPSS exploitation probability, and ATT&amp;CK threat-actor usage frequency. Techniques with higher scores represent the greatest unremediated risk.</p>
+<p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">
+  Formula: <strong>KEV</strong> +40 pts · <strong>EPSS ≥90th %ile</strong> +30 pts · <strong>≥70th</strong> +20 pts · <strong>≥50th</strong> +10 pts · <strong>Threat Actors ≥5</strong> +20 pts · <strong>≥2</strong> +10 pts · <strong>Unblocked</strong> +10 pts.
+</p>
+<table>
+  <thead><tr>
+    <th>#</th>
+    <th>Technique</th>
+    <th>Tactic</th>
+    <th style="text-align:right">Score</th>
+    <th>Tier</th>
+    <th style="text-align:center">KEV</th>
+    <th style="text-align:right">EPSS</th>
+    <th style="text-align:right">Actors</th>
+    <th>Verdict</th>
+  </tr></thead>
+  <tbody>
+  {{range $i, $p := .priorityScores}}
+  <tr>
+    <td style="font-size:0.8rem;color:#6e7681">{{add1 $i}}</td>
+    <td>
+      <code style="font-size:0.8rem">{{$p.techniqueId}}</code>
+      <div style="font-size:0.75rem;color:#374151">{{$p.name}}</div>
+    </td>
+    <td style="font-size:0.8rem;color:#6e7681">{{humanize $p.tactic}}</td>
+    <td style="text-align:right">
+      <strong style="font-size:1rem;color:{{if ge $p.priorityScore 70}}#da3633{{else if ge $p.priorityScore 40}}#d29922{{else if ge $p.priorityScore 20}}#2f81f7{{else}}#6e7681{{end}}">{{$p.priorityScore}}</strong>
+      <div style="width:50px;height:4px;background:#e5e7eb;border-radius:2px;margin:2px 0 0 auto">
+        <div style="height:4px;border-radius:2px;width:{{$p.priorityScore}}%;background:{{if ge $p.priorityScore 70}}#da3633{{else if ge $p.priorityScore 40}}#d29922{{else if ge $p.priorityScore 20}}#2f81f7{{else}}#6e7681{{end}}"></div>
+      </div>
+    </td>
+    <td>
+      <span style="font-size:0.73rem;font-weight:700;border-radius:4px;padding:2px 7px;
+        {{if eq $p.priorityTier "Critical"}}background:#fef2f2;border:1px solid #fca5a5;color:#991b1b
+        {{else if eq $p.priorityTier "High"}}background:#fffbeb;border:1px solid #fde68a;color:#92400e
+        {{else if eq $p.priorityTier "Medium"}}background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8
+        {{else}}background:#f8fafc;border:1px solid #cbd5e1;color:#64748b{{end}}">
+        {{$p.priorityTier}}
+      </span>
+    </td>
+    <td style="text-align:center">
+      {{if $p.kev}}<span style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:3px;padding:1px 5px;font-size:0.68rem;font-weight:700">KEV</span>{{else}}<span style="color:#e5e7eb">—</span>{{end}}
+    </td>
+    <td style="text-align:right;font-size:0.8rem;color:#6e7681">
+      {{if gt $p.epssScore 0.0}}{{printf "%.4f" $p.epssScore}}<div style="font-size:0.65rem">{{printf "%.0f" $p.epssPercentile}}th %ile</div>{{else}}—{{end}}
+    </td>
+    <td style="text-align:right;font-size:0.85rem">{{$p.threatActorCount}}</td>
+    <td>
+      <span style="font-size:0.75rem;font-weight:600;color:{{if eq $p.verdict "fail"}}#da3633{{else if eq $p.verdict "pass"}}#0d9488{{else if eq $p.verdict "blocked"}}#0d9488{{else}}#6e7681{{end}}">
+        {{if eq $p.verdict "fail"}}UNBLOCKED{{else if eq $p.verdict "pass"}}PASS{{else if eq $p.verdict "blocked"}}BLOCKED{{else}}{{$p.verdict}}{{end}}
+      </span>
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+<p style="font-size:0.72rem;color:#6e7681;margin-top:10px">EPSS scores from FIRST.org (offline snapshot). KEV from CISA Known Exploited Vulnerabilities catalog. ATT&amp;CK attribution from MITRE &copy; The MITRE Corporation.</p>
+<div class="footer">
+  <span>{{.agent.hostname}} &#8212; EPSS Priority Index</span>
+</div>
+</div>
+{{end}}
+
 <!-- ═══ 11. VARIANT COVERAGE ANALYSIS ════════════════════════════════════ -->
 {{if .variantCoverage}}{{if .variantCoverage.hasData}}
 <div class="page">
