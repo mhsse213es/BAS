@@ -44,7 +44,10 @@ type FullReport struct {
 	AttackFlowSummary   AttackFlowSummary       `json:"attackFlowSummary"`
 	// VariantCoverage holds multi-variant evasion analysis for the HTML/PDF report.
 	// Populated from scenario_variant_technique_summary; nil for runs with no variant depth.
-	VariantCoverage     *VariantCoverageSection `json:"variantCoverage,omitempty"`
+	VariantCoverage         *VariantCoverageSection  `json:"variantCoverage,omitempty"`
+	// CampaignVariantCoverage holds trend-focused multi-variant analysis for campaign reports.
+	// Populated from campaign_variant_summary; nil for non-campaign reports.
+	CampaignVariantCoverage *CampaignVariantSection  `json:"campaignVariantCoverage,omitempty"`
 	// DetectionTechniques is the per-technique purple-team verdict from the agent's
 	// post-run alert sweep (prevented|detected|undetected + confidence). Empty until
 	// the agent submits detections for the run. Sourced from scenario_runs.detection_summary.
@@ -173,6 +176,46 @@ type VariantTechRow struct {
 	BestBypassLabel   string   `json:"bestBypassLabel,omitempty"`
 	Headline          string   `json:"headline,omitempty"`
 	RemediationPoints []string `json:"remediationPoints,omitempty"`
+}
+
+// CampaignVariantSection holds trend-focused variant analysis for campaign HTML/PDF
+// reports. Sourced from campaign_variant_summary (pre-computed per campaign).
+type CampaignVariantSection struct {
+	HasData          bool              `json:"hasData"`
+	TechniquesTested int               `json:"techniquesTested"`
+	VariantsExecuted int               `json:"variantsExecuted"`
+	Blocked          int               `json:"blocked"`
+	Detected         int               `json:"detected"`
+	Bypassed         int               `json:"bypassed"`
+	RunCount         int               `json:"runCount"`
+	PreventionScore  float64           `json:"preventionScore"`
+	DetectionScore   float64           `json:"detectionScore"`
+	TopBypasses      []CampTopBypass   `json:"topBypasses"`
+	TacticBreakdown  []CampTacticRow   `json:"tacticBreakdown"`
+	HasTrend         bool              `json:"hasTrend"`
+	TrendImproved    bool              `json:"trendImproved"`
+	PrevBypassed     int               `json:"prevBypassed"`
+	ImprovementPct   float64           `json:"improvementPct"`
+	TrendDelta       int               `json:"trendDelta"` // positive = regression, negative = improvement
+	TrendNote        string            `json:"trendNote"`
+}
+
+// CampTopBypass is a technique that bypassed controls in multiple campaign runs.
+type CampTopBypass struct {
+	TechniqueID      string `json:"techniqueId"`
+	TechniqueName    string `json:"techniqueName"`
+	Tactic           string `json:"tactic"`
+	TimesObserved    int    `json:"timesObserved"`
+	MostCommonBypass string `json:"mostCommonBypass"`
+}
+
+// CampTacticRow is one ATT&CK tactic in the campaign tactic risk heatmap.
+type CampTacticRow struct {
+	Tactic         string  `json:"tactic"`
+	Tested         int     `json:"tested"`
+	Bypassed       int     `json:"bypassed"`
+	PreventionRate float64 `json:"preventionRate"`
+	RiskLevel      string  `json:"riskLevel"` // High|Medium|Low
 }
 
 // ReportScope describes a fleet-wide (campaign) report's subject.
@@ -1497,6 +1540,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
 
 	e.populateCampaignAttackSurfaceAge(ctx, report, campaignID)
+	e.populateCampaignVariantCoverage(ctx, report, campaignID)
 
 	// Aggregate detection sources across all campaign runs.
 	dRows, _ := e.db.Query(ctx,
@@ -2496,4 +2540,72 @@ func variantTechExecLang(techID string) string {
 		}
 	}
 	return techID + " execution"
+}
+
+// ── Campaign Variant Coverage ─────────────────────────────────────────────────
+
+// populateCampaignVariantCoverage reads from campaign_variant_summary (pre-computed
+// by refreshCampaignVariantSummary) and populates report.CampaignVariantCoverage.
+// No-op when no variant data exists for the campaign.
+func (e *Engine) populateCampaignVariantCoverage(ctx context.Context, report *FullReport, campaignID string) {
+	var techTested, varExec, blocked, detected, bypassed, runCount int
+	var prevScore, detScore float64
+	var topBypassesRaw, tacticRaw []byte
+	var prevBypassed *int
+
+	if err := e.db.QueryRow(ctx, `
+		SELECT techniques_tested, variants_executed, blocked, detected, bypassed, run_count,
+		       prevention_score, detection_score, top_bypasses, tactic_breakdown, prev_bypassed
+		  FROM campaign_variant_summary
+		 WHERE campaign_id = $1`, campaignID,
+	).Scan(&techTested, &varExec, &blocked, &detected, &bypassed, &runCount,
+		&prevScore, &detScore, &topBypassesRaw, &tacticRaw, &prevBypassed,
+	); err != nil || techTested == 0 {
+		return
+	}
+
+	sec := &CampaignVariantSection{
+		HasData:          true,
+		TechniquesTested: techTested,
+		VariantsExecuted: varExec,
+		Blocked:          blocked,
+		Detected:         detected,
+		Bypassed:         bypassed,
+		RunCount:         runCount,
+		PreventionScore:  prevScore,
+		DetectionScore:   detScore,
+	}
+
+	if len(topBypassesRaw) > 0 {
+		json.Unmarshal(topBypassesRaw, &sec.TopBypasses)
+	}
+	if len(tacticRaw) > 0 {
+		json.Unmarshal(tacticRaw, &sec.TacticBreakdown)
+	}
+
+	if prevBypassed != nil {
+		sec.HasTrend = true
+		sec.PrevBypassed = *prevBypassed
+		delta := bypassed - *prevBypassed
+		sec.TrendDelta = delta
+		if delta < 0 {
+			sec.TrendImproved = true
+			if *prevBypassed > 0 {
+				sec.ImprovementPct = float64(-delta) / float64(*prevBypassed) * 100
+				sec.TrendNote = fmt.Sprintf("Improved %.0f%% — %d fewer bypassed technique(s) vs previous campaign (%d → %d)",
+					sec.ImprovementPct, -delta, *prevBypassed, bypassed)
+			} else {
+				sec.TrendNote = fmt.Sprintf("Improved — %d fewer bypassed technique(s) vs previous campaign", -delta)
+			}
+		} else if delta > 0 {
+			sec.TrendNote = fmt.Sprintf("Regression — %d more bypassed technique(s) vs previous campaign (%d → %d)",
+				delta, *prevBypassed, bypassed)
+		} else {
+			sec.TrendNote = "No change vs previous campaign"
+		}
+	} else {
+		sec.TrendNote = "No prior campaign on record — trend will be available after the next campaign."
+	}
+
+	report.CampaignVariantCoverage = sec
 }

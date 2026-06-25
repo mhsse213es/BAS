@@ -1122,6 +1122,127 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 {{end}}{{end}}
+
+<!-- ═══ 10b. CAMPAIGN VARIANT COVERAGE TRENDS ═══════════════════════════════ -->
+{{if .campaignVariantCoverage}}{{if .campaignVariantCoverage.hasData}}
+<div class="page">
+<h1>10. Variant Coverage Trends</h1>
+<p style="color:#6e7681;margin-bottom:14px">Aggregated multi-variant evasion results across {{.campaignVariantCoverage.runCount}} campaign run(s). Identifies recurring control gaps, tactic-level weaknesses, and improvement vs the previous campaign.</p>
+
+{{/* ── Trend banner ── */}}
+{{if .campaignVariantCoverage.hasTrend}}
+<div style="border-radius:6px;padding:12px 16px;margin-bottom:18px;
+  {{if .campaignVariantCoverage.trendImproved}}background:#f0fdf4;border:1px solid #86efac
+  {{else}}background:#fff7ed;border:1px solid #fdba74{{end}}">
+  <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+    color:{{if .campaignVariantCoverage.trendImproved}}#15803d{{else}}#c2410c{{end}};margin-bottom:4px">
+    {{if .campaignVariantCoverage.trendImproved}}&#9650; Improvement vs Previous Campaign{{else}}&#9660; Regression vs Previous Campaign{{end}}
+  </div>
+  <div style="font-size:0.92rem;font-weight:600;color:{{if .campaignVariantCoverage.trendImproved}}#15803d{{else}}#92400e{{end}}">
+    {{.campaignVariantCoverage.trendNote}}
+  </div>
+  <div style="margin-top:8px;display:flex;gap:24px;font-size:0.82rem;color:#6e7681">
+    <span>Previous: <strong>{{.campaignVariantCoverage.prevBypassed}}</strong> bypassed</span>
+    <span>Current: <strong>{{.campaignVariantCoverage.bypassed}}</strong> bypassed</span>
+    {{if .campaignVariantCoverage.trendImproved}}<span style="color:#15803d;font-weight:600">&#8595; {{printf "%.0f" .campaignVariantCoverage.improvementPct}}% reduction</span>{{end}}
+  </div>
+</div>
+{{else}}
+<p style="font-size:0.82rem;color:#6e7681;margin-bottom:14px">{{.campaignVariantCoverage.trendNote}}</p>
+{{end}}
+
+{{/* ── KPI summary ── */}}
+<div class="score-row">
+  <div class="scard">
+    <div class="scard-label">Techniques Tested</div>
+    <div class="scard-value">{{.campaignVariantCoverage.techniquesTested}}</div>
+    <div style="font-size:0.78rem;color:#6e7681">{{.campaignVariantCoverage.variantsExecuted}} variants across {{.campaignVariantCoverage.runCount}} run(s)</div>
+  </div>
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Blocked</div>
+    <div class="scard-value" style="color:#0d9488">{{.campaignVariantCoverage.blocked}}</div>
+    <div style="font-size:0.78rem;color:#6e7681">Detected: {{.campaignVariantCoverage.detected}}</div>
+  </div>
+  <div class="scard" style="border-left:3px solid #2563eb">
+    <div class="scard-label">Avg Prevention Score</div>
+    <div class="scard-value" style="color:#2563eb">{{printf "%.1f" .campaignVariantCoverage.preventionScore}}%</div>
+    <div style="font-size:0.78rem;color:#6e7681">Detection Score: {{printf "%.1f" .campaignVariantCoverage.detectionScore}}%</div>
+  </div>
+  <div class="scard" style="border-left:3px solid {{if gt .campaignVariantCoverage.bypassed 0.0}}#da3633{{else}}#0d9488{{end}}">
+    <div class="scard-label">Bypassed (Total)</div>
+    <div class="scard-value" style="color:{{if gt .campaignVariantCoverage.bypassed 0.0}}#da3633{{else}}#0d9488{{end}}">{{.campaignVariantCoverage.bypassed}}</div>
+    <div style="font-size:0.78rem;color:#6e7681">across all techniques &amp; runs</div>
+  </div>
+</div>
+
+{{/* ── Top recurring bypasses ── */}}
+{{if .campaignVariantCoverage.topBypasses}}
+<h2>Top Recurring Bypasses</h2>
+<p style="color:#6e7681;margin-bottom:10px">Techniques that bypassed controls across multiple runs — these represent systemic control gaps, not isolated incidents.</p>
+<table>
+  <thead><tr>
+    <th>Technique</th>
+    <th>Tactic</th>
+    <th style="text-align:right">Runs With Bypass</th>
+    <th>Most Common Bypass</th>
+  </tr></thead>
+  <tbody>
+  {{range .campaignVariantCoverage.topBypasses}}
+  <tr>
+    <td style="font-weight:600">{{.techniqueId}}{{if .techniqueName}}<br><span style="font-weight:400;font-size:0.78rem;color:#6e7681">{{.techniqueName}}</span>{{end}}</td>
+    <td style="font-size:0.82rem;color:#6e7681">{{if .tactic}}{{humanize .tactic}}{{else}}&#8212;{{end}}</td>
+    <td style="text-align:right;font-weight:700;color:#da3633">{{.timesObserved}}</td>
+    <td style="font-size:0.82rem;font-weight:600">{{if .mostCommonBypass}}{{.mostCommonBypass}}{{else}}&#8212;{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{/* ── Tactic risk heatmap ── */}}
+{{if .campaignVariantCoverage.tacticBreakdown}}
+<h2 style="margin-top:22px">Control Effectiveness by ATT&amp;CK Tactic</h2>
+<p style="color:#6e7681;margin-bottom:10px">Aggregate prevention rate per tactic across all campaign runs. Drives security roadmap prioritisation.</p>
+<table>
+  <thead><tr>
+    <th>Tactic</th>
+    <th style="text-align:right">Techniques</th>
+    <th style="text-align:right">Bypasses</th>
+    <th style="text-align:right">Prevention Rate</th>
+    <th>Risk</th>
+    <th style="min-width:120px">Prevention</th>
+  </tr></thead>
+  <tbody>
+  {{range .campaignVariantCoverage.tacticBreakdown}}
+  <tr>
+    <td style="font-weight:600">{{humanize .tactic}}</td>
+    <td style="text-align:right">{{.tested}}</td>
+    <td style="text-align:right;color:{{if gt .bypassed 0.0}}#da3633{{else}}#6e7681{{end}};font-weight:{{if gt .bypassed 0.0}}700{{else}}400{{end}}">{{.bypassed}}</td>
+    <td style="text-align:right;font-weight:700;color:{{if gt .preventionRate 94.9}}#0d9488{{else if gt .preventionRate 79.9}}#d29922{{else}}#da3633{{end}}">{{printf "%.1f" .preventionRate}}%</td>
+    <td>
+      <span style="font-size:0.78rem;font-weight:700;border-radius:4px;padding:2px 8px;
+        {{if eq .riskLevel "High"}}background:#fef2f2;border:1px solid #fca5a5;color:#991b1b
+        {{else if eq .riskLevel "Medium"}}background:#fffbeb;border:1px solid #fde68a;color:#92400e
+        {{else}}background:#f0fdf4;border:1px solid #86efac;color:#15803d{{end}}">
+        {{.riskLevel}}
+      </span>
+    </td>
+    <td>
+      <div style="background:#e5e7eb;border-radius:3px;height:8px;overflow:hidden">
+        <div style="height:100%;background:{{if gt .preventionRate 94.9}}#0d9488{{else if gt .preventionRate 79.9}}#d29922{{else}}#da3633{{end}};width:{{printf "%.0f" .preventionRate}}%"></div>
+      </div>
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+<div class="footer">
+  <span>{{.agent.hostname}} &#8212; Variant Coverage Trends</span>
+</div>
+</div>
+{{end}}{{end}}
 <!-- ═══ 11. ASSESSMENT INSIGHTS ═════════════════════════════════════════ -->
 <div class="page">
 <h1>11. Assessment Insights</h1>

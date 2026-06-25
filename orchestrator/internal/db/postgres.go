@@ -156,6 +156,25 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_svts_run_id    ON scenario_variant_technique_summary (run_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_svts_bypassed  ON scenario_variant_technique_summary (run_id, bypassed DESC)`,
 
+		// ── Campaign Variant Summary — pre-computed once per campaign ─────────
+		// Aggregates scenario_variant_technique_summary across all child runs.
+		// Refreshed async whenever a run result is submitted to the campaign.
+		`CREATE TABLE IF NOT EXISTS campaign_variant_summary (
+			campaign_id         text        PRIMARY KEY,
+			techniques_tested   int         NOT NULL DEFAULT 0,
+			variants_executed   int         NOT NULL DEFAULT 0,
+			blocked             int         NOT NULL DEFAULT 0,
+			detected            int         NOT NULL DEFAULT 0,
+			bypassed            int         NOT NULL DEFAULT 0,
+			run_count           int         NOT NULL DEFAULT 0,
+			prevention_score    double precision NOT NULL DEFAULT 0,
+			detection_score     double precision NOT NULL DEFAULT 0,
+			top_bypasses        jsonb       NOT NULL DEFAULT '[]',
+			tactic_breakdown    jsonb       NOT NULL DEFAULT '[]',
+			prev_bypassed       int,
+			computed_at         timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
 		// ── Phase B-1: run-event stream + denormalized progress summary ───────
 		`CREATE TABLE IF NOT EXISTS run_events (
 			run_id       text        NOT NULL,

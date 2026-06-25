@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -539,6 +540,231 @@ func setToSlice(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ── Campaign Variant Summary ──────────────────────────────────────────────────
+
+// refreshCampaignVariantSummary aggregates scenario_variant_technique_summary
+// for all runs in the campaign and upserts campaign_variant_summary.
+// Called async after computeVariantTechniqueSummary completes for a run
+// that belongs to a campaign.
+func (h *Handler) refreshCampaignVariantSummary(ctx context.Context, campaignID string) {
+	// 1. Aggregate totals across all campaign runs.
+	var techTested, varExec, blocked, detected, bypassed, runCount int
+	if err := h.db.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT svt.technique_id),
+		       COALESCE(SUM(svt.variants_executed),0),
+		       COALESCE(SUM(svt.blocked),0),
+		       COALESCE(SUM(svt.detected + svt.logged),0),
+		       COALESCE(SUM(svt.bypassed),0),
+		       COUNT(DISTINCT svt.run_id)
+		  FROM scenario_variant_technique_summary svt
+		  JOIN scenario_runs sr ON sr.id = svt.run_id
+		 WHERE sr.campaign_id = $1`, campaignID,
+	).Scan(&techTested, &varExec, &blocked, &detected, &bypassed, &runCount); err != nil || techTested == 0 {
+		return
+	}
+
+	counted := blocked + detected + bypassed
+	var prevScore, detScore float64
+	if counted > 0 {
+		prevScore = float64(blocked) / float64(counted) * 100
+		if nonBlocked := detected + bypassed; nonBlocked > 0 {
+			detScore = float64(detected) / float64(nonBlocked) * 100
+		}
+	}
+
+	// 2. Top recurring bypasses — techniques that bypassed controls in most runs.
+	type topRow struct {
+		techID, techName, tactic string
+		times                    int
+		sampleID                 *string
+	}
+	var topRows []topRow
+	var sampleIDs []string
+
+	trows, err := h.db.Query(ctx, `
+		SELECT svt.technique_id,
+		       MAX(svt.technique_name),
+		       MAX(svt.tactic),
+		       COUNT(DISTINCT svt.run_id) AS times_observed,
+		       MAX(svt.best_bypass_variant_id) AS sample_bypass_id
+		  FROM scenario_variant_technique_summary svt
+		  JOIN scenario_runs sr ON sr.id = svt.run_id
+		 WHERE sr.campaign_id = $1 AND svt.bypassed > 0
+		 GROUP BY svt.technique_id
+		 ORDER BY times_observed DESC
+		 LIMIT 10`, campaignID)
+	if err == nil {
+		defer trows.Close()
+		for trows.Next() {
+			var r topRow
+			if trows.Scan(&r.techID, &r.techName, &r.tactic, &r.times, &r.sampleID) == nil {
+				topRows = append(topRows, r)
+				if r.sampleID != nil {
+					sampleIDs = append(sampleIDs, *r.sampleID)
+				}
+			}
+		}
+		trows.Close()
+	}
+
+	// Bulk-fetch best bypass details for label construction.
+	type bpDetail struct{ enc, execCtx, priv string }
+	bpDetails := map[string]bpDetail{}
+	if len(sampleIDs) > 0 {
+		phs := make([]string, len(sampleIDs))
+		args := make([]any, len(sampleIDs))
+		for i, id := range sampleIDs {
+			phs[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = id
+		}
+		brows, berr := h.db.Query(ctx,
+			`SELECT id, encoding, execution_context, privilege
+			   FROM scenario_variant_results WHERE id IN (`+strings.Join(phs, ",")+`)`,
+			args...,
+		)
+		if berr == nil {
+			defer brows.Close()
+			for brows.Next() {
+				var id, enc, execCtx, priv string
+				if brows.Scan(&id, &enc, &execCtx, &priv) == nil {
+					bpDetails[id] = bpDetail{enc, execCtx, priv}
+				}
+			}
+		}
+	}
+
+	type campTopBypass struct {
+		TechniqueID      string `json:"techniqueId"`
+		TechniqueName    string `json:"techniqueName"`
+		Tactic           string `json:"tactic"`
+		TimesObserved    int    `json:"timesObserved"`
+		MostCommonBypass string `json:"mostCommonBypass"`
+	}
+	topBypasses := make([]campTopBypass, 0, len(topRows))
+	for _, r := range topRows {
+		label := ""
+		if r.sampleID != nil {
+			if d, ok := bpDetails[*r.sampleID]; ok {
+				label = campBypassLabel(d.enc, d.execCtx, d.priv)
+			}
+		}
+		topBypasses = append(topBypasses, campTopBypass{r.techID, r.techName, r.tactic, r.times, label})
+	}
+
+	// 3. Tactic risk breakdown.
+	type campTacticRow struct {
+		Tactic         string  `json:"tactic"`
+		Tested         int     `json:"tested"`
+		Bypassed       int     `json:"bypassed"`
+		PreventionRate float64 `json:"preventionRate"`
+		RiskLevel      string  `json:"riskLevel"`
+	}
+	var tacticBreakdown []campTacticRow
+
+	tarows, terr := h.db.Query(ctx, `
+		SELECT svt.tactic,
+		       COUNT(DISTINCT svt.technique_id) AS tested,
+		       SUM(CASE WHEN svt.bypassed > 0 THEN 1 ELSE 0 END) AS bypass_instances,
+		       COALESCE(SUM(svt.blocked),0) AS blocked_sum,
+		       COALESCE(SUM(svt.blocked + svt.detected + svt.logged + svt.bypassed),0) AS counted_sum
+		  FROM scenario_variant_technique_summary svt
+		  JOIN scenario_runs sr ON sr.id = svt.run_id
+		 WHERE sr.campaign_id = $1 AND svt.tactic != ''
+		 GROUP BY svt.tactic
+		 ORDER BY bypass_instances DESC`, campaignID)
+	if terr == nil {
+		defer tarows.Close()
+		for tarows.Next() {
+			var tactic string
+			var tested, bypassInst, blockedSum, countedSum int
+			if tarows.Scan(&tactic, &tested, &bypassInst, &blockedSum, &countedSum) == nil {
+				rate := 0.0
+				if countedSum > 0 {
+					rate = float64(blockedSum) / float64(countedSum) * 100
+				}
+				risk := "Low"
+				if bypassInst >= 3 || rate < 80 {
+					risk = "High"
+				} else if bypassInst >= 1 || rate < 95 {
+					risk = "Medium"
+				}
+				tacticBreakdown = append(tacticBreakdown, campTacticRow{tactic, tested, bypassInst, rate, risk})
+			}
+		}
+	}
+
+	// 4. Previous campaign's bypassed count for trend (same scenario, earlier start).
+	var prevBypassed *int
+	var pb int
+	if err := h.db.QueryRow(ctx, `
+		SELECT cvs.bypassed
+		  FROM campaign_variant_summary cvs
+		  JOIN campaigns c ON c.id = cvs.campaign_id
+		 WHERE c.scenario_id = (SELECT scenario_id FROM campaigns WHERE id = $1)
+		   AND c.started_at < (SELECT started_at FROM campaigns WHERE id = $1)
+		 ORDER BY c.started_at DESC
+		 LIMIT 1`, campaignID,
+	).Scan(&pb); err == nil {
+		prevBypassed = &pb
+	}
+
+	// 5. Serialize and upsert.
+	topJSON, _ := json.Marshal(topBypasses)
+	tacJSON, _ := json.Marshal(tacticBreakdown)
+
+	h.db.Exec(ctx, `
+		INSERT INTO campaign_variant_summary
+		       (campaign_id, techniques_tested, variants_executed, blocked, detected, bypassed,
+		        run_count, prevention_score, detection_score, top_bypasses, tactic_breakdown,
+		        prev_bypassed, computed_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+		ON CONFLICT (campaign_id) DO UPDATE SET
+		    techniques_tested = EXCLUDED.techniques_tested,
+		    variants_executed = EXCLUDED.variants_executed,
+		    blocked           = EXCLUDED.blocked,
+		    detected          = EXCLUDED.detected,
+		    bypassed          = EXCLUDED.bypassed,
+		    run_count         = EXCLUDED.run_count,
+		    prevention_score  = EXCLUDED.prevention_score,
+		    detection_score   = EXCLUDED.detection_score,
+		    top_bypasses      = EXCLUDED.top_bypasses,
+		    tactic_breakdown  = EXCLUDED.tactic_breakdown,
+		    prev_bypassed     = EXCLUDED.prev_bypassed,
+		    computed_at       = NOW()`,
+		campaignID, techTested, varExec, blocked, detected, bypassed,
+		runCount, prevScore, detScore, topJSON, tacJSON, prevBypassed,
+	)
+}
+
+// campBypassLabel formats a bypass combination as "Charcode + WMI + Admin".
+func campBypassLabel(enc, execCtx, priv string) string {
+	var parts []string
+	switch enc {
+	case "base64":
+		parts = append(parts, "Base64")
+	case "charcode":
+		parts = append(parts, "Charcode")
+	}
+	switch execCtx {
+	case "wmi":
+		parts = append(parts, "WMI")
+	case "scheduled-task":
+		parts = append(parts, "Schtasks")
+	case "com":
+		parts = append(parts, "COM")
+	}
+	switch priv {
+	case "admin":
+		parts = append(parts, "Admin")
+	case "system":
+		parts = append(parts, "System")
+	}
+	if len(parts) == 0 {
+		return "Plain / Direct"
+	}
+	return strings.Join(parts, " + ")
 }
 
 func pct(n, total int) float64 {
