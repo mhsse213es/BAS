@@ -8222,7 +8222,14 @@ function loadDashboard() {
 
     // KPI — Prevention score (latest scored run) + trend chip + sparkline of the
     // last ~8 scored runs (oldest→newest).
-    var scored = runs.filter(function(r) { return r.score && (r.score.preventionScore != null || r.score.riskScore != null); });
+    // Only include runs with at least one scoreable result (pass OR fail).
+    // A run where everything errored/skipped has preventionScore=0 but that 0
+    // means "no data", not "0% prevention" — exclude it from the gauge.
+    var scored = runs.filter(function(r) {
+      if (!r.score) return false;
+      if (r.score.preventionScore == null && r.score.riskScore == null) return false;
+      return (r.score.passedTechniques || 0) + (r.score.failedTechniques || 0) > 0;
+    });
     var prevPctOf = function(r) { return Math.round(r.score.preventionScore != null ? r.score.preventionScore : r.score.preventionEffectiveness || 0); };
     if (scored.length) {
       var s = scored[0].score;
@@ -8322,10 +8329,11 @@ function loadDashboard() {
           '</div>' +
         '</div>' +
         '<div style="flex:1;display:flex;flex-direction:column;gap:0.55rem;min-width:160px">' +
-          lg('var(--teal)', 'Prevented', eff.prevented) +
-          lg('var(--warning)', 'Detected only', eff.detected) +
-          lg('var(--danger)', 'Missed', eff.missed) +
-          lg('var(--elevated)', 'Not tested', eff.other) +
+          lg('var(--teal)',    'Prevented',     eff.prevented) +
+          (eff.detected > 0 ? lg('var(--warning)', 'Detected only', eff.detected) : '') +
+          lg('var(--danger)', 'Missed',         eff.missed) +
+          (eff.other > 0    ? lg('var(--elevated)', 'Not tested',   eff.other)    : '') +
+          (eff.detected === 0 ? '<div style="font-size:0.63rem;color:var(--muted);margin-top:0.3rem;line-height:1.4">Detected-only appears once a SIEM/EDR integration is reporting alerts.</div>' : '') +
         '</div>';
     }
 
