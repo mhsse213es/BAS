@@ -245,6 +245,20 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 			return "#0d9488"
 		}
 	},
+	"verdictBg": func(v string) string {
+		switch v {
+		case "pass":
+			return "#238636"
+		case "fail":
+			return "#da3633"
+		case "error":
+			return "#d29922"
+		case "skipped":
+			return "#6e7681"
+		}
+		return "#6e7681"
+	},
+	"verdictColor": func(string) string { return "#ffffff" },
 }).Parse(reportHTML))
 
 // GenerateHTML writes a self-contained HTML report to w.
