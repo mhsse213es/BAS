@@ -5232,6 +5232,7 @@ function renderRemList() {
       '</div>' +
       '<div class="rem-actions">' +
         '<button class="btn btn-outline btn-sm" onclick="openRemediation(' + i + ')">View</button>' +
+        (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-outline btn-sm" onclick="remSingleTicket(' + i + ')">&#128279; Ticket</button>' : '') +
         '<button class="btn btn-primary btn-sm" onclick="revalidateRemediation(\'' + x(r.techniqueId) + '\')">&#8635; Re-validate</button>' +
       '</div>' +
     '</div>';
@@ -5242,6 +5243,7 @@ function openRemediation(i) {
   if (!r) return;
   document.getElementById('results-title').textContent = r.techniqueId + ' — Remediation';
   document.getElementById('results-export').innerHTML =
+    (ROLE === 'admin' || ROLE === 'analyst' ? '<button class="btn btn-outline btn-sm" onclick="remSingleTicket(' + i + ')">&#128279; Create Ticket</button>' : '') +
     '<button class="btn btn-primary btn-sm" onclick="revalidateRemediation(\'' + x(r.techniqueId) + '\')">&#8635; Re-validate</button>';
   var ctrls = (r.controlClasses || []).map(x).join(', ') || '—';
   var stat = function(l, v) { return '<div class="rem-stat"><div class="lbl">' + l + '</div><div class="val">' + v + '</div></div>'; };
@@ -5645,10 +5647,21 @@ function remBulkTicket(filter) {
   var rems = window._rems || [];
   var targets = filter === 'critical' ? rems.filter(function(r) { return r.severity === 'Critical'; }) : rems;
   if (!targets.length) { showToast('No remediations to ticket', 'err'); return; }
-  // Gather finding IDs from remediations
   var findingIds = [];
   targets.forEach(function(r) { (r.findingIds || []).forEach(function(id) { findingIds.push(id); }); });
   if (!findingIds.length) { showToast('Remediations have no finding IDs — re-validate first', 'err'); return; }
+  _pushFindingTickets(findingIds);
+}
+
+function remSingleTicket(i) {
+  var r = (window._rems || [])[i];
+  if (!r) return;
+  var findingIds = r.findingIds || [];
+  if (!findingIds.length) { showToast(r.techniqueId + ' has no finding IDs — re-validate first', 'err'); return; }
+  _pushFindingTickets(findingIds);
+}
+
+function _pushFindingTickets(findingIds) {
   loadTicketingConfigs(function(cfgs) {
     var enabled = (cfgs || []).filter(function(c) { return c.enabled; });
     if (!enabled.length) { showToast('No ITSM connectors configured — add one in Integrations', 'err'); return; }
@@ -5661,7 +5674,7 @@ function remBulkTicket(filter) {
     }
     apicall('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: findingIds, configId: configId, recordType: 'incident' }) })
       .then(function(results) {
-        var ok = results.filter(function(r) { return !r.error; }).length;
+        var ok = (results || []).filter(function(r) { return !r.error; }).length;
         showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created', ok ? 'ok' : 'err');
       }).catch(function(e) { showToast(e.message, 'err'); });
   });
