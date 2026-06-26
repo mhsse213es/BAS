@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/audspect/bas-agent/sched"
+	"audspect/agent/sched"
 )
 
 // ── Wire Protocol ─────────────────────────────────────────────────────────────

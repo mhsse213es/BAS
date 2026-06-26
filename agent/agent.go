@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/audspect/bas-agent/sched"
+	"audspect/agent/sched"
 	"github.com/gorilla/websocket"
 )
 

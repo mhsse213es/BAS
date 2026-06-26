@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode/utf16"
 
-	"github.com/audspect/bas-agent/sched"
+	"audspect/agent/sched"
 )
 
 // ── PowerShell host pool ───────────────────────────────────────────────────────

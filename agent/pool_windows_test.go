@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/audspect/bas-agent/sched"
+	"audspect/agent/sched"
 )
 
 func obsStep(taskID, command string) ScenarioStep {

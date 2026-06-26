@@ -1,4 +1,4 @@
-module github.com/audspect/bas-agent
+module audspect/agent
 
 go 1.26.0
 

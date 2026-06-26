@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/audspect/bas-agent/sched"
+	"audspect/agent/sched"
 )
 
 // declinePromptInput must supply a bounded stream of "No" answers so an

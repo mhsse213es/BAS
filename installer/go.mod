@@ -1,4 +1,4 @@
-module github.com/audspect/bas-installer
+module audspect/installer
 
 go 1.25.0
 

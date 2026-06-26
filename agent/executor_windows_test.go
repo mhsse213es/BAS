@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/audspect/bas-agent/sched"
+	"audspect/agent/sched"
 )
 
 // A console command that prompts on stdin (here cmd's `set /p`, the same pattern
