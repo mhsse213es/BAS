@@ -84,7 +84,7 @@ COPY orchestrator/ .
 # fields and breaks PDF font loading ("font has not been set") — and protects no
 # IP, since those libs are public OSS.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
-    garble -literals -tiny build \
+    garble -literals build \
     -ldflags="-s -w -X main.expectedWWWRootHash=${BAS_WWWROOT_HASH}" \
     -o /bin/orchestrator ./cmd/server
 
