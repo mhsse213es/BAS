@@ -325,11 +325,16 @@ func (h *Handler) GetVariantStats(w http.ResponseWriter, r *http.Request) {
 	h.db.QueryRow(ctx, `SELECT COUNT(*) FROM payload_families`).Scan(&familyCount)
 	h.db.QueryRow(ctx, `SELECT COUNT(DISTINCT technique_id) FROM payload_families`).Scan(&techCount)
 
+	// ART-derived total: same formula used by /api/art/content/status so both
+	// screens agree. Falls back to 0 on error — non-fatal.
+	_, _, artVariants, _ := scenario.QueryVariantCount(ctx, h.db)
+
 	perFamily := variant.VariantsPerFamily(false)
 	jsonOK(w, variant.Stats{
 		ExecutedVariants:       executed,
-		AvailableVariants:      familyCount * perFamily,
+		AvailableVariants:      artVariants,
 		PayloadFamilyCount:     familyCount,
+		PayloadFamilyVariants:  familyCount * perFamily,
 		TechniquesWithFamilies: techCount,
 		VariantsPerFamily:      perFamily,
 	})

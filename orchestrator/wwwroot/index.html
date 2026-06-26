@@ -1198,7 +1198,7 @@ body.theme-slate {
         </div>
       </div>
     </nav>
-    <div class="sidebar-footer">v1.6.0 &nbsp;&middot;&nbsp; On-Premise</div>
+    <div class="sidebar-footer">v1.7.1 &nbsp;&middot;&nbsp; On-Premise</div>
   </aside>
 
   <div class="main-wrapper">
@@ -9560,16 +9560,18 @@ function loadVariantStats() {
     var el = document.getElementById('vex-stats');
     if (!el) return;
     el.innerHTML =
-      vexStatCard('Executed Variants', s.executedVariants, 'var(--accent)') +
-      vexStatCard('Available Variants', s.availableVariants, 'var(--text)') +
-      vexStatCard('Payload Families', s.payloadFamilyCount, 'var(--text)') +
-      vexStatCard('Techniques Covered', s.techniquesWithFamilies, 'var(--text)');
+      vexStatCard('Executed Variants',  s.executedVariants,      'var(--accent)', null) +
+      vexStatCard('Available Variants', s.availableVariants,     'var(--text)',   'ART atomics \xd7 encoding \xd7 privilege \xd7 exec-context') +
+      vexStatCard('Payload Families',   s.payloadFamilyCount,    'var(--text)',   (s.payloadFamilyVariants || 0).toLocaleString() + ' family variants') +
+      vexStatCard('Techniques Covered', s.techniquesWithFamilies,'var(--text)',   'techniques with custom families');
   }).catch(function() {});
 }
 
-function vexStatCard(label, val, col) {
+function vexStatCard(label, val, col, sub) {
   return '<div class="kpi-card"><div class="kpi-label">' + label + '</div>' +
-    '<div class="kpi-value" style="color:' + col + '">' + (val || 0) + '</div></div>';
+    '<div class="kpi-value" style="color:' + col + '">' + (val || 0).toLocaleString() + '</div>' +
+    (sub ? '<div style="font-size:0.65rem;color:var(--muted);margin-top:0.15rem">' + sub + '</div>' : '') +
+    '</div>';
 }
 
 function populateVexAgents() {

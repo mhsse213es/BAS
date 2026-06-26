@@ -193,9 +193,10 @@ type CoverageRow struct {
 // Keeps "Executed Variants" and "Available Variants" separate — never inflate
 // the executed count with un-run theoretical variants.
 type Stats struct {
-	ExecutedVariants      int `json:"executedVariants"`      // sum of completed variant_run.total_variants
-	AvailableVariants     int `json:"availableVariants"`     // payload_family count × variants_per_family
-	PayloadFamilyCount    int `json:"payloadFamilyCount"`
-	TechniquesWithFamilies int `json:"techniquesWithFamilies"`
-	VariantsPerFamily     int `json:"variantsPerFamily"`     // = 56 default / 70 with advanced
+	ExecutedVariants       int `json:"executedVariants"`       // sum of completed variant_run.total_variants
+	AvailableVariants      int `json:"availableVariants"`      // ART atomics × encoding × privilege × exec-context permutations
+	PayloadFamilyCount     int `json:"payloadFamilyCount"`     // custom payload families in DB
+	PayloadFamilyVariants  int `json:"payloadFamilyVariants"`  // payload_family count × variants_per_family
+	TechniquesWithFamilies int `json:"techniquesWithFamilies"` // techniques with at least one payload family
+	VariantsPerFamily      int `json:"variantsPerFamily"`      // = 56 default / 70 with advanced
 }
