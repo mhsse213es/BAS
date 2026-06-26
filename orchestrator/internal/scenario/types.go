@@ -86,6 +86,13 @@ type Scenario struct {
 	// LivePolicy holds the guardrails enforced during live (telemetry/lab) runs.
 	LivePolicy *LivePolicy `yaml:"live_policy,omitempty" json:"livePolicy,omitempty"`
 
+	// PreventScreenTimeout, when true, signals the agent to hold a
+	// SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM|ES_DISPLAY) wake lock for
+	// the duration of this run. Only set for long-running scenarios where a
+	// screensaver or display-off event would abort in-progress steps. Opt-in
+	// to respect enterprise idle/timeout policies on standard endpoints.
+	PreventScreenTimeout bool `yaml:"prevent_screen_timeout,omitempty" json:"preventScreenTimeout,omitempty"`
+
 	// Executable marks a hybrid scenario that supports opt-in LIVE execution of
 	// real (self-cleaning) attack steps in addition to its read-only posture
 	// checks. Only scenarios with audited, safe steps set this true. When false,
@@ -176,6 +183,10 @@ type ScenarioCommand struct {
 	Steps      []ScenarioStep `json:"steps"`
 	Mode       string         `json:"mode,omitempty"`   // telemetry | lab (live runs only)
 	Policy     *LivePolicy    `json:"policy,omitempty"` // guardrails the agent enforces
+	// PreventScreenTimeout mirrors Scenario.PreventScreenTimeout — tells the agent to
+	// hold a display/system wake lock for the run. Only set when the scenario author
+	// has explicitly opted in; never injected by the dispatcher.
+	PreventScreenTimeout bool `json:"preventScreenTimeout,omitempty"`
 }
 
 // ExecResult is the raw output returned by the agent per step.

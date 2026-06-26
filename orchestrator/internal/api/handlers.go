@@ -44,6 +44,7 @@ type Handler struct {
 	artContentDir    string               // seed source for ART atomics (ART_DIR)
 	artPayloadDir    string               // seed source for ART payload binaries (ART_PAYLOAD_DIR)
 	artKEVFile       string               // CISA KEV catalog JSON (KEV_FILE)
+	artEPSSFile      string               // FIRST EPSS CSV/GZ (EPSS_FILE)
 	artContentVer    string               // recorded content-pack version
 	manifest         *integrity.Manifest  // binary hash manifest — nil means verification disabled
 	complianceMapper *compliance.Mapper    // nil when not loaded
@@ -130,6 +131,13 @@ func (h *Handler) WithContentSeed(atomicsDir, payloadDir, kevFile, version strin
 	h.artPayloadDir = payloadDir
 	h.artKEVFile = kevFile
 	h.artContentVer = version
+	return h
+}
+
+// WithEPSSFile records the EPSS file path so the admin reseed endpoint can
+// refresh EPSS scores when the file is updated.
+func (h *Handler) WithEPSSFile(epssFile string) *Handler {
+	h.artEPSSFile = epssFile
 	return h
 }
 
@@ -844,12 +852,13 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	h.persistStepMeta(ctx, runID, steps)
 
 	cmd := scenario.ScenarioCommand{
-		RunID:      runID,
-		ScenarioID: sc.ID,
-		Name:       sc.Name,
-		Steps:      steps,
-		Mode:       o.Mode,
-		Policy:     sc.LivePolicy,
+		RunID:                runID,
+		ScenarioID:           sc.ID,
+		Name:                 sc.Name,
+		Steps:                steps,
+		Mode:                 o.Mode,
+		Policy:               sc.LivePolicy,
+		PreventScreenTimeout: sc.PreventScreenTimeout,
 	}
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
 		Type:    models.MsgCommandScenario,
@@ -4153,6 +4162,11 @@ func (h *Handler) ReseedART(w http.ResponseWriter, r *http.Request) {
 	if err := h.artStore.Reload(r.Context(), h.db); err != nil {
 		jsonError(w, "reseeded but reload failed: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if en, eErr := scenario.SeedEPSS(r.Context(), h.db, h.artEPSSFile); eErr != nil {
+		log.Printf("[content] EPSS reseed: %v", eErr)
+	} else if en > 0 {
+		log.Printf("[content] EPSS reseed: %d CVE entries", en)
 	}
 	log.Printf("[content] reseed via API: %d techniques, %d payloads (version %q)", tc, pc, version)
 	h.auditLog(r, "art.reseed", "", map[string]any{"version": version, "techniqueCount": tc, "payloadCount": pc}, "ok")

@@ -329,6 +329,14 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, "", "", "scenario_start",
 		fmt.Sprintf("scenario started: %s steps=%d mode=%s", cmd.Name, len(cmd.Steps), cmd.Mode))
 
+	// Per-scenario screen-timeout inhibition — only activated when the scenario
+	// author explicitly sets prevent_screen_timeout: true in the YAML. Never on
+	// by default; enterprise idle/lock policies apply for all other scenarios.
+	if cmd.PreventScreenTimeout {
+		inhibitScreenTimeout()
+		defer restoreScreenTimeout()
+	}
+
 	// Start the dialog auto-dismisser for the duration of this scenario.
 	// It scans for dialog boxes belonging to step processes every 500ms and
 	// dismisses them automatically — last line of defence after CREATE_NO_WINDOW,

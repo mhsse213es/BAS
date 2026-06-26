@@ -99,6 +99,10 @@ type ScenarioCommand struct {
 	// (one per CPU, capped). Steps still run only as concurrently as their
 	// resource profiles allow; unlabeled steps run serially regardless.
 	Workers int `json:"workers,omitempty"`
+	// PreventScreenTimeout, when true, holds a display/system wake lock for the
+	// entire run via SetThreadExecutionState. Opt-in per scenario only — never
+	// applied globally so enterprise idle/lock policies are respected by default.
+	PreventScreenTimeout bool `json:"preventScreenTimeout,omitempty"`
 }
 
 // LivePolicy mirrors the server-side guardrails the agent must honour for live runs.
