@@ -3708,7 +3708,7 @@ function renderScenarios() {
   document.getElementById('em-cnt').textContent = emMatches.length;
   document.getElementById('other-cnt').textContent = otherMatches.length;
 
-  if (emMatches.length > 0) {
+  if (emMatches.length > 0 && src !== 'intel') {
     document.getElementById('em-section').style.display = 'block';
     gridEm.innerHTML = emMatches.map(scenarioCardHTML).join('');
   } else {
@@ -3721,7 +3721,23 @@ function renderScenarios() {
     grid.innerHTML = otherMatches.map(scenarioCardHTML).join('');
   } else {
     if (emMatches.length === 0) {
-      grid.innerHTML = '<p class="empty">No scenarios match your filter.</p>';
+      var emptyMsg;
+      if (src === 'intel') {
+        emptyMsg = '<div style="padding:2rem 1rem;text-align:center">' +
+          '<div style="font-size:1.5rem;margin-bottom:0.6rem">&#128268;</div>' +
+          '<div style="font-weight:600;color:var(--text);margin-bottom:0.4rem">No Threat Intel scenarios yet</div>' +
+          '<div style="color:var(--muted);font-size:0.82rem;max-width:480px;margin:0 auto;line-height:1.6">' +
+            'Threat Intel scenarios are auto-generated when a <strong>MISP</strong> or <strong>OpenCTI</strong> ' +
+            'instance is connected. The platform pulls threat-actor TTP profiles from those feeds and creates ' +
+            'one scenario per actor.<br><br>' +
+            'To enable: go to <strong>Integrations &rarr; Threat Intel Connector</strong> and configure your MISP/OpenCTI URL and API key.' +
+          '</div>' +
+        '</div>';
+      } else {
+        emptyMsg = '<p class="empty">No scenarios match your filter.</p>';
+      }
+      document.getElementById('other-section').style.display = 'block';
+      grid.innerHTML = emptyMsg;
     } else {
       document.getElementById('other-section').style.display = 'none';
       grid.innerHTML = '';
