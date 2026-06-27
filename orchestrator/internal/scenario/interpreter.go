@@ -68,6 +68,11 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		CleanupVerdict: result.CleanupVerdict,
 		RequestedPriv:  result.RequestedPriv,
 		ExecutedAs:     result.ExecutedAs,
+		Command:        step.Command,
+		ExitCode:       result.ExitCode,
+		TimedOut:       result.TimedOut,
+		PID:            result.PID,
+		StartedAt:      result.StartedAt,
 	}
 }
 

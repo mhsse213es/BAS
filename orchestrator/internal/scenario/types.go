@@ -192,6 +192,8 @@ type ScenarioCommand struct {
 // ExecResult is the raw output returned by the agent per step.
 type ExecResult struct {
 	TaskID     string    `json:"taskId"`
+	PID        int       `json:"pid,omitempty"`
+	StartedAt  time.Time `json:"startedAt"`
 	ExitCode   int       `json:"exitCode"`
 	Stdout     string    `json:"stdout"`
 	Stderr     string    `json:"stderr"`

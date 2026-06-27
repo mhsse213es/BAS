@@ -56,6 +56,13 @@ type SimulationResult struct {
 	// ExecutedAs records the actual privilege tier used: "user" | "user→admin" |
 	// "admin" | "system" | "" (empty = legacy unannotated step).
 	ExecutedAs string `json:"executedAs,omitempty"`
+
+	// Evidence fields — populated from agent ExecResult; displayed in the UI evidence panel.
+	Command   string    `json:"command,omitempty"`   // human-readable step command from the scenario YAML
+	ExitCode  int       `json:"exitCode,omitempty"`
+	TimedOut  bool      `json:"timedOut,omitempty"`
+	PID       int       `json:"pid,omitempty"`
+	StartedAt time.Time `json:"startedAt"`
 }
 
 // DetectionAlert is the alert record that matched this technique during the

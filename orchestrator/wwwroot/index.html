@@ -2916,6 +2916,20 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- Evidence Panel Overlay -->
+<div id="evidence-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:220;overflow-y:auto;padding:2rem 1rem" onclick="if(event.target===this)closeEvidence()">
+  <div style="max-width:640px;width:95vw;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.4rem">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;gap:1rem">
+      <div>
+        <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:0.2rem;font-weight:700">Execution Evidence</div>
+        <div id="evidence-title" style="font-size:1rem;font-weight:600;color:var(--text)"></div>
+      </div>
+      <button onclick="closeEvidence()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;flex-shrink:0;padding:0;line-height:1">&#10005;</button>
+    </div>
+    <div id="evidence-content"></div>
+  </div>
+</div>
+
 <!-- Scenario Builder Drawer -->
 <div id="builder-overlay" class="drawer-overlay" onclick="if(event.target===this)closeBuilder()">
   <div class="drawer" style="width:560px;max-width:92vw">
@@ -6902,6 +6916,9 @@ function viewRunResults(run) {
     scorePanel += '<div style="' + dimStyle2 + '"><div style="' + labelStyle2 + '">Privilege Tier Breakdown</div>' + rows + '</div>';
   })();
 
+  window._evidenceResults = results;
+  results.forEach(function(c, i) { c._eidx = i; });
+
   var byTactic = {};
   results.forEach(function(c) {
     var tactic = (c.technique && c.technique.tactic) || 'other';
@@ -6930,11 +6947,12 @@ function viewRunResults(run) {
         privBadge = '<span style="font-size:0.6rem;font-weight:500;text-transform:uppercase;background:rgba(255,255,255,0.02);color:var(--muted);border-radius:2px;padding:1px 5px;margin-left:2px;border:1px solid rgba(154,169,188,0.2)" title="Privilege tier not annotated — technique ran in the agent\'s own security context. Add requires_priv: user|admin|system to the scenario step YAML for explicit tracking.">inherited</span>';
       }
       var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.68rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
+      var evidenceBtn = '<button onclick="openEvidence('+c._eidx+')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--accent);cursor:pointer;font-size:0.6rem;padding:0.18rem 0.45rem;flex-shrink:0;margin-left:0.35rem;white-space:nowrap" title="View execution evidence">&#128269; Evidence</button>';
       return '<div style="padding:0.32rem 0;border-bottom:1px solid rgba(34,50,74,0.45)">' +
-        '<div style="display:flex;align-items:baseline;gap:0.45rem;flex-wrap:wrap">' +
+        '<div style="display:flex;align-items:center;gap:0.45rem;flex-wrap:wrap">' +
           '<span style="color:' + col + ';font-size:0.7rem;font-weight:600;min-width:46px">' + x(c.result) + '</span>' +
           techId + '<span style="font-size:0.8rem">' + x((c.technique && c.technique.name) || c.name || '') + '</span>' +
-          fwBadge + privBadge + '<span style="color:var(--muted);font-size:0.68rem;margin-left:auto">' + x(c.severity || '') + '</span>' +
+          fwBadge + privBadge + '<span style="color:var(--muted);font-size:0.68rem;margin-left:auto">' + x(c.severity || '') + '</span>' + evidenceBtn +
         '</div>' +
         (c.details ? '<div style="color:var(--muted);font-size:0.72rem;padding-left:52px;margin-top:0.1rem">' + x(c.details) + '</div>' : '') +
         (c.result === 'fail' && c.threatImpact ? '<div style="color:var(--muted);font-size:0.7rem;padding-left:52px;margin-top:0.1rem">' + x(c.threatImpact) + '</div>' : '') +
@@ -7827,6 +7845,310 @@ function closeResults() { document.getElementById('results-overlay').classList.r
 })();
 
 function closeRunLive() { document.getElementById('run-live-overlay').classList.remove('open'); }
+
+// ── Evidence Panel ────────────────────────────────────────────────────────────
+
+var WIN_EVENT_NAMES = {
+  '1':    'Sysmon — Process Create',
+  '3':    'Sysmon — Network Connection',
+  '7':    'Sysmon — Image Loaded',
+  '10':   'Sysmon — Process Access',
+  '11':   'Sysmon — File Create',
+  '12':   'Sysmon — Registry Add/Delete',
+  '13':   'Sysmon — Registry Set',
+  '15':   'Sysmon — Alternate Data Stream',
+  '17':   'Sysmon — Named Pipe Created',
+  '22':   'Sysmon — DNS Query',
+  '4103': 'PowerShell — Module Logging',
+  '4104': 'PowerShell — Script Block Logging',
+  '4624': 'Security — Logon Success',
+  '4625': 'Security — Logon Failure',
+  '4648': 'Security — Explicit Logon',
+  '4656': 'Security — Object Handle Requested',
+  '4657': 'Security — Registry Value Modified',
+  '4660': 'Security — Object Deleted',
+  '4663': 'Security — Object Access Attempt',
+  '4688': 'Security — Process Creation',
+  '4689': 'Security — Process Exit',
+  '4698': 'Security — Scheduled Task Created',
+  '4702': 'Security — Scheduled Task Updated',
+  '4719': 'Security — Audit Policy Changed',
+  '4720': 'Security — User Account Created',
+  '4722': 'Security — Account Enabled',
+  '4724': 'Security — Password Reset Attempt',
+  '4725': 'Security — Account Disabled',
+  '4726': 'Security — User Account Deleted',
+  '4768': 'Security — Kerberos TGT Request',
+  '4769': 'Security — Kerberos Service Ticket',
+  '4776': 'Security — NTLM Credential Validation',
+  '7045': 'System — New Service Installed',
+  '7036': 'System — Service State Change',
+  '1102': 'Security — Audit Log Cleared',
+  '8004': 'AppLocker — Execution Blocked',
+};
+
+function copyRaw(text) {
+  navigator.clipboard.writeText(text).catch(function() {});
+}
+
+function openEvidence(idx) {
+  var results = window._evidenceResults || [];
+  var c = results[idx];
+  if (!c) return;
+  var techName = (c.technique && c.technique.name) || c.name || 'Technique';
+  var techId   = (c.technique && c.technique.id)   ? c.technique.id + ' — ' : '';
+  document.getElementById('evidence-title').textContent = techId + techName;
+  renderEvidencePanel(c);
+  document.getElementById('evidence-overlay').style.display = 'block';
+}
+
+function closeEvidence() {
+  document.getElementById('evidence-overlay').style.display = 'none';
+}
+
+function renderEvidencePanel(c) {
+  var da       = c.detectionAlert || null;
+  var execOk   = c.result !== 'error' && c.result !== 'skipped';
+  var detOk    = !!(c.detectionVerdict === 'detected' || c.detectionVerdict === 'prevented' || da);
+  var prevOk   = c.detectionVerdict === 'prevented' || c.result === 'pass';
+  var cleanOk  = c.cleanupVerdict === 'reverted';
+
+  // confidence
+  var cScore = 1 + (detOk ? 1 : 0) + (c.events && c.events.length > 0 ? 1 : 0) + (cleanOk ? 1 : 0);
+  var conf = cScore >= 4 ? {l:'High',   col:'var(--success)'}
+           : cScore >= 2 ? {l:'Medium', col:'var(--warning)'}
+                         : {l:'Low',    col:'var(--muted)'};
+
+  function xe(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function secRow(label, ok, text) {
+    return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.22rem 0">'
+      + '<span style="width:5.8rem;font-size:0.72rem;color:var(--muted);flex-shrink:0">' + label + '</span>'
+      + '<span style="font-size:0.72rem;color:' + (ok ? 'var(--success)' : 'var(--muted)') + ';font-weight:600">'
+      + (ok ? '&#10003; ' : '&#8212; ') + xe(text) + '</span>'
+      + '</div>';
+  }
+  function section(title, badge, content) {
+    return '<div style="margin-bottom:0.9rem">'
+      + '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">'
+      + '<div style="font-size:0.61rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">' + title + '</div>'
+      + (badge ? '<span style="font-size:0.58rem;font-weight:700;text-transform:uppercase;background:rgba(35,134,54,0.15);color:var(--success);border-radius:3px;padding:1px 6px;border:1px solid rgba(35,134,54,0.3)">' + xe(badge) + '</span>' : '')
+      + '</div>'
+      + '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.7rem 0.85rem;font-size:0.74rem">'
+      + content
+      + '</div></div>';
+  }
+  function kv(label, valueHtml) {
+    return '<div style="display:flex;gap:0.75rem;padding:0.18rem 0;border-bottom:1px solid rgba(34,50,74,0.4);min-height:1.6rem;align-items:flex-start">'
+      + '<span style="min-width:6.5rem;color:var(--muted);font-size:0.69rem;flex-shrink:0;padding-top:0.05rem">' + label + '</span>'
+      + '<span style="color:var(--text)">' + valueHtml + '</span>'
+      + '</div>';
+  }
+
+  var html = '';
+
+  // ── 1. Evidence Summary ──
+  var detText  = detOk  ? (da && da.provider ? xe(da.provider) : 'Detected') : 'No detection correlated';
+  var prevText = prevOk ? 'Blocked' : 'Not prevented';
+  var cvText   = cleanOk ? 'Environment restored'
+               : (c.cleanupVerdict === 'partial' ? 'Partial cleanup'
+               : (c.cleanupVerdict === 'leaked'  ? 'Leaked — artifacts remain'
+               : 'No cleanup defined'));
+
+  html += '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.8rem 1rem;margin-bottom:1rem">';
+  html += '<div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:0.45rem;font-weight:700">Evidence Summary</div>';
+  html += secRow('Execution', execOk, execOk ? 'Verified' : 'Failed');
+  html += secRow('Detection', detOk,  detText);
+  html += secRow('Prevention', prevOk, prevText);
+  html += secRow('Cleanup', cleanOk, cvText);
+  html += '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.22rem 0;margin-top:0.3rem;border-top:1px solid var(--border)">'
+       + '<span style="width:5.8rem;font-size:0.72rem;color:var(--muted);flex-shrink:0">Confidence</span>'
+       + '<span style="font-size:0.72rem;color:' + conf.col + ';font-weight:700">' + conf.l + '</span>'
+       + '</div>';
+  html += '</div>';
+
+  // ── 2. Security Response ──
+  var srHtml = '';
+  srHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:0.6rem">';
+  var card = function(label, ok, sub, bg) {
+    return '<div style="text-align:center;padding:0.45rem 0.3rem;background:' + bg + ';border-radius:4px">'
+      + '<div style="font-size:0.64rem;color:var(--muted);margin-bottom:0.15rem">' + label + '</div>'
+      + '<div style="font-size:0.95rem;margin:0.08rem 0;color:' + (ok ? 'var(--success)' : 'var(--muted)') + '">' + (ok ? '&#10003;' : '&#8212;') + '</div>'
+      + '<div style="font-size:0.67rem;color:var(--text)">' + xe(sub) + '</div>'
+      + '</div>';
+  };
+  var resultVerdict = c.detectionVerdict || c.result || '—';
+  var resultCol = prevOk ? 'var(--success)' : (detOk ? 'var(--warning)' : 'var(--danger)');
+  srHtml += card('Execution', execOk, execOk ? 'Successful' : 'Failed', 'rgba(47,129,247,0.07)');
+  srHtml += card('Detection', detOk,  detOk  ? (da && da.provider ? xe(da.provider) : 'Detected') : 'No detection', 'rgba(210,153,34,0.07)');
+  srHtml += card('Prevention', prevOk, prevOk ? 'Blocked' : 'Not blocked', 'rgba(35,134,54,0.07)');
+  srHtml += '<div style="text-align:center;padding:0.45rem 0.3rem;background:var(--bg);border-radius:4px">'
+         + '<div style="font-size:0.64rem;color:var(--muted);margin-bottom:0.15rem">Result</div>'
+         + '<div style="font-size:0.67rem;font-weight:700;color:' + resultCol + ';text-transform:uppercase;margin-top:0.6rem">' + xe(resultVerdict) + '</div>'
+         + '</div>';
+  srHtml += '</div>';
+  if (da) {
+    srHtml += '<div style="background:rgba(210,153,34,0.08);border:1px solid rgba(210,153,34,0.25);border-radius:4px;padding:0.5rem 0.65rem;margin-bottom:0.4rem">';
+    srHtml += '<div style="font-size:0.61rem;color:var(--warning);font-weight:700;margin-bottom:0.2rem">' + xe(da.provider||'EDR') + ' Alert</div>';
+    if (da.threatName) srHtml += '<div style="font-size:0.72rem;color:var(--text);margin-bottom:0.12rem">' + xe(da.threatName) + '</div>';
+    if (da.mttdMs != null) srHtml += '<div style="font-size:0.67rem;color:var(--muted)">MTTD: ' + (da.mttdMs < 1000 ? da.mttdMs + ' ms' : (da.mttdMs/1000).toFixed(1) + ' s') + '</div>';
+    srHtml += '</div>';
+  }
+  if (c.blockingControl) {
+    srHtml += '<div style="background:rgba(35,134,54,0.08);border:1px solid rgba(35,134,54,0.25);border-radius:4px;padding:0.5rem 0.65rem;margin-bottom:0.4rem">';
+    srHtml += '<div style="font-size:0.61rem;color:var(--success);font-weight:700;margin-bottom:0.12rem">Blocking Control</div>';
+    srHtml += '<div style="font-size:0.72rem;color:var(--text)">' + xe((c.blockingControl && c.blockingControl.name) || 'Security Control') + '</div>';
+    srHtml += '</div>';
+  }
+  if (c.events && c.events.length > 0) {
+    srHtml += '<div style="margin-top:0.5rem"><div style="font-size:0.61rem;color:var(--muted);margin-bottom:0.22rem;font-weight:600">Windows Events</div>';
+    srHtml += c.events.map(function(evId) {
+      var evName = WIN_EVENT_NAMES[String(evId)] || 'Security Event';
+      var evIdStr = xe(String(evId));
+      return '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.16rem 0">'
+        + '<code style="font-size:0.64rem;color:var(--accent);min-width:2.8rem">' + evIdStr + '</code>'
+        + '<span style="font-size:0.69rem;color:var(--text);flex:1">' + xe(evName) + '</span>'
+        + '<button onclick="copyRaw(\'' + evIdStr + '\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.63rem;padding:0" title="Copy ID">&#128203;</button>'
+        + '</div>';
+    }).join('');
+    srHtml += '</div>';
+  }
+  var srBadge = da ? 'EDR Verified ✓' : (c.events && c.events.length > 0 ? 'Event Log Verified ✓' : null);
+  html += section('Security Response', srBadge, srHtml);
+
+  // ── 3. Execution ──
+  var cmd = c.command || '';
+  var cmdMethod = 'Custom';
+  if (cmd.indexOf('-EncodedCommand') !== -1 || cmd.indexOf(' -enc ') !== -1) { cmdMethod = 'PowerShell (Encoded)'; }
+  else if (cmd.toLowerCase().indexOf('powershell') !== -1 || cmd.toLowerCase().indexOf('pwsh') !== -1) { cmdMethod = 'PowerShell'; }
+  else if (cmd.toLowerCase().indexOf('cmd.exe') !== -1 || /^cmd\s/i.test(cmd)) { cmdMethod = 'CMD.exe'; }
+  else if (cmd.toLowerCase().indexOf('wmic') !== -1) { cmdMethod = 'WMI (wmic.exe)'; }
+  else if (cmd.toLowerCase().indexOf('schtasks') !== -1) { cmdMethod = 'Scheduled Task'; }
+  else if (c.framework === 'caldera') { cmdMethod = 'Caldera Ability'; }
+  else if (cmd) { cmdMethod = cmd.split(/[\s/\\]/)[0]; }
+
+  var durMs = c.durationMs || 0;
+  var durLabel = durMs < 1000 ? durMs + ' ms' : durMs < 60000 ? (durMs/1000).toFixed(1) + ' s' : Math.round(durMs/60000) + ' m ' + Math.round((durMs%60000)/1000) + ' s';
+  var durCol = durMs < 1000 ? 'var(--success)' : durMs < 8000 ? 'var(--text)' : durMs < 30000 ? 'var(--warning)' : 'var(--danger)';
+
+  var exHtml = kv('Method', xe(cmdMethod));
+  if (cmd) {
+    var cmdJson = JSON.stringify(cmd);
+    exHtml += '<div style="display:flex;gap:0.75rem;padding:0.18rem 0;border-bottom:1px solid rgba(34,50,74,0.4)">'
+      + '<span style="min-width:6.5rem;color:var(--muted);font-size:0.69rem;flex-shrink:0;padding-top:0.05rem">Command</span>'
+      + '<details style="flex:1;cursor:pointer"><summary style="list-style:none;color:var(--accent);font-size:0.68rem">View Full Command &#9660;</summary>'
+      + '<div style="margin-top:0.4rem;display:flex;gap:0.4rem;align-items:flex-start">'
+      + '<code style="font-size:0.62rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.35rem 0.5rem;display:block;word-break:break-all;flex:1;color:var(--text);line-height:1.5">' + xe(cmd) + '</code>'
+      + '<button onclick="copyRaw(' + cmdJson + ')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-size:0.63rem;padding:0.2rem 0.35rem;flex-shrink:0" title="Copy">&#128203;</button>'
+      + '</div></details></div>';
+  }
+  if (c.pid) exHtml += kv('PID', xe(String(c.pid)));
+  exHtml += kv('Executed as', xe(c.executedAs || c.requestedPriv || 'agent context'));
+  exHtml += kv('Exit code', c.exitCode != null ? xe(String(c.exitCode)) : '&#8212;');
+  if (c.startedAt && (new Date(c.startedAt)).getFullYear() > 2000) {
+    exHtml += kv('Started at', xe(new Date(c.startedAt).toISOString().replace('T',' ').slice(0,23) + ' UTC'));
+  } else if (c.executedAt) {
+    exHtml += kv('Completed at', xe(new Date(c.executedAt).toISOString().replace('T',' ').slice(0,23) + ' UTC'));
+  }
+  exHtml += kv('Duration', '<span style="font-weight:600;color:' + durCol + '">' + durLabel + '</span>');
+  if (c.timedOut) exHtml += kv('Timed out', '<span style="color:var(--danger);font-weight:700">Yes — exceeded timeout</span>');
+  html += section('Execution', 'Agent Verified ✓', exHtml);
+
+  // ── 4. Detection Timeline (always visible) ──
+  var t0 = (c.startedAt && (new Date(c.startedAt)).getFullYear() > 2000) ? new Date(c.startedAt)
+         : (c.executedAt ? new Date(new Date(c.executedAt).getTime() - (c.durationMs||0)) : null);
+  var t1 = c.executedAt ? new Date(c.executedAt) : null;
+  var fmt = function(d) { return d ? d.toISOString().replace('T',' ').slice(11,19) + ' UTC' : ''; };
+
+  var tlNodes = [
+    { label: 'Started', sub: fmt(t0), col: 'var(--accent)' },
+    { label: 'Payload Executed', sub: '', col: 'var(--text)' },
+  ];
+  if (detOk) {
+    var alertTime = (da && da.timestamp) ? new Date(da.timestamp) : null;
+    var mttdLabel = (da && da.mttdMs != null) ? ' +' + (da.mttdMs < 1000 ? da.mttdMs+'ms' : (da.mttdMs/1000).toFixed(1)+'s') : '';
+    tlNodes.push({ label: prevOk ? 'Blocked' : 'Detected', sub: (alertTime ? fmt(alertTime) : '') + mttdLabel, col: prevOk ? 'var(--success)' : 'var(--warning)' });
+  } else {
+    tlNodes.push({ label: 'No Detection', sub: 'Controls did not alert', col: 'var(--muted)' });
+  }
+  if (c.cleanupVerdict) {
+    var cleanCol2 = cleanOk ? 'var(--success)' : c.cleanupVerdict === 'leaked' ? 'var(--danger)' : 'var(--warning)';
+    tlNodes.push({ label: 'Cleanup', sub: xe(c.cleanupVerdict), col: cleanCol2 });
+  }
+  tlNodes.push({ label: 'Completed', sub: fmt(t1), col: 'var(--text)' });
+
+  var tlHtml = '<div style="position:relative;padding-left:1.4rem">';
+  tlNodes.forEach(function(n, i) {
+    var last = i === tlNodes.length - 1;
+    tlHtml += '<div style="position:relative;padding-bottom:' + (last ? '0' : '0.85rem') + '">'
+      + (!last ? '<div style="position:absolute;left:-0.65rem;top:0.55rem;bottom:0;width:1px;background:var(--border)"></div>' : '')
+      + '<div style="position:absolute;left:-0.87rem;top:0.12rem;width:0.42rem;height:0.42rem;border-radius:50%;background:' + n.col + '"></div>'
+      + '<div style="font-size:0.74rem;font-weight:600;color:' + n.col + '">' + xe(n.label) + '</div>'
+      + (n.sub ? '<div style="font-size:0.64rem;color:var(--muted);margin-top:0.04rem">' + xe(n.sub) + '</div>' : '')
+      + '</div>';
+  });
+  tlHtml += '</div>';
+  html += section('Detection Timeline', null, tlHtml);
+
+  // ── 5. Cleanup (only if cleanup verdict exists) ──
+  if (c.cleanupVerdict) {
+    var cv   = c.cleanupVerdict;
+    var cvIcon = cv === 'reverted' ? '&#10003;' : cv === 'partial' ? '&#9888;' : cv === 'leaked' ? '&#10007;' : '&#8212;';
+    var cvCol2 = cv === 'reverted' ? 'var(--success)' : cv === 'partial' ? 'var(--warning)' : cv === 'leaked' ? 'var(--danger)' : 'var(--muted)';
+    var cvDesc = cv === 'reverted' ? 'All artifacts removed, environment restored'
+               : cv === 'partial'  ? 'Cleanup ran but had errors — some artifacts may remain'
+               : cv === 'leaked'   ? 'Cleanup timed out or failed — artifacts remain on host'
+               : 'No cleanup step defined';
+    var clFlow = cv === 'reverted' ? ['Payload Executed', 'Cleanup Started', 'Cleanup Complete']
+               : cv === 'partial'  ? ['Payload Executed', 'Cleanup Started', 'Partial Complete']
+               :                     ['Payload Executed', 'Cleanup Timed Out'];
+    var clHtml = '<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem">'
+      + '<span style="font-size:1rem;color:' + cvCol2 + ';flex-shrink:0">' + cvIcon + '</span>'
+      + '<div><div style="font-weight:600;color:' + cvCol2 + ';font-size:0.77rem">' + xe(cv.charAt(0).toUpperCase()+cv.slice(1)) + '</div>'
+      + '<div style="font-size:0.67rem;color:var(--muted)">' + xe(cvDesc) + '</div></div></div>';
+    clHtml += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:0">';
+    clFlow.forEach(function(step, i) {
+      var last = i === clFlow.length-1;
+      var sc = last ? cvCol2 : 'var(--muted)';
+      clHtml += '<span style="font-size:0.65rem;color:' + sc + '">' + xe(step) + '</span>';
+      if (!last) clHtml += '<span style="color:var(--border);margin:0 0.3rem">&rsaquo;</span>';
+    });
+    clHtml += '</div>';
+    html += section('Cleanup', cv === 'reverted' ? 'Agent Verified ✓' : null, clHtml);
+  }
+
+  // ── 6. MITRE ATT&CK ──
+  if (c.technique && c.technique.id) {
+    var tid = c.technique.id.replace('.', '/');
+    var miHtml = kv('Technique',
+      '<a href="https://attack.mitre.org/techniques/' + xe(tid) + '" target="_blank" style="color:var(--accent);text-decoration:none">'
+      + xe(c.technique.id) + ' &#8212; ' + xe(c.technique.name||'') + ' &#8599;</a>');
+    if (c.technique.tactic) miHtml += kv('Tactic', xe(c.technique.tactic.replace(/-/g,' ')));
+    var fw2 = (c.framework||'custom').toLowerCase();
+    var fw2col = fw2 === 'art' ? 'var(--accent)' : fw2 === 'caldera' ? '#bc8cff' : 'var(--muted)';
+    miHtml += kv('Framework', '<span style="color:' + fw2col + ';font-weight:700;text-transform:uppercase;font-size:0.68rem">' + xe(fw2) + '</span>');
+    html += section('MITRE ATT&CK', null, miHtml);
+  }
+
+  // ── 7. Execution Logs ──
+  if (c.rawOutput) {
+    var rawJson = JSON.stringify(c.rawOutput);
+    var logsHtml = '<details><summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:0.5rem;color:var(--muted);font-size:0.72rem">'
+      + '<span style="color:var(--accent)">&#9658;</span> View Execution Logs</summary>'
+      + '<div style="margin-top:0.5rem">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">'
+      + '<span style="font-size:0.62rem;color:var(--muted)">stdout / stderr</span>'
+      + '<button onclick="copyRaw(' + rawJson + ')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-size:0.62rem;padding:0.15rem 0.4rem">&#128203; Copy</button>'
+      + '</div>'
+      + '<pre style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:0.6rem;font-size:0.64rem;color:var(--text);overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:180px;overflow-y:auto;margin:0">'
+      + xe(c.rawOutput) + '</pre></div></details>';
+    html += section('Execution Logs', null, logsHtml);
+  }
+
+  document.getElementById('evidence-content').innerHTML = html;
+}
 
 // Stop an in-flight run. The agent cancels gracefully (completed steps are kept;
 // the run is marked partial). If the agent is offline the server marks it partial.

@@ -160,6 +160,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 	// Register the child PID with the dialog dismisser so it can identify
 	// dialog boxes that belong to this step (including grandchildren).
 	childPID := uint32(cmd.Process.Pid)
+	stepPID := cmd.Process.Pid
 	trackExecPID(childPID)
 	defer untrackExecPID(childPID)
 
@@ -230,6 +231,8 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 
 	result := ExecResult{
 		TaskID:        step.TaskID,
+		PID:           stepPID,
+		StartedAt:     before,
 		ExitCode:      exitCode,
 		Stdout:        trimOutput(stdout.Bytes()),
 		Stderr:        trimOutput(stderr.Bytes()),

@@ -176,6 +176,8 @@ type ScenarioStep struct {
 
 type ExecResult struct {
 	TaskID        string    `json:"taskId"`
+	PID           int       `json:"pid,omitempty"`
+	StartedAt     time.Time `json:"startedAt,omitempty"`
 	ExitCode      int       `json:"exitCode"`
 	Stdout        string    `json:"stdout"`
 	Stderr        string    `json:"stderr"`
