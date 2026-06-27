@@ -135,7 +135,7 @@ func (h *Handler) DeleteTicketingConfig(w http.ResponseWriter, r *http.Request) 
 	respond(w, map[string]any{"status": "ok"})
 }
 
-// TestTicketingConfig tests connectivity for a connector.
+// TestTicketingConfig tests connectivity for a saved connector.
 // POST /api/ticketing/configs/{id}/test
 func (h *Handler) TestTicketingConfig(w http.ResponseWriter, r *http.Request) {
 	if h.ticketing == nil {
@@ -144,6 +144,32 @@ func (h *Handler) TestTicketingConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	id := chi.URLParam(r, "id")
 	if err := h.ticketing.TestConnector(r.Context(), id); err != nil {
+		respond(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	respond(w, map[string]any{"ok": true})
+}
+
+// ProbeTicketingConfig tests connectivity from inline (unsaved) settings.
+// POST /api/ticketing/probe  body: {provider, settings}
+// Lets the UI test credentials from the form without saving first.
+func (h *Handler) ProbeTicketingConfig(w http.ResponseWriter, r *http.Request) {
+	if h.ticketing == nil {
+		jsonError(w, "ticketing not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var req struct {
+		Provider string            `json:"provider"`
+		Settings map[string]string `json:"settings"`
+	}
+	if json.NewDecoder(r.Body).Decode(&req) != nil || req.Provider == "" {
+		jsonError(w, "provider is required", http.StatusBadRequest)
+		return
+	}
+	if req.Settings == nil {
+		req.Settings = map[string]string{}
+	}
+	if err := h.ticketing.ProbeConnector(r.Context(), req.Provider, req.Settings); err != nil {
 		respond(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}

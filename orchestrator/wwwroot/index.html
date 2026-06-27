@@ -1160,7 +1160,7 @@ body.theme-slate {
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <polyline points="1,11 5,6 8,9 11,4 15,7"/>
           </svg>
-          Detections <span class="coming-tag">Soon</span>
+         <!-- Detections <span class="coming-tag">Soon</span>-->
         </div>
       </div>
       <div class="nav-group">
@@ -1194,7 +1194,7 @@ body.theme-slate {
             <rect x="1" y="1" width="14" height="14" rx="1"/>
             <path d="M4 5h8M4 8h6M4 11h4"/>
           </svg>
-          Audit Logs <span class="coming-tag">Soon</span>
+         <!-- Audit Logs <span class="coming-tag">Soon</span>-->
         </div>
       </div>
     </nav>
@@ -5457,21 +5457,27 @@ function closeConnectorForm() {
 
 var CONNECTOR_FIELDS = {
   servicenow: [
-    { key: 'instance_url',    label: 'Instance URL',       placeholder: 'https://instance.service-now.com', type: 'text' },
-    { key: 'username',        label: 'Username',           placeholder: 'admin',                            type: 'text' },
-    { key: 'password',        label: 'Password',           placeholder: '••••••',                           type: 'password' },
-    { key: 'category',        label: 'Category',           placeholder: 'Security (optional)',              type: 'text' },
-    { key: 'assignment_group',label: 'Assignment Group',   placeholder: 'SOC (optional)',                   type: 'text' }
+    { key: 'instance_url',    label: 'Instance URL',                  placeholder: 'https://instance.service-now.com',         type: 'text' },
+    { key: 'username',        label: 'Username',                      placeholder: 'admin',                                    type: 'text' },
+    { key: 'password',        label: 'Password',                      placeholder: '••••••',                                   type: 'password' },
+    { key: 'category',        label: 'Category (optional)',           placeholder: 'security',                                 type: 'text' },
+    { key: 'assignment_group',label: 'Assignment Group (optional)',   placeholder: 'SOC',                                      type: 'text' },
+    { key: 'insecure_tls',    label: 'Skip TLS verification',         placeholder: '',                                         type: 'checkbox',
+      hint: 'Enable only for self-signed or internal CA certificates' }
   ],
   jira: [
-    { key: 'base_url',        label: 'Base URL',           placeholder: 'https://jira.company.com',         type: 'text' },
-    { key: 'username',        label: 'Username/Email',     placeholder: 'user@company.com',                 type: 'text' },
-    { key: 'api_token',       label: 'API Token',          placeholder: '••••••',                           type: 'password' },
-    { key: 'project_key',     label: 'Project Key',        placeholder: 'SEC',                              type: 'text' }
+    { key: 'base_url',        label: 'Base URL',                      placeholder: 'https://jira.company.com',                 type: 'text' },
+    { key: 'username',        label: 'Username / Email',              placeholder: 'user@company.com',                         type: 'text' },
+    { key: 'api_token',       label: 'API Token (or password for Jira Server)', placeholder: '••••••',                         type: 'password' },
+    { key: 'project_key',     label: 'Project Key',                   placeholder: 'SEC',                                      type: 'text' },
+    { key: 'insecure_tls',    label: 'Skip TLS verification',         placeholder: '',                                         type: 'checkbox',
+      hint: 'Enable only for self-signed or internal CA certificates' }
   ],
   webhook: [
-    { key: 'url',             label: 'Endpoint URL',       placeholder: 'https://hooks.example.com/bas',    type: 'text' },
-    { key: 'secret',          label: 'HMAC Secret',        placeholder: 'optional — signs X-BAS-Signature', type: 'password' }
+    { key: 'url',             label: 'Endpoint URL',                  placeholder: 'https://hooks.example.com/bas',            type: 'text' },
+    { key: 'secret',          label: 'HMAC Secret (optional)',        placeholder: 'Signs the X-BAS-Signature header',         type: 'password' },
+    { key: 'insecure_tls',    label: 'Skip TLS verification',         placeholder: '',                                         type: 'checkbox',
+      hint: 'Enable only for self-signed or internal CA certificates' }
   ]
 };
 
@@ -5480,11 +5486,26 @@ function renderConnectorSettings(saved) {
   var fields = CONNECTOR_FIELDS[prov] || [];
   var s = saved || {};
   document.getElementById('cf-settings').innerHTML = fields.map(function(f) {
+    if (f.type === 'checkbox') {
+      return '<div style="margin-bottom:0.6rem">' +
+        '<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">' +
+          '<input type="checkbox" id="cfs-' + f.key + '"' + (s[f.key] === 'yes' ? ' checked' : '') + '>' +
+          '<span class="conn-cfg-label" style="margin:0">' + f.label + '</span>' +
+        '</label>' +
+        (f.hint ? '<div style="font-size:0.65rem;color:var(--muted);margin-top:0.2rem;margin-left:1.4rem">' + f.hint + '</div>' : '') +
+        '</div>';
+    }
     return '<div style="margin-bottom:0.6rem">' +
       '<div class="conn-cfg-label" style="margin-bottom:0.25rem">' + f.label + '</div>' +
       '<input type="' + f.type + '" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm" style="width:100%">' +
       '</div>';
   }).join('');
+}
+
+function _connectorFieldValue(f) {
+  var el = document.getElementById('cfs-' + f.key);
+  if (!el) return '';
+  return f.type === 'checkbox' ? (el.checked ? 'yes' : '') : (el.value || '');
 }
 
 function saveConnectorForm() {
@@ -5493,7 +5514,7 @@ function saveConnectorForm() {
   var fields = CONNECTOR_FIELDS[prov] || [];
   var settings = {};
   fields.forEach(function(f) {
-    var v = (document.getElementById('cfs-' + f.key) || {}).value || '';
+    var v = _connectorFieldValue(f);
     if (v) settings[f.key] = v;
   });
   var body = {
@@ -5526,14 +5547,20 @@ function testConnectorById(id, btn) {
 }
 
 function testConnectorForm() {
-  var id = document.getElementById('cf-id').value;
+  var prov = document.getElementById('cf-provider').value;
+  var fields = CONNECTOR_FIELDS[prov] || [];
+  var settings = {};
+  fields.forEach(function(f) {
+    var v = _connectorFieldValue(f);
+    if (v) settings[f.key] = v;
+  });
   var res = document.getElementById('cf-test-result');
-  if (!id) { res.style.display = ''; res.style.color = 'var(--muted)'; res.textContent = 'Save the connector first, then test.'; return; }
   res.style.display = ''; res.style.color = 'var(--muted)'; res.textContent = 'Testing…';
-  apicall('/api/ticketing/configs/' + encodeURIComponent(id) + '/test', { method: 'POST' })
+  apicall('/api/ticketing/probe', { method: 'POST', body: JSON.stringify({ provider: prov, settings: settings }) })
     .then(function(r) {
       res.style.color = r.ok ? 'var(--success)' : 'var(--danger)';
-      res.textContent = r.ok ? 'Connection successful.' : 'Failed: ' + (r.error || 'check credentials');
+      var msg = r.ok ? 'Connection successful.' : 'Failed: ' + (r.error || 'check credentials');
+      res.textContent = msg.length > 220 ? msg.slice(0, 220) + '…' : msg;
     }).catch(function(e) { res.style.color = 'var(--danger)'; res.textContent = e.message; });
 }
 

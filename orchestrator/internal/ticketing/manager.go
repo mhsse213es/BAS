@@ -246,6 +246,17 @@ func (m *Manager) TestConnector(ctx context.Context, configID string) error {
 	return con.TestConnection(ctx)
 }
 
+// ProbeConnector builds a connector from inline config and tests it without persisting.
+// Used by the UI "Test Connection" button before (or instead of) saving.
+func (m *Manager) ProbeConnector(ctx context.Context, provider string, settings map[string]string) error {
+	c := &Config{Provider: provider, Settings: settings}
+	con := buildConnector(c)
+	if con == nil {
+		return fmt.Errorf("unknown provider %q", provider)
+	}
+	return con.TestConnection(ctx)
+}
+
 // ListTicketsForFinding returns all ticket references for a finding.
 func (m *Manager) ListTicketsForFinding(ctx context.Context, findingID string) ([]map[string]any, error) {
 	rows, err := m.db.Query(ctx,

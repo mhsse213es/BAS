@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -36,11 +37,15 @@ func newWebhook(settings map[string]string) *webhookConnector {
 			headers[strings.TrimPrefix(k, "header_")] = v
 		}
 	}
+	client := &http.Client{Timeout: 15 * time.Second}
+	if settings["insecure_tls"] == "yes" {
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec
+	}
 	return &webhookConnector{
 		url:        settings["url"],
 		secret:     settings["secret"],
 		headers:    headers,
-		httpClient: &http.Client{Timeout: 15 * time.Second},
+		httpClient: client,
 	}
 }
 

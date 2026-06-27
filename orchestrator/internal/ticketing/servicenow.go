@@ -3,6 +3,7 @@ package ticketing
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,13 +25,17 @@ type snowConnector struct {
 }
 
 func newServiceNow(settings map[string]string) *snowConnector {
+	client := &http.Client{Timeout: 15 * time.Second}
+	if settings["insecure_tls"] == "yes" {
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec
+	}
 	return &snowConnector{
 		instanceURL: strings.TrimRight(settings["instance_url"], "/"),
 		username:    settings["username"],
 		password:    settings["password"],
 		category:    orDefault(settings["category"], "security"),
 		assignGroup: settings["assignment_group"],
-		httpClient:  &http.Client{Timeout: 15 * time.Second},
+		httpClient:  client,
 	}
 }
 

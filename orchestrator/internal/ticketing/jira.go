@@ -3,6 +3,7 @@ package ticketing
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -24,12 +25,16 @@ type jiraConnector struct {
 }
 
 func newJira(settings map[string]string) *jiraConnector {
+	client := &http.Client{Timeout: 15 * time.Second}
+	if settings["insecure_tls"] == "yes" {
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec
+	}
 	return &jiraConnector{
 		baseURL:    strings.TrimRight(settings["base_url"], "/"),
 		username:   settings["username"],
 		apiToken:   settings["api_token"],
 		projectKey: settings["project_key"],
-		httpClient: &http.Client{Timeout: 15 * time.Second},
+		httpClient: client,
 	}
 }
 
