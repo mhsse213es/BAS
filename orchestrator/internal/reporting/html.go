@@ -1803,7 +1803,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
           <div class="fc-detail-label">Executed As</div>
           <div class="fc-detail-value">
             {{if .executedAs}}<span style="font-family:monospace;font-size:0.72rem;font-weight:700;
-              {{if eq .executedAs "System"}}color:#da3633{{else if eq .executedAs "Admin"}}color:#f0883e{{else if contains .executedAs "→"}}color:#d29922{{else}}color:#2563eb{{end}}">{{.executedAs}}</span>{{end}}
+              {{if eq .executedAs "System"}}color:#da3633{{else if eq .executedAs "Admin"}}color:#f0883e{{else if contains .executedAs "→"}}color:#d29922{{else if eq .executedAs "Legacy"}}color:#9aa5b5{{else}}color:#2563eb{{end}}">{{.executedAs}}</span>{{end}}
             {{if and .requestedPriv (ne .requestedPriv .executedAs)}}<span style="color:#9aa5b5;font-size:0.65rem"> (requested: {{.requestedPriv}})</span>{{end}}
           </div>
         </div>{{end}}
