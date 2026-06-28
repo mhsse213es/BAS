@@ -1,6 +1,84 @@
 package scenario
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
+
+// PrivSpec declares the privilege tier(s) a scenario step may run under.
+//
+// Three YAML forms are accepted — all parse into this struct:
+//
+//	scalar:   requires_priv: admin
+//	minimum:  requires_priv: {minimum: user}
+//	full:     requires_priv: {minimum: user, preferred: admin}
+//
+// Minimum is the lowest tier at which the technique is meaningful. Preferred
+// is the tier at which it yields the broadest coverage (e.g. T1547.001 works
+// as "user" in HKCU but as "admin" in HKLM). When Preferred is set the agent
+// uses it for execution; Minimum documents the fallback floor. Both values are
+// carried through to the report so analysts see "ran as Admin, minimum: User"
+// rather than just the bare effective tier.
+//
+// Valid tier values: "user" | "admin" | "system". Empty means unannotated
+// (legacy step — ran in the agent's own context, no tier recorded).
+type PrivSpec struct {
+	Minimum   string `yaml:"minimum"            json:"minimum,omitempty"`
+	Preferred string `yaml:"preferred,omitempty" json:"preferred,omitempty"`
+}
+
+// UnmarshalYAML accepts both scalar and mapping forms of requires_priv.
+func (p *PrivSpec) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err == nil {
+		p.Minimum = s
+		return nil
+	}
+	type privAlias PrivSpec
+	var m privAlias
+	if err := unmarshal(&m); err != nil {
+		return err
+	}
+	*p = PrivSpec(m)
+	return nil
+}
+
+// MarshalJSON outputs the full object form so the scenario API is unambiguous.
+func (p PrivSpec) MarshalJSON() ([]byte, error) {
+	if p.IsZero() {
+		return []byte("null"), nil
+	}
+	type privAlias PrivSpec
+	return json.Marshal(privAlias(p))
+}
+
+// UnmarshalJSON accepts both scalar string and object forms for JSON round-trips.
+func (p *PrivSpec) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		p.Minimum = s
+		return nil
+	}
+	type privAlias PrivSpec
+	var m privAlias
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+	*p = PrivSpec(m)
+	return nil
+}
+
+// Effective returns the tier the agent should execute under: Preferred when set,
+// otherwise Minimum. Returns empty string for unannotated (legacy) steps.
+func (p PrivSpec) Effective() string {
+	if p.Preferred != "" {
+		return p.Preferred
+	}
+	return p.Minimum
+}
+
+// IsZero reports whether no privilege tier has been declared.
+func (p PrivSpec) IsZero() bool { return p.Minimum == "" && p.Preferred == "" }
 
 // YAMLPayload defines a file the server should stage on the endpoint before a step runs.
 // Content is base64-encoded. Defined in scenario YAML alongside the step.
@@ -38,14 +116,11 @@ type Step struct {
 	Fidelity       string `yaml:"fidelity,omitempty"        json:"fidelity,omitempty"`
 	ProductionSafe bool   `yaml:"production_safe,omitempty" json:"productionSafe,omitempty"`
 
-	// RequiresPriv declares the minimum privilege the step needs to execute:
-	//   ""       → defaults to "user" (non-elevated interactive session)
-	//   "user"   → standard non-elevated user context (realistic phishing/initial-access model)
-	//   "admin"  → local administrator (service/persistence techniques)
-	//   "system" → NT AUTHORITY\SYSTEM (kernel/driver/EDR self-protection tests)
-	// The agent resolves the logged-in user token via WTS for "user" steps; falls back
-	// to its own context if no interactive session is present.
-	RequiresPriv string `yaml:"requires_priv,omitempty" json:"requiresPriv,omitempty"`
+	// RequiresPriv declares the privilege context for this step using PrivSpec.
+	// Three YAML forms accepted — see PrivSpec for details.
+	// The agent receives only PrivSpec.Effective() (a plain string) so the wire
+	// format is unchanged; the full spec is carried server-side for reporting.
+	RequiresPriv PrivSpec `yaml:"requires_priv,omitempty" json:"requiresPriv,omitempty"`
 }
 
 // LivePolicy is the per-scenario guardrail set applied to live (telemetry/lab)

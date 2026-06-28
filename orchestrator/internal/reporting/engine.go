@@ -293,9 +293,14 @@ type TechniqueRow struct {
 	CleanupVerdict   string `json:"cleanupVerdict,omitempty"` // reverted|partial|leaked
 	ControlName      string `json:"controlName,omitempty"`    // specific control that blocked (Defender ASR, AppLocker, WDAC)
 	ControlRuleID    string `json:"controlRuleId,omitempty"`  // ASR GUID or AppLocker policy name
-	// RequestedPriv is the privilege tier declared in the scenario YAML.
-	// "Legacy" when the step was unannotated (Phase 2 not yet applied to this scenario).
+	// RequestedPriv is the effective tier sent to the agent (PrivSpec.Effective()).
+	// "Legacy" when the step was unannotated.
 	RequestedPriv string `json:"requestedPriv"`
+	// RequestedPrivMin / RequestedPrivPref carry the full PrivSpec when the step
+	// used the richer YAML form {minimum: user, preferred: admin}. Both empty
+	// means either a plain scalar annotation or a legacy unannotated step.
+	RequestedPrivMin  string `json:"requestedPrivMin,omitempty"`
+	RequestedPrivPref string `json:"requestedPrivPref,omitempty"`
 	// ExecutedAs is the actual privilege tier used at runtime.
 	// "Legacy" when the step was unannotated. "User→Admin" flags a WTS fallback.
 	ExecutedAs  string `json:"executedAs"`
@@ -743,8 +748,10 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 			ExecVerdict:    string(r.Result),
 			DurationMs:     r.DurationMs,
 			CleanupVerdict: r.CleanupVerdict,
-			RequestedPriv:  privLabel(r.RequestedPriv),
-			ExecutedAs:     privLabel(r.ExecutedAs),
+			RequestedPriv:     privLabel(r.RequestedPriv),
+			RequestedPrivMin:  privLabel(r.RequestedPrivMin),
+			RequestedPrivPref: privLabel(r.RequestedPrivPref),
+			ExecutedAs:        privLabel(r.ExecutedAs),
 			Details:        r.Details,
 			Remediation:    r.Remediation,
 		}

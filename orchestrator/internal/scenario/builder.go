@@ -177,7 +177,7 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 		Payloads:     payloads,
 		Cleanup:      s.Cleanup,
 		Fidelity:     s.Fidelity,
-		RequiresPriv: s.RequiresPriv,
+		RequiresPriv: s.RequiresPriv.Effective(),
 	}, nil
 }
 

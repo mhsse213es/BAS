@@ -1805,6 +1805,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
             {{if .executedAs}}<span style="font-family:monospace;font-size:0.72rem;font-weight:700;
               {{if eq .executedAs "System"}}color:#da3633{{else if eq .executedAs "Admin"}}color:#f0883e{{else if contains .executedAs "→"}}color:#d29922{{else if eq .executedAs "Legacy"}}color:#9aa5b5{{else}}color:#2563eb{{end}}">{{.executedAs}}</span>{{end}}
             {{if and .requestedPriv (ne .requestedPriv .executedAs)}}<span style="color:#9aa5b5;font-size:0.65rem"> (requested: {{.requestedPriv}})</span>{{end}}
+            {{if and .requestedPrivMin (ne .requestedPrivMin "Legacy")}}<span style="color:#9aa5b5;font-size:0.63rem;margin-left:4px">&#9492; min: {{.requestedPrivMin}}{{if and .requestedPrivPref (ne .requestedPrivPref "Legacy")}} / preferred: {{.requestedPrivPref}}{{end}}</span>{{end}}
           </div>
         </div>{{end}}
         <div class="fc-detail-row">
@@ -2056,7 +2057,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td style="font-size:0.8rem;color:#6e7681">{{humanize .tactic}}</td>
     <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
     <td><span style="font-size:0.78rem;font-weight:600;color:{{execVerdictColor .execVerdict}}">{{upper .execVerdict}}</span></td>
-    <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">{{.requestedPriv}}</td>
+    <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">
+      {{.requestedPriv}}
+      {{if and .requestedPrivMin (ne .requestedPrivMin "Legacy") (ne .requestedPrivPref "")}}<span style="font-size:0.65rem;color:#9aa5b5;display:block">min:{{.requestedPrivMin}} / pref:{{.requestedPrivPref}}</span>{{end}}
+    </td>
     <td style="font-size:0.78rem;white-space:nowrap;{{if contains .executedAs "→"}}color:#d29922;font-weight:600{{else if eq .executedAs "Legacy"}}color:#6e7681{{else}}color:#9aa9bc{{end}}">{{.executedAs}}</td>
     <td>
       {{if .detectionVerdict}}

@@ -50,9 +50,13 @@ type SimulationResult struct {
 	DetectionAlert   *DetectionAlert  `json:"detectionAlert,omitempty"`    // matched EDR/AV alert when DetectionVerdict=detected
 	CleanupVerdict   string           `json:"cleanupVerdict,omitempty"`    // reverted | partial | leaked (populated from agent cleanup exit code)
 	BlockingControl  *BlockingControl `json:"blockingControl,omitempty"`   // specific control that prevented the technique (populated when DetectionVerdict=prevented)
-	// RequestedPriv mirrors the step's requires_priv YAML field. Empty ("") means
-	// the step was unannotated (legacy — runs in agent's own context).
+	// RequestedPriv is the effective tier sent to the agent (PrivSpec.Effective()).
+	// Empty means the step was unannotated (legacy).
 	RequestedPriv string `json:"requestedPriv,omitempty"`
+	// RequestedPrivMin / RequestedPrivPref carry the full PrivSpec when the YAML
+	// step used the richer {minimum, preferred} form. Both empty = scalar or legacy.
+	RequestedPrivMin  string `json:"requestedPrivMin,omitempty"`
+	RequestedPrivPref string `json:"requestedPrivPref,omitempty"`
 	// ExecutedAs records the actual privilege tier used: "user" | "user→admin" |
 	// "admin" | "system" | "" (empty = legacy unannotated step).
 	ExecutedAs string `json:"executedAs,omitempty"`
