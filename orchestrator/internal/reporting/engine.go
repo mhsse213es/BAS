@@ -298,7 +298,9 @@ type TechniqueRow struct {
 	RequestedPriv string `json:"requestedPriv"`
 	// ExecutedAs is the actual privilege tier used at runtime.
 	// "Legacy" when the step was unannotated. "User→Admin" flags a WTS fallback.
-	ExecutedAs string `json:"executedAs"`
+	ExecutedAs  string `json:"executedAs"`
+	Details     string `json:"details,omitempty"`
+	Remediation string `json:"remediation,omitempty"`
 }
 
 // CoverageBreakdown is the 3-bucket summary of all technique-level verdicts
@@ -743,10 +745,15 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 			CleanupVerdict: r.CleanupVerdict,
 			RequestedPriv:  privLabel(r.RequestedPriv),
 			ExecutedAs:     privLabel(r.ExecutedAs),
+			Details:        r.Details,
+			Remediation:    r.Remediation,
 		}
 		if r.BlockingControl != nil {
 			row.ControlName   = r.BlockingControl.Name
 			row.ControlRuleID = r.BlockingControl.RuleID
+		}
+		if row.ControlName == "" && (r.Result == models.ResultPass || r.Result == models.ResultBlocked) {
+			row.ControlName = attributeControl(r)
 		}
 		if r.DetectionVerdict != "" {
 			row.DetectionVerdict = r.DetectionVerdict

@@ -1,12 +1,16 @@
 ﻿package reporting
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/audspect/bas/internal/reporting/attackdata"
@@ -104,6 +108,7 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 	},
 	"upper":    strings.ToUpper,
+	"lower":    strings.ToLower,
 	"add1":     func(i int) int { return i + 1 },
 	"humanize": humanizeTactic,
 	"join":     func(s []string) string { return strings.Join(s, ", ") },
@@ -261,6 +266,32 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 	"verdictColor": func(string) string { return "#ffffff" },
 }).Parse(reportHTML))
 
+// ── Logo helpers ──────────────────────────────────────────────────────────────
+
+var (
+	_logoLight    string
+	_logoDark     string
+	_logoLoadOnce sync.Once
+)
+
+// _loadLogos reads the Audspect logo PNGs from wwwroot and converts them to
+// inline base64 data URIs so the HTML report is self-contained (Chromium
+// sidecar cannot access local file:// paths). Called at most once per process.
+func _loadLogos() {
+	for _, candidate := range []string{"./wwwroot", "../../wwwroot", "../wwwroot"} {
+		lightPath := filepath.Join(candidate, "images", "logo_name.png")
+		data, err := os.ReadFile(lightPath)
+		if err != nil {
+			continue
+		}
+		_logoLight = "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+		if dark, err2 := os.ReadFile(filepath.Join(candidate, "images", "logo.png")); err2 == nil {
+			_logoDark = "data:image/png;base64," + base64.StdEncoding.EncodeToString(dark)
+		}
+		return
+	}
+}
+
 // GenerateHTML writes a self-contained HTML report to w.
 //
 // It renders from a json-tag-keyed map rather than the FullReport struct
@@ -282,6 +313,9 @@ func GenerateHTML(w io.Writer, r *FullReport, compliance []ComplianceSummaryRow)
 	if err := json.Unmarshal(raw, &data); err != nil {
 		return err
 	}
+	_logoLoadOnce.Do(_loadLogos)
+	data["logoLightUri"] = _logoLight
+	data["logoDarkUri"] = _logoDark
 	return reportTmpl.Execute(w, data)
 }
 
@@ -401,6 +435,97 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 /* Footer */
 .footer{border-top:1px solid var(--line);padding:13px 0 0;font-size:0.7rem;color:var(--faint);
   display:flex;justify-content:space-between;margin-top:34px}
+
+/* ── Cover enhancement ── */
+.cover{min-height:90vh;display:flex;flex-direction:column;background:#0b1420}
+.cover-band{background:#0b1420;margin:-42px -48px 0;padding:36px 48px 30px;
+  border-bottom:1px solid rgba(13,148,136,0.3)}
+.cover-logo{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:-0.02em}
+.cover-logo span{color:#0d9488}
+.cover-kicker{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.16em;color:#4a6a8a;margin-top:5px}
+.cover-mid{flex:1;display:flex;flex-direction:column;justify-content:center;padding:46px 0}
+.cover-title{font-size:2.4rem;font-weight:750;color:#fff;letter-spacing:-0.03em;line-height:1.04;margin-bottom:10px}
+.cover-sub{font-size:1.02rem;color:#6a8aaa;margin-bottom:30px}
+.cover-meta{border-top:1px solid rgba(255,255,255,0.08)}
+.cover-meta .crow{display:flex;padding:11px 2px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.86rem}
+.cover-meta .crow .k{width:170px;color:#5a7a9a;font-weight:600}
+.cover-meta .crow .v{flex:1;color:#c8d8e8;font-weight:500}
+.confidential{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;
+  background:rgba(220,166,0,0.1);color:#c8a020;border:1px solid rgba(220,166,0,0.28);
+  padding:6px 13px;border-radius:20px;font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:28px}
+.filter-badge{display:inline-flex;align-items:center;gap:7px;
+  background:rgba(37,99,235,0.1);color:#60a5fa;border:1px solid rgba(37,99,235,0.3);
+  padding:6px 13px;border-radius:20px;font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:10px}
+.cover-logo-img{height:38px;filter:brightness(0) invert(1);opacity:0.9}
+
+/* ── Finding Cards ─────────────────────────────────────────────────────────── */
+.fc{border-radius:8px;margin-bottom:16px;overflow:hidden;border:1px solid var(--line);
+  border-left-width:5px;box-shadow:0 2px 8px var(--fc-shadow,rgba(0,0,0,0.06))}
+.fc.fc-critical{border-left-color:#da3633;--fc-shadow:rgba(218,54,51,0.1)}
+.fc.fc-high{border-left-color:#f0883e;--fc-shadow:rgba(240,136,62,0.08)}
+.fc.fc-medium{border-left-color:#d29922;--fc-shadow:rgba(210,153,34,0.07)}
+.fc.fc-prevented{border-left-color:#0d9488;--fc-shadow:rgba(13,148,136,0.07)}
+.fc.fc-detected{border-left-color:#2f81f7;--fc-shadow:rgba(47,129,247,0.07)}
+/* Severity top stripe */
+.fc-stripe{height:3px;width:100%}
+.fc.fc-critical .fc-stripe{background:linear-gradient(90deg,#da3633,#ef4444)}
+.fc.fc-high .fc-stripe{background:linear-gradient(90deg,#f0883e,#fb923c)}
+.fc.fc-medium .fc-stripe{background:linear-gradient(90deg,#d29922,#fbbf24)}
+.fc.fc-prevented .fc-stripe{background:linear-gradient(90deg,#0d9488,#34d399)}
+.fc.fc-detected .fc-stripe{background:linear-gradient(90deg,#2f81f7,#60a5fa)}
+/* Card header */
+.fc-header{padding:10px 14px;display:flex;align-items:flex-start;gap:10px;
+  background:#f7f9fc;border-bottom:1px solid var(--line)}
+.fc-sev-block{padding:3px 9px;border-radius:4px;font-size:0.6rem;font-weight:800;
+  text-transform:uppercase;letter-spacing:0.06em;color:#fff;flex-shrink:0;margin-top:1px}
+.fc-sev-block.critical{background:#da3633}
+.fc-sev-block.high{background:#f0883e}
+.fc-sev-block.medium{background:#d29922}
+.fc-sev-block.low{background:#6e7681}
+.fc-sev-block.prevented{background:#0d9488}
+.fc-sev-block.detected{background:#2f81f7}
+.fc-heading{flex:1;min-width:0}
+.fc-name{font-size:0.88rem;font-weight:700;color:var(--navy);line-height:1.25;margin-bottom:2px}
+.fc-name.critical{color:#991b1b}
+.fc-tid{font-size:0.63rem;color:#9aa5b5;font-family:monospace}
+/* Card body */
+.fc-body{padding:12px 14px}
+.fc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fc-detail-row{display:flex;gap:6px;margin-bottom:5px;align-items:flex-start}
+.fc-detail-label{font-size:0.58rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.08em;color:#9aa5b5;min-width:84px;padding-top:2px;flex-shrink:0}
+.fc-detail-value{font-size:0.73rem;color:var(--ink);line-height:1.5}
+/* Blocked By */
+.fc-blocked-by{font-size:0.73rem;font-weight:700;color:#065f46;
+  background:#f0fdf9;border:1px solid #a7f3d0;border-radius:4px;
+  padding:2px 9px;display:inline-flex;align-items:center;gap:4px}
+.fc-blocked-none{font-size:0.73rem;color:#da3633;font-weight:600}
+/* Evidence block (dark terminal) */
+.fc-evidence{background:#0d1621;border-radius:6px;padding:10px 12px;font-family:monospace}
+.fc-ev-hdr{font-size:0.52rem;text-transform:uppercase;letter-spacing:0.12em;
+  color:#3a6a9a;font-weight:700;margin-bottom:7px;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:4px}
+.fc-ev-row{display:flex;gap:5px;margin-bottom:3px;font-size:0.61rem;line-height:1.4}
+.fc-ev-k{color:#4a6a8a;min-width:68px;flex-shrink:0}
+.fc-ev-v{color:#a0c4e0;word-break:break-all}
+.fc-ev-v.ok{color:#34d399}.fc-ev-v.bad{color:#f87171}.fc-ev-v.warn{color:#fbbf24}.fc-ev-v.code{color:#c084fc}
+.fc-ev-sec{margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.06)}
+.fc-ev-sec-lbl{font-size:0.5rem;text-transform:uppercase;letter-spacing:0.12em;
+  color:#2f81f7;font-weight:700;margin-bottom:4px}
+/* Residual risk colors */
+.fc-rr-none{color:#34d399}.fc-rr-partial{color:#fbbf24}.fc-rr-leaked{color:#f87171}.fc-rr-none-dash{color:#6e7681}
+/* Remediation box */
+.fc-remediation{background:#f0fdf9;border-left:3px solid #0d9488;
+  padding:8px 12px;margin-top:9px;border-radius:0 6px 6px 0}
+.fc-rem-label{font-size:0.55rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.1em;color:#0d9488;margin-bottom:3px}
+.fc-rem-text{font-size:0.72rem;color:var(--ink);line-height:1.6}
+/* Verdict badges */
+.vb{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
+  border-radius:3px;font-size:0.6rem;font-weight:800;letter-spacing:0.04em;flex-shrink:0}
+.vb-missed{background:#fee2e2;color:#da3633}
+.vb-detected{background:#dbeafe;color:#1d4ed8}
+.vb-prevented{background:#dcfce7;color:#16a34a}
+.vb-error{background:#fef3c7;color:#d97706}
 </style>
 </head>
 <body>
@@ -409,7 +534,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <div class="page">
 <div class="cover">
   <div class="cover-band">
-    <div class="cover-logo">Aud<span>spect</span> BAS</div>
+    <div class="cover-logo">
+      {{if .logoDarkUri}}<img class="cover-logo-img" src="{{.logoDarkUri}}" alt="Audspect BAS">{{else}}Aud<span>spect</span> BAS{{end}}
+    </div>
     <div class="cover-kicker">Breach &amp; Attack Simulation Platform</div>
   </div>
   <div class="cover-mid">
@@ -1627,34 +1754,123 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <!-- ═══ 16. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
 <div class="page">
 <h1>16. Technical Findings</h1>
-{{if .topFindings}}
-<p style="color:#6e7681;margin-bottom:14px">Critical and High severity techniques that succeeded against this endpoint — the associated security controls did <strong>not</strong> prevent the attack. De-duplicated by technique.</p>
+{{$hasFindings := false}}
+{{range .techniqueMatrix}}{{if and (eq .execVerdict "fail") (or (eq .severity "Critical") (eq .severity "High"))}}{{$hasFindings = true}}{{end}}{{end}}
+{{if $hasFindings}}
+<p style="color:#6e7681;margin-bottom:14px">Critical and High severity techniques that executed successfully — the associated controls did <strong>not</strong> prevent the attack. Each card includes the specific blocking control (if any), detection source, and residual artifact state.</p>
+{{range .techniqueMatrix}}
+{{if and (eq .execVerdict "fail") (or (eq .severity "Critical") (eq .severity "High"))}}
+{{$sevClass := "fc-medium"}}
+{{if eq .severity "Critical"}}{{$sevClass = "fc-critical"}}{{end}}
+{{if eq .severity "High"}}{{$sevClass = "fc-high"}}{{end}}
+<div class="fc {{$sevClass}}">
+  <div class="fc-stripe"></div>
+  <div class="fc-header">
+    <div class="fc-sev-block {{lower .severity}}">
+      {{if eq .severity "Critical"}}&#9650;{{else}}&#8679;{{end}} {{upper .severity}}
+    </div>
+    <div class="fc-heading">
+      <div class="fc-name{{if eq .severity "Critical"}} critical{{end}}">
+        {{.techniqueName}}
+        {{$actors := techActors .techniqueId}}{{if $actors}}&nbsp;<span style="font-size:0.62rem;color:#9aa5b5;font-weight:400">&#8212; {{range $i,$a := $actors}}{{if $i}}, {{end}}{{$a}}{{end}}</span>{{end}}
+      </div>
+      <div class="fc-tid">{{.techniqueId}} &nbsp;&#183;&nbsp; {{humanize .tactic}} &nbsp;&#183;&nbsp; Duration: {{if .durationMs}}{{.durationMs}}ms{{else}}&#8212;{{end}}</div>
+    </div>
+    <span class="vb vb-missed">&#10007; EVADED</span>
+  </div>
+  <div class="fc-body">
+    <div class="fc-grid">
+      <div>
+        {{if .details}}<div class="fc-detail-row">
+          <div class="fc-detail-label">What Happened</div>
+          <div class="fc-detail-value">{{.details}}</div>
+        </div>{{end}}
+        {{if or .executedAs .requestedPriv}}<div class="fc-detail-row">
+          <div class="fc-detail-label">Executed As</div>
+          <div class="fc-detail-value">
+            {{if .executedAs}}<span style="font-family:monospace;font-size:0.72rem;font-weight:700;
+              {{if eq .executedAs "System"}}color:#da3633{{else if eq .executedAs "Admin"}}color:#f0883e{{else if contains .executedAs "→"}}color:#d29922{{else}}color:#2563eb{{end}}">{{.executedAs}}</span>{{end}}
+            {{if and .requestedPriv (ne .requestedPriv .executedAs)}}<span style="color:#9aa5b5;font-size:0.65rem"> (requested: {{.requestedPriv}})</span>{{end}}
+          </div>
+        </div>{{end}}
+        <div class="fc-detail-row">
+          <div class="fc-detail-label">Blocked By</div>
+          <div class="fc-detail-value">
+            {{if .controlName}}<span class="fc-blocked-by">&#128737; {{.controlName}}{{if .controlRuleId}} &nbsp;&#183;&nbsp; {{.controlRuleId}}{{end}}</span>
+            {{else}}<span class="fc-blocked-none">&#10007; None &#8212; no control prevented this technique</span>{{end}}
+          </div>
+        </div>
+        <div class="fc-detail-row">
+          <div class="fc-detail-label">Detection</div>
+          <div class="fc-detail-value">
+            {{if eq .detectionVerdict "detected"}}
+              <span style="color:#2f81f7;font-weight:700">&#9679; Alert raised</span>
+              {{if .alertProvider}} &nbsp;&#183;&nbsp; <strong>{{.alertProvider}}</strong>{{end}}
+              {{if .alertEventId}} &nbsp;&#183;&nbsp; Event {{.alertEventId}}{{end}}
+              {{if .mttdMs}} &nbsp;&#183;&nbsp; MTTD: <strong>{{mttd .mttdMs}}</strong>{{end}}
+              {{if .alertThreatName}}<br><span style="font-size:0.68rem;color:#6e7681">{{.alertThreatName}}</span>{{end}}
+            {{else}}<span style="color:#da3633;font-weight:600">&#10007; No detection &#8212; technique executed unseen</span>{{end}}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="fc-evidence">
+          <div class="fc-ev-hdr">Execution Evidence</div>
+          <div class="fc-ev-row"><div class="fc-ev-k">Exec Verdict</div><div class="fc-ev-v bad">FAIL &#8212; ran to completion</div></div>
+          {{if .durationMs}}<div class="fc-ev-row"><div class="fc-ev-k">Duration</div><div class="fc-ev-v">{{.durationMs}} ms</div></div>{{end}}
+          {{if .alertProvider}}<div class="fc-ev-sec">
+            <div class="fc-ev-sec-lbl">Detection Details</div>
+            {{if .alertProvider}}<div class="fc-ev-row"><div class="fc-ev-k">Source</div><div class="fc-ev-v">{{.alertProvider}}</div></div>{{end}}
+            {{if .alertEventId}}<div class="fc-ev-row"><div class="fc-ev-k">Event ID</div><div class="fc-ev-v">{{.alertEventId}}</div></div>{{end}}
+            {{if .alertThreatName}}<div class="fc-ev-row"><div class="fc-ev-k">Threat Name</div><div class="fc-ev-v code">{{.alertThreatName}}</div></div>{{end}}
+            {{if .mttdMs}}<div class="fc-ev-row"><div class="fc-ev-k">MTTD</div><div class="fc-ev-v warn">{{mttd .mttdMs}}</div></div>{{end}}
+            {{if .confidence}}<div class="fc-ev-row"><div class="fc-ev-k">Confidence</div><div class="fc-ev-v">{{.confidence}}</div></div>{{end}}
+          {{end}}</div>
+          <div class="fc-ev-sec">
+            <div class="fc-ev-sec-lbl">Cleanup &amp; Residual Risk</div>
+            {{if eq .cleanupVerdict "reverted"}}
+              <div class="fc-ev-row"><div class="fc-ev-k">Cleanup</div><div class="fc-ev-v ok">&#10003; Reverted</div></div>
+              <div class="fc-ev-row"><div class="fc-ev-k">Residual Risk</div><div class="fc-ev-v fc-rr-none">None</div></div>
+            {{else if eq .cleanupVerdict "partial"}}
+              <div class="fc-ev-row"><div class="fc-ev-k">Cleanup</div><div class="fc-ev-v warn">Partial</div></div>
+              <div class="fc-ev-row"><div class="fc-ev-k">Residual Risk</div><div class="fc-ev-v fc-rr-partial">Partial &#8212; artifacts may remain; manual review advised</div></div>
+            {{else if eq .cleanupVerdict "leaked"}}
+              <div class="fc-ev-row"><div class="fc-ev-k">Cleanup</div><div class="fc-ev-v bad">Leaked (timeout / failure)</div></div>
+              <div class="fc-ev-row"><div class="fc-ev-k">Residual Risk</div><div class="fc-ev-v fc-rr-leaked">Manual verification required</div></div>
+            {{else}}
+              <div class="fc-ev-row"><div class="fc-ev-k">Residual Risk</div><div class="fc-ev-v fc-rr-none-dash">&#8212;</div></div>
+            {{end}}
+          </div>
+        </div>
+      </div>
+    </div>
+    {{if .remediation}}
+    <div class="fc-remediation">
+      <div class="fc-rem-label">&#9654; Recommended Remediation</div>
+      <div class="fc-rem-text">{{.remediation}}</div>
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}
+{{end}}
+{{else if .topFindings}}
+<p style="color:#6e7681;margin-bottom:14px">Critical and High severity technique failures from the latest run.</p>
 <table>
-  <thead><tr>
-    <th>Severity</th><th>Technique</th><th>Tactic</th><th>Details &amp; Remediation</th>
-  </tr></thead>
+  <thead><tr><th>Severity</th><th>Technique</th><th>Tactic</th><th>Details &amp; Remediation</th></tr></thead>
   <tbody>
   {{range .topFindings}}
   <tr>
     <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
-    <td><code>{{.techniqueId}}</code>{{if .kev}}&nbsp;<span style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:3px;padding:1px 5px;font-size:0.65rem;font-weight:700;vertical-align:middle">KEV{{if gt .kevCount 0.0}}&nbsp;{{.kevCount}}{{end}}</span>{{end}}<br>{{.techniqueName}}</td>
+    <td><code>{{.techniqueId}}</code>{{if .kev}}&nbsp;<span style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:3px;padding:1px 5px;font-size:0.65rem;font-weight:700;vertical-align:middle">KEV</span>{{end}}<br>{{.techniqueName}}</td>
     <td>{{humanize .tactic}}</td>
-    <td>
-      {{.details}}
-      {{if .remediation}}<div class="remediation">{{.remediation}}</div>{{end}}
-      {{$actors := techActors .techniqueId}}{{if $actors}}
-      <div style="margin-top:6px;font-size:0.72rem;color:#6e7681">
-        <span style="font-weight:600;color:#374151">Attributed to:</span>
-        {{range $i,$a := $actors}}{{if $i}}, {{end}}<span style="color:#2563eb">{{$a}}</span>{{end}}
-      </div>
-      {{end}}
-    </td>
+    <td>{{.details}}{{if .remediation}}<div class="remediation">{{.remediation}}</div>{{end}}</td>
   </tr>
   {{end}}
   </tbody>
 </table>
 {{else}}
-<p style="color:#0d9488;font-weight:600">✓ No Critical or High severity failures in the latest run. Continue to validate with future assessments.</p>
+<p style="color:#0d9488;font-weight:600">&#10003; No Critical or High severity failures in the latest run. Continue to validate with future assessments.</p>
 {{end}}
 
 <div class="footer">
