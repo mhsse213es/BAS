@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/audspect/bas/internal/reporting"
 )
 
 // expectedWWWRootHash is the SHA-256 hash of the canonical index.html,
@@ -36,8 +38,10 @@ var expectedWWWRootHash = ""
 // cmd/server/ directory.
 // resolveWWWRoot returns the wwwroot directory path, walking up from the CWD
 // so the server works whether launched from orchestrator/ or cmd/server/.
+// /wwwroot is checked first because it is the absolute Docker container path
+// (bind-mounted by compose). Relative paths are fallbacks for local dev.
 func resolveWWWRoot() string {
-	candidates := []string{"./wwwroot", "../../wwwroot", "../wwwroot"}
+	candidates := []string{"/wwwroot", "./wwwroot", "../../wwwroot", "../wwwroot"}
 	for _, c := range candidates {
 		if info, err := os.Stat(filepath.Join(c, "index.html")); err == nil && !info.IsDir() {
 			return c
@@ -48,6 +52,7 @@ func resolveWWWRoot() string {
 
 func StaticHandler() http.Handler {
 	wwwrootDir := resolveWWWRoot()
+	reporting.SetWWWRoot(wwwrootDir)
 
 	// Verify index.html hash if a reference hash is compiled in.
 	if expectedWWWRootHash != "" {

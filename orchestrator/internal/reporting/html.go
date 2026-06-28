@@ -272,13 +272,27 @@ var (
 	_logoLight    string
 	_logoDark     string
 	_logoLoadOnce sync.Once
+	_wwwRootDir   string
 )
+
+// SetWWWRoot tells the reporting engine exactly where wwwroot lives on disk.
+// Call once from main() right after resolveWWWRoot() so the logo loader uses
+// the same verified path as the static file server — zero path guessing.
+func SetWWWRoot(dir string) { _wwwRootDir = dir }
 
 // _loadLogos reads the Audspect logo PNGs from wwwroot and converts them to
 // inline base64 data URIs so the HTML report is self-contained (Chromium
 // sidecar cannot access local file:// paths). Called at most once per process.
 func _loadLogos() {
-	for _, candidate := range []string{"./wwwroot", "../../wwwroot", "../wwwroot"} {
+	// _wwwRootDir is set by SetWWWRoot() from the same resolveWWWRoot() call
+	// that serves static files — if it's non-empty it's guaranteed to exist.
+	// /wwwroot is the absolute Docker container path (bind-mounted by compose).
+	// The relative paths are fallbacks for local dev.
+	candidates := []string{_wwwRootDir, "/wwwroot", "./wwwroot", "../../wwwroot", "../wwwroot"}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
 		lightPath := filepath.Join(candidate, "images", "logo_name.png")
 		data, err := os.ReadFile(lightPath)
 		if err != nil {
