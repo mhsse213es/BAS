@@ -5441,9 +5441,33 @@ function renderConnectorList(list) {
   }
   el.innerHTML = list.map(function(c) {
     var ac = c.autoCreate === 'off' || !c.autoCreate ? 'Manual only' : c.autoCreate.replace('_', '+');
-    var statusDot = c.enabled
-      ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:5px"></span>Active'
-      : '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);margin-right:5px"></span>Disabled';
+
+    // Honest connection status — 4 states, not just enabled/disabled
+    var statusColor, statusLabel, statusTitle;
+    if (!c.enabled) {
+      statusColor = 'var(--muted)';
+      statusLabel = 'Disabled';
+      statusTitle = 'Connector is turned off';
+    } else if (c.lastTestOk === null || c.lastTestOk === undefined) {
+      statusColor = 'var(--warning)';
+      statusLabel = 'Not tested';
+      statusTitle = 'Click Test to verify connectivity';
+    } else if (c.lastTestOk === true) {
+      statusColor = 'var(--success)';
+      statusLabel = 'Connected';
+      statusTitle = 'Last test passed' + (c.lastTestAt ? ' at ' + new Date(c.lastTestAt).toLocaleString() : '');
+    } else {
+      statusColor = 'var(--danger)';
+      statusLabel = 'Connection error';
+      statusTitle = c.lastTestError || 'Last test failed';
+    }
+    var statusDot = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px"></span>' + statusLabel;
+
+    // Error detail row (only shown when last test failed)
+    var errorRow = (c.enabled && c.lastTestOk === false && c.lastTestError)
+      ? '<div style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:rgba(218,54,51,0.07);border:1px solid rgba(218,54,51,0.2);border-radius:5px;font-size:0.72rem;color:var(--danger)">' + x(c.lastTestError) + '</div>'
+      : '';
+
     return '<div class="conn-cfg-card" style="margin-bottom:0.75rem">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">' +
         '<div style="display:flex;align-items:center;gap:0.75rem">' +
@@ -5452,12 +5476,13 @@ function renderConnectorList(list) {
             '<div class="tiny muted">' + (PROVIDER_LABELS[c.provider] || c.provider) + ' &nbsp;·&nbsp; Auto-create: ' + x(ac) + '</div></div>' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:0.65rem">' +
-          '<span class="tiny" style="color:' + (c.enabled ? 'var(--success)' : 'var(--muted)') + '">' + statusDot + '</span>' +
+          '<span class="tiny" style="color:' + statusColor + '" title="' + x(statusTitle) + '">' + statusDot + '</span>' +
           '<button class="btn btn-outline btn-sm" onclick="testConnectorById(\'' + x(c.id) + '\',this)">Test</button>' +
           '<button class="btn btn-outline btn-sm" onclick="openEditConnector(\'' + x(c.id) + '\')">Edit</button>' +
           '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)" onclick="deleteConnector(\'' + x(c.id) + '\',\'' + x(c.name) + '\')">Delete</button>' +
         '</div>' +
       '</div>' +
+      errorRow +
     '</div>';
   }).join('');
 }
@@ -5638,7 +5663,11 @@ function testConnectorById(id, btn) {
   apicall('/api/ticketing/configs/' + encodeURIComponent(id) + '/test', { method: 'POST' })
     .then(function(r) {
       showToast(r.ok ? 'Connection OK' : 'Failed: ' + (r.error || 'unknown'), r.ok ? 'ok' : 'err');
-    }).catch(function(e) { showToast(e.message, 'err'); })
+      loadIntegrations(); // refresh status badge to reflect test result
+    }).catch(function(e) {
+      showToast(e.message, 'err');
+      loadIntegrations();
+    })
     .finally(function() { if (btn) { btn.disabled = false; btn.textContent = orig; } });
 }
 

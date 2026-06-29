@@ -624,6 +624,11 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_finding_tickets_finding ON finding_tickets (finding_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_finding_tickets_status  ON finding_tickets (status)`,
+
+		// Idempotent migrations for ticketing_configs
+		`ALTER TABLE ticketing_configs ADD COLUMN IF NOT EXISTS last_test_ok    boolean`,
+		`ALTER TABLE ticketing_configs ADD COLUMN IF NOT EXISTS last_test_at    timestamptz`,
+		`ALTER TABLE ticketing_configs ADD COLUMN IF NOT EXISTS last_test_error text NOT NULL DEFAULT ''`,
 	}
 
 	for _, s := range stmts {

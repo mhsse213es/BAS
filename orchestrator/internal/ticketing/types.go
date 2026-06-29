@@ -98,6 +98,10 @@ type Config struct {
 	AutoUpdate bool              `json:"autoUpdate"`
 	AutoClose  bool              `json:"autoClose"`
 	Settings   map[string]string `json:"settings"`
+	// Connection test results — populated by TestConnector; nil LastTestOk means never tested.
+	LastTestOk    *bool      `json:"lastTestOk"`
+	LastTestAt    *time.Time `json:"lastTestAt"`
+	LastTestError string     `json:"lastTestError"`
 }
 
 // MaskedConfig returns a copy with sensitive settings values redacted.

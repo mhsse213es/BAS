@@ -49,7 +49,8 @@ func (m *Manager) Reload(ctx context.Context) error {
 
 func (m *Manager) reload(ctx context.Context) error {
 	rows, err := m.db.Query(ctx,
-		`SELECT id, name, provider, enabled, auto_create, auto_update, auto_close, settings
+		`SELECT id, name, provider, enabled, auto_create, auto_update, auto_close, settings,
+		        last_test_ok, last_test_at, last_test_error
 		   FROM ticketing_configs ORDER BY created_at`)
 	if err != nil {
 		return err
@@ -62,7 +63,8 @@ func (m *Manager) reload(ctx context.Context) error {
 		var c Config
 		var settingsRaw []byte
 		if err := rows.Scan(&c.ID, &c.Name, &c.Provider, &c.Enabled,
-			&c.AutoCreate, &c.AutoUpdate, &c.AutoClose, &settingsRaw); err != nil {
+			&c.AutoCreate, &c.AutoUpdate, &c.AutoClose, &settingsRaw,
+			&c.LastTestOk, &c.LastTestAt, &c.LastTestError); err != nil {
 			continue
 		}
 		if c.Settings == nil {
@@ -235,15 +237,31 @@ func (m *Manager) createTicketRecord(ctx context.Context, cfg *Config, con Conne
 	return ref, nil
 }
 
-// TestConnector verifies connection for the given config ID.
+// TestConnector verifies connection for the given config ID and persists the result.
 func (m *Manager) TestConnector(ctx context.Context, configID string) error {
 	m.mu.RLock()
 	con, ok := m.cons[configID]
 	m.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("connector not loaded — check that it is enabled and credentials are set")
+		testErr := "connector not loaded — check that it is enabled and credentials are set"
+		ok2 := false
+		_, _ = m.db.Exec(ctx,
+			`UPDATE ticketing_configs SET last_test_ok=$1, last_test_at=NOW(), last_test_error=$2 WHERE id=$3`,
+			ok2, testErr, configID)
+		_ = m.reload(ctx)
+		return fmt.Errorf("%s", testErr)
 	}
-	return con.TestConnection(ctx)
+	err := con.TestConnection(ctx)
+	testOk := err == nil
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+	_, _ = m.db.Exec(ctx,
+		`UPDATE ticketing_configs SET last_test_ok=$1, last_test_at=NOW(), last_test_error=$2 WHERE id=$3`,
+		testOk, errMsg, configID)
+	_ = m.reload(ctx)
+	return err
 }
 
 // ProbeConnector builds a connector from inline config and tests it without persisting.
