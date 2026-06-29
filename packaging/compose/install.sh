@@ -322,11 +322,14 @@ _check_licence() {
   local lic="$1"
   [[ -z "$lic" ]] && { echo "WARN:Licence -LIC_PATH not set in setup.conf"; return; }
   [[ ! -f "$lic" ]] && { echo "FAIL:Licence -file not found: $lic"; return; }
-  # Structural check only -cryptographic validation happens at orchestrator start.
-  if grep -q "AUDSPECT" "$lic" 2>/dev/null; then
-    echo "PASS:Licence -file present: $lic"
+  # Structural check: must be JSON with the three fields the orchestrator requires.
+  # Full cryptographic validation happens at orchestrator start.
+  if grep -q '"customer_id"' "$lic" 2>/dev/null && \
+     grep -q '"signature"'   "$lic" 2>/dev/null && \
+     grep -q '"expires_at"'  "$lic" 2>/dev/null; then
+    echo "PASS:Licence -file present and valid format: $lic"
   else
-    echo "WARN:Licence -file present but format unrecognised: $lic"
+    echo "WARN:Licence -file present but missing required fields (customer_id/expires_at/signature): $lic"
   fi
 }
 
