@@ -46,8 +46,12 @@ function Err  { param($msg) Write-Host "[x] $msg" -ForegroundColor Red; exit 1 }
 function ConvertToLF {
     param($path)
     if (Test-Path $path) {
-        $t = (Get-Content $path -Raw) -replace "`r`n", "`n"
-        [System.IO.File]::WriteAllText($path, $t)
+        # ReadAllText with explicit UTF-8 preserves box-drawing/arrow chars in the
+        # template; Get-Content defaults to the system code page (Windows-1252) and
+        # corrupts multi-byte sequences into mojibake (â€" â† â•).
+        $utf8 = [System.Text.UTF8Encoding]::new($false) # no BOM
+        $t = [System.IO.File]::ReadAllText($path, $utf8) -replace "`r`n", "`n"
+        [System.IO.File]::WriteAllText($path, $t, $utf8)
     }
 }
 
