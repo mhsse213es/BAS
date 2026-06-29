@@ -295,7 +295,7 @@ body {
 .main-wrapper {
   margin-left: var(--sidebar-w);
   flex: 1;
-  min-width: auto;
+  min-width: 0;
   overflow-x: clip;
   min-height: 100vh;
 }
@@ -835,7 +835,7 @@ code {
 }
 
 /* ── Dual-rail kill chain (run drawer) ───────────────────────────────────── */
-.killchain { display:flex; gap:0; overflow-x:auto; padding:8px 2px 14px; }
+.killchain { display:flex; gap:0; padding:8px 2px 14px; min-width:max-content; }
 .kc-step { min-width:178px; flex:1; position:relative; padding:0 6px; }
 .kc-rail { height:2px; background:var(--border); position:absolute; top:50%; left:0; right:0; }
 .kc-node { position:relative; background:var(--elevated); border:1px solid var(--border); border-radius:9px; padding:9px 10px; z-index:2; transition:border-color .12s; }
@@ -1400,7 +1400,7 @@ body.theme-slate {
               <a class="tiny" id="dash-attackflow-open" style="color:var(--accent);cursor:pointer;font-weight:500;display:none">Open run →</a>
             </span>
           </div>
-          <div class="dash-panel-body" id="dash-attackflow" style="padding:0.4rem 0.75rem"><div class="empty" style="padding:1.5rem">No completed runs yet.</div></div>
+          <div class="dash-panel-body" id="dash-attackflow" style="padding:0.4rem 0.75rem;overflow-x:auto"><div class="empty" style="padding:1.5rem">No completed runs yet.</div></div>
         </div>
 
         <div class="dash-panel">
