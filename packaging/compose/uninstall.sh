@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BAS Platform — Uninstaller
+# BAS Platform -Uninstaller
 # Removes containers, volumes, images, systemd service, and install directory,
 # then verifies every item was actually gone.
 #
@@ -11,8 +11,8 @@ set -euo pipefail
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
-err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
-step() { echo -e "\n${BOLD}──${NC} $*"; }
+err()  { echo -e "${RED}[X]${NC} $*" >&2; }
+step() { echo -e "\n${BOLD}--${NC} $*"; }
 
 PURGE_IMAGES=false
 YES=false
@@ -38,7 +38,7 @@ if [[ -f "$SERVICE_UNIT" ]]; then
 fi
 
 echo ""
-echo -e "${RED}${BOLD}━━━  Audspect BAS — Uninstaller  ━━━${NC}"
+echo -e "${RED}${BOLD}===  Audspect BAS -Uninstaller  ===${NC}"
 echo "  Install directory : $INSTALL_DIR"
 echo "  Purge images      : $PURGE_IMAGES"
 echo ""
@@ -125,7 +125,7 @@ step "6/6  Removing install directory..."
 if [[ -d "$INSTALL_DIR" ]]; then
   rm -rf "$INSTALL_DIR" && log "Removed $INSTALL_DIR."
 else
-  warn "Directory not found — already removed."
+  warn "Directory not found -already removed."
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -133,12 +133,12 @@ fi
 # ═════════════════════════════════════════════════════════════════════════════
 
 echo ""
-echo -e "${BOLD}━━━  Verification  ━━━${NC}"
+echo -e "${BOLD}===  Verification  ===${NC}"
 echo ""
 
 PASS=true
-ok()   { echo -e "  ${GREEN}✔${NC}  $*"; }
-fail() { echo -e "  ${RED}✘${NC}  $*"; PASS=false; }
+ok()   { echo -e "  ${GREEN}[OK]${NC}  $*"; }
+fail() { echo -e "  ${RED}[X]${NC}  $*"; PASS=false; }
 
 # Containers
 for ctr in audspect-orchestrator audspect-caldera audspect-postgres audspect-chrome; do
@@ -195,9 +195,9 @@ fi
 
 echo ""
 if $PASS; then
-  echo -e "${GREEN}${BOLD}✔  BAS Platform completely removed. All checks passed.${NC}"
+  echo -e "${GREEN}${BOLD}[OK]  BAS Platform completely removed. All checks passed.${NC}"
 else
-  echo -e "${RED}${BOLD}✘  Uninstall incomplete — review the failures above.${NC}"
+  echo -e "${RED}${BOLD}[X]  Uninstall incomplete -review the failures above.${NC}"
   exit 1
 fi
 echo ""

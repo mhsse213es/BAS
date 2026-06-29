@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Audspect BAS Platform — BFSI-Grade Installer
+# Audspect BAS Platform -BFSI-Grade Installer
 #
 # Usage:
 #   sudo bash install.sh --check                          # prereq report (attach to CAB)
@@ -37,7 +37,7 @@ readonly PRODUCT="Audspect BAS"
 readonly DEFAULT_DATA_DIR="/opt/audspect"
 readonly DEFAULT_PORT="9443"
 readonly MIN_RAM_MB=3800
-readonly MIN_DISK_MB=10240        # 10 GB — images + DB + logs
+readonly MIN_DISK_MB=10240        # 10 GB -images + DB + logs
 readonly MIN_CPU_CORES=2
 readonly COMPOSE_PROJECT="audspect"
 readonly SERVICE_NAME="audspect"
@@ -59,7 +59,7 @@ fi
 log()   { echo -e "${GREEN}[PASS]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[FAIL]${NC} $*" >&2; }
-step()  { echo -e "\n${BOLD}${CYAN}──  $*${NC}"; }
+step()  { echo -e "\n${BOLD}${CYAN}--  $*${NC}"; }
 info()  { echo -e "      $*"; }
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ JWT_SECRET=""
 AGENT_SECRET=""
 LIC_PATH=""
 
-# ── Config loader — safe key=value parser (no source / eval) ─────────────────
+# ── Config loader -safe key=value parser (no source / eval) ─────────────────
 load_config() {
   local cfg="$1"
   [[ -f "$cfg" ]] || { err "Config file not found: $cfg"; exit 1; }
@@ -172,7 +172,7 @@ load_config() {
   [[ -z "$JWT_SECRET"   ]] && JWT_SECRET=$(openssl rand -hex 32)
   [[ -z "$AGENT_SECRET" ]] && AGENT_SECRET=$(openssl rand -hex 24)
 
-  # Caldera keys — preserve in priority order:
+  # Caldera keys -preserve in priority order:
   #   1. existing .env in DATA_DIR (survives upgrades)
   #   2. running Caldera container (operator may have set a custom key)
   #   3. generate fresh random key (first install only)
@@ -208,49 +208,49 @@ _check_os() {
   os_ver=$(grep -oP '(?<=^VERSION_ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "0")
   case "$os_id" in
     ubuntu)
-      [[ "${os_ver%%.*}" -ge 20 ]] && echo "PASS:OS — Ubuntu ${os_ver} LTS" \
-                                    || echo "FAIL:OS — Ubuntu ${os_ver} not supported (need 20.04+)";;
+      [[ "${os_ver%%.*}" -ge 20 ]] && echo "PASS:OS -Ubuntu ${os_ver} LTS" \
+                                    || echo "FAIL:OS -Ubuntu ${os_ver} not supported (need 20.04+)";;
     rocky|rhel|centos)
-      [[ "${os_ver%%.*}" -ge 9  ]] && echo "PASS:OS — Rocky/RHEL ${os_ver}" \
-                                    || echo "FAIL:OS — Rocky/RHEL ${os_ver} not supported (need 9+)";;
-    *) echo "WARN:OS — ${os_id} ${os_ver} (untested)" ;;
+      [[ "${os_ver%%.*}" -ge 9  ]] && echo "PASS:OS -Rocky/RHEL ${os_ver}" \
+                                    || echo "FAIL:OS -Rocky/RHEL ${os_ver} not supported (need 9+)";;
+    *) echo "WARN:OS -${os_id} ${os_ver} (untested)" ;;
   esac
 }
 
 _check_docker() {
   if ! command -v docker &>/dev/null; then
-    echo "FAIL:Docker — not installed (required)"; return
+    echo "FAIL:Docker -not installed (required)"; return
   fi
   if ! docker info &>/dev/null 2>&1; then
-    echo "FAIL:Docker — daemon not running (start it before install)"; return
+    echo "FAIL:Docker -daemon not running (start it before install)"; return
   fi
   local ver
   ver=$(docker --version 2>/dev/null | grep -oP '[\d]+\.[\d]+\.[\d]+' | head -1 || echo "?")
-  echo "PASS:Docker — ${ver}"
+  echo "PASS:Docker -${ver}"
 }
 
 _check_compose() {
   if docker compose version &>/dev/null 2>&1; then
     local ver
     ver=$(docker compose version 2>/dev/null | grep -oP '[\d]+\.[\d]+\.[\d]+' | head -1 || echo "?")
-    echo "PASS:Docker Compose — ${ver}"
+    echo "PASS:Docker Compose -${ver}"
   else
-    echo "FAIL:Docker Compose — plugin not found (install docker-compose-plugin)"
+    echo "FAIL:Docker Compose -plugin not found (install docker-compose-plugin)"
   fi
 }
 
 _check_ram() {
   local mb
   mb=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
-  [[ $mb -ge $MIN_RAM_MB ]] && echo "PASS:RAM — ${mb} MB available" \
-                              || echo "FAIL:RAM — ${mb} MB available (need ${MIN_RAM_MB} MB)"
+  [[ $mb -ge $MIN_RAM_MB ]] && echo "PASS:RAM -${mb} MB available" \
+                              || echo "FAIL:RAM -${mb} MB available (need ${MIN_RAM_MB} MB)"
 }
 
 _check_cpu() {
   local cores
   cores=$(nproc 2>/dev/null || echo 0)
-  [[ $cores -ge $MIN_CPU_CORES ]] && echo "PASS:CPU — ${cores} cores" \
-                                   || echo "FAIL:CPU — ${cores} cores (need ${MIN_CPU_CORES})"
+  [[ $cores -ge $MIN_CPU_CORES ]] && echo "PASS:CPU -${cores} cores" \
+                                   || echo "FAIL:CPU -${cores} cores (need ${MIN_CPU_CORES})"
 }
 
 _check_disk() {
@@ -259,8 +259,8 @@ _check_disk() {
   while [[ ! -d "$parent" ]]; do parent="$(dirname "$parent")"; done
   local mb
   mb=$(df -m "$parent" 2>/dev/null | awk 'NR==2 {print $4}' || echo 0)
-  [[ $mb -ge $MIN_DISK_MB ]] && echo "PASS:Disk — ${mb} MB free on $(df -m "$parent" | awk 'NR==2{print $6}')" \
-                              || echo "FAIL:Disk — ${mb} MB free (need ${MIN_DISK_MB} MB)"
+  [[ $mb -ge $MIN_DISK_MB ]] && echo "PASS:Disk -${mb} MB free on $(df -m "$parent" | awk 'NR==2{print $6}')" \
+                              || echo "FAIL:Disk -${mb} MB free (need ${MIN_DISK_MB} MB)"
 }
 
 _check_port() {
@@ -268,22 +268,22 @@ _check_port() {
   if ss -tlnp 2>/dev/null | grep -q ":${port}[[:space:]]"; then
     local proc
     proc=$(ss -tlnp 2>/dev/null | grep ":${port}[[:space:]]" | grep -oP '"[^"]+"' | head -1 || echo "unknown")
-    echo "FAIL:Port ${port} — already in use by ${proc}"
+    echo "FAIL:Port ${port} -already in use by ${proc}"
   else
-    echo "PASS:Port ${port} — available"
+    echo "PASS:Port ${port} -available"
   fi
 }
 
 _check_openssl() {
   command -v openssl &>/dev/null \
-    && echo "PASS:openssl — $(openssl version 2>/dev/null | awk '{print $1,$2}')" \
-    || echo "FAIL:openssl — not found (required for secret generation)"
+    && echo "PASS:openssl -$(openssl version 2>/dev/null | awk '{print $1,$2}')" \
+    || echo "FAIL:openssl -not found (required for secret generation)"
 }
 
 _check_bundle_integrity() {
   local manifest="${SCRIPT_DIR}/MANIFEST.sha256"
   if [[ ! -f "$manifest" ]]; then
-    echo "WARN:Bundle integrity — MANIFEST.sha256 not found (standalone run?)"
+    echo "WARN:Bundle integrity -MANIFEST.sha256 not found (standalone run?)"
     return
   fi
   local fail=0
@@ -291,42 +291,42 @@ _check_bundle_integrity() {
     if [[ -z "$hash" || -z "$rel" ]]; then continue; fi
     local fp="${SCRIPT_DIR}/${rel}"
     if [[ ! -f "$fp" ]]; then
-      echo "FAIL:Bundle — missing file: $rel"
+      echo "FAIL:Bundle -missing file: $rel"
       fail=1; continue
     fi
     local actual
     actual=$(sha256sum "$fp" | awk '{print $1}')
     if [[ "$actual" != "$hash" ]]; then
-      echo "FAIL:Bundle — hash mismatch: $rel"
+      echo "FAIL:Bundle -hash mismatch: $rel"
       fail=1
     fi
   done < "$manifest"
-  if [[ $fail -eq 0 ]]; then echo "PASS:Bundle integrity — all files verified"; fi
+  if [[ $fail -eq 0 ]]; then echo "PASS:Bundle integrity -all files verified"; fi
 }
 
 _check_tls_certs() {
   local cert="$1" key="$2"
-  [[ -z "$cert" && -z "$key" ]] && { echo "INFO:TLS — disabled in setup.conf"; return; }
-  [[ ! -f "$cert" ]] && { echo "FAIL:TLS cert — not found: $cert"; return; }
-  [[ ! -f "$key"  ]] && { echo "FAIL:TLS key  — not found: $key";  return; }
+  [[ -z "$cert" && -z "$key" ]] && { echo "INFO:TLS -disabled in setup.conf"; return; }
+  [[ ! -f "$cert" ]] && { echo "FAIL:TLS cert -not found: $cert"; return; }
+  [[ ! -f "$key"  ]] && { echo "FAIL:TLS key  -not found: $key";  return; }
   if ! openssl x509 -noout -in "$cert" &>/dev/null 2>&1; then
-    echo "FAIL:TLS cert — not a valid X.509 certificate: $cert"
+    echo "FAIL:TLS cert -not a valid X.509 certificate: $cert"
     return
   fi
   local expiry
   expiry=$(openssl x509 -noout -enddate -in "$cert" 2>/dev/null | cut -d= -f2 || echo "unknown")
-  echo "PASS:TLS certs — cert valid, expires ${expiry}"
+  echo "PASS:TLS certs -cert valid, expires ${expiry}"
 }
 
 _check_licence() {
   local lic="$1"
-  [[ -z "$lic" ]] && { echo "WARN:Licence — LIC_PATH not set in setup.conf"; return; }
-  [[ ! -f "$lic" ]] && { echo "FAIL:Licence — file not found: $lic"; return; }
-  # Structural check only — cryptographic validation happens at orchestrator start.
+  [[ -z "$lic" ]] && { echo "WARN:Licence -LIC_PATH not set in setup.conf"; return; }
+  [[ ! -f "$lic" ]] && { echo "FAIL:Licence -file not found: $lic"; return; }
+  # Structural check only -cryptographic validation happens at orchestrator start.
   if grep -q "AUDSPECT" "$lic" 2>/dev/null; then
-    echo "PASS:Licence — file present: $lic"
+    echo "PASS:Licence -file present: $lic"
   else
-    echo "WARN:Licence — file present but format unrecognised: $lic"
+    echo "WARN:Licence -file present but format unrecognised: $lic"
   fi
 }
 
@@ -346,11 +346,11 @@ render_checks() {
   done
   echo ""
   if [[ $fails -gt 0 ]]; then
-    echo -e "  ${RED}${BOLD}${fails} prerequisite(s) failed — resolve before install.${NC}"
+    echo -e "  ${RED}${BOLD}${fails} prerequisite(s) failed -resolve before install.${NC}"
     return 1
   fi
-  [[ $warns -gt 0 ]] && echo -e "  ${YELLOW}${BOLD}${warns} warning(s) — review before install.${NC}"
-  echo -e "  ${GREEN}${BOLD}All checks passed — system is ready.${NC}"
+  [[ $warns -gt 0 ]] && echo -e "  ${YELLOW}${BOLD}${warns} warning(s) -review before install.${NC}"
+  echo -e "  ${GREEN}${BOLD}All checks passed -system is ready.${NC}"
   return 0
 }
 
@@ -359,7 +359,7 @@ render_checks() {
 # ═════════════════════════════════════════════════════════════════════════════
 mode_check() {
   echo ""
-  echo -e "${BOLD}${CYAN}━━━  ${PRODUCT} — Prerequisite Report  ━━━${NC}"
+  echo -e "${BOLD}${CYAN}===  ${PRODUCT} -Prerequisite Report  ===${NC}"
   echo "    Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
   echo "    Host     : $(hostname -f 2>/dev/null || hostname)"
   echo "    Bundle   : ${BAS_VERSION}"
@@ -424,12 +424,12 @@ mode_install() {
   step "2/9  Creating data directories"
   mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound}
   chmod 750 "${DATA_DIR}"
-  # scenarios is written by the orchestrator container (runs as UID 65532 — distroless nonroot).
+  # scenarios is written by the orchestrator container (runs as UID 65532 -distroless nonroot).
   # Without this the UI cannot create or save custom scenarios.
   chown -R 65532:65532 "${DATA_DIR}/scenarios"
   log "Created: ${DATA_DIR}"
 
-  step "3/9  Loading Docker images (air-gap safe — no pull)"
+  step "3/9  Loading Docker images (air-gap safe -no pull)"
   local images_dir="${SCRIPT_DIR}/images"
   if [[ -d "$images_dir" ]]; then
     for tar in "${images_dir}"/*.tar; do
@@ -439,7 +439,7 @@ mode_install() {
       log "Loaded: $(basename "$tar")"
     done
   else
-    warn "images/ directory not found — Docker will attempt to pull (requires internet)"
+    warn "images/ directory not found -Docker will attempt to pull (requires internet)"
   fi
 
   step "4/9  Staging bundle files"
@@ -497,7 +497,7 @@ mode_install() {
 
   _write_install_log "$LOG_FILE"
   echo ""
-  echo -e "${GREEN}${BOLD}━━━  ${PRODUCT} — Installation Complete  ━━━${NC}"
+  echo -e "${GREEN}${BOLD}===  ${PRODUCT} -Installation Complete  ===${NC}"
   _print_access_info
 }
 
@@ -579,7 +579,7 @@ mode_rollback() {
   local install_dir
   install_dir=$(dirname "$backup_root")
 
-  echo -e "${YELLOW}${BOLD}━━━  Rollback  ━━━${NC}"
+  echo -e "${YELLOW}${BOLD}===  Rollback  ===${NC}"
   echo "  Restoring from: ${latest}"
   echo "  Install dir   : ${install_dir}"
   echo ""
@@ -614,7 +614,7 @@ mode_status() {
   fi
 
   echo ""
-  echo -e "${BOLD}${CYAN}━━━  ${PRODUCT} — Status  ━━━${NC}"
+  echo -e "${BOLD}${CYAN}===  ${PRODUCT} -Status  ===${NC}"
   echo ""
 
   # Containers
@@ -629,10 +629,10 @@ mode_status() {
       if [[ "$st" == "running" ]]; then
         running=$(( running + 1 ))
         [[ -n "$health" ]] \
-          && echo -e "  ${GREEN}●${NC} ${ctr} — running (health: ${health})" \
-          || echo -e "  ${GREEN}●${NC} ${ctr} — running"
+          && echo -e "  ${GREEN}●${NC} ${ctr} -running (health: ${health})" \
+          || echo -e "  ${GREEN}●${NC} ${ctr} -running"
       else
-        echo -e "  ${RED}●${NC} ${ctr} — ${st}"
+        echo -e "  ${RED}●${NC} ${ctr} -${st}"
       fi
     fi
   done
@@ -679,7 +679,7 @@ mode_uninstall() {
   fi
 
   echo ""
-  echo -e "${RED}${BOLD}━━━  ${PRODUCT} — Uninstall  ━━━${NC}"
+  echo -e "${RED}${BOLD}===  ${PRODUCT} -Uninstall  ===${NC}"
   echo ""
   echo "  This will PERMANENTLY DELETE:"
   echo "    • All running containers"
@@ -770,8 +770,8 @@ EOF
 _write_env() {
   local env_file="${DATA_DIR}/.env"
   cat > "$env_file" << EOF
-# Audspect BAS — Runtime environment
-# Generated by install.sh — do not edit manually.
+# Audspect BAS -Runtime environment
+# Generated by install.sh -do not edit manually.
 # Regenerated on upgrade; secrets survive in this file.
 BAS_VERSION=${BAS_VERSION}
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT}
@@ -807,7 +807,7 @@ _wait_healthy() {
     fi
     sleep 3; elapsed=$(( elapsed + 3 ))
   done
-  warn "Orchestrator health check timed out — check: docker compose -p ${COMPOSE_PROJECT} logs"
+  warn "Orchestrator health check timed out -check: docker compose -p ${COMPOSE_PROJECT} logs"
 }
 
 _create_admin() {
@@ -825,13 +825,13 @@ _create_admin() {
     fi
     sleep 3; attempts=$(( attempts + 1 ))
   done
-  warn "Could not create admin automatically — log in and create manually if needed"
+  warn "Could not create admin automatically -log in and create manually if needed"
 }
 
 _write_install_log() {
   local log_file="$1"
   {
-    echo "Audspect BAS — Install Log"
+    echo "Audspect BAS -Install Log"
     echo "Timestamp : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
     echo "Version   : ${BAS_VERSION}"
     echo "Host      : $(hostname -f 2>/dev/null || hostname)"
@@ -863,7 +863,7 @@ _print_access_info() {
 # Dispatch
 # ═════════════════════════════════════════════════════════════════════════════
 echo ""
-echo -e "${BOLD}${CYAN}━━━  ${PRODUCT} v${BAS_VERSION}  ━━━${NC}"
+echo -e "${BOLD}${CYAN}===  ${PRODUCT} v${BAS_VERSION}  ===${NC}"
 echo ""
 
 case "$MODE" in
