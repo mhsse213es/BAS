@@ -91,6 +91,13 @@ func main() {
 		}
 	}
 
+	// EPSS enrichment — optional, seeded from FIRST EPSS CSV if provided.
+	if n, sErr := scenario.SeedEPSS(context.Background(), pool, cfg.EPSSFile); sErr != nil {
+		log.Printf("[!] EPSS seed: %v", sErr)
+	} else if n > 0 {
+		log.Printf("[+] EPSS scores seeded: %d CVE entries", n)
+	}
+
 	if err := seedDefaultAdmin(pool, cfg.AdminPassword); err != nil {
 		log.Printf("[!] admin seed: %v", err)
 	}
@@ -172,12 +179,14 @@ func main() {
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
 		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
+		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
 		WithManifest(manifest).
 		WithCompliance(complianceMapper).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
-		WithTicketing(ticketingManager)
+		WithTicketing(ticketingManager).
+		WithLicensePath(cfg.LicensePath)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler())
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────

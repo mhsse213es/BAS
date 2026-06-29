@@ -24,6 +24,7 @@ import (
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/integrity"
+	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
@@ -51,6 +52,7 @@ type Handler struct {
 	reportingEngine  *reporting.Engine     // nil when not loaded
 	scheduler        *connector.Scheduler  // nil when no sources configured
 	ticketing        *ticketing.Manager    // nil when no connectors configured
+	licPath          string               // path to bas.lic for Settings → License display
 }
 
 // New creates a Handler.
@@ -145,6 +147,29 @@ func (h *Handler) WithEPSSFile(epssFile string) *Handler {
 func (h *Handler) WithManifest(m *integrity.Manifest) *Handler {
 	h.manifest = m
 	return h
+}
+
+func (h *Handler) WithLicensePath(path string) *Handler {
+	h.licPath = path
+	return h
+}
+
+// GetLicenseInfo returns parsed licence details for the Settings → License panel.
+// GET /api/license
+func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
+	lic, err := license.Get(h.licPath)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	respond(w, map[string]any{
+		"customer":   lic.Customer,
+		"customerId": lic.CustomerID,
+		"issuedAt":   lic.IssuedAt,
+		"expiresAt":  lic.ExpiresAt,
+		"features":   lic.Features,
+		"status":     license.Status(lic.ExpiresAt),
+	})
 }
 
 // verifyResultMAC checks X-Result-MAC on a pre-read body.

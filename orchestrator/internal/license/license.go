@@ -88,6 +88,39 @@ func Check(licPath string) error {
 	return nil
 }
 
+// Get parses and returns the licence for display purposes.
+// Signature verification already happened at startup — this is read-only info.
+func Get(licPath string) (*License, error) {
+	if licPath == "" {
+		licPath = "/etc/bas/bas.lic"
+	}
+	data, err := os.ReadFile(licPath)
+	if err != nil {
+		return nil, fmt.Errorf("license file not found at %s", licPath)
+	}
+	var lic License
+	if err := json.Unmarshal(data, &lic); err != nil {
+		return nil, fmt.Errorf("invalid license format: %w", err)
+	}
+	return &lic, nil
+}
+
+// Status returns "valid", "expiring_soon" (< 30 days), or "expired".
+func Status(expiresAt string) string {
+	t, err := time.Parse("2006-01-02", expiresAt)
+	if err != nil {
+		return "unknown"
+	}
+	now := time.Now().UTC()
+	if now.After(t.UTC().Add(24 * time.Hour)) {
+		return "expired"
+	}
+	if t.UTC().Sub(now) < 30*24*time.Hour {
+		return "expiring_soon"
+	}
+	return "valid"
+}
+
 func parsePublicKey(pemStr string) (*rsa.PublicKey, error) {
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {

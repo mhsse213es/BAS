@@ -1615,6 +1615,7 @@ body.theme-slate {
             <a class="sset" data-set="art" onclick="showSettingsSection('art')">ART content</a>
             <a class="sset" data-set="audit" onclick="showSettingsSection('audit')">Audit logs</a>
             <a class="sset" data-set="theme" onclick="showSettingsSection('theme')">Theme &amp; display</a>
+            <a class="sset" data-set="license" onclick="showSettingsSection('license')">License</a>
           </div>
           <div class="settings-body">
 
@@ -1881,6 +1882,17 @@ body.theme-slate {
                 </div>
                 <div class="theme-name">Slate Minimal</div>
               </div>
+            </div>
+          </div>
+
+          <!-- License -->
+          <div id="set-license" class="set-section" style="display:none">
+            <div class="sec-hdr">
+              <h2>License</h2>
+              <button class="btn btn-outline btn-sm" onclick="loadLicenseInfo()">&#x21bb; Refresh</button>
+            </div>
+            <div id="license-card-wrap">
+              <div class="empty" style="padding:2rem">Loading…</div>
             </div>
           </div>
 
@@ -3466,7 +3478,7 @@ var SETTINGS_SECTION = 'users';
 // Settings sub-section switcher — toggles the body panels + lazily loads each.
 function showSettingsSection(name) {
   SETTINGS_SECTION = name;
-  ['users', 'engine', 'intel', 'art', 'audit', 'theme'].forEach(function(s) {
+  ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'license'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
     if (el) el.style.display = s === name ? '' : 'none';
     var nav = document.querySelector('[data-set="' + s + '"]');
@@ -3477,6 +3489,7 @@ function showSettingsSection(name) {
   else if (name === 'intel') loadConnectorStatus();
   else if (name === 'art') loadARTContentStatus();
   else if (name === 'audit') loadAuditLogs();
+  else if (name === 'license') loadLicenseInfo();
 }
 
 function selectTheme(themeName) {
@@ -9387,6 +9400,39 @@ var AUDIT_ACTION_LABELS = {
 function loadAuditLogs() {
   AUDIT_OFFSET = 0;
   fetchAuditPage();
+}
+
+function loadLicenseInfo() {
+  var wrap = document.getElementById('license-card-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
+  apicall('/api/license').then(function(lic) {
+    if (lic.error) { wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(lic.error) + '</div>'; return; }
+    var statusColor = lic.status === 'valid' ? 'var(--success)' : lic.status === 'expiring_soon' ? 'var(--warning)' : 'var(--danger)';
+    var statusLabel = lic.status === 'valid' ? 'Active' : lic.status === 'expiring_soon' ? 'Expiring Soon' : lic.status === 'expired' ? 'Expired' : 'Unknown';
+    var features = (lic.features || []).map(function(f) {
+      return '<span class="sbadge" style="background:rgba(47,129,247,0.12);color:var(--accent);margin:0.15rem 0.2rem 0.15rem 0;display:inline-block">' + x(f) + '</span>';
+    }).join('');
+    wrap.innerHTML =
+      '<div class="conn-cfg-card" style="max-width:540px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">' +
+          '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Entitlement</div>' +
+          '<span class="sbadge" style="background:' + statusColor + '22;color:' + statusColor + ';border:1px solid ' + statusColor + '44;font-size:0.7rem;font-weight:700">' + statusLabel + '</span>' +
+        '</div>' +
+        _licRow('Customer',    x(lic.customer   || '-')) +
+        _licRow('Customer ID', x(lic.customerId || '-')) +
+        _licRow('Issued',      x(lic.issuedAt   || '-')) +
+        _licRow('Expires',     '<span style="color:' + statusColor + ';font-weight:600">' + x(lic.expiresAt || '-') + '</span>') +
+        (features ? '<div style="padding:0.55rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.5rem;font-size:0.8rem;align-items:flex-start"><span style="color:var(--muted);min-width:130px;flex-shrink:0">Features</span><div>' + features + '</div></div>' : '') +
+      '</div>';
+  }).catch(function(e) { wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(e.message) + '</div>'; });
+}
+
+function _licRow(label, val) {
+  return '<div style="display:flex;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.8rem">' +
+    '<span style="color:var(--muted);min-width:130px;flex-shrink:0">' + label + '</span>' +
+    '<span style="flex:1;color:var(--text)">' + val + '</span>' +
+    '</div>';
 }
 
 function auditPage(dir) {
