@@ -29,8 +29,12 @@ func newJira(settings map[string]string) *jiraConnector {
 	if settings["insecure_tls"] == "yes" {
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec
 	}
+	baseURL := strings.TrimRight(settings["base_url"], "/")
+	if baseURL != "" && !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		baseURL = "https://" + baseURL
+	}
 	return &jiraConnector{
-		baseURL:    strings.TrimRight(settings["base_url"], "/"),
+		baseURL:    baseURL,
 		username:   settings["username"],
 		apiToken:   settings["api_token"],
 		projectKey: settings["project_key"],
@@ -249,6 +253,26 @@ func (j *jiraConnector) GetStatus(ctx context.Context, ticketID string) (string,
 func (j *jiraConnector) TestConnection(ctx context.Context) error {
 	_, err := j.doRequest(ctx, "GET", "/rest/api/2/project/"+j.projectKey, nil)
 	return err
+}
+
+// ListProjects returns all projects visible to the authenticated user.
+func (j *jiraConnector) ListProjects(ctx context.Context) ([]map[string]string, error) {
+	resp, err := j.doRequest(ctx, "GET", "/rest/api/2/project?expand=&maxResults=200", nil)
+	if err != nil {
+		return nil, err
+	}
+	var raw []struct {
+		Key  string `json:"key"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(resp, &raw); err != nil {
+		return nil, fmt.Errorf("jira: parse projects: %w", err)
+	}
+	out := make([]map[string]string, len(raw))
+	for i, p := range raw {
+		out[i] = map[string]string{"key": p.Key, "name": p.Name}
+	}
+	return out, nil
 }
 
 func (j *jiraConnector) doRequest(ctx context.Context, method, path string, body any) ([]byte, error) {

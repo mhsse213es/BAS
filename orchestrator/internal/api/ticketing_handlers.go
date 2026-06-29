@@ -95,6 +95,21 @@ func (h *Handler) UpdateTicketingConfig(w http.ResponseWriter, r *http.Request) 
 	if req.AutoCreate == "" {
 		req.AutoCreate = "off"
 	}
+	// Preserve existing sensitive values that the UI returns as "***" (masked).
+	var existingRaw []byte
+	_ = h.db.QueryRow(r.Context(), `SELECT settings FROM ticketing_configs WHERE id=$1`, id).Scan(&existingRaw)
+	var existingSettings map[string]string
+	_ = json.Unmarshal(existingRaw, &existingSettings)
+	if req.Settings == nil {
+		req.Settings = map[string]string{}
+	}
+	for k, v := range req.Settings {
+		if v == "***" {
+			if old, ok := existingSettings[k]; ok {
+				req.Settings[k] = old
+			}
+		}
+	}
 	settingsJSON, _ := json.Marshal(req.Settings)
 	ct, err := h.db.Exec(r.Context(),
 		`UPDATE ticketing_configs SET name=$1, enabled=$2, auto_create=$3, auto_update=$4,
@@ -174,6 +189,32 @@ func (h *Handler) ProbeTicketingConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, map[string]any{"ok": true})
+}
+
+// ProbeListProjects returns the project list from inline (unsaved) credentials.
+// POST /api/ticketing/probe/projects  body: {provider, settings}
+func (h *Handler) ProbeListProjects(w http.ResponseWriter, r *http.Request) {
+	if h.ticketing == nil {
+		jsonError(w, "ticketing not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var req struct {
+		Provider string            `json:"provider"`
+		Settings map[string]string `json:"settings"`
+	}
+	if json.NewDecoder(r.Body).Decode(&req) != nil || req.Provider == "" {
+		jsonError(w, "provider is required", http.StatusBadRequest)
+		return
+	}
+	if req.Settings == nil {
+		req.Settings = map[string]string{}
+	}
+	projects, err := h.ticketing.ProbeListProjects(r.Context(), req.Provider, req.Settings)
+	if err != nil {
+		respond(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	respond(w, map[string]any{"ok": true, "projects": projects})
 }
 
 // ── Candidates + Push (Analyst+) ─────────────────────────────────────────────

@@ -239,6 +239,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Delete("/api/ticketing/configs/{id}", h.DeleteTicketingConfig)
 			r.Post("/api/ticketing/configs/{id}/test", h.TestTicketingConfig)
 			r.Post("/api/ticketing/probe", h.ProbeTicketingConfig)
+			r.Post("/api/ticketing/probe/projects", h.ProbeListProjects)
 			r.Post("/api/ticketing/sync", h.TriggerTicketingSync)
 
 			// Payload family management — write/delete restricted to Admin

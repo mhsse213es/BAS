@@ -29,8 +29,12 @@ func newServiceNow(settings map[string]string) *snowConnector {
 	if settings["insecure_tls"] == "yes" {
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec
 	}
+	instanceURL := strings.TrimRight(settings["instance_url"], "/")
+	if instanceURL != "" && !strings.HasPrefix(instanceURL, "http://") && !strings.HasPrefix(instanceURL, "https://") {
+		instanceURL = "https://" + instanceURL
+	}
 	return &snowConnector{
-		instanceURL: strings.TrimRight(settings["instance_url"], "/"),
+		instanceURL: instanceURL,
 		username:    settings["username"],
 		password:    settings["password"],
 		category:    orDefault(settings["category"], "security"),

@@ -1154,7 +1154,7 @@ body.theme-slate {
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/>
           </svg>
-          Evidence <span class="coming-tag">Soon</span>
+          <!--Evidence <span class="coming-tag">Soon</span>-->
         </div>
         <div class="nav-item disabled">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
@@ -5499,7 +5499,7 @@ var CONNECTOR_FIELDS = {
     { key: 'base_url',        label: 'Base URL',                      placeholder: 'https://jira.company.com',                 type: 'text' },
     { key: 'username',        label: 'Username / Email',              placeholder: 'user@company.com',                         type: 'text' },
     { key: 'api_token',       label: 'API Token (or password for Jira Server)', placeholder: '••••••',                         type: 'password' },
-    { key: 'project_key',     label: 'Project Key',                   placeholder: 'SEC',                                      type: 'text' },
+    { key: 'project_key',     label: 'Project Key',                   placeholder: 'SEC',                                      type: 'project_picker' },
     { key: 'insecure_tls',    label: 'Skip TLS verification',         placeholder: '',                                         type: 'checkbox',
       hint: 'Enable only for self-signed or internal CA certificates' }
   ],
@@ -5525,6 +5525,17 @@ function renderConnectorSettings(saved) {
         (f.hint ? '<div style="font-size:0.65rem;color:var(--muted);margin-top:0.2rem;margin-left:1.4rem">' + f.hint + '</div>' : '') +
         '</div>';
     }
+    if (f.type === 'project_picker') {
+      return '<div style="margin-bottom:0.6rem">' +
+        '<div class="conn-cfg-label" style="margin-bottom:0.25rem">' + f.label + '</div>' +
+        '<div style="display:flex;gap:0.4rem;align-items:center">' +
+          '<select id="cfs-' + f.key + '-sel" class="inp-sm" style="flex:1;display:none" onchange="document.getElementById(\'cfs-' + f.key + '\').value=this.value"></select>' +
+          '<input type="text" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm" style="flex:1">' +
+          '<button type="button" class="btn btn-outline btn-sm" style="white-space:nowrap;font-size:0.72rem" onclick="fetchConnectorProjects()">↓ Fetch</button>' +
+        '</div>' +
+        '<div id="cfs-' + f.key + '-hint" style="font-size:0.65rem;color:var(--muted);margin-top:0.2rem"></div>' +
+        '</div>';
+    }
     return '<div style="margin-bottom:0.6rem">' +
       '<div class="conn-cfg-label" style="margin-bottom:0.25rem">' + f.label + '</div>' +
       '<input type="' + f.type + '" id="cfs-' + f.key + '" placeholder="' + f.placeholder + '" value="' + x(s[f.key] || '') + '" class="inp-sm" style="width:100%">' +
@@ -5532,7 +5543,49 @@ function renderConnectorSettings(saved) {
   }).join('');
 }
 
+function fetchConnectorProjects() {
+  var prov = document.getElementById('cf-provider').value;
+  var fields = CONNECTOR_FIELDS[prov] || [];
+  var settings = {};
+  fields.forEach(function(f) {
+    if (f.type === 'project_picker') return;
+    var v = _connectorFieldValue(f);
+    if (v && v !== '***') settings[f.key] = v;
+  });
+  var hint = document.getElementById('cfs-project_key-hint');
+  if (hint) { hint.textContent = 'Fetching projects…'; hint.style.color = 'var(--muted)'; }
+  apicall('/api/ticketing/probe/projects', { method: 'POST', body: JSON.stringify({ provider: prov, settings: settings }) })
+    .then(function(r) {
+      if (!r.ok) {
+        if (hint) { hint.textContent = r.error || 'Failed'; hint.style.color = 'var(--danger)'; }
+        return;
+      }
+      var projects = r.projects || [];
+      var sel = document.getElementById('cfs-project_key-sel');
+      var inp = document.getElementById('cfs-project_key');
+      if (!sel || !inp) return;
+      if (!projects.length) {
+        if (hint) { hint.textContent = 'No projects found'; hint.style.color = 'var(--warning)'; }
+        return;
+      }
+      sel.innerHTML = projects.map(function(p) {
+        return '<option value="' + x(p.key) + '"' + (inp.value === p.key ? ' selected' : '') + '>' + x(p.key) + ' — ' + x(p.name) + '</option>';
+      }).join('');
+      sel.style.display = 'block';
+      inp.style.display = 'none';
+      if (!inp.value && projects.length) { sel.value = projects[0].key; }
+      if (hint) { hint.textContent = projects.length + ' project(s) found'; hint.style.color = 'var(--success)'; }
+    })
+    .catch(function(e) { if (hint) { hint.textContent = e.message; hint.style.color = 'var(--danger)'; } });
+}
+
 function _connectorFieldValue(f) {
+  if (f.type === 'project_picker') {
+    var sel = document.getElementById('cfs-' + f.key + '-sel');
+    if (sel && sel.style.display !== 'none') return sel.value || '';
+    var inp = document.getElementById('cfs-' + f.key);
+    return inp ? (inp.value || '') : '';
+  }
   var el = document.getElementById('cfs-' + f.key);
   if (!el) return '';
   return f.type === 'checkbox' ? (el.checked ? 'yes' : '') : (el.value || '');
@@ -5644,8 +5697,10 @@ function pushFindingToITSM(findingId) {
     }
     apicall('/api/ticketing/push', { method: 'POST', body: JSON.stringify({ findingId: findingId, configId: configId, recordType: 'incident' }) })
       .then(function(r) {
-        showToast('Ticket created: ' + (r.ticketId || ''), 'ok');
-        openFinding(findingId); // refresh drawer
+        if (r.error) { showToast(r.error, 'err'); return; }
+        var msg = r.ticketId ? 'Ticket created: ' + r.ticketId : 'Ticket created';
+        showToast(msg, 'ok');
+        openFinding(findingId); // refresh drawer to show new ticket
       }).catch(function(e) { showToast(e.message, 'err'); });
   });
 }
@@ -5690,6 +5745,7 @@ function bulkPushSelectedFindings() {
     }
     apicall('/api/ticketing/push/bulk', { method: 'POST', body: JSON.stringify({ findingIds: ids, configId: configId, recordType: 'incident' }) })
       .then(function(results) {
+        if (!Array.isArray(results)) { showToast((results && results.error) || 'Push failed', 'err'); return; }
         var ok = results.filter(function(r) { return !r.error; }).length;
         var fail = results.length - ok;
         showToast(ok + ' ticket' + (ok === 1 ? '' : 's') + ' created' + (fail ? ', ' + fail + ' failed' : ''), ok ? 'ok' : 'err');

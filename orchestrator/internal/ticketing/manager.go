@@ -257,6 +257,18 @@ func (m *Manager) ProbeConnector(ctx context.Context, provider string, settings 
 	return con.TestConnection(ctx)
 }
 
+// ProbeListProjects fetches the project list from inline (unsaved) credentials.
+// Currently only supported for Jira; returns an error for other providers.
+func (m *Manager) ProbeListProjects(ctx context.Context, provider string, settings map[string]string) ([]map[string]string, error) {
+	switch provider {
+	case "jira":
+		j := newJira(settings)
+		return j.ListProjects(ctx)
+	default:
+		return nil, fmt.Errorf("project listing not supported for %q", provider)
+	}
+}
+
 // ListTicketsForFinding returns all ticket references for a finding.
 func (m *Manager) ListTicketsForFinding(ctx context.Context, findingID string) ([]map[string]any, error) {
 	rows, err := m.db.Query(ctx,
