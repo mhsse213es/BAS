@@ -355,240 +355,421 @@ const reportHTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <title>BAS Security Assessment Report — {{.agent.hostname}}</title>
 <style>
+/* ── Reset ── */
 *{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --ink:#1b2433; --muted:#6b7689; --faint:#9aa5b5;
-  --navy:#0b1420; --line:#e7eaf0; --line2:#eef1f6; --panel:#f7f9fc;
-  --accent:#2563eb; --teal:#0d9488;
-}
-html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  font-size:12.5px;color:var(--ink);background:#fff;line-height:1.6;
-  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-a{color:var(--accent);text-decoration:none}
-h1{font-size:1.32rem;font-weight:700;color:var(--navy);letter-spacing:-0.015em;line-height:1.2;
-  margin:0 0 18px;padding-left:12px;border-left:3px solid var(--teal)}
-h2{font-size:1rem;font-weight:650;color:var(--navy);letter-spacing:-0.01em;margin:22px 0 10px}
-h3{font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:18px 0 9px}
-p{margin-bottom:9px}
-em{color:var(--muted);font-style:normal}
-code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:0.85em;color:var(--navy);background:var(--panel);padding:1px 5px;border-radius:4px}
-strong{font-weight:650}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
+body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
+  color:#1a2332;background:#fff;line-height:1.6;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em}
+:root{--line:#e8edf4;--line2:#eef1f6;--surface:#f7f9fc;--navy:#0b1420;--ink:#1a2332;--accent:#2563eb;--teal:#0d9488;--muted:#6b7689;--faint:#9aa5b5}
 
-/* Page layout */
-.page{padding:42px 48px;max-width:900px;margin:0 auto}
-@media print{
-  .page{page-break-after:always;padding:30px 32px}
-  .page:last-child{page-break-after:avoid}
-  body{font-size:10.5px}
-  /* Clean page breaks — never split a row, card, or glossary entry; keep a
-     heading with the content that follows it; repeat table headers on overflow. */
-  tr,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
+/* ── Page ── */
+.page{width:210mm;min-height:297mm;margin:0 auto;background:#fff;
+  position:relative;page-break-after:always;break-after:page;overflow:hidden}
+.page:last-child{page-break-after:avoid;break-after:avoid}
+@media screen{body{background:#c8d0da;padding:24px 0}
+  .page{box-shadow:0 6px 32px rgba(0,0,0,0.22);margin:0 auto 28px;border-radius:2px}}
+@media print{body{background:#fff;padding:0}
+  .page{width:100%;margin:0;box-shadow:none}
+  .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
-  h1,h2,h3{page-break-after:avoid;break-after:avoid}
-  .footer{page-break-inside:avoid}
-}
+  .ph,.pf{page-break-inside:avoid}}
 
-/* Cover */
-.cover{min-height:90vh;display:flex;flex-direction:column}
-.cover-band{background:var(--navy);margin:-42px -48px 0;padding:36px 48px 30px;border-bottom:3px solid var(--teal)}
-.cover-logo{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:-0.02em}
-.cover-logo span{color:var(--teal)}
-.cover-kicker{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.16em;color:#8aa0b8;margin-top:5px}
-.cover-mid{flex:1;display:flex;flex-direction:column;justify-content:center;padding:46px 0}
-.cover-title{font-size:2.4rem;font-weight:750;color:var(--navy);letter-spacing:-0.03em;line-height:1.04;margin-bottom:10px}
-.cover-sub{font-size:1.02rem;color:var(--muted);margin-bottom:30px}
-.cover-meta{border-top:1px solid var(--line)}
-.cover-meta .crow{display:flex;padding:11px 2px;border-bottom:1px solid var(--line);font-size:0.86rem}
-.cover-meta .crow .k{width:170px;color:var(--muted);font-weight:600}
-.cover-meta .crow .v{flex:1;color:var(--ink);font-weight:500}
-.confidential{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;
-  background:#fff6e6;color:#92610a;border:1px solid #f0c674;padding:6px 13px;border-radius:20px;
-  font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:28px}
-.filter-badge{display:inline-flex;align-items:center;gap:7px;
-  background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;padding:6px 13px;border-radius:20px;
-  font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:10px}
-
-/* Risk badge */
-.risk-badge{display:inline-flex;align-items:center;gap:14px;padding:14px 22px;border-radius:10px;
-  font-weight:600;margin-bottom:22px;border:1px solid var(--line);background:var(--panel)}
-
-/* Score cards */
-.score-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:22px}
-.scard{border:1px solid var(--line);border-radius:12px;padding:15px 16px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,0.04)}
-.scard-label{font-size:0.66rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);font-weight:700;margin-bottom:8px}
-.scard-value{font-size:1.6rem;font-weight:750;letter-spacing:-0.02em;line-height:1;margin-bottom:10px}
-.scard-bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden}
-.scard-bar-fill{height:100%;border-radius:3px}
-
-/* Tables */
-table{width:100%;border-collapse:collapse;margin:6px 0 16px;font-size:0.82rem}
-thead th{background:var(--panel);color:var(--muted);text-transform:uppercase;font-size:0.66rem;
-  letter-spacing:0.05em;font-weight:700;text-align:left;padding:9px 12px;border-bottom:1.5px solid var(--line)}
-td{padding:9px 12px;border-bottom:1px solid var(--line2);vertical-align:top}
-tbody tr:last-child td{border-bottom:none}
-tbody tr:nth-child(even) td{background:#fbfcfe}
-
-/* Severity dots */
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
-
-/* Tactic bar */
-.tbar-wrap{width:100%;height:7px;background:var(--line);border-radius:4px;overflow:hidden;display:inline-block;min-width:80px;vertical-align:middle}
-.tbar-fill{height:100%;border-radius:4px}
-
-/* Compliance table */
-.comp-pct{font-weight:700}
-
-/* Findings */
-.remediation{background:var(--panel);border-left:3px solid var(--teal);padding:8px 12px;font-size:0.78rem;color:var(--muted);margin-top:6px;border-radius:0 6px 6px 0;line-height:1.55}
-
-/* Tools list */
-.tool-tag{display:inline-block;background:#eef4ff;color:#2353c4;border:1px solid #cfe0ff;
-  padding:3px 10px;border-radius:20px;font-size:0.72rem;margin:2px 3px 2px 0}
-
-/* Footer */
-.footer{border-top:1px solid var(--line);padding:13px 0 0;font-size:0.7rem;color:var(--faint);
-  display:flex;justify-content:space-between;margin-top:34px}
-
-/* ── Cover enhancement ── */
-.cover{min-height:90vh;display:flex;flex-direction:column;background:#0b1420}
-.cover-band{background:#0b1420;margin:-42px -48px 0;padding:36px 48px 30px;
-  border-bottom:1px solid rgba(13,148,136,0.3)}
-.cover-logo{font-size:1.2rem;font-weight:800;color:#fff;letter-spacing:-0.02em}
-.cover-logo span{color:#0d9488}
-.cover-kicker{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.16em;color:#4a6a8a;margin-top:5px}
-.cover-mid{flex:1;display:flex;flex-direction:column;justify-content:center;padding:46px 0}
-.cover-title{font-size:2.4rem;font-weight:750;color:#fff;letter-spacing:-0.03em;line-height:1.04;margin-bottom:10px}
-.cover-sub{font-size:1.02rem;color:#6a8aaa;margin-bottom:30px}
-.cover-meta{border-top:1px solid rgba(255,255,255,0.08)}
-.cover-meta .crow{display:flex;padding:11px 2px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.86rem}
-.cover-meta .crow .k{width:170px;color:#5a7a9a;font-weight:600}
-.cover-meta .crow .v{flex:1;color:#c8d8e8;font-weight:500}
-.confidential{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;
-  background:rgba(220,166,0,0.1);color:#c8a020;border:1px solid rgba(220,166,0,0.28);
-  padding:6px 13px;border-radius:20px;font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:28px}
+/* ── Cover ── */
+.cover{background:#0b1420;min-height:297mm;display:flex;flex-direction:column;position:relative}
+.cover-grain{position:absolute;inset:0;opacity:0.03;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:200px}
+.cover-accent{position:absolute;right:-100px;top:-100px;width:520px;height:520px;
+  border-radius:50%;border:70px solid rgba(13,148,136,0.07);pointer-events:none}
+.cover-accent2{position:absolute;right:40px;bottom:80px;width:280px;height:280px;
+  border-radius:50%;border:40px solid rgba(37,99,235,0.05);pointer-events:none}
+.cover-header{padding:40px 48px 0;position:relative;z-index:1}
+.clogo{display:flex;align-items:center;gap:11px}
+.clogo-mark{width:34px;height:34px;background:linear-gradient(135deg,#0d9488 0%,#2563eb 100%);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:15px;color:#fff;flex-shrink:0}
+.clogo-name{font-size:1.15rem;font-weight:800;color:#fff;letter-spacing:-0.03em}
+.clogo-name span{color:#0d9488}
+.clogo-sub{font-size:0.58rem;text-transform:uppercase;letter-spacing:0.16em;color:#4a6a8a;margin-top:1px}
+.cover-body{flex:1;padding:0 48px;display:flex;flex-direction:column;justify-content:center;
+  position:relative;z-index:1}
+.cover-eyebrow{font-size:0.62rem;text-transform:uppercase;letter-spacing:0.2em;
+  color:#0d9488;font-weight:700;margin-bottom:12px}
+.cover-title{font-size:2.8rem;font-weight:900;color:#fff;letter-spacing:-0.04em;
+  line-height:1.02;margin-bottom:8px}
+.cover-sub{font-size:0.95rem;color:#6a8aaa;margin-bottom:32px;line-height:1.6}
+.cover-rule{width:56px;height:3px;background:linear-gradient(90deg,#0d9488,#2563eb);
+  border-radius:2px;margin-bottom:30px}
+.cover-grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid rgba(255,255,255,0.07);
+  border-radius:10px;overflow:hidden;margin-bottom:30px}
+.cg-cell{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.05);
+  border-right:1px solid rgba(255,255,255,0.05)}
+.cg-cell:nth-child(even){border-right:none}
+.cg-cell:nth-last-child(-n+2){border-bottom:none}
+.cg-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;
+  color:#4a6a8a;font-weight:700;margin-bottom:4px}
+.cg-value{font-size:0.84rem;font-weight:600;color:#d8e8f8}
+.cover-badges{display:flex;gap:9px;flex-wrap:wrap}
+.cb{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;
+  border-radius:20px;font-size:0.64rem;font-weight:700;letter-spacing:0.04em}
+.cb-conf{background:rgba(220,166,0,0.1);border:1px solid rgba(220,166,0,0.28);color:#e0bc30}
+.cb-live{background:rgba(13,148,136,0.1);border:1px solid rgba(13,148,136,0.25);color:#0d9488}
 .filter-badge{display:inline-flex;align-items:center;gap:7px;
   background:rgba(37,99,235,0.1);color:#60a5fa;border:1px solid rgba(37,99,235,0.3);
-  padding:6px 13px;border-radius:20px;font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:10px}
-.cover-logo-img{height:38px;filter:brightness(0) invert(1);opacity:0.9}
+  padding:6px 13px;border-radius:20px;font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:14px}
+.cover-bottom{padding:24px 48px;border-top:1px solid rgba(255,255,255,0.06);
+  display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+.cover-bottom-copy{font-size:0.62rem;color:#2a4a6a;line-height:1.6}
+.cover-scores{display:flex;gap:22px}
+.cs-item{text-align:center}
+.cs-num{font-size:1.45rem;font-weight:900;line-height:1}
+.cs-lbl{font-size:0.56rem;text-transform:uppercase;letter-spacing:0.1em;color:#3a5a7a;margin-top:2px}
 
-/* ── Finding Cards ─────────────────────────────────────────────────────────── */
-.fc{border-radius:8px;margin-bottom:16px;overflow:hidden;border:1px solid var(--line);
-  border-left-width:5px;box-shadow:0 2px 8px var(--fc-shadow,rgba(0,0,0,0.06))}
-.fc.fc-critical{border-left-color:#da3633;--fc-shadow:rgba(218,54,51,0.1)}
-.fc.fc-high{border-left-color:#f0883e;--fc-shadow:rgba(240,136,62,0.08)}
-.fc.fc-medium{border-left-color:#d29922;--fc-shadow:rgba(210,153,34,0.07)}
-.fc.fc-prevented{border-left-color:#0d9488;--fc-shadow:rgba(13,148,136,0.07)}
-.fc.fc-detected{border-left-color:#2f81f7;--fc-shadow:rgba(47,129,247,0.07)}
-/* Severity top stripe */
-.fc-stripe{height:3px;width:100%}
-.fc.fc-critical .fc-stripe{background:linear-gradient(90deg,#da3633,#ef4444)}
-.fc.fc-high .fc-stripe{background:linear-gradient(90deg,#f0883e,#fb923c)}
-.fc.fc-medium .fc-stripe{background:linear-gradient(90deg,#d29922,#fbbf24)}
-.fc.fc-prevented .fc-stripe{background:linear-gradient(90deg,#0d9488,#34d399)}
-.fc.fc-detected .fc-stripe{background:linear-gradient(90deg,#2f81f7,#60a5fa)}
-/* Card header */
-.fc-header{padding:10px 14px;display:flex;align-items:flex-start;gap:10px;
-  background:#f7f9fc;border-bottom:1px solid var(--line)}
-.fc-sev-block{padding:3px 9px;border-radius:4px;font-size:0.6rem;font-weight:800;
-  text-transform:uppercase;letter-spacing:0.06em;color:#fff;flex-shrink:0;margin-top:1px}
-.fc-sev-block.critical{background:#da3633}
-.fc-sev-block.high{background:#f0883e}
-.fc-sev-block.medium{background:#d29922}
-.fc-sev-block.low{background:#6e7681}
+/* ── Inner Page Scaffolding ── */
+.inner{padding:0 48px 28px;min-height:297mm;display:flex;flex-direction:column}
+.ph{display:flex;justify-content:space-between;align-items:center;
+  padding:16px 0 14px;border-bottom:1px solid #e8edf4;margin-bottom:24px}
+.ph-left{display:flex;align-items:center;gap:16px}
+.ph-logo{font-size:0.78rem;font-weight:800;color:#0b1420}
+.ph-logo span{color:#0d9488}
+.ph-sep{width:1px;height:14px;background:#d0d8e4}
+.ph-title{font-size:0.68rem;font-weight:600;color:#4a6a8a}
+.ph-right{display:flex;align-items:center;gap:16px}
+.ph-endpoint{font-size:0.62rem;color:#7a9ab8}
+.ph-class{font-size:0.58rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:0.08em;color:#dc2626;background:#fff0f0;border:1px solid #fca5a5;
+  padding:2px 8px;border-radius:3px}
+.pf{margin-top:auto;padding-top:12px;border-top:1px solid #f0f4f8;
+  display:flex;justify-content:space-between;align-items:center;font-size:0.58rem;color:#9ab0c8}
+/* legacy footer alias */
+.footer{margin-top:auto;padding-top:12px;border-top:1px solid #f0f4f8;
+  display:flex;justify-content:space-between;align-items:center;font-size:0.58rem;color:#9ab0c8}
+
+/* ── Section headings ── */
+.stag{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.2em;color:#0d9488;font-weight:700;margin-bottom:5px}
+.stitle{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-0.025em;
+  line-height:1.15;margin-bottom:16px;padding-left:13px;border-left:4px solid #0d9488}
+h1{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-0.025em;
+  line-height:1.15;margin:0 0 16px;padding-left:13px;border-left:4px solid #0d9488}
+h2{font-size:0.88rem;font-weight:800;color:#0b1420;margin:18px 0 10px;letter-spacing:-0.01em}
+h3{font-size:0.63rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin:14px 0 7px}
+p{margin-bottom:9px;font-size:0.82rem}
+em{color:#6e7681;font-style:normal}
+strong{font-weight:700}
+a{color:#2563eb;text-decoration:none}
+
+/* ── Narrative box ── */
+.narrative{background:#f8faff;border:1px solid #dce8f8;border-left:4px solid #2563eb;
+  border-radius:0 10px 10px 0;padding:18px 20px;margin-bottom:18px}
+.narrative-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.14em;
+  color:#2563eb;font-weight:800;margin-bottom:9px}
+.narrative p{font-size:0.86rem;color:#1a2332;line-height:1.75}
+.narrative strong{color:#0b1420}
+
+/* ── KPI row ── */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid #e7eaf0;border-radius:10px;
+  padding:15px 15px 13px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:var(--c,#0d9488);border-radius:3px 3px 0 0}
+.kpi-lbl{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;
+  color:#9aa5b5;font-weight:700;margin-bottom:7px}
+.kpi-val{font-size:1.55rem;font-weight:900;color:var(--c,#0d9488);
+  letter-spacing:-0.02em;line-height:1;margin-bottom:5px}
+.kpi-sub{font-size:0.61rem;color:#9aa5b5}
+.kpi-bar{height:4px;background:#eef1f6;border-radius:2px;margin-top:7px;overflow:hidden}
+.kpi-bar-fill{height:100%;border-radius:2px;background:var(--c,#0d9488)}
+
+/* ── Score cards (backward-compat) ── */
+.score-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:11px;margin-bottom:18px}
+.scard{background:#fff;border:1px solid #e7eaf0;border-radius:10px;padding:15px 15px 13px}
+.scard-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;color:#9aa5b5;font-weight:700;margin-bottom:7px}
+.scard-value{font-size:1.55rem;font-weight:900;color:#0b1420;letter-spacing:-0.02em;line-height:1;margin-bottom:5px}
+.scard-bar{height:4px;background:#eef1f6;border-radius:2px;margin-top:7px;overflow:hidden}
+.scard-bar-fill{height:100%;border-radius:2px;background:#0d9488}
+
+/* ── Callouts ── */
+.callout{border-radius:8px;padding:11px 15px;margin-bottom:10px;
+  font-size:0.77rem;line-height:1.6;display:flex;gap:10px;align-items:flex-start}
+.callout-icon{flex-shrink:0;margin-top:1px;font-size:0.9rem}
+.co-danger{background:#fff5f5;border:1px solid #fecaca;color:#991b1b}
+.co-warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.co-ok{background:#f0fdf9;border:1px solid #d1fae5;color:#065f46}
+
+/* ── Risk hero ── */
+.risk-hero{background:linear-gradient(130deg,#0b1420 0%,#152338 100%);
+  border-radius:13px;padding:24px 28px;margin-bottom:18px;
+  display:flex;align-items:center;gap:28px;position:relative;overflow:hidden}
+.rh-ring{position:absolute;right:-50px;top:-50px;width:200px;height:200px;
+  border-radius:50%;border:28px solid rgba(255,255,255,0.025)}
+.rh-donut{flex-shrink:0;position:relative;width:110px;height:110px}
+.rh-donut svg{display:block}
+.rh-center{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center}
+.rh-num{font-size:1.75rem;font-weight:900;color:#fff;line-height:1}
+.rh-denom{font-size:0.62rem;color:#4a6a8a;line-height:1;margin-top:1px}
+.rh-info{flex:1}
+.rh-class{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#4a6a8a;font-weight:700;margin-bottom:4px}
+.rh-label{font-size:1.35rem;font-weight:900;letter-spacing:-0.02em;margin-bottom:7px}
+.rh-desc{font-size:0.76rem;color:#7a9ab8;line-height:1.6;max-width:340px}
+.rh-pills{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+.rh-pill{padding:3px 11px;border-radius:20px;font-size:0.62rem;font-weight:700;border:1px solid}
+
+/* ── MITRE Heatmap ── */
+.hm-wrap{overflow-x:auto;margin-bottom:12px}
+.hm{display:flex;gap:5px;min-width:580px}
+.hm-col{flex:1;min-width:56px}
+.hm-tactic{font-size:0.5rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;
+  color:#5a7a9a;text-align:center;padding:4px 2px 5px;
+  border-bottom:2px solid #e7eaf0;margin-bottom:4px;line-height:1.3}
+.hm-cell{height:21px;border-radius:3px;margin-bottom:2px;font-size:0.48rem;font-weight:700;
+  color:#fff;display:flex;align-items:center;justify-content:center;
+  letter-spacing:0.02em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
+.hm-cell.P{background:#0d9488}.hm-cell.D{background:#2563eb}
+.hm-cell.M{background:#dc2626}.hm-cell.N{background:#e7eaf0;color:#9aa5b5}
+.hm-legend{display:flex;gap:14px;margin-top:6px;margin-bottom:16px}
+.hml-item{display:flex;align-items:center;gap:5px;font-size:0.62rem;color:#6e7681}
+.hml-dot{width:11px;height:11px;border-radius:2px}
+
+/* ── Execution context / priv badges ── */
+.ctx-table{width:100%;border-collapse:collapse;font-size:0.72rem;margin-bottom:14px}
+.ctx-table thead th{background:#f0f4f8;color:#5a7a9a;text-transform:uppercase;
+  font-size:0.56rem;letter-spacing:0.08em;font-weight:700;text-align:left;
+  padding:8px 10px;border-bottom:1.5px solid #e0e7ef}
+.ctx-table td{padding:8px 10px;border-bottom:1px solid #f0f4f8;vertical-align:middle}
+.priv-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
+  border-radius:3px;font-size:0.6rem;font-weight:700;border:1px solid}
+.priv-system{background:rgba(220,38,38,0.08);border-color:rgba(220,38,38,0.3);color:#dc2626}
+.priv-admin{background:rgba(234,88,12,0.08);border-color:rgba(234,88,12,0.3);color:#ea580c}
+.priv-user{background:rgba(37,99,235,0.08);border-color:rgba(37,99,235,0.3);color:#2563eb}
+.priv-fallback{background:rgba(217,119,6,0.08);border-color:rgba(217,119,6,0.3);color:#d97706}
+.priv-skipped{background:#f3f4f6;border-color:#d1d5db;color:#6b7280}
+
+/* ── Finding Cards ── */
+.fc{border-radius:10px;margin-bottom:14px;overflow:hidden;border:1px solid #e7eaf0;
+  border-left-width:5px}
+.fc.fc-critical{border-left-color:#dc2626}
+.fc.fc-high{border-left-color:#ea580c}
+.fc.fc-medium{border-left-color:#d97706}
+.fc.fc-low{border-left-color:#0d9488}
+.fc.fc-prevented{border-left-color:#0d9488}
+.fc.fc-detected{border-left-color:#2563eb}
+.fc-stripe{height:0}
+.fc-header{padding:12px 16px;display:flex;align-items:flex-start;gap:12px;
+  background:#fafbfc;border-bottom:1px solid #f0f4f8}
+.fc-sev-block{padding:4px 10px;border-radius:5px;font-size:0.62rem;font-weight:900;
+  text-transform:uppercase;letter-spacing:0.08em;color:#fff;flex-shrink:0;margin-top:1px}
+.fc-sev-block.critical{background:#dc2626}
+.fc-sev-block.high{background:#ea580c}
+.fc-sev-block.medium{background:#d97706}
+.fc-sev-block.low{background:#0d9488}
 .fc-sev-block.prevented{background:#0d9488}
-.fc-sev-block.detected{background:#2f81f7}
+.fc-sev-block.detected{background:#2563eb}
 .fc-heading{flex:1;min-width:0}
-.fc-name{font-size:0.88rem;font-weight:700;color:var(--navy);line-height:1.25;margin-bottom:2px}
-.fc-name.critical{color:#991b1b}
-.fc-tid{font-size:0.63rem;color:#9aa5b5;font-family:monospace}
-/* Card body */
-.fc-body{padding:12px 14px}
-.fc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.fc-detail-row{display:flex;gap:6px;margin-bottom:5px;align-items:flex-start}
-.fc-detail-label{font-size:0.58rem;font-weight:700;text-transform:uppercase;
-  letter-spacing:0.08em;color:#9aa5b5;min-width:84px;padding-top:2px;flex-shrink:0}
-.fc-detail-value{font-size:0.73rem;color:var(--ink);line-height:1.5}
-/* Blocked By */
+.fc-name{font-size:0.9rem;font-weight:800;color:#0b1420;line-height:1.25;margin-bottom:3px}
+.fc-name.critical{font-size:1.02rem}
+.fc-tid{font-size:0.65rem;color:#9aa5b5;font-family:monospace;font-weight:500}
+.fc-verdict{flex-shrink:0}
+.fc-body{padding:14px 16px}
+.fc-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fc-detail-row{display:flex;gap:8px;margin-bottom:7px;align-items:flex-start}
+.fc-detail-label{font-size:0.6rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.08em;color:#9aa5b5;min-width:88px;padding-top:2px;flex-shrink:0}
+.fc-detail-value{font-size:0.75rem;color:#1a2332;line-height:1.5}
 .fc-blocked-by{font-size:0.73rem;font-weight:700;color:#065f46;
   background:#f0fdf9;border:1px solid #a7f3d0;border-radius:4px;
   padding:2px 9px;display:inline-flex;align-items:center;gap:4px}
-.fc-blocked-none{font-size:0.73rem;color:#da3633;font-weight:600}
-/* Evidence block (dark terminal) */
-.fc-evidence{background:#0d1621;border-radius:6px;padding:10px 12px;font-family:monospace}
-.fc-ev-hdr{font-size:0.52rem;text-transform:uppercase;letter-spacing:0.12em;
-  color:#3a6a9a;font-weight:700;margin-bottom:7px;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:4px}
-.fc-ev-row{display:flex;gap:5px;margin-bottom:3px;font-size:0.61rem;line-height:1.4}
-.fc-ev-k{color:#4a6a8a;min-width:68px;flex-shrink:0}
-.fc-ev-v{color:#a0c4e0;word-break:break-all}
-.fc-ev-v.ok{color:#34d399}.fc-ev-v.bad{color:#f87171}.fc-ev-v.warn{color:#fbbf24}.fc-ev-v.code{color:#c084fc}
+.fc-blocked-none{font-size:0.73rem;color:#dc2626;font-weight:600}
+/* Evidence block — dark terminal */
+.fc-evidence,.evidence-block{background:#0d1621;border-radius:7px;padding:11px 13px;font-family:monospace}
+.fc-ev-hdr,.ev-header{font-size:0.56rem;text-transform:uppercase;letter-spacing:0.14em;
+  color:#2563eb;font-weight:700;margin-bottom:8px}
+.fc-ev-row,.ev-row{display:flex;gap:6px;margin-bottom:4px;font-size:0.63rem}
+.fc-ev-k,.ev-key{color:#4a6a8a;min-width:70px;flex-shrink:0}
+.fc-ev-v,.ev-val{color:#a0c4e0;word-break:break-all;line-height:1.4}
+.fc-ev-v.ok,.ev-val.ok{color:#0d9488}
+.fc-ev-v.bad,.ev-val.bad{color:#f87171}
+.fc-ev-v.warn,.ev-val.warn{color:#fbbf24}
+.fc-ev-v.code,.ev-val.code{color:#c084fc}
 .fc-ev-sec{margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.06)}
-.fc-ev-sec-lbl{font-size:0.5rem;text-transform:uppercase;letter-spacing:0.12em;
-  color:#2f81f7;font-weight:700;margin-bottom:4px}
-/* Residual risk colors */
+.fc-ev-sec-lbl{font-size:0.5rem;text-transform:uppercase;letter-spacing:0.12em;color:#2f81f7;font-weight:700;margin-bottom:4px}
 .fc-rr-none{color:#34d399}.fc-rr-partial{color:#fbbf24}.fc-rr-leaked{color:#f87171}.fc-rr-none-dash{color:#6e7681}
-/* Remediation box */
 .fc-remediation{background:#f0fdf9;border-left:3px solid #0d9488;
-  padding:8px 12px;margin-top:9px;border-radius:0 6px 6px 0}
-.fc-rem-label{font-size:0.55rem;font-weight:700;text-transform:uppercase;
-  letter-spacing:0.1em;color:#0d9488;margin-bottom:3px}
-.fc-rem-text{font-size:0.72rem;color:var(--ink);line-height:1.6}
-/* Verdict badges */
-.vb{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
-  border-radius:3px;font-size:0.6rem;font-weight:800;letter-spacing:0.04em;flex-shrink:0}
-.vb-missed{background:#fee2e2;color:#da3633}
+  padding:10px 13px;margin-top:10px;border-radius:0 7px 7px 0}
+.fc-rem-label{font-size:0.57rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.1em;color:#0d9488;margin-bottom:4px}
+.fc-rem-text{font-size:0.74rem;color:#1a2332;line-height:1.6}
+/* Remediation (legacy inline) */
+.remediation{background:#f0fdf9;border-left:3px solid #0d9488;padding:8px 12px;
+  font-size:0.78rem;color:#1a2332;margin-top:6px;border-radius:0 6px 6px 0;line-height:1.55}
+
+/* ── Verdict badges ── */
+.vb{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
+  border-radius:4px;font-size:0.62rem;font-weight:800;letter-spacing:0.04em}
+.vb-missed{background:#fee2e2;color:#dc2626}
 .vb-detected{background:#dbeafe;color:#1d4ed8}
 .vb-prevented{background:#dcfce7;color:#16a34a}
 .vb-error{background:#fef3c7;color:#d97706}
+.vb-skipped{background:#f3f4f6;color:#6b7280}
+
+/* ── Tables ── */
+table{width:100%;border-collapse:collapse;font-size:0.77rem;margin-bottom:14px}
+thead th{background:#f0f4f8;color:#5a7a9a;text-transform:uppercase;font-size:0.57rem;
+  letter-spacing:0.08em;font-weight:700;text-align:left;padding:8px 11px;
+  border-bottom:1.5px solid #e0e7ef}
+td{padding:8px 11px;border-bottom:1px solid #f0f4f8;vertical-align:middle;color:#1a2332}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#f7f9fc}
+tbody tr:nth-child(even) td{background:#fbfcfe}
+
+/* ── Misc ── */
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.tool-tag{display:inline-block;background:#eef4ff;color:#2353c4;border:1px solid #cfe0ff;
+  padding:3px 10px;border-radius:20px;font-size:0.72rem;margin:2px 3px 2px 0}
+.comp-pct{font-weight:700}
+.tbar-wrap{width:100%;height:8px;background:#eef1f6;border-radius:4px;overflow:hidden;display:inline-block;min-width:80px;vertical-align:middle;position:relative}
+.tbar-fill{height:100%;border-radius:4px}
+.sev{display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;font-weight:600}
+.sev-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sd-c{background:#dc2626}.sd-h{background:#ea580c}.sd-m{background:#d97706}.sd-l{background:#0d9488}
+.gloss-item{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb}
 </style>
 </head>
 <body>
 
-<!-- ═══ COVER PAGE ════════════════════════════════════════════════════════ -->
+<!-- ══════════════════ COVER ══════════════════ -->
 <div class="page">
 <div class="cover">
-  <div class="cover-band">
-    <div class="cover-logo">
-      {{if .logoDarkUri}}<img class="cover-logo-img" src="{{.logoDarkUri}}" alt="Audspect BAS">{{else}}Aud<span>spect</span> BAS{{end}}
+  <div class="cover-grain"></div>
+  <div class="cover-accent"></div>
+  <div class="cover-accent2"></div>
+
+  <div class="cover-header">
+    <div class="clogo">
+      {{if .logoDarkUri}}<img src="{{.logoDarkUri}}" alt="Audspect BAS" style="height:32px;filter:brightness(0) invert(1);opacity:0.9">{{else}}
+      <div class="clogo-mark">A</div>
+      <div>
+        <div class="clogo-name">Aud<span>spect</span> BAS</div>
+        <div class="clogo-sub">Breach &amp; Attack Simulation Platform</div>
+      </div>
+      {{end}}
     </div>
-    <div class="cover-kicker">Breach &amp; Attack Simulation Platform</div>
   </div>
-  <div class="cover-mid">
-    <div class="cover-title">Security Assessment Report</div>
+
+  <div class="cover-body">
+    <div class="cover-eyebrow">Security Assessment Report</div>
     {{if .scope}}
-    <div class="cover-sub">{{.scope.subtitle}}</div>
-    <div class="cover-meta">
-      <div class="crow"><div class="k">Campaign</div><div class="v"><strong>{{.scope.title}}</strong></div></div>
-      <div class="crow"><div class="k">Scenario</div><div class="v">{{.scope.scenario}}</div></div>
-      <div class="crow"><div class="k">Endpoints</div><div class="v">{{.scope.agentCount}} agent(s) &nbsp;·&nbsp; {{.scope.runCount}} run(s)</div></div>
-      <div class="crow"><div class="k">Assessment Date</div><div class="v">{{fmtTime .summary.lastRunAt}}</div></div>
-      <div class="crow"><div class="k">Report Generated</div><div class="v">{{fmtTime .generatedAt}}</div></div>
-    </div>
+    <div class="cover-title">{{.scope.title}}</div>
+    <div class="cover-sub">{{.scope.subtitle}}<br>ATT&amp;CK-Aligned BAS — Executive &amp; Technical Report</div>
     {{else}}
-    <div class="cover-sub">Endpoint Posture Report</div>
-    <div class="cover-meta">
-      <div class="crow"><div class="k">Agent</div><div class="v"><strong>{{.agent.hostname}}</strong> ({{.agent.ipAddress}})</div></div>
-      <div class="crow"><div class="k">OS / Username</div><div class="v">{{.agent.osVersion}} &nbsp;·&nbsp; {{.agent.username}}</div></div>
-      <div class="crow"><div class="k">Environment</div><div class="v">{{.agent.envLabel}}</div></div>
-      <div class="crow"><div class="k">Assessment Date</div><div class="v">{{fmtTime .summary.lastRunAt}}</div></div>
-      <div class="crow"><div class="k">Report Generated</div><div class="v">{{fmtTime .generatedAt}}</div></div>
-      <div class="crow"><div class="k">Last Scenario</div><div class="v">{{.summary.lastScenarioName}} &nbsp;·&nbsp; {{.summary.totalRuns}} run(s) on record</div></div>
-    </div>
+    <div class="cover-title">Endpoint Security<br>Posture Assessment</div>
+    <div class="cover-sub">ATT&amp;CK-Aligned Breach &amp; Attack Simulation<br>Executive &amp; Technical Report — Confidential</div>
     {{end}}
-    <div class="confidential">⚠ CONFIDENTIAL — For authorized use only</div>
-    {{if .activeFilter}}<div class="filter-badge">&#9660; Filtered View: {{filterLabel .activeFilter}} — {{.filterMatchCount}} of {{.filterTotalCount}} techniques shown &nbsp;·&nbsp; Scores reflect the full unfiltered run</div>{{end}}
+    <div class="cover-rule"></div>
+
+    <div class="cover-grid">
+      {{if .scope}}
+      <div class="cg-cell">
+        <div class="cg-label">Campaign</div>
+        <div class="cg-value">{{.scope.title}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Scenario</div>
+        <div class="cg-value">{{.scope.scenario}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Endpoints Assessed</div>
+        <div class="cg-value">{{.scope.agentCount}} agent(s)</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Runs Aggregated</div>
+        <div class="cg-value">{{.scope.runCount}} run(s)</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Assessment Date</div>
+        <div class="cg-value">{{fmtTime .summary.lastRunAt}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Report Generated</div>
+        <div class="cg-value">{{fmtTime .generatedAt}}</div>
+      </div>
+      {{else}}
+      <div class="cg-cell">
+        <div class="cg-label">Endpoint</div>
+        <div class="cg-value">{{.agent.hostname}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">IP / Environment</div>
+        <div class="cg-value">{{.agent.ipAddress}} &nbsp;&#183;&nbsp; {{.agent.envLabel}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Operating System</div>
+        <div class="cg-value">{{.agent.osVersion}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Logged-in User</div>
+        <div class="cg-value">{{.agent.username}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Assessment Date</div>
+        <div class="cg-value">{{fmtTime .summary.lastRunAt}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Last Scenario</div>
+        <div class="cg-value">{{.summary.lastScenarioName}}</div>
+      </div>
+      {{end}}
+    </div>
+
+    <div class="cover-badges">
+      <div class="cb cb-conf">&#9888; CONFIDENTIAL &#8212; Authorised Recipients Only</div>
+      <div class="cb cb-live">&#10003; Live Simulation &nbsp;&#183;&nbsp; Audspect BAS</div>
+    </div>
+    {{if .activeFilter}}<div class="filter-badge">&#9660; Filtered View: {{filterLabel .activeFilter}} &#8212; {{.filterMatchCount}} of {{.filterTotalCount}} techniques shown &nbsp;&#183;&nbsp; Scores reflect the full unfiltered run</div>{{end}}
   </div>
-</div>
-<div class="footer">
-  <span>Audspect BAS Platform</span>
-  <span>Classification: Confidential</span>
-  <span>{{fmtTime .generatedAt}}</span>
+
+  <div class="cover-bottom">
+    <div class="cover-bottom-copy">
+      Audspect BAS Platform &nbsp;&#183;&nbsp; Classification: CONFIDENTIAL<br>
+      This document contains sensitive security posture information. Do not forward or distribute.
+    </div>
+    <div class="cover-scores">
+      <div class="cs-item">
+        <div class="cs-num" style="color:#0d9488">{{fmtScore .summary.preventionScore}}%</div>
+        <div class="cs-lbl">Prevention</div>
+      </div>
+      <div class="cs-item">
+        <div class="cs-num" style="color:#2563eb">{{fmtScore .summary.detectionScore}}%</div>
+        <div class="cs-lbl">Detection</div>
+      </div>
+      <div class="cs-item">
+        <div class="cs-num" style="color:{{riskColor .summary.classification}}">{{.summary.classification}}</div>
+        <div class="cs-lbl">Risk Class</div>
+      </div>
+    </div>
+  </div>
 </div>
 </div>
 
 <!-- ═══ 1. EXECUTIVE SUMMARY ════════════════════════════════════════════ -->
 <div class="page">
-<h1>1. Executive Summary</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 1</div>
+<div class="stitle">Executive Summary</div>
+
 
 <div class="risk-badge" style="color:{{riskColor .summary.classification}};border-color:{{riskColor .summary.classification}};background:{{riskColor .summary.classification}}18">
   <span style="font-size:1.8rem">{{.summary.riskScore}}</span>
@@ -644,14 +825,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <h2>Executive Conclusion</h2>
 <p style="font-size:0.92rem;line-height:1.7">{{.executiveConclusion}}</p>
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Executive Summary</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 2. ASSESSMENT SUMMARY ═══════════════════════════════════════════ -->
 <div class="page">
-<h1>2. Assessment Summary</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 2</div>
+<div class="stitle">Assessment Summary</div>
+
 
 <div class="score-row">
   <div class="scard">
@@ -816,14 +1012,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   {{if .privilegeSummary.fallbacks}}<tr><td colspan="4" style="color:#d29922;font-size:0.85em">WTS Fallbacks (User→Admin): <strong>{{.privilegeSummary.fallbacks}}</strong> step(s) requested user context but fell back to admin — no interactive session was active.</td></tr>{{end}}
 </table>
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Assessment Summary</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 3. TOP RISK DRIVERS ═════════════════════════════════════════════ -->
 <div class="page">
-<h1>3. Top Risk Drivers</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 3</div>
+<div class="stitle">Top Risk Drivers</div>
+
 <p style="color:#6e7681;margin-bottom:14px">The techniques whose failures account for the most lost prevention points (severity-weighted, the same weighting as the headline score). "Score points" is how much of the 100-point scale each technique's failures <em>account for</em> — not a guaranteed gain from any single fix.</p>
 {{if .topRiskDrivers}}
 <table>
@@ -845,14 +1056,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#0d9488;font-weight:600">✓ No techniques penetrated this endpoint — there are no risk drivers to rank.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Top Risk Drivers</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 4. RISK SUMMARY ═════════════════════════════════════════════════ -->
 <div class="page">
-<h1>4. Risk Summary</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 4</div>
+<div class="stitle">Risk Summary</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Business-objective risk derived from the per-tactic outcome: <strong>High</strong> when most tested techniques in the objective went unprevented, <strong>Medium</strong> when some did, <strong>Low</strong> when all were blocked. Objectives with no executed techniques are omitted.</p>
 {{if .objectiveRisks}}
 <table>
@@ -873,14 +1099,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681">No objective-level results were recorded for this run.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Risk Summary</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 5. ASSET CONTEXT ════════════════════════════════════════════════ -->
 <div class="page">
-<h1>5. Asset Context</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 5</div>
+<div class="stitle">Asset Context</div>
+
 {{if .scope}}
 <table>
   <tr><td>Campaign</td><td><strong>{{.scope.title}}</strong></td></tr>
@@ -930,14 +1171,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <ul style="padding-left:20px;color:#6e7681;font-size:0.82rem">{{range .reverted}}<li>{{.}}</li>{{end}}</ul>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Asset Context</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 6. KILL-CHAIN PATH ══════════════════════════════════════════════ -->
 <div class="page">
-<h1>6. Kill-Chain Path</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 6</div>
+<div class="stitle">Kill-Chain Path</div>
+
 <p style="color:#6e7681;margin-bottom:14px">The chain of kill-chain phases this endpoint's gaps actually permit — built strictly from observed unprevented techniques, ordered by ATT&amp;CK phase. No hypothetical or inferred steps.</p>
 {{if .attackPath.steps}}
 <table>
@@ -955,14 +1211,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#0d9488;font-weight:600">✓ No unprevented techniques formed a traversable kill-chain path this run.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Kill-Chain Path</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 7. ATTACK FLOW ═══════════════════════════════════════════════════ -->
 <div class="page">
-<h1>7. Attack Flow</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 7</div>
+<div class="stitle">Attack Flow</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Per-technique execution outcome ordered by ATT&amp;CK kill-chain phase. Each row shows which security control acted (or failed to act) on the technique and the resulting verdict: <strong style="color:#238636">Blocked</strong> (control prevented execution), <strong style="color:#d29922">Detected</strong> (logged and alerted but not stopped), <strong style="color:#b58800">Logged</strong> (telemetry captured, no alert), or <strong style="color:#da3633">Bypassed</strong> (no control observed the technique).</p>
 
 {{if .attackFlow}}
@@ -1033,14 +1304,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#0d9488;font-weight:600">&#10003; No techniques were executed in this run.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Attack Flow</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 8. ATTACK PATH VALIDATION ═══════════════════════════════════════ -->
 <div class="page">
-<h1>8. Attack Path Validation</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 8</div>
+<div class="stitle">Attack Path Validation</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Lateral-movement reachability mapped as a graph of hosts, users and groups. Recon/relationship analysis only — no exploitation, no propagation. It answers what ART and Caldera cannot: if a host is compromised, how far can an attacker move and can they reach Domain Admin or a crown jewel?</p>
 {{with .attackPathValidation}}
 <div class="score-row">
@@ -1122,14 +1408,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681">No attack-path data has been collected yet. Enable the <code>attackpath.collect</code> task on enrolled agents to map lateral-movement reachability, blast radius, segmentation, and crown-jewel exposure across the fleet.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Attack Path Validation</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 9. TACTIC SUMMARY ═══════════════════════════════════════════════ -->
 <div class="page">
-<h1>9. MITRE ATT&amp;CK Tactic Summary</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 9</div>
+<div class="stitle">MITRE ATT&amp;CK Tactic Summary</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Per-tactic coverage (techniques tested), prevention rate, detection rate, and mean time-to-detect. MTTD shows "—" when detection latency was not measured. Tactics with no tested techniques are omitted.</p>
 {{if .tacticHeatmap}}
 <table>
@@ -1160,8 +1461,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681">No tactic data available. Run a scenario with MITRE-mapped techniques.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Tactic Summary</span>
+</div>
 </div>
 </div>
 
@@ -1169,7 +1471,21 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <!-- ═══ 10. THREAT ACTOR READINESS ═════════════════════════════════════════ -->
 {{if .readinessScores}}
 <div class="page">
-<h1>10. Threat Actor Readiness</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 10</div>
+<div class="stitle">Threat Actor Readiness</div>
+
 <p style="color:#6e7681;margin-bottom:6px">For each ATT&amp;CK threat group whose techniques overlap this assessment, how well are your controls positioned? Derived from the MITRE ATT&amp;CK knowledge base — no external feed required. Worst prevention readiness shown first.</p>
 <p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">
   <strong>Prevention Readiness:</strong> % of tested techniques that were blocked.&nbsp;
@@ -1238,15 +1554,30 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </tbody>
 </table>
 <p style="font-size:0.72rem;color:#6e7681;margin-top:10px">Groups with fewer than 3 tested techniques are excluded. Technique attribution sourced from MITRE ATT&amp;CK&reg;. &copy; The MITRE Corporation.</p>
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} &#8212; Threat Actor Readiness</span>
+</div>
 </div>
 </div>
 {{end}}
 <!-- ═══ 10a. RANSOMWARE READINESS ═══════════════════════════════════════════ -->
 {{if .ransomwareReadiness}}
 <div class="page">
-<h1>10a. Ransomware Readiness</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 10a</div>
+<div class="stitle">Ransomware Readiness</div>
+
 <p style="color:#6e7681;margin-bottom:6px">Prevention and detection readiness against known ransomware threat actors, derived from MITRE ATT&amp;CK technique attribution. Worst performers shown first — these represent the highest breach risk from currently active ransomware groups.</p>
 <p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">Only groups with ≥3 tested techniques are included. Confidence reflects sample size: <strong>High</strong> ≥10 tested, <strong>Medium</strong> ≥5, <strong>Low</strong> 3–4.</p>
 <table>
@@ -1308,8 +1639,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </tbody>
 </table>
 <p style="font-size:0.72rem;color:#6e7681;margin-top:10px">Technique attribution from MITRE ATT&amp;CK&reg; &copy; The MITRE Corporation. Groups identified as ransomware-associated by curated keyword matching.</p>
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} &#8212; Ransomware Readiness</span>
+</div>
 </div>
 </div>
 {{end}}
@@ -1317,7 +1649,21 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <!-- ═══ 10b. EPSS PRIORITY INDEX ═══════════════════════════════════════════ -->
 {{if .priorityScores}}
 <div class="page">
-<h1>10b. EPSS Priority Index</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 10b</div>
+<div class="stitle">EPSS Priority Index</div>
+
 <p style="color:#6e7681;margin-bottom:6px">Composite prioritisation combining CISA KEV active-exploitation status, FIRST EPSS exploitation probability, and ATT&amp;CK threat-actor usage frequency. Techniques with higher scores represent the greatest unremediated risk.</p>
 <p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">
   Formula: <strong>KEV</strong> +40 pts · <strong>EPSS ≥90th %ile</strong> +30 pts · <strong>≥70th</strong> +20 pts · <strong>≥50th</strong> +10 pts · <strong>Threat Actors ≥5</strong> +20 pts · <strong>≥2</strong> +10 pts · <strong>Unblocked</strong> +10 pts.
@@ -1375,8 +1721,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </tbody>
 </table>
 <p style="font-size:0.72rem;color:#6e7681;margin-top:10px">EPSS scores from FIRST.org (offline snapshot). KEV from CISA Known Exploited Vulnerabilities catalog. ATT&amp;CK attribution from MITRE &copy; The MITRE Corporation.</p>
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} &#8212; EPSS Priority Index</span>
+</div>
 </div>
 </div>
 {{end}}
@@ -1384,7 +1731,21 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <!-- ═══ 11. VARIANT COVERAGE ANALYSIS ════════════════════════════════════ -->
 {{if .variantCoverage}}{{if .variantCoverage.hasData}}
 <div class="page">
-<h1>11. Variant Coverage Analysis</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 11</div>
+<div class="stitle">Variant Coverage Analysis</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Multi-variant evasion testing: encoding obfuscation, execution-context, and privilege-tier combinations per technique. Shows which control gaps allowed bypasses and provides targeted remediation guidance.</p>
 
 <div class="score-row">
@@ -1514,8 +1875,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <strong>Trend:</strong> {{if .variantCoverage.trendNote}}{{.variantCoverage.trendNote}}{{else}}No prior variant run on record.{{end}}
 </div>
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} &#8212; Variant Coverage Analysis</span>
+</div>
 </div>
 </div>
 {{end}}{{end}}
@@ -1523,7 +1885,21 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <!-- ═══ 10b. CAMPAIGN VARIANT COVERAGE TRENDS ═══════════════════════════════ -->
 {{if .campaignVariantCoverage}}{{if .campaignVariantCoverage.hasData}}
 <div class="page">
-<h1>11. Variant Coverage Trends</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 11</div>
+<div class="stitle">Variant Coverage Trends</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Aggregated multi-variant evasion results across {{.campaignVariantCoverage.runCount}} campaign run(s). Identifies recurring control gaps, tactic-level weaknesses, and improvement vs the previous campaign.</p>
 
 {{/* ── Trend banner ── */}}
@@ -1635,14 +2011,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </table>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} &#8212; Variant Coverage Trends</span>
+</div>
 </div>
 </div>
 {{end}}{{end}}
 <!-- ═══ 12. ASSESSMENT INSIGHTS ═════════════════════════════════════════ -->
 <div class="page">
-<h1>12. Assessment Insights</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 12</div>
+<div class="stitle">Assessment Insights</div>
+
 {{if .insights.hasData}}
 <div class="score-row">
   {{if .insights.most}}
@@ -1665,14 +2056,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681">Not enough tactic data to derive insights.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Insights</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 13. ACTION PLAN ═════════════════════════════════════════════════ -->
 <div class="page">
-<h1>13. Action Plan</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 13</div>
+<div class="stitle">Action Plan</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Remediations ordered by the prevention-score points their failures account for. The points quantify current exposure attributable to each tactic — they are not a promised score gain, since a single control may not resolve every underlying finding.</p>
 {{if .actionPlan}}
 <table>
@@ -1693,14 +2099,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#0d9488;font-weight:600">✓ No failing tactics — no remediation actions required from this assessment.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Action Plan</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 14. COMPLIANCE STATUS ═══════════════════════════════════════════ -->
 <div class="page">
-<h1>14. Regulatory Compliance Status</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 14</div>
+<div class="stitle">Regulatory Compliance Status</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
 {{if .compliance}}
 <table>
@@ -1727,14 +2148,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681">Compliance data unavailable.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Compliance Status</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 15. SCENARIO RUN HISTORY ════════════════════════════════════════ -->
 <div class="page">
-<h1>15. Scenario Run History</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 15</div>
+<div class="stitle">Scenario Run History</div>
+
 {{if .runs}}
 <table>
   <thead><tr>
@@ -1760,14 +2196,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681">No completed scenario runs found for this agent.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Run History</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 16. TECHNICAL FINDINGS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>16. Technical Findings</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 16</div>
+<div class="stitle">Technical Findings</div>
+
 {{$hasFindings := false}}
 {{range .techniqueMatrix}}{{if and (eq .execVerdict "fail") (or (eq .severity "Critical") (eq .severity "High"))}}{{$hasFindings = true}}{{end}}{{end}}
 {{if $hasFindings}}
@@ -1888,15 +2339,30 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#0d9488;font-weight:600">&#10003; No Critical or High severity failures in the latest run. Continue to validate with future assessments.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Technical Findings</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 17. ENVIRONMENT RESTORATION ════════════════════════════════════════ -->
 {{if .envRestoration}}{{if .envRestoration.hasData}}
 <div class="page">
-<h1>17. Environment Restoration</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 17</div>
+<div class="stitle">Environment Restoration</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Documents whether all simulation-induced environment changes were successfully reverted. Answers the key enterprise question: <em>"Did the BAS restore everything it touched?"</em></p>
 
 {{/* ── Headline status card ── */}}
@@ -2010,14 +2476,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <ul style="padding-left:20px;color:#374151;font-size:0.82rem;line-height:1.8">{{range .reverted}}<li>{{.}}</li>{{end}}</ul>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} &#8212; Environment Restoration</span>
+</div>
 </div>
 </div>
 {{end}}{{end}}
 <!-- ═══ 18. DETECTION VALIDATION ════════════════════════════════════════ -->
 <div class="page">
-<h1>18. Detection Validation</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 18</div>
+<div class="stitle">Detection Validation</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
 
 <h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
@@ -2111,14 +2592,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Detection Validation</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 19. COVERAGE ANALYTICS ══════════════════════════════════════════ -->
 <div class="page">
-<h1>19. Coverage Analytics</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 19</div>
+<div class="stitle">Coverage Analytics</div>
+
 <p style="color:#6e7681;margin-bottom:14px">
   3-bucket breakdown of every technique executed in this assessment.
   <strong style="color:#0d9488">Prevented</strong> — a control blocked execution (PASS/BLOCKED).
@@ -2242,14 +2738,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681">No technique execution data available. Run a scenario to populate coverage analytics.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — Coverage Analytics</span>
+</div>
 </div>
 </div>
 
 <!-- ═══ 20. TECHNICAL APPENDIX — GLOSSARY ═══════════════════════════════ -->
 <div class="page">
-<h1>20. Technical Appendix — ATT&amp;CK Glossary</h1>
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 20</div>
+<div class="stitle">Technical Appendix — ATT&amp;CK Glossary</div>
+
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
 {{range .glossary}}
@@ -2266,9 +2777,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681">No ATT&amp;CK-mapped techniques were exercised in this assessment.</p>
 {{end}}
 
-<div class="footer">
+<div class="pf">
   <span>{{.agent.hostname}} — ATT&amp;CK Glossary</span>
   <span>Generated {{fmtTime .generatedAt}} &nbsp;·&nbsp; Audspect BAS Platform &nbsp;·&nbsp; CONFIDENTIAL</span>
+</div>
 </div>
 </div>
 
