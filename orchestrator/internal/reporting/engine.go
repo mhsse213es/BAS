@@ -273,6 +273,15 @@ type DetectionTechnique struct {
 	TimeToDetectMs int64  `json:"timeToDetectMs,omitempty"`
 }
 
+// RemediationPlan is structured remediation guidance for a failing technique.
+// Priority / Owner / Effort map to the four fields on the report finding card.
+type RemediationPlan struct {
+	Priority     string `json:"priority"`     // Critical | High | Medium | Low
+	Owner        string `json:"owner"`        // team responsible for the fix
+	Effort       string `json:"effort"`       // Hours | Days | Weeks
+	Verification string `json:"verification"` // how to confirm the fix worked
+}
+
 // TechniqueRow is one row in the Detection Validation table — execution verdict
 // combined with post-run EDR/alert correlation for the same technique.
 type TechniqueRow struct {
@@ -307,6 +316,9 @@ type TechniqueRow struct {
 	Details        string `json:"details,omitempty"`
 	Remediation    string `json:"remediation,omitempty"`
 	BusinessImpact string `json:"businessImpact,omitempty"`
+	Command        string          `json:"command,omitempty"`   // human-readable step command from scenario YAML
+	Framework      string          `json:"framework,omitempty"` // art | caldera | sigma | custom
+	RemPlan        RemediationPlan `json:"remPlan,omitempty"`
 }
 
 // CoverageBreakdown is the 3-bucket summary of all technique-level verdicts
@@ -756,6 +768,9 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 			Details:        r.Details,
 			Remediation:    r.Remediation,
 			BusinessImpact: tacticBusinessImpact(r.Technique.Tactic, r.Technique.ID),
+			Command:        r.Command,
+			Framework:      r.Framework,
+			RemPlan:        remediationPlan(r.Technique.Tactic, r.Technique.ID, r.Severity),
 		}
 		if r.BlockingControl != nil {
 			row.ControlName   = r.BlockingControl.Name
@@ -1034,9 +1049,18 @@ type Finding struct {
 	Details       string `json:"details"`
 	Remediation   string `json:"remediation"`
 	ScenarioName  string `json:"scenarioName"`
-	BusinessImpact string `json:"businessImpact,omitempty"`
-	KEV            bool   `json:"kev"`      // technique has ≥1 active CISA KEV CVE
-	KEVCount       int    `json:"kevCount"` // number of KEV CVEs linked
+	BusinessImpact   string          `json:"businessImpact,omitempty"`
+	ExecVerdict      string          `json:"execVerdict,omitempty"`
+	ExecutedAs       string          `json:"executedAs,omitempty"`
+	RequestedPriv    string          `json:"requestedPriv,omitempty"`
+	DetectionVerdict string          `json:"detectionVerdict,omitempty"`
+	CleanupVerdict   string          `json:"cleanupVerdict,omitempty"`
+	DurationMs       int64           `json:"durationMs,omitempty"`
+	Command          string          `json:"command,omitempty"`
+	Framework        string          `json:"framework,omitempty"`
+	RemPlan          RemediationPlan `json:"remPlan,omitempty"`
+	KEV              bool            `json:"kev"`      // technique has ≥1 active CISA KEV CVE
+	KEVCount         int             `json:"kevCount"` // number of KEV CVEs linked
 }
 
 // RunSummary is one row in the Scenario Run History table.
@@ -2090,6 +2114,146 @@ func tacticBusinessImpact(tactic, techniqueID string) string {
 	return ""
 }
 
+// remediationPlan returns structured remediation guidance (Priority / Owner /
+// Effort / Verification) for a failing technique. Technique-level overrides
+// provide specific actionable steps; severity and tactic-level fallbacks ensure
+// every finding has coverage.
+func remediationPlan(tactic, techniqueID, severity string) RemediationPlan {
+	tid := strings.ToUpper(strings.TrimSpace(techniqueID))
+	tac := strings.ToLower(strings.TrimSpace(tactic))
+
+	switch tid {
+	case "T1003", "T1003.001":
+		return RemediationPlan{
+			Priority:     "Critical",
+			Owner:        "Active Directory / Identity Team",
+			Effort:       "Days",
+			Verification: "Re-run LSASS dump test — result must change to BLOCKED. Enable Credential Guard via Group Policy (Device Guard) and confirm with Get-WinEvent -FilterHashtable @{LogName='System'; Id=12}. Verify Event ID 4656 fires in Windows Security log on any LSASS handle attempt.",
+		}
+	case "T1003.002", "T1003.003", "T1003.004", "T1003.005", "T1003.006", "T1003.007", "T1003.008":
+		return RemediationPlan{
+			Priority:     "Critical",
+			Owner:        "Active Directory / Identity Team",
+			Effort:       "Days",
+			Verification: "Re-run the credential dump sub-technique — result must change to BLOCKED. Audit SAM/NTDS/LSA secret access via Windows Security Event 4663. Restrict access to credential stores using SACL auditing and Protected Users group.",
+		}
+	case "T1486":
+		return RemediationPlan{
+			Priority:     "Critical",
+			Owner:        "Endpoint Security / Backup Team",
+			Effort:       "Weeks",
+			Verification: "Re-run ransomware simulation — file encryption must be BLOCKED by Controlled Folder Access or EDR policy. Verify an immutable offline backup exists with a last-restore-date under 24 hours. Execute a test restore on a non-production asset and document RTO.",
+		}
+	case "T1055", "T1055.001", "T1055.002", "T1055.003", "T1055.004", "T1055.012":
+		return RemediationPlan{
+			Priority:     "Critical",
+			Owner:        "Endpoint Security Team",
+			Effort:       "Days",
+			Verification: "Re-run process injection test — must produce BLOCKED verdict. Enable Windows Defender Exploit Protection memory protections (Enable-ExploitProtection) or equivalent EDR injection-prevention policy. Confirm injection events log to SIEM.",
+		}
+	case "T1078", "T1078.001", "T1078.002", "T1078.003", "T1078.004":
+		return RemediationPlan{
+			Priority:     "Critical",
+			Owner:        "Active Directory / IAM Team",
+			Effort:       "Days",
+			Verification: "Enroll all privileged accounts in MFA. Deploy LAPS for local admin accounts. Audit logon events (Event 4624/4625) for anomalous access. Re-test with a controlled credential spray — all attempts must be detected or blocked.",
+		}
+	case "T1059", "T1059.001", "T1059.003":
+		return RemediationPlan{
+			Priority:     "High",
+			Owner:        "Endpoint Security Team",
+			Effort:       "Days",
+			Verification: "Enable PowerShell Constrained Language Mode and Script Block Logging. Re-run scripting execution test — EDR must alert or block. Confirm AMSI events appear in Windows Defender event log (Event ID 1116 / 1117).",
+		}
+	case "T1053", "T1053.002", "T1053.003", "T1053.005":
+		return RemediationPlan{
+			Priority:     "High",
+			Owner:        "IT / SysAdmin Team",
+			Effort:       "Days",
+			Verification: `Re-run scheduled task persistence test — Sysmon Event ID 1 (process create: schtasks.exe) must be captured and alerted. Audit existing tasks: Get-ScheduledTask | Where-Object {$_.TaskPath -notlike '\Microsoft*'}. Remove or document any unlisted tasks.`,
+		}
+	case "T1547", "T1547.001":
+		return RemediationPlan{
+			Priority:     "High",
+			Owner:        "IT / SysAdmin Team",
+			Effort:       "Days",
+			Verification: "Re-run registry run-key persistence test — Sysmon Event ID 13 (registry value set) must be captured and alerted on HKCU/HKLM Run keys. Deploy AppLocker or WDAC rules to block execution from user-writable locations.",
+		}
+	case "T1562", "T1562.001":
+		return RemediationPlan{
+			Priority:     "Critical",
+			Owner:        "SOC / Endpoint Security Team",
+			Effort:       "Hours",
+			Verification: "Enable Tamper Protection on all endpoints via Microsoft Intune or Defender policy. Re-run defense evasion test — tamper attempt must be BLOCKED. Confirm Get-MpComputerStatus shows IsTamperProtected: True on all endpoints.",
+		}
+	case "T1190":
+		return RemediationPlan{
+			Priority:     "Critical",
+			Owner:        "SOC / Perimeter Security Team",
+			Effort:       "Days",
+			Verification: "Apply vendor patch or WAF rule for the exploited vulnerability. Re-run exploit test against the patched asset — result must change to BLOCKED. Confirm WAF logs show the attempt and that the vulnerability scanner no longer reports the CVE.",
+		}
+	}
+
+	p := RemediationPlan{}
+	switch severity {
+	case "Critical":
+		p.Priority = "Critical"
+		p.Effort = "Days"
+	case "High":
+		p.Priority = "High"
+		p.Effort = "Days"
+	case "Medium":
+		p.Priority = "Medium"
+		p.Effort = "Weeks"
+	default:
+		p.Priority = "Low"
+		p.Effort = "Weeks"
+	}
+	switch tac {
+	case "initial-access":
+		p.Owner = "SOC / Perimeter Security Team"
+		p.Verification = "Re-test initial access vector after control change. Confirm network perimeter and email gateway logs block and alert on the attempt."
+	case "execution":
+		p.Owner = "Endpoint Security Team"
+		p.Verification = "Re-run execution technique after applying EDR behavioral rule. AMSI or EDR event must fire. Verify process creation events are captured in SIEM."
+	case "persistence":
+		p.Owner = "IT / SysAdmin Team"
+		p.Verification = "Re-run persistence technique after deploying detection rule. Verify Sysmon or Windows Event capture the action. Audit startup locations for unauthorised entries."
+	case "privilege-escalation":
+		p.Owner = "Active Directory / Endpoint Team"
+		p.Verification = "Apply least-privilege policy and re-run escalation test. Verify admin tokens are not accessible to standard users. Confirm LAPS is active on target."
+	case "defense-evasion":
+		p.Owner = "Endpoint Security Team"
+		p.Verification = "Enable additional EDR behavioral rules and Tamper Protection. Re-run evasion test — EDR must detect or block. Verify Tamper Protection is active on all endpoints."
+	case "credential-access":
+		p.Owner = "Active Directory / Identity Team"
+		p.Verification = "Enable Credential Guard and audit credential access events (Event IDs 4648, 4776, 4768). Re-run credential access technique — result must change to BLOCKED."
+	case "discovery":
+		p.Owner = "Endpoint Security Team"
+		p.Verification = "Deploy UEBA or behavioral rule for reconnaissance activity. Re-run discovery technique — SIEM must generate an alert on the enumeration behaviour."
+	case "lateral-movement":
+		p.Owner = "Network Security Team"
+		p.Verification = "Restrict SMB/WinRM/RDP between non-admin workstations via firewall policy. Re-run lateral movement technique — connection must be blocked or alerted."
+	case "collection":
+		p.Owner = "SOC / DLP Team"
+		p.Verification = "Deploy DLP policy for sensitive file access patterns. Re-run collection technique — DLP rule must alert. Verify SIEM captures file read events on sensitive paths."
+	case "command-and-control":
+		p.Owner = "Network Security Team"
+		p.Verification = "Block identified C2 channels via proxy/firewall. Deploy DNS filtering for known-bad domains. Re-run C2 technique — outbound connection must be blocked."
+	case "exfiltration":
+		p.Owner = "SOC / DLP Team"
+		p.Verification = "Enable DLP outbound data transfer rules. Re-run exfiltration technique — data transfer must be blocked or alerted. Verify alert fires in SIEM within 5 minutes."
+	case "impact":
+		p.Owner = "Endpoint Security / Backup Team"
+		p.Verification = "Enable Controlled Folder Access and validate immutable backup exists. Re-run impact technique — file modification must be BLOCKED. Confirm backup restore is tested and RTO documented."
+	default:
+		p.Owner = "Security Team"
+		p.Verification = "Re-run this technique after applying the recommended control. The verdict must change from FAIL to BLOCKED or DETECTED. Confirm the detection event appears in SIEM."
+	}
+	return p
+}
+
 func buildTopFindings(results []models.SimulationResult, scenarioName string) []Finding {
 	var findings []Finding
 	// Deduplicate by technique: the same technique failing across several atomic
@@ -2112,14 +2276,23 @@ func buildTopFindings(results []models.SimulationResult, scenarioName string) []
 		}
 		seen[key] = true
 		findings = append(findings, Finding{
-			TechniqueID:    r.Technique.ID,
-			TechniqueName:  r.Technique.Name,
-			Tactic:         r.Technique.Tactic,
-			Severity:       r.Severity,
-			Details:        r.Details,
-			Remediation:    r.Remediation,
-			BusinessImpact: tacticBusinessImpact(r.Technique.Tactic, r.Technique.ID),
-			ScenarioName:   scenarioName,
+			TechniqueID:      r.Technique.ID,
+			TechniqueName:    r.Technique.Name,
+			Tactic:           r.Technique.Tactic,
+			Severity:         r.Severity,
+			Details:          r.Details,
+			Remediation:      r.Remediation,
+			BusinessImpact:   tacticBusinessImpact(r.Technique.Tactic, r.Technique.ID),
+			ScenarioName:     scenarioName,
+			ExecVerdict:      string(r.Result),
+			ExecutedAs:       privLabel(r.ExecutedAs),
+			RequestedPriv:    privLabel(r.RequestedPriv),
+			DetectionVerdict: r.DetectionVerdict,
+			CleanupVerdict:   r.CleanupVerdict,
+			DurationMs:       r.DurationMs,
+			Command:          r.Command,
+			Framework:        r.Framework,
+			RemPlan:          remediationPlan(r.Technique.Tactic, r.Technique.ID, r.Severity),
 		})
 	}
 	return findings

@@ -310,6 +310,16 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return "#6e7681"
 	},
+	"agentStatusColor": func(status string) string {
+		switch strings.ToLower(strings.TrimSpace(status)) {
+		case "active", "online":
+			return "#0d9488"
+		case "idle":
+			return "#d29922"
+		default:
+			return "#6e7681"
+		}
+	},
 }).Parse(reportHTML))
 
 // ── Logo helpers ──────────────────────────────────────────────────────────────
@@ -395,7 +405,8 @@ type ComplianceSummaryRow struct {
 
 // ── Template ──────────────────────────────────────────────────────────────────
 
-const reportHTML = `<!DOCTYPE html>
+const reportHTML = `{{define "pf-right"}}{{if or .agent.ipAddress .agent.status}}<span>{{if .agent.ipAddress}}{{.agent.ipAddress}}&nbsp;&middot;&nbsp;{{end}}{{if .agent.status}}<span style="color:{{agentStatusColor .agent.status}}">&#9679;</span>&nbsp;{{.agent.status}}&nbsp;&middot;&nbsp;{{end}}Audspect&nbsp;BAS</span>{{end}}{{end}}
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -780,6 +791,12 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
         <div class="cg-label">Last Scenario</div>
         <div class="cg-value">{{.summary.lastScenarioName}}</div>
       </div>
+      {{if .agent.status}}
+      <div class="cg-cell">
+        <div class="cg-label">Agent Status</div>
+        <div class="cg-value" style="color:{{agentStatusColor .agent.status}};font-weight:700">&#9679; {{.agent.status}}</div>
+      </div>
+      {{end}}
       {{end}}
     </div>
 
@@ -923,6 +940,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Executive Summary</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1110,6 +1128,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Assessment Summary</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1154,6 +1173,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Top Risk Drivers</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1197,6 +1217,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Risk Summary</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1269,6 +1290,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Asset Context</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1291,6 +1313,35 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <div class="stitle">Kill-Chain Path</div>
 
 <p style="color:#6e7681;margin-bottom:14px">The chain of kill-chain phases this endpoint's gaps actually permit — built strictly from observed unprevented techniques, ordered by ATT&amp;CK phase. No hypothetical or inferred steps.</p>
+
+{{if .killChain}}
+<!-- Attack Simulation Timeline — all executed steps ordered by ATT&CK phase -->
+<div style="margin-bottom:20px">
+  <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin-bottom:10px">Attack Simulation Timeline</div>
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <div style="display:flex;align-items:flex-start;min-width:fit-content;padding:4px 2px 10px">
+      {{range $i,$s := .killChain}}
+      {{if $i}}<div style="flex:1;min-width:20px;max-width:48px;height:2px;margin-top:20px;align-self:flex-start;background:{{if eq $s.outcome "prevented"}}#0d9488{{else if eq $s.outcome "detected"}}#d29922{{else}}#da3633{{end}}"></div>{{end}}
+      <div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:78px;max-width:96px;flex-shrink:0">
+        <div style="width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:{{if eq $s.outcome "prevented"}}#0d9488{{else if eq $s.outcome "detected"}}#d29922{{else}}#da3633{{end}}">
+          <span style="font-size:11px;color:#fff;line-height:1">{{if eq $s.outcome "prevented"}}&#10003;{{else if eq $s.outcome "detected"}}!{{else}}&#10007;{{end}}</span>
+        </div>
+        <div style="font-size:0.42rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#6e7681;text-align:center;padding:0 2px">{{humanize $s.phase}}</div>
+        <div style="font-size:0.5rem;font-weight:700;color:#c9d1d9;font-family:monospace;text-align:center">{{$s.techniqueId}}</div>
+        <div style="font-size:0.45rem;color:#8b949e;text-align:center;line-height:1.3;max-width:92px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">{{$s.technique}}</div>
+        <div style="font-size:0.44rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:{{if eq $s.outcome "prevented"}}#0d9488{{else if eq $s.outcome "detected"}}#d29922{{else}}#da3633{{end}}">{{$s.outcome}}</div>
+      </div>
+      {{end}}
+    </div>
+  </div>
+  <div style="display:flex;gap:16px;margin-top:6px">
+    <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#6e7681"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#0d9488"></span>Prevented</div>
+    <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#6e7681"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#d29922"></span>Detected (not blocked)</div>
+    <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#6e7681"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#da3633"></span>Missed (no detection)</div>
+  </div>
+</div>
+{{end}}
+
 {{if .attackPath.steps}}
 <table>
   <thead><tr><th>Phase</th><th>Unprevented Techniques</th></tr></thead>
@@ -1309,6 +1360,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Kill-Chain Path</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1402,6 +1454,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Attack Flow</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1506,6 +1559,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Attack Path Validation</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1559,6 +1613,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Tactic Summary</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1652,6 +1707,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="font-size:0.72rem;color:#6e7681;margin-top:10px">Groups with fewer than 3 tested techniques are excluded. Technique attribution sourced from MITRE ATT&amp;CK&reg;. &copy; The MITRE Corporation.</p>
 <div class="pf">
   <span>{{.agent.hostname}} &#8212; Threat Actor Readiness</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1737,6 +1793,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="font-size:0.72rem;color:#6e7681;margin-top:10px">Technique attribution from MITRE ATT&amp;CK&reg; &copy; The MITRE Corporation. Groups identified as ransomware-associated by curated keyword matching.</p>
 <div class="pf">
   <span>{{.agent.hostname}} &#8212; Ransomware Readiness</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1819,6 +1876,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="font-size:0.72rem;color:#6e7681;margin-top:10px">EPSS scores from FIRST.org (offline snapshot). KEV from CISA Known Exploited Vulnerabilities catalog. ATT&amp;CK attribution from MITRE &copy; The MITRE Corporation.</p>
 <div class="pf">
   <span>{{.agent.hostname}} &#8212; EPSS Priority Index</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -1973,6 +2031,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} &#8212; Variant Coverage Analysis</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -2109,6 +2168,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} &#8212; Variant Coverage Trends</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -2154,6 +2214,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Insights</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -2197,6 +2258,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Action Plan</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -2246,6 +2308,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Compliance Status</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -2294,6 +2357,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Run History</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -2335,17 +2399,18 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
         {{.techniqueName}}
         {{$actors := techActors .techniqueId}}{{if $actors}}&nbsp;<span style="font-size:0.62rem;color:#9aa5b5;font-weight:400">&#8212; {{range $i,$a := $actors}}{{if $i}}, {{end}}{{$a}}{{end}}</span>{{end}}
       </div>
-      <div class="fc-tid">{{.techniqueId}} &nbsp;&#183;&nbsp; {{humanize .tactic}} &nbsp;&#183;&nbsp; Duration: {{if .durationMs}}{{.durationMs}}ms{{else}}&#8212;{{end}}</div>
+      <div class="fc-tid">{{.techniqueId}} &nbsp;&#183;&nbsp; {{humanize .tactic}} &nbsp;&#183;&nbsp; Duration: {{if .durationMs}}{{.durationMs}}ms{{else}}&#8212;{{end}}{{if .framework}} &nbsp;&#183;&nbsp; <span style="color:#58a6ff;font-weight:700;text-transform:uppercase;font-size:0.52rem">{{.framework}}</span>{{end}}</div>
     </div>
     <span class="vb vb-missed">&#10007; EVADED</span>
   </div>
   <div class="fc-body">
     <div class="fc-grid">
       <div>
-        {{if .details}}<div class="fc-detail-row">
+        <div class="fc-detail-row">
           <div class="fc-detail-label">What Happened</div>
-          <div class="fc-detail-value">{{.details}}</div>
-        </div>{{end}}
+          {{if .details}}<div class="fc-detail-value">{{.details}}</div>
+          {{else}}<div class="fc-detail-value" style="color:#da3633;font-weight:600">Technique executed to completion without being blocked or detected. No security control intervened during the simulation window.</div>{{end}}
+        </div>
         {{if or .executedAs .requestedPriv}}<div class="fc-detail-row">
           <div class="fc-detail-label">Executed As</div>
           <div class="fc-detail-value">
@@ -2378,8 +2443,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
       <div>
         <div class="fc-evidence">
           <div class="fc-ev-hdr">Execution Evidence</div>
-          <div class="fc-ev-row"><div class="fc-ev-k">Exec Verdict</div><div class="fc-ev-v bad">FAIL &#8212; ran to completion</div></div>
+          <div class="fc-ev-row"><div class="fc-ev-k">Exec Verdict</div><div class="fc-ev-v bad">FAIL — technique ran to completion; no control blocked execution</div></div>
           {{if .durationMs}}<div class="fc-ev-row"><div class="fc-ev-k">Duration</div><div class="fc-ev-v">{{.durationMs}} ms</div></div>{{end}}
+          {{if .command}}<div class="fc-ev-row"><div class="fc-ev-k">Command Used</div><div class="fc-ev-v code" style="word-break:break-all;font-size:0.62rem;line-height:1.5">{{.command}}</div></div>{{end}}
+          {{if .framework}}<div class="fc-ev-row"><div class="fc-ev-k">Framework</div><div class="fc-ev-v"><span style="color:#58a6ff;font-weight:700;text-transform:uppercase">{{.framework}}</span></div></div>{{end}}
           {{if .alertProvider}}<div class="fc-ev-sec">
             <div class="fc-ev-sec-lbl">Detection Details</div>
             {{if .alertProvider}}<div class="fc-ev-row"><div class="fc-ev-k">Source</div><div class="fc-ev-v">{{.alertProvider}}</div></div>{{end}}
@@ -2418,6 +2485,29 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
       <div class="fc-rem-text">{{.remediation}}</div>
     </div>
     {{end}}
+    {{if or .remPlan.priority .remPlan.owner}}
+    <div style="margin-top:12px;border-top:1px solid #e7eaf0;padding-top:10px">
+      <div style="font-size:0.6rem;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin-bottom:8px">&#9654; Remediation Plan</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        {{if .remPlan.priority}}<div style="background:#f8faff;border:1px solid #e7eaf0;border-radius:6px;padding:7px 10px">
+          <div style="font-size:0.5rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9aa5b5;margin-bottom:2px">Priority</div>
+          <div style="font-size:0.78rem;font-weight:800;color:{{if eq .remPlan.priority "Critical"}}#da3633{{else if eq .remPlan.priority "High"}}#f0883e{{else if eq .remPlan.priority "Medium"}}#d29922{{else}}#0d9488{{end}}">{{.remPlan.priority}}</div>
+        </div>{{end}}
+        {{if .remPlan.owner}}<div style="background:#f8faff;border:1px solid #e7eaf0;border-radius:6px;padding:7px 10px">
+          <div style="font-size:0.5rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9aa5b5;margin-bottom:2px">Owner</div>
+          <div style="font-size:0.72rem;font-weight:600;color:#24292f;line-height:1.4">{{.remPlan.owner}}</div>
+        </div>{{end}}
+        {{if .remPlan.effort}}<div style="background:#f8faff;border:1px solid #e7eaf0;border-radius:6px;padding:7px 10px">
+          <div style="font-size:0.5rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9aa5b5;margin-bottom:2px">Estimated Effort</div>
+          <div style="font-size:0.78rem;font-weight:600;color:#24292f">{{.remPlan.effort}}</div>
+        </div>{{end}}
+        {{if .remPlan.verification}}<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:7px 10px;grid-column:span 2">
+          <div style="font-size:0.5rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#166534;margin-bottom:3px">How to Verify Fix</div>
+          <div style="font-size:0.68rem;color:#166534;line-height:1.55">{{.remPlan.verification}}</div>
+        </div>{{end}}
+      </div>
+    </div>
+    {{end}}
   </div>
 </div>
 {{end}}
@@ -2443,6 +2533,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Technical Findings</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -2580,6 +2671,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} &#8212; Environment Restoration</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -2696,6 +2788,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Detection Validation</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>
@@ -2842,6 +2935,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 
 <div class="pf">
   <span>{{.agent.hostname}} — Coverage Analytics</span>
+  {{template "pf-right" .}}
 </div>
 </div>
 </div>

@@ -1198,6 +1198,64 @@ func (d *rpt) finding(n int, f Finding) {
 	if f.Remediation != "" {
 		d.labelled("Remediation", f.Remediation)
 	}
+	if f.RemPlan.Priority != "" {
+		pdf2 := d.pdf
+		d.ensure(6)
+		// Priority + Owner on one line
+		d.text(rgb{99, 102, 241})
+		pdf2.SetFont("Helvetica", "B", 7)
+		pdf2.SetX(margin + 4)
+		d.cellT(22, 4.2, "Priority")
+		var pc rgb
+		switch f.RemPlan.Priority {
+		case "Critical":
+			pc = rgb{218, 54, 51}
+		case "High":
+			pc = rgb{240, 136, 62}
+		case "Medium":
+			pc = rgb{210, 153, 34}
+		default:
+			pc = rgb{13, 148, 136}
+		}
+		d.text(pc)
+		pdf2.SetFont("Helvetica", "B", 8.5)
+		pdf2.SetX(margin + 26)
+		d.cellT(36, 4.2, f.RemPlan.Priority)
+		if f.RemPlan.Owner != "" {
+			d.text(rgb{99, 102, 241})
+			pdf2.SetFont("Helvetica", "B", 7)
+			pdf2.SetX(margin + 64)
+			d.cellT(18, 4.2, "Owner")
+			d.text(cInk)
+			pdf2.SetFont("Helvetica", "", 7.8)
+			pdf2.SetX(margin + 82)
+			d.mcellT(contentW-82, 4.2, f.RemPlan.Owner, "", "L", false)
+		}
+	}
+	if f.RemPlan.Effort != "" {
+		pdf2 := d.pdf
+		d.ensure(5)
+		d.text(rgb{99, 102, 241})
+		pdf2.SetFont("Helvetica", "B", 7)
+		pdf2.SetX(margin + 4)
+		d.cellT(22, 4.2, "Effort")
+		d.text(cInk)
+		pdf2.SetFont("Helvetica", "", 8)
+		pdf2.SetX(margin + 26)
+		d.cellT(40, 4.2, f.RemPlan.Effort)
+	}
+	if f.RemPlan.Verification != "" {
+		pdf2 := d.pdf
+		d.ensure(8)
+		d.text(rgb{22, 101, 52})
+		pdf2.SetFont("Helvetica", "B", 7)
+		pdf2.SetX(margin + 4)
+		d.cellT(22, 4.2, "How to Verify")
+		d.text(rgb{22, 101, 52})
+		pdf2.SetFont("Helvetica", "I", 7.5)
+		pdf2.SetX(margin + 26)
+		d.mcellT(contentW-26, 4.2, f.RemPlan.Verification, "", "L", false)
+	}
 	d.threatIntel(f.TechniqueID)
 	// Accent left bar spanning the block (same page only).
 	yEnd := pdf.GetY()
