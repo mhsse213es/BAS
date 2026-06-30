@@ -2598,6 +2598,41 @@ body.theme-slate {
         <!-- Stats row -->
         <div id="vex-stats" class="score-grid" style="margin-bottom:1rem"></div>
 
+        <!-- Full Sweep banner -->
+        <div class="card" id="vex-sweep-card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem">
+            <div>
+              <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.25rem;display:flex;align-items:center;gap:0.5rem">
+                <svg viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6" style="width:16px;height:16px;flex-shrink:0"><path d="M3 10a7 7 0 1 1 14 0A7 7 0 0 1 3 10z"/><path d="m10 7 3 3-3 3M7 10h6"/></svg>
+                Full Variant Sweep
+              </div>
+              <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> ART techniques sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+              <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px">
+                <option value="">Select agent…</option>
+              </select>
+              <select id="vex-sweep-mode" class="btn btn-outline" style="font-size:0.8rem">
+                <option value="sequential">All variants</option>
+                <option value="adaptive">Adaptive (stop on bypass)</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;color:var(--muted);cursor:pointer;white-space:nowrap">
+                <input type="checkbox" id="vex-sweep-advanced" style="accent-color:var(--accent)"> Advanced Pack
+              </label>
+              <button id="vex-sweep-btn" class="btn btn-primary" onclick="vexRunFullSweep()" style="white-space:nowrap">▶ Start Sweep</button>
+            </div>
+          </div>
+          <div id="vex-sweep-progress" style="display:none;margin-top:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;font-size:0.78rem">
+              <span id="vex-sweep-status" style="color:var(--muted)"></span>
+              <span id="vex-sweep-pct" style="font-weight:700;color:var(--accent)"></span>
+            </div>
+            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div id="vex-sweep-bar" style="height:5px;background:var(--accent);border-radius:3px;width:0%;transition:width 0.5s ease"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Run form + result side-by-side -->
         <div style="display:grid;grid-template-columns:minmax(320px,380px) 1fr;width:100%;gap:1rem;margin-bottom:1rem;align-items:start">
           <!-- Run form -->
@@ -10172,6 +10207,7 @@ function loadVariantStats() {
       vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString() + ' ART tests across ' + artTech + ' techniques \xd7 encoding/privilege/context') +
       vexStatCard('Custom Payload Families', s.payloadFamilyCount,   'var(--text)',   s.payloadFamilyCount + ' families \xd7 ' + (s.variantsPerFamily || 56) + ' variants = ' + (s.payloadFamilyVariants || 0).toLocaleString()) +
       vexStatCard('Custom-Enhanced Techniques', s.techniquesWithFamilies, 'var(--text)', 'of ' + artTech + ' ART techniques have custom payload families');
+    _updateSweepVariantCount(s.availableVariants);
   }).catch(function() {});
 }
 
@@ -10184,13 +10220,15 @@ function vexStatCard(label, val, col, sub) {
 
 function populateVexAgents() {
   apicall('/api/agents').then(function(agents) {
-    var sel = document.getElementById('vex-agent');
-    if (!sel) return;
     var online = (agents || []).filter(function(a) { return a.status !== 'offline'; });
-    sel.innerHTML = '<option value="">Select agent…</option>' +
+    var opts = '<option value="">Select agent…</option>' +
       online.map(function(a) {
         return '<option value="' + x(a.id) + '">' + x(a.hostname || a.id) + '</option>';
       }).join('');
+    var sel = document.getElementById('vex-agent');
+    if (sel) sel.innerHTML = opts;
+    var sweepSel = document.getElementById('vex-sweep-agent');
+    if (sweepSel) sweepSel.innerHTML = opts;
   }).catch(function() {});
 }
 
@@ -10199,12 +10237,16 @@ var _vexAllTechniques = [];
 function populateVexTechniques() {
   apicall('/api/art/techniques').then(function(techs) {
     _vexAllTechniques = (techs || []).filter(function(t) { return t.id; });
+    // Update sweep card counts
+    var n = _vexAllTechniques.length;
+    var techCountEl = document.getElementById('vex-sweep-tech-count');
+    if (techCountEl) techCountEl.textContent = n;
     // Populate tactic dropdown
     var tactics = {};
     _vexAllTechniques.forEach(function(t) { if (t.tactic) tactics[t.tactic] = true; });
     var tacSel = document.getElementById('vex-tactic');
     if (tacSel) {
-      var tacOpts = '<option value="">All tactics (' + _vexAllTechniques.length + ' techniques)</option>';
+      var tacOpts = '<option value="">All tactics (' + n + ' techniques)</option>';
       Object.keys(tactics).sort().forEach(function(tc) {
         var label = tc.replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
         tacOpts += '<option value="' + x(tc) + '">' + x(label) + '</option>';
@@ -10216,6 +10258,88 @@ function populateVexTechniques() {
     var el = document.getElementById('vex-technique-list');
     if (el) el.innerHTML = '<div style="color:var(--danger);font-size:0.75rem;padding:0.4rem">Failed to load techniques</div>';
   });
+}
+
+// Update the sweep card "N total variants" once stats load.
+// Called from loadVariantStats after the API responds.
+function _updateSweepVariantCount(availableVariants) {
+  var el = document.getElementById('vex-sweep-total-variants');
+  if (el && availableVariants) el.textContent = availableVariants.toLocaleString() + '+ variants';
+}
+
+var _vexSweepRunning = false;
+
+function vexRunFullSweep() {
+  if (_vexSweepRunning) { showToast('Sweep already in progress', 'err'); return; }
+  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
+  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
+  if (!_vexAllTechniques.length) { showToast('Technique list still loading — wait a moment', 'err'); return; }
+  var n = _vexAllTechniques.length;
+  var mode = (document.getElementById('vex-sweep-mode') || {}).value || 'sequential';
+  var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
+  if (!confirm('Start Full Variant Sweep:\n\n  ' + n + ' techniques dispatched sequentially\n  ~' + (n * 33).toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
+
+  var techniques = _vexAllTechniques.map(function(t) { return t.id; });
+  _vexSweepRunning = true;
+  var btn = document.getElementById('vex-sweep-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sweeping…'; }
+  var prog = document.getElementById('vex-sweep-progress');
+  if (prog) prog.style.display = 'block';
+  _vexSweepQueue(agentId, techniques, mode, advanced, 0);
+}
+
+function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
+  var n = techniques.length;
+  var btn = document.getElementById('vex-sweep-btn');
+  var statusEl = document.getElementById('vex-sweep-status');
+  var pctEl = document.getElementById('vex-sweep-pct');
+  var barEl = document.getElementById('vex-sweep-bar');
+
+  if (idx >= n) {
+    _vexSweepRunning = false;
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Start Sweep'; }
+    if (statusEl) statusEl.textContent = 'Sweep complete — ' + n + ' techniques tested';
+    if (pctEl) pctEl.textContent = '100%';
+    if (barEl) barEl.style.width = '100%';
+    showToast('Full sweep complete — ' + n + ' techniques', 'ok');
+    loadVariantStats();
+    loadVariantCoverage();
+    return;
+  }
+
+  var pct = Math.round((idx / n) * 100);
+  var tid = techniques[idx];
+  if (statusEl) statusEl.textContent = 'Running ' + x(tid) + ' (' + (idx + 1) + ' / ' + n + ')';
+  if (pctEl) pctEl.textContent = pct + '%';
+  if (barEl) barEl.style.width = pct + '%';
+  if (btn) btn.textContent = (idx + 1) + '/' + n + ' Sweeping…';
+
+  apicall('/api/variants/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
+  }).then(function(resp) {
+    // Poll until this technique's variant run completes, then continue.
+    _vexSweepPollAndNext(resp.variantRunId, agentId, techniques, mode, advanced, idx);
+  }).catch(function(e) {
+    // Dispatch failed — log and continue to next technique.
+    if (statusEl) statusEl.textContent = 'Error on ' + x(tid) + ': ' + (e.message || 'failed') + ' — continuing…';
+    setTimeout(function() { _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1); }, 1500);
+  });
+}
+
+function _vexSweepPollAndNext(vrId, agentId, techniques, mode, advanced, idx) {
+  var poll = setInterval(function() {
+    apicall('/api/variants/run/' + vrId).then(function(detail) {
+      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
+        clearInterval(poll);
+        _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
+      }
+    }).catch(function() {
+      clearInterval(poll);
+      _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
+    });
+  }, 3000);
 }
 
 function filterVexTechniques() {
