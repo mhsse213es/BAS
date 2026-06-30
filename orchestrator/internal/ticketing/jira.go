@@ -76,28 +76,55 @@ func (j *jiraConnector) CreateTicket(ctx context.Context, f TicketFinding, rt Re
 	if len(summary) > 255 {
 		summary = summary[:255]
 	}
-	payload := map[string]any{
-		"fields": map[string]any{
-			"project":     map[string]string{"key": j.projectKey},
-			"summary":     summary,
-			"description": buildJiraDescription(f),
-			"issuetype":   map[string]string{"name": issueTypeForRecord(rt)},
-			"priority":    map[string]string{"name": jiraPriorityName(f.Severity)},
-			"labels":      []string{"BAS", "ATT&CK", f.TechniqueID},
-		},
+	fields := map[string]any{
+		"project":     map[string]string{"key": j.projectKey},
+		"summary":     summary,
+		"description": buildJiraDescription(f),
+		"issuetype":   map[string]string{"name": issueTypeForRecord(rt)},
+		"priority":    map[string]string{"name": jiraPriorityName(f.Severity)},
+		"labels":      []string{"BAS", "ATT&CK", f.TechniqueID},
 	}
-	resp, err := j.doRequest(ctx, "POST", "/rest/api/2/issue", payload)
+	payload := map[string]any{"fields": fields}
+
+	// Build a cascade of issue type names to try. Different Jira project
+	// templates ship very different type sets (Scrum: Bug/Story/Task,
+	// ITSM: Incident/Service Request, custom: anything). We try the
+	// preferred type first, then common fallbacks, and finally query the
+	// project's own issueTypes list so we always find something that works.
+	preferred := issueTypeForRecord(rt)
+	cascade := dedupeStrings([]string{preferred, "Bug", "Task", "Story", "Issue", "Incident"})
+
+	var (
+		resp []byte
+		err  error
+	)
+	for _, typeName := range cascade {
+		fields["issuetype"] = map[string]string{"name": typeName}
+		resp, err = j.doRequest(ctx, "POST", "/rest/api/2/issue", payload)
+		if err == nil {
+			break
+		}
+		if !isIssueTypeError(err) {
+			return TicketRef{}, err // unrelated error — don't retry
+		}
+	}
+	// Final fallback: ask the project which types actually exist.
 	if err != nil {
-		// Issue type not found in project — retry with "Bug" (always present).
-		if strings.Contains(strings.ToLower(err.Error()), "issuetype") ||
-			strings.Contains(strings.ToLower(err.Error()), "issue type") {
-			payload["fields"].(map[string]any)["issuetype"] = map[string]string{"name": "Bug"}
+		for _, typeName := range j.projectIssueTypes(ctx) {
+			fields["issuetype"] = map[string]string{"name": typeName}
 			resp, err = j.doRequest(ctx, "POST", "/rest/api/2/issue", payload)
-		}
-		if err != nil {
-			return TicketRef{}, err
+			if err == nil {
+				break
+			}
+			if !isIssueTypeError(err) {
+				return TicketRef{}, err
+			}
 		}
 	}
+	if err != nil {
+		return TicketRef{}, err
+	}
+
 	var result struct {
 		Key  string `json:"key"`
 		Self string `json:"self"`
@@ -109,6 +136,48 @@ func (j *jiraConnector) CreateTicket(ctx context.Context, f TicketFinding, rt Re
 		TicketID:  result.Key,
 		TicketURL: j.baseURL + "/browse/" + result.Key,
 	}, nil
+}
+
+func isIssueTypeError(err error) bool {
+	low := strings.ToLower(err.Error())
+	return strings.Contains(low, "issuetype") || strings.Contains(low, "issue type")
+}
+
+// projectIssueTypes queries the Jira project and returns its non-subtask
+// issue type names. Used as the last-resort fallback in CreateTicket.
+func (j *jiraConnector) projectIssueTypes(ctx context.Context) []string {
+	data, err := j.doRequest(ctx, "GET", "/rest/api/2/project/"+j.projectKey+"?expand=issueTypes", nil)
+	if err != nil {
+		return nil
+	}
+	var proj struct {
+		IssueTypes []struct {
+			Name    string `json:"name"`
+			Subtask bool   `json:"subtask"`
+		} `json:"issueTypes"`
+	}
+	if json.Unmarshal(data, &proj) != nil {
+		return nil
+	}
+	var types []string
+	for _, t := range proj.IssueTypes {
+		if !t.Subtask {
+			types = append(types, t.Name)
+		}
+	}
+	return types
+}
+
+func dedupeStrings(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := in[:0:len(in)]
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func buildJiraDescription(f TicketFinding) string {
