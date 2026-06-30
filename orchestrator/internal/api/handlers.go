@@ -2008,11 +2008,11 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 	defer hResp.Body.Close()
 
 	if hResp.StatusCode != http.StatusOK {
-		errMsg := fmt.Sprintf("Caldera returned HTTP %d — verify CALDERA_API_KEY matches the running instance", hResp.StatusCode)
+		errMsg := fmt.Sprintf("Caldera returned HTTP %d", hResp.StatusCode)
 		if hResp.StatusCode == http.StatusUnauthorized {
-			errMsg = "Caldera returned HTTP 401 (wrong API key). " +
-				"On the server: check CALDERA_API_KEY in .env matches API_KEY_RED in the bas-caldera container. " +
-				"Run: docker inspect bas-caldera | grep API_KEY_RED"
+			errMsg = "Caldera API key mismatch (HTTP 401). This is unexpected after a standard install — " +
+				"the bas-caldera image auto-injects the key from .env on startup. " +
+				"If the container was restarted or recreated manually, run: docker compose restart caldera orchestrator"
 		}
 		respond(w, CalderaStatus{
 			Reachable:  false,
@@ -2968,10 +2968,9 @@ func (h *Handler) GetCalderaAbilities(w http.ResponseWriter, r *http.Request) {
 		if resp.StatusCode == http.StatusUnauthorized {
 			// Settings can still show green because /api/v2/health does not validate
 			// the key — but the abilities API does. This is almost always a key mismatch.
-			msg = "Caldera rejected the API key (HTTP 401) on /api/v2/abilities. " +
-				"The Settings page shows green because the health check doesn't validate the key. " +
-				"On the server, confirm CALDERA_API_KEY in .env matches API_KEY_RED in the bas-caldera container: " +
-				"docker inspect bas-caldera | grep API_KEY_RED"
+			msg = "Caldera rejected the API key (HTTP 401) fetching abilities. " +
+				"This is unexpected after a standard install — the bas-caldera image auto-injects the correct key on startup. " +
+				"Run: docker compose restart caldera orchestrator"
 		}
 		jsonError(w, msg, http.StatusBadGateway)
 		return
