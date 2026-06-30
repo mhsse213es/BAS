@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -61,7 +62,19 @@ func chromeWSURL(ctx context.Context, base string) string {
 	if json.NewDecoder(resp.Body).Decode(&v) != nil {
 		return ""
 	}
-	return v.WebSocketDebuggerURL
+	wsURL := v.WebSocketDebuggerURL
+	// Chrome's /json/version always returns 127.0.0.1 in the WebSocket URL, even
+	// when launched with --remote-debugging-address=0.0.0.0. From inside the
+	// orchestrator container 127.0.0.1 resolves to the orchestrator's own loopback,
+	// not the chrome sidecar — so chromedp can't connect and the call fails.
+	// Replace the host portion with the one from base (e.g. "chrome:9222").
+	if baseU, err := url.Parse(base); err == nil {
+		if wsU, err2 := url.Parse(wsURL); err2 == nil {
+			wsU.Host = baseU.Host
+			wsURL = wsU.String()
+		}
+	}
+	return wsURL
 }
 
 // htmlToPDF prints the given HTML to an A4 PDF using the remote headless-shell

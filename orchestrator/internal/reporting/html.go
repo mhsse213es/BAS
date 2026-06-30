@@ -353,6 +353,7 @@ const reportHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BAS Security Assessment Report — {{.agent.hostname}}</title>
 <style>
 /* ── Reset ── */
@@ -375,6 +376,19 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
   .ph,.pf{page-break-inside:avoid}}
+@media screen and (max-width:700px){
+  body{padding:0}
+  .page{width:100%;min-height:unset;overflow:visible;border-radius:0;box-shadow:none;margin:0 0 16px}
+  .inner{padding:0 16px 20px;min-height:unset}
+  .cover{min-height:unset;padding-bottom:24px}
+  .kpi-row{grid-template-columns:1fr 1fr}
+  .score-row{grid-template-columns:1fr 1fr}
+  .fc-grid{grid-template-columns:1fr}
+  .cover-grid{grid-template-columns:1fr}
+  .risk-hero{flex-direction:column;gap:12px}
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .hm{min-width:unset;flex-wrap:wrap}
+}
 
 /* ── Cover ── */
 .cover{background:#0b1420;min-height:297mm;display:flex;flex-direction:column;position:relative}

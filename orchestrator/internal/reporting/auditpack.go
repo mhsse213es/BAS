@@ -94,9 +94,9 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 		GenerateHTML(f, report, compSummaries)
 	}
 
-	// executive-report.pdf — print-ready enterprise report
+	// executive-report.pdf — print-ready enterprise report (HTML→Chrome path, fpdf fallback)
 	if f, err := zw.Create(prefix + "executive-report.pdf"); err == nil {
-		if err := RenderReportPDF(f, report, latestResults); err != nil {
+		if err := e.PDFFromReport(ctx, f, report, compSummaries, latestResults); err != nil {
 			fmt.Fprintf(f, "PDF generation failed: %v", err)
 		}
 	}
