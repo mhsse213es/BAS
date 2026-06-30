@@ -502,7 +502,7 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
 @media screen{body{background:#c8d0da;padding:24px 0}
   .page{box-shadow:0 6px 32px rgba(0,0,0,0.22);margin:0 auto 28px;border-radius:2px}}
 @media print{body{background:#fff;padding:0}
-  .page{width:100%;margin:0;box-shadow:none}
+  .page{width:100%;margin:0;box-shadow:none;overflow:visible}
   .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
   .ph,.pf{page-break-inside:avoid}}
@@ -1416,26 +1416,24 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <p style="color:#6e7681;margin-bottom:14px">The chain of kill-chain phases this endpoint's gaps actually permit — built strictly from observed unprevented techniques, ordered by ATT&amp;CK phase. No hypothetical or inferred steps.</p>
 
 {{if .killChain}}
-<!-- Attack Simulation Timeline — all executed steps ordered by ATT&CK phase -->
+<!-- Attack Simulation Timeline — wrapping tile grid, one card per step -->
 <div style="margin-bottom:20px">
   <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin-bottom:10px">Attack Simulation Timeline</div>
-  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-    <div style="display:flex;align-items:flex-start;min-width:fit-content;padding:4px 2px 10px">
-      {{range $i,$s := .killChain}}
-      {{if $i}}<div style="flex:1;min-width:20px;max-width:48px;height:2px;margin-top:20px;align-self:flex-start;background:{{if eq $s.outcome "prevented"}}#0d9488{{else if eq $s.outcome "detected"}}#d29922{{else}}#da3633{{end}}"></div>{{end}}
-      <div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:78px;max-width:96px;flex-shrink:0">
-        <div style="width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:{{if eq $s.outcome "prevented"}}#0d9488{{else if eq $s.outcome "detected"}}#d29922{{else}}#da3633{{end}}">
-          <span style="font-size:11px;color:#fff;line-height:1">{{if eq $s.outcome "prevented"}}&#10003;{{else if eq $s.outcome "detected"}}!{{else}}&#10007;{{end}}</span>
-        </div>
-        <div style="font-size:0.42rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#6e7681;text-align:center;padding:0 2px">{{humanize $s.phase}}</div>
-        <div style="font-size:0.5rem;font-weight:700;color:#c9d1d9;font-family:monospace;text-align:center">{{$s.techniqueId}}</div>
-        <div style="font-size:0.45rem;color:#8b949e;text-align:center;line-height:1.3;max-width:92px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">{{$s.technique}}</div>
-        <div style="font-size:0.44rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:{{if eq $s.outcome "prevented"}}#0d9488{{else if eq $s.outcome "detected"}}#d29922{{else}}#da3633{{end}}">{{$s.outcome}}</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px">
+    {{range $i,$s := .killChain}}
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;width:88px;padding:7px 4px 6px;border:1px solid {{if eq $s.outcome "prevented"}}#0d948833{{else if eq $s.outcome "detected"}}#d2992233{{else}}#da363333{{end}};border-top:3px solid {{if eq $s.outcome "prevented"}}#0d9488{{else if eq $s.outcome "detected"}}#d29922{{else}}#da3633{{end}};border-radius:6px;background:#fafbfc">
+      <div style="font-size:0.5rem;font-weight:700;color:#9aa5b5;letter-spacing:0.04em">#{{add1 $i}}</div>
+      <div style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{if eq $s.outcome "prevented"}}#0d9488{{else if eq $s.outcome "detected"}}#d29922{{else}}#da3633{{end}}">
+        <span style="font-size:10px;color:#fff;line-height:1">{{if eq $s.outcome "prevented"}}&#10003;{{else if eq $s.outcome "detected"}}!{{else}}&#10007;{{end}}</span>
       </div>
-      {{end}}
+      <div style="font-size:0.42rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6e7681;text-align:center">{{humanize $s.phase}}</div>
+      <div style="font-size:0.48rem;font-weight:700;color:#0b1420;font-family:monospace;text-align:center">{{$s.techniqueId}}</div>
+      <div style="font-size:0.42rem;color:#6e7681;text-align:center;line-height:1.3;word-break:break-word">{{$s.technique}}</div>
+      <div style="font-size:0.44rem;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:{{if eq $s.outcome "prevented"}}#0d9488{{else if eq $s.outcome "detected"}}#d29922{{else}}#da3633{{end}}">{{$s.outcome}}</div>
     </div>
+    {{end}}
   </div>
-  <div style="display:flex;gap:16px;margin-top:6px">
+  <div style="display:flex;gap:16px;margin-top:8px">
     <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#6e7681"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#0d9488"></span>Prevented</div>
     <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#6e7681"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#d29922"></span>Detected (not blocked)</div>
     <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#6e7681"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#da3633"></span>Missed (no detection)</div>
