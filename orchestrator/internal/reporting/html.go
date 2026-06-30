@@ -264,6 +264,52 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		return "#6e7681"
 	},
 	"verdictColor": func(string) string { return "#ffffff" },
+	// scoreArc returns the stroke-dasharray offset for a donut arc where the
+	// full circumference is 276.46 (r=44 circle: 2π×44≈276.46). score is 0-100.
+	"scoreArc": func(score float64) float64 {
+		if score < 0 {
+			score = 0
+		}
+		if score > 100 {
+			score = 100
+		}
+		return 276.46 * score / 100.0
+	},
+	// tacticAccent returns a consistent accent color per ATT&CK tactic slug,
+	// used in kill chain strips and tactic chips.
+	"tacticAccent": func(tactic string) string {
+		switch strings.ToLower(strings.TrimSpace(tactic)) {
+		case "initial-access":
+			return "#c0392b"
+		case "execution":
+			return "#e74c3c"
+		case "persistence":
+			return "#e67e22"
+		case "privilege-escalation":
+			return "#f39c12"
+		case "defense-evasion":
+			return "#d35400"
+		case "credential-access":
+			return "#8e44ad"
+		case "discovery":
+			return "#2980b9"
+		case "lateral-movement":
+			return "#16a085"
+		case "collection":
+			return "#1abc9c"
+		case "command-and-control":
+			return "#27ae60"
+		case "exfiltration":
+			return "#2c3e50"
+		case "impact":
+			return "#7f8c8d"
+		case "resource-development":
+			return "#6c5ce7"
+		case "reconnaissance":
+			return "#0984e3"
+		}
+		return "#6e7681"
+	},
 }).Parse(reportHTML))
 
 // ── Logo helpers ──────────────────────────────────────────────────────────────
@@ -785,10 +831,30 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <div class="stitle">Executive Summary</div>
 
 
-<div class="risk-badge" style="color:{{riskColor .summary.classification}};border-color:{{riskColor .summary.classification}};background:{{riskColor .summary.classification}}18">
-  <span style="font-size:1.8rem">{{.summary.riskScore}}</span>
-  <span>Risk Score / 100&emsp;—&emsp;{{.summary.classification}}</span>
-  <span style="margin-left:auto;padding:4px 12px;border-radius:4px;font-size:0.85rem;color:#fff;background:{{exposureColor .summary.exposureLevel}}">Exposure: {{.summary.exposureLevel}}</span>
+<div class="risk-hero">
+  <div class="rh-ring"></div>
+  <!-- SVG donut — prevention score ring -->
+  <svg width="120" height="120" viewBox="0 0 100 100" style="flex-shrink:0">
+    <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
+    <circle cx="50" cy="50" r="44" fill="none"
+      stroke="{{riskColor .summary.classification}}"
+      stroke-width="10"
+      stroke-linecap="round"
+      stroke-dasharray="{{scoreArc .summary.preventionScore}} 276.46"
+      transform="rotate(-90 50 50)"/>
+    <text x="50" y="45" text-anchor="middle" fill="#fff" font-size="18" font-weight="700" font-family="system-ui,sans-serif">{{fmtScore .summary.preventionScore}}%</text>
+    <text x="50" y="62" text-anchor="middle" fill="rgba(255,255,255,0.55)" font-size="9" font-family="system-ui,sans-serif">PREVENTION</text>
+  </svg>
+  <div style="flex:1;min-width:0">
+    <div style="color:rgba(255,255,255,0.5);font-size:0.75rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Overall Risk Score</div>
+    <div style="font-size:2.6rem;font-weight:800;color:{{riskColor .summary.classification}};line-height:1">{{.summary.riskScore}}<span style="font-size:1rem;color:rgba(255,255,255,0.4);font-weight:400"> / 100</span></div>
+    <div style="font-size:1.1rem;color:#fff;font-weight:600;margin-top:4px">{{.summary.classification}}</div>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+      <span style="padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;background:{{exposureColor .summary.exposureLevel}}22;color:{{exposureColor .summary.exposureLevel}};border:1px solid {{exposureColor .summary.exposureLevel}}55">Exposure: {{.summary.exposureLevel}}</span>
+      {{if .summary.detectionMeasured}}<span style="padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;background:#2f81f722;color:#2f81f7;border:1px solid #2f81f755">Detection: {{fmtScore .summary.detectionScore}}%</span>{{end}}
+      <span style="padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.12)">{{.summary.penetrationFailed}} / {{.summary.penetrationTested}} techniques evaded</span>
+    </div>
+  </div>
 </div>
 
 <!-- 4 KPI cards — give CISOs the numbers at a glance before the prose -->
@@ -835,6 +901,22 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
   {{end}}
 </div>
+
+{{if .tacticHeatmap}}
+<!-- Kill-chain coverage strip — one tile per tested tactic, colored by prevention rate -->
+<div style="margin-bottom:18px">
+  <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.1em;color:#6e7681;font-weight:700;margin-bottom:8px">ATT&amp;CK Kill-Chain Coverage</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px">
+    {{range .tacticHeatmap}}
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:62px;max-width:80px;background:#f8faff;border:1px solid #e7eaf0;border-top:3px solid {{tacticAccent .tactic}};border-radius:7px;padding:6px 8px">
+      <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.05em;color:#6e7681;text-align:center;line-height:1.3;margin-bottom:4px">{{humanize .tactic}}</div>
+      <div style="font-size:0.95rem;font-weight:800;color:{{if ge .passPct 70.0}}#0d9488{{else if ge .passPct 40.0}}#d29922{{else}}#da3633{{end}}">{{fmtScore .passPct}}%</div>
+      <div style="font-size:0.58rem;color:#9ca3af;margin-top:2px">{{printf "%.0f" .total}} tested</div>
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}
 
 <h2>Executive Conclusion</h2>
 <p style="font-size:0.92rem;line-height:1.7">{{.executiveConclusion}}</p>
@@ -2324,6 +2406,12 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
         </div>
       </div>
     </div>
+    {{if .businessImpact}}
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #d29922;border-radius:0 7px 7px 0;padding:10px 14px;margin-top:8px">
+      <div style="font-size:0.6rem;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:#92400e;margin-bottom:4px">&#9888; Business Impact</div>
+      <div style="font-size:0.8rem;color:#78350f;line-height:1.55">{{.businessImpact}}</div>
+    </div>
+    {{end}}
     {{if .remediation}}
     <div class="fc-remediation">
       <div class="fc-rem-label">&#9654; Recommended Remediation</div>

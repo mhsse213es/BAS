@@ -1178,6 +1178,23 @@ func (d *rpt) finding(n int, f Finding) {
 	if f.Details != "" {
 		d.labelled("What happened", f.Details)
 	}
+	if f.BusinessImpact != "" {
+		pdf := d.pdf
+		d.ensure(10)
+		// Amber "Business Impact" highlight row
+		d.fill(rgb{255, 251, 235})
+		d.draw(rgb{253, 230, 138})
+		pdf.SetX(margin + 4)
+		pdf.RoundedRect(margin+4, pdf.GetY(), contentW-4, 1, 0, "1234", "F")
+		d.text(cWarning)
+		pdf.SetFont("Helvetica", "BI", 7.5)
+		pdf.SetX(margin + 6)
+		pdf.CellFormat(28, 4.4, "Business Impact", "", 0, "L", false, 0, "")
+		d.text(rgb{120, 53, 15})
+		pdf.SetFont("Helvetica", "I", 8.2)
+		pdf.SetX(margin + 34)
+		d.mcellT(contentW-34, 4.4, f.BusinessImpact, "", "L", false)
+	}
 	if f.Remediation != "" {
 		d.labelled("Remediation", f.Remediation)
 	}

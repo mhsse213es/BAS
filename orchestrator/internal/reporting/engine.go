@@ -304,8 +304,9 @@ type TechniqueRow struct {
 	// ExecutedAs is the actual privilege tier used at runtime.
 	// "Legacy" when the step was unannotated. "User→Admin" flags a WTS fallback.
 	ExecutedAs  string `json:"executedAs"`
-	Details     string `json:"details,omitempty"`
-	Remediation string `json:"remediation,omitempty"`
+	Details        string `json:"details,omitempty"`
+	Remediation    string `json:"remediation,omitempty"`
+	BusinessImpact string `json:"businessImpact,omitempty"`
 }
 
 // CoverageBreakdown is the 3-bucket summary of all technique-level verdicts
@@ -754,6 +755,7 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 			ExecutedAs:        privLabel(r.ExecutedAs),
 			Details:        r.Details,
 			Remediation:    r.Remediation,
+			BusinessImpact: tacticBusinessImpact(r.Technique.Tactic, r.Technique.ID),
 		}
 		if r.BlockingControl != nil {
 			row.ControlName   = r.BlockingControl.Name
@@ -1032,8 +1034,9 @@ type Finding struct {
 	Details       string `json:"details"`
 	Remediation   string `json:"remediation"`
 	ScenarioName  string `json:"scenarioName"`
-	KEV           bool   `json:"kev"`      // technique has ≥1 active CISA KEV CVE
-	KEVCount      int    `json:"kevCount"` // number of KEV CVEs linked
+	BusinessImpact string `json:"businessImpact,omitempty"`
+	KEV            bool   `json:"kev"`      // technique has ≥1 active CISA KEV CVE
+	KEVCount       int    `json:"kevCount"` // number of KEV CVEs linked
 }
 
 // RunSummary is one row in the Scenario Run History table.
@@ -2027,6 +2030,66 @@ func buildDetectionCategories(results []models.SimulationResult) []Category {
 	return out
 }
 
+// tacticBusinessImpact returns an executive-grade business impact sentence for a
+// failing technique. Technique-level overrides give precise context for the most
+// impactful ATT&CK techniques; the tactic-level fallback ensures every finding has
+// coverage across all 14 ATT&CK Enterprise tactics.
+func tacticBusinessImpact(tactic, techniqueID string) string {
+	switch strings.ToUpper(strings.TrimSpace(techniqueID)) {
+	case "T1003", "T1003.001":
+		return "LSASS credentials enable Pass-the-Hash or Pass-the-Ticket attacks against every Windows endpoint in the domain. An attacker can silently reach domain controllers without triggering additional authentication prompts."
+	case "T1003.002", "T1003.003", "T1003.004", "T1003.005", "T1003.006", "T1003.007", "T1003.008":
+		return "Harvested credentials grant silent access to other systems in the domain. Lateral movement can begin within minutes of a successful dump."
+	case "T1486":
+		return "Ransomware reached the encryption stage. A real attack would render files unrecoverable without tested backups, potentially halting operations for days and triggering RBI/SEBI incident notification obligations."
+	case "T1055", "T1055.001", "T1055.002", "T1055.003", "T1055.004", "T1055.012":
+		return "Code injected into a trusted process can evade application whitelisting and most EDR behavioral detection, operating with the full privileges of the host process."
+	case "T1078", "T1078.001", "T1078.002", "T1078.003", "T1078.004":
+		return "Compromised valid credentials produce activity indistinguishable from a legitimate user. Detection may require weeks of forensic analysis to identify the full breach timeline."
+	case "T1059", "T1059.001", "T1059.003":
+		return "Script execution gives an attacker arbitrary command execution under the endpoint's user or system context — the baseline capability for ransomware deployment, data exfiltration, and persistence."
+	case "T1053", "T1053.002", "T1053.003", "T1053.005":
+		return "Scheduled task persistence survives reboots, password resets, and many partial remediation attempts. An attacker automatically re-establishes access even after initial cleanup efforts."
+	case "T1547", "T1547.001":
+		return "Registry run-key persistence ensures the attacker's payload executes on every user logon, enabling long-dwell-time campaigns that remain undetected for extended periods."
+	case "T1562", "T1562.001":
+		return "With security tooling disabled, all subsequent attacker activity is invisible to the SOC. This is the standard precursor to ransomware deployment and large-scale data exfiltration."
+	case "T1190":
+		return "Exploiting a public-facing application gives an attacker an unauthenticated foothold inside the network perimeter, bypassing all VPN and identity controls."
+	}
+	switch strings.ToLower(strings.TrimSpace(tactic)) {
+	case "initial-access":
+		return "An attacker could establish an initial foothold inside the corporate network, bypassing perimeter controls and enabling all subsequent campaign stages."
+	case "execution":
+		return "Malicious code ran on this endpoint. From here, an attacker can deploy ransomware, establish persistence, or use the endpoint as a launchpad for attacks on adjacent systems."
+	case "persistence":
+		return "An attacker can survive system reboots and credential rotations, maintaining durable long-term access without re-exploitation — increasing dwell time and the window for data theft."
+	case "privilege-escalation":
+		return "Admin or SYSTEM-level access was achieved. An attacker can now disable security tools, access protected data stores, and move laterally across the domain without restriction."
+	case "defense-evasion":
+		return "Security controls were bypassed on this endpoint. An attacker operating in this state can conduct further activity with a greatly reduced chance of detection or incident response."
+	case "credential-access":
+		return "Credentials harvested here can authenticate as legitimate users across Active Directory, enabling silent lateral movement and potentially domain-wide access within minutes."
+	case "discovery":
+		return "Internal network structure and high-value targets have been identified. An attacker can now plan targeted lateral movement and data theft with precision and minimal noise."
+	case "lateral-movement":
+		return "An attacker can pivot from this endpoint to other systems on the network, expanding the breach blast radius. In BFSI environments this can reach core banking systems and payment infrastructure."
+	case "collection":
+		return "Sensitive data — documents, credentials, and financial records — can be gathered and staged for exfiltration. Attackers typically spend weeks in this phase before data leaves the network."
+	case "command-and-control":
+		return "Remote control of this endpoint is established over a covert channel. An attacker can issue commands, exfiltrate data, and re-deploy payloads even after partial remediation."
+	case "exfiltration":
+		return "Data is being transferred outside organizational control. In a real incident this represents breach completion, triggering regulatory notification obligations under DPDPA, RBI, and SEBI CSCRF frameworks."
+	case "impact":
+		return "Business operations are at risk of disruption. Ransomware, service outages, or data destruction are realistic outcomes at this kill-chain stage, with recovery typically taking days to weeks."
+	case "resource-development":
+		return "Organizational resources can be weaponized as attacker infrastructure, enabling further campaigns and potentially implicating the organization in attacks against third parties."
+	case "reconnaissance":
+		return "Targeted intelligence gathered about users, systems, and vulnerabilities enables attackers to craft more effective attacks with higher success rates and lower detection probability."
+	}
+	return ""
+}
+
 func buildTopFindings(results []models.SimulationResult, scenarioName string) []Finding {
 	var findings []Finding
 	// Deduplicate by technique: the same technique failing across several atomic
@@ -2049,13 +2112,14 @@ func buildTopFindings(results []models.SimulationResult, scenarioName string) []
 		}
 		seen[key] = true
 		findings = append(findings, Finding{
-			TechniqueID:   r.Technique.ID,
-			TechniqueName: r.Technique.Name,
-			Tactic:        r.Technique.Tactic,
-			Severity:      r.Severity,
-			Details:       r.Details,
-			Remediation:   r.Remediation,
-			ScenarioName:  scenarioName,
+			TechniqueID:    r.Technique.ID,
+			TechniqueName:  r.Technique.Name,
+			Tactic:         r.Technique.Tactic,
+			Severity:       r.Severity,
+			Details:        r.Details,
+			Remediation:    r.Remediation,
+			BusinessImpact: tacticBusinessImpact(r.Technique.Tactic, r.Technique.ID),
+			ScenarioName:   scenarioName,
 		})
 	}
 	return findings
