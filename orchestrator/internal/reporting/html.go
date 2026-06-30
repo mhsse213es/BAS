@@ -320,6 +320,79 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 			return "#6e7681"
 		}
 	},
+	// sumInts sums any number of JSON-decoded numeric values (float64) into an int.
+	"sumInts": func(vals ...any) int {
+		total := 0
+		for _, v := range vals {
+			if f, ok := v.(float64); ok {
+				total += int(f)
+			}
+		}
+		return total
+	},
+	// privConclusion returns a one-sentence executive assessment of a technique's
+	// privilege context: what it means that it ran (or was blocked) at that tier.
+	"privConclusion": func(executedAs, verdict any) string {
+		ea := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", executedAs)))
+		v := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", verdict)))
+		blocked := v == "pass" || v == "blocked"
+		switch {
+		case ea == "user" && blocked:
+			return "✅ Blocked at standard-user level — controls prevented this technique even without requiring elevated privileges."
+		case ea == "user" && !blocked:
+			return "⚠️ Succeeded without administrator privileges. This technique is exploitable from any initial-access scenario — phishing, malicious document, or compromised standard account — before privilege escalation occurs. Prioritise remediation."
+		case (ea == "admin" || ea == "system") && blocked:
+			return "✅ Blocked even at elevated privilege — controls are effective regardless of execution context. Strong prevention signal."
+		case (ea == "admin" || ea == "system") && !blocked:
+			return "⚠️ Requires elevated privileges to succeed. An attacker must first escalate from a standard user account before this technique becomes feasible. Focus on preventing privilege escalation and securing administrator credentials."
+		case strings.Contains(ea, "→") && !blocked:
+			return "⚠️ Tested under admin fallback — no interactive user session was active at execution time. Re-run with a logged-in standard user to confirm whether this technique is accessible without elevation."
+		default:
+			if !blocked && (ea == "legacy" || ea == "") {
+				return "ℹ️ Privilege context not annotated for this step. Re-run with privilege annotation (requires_priv in the scenario YAML) to determine whether this technique is accessible to standard users."
+			}
+		}
+		return ""
+	},
+	// privSummaryConclusion returns an executive-grade paragraph summarising the
+	// overall privilege posture from the PrivilegeSummary map (JSON-decoded).
+	"privSummaryConclusion": func(ps any) string {
+		m, ok := ps.(map[string]any)
+		if !ok {
+			return ""
+		}
+		getInt := func(key string) int {
+			f, _ := m[key].(float64)
+			return int(f)
+		}
+		user := getInt("user")
+		admin := getInt("admin")
+		system := getInt("system")
+		userPrev := getInt("userPrevented")
+		fallbacks := getInt("fallbacks")
+		if user == 0 && admin == 0 && system == 0 {
+			return ""
+		}
+		userFailed := user - userPrev
+		elevTotal := admin + system
+		var sb strings.Builder
+		switch {
+		case userFailed > 0 && elevTotal > 0:
+			sb.WriteString(fmt.Sprintf("⚠️ %d technique(s) succeeded from a standard user account — exploitable immediately after initial access, before any privilege escalation. Additionally, %d technique(s) required elevated privileges to succeed.", userFailed, elevTotal))
+		case userFailed > 0:
+			sb.WriteString(fmt.Sprintf("⚠️ %d technique(s) succeeded from a standard user account without requiring elevation. These are exploitable from any phishing or drive-by initial-access scenario. Prioritise their remediation.", userFailed))
+		case user > 0 && userFailed == 0 && elevTotal > 0:
+			sb.WriteString(fmt.Sprintf("✅ All standard-user attempts were blocked. %d technique(s) required elevated privileges to succeed — preventing privilege escalation is the primary control priority.", elevTotal))
+		case user > 0 && userFailed == 0 && elevTotal == 0:
+			sb.WriteString("✅ All tested techniques were blocked across all privilege tiers. Controls are effective regardless of execution context.")
+		case user == 0 && elevTotal > 0:
+			sb.WriteString(fmt.Sprintf("All %d successful technique(s) required elevated privileges — an attacker must first escalate from a standard user account before these become feasible. Preventing privilege escalation is the primary control priority.", elevTotal))
+		}
+		if fallbacks > 0 {
+			sb.WriteString(fmt.Sprintf(" Note: %d step(s) fell back to admin context (no interactive user session was active). Re-run with a logged-in standard user to verify standard-user coverage.", fallbacks))
+		}
+		return sb.String()
+	},
 }).Parse(reportHTML))
 
 // ── Logo helpers ──────────────────────────────────────────────────────────────
@@ -932,6 +1005,34 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     </div>
     {{end}}
   </div>
+</div>
+{{end}}
+
+{{/* ── Privilege Assessment block ── */}}
+{{$ps := .privilegeSummary}}
+{{if or $ps.user $ps.admin $ps.system}}
+<div style="margin-bottom:18px;padding:14px 16px;background:rgba(13,17,23,0.5);border:1px solid #30363d;border-radius:8px">
+  <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin-bottom:10px">&#x1F6E1; Privilege Assessment</div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #21262d">
+    <div style="text-align:center">
+      <div style="font-size:1.3rem;font-weight:900;color:#fff">{{sumInts $ps.user $ps.admin $ps.system}}</div>
+      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">Techniques Tested</div>
+    </div>
+    {{if $ps.user}}<div style="text-align:center">
+      <div style="font-size:1.3rem;font-weight:900;color:#c9d1d9">{{$ps.user}}</div>
+      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">Standard User</div>
+    </div>{{end}}
+    {{if or $ps.admin $ps.system}}<div style="text-align:center">
+      <div style="font-size:1.3rem;font-weight:900;color:#d29922">{{sumInts $ps.admin $ps.system}}</div>
+      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">Required Elevation</div>
+    </div>{{end}}
+    {{if $ps.fallbacks}}<div style="text-align:center">
+      <div style="font-size:1.3rem;font-weight:900;color:#9aa5b5">{{$ps.fallbacks}}</div>
+      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">WTS Fallbacks</div>
+    </div>{{end}}
+  </div>
+  {{$psc := privSummaryConclusion .privilegeSummary}}
+  {{if $psc}}<div style="font-size:0.78rem;color:#c9d1d9;line-height:1.7">{{$psc}}</div>{{end}}
 </div>
 {{end}}
 
@@ -2419,7 +2520,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
             {{if and .requestedPriv (ne .requestedPriv .executedAs)}}<span style="color:#9aa5b5;font-size:0.65rem"> (requested: {{.requestedPriv}})</span>{{end}}
             {{if and .requestedPrivMin (ne .requestedPrivMin "Legacy")}}<span style="color:#9aa5b5;font-size:0.63rem;margin-left:4px">&#9492; min: {{.requestedPrivMin}}{{if and .requestedPrivPref (ne .requestedPrivPref "Legacy")}} / preferred: {{.requestedPrivPref}}{{end}}</span>{{end}}
           </div>
-        </div>{{end}}
+        </div>
+        {{$pc := privConclusion .executedAs .execVerdict}}{{if $pc}}<div style="font-size:0.75rem;color:#c9d1d9;line-height:1.65;padding:8px 12px;background:#0d1117;border-radius:6px;border-left:3px solid #30363d;margin-bottom:7px">{{$pc}}</div>{{end}}
+        {{end}}
         <div class="fc-detail-row">
           <div class="fc-detail-label">Blocked By</div>
           <div class="fc-detail-value">
