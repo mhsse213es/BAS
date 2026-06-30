@@ -9914,9 +9914,10 @@ function loadAgtOverview(agentId) {
       kv('Last Seen',    ago(a.lastUpdate)) + kv('Enrolled', a.enrolledAt ? ago(a.enrolledAt) : '—') +
       kv('Binary Trusted', a.binaryTrusted ? '<span style="color:var(--success)">&#10003; Verified</span>' : '<span style="color:var(--warning)">&#9888; Unverified</span>') +
       '</div>' +
-      (a.state === 'quarantined' ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is QUARANTINED — binary hash mismatch detected. Resolve via Administration before running scenarios.</div>' : '') +
-      (a.state === 'restricted'  ? '<div style="background:rgba(210,153,34,.12);border:1px solid var(--warning);border-radius:4px;padding:0.6rem 0.85rem;color:var(--warning);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is RESTRICTED by server policy.</div>' : '') +
-      (Object.keys(policy).length ? '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.7rem 0.9rem">' +
+      (a.state === 'quarantined' ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the issue is resolved.</div>' : '') +
+      (a.state === 'restricted'  ? '<div style="background:rgba(210,153,34,.12);border:1px solid var(--warning);border-radius:4px;padding:0.6rem 0.85rem;color:var(--warning);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.</div>' : '') +
+      (a.state === 'retired'     ? '<div style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.4);border-radius:4px;padding:0.6rem 0.85rem;color:#94a3b8;font-size:0.78rem;margin-bottom:0.75rem">&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.</div>' : '') +
+      (Object.keys(policy).length ? '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.7rem 0.9rem;margin-bottom:0.75rem">' +
         '<div style="font-weight:600;font-size:0.78rem;margin-bottom:0.4rem;color:var(--muted)">POLICY BUNDLE</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 1rem;font-size:0.77rem">' +
         kv('Log Level', policy.logLevel || 'info') +
@@ -9925,12 +9926,44 @@ function loadAgtOverview(agentId) {
         kv('Exec Window', policy.executionWindow || 'unrestricted') +
         '</div>' +
       '</div>' : '') +
+      '<div style="border-top:1px solid var(--border);padding-top:0.85rem;margin-top:0.25rem">' +
+        '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.55rem">Lifecycle Controls</div>' +
+        '<div style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
+          (a.state !== 'active' ?
+            '<button class="btn btn-primary btn-sm" onclick="setAgentState(\'' + x(a.agentId) + '\',\'active\')">&#10003; Restore to Active</button>' : '') +
+          (a.state !== 'quarantined' ?
+            '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger-border)" onclick="setAgentState(\'' + x(a.agentId) + '\',\'quarantined\')">&#9888; Quarantine</button>' : '') +
+          (a.state !== 'restricted' ?
+            '<button class="btn btn-outline btn-sm" style="color:var(--warning);border-color:var(--warning-border)" onclick="setAgentState(\'' + x(a.agentId) + '\',\'restricted\')">&#128274; Restrict</button>' : '') +
+          (a.state !== 'retired' ?
+            '<button class="btn btn-outline btn-sm" style="color:var(--muted)" onclick="setAgentState(\'' + x(a.agentId) + '\',\'retired\')">&#128683; Retire</button>' : '') +
+        '</div>' +
+        '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.45rem">Quarantine / Restrict / Retire all block scenario dispatch. Only <strong>Restore to Active</strong> re-enables the agent.</div>' +
+      '</div>' +
       '</div>';
   }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
 }
 function kv(label, val) {
   return '<div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.1rem">' + label + '</div>' +
          '<div style="font-size:0.82rem">' + val + '</div></div>';
+}
+
+function setAgentState(agentId, state) {
+  var labels = { quarantined: 'Quarantine', restricted: 'Restrict', retired: 'Retire', active: 'Restore to Active' };
+  var warn = {
+    quarantined: 'Quarantine blocks ALL scenario dispatch from this agent. Are you sure?',
+    restricted:  'Restrict blocks ALL scenario dispatch from this agent. Are you sure?',
+    retired:     'Retire decommissions this agent and blocks all scenario dispatch. Are you sure?',
+    active:      'Restore this agent to active and re-enable scenario dispatch?'
+  };
+  if (!confirm(warn[state] || 'Set agent state to ' + state + '?')) return;
+  apicall('/api/agents/' + encodeURIComponent(agentId) + '/state', {
+    method: 'PUT', body: JSON.stringify({ state: state })
+  }).then(function() {
+    showToast('Agent state set to ' + state, state === 'active' ? 'ok' : 'warn');
+    loadAgents();
+    loadAgtOverview(agentId);
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
 // ── Scenarios tab ─────────────────────────────────────────────────────────────

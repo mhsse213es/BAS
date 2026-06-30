@@ -288,6 +288,38 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	respond(w, agents)
 }
 
+// PUT /api/agents/{agentId}/state — sets an agent's lifecycle state.
+// Valid states: active | restricted | quarantined | retired.
+// Only Admin may call this; the route group enforces the role check.
+func (h *Handler) SetAgentState(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	var body struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	valid := map[string]bool{"active": true, "restricted": true, "quarantined": true, "retired": true}
+	if !valid[body.State] {
+		jsonError(w, "invalid state: must be active, restricted, quarantined, or retired", http.StatusBadRequest)
+		return
+	}
+	tag, err := h.db.Exec(r.Context(),
+		`UPDATE agents SET state = $1 WHERE agent_id = $2`, body.State, agentID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		jsonError(w, "agent not found", http.StatusNotFound)
+		return
+	}
+	h.auditLog(r, "agent.state", agentID, map[string]any{"state": body.State}, "ok")
+	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: agentID})
+	respond(w, map[string]any{"agentId": agentID, "state": body.State})
+}
+
 // agentFiles is the explicit allowlist of downloadable agent artifacts.
 // key = URL platform param; value = filename and MIME type served.
 var agentFiles = map[string]struct {

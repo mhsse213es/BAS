@@ -203,6 +203,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Admin only — config + user management + connector
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin))
+			r.Put("/api/agents/{agentId}/state", h.SetAgentState)
 			r.Get("/api/license", h.GetLicenseInfo)
 			r.Get("/api/config/connection", h.GetConnectionConfig)
 			r.Get("/api/users", h.ListUsers)
