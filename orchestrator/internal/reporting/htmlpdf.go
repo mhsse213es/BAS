@@ -25,13 +25,13 @@ import (
 // fpdf renderer, so the endpoint always returns a PDF.
 func (e *Engine) PDFFromReport(ctx context.Context, w io.Writer, rep *FullReport, compliance []ComplianceSummaryRow, results []models.SimulationResult) error {
 	var html bytes.Buffer
-	if err := GenerateHTML(&html, rep, compliance); err == nil {
-		if pdf, perr := htmlToPDF(ctx, html.Bytes()); perr == nil && len(pdf) > 0 {
-			_, werr := w.Write(pdf)
-			return werr
-		} else if perr != nil {
-			log.Printf("[reporting] HTML→PDF via chrome unavailable, using fpdf fallback: %v", perr)
-		}
+	if err := GenerateHTML(&html, rep, compliance); err != nil {
+		log.Printf("[reporting] GenerateHTML failed, using fpdf fallback: %v", err)
+	} else if pdf, perr := htmlToPDF(ctx, html.Bytes()); perr == nil && len(pdf) > 0 {
+		_, werr := w.Write(pdf)
+		return werr
+	} else {
+		log.Printf("[reporting] HTML→PDF via chrome unavailable, using fpdf fallback: %v", perr)
 	}
 	return RenderReportPDF(w, rep, results)
 }
