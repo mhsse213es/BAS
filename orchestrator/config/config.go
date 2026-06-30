@@ -17,6 +17,7 @@ type Config struct {
 	ARTPayloadDir     string `json:"art_payload_dir,omitempty"`     // server-side store of ART external payloads (operator-provided)
 	ARTContentVersion string `json:"art_content_version,omitempty"` // content-pack version; reseed is skipped when unchanged
 	KEVFile           string `json:"kev_file,omitempty"`            // CISA KEV catalog JSON (baked into image); seeds the cves table
+	EPSSFile          string `json:"epss_file,omitempty"`           // FIRST EPSS CSV/CSV.GZ (optional); seeds cve_epss for KEV-linked CVEs
 	CalderaURL        string `json:"caldera_url,omitempty"`
 	CalderaAPIKey     string `json:"caldera_api_key,omitempty"`
 	LicensePath       string `json:"license_path,omitempty"`
@@ -79,6 +80,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("KEV_FILE"); v != "" {
 		cfg.KEVFile = v
+	}
+	if v := os.Getenv("EPSS_FILE"); v != "" {
+		cfg.EPSSFile = v
 	}
 	if v := os.Getenv("CALDERA_URL"); v != "" {
 		cfg.CalderaURL = v

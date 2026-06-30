@@ -1,11 +1,14 @@
 package scenario
 
 import (
+	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -499,6 +502,125 @@ func backfillTechniqueCVEs(ctx context.Context, pool *pgxpool.Pool) (int, error)
 		}
 	}
 	return inserted, nil
+}
+
+// SeedEPSS reads the FIRST EPSS CSV/CSV.GZ file and upserts exploitation-probability
+// scores into cve_epss for CVEs that are linked to techniques in technique_cves.
+// Only relevant CVEs are inserted — the full EPSS catalog (~220k rows) is NOT bulk-loaded.
+// File format: comment lines starting with '#', then header 'cve,epss,percentile', then data.
+// No-op when the file does not exist; silently tolerates an empty technique_cves table.
+func SeedEPSS(ctx context.Context, pool *pgxpool.Pool, epssFile string) (int, error) {
+	if epssFile == "" {
+		return 0, nil
+	}
+
+	// Get the CVE IDs we actually care about (in technique_cves)
+	cveRows, err := pool.Query(ctx, `SELECT DISTINCT cve_id FROM technique_cves`)
+	if err != nil {
+		return 0, fmt.Errorf("query technique_cves: %w", err)
+	}
+	ourCVEs := map[string]bool{}
+	for cveRows.Next() {
+		var id string
+		if cveRows.Scan(&id) == nil {
+			ourCVEs[strings.ToUpper(id)] = true
+		}
+	}
+	cveRows.Close()
+	if len(ourCVEs) == 0 {
+		log.Printf("[content] EPSS seed skipped — no CVEs in technique_cves yet")
+		return 0, nil
+	}
+
+	f, err := os.Open(epssFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Printf("[content] EPSS file %q absent — skipping EPSS enrichment", epssFile)
+			return 0, nil
+		}
+		return 0, fmt.Errorf("open EPSS file %q: %w", epssFile, err)
+	}
+	defer f.Close()
+
+	var rd io.Reader = f
+	if strings.HasSuffix(strings.ToLower(epssFile), ".gz") {
+		gr, gerr := gzip.NewReader(f)
+		if gerr != nil {
+			return 0, fmt.Errorf("open EPSS gzip %q: %w", epssFile, gerr)
+		}
+		defer gr.Close()
+		rd = gr
+	}
+
+	const upsert = `INSERT INTO cve_epss (cve_id, epss_score, percentile, score_date, updated_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		ON CONFLICT (cve_id) DO UPDATE SET
+			epss_score = EXCLUDED.epss_score,
+			percentile = EXCLUDED.percentile,
+			score_date = EXCLUDED.score_date,
+			updated_at = NOW()`
+
+	type epssEntry struct {
+		score, percentile float64
+		scoreDate         *time.Time
+	}
+	matches := make(map[string]epssEntry, len(ourCVEs))
+
+	scanner := bufio.NewScanner(rd)
+	scanner.Buffer(make([]byte, 512*1024), 512*1024)
+	var scoreDate *time.Time
+	headerSeen := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") {
+			if strings.HasPrefix(line, "#score_date:") {
+				ds := strings.TrimPrefix(line, "#score_date:")
+				if t, terr := time.Parse(time.RFC3339, strings.TrimSpace(ds)); terr == nil {
+					td := t
+					scoreDate = &td
+				}
+			}
+			continue
+		}
+		if !headerSeen {
+			headerSeen = true // skip "cve,epss,percentile" header
+			continue
+		}
+		parts := strings.SplitN(line, ",", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		cveID := strings.ToUpper(strings.TrimSpace(parts[0]))
+		if !ourCVEs[cveID] {
+			continue
+		}
+		var sc, pct float64
+		fmt.Sscanf(parts[1], "%f", &sc)
+		fmt.Sscanf(parts[2], "%f", &pct)
+		matches[cveID] = epssEntry{sc, pct, scoreDate}
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("scan EPSS CSV: %w", err)
+	}
+	if len(matches) == 0 {
+		log.Printf("[content] EPSS file %q produced no matches for our CVE set", epssFile)
+		return 0, nil
+	}
+
+	batch := &pgx.Batch{}
+	for cveID, e := range matches {
+		batch.Queue(upsert, cveID, e.score, e.percentile, e.scoreDate)
+	}
+	br := pool.SendBatch(ctx, batch)
+	count := 0
+	for i := 0; i < batch.Len(); i++ {
+		if tag, berr := br.Exec(); berr == nil {
+			count += int(tag.RowsAffected())
+		}
+	}
+	br.Close()
+	return count, nil
 }
 
 // seedTactics upserts the 14 ATT&CK Enterprise tactics into the tactics table.
