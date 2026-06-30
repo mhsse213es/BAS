@@ -172,22 +172,30 @@ load_config() {
   [[ -z "$JWT_SECRET"   ]] && JWT_SECRET=$(openssl rand -hex 32)
   [[ -z "$AGENT_SECRET" ]] && AGENT_SECRET=$(openssl rand -hex 24)
 
-  # Caldera keys -preserve in priority order:
-  #   1. existing .env in DATA_DIR (survives upgrades)
-  #   2. running Caldera container (operator may have set a custom key)
-  #   3. generate fresh random key (first install only)
+  # Caldera keys — priority order:
+  #   1. running Caldera container (ground truth — what is actually deployed)
+  #   2. existing .env in DATA_DIR (no container running yet, e.g. fresh install)
+  #   3. generate fresh random key (very first install)
+  #
+  # The container is checked FIRST so that install/upgrade never silently writes
+  # a different key than what Caldera is running with, which would cause every
+  # orchestrator→Caldera call to get a 401 with no visible error to the operator.
   local CALDERA_KEY CALDERA_KEY_BLUE existing_env="${DATA_DIR}/.env"
   CALDERA_KEY=""
   CALDERA_KEY_BLUE=""
 
-  if [[ -f "$existing_env" ]]; then
-    CALDERA_KEY=$(grep -oP '(?<=^CALDERA_API_KEY=).+' "$existing_env" 2>/dev/null || true)
-    CALDERA_KEY_BLUE=$(grep -oP '(?<=^CALDERA_API_KEY_BLUE=).+' "$existing_env" 2>/dev/null || true)
+  if docker inspect audspect-caldera &>/dev/null 2>&1; then
+    CALDERA_KEY=$(docker exec audspect-caldera python3 -c \
+      "import yaml; c=yaml.safe_load(open('conf/local.yml')); print(c.get('api_key_red',''))" \
+      2>/dev/null | tr -d '[:space:]' || true)
+    CALDERA_KEY_BLUE=$(docker exec audspect-caldera python3 -c \
+      "import yaml; c=yaml.safe_load(open('conf/local.yml')); print(c.get('api_key_blue',''))" \
+      2>/dev/null | tr -d '[:space:]' || true)
   fi
 
-  if [[ -z "$CALDERA_KEY" ]] && docker inspect audspect-caldera &>/dev/null; then
-    CALDERA_KEY=$(docker exec audspect-caldera grep -oP '(?<=api_key_red:\s).+' conf/local.yml 2>/dev/null | tr -d '[:space:]' || true)
-    CALDERA_KEY_BLUE=$(docker exec audspect-caldera grep -oP '(?<=api_key_blue:\s).+' conf/local.yml 2>/dev/null | tr -d '[:space:]' || true)
+  if [[ -z "$CALDERA_KEY" && -f "$existing_env" ]]; then
+    CALDERA_KEY=$(grep -oP '(?<=^CALDERA_API_KEY=).+' "$existing_env" 2>/dev/null || true)
+    CALDERA_KEY_BLUE=$(grep -oP '(?<=^CALDERA_API_KEY_BLUE=).+' "$existing_env" 2>/dev/null || true)
   fi
 
   [[ -z "$CALDERA_KEY"      ]] && CALDERA_KEY=$(openssl rand -hex 20)
