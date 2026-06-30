@@ -273,6 +273,9 @@ const (
 	MsgPolicyUpdate    = "policy_update"
 	MsgRunEvent        = "run_event"
 	MsgCommandAttackPathCollect = "command_attackpath_collect"
+	// MsgAttackPathCollected is broadcast to browser sessions when an agent
+	// submits a completed attack-path collection so the UI can update live.
+	MsgAttackPathCollected = "attackpath_collected"
 	// MsgTamperAlert is broadcast to all browser sessions when the filesystem
 	// watcher detects an unexpected modification to a protected file.
 	MsgTamperAlert = "tamper_alert"

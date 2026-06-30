@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/audspect/bas/internal/attackpath"
@@ -52,6 +54,20 @@ func (h *Handler) SubmitAttackPathCollection(w http.ResponseWriter, r *http.Requ
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Notify all browser sessions so the UI can advance its status timeline
+	// without polling. The browser receives node/edge counts so it can show
+	// exactly what was discovered without waiting for a full summary reload.
+	h.hub.BroadcastBrowsers(models.WSMessage{
+		Type:    models.MsgAttackPathCollected,
+		AgentID: c.AgentID,
+		Data: map[string]any{
+			"hostname":    c.Hostname,
+			"nodes":       len(c.Nodes),
+			"edges":       len(c.Edges),
+			"source":      c.Source,
+			"collectedAt": c.CollectedAt,
+		},
+	})
 	respond(w, map[string]any{
 		"agentId": c.AgentID, "nodes": len(c.Nodes), "edges": len(c.Edges), "source": c.Source,
 	})
@@ -250,6 +266,13 @@ func (h *Handler) DispatchAttackPathCollect(w http.ResponseWriter, r *http.Reque
 
 	cmd, sharpHoundLoaded := buildCollectCmd(body.Targets, body.Segment, body.RunSharpHound, body.SharpHoundArgs)
 
+	// Check whether a previous collection exists for this agent so the UI can
+	// inform the operator it will be replaced — not lost, just superseded.
+	var prevCollectedAt *time.Time
+	h.db.QueryRow(r.Context(),
+		`SELECT collected_at FROM attackpath_collections WHERE agent_id=$1 AND source='agent'`,
+		agentID).Scan(&prevCollectedAt)
+
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
 		Type: models.MsgCommandAttackPathCollect, AgentID: agentID, Data: cmd,
 	})
@@ -261,6 +284,7 @@ func (h *Handler) DispatchAttackPathCollect(w http.ResponseWriter, r *http.Reque
 	respond(w, map[string]any{
 		"agentId": agentID, "targets": len(body.Targets),
 		"sharpHound": body.RunSharpHound, "sharpHoundDelivered": sharpHoundLoaded,
+		"previousCollectionAt": prevCollectedAt,
 	})
 }
 
@@ -363,5 +387,44 @@ func (h *Handler) SubmitAttackPathSharpHound(w http.ResponseWriter, r *http.Requ
 	}
 	respond(w, map[string]any{
 		"agentId": agentID, "nodes": len(c.Nodes), "edges": len(c.Edges), "source": "sharphound",
+	})
+}
+
+// GetAttackPathSubnet derives the /24 subnet from the selected agent's known IP
+// and returns the full list of addresses as suggested probe targets. The UI
+// pre-fills the targets textarea with this list; the operator reviews and edits
+// before dispatching — nothing is dispatched automatically.
+func (h *Handler) GetAttackPathSubnet(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	if agentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+
+	var ipStr string
+	h.db.QueryRow(r.Context(),
+		`SELECT ip_address FROM agents WHERE agent_id = $1`, agentID).Scan(&ipStr)
+
+	ipStr = strings.TrimSpace(ipStr)
+	ip := net.ParseIP(ipStr).To4()
+	if ip == nil {
+		// No IP recorded for this agent yet (unlikely but possible before first heartbeat).
+		respond(w, map[string]any{"agentIp": ipStr, "subnet": "", "targets": []string{}})
+		return
+	}
+
+	subnet := fmt.Sprintf("%d.%d.%d.0/24", ip[0], ip[1], ip[2])
+	targets := make([]string, 0, 253)
+	for i := 1; i <= 254; i++ {
+		candidate := fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], i)
+		if candidate != ipStr {
+			targets = append(targets, candidate)
+		}
+	}
+
+	respond(w, map[string]any{
+		"agentIp": ipStr,
+		"subnet":  subnet,
+		"targets": targets,
 	})
 }
