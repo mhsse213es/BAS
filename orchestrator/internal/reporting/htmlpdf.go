@@ -79,13 +79,41 @@ func chromeWSURL(ctx context.Context, base string) string {
 
 // htmlToPDF prints the given HTML to an A4 PDF using the remote headless-shell
 // sidecar. Returns an error (so the caller can fall back) when the sidecar is
-// unconfigured or the render fails.
+// unconfigured or the render fails. Retries up to 3 times with 2 s backoff to
+// handle the window between Chrome's container starting and its CDP port being
+// ready (a race the healthcheck closes on fresh installs, but not mid-upgrade).
 func htmlToPDF(ctx context.Context, html []byte) ([]byte, error) {
-	ws := chromeWSURL(ctx, os.Getenv("CHROME_WS_URL"))
-	if ws == "" {
-		return nil, fmt.Errorf("chrome sidecar not configured (CHROME_WS_URL)")
+	base := os.Getenv("CHROME_WS_URL")
+	if strings.TrimSpace(base) == "" {
+		return nil, fmt.Errorf("chrome sidecar not configured (CHROME_WS_URL unset)")
 	}
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(2 * time.Second):
+			}
+		}
+		ws := chromeWSURL(ctx, base)
+		if ws == "" {
+			lastErr = fmt.Errorf("chrome sidecar not reachable at %s (attempt %d)", base, attempt+1)
+			log.Printf("[reporting] %v", lastErr)
+			continue
+		}
+		pdf, err := doRenderPDF(ctx, ws, html)
+		if err == nil && len(pdf) > 0 {
+			return pdf, nil
+		}
+		lastErr = err
+		log.Printf("[reporting] chrome render attempt %d failed: %v", attempt+1, err)
+	}
+	return nil, fmt.Errorf("chrome render failed after 3 attempts: %w", lastErr)
+}
 
+// doRenderPDF performs a single Chrome CDP print-to-PDF pass.
+func doRenderPDF(ctx context.Context, ws string, html []byte) ([]byte, error) {
 	allocCtx, cancelAlloc := chromedp.NewRemoteAllocator(ctx, ws)
 	defer cancelAlloc()
 	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
