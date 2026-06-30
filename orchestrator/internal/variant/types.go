@@ -195,6 +195,8 @@ type CoverageRow struct {
 type Stats struct {
 	ExecutedVariants       int `json:"executedVariants"`       // sum of completed variant_run.total_variants
 	AvailableVariants      int `json:"availableVariants"`      // ART atomics × encoding × privilege × exec-context permutations
+	ARTTechniqueCount      int `json:"artTechniqueCount"`      // distinct technique IDs in art_atomic_tests
+	ARTAtomicCount         int `json:"artAtomicCount"`         // total rows in art_atomic_tests (techniques × tests/technique)
 	PayloadFamilyCount     int `json:"payloadFamilyCount"`     // custom payload families in DB
 	PayloadFamilyVariants  int `json:"payloadFamilyVariants"`  // payload_family count × variants_per_family
 	TechniquesWithFamilies int `json:"techniquesWithFamilies"` // techniques with at least one payload family

@@ -318,12 +318,14 @@ func (h *Handler) GetVariantCoverage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetVariantStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var executed, familyCount, techCount int
+	var executed, familyCount, techCount, artTechCount, artAtomicCount int
 	h.db.QueryRow(ctx,
 		`SELECT COALESCE(SUM(total_variants),0) FROM variant_runs WHERE status = 'completed'`,
 	).Scan(&executed)
 	h.db.QueryRow(ctx, `SELECT COUNT(*) FROM payload_families`).Scan(&familyCount)
 	h.db.QueryRow(ctx, `SELECT COUNT(DISTINCT technique_id) FROM payload_families`).Scan(&techCount)
+	h.db.QueryRow(ctx, `SELECT COUNT(DISTINCT technique_id) FROM art_atomic_tests`).Scan(&artTechCount)
+	h.db.QueryRow(ctx, `SELECT COUNT(*) FROM art_atomic_tests`).Scan(&artAtomicCount)
 
 	// ART-derived total: same formula used by /api/art/content/status so both
 	// screens agree. Falls back to 0 on error — non-fatal.
@@ -333,6 +335,8 @@ func (h *Handler) GetVariantStats(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, variant.Stats{
 		ExecutedVariants:       executed,
 		AvailableVariants:      artVariants,
+		ARTTechniqueCount:      artTechCount,
+		ARTAtomicCount:         artAtomicCount,
 		PayloadFamilyCount:     familyCount,
 		PayloadFamilyVariants:  familyCount * perFamily,
 		TechniquesWithFamilies: techCount,
