@@ -2569,8 +2569,23 @@ body.theme-slate {
                 <select id="vex-agent" class="btn btn-outline" style="width:100%;text-align:left"></select>
               </div>
               <div>
-                <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Technique</label>
-                <select id="vex-technique" class="btn btn-outline" style="width:100%;text-align:left"></select>
+                <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Tactic</label>
+                <select id="vex-tactic" class="btn btn-outline" style="width:100%;text-align:left" onchange="filterVexTechniques()">
+                  <option value="">All tactics</option>
+                </select>
+              </div>
+              <div>
+                <label class="modal-lbl" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem">
+                  <span>Techniques <span id="vex-tech-count" style="color:var(--muted);font-size:0.72rem"></span></span>
+                  <span style="display:flex;gap:0.3rem">
+                    <button class="btn btn-sm btn-outline" onclick="vexSelectAll()" style="font-size:0.66rem;padding:1px 6px">All</button>
+                    <button class="btn btn-sm btn-outline" onclick="vexClearAll()" style="font-size:0.66rem;padding:1px 6px">None</button>
+                  </span>
+                </label>
+                <input type="text" id="vex-tech-search" class="btn btn-outline" style="width:100%;font-size:0.78rem;margin-bottom:0.3rem" placeholder="Search T-ID or name…" oninput="filterVexTechniques()">
+                <div id="vex-technique-list" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:0.35rem;background:var(--surface)">
+                  <div style="color:var(--muted);font-size:0.75rem;padding:0.4rem">Loading…</div>
+                </div>
               </div>
               <div>
                 <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Mode</label>
@@ -10103,21 +10118,65 @@ function populateVexAgents() {
   }).catch(function() {});
 }
 
+var _vexAllTechniques = [];
+
 function populateVexTechniques() {
-  apicall('/api/payload-families').then(function(families) {
-    var seen = {}, opts = [];
-    (families || []).forEach(function(f) {
-      if (!seen[f.techniqueId]) {
-        seen[f.techniqueId] = true;
-        opts.push('<option value="' + x(f.techniqueId) + '">' + x(f.techniqueId) + '</option>');
-      }
-    });
-    var sel = document.getElementById('vex-technique');
-    if (!sel) return;
-    sel.innerHTML = opts.length
-      ? '<option value="">Select technique…</option>' + opts.join('')
-      : '<option value="">No payload families loaded</option>';
-  }).catch(function() {});
+  apicall('/api/art/techniques').then(function(techs) {
+    _vexAllTechniques = (techs || []).filter(function(t) { return t.id; });
+    // Populate tactic dropdown
+    var tactics = {};
+    _vexAllTechniques.forEach(function(t) { if (t.tactic) tactics[t.tactic] = true; });
+    var tacSel = document.getElementById('vex-tactic');
+    if (tacSel) {
+      var tacOpts = '<option value="">All tactics (' + _vexAllTechniques.length + ' techniques)</option>';
+      Object.keys(tactics).sort().forEach(function(tc) {
+        var label = tc.replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+        tacOpts += '<option value="' + x(tc) + '">' + x(label) + '</option>';
+      });
+      tacSel.innerHTML = tacOpts;
+    }
+    filterVexTechniques();
+  }).catch(function() {
+    var el = document.getElementById('vex-technique-list');
+    if (el) el.innerHTML = '<div style="color:var(--danger);font-size:0.75rem;padding:0.4rem">Failed to load techniques</div>';
+  });
+}
+
+function filterVexTechniques() {
+  var tactic = document.getElementById('vex-tactic') ? document.getElementById('vex-tactic').value : '';
+  var search = (document.getElementById('vex-tech-search') ? document.getElementById('vex-tech-search').value : '').toLowerCase().trim();
+  var filtered = _vexAllTechniques.filter(function(t) {
+    if (tactic && t.tactic !== tactic) return false;
+    if (search && t.id.toLowerCase().indexOf(search) < 0 && (t.name || '').toLowerCase().indexOf(search) < 0) return false;
+    return true;
+  });
+  var el = document.getElementById('vex-technique-list');
+  if (!el) return;
+  var countEl = document.getElementById('vex-tech-count');
+  if (countEl) countEl.textContent = '(' + filtered.length + ')';
+  if (!filtered.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:0.75rem;padding:0.4rem">No techniques match</div>';
+    return;
+  }
+  el.innerHTML = filtered.map(function(t) {
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:2px 4px;cursor:pointer;border-radius:3px">' +
+      '<input type="checkbox" class="vex-tech-cb" value="' + x(t.id) + '" style="accent-color:var(--accent);flex-shrink:0">' +
+      '<span style="font-family:var(--font-mono);font-size:0.76rem;flex-shrink:0">' + x(t.id) + '</span>' +
+      (t.name ? '<span style="color:var(--muted);font-size:0.71rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(t.name) + '</span>' : '') +
+      '</label>';
+  }).join('');
+}
+
+function vexSelectAll() {
+  document.querySelectorAll('#vex-technique-list .vex-tech-cb').forEach(function(cb) { cb.checked = true; });
+}
+
+function vexClearAll() {
+  document.querySelectorAll('#vex-technique-list .vex-tech-cb').forEach(function(cb) { cb.checked = false; });
+}
+
+function vexSelectedTechniques() {
+  return Array.from(document.querySelectorAll('#vex-technique-list .vex-tech-cb:checked')).map(function(cb) { return cb.value; });
 }
 
 function loadVariantCoverage() {
@@ -10159,27 +10218,72 @@ function loadVariantCoverage() {
 
 function runVariants() {
   var agentId = document.getElementById('vex-agent') ? document.getElementById('vex-agent').value : '';
-  var techniqueId = document.getElementById('vex-technique') ? document.getElementById('vex-technique').value : '';
+  var techniques = vexSelectedTechniques();
   var mode = document.getElementById('vex-mode') ? document.getElementById('vex-mode').value : 'sequential';
   var advanced = document.getElementById('vex-advanced') ? document.getElementById('vex-advanced').checked : false;
-  if (!agentId || !techniqueId) {
-    showToast('Select an agent and technique first', 'err');
+  if (!agentId) { showToast('Select an agent first', 'err'); return; }
+  if (!techniques.length) { showToast('Check at least one technique', 'err'); return; }
+  var btn = document.getElementById('vex-run-btn');
+  if (btn) { btn.disabled = true; }
+  _vexRunVariantQueue(agentId, techniques, mode, advanced, 0);
+}
+
+function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
+  var btn = document.getElementById('vex-run-btn');
+  if (idx >= techniques.length) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
+    if (techniques.length > 1) showToast('All ' + techniques.length + ' techniques queued', 'ok');
+    loadVariantCoverage();
+    loadVariantStats();
     return;
   }
-  var btn = document.getElementById('vex-run-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Dispatching…'; }
+  var tid = techniques[idx];
+  if (btn) btn.textContent = techniques.length > 1 ? (idx + 1) + '/' + techniques.length + ' Running…' : 'Dispatching…';
+
+  if (techniques.length > 1) {
+    var panel = document.getElementById('vex-result-panel');
+    if (panel) {
+      var pct = Math.round((idx / techniques.length) * 100);
+      panel.innerHTML = '<div class="card" style="padding:1.5rem">' +
+        '<div class="card-title" style="margin-bottom:0.75rem">Queue Progress</div>' +
+        '<div style="font-size:0.83rem;color:var(--muted);margin-bottom:0.6rem">Running <span style="font-family:var(--font-mono);color:var(--text)">' + x(tid) + '</span> — <span style="color:var(--accent);font-weight:600">' + (idx + 1) + ' / ' + techniques.length + '</span></div>' +
+        '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
+          '<div style="height:4px;background:var(--accent);border-radius:2px;width:' + pct + '%;transition:width 0.4s"></div>' +
+        '</div>' +
+        (idx > 0 ? '<div style="margin-top:0.6rem;font-size:0.74rem;color:var(--muted)">' + idx + ' completed</div>' : '') +
+      '</div>';
+    }
+  }
+
   apicall('/api/variants/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agentId: agentId, techniqueId: techniqueId, executionMode: mode, includeAdvanced: advanced })
+    body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
   }).then(function(resp) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
-    showToast('Dispatched ' + (resp.totalVariants || 0) + ' variants', 'ok');
-    pollVariantRun(resp.variantRunId);
+    var vrId = resp.variantRunId;
+    if (techniques.length === 1) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
+      showToast('Dispatched ' + (resp.totalVariants || 0) + ' variants', 'ok');
+      pollVariantRun(vrId);
+      return;
+    }
+    // Multi: wait for this run to finish, then dispatch next
+    _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, idx);
   }).catch(function(e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
-    showToast(e.message || 'Dispatch failed', 'err');
+    showToast('Failed on ' + tid + ': ' + (e.message || 'error'), 'err');
   });
+}
+
+function _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, idx) {
+  var poll = setInterval(function() {
+    apicall('/api/variants/run/' + vrId).then(function(detail) {
+      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
+        clearInterval(poll);
+        _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1);
+      }
+    }).catch(function() { clearInterval(poll); _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1); });
+  }, 3000);
 }
 
 function pollVariantRun(vrId) {
