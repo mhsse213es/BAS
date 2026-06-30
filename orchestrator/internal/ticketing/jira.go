@@ -108,10 +108,15 @@ func (j *jiraConnector) CreateTicket(ctx context.Context, f TicketFinding, rt Re
 			return TicketRef{}, err // unrelated error — don't retry
 		}
 	}
-	// Final fallback: ask the project which types actually exist.
+	// Final fallback: query which types the project actually accepts.
+	// Prefer ID-based lookup (bypasses name-matching and localisation issues).
 	if err != nil {
-		for _, typeName := range j.projectIssueTypes(ctx) {
-			fields["issuetype"] = map[string]string{"name": typeName}
+		for _, t := range j.projectIssueTypes(ctx) {
+			if t.ID != "" {
+				fields["issuetype"] = map[string]string{"id": t.ID}
+			} else {
+				fields["issuetype"] = map[string]string{"name": t.Name}
+			}
 			resp, err = j.doRequest(ctx, "POST", "/rest/api/2/issue", payload)
 			if err == nil {
 				break
@@ -143,15 +148,46 @@ func isIssueTypeError(err error) bool {
 	return strings.Contains(low, "issuetype") || strings.Contains(low, "issue type")
 }
 
-// projectIssueTypes queries the Jira project and returns its non-subtask
-// issue type names. Used as the last-resort fallback in CreateTicket.
-func (j *jiraConnector) projectIssueTypes(ctx context.Context) []string {
-	data, err := j.doRequest(ctx, "GET", "/rest/api/2/project/"+j.projectKey+"?expand=issueTypes", nil)
+type issueTypeRef struct {
+	ID   string
+	Name string
+}
+
+// projectIssueTypes returns the issue types valid for creating issues in the
+// configured project. Tries /issue/createmeta first (authoritative, returns
+// only create-eligible types by ID), then falls back to /project expand.
+// Using ID avoids name-matching failures from localisation or capitalization.
+func (j *jiraConnector) projectIssueTypes(ctx context.Context) []issueTypeRef {
+	// Strategy 1: createmeta — most reliable, used by Jira's own UI
+	data, err := j.doRequest(ctx, "GET",
+		"/rest/api/2/issue/createmeta?projectKeys="+j.projectKey+"&expand=projects.issuetypes", nil)
+	if err == nil {
+		var meta struct {
+			Projects []struct {
+				IssueTypes []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"issuetypes"`
+			} `json:"projects"`
+		}
+		if json.Unmarshal(data, &meta) == nil && len(meta.Projects) > 0 {
+			var out []issueTypeRef
+			for _, t := range meta.Projects[0].IssueTypes {
+				out = append(out, issueTypeRef{ID: t.ID, Name: t.Name})
+			}
+			if len(out) > 0 {
+				return out
+			}
+		}
+	}
+	// Strategy 2: project expand (older Jira Server / DC)
+	data, err = j.doRequest(ctx, "GET", "/rest/api/2/project/"+j.projectKey+"?expand=issueTypes", nil)
 	if err != nil {
 		return nil
 	}
 	var proj struct {
 		IssueTypes []struct {
+			ID      string `json:"id"`
 			Name    string `json:"name"`
 			Subtask bool   `json:"subtask"`
 		} `json:"issueTypes"`
@@ -159,13 +195,13 @@ func (j *jiraConnector) projectIssueTypes(ctx context.Context) []string {
 	if json.Unmarshal(data, &proj) != nil {
 		return nil
 	}
-	var types []string
+	var out []issueTypeRef
 	for _, t := range proj.IssueTypes {
 		if !t.Subtask {
-			types = append(types, t.Name)
+			out = append(out, issueTypeRef{ID: t.ID, Name: t.Name})
 		}
 	}
-	return types
+	return out
 }
 
 func dedupeStrings(in []string) []string {
