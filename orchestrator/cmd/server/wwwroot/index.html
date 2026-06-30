@@ -5584,41 +5584,46 @@ function openRemediation(i) {
   document.getElementById('results-overlay').classList.add('open');
 }
 function revalidateRemediation(techniqueId) {
-  // Find the best matching scenario for this technique ID so the modal
-  // opens pre-selected rather than blank.
-  // Priority: (1) custom/builtin scenario whose artTechniques list contains the ID,
-  //           (2) scenario with a step whose techniqueId matches,
-  //           (3) fall back to blank modal with a guiding toast.
+  // Re-validate runs ONLY the specific technique that was remediated, not the
+  // entire scenario. Pre-set _runSelection to a single-technique subset so the
+  // wizard skips to Options and dispatches only that one technique.
+  // Priority: (1) scenario whose artTechniques list contains the ID (most common),
+  //           (2) scenario with a custom step whose techniqueId matches.
   var tid = (techniqueId || '').toUpperCase();
   var match = null;
-  // Pass 1 — artTechniques list
+  var matchFw = 'art';
+  // Pass 1 — ART scenario with this technique in its artTechniques list
   for (var i = 0; i < scenarios.length; i++) {
     var s = scenarios[i];
     var arts = s.artTechniques || [];
     for (var j = 0; j < arts.length; j++) {
-      if ((arts[j] || '').toUpperCase() === tid) { match = s; break; }
+      if ((arts[j] || '').toUpperCase() === tid) { match = s; matchFw = 'art'; break; }
     }
     if (match) break;
   }
-  // Pass 2 — custom steps with a techniqueId field
+  // Pass 2 — custom-step scenario with a step that has this techniqueId
   if (!match) {
     for (var i = 0; i < scenarios.length; i++) {
       var s = scenarios[i];
       var steps = s.steps || [];
       for (var j = 0; j < steps.length; j++) {
-        if ((steps[j].techniqueId || '').toUpperCase() === tid) { match = s; break; }
+        if ((steps[j].techniqueId || '').toUpperCase() === tid) {
+          match = s; matchFw = scenarioFramework(s) || 'steps'; break;
+        }
       }
       if (match) break;
     }
   }
-  if (match) {
-    showToast('Opening scenario "' + match.name + '" for ' + techniqueId, 'ok');
-    openModal(match.id);
-  } else {
-    // No matching scenario found — open blank modal with a guiding toast
+  if (!match) {
     showToast('No scenario found for ' + techniqueId + ' — select one manually', 'ok');
     openModal();
+    return;
   }
+  // Pre-arm the run-selection with ONLY this one technique so the modal
+  // dispatches a targeted single-technique run, not the whole scenario.
+  _runSelection = { scId: match.id, fw: matchFw, ids: [tid] };
+  showToast('Re-validating ' + techniqueId + ' only — not the full scenario', 'ok');
+  openModal(match.id);
 }
 
 // ── Ticketing ─────────────────────────────────────────────────────────────────
