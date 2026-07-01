@@ -23,6 +23,7 @@ import (
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
@@ -53,6 +54,9 @@ type Handler struct {
 	scheduler        *connector.Scheduler  // nil when no sources configured
 	ticketing        *ticketing.Manager    // nil when no connectors configured
 	licPath          string               // path to bas.lic for Settings → License display
+	exerciseStore    *exercise.Store
+	exerciseExecutor *exercise.Executor
+	exerciseChain    *exercise.EvidenceChain
 }
 
 // New creates a Handler.
@@ -151,6 +155,14 @@ func (h *Handler) WithManifest(m *integrity.Manifest) *Handler {
 
 func (h *Handler) WithLicensePath(path string) *Handler {
 	h.licPath = path
+	return h
+}
+
+// WithExercise attaches the exercise engine components.
+func (h *Handler) WithExercise(store *exercise.Store, exec *exercise.Executor, chain *exercise.EvidenceChain) *Handler {
+	h.exerciseStore = store
+	h.exerciseExecutor = exec
+	h.exerciseChain = chain
 	return h
 }
 

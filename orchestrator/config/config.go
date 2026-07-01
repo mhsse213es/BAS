@@ -23,6 +23,15 @@ type Config struct {
 	LicensePath       string `json:"license_path,omitempty"`
 	AdminPassword     string `json:"admin_password,omitempty"`
 
+	// Exercise Engine — SMTP injector + tracker base URL
+	SMTPHost      string `json:"smtp_host,omitempty"`
+	SMTPPort      int    `json:"smtp_port,omitempty"`
+	SMTPUser      string `json:"smtp_user,omitempty"`
+	SMTPPass      string `json:"smtp_pass,omitempty"`
+	SMTPFrom      string `json:"smtp_from,omitempty"`
+	SMTPFromName  string `json:"smtp_from_name,omitempty"`
+	PublicBaseURL string `json:"public_base_url,omitempty"` // e.g. "https://bas.internal" for tracking pixel URLs
+
 	// Threat-intel connector (MISP / OpenCTI)
 	MISPUrl              string   `json:"misp_url,omitempty"`
 	MISPApiKey           string   `json:"misp_api_key,omitempty"`
@@ -92,6 +101,27 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("AGENT_SECRET"); v != "" {
 		cfg.AgentSecret = v
+	}
+	if v := os.Getenv("SMTP_HOST"); v != "" {
+		cfg.SMTPHost = v
+	}
+	if v := os.Getenv("SMTP_PORT"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.SMTPPort)
+	}
+	if v := os.Getenv("SMTP_USER"); v != "" {
+		cfg.SMTPUser = v
+	}
+	if v := os.Getenv("SMTP_PASS"); v != "" {
+		cfg.SMTPPass = v
+	}
+	if v := os.Getenv("SMTP_FROM"); v != "" {
+		cfg.SMTPFrom = v
+	}
+	if v := os.Getenv("SMTP_FROM_NAME"); v != "" {
+		cfg.SMTPFromName = v
+	}
+	if v := os.Getenv("PUBLIC_BASE_URL"); v != "" {
+		cfg.PublicBaseURL = v
 	}
 	if v := os.Getenv("MISP_URL"); v != "" {
 		cfg.MISPUrl = v

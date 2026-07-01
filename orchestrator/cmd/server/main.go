@@ -20,6 +20,7 @@ import (
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detect"
+	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
@@ -173,6 +174,30 @@ func main() {
 	scheduler.Start()
 	defer scheduler.Stop()
 
+	// ── Exercise Engine ───────────────────────────────────────────────────
+	if err := db.EnsureExerciseSchema(context.Background(), pool); err != nil {
+		log.Fatalf("[FATAL] exercise schema: %v", err)
+	}
+	exStore := exercise.NewStore(pool)
+	exChain := exercise.NewEvidenceChain(exStore)
+	smtpCfg := exercise.SMTPConfig{
+		Host:           cfg.SMTPHost,
+		Port:           cfg.SMTPPort,
+		Username:       cfg.SMTPUser,
+		Password:       cfg.SMTPPass,
+		FromAddr:       cfg.SMTPFrom,
+		FromName:       cfg.SMTPFromName,
+		TrackerBaseURL: cfg.PublicBaseURL,
+	}
+	var smtpInj *exercise.SMTPInjector
+	if cfg.SMTPHost != "" {
+		smtpInj = exercise.NewSMTPInjector(smtpCfg, exStore, exChain)
+	}
+	exExecutor := exercise.NewExecutor(exStore, exChain, smtpInj, nil)
+	exExecutor.Start()
+	exTracker := exercise.NewTracker(exStore, exChain)
+	log.Println("[+] Exercise engine ready")
+
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
@@ -186,8 +211,9 @@ func main() {
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
 		WithTicketing(ticketingManager).
-		WithLicensePath(cfg.LicensePath)
-	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler())
+		WithLicensePath(cfg.LicensePath).
+		WithExercise(exStore, exExecutor, exChain)
+	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), exTracker)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
 	// Marks agents offline if no heartbeat received within 90 seconds and

@@ -7,13 +7,14 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/ws"
 )
 
 // Mount builds the full HTTP router and returns it.
 // staticHandler serves the dashboard SPA — pass StaticHandler() in production
 // (embedded FS) or http.FileServer(http.Dir("./wwwroot")) in tests/dev.
-func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler http.Handler) http.Handler {
+func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler http.Handler, tracker ...*exercise.Tracker) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
@@ -76,6 +77,15 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	// Exercise click/open/cred tracking — no auth; access is via single-use tokens.
+	if len(tracker) > 0 && tracker[0] != nil {
+		tr := tracker[0]
+		r.Get("/x/open/{token}", tr.HandleOpen)
+		r.Get("/x/click/{token}", tr.HandleClick)
+		r.Post("/x/cred/{token}", tr.HandleCredSubmit)
+		r.Post("/x/report/{token}", tr.HandleReport)
+	}
 
 	// ── Authenticated endpoints (JWT required) ────────────────────────────
 	r.Group(func(r chi.Router) {
@@ -187,7 +197,22 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			// Payload families (Phase 3) — mutation/delete is Admin only (see below)
 			r.Get("/api/payload-families", h.GetPayloadFamilies)
 			r.Get("/api/payload-families/{techniqueId}", h.GetTechniqueFamilies)
+
+			// Exercise Engine — Analyst+ can run and observe exercises.
+			r.Post("/api/exercises/executions/{id}/launch", h.LaunchExerciseExecution)
+			r.Post("/api/exercises/executions/{id}/abort", h.AbortExerciseExecution)
+			r.Post("/api/exercises/executions/{id}/steps/{stepId}/approve", h.ApproveExerciseStep)
+			r.Post("/api/exercises/executions/{id}/evidence", h.InjectEvidence)
 		})
+
+		// Exercise — read access for all authenticated roles.
+		r.Get("/api/exercises/plans", h.ListExercisePlans)
+		r.Get("/api/exercises/plans/{id}", h.GetExercisePlan)
+		r.Get("/api/exercises/executions", h.ListExerciseExecutions)
+		r.Get("/api/exercises/executions/{id}", h.GetExerciseExecution)
+		r.Get("/api/exercises/executions/{id}/evidence", h.GetExerciseEvidence)
+		r.Get("/api/exercises/executions/{id}/evidence/verify", h.VerifyExerciseChain)
+		r.Post("/api/exercises/executions", h.CreateExerciseExecution)
 
 		// Any authenticated user — self-service password change
 		r.Post("/api/auth/change-password", h.ChangePassword)
@@ -258,6 +283,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Put("/api/siem/configs/{id}", h.UpdateSIEMConfig)
 			r.Delete("/api/siem/configs/{id}", h.DeleteSIEMConfig)
 			r.Post("/api/siem/configs/{id}/test", h.TestSIEMConfig)
+
+			// Exercise plan authoring — Admin only
+			r.Post("/api/exercises/plans", h.CreateExercisePlan)
+			r.Put("/api/exercises/plans/{id}", h.UpdateExercisePlan)
+			r.Delete("/api/exercises/plans/{id}", h.DeleteExercisePlan)
 		})
 	})
 
