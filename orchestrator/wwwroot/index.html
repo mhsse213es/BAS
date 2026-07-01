@@ -10400,12 +10400,27 @@ function downloadFullReportPDF(agentId) {
 
 function downloadAuditPack(agentId) {
   showToast('Preparing audit pack…', 'ok');
-  var a = document.createElement('a');
-  a.href = '/api/report/audit-pack?agentId=' + encodeURIComponent(agentId);
-  a.download = 'bas-audit-pack-' + agentId + '.zip';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  fetch('/api/report/audit-pack?agentId=' + encodeURIComponent(agentId), {
+    credentials: 'same-origin'
+  }).then(function(resp) {
+    if (!resp.ok) {
+      return resp.json().then(function(j) {
+        showToast(j.error || 'Audit pack failed', 'err');
+      }).catch(function() {
+        showToast('Audit pack failed (' + resp.status + ')', 'err');
+      });
+    }
+    return resp.blob().then(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'bas-audit-pack-' + agentId + '.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+    });
+  }).catch(function(e) { showToast('Audit pack failed: ' + e.message, 'err'); });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

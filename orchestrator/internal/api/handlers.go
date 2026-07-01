@@ -3754,6 +3754,17 @@ func (h *Handler) GetAuditPack(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agentId required", http.StatusBadRequest)
 		return
 	}
+	// Guard: require at least one completed run before generating a pack.
+	var runCount int
+	h.db.QueryRow(r.Context(),
+		`SELECT COUNT(*) FROM scenario_runs WHERE agent_id=$1 AND status IN ('completed','partial')`,
+		agentID,
+	).Scan(&runCount)
+	if runCount == 0 {
+		jsonError(w, "No completed runs for this agent — run at least one scenario before generating an audit pack", http.StatusUnprocessableEntity)
+		return
+	}
+
 	fname := fmt.Sprintf("bas-audit-pack-%s-%s.zip", agentID, time.Now().UTC().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
