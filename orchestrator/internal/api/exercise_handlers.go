@@ -2,12 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/exercise"
+	"github.com/audspect/bas/internal/reporting"
 )
 
 // actorID extracts the authenticated username from the JWT context.
@@ -218,6 +220,101 @@ func (h *Handler) GetExerciseEvents(w http.ResponseWriter, r *http.Request) {
 		evs = []map[string]interface{}{}
 	}
 	respond(w, evs)
+}
+
+// ── Report exports ────────────────────────────────────────────────────────────
+
+// buildExerciseReport assembles all data for one execution into a report struct.
+func (h *Handler) buildExerciseReport(r *http.Request, id string) (*reporting.ExerciseReport, error) {
+	ctx := r.Context()
+	ex, err := h.exerciseStore.GetExecution(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("execution not found: %w", err)
+	}
+	plan, err := h.exerciseStore.GetPlan(ctx, ex.PlanID)
+	if err != nil {
+		return nil, fmt.Errorf("plan not found: %w", err)
+	}
+	steps, _ := h.exerciseStore.ListStepExecutions(ctx, id)
+	evidence, _ := h.exerciseStore.ListEvidence(ctx, id)
+	events, _ := h.exerciseStore.ListEvents(ctx, id)
+	chainErr := ""
+	chainOK := true
+	if err := h.exerciseChain.Verify(ctx, id); err != nil {
+		chainOK = false
+		chainErr = err.Error()
+	}
+	rep := &reporting.ExerciseReport{
+		Execution: ex,
+		Plan:      plan,
+		Steps:     steps,
+		Evidence:  evidence,
+		Events:    events,
+		Score:     ex.Score,
+		ChainOK:   chainOK,
+		ChainErr:  chainErr,
+	}
+	rep.Timeline = reporting.BuildTimeline(rep)
+	return rep, nil
+}
+
+// GET /api/exercises/executions/{id}/report.json
+func (h *Handler) GetExerciseReportJSON(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	rep, err := h.buildExerciseReport(r, id)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="exercise-%s.json"`, id))
+	if err := reporting.ExerciseReportJSON(w, rep); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// GET /api/exercises/executions/{id}/report.html
+func (h *Handler) GetExerciseReportHTML(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	rep, err := h.buildExerciseReport(r, id)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := reporting.ExerciseReportHTML(w, rep); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// GET /api/exercises/executions/{id}/report.pdf
+func (h *Handler) GetExerciseReportPDF(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	rep, err := h.buildExerciseReport(r, id)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="exercise-%s.pdf"`, id))
+	if err := reporting.ExerciseReportPDF(r.Context(), w, rep); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// GET /api/exercises/executions/{id}/report.csv
+func (h *Handler) GetExerciseReportCSV(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	rep, err := h.buildExerciseReport(r, id)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="exercise-%s.csv"`, id))
+	if err := reporting.ExerciseReportCSV(w, rep); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // POST /api/exercises/executions/{id}/evidence

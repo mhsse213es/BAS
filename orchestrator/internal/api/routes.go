@@ -214,6 +214,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/exercises/executions/{id}/evidence", h.GetExerciseEvidence)
 		r.Get("/api/exercises/executions/{id}/evidence/verify", h.VerifyExerciseChain)
 		r.Get("/api/exercises/executions/{id}/events", h.GetExerciseEvents)
+		r.Get("/api/exercises/executions/{id}/report.json", h.GetExerciseReportJSON)
+		r.Get("/api/exercises/executions/{id}/report.html", h.GetExerciseReportHTML)
+		r.Get("/api/exercises/executions/{id}/report.pdf", h.GetExerciseReportPDF)
+		r.Get("/api/exercises/executions/{id}/report.csv", h.GetExerciseReportCSV)
 		r.Post("/api/exercises/executions", h.CreateExerciseExecution)
 
 		// Any authenticated user — self-service password change
