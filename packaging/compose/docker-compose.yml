@@ -70,7 +70,7 @@ services:
     # chromedp/headless-shell has no wget/curl/python3; use socat (present
     # in this image) to verify the CDP port accepts connections.
     healthcheck:
-      test: ["CMD-SHELL", "socat /dev/null TCP:127.0.0.1:9222,connect-timeout=2"]
+      test: ["CMD", "/usr/bin/socat", "/dev/null", "TCP:127.0.0.1:9222,connect-timeout=2"]
       interval: 5s
       timeout: 5s
       retries: 10
