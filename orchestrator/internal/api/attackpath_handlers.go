@@ -138,7 +138,13 @@ func (h *Handler) GetAttackPathSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := attackpath.BuildAndAnalyze(cols, h.loadAssetTags(r))
-	respond(w, map[string]any{"collected": true, "agents": len(cols), "summary": s})
+	var latest time.Time
+	for _, c := range cols {
+		if c.CollectedAt.After(latest) {
+			latest = c.CollectedAt
+		}
+	}
+	respond(w, map[string]any{"collected": true, "agents": len(cols), "summary": s, "latestCollectedAt": latest})
 }
 
 // GetAttackPathAssets returns the host inventory — every host in the current

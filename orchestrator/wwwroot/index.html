@@ -3568,7 +3568,54 @@ function showTab(name) {
 function loadAttackPath() {
   var body = document.getElementById('ap-body');
   if (body) body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
-  apicall('/api/attackpath/summary').then(renderAttackPath).catch(function(e) { showToast(e.message, 'err'); });
+  apicall('/api/attackpath/summary').then(function(d) {
+    // Check if a collection was in-flight when the page was last reloaded.
+    var pending = _apLoadPending();
+    if (pending) {
+      var completedWhileAway = d && d.latestCollectedAt &&
+          new Date(d.latestCollectedAt) > new Date(pending.dispatchedAt);
+      if (completedWhileAway) {
+        // Collection finished during the reload gap — surface it as completed.
+        _apClearPending();
+        var panel = document.getElementById('ap-collect');
+        var tl = document.getElementById('ap-timeline');
+        if (panel && tl) {
+          panel.style.display = '';
+          document.getElementById('ap-form').style.display = 'none';
+          document.getElementById('ap-progress').style.display = '';
+          var shNote = pending.shEnabled ? (pending.sharpHoundDelivered ? ' + SharpHound' : ' (SharpHound skipped — not configured)') : '';
+          tl.innerHTML =
+            _apStep('done', 'Command dispatched to ' + x(pending.agentLabel) + ' at ' + new Date(pending.dispatchedAt).toLocaleTimeString(),
+              pending.targets.length + ' target' + (pending.targets.length === 1 ? '' : 's') + shNote) +
+            _apStep('done', 'Agent finished probing', 'Completed while page was reloading.') +
+            _apStep('done', 'Collection received — graph updated',
+              'Collection arrived at ' + new Date(d.latestCollectedAt).toLocaleTimeString() + '. Results are ready.') +
+            _apStep('done', 'Graph analysis complete', 'Attack path score and lateral movement risk have been recalculated.');
+          document.getElementById('ap-done-actions').style.display = '';
+        }
+        showToast('Attack path collection completed while you were away — results ready', 'ok');
+      } else {
+        // Still in-flight — restore the spinner UI so the user knows it is running.
+        _apCollectAgentId = pending.agentId;
+        var panel = document.getElementById('ap-collect');
+        var tl = document.getElementById('ap-timeline');
+        if (panel && tl) {
+          panel.style.display = '';
+          document.getElementById('ap-form').style.display = 'none';
+          document.getElementById('ap-progress').style.display = '';
+          var shNote2 = pending.shEnabled ? (pending.sharpHoundDelivered ? ' + SharpHound domain mapping' : ' (SharpHound skipped — binary not configured)') : '';
+          tl.innerHTML =
+            _apStep('done', 'Command dispatched to ' + x(pending.agentLabel) + ' at ' + new Date(pending.dispatchedAt).toLocaleTimeString(),
+              pending.targets.length + ' target' + (pending.targets.length === 1 ? '' : 's') + ' queued' + shNote2) +
+            _apStep('active', 'Agent is probing the network…',
+              'TCP connect on SMB (445), WinRM (5985), RDP (3389) — page was reloaded during collection. Waiting for the agent to report back.') +
+            _apStep('pending', 'Collection received by server', '') +
+            _apStep('pending', 'Graph built &amp; analysis complete', '');
+        }
+      }
+    }
+    renderAttackPath(d);
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function apColor(score) {
   return score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : score >= 40 ? '#f0883e' : 'var(--danger)';
@@ -3649,9 +3696,28 @@ function renderAttackPath(d) {
 
 var _apCollectAgentId = null; // agentId currently being collected (for WS matching)
 
+// Persist in-flight collection state across page reloads.
+function _apSavePending(agentId, agentLabel, targets, shEnabled, sharpHoundDelivered) {
+  try {
+    localStorage.setItem('_apPending', JSON.stringify({
+      agentId: agentId, agentLabel: agentLabel,
+      targets: targets, shEnabled: shEnabled,
+      sharpHoundDelivered: !!sharpHoundDelivered,
+      dispatchedAt: new Date().toISOString()
+    }));
+  } catch(e) {}
+}
+function _apClearPending() {
+  try { localStorage.removeItem('_apPending'); } catch(e) {}
+}
+function _apLoadPending() {
+  try { return JSON.parse(localStorage.getItem('_apPending') || 'null'); } catch(e) { return null; }
+}
+
 function apCollectClose() {
   document.getElementById('ap-collect').style.display = 'none';
   _apCollectAgentId = null;
+  _apClearPending();
   // reset to form mode for next open
   document.getElementById('ap-form').style.display = '';
   document.getElementById('ap-progress').style.display = 'none';
@@ -3759,6 +3825,7 @@ function dispatchAPCollect() {
 
   apicall('/api/attackpath/collect/' + encodeURIComponent(agentId), { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
     _apCollectAgentId = agentId;
+    _apSavePending(agentId, agentLabel, targets, shEnabled, r.sharpHoundDelivered);
 
     // Switch panel to progress timeline
     document.getElementById('ap-form').style.display = 'none';
@@ -3786,6 +3853,7 @@ function dispatchAPCollect() {
 // Called from the WS onmessage handler when the agent reports a completed collection.
 function _apOnCollected(msg) {
   if (!msg || !msg.data) return;
+  _apClearPending();
   var d = msg.data;
   var tl = document.getElementById('ap-timeline');
   if (!tl) return;
