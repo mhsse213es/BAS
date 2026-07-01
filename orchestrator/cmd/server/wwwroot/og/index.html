@@ -2207,6 +2207,7 @@ body.theme-slate {
             <button class="btn btn-outline btn-sm" onclick="loadAttackPath()">Refresh</button>
             <button class="btn btn-outline btn-sm" onclick="openAPAssets()">&#9873; Tag Assets</button>
             <button class="btn btn-outline btn-sm" onclick="openAPSchedule()">&#8635; Schedule</button>
+            <button class="btn btn-outline btn-sm" onclick="openAPAbout()" title="How Attack Path Validation works">&#9432; About</button>
             <button class="btn btn-primary btn-sm" id="ap-collect-btn" onclick="openAPCollect()">&#9654; Run Collection</button>
           </div>
         </div>
@@ -2271,6 +2272,151 @@ body.theme-slate {
           </div>
         </div>
         <div id="ap-body"><div class="empty" style="padding:2rem">Loading…</div></div>
+
+        <!-- About modal -->
+        <div id="ap-about-backdrop" onclick="closeAPAbout()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1000"></div>
+        <div id="ap-about-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;width:min(680px,96vw);max-height:88vh;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,0.5)">
+          <div style="position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:1rem 1.25rem 0.85rem;display:flex;align-items:center;justify-content:space-between;z-index:1">
+            <div>
+              <div style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:var(--text);letter-spacing:-0.01em">&#9432; Attack Path Validation — How It Works</div>
+              <div style="font-size:0.75rem;color:var(--muted);margin-top:0.15rem">Relationship mapping and reachability analysis · no exploitation · no propagation</div>
+            </div>
+            <button onclick="closeAPAbout()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:0.25rem 0.55rem;color:var(--muted);cursor:pointer;font-size:0.85rem">&#10005;</button>
+          </div>
+          <div style="padding:1.25rem;font-size:0.82rem;color:var(--text);line-height:1.65">
+
+            <!-- Overview -->
+            <div style="margin-bottom:1.1rem">
+              <div style="font-weight:700;color:var(--text);margin-bottom:0.35rem;font-size:0.88rem">What is Attack Path Validation?</div>
+              <div style="color:var(--muted)">Identifies potential lateral movement paths from a compromised endpoint by validating reachability and administrative relationships between systems. It does not exploit targets or perform vulnerability scanning. Instead it builds an attack graph from collected connectivity and privilege information, then computes blast radius, choke points, and chains to Domain Admin or Crown Jewel assets.</div>
+            </div>
+
+            <!-- Prerequisites -->
+            <div style="margin-bottom:1.1rem">
+              <div style="font-weight:700;color:var(--text);margin-bottom:0.5rem;font-size:0.88rem">Prerequisites</div>
+              <div style="display:flex;flex-direction:column;gap:0.3rem">
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Windows agent online</strong> — agent must be enrolled and connected</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Local enumeration permissions</strong> — the agent needs rights to enumerate local admins and active sessions on its own host</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Firewall allows outbound probes</strong> — SMB (445), WinRM (5985), RDP (3389) from agent to each target</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Targets explicitly listed</strong> — the agent probes only the hosts you supply; no subnet discovery</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--muted);font-size:0.9rem;flex-shrink:0">○</span><span><strong>Domain-joined host + SharpHound enabled</strong> — optional; required for AD relationship edges</span></div>
+              </div>
+            </div>
+
+            <!-- How collection works -->
+            <div style="margin-bottom:1.1rem">
+              <div style="font-weight:700;color:var(--text);margin-bottom:0.5rem;font-size:0.88rem">What the agent does during collection</div>
+              <div style="display:flex;flex-direction:column;gap:0.55rem">
+                <div><strong style="color:var(--text)">1 · Local identity</strong>
+                  <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
+                    <li>Enumerates all <strong>Local Administrators</strong> and emits an <code>admin-to</code> edge for each</li>
+                    <li>Enumerates <strong>Interactive Sessions</strong> and emits a <code>has-session</code> edge per logged-on user</li>
+                  </ul>
+                </div>
+                <div><strong style="color:var(--text)">2 · Reachability probes</strong> (TCP connect, 1.5 s timeout, against your explicit target list only)
+                  <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
+                    <li>SMB — TCP 445</li>
+                    <li>WinRM — TCP 5985</li>
+                    <li>RDP — TCP 3389</li>
+                  </ul>
+                </div>
+                <div><strong style="color:var(--text)">3 · SharpHound</strong> (domain-joined hosts only, if enabled)
+                  <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
+                    <li>Receives binary from server, executes it, uploads raw output ZIP</li>
+                    <li>Server parses and merges AD edges — agent never interprets the output</li>
+                  </ul>
+                </div>
+                <div><strong style="color:var(--text)">4 · Upload</strong> — all nodes and edges submitted to the server; server rebuilds and analyzes the graph</div>
+              </div>
+            </div>
+
+            <!-- Edge types -->
+            <div style="margin-bottom:1.1rem">
+              <div style="font-weight:700;color:var(--text);margin-bottom:0.5rem;font-size:0.88rem">Graph edge types</div>
+              <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+                <thead>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <th style="text-align:left;padding:0.3rem 0.5rem 0.3rem 0;color:var(--muted);font-weight:600;width:30%">Edge</th>
+                    <th style="text-align:left;padding:0.3rem 0;color:var(--muted);font-weight:600">Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:0.35rem 0.5rem 0.35rem 0;vertical-align:top"><code>smb</code></td><td style="padding:0.35rem 0;color:var(--muted)">Source host can reach destination over TCP 445. Lateral movement via file share, PsExec, or remote service creation is possible if credentials are available.</td></tr>
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:0.35rem 0.5rem 0.35rem 0;vertical-align:top"><code>winrm</code></td><td style="padding:0.35rem 0;color:var(--muted)">TCP 5985 reachable. PowerShell Remoting or WinRM-based lateral movement is possible.</td></tr>
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:0.35rem 0.5rem 0.35rem 0;vertical-align:top"><code>rdp</code></td><td style="padding:0.35rem 0;color:var(--muted)">TCP 3389 reachable. Remote Desktop access is possible with valid credentials.</td></tr>
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:0.35rem 0.5rem 0.35rem 0;vertical-align:top"><code>admin-to</code></td><td style="padding:0.35rem 0;color:var(--muted)">The source user or group is a local Administrator on the destination host. Credential reuse yields admin access to that machine.</td></tr>
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:0.35rem 0.5rem 0.35rem 0;vertical-align:top"><code>has-session</code></td><td style="padding:0.35rem 0;color:var(--muted)">An interactive logon session for the destination user currently exists on the source host. Credentials may be harvestable from LSASS on that machine.</td></tr>
+                  <tr style="border-bottom:1px solid var(--border)"><td style="padding:0.35rem 0.5rem 0.35rem 0;vertical-align:top"><code>member-of</code></td><td style="padding:0.35rem 0;color:var(--muted)">AD group membership. Source user or group belongs to the destination group. (SharpHound only)</td></tr>
+                  <tr><td style="padding:0.35rem 0.5rem 0.35rem 0;vertical-align:top"><code>credential</code></td><td style="padding:0.35rem 0;color:var(--muted)">Reusable credential link between a user and a host (e.g. shared local admin password). (SharpHound only)</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Derived insights -->
+            <div style="margin-bottom:1.1rem">
+              <div style="font-weight:700;color:var(--text);margin-bottom:0.5rem;font-size:0.88rem">What the graph tells you</div>
+              <div style="display:flex;flex-direction:column;gap:0.45rem;color:var(--muted)">
+                <div><strong style="color:var(--text)">Paths to Domain Admin</strong> — potential privilege escalation chains leading to tagged Domain Controllers or Crown Jewel assets, computed by traversing observed relationships. Only available when AD data (SharpHound or domain-joined collection) is present.</div>
+                <div><strong style="color:var(--text)">Blast Radius</strong> — estimated number of distinct hosts reachable from the selected endpoint by chaining SMB / WinRM / RDP edges. A blast radius of 12 means: from this starting point an attacker with credentials could potentially reach 12 other systems.</div>
+                <div><strong style="color:var(--text)">Choke Points</strong> — hosts that appear in many attack paths. Compromising or hardening a choke point significantly increases or reduces attacker reach across the entire fleet.</div>
+                <div><strong style="color:var(--text)">Crown Jewel Exposure</strong> — attack paths that terminate at a host you have tagged as a Crown Jewel (ERP, backup server, payment gateway, etc.). Tags are set in <em>Tag Assets</em>.</div>
+              </div>
+            </div>
+
+            <!-- SharpHound -->
+            <div style="margin-bottom:1.1rem">
+              <div style="font-weight:700;color:var(--text);margin-bottom:0.35rem;font-size:0.88rem">SharpHound enrichment</div>
+              <div style="color:var(--muted);margin-bottom:0.5rem">Without SharpHound the graph shows host-to-host connectivity (who can reach whom) but not who can <em>use</em> that connectivity. Enable SharpHound to add Active Directory relationships:</div>
+              <div style="display:flex;gap:1.5rem;flex-wrap:wrap;color:var(--muted)">
+                <ul style="margin:0;padding-left:1.1rem;list-style:disc">
+                  <li>Group memberships</li>
+                  <li>AdminTo across all domain machines</li>
+                  <li>HasSession across the domain</li>
+                </ul>
+                <ul style="margin:0;padding-left:1.1rem;list-style:disc">
+                  <li>Local admin via GPO</li>
+                  <li>OU structure &amp; GPO links</li>
+                </ul>
+              </div>
+              <div style="color:var(--muted);margin-top:0.5rem">SharpHound only runs on domain-joined hosts. On workgroup machines it is silently skipped; reachability and local identity still run.</div>
+            </div>
+
+            <!-- Limitations -->
+            <div style="margin-bottom:1.1rem">
+              <div style="font-weight:700;color:var(--text);margin-bottom:0.4rem;font-size:0.88rem">Limitations</div>
+              <ul style="margin:0;padding-left:1.1rem;list-style:disc;color:var(--muted);display:flex;flex-direction:column;gap:0.25rem">
+                <li>Only validates explicitly supplied targets — systems not in the list are invisible to the graph</li>
+                <li>No subnet discovery — you must supply the target list</li>
+                <li>Does not execute exploits or authenticate to any remote service</li>
+                <li>Cannot infer privileges that were not collected</li>
+                <li>Results depend on the permissions available to the collecting agent</li>
+                <li>Graph is a snapshot — sessions and reachability change; re-collect to refresh</li>
+              </ul>
+            </div>
+
+            <!-- Confidence -->
+            <div style="margin-bottom:1.1rem;padding:0.75rem 1rem;background:rgba(47,129,247,0.07);border-left:3px solid var(--accent);border-radius:0 6px 6px 0">
+              <div style="font-weight:600;color:var(--text);margin-bottom:0.3rem;font-size:0.83rem">&#9432; Interpreting results</div>
+              <div style="color:var(--muted)">Attack paths represent <strong>potential</strong> attacker movement based on observed relationships. They are not proof that exploitation is possible. An <code>smb</code> edge means TCP 445 accepted a connection — it does not confirm valid credentials exist. A path to Domain Admin means the relationship chain is present in the graph — not that every step is exploitable without additional access. Use paths to prioritise hardening and segmentation, not as a confirmed attack roadmap.</div>
+            </div>
+
+            <!-- Security impact -->
+            <div style="margin-bottom:0.5rem">
+              <div style="font-weight:700;color:var(--text);margin-bottom:0.4rem;font-size:0.88rem">Security impact of collection</div>
+              <div style="display:flex;flex-direction:column;gap:0.3rem">
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">No exploits executed — TCP connect probes only, no authentication</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">No target modification — nothing is written to remote systems</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">Read-only enumeration using standard Windows APIs</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">Minimal network traffic — one TCP SYN per port per target (three probes per host)</span></div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span style="color:var(--muted)">No propagation — agent never moves to or executes on any remote host</span></div>
+              </div>
+            </div>
+
+          </div>
+          <div style="padding:0.75rem 1.25rem;border-top:1px solid var(--border);text-align:right">
+            <button onclick="closeAPAbout()" class="btn btn-primary btn-sm">Got it</button>
+          </div>
+        </div>
       </div>
 
       <!-- Findings -->
@@ -3227,6 +3373,16 @@ function saveAPAsset(i) {
     showToast('Saved ' + (a.label || a.hostKey), 'ok');
     loadAttackPath();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function openAPAbout() {
+  document.getElementById('ap-about-backdrop').style.display = '';
+  document.getElementById('ap-about-modal').style.display = '';
+  document.getElementById('ap-about-modal').scrollTop = 0;
+}
+function closeAPAbout() {
+  document.getElementById('ap-about-backdrop').style.display = 'none';
+  document.getElementById('ap-about-modal').style.display = 'none';
 }
 
 function openAPSchedule() {
@@ -4920,14 +5076,17 @@ function revalidateRemediation(techniqueId) {
       if (match) break;
     }
   }
-  if (match) {
-    showToast('Opening scenario "' + match.name + '" for ' + techniqueId, 'ok');
-    openModal(match.id);
-  } else {
-    // No matching scenario found — open blank modal with a guiding toast
+  if (!match) {
     showToast('No scenario found for ' + techniqueId + ' — select one manually', 'ok');
     openModal();
+    return;
   }
+  // Pre-arm the run-selection with ONLY this one technique. locked=true bypasses
+  // the picker step (jump straight to Review) and hides "Change selection".
+  var matchFw = match.steps ? (scenarioFramework(match) || 'steps') : 'art';
+  _runSelection = { scId: match.id, fw: matchFw, ids: [tid], locked: true };
+  showToast('Re-validating ' + techniqueId + ' only — 1 technique targeted', 'ok');
+  openModal(match.id);
 }
 
 // ── Reports ──────────────────────────────────────────────────────────────────
@@ -5159,7 +5318,8 @@ function openModal(scenarioId, preAgent) {
   var pip1 = document.querySelector('[data-pip="1"]');
   if (pip1) pip1.style.display = scenarioId ? 'none' : '';
   var effId = scenarioId || document.getElementById('modal-sc').value;
-  var start = (_runSelection && _runSelection.scId === effId && _runSelection.ids && _runSelection.ids.length) ? 3 : _wzMin;
+  var start = (_runSelection && _runSelection.scId === effId && _runSelection.ids && _runSelection.ids.length)
+              ? (_runSelection.locked ? 4 : 3) : _wzMin;
   wizardSet(start);
 }
 
@@ -5393,7 +5553,7 @@ function openPickerWith(scId, fw, sc, items) {
   } else if (fw === 'caldera' && (sc.calderaAbilities || []).length) {
     pre = sc.calderaAbilities.slice();
   }
-  if (pre) { pre.forEach(function(id) { _pickerSel[id] = true; }); }
+  if (pre) { pre.forEach(function(id) { _pickerSel[String(id).toUpperCase()] = true; }); }
   else { _pickerItems.forEach(function(it) { _pickerSel[it.id] = true; }); }
   var titleNoun = fw === 'art' ? 'Select ART techniques'
                 : fw === 'caldera' ? 'Select Caldera abilities'
@@ -5592,6 +5752,10 @@ function renderModalSelection() {
     link.innerHTML = '&#9881; Customize — select a target agent first';
     link.style.opacity = '0.5';
     link.style.pointerEvents = 'none';
+  } else if (has && _runSelection.locked) {
+    link.innerHTML = '&#128274; Locked — re-validating ' + _runSelection.ids.join(', ') + ' only';
+    link.style.opacity = '0.6';
+    link.style.pointerEvents = 'none';
   } else {
     link.style.opacity = '';
     link.style.pointerEvents = '';
@@ -5600,7 +5764,8 @@ function renderModalSelection() {
   if (has) {
     note.style.display = 'block';
     note.innerHTML = '&#9989; Running a selected subset: <strong>' + _runSelection.ids.length + '</strong> ' + noun +
-      ' <a href="javascript:void(0)" class="desc-toggle" style="margin-left:8px" onclick="clearSelection();return false;">Clear</a>';
+      (_runSelection.locked ? ' (targeted re-validate)' :
+       ' <a href="javascript:void(0)" class="desc-toggle" style="margin-left:8px" onclick="clearSelection();return false;">Clear</a>');
   } else {
     note.style.display = 'none';
   }

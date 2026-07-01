@@ -5076,14 +5076,17 @@ function revalidateRemediation(techniqueId) {
       if (match) break;
     }
   }
-  if (match) {
-    showToast('Opening scenario "' + match.name + '" for ' + techniqueId, 'ok');
-    openModal(match.id);
-  } else {
-    // No matching scenario found — open blank modal with a guiding toast
+  if (!match) {
     showToast('No scenario found for ' + techniqueId + ' — select one manually', 'ok');
     openModal();
+    return;
   }
+  // Pre-arm the run-selection with ONLY this one technique. locked=true bypasses
+  // the picker step (jump straight to Review) and hides "Change selection".
+  var matchFw = match.steps ? (scenarioFramework(match) || 'steps') : 'art';
+  _runSelection = { scId: match.id, fw: matchFw, ids: [tid], locked: true };
+  showToast('Re-validating ' + techniqueId + ' only — 1 technique targeted', 'ok');
+  openModal(match.id);
 }
 
 // ── Reports ──────────────────────────────────────────────────────────────────
@@ -5315,7 +5318,8 @@ function openModal(scenarioId, preAgent) {
   var pip1 = document.querySelector('[data-pip="1"]');
   if (pip1) pip1.style.display = scenarioId ? 'none' : '';
   var effId = scenarioId || document.getElementById('modal-sc').value;
-  var start = (_runSelection && _runSelection.scId === effId && _runSelection.ids && _runSelection.ids.length) ? 3 : _wzMin;
+  var start = (_runSelection && _runSelection.scId === effId && _runSelection.ids && _runSelection.ids.length)
+              ? (_runSelection.locked ? 4 : 3) : _wzMin;
   wizardSet(start);
 }
 
@@ -5549,7 +5553,7 @@ function openPickerWith(scId, fw, sc, items) {
   } else if (fw === 'caldera' && (sc.calderaAbilities || []).length) {
     pre = sc.calderaAbilities.slice();
   }
-  if (pre) { pre.forEach(function(id) { _pickerSel[id] = true; }); }
+  if (pre) { pre.forEach(function(id) { _pickerSel[String(id).toUpperCase()] = true; }); }
   else { _pickerItems.forEach(function(it) { _pickerSel[it.id] = true; }); }
   var titleNoun = fw === 'art' ? 'Select ART techniques'
                 : fw === 'caldera' ? 'Select Caldera abilities'
@@ -5748,6 +5752,10 @@ function renderModalSelection() {
     link.innerHTML = '&#9881; Customize — select a target agent first';
     link.style.opacity = '0.5';
     link.style.pointerEvents = 'none';
+  } else if (has && _runSelection.locked) {
+    link.innerHTML = '&#128274; Locked — re-validating ' + _runSelection.ids.join(', ') + ' only';
+    link.style.opacity = '0.6';
+    link.style.pointerEvents = 'none';
   } else {
     link.style.opacity = '';
     link.style.pointerEvents = '';
@@ -5756,7 +5764,8 @@ function renderModalSelection() {
   if (has) {
     note.style.display = 'block';
     note.innerHTML = '&#9989; Running a selected subset: <strong>' + _runSelection.ids.length + '</strong> ' + noun +
-      ' <a href="javascript:void(0)" class="desc-toggle" style="margin-left:8px" onclick="clearSelection();return false;">Clear</a>';
+      (_runSelection.locked ? ' (targeted re-validate)' :
+       ' <a href="javascript:void(0)" class="desc-toggle" style="margin-left:8px" onclick="clearSelection();return false;">Clear</a>');
   } else {
     note.style.display = 'none';
   }
