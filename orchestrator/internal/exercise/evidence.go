@@ -65,6 +65,12 @@ func (c *EvidenceChain) Append(ctx context.Context, execID, stepExecID, evType, 
 	return ev, nil
 }
 
+// Record satisfies tracker.Recorder — wraps Append for use by the tracker sub-package.
+func (c *EvidenceChain) Record(ctx context.Context, execID, stepExecID, evType, actor, source string, payload map[string]any) error {
+	_, err := c.Append(ctx, execID, stepExecID, evType, actor, source, payload)
+	return err
+}
+
 // Verify walks the evidence chain for an execution and returns the first
 // broken link, if any. Returns nil if the chain is intact.
 func (c *EvidenceChain) Verify(ctx context.Context, execID string) error {

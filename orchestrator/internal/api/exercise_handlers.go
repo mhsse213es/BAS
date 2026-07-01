@@ -206,6 +206,20 @@ func (h *Handler) VerifyExerciseChain(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"status": "ok", "chain": "intact"})
 }
 
+// GET /api/exercises/executions/{id}/events
+func (h *Handler) GetExerciseEvents(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	evs, err := h.exerciseStore.ListEvents(r.Context(), id)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if evs == nil {
+		evs = []map[string]interface{}{}
+	}
+	respond(w, evs)
+}
+
 // POST /api/exercises/executions/{id}/evidence
 // Operator-injected evidence: SOC acknowledged, ticket created, exec notified, etc.
 func (h *Handler) InjectEvidence(w http.ResponseWriter, r *http.Request) {

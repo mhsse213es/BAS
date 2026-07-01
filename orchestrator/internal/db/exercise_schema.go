@@ -79,6 +79,19 @@ func EnsureExerciseSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_ex_evidence_exec ON exercise_evidence(execution_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ex_evidence_type ON exercise_evidence(execution_id, evidence_type)`,
 
+		// ── Exercise Events (execution audit trail) ───────────────────────────
+		`CREATE TABLE IF NOT EXISTS exercise_events (
+			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			execution_id text        NOT NULL REFERENCES exercise_executions(id) ON DELETE CASCADE,
+			step_id      text,
+			event_type   text        NOT NULL,
+			actor        text        NOT NULL DEFAULT '',
+			detail_json  jsonb       NOT NULL DEFAULT '{}',
+			ts           timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_ex_events_exec ON exercise_events(execution_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_ex_events_ts   ON exercise_events(execution_id, ts DESC)`,
+
 		// ── Click/Open Tracking Tokens ────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS exercise_track_tokens (
 			token           text        PRIMARY KEY,

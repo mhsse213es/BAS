@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/audspect/bas/internal/exercise/tracker"
 )
 
 // Store handles all DB operations for the exercise engine.
@@ -262,7 +263,8 @@ func (s *Store) ListStepExecutions(ctx context.Context, execID string) ([]StepEx
 
 // ── Tracking Tokens ───────────────────────────────────────────────────────────
 
-func (s *Store) InsertTrackToken(ctx context.Context, token, execID, stepExecID, targetID, tokenType string, payload map[string]interface{}) error {
+// InsertTrackToken satisfies tracker.TokenStore.
+func (s *Store) InsertTrackToken(ctx context.Context, token, execID, stepExecID, targetID, tokenType string, payload map[string]any) error {
 	raw, _ := json.Marshal(payload)
 	_, err := s.db.Exec(ctx,
 		`INSERT INTO exercise_track_tokens (token, execution_id, step_exec_id, target_id, token_type, payload_json)
@@ -271,19 +273,9 @@ func (s *Store) InsertTrackToken(ctx context.Context, token, execID, stepExecID,
 	return err
 }
 
-type TrackToken struct {
-	Token       string                 `json:"token"`
-	ExecutionID string                 `json:"execution_id"`
-	StepExecID  string                 `json:"step_exec_id"`
-	TargetID    string                 `json:"target_id"`
-	TokenType   string                 `json:"token_type"`
-	Payload     map[string]interface{} `json:"payload,omitempty"`
-	UsedCount   int                    `json:"used_count"`
-	UsedAt      *time.Time             `json:"used_at,omitempty"`
-}
-
-func (s *Store) GetTrackToken(ctx context.Context, token string) (*TrackToken, error) {
-	var t TrackToken
+// GetTrackToken satisfies tracker.TokenStore.
+func (s *Store) GetTrackToken(ctx context.Context, token string) (*tracker.TrackToken, error) {
+	var t tracker.TrackToken
 	var payRaw []byte
 	err := s.db.QueryRow(ctx,
 		`SELECT token, execution_id, step_exec_id, target_id, token_type, payload_json, used_count, used_at
@@ -303,6 +295,45 @@ func (s *Store) RecordTokenUse(ctx context.Context, token string) error {
 		 SET used_count=used_count+1, used_at=COALESCE(used_at,NOW())
 		 WHERE token=$1`, token)
 	return err
+}
+
+// ── Exercise Events ───────────────────────────────────────────────────────────
+
+// RecordEvent appends a state-transition event. Fire-and-forget safe to call
+// from goroutines; errors are logged by the caller but never fatal.
+func (s *Store) RecordEvent(ctx context.Context, execID, stepID, eventType, actor string, detail map[string]any) error {
+	raw, _ := json.Marshal(detail)
+	_, err := s.db.Exec(ctx,
+		`INSERT INTO exercise_events (execution_id, step_id, event_type, actor, detail_json)
+		 VALUES ($1,$2,$3,$4,$5)`,
+		execID, stepID, eventType, actor, raw)
+	return err
+}
+
+func (s *Store) ListEvents(ctx context.Context, execID string) ([]map[string]any, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, execution_id, step_id, event_type, actor, detail_json, ts
+		 FROM exercise_events WHERE execution_id=$1 ORDER BY ts`, execID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []map[string]any
+	for rows.Next() {
+		var id, eid, stepID, evType, actor string
+		var detRaw []byte
+		var ts interface{}
+		if err := rows.Scan(&id, &eid, &stepID, &evType, &actor, &detRaw, &ts); err != nil {
+			return nil, err
+		}
+		var detail map[string]any
+		_ = json.Unmarshal(detRaw, &detail)
+		out = append(out, map[string]any{
+			"id": id, "execution_id": eid, "step_id": stepID,
+			"event_type": evType, "actor": actor, "detail": detail, "ts": ts,
+		})
+	}
+	return out, rows.Err()
 }
 
 // ── Evidence (used by evidence.go) ───────────────────────────────────────────

@@ -21,6 +21,7 @@ import (
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/exercise"
+	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
@@ -180,22 +181,24 @@ func main() {
 	}
 	exStore := exercise.NewStore(pool)
 	exChain := exercise.NewEvidenceChain(exStore)
-	smtpCfg := exercise.SMTPConfig{
-		Host:           cfg.SMTPHost,
-		Port:           cfg.SMTPPort,
-		Username:       cfg.SMTPUser,
-		Password:       cfg.SMTPPass,
-		FromAddr:       cfg.SMTPFrom,
-		FromName:       cfg.SMTPFromName,
-		TrackerBaseURL: cfg.PublicBaseURL,
-	}
 	var smtpInj *exercise.SMTPInjector
 	if cfg.SMTPHost != "" {
-		smtpInj = exercise.NewSMTPInjector(smtpCfg, exStore, exChain)
+		smtpInj = exercise.NewSMTPInjector(exercise.SMTPConfig{
+			Host:           cfg.SMTPHost,
+			Port:           cfg.SMTPPort,
+			Username:       cfg.SMTPUser,
+			Password:       cfg.SMTPPass,
+			FromAddr:       cfg.SMTPFrom,
+			FromName:       cfg.SMTPFromName,
+			TrackerBaseURL: cfg.PublicBaseURL,
+		}, exStore)
 	}
-	exExecutor := exercise.NewExecutor(exStore, exChain, smtpInj, nil)
+	exRegistry := exercise.NewRegistry()
+	exScheduler := exercise.NewPollScheduler(5 * time.Second)
+	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil)
+	exExecutor.RegisterBuiltins(smtpInj)
 	exExecutor.Start()
-	exTracker := exercise.NewTracker(exStore, exChain)
+	exTracker := exercisetracker.New(exStore, exChain)
 	log.Println("[+] Exercise engine ready")
 
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────

@@ -7,14 +7,14 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/audspect/bas/internal/auth"
-	"github.com/audspect/bas/internal/exercise"
+	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/ws"
 )
 
 // Mount builds the full HTTP router and returns it.
 // staticHandler serves the dashboard SPA — pass StaticHandler() in production
 // (embedded FS) or http.FileServer(http.Dir("./wwwroot")) in tests/dev.
-func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler http.Handler, tracker ...*exercise.Tracker) http.Handler {
+func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler http.Handler, tracker ...*exercisetracker.Tracker) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
@@ -212,6 +212,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/exercises/executions/{id}", h.GetExerciseExecution)
 		r.Get("/api/exercises/executions/{id}/evidence", h.GetExerciseEvidence)
 		r.Get("/api/exercises/executions/{id}/evidence/verify", h.VerifyExerciseChain)
+		r.Get("/api/exercises/executions/{id}/events", h.GetExerciseEvents)
 		r.Post("/api/exercises/executions", h.CreateExerciseExecution)
 
 		// Any authenticated user — self-service password change
