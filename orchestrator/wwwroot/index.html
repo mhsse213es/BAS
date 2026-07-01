@@ -10701,7 +10701,7 @@ function populateVexAgents() {
     var online = (agents || []).filter(function(a) { return a.status !== 'offline'; });
     var opts = '<option value="">Select agent…</option>' +
       online.map(function(a) {
-        return '<option value="' + x(a.id) + '">' + x(a.hostname || a.id) + '</option>';
+        return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + '</option>';
       }).join('');
     var sel = document.getElementById('vex-agent');
     if (sel) sel.innerHTML = opts;

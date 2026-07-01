@@ -8452,7 +8452,7 @@ function populateVexAgents() {
     var online = (agents || []).filter(function(a) { return a.status !== 'offline'; });
     sel.innerHTML = '<option value="">Select agent…</option>' +
       online.map(function(a) {
-        return '<option value="' + x(a.id) + '">' + x(a.hostname || a.id) + '</option>';
+        return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + '</option>';
       }).join('');
   }).catch(function() {});
 }
