@@ -1,0 +1,392 @@
+id: PCI_DSS_V4
+name: PCI DSS v4.0
+version: "v4.0 (March 2022)"
+regulator: PCI SSC
+published_year: "2022"
+controls:
+  # ── Requirement 1: Network Security Controls ─────────────────────────────────
+  - id: REQ-1.2.1
+    name: Network security controls restrict inbound and outbound traffic to only what is necessary
+    domain: Network Security
+    category: Firewall & Traffic Control
+    techniques: [T1562.004, T1095, T1571, T1105]
+
+  - id: REQ-1.2.5
+    name: All services and ports allowed through network security controls are identified and approved
+    domain: Network Security
+    category: Service Exposure
+    techniques: [T1046, T1595.002, T1071]
+
+  - id: REQ-1.3.2
+    name: Inbound traffic from untrusted networks to the CDE is restricted to communications from system components
+    domain: Network Security
+    category: Perimeter Control
+    techniques: [T1133, T1190, T1021]
+
+  - id: REQ-1.4.1
+    name: Network security controls are implemented between trusted and untrusted networks
+    domain: Network Security
+    category: Network Segmentation
+    techniques: [T1021, T1550, T1072]
+
+  - id: REQ-1.5.1
+    name: Security controls for network connections between untrusted networks and web-based systems are implemented
+    domain: Network Security
+    category: Web Exposure
+    techniques: [T1190, T1059.007, T1071.001]
+
+  # ── Requirement 2: Secure Configurations ─────────────────────────────────────
+  - id: REQ-2.2.1
+    name: Configuration standards for all system components are developed and implemented
+    domain: Secure Configuration
+    category: Hardening
+    techniques: [T1562.001, T1543, T1218]
+
+  - id: REQ-2.2.6
+    name: System security parameters are configured to prevent misuse
+    domain: Secure Configuration
+    category: Hardening
+    techniques: [T1562, T1547, T1543.003]
+
+  - id: REQ-2.2.7
+    name: All non-console administrative access is encrypted
+    domain: Secure Configuration
+    category: Encrypted Administration
+    techniques: [T1557, T1040, T1021.004]
+
+  - id: REQ-2.3.1
+    name: Wireless environments connected to the CDE or transmitting cardholder data are protected from unauthorized access
+    domain: Secure Configuration
+    category: Wireless Security
+    techniques: [T1040, T1557.004, T1557]
+
+  # ── Requirement 3: Stored Account Data ───────────────────────────────────────
+  - id: REQ-3.3.1
+    name: SAD is not retained after authorization; all SAD retention is justified by business need and documented
+    domain: Data Protection
+    category: Data Minimisation
+    techniques: [T1530, T1560, T1005]
+    testable: false
+
+  - id: REQ-3.4.1
+    name: PAN is masked when displayed; only personnel with legitimate business need can see more than the first six/last four digits
+    domain: Data Protection
+    category: Data Masking
+    techniques: [T1005, T1530, T1213]
+    testable: false
+
+  - id: REQ-3.5.1
+    name: PAN is secured with strong cryptography wherever stored
+    domain: Data Protection
+    category: Encryption at Rest
+    techniques: [T1560, T1530, T1552.001]
+
+  # ── Requirement 4: Data in Transit ───────────────────────────────────────────
+  - id: REQ-4.2.1
+    name: Strong cryptography is used to safeguard PAN during transmission over open, public networks
+    domain: Data-in-Transit
+    category: Encryption in Transit
+    techniques: [T1557, T1040, T1573]
+
+  - id: REQ-4.2.2
+    name: PAN is secured with strong cryptography when sent via end-user messaging technologies
+    domain: Data-in-Transit
+    category: Messaging Security
+    techniques: [T1048, T1567, T1071]
+
+  # ── Requirement 5: Anti-Malware ───────────────────────────────────────────────
+  - id: REQ-5.2.1
+    name: An anti-malware solution is deployed on all system components, except for those identified as not at risk
+    domain: Malware Protection
+    category: Anti-Malware Deployment
+    techniques: [T1059, T1204, T1566.001]
+
+  - id: REQ-5.2.2
+    name: The deployed anti-malware solution detects all types of malware
+    domain: Malware Protection
+    category: Detection Coverage
+    techniques: [T1027, T1562.001, T1059.001]
+
+  - id: REQ-5.2.3
+    name: Anti-malware mechanisms detect and protect against phishing attacks
+    domain: Malware Protection
+    category: Phishing Protection
+    techniques: [T1566.001, T1566.002, T1204.001]
+
+  - id: REQ-5.3.1
+    name: Anti-malware solution is kept current via automatic updates
+    domain: Malware Protection
+    category: AV Signature Updates
+    techniques: [T1562.001, T1059, T1204]
+
+  - id: REQ-5.3.3
+    name: Anti-malware mechanisms cannot be disabled or altered by users unless authorized by management
+    domain: Malware Protection
+    category: Tamper Protection
+    techniques: [T1562.001, T1112, T1543]
+
+  - id: REQ-5.4.1
+    name: Phishing protection mechanisms are in place to detect and protect personnel against attacks
+    domain: Malware Protection
+    category: Anti-Phishing
+    techniques: [T1566, T1598, T1204.002]
+
+  # ── Requirement 6: Secure Systems and Software ───────────────────────────────
+  - id: REQ-6.2.4
+    name: Software development practices for bespoke and custom software prevent common attacks
+    domain: Application Security
+    category: Secure Development
+    techniques: [T1190, T1059.007, T1210]
+    testable: false
+
+  - id: REQ-6.3.3
+    name: All system components are protected from known vulnerabilities by installing applicable security patches/updates
+    domain: Application Security
+    category: Patch Management
+    techniques: [T1190, T1068, T1203]
+
+  - id: REQ-6.4.1
+    name: Public-facing web applications are protected against attacks continuously by technical controls
+    domain: Application Security
+    category: WAF / Web Protection
+    techniques: [T1190, T1059.007, T1505.003]
+
+  - id: REQ-6.4.2
+    name: An automated technical solution detects and prevents web-based attacks against public-facing web applications
+    domain: Application Security
+    category: WAF Automation
+    techniques: [T1190, T1210, T1059.007]
+
+  # ── Requirement 7: Access Control ─────────────────────────────────────────────
+  - id: REQ-7.2.1
+    name: An access control model is defined and implemented, including granting access based on need to know
+    domain: Access Control
+    category: Need-to-Know
+    techniques: [T1078, T1134, T1548]
+
+  - id: REQ-7.2.2
+    name: Access to system components and data is appropriately assigned to individuals based on their job classification and function
+    domain: Access Control
+    category: Role-Based Access
+    techniques: [T1078, T1087, T1134]
+
+  - id: REQ-7.2.4
+    name: All user accounts and related access privileges are reviewed periodically to ensure appropriate access
+    domain: Access Control
+    category: Access Reviews
+    techniques: [T1078, T1098, T1087]
+    testable: false
+
+  - id: REQ-7.3.1
+    name: An access control system manages assignment of access privileges to system components
+    domain: Access Control
+    category: Privileged Access Management
+    techniques: [T1134, T1548, T1068]
+
+  # ── Requirement 8: Authentication ─────────────────────────────────────────────
+  - id: REQ-8.2.1
+    name: All user IDs and associated authentication factors are managed using an ID and authentication management system
+    domain: Authentication
+    category: Identity Management
+    techniques: [T1078, T1110, T1556]
+    testable: false
+
+  - id: REQ-8.2.4
+    name: Additions, deletions, and modifications to user IDs and authentication factors are managed
+    domain: Authentication
+    category: Account Lifecycle
+    techniques: [T1078.001, T1136, T1098]
+    testable: false
+
+  - id: REQ-8.3.1
+    name: All user access to system components for users and administrators is authenticated via at least one authentication factor
+    domain: Authentication
+    category: MFA Enforcement
+    techniques: [T1078, T1110, T1556]
+
+  - id: REQ-8.3.6
+    name: If passwords/passphrases are used as authentication factors, they meet a minimum length of at least 12 characters
+    domain: Authentication
+    category: Password Policy
+    techniques: [T1110.001, T1078, T1556.002]
+
+  - id: REQ-8.3.9
+    name: If passwords/passphrases are used as authentication factors for users, they are changed at least once every 90 days
+    domain: Authentication
+    category: Password Rotation
+    techniques: [T1110, T1078, T1552]
+    testable: false
+
+  - id: REQ-8.4.2
+    name: MFA is implemented for all access into the CDE
+    domain: Authentication
+    category: MFA — CDE Access
+    techniques: [T1078, T1110, T1556, T1133]
+
+  - id: REQ-8.6.1
+    name: System/application accounts and associated authentication factors are managed
+    domain: Authentication
+    category: Service Account Security
+    techniques: [T1078.003, T1098, T1552.001]
+
+  # ── Requirement 9: Physical Access ───────────────────────────────────────────
+  - id: REQ-9.1.1
+    name: Physical security policies and procedures are documented and implemented
+    domain: Physical Security
+    category: Physical Controls
+    techniques: []
+    testable: false
+
+  - id: REQ-9.4.1
+    name: Media with cardholder data is physically secured
+    domain: Physical Security
+    category: Media Control
+    techniques: [T1091, T1200]
+    testable: false
+
+  # ── Requirement 10: Logging and Monitoring ────────────────────────────────────
+  - id: REQ-10.2.1
+    name: Audit logs capture all individual user access to cardholder data
+    domain: Logging & Monitoring
+    category: Audit Logging
+    techniques: [T1070.001, T1070.006, T1562.006]
+
+  - id: REQ-10.2.2
+    name: Audit logs capture all actions taken by root or administrative privileges
+    domain: Logging & Monitoring
+    category: Privileged Activity Logging
+    techniques: [T1070.001, T1134, T1562.006]
+
+  - id: REQ-10.2.6
+    name: Audit logs capture initialization, stopping, or pausing of the audit logs
+    domain: Logging & Monitoring
+    category: Log Integrity
+    techniques: [T1070.001, T1562.006, T1489]
+
+  - id: REQ-10.2.7
+    name: Audit logs capture creation and deletion of system-level objects
+    domain: Logging & Monitoring
+    category: Object Lifecycle Logging
+    techniques: [T1070, T1562.002, T1547]
+
+  - id: REQ-10.3.1
+    name: Read access to audit logs files is limited to those with a job-related need
+    domain: Logging & Monitoring
+    category: Log Access Control
+    techniques: [T1070.001, T1530, T1654]
+
+  - id: REQ-10.3.2
+    name: Audit log files are protected to prevent modifications by individuals
+    domain: Logging & Monitoring
+    category: Log Tamper Protection
+    techniques: [T1070.001, T1562.006, T1489]
+
+  - id: REQ-10.3.3
+    name: Audit log files are promptly backed up to a centralized log server or media
+    domain: Logging & Monitoring
+    category: Log Centralization
+    techniques: [T1070.001, T1562.006]
+    testable: false
+
+  - id: REQ-10.4.1
+    name: The following audit logs are reviewed at least once daily
+    domain: Logging & Monitoring
+    category: Log Review
+    techniques: [T1070, T1562.006, T1654]
+    testable: false
+
+  - id: REQ-10.5.1
+    name: Retain audit log history for at least 12 months, with at least the most recent 3 months available for immediate analysis
+    domain: Logging & Monitoring
+    category: Log Retention
+    techniques: [T1070.001]
+    testable: false
+
+  - id: REQ-10.6.1
+    name: System clocks and time are synchronized using time-synchronization technology
+    domain: Logging & Monitoring
+    category: Time Synchronisation
+    techniques: [T1070.001, T1562.006]
+    testable: false
+
+  - id: REQ-10.7.1
+    name: Failures of critical security controls are detected, reported, and responded to promptly
+    domain: Logging & Monitoring
+    category: Control Failure Detection
+    techniques: [T1562, T1562.001, T1489]
+
+  - id: REQ-10.7.3
+    name: Failures of critical security controls are responded to promptly to restore security functions
+    domain: Logging & Monitoring
+    category: Incident Response
+    techniques: [T1562, T1489]
+    testable: false
+
+  # ── Requirement 11: Testing ───────────────────────────────────────────────────
+  - id: REQ-11.3.1
+    name: External penetration testing is performed at least once every 12 months
+    domain: Security Testing
+    category: Penetration Testing
+    techniques: [T1190, T1595, T1046]
+    testable: false
+
+  - id: REQ-11.3.2
+    name: Internal penetration testing is performed at least once every 12 months
+    domain: Security Testing
+    category: Internal Pentesting
+    techniques: [T1021, T1068, T1046]
+    testable: false
+
+  - id: REQ-11.4.1
+    name: An intrusion-detection and/or intrusion-prevention technique is used to detect and/or prevent intrusions into the network
+    domain: Security Testing
+    category: IDS/IPS
+    techniques: [T1046, T1071, T1095, T1572]
+
+  - id: REQ-11.4.2
+    name: An intrusion-detection and/or intrusion-prevention technique is in place in the CDE
+    domain: Security Testing
+    category: IDS/IPS — CDE
+    techniques: [T1046, T1021, T1072, T1095]
+
+  - id: REQ-11.4.7
+    name: Multi-tenant service providers support their customers for external penetration testing
+    domain: Security Testing
+    category: Multi-Tenant Testing
+    techniques: [T1190, T1595]
+    testable: false
+
+  - id: REQ-11.6.1
+    name: A change-and-tamper-detection mechanism is deployed for payment pages
+    domain: Security Testing
+    category: Script Integrity Monitoring
+    techniques: [T1059.007, T1189, T1505.003]
+
+  # ── Requirement 12: Organisational Policies ──────────────────────────────────
+  - id: REQ-12.1.1
+    name: An overall information security policy is established, published, maintained, and disseminated
+    domain: Policy & Governance
+    category: Security Policy
+    techniques: []
+    testable: false
+
+  - id: REQ-12.3.1
+    name: Each PCI DSS requirement that provides flexibility for how frequently it is performed is reviewed at least once every 12 months
+    domain: Policy & Governance
+    category: Periodic Review
+    techniques: []
+    testable: false
+
+  - id: REQ-12.6.2
+    name: The security awareness programme is reviewed at least once every 12 months
+    domain: Policy & Governance
+    category: Security Awareness
+    techniques: [T1566, T1598]
+    testable: false
+
+  - id: REQ-12.10.1
+    name: An incident response plan exists and is ready to be activated in the event of a system breach
+    domain: Policy & Governance
+    category: Incident Response Plan
+    techniques: []
+    testable: false

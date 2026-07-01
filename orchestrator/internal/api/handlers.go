@@ -3561,6 +3561,7 @@ func complianceShortName(id string) string {
 	case "IRDAI_CSF":      return "IRDAI"
 	case "ISO_27001_2022": return "ISO 27001"
 	case "NIST_CSF_2":     return "NIST CSF"
+	case "PCI_DSS_V4":     return "PCI DSS v4"
 	}
 	return id
 }
