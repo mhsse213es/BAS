@@ -634,6 +634,55 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// run was dispatched so the loop skips already-queued revalidations.
 		`ALTER TABLE finding_tickets ADD COLUMN IF NOT EXISTS revalidation_dispatched_at timestamptz`,
 		`CREATE INDEX IF NOT EXISTS idx_finding_tickets_reval ON finding_tickets (revalidation_required, revalidation_dispatched_at) WHERE revalidation_required = true`,
+
+		// ── SIEM Correlation ──────────────────────────────────────────────────
+		// siem_configs: one row per SIEM integration (QRadar, Splunk, Wazuh…).
+		// Sensitive fields (token/password) are stored encrypted-at-rest via PG
+		// column-level encryption when available; for on-prem BFSI we store them
+		// as text and rely on PG TDE or LUKS for disk-level protection.
+		`CREATE TABLE IF NOT EXISTS siem_configs (
+			id                   text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name                 text        NOT NULL,
+			provider             text        NOT NULL,
+			enabled              boolean     NOT NULL DEFAULT true,
+			console_url          text        NOT NULL DEFAULT '',
+			token                text        NOT NULL DEFAULT '',
+			username             text        NOT NULL DEFAULT '',
+			password             text        NOT NULL DEFAULT '',
+			tenant_id            text        NOT NULL DEFAULT '',
+			workspace_id         text        NOT NULL DEFAULT '',
+			client_id            text        NOT NULL DEFAULT '',
+			client_secret        text        NOT NULL DEFAULT '',
+			insecure_skip_verify boolean     NOT NULL DEFAULT false,
+			auto_correlate       boolean     NOT NULL DEFAULT true,
+			created_at           timestamptz NOT NULL DEFAULT NOW(),
+			updated_at           timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
+		// siem_correlations: one row per (run_id, config_id) correlation run.
+		// The full report JSON is stored in report_json for the detail view; the
+		// summary columns drive the dashboard badge and run-list indicators.
+		`CREATE TABLE IF NOT EXISTS siem_correlations (
+			id               text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			run_id           text        NOT NULL,
+			config_id        text        NOT NULL,
+			agent_id         text        NOT NULL,
+			agent_ip         text        NOT NULL DEFAULT '',
+			provider         text        NOT NULL,
+			window_start     timestamptz NOT NULL,
+			window_end       timestamptz NOT NULL,
+			total_alerts     int         NOT NULL DEFAULT 0,
+			detected         int         NOT NULL DEFAULT 0,
+			undetected       int         NOT NULL DEFAULT 0,
+			not_executed     int         NOT NULL DEFAULT 0,
+			detection_rate   int         NOT NULL DEFAULT 0,
+			undetected_rate  int         NOT NULL DEFAULT 0,
+			report_json      jsonb       NOT NULL DEFAULT '{}',
+			correlated_at    timestamptz NOT NULL DEFAULT NOW(),
+			UNIQUE (run_id, config_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_siem_corr_run    ON siem_correlations (run_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_siem_corr_agent  ON siem_correlations (agent_id, correlated_at DESC)`,
 	}
 
 	for _, s := range stmts {

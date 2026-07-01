@@ -161,6 +161,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)
 			r.Post("/api/adversary-templates/{id}/run", h.RunAdversaryTemplate)
 			r.Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
+			// SIEM Correlation — trigger and results (Analyst+)
+			r.Post("/api/siem/correlate/{runId}", h.TriggerSIEMCorrelation)
+			r.Get("/api/siem/correlations/{runId}", h.GetSIEMCorrelations)
 			r.Post("/api/campaigns", h.CreateCampaign)
 			r.Post("/api/campaigns/{id}/stop", h.StopCampaign)
 			r.Post("/api/findings/{id}/status", h.SetFindingStatus)
@@ -248,6 +251,13 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			// Payload family management — write/delete restricted to Admin
 			r.Post("/api/payload-families", h.CreatePayloadFamily)
 			r.Delete("/api/payload-families/{id}", h.DeletePayloadFamily)
+
+			// SIEM Correlation — connector management (Admin only)
+			r.Get("/api/siem/configs", h.ListSIEMConfigs)
+			r.Post("/api/siem/configs", h.CreateSIEMConfig)
+			r.Put("/api/siem/configs/{id}", h.UpdateSIEMConfig)
+			r.Delete("/api/siem/configs/{id}", h.DeleteSIEMConfig)
+			r.Post("/api/siem/configs/{id}/test", h.TestSIEMConfig)
 		})
 	})
 

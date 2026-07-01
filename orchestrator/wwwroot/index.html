@@ -3666,6 +3666,15 @@ function _apOnCollected(msg) {
   showToast(label + ': ' + nodes + ' nodes collected — attack path updated.', 'ok');
 }
 
+function _onSIEMCorrelationComplete(msg) {
+  if (!msg || !msg.data) return;
+  var d = msg.data;
+  var rate = d.detectionRate || 0;
+  showToast('SIEM (' + (d.provider || 'qradar') + '): ' + rate + '% detection rate — ' +
+    (d.detected || 0) + ' detected, ' + (d.undetected || 0) + ' missed.', rate >= 50 ? 'ok' : 'warn');
+  if (d.runId) loadSIEMCorrelationPanel(d.runId);
+}
+
 function _onRevalidationStarted(msg) {
   if (!msg || !msg.data) return;
   var d = msg.data;
@@ -7351,7 +7360,8 @@ function viewRunResults(run) {
     '<div id="run-report-extra"></div>' +
     '<div id="rv-table">' + checksHtml + '</div>' +
     '<div id="rv-flow" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>' +
-    '<div id="rv-coverage" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading variant coverage&#8230;</div></div>';
+    '<div id="rv-coverage" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading variant coverage&#8230;</div></div>' +
+    '<div id="rv-siem" style="display:none"></div>';
   document.getElementById('results-overlay').classList.add('open');
 
   // Key Findings + Prioritised Recommendations — fetched from the report engine
@@ -7384,6 +7394,9 @@ function viewRunResults(run) {
       var el = document.getElementById('rv-coverage');
       if (el) el.innerHTML = '<div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Variant coverage unavailable.</div>';
     });
+
+    // SIEM Correlation panel — load if a correlation result exists for this run.
+    loadSIEMCorrelationPanel(runId);
   }
 }
 
@@ -7393,13 +7406,16 @@ function switchResultsView(view) {
   var tableEl    = document.getElementById('rv-table');
   var flowEl     = document.getElementById('rv-flow');
   var coverageEl = document.getElementById('rv-coverage');
+  var siemEl     = document.getElementById('rv-siem');
   var btnT       = document.getElementById('rvt-results');
   var btnF       = document.getElementById('rvt-flow');
   var btnC       = document.getElementById('rvt-coverage');
+  var btnS       = document.getElementById('rvt-siem');
   if (!tableEl) return;
   tableEl.style.display    = (view === 'table'    || !view) ? '' : 'none';
   if (flowEl)     flowEl.style.display     = (view === 'flow')     ? '' : 'none';
   if (coverageEl) coverageEl.style.display = (view === 'coverage') ? '' : 'none';
+  if (siemEl)     siemEl.style.display     = (view === 'siem')     ? '' : 'none';
   var activeStyle   = { background: 'var(--elevated)', color: 'var(--accent)', borderBottom: '2px solid var(--accent)' };
   var inactiveStyle = { background: '', color: 'var(--muted)', borderBottom: '' };
   function applyTab(btn, isActive) {
@@ -7412,6 +7428,76 @@ function switchResultsView(view) {
   applyTab(btnT, view === 'table' || !view);
   applyTab(btnF, view === 'flow');
   applyTab(btnC, view === 'coverage');
+  applyTab(btnS, view === 'siem');
+}
+
+function loadSIEMCorrelationPanel(runId) {
+  apicall('/api/siem/correlations/' + encodeURIComponent(runId)).then(function(corrs) {
+    var el = document.getElementById('rv-siem');
+    if (!el) return;
+    if (!corrs || corrs.length === 0) return; // no correlation yet — hide tab
+    // Inject SIEM tab button if not already there
+    var btnBar = document.getElementById('rvt-coverage');
+    if (btnBar && !document.getElementById('rvt-siem')) {
+      var siemBtn = document.createElement('button');
+      siemBtn.id = 'rvt-siem';
+      siemBtn.className = 'btn btn-sm btn-outline';
+      siemBtn.style.cssText = 'font-size:0.7rem;padding:0.22rem 0.7rem;color:var(--muted);border-bottom:2px solid transparent';
+      siemBtn.textContent = 'SIEM Correlation';
+      siemBtn.onclick = function() { switchResultsView('siem'); };
+      btnBar.parentNode.insertBefore(siemBtn, btnBar.nextSibling);
+    }
+    var c = corrs[0]; // most recent correlation
+    var detRate = c.detectionRate || 0;
+    var undetRate = c.undetectedRate || 0;
+    var color = detRate >= 70 ? 'var(--success)' : detRate >= 40 ? 'var(--warning)' : 'var(--danger)';
+    var rows = '';
+    if (c.report && c.report.techniques) {
+      c.report.techniques.forEach(function(t) {
+        if (t.siemVerdict === 'not_applicable') return;
+        var badge = '';
+        if (t.siemVerdict === 'detected') badge = '<span style="background:var(--success);color:#fff;padding:0.12rem 0.45rem;border-radius:4px;font-size:0.67rem;font-weight:600">SIEM DETECTED</span>';
+        else if (t.siemVerdict === 'undetected') badge = '<span style="background:var(--danger);color:#fff;padding:0.12rem 0.45rem;border-radius:4px;font-size:0.67rem;font-weight:600">SIEM MISSED</span>';
+        else badge = '<span style="background:var(--muted);color:#fff;padding:0.12rem 0.45rem;border-radius:4px;font-size:0.67rem;font-weight:600">NOT RUN</span>';
+        var alerts = t.alertCount ? (' <span style="color:var(--muted);font-size:0.67rem">(' + t.alertCount + ' alert' + (t.alertCount > 1 ? 's' : '') + ')</span>') : '';
+        rows += '<tr><td style="font-family:monospace;font-size:0.72rem">' + x(t.techniqueId) + '</td>' +
+                '<td style="font-size:0.73rem">' + x(t.techniqueName || '') + '</td>' +
+                '<td>' + badge + alerts + '</td>' +
+                '<td style="font-size:0.72rem;color:var(--muted)">' + x(t.basVerdict || '') + '</td></tr>';
+      });
+    }
+    el.innerHTML =
+      '<div style="padding:1rem 0 0.5rem">' +
+        '<div style="display:flex;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap">' +
+          '<div style="text-align:center">' +
+            '<div style="font-size:1.7rem;font-weight:700;color:' + color + '">' + detRate + '%</div>' +
+            '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">SIEM Detection Rate</div>' +
+          '</div>' +
+          '<div style="text-align:center">' +
+            '<div style="font-size:1.7rem;font-weight:700;color:var(--danger)">' + undetRate + '%</div>' +
+            '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">SIEM Miss Rate</div>' +
+          '</div>' +
+          '<div style="text-align:center">' +
+            '<div style="font-size:1.7rem;font-weight:700">' + (c.totalAlerts || 0) + '</div>' +
+            '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Total Alerts</div>' +
+          '</div>' +
+          '<div style="font-size:0.68rem;color:var(--muted);align-self:center">' +
+            'Source: <b>' + x(c.provider || '') + '</b> &nbsp;|&nbsp; ' +
+            'Agent IP: <code>' + x(c.agentIp || '') + '</code> &nbsp;|&nbsp; ' +
+            'Correlated: ' + new Date(c.correlatedAt).toLocaleString() +
+          '</div>' +
+        '</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:0.73rem">' +
+          '<thead><tr style="border-bottom:1px solid var(--border);color:var(--muted);font-size:0.67rem">' +
+            '<th style="text-align:left;padding:0.3rem 0">Tech ID</th>' +
+            '<th style="text-align:left;padding:0.3rem 0.5rem">Name</th>' +
+            '<th style="text-align:left;padding:0.3rem 0.5rem">SIEM</th>' +
+            '<th style="text-align:left;padding:0.3rem 0">BAS</th>' +
+          '</tr></thead>' +
+          '<tbody>' + (rows || '<tr><td colspan="4" style="color:var(--muted);padding:1rem 0;text-align:center">No technique details available</td></tr>') + '</tbody>' +
+        '</table>' +
+      '</div>';
+  }).catch(function() {}); // silent — SIEM correlation is optional
 }
 
 // ── Variant Coverage Report rendering ────────────────────────────────────────
@@ -8699,7 +8785,8 @@ function connectWS() {
       if (msg.type === 'scenario_result')    { loadRuns(); loadAgents(); refreshDashboardCampaigns(); }
       if (msg.type === 'tamper_alert')       { showTamperBanner(msg.data); }
       if (msg.type === 'attackpath_collected') { _apOnCollected(msg); }
-      if (msg.type === 'revalidation_started') { _onRevalidationStarted(msg); }
+      if (msg.type === 'revalidation_started')     { _onRevalidationStarted(msg); }
+      if (msg.type === 'siem_correlation_complete') { _onSIEMCorrelationComplete(msg); }
     } catch(e) {}
   };
 }

@@ -1608,6 +1608,28 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			"results":    simResults,
 		},
 	})
+
+	// SIEM auto-correlation: fire in background so the agent's HTTP response
+	// is not blocked. Fetches agent IP + run start time from DB then calls any
+	// enabled SIEM connectors with auto_correlate=true.
+	{
+		runID := raw.RunID
+		agentID := raw.AgentID
+		sr := simResults
+		go func() {
+			var agentIP string
+			var runStart time.Time
+			h.db.QueryRow(context.Background(),
+				`SELECT COALESCE(a.ip_address,''), sr.started_at
+				   FROM scenario_runs sr
+				   LEFT JOIN agents a ON a.agent_id = sr.agent_id
+				  WHERE sr.id = $1`, runID,
+			).Scan(&agentIP, &runStart)
+			runEnd := time.Now()
+			h.AutoCorrelateSIEM(runID, agentID, agentIP, runStart, runEnd, sr)
+		}()
+	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
