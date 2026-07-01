@@ -67,10 +67,10 @@ services:
     networks:
       - bas-internal
     restart: unless-stopped
-    # chromedp/headless-shell recent builds drop wget; use python3 which is
-    # present on the Debian base. Longer retries absorb slow Chrome startup.
+    # chromedp/headless-shell has no wget/curl/python3; use socat (present
+    # in this image) to verify the CDP port accepts connections.
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:9222/json/version')\" 2>/dev/null && echo ok || exit 1"]
+      test: ["CMD-SHELL", "socat /dev/null TCP:127.0.0.1:9222,connect-timeout=2"]
       interval: 5s
       timeout: 5s
       retries: 10
