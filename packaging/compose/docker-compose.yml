@@ -67,14 +67,14 @@ services:
     networks:
       - bas-internal
     restart: unless-stopped
-    # Probe the CDP /json/version endpoint so the orchestrator waits until Chrome
-    # is actually ready to accept connections, not just started as a process.
+    # chromedp/headless-shell recent builds drop wget; use python3 which is
+    # present on the Debian base. Longer retries absorb slow Chrome startup.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:9222/json/version 2>/dev/null"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:9222/json/version')\" 2>/dev/null && echo ok || exit 1"]
       interval: 5s
-      timeout: 3s
-      retries: 6
-      start_period: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   # ── BAS Orchestrator ─────────────────────────────────────────────────────────
   orchestrator:
@@ -86,7 +86,7 @@ services:
       caldera:
         condition: service_started
       chrome:
-        condition: service_healthy
+        condition: service_started  # orchestrator falls back to built-in PDF if chrome unhealthy
     environment:
       DATABASE_URL:     "postgres://${POSTGRES_USER:-bas_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bas_platform}?sslmode=disable"
       JWT_SECRET:       ${JWT_SECRET}
