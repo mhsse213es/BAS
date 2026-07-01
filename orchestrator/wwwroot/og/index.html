@@ -3227,10 +3227,40 @@ function showTab(name) {
 }
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
+function _apSavePending(agentId, agentLabel, targets, shEnabled, sharpHoundDelivered) {
+  try {
+    localStorage.setItem('_apPending', JSON.stringify({
+      agentId: agentId, agentLabel: agentLabel,
+      targets: targets, shEnabled: shEnabled,
+      sharpHoundDelivered: !!sharpHoundDelivered,
+      dispatchedAt: new Date().toISOString()
+    }));
+  } catch(e) {}
+}
+function _apClearPending() {
+  try { localStorage.removeItem('_apPending'); } catch(e) {}
+}
+function _apLoadPending() {
+  try { return JSON.parse(localStorage.getItem('_apPending') || 'null'); } catch(e) { return null; }
+}
+
 function loadAttackPath() {
   var body = document.getElementById('ap-body');
   if (body) body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
-  apicall('/api/attackpath/summary').then(renderAttackPath).catch(function(e) { showToast(e.message, 'err'); });
+  apicall('/api/attackpath/summary').then(function(d) {
+    var pending = _apLoadPending();
+    if (pending) {
+      var completedWhileAway = d && d.latestCollectedAt &&
+          new Date(d.latestCollectedAt) > new Date(pending.dispatchedAt);
+      if (completedWhileAway) {
+        _apClearPending();
+        showToast('Attack path collection completed while you were away — results ready', 'ok');
+      } else {
+        showToast('Collection in progress for ' + (pending.agentLabel || pending.agentId) + ' — waiting for agent…', 'ok');
+      }
+    }
+    renderAttackPath(d);
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function apColor(score) {
   return score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : score >= 40 ? '#f0883e' : 'var(--danger)';
@@ -3325,9 +3355,12 @@ function dispatchAPCollect() {
   if (!agentId) { showToast('Select an agent', 'err'); return; }
   var targets = document.getElementById('ap-targets').value.split('\n').map(function(t) { return t.trim(); }).filter(Boolean);
   var payload = { targets: targets, segment: document.getElementById('ap-segment').value.trim(), runSharpHound: document.getElementById('ap-sharphound').checked };
+  var shEnabled = payload.runSharpHound;
+  var agentLabel = (document.getElementById('ap-agent').options[document.getElementById('ap-agent').selectedIndex] || {}).text || agentId;
   apicall('/api/attackpath/collect/' + encodeURIComponent(agentId), { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
+    _apSavePending(agentId, agentLabel, targets, shEnabled, r.sharpHoundDelivered);
     document.getElementById('ap-collect').style.display = 'none';
-    var sh = r.sharpHound ? (r.sharpHoundDelivered ? ' + SharpHound' : ' (SharpHound binary not configured server-side)') : '';
+    var sh = shEnabled ? (r.sharpHoundDelivered ? ' + SharpHound' : ' (SharpHound binary not configured server-side)') : '';
     showToast('Collection dispatched to ' + agentId + sh + '. Refresh in a moment.', 'ok');
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
