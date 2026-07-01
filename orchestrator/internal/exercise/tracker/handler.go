@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -66,6 +67,25 @@ func (t *Tracker) HandleReport(w http.ResponseWriter, r *http.Request) {
 	t.withToken(w, r, chi.URLParam(r, "token"), func(tok *TrackToken) {
 		_ = t.tokens.RecordTokenUse(r.Context(), tok.Token)
 		t.handleReport(w, r, tok)
+	})
+}
+
+// HandleWebhook records an inbound webhook call from an external system.
+// POST /x/hook/{token}
+// The response is always 200 OK so the external caller knows the POST succeeded.
+// The trigger registry will fire the waiting step on the next executor tick.
+func (t *Tracker) HandleWebhook(w http.ResponseWriter, r *http.Request) {
+	token := chi.URLParam(r, "token")
+	t.withToken(w, r, token, func(tok *TrackToken) {
+		body, _ := io.ReadAll(io.LimitReader(r.Body, 64*1024)) // 64 KiB limit
+		if wh, ok := t.tokens.(WebhookStore); ok {
+			_ = wh.InsertWebhookCall(r.Context(), tok.Token, tok.ExecutionID, tok.StepExecID, body)
+		}
+		_ = t.recorder.Record(r.Context(), tok.ExecutionID, tok.StepExecID,
+			"webhook_received", realIP(r), "inbound_webhook",
+			map[string]any{"token": tok.Token, "content_type": r.Header.Get("Content-Type")})
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 }
 

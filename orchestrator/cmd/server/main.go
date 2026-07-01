@@ -197,6 +197,7 @@ func main() {
 	exScheduler := exercise.NewPollScheduler(5 * time.Second)
 	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil)
 	exExecutor.RegisterBuiltins(smtpInj)
+	exExecutor.RegisterBuiltinTriggers()
 	exExecutor.Start()
 	exTracker := exercisetracker.New(exStore, exChain)
 	log.Println("[+] Exercise engine ready")

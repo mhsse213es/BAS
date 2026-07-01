@@ -6,13 +6,18 @@ import "time"
 type StepType string
 
 const (
-	StepTypeSendEmail  StepType = "send_email"
-	StepTypeSendSMS    StepType = "send_sms"
-	StepTypeAgentTask  StepType = "agent_task"
-	StepTypeWait       StepType = "wait"
-	StepTypeApproval   StepType = "approval"
-	StepTypeWebhook    StepType = "webhook"
-	StepTypeNotify     StepType = "notify"
+	StepTypeSendEmail       StepType = "send_email"
+	StepTypeSendSMS         StepType = "send_sms"
+	StepTypeAgentTask       StepType = "agent_task"
+	StepTypeWait            StepType = "wait"
+	StepTypeApproval        StepType = "approval"
+	StepTypeWebhook         StepType = "webhook"
+	StepTypeNotify          StepType = "notify"
+	// Event-based waits — step enters StepWaiting and the trigger registry
+	// checks the condition on every executor tick.
+	StepTypeWaitForAgent     StepType = "wait_for_agent"     // waits until a BAS run completes
+	StepTypeWaitForDetection StepType = "wait_for_detection" // waits until EDR/SIEM evidence arrives
+	StepTypeWaitForWebhook   StepType = "wait_for_webhook"   // waits until external system POSTs /x/hook/{token}
 )
 
 // StepStatus is the runtime state of a single step within an execution.
@@ -73,7 +78,7 @@ type StepConfig struct {
 	// approval
 	ApprovalPrompt string   `json:"approval_prompt,omitempty"`
 	ApproverRoles  []string `json:"approver_roles,omitempty"`
-	// webhook
+	// webhook (outbound)
 	WebhookURL     string            `json:"webhook_url,omitempty"`
 	WebhookMethod  string            `json:"webhook_method,omitempty"`
 	WebhookHeaders map[string]string `json:"webhook_headers,omitempty"`
@@ -81,6 +86,12 @@ type StepConfig struct {
 	// notify (same as email but to operator/admin, not exercise target)
 	NotifyEmail string `json:"notify_email,omitempty"`
 	NotifyMsg   string `json:"notify_msg,omitempty"`
+	// wait_for_agent
+	WaitForAgent *WaitForAgentConfig `json:"wait_for_agent,omitempty"`
+	// wait_for_detection
+	WaitForDetection *WaitForDetectionConfig `json:"wait_for_detection,omitempty"`
+	// wait_for_webhook (inbound)
+	WaitForWebhook *WaitForWebhookConfig `json:"wait_for_webhook,omitempty"`
 }
 
 type EmailConfig struct {
@@ -104,6 +115,34 @@ type AgentTaskConfig struct {
 	AgentID     string `json:"agent_id"`
 	ScenarioID  string `json:"scenario_id,omitempty"`
 	TechniqueID string `json:"technique_id,omitempty"`
+}
+
+// WaitForAgentConfig configures a wait_for_agent step.
+// The step enters StepWaiting immediately; the trigger fires once the BAS run
+// referenced by AgentTaskStepID's result.bas_run_id reaches a terminal status.
+type WaitForAgentConfig struct {
+	// AgentTaskStepID is the step ID (in the same plan) whose result holds bas_run_id.
+	// Leave empty if bas_run_id will be stored directly in this step's own result.
+	AgentTaskStepID string `json:"agent_task_step_id,omitempty"`
+}
+
+// WaitForDetectionConfig waits for EDR/SIEM evidence to appear in the
+// exercise evidence chain (injected via InjectEvidence or a future SIEM hook).
+type WaitForDetectionConfig struct {
+	// DetectionTypes restricts which evidence types count as a "detection".
+	// Defaults to ["edr_detected", "siem_alerted"] when empty.
+	DetectionTypes []string `json:"detection_types,omitempty"`
+	// MinCount is the minimum number of matching evidence records required.
+	// Defaults to 1.
+	MinCount int `json:"min_count,omitempty"`
+}
+
+// WaitForWebhookConfig waits for an inbound HTTP POST to /x/hook/{token}.
+// The token is minted when the step enters StepWaiting and returned in the
+// step result so operators know the URL to configure in their external system.
+type WaitForWebhookConfig struct {
+	// Description is shown to the operator when the hook URL is generated.
+	Description string `json:"description,omitempty"`
 }
 
 // Plan is a reusable exercise DAG template.

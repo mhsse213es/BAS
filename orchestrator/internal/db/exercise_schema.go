@@ -106,6 +106,17 @@ func EnsureExerciseSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_ex_token_exec ON exercise_track_tokens(execution_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ex_token_step ON exercise_track_tokens(step_exec_id)`,
+
+		// ── Inbound webhook calls (/x/hook/{token}) ───────────────────────────
+		`CREATE TABLE IF NOT EXISTS exercise_webhook_calls (
+			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			token        text        NOT NULL,
+			execution_id text        NOT NULL,
+			step_exec_id text        NOT NULL DEFAULT '',
+			body         bytea,
+			received_at  timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_ex_hook_token ON exercise_webhook_calls(token)`,
 	}
 	for _, s := range stmts {
 		if _, err := pool.Exec(ctx, s); err != nil {

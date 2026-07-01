@@ -158,11 +158,35 @@ func (h *Handler) WithLicensePath(path string) *Handler {
 	return h
 }
 
-// WithExercise attaches the exercise engine components.
+// WithExercise attaches the exercise engine components and wires the BAS
+// dispatch function so the exercise executor can trigger scenario runs.
 func (h *Handler) WithExercise(store *exercise.Store, exec *exercise.Executor, chain *exercise.EvidenceChain) *Handler {
 	h.exerciseStore = store
 	h.exerciseExecutor = exec
 	h.exerciseChain = chain
+	// Wire AgentDispatchFn: exercise step type "agent_task" → existing BAS engine.
+	exec.SetDispatch(func(agentID, scenarioID, techniqueID string) (string, error) {
+		var techniques []string
+		if techniqueID != "" {
+			techniques = []string{techniqueID}
+		}
+		opts := dispatchOpts{
+			Mode:       "posture",
+			Techniques: techniques,
+		}
+		sc, ok := h.engine.Get(scenarioID)
+		if !ok {
+			return "", fmt.Errorf("exercise dispatch: scenario %q not found", scenarioID)
+		}
+		runID, skip, err := h.dispatchRun(context.Background(), sc, agentID, opts)
+		if err != nil {
+			return "", err
+		}
+		if skip != "" {
+			return "", fmt.Errorf("exercise dispatch: agent skipped (%s)", skip)
+		}
+		return runID, nil
+	})
 	return h
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -431,6 +432,78 @@ func (s *Store) stepExecIDForStep(ctx context.Context, execID, stepID string) (s
 		`SELECT id FROM exercise_step_executions WHERE execution_id=$1 AND step_id=$2`,
 		execID, stepID).Scan(&id)
 	return id, err
+}
+
+// ── Trigger support ───────────────────────────────────────────────────────────
+
+// BASRunStatus returns the status of a BAS scenario_run by run ID.
+// Returns ("", nil) when the run is not found.
+func (s *Store) BASRunStatus(ctx context.Context, runID string) (string, error) {
+	var status string
+	err := s.db.QueryRow(ctx,
+		`SELECT status FROM scenario_runs WHERE id = $1`, runID).Scan(&status)
+	if err != nil {
+		return "", nil // not found — not an error for trigger polling
+	}
+	return status, nil
+}
+
+// CountEvidenceForExec counts evidence records of the given types in an
+// execution. Used by the wait_for_detection trigger.
+func (s *Store) CountEvidenceForExec(ctx context.Context, execID string, evTypes []string) (int, error) {
+	if len(evTypes) == 0 {
+		evTypes = []string{"edr_detected", "siem_alerted"}
+	}
+	// Build a parameterized IN list.
+	params := make([]any, 0, len(evTypes)+1)
+	params = append(params, execID)
+	placeholders := make([]string, len(evTypes))
+	for i, t := range evTypes {
+		params = append(params, t)
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+	}
+	var n int
+	err := s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM exercise_evidence
+		 WHERE execution_id = $1 AND evidence_type IN (`+strings.Join(placeholders, ",")+`)`,
+		params...).Scan(&n)
+	return n, err
+}
+
+// WebhookCallCount returns the number of inbound hook POSTs received for token.
+func (s *Store) WebhookCallCount(ctx context.Context, token string) (int, error) {
+	var n int
+	err := s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM exercise_webhook_calls WHERE token = $1`, token).Scan(&n)
+	return n, err
+}
+
+// InsertWebhookCall records one inbound /x/hook/{token} POST.
+func (s *Store) InsertWebhookCall(ctx context.Context, token, execID, stepExecID string, body []byte) error {
+	_, err := s.db.Exec(ctx,
+		`INSERT INTO exercise_webhook_calls (token, execution_id, step_exec_id, body)
+		 VALUES ($1, $2, $3, $4)`,
+		token, execID, stepExecID, body)
+	return err
+}
+
+// GetStepExecByStepID returns the StepExecution for a specific step within an execution.
+func (s *Store) GetStepExecByStepID(ctx context.Context, execID, stepID string) (*StepExecution, error) {
+	var se StepExecution
+	var resultRaw []byte
+	err := s.db.QueryRow(ctx,
+		`SELECT id, execution_id, step_id, step_type, status, attempt,
+		        scheduled_at, started_at, completed_at, result_json, error_msg, created_at
+		 FROM exercise_step_executions
+		 WHERE execution_id=$1 AND step_id=$2`, execID, stepID,
+	).Scan(&se.ID, &se.ExecutionID, &se.StepID, &se.StepType,
+		&se.Status, &se.Attempt, &se.ScheduledAt, &se.StartedAt, &se.CompletedAt,
+		&resultRaw, &se.Error, &se.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal(resultRaw, &se.Result)
+	return &se, nil
 }
 
 // SumDurationByType returns the total time (seconds) between the first and last

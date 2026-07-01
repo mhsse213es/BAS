@@ -78,13 +78,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	// Exercise click/open/cred tracking — no auth; access is via single-use tokens.
+	// Exercise tracking — no auth; single-use tokens gate access.
 	if len(tracker) > 0 && tracker[0] != nil {
 		tr := tracker[0]
 		r.Get("/x/open/{token}", tr.HandleOpen)
 		r.Get("/x/click/{token}", tr.HandleClick)
 		r.Post("/x/cred/{token}", tr.HandleCredSubmit)
 		r.Post("/x/report/{token}", tr.HandleReport)
+		r.Post("/x/hook/{token}", tr.HandleWebhook) // inbound webhook from external systems
 	}
 
 	// ── Authenticated endpoints (JWT required) ────────────────────────────

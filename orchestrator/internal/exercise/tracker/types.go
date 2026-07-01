@@ -21,6 +21,12 @@ type Recorder interface {
 	Record(ctx context.Context, execID, stepExecID, evType, actor, source string, payload map[string]any) error
 }
 
+// WebhookStore is an optional extension of TokenStore for inbound webhook calls.
+// exercise.Store satisfies this interface when available.
+type WebhookStore interface {
+	InsertWebhookCall(ctx context.Context, token, execID, stepExecID string, body []byte) error
+}
+
 // TrackToken is a single-use tracking token issued by an injector.
 type TrackToken struct {
 	Token       string         `json:"token"`

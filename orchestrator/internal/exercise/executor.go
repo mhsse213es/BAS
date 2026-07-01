@@ -2,10 +2,15 @@ package exercise
 
 import (
 	"context"
+	crand "crypto/rand"
+	"encoding/hex"
 	"log"
 	"strings"
 	"time"
 )
+
+// cryptoRandRead is a package-level alias so tests can stub it.
+var cryptoRandRead = crand.Read
 
 // Executor is the DAG runtime for exercise executions.
 // It advances step state machines and fires registered step handlers.
@@ -14,20 +19,32 @@ type Executor struct {
 	store     *Store
 	evidence  *EvidenceChain
 	registry  *Registry
+	triggers  *TriggerRegistry
 	scheduler Scheduler
 	dispatch  AgentDispatchFn
 }
 
 // NewExecutor builds an Executor with a pluggable Registry and Scheduler.
-// Call RegisterBuiltins() afterwards to wire the standard step types.
+// Call RegisterBuiltins() and RegisterBuiltinTriggers() afterwards.
 func NewExecutor(store *Store, evidence *EvidenceChain, registry *Registry, scheduler Scheduler, dispatch AgentDispatchFn) *Executor {
 	return &Executor{
 		store:     store,
 		evidence:  evidence,
 		registry:  registry,
+		triggers:  NewTriggerRegistry(),
 		scheduler: scheduler,
 		dispatch:  dispatch,
 	}
+}
+
+// SetDispatch wires the BAS run dispatch function after construction.
+// Call this after the API handler is created (avoids import cycle).
+func (e *Executor) SetDispatch(fn AgentDispatchFn) { e.dispatch = fn }
+
+// WithTriggers replaces the trigger registry (useful in tests).
+func (e *Executor) WithTriggers(t *TriggerRegistry) *Executor {
+	e.triggers = t
+	return e
 }
 
 // Start begins the scheduler loop.
@@ -51,6 +68,18 @@ func (e *Executor) RegisterBuiltins(smtp *SMTPInjector) {
 	e.registry.Register(StepTypeApproval, StepHandlerFunc(e.handleApproval))
 	e.registry.Register(StepTypeWebhook, StepHandlerFunc(e.handleWebhook))
 	e.registry.Register(StepTypeNotify, StepHandlerFunc(e.handleNotify))
+	// Event-based wait steps: enter StepWaiting immediately, then the
+	// trigger registry fires them when the condition is satisfied.
+	e.registry.Register(StepTypeWaitForAgent, StepHandlerFunc(e.handleWaitForAgent))
+	e.registry.Register(StepTypeWaitForDetection, StepHandlerFunc(e.handleWaitForDetection))
+	e.registry.Register(StepTypeWaitForWebhook, StepHandlerFunc(e.handleWaitForWebhook))
+}
+
+// RegisterBuiltinTriggers wires the event-driven trigger functions.
+func (e *Executor) RegisterBuiltinTriggers() {
+	e.triggers.Register(StepTypeWaitForAgent, e.triggerWaitForAgent)
+	e.triggers.Register(StepTypeWaitForDetection, e.triggerWaitForDetection)
+	e.triggers.Register(StepTypeWaitForWebhook, e.triggerWaitForWebhook)
 }
 
 func (e *Executor) tick(ctx context.Context) error {
@@ -92,22 +121,56 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 		}
 	}
 
-	// Advance timeout-expired wait/approval steps.
+	// Fire triggers and advance timeout-expired wait steps.
 	now := time.Now()
-	for _, ps := range plan.Steps {
+	for i := range plan.Steps {
+		ps := &plan.Steps[i]
 		se, ok := byID[ps.ID]
 		if !ok || se.Status != StepWaiting {
 			continue
 		}
+
+		// Check registered trigger (wait_for_agent, wait_for_detection, wait_for_webhook).
+		if e.triggers.Has(ps.Type) {
+			triggered, payload, trigErr := e.triggers.Check(ctx, ex, ps, se)
+			if trigErr != nil {
+				log.Printf("[exercise] trigger %s/%s: %v", ex.ID, ps.ID, trigErr)
+			} else if triggered {
+				merged := mergeMaps(se.Result, payload)
+				_ = e.store.SetStepResult(ctx, ex.ID, ps.ID, merged)
+				_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepCompleted, "")
+				_, _ = e.evidence.Append(ctx, ex.ID, se.ID, "trigger_fired", "system", "trigger_registry",
+					map[string]any{"step_type": string(ps.Type), "payload": payload})
+				_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "step_completed", "system", payload)
+				done[ps.ID] = true
+				continue
+			}
+		}
+
+		// Timeout for generic wait steps.
 		if ps.Type == StepTypeWait && se.ScheduledAt != nil && now.After(*se.ScheduledAt) {
 			_ = e.store.SetStepResult(ctx, ex.ID, ps.ID, map[string]any{"timed_out": true})
 			_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepCompleted, "")
 			_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "timeout", "system", nil)
 			done[ps.ID] = true
 		}
+
+		// Timeout for approval steps.
 		if ps.Type == StepTypeApproval && ps.TimeoutSecs > 0 && se.StartedAt != nil {
 			if now.After(se.StartedAt.Add(time.Duration(ps.TimeoutSecs) * time.Second)) {
 				_ = e.store.SetStepResult(ctx, ex.ID, ps.ID, map[string]any{"timed_out": true, "approved": false})
+				_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepCompleted, "timeout")
+				_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "timeout", "system", nil)
+				done[ps.ID] = true
+			}
+		}
+
+		// Global timeout for event-based waits (wait_for_*).
+		if ps.TimeoutSecs > 0 && se.StartedAt != nil &&
+			now.After(se.StartedAt.Add(time.Duration(ps.TimeoutSecs)*time.Second)) {
+			switch ps.Type {
+			case StepTypeWaitForAgent, StepTypeWaitForDetection, StepTypeWaitForWebhook:
+				_ = e.store.SetStepResult(ctx, ex.ID, ps.ID, mergeMaps(se.Result, map[string]any{"timed_out": true}))
 				_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepCompleted, "timeout")
 				_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "timeout", "system", nil)
 				done[ps.ID] = true
@@ -275,6 +338,134 @@ func (e *Executor) handleWebhook(_ context.Context, ex *Execution, ps *PlanStep,
 func (e *Executor) handleNotify(_ context.Context, ex *Execution, ps *PlanStep, _ *StepExecution) error {
 	log.Printf("[exercise] NOTIFY [%s] %s: %s", ex.ID, ps.Label, ps.Config.NotifyMsg)
 	return e.store.SetStepStatus(context.Background(), ex.ID, ps.ID, StepCompleted, "")
+}
+
+// handleWaitForAgent enters StepWaiting immediately; the trigger fires once the
+// BAS run (from a previous agent_task step) reaches a terminal status.
+func (e *Executor) handleWaitForAgent(_ context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+	cfg := ps.Config.WaitForAgent
+	now := time.Now()
+	se.Status = StepWaiting
+	se.StartedAt = &now
+	// Copy bas_run_id from the referenced agent_task step into this step's result
+	// so the trigger can find it without needing to re-query the dependent step.
+	if cfg != nil && cfg.AgentTaskStepID != "" {
+		if ref, err := e.store.GetStepExecByStepID(context.Background(), ex.ID, cfg.AgentTaskStepID); err == nil {
+			if runID, ok := ref.Result["bas_run_id"].(string); ok {
+				se.Result = map[string]any{"bas_run_id": runID}
+			}
+		}
+	}
+	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "step_waiting", "system",
+		map[string]any{"waiting_for": "bas_run_complete"})
+	return e.store.UpsertStepExecution(context.Background(), se)
+}
+
+// handleWaitForDetection enters StepWaiting; trigger fires when edr_detected or
+// siem_alerted evidence appears in the exercise evidence chain.
+func (e *Executor) handleWaitForDetection(_ context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+	now := time.Now()
+	se.Status = StepWaiting
+	se.StartedAt = &now
+	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "step_waiting", "system",
+		map[string]any{"waiting_for": "detection_evidence"})
+	return e.store.UpsertStepExecution(context.Background(), se)
+}
+
+// handleWaitForWebhook mints a hook token, enters StepWaiting, and stores the
+// callback URL in the step result so the operator can configure the external system.
+func (e *Executor) handleWaitForWebhook(_ context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+	// Re-use the tracker token infrastructure for the webhook token.
+	token, err := mintHookToken()
+	if err != nil {
+		return e.store.SetStepStatus(context.Background(), ex.ID, ps.ID, StepFailed, err.Error())
+	}
+	if err := e.store.InsertTrackToken(context.Background(), token, ex.ID, se.ID, "",
+		"webhook", map[string]any{"step_id": ps.ID}); err != nil {
+		return e.store.SetStepStatus(context.Background(), ex.ID, ps.ID, StepFailed, err.Error())
+	}
+	now := time.Now()
+	se.Status = StepWaiting
+	se.StartedAt = &now
+	se.Result = map[string]any{"hook_token": token, "hook_path": "/x/hook/" + token}
+	_ = e.store.RecordEvent(context.Background(), ex.ID, ps.ID, "step_waiting", "system",
+		map[string]any{"hook_token": token})
+	return e.store.UpsertStepExecution(context.Background(), se)
+}
+
+// ── Trigger functions ─────────────────────────────────────────────────────────
+
+func (e *Executor) triggerWaitForAgent(ctx context.Context, _ *Execution, _ *PlanStep, se *StepExecution) (bool, map[string]any, error) {
+	runID, _ := se.Result["bas_run_id"].(string)
+	if runID == "" {
+		return false, nil, nil
+	}
+	status, err := e.store.BASRunStatus(ctx, runID)
+	if err != nil || status == "" {
+		return false, nil, err
+	}
+	if status == "completed" || status == "failed" || status == "cancelled" || status == "partial" {
+		return true, map[string]any{"bas_run_id": runID, "bas_run_status": status}, nil
+	}
+	return false, nil, nil
+}
+
+func (e *Executor) triggerWaitForDetection(ctx context.Context, ex *Execution, ps *PlanStep, _ *StepExecution) (bool, map[string]any, error) {
+	cfg := ps.Config.WaitForDetection
+	var types []string
+	minCount := 1
+	if cfg != nil {
+		types = cfg.DetectionTypes
+		if cfg.MinCount > 0 {
+			minCount = cfg.MinCount
+		}
+	}
+	n, err := e.store.CountEvidenceForExec(ctx, ex.ID, types)
+	if err != nil {
+		return false, nil, err
+	}
+	if n >= minCount {
+		return true, map[string]any{"detection_count": n}, nil
+	}
+	return false, nil, nil
+}
+
+func (e *Executor) triggerWaitForWebhook(ctx context.Context, _ *Execution, _ *PlanStep, se *StepExecution) (bool, map[string]any, error) {
+	token, _ := se.Result["hook_token"].(string)
+	if token == "" {
+		return false, nil, nil
+	}
+	n, err := e.store.WebhookCallCount(ctx, token)
+	if err != nil {
+		return false, nil, err
+	}
+	if n > 0 {
+		return true, map[string]any{"hook_token": token, "call_count": n}, nil
+	}
+	return false, nil, nil
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// mergeMaps returns a new map with all keys from both a and b (b wins on conflict).
+func mergeMaps(a, b map[string]any) map[string]any {
+	out := make(map[string]any, len(a)+len(b))
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		out[k] = v
+	}
+	return out
+}
+
+// mintHookToken generates a random 16-byte hex token for webhook callbacks.
+func mintHookToken() (string, error) {
+	b := make([]byte, 16)
+	if _, err := cryptoRandRead(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // ── Condition evaluator ───────────────────────────────────────────────────────
