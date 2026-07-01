@@ -54,6 +54,10 @@ func (h *Handler) CreateExercisePlan(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "name required", http.StatusBadRequest)
 		return
 	}
+	if errs := exercise.ValidatePlan(&p); len(errs) > 0 {
+		respond(w, map[string]any{"valid": false, "errors": errs})
+		return
+	}
 	p.CreatedBy = actorID(r)
 	if err := h.exerciseStore.CreatePlan(r.Context(), &p); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -61,6 +65,18 @@ func (h *Handler) CreateExercisePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	h.auditLog(r, "exercise.plan.create", p.ID, map[string]any{"name": p.Name}, "success")
 	respond(w, p)
+}
+
+// POST /api/exercises/plans/{id}/validate
+// Returns validation results without saving. Frontend DAG editor calls this.
+func (h *Handler) ValidateExercisePlan(w http.ResponseWriter, r *http.Request) {
+	var p exercise.Plan
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		jsonError(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	errs := exercise.ValidatePlan(&p)
+	respond(w, map[string]any{"valid": len(errs) == 0, "errors": errs})
 }
 
 func (h *Handler) UpdateExercisePlan(w http.ResponseWriter, r *http.Request) {
@@ -116,9 +132,10 @@ func (h *Handler) GetExerciseExecution(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CreateExerciseExecution(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		PlanID  string            `json:"plan_id"`
-		Name    string            `json:"name"`
-		Targets []exercise.Target `json:"targets"`
+		PlanID    string            `json:"plan_id"`
+		Name      string            `json:"name"`
+		Targets   []exercise.Target `json:"targets"`
+		Variables map[string]string `json:"variables"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -128,8 +145,14 @@ func (h *Handler) CreateExerciseExecution(w http.ResponseWriter, r *http.Request
 		jsonError(w, "plan_id required", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.exerciseStore.GetPlan(r.Context(), req.PlanID); err != nil {
+	plan, err := h.exerciseStore.GetPlan(r.Context(), req.PlanID)
+	if err != nil {
 		jsonError(w, "plan not found", http.StatusNotFound)
+		return
+	}
+	// Validate required variables are supplied before creating the execution.
+	if verr := exercise.ValidateVars(plan.Variables, req.Variables); verr != nil {
+		jsonError(w, verr.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 	ex := &exercise.Execution{
@@ -138,6 +161,8 @@ func (h *Handler) CreateExerciseExecution(w http.ResponseWriter, r *http.Request
 		Status:      exercise.ExecDraft,
 		InitiatedBy: actorID(r),
 		Targets:     req.Targets,
+		Variables:   req.Variables,
+		PlanVersion: plan.Version,
 	}
 	if err := h.exerciseStore.CreateExecution(r.Context(), ex); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -220,6 +245,121 @@ func (h *Handler) GetExerciseEvents(w http.ResponseWriter, r *http.Request) {
 		evs = []map[string]interface{}{}
 	}
 	respond(w, evs)
+}
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+
+// GET /api/exercises/templates
+func (h *Handler) ListExerciseTemplates(w http.ResponseWriter, r *http.Request) {
+	tmps, err := h.exerciseStore.ListTemplates(r.Context())
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tmps == nil {
+		tmps = []exercise.Template{}
+	}
+	respond(w, tmps)
+}
+
+// GET /api/exercises/templates/{id}
+func (h *Handler) GetExerciseTemplate(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	t, err := h.exerciseStore.GetTemplate(r.Context(), id)
+	if err != nil {
+		jsonError(w, "not found", http.StatusNotFound)
+		return
+	}
+	respond(w, t)
+}
+
+// POST /api/exercises/templates (Admin)
+func (h *Handler) CreateExerciseTemplate(w http.ResponseWriter, r *http.Request) {
+	var t exercise.Template
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		jsonError(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if t.Name == "" {
+		jsonError(w, "name required", http.StatusBadRequest)
+		return
+	}
+	// Validate the embedded plan graph.
+	p := &exercise.Plan{Steps: t.Steps, Variables: t.Variables}
+	if errs := exercise.ValidatePlan(p); len(errs) > 0 {
+		respond(w, map[string]any{"valid": false, "errors": errs})
+		return
+	}
+	t.BuiltIn = false
+	t.Author = actorID(r)
+	if t.ID == "" {
+		t.ID = "custom-" + fmt.Sprintf("%d", len(t.Name)) // crude; real ID from DB gen
+	}
+	if err := h.exerciseStore.UpsertTemplate(r.Context(), &t); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "exercise.template.create", t.ID, map[string]any{"name": t.Name}, "success")
+	respond(w, t)
+}
+
+// POST /api/exercises/templates/{id}/instantiate
+// Creates a Plan + Execution from a template with operator-provided variables.
+func (h *Handler) InstantiateExerciseTemplate(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req struct {
+		Name      string            `json:"name"`
+		Targets   []exercise.Target `json:"targets"`
+		Variables map[string]string `json:"variables"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	tmpl, err := h.exerciseStore.GetTemplate(r.Context(), id)
+	if err != nil {
+		jsonError(w, "template not found", http.StatusNotFound)
+		return
+	}
+	// Validate required variables.
+	if verr := exercise.ValidateVars(tmpl.Variables, req.Variables); verr != nil {
+		jsonError(w, verr.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	if req.Name == "" {
+		req.Name = tmpl.Name
+	}
+	// Create a Plan snapshot from the template (preserves step graph + var defs).
+	plan := &exercise.Plan{
+		Name:        req.Name,
+		Description: tmpl.Description,
+		Steps:       tmpl.Steps,
+		Variables:   tmpl.Variables,
+		TemplateID:  tmpl.ID,
+		Version:     tmpl.Version,
+		CreatedBy:   actorID(r),
+	}
+	if err := h.exerciseStore.CreatePlan(r.Context(), plan); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Create the Execution bound to that Plan with the provided variables.
+	ex := &exercise.Execution{
+		PlanID:      plan.ID,
+		Name:        req.Name,
+		Status:      exercise.ExecDraft,
+		InitiatedBy: actorID(r),
+		Targets:     req.Targets,
+		Variables:   req.Variables,
+		PlanVersion: plan.Version,
+	}
+	if err := h.exerciseStore.CreateExecution(r.Context(), ex); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "exercise.template.instantiate", tmpl.ID,
+		map[string]any{"template": tmpl.Name, "execution_id": ex.ID}, "success")
+	respond(w, map[string]any{"plan": plan, "execution": ex})
 }
 
 // ── Report exports ────────────────────────────────────────────────────────────

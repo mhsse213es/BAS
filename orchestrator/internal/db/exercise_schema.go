@@ -11,34 +11,61 @@ import (
 // Idempotent — safe to call on every startup.
 func EnsureExerciseSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	stmts := []string{
+		// ── Exercise Templates (built-in + custom plan blueprints) ────────────
+		`CREATE TABLE IF NOT EXISTS exercise_templates (
+			id             text        PRIMARY KEY,
+			name           text        NOT NULL,
+			version        int         NOT NULL DEFAULT 1,
+			category       text        NOT NULL DEFAULT '',
+			description    text        NOT NULL DEFAULT '',
+			variables_json jsonb       NOT NULL DEFAULT '[]',
+			steps_json     jsonb       NOT NULL DEFAULT '[]',
+			built_in       boolean     NOT NULL DEFAULT false,
+			author         text        NOT NULL DEFAULT '',
+			created_at     timestamptz NOT NULL DEFAULT NOW(),
+			updated_at     timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_ex_tmpl_category ON exercise_templates(category)`,
+
 		// ── Exercise Plans (reusable DAG templates) ───────────────────────────
 		`CREATE TABLE IF NOT EXISTS exercise_plans (
-			id          text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
-			name        text        NOT NULL,
-			description text        NOT NULL DEFAULT '',
-			steps_json  jsonb       NOT NULL DEFAULT '[]',
-			created_by  text        NOT NULL DEFAULT '',
-			created_at  timestamptz NOT NULL DEFAULT NOW(),
-			updated_at  timestamptz NOT NULL DEFAULT NOW()
+			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name           text        NOT NULL,
+			description    text        NOT NULL DEFAULT '',
+			steps_json     jsonb       NOT NULL DEFAULT '[]',
+			variables_json jsonb       NOT NULL DEFAULT '[]',
+			template_id    text,
+			version        int         NOT NULL DEFAULT 1,
+			created_by     text        NOT NULL DEFAULT '',
+			created_at     timestamptz NOT NULL DEFAULT NOW(),
+			updated_at     timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		// Backward-compat: add columns to existing tables that predate this migration.
+		`ALTER TABLE exercise_plans ADD COLUMN IF NOT EXISTS variables_json jsonb NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE exercise_plans ADD COLUMN IF NOT EXISTS template_id    text`,
+		`ALTER TABLE exercise_plans ADD COLUMN IF NOT EXISTS version        int NOT NULL DEFAULT 1`,
 
 		// ── Exercise Executions (live instantiation of a plan) ────────────────
 		`CREATE TABLE IF NOT EXISTS exercise_executions (
-			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
-			plan_id       text        NOT NULL REFERENCES exercise_plans(id) ON DELETE RESTRICT,
-			name          text        NOT NULL DEFAULT '',
-			status        text        NOT NULL DEFAULT 'draft',
-			initiated_by  text        NOT NULL DEFAULT '',
-			targets_json  jsonb       NOT NULL DEFAULT '[]',
-			metadata_json jsonb       NOT NULL DEFAULT '{}',
-			score_json    jsonb,
-			started_at    timestamptz,
-			completed_at  timestamptz,
-			created_at    timestamptz NOT NULL DEFAULT NOW(),
+			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			plan_id        text        NOT NULL REFERENCES exercise_plans(id) ON DELETE RESTRICT,
+			name           text        NOT NULL DEFAULT '',
+			status         text        NOT NULL DEFAULT 'draft',
+			initiated_by   text        NOT NULL DEFAULT '',
+			targets_json   jsonb       NOT NULL DEFAULT '[]',
+			metadata_json  jsonb       NOT NULL DEFAULT '{}',
+			variables_json jsonb       NOT NULL DEFAULT '{}',
+			plan_version   int         NOT NULL DEFAULT 1,
+			score_json     jsonb,
+			started_at     timestamptz,
+			completed_at   timestamptz,
+			created_at     timestamptz NOT NULL DEFAULT NOW(),
 			updated_at    timestamptz NOT NULL DEFAULT NOW()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_ex_exec_plan   ON exercise_executions(plan_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ex_exec_status ON exercise_executions(status)`,
+		`ALTER TABLE exercise_executions ADD COLUMN IF NOT EXISTS variables_json jsonb NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE exercise_executions ADD COLUMN IF NOT EXISTS plan_version   int NOT NULL DEFAULT 1`,
 
 		// ── Step Executions (per-node runtime state) ──────────────────────────
 		`CREATE TABLE IF NOT EXISTS exercise_step_executions (

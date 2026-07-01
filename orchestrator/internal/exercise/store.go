@@ -22,39 +22,46 @@ func NewStore(db *pgxpool.Pool) *Store { return &Store{db: db} }
 
 func (s *Store) CreatePlan(ctx context.Context, p *Plan) error {
 	steps, _ := json.Marshal(p.Steps)
+	vars, _ := json.Marshal(p.Variables)
 	return s.db.QueryRow(ctx,
-		`INSERT INTO exercise_plans (name, description, steps_json, created_by)
-		 VALUES ($1,$2,$3,$4) RETURNING id, created_at, updated_at`,
-		p.Name, p.Description, steps, p.CreatedBy,
+		`INSERT INTO exercise_plans (name, description, steps_json, variables_json, template_id, version, created_by)
+		 VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7) RETURNING id, created_at, updated_at`,
+		p.Name, p.Description, steps, vars, p.TemplateID, max1(p.Version), p.CreatedBy,
 	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 }
 
 func (s *Store) UpdatePlan(ctx context.Context, p *Plan) error {
 	steps, _ := json.Marshal(p.Steps)
+	vars, _ := json.Marshal(p.Variables)
 	_, err := s.db.Exec(ctx,
-		`UPDATE exercise_plans SET name=$1, description=$2, steps_json=$3, updated_at=NOW()
-		 WHERE id=$4`,
-		p.Name, p.Description, steps, p.ID)
+		`UPDATE exercise_plans SET name=$1, description=$2, steps_json=$3, variables_json=$4, updated_at=NOW()
+		 WHERE id=$5`,
+		p.Name, p.Description, steps, vars, p.ID)
 	return err
 }
 
 func (s *Store) GetPlan(ctx context.Context, id string) (*Plan, error) {
 	var p Plan
-	var stepsRaw []byte
+	var stepsRaw, varsRaw []byte
+	var templateID *string
 	err := s.db.QueryRow(ctx,
-		`SELECT id, name, description, steps_json, created_by, created_at, updated_at
+		`SELECT id, name, description, steps_json, variables_json, template_id, version, created_by, created_at, updated_at
 		 FROM exercise_plans WHERE id=$1`, id,
-	).Scan(&p.ID, &p.Name, &p.Description, &stepsRaw, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
+	).Scan(&p.ID, &p.Name, &p.Description, &stepsRaw, &varsRaw, &templateID, &p.Version, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal(stepsRaw, &p.Steps)
+	_ = json.Unmarshal(varsRaw, &p.Variables)
+	if templateID != nil {
+		p.TemplateID = *templateID
+	}
 	return &p, nil
 }
 
 func (s *Store) ListPlans(ctx context.Context) ([]Plan, error) {
 	rows, err := s.db.Query(ctx,
-		`SELECT id, name, description, steps_json, created_by, created_at, updated_at
+		`SELECT id, name, description, steps_json, variables_json, template_id, version, created_by, created_at, updated_at
 		 FROM exercise_plans ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -63,15 +70,27 @@ func (s *Store) ListPlans(ctx context.Context) ([]Plan, error) {
 	var out []Plan
 	for rows.Next() {
 		var p Plan
-		var stepsRaw []byte
-		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &stepsRaw,
-			&p.CreatedBy, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		var stepsRaw, varsRaw []byte
+		var templateID *string
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &stepsRaw, &varsRaw,
+			&templateID, &p.Version, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(stepsRaw, &p.Steps)
+		_ = json.Unmarshal(varsRaw, &p.Variables)
+		if templateID != nil {
+			p.TemplateID = *templateID
+		}
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+func max1(v int) int {
+	if v < 1 {
+		return 1
+	}
+	return v
 }
 
 func (s *Store) DeletePlan(ctx context.Context, id string) error {
@@ -84,10 +103,11 @@ func (s *Store) DeletePlan(ctx context.Context, id string) error {
 func (s *Store) CreateExecution(ctx context.Context, e *Execution) error {
 	targets, _ := json.Marshal(e.Targets)
 	meta, _ := json.Marshal(e.Metadata)
+	vars, _ := json.Marshal(e.Variables)
 	return s.db.QueryRow(ctx,
-		`INSERT INTO exercise_executions (plan_id, name, status, initiated_by, targets_json, metadata_json)
-		 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, created_at, updated_at`,
-		e.PlanID, e.Name, e.Status, e.InitiatedBy, targets, meta,
+		`INSERT INTO exercise_executions (plan_id, name, status, initiated_by, targets_json, metadata_json, variables_json, plan_version)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, created_at, updated_at`,
+		e.PlanID, e.Name, e.Status, e.InitiatedBy, targets, meta, vars, max1(e.PlanVersion),
 	).Scan(&e.ID, &e.CreatedAt, &e.UpdatedAt)
 }
 
@@ -114,20 +134,20 @@ func (s *Store) UpdateExecutionScore(ctx context.Context, id string, score *Exer
 
 func (s *Store) GetExecution(ctx context.Context, id string) (*Execution, error) {
 	var e Execution
-	var targetsRaw, metaRaw []byte
-	var scoreRaw []byte
+	var targetsRaw, metaRaw, varsRaw, scoreRaw []byte
 	err := s.db.QueryRow(ctx,
 		`SELECT id, plan_id, name, status, initiated_by, targets_json, metadata_json,
-		        score_json, started_at, completed_at, created_at, updated_at
+		        variables_json, plan_version, score_json, started_at, completed_at, created_at, updated_at
 		 FROM exercise_executions WHERE id=$1`, id,
 	).Scan(&e.ID, &e.PlanID, &e.Name, &e.Status, &e.InitiatedBy,
-		&targetsRaw, &metaRaw, &scoreRaw,
+		&targetsRaw, &metaRaw, &varsRaw, &e.PlanVersion, &scoreRaw,
 		&e.StartedAt, &e.CompletedAt, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal(targetsRaw, &e.Targets)
 	_ = json.Unmarshal(metaRaw, &e.Metadata)
+	_ = json.Unmarshal(varsRaw, &e.Variables)
 	if len(scoreRaw) > 0 {
 		var sc ExerciseScore
 		if err := json.Unmarshal(scoreRaw, &sc); err == nil {
@@ -143,7 +163,7 @@ func (s *Store) ListExecutions(ctx context.Context, limit int) ([]Execution, err
 	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, plan_id, name, status, initiated_by, targets_json, metadata_json,
-		        score_json, started_at, completed_at, created_at, updated_at
+		        variables_json, plan_version, score_json, started_at, completed_at, created_at, updated_at
 		 FROM exercise_executions ORDER BY created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
@@ -152,9 +172,9 @@ func (s *Store) ListExecutions(ctx context.Context, limit int) ([]Execution, err
 	var out []Execution
 	for rows.Next() {
 		var e Execution
-		var targetsRaw, metaRaw, scoreRaw []byte
+		var targetsRaw, metaRaw, varsRaw, scoreRaw []byte
 		if err := rows.Scan(&e.ID, &e.PlanID, &e.Name, &e.Status, &e.InitiatedBy,
-			&targetsRaw, &metaRaw, &scoreRaw,
+			&targetsRaw, &metaRaw, &varsRaw, &e.PlanVersion, &scoreRaw,
 			&e.StartedAt, &e.CompletedAt, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -174,7 +194,7 @@ func (s *Store) ListExecutions(ctx context.Context, limit int) ([]Execution, err
 func (s *Store) ListRunningExecutions(ctx context.Context) ([]Execution, error) {
 	rows, err := s.db.Query(ctx,
 		`SELECT id, plan_id, name, status, initiated_by, targets_json, metadata_json,
-		        score_json, started_at, completed_at, created_at, updated_at
+		        variables_json, plan_version, score_json, started_at, completed_at, created_at, updated_at
 		 FROM exercise_executions WHERE status IN ('running','paused')`)
 	if err != nil {
 		return nil, err
@@ -183,17 +203,86 @@ func (s *Store) ListRunningExecutions(ctx context.Context) ([]Execution, error) 
 	var out []Execution
 	for rows.Next() {
 		var e Execution
-		var targetsRaw, metaRaw, scoreRaw []byte
+		var targetsRaw, metaRaw, varsRaw, scoreRaw []byte
 		if err := rows.Scan(&e.ID, &e.PlanID, &e.Name, &e.Status, &e.InitiatedBy,
-			&targetsRaw, &metaRaw, &scoreRaw,
+			&targetsRaw, &metaRaw, &varsRaw, &e.PlanVersion, &scoreRaw,
 			&e.StartedAt, &e.CompletedAt, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(targetsRaw, &e.Targets)
 		_ = json.Unmarshal(metaRaw, &e.Metadata)
+		_ = json.Unmarshal(varsRaw, &e.Variables)
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+
+func (s *Store) UpsertTemplate(ctx context.Context, t *Template) error {
+	vars, _ := json.Marshal(t.Variables)
+	steps, _ := json.Marshal(t.Steps)
+	_, err := s.db.Exec(ctx,
+		`INSERT INTO exercise_templates (id, name, version, category, description, variables_json, steps_json, built_in, author)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		 ON CONFLICT (id) DO UPDATE SET
+		   name=$2, version=$3, category=$4, description=$5,
+		   variables_json=$6, steps_json=$7, author=$9, updated_at=NOW()`,
+		t.ID, t.Name, t.Version, t.Category, t.Description,
+		vars, steps, t.BuiltIn, t.Author)
+	return err
+}
+
+func (s *Store) GetTemplate(ctx context.Context, id string) (*Template, error) {
+	var t Template
+	var varsRaw, stepsRaw []byte
+	err := s.db.QueryRow(ctx,
+		`SELECT id, name, version, category, description, variables_json, steps_json,
+		        built_in, author, created_at, updated_at
+		 FROM exercise_templates WHERE id=$1`, id,
+	).Scan(&t.ID, &t.Name, &t.Version, &t.Category, &t.Description,
+		&varsRaw, &stepsRaw, &t.BuiltIn, &t.Author, &t.CreatedAt, &t.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal(varsRaw, &t.Variables)
+	_ = json.Unmarshal(stepsRaw, &t.Steps)
+	return &t, nil
+}
+
+func (s *Store) ListTemplates(ctx context.Context) ([]Template, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, name, version, category, description, variables_json, steps_json,
+		        built_in, author, created_at, updated_at
+		 FROM exercise_templates ORDER BY built_in DESC, name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Template
+	for rows.Next() {
+		var t Template
+		var varsRaw, stepsRaw []byte
+		if err := rows.Scan(&t.ID, &t.Name, &t.Version, &t.Category, &t.Description,
+			&varsRaw, &stepsRaw, &t.BuiltIn, &t.Author, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(varsRaw, &t.Variables)
+		_ = json.Unmarshal(stepsRaw, &t.Steps)
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// SeedBuiltinTemplates upserts all BuiltinTemplates into the DB.
+// Safe to call on every startup — built_in rows are never deleted.
+func (s *Store) SeedBuiltinTemplates(ctx context.Context) error {
+	for i := range BuiltinTemplates {
+		if err := s.UpsertTemplate(ctx, &BuiltinTemplates[i]); err != nil {
+			return fmt.Errorf("seed template %q: %w", BuiltinTemplates[i].ID, err)
+		}
+	}
+	return nil
 }
 
 // ── Step Executions ───────────────────────────────────────────────────────────

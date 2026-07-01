@@ -209,6 +209,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Exercise — read access for all authenticated roles.
 		r.Get("/api/exercises/plans", h.ListExercisePlans)
 		r.Get("/api/exercises/plans/{id}", h.GetExercisePlan)
+		r.Get("/api/exercises/templates", h.ListExerciseTemplates)
+		r.Get("/api/exercises/templates/{id}", h.GetExerciseTemplate)
 		r.Get("/api/exercises/executions", h.ListExerciseExecutions)
 		r.Get("/api/exercises/executions/{id}", h.GetExerciseExecution)
 		r.Get("/api/exercises/executions/{id}/evidence", h.GetExerciseEvidence)
@@ -292,8 +294,13 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 			// Exercise plan authoring — Admin only
 			r.Post("/api/exercises/plans", h.CreateExercisePlan)
+			r.Post("/api/exercises/plans/validate", h.ValidateExercisePlan)
 			r.Put("/api/exercises/plans/{id}", h.UpdateExercisePlan)
 			r.Delete("/api/exercises/plans/{id}", h.DeleteExercisePlan)
+
+			// Exercise templates — Admin only for write, all authenticated for read
+			r.Post("/api/exercises/templates", h.CreateExerciseTemplate)
+			r.Post("/api/exercises/templates/{id}/instantiate", h.InstantiateExerciseTemplate)
 		})
 	})
 

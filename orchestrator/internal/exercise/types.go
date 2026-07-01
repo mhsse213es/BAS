@@ -151,6 +151,9 @@ type Plan struct {
 	Name        string     `json:"name"`
 	Description string     `json:"description,omitempty"`
 	Steps       []PlanStep `json:"steps"`
+	Variables   []VarDef   `json:"variables,omitempty"`
+	TemplateID  string     `json:"template_id,omitempty"` // set when derived from a Template
+	Version     int        `json:"version,omitempty"`
 	CreatedBy   string     `json:"created_by,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
@@ -165,6 +168,10 @@ type Execution struct {
 	InitiatedBy string                 `json:"initiated_by,omitempty"`
 	Targets     []Target               `json:"targets,omitempty"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	// Variables holds the operator-provided values that override plan defaults.
+	// The executor resolves ${VarName} against these before dispatching each step.
+	Variables   map[string]string      `json:"variables,omitempty"`
+	PlanVersion int                    `json:"plan_version,omitempty"`
 	Score       *ExerciseScore         `json:"score,omitempty"`
 	StartedAt   *time.Time             `json:"started_at,omitempty"`
 	CompletedAt *time.Time             `json:"completed_at,omitempty"`
@@ -257,3 +264,53 @@ type ManagementScore struct {
 // AgentDispatchFn allows the exercise executor to trigger BAS runs without
 // importing the api package (avoids circular dependency).
 type AgentDispatchFn func(agentID, scenarioID, techniqueID string) (runID string, err error)
+
+// ── Variable system ───────────────────────────────────────────────────────────
+
+// VarType classifies how a variable value is supplied.
+type VarType string
+
+const (
+	// VarTypeString is a plain text value supplied by the operator at launch time.
+	VarTypeString VarType = "string"
+	// VarTypeEmailList is a comma-separated list of email addresses.
+	VarTypeEmailList VarType = "email_list"
+	// VarTypeEndpoint is a BAS agent ID.
+	VarTypeEndpoint VarType = "endpoint_id"
+	// VarTypeDuration is a Go duration string ("30m", "4h").
+	VarTypeDuration VarType = "duration"
+	// VarTypeSecret is resolved from an environment variable at runtime —
+	// never stored in plan or execution JSON.
+	VarTypeSecret VarType = "secret"
+	// VarTypeRuntime is generated when the execution starts (e.g. RandomToken).
+	VarTypeRuntime VarType = "runtime"
+)
+
+// VarDef declares one variable in a plan or template.
+type VarDef struct {
+	Name        string  `json:"name"`
+	Type        VarType `json:"type"`
+	Default     string  `json:"default,omitempty"`
+	Required    bool    `json:"required,omitempty"`
+	Description string  `json:"description,omitempty"`
+	// SecretEnv is the OS environment variable name for VarTypeSecret.
+	SecretEnv string `json:"secret_env,omitempty"`
+}
+
+// ── Template ──────────────────────────────────────────────────────────────────
+
+// Template is a parameterized exercise plan blueprint.
+// Templates ship with the platform; operators can also author custom ones.
+type Template struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Version     int       `json:"version"`
+	Category    string    `json:"category"`   // "phishing" | "ransomware" | "insider" | …
+	Description string    `json:"description"`
+	Variables   []VarDef  `json:"variables"`
+	Steps       []PlanStep `json:"steps"`
+	BuiltIn     bool      `json:"built_in"`
+	Author      string    `json:"author"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}

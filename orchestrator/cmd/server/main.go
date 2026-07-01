@@ -198,6 +198,9 @@ func main() {
 	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil)
 	exExecutor.RegisterBuiltins(smtpInj)
 	exExecutor.RegisterBuiltinTriggers()
+	if err := exStore.SeedBuiltinTemplates(context.Background()); err != nil {
+		log.Printf("warn: seed built-in exercise templates: %v", err)
+	}
 	exExecutor.Start()
 	exTracker := exercisetracker.New(exStore, exChain)
 	log.Println("[+] Exercise engine ready")

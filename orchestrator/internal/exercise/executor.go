@@ -236,7 +236,18 @@ func (e *Executor) advance(ctx context.Context, ex *Execution) error {
 func (e *Executor) dispatchStep(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
 	_ = e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepRunning, "")
 	_ = e.store.RecordEvent(ctx, ex.ID, ps.ID, "step_running", "system", nil)
-	return e.registry.Dispatch(ctx, ex, ps, se)
+
+	// Resolve ${VarName} in the step config before handing to the registry.
+	resolved := *ps
+	if len(ex.Variables) > 0 {
+		if plan, perr := e.store.GetPlan(ctx, ex.PlanID); perr == nil {
+			r := NewResolver(plan.Variables, ex.Variables, ex.ID, ex.InitiatedBy)
+			if cfg, rerr := r.ResolveStepConfig(ps.Config); rerr == nil {
+				resolved.Config = cfg
+			}
+		}
+	}
+	return e.registry.Dispatch(ctx, ex, &resolved, se)
 }
 
 // ── Built-in step handlers ────────────────────────────────────────────────────
