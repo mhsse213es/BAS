@@ -629,6 +629,11 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE ticketing_configs ADD COLUMN IF NOT EXISTS last_test_ok    boolean`,
 		`ALTER TABLE ticketing_configs ADD COLUMN IF NOT EXISTS last_test_at    timestamptz`,
 		`ALTER TABLE ticketing_configs ADD COLUMN IF NOT EXISTS last_test_error text NOT NULL DEFAULT ''`,
+
+		// Idempotent migration for finding_tickets — tracks when an auto-revalidation
+		// run was dispatched so the loop skips already-queued revalidations.
+		`ALTER TABLE finding_tickets ADD COLUMN IF NOT EXISTS revalidation_dispatched_at timestamptz`,
+		`CREATE INDEX IF NOT EXISTS idx_finding_tickets_reval ON finding_tickets (revalidation_required, revalidation_dispatched_at) WHERE revalidation_required = true`,
 	}
 
 	for _, s := range stmts {

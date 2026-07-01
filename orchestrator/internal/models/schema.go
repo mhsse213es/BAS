@@ -279,6 +279,9 @@ const (
 	// MsgTamperAlert is broadcast to all browser sessions when the filesystem
 	// watcher detects an unexpected modification to a protected file.
 	MsgTamperAlert = "tamper_alert"
+	// MsgRevalidationStarted is broadcast when the auto-revalidation loop
+	// dispatches a targeted re-run after an ITSM ticket is resolved.
+	MsgRevalidationStarted = "revalidation_started"
 )
 
 // ── ATT&CK Normalisation ──────────────────────────────────────────────────────

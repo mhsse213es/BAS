@@ -908,6 +908,7 @@ code {
 .cmdk-launch .kbd { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.68rem; border:1px solid var(--border); border-radius:4px; padding:1px 5px; color:var(--muted); }
 .cmdk-scrim { position:fixed; inset:0; z-index:1000; background:rgba(4,9,17,0.62); backdrop-filter:blur(2px); display:flex; align-items:flex-start; justify-content:center; padding-top:13vh; animation:cmdkFade .12s ease; }
 @keyframes cmdkFade { from { opacity:0; } to { opacity:1; } }
+@keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
 .cmdk { width:min(560px,92vw); background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:0 24px 64px -16px rgba(0,0,0,.7); overflow:hidden; }
 .cmdk-in { display:flex; align-items:center; gap:10px; padding:13px 15px; border-bottom:1px solid var(--border); color:var(--muted); }
 .cmdk-in input { flex:1; background:transparent; border:none; outline:none; color:var(--text); font-size:0.95rem; }
@@ -2337,22 +2338,54 @@ body.theme-slate {
           </div>
         </div>
         <div id="ap-collect" class="dash-panel" style="display:none;margin-bottom:1rem">
-          <div class="dash-panel-body" style="padding:1rem;max-width:560px">
-            <div style="font-weight:700;margin-bottom:0.35rem;color:var(--text)">Run Attack-Path Collection</div>
-            <div class="tiny muted" style="margin-bottom:0.75rem">The agent probes only the hosts you list (TCP connect — no network scanning) and maps local admins/sessions. SharpHound runs where domain-joined if enabled and the binary is configured on the server.</div>
-            <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Agent</label>
-            <select id="ap-agent" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-size:0.8rem"></select>
-            <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Targets — one host or IP per line</label>
-            <textarea id="ap-targets" rows="4" placeholder="DC01&#10;FILE01&#10;10.0.0.20" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-family:var(--font-mono);font-size:0.78rem"></textarea>
-            <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Network segment tag (optional)</label>
-            <input id="ap-segment" placeholder="user-vlan" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-size:0.8rem">
-            <label style="display:flex;align-items:center;gap:0.45rem;font-size:0.8rem;color:var(--text);margin-bottom:0.8rem;cursor:pointer">
-              <input type="checkbox" id="ap-sharphound"> Run SharpHound (domain-joined hosts only)
-            </label>
-            <div style="display:flex;gap:0.5rem">
-              <button class="btn btn-primary btn-sm" onclick="dispatchAPCollect()">Dispatch</button>
-              <button class="btn btn-outline btn-sm" onclick="document.getElementById('ap-collect').style.display='none'">Cancel</button>
+          <div class="dash-panel-body" style="padding:1rem;max-width:640px">
+
+            <!-- ── Configure form (shown initially) ─────────────────────────── -->
+            <div id="ap-form">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
+                <div style="font-weight:700;color:var(--text)">Run Attack-Path Collection</div>
+                <button class="btn btn-outline btn-sm" onclick="apCollectClose()" style="padding:0.2rem 0.55rem">&#10005;</button>
+              </div>
+              <div class="tiny muted" style="margin-bottom:0.75rem">The agent probes only the hosts you list (TCP connect — no scanning) and maps local admins, active sessions, and domain membership. SharpHound deepens the picture on domain-joined hosts if enabled and the binary is configured server-side.</div>
+              <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Agent</label>
+              <div style="display:flex;gap:0.4rem;margin-bottom:0.6rem;align-items:center">
+                <select id="ap-agent" style="flex:1;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:0.8rem"></select>
+                <button class="btn btn-outline btn-sm" onclick="apDiscoverSubnet()" id="ap-discover-btn" title="Populate targets with all hosts in this agent&apos;s subnet for you to review before dispatching" style="white-space:nowrap">&#128270; Discover Subnet</button>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.2rem">
+                <label class="tiny muted">Targets &mdash; one hostname or IP per line</label>
+                <span class="tiny muted" id="ap-target-count"></span>
+              </div>
+              <textarea id="ap-targets" rows="5" placeholder="DC01&#10;FILE01&#10;10.0.0.20" oninput="apCountTargets()" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-family:var(--font-mono);font-size:0.78rem;resize:vertical;box-sizing:border-box"></textarea>
+              <label class="tiny muted" style="display:block;margin-bottom:0.2rem">Network segment tag (optional — groups hosts in the graph)</label>
+              <input id="ap-segment" placeholder="user-vlan" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.6rem;font-size:0.8rem;box-sizing:border-box">
+              <label style="display:flex;align-items:center;gap:0.45rem;font-size:0.8rem;color:var(--text);margin-bottom:0.8rem;cursor:pointer">
+                <input type="checkbox" id="ap-sharphound"> Run SharpHound (domain-joined hosts only)
+              </label>
+              <!-- replacement warning — shown when a previous collection exists -->
+              <div id="ap-replace-warn" style="display:none;background:rgba(210,153,34,0.10);border:1px solid var(--warning);border-radius:6px;padding:0.55rem 0.75rem;margin-bottom:0.75rem;font-size:0.78rem;color:var(--warning)">
+                &#9888;&nbsp;<strong>Previous collection will be replaced.</strong> <span id="ap-replace-detail"></span>
+                This new collection supersedes the old one — no data is permanently lost until the agent reports back.
+              </div>
+              <div style="display:flex;gap:0.5rem">
+                <button class="btn btn-primary btn-sm" onclick="dispatchAPCollect()">&#9654; Dispatch Collection</button>
+                <button class="btn btn-outline btn-sm" onclick="apCollectClose()">Cancel</button>
+              </div>
             </div>
+
+            <!-- ── Progress timeline (shown after dispatch) ──────────────────── -->
+            <div id="ap-progress" style="display:none">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+                <div style="font-weight:700;color:var(--text)">Collection in progress</div>
+                <button class="btn btn-outline btn-sm" onclick="apCollectClose()" style="padding:0.2rem 0.55rem">&#10005;</button>
+              </div>
+              <div id="ap-timeline" style="display:flex;flex-direction:column;gap:0;padding-left:0.1rem"></div>
+              <div id="ap-done-actions" style="display:none;margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+                <button class="btn btn-primary btn-sm" onclick="loadAttackPath();apCollectClose()">View Results</button>
+                <button class="btn btn-outline btn-sm" onclick="apCollectClose()">Close</button>
+              </div>
+            </div>
+
           </div>
         </div>
         <div id="ap-schedule" class="dash-panel" style="display:none;margin-bottom:1rem">
@@ -2597,6 +2630,41 @@ body.theme-slate {
 
         <!-- Stats row -->
         <div id="vex-stats" class="score-grid" style="margin-bottom:1rem"></div>
+
+        <!-- Full Sweep banner -->
+        <div class="card" id="vex-sweep-card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem">
+            <div>
+              <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.25rem;display:flex;align-items:center;gap:0.5rem">
+                <svg viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6" style="width:16px;height:16px;flex-shrink:0"><path d="M3 10a7 7 0 1 1 14 0A7 7 0 0 1 3 10z"/><path d="m10 7 3 3-3 3M7 10h6"/></svg>
+                Full Variant Sweep
+              </div>
+              <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> ART techniques sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+              <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px">
+                <option value="">Select agent…</option>
+              </select>
+              <select id="vex-sweep-mode" class="btn btn-outline" style="font-size:0.8rem">
+                <option value="sequential">All variants</option>
+                <option value="adaptive">Adaptive (stop on bypass)</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;color:var(--muted);cursor:pointer;white-space:nowrap">
+                <input type="checkbox" id="vex-sweep-advanced" style="accent-color:var(--accent)"> Advanced Pack
+              </label>
+              <button id="vex-sweep-btn" class="btn btn-primary" onclick="vexRunFullSweep()" style="white-space:nowrap">▶ Start Sweep</button>
+            </div>
+          </div>
+          <div id="vex-sweep-progress" style="display:none;margin-top:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;font-size:0.78rem">
+              <span id="vex-sweep-status" style="color:var(--muted)"></span>
+              <span id="vex-sweep-pct" style="font-weight:700;color:var(--accent)"></span>
+            </div>
+            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div id="vex-sweep-bar" style="height:5px;background:var(--accent);border-radius:3px;width:0%;transition:width 0.5s ease"></div>
+            </div>
+          </div>
+        </div>
 
         <!-- Run form + result side-by-side -->
         <div style="display:grid;grid-template-columns:minmax(320px,380px) 1fr;width:100%;gap:1rem;margin-bottom:1rem;align-items:start">
@@ -3431,29 +3499,185 @@ function renderAttackPath(d) {
   }
   body.innerHTML = h;
 }
+// ── Attack Path Collection — enterprise status tracking ────────────────────────
+
+var _apCollectAgentId = null; // agentId currently being collected (for WS matching)
+
+function apCollectClose() {
+  document.getElementById('ap-collect').style.display = 'none';
+  _apCollectAgentId = null;
+  // reset to form mode for next open
+  document.getElementById('ap-form').style.display = '';
+  document.getElementById('ap-progress').style.display = 'none';
+  document.getElementById('ap-done-actions').style.display = 'none';
+  document.getElementById('ap-replace-warn').style.display = 'none';
+}
+
 function openAPCollect() {
   var sel = document.getElementById('ap-agent');
   var panel = document.getElementById('ap-collect');
+  // reset to configure mode
+  document.getElementById('ap-form').style.display = '';
+  document.getElementById('ap-progress').style.display = 'none';
+  document.getElementById('ap-done-actions').style.display = 'none';
+  document.getElementById('ap-replace-warn').style.display = 'none';
+  document.getElementById('ap-targets').value = '';
+  document.getElementById('ap-target-count').textContent = '';
   function fill() {
     sel.innerHTML = (agents || []).map(function(a) {
       return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + (a.status === 'offline' ? ' (offline)' : '') + '</option>';
     }).join('') || '<option value="">No agents enrolled</option>';
     panel.style.display = '';
+    // check for previous collection on selected agent
+    apCheckPrevious();
   }
+  // wire agent change → re-check previous collection
+  sel.onchange = apCheckPrevious;
   if (!agents || !agents.length) {
     apicall('/api/agents').then(function(d) { agents = d || []; fill(); }).catch(function(e) { showToast(e.message, 'err'); });
   } else fill();
 }
+
+function apCheckPrevious() {
+  var agentId = document.getElementById('ap-agent').value;
+  if (!agentId) return;
+  // summary returns latest graph; if nodes > 0 there is a previous collection
+  apicall('/api/attackpath/summary').then(function(d) {
+    var warn = document.getElementById('ap-replace-warn');
+    var detail = document.getElementById('ap-replace-detail');
+    var nodes = (d && d.graph && d.graph.nodes) ? d.graph.nodes.length : 0;
+    if (nodes > 0) {
+      var ts = (d && d.graph && d.graph.collectedAt) ? new Date(d.graph.collectedAt).toLocaleString() : '';
+      detail.textContent = 'The existing graph has ' + nodes + ' host' + (nodes === 1 ? '' : 's') + (ts ? ' (collected ' + ts + ')' : '') + '. ';
+      warn.style.display = '';
+    } else {
+      warn.style.display = 'none';
+    }
+  }).catch(function() {});
+}
+
+function apCountTargets() {
+  var lines = document.getElementById('ap-targets').value.split('\n').map(function(t) { return t.trim(); }).filter(Boolean);
+  var el = document.getElementById('ap-target-count');
+  el.textContent = lines.length ? lines.length + ' host' + (lines.length === 1 ? '' : 's') : '';
+}
+
+function apDiscoverSubnet() {
+  var agentId = document.getElementById('ap-agent').value;
+  if (!agentId) { showToast('Select an agent first', 'err'); return; }
+  var btn = document.getElementById('ap-discover-btn');
+  btn.disabled = true;
+  btn.textContent = 'Discovering…';
+  apicall('/api/attackpath/subnet/' + encodeURIComponent(agentId)).then(function(r) {
+    btn.disabled = false;
+    btn.innerHTML = '&#128270; Discover Subnet';
+    if (!r.targets || !r.targets.length) {
+      showToast('No subnet info available for this agent yet — try heartbeating first.', 'err');
+      return;
+    }
+    document.getElementById('ap-targets').value = r.targets.join('\n');
+    apCountTargets();
+    showToast('Populated ' + r.targets.length + ' hosts from ' + r.subnet + ' — review and edit before dispatching.', 'ok');
+  }).catch(function(e) {
+    btn.disabled = false;
+    btn.innerHTML = '&#128270; Discover Subnet';
+    showToast(e.message, 'err');
+  });
+}
+
+// Renders a timeline step. state: 'done' | 'active' | 'pending' | 'warn'
+function _apStep(state, title, detail) {
+  var icon = state === 'done' ? '<span style="color:var(--success)">&#10003;</span>'
+    : state === 'active' ? '<span style="animation:spin 1s linear infinite;display:inline-block">&#9696;</span>'
+    : state === 'warn' ? '<span style="color:var(--warning)">&#9888;</span>'
+    : '<span style="color:var(--muted)">&#9675;</span>';
+  var titleColor = state === 'pending' ? 'var(--muted)' : 'var(--text)';
+  return '<div style="display:flex;gap:0.7rem;align-items:flex-start;padding:0.55rem 0;border-bottom:1px solid var(--border)">' +
+    '<div style="width:1.2rem;text-align:center;flex-shrink:0;margin-top:0.05rem;font-size:0.9rem">' + icon + '</div>' +
+    '<div><div style="font-size:0.82rem;font-weight:600;color:' + titleColor + '">' + title + '</div>' +
+    (detail ? '<div class="tiny muted" style="margin-top:0.2rem">' + detail + '</div>' : '') +
+    '</div></div>';
+}
+
+function _apTimestamp() {
+  return new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
 function dispatchAPCollect() {
   var agentId = document.getElementById('ap-agent').value;
   if (!agentId) { showToast('Select an agent', 'err'); return; }
   var targets = document.getElementById('ap-targets').value.split('\n').map(function(t) { return t.trim(); }).filter(Boolean);
+  var agentLabel = document.getElementById('ap-agent').options[document.getElementById('ap-agent').selectedIndex].text;
   var payload = { targets: targets, segment: document.getElementById('ap-segment').value.trim(), runSharpHound: document.getElementById('ap-sharphound').checked };
+  var shEnabled = payload.runSharpHound;
+
   apicall('/api/attackpath/collect/' + encodeURIComponent(agentId), { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
-    document.getElementById('ap-collect').style.display = 'none';
-    var sh = r.sharpHound ? (r.sharpHoundDelivered ? ' + SharpHound' : ' (SharpHound binary not configured server-side)') : '';
-    showToast('Collection dispatched to ' + agentId + sh + '. Refresh in a moment.', 'ok');
-  }).catch(function(e) { showToast(e.message, 'err'); });
+    _apCollectAgentId = agentId;
+
+    // Switch panel to progress timeline
+    document.getElementById('ap-form').style.display = 'none';
+    document.getElementById('ap-progress').style.display = '';
+
+    var tl = document.getElementById('ap-timeline');
+    var shNote = shEnabled ? (r.sharpHoundDelivered ? ' + SharpHound domain mapping' : ' (SharpHound binary not configured server-side — skipping)') : '';
+    var shDetail = shEnabled && !r.sharpHoundDelivered ? 'SharpHound was requested but the binary is not configured on the server. TCP-only collection will proceed.' : '';
+    var prevNote = r.previousCollectionAt ? ' &mdash; <span style="color:var(--warning)">replaces collection from ' + new Date(r.previousCollectionAt).toLocaleString() + '</span>' : ' &mdash; first collection for this agent';
+
+    tl.innerHTML =
+      _apStep('done', 'Command dispatched to ' + agentLabel + ' at ' + _apTimestamp(),
+        targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' queued for TCP probe' + shNote + prevNote) +
+      (shDetail ? _apStep('warn', 'SharpHound notice', shDetail) : '') +
+      _apStep('active', 'Agent is probing the network…',
+        'TCP connect on SMB (445), WinRM (5985), RDP (3389) to each target &mdash; mapping reachability, local admin rights, and active sessions. This typically takes 15&ndash;60 seconds depending on target count and network latency.') +
+      _apStep('pending', 'Collection received by server', '') +
+      _apStep('pending', 'Graph built &amp; analysis complete', '');
+
+  }).catch(function(e) {
+    showToast('Dispatch failed: ' + e.message, 'err');
+  });
+}
+
+// Called from the WS onmessage handler when the agent reports a completed collection.
+function _apOnCollected(msg) {
+  if (!msg || !msg.data) return;
+  var d = msg.data;
+  var tl = document.getElementById('ap-timeline');
+  if (!tl) return;
+
+  // Advance the timeline: preserve step 1 text (already rendered), complete remaining steps.
+  var label = d.hostname || msg.agentId || 'agent';
+  var nodes = d.nodes || 0;
+  var edges = d.edges || 0;
+  // Keep the first step's inner HTML (dispatch confirmed) and replace the rest.
+  var step1Html = tl.children.length > 0 ? tl.children[0].outerHTML : _apStep('done', 'Command dispatched', '');
+  // Mark step 1 icon as done (swap active/pending icon if it was still spinning)
+  step1Html = step1Html.replace(/animation:spin[^"]+/g, '').replace(/<span[^>]*>&#9696;<\/span>/, '<span style="color:var(--success)">&#10003;</span>').replace(/<span[^>]*>&#9675;<\/span>/, '<span style="color:var(--success)">&#10003;</span>');
+  tl.innerHTML =
+    step1Html +
+    _apStep('done', 'Agent finished probing at ' + _apTimestamp(), label + ' completed TCP probes across all targets.') +
+    _apStep('done', 'Collection received — ' + nodes + ' node' + (nodes === 1 ? '' : 's') + ', ' + edges + ' lateral edge' + (edges === 1 ? '' : 's') + ' mapped',
+      'The server has built the updated graph. Previous collection (if any) has been superseded by this result.') +
+    _apStep('done', 'Graph analysis complete — results are ready', 'Attack path score, lateral movement risk, and domain reachability have been recalculated. Click View Results to review.');
+
+  document.getElementById('ap-done-actions').style.display = '';
+  // auto-refresh the results panel if attackpath tab is visible
+  loadAttackPath();
+  // notify even if the panel is closed
+  showToast(label + ': ' + nodes + ' nodes collected — attack path updated.', 'ok');
+}
+
+function _onRevalidationStarted(msg) {
+  if (!msg || !msg.data) return;
+  var d = msg.data;
+  var status = d.status || '';
+  var tech = d.techniqueId || '';
+  var name = d.techniqueName ? (' — ' + d.techniqueName) : '';
+  if (status === 'dispatched') {
+    showToast('Auto-revalidation started: ' + tech + name + '. Check Live Runs for progress.', 'ok');
+    loadRuns();
+  } else if (status === 'no_scenario') {
+    showToast('Auto-revalidation: no scenario for ' + tech + ' — re-validate manually via Remediations.', 'warn');
+  }
 }
 
 var AP_ASSETS = [];
@@ -5374,41 +5598,46 @@ function openRemediation(i) {
   document.getElementById('results-overlay').classList.add('open');
 }
 function revalidateRemediation(techniqueId) {
-  // Find the best matching scenario for this technique ID so the modal
-  // opens pre-selected rather than blank.
-  // Priority: (1) custom/builtin scenario whose artTechniques list contains the ID,
-  //           (2) scenario with a step whose techniqueId matches,
-  //           (3) fall back to blank modal with a guiding toast.
+  // Re-validate runs ONLY the specific technique that was remediated, not the
+  // entire scenario. Pre-set _runSelection to a single-technique subset so the
+  // wizard skips to Options and dispatches only that one technique.
+  // Priority: (1) scenario whose artTechniques list contains the ID (most common),
+  //           (2) scenario with a custom step whose techniqueId matches.
   var tid = (techniqueId || '').toUpperCase();
   var match = null;
-  // Pass 1 — artTechniques list
+  var matchFw = 'art';
+  // Pass 1 — ART scenario with this technique in its artTechniques list
   for (var i = 0; i < scenarios.length; i++) {
     var s = scenarios[i];
     var arts = s.artTechniques || [];
     for (var j = 0; j < arts.length; j++) {
-      if ((arts[j] || '').toUpperCase() === tid) { match = s; break; }
+      if ((arts[j] || '').toUpperCase() === tid) { match = s; matchFw = 'art'; break; }
     }
     if (match) break;
   }
-  // Pass 2 — custom steps with a techniqueId field
+  // Pass 2 — custom-step scenario with a step that has this techniqueId
   if (!match) {
     for (var i = 0; i < scenarios.length; i++) {
       var s = scenarios[i];
       var steps = s.steps || [];
       for (var j = 0; j < steps.length; j++) {
-        if ((steps[j].techniqueId || '').toUpperCase() === tid) { match = s; break; }
+        if ((steps[j].techniqueId || '').toUpperCase() === tid) {
+          match = s; matchFw = scenarioFramework(s) || 'steps'; break;
+        }
       }
       if (match) break;
     }
   }
-  if (match) {
-    showToast('Opening scenario "' + match.name + '" for ' + techniqueId, 'ok');
-    openModal(match.id);
-  } else {
-    // No matching scenario found — open blank modal with a guiding toast
+  if (!match) {
     showToast('No scenario found for ' + techniqueId + ' — select one manually', 'ok');
     openModal();
+    return;
   }
+  // Pre-arm the run-selection with ONLY this one technique so the modal
+  // dispatches a targeted single-technique run, not the whole scenario.
+  _runSelection = { scId: match.id, fw: matchFw, ids: [tid] };
+  showToast('Re-validating ' + techniqueId + ' only — not the full scenario', 'ok');
+  openModal(match.id);
 }
 
 // ── Ticketing ─────────────────────────────────────────────────────────────────
@@ -8465,10 +8694,12 @@ function connectWS() {
   socket.onmessage = function(evt) {
     try {
       var msg = JSON.parse(evt.data);
-      if (msg.type === 'run_event')       { window.onRunEvent(msg); return; }
-      if (msg.type === 'agentUpdate')     loadAgents();
-      if (msg.type === 'scenario_result') { loadRuns(); loadAgents(); refreshDashboardCampaigns(); }
-      if (msg.type === 'tamper_alert')    { showTamperBanner(msg.data); }
+      if (msg.type === 'run_event')          { window.onRunEvent(msg); return; }
+      if (msg.type === 'agentUpdate')        loadAgents();
+      if (msg.type === 'scenario_result')    { loadRuns(); loadAgents(); refreshDashboardCampaigns(); }
+      if (msg.type === 'tamper_alert')       { showTamperBanner(msg.data); }
+      if (msg.type === 'attackpath_collected') { _apOnCollected(msg); }
+      if (msg.type === 'revalidation_started') { _onRevalidationStarted(msg); }
     } catch(e) {}
   };
 }
@@ -9698,9 +9929,10 @@ function loadAgtOverview(agentId) {
       kv('Last Seen',    ago(a.lastUpdate)) + kv('Enrolled', a.enrolledAt ? ago(a.enrolledAt) : '—') +
       kv('Binary Trusted', a.binaryTrusted ? '<span style="color:var(--success)">&#10003; Verified</span>' : '<span style="color:var(--warning)">&#9888; Unverified</span>') +
       '</div>' +
-      (a.state === 'quarantined' ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is QUARANTINED — binary hash mismatch detected. Resolve via Administration before running scenarios.</div>' : '') +
-      (a.state === 'restricted'  ? '<div style="background:rgba(210,153,34,.12);border:1px solid var(--warning);border-radius:4px;padding:0.6rem 0.85rem;color:var(--warning);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is RESTRICTED by server policy.</div>' : '') +
-      (Object.keys(policy).length ? '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.7rem 0.9rem">' +
+      (a.state === 'quarantined' ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the issue is resolved.</div>' : '') +
+      (a.state === 'restricted'  ? '<div style="background:rgba(210,153,34,.12);border:1px solid var(--warning);border-radius:4px;padding:0.6rem 0.85rem;color:var(--warning);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.</div>' : '') +
+      (a.state === 'retired'     ? '<div style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.4);border-radius:4px;padding:0.6rem 0.85rem;color:#94a3b8;font-size:0.78rem;margin-bottom:0.75rem">&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.</div>' : '') +
+      (Object.keys(policy).length ? '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.7rem 0.9rem;margin-bottom:0.75rem">' +
         '<div style="font-weight:600;font-size:0.78rem;margin-bottom:0.4rem;color:var(--muted)">POLICY BUNDLE</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 1rem;font-size:0.77rem">' +
         kv('Log Level', policy.logLevel || 'info') +
@@ -9709,12 +9941,44 @@ function loadAgtOverview(agentId) {
         kv('Exec Window', policy.executionWindow || 'unrestricted') +
         '</div>' +
       '</div>' : '') +
+      '<div style="border-top:1px solid var(--border);padding-top:0.85rem;margin-top:0.25rem">' +
+        '<div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.55rem">Lifecycle Controls</div>' +
+        '<div style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
+          (a.state !== 'active' ?
+            '<button class="btn btn-primary btn-sm" onclick="setAgentState(\'' + x(a.agentId) + '\',\'active\')">&#10003; Restore to Active</button>' : '') +
+          (a.state !== 'quarantined' ?
+            '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger-border)" onclick="setAgentState(\'' + x(a.agentId) + '\',\'quarantined\')">&#9888; Quarantine</button>' : '') +
+          (a.state !== 'restricted' ?
+            '<button class="btn btn-outline btn-sm" style="color:var(--warning);border-color:var(--warning-border)" onclick="setAgentState(\'' + x(a.agentId) + '\',\'restricted\')">&#128274; Restrict</button>' : '') +
+          (a.state !== 'retired' ?
+            '<button class="btn btn-outline btn-sm" style="color:var(--muted)" onclick="setAgentState(\'' + x(a.agentId) + '\',\'retired\')">&#128683; Retire</button>' : '') +
+        '</div>' +
+        '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.45rem">Quarantine / Restrict / Retire all block scenario dispatch. Only <strong>Restore to Active</strong> re-enables the agent.</div>' +
+      '</div>' +
       '</div>';
   }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
 }
 function kv(label, val) {
   return '<div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:0.1rem">' + label + '</div>' +
          '<div style="font-size:0.82rem">' + val + '</div></div>';
+}
+
+function setAgentState(agentId, state) {
+  var labels = { quarantined: 'Quarantine', restricted: 'Restrict', retired: 'Retire', active: 'Restore to Active' };
+  var warn = {
+    quarantined: 'Quarantine blocks ALL scenario dispatch from this agent. Are you sure?',
+    restricted:  'Restrict blocks ALL scenario dispatch from this agent. Are you sure?',
+    retired:     'Retire decommissions this agent and blocks all scenario dispatch. Are you sure?',
+    active:      'Restore this agent to active and re-enable scenario dispatch?'
+  };
+  if (!confirm(warn[state] || 'Set agent state to ' + state + '?')) return;
+  apicall('/api/agents/' + encodeURIComponent(agentId) + '/state', {
+    method: 'PUT', body: JSON.stringify({ state: state })
+  }).then(function() {
+    showToast('Agent state set to ' + state, state === 'active' ? 'ok' : 'warn');
+    loadAgents();
+    loadAgtOverview(agentId);
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
 // ── Scenarios tab ─────────────────────────────────────────────────────────────
@@ -10165,11 +10429,14 @@ function loadVariantStats() {
   apicall('/api/variants/stats').then(function(s) {
     var el = document.getElementById('vex-stats');
     if (!el) return;
+    var artTech = s.artTechniqueCount || 0;
+    var artAtomic = s.artAtomicCount || 0;
     el.innerHTML =
-      vexStatCard('Executed Variants',  s.executedVariants,      'var(--accent)', null) +
-      vexStatCard('Available Variants', s.availableVariants,     'var(--text)',   'ART atomics \xd7 encoding \xd7 privilege \xd7 exec-context') +
-      vexStatCard('Payload Families',   s.payloadFamilyCount,    'var(--text)',   (s.payloadFamilyVariants || 0).toLocaleString() + ' family variants') +
-      vexStatCard('Techniques Covered', s.techniquesWithFamilies,'var(--text)',   'techniques with custom families');
+      vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null) +
+      vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString() + ' ART tests across ' + artTech + ' techniques \xd7 encoding/privilege/context') +
+      vexStatCard('Custom Payload Families', s.payloadFamilyCount,   'var(--text)',   s.payloadFamilyCount + ' families \xd7 ' + (s.variantsPerFamily || 56) + ' variants = ' + (s.payloadFamilyVariants || 0).toLocaleString()) +
+      vexStatCard('Custom-Enhanced Techniques', s.techniquesWithFamilies, 'var(--text)', 'of ' + artTech + ' ART techniques have custom payload families');
+    _updateSweepVariantCount(s.availableVariants);
   }).catch(function() {});
 }
 
@@ -10182,13 +10449,15 @@ function vexStatCard(label, val, col, sub) {
 
 function populateVexAgents() {
   apicall('/api/agents').then(function(agents) {
-    var sel = document.getElementById('vex-agent');
-    if (!sel) return;
     var online = (agents || []).filter(function(a) { return a.status !== 'offline'; });
-    sel.innerHTML = '<option value="">Select agent…</option>' +
+    var opts = '<option value="">Select agent…</option>' +
       online.map(function(a) {
         return '<option value="' + x(a.id) + '">' + x(a.hostname || a.id) + '</option>';
       }).join('');
+    var sel = document.getElementById('vex-agent');
+    if (sel) sel.innerHTML = opts;
+    var sweepSel = document.getElementById('vex-sweep-agent');
+    if (sweepSel) sweepSel.innerHTML = opts;
   }).catch(function() {});
 }
 
@@ -10197,12 +10466,16 @@ var _vexAllTechniques = [];
 function populateVexTechniques() {
   apicall('/api/art/techniques').then(function(techs) {
     _vexAllTechniques = (techs || []).filter(function(t) { return t.id; });
+    // Update sweep card counts
+    var n = _vexAllTechniques.length;
+    var techCountEl = document.getElementById('vex-sweep-tech-count');
+    if (techCountEl) techCountEl.textContent = n;
     // Populate tactic dropdown
     var tactics = {};
     _vexAllTechniques.forEach(function(t) { if (t.tactic) tactics[t.tactic] = true; });
     var tacSel = document.getElementById('vex-tactic');
     if (tacSel) {
-      var tacOpts = '<option value="">All tactics (' + _vexAllTechniques.length + ' techniques)</option>';
+      var tacOpts = '<option value="">All tactics (' + n + ' techniques)</option>';
       Object.keys(tactics).sort().forEach(function(tc) {
         var label = tc.replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
         tacOpts += '<option value="' + x(tc) + '">' + x(label) + '</option>';
@@ -10214,6 +10487,88 @@ function populateVexTechniques() {
     var el = document.getElementById('vex-technique-list');
     if (el) el.innerHTML = '<div style="color:var(--danger);font-size:0.75rem;padding:0.4rem">Failed to load techniques</div>';
   });
+}
+
+// Update the sweep card "N total variants" once stats load.
+// Called from loadVariantStats after the API responds.
+function _updateSweepVariantCount(availableVariants) {
+  var el = document.getElementById('vex-sweep-total-variants');
+  if (el && availableVariants) el.textContent = availableVariants.toLocaleString() + '+ variants';
+}
+
+var _vexSweepRunning = false;
+
+function vexRunFullSweep() {
+  if (_vexSweepRunning) { showToast('Sweep already in progress', 'err'); return; }
+  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
+  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
+  if (!_vexAllTechniques.length) { showToast('Technique list still loading — wait a moment', 'err'); return; }
+  var n = _vexAllTechniques.length;
+  var mode = (document.getElementById('vex-sweep-mode') || {}).value || 'sequential';
+  var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
+  if (!confirm('Start Full Variant Sweep:\n\n  ' + n + ' techniques dispatched sequentially\n  ~' + (n * 33).toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
+
+  var techniques = _vexAllTechniques.map(function(t) { return t.id; });
+  _vexSweepRunning = true;
+  var btn = document.getElementById('vex-sweep-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sweeping…'; }
+  var prog = document.getElementById('vex-sweep-progress');
+  if (prog) prog.style.display = 'block';
+  _vexSweepQueue(agentId, techniques, mode, advanced, 0);
+}
+
+function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
+  var n = techniques.length;
+  var btn = document.getElementById('vex-sweep-btn');
+  var statusEl = document.getElementById('vex-sweep-status');
+  var pctEl = document.getElementById('vex-sweep-pct');
+  var barEl = document.getElementById('vex-sweep-bar');
+
+  if (idx >= n) {
+    _vexSweepRunning = false;
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Start Sweep'; }
+    if (statusEl) statusEl.textContent = 'Sweep complete — ' + n + ' techniques tested';
+    if (pctEl) pctEl.textContent = '100%';
+    if (barEl) barEl.style.width = '100%';
+    showToast('Full sweep complete — ' + n + ' techniques', 'ok');
+    loadVariantStats();
+    loadVariantCoverage();
+    return;
+  }
+
+  var pct = Math.round((idx / n) * 100);
+  var tid = techniques[idx];
+  if (statusEl) statusEl.textContent = 'Running ' + x(tid) + ' (' + (idx + 1) + ' / ' + n + ')';
+  if (pctEl) pctEl.textContent = pct + '%';
+  if (barEl) barEl.style.width = pct + '%';
+  if (btn) btn.textContent = (idx + 1) + '/' + n + ' Sweeping…';
+
+  apicall('/api/variants/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
+  }).then(function(resp) {
+    // Poll until this technique's variant run completes, then continue.
+    _vexSweepPollAndNext(resp.variantRunId, agentId, techniques, mode, advanced, idx);
+  }).catch(function(e) {
+    // Dispatch failed — log and continue to next technique.
+    if (statusEl) statusEl.textContent = 'Error on ' + x(tid) + ': ' + (e.message || 'failed') + ' — continuing…';
+    setTimeout(function() { _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1); }, 1500);
+  });
+}
+
+function _vexSweepPollAndNext(vrId, agentId, techniques, mode, advanced, idx) {
+  var poll = setInterval(function() {
+    apicall('/api/variants/run/' + vrId).then(function(detail) {
+      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
+        clearInterval(poll);
+        _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
+      }
+    }).catch(function() {
+      clearInterval(poll);
+      _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
+    });
+  }, 3000);
 }
 
 function filterVexTechniques() {

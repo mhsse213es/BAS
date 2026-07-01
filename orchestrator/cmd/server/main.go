@@ -194,6 +194,12 @@ func main() {
 	// broadcasts the change so the dashboard updates in real time.
 	go runStalenessMonitor(pool, hub)
 
+	// ── ITSM Auto-Revalidation Loop ───────────────────────────────────────
+	// Every 2 minutes: checks for findings whose ITSM ticket was resolved but
+	// BAS has not yet re-confirmed. Dispatches a targeted single-technique
+	// posture re-run on the original agent. Results in the audit log + WS push.
+	go handler.StartRevalidationLoop(context.Background())
+
 	// ── Attack-Path Scheduler ─────────────────────────────────────────────
 	// Ticks every 60 s and re-dispatches fleet-wide attack-path collection
 	// when the operator-configured interval has elapsed.
