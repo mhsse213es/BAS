@@ -37,7 +37,7 @@ type normalizedTest struct {
 }
 
 // normalizeAtomic parses one ART atomic YAML file into a technique ID, its
-// display name, and the set of Windows-executable tests in execution-ready form.
+// display name, and all execution-ready tests (Windows + Linux/macOS).
 // It mirrors the runtime transformations done in parseARTFile so the rows stored
 // in art_atomic_tests are exactly what would be dispatched to an agent.
 func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []normalizedTest, err error) {
@@ -51,6 +51,7 @@ func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []norm
 	}
 	displayName = strings.TrimSpace(f.DisplayName)
 
+	// ── Windows atomics ──────────────────────────────────────────────────────
 	for i, test := range f.AtomicTests {
 		if !artIsWindows(test.SupportedPlatforms) {
 			continue
@@ -62,30 +63,49 @@ func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []norm
 		case "command_prompt":
 			executor = "cmd"
 		default:
-			continue // skip bash/sh/manual
+			continue
 		}
-
 		cmd := artResolveArgs(test.Executor.Command, test.InputArguments)
 		if cmd == "" {
 			continue
 		}
 		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments)
-
 		cmd, required := artResolvePayloads(cmd, executor)
 		cleanup, _ = artResolvePayloads(cleanup, executor)
-
 		name := fmt.Sprintf("%s - Test %d: %s", techniqueID, i+1, test.Name)
 		tests = append(tests, normalizedTest{
-			Index:            i,
-			Name:             name,
-			Executor:         executor,
-			Command:          cmd,
-			Cleanup:          cleanup,
-			Platform:         "windows",
-			TimeoutSec:       120,
-			RequiredPayloads: required,
+			Index: i, Name: name, Executor: executor,
+			Command: cmd, Cleanup: cleanup, Platform: "windows",
+			TimeoutSec: 120, RequiredPayloads: required,
 		})
 	}
+
+	// ── Linux / macOS atomics ────────────────────────────────────────────────
+	for i, test := range f.AtomicTests {
+		platform := artUnixPlatform(test.SupportedPlatforms)
+		if platform == "" {
+			continue
+		}
+		switch strings.ToLower(test.Executor.Name) {
+		case "bash", "sh", "zsh", "fish":
+		default:
+			continue
+		}
+		cmd := artResolveArgs(test.Executor.Command, test.InputArguments)
+		if cmd == "" {
+			continue
+		}
+		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments)
+		cmd, required := artResolvePayloadsUnix(cmd)
+		cleanup, _ = artResolvePayloadsUnix(cleanup)
+		name := fmt.Sprintf("%s - Test %d: %s", techniqueID, i+1, test.Name)
+		tests = append(tests, normalizedTest{
+			Index: i, Name: name, Executor: "bash",
+			Command: cmd, Cleanup: cleanup, Platform: platform,
+			TimeoutSec: 120, RequiredPayloads: required,
+		})
+	}
+
 	return techniqueID, displayName, tests, nil
 }
 

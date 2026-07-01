@@ -1,0 +1,38 @@
+id: linux-defense-evasion
+name: Linux Defense Evasion  -  Log Clearing, Timestomping, History Wipe
+description: >
+  Linux defense evasion simulation using Atomic Red Team atomics.
+  Tests your detection stack's ability to catch attackers covering their tracks:
+  clearing /var/log files, wiping bash history, timestomping, disabling
+  auditd, and masquerading processes under legitimate names.
+
+  Each technique runs ALL available Linux atomics (depth mode).
+
+  Expected verdicts:
+    PASS  = HIDS/auditd alerted on log tampering or timestomp activity
+    FAIL  = evasion action completed undetected
+    SKIP  = atomic requires elevated privilege or capability not on test host
+
+  Safety: no destructive changes to system logs beyond the tested artefact.
+  Cleanup commands restore the state after each test step where possible.
+author: Audspect Research
+executable: true
+supported_os: [linux]
+tags:
+  - defense-evasion
+  - linux
+  - art
+  - atomic-red-team
+  - t1070
+  - t1036
+  - t1562
+  - mitre-attack
+mitre_phases:
+  - defense-evasion
+
+art_techniques:
+  - T1070.002   # Clear Linux or Mac System Logs (/var/log)
+  - T1070.003   # Clear Command History (bash history wipe)
+  - T1070.006   # Timestomp (touch -t to alter mtime/atime)
+  - T1036.005   # Match Legitimate Name or Location (process masquerade)
+  - T1562.001   # Disable or Modify Tools (auditd stop/disable)

@@ -80,7 +80,7 @@ func NewARTStore(dir string, payloads *PayloadStore) (*ARTStore, error) {
 func NewARTStoreFromDB(ctx context.Context, pool *pgxpool.Pool, payloads *PayloadStore) (*ARTStore, error) {
 	s := &ARTStore{steps: make(map[string][]ScenarioStep), payloads: payloads}
 	rows, err := pool.Query(ctx,
-		`SELECT technique_id, name, executor, command, cleanup, timeout_sec, required_payloads
+		`SELECT technique_id, name, executor, command, cleanup, timeout_sec, required_payloads, platform
 		   FROM art_atomic_tests
 		  ORDER BY technique_id, test_index`)
 	if err != nil {
@@ -88,21 +88,25 @@ func NewARTStoreFromDB(ctx context.Context, pool *pgxpool.Pool, payloads *Payloa
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var tech, name, executor, command, cleanup string
+		var tech, name, executor, command, cleanup, platform string
 		var timeout int
 		var required []string
-		if err := rows.Scan(&tech, &name, &executor, &command, &cleanup, &timeout, &required); err != nil {
+		if err := rows.Scan(&tech, &name, &executor, &command, &cleanup, &timeout, &required, &platform); err != nil {
 			return nil, err
 		}
 		tech = strings.ToUpper(tech)
 		if timeout <= 0 {
 			timeout = 120
 		}
+		if platform == "" {
+			platform = "windows"
+		}
 		s.steps[tech] = append(s.steps[tech], ScenarioStep{
 			TaskID:           TaskID(tech, name),
 			TechniqueID:      tech,
 			Name:             name,
 			Framework:        "art",
+			Platform:         platform,
 			Executor:         executor,
 			Command:          command,
 			TimeoutSec:       timeout,
@@ -139,11 +143,59 @@ func (s *ARTStore) Count() int {
 	return len(s.steps)
 }
 
-// GetSteps returns all Windows ScenarioSteps for a given technique ID.
+// GetSteps returns Windows ScenarioSteps for a given technique ID (backward compat).
 func (s *ARTStore) GetSteps(techniqueID string) []ScenarioStep {
+	return s.GetStepsByPlatform(techniqueID, "windows")
+}
+
+// GetStepsByPlatform returns ScenarioSteps for a given technique ID and platform.
+// platform should be "windows", "linux", or "darwin". Empty string → "windows".
+func (s *ARTStore) GetStepsByPlatform(techniqueID, platform string) []ScenarioStep {
+	if platform == "" {
+		platform = "windows"
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.steps[strings.ToUpper(techniqueID)]
+	all := s.steps[strings.ToUpper(techniqueID)]
+	if len(all) == 0 {
+		return nil
+	}
+	var out []ScenarioStep
+	for _, st := range all {
+		p := st.Platform
+		if p == "" {
+			p = "windows" // legacy steps with no platform tag default to windows
+		}
+		if strings.EqualFold(p, platform) {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
+// ListTechniquesByPlatform returns technique IDs that have at least one step for
+// the given platform, sorted. Used by full-platform sweep builds.
+func (s *ARTStore) ListTechniquesByPlatform(platform string) []string {
+	if platform == "" {
+		platform = "windows"
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []string
+	for id, steps := range s.steps {
+		for _, st := range steps {
+			p := st.Platform
+			if p == "" {
+				p = "windows"
+			}
+			if strings.EqualFold(p, platform) {
+				out = append(out, id)
+				break
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ListTechniques returns all technique IDs that have at least one Windows step, sorted.
@@ -215,6 +267,8 @@ func parseARTFile(path string) (string, []ScenarioStep, error) {
 	}
 
 	var steps []ScenarioStep
+
+	// ── Windows atomics ──────────────────────────────────────────────────────
 	for i, test := range f.AtomicTests {
 		if !artIsWindows(test.SupportedPlatforms) {
 			continue
@@ -227,34 +281,50 @@ func parseARTFile(path string) (string, []ScenarioStep, error) {
 		case "command_prompt":
 			executor = "cmd"
 		default:
-			continue // skip bash/sh/manual
+			continue
 		}
-
 		cmd := artResolveArgs(test.Executor.Command, test.InputArguments)
 		if cmd == "" {
 			continue
 		}
 		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments)
-
-		// Rewrite ART payload-folder references to the agent's staging dir
-		// ($env:BAS_PAYLOAD_DIR / %BAS_PAYLOAD_DIR%) and record which external
-		// payload files the command needs so they can be shipped at dispatch.
 		cmd, required := artResolvePayloads(cmd, executor)
 		cleanup, _ = artResolvePayloads(cleanup, executor)
-
 		name := fmt.Sprintf("%s - Test %d: %s", techniqueID, i+1, test.Name)
 		steps = append(steps, ScenarioStep{
-			TaskID:           TaskID(techniqueID, name),
-			TechniqueID:      techniqueID,
-			Name:             name,
-			Framework:        "art",
-			Executor:         executor,
-			Command:          cmd,
-			TimeoutSec:       120,
-			Cleanup:          cleanup,
-			requiredPayloads: required,
+			TaskID: TaskID(techniqueID, name), TechniqueID: techniqueID, Name: name,
+			Framework: "art", Platform: "windows", Executor: executor,
+			Command: cmd, TimeoutSec: 120, Cleanup: cleanup, requiredPayloads: required,
 		})
 	}
+
+	// ── Linux / macOS atomics ────────────────────────────────────────────────
+	for i, test := range f.AtomicTests {
+		platform := artUnixPlatform(test.SupportedPlatforms)
+		if platform == "" {
+			continue
+		}
+		execName := strings.ToLower(test.Executor.Name)
+		switch execName {
+		case "bash", "sh", "zsh", "fish":
+		default:
+			continue // skip manual/powershell on unix
+		}
+		cmd := artResolveArgs(test.Executor.Command, test.InputArguments)
+		if cmd == "" {
+			continue
+		}
+		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments)
+		cmd, required := artResolvePayloadsUnix(cmd)
+		cleanup, _ = artResolvePayloadsUnix(cleanup)
+		name := fmt.Sprintf("%s - Test %d: %s", techniqueID, i+1, test.Name)
+		steps = append(steps, ScenarioStep{
+			TaskID: TaskID(techniqueID, name), TechniqueID: techniqueID, Name: name,
+			Framework: "art", Platform: platform, Executor: "bash",
+			Command: cmd, TimeoutSec: 120, Cleanup: cleanup, requiredPayloads: required,
+		})
+	}
+
 	return techniqueID, steps, nil
 }
 
@@ -265,6 +335,30 @@ func artIsWindows(platforms []string) bool {
 		}
 	}
 	return false
+}
+
+// artUnixPlatform returns "linux" or "darwin" if the test supports either,
+// preferring the most specific match. Returns "" for Windows-only tests.
+func artUnixPlatform(platforms []string) string {
+	var hasLinux, hasDarwin bool
+	for _, p := range platforms {
+		switch strings.ToLower(p) {
+		case "linux":
+			hasLinux = true
+		case "macos", "darwin":
+			hasDarwin = true
+		}
+	}
+	if hasLinux && hasDarwin {
+		return "linux" // store under linux; darwin dispatch will also match via cross-platform logic
+	}
+	if hasLinux {
+		return "linux"
+	}
+	if hasDarwin {
+		return "darwin"
+	}
+	return ""
 }
 
 func artResolveArgs(cmd string, args map[string]artInputArg) string {
@@ -320,6 +414,30 @@ func artResolvePayloads(cmd, executor string) (string, []string) {
 	// Any leftover directory-style references → point at the staging dir root.
 	// Use a func replacement so "$" in $env:... is emitted literally (a plain
 	// replacement string would treat $ as a regexp group reference).
+	cmd = artPathRootRe.ReplaceAllStringFunc(cmd, func(string) string { return envRef })
+	return cmd, required
+}
+
+// artResolvePayloadsUnix rewrites ART PathToAtomicsFolder references for bash/sh
+// execution on Linux/macOS: uses $BAS_PAYLOAD_DIR with forward-slash separator.
+func artResolvePayloadsUnix(cmd string) (string, []string) {
+	if cmd == "" {
+		return "", nil
+	}
+	const envRef = `$BAS_PAYLOAD_DIR`
+	seen := make(map[string]bool)
+	var required []string
+	cmd = artPayloadFileRe.ReplaceAllStringFunc(cmd, func(match string) string {
+		base := payloadBasename(match)
+		if base == "" {
+			return match
+		}
+		if !seen[strings.ToLower(base)] {
+			seen[strings.ToLower(base)] = true
+			required = append(required, base)
+		}
+		return envRef + "/" + base
+	})
 	cmd = artPathRootRe.ReplaceAllStringFunc(cmd, func(string) string { return envRef })
 	return cmd, required
 }

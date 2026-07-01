@@ -8,13 +8,13 @@ import "testing"
 // full sweep only in a maintenance window — T1529's atomic reboots the host.)
 func TestBuildARTAllWindowsStepsIncludesAllTechniques(t *testing.T) {
 	store := &ARTStore{steps: map[string][]ScenarioStep{
-		"T1059": {{Name: "exec", TechniqueID: "T1059", Executor: "powershell", Command: "whoami"}},
-		"T1083": {{Name: "discovery", TechniqueID: "T1083", Executor: "powershell", Command: "dir"}},
-		"T1529": {{Name: "reboot", TechniqueID: "T1529", Executor: "powershell", Command: "Restart-Computer -Force"}},
-		"T1485": {{Name: "wipe", TechniqueID: "T1485", Executor: "powershell", Command: "Remove-Item C:\\ -Recurse"}},
+		"T1059": {{Name: "exec", TechniqueID: "T1059", Platform: "windows", Executor: "powershell", Command: "whoami"}},
+		"T1083": {{Name: "discovery", TechniqueID: "T1083", Platform: "windows", Executor: "powershell", Command: "dir"}},
+		"T1529": {{Name: "reboot", TechniqueID: "T1529", Platform: "windows", Executor: "powershell", Command: "Restart-Computer -Force"}},
+		"T1485": {{Name: "wipe", TechniqueID: "T1485", Platform: "windows", Executor: "powershell", Command: "Remove-Item C:\\ -Recurse"}},
 	}}
 
-	steps, err := buildARTAllWindowsSteps(store)
+	steps, err := buildARTPlatformSteps("windows", store)
 	if err != nil {
 		t.Fatalf("buildARTAllWindowsSteps: %v", err)
 	}

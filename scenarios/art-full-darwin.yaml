@@ -1,0 +1,34 @@
+id: art-full-darwin
+name: Atomic Red Team  -  Full macOS Sweep
+description: >
+  Broad ATT&CK breadth sweep for macOS endpoints  -  runs ONE representative
+  bash/sh/zsh atomic per technique across the entire seeded Atomic Red Team
+  library. Content is served from the platform database (seeded at install),
+  so no network access is needed at run time. The orchestrator selects the first
+  macOS-compatible atomic for each technique and dispatches them to the agent.
+  Coverage: every technique with a macOS atomic (~one step each). Use the
+  Selective scenario (art-selective) to run every atomic for chosen techniques.
+author: Audspect Research
+supported_os: [darwin]
+tags:
+  - art
+  - atomic-red-team
+  - full-sweep
+  - macos
+  - darwin
+  - mitre-attack
+mitre_phases:
+  - initial-access
+  - execution
+  - persistence
+  - privilege-escalation
+  - defense-evasion
+  - credential-access
+  - discovery
+  - lateral-movement
+  - collection
+  - exfiltration
+  - impact
+
+# Runs all macOS atomics from the seeded ART library (one per technique).
+art_all_platform: true

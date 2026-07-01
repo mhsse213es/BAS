@@ -1,0 +1,40 @@
+id: linux-privilege-escalation
+name: Linux Privilege Escalation  -  SUDO, SUID, ptrace, Capabilities
+description: >
+  Linux privilege escalation validation using Atomic Red Team atomics.
+  Simulates the common techniques a low-privileged adversary uses to gain
+  root or elevated capabilities on a Linux endpoint.
+
+  Covers: sudo misconfiguration exploitation, SUID binary abuse, Linux
+  capability misuse, ptrace-based process injection, and Docker/container
+  escape primitives.
+
+  Each technique runs ALL available Linux atomics (depth mode) so every
+  variant is tested against your privilege-boundary controls.
+
+  Expected verdicts:
+    PASS  = privilege boundary held; elevation blocked or alerted
+    FAIL  = privilege elevation succeeded undetected
+    SKIP  = atomic requires a specific precondition not present on the host
+
+  Safety: tests use benign demonstration commands (id, whoami) rather than
+  destructive payloads. Run only on dedicated test endpoints.
+author: Audspect Research
+executable: true
+supported_os: [linux]
+tags:
+  - privilege-escalation
+  - linux
+  - art
+  - atomic-red-team
+  - t1548
+  - t1611
+  - mitre-attack
+mitre_phases:
+  - privilege-escalation
+
+art_techniques:
+  - T1548.001   # Setuid and Setgid (SUID binary abuse)
+  - T1548.003   # Sudo and Sudo Caching (NOPASSWD, env_keep)
+  - T1611       # Escape to Host (container/Docker escape)
+  - T1055.008   # ptrace System Calls (process injection via ptrace)

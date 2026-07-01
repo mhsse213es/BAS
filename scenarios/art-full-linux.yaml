@@ -1,0 +1,34 @@
+id: art-full-linux
+name: Atomic Red Team  -  Full Linux Sweep
+description: >
+  Broad ATT&CK breadth sweep for Linux endpoints  -  runs ONE representative
+  bash/sh atomic per technique across the entire seeded Atomic Red Team library.
+  Content is served from the platform database (seeded at install from the ART
+  repository), so no network access is needed at run time. The orchestrator
+  selects the first Linux-compatible atomic for each technique and dispatches
+  them as individual steps to the agent running as root or with sudo rights.
+  Coverage: every technique with a Linux atomic (~one step each). Use the
+  Selective scenario (art-selective) to run every atomic for chosen techniques.
+author: Audspect Research
+supported_os: [linux]
+tags:
+  - art
+  - atomic-red-team
+  - full-sweep
+  - linux
+  - mitre-attack
+mitre_phases:
+  - initial-access
+  - execution
+  - persistence
+  - privilege-escalation
+  - defense-evasion
+  - credential-access
+  - discovery
+  - lateral-movement
+  - collection
+  - exfiltration
+  - impact
+
+# Runs all Linux atomics from the seeded ART library (one per technique).
+art_all_platform: true

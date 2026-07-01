@@ -12,7 +12,7 @@ import (
 // the result loses its metadata and falls back to the generic "custom" path.
 func TestBuildStepTagsARTFramework(t *testing.T) {
 	s := Step{TechniqueID: "T1003", Name: "OS Credential Dumping", Framework: "art"}
-	built, err := buildStep(s, "", "", nil)
+	built, err := buildStep(s, "", "", nil, "windows")
 	if err != nil {
 		t.Fatalf("buildStep: %v", err)
 	}

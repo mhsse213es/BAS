@@ -156,6 +156,9 @@ type Scenario struct {
 	CalderaAbilities   []string `yaml:"caldera_abilities,omitempty"    json:"calderaAbilities,omitempty"`
 	CalderaAdversaryID string   `yaml:"caldera_adversary_id,omitempty" json:"calderaAdversaryId,omitempty"`
 	ARTAllWindows      bool     `yaml:"art_all_windows,omitempty"      json:"artAllWindows,omitempty"`
+	// ARTAllPlatform runs every ART technique available for the agent's OS.
+	// Used by linux-full / darwin-full sweep scenarios; respects supported_os.
+	ARTAllPlatform     bool     `yaml:"art_all_platform,omitempty"     json:"artAllPlatform,omitempty"`
 	ARTTechniques      []string `yaml:"art_techniques,omitempty"       json:"artTechniques,omitempty"`
 
 	// LivePolicy holds the guardrails enforced during live (telemetry/lab) runs.
@@ -212,6 +215,10 @@ type ScenarioStep struct {
 	// wire) so results from dynamically-built steps can be interpreted by the
 	// correct framework handler (art|caldera|custom).
 	Framework string `json:"-"`
+	// Platform is the OS this step targets ("windows", "linux", "darwin").
+	// Server-internal only — not sent to the agent. Used to select the correct
+	// ART atomic variant during dispatch.
+	Platform string `json:"-"`
 	// Fidelity gates a dynamically-built step to a live tier, mirroring Step.Fidelity:
 	//   "" → runs in telemetry AND lab; "lab-only" → runs ONLY in lab mode.
 	// Set on Caldera abilities that ship real payloads (e.g. emu APT chains).

@@ -60,11 +60,13 @@ func BuildStepMeta(steps []ScenarioStep) map[string]StepMeta {
 }
 
 // BuildSteps converts a Scenario into concrete ScenarioSteps the agent executes.
+// agentOS is "windows", "linux", or "darwin" — used to select the correct ART
+// atomic variants for platform-aware scenarios. Pass "" to default to "windows".
 // Modes are checked in priority order (see Scenario type comment). Every built
 // step is then labelled with its curated resource profile so the agent scheduler
 // can run independent steps concurrently; unlabeled steps stay serial.
-func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore) ([]ScenarioStep, error) {
-	steps, err := buildStepsRaw(sc, calderaURL, calderaKey, artStore)
+func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) ([]ScenarioStep, error) {
+	steps, err := buildStepsRaw(sc, calderaURL, calderaKey, artStore, agentOS)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +75,10 @@ func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore)
 }
 
 // buildStepsRaw produces concrete steps without resource labels.
-func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore) ([]ScenarioStep, error) {
+func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) ([]ScenarioStep, error) {
+	if agentOS == "" {
+		agentOS = "windows"
+	}
 	if calderaURL != "" {
 		if sc.CalderaAllWindows {
 			return buildCalderaAllWindowsSteps(calderaURL, calderaKey)
@@ -89,17 +94,23 @@ func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTSto
 		if artStore == nil {
 			return nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		return buildARTAllWindowsSteps(artStore)
+		return buildARTPlatformSteps("windows", artStore)
+	}
+	if sc.ARTAllPlatform {
+		if artStore == nil {
+			return nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
+		}
+		return buildARTPlatformSteps(agentOS, artStore)
 	}
 	if len(sc.ARTTechniques) > 0 {
 		if artStore == nil {
 			return nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		return buildARTTechniquesSteps(sc.ARTTechniques, artStore)
+		return buildARTTechniquesSteps(sc.ARTTechniques, artStore, agentOS)
 	}
 	out := make([]ScenarioStep, 0, len(sc.Steps))
 	for _, s := range sc.Steps {
-		built, err := buildStep(s, calderaURL, calderaKey, artStore)
+		built, err := buildStep(s, calderaURL, calderaKey, artStore, agentOS)
 		if err != nil {
 			return nil, fmt.Errorf("step %q: %w", s.Name, err)
 		}
@@ -108,10 +119,14 @@ func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTSto
 	return out, nil
 }
 
-func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (ScenarioStep, error) {
+func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) (ScenarioStep, error) {
 	executor := s.Executor
 	if executor == "" {
-		executor = "powershell"
+		if agentOS == "linux" || agentOS == "darwin" {
+			executor = "bash"
+		} else {
+			executor = "powershell"
+		}
 	}
 	timeout := s.TimeoutSec
 	if timeout == 0 {
@@ -123,14 +138,12 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 	switch s.Framework {
 	case "art":
 		if artStore != nil {
-			artSteps := artStore.GetSteps(s.TechniqueID)
+			artSteps := artStore.GetStepsByPlatform(s.TechniqueID, agentOS)
 			idx := s.TestIndex
 			if idx < 0 || idx >= len(artSteps) {
 				idx = 0
 			}
 			if len(artSteps) > 0 {
-				// materialize ships any required external payloads (or turns the
-				// step into a clean SKIP if a payload is missing).
 				m := artStore.materialize(artSteps[idx])
 				command = m.Command
 				artPayloads = m.Payloads
@@ -140,7 +153,11 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 			}
 		}
 		if command == "" {
-			command = fmt.Sprintf(`Write-Output "SKIP: ART technique %s not in local store"`, s.TechniqueID)
+			if agentOS == "linux" || agentOS == "darwin" {
+				command = fmt.Sprintf(`echo "SKIP: ART technique %s not in local store for %s"`, s.TechniqueID, agentOS)
+			} else {
+				command = fmt.Sprintf(`Write-Output "SKIP: ART technique %s not in local store"`, s.TechniqueID)
+			}
 		}
 	case "caldera":
 		// NOTE: this static-YAML path resolves only the command; unlike the
@@ -183,47 +200,45 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore) (Scena
 
 // ── ART Local Store Modes ──────────────────────────────────────────────────────
 
-func buildARTAllWindowsSteps(artStore *ARTStore) ([]ScenarioStep, error) {
-	techniques := artStore.ListTechniques()
+// buildARTPlatformSteps runs one representative atomic per technique for the
+// given platform. Breadth-first: one test per technique, not every variant.
+func buildARTPlatformSteps(platform string, artStore *ARTStore) ([]ScenarioStep, error) {
+	techniques := artStore.ListTechniquesByPlatform(platform)
 	if len(techniques) == 0 {
-		return nil, fmt.Errorf("ART store is empty — verify ART_DIR was loaded at startup")
+		return nil, fmt.Errorf("ART store has no %s steps — verify ART_DIR was loaded at startup", platform)
 	}
-	// Breadth sweep: dispatch ONE representative atomic per technique (the first
-	// Windows test), not every test. Running all tests across all techniques is
-	// well over a thousand steps and multi-hour on a single endpoint, which made
-	// the sweep impractical and prone to being cancelled mid-run. One-per-technique
-	// preserves full ATT&CK breadth while keeping the run bounded. Use the Selective
-	// scenario to run every atomic for a chosen set of techniques (depth).
 	steps := make([]ScenarioStep, 0, len(techniques))
 	for _, t := range techniques {
-		s := artStore.GetSteps(strings.ToUpper(strings.TrimSpace(t)))
+		s := artStore.GetStepsByPlatform(strings.ToUpper(strings.TrimSpace(t)), platform)
 		if len(s) == 0 {
-			log.Printf("[ART] no Windows steps for %s — skipped", t)
+			log.Printf("[ART] no %s steps for %s — skipped", platform, t)
 			continue
 		}
 		steps = append(steps, artStore.materialize(s[0]))
 	}
 	if len(steps) == 0 {
-		return nil, fmt.Errorf("ART: no Windows steps found across %d techniques", len(techniques))
+		return nil, fmt.Errorf("ART: no %s steps found across %d techniques", platform, len(techniques))
 	}
 	return steps, nil
 }
 
-func buildARTTechniquesSteps(techniques []string, artStore *ARTStore) ([]ScenarioStep, error) {
+func buildARTTechniquesSteps(techniques []string, artStore *ARTStore, platform string) ([]ScenarioStep, error) {
+	if platform == "" {
+		platform = "windows"
+	}
 	var steps []ScenarioStep
 	for _, t := range techniques {
-		s := artStore.GetSteps(strings.ToUpper(strings.TrimSpace(t)))
+		s := artStore.GetStepsByPlatform(strings.ToUpper(strings.TrimSpace(t)), platform)
 		if len(s) == 0 {
-			log.Printf("[ART] no Windows steps for %s — skipped", t)
+			log.Printf("[ART] no %s steps for %s — skipped", platform, t)
 			continue
 		}
 		for _, st := range s {
-			// Ship required external payloads, or skip cleanly if missing.
 			steps = append(steps, artStore.materialize(st))
 		}
 	}
 	if len(steps) == 0 {
-		return nil, fmt.Errorf("ART: no Windows steps found for any of the %d requested techniques", len(techniques))
+		return nil, fmt.Errorf("ART: no %s steps found for any of the %d requested techniques", platform, len(techniques))
 	}
 	return steps, nil
 }

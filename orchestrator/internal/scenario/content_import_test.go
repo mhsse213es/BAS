@@ -32,7 +32,7 @@ atomic_tests:
       command: "#{tool_path} /scan"
 `
 
-func TestNormalizeAtomicWindowsOnly(t *testing.T) {
+func TestNormalizeAtomicAllPlatforms(t *testing.T) {
 	tech, name, tests, err := normalizeAtomic([]byte(sampleAtomicYAML))
 	if err != nil {
 		t.Fatalf("normalizeAtomic: %v", err)
@@ -43,22 +43,23 @@ func TestNormalizeAtomicWindowsOnly(t *testing.T) {
 	if name != "System Information Discovery" {
 		t.Errorf("display name = %q", name)
 	}
-	// Only the two Windows tests should survive; the macOS/sh one is dropped.
-	if len(tests) != 2 {
-		t.Fatalf("got %d tests, want 2: %+v", len(tests), tests)
+	// Two Windows tests + one macOS/sh test = 3 total.
+	if len(tests) != 3 {
+		t.Fatalf("got %d tests, want 3: %+v", len(tests), tests)
 	}
 
-	if tests[0].Executor != "powershell" || tests[0].Command != "hostname" {
-		t.Errorf("test0 = %+v", tests[0])
+	// Windows tests come first (Windows loop runs before Unix loop).
+	win := tests[:2]
+	if win[0].Executor != "powershell" || win[0].Command != "hostname" || win[0].Platform != "windows" {
+		t.Errorf("win[0] = %+v", win[0])
 	}
 	// test indices preserve original ordinal position (0 and 2).
-	if tests[0].Index != 0 || tests[1].Index != 2 {
-		t.Errorf("indices = %d,%d want 0,2", tests[0].Index, tests[1].Index)
+	if win[0].Index != 0 || win[1].Index != 2 {
+		t.Errorf("indices = %d,%d want 0,2", win[0].Index, win[1].Index)
 	}
 
-	// The payload-backed test must rewrite PathToAtomicsFolder to the agent's
-	// staging dir and record the required payload basename.
-	pt := tests[1]
+	// The payload-backed Windows test must rewrite PathToAtomicsFolder.
+	pt := win[1]
 	if pt.Executor != "cmd" {
 		t.Errorf("payload test executor = %q, want cmd", pt.Executor)
 	}
@@ -67,6 +68,15 @@ func TestNormalizeAtomicWindowsOnly(t *testing.T) {
 	}
 	if len(pt.RequiredPayloads) != 1 || !strings.EqualFold(pt.RequiredPayloads[0], "tool.exe") {
 		t.Errorf("required payloads = %v, want [tool.exe]", pt.RequiredPayloads)
+	}
+
+	// macOS/sh test.
+	mac := tests[2]
+	if mac.Platform != "darwin" || mac.Executor != "bash" {
+		t.Errorf("mac test = %+v, want platform=darwin executor=bash", mac)
+	}
+	if mac.Command != "uname -a" {
+		t.Errorf("mac command = %q, want uname -a", mac.Command)
 	}
 }
 

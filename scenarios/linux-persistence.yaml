@@ -1,0 +1,44 @@
+id: linux-persistence
+name: Linux Persistence  -  Cron, Bashrc, Systemd, SUID
+description: >
+  Linux persistence mechanism validation using Atomic Red Team atomics.
+  Simulates the techniques an adversary uses to survive a reboot or session
+  termination on a compromised Linux endpoint.
+
+  Covers: cron job injection, .bashrc/.bash_profile modification, systemd
+  unit file creation, kernel module loading, and SUID/SGID bit manipulation.
+
+  Each technique runs ALL available Linux atomics (depth mode) so every
+  variant is tested against your EDR / auditd / HIDS controls.
+
+  Expected verdicts:
+    PASS  = EDR/auditd detected and alerted on the persistence mechanism
+    FAIL  = persistence artefact was written undetected
+    SKIP  = atomic requires a capability not present on the test host
+
+  Safety: cleanup commands are issued after each step to remove any written
+  artefacts. Do not run on production servers — use a dedicated test endpoint.
+author: Audspect Research
+executable: true
+supported_os: [linux]
+tags:
+  - persistence
+  - linux
+  - art
+  - atomic-red-team
+  - t1053
+  - t1543
+  - t1546
+  - t1547
+  - t1548
+  - mitre-attack
+mitre_phases:
+  - persistence
+  - privilege-escalation
+
+art_techniques:
+  - T1053.003   # Cron (add cron job)
+  - T1546.004   # .bash_profile and .bashrc modification
+  - T1543.002   # Systemd service unit file creation
+  - T1547.006   # Kernel Modules and Extensions (modprobe/insmod)
+  - T1548.001   # Setuid/Setgid bit manipulation

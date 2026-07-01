@@ -1,0 +1,38 @@
+id: linux-lateral-movement
+name: Linux Lateral Movement  -  SSH, SCP, Remote Execution
+description: >
+  Linux lateral movement simulation using Atomic Red Team atomics.
+  Tests your detection stack's coverage of the common techniques attackers
+  use to move between Linux hosts once initial access is established: SSH
+  key-based authentication, remote command execution, file transfer via
+  SCP/rsync, and use of legitimate admin tools for lateral movement.
+
+  Each technique runs ALL available Linux atomics (depth mode).
+
+  Expected verdicts:
+    PASS  = SIEM/EDR detected the lateral movement attempt
+    FAIL  = connection or transfer completed without an alert
+    SKIP  = atomic requires a reachable remote host or tool not present
+
+  Note: most atomics in this scenario target localhost (127.0.0.1) as the
+  remote to avoid actual host pivoting. Real lateral movement validation
+  requires an attack-path topology with at least two enrolled agents.
+author: Audspect Research
+executable: true
+supported_os: [linux]
+tags:
+  - lateral-movement
+  - linux
+  - art
+  - atomic-red-team
+  - t1021
+  - t1105
+  - mitre-attack
+mitre_phases:
+  - lateral-movement
+
+art_techniques:
+  - T1021.004   # SSH (key-based login, ssh -i, ProxyJump)
+  - T1105       # Ingress Tool Transfer (curl/wget binary drop)
+  - T1570       # Lateral Tool Transfer (scp, rsync between hosts)
+  - T1059.004   # Unix Shell (bash -c remote command execution)

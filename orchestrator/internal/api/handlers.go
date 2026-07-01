@@ -561,7 +561,7 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore)
+	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore, "windows")
 	if err != nil {
 		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -864,7 +864,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	}
 
 	// Build concrete commands — all framework logic resolved server-side.
-	steps, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore)
+	steps, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
 	if err != nil {
 		_, _ = h.db.Exec(context.Background(),
 			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)

@@ -1,0 +1,40 @@
+id: macos-persistence
+name: macOS Persistence  -  Launch Agents, Cron, Login Items
+description: >
+  macOS persistence mechanism validation using Atomic Red Team atomics.
+  Simulates the techniques attackers use to survive a reboot or logout on
+  a compromised macOS endpoint: LaunchAgent/LaunchDaemon plist creation,
+  cron job injection, login item manipulation, and .bash_profile modification.
+
+  Each technique runs ALL available macOS/darwin atomics (depth mode).
+
+  Expected verdicts:
+    PASS  = EDR/XProtect/Santa detected the persistence mechanism
+    FAIL  = persistence artefact was written undetected
+    SKIP  = atomic requires SIP bypass or admin privilege not held by test user
+
+  Safety: cleanup commands remove artefacts after each test. LaunchAgent
+  plists are written to the user's Library folder, not /Library (no SIP bypass
+  required). Do not run on production macOS endpoints.
+author: Audspect Research
+executable: true
+supported_os: [darwin]
+tags:
+  - persistence
+  - macos
+  - darwin
+  - art
+  - atomic-red-team
+  - t1053
+  - t1543
+  - t1546
+  - mitre-attack
+mitre_phases:
+  - persistence
+
+art_techniques:
+  - T1543.001   # Launch Agent (~/Library/LaunchAgents plist)
+  - T1543.004   # Launch Daemon (/Library/LaunchDaemons — needs sudo)
+  - T1053.003   # Cron (crontab -e style injection)
+  - T1546.004   # .bash_profile and .bashrc modification
+  - T1547.011   # Plist Modification (LSUIElement, RunAtLoad keys)
