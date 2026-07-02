@@ -189,6 +189,30 @@ func (h *Handler) WithExercise(store *exercise.Store, exec *exercise.Executor, c
 	return h
 }
 
+// GetCryptoInfo returns a read-only summary of the active cryptographic profile.
+// Useful during customer security reviews and FIPS compliance discussions.
+// GET /api/crypto/info (Viewer+)
+func (h *Handler) GetCryptoInfo(w http.ResponseWriter, r *http.Request) {
+	type cryptoInfo struct {
+		PasswordAlgorithm string `json:"password_algorithm"`
+		PBKDF2Iterations  int    `json:"pbkdf2_iterations"`
+		JWT               string `json:"jwt"`
+		ScenarioSigning   string `json:"scenario_signing"`
+		Hashing           string `json:"hashing"`
+		TLS               string `json:"tls"`
+		FIPSReady         bool   `json:"fips_ready"`
+	}
+	jsonOK(w, cryptoInfo{
+		PasswordAlgorithm: "PBKDF2-HMAC-SHA256",
+		PBKDF2Iterations:  auth.GetIterations(),
+		JWT:               "HS256",
+		ScenarioSigning:   "RSA-4096 / SHA-256 (PKCS#1 v1.5)",
+		Hashing:           "SHA-256",
+		TLS:               "TLS 1.2/1.3 (at reverse proxy)",
+		FIPSReady:         true,
+	})
+}
+
 // GetLicenseInfo returns parsed licence details for the Settings → License panel.
 // GET /api/license
 func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
@@ -233,14 +257,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	).Scan(&id, &hash, &role, &isActive, &mustChangePw)
 	// Evaluate password even on DB miss to prevent timing-based user enumeration.
 	// VerifyPassword on an empty string returns false without error.
-	ok, needsRehash, _ := auth.VerifyPassword(req.Password, hash)
+	ok, needsUpgrade, _ := auth.VerifyPassword(req.Password, hash)
 	if dbErr != nil || !ok {
 		h.auditLogAs(r, "", "user.login", req.Username, map[string]any{"username": req.Username, "reason": "invalid credentials"}, "fail")
 		jsonError(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
-	// Transparent migration: upgrade bcrypt hash to PBKDF2-HMAC-SHA256 on login.
-	if needsRehash {
+	// Transparent upgrade: re-hash with current algorithm/iteration count on login.
+	if needsUpgrade {
 		if newHash, hErr := auth.HashPassword(req.Password); hErr == nil {
 			h.db.Exec(r.Context(), `UPDATE users SET password_hash = $1 WHERE id = $2`, newHash, id)
 		}

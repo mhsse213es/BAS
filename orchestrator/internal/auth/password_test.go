@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -18,15 +19,15 @@ func TestHashAndVerify_PBKDF2(t *testing.T) {
 		t.Fatalf("expected PBKDF2 hash prefix, got %q", h)
 	}
 
-	ok, rehash, err := VerifyPassword("hunter2", h)
+	ok, needsUpgrade, err := VerifyPassword("hunter2", h)
 	if err != nil {
 		t.Fatalf("VerifyPassword: %v", err)
 	}
 	if !ok {
 		t.Error("expected ok=true for correct password")
 	}
-	if rehash {
-		t.Error("fresh PBKDF2 hash must not require rehash")
+	if needsUpgrade {
+		t.Error("fresh PBKDF2 hash must not require upgrade")
 	}
 }
 
@@ -71,40 +72,92 @@ func TestVerify_BcryptLegacy_CorrectPassword(t *testing.T) {
 	}
 	hash := string(raw)
 
-	ok, needsRehash, err := VerifyPassword("legacy", hash)
+	ok, needsUpgrade, err := VerifyPassword("legacy", hash)
 	if err != nil {
 		t.Fatalf("VerifyPassword: %v", err)
 	}
 	if !ok {
 		t.Error("expected ok=true for correct bcrypt password")
 	}
-	if !needsRehash {
-		t.Error("bcrypt hash must be flagged for rehash")
+	if !needsUpgrade {
+		t.Error("bcrypt hash must be flagged for upgrade")
 	}
 }
 
 func TestVerify_BcryptLegacy_WrongPassword(t *testing.T) {
 	raw, _ := bcrypt.GenerateFromPassword([]byte("correct"), bcrypt.MinCost)
-	ok, needsRehash, err := VerifyPassword("wrong", string(raw))
+	ok, needsUpgrade, err := VerifyPassword("wrong", string(raw))
 	if err != nil {
 		t.Fatalf("VerifyPassword: %v", err)
 	}
 	if ok {
 		t.Error("expected ok=false for wrong password")
 	}
-	if needsRehash {
-		t.Error("failed bcrypt verify must not flag for rehash")
+	if needsUpgrade {
+		t.Error("failed bcrypt verify must not flag for upgrade")
 	}
 }
 
-func TestNeedsRehash(t *testing.T) {
+func TestNeedsUpgrade(t *testing.T) {
+	// bcrypt must always need upgrade.
 	raw, _ := bcrypt.GenerateFromPassword([]byte("x"), bcrypt.MinCost)
-	if !NeedsRehash(string(raw)) {
-		t.Error("bcrypt hash must need rehash")
+	if !NeedsUpgrade(string(raw)) {
+		t.Error("bcrypt hash must need upgrade")
 	}
-	pbkdf2h, _ := HashPassword("x")
-	if NeedsRehash(pbkdf2h) {
-		t.Error("PBKDF2 hash must not need rehash")
+
+	// Fresh PBKDF2 at current iterations must not need upgrade.
+	h, _ := HashPassword("x")
+	if NeedsUpgrade(h) {
+		t.Error("current PBKDF2 hash must not need upgrade")
+	}
+
+	// PBKDF2 hash with lower iteration count (injected manually) must need upgrade.
+	lowIter := strings.Replace(h, fmt.Sprintf("$pbkdf2-sha256$%d$", iterations), "$pbkdf2-sha256$1$", 1)
+	if !NeedsUpgrade(lowIter) {
+		t.Error("low-iteration PBKDF2 hash must need upgrade")
+	}
+}
+
+// ── Edge-case passwords ───────────────────────────────────────────────────────
+
+func TestEmptyPassword(t *testing.T) {
+	h, err := HashPassword("")
+	if err != nil {
+		t.Fatalf("HashPassword empty: %v", err)
+	}
+	ok, _, err := VerifyPassword("", h)
+	if err != nil {
+		t.Fatalf("VerifyPassword: %v", err)
+	}
+	if !ok {
+		t.Error("empty password must verify against its own hash")
+	}
+	if wrong, _, _ := VerifyPassword("x", h); wrong {
+		t.Error("non-empty password must not match empty-password hash")
+	}
+}
+
+func TestVeryLongPassword(t *testing.T) {
+	pw := strings.Repeat("A", 1024)
+	h, err := HashPassword(pw)
+	if err != nil {
+		t.Fatalf("HashPassword 1KB: %v", err)
+	}
+	ok, _, err := VerifyPassword(pw, h)
+	if err != nil {
+		t.Fatalf("VerifyPassword 1KB: %v", err)
+	}
+	if !ok {
+		t.Error("1KB password must verify")
+	}
+}
+
+func TestInvalidIterationCount(t *testing.T) {
+	// Craft a hash with iteration count "0" — must return error, not panic.
+	badHash := "$pbkdf2-sha256$0$AAAA$AAAA"
+	_, _, err := VerifyPassword("pw", badHash)
+	if err == nil {
+		t.Error("expected error for zero iteration count in stored hash")
 	}
 }
 

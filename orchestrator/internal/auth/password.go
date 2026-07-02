@@ -1,7 +1,13 @@
 package auth
 
 import (
+	"crypto"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -17,13 +23,18 @@ const minIterations = 310000
 var iterations = DefaultIterations
 
 // SetIterations overrides the PBKDF2 iteration count. Call once at startup
-// from config, before any HashPassword calls. Panics if n < minIterations to
+// from config, before any HashPassword calls. Panics below minIterations to
 // prevent accidental weakening.
 func SetIterations(n int) {
 	if n < minIterations {
 		panic(fmt.Sprintf("auth: PBKDF2 iteration count %d is below the minimum %d", n, minIterations))
 	}
 	iterations = n
+}
+
+// GetIterations returns the currently configured PBKDF2 iteration count.
+func GetIterations() int {
+	return iterations
 }
 
 // HashPassword returns a PBKDF2-HMAC-SHA256 hash in self-describing format:
@@ -40,73 +51,169 @@ func HashPassword(password string) (string, error) {
 //
 // Returns:
 //
-//	ok          — true if the password matches
-//	needsRehash — true if the hash uses the legacy bcrypt algorithm and
-//	              should be replaced with PBKDF2 on the next successful login
-//	err         — non-nil if the hash format is unrecognized or verification failed
-func VerifyPassword(password, hash string) (ok bool, needsRehash bool, err error) {
+//	ok           — true if the password matches
+//	needsUpgrade — true when the match succeeded but the hash should be
+//	               replaced: bcrypt (algorithm migration) or PBKDF2 with a
+//	               lower iteration count than the current configuration
+//	err          — non-nil if the hash format is unrecognized or verification failed
+func VerifyPassword(password, hash string) (ok bool, needsUpgrade bool, err error) {
 	switch {
 	case isPBKDF2Hash(hash):
 		ok, err = pbkdf2Verify(password, hash)
-		return ok, false, err
+		return ok, ok && NeedsUpgrade(hash), err
 
 	case isBcryptHash(hash):
 		ok, err = bcryptVerify(password, hash)
 		if err != nil {
 			return false, false, err
 		}
-		// Migration flag: upgrade this hash to PBKDF2 on successful login.
-		return ok, ok, nil
+		return ok, ok && NeedsUpgrade(hash), nil
 
 	default:
 		return false, false, errors.New("auth: unrecognized password hash format")
 	}
 }
 
-// NeedsRehash reports whether hash was produced by the legacy bcrypt algorithm
-// and should be replaced with PBKDF2 on the next successful login.
-func NeedsRehash(hash string) bool {
-	return isBcryptHash(hash)
+// NeedsUpgrade reports whether a hash should be replaced on the next successful login.
+//
+// Returns true for:
+//   - any bcrypt hash (algorithm migration to PBKDF2)
+//   - PBKDF2 hashes whose stored iteration count is below the current configuration
+//     (enables transparent re-hashing when the config iteration count is increased)
+func NeedsUpgrade(hash string) bool {
+	if isBcryptHash(hash) {
+		return true
+	}
+	if isPBKDF2Hash(hash) {
+		return pbkdf2ParseIterations(hash) < iterations
+	}
+	return false
 }
 
-// CryptoSelfTest verifies the password subsystem is operational.
-// Intended to be called once at server startup; fatal if any check fails.
+// CryptoSelfTest verifies the cryptographic subsystem is fully operational.
+// Call once at server startup; treat a non-nil return as fatal.
 //
-// Verifies:
-//   - crypto/rand is readable
-//   - PBKDF2-HMAC-SHA256 hashing produces a valid hash
-//   - hash verification succeeds for the correct password
-//   - hash verification fails for a wrong password
-//   - fresh PBKDF2 hash is NOT flagged for rehash
+// Verifies: SHA-256 (known-answer), HMAC-SHA256, RSA-2048 sign/verify,
+// PBKDF2-HMAC-SHA256, crypto/rand entropy, constant-time compare.
 func CryptoSelfTest() error {
-	// Verify crypto/rand is readable.
-	probe := make([]byte, 32)
-	if _, err := rand.Read(probe); err != nil {
-		return fmt.Errorf("crypto self-test: crypto/rand unavailable: %w", err)
+	checks := []struct {
+		name string
+		fn   func() error
+	}{
+		{"SHA-256 KAT", sha256SelfTest},
+		{"HMAC-SHA256", hmacSelfTest},
+		{"RSA sign/verify", rsaSelfTest},
+		{"crypto/rand", randSelfTest},
+		{"PBKDF2-HMAC-SHA256", pbkdf2SelfTest},
+		{"constant-time compare", ctCompareSelfTest},
 	}
+	for _, c := range checks {
+		if err := c.fn(); err != nil {
+			return fmt.Errorf("crypto self-test [%s]: %w", c.name, err)
+		}
+	}
+	log.Printf("[+] Crypto self-test passed (SHA-256, HMAC-SHA256, RSA-2048, PBKDF2-HMAC-SHA256, crypto/rand, CT-compare)")
+	return nil
+}
 
+// sha256SelfTest uses a known-answer test to verify the SHA-256 implementation.
+func sha256SelfTest() error {
+	// SHA-256("") is a well-known constant; any deviation indicates a broken implementation.
+	const expected = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	h := sha256.Sum256([]byte(""))
+	if hex.EncodeToString(h[:]) != expected {
+		return errors.New("SHA-256 known-answer test failed")
+	}
+	return nil
+}
+
+func hmacSelfTest() error {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return fmt.Errorf("rand: %w", err)
+	}
+	const msg = "audspect-hmac-probe"
+	mac1 := hmac.New(sha256.New, key)
+	mac1.Write([]byte(msg))
+	sum1 := mac1.Sum(nil)
+	mac2 := hmac.New(sha256.New, key)
+	mac2.Write([]byte(msg))
+	if !hmac.Equal(sum1, mac2.Sum(nil)) {
+		return errors.New("HMAC reproducibility check failed")
+	}
+	mac3 := hmac.New(sha256.New, key)
+	mac3.Write([]byte(msg + "x"))
+	if hmac.Equal(sum1, mac3.Sum(nil)) {
+		return errors.New("HMAC produced identical output for different inputs")
+	}
+	return nil
+}
+
+func rsaSelfTest() error {
+	// 2048-bit key for test speed; production scenario/license signing uses RSA-4096.
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return fmt.Errorf("key generation: %w", err)
+	}
+	digest := sha256.Sum256([]byte("audspect-rsa-selftest"))
+	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
+	if err != nil {
+		return fmt.Errorf("sign: %w", err)
+	}
+	if err := rsa.VerifyPKCS1v15(&key.PublicKey, crypto.SHA256, digest[:], sig); err != nil {
+		return fmt.Errorf("verify: %w", err)
+	}
+	bad := sha256.Sum256([]byte("wrong"))
+	if rsa.VerifyPKCS1v15(&key.PublicKey, crypto.SHA256, bad[:], sig) == nil {
+		return errors.New("RSA accepted signature for wrong digest")
+	}
+	return nil
+}
+
+func randSelfTest() error {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Errorf("read failed: %w", err)
+	}
+	for _, b := range buf {
+		if b != 0 {
+			return nil
+		}
+	}
+	return errors.New("crypto/rand returned all zeros — possible entropy failure")
+}
+
+func pbkdf2SelfTest() error {
 	const pw = "audspect-fips-selftest-probe"
 	h, err := HashPassword(pw)
 	if err != nil {
-		return fmt.Errorf("crypto self-test: HashPassword failed: %w", err)
+		return fmt.Errorf("HashPassword: %w", err)
 	}
-
-	ok, rehash, err := VerifyPassword(pw, h)
+	ok, upgrade, err := VerifyPassword(pw, h)
 	if err != nil {
-		return fmt.Errorf("crypto self-test: VerifyPassword returned error: %w", err)
+		return fmt.Errorf("VerifyPassword: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("crypto self-test: VerifyPassword returned false for correct password")
+		return errors.New("correct password rejected")
 	}
-	if rehash {
-		return fmt.Errorf("crypto self-test: fresh PBKDF2 hash incorrectly flagged for rehash")
+	if upgrade {
+		return errors.New("fresh PBKDF2 hash incorrectly flagged for upgrade")
 	}
+	if wrong, _, _ := VerifyPassword("wrong", h); wrong {
+		return errors.New("wrong password accepted")
+	}
+	return nil
+}
 
-	wrong, _, _ := VerifyPassword("wrong-password", h)
-	if wrong {
-		return fmt.Errorf("crypto self-test: VerifyPassword returned true for wrong password")
+func ctCompareSelfTest() error {
+	a := []byte("audspect-ct-probe-value")
+	b := []byte("audspect-ct-probe-value")
+	c := []byte("audspect-ct-probe-XXXXX")
+	if subtle.ConstantTimeCompare(a, b) != 1 {
+		return errors.New("equal slices returned not-equal")
 	}
-
-	log.Println("[+] Crypto self-test passed (PBKDF2-HMAC-SHA256, crypto/rand)")
+	if subtle.ConstantTimeCompare(a, c) != 0 {
+		return errors.New("different slices returned equal")
+	}
 	return nil
 }

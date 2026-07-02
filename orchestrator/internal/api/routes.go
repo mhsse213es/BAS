@@ -137,6 +137,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/caldera/abilities", h.GetCalderaAbilities)
 		r.Get("/api/techniques/unified", h.GetUnifiedTechniques)
 
+		// Crypto profile — read-only; useful for customer security reviews.
+		r.Get("/api/crypto/info", h.GetCryptoInfo)
+
 		// Coverage Analytics — aggregate prevention/detection breakdown across runs.
 		r.Get("/api/coverage/analytics", h.GetCoverageAnalytics)
 
