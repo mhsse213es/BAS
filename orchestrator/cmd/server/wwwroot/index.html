@@ -6141,6 +6141,21 @@ function revalidateRemediation(techniqueId) {
       if (match) break;
     }
   }
+  // Pass 1b — artAllWindows scenario as fallback. These can execute any ART technique
+  // as a targeted subset (server clears artAllWindows and sets ARTTechniques=[tid]).
+  // Prefer 'selective' scenarios over 'full' to minimise blast radius.
+  if (!match) {
+    var _artAll = [];
+    for (var i = 0; i < scenarios.length; i++) {
+      if (scenarios[i].artAllWindows) _artAll.push(scenarios[i]);
+    }
+    _artAll.sort(function(a, b) {
+      var aS = (a.id || '').indexOf('selective') !== -1 ? 0 : 1;
+      var bS = (b.id || '').indexOf('selective') !== -1 ? 0 : 1;
+      return aS - bS;
+    });
+    if (_artAll.length) { match = _artAll[0]; matchFw = 'art'; }
+  }
   if (!match) {
     showToast('No scenario found for ' + techniqueId + ' — select one manually', 'ok');
     openModal();
