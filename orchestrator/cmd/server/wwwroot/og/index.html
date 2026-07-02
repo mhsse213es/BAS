@@ -3738,12 +3738,24 @@ function toggleSecret(btn) {
 
 function copyText(elId, btn) {
   var el = document.getElementById(elId);
-  var text = el.dataset.value || el.textContent;
-  navigator.clipboard.writeText(text).then(function() {
+  var text = el.hasAttribute('data-value') ? el.dataset.value : el.textContent;
+  function onSuccess() {
     var orig = btn.textContent;
     btn.textContent = 'Copied!';
     setTimeout(function() { btn.textContent = orig; }, 1500);
-  }).catch(function() { showToast('Copy failed', 'err'); });
+  }
+  function onFail() { showToast('Copy failed', 'err'); }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(onSuccess).catch(onFail);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy') ? onSuccess() : onFail(); } catch(e) { onFail(); }
+    document.body.removeChild(ta);
+  }
 }
 
 function stripeColor(id) {
