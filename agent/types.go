@@ -32,6 +32,17 @@ type Heartbeat struct {
 	EmitsEvents     bool `json:"emitsEvents,omitempty"`
 
 	SecurityProducts []string `json:"securityProducts,omitempty"` // installed AV/EDR inventory (presence only)
+
+	// Attack-path job progress — only set when actively running a collection job.
+	CurrentJobID string               `json:"currentJobId,omitempty"`
+	JobProgress  HeartbeatJobProgress `json:"jobProgress,omitempty"`
+}
+
+// HeartbeatJobProgress carries per-job collection progress in a heartbeat.
+type HeartbeatJobProgress struct {
+	Stage            string `json:"stage"`
+	TargetsCompleted int    `json:"targetsCompleted"`
+	TargetsTotal     int    `json:"targetsTotal"`
 }
 
 // HeartbeatResponse is returned by the server on every POST /api/heartbeat.

@@ -238,6 +238,11 @@ func main() {
 	// when the operator-configured interval has elapsed.
 	api.StartAttackPathScheduler(context.Background(), pool, hub)
 
+	// ── Attack-Path Job Monitor ───────────────────────────────────────────
+	// Every 15 s: enforces ack-window (dispatched→delivery_failed if no ACK
+	// within 30 s) and expires_at (running/queued→timed_out).
+	handler.StartAPJobMonitor(context.Background())
+
 	// ── Filesystem Integrity Watcher ──────────────────────────────────────
 	// Polls protected on-disk paths every 15 seconds. Any unexpected
 	// modification, deletion, or creation is logged, persisted to

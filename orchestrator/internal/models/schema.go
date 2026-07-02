@@ -243,6 +243,19 @@ type Heartbeat struct {
 	EmitsEvents     bool `json:"emitsEvents,omitempty"`
 
 	SecurityProducts []string `json:"securityProducts,omitempty"` // installed AV/EDR inventory (presence only)
+
+	// Attack-path job progress — only populated when the agent is actively running
+	// a collection job. The server uses this to update the job's progress column
+	// and broadcast live progress to browser sessions.
+	CurrentJobID string          `json:"currentJobId,omitempty"`
+	JobProgress  HeartbeatJobProgress `json:"jobProgress,omitempty"`
+}
+
+// HeartbeatJobProgress carries per-job progress within a heartbeat.
+type HeartbeatJobProgress struct {
+	Stage            string `json:"stage"`
+	TargetsCompleted int    `json:"targetsCompleted"`
+	TargetsTotal     int    `json:"targetsTotal"`
 }
 
 // HeartbeatResponse is returned to the agent after each heartbeat.
@@ -276,6 +289,12 @@ const (
 	// MsgAttackPathCollected is broadcast to browser sessions when an agent
 	// submits a completed attack-path collection so the UI can update live.
 	MsgAttackPathCollected = "attackpath_collected"
+	// Attack-path job lifecycle events — broadcast to browser sessions so the
+	// UI state machine can advance without polling.
+	MsgAPJobUpdate        = "ap_job_update"        // any status change
+	MsgAPJobProgress      = "ap_job_progress"      // agent heartbeat progress tick
+	MsgAgentReconnected   = "agent_reconnected"     // agent came back online
+	MsgAgentDisconnected  = "agent_disconnected"    // agent WS dropped
 	// MsgTamperAlert is broadcast to all browser sessions when the filesystem
 	// watcher detects an unexpected modification to a protected file.
 	MsgTamperAlert = "tamper_alert"

@@ -29,11 +29,24 @@ func (h *Handler) SubmitAttackPathCollection(w http.ResponseWriter, r *http.Requ
 		jsonError(w, "unauthorized — check AGENT_SECRET", http.StatusUnauthorized)
 		return
 	}
-	var c attackpath.Collection
-	if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+	// Decode into a raw map first so we can extract jobId without touching
+	// the Collection struct (which is shared with the attackpath package).
+	var raw map[string]json.RawMessage
+	body := json.NewDecoder(r.Body)
+	if err := body.Decode(&raw); err != nil {
 		jsonError(w, "invalid attack-path collection payload", http.StatusBadRequest)
 		return
 	}
+	var c attackpath.Collection
+	// Re-encode and decode into typed struct for existing logic.
+	if fullRaw, err := json.Marshal(raw); err == nil {
+		json.Unmarshal(fullRaw, &c)
+	}
+	var jobID string
+	if jb, ok := raw["jobId"]; ok {
+		json.Unmarshal(jb, &jobID)
+	}
+
 	if c.AgentID == "" {
 		jsonError(w, "agentId is required", http.StatusBadRequest)
 		return
@@ -54,19 +67,21 @@ func (h *Handler) SubmitAttackPathCollection(w http.ResponseWriter, r *http.Requ
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// Notify all browser sessions so the UI can advance its status timeline
-	// without polling. The browser receives node/edge counts so it can show
-	// exactly what was discovered without waiting for a full summary reload.
+	// Mark the job completed (also clears the progress column).
+	h.CompleteAPJob(r.Context(), c.AgentID, jobID)
+
+	// Notify all browser sessions so the UI can advance its status timeline.
 	h.hub.BroadcastBrowsers(models.WSMessage{
 		Type:    models.MsgAttackPathCollected,
 		AgentID: c.AgentID,
-		Data: map[string]any{
+		Data: mustMarshal(map[string]any{
 			"hostname":    c.Hostname,
 			"nodes":       len(c.Nodes),
 			"edges":       len(c.Edges),
 			"source":      c.Source,
 			"collectedAt": c.CollectedAt,
-		},
+			"jobId":       jobID,
+		}),
 	})
 	respond(w, map[string]any{
 		"agentId": c.AgentID, "nodes": len(c.Nodes), "edges": len(c.Edges), "source": c.Source,

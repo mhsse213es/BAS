@@ -482,7 +482,23 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 	var policy models.PolicyBundle
 	json.Unmarshal([]byte(policyRaw), &policy)
 
-	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: hb.AgentID, Data: hb})
+	// Handle attack-path job progress if the agent reports one.
+	if hb.CurrentJobID != "" && hb.JobProgress.Stage != "" {
+		h.UpdateAPJobProgress(r.Context(), hb.AgentID, hb.CurrentJobID, APJobProgress{
+			Stage:            hb.JobProgress.Stage,
+			TargetsCompleted: hb.JobProgress.TargetsCompleted,
+			TargetsTotal:     hb.JobProgress.TargetsTotal,
+		})
+	}
+	// Note: RedeliverQueuedAPJobs is in a goroutine to avoid blocking the
+	// heartbeat response. The context is derived from r.Context() before launch.
+
+	// On every heartbeat, attempt to re-deliver any queued attack-path jobs
+	// that were created while the agent was offline. Only queued (never ACKed)
+	// jobs are re-dispatched; running jobs are left alone.
+	go h.RedeliverQueuedAPJobs(r.Context(), hb.AgentID)
+
+	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: hb.AgentID, Data: mustMarshal(hb)})
 	respond(w, models.HeartbeatResponse{
 		State:  models.AgentState(stateStr),
 		Policy: policy,

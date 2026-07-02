@@ -41,6 +41,32 @@ type Agent struct {
 	watchdogTripped   bool      // the watchdog already finalized the run for this outage (one-shot)
 
 	runWG sync.WaitGroup // tracks in-flight scenario/scan goroutines so shutdown can wait for them to spool a Partial
+
+	// Attack-path job progress reported in each heartbeat (guarded by mu).
+	currentJobID         string
+	currentJobStage      string
+	currentJobCompleted  int
+	currentJobTotal      int
+}
+
+// setCurrentJob records the active attack-path job so heartbeats carry progress.
+func (a *Agent) setCurrentJob(jobID, stage string, completed, total int) {
+	a.mu.Lock()
+	a.currentJobID = jobID
+	a.currentJobStage = stage
+	a.currentJobCompleted = completed
+	a.currentJobTotal = total
+	a.mu.Unlock()
+}
+
+// clearCurrentJob zeroes out the active job after collection finishes.
+func (a *Agent) clearCurrentJob() {
+	a.mu.Lock()
+	a.currentJobID = ""
+	a.currentJobStage = ""
+	a.currentJobCompleted = 0
+	a.currentJobTotal = 0
+	a.mu.Unlock()
 }
 
 func newAgent(cfg Config, id Identity) *Agent {
@@ -163,6 +189,10 @@ func (a *Agent) enrollWithServer() {
 func (a *Agent) sendHeartbeat(status string) {
 	a.mu.Lock()
 	products := a.secProducts
+	jobID := a.currentJobID
+	jobStage := a.currentJobStage
+	jobCompleted := a.currentJobCompleted
+	jobTotal := a.currentJobTotal
 	a.mu.Unlock()
 	hb := Heartbeat{
 		AgentID:       a.id.AgentID,
@@ -179,6 +209,14 @@ func (a *Agent) sendHeartbeat(status string) {
 		ProtocolVersion:  protocolVersion,
 		EmitsEvents:      true,
 		SecurityProducts: products,
+	}
+	if jobID != "" {
+		hb.CurrentJobID = jobID
+		hb.JobProgress = HeartbeatJobProgress{
+			Stage:            jobStage,
+			TargetsCompleted: jobCompleted,
+			TargetsTotal:     jobTotal,
+		}
 	}
 	t0 := time.Now()
 	var resp HeartbeatResponse

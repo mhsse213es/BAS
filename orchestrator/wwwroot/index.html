@@ -2381,8 +2381,9 @@ body.theme-slate {
                 <button class="btn btn-outline btn-sm" onclick="apCollectClose()" style="padding:0.2rem 0.55rem">&#10005;</button>
               </div>
               <div id="ap-timeline" style="display:flex;flex-direction:column;gap:0;padding-left:0.1rem"></div>
-              <div id="ap-done-actions" style="display:none;margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+              <div id="ap-done-actions" style="display:none;margin-top:1rem;gap:0.5rem;flex-wrap:wrap">
                 <button class="btn btn-primary btn-sm" onclick="loadAttackPath();apCollectClose()">View Results</button>
+                <button id="ap-retry-btn" class="btn btn-outline btn-sm" style="display:none">&#8635; Retry</button>
                 <button class="btn btn-outline btn-sm" onclick="apCollectClose()">Close</button>
               </div>
             </div>
@@ -3569,50 +3570,30 @@ function loadAttackPath() {
   var body = document.getElementById('ap-body');
   if (body) body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
   apicall('/api/attackpath/summary').then(function(d) {
-    // Check if a collection was in-flight when the page was last reloaded.
-    var pending = _apLoadPending();
-    if (pending) {
-      var completedWhileAway = d && d.latestCollectedAt &&
-          new Date(d.latestCollectedAt) > new Date(pending.dispatchedAt);
-      if (completedWhileAway) {
-        // Collection finished during the reload gap — surface it as completed.
-        _apClearPending();
-        var panel = document.getElementById('ap-collect');
-        var tl = document.getElementById('ap-timeline');
-        if (panel && tl) {
-          panel.style.display = '';
-          document.getElementById('ap-form').style.display = 'none';
-          document.getElementById('ap-progress').style.display = '';
-          var shNote = pending.shEnabled ? (pending.sharpHoundDelivered ? ' + SharpHound' : ' (SharpHound skipped — not configured)') : '';
-          tl.innerHTML =
-            _apStep('done', 'Command dispatched to ' + x(pending.agentLabel) + ' at ' + new Date(pending.dispatchedAt).toLocaleTimeString(),
-              pending.targets.length + ' target' + (pending.targets.length === 1 ? '' : 's') + shNote) +
-            _apStep('done', 'Agent finished probing', 'Completed while page was reloading.') +
-            _apStep('done', 'Collection received — graph updated',
-              'Collection arrived at ' + new Date(d.latestCollectedAt).toLocaleTimeString() + '. Results are ready.') +
-            _apStep('done', 'Graph analysis complete', 'Attack path score and lateral movement risk have been recalculated.');
-          document.getElementById('ap-done-actions').style.display = '';
+    // Restore in-flight job state from server after a page reload.
+    var saved = _apLoadJobId();
+    if (saved && saved.jobId && !_apCurrentJobId) {
+      apicall('/api/attackpath/jobs/' + saved.jobId).then(function(job) {
+        var terminal = ['completed','failed','timed_out','delivery_failed','cancelled'];
+        if (terminal.indexOf(job.status) === -1) {
+          // Job still active — restore progress panel so the user can watch it.
+          _apCurrentJobId = job.id;
+          _apCollectAgentId = job.agentId;
+          var panel = document.getElementById('ap-collect');
+          if (panel) {
+            panel.style.display = '';
+            document.getElementById('ap-form').style.display = 'none';
+            document.getElementById('ap-progress').style.display = '';
+            _apRenderJobState(job);
+          }
+        } else if (job.status === 'completed') {
+          _apClearJobId();
+          showToast('Attack-path collection completed while you were away — results ready.', 'ok');
+        } else {
+          _apClearJobId();
+          showToast('Attack-path job ended with status: ' + job.status, 'warn');
         }
-        showToast('Attack path collection completed while you were away — results ready', 'ok');
-      } else {
-        // Still in-flight — restore the spinner UI so the user knows it is running.
-        _apCollectAgentId = pending.agentId;
-        var panel = document.getElementById('ap-collect');
-        var tl = document.getElementById('ap-timeline');
-        if (panel && tl) {
-          panel.style.display = '';
-          document.getElementById('ap-form').style.display = 'none';
-          document.getElementById('ap-progress').style.display = '';
-          var shNote2 = pending.shEnabled ? (pending.sharpHoundDelivered ? ' + SharpHound domain mapping' : ' (SharpHound skipped — binary not configured)') : '';
-          tl.innerHTML =
-            _apStep('done', 'Command dispatched to ' + x(pending.agentLabel) + ' at ' + new Date(pending.dispatchedAt).toLocaleTimeString(),
-              pending.targets.length + ' target' + (pending.targets.length === 1 ? '' : 's') + ' queued' + shNote2) +
-            _apStep('active', 'Agent is probing the network…',
-              'TCP connect on SMB (445), WinRM (5985), RDP (3389) — page was reloaded during collection. Waiting for the agent to report back.') +
-            _apStep('pending', 'Collection received by server', '') +
-            _apStep('pending', 'Graph built &amp; analysis complete', '');
-        }
-      }
+      }).catch(function() { _apClearJobId(); });
     }
     renderAttackPath(d);
   }).catch(function(e) { showToast(e.message, 'err'); });
@@ -3692,32 +3673,32 @@ function renderAttackPath(d) {
   }
   body.innerHTML = h;
 }
-// ── Attack Path Collection — enterprise status tracking ────────────────────────
+// ── Attack Path Collection — job-based execution with full state machine ────────
 
 var _apCollectAgentId = null; // agentId currently being collected (for WS matching)
+var _apCurrentJobId   = null; // current job ID for WS event matching
 
-// Persist in-flight collection state across page reloads.
-function _apSavePending(agentId, agentLabel, targets, shEnabled, sharpHoundDelivered) {
-  try {
-    localStorage.setItem('_apPending', JSON.stringify({
-      agentId: agentId, agentLabel: agentLabel,
-      targets: targets, shEnabled: shEnabled,
-      sharpHoundDelivered: !!sharpHoundDelivered,
-      dispatchedAt: new Date().toISOString()
-    }));
-  } catch(e) {}
+// Persist just the current job ID across page reloads so we can restore state from the server.
+function _apSaveJobId(jobId, agentId) {
+  try { localStorage.setItem('_apCurrentJob', JSON.stringify({jobId: jobId, agentId: agentId})); } catch(e) {}
 }
-function _apClearPending() {
-  try { localStorage.removeItem('_apPending'); } catch(e) {}
+function _apClearJobId() {
+  try { localStorage.removeItem('_apCurrentJob'); } catch(e) {}
 }
-function _apLoadPending() {
-  try { return JSON.parse(localStorage.getItem('_apPending') || 'null'); } catch(e) { return null; }
+function _apLoadJobId() {
+  try { return JSON.parse(localStorage.getItem('_apCurrentJob') || 'null'); } catch(e) { return null; }
 }
+
+// Legacy helpers kept for backward compat with loadAttackPath
+function _apSavePending(agentId, agentLabel, targets, shEnabled, sharpHoundDelivered) {}
+function _apClearPending() { _apClearJobId(); }
+function _apLoadPending() { return null; }
 
 function apCollectClose() {
   document.getElementById('ap-collect').style.display = 'none';
   _apCollectAgentId = null;
-  _apClearPending();
+  _apCurrentJobId = null;
+  _apClearJobId();
   // reset to form mode for next open
   document.getElementById('ap-form').style.display = '';
   document.getElementById('ap-progress').style.display = 'none';
@@ -3820,12 +3801,13 @@ function dispatchAPCollect() {
   if (!agentId) { showToast('Select an agent', 'err'); return; }
   var targets = document.getElementById('ap-targets').value.split('\n').map(function(t) { return t.trim(); }).filter(Boolean);
   var agentLabel = document.getElementById('ap-agent').options[document.getElementById('ap-agent').selectedIndex].text;
-  var payload = { targets: targets, segment: document.getElementById('ap-segment').value.trim(), runSharpHound: document.getElementById('ap-sharphound').checked };
+  var payload = { agentId: agentId, targets: targets, segment: document.getElementById('ap-segment').value.trim(), runSharpHound: document.getElementById('ap-sharphound').checked };
   var shEnabled = payload.runSharpHound;
 
-  apicall('/api/attackpath/collect/' + encodeURIComponent(agentId), { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
+  apicall('/api/attackpath/jobs', { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
     _apCollectAgentId = agentId;
-    _apSavePending(agentId, agentLabel, targets, shEnabled, r.sharpHoundDelivered);
+    _apCurrentJobId = r.job && r.job.id;
+    if (_apCurrentJobId) _apSaveJobId(_apCurrentJobId, agentId);
 
     // Switch panel to progress timeline
     document.getElementById('ap-form').style.display = 'none';
@@ -3836,35 +3818,152 @@ function dispatchAPCollect() {
     var shDetail = shEnabled && !r.sharpHoundDelivered ? 'SharpHound was requested but the binary is not configured on the server. TCP-only collection will proceed.' : '';
     var prevNote = r.previousCollectionAt ? ' &mdash; <span style="color:var(--warning)">replaces collection from ' + new Date(r.previousCollectionAt).toLocaleString() + '</span>' : ' &mdash; first collection for this agent';
 
+    var jobStatus = r.job && r.job.status;
     tl.innerHTML =
-      _apStep('done', 'Command dispatched to ' + agentLabel + ' at ' + _apTimestamp(),
-        targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' queued for TCP probe' + shNote + prevNote) +
+      _apStep('done', 'Job created &amp; queued for ' + x(agentLabel) + ' at ' + _apTimestamp(),
+        targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' — job ' + (r.job ? r.job.id.slice(0,8) : '') + prevNote) +
       (shDetail ? _apStep('warn', 'SharpHound notice', shDetail) : '') +
-      _apStep('active', 'Agent is probing the network…',
-        'TCP connect on SMB (445), WinRM (5985), RDP (3389) to each target &mdash; mapping reachability, local admin rights, and active sessions. This typically takes 15&ndash;60 seconds depending on target count and network latency.') +
+      _apStep(jobStatus === 'dispatched' || jobStatus === 'running' ? 'done' : 'active',
+        jobStatus === 'dispatched' ? 'WS command sent — waiting for agent ACK…'
+          : jobStatus === 'running' ? 'Agent acknowledged — probing the network…'
+          : 'Dispatching to agent…',
+        'TCP connect on SMB (445), WinRM (5985), RDP (3389)' + shNote) +
+      _apStep('pending', 'Agent acknowledged (running)', '') +
       _apStep('pending', 'Collection received by server', '') +
       _apStep('pending', 'Graph built &amp; analysis complete', '');
 
+    // Wire retry button if it exists in the panel
+    var retryBtn = document.getElementById('ap-retry-btn');
+    if (retryBtn) { retryBtn.onclick = function() { _apRetryJob(r.job && r.job.id); }; }
   }).catch(function(e) {
     showToast('Dispatch failed: ' + e.message, 'err');
   });
 }
 
-// Called from the WS onmessage handler when the agent reports a completed collection.
+// Retry a failed or timed-out job by creating a new one from the same payload.
+function _apRetryJob(jobId) {
+  if (!jobId) return;
+  apicall('/api/attackpath/jobs/' + jobId + '/retry', { method: 'POST' }).then(function(r) {
+    _apCurrentJobId = r.id;
+    if (r.id) _apSaveJobId(r.id, _apCollectAgentId);
+    showToast('Retry job created — ' + r.id.slice(0,8), 'ok');
+    _apRenderJobState(r);
+  }).catch(function(e) { showToast('Retry failed: ' + e.message, 'err'); });
+}
+
+// Render the timeline from a job object (status, progress, error).
+function _apRenderJobState(job) {
+  if (!job) return;
+  var tl = document.getElementById('ap-timeline');
+  if (!tl) return;
+  var s = job.status;
+  var prog = job.progress;
+  var progDetail = prog && prog.stage ? prog.stage + (prog.targetsTotal > 0
+    ? ' — ' + prog.targetsCompleted + ' of ' + prog.targetsTotal + ' targets'
+    : '') : '';
+
+  var isTerminal = (s === 'completed' || s === 'failed' || s === 'timed_out' || s === 'delivery_failed' || s === 'cancelled');
+
+  // Step states by job status
+  var dispatchState = (s === 'queued') ? 'active' : 'done';
+  var ackState = s === 'queued' ? 'pending' : s === 'dispatched' ? 'active' : 'done';
+  var probeState = (s === 'queued' || s === 'dispatched') ? 'pending' : (s === 'running') ? 'active' : 'done';
+  var uploadState = (s === 'running' && prog && prog.stage === 'uploading') ? 'active' : (s === 'completed') ? 'done' : 'pending';
+  var graphState  = s === 'completed' ? 'done' : 'pending';
+
+  if (s === 'failed' || s === 'timed_out' || s === 'delivery_failed' || s === 'cancelled') {
+    ackState = probeState = uploadState = graphState = 'warn';
+  }
+
+  var statusLabel = {
+    queued: 'Queued — waiting for agent to connect',
+    dispatched: 'WS command sent — waiting for agent ACK (30 s window)…',
+    running: 'Agent acknowledged — ' + (progDetail || 'probing the network…'),
+    completed: 'Done',
+    failed: 'Failed — ' + (job.error || 'unknown error'),
+    timed_out: 'Timed out — agent did not complete within the allocated window. ' + (job.error || ''),
+    delivery_failed: 'Delivery failed — agent did not ACK the WS command. Check agent connectivity.',
+    cancelled: 'Cancelled by operator.'
+  }[s] || s;
+
+  tl.innerHTML =
+    _apStep(dispatchState, 'Job dispatched — ' + job.id.slice(0,8),
+      job.targetCount > 0 ? job.targetCount + ' target' + (job.targetCount === 1 ? '' : 's') + ' to probe' : '') +
+    _apStep(ackState, statusLabel, '') +
+    _apStep(probeState, 'Agent probing…', progDetail) +
+    _apStep(uploadState, 'Uploading results…', '') +
+    _apStep(graphState, 'Graph built &amp; analysis complete', '');
+
+  if (isTerminal) {
+    var doneDiv = document.getElementById('ap-done-actions');
+    if (doneDiv) doneDiv.style.display = 'flex';
+    var retryBtn2 = document.getElementById('ap-retry-btn');
+    if (retryBtn2) retryBtn2.style.display = (s === 'completed') ? 'none' : '';
+    var viewBtn = doneDiv && doneDiv.querySelector('button.btn-primary');
+    if (viewBtn) viewBtn.style.display = (s === 'completed') ? '' : 'none';
+  }
+}
+
+// Called from the WS onmessage handler for job lifecycle changes.
+function _apOnJobUpdate(msg) {
+  if (!msg || !msg.data) return;
+  var job = msg.data;
+  // Only process if this is the panel's current job (or the panel is closed — update silently)
+  if (_apCurrentJobId && job.id !== _apCurrentJobId) return;
+  if (!_apCurrentJobId && job.id) {
+    // Restore from WS if page was reloaded — only if panel is showing progress
+    var saved = _apLoadJobId();
+    if (!saved || saved.jobId !== job.id) return;
+    _apCurrentJobId = job.id;
+    _apCollectAgentId = msg.agentId || job.agentId;
+    document.getElementById('ap-form').style.display = 'none';
+    document.getElementById('ap-progress').style.display = '';
+  }
+  _apRenderJobState(job);
+  if (job.status === 'completed') {
+    loadAttackPath();
+    _apClearJobId();
+    var da = document.getElementById('ap-done-actions');
+    if (da) { da.style.display = 'flex'; var rb = document.getElementById('ap-retry-btn'); if (rb) rb.style.display = 'none'; }
+    showToast('Attack-path collection complete — graph updated.', 'ok');
+  } else if (job.status === 'timed_out') {
+    showToast('Attack-path job timed out — agent did not complete in time.', 'warn');
+  } else if (job.status === 'delivery_failed') {
+    showToast('Attack-path delivery failed — check agent connectivity.', 'err');
+  }
+}
+
+// Called from WS for real-time progress updates from agent heartbeats.
+function _apOnProgress(msg) {
+  if (!msg || !msg.data) return;
+  var d = msg.data;
+  if (_apCurrentJobId && d.jobId !== _apCurrentJobId) return;
+  var tl = document.getElementById('ap-timeline');
+  if (!tl || document.getElementById('ap-progress').style.display === 'none') return;
+  var prog = d.progress || {};
+  var detail = prog.stage ? prog.stage + (prog.targetsTotal > 0 ? ' — ' + prog.targetsCompleted + ' of ' + prog.targetsTotal + ' targets' : '') : '';
+  // Update the probing step in-place (step index 2 in the timeline)
+  var steps = tl.querySelectorAll('div[style*="border-bottom"]');
+  if (steps[2]) {
+    var titleEl = steps[2].querySelector('div[style*="font-weight:600"]');
+    if (titleEl) titleEl.textContent = 'Agent probing… ' + (prog.targetsTotal > 0 ? '(' + prog.targetsCompleted + '/' + prog.targetsTotal + ')' : '');
+  }
+}
+
+// Called from the WS handler when the server confirms a collection is stored (legacy event).
 function _apOnCollected(msg) {
   if (!msg || !msg.data) return;
-  _apClearPending();
+  _apClearJobId();
   var d = msg.data;
   var tl = document.getElementById('ap-timeline');
   if (!tl) return;
+  // If the job update already rendered completion, skip double-render.
+  if (document.getElementById('ap-done-actions').style.display !== 'none') return;
 
-  // Advance the timeline: preserve step 1 text (already rendered), complete remaining steps.
   var label = d.hostname || msg.agentId || 'agent';
   var nodes = d.nodes || 0;
   var edges = d.edges || 0;
-  // Keep the first step's inner HTML (dispatch confirmed) and replace the rest.
   var step1Html = tl.children.length > 0 ? tl.children[0].outerHTML : _apStep('done', 'Command dispatched', '');
-  // Mark step 1 icon as done (swap active/pending icon if it was still spinning)
   step1Html = step1Html.replace(/animation:spin[^"]+/g, '').replace(/<span[^>]*>&#9696;<\/span>/, '<span style="color:var(--success)">&#10003;</span>').replace(/<span[^>]*>&#9675;<\/span>/, '<span style="color:var(--success)">&#10003;</span>');
   tl.innerHTML =
     step1Html +
@@ -3873,10 +3972,9 @@ function _apOnCollected(msg) {
       'The server has built the updated graph. Previous collection (if any) has been superseded by this result.') +
     _apStep('done', 'Graph analysis complete — results are ready', 'Attack path score, lateral movement risk, and domain reachability have been recalculated. Click View Results to review.');
 
-  document.getElementById('ap-done-actions').style.display = '';
-  // auto-refresh the results panel if attackpath tab is visible
+  var doneDiv2 = document.getElementById('ap-done-actions');
+  if (doneDiv2) { doneDiv2.style.display = 'flex'; var rb = document.getElementById('ap-retry-btn'); if (rb) rb.style.display = 'none'; }
   loadAttackPath();
-  // notify even if the panel is closed
   showToast(label + ': ' + nodes + ' nodes collected — attack path updated.', 'ok');
 }
 
@@ -9015,6 +9113,8 @@ function connectWS() {
       if (msg.type === 'scenario_result')    { loadRuns(); loadAgents(); refreshDashboardCampaigns(); }
       if (msg.type === 'tamper_alert')       { showTamperBanner(msg.data); }
       if (msg.type === 'attackpath_collected') { _apOnCollected(msg); }
+      if (msg.type === 'ap_job_update')   { _apOnJobUpdate(msg); }
+      if (msg.type === 'ap_job_progress') { _apOnProgress(msg); }
       if (msg.type === 'revalidation_started')     { _onRevalidationStarted(msg); }
       if (msg.type === 'siem_correlation_complete') { _onSIEMCorrelationComplete(msg); }
     } catch(e) {}

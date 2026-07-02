@@ -24,12 +24,13 @@ import (
 // domain-joined, is written to a temp dir and executed; its raw output zip is
 // uploaded for server-side parsing.
 type AttackPathCollectCommand struct {
-	CollectID       string   `json:"collectId"`
-	Targets         []string `json:"targets"`
-	Segment         string   `json:"segment,omitempty"`
-	RunSharpHound   bool     `json:"runSharpHound,omitempty"`
+	CollectID         string   `json:"collectId"`
+	JobID             string   `json:"jobId,omitempty"` // server-assigned job ID for ACK + progress
+	Targets           []string `json:"targets"`
+	Segment           string   `json:"segment,omitempty"`
+	RunSharpHound     bool     `json:"runSharpHound,omitempty"`
 	SharpHoundPayload *Payload `json:"sharpHoundPayload,omitempty"`
-	SharpHoundArgs  string   `json:"sharpHoundArgs,omitempty"`
+	SharpHoundArgs    string   `json:"sharpHoundArgs,omitempty"`
 }
 
 // Wire types mirroring the server's attackpath.Collection (separate module).
@@ -56,6 +57,7 @@ type apCollection struct {
 	CollectedAt time.Time `json:"collectedAt"`
 	Nodes       []apNode  `json:"nodes"`
 	Edges       []apEdge  `json:"edges"`
+	JobID       string    `json:"jobId,omitempty"` // echoed from command for server-side job completion
 }
 
 // reachProbes maps an edge kind to the TCP port that signals reachability.
@@ -74,6 +76,17 @@ const probeTimeout = 1500 * time.Millisecond
 // never fatal — a failed probe or a missing SharpHound just yields a smaller
 // graph.
 func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
+	// ACK immediately so the server knows we received the job and can transition
+	// dispatched→running. Fire-and-forget — a failed ACK doesn't abort the work.
+	if cmd.JobID != "" {
+		if err := a.postJSON("/api/attackpath/jobs/"+cmd.JobID+"/ack", map[string]string{"agentId": a.id.AgentID}); err != nil {
+			log.Printf("[attackpath] ACK failed (job=%s): %v", cmd.JobID, err)
+		}
+		// Expose the job in heartbeats so the server can track that we're alive.
+		a.setCurrentJob(cmd.JobID, "probing", 0, len(cmd.Targets))
+		defer a.clearCurrentJob()
+	}
+
 	self := strings.ToUpper(shortHostname(a.id.Hostname))
 	role := "endpoint"
 	if hostIsDomainController() {
@@ -84,6 +97,7 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 		Hostname:    a.id.Hostname,
 		Source:      "agent",
 		CollectedAt: time.Now().UTC(),
+		JobID:       cmd.JobID,
 	}
 	col.Nodes = append(col.Nodes, apNode{ID: self, Kind: "host", Label: a.id.Hostname, Role: role, Segment: cmd.Segment})
 
@@ -102,7 +116,8 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 	}
 
 	// Reachability probes against the explicit allowlist only.
-	for _, t := range cmd.Targets {
+	total := len(cmd.Targets)
+	for i, t := range cmd.Targets {
 		t = strings.TrimSpace(t)
 		if t == "" || strings.EqualFold(shortHostname(t), shortHostname(a.id.Hostname)) {
 			continue
@@ -118,12 +133,21 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 		if reached {
 			col.Nodes = append(col.Nodes, apNode{ID: tid, Kind: "host", Label: t})
 		}
+		// Update progress every 5 targets so heartbeats carry fresh counts.
+		if cmd.JobID != "" && (i+1)%5 == 0 {
+			a.setCurrentJob(cmd.JobID, "probing", i+1, total)
+		}
+	}
+
+	if cmd.JobID != "" {
+		a.setCurrentJob(cmd.JobID, "uploading", total, total)
 	}
 
 	if err := a.postJSON("/api/attackpath/collect", col); err != nil {
 		log.Printf("[attackpath] collect submit failed: %v", err)
 	} else {
-		log.Printf("[attackpath] collected %d nodes, %d edges (collectId=%s)", len(col.Nodes), len(col.Edges), cmd.CollectID)
+		log.Printf("[attackpath] collected %d nodes, %d edges (collectId=%s job=%s)",
+			len(col.Nodes), len(col.Edges), cmd.CollectID, cmd.JobID)
 	}
 
 	// SharpHound (domain-joined only). The agent uploads the RAW zip; the server

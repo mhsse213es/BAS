@@ -37,6 +37,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Post("/api/scenarios/runs/{runId}/detections", h.SubmitRunDetections)
 	r.Post("/api/attackpath/collect", h.SubmitAttackPathCollection)
 	r.Post("/api/attackpath/sharphound", h.SubmitAttackPathSharpHound)
+	r.Post("/api/attackpath/jobs/{id}/ack", h.AckAttackPathJob)
 
 	// WebSocket — agents connect here.
 	// Validates agentSecret query param / X-Agent-Token header when configured.
@@ -160,6 +161,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/attackpath/assets", h.GetAttackPathAssets)
 		r.Get("/api/attackpath/schedule", h.GetAttackPathSchedule)
 		r.Get("/api/attackpath/subnet/{agentId}", h.GetAttackPathSubnet)
+		r.Get("/api/attackpath/jobs", h.ListAttackPathJobs)
+		r.Get("/api/attackpath/jobs/{id}", h.GetAttackPathJob)
 
 		// Analyst + Admin only — can trigger scans, run scenarios, and
 		// author custom scenarios from the dashboard.
@@ -167,6 +170,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleAnalyst))
 			r.Post("/api/scan/{agentId}", h.TriggerScan)
 			r.Post("/api/attackpath/collect/{agentId}", h.DispatchAttackPathCollect)
+			r.Post("/api/attackpath/jobs", h.CreateAttackPathJob)
+			r.Post("/api/attackpath/jobs/{id}/cancel", h.CancelAttackPathJob)
+			r.Post("/api/attackpath/jobs/{id}/retry", h.RetryAttackPathJob)
 			r.Post("/api/attackpath/assets", h.SetAttackPathAsset)
 			r.Post("/api/scenarios/{id}/run", h.RunScenario)
 			r.Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)

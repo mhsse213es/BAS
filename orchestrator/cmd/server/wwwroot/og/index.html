@@ -3227,10 +3227,46 @@ function showTab(name) {
 }
 
 // ── Attack Path Validation ─────────────────────────────────────────────────
+var _apCollectAgentId = null;
+var _apCurrentJobId   = null;
+
+function _apSaveJobId(jobId, agentId) {
+  try { localStorage.setItem('_apCurrentJob', JSON.stringify({jobId: jobId, agentId: agentId})); } catch(e) {}
+}
+function _apClearJobId() {
+  try { localStorage.removeItem('_apCurrentJob'); } catch(e) {}
+}
+function _apLoadJobId() {
+  try { return JSON.parse(localStorage.getItem('_apCurrentJob') || 'null'); } catch(e) { return null; }
+}
+// Legacy stubs
+function _apSavePending() {}
+function _apClearPending() { _apClearJobId(); }
+function _apLoadPending() { return null; }
+
 function loadAttackPath() {
   var body = document.getElementById('ap-body');
   if (body) body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
-  apicall('/api/attackpath/summary').then(renderAttackPath).catch(function(e) { showToast(e.message, 'err'); });
+  apicall('/api/attackpath/summary').then(function(d) {
+    var saved = _apLoadJobId();
+    if (saved && saved.jobId && !_apCurrentJobId) {
+      apicall('/api/attackpath/jobs/' + saved.jobId).then(function(job) {
+        var terminal = ['completed','failed','timed_out','delivery_failed','cancelled'];
+        if (terminal.indexOf(job.status) === -1) {
+          _apCurrentJobId = job.id;
+          _apCollectAgentId = job.agentId;
+          showToast('Collection in progress (job ' + job.id.slice(0,8) + ') — ' + job.status, 'ok');
+        } else if (job.status === 'completed') {
+          _apClearJobId();
+          showToast('Attack-path collection completed while you were away — results ready.', 'ok');
+        } else {
+          _apClearJobId();
+          showToast('Attack-path job ended: ' + job.status, 'warn');
+        }
+      }).catch(function() { _apClearJobId(); });
+    }
+    renderAttackPath(d);
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function apColor(score) {
   return score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : score >= 40 ? '#f0883e' : 'var(--danger)';
@@ -3324,12 +3360,47 @@ function dispatchAPCollect() {
   var agentId = document.getElementById('ap-agent').value;
   if (!agentId) { showToast('Select an agent', 'err'); return; }
   var targets = document.getElementById('ap-targets').value.split('\n').map(function(t) { return t.trim(); }).filter(Boolean);
-  var payload = { targets: targets, segment: document.getElementById('ap-segment').value.trim(), runSharpHound: document.getElementById('ap-sharphound').checked };
-  apicall('/api/attackpath/collect/' + encodeURIComponent(agentId), { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
+  var payload = { agentId: agentId, targets: targets, segment: document.getElementById('ap-segment').value.trim(), runSharpHound: document.getElementById('ap-sharphound').checked };
+  var shEnabled = payload.runSharpHound;
+  var agentLabel = (document.getElementById('ap-agent').options[document.getElementById('ap-agent').selectedIndex] || {}).text || agentId;
+  apicall('/api/attackpath/jobs', { method: 'POST', body: JSON.stringify(payload) }).then(function(r) {
+    _apCurrentJobId = r.job && r.job.id;
+    _apCollectAgentId = agentId;
+    if (_apCurrentJobId) _apSaveJobId(_apCurrentJobId, agentId);
     document.getElementById('ap-collect').style.display = 'none';
-    var sh = r.sharpHound ? (r.sharpHoundDelivered ? ' + SharpHound' : ' (SharpHound binary not configured server-side)') : '';
-    showToast('Collection dispatched to ' + agentId + sh + '. Refresh in a moment.', 'ok');
+    var sh = shEnabled ? (r.sharpHoundDelivered ? ' + SharpHound' : ' (SharpHound binary not configured server-side)') : '';
+    var jobShort = _apCurrentJobId ? ' (job ' + _apCurrentJobId.slice(0,8) + ')' : '';
+    showToast('Collection queued for ' + agentLabel + sh + jobShort + '. Refresh the graph once complete.', 'ok');
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function _apOnJobUpdate(msg) {
+  if (!msg || !msg.data) return;
+  var job = msg.data;
+  if (_apCurrentJobId && job.id !== _apCurrentJobId) return;
+  if (job.status === 'completed') {
+    _apClearJobId();
+    _apCurrentJobId = null;
+    loadAttackPath();
+    showToast('Attack-path collection complete — graph updated.', 'ok');
+  } else if (job.status === 'timed_out') {
+    _apClearJobId(); _apCurrentJobId = null;
+    showToast('Attack-path job timed out — agent did not complete in time.', 'warn');
+  } else if (job.status === 'delivery_failed') {
+    _apClearJobId(); _apCurrentJobId = null;
+    showToast('Attack-path delivery failed — check agent connectivity.', 'err');
+  } else if (job.status === 'running') {
+    showToast('Agent acknowledged job — probing network…', 'ok');
+  }
+}
+
+function _apOnCollected(msg) {
+  if (!msg || !msg.data) return;
+  _apClearJobId(); _apCurrentJobId = null;
+  var d = msg.data;
+  var label = d.hostname || msg.agentId || 'agent';
+  loadAttackPath();
+  showToast(label + ': collection complete — ' + (d.nodes || 0) + ' nodes mapped.', 'ok');
 }
 
 var AP_ASSETS = [];
@@ -6835,9 +6906,11 @@ function connectWS() {
     try {
       var msg = JSON.parse(evt.data);
       if (msg.type === 'run_event')       { window.onRunEvent(msg); return; }
-      if (msg.type === 'agentUpdate')     loadAgents();
-      if (msg.type === 'scenario_result') { loadRuns(); loadAgents(); refreshDashboardCampaigns(); }
-      if (msg.type === 'tamper_alert')    { showTamperBanner(msg.data); }
+      if (msg.type === 'agentUpdate')          loadAgents();
+      if (msg.type === 'scenario_result')      { loadRuns(); loadAgents(); refreshDashboardCampaigns(); }
+      if (msg.type === 'tamper_alert')         { showTamperBanner(msg.data); }
+      if (msg.type === 'attackpath_collected') { _apOnCollected(msg); }
+      if (msg.type === 'ap_job_update')        { _apOnJobUpdate(msg); }
     } catch(e) {}
   };
 }
@@ -8188,12 +8261,27 @@ function downloadFullReportPDF(agentId) {
 
 function downloadAuditPack(agentId) {
   showToast('Preparing audit pack…', 'ok');
-  var a = document.createElement('a');
-  a.href = '/api/report/audit-pack?agentId=' + encodeURIComponent(agentId);
-  a.download = 'bas-audit-pack-' + agentId + '.zip';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  fetch('/api/report/audit-pack?agentId=' + encodeURIComponent(agentId), {
+    credentials: 'same-origin'
+  }).then(function(resp) {
+    if (!resp.ok) {
+      return resp.json().then(function(j) {
+        showToast(j.error || 'Audit pack failed', 'err');
+      }).catch(function() {
+        showToast('Audit pack failed (' + resp.status + ')', 'err');
+      });
+    }
+    return resp.blob().then(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'bas-audit-pack-' + agentId + '.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+    });
+  }).catch(function(e) { showToast('Audit pack failed: ' + e.message, 'err'); });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -8452,7 +8540,7 @@ function populateVexAgents() {
     var online = (agents || []).filter(function(a) { return a.status !== 'offline'; });
     sel.innerHTML = '<option value="">Select agent…</option>' +
       online.map(function(a) {
-        return '<option value="' + x(a.id) + '">' + x(a.hostname || a.id) + '</option>';
+        return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + '</option>';
       }).join('');
   }).catch(function() {});
 }

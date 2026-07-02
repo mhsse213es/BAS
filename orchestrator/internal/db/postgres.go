@@ -364,6 +364,31 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at  timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
+		// attackpath_jobs: lifecycle record for every operator-initiated or scheduled
+		// attack-path collection. Tracks the full state machine from queued through
+		// completed/failed so the UI can show real progress and the server can handle
+		// agent disconnects, ACK timeouts, and retries without losing context.
+		`CREATE TABLE IF NOT EXISTS attackpath_jobs (
+			id                  text        PRIMARY KEY,
+			agent_id            text        NOT NULL,
+			status              text        NOT NULL DEFAULT 'queued',
+			payload             jsonb       NOT NULL DEFAULT '{}',
+			created_at          timestamptz NOT NULL DEFAULT NOW(),
+			dispatched_at       timestamptz,
+			ack_at              timestamptz,
+			completed_at        timestamptz,
+			last_heartbeat_at   timestamptz,
+			attempts            int         NOT NULL DEFAULT 0,
+			expires_at          timestamptz NOT NULL,
+			error               text        NOT NULL DEFAULT '',
+			progress            jsonb       NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_attackpath_jobs_agent
+			ON attackpath_jobs(agent_id, status)`,
+		`CREATE INDEX IF NOT EXISTS idx_attackpath_jobs_active
+			ON attackpath_jobs(expires_at)
+			WHERE status NOT IN ('completed','failed','timed_out','delivery_failed','cancelled')`,
+
 		// ── Tamper events: filesystem integrity violations ─────────────────────
 		// Populated by integrity.StartWatcher when any protected file is modified,
 		// deleted, or created unexpectedly. Acknowledged by an admin via the dashboard.
