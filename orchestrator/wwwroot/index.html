@@ -3551,7 +3551,16 @@ function bootApp() {
   loadRuns();
   if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
   injectServerURL();
-  showTab('dashboard');
+  // Restore the last active tab so a reload returns the user to where they were.
+  // If there's a pending attack-path job in localStorage, go straight to that tab
+  // regardless of where the user was, so the progress panel reappears.
+  var lastTab = (function() {
+    try { return localStorage.getItem('bas_last_tab') || 'dashboard'; } catch(e) { return 'dashboard'; }
+  })();
+  var hasPendingJob = (function() {
+    try { var s = JSON.parse(localStorage.getItem('_apCurrentJob') || 'null'); return !!(s && s.jobId); } catch(e) { return false; }
+  })();
+  showTab(hasPendingJob ? 'attackpath' : lastTab);
   if (!window._cmdkBound) {
     window._cmdkBound = true;
     document.addEventListener('keydown', function(e) {
@@ -3575,6 +3584,7 @@ function activateTab(name) {
 }
 
 function showTab(name) {
+  try { localStorage.setItem('bas_last_tab', name); } catch(e) {}
   activateTab(name);
   if (name === 'agents') loadAgents();
   if (name === 'runs') loadRuns();

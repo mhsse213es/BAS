@@ -3192,7 +3192,13 @@ function bootApp() {
   loadRuns();
   if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
   injectServerURL();
-  showTab('dashboard');
+  var lastTab = (function() {
+    try { return localStorage.getItem('bas_last_tab') || 'dashboard'; } catch(e) { return 'dashboard'; }
+  })();
+  var hasPendingJob = (function() {
+    try { var s = JSON.parse(localStorage.getItem('_apCurrentJob') || 'null'); return !!(s && s.jobId); } catch(e) { return false; }
+  })();
+  showTab(hasPendingJob ? 'attackpath' : lastTab);
   if (!window._cmdkBound) {
     window._cmdkBound = true;
     document.addEventListener('keydown', function(e) {
@@ -3205,7 +3211,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','compliance','settings','variants','em'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','compliance','settings','variants','em','attackpath','integrations'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -3216,6 +3222,7 @@ function activateTab(name) {
 }
 
 function showTab(name) {
+  try { localStorage.setItem('bas_last_tab', name); } catch(e) {}
   activateTab(name);
   if (name === 'agents') loadAgents();
   if (name === 'campaigns') closeCampaignDetail();
