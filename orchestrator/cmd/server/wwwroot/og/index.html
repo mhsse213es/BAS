@@ -3262,6 +3262,7 @@ function showTab(name) {
 // ── Attack Path Validation ─────────────────────────────────────────────────
 var _apCollectAgentId = null;
 var _apCurrentJobId   = null;
+var apActiveJobs      = {};   // agentId → {jobId,status} for agent-table badge
 
 function _apSaveJobId(jobId, agentId) {
   try { localStorage.setItem('_apCurrentJob', JSON.stringify({jobId: jobId, agentId: agentId})); } catch(e) {}
@@ -3465,6 +3466,15 @@ var _apFailLabels = {
 function _apOnJobUpdate(msg) {
   if (!msg || !msg.data) return;
   var job = msg.data;
+  var agentId = job.agentId || msg.agentId;
+  // Update per-agent badge in the agents table regardless of panel state.
+  var terminalStates = ['completed','failed','timed_out','delivery_failed','cancelled'];
+  if (terminalStates.indexOf(job.status) !== -1) {
+    delete apActiveJobs[agentId];
+  } else if (agentId) {
+    apActiveJobs[agentId] = { jobId: job.id, status: job.status };
+  }
+  renderAgentRows();
   if (_apCurrentJobId && job.id !== _apCurrentJobId) return;
   if (job.status === 'completed') {
     _apClearJobId(); _apCurrentJobId = null;
@@ -3676,6 +3686,7 @@ function renderAgentRows() {
       '<td>' +
         '<span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span>' +
         (a.state && a.state !== 'active' ? ' <span class="sbadge s-' + x(a.state) + '" title="Lifecycle state">' + x(a.state) + '</span>' : '') +
+        (apActiveJobs[a.agentId] ? ' <span class="sbadge s-running" title="Attack-path collection: ' + x(apActiveJobs[a.agentId].status) + '">&#128202; AP</span>' : '') +
       '</td>' +
       '<td style="color:var(--muted);font-size:0.78rem;white-space:nowrap">' + ago(a.lastUpdate) + '</td>' +
       '<td class="tiny" style="font-family:var(--font-mono)">' + (a.sims || 0) + '</td>' +

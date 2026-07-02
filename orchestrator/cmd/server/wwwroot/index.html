@@ -3802,6 +3802,7 @@ function renderAttackPath(d) {
 
 var _apCollectAgentId = null; // agentId currently being collected (for WS matching)
 var _apCurrentJobId   = null; // current job ID for WS event matching
+var apActiveJobs      = {};   // agentId → {jobId,status} for agent-table badge
 
 // Persist just the current job ID across page reloads so we can restore state from the server.
 function _apSaveJobId(jobId, agentId) {
@@ -4064,14 +4065,23 @@ function _apCancelJob() {
 function _apOnJobUpdate(msg) {
   if (!msg || !msg.data) return;
   var job = msg.data;
-  // Only process if this is the panel's current job (or the panel is closed — update silently)
+  var agentId = job.agentId || msg.agentId;
+  // Update per-agent badge in the agents table regardless of panel state.
+  var terminalStates = ['completed','failed','timed_out','delivery_failed','cancelled'];
+  if (terminalStates.indexOf(job.status) !== -1) {
+    delete apActiveJobs[agentId];
+  } else if (agentId) {
+    apActiveJobs[agentId] = { jobId: job.id, status: job.status };
+  }
+  renderAgentRows();
+  // Only update the progress panel if this is the panel's current job.
   if (_apCurrentJobId && job.id !== _apCurrentJobId) return;
   if (!_apCurrentJobId && job.id) {
     // Restore from WS if page was reloaded — only if panel is showing progress
     var saved = _apLoadJobId();
     if (!saved || saved.jobId !== job.id) return;
     _apCurrentJobId = job.id;
-    _apCollectAgentId = msg.agentId || job.agentId;
+    _apCollectAgentId = agentId;
     document.getElementById('ap-form').style.display = 'none';
     document.getElementById('ap-progress').style.display = '';
   }
@@ -4333,6 +4343,7 @@ function renderAgentRows() {
       '<td>' +
         '<span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span>' +
         (a.state && a.state !== 'active' ? ' <span class="sbadge s-' + x(a.state) + '" title="Lifecycle state">' + x(a.state) + '</span>' : '') +
+        (apActiveJobs[a.agentId] ? ' <span class="sbadge s-running" title="Attack-path collection: ' + x(apActiveJobs[a.agentId].status) + '">&#128202; AP</span>' : '') +
       '</td>' +
       '<td style="color:var(--muted);font-size:0.78rem;white-space:nowrap">' + ago(a.lastUpdate) + '</td>' +
       '<td class="tiny" style="font-family:var(--font-mono)">' + (a.sims || 0) + '</td>' +
