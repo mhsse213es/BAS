@@ -125,6 +125,17 @@ func RunAllChecks() []SimCategory {
 
 // ── Scenario Checks Entry Point ───────────────────────────────────────────────
 
+// knownPostureScenarios lists the scenario IDs this Linux agent build handles
+// via RunScenarioChecks. Keep in sync with the switch cases below.
+func knownPostureScenarios() []string {
+	return []string{
+		"safe-simulation", "cis-ubuntu-l1", "apt36-spearphish", "apt36-kill-chain",
+		"ransomware-drill", "ad-credential-access", "upi-fraud-killchain",
+		"cscrf-mii-drill", "purplesharp-ad-drill", "lolbin-execution",
+		"lolbin-execution-coverage",
+	}
+}
+
 func RunScenarioChecks(scenarioID string) []SimCategory {
 	switch scenarioID {
 	case "safe-simulation":

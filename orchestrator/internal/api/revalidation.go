@@ -95,7 +95,11 @@ func (h *Handler) dispatchRevalidation(ctx context.Context, c revalidationCandid
 		return
 	}
 
-	sc := h.resolveRevalidationScenario(c.lastScenarioID, c.techniqueID)
+	var agentOSVersion string
+	h.db.QueryRow(ctx, `SELECT COALESCE(os_version,'') FROM agents WHERE agent_id = $1`, c.agentID).Scan(&agentOSVersion)
+	agentOS := classifyAgentOS(agentOSVersion)
+
+	sc := h.resolveRevalidationScenario(c.lastScenarioID, c.techniqueID, agentOS)
 	if sc == nil {
 		log.Printf("[reval] no scenario found for technique %s (finding %s) — skipping auto-dispatch",
 			c.techniqueID, c.findingID)
@@ -160,18 +164,22 @@ func (h *Handler) dispatchRevalidation(ctx context.Context, c revalidationCandid
 	})
 }
 
-// resolveRevalidationScenario returns the best scenario to re-run for a technique.
-// Priority: (1) the original scenario that generated the finding; (2) any loaded
-// ART scenario that lists the technique in its ArtTechniques field.
-func (h *Handler) resolveRevalidationScenario(lastScenarioID, techniqueID string) *scenario.Scenario {
+// resolveRevalidationScenario returns the best OS-compatible scenario to re-run
+// for a technique. Priority: (1) the original scenario that generated the finding
+// (if it is OS-compatible); (2) any loaded ART scenario that lists the technique
+// in its ArtTechniques field AND is compatible with agentOS.
+func (h *Handler) resolveRevalidationScenario(lastScenarioID, techniqueID, agentOS string) *scenario.Scenario {
 	if lastScenarioID != "" {
-		if s, ok := h.engine.Get(lastScenarioID); ok {
+		if s, ok := h.engine.Get(lastScenarioID); ok && revalOSCompatible(s.SupportedOS, agentOS) {
 			return s
 		}
 	}
-	// Fall back: scan all scenarios for one that covers this technique.
+	// Fall back: scan all scenarios for one that covers this technique and OS.
 	techUp := strings.ToUpper(techniqueID)
 	for _, s := range h.engine.List() {
+		if !revalOSCompatible(s.SupportedOS, agentOS) {
+			continue
+		}
 		for _, t := range s.ARTTechniques {
 			if strings.ToUpper(t) == techUp {
 				return s
@@ -179,4 +187,18 @@ func (h *Handler) resolveRevalidationScenario(lastScenarioID, techniqueID string
 		}
 	}
 	return nil
+}
+
+// revalOSCompatible reports whether a scenario's supported_os list allows the
+// given agent OS. An empty SupportedOS or empty agentOS means unrestricted.
+func revalOSCompatible(supportedOS []string, agentOS string) bool {
+	if len(supportedOS) == 0 || agentOS == "" {
+		return true
+	}
+	for _, o := range supportedOS {
+		if strings.EqualFold(o, agentOS) {
+			return true
+		}
+	}
+	return false
 }

@@ -1663,7 +1663,11 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 
 	// Derive/refresh persistent findings from this run's results (detection data,
 	// if any, is folded in by the detection-ingest hook). Idempotent.
-	h.upsertFindingsForRun(r.Context(), raw.RunID)
+	// Skip for partial runs: an incomplete result set must not heal (remediate)
+	// findings — only a full, completed run can confirm a control is in place.
+	if !raw.Partial {
+		h.upsertFindingsForRun(r.Context(), raw.RunID)
+	}
 
 	// Auto-populate variant_findings for any ALLOWED results in variant runs.
 	h.upsertVariantFindingsForRun(r.Context(), raw.RunID, raw.ScenarioID, simResults)
