@@ -100,7 +100,7 @@ func main() {
 		log.Printf("[+] EPSS scores seeded: %d CVE entries", n)
 	}
 
-	if err := seedDefaultAdmin(pool, cfg.AdminPassword); err != nil {
+	if err := seedDefaultAdmin(pool, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		log.Printf("[!] admin seed: %v", err)
 	}
 
@@ -367,15 +367,20 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 }
 
 // seedDefaultAdmin creates the admin user on first run if no users exist.
-// Uses the operator-supplied password from BAS_ADMIN_PASSWORD; falls back to
-// "ChangeMe!2024" and forces a password change on next login when not set.
-func seedDefaultAdmin(pool *pgxpool.Pool, adminPassword string) error {
+// adminUsername is used as the login name — if the operator supplied an email
+// via BAS_ADMIN_EMAIL / setup.conf that becomes the username so they can log
+// in with the same value they entered during installation. Falls back to
+// "admin" when no email is configured (dev / manual installs).
+func seedDefaultAdmin(pool *pgxpool.Pool, adminUsername, adminPassword string) error {
 	var count int
 	err := pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM users`).Scan(&count)
 	if err != nil || count > 0 {
 		return err
 	}
 
+	if adminUsername == "" {
+		adminUsername = "admin"
+	}
 	mustChange := false
 	if adminPassword == "" {
 		adminPassword = "ChangeMe!2024"
@@ -387,12 +392,12 @@ func seedDefaultAdmin(pool *pgxpool.Pool, adminPassword string) error {
 		return fmt.Errorf("bcrypt: %w", err)
 	}
 	_, err = pool.Exec(context.Background(),
-		`INSERT INTO users (username, password_hash, role, must_change_pw) VALUES ('admin', $1, 'admin', $2)`,
-		string(hash), mustChange,
+		`INSERT INTO users (username, password_hash, role, must_change_pw) VALUES ($1, $2, 'admin', $3)`,
+		adminUsername, string(hash), mustChange,
 	)
 	if err != nil {
 		return fmt.Errorf("insert admin: %w", err)
 	}
-	log.Println("[+] Default admin seeded (username: admin) — change the password immediately via Settings → Users")
+	log.Printf("[+] Default admin seeded (username: %s) — change the password immediately via Settings → Users", adminUsername)
 	return nil
 }

@@ -22,6 +22,7 @@ type Config struct {
 	CalderaAPIKey     string `json:"caldera_api_key,omitempty"`
 	LicensePath       string `json:"license_path,omitempty"`
 	AdminPassword     string `json:"admin_password,omitempty"`
+	AdminEmail        string `json:"admin_email,omitempty"` // used as the admin username on first-run seed
 
 	// Exercise Engine — SMTP injector + tracker base URL
 	SMTPHost      string `json:"smtp_host,omitempty"`
@@ -143,6 +144,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("BAS_ADMIN_PASSWORD"); v != "" {
 		cfg.AdminPassword = v
+	}
+	if v := os.Getenv("BAS_ADMIN_EMAIL"); v != "" {
+		cfg.AdminEmail = v
 	}
 
 	if cfg.DatabaseURL == "" {

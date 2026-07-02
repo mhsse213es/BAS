@@ -25,6 +25,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// ── Public endpoints (no auth) ────────────────────────────────────────
 	r.Post("/api/auth/login", h.Login)
 	r.Post("/api/auth/logout", h.Logout)
+	r.Post("/api/auth/setup", h.Setup) // first-run admin provisioning (installer)
 
 	// Agent endpoints — protected by optional AGENT_SECRET shared token.
 	// When agentSecret is empty these remain open (backward compat).

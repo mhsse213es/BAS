@@ -268,6 +268,47 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// POST /api/auth/setup — first-run admin provisioning called by the installer.
+// Creates the initial admin user with the supplied email as the username.
+// Returns 409 if any user already exists (idempotent-safe for the installer).
+// No authentication required — the endpoint is only useful before any user exists.
+func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" || req.Password == "" {
+		jsonError(w, "email and password are required", http.StatusBadRequest)
+		return
+	}
+
+	var count int
+	h.db.QueryRow(r.Context(), `SELECT COUNT(*) FROM users`).Scan(&count)
+	if count > 0 {
+		// Already configured — installer treats 409 as success.
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]string{"error": "already configured"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		jsonError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	_, err = h.db.Exec(r.Context(),
+		`INSERT INTO users (username, password_hash, role, must_change_pw) VALUES ($1, $2, 'admin', false)`,
+		req.Email, string(hash),
+	)
+	if err != nil {
+		jsonError(w, "failed to create admin user", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[+] Admin user created via setup endpoint (username: %s)", req.Email)
+	h.auditLogAs(r, "", "user.setup", req.Email, map[string]any{"username": req.Email}, "ok")
+	respond(w, map[string]string{"status": "ok", "username": req.Email})
+}
+
 // POST /api/auth/logout — clears the session cookie.
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
