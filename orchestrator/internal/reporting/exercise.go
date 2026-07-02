@@ -157,6 +157,46 @@ func ExerciseReportHTML(w io.Writer, rep *ExerciseReport) error {
 			}
 			return v
 		},
+		// scoreArc returns the stroke-dasharray fill length for a 276.46-circumference donut (r=44).
+		"scoreArc": func(f float64) float64 {
+			if f < 0 {
+				f = 0
+			}
+			if f > 100 {
+				f = 100
+			}
+			return 276.46 * f / 100
+		},
+		// scoreColor maps an overall score (0-100) to a semantic color.
+		"scoreColor": func(f float64) string {
+			switch {
+			case f >= 70:
+				return "#0d9488"
+			case f >= 40:
+				return "#d29922"
+			default:
+				return "#da3633"
+			}
+		},
+		// pctInt converts a 0..1 fraction to a 0..100 integer (for CSS bar widths).
+		"pctInt": func(f float64) int {
+			v := int(f * 100)
+			if v < 0 {
+				return 0
+			}
+			if v > 100 {
+				return 100
+			}
+			return v
+		},
+		// truncate clips s to n runes and appends "…" when clipped.
+		"truncate": func(s string, n int) string {
+			r := []rune(s)
+			if len(r) <= n {
+				return s
+			}
+			return string(r[:n]) + "…"
+		},
 	}).Parse(exerciseReportTmpl)
 	if err != nil {
 		return fmt.Errorf("template parse: %w", err)
@@ -242,233 +282,488 @@ const exerciseReportTmpl = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Exercise Report — {{.Execution.Name}}</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-  body { font-family: Inter, system-ui, sans-serif; background: #f6f8fa; color: #1e293b; font-size: 13px; line-height: 1.5; }
+/* ── reset ── */
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
+body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
+  color:#1a2332;background:#fff;line-height:1.6;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:.85em}
+:root{--line:#e8edf4;--surface:#f7f9fc;--navy:#0b1420;--ink:#1a2332;--accent:#2563eb;--teal:#0d9488;--muted:#6b7689}
 
-  /* ── Cover ── */
-  .cover { background: #0b1420; color: #fff; padding: 56px 48px 40px; page-break-after: always; }
-  .cover .logo { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #9aa9bc; margin-bottom: 48px; }
-  .cover h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
-  .cover .subtitle { font-size: 15px; color: #9aa9bc; margin-bottom: 48px; }
-  .cover-meta { display: flex; gap: 48px; flex-wrap: wrap; }
-  .cover-meta dt { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #9aa9bc; margin-bottom: 2px; }
-  .cover-meta dd { font-size: 13px; color: #e2e8f0; font-weight: 500; }
-  .status-badge {
-    display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .5px;
-  }
-  .status-completed { background: #14532d; color: #86efac; }
-  .status-aborted   { background: #7f1d1d; color: #fca5a5; }
-  .status-running   { background: #1e3a5f; color: #93c5fd; }
-  .status-default   { background: #1e293b; color: #94a3b8; }
+/* ── page ── */
+.page{width:210mm;min-height:297mm;margin:0 auto;background:#fff;
+  position:relative;page-break-after:always;break-after:page;overflow:hidden}
+.page:last-child{page-break-after:avoid;break-after:avoid}
+@media screen{body{background:#c8d0da;padding:24px 0}
+  .page{box-shadow:0 6px 32px rgba(0,0,0,.22);margin:0 auto 28px;border-radius:2px}}
+@media print{body{background:#fff;padding:0}
+  .page{width:100%;margin:0;box-shadow:none;overflow:visible}
+  .ph,.pf{page-break-inside:avoid}
+  thead{display:table-header-group}}
+@media screen and (max-width:700px){
+  body{padding:0}.page{width:100%;min-height:unset;overflow:visible;border-radius:0;box-shadow:none;margin:0 0 16px}
+  .inner{padding:0 16px 20px;min-height:unset}.cover{min-height:unset;padding-bottom:24px}
+  .kpi-row{grid-template-columns:1fr 1fr}.cover-grid{grid-template-columns:1fr}
+  .two-col{grid-template-columns:1fr}}
 
-  /* ── Layout ── */
-  .page { padding: 40px 48px; }
-  h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #22324a; }
-  h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: #9aa9bc; margin-bottom: 12px; }
-  .section { margin-bottom: 40px; }
+/* ── cover ── */
+.cover{background:#0b1420;min-height:297mm;display:flex;flex-direction:column;position:relative}
+.cover-grain{position:absolute;inset:0;opacity:.03;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:200px}
+.cover-accent{position:absolute;right:-100px;top:-100px;width:520px;height:520px;
+  border-radius:50%;border:70px solid rgba(13,148,136,.07);pointer-events:none}
+.cover-accent2{position:absolute;right:40px;bottom:80px;width:280px;height:280px;
+  border-radius:50%;border:40px solid rgba(37,99,235,.05);pointer-events:none}
+.cover-header{padding:40px 48px 0;position:relative;z-index:1}
+.clogo{display:flex;align-items:center;gap:11px}
+.clogo-mark{width:34px;height:34px;background:linear-gradient(135deg,#0d9488 0%,#2563eb 100%);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:15px;color:#fff;flex-shrink:0}
+.clogo-name{font-size:1.15rem;font-weight:800;color:#fff;letter-spacing:-.03em}
+.clogo-name span{color:#0d9488}
+.clogo-sub{font-size:.58rem;text-transform:uppercase;letter-spacing:.16em;color:#4a6a8a;margin-top:1px}
+.cover-body{flex:1;padding:0 48px;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:1}
+.cover-eyebrow{font-size:.62rem;text-transform:uppercase;letter-spacing:.2em;color:#0d9488;font-weight:700;margin-bottom:12px}
+.cover-title{font-size:2.5rem;font-weight:900;color:#fff;letter-spacing:-.04em;line-height:1.05;margin-bottom:8px}
+.cover-sub{font-size:.95rem;color:#6a8aaa;margin-bottom:32px;line-height:1.6}
+.cover-rule{width:56px;height:3px;background:linear-gradient(90deg,#0d9488,#2563eb);border-radius:2px;margin-bottom:30px}
+.cover-grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid rgba(255,255,255,.07);
+  border-radius:10px;overflow:hidden;margin-bottom:30px}
+.cg-cell{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.05);border-right:1px solid rgba(255,255,255,.05)}
+.cg-cell:nth-child(even){border-right:none}
+.cg-cell:nth-last-child(-n+2){border-bottom:none}
+.cg-label{font-size:.57rem;text-transform:uppercase;letter-spacing:.1em;color:#4a6a8a;font-weight:700;margin-bottom:4px}
+.cg-value{font-size:.84rem;font-weight:600;color:#d8e8f8}
+.cover-badges{display:flex;gap:9px;flex-wrap:wrap}
+.cb{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:20px;font-size:.64rem;font-weight:700;letter-spacing:.04em}
+.cb-conf{background:rgba(220,166,0,.1);border:1px solid rgba(220,166,0,.28);color:#e0bc30}
+.cb-ex{background:rgba(13,148,136,.1);border:1px solid rgba(13,148,136,.25);color:#0d9488}
+.cover-bottom{padding:24px 48px;border-top:1px solid rgba(255,255,255,.06);
+  display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+.cover-bottom-copy{font-size:.62rem;color:#2a4a6a;line-height:1.6}
+.cover-scores{display:flex;gap:22px}
+.cs-item{text-align:center}
+.cs-num{font-size:1.45rem;font-weight:900;line-height:1}
+.cs-lbl{font-size:.56rem;text-transform:uppercase;letter-spacing:.1em;color:#3a5a7a;margin-top:2px}
 
-  /* ── Score cards ── */
-  .score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-  .score-card { background: #152338; border: 1px solid #22324a; border-radius: 8px; padding: 20px; }
-  .score-card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9aa9bc; margin-bottom: 16px; }
-  .score-num { font-size: 36px; font-weight: 700; color: #2f81f7; line-height: 1; }
-  .score-label { font-size: 11px; color: #9aa9bc; margin-top: 4px; }
-  .stat-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #22324a; }
-  .stat-row:last-child { border: 0; }
-  .stat-label { color: #9aa9bc; }
-  .stat-val { font-weight: 500; }
-  .ok   { color: #238636; }
-  .fail { color: #da3633; }
-  .muted { color: #9aa9bc; }
+/* ── inner page scaffolding ── */
+.inner{padding:0 48px 28px;min-height:297mm;display:flex;flex-direction:column}
+.ph{display:flex;justify-content:space-between;align-items:center;
+  padding:16px 0 14px;border-bottom:1px solid #e8edf4;margin-bottom:24px}
+.ph-left{display:flex;align-items:center;gap:16px}
+.ph-logo{font-size:.78rem;font-weight:800;color:#0b1420}
+.ph-logo span{color:#0d9488}
+.ph-sep{width:1px;height:14px;background:#d0d8e4}
+.ph-title{font-size:.68rem;font-weight:600;color:#4a6a8a}
+.ph-right{display:flex;align-items:center;gap:16px}
+.ph-endpoint{font-size:.62rem;color:#7a9ab8}
+.ph-class{font-size:.58rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:.08em;color:#dc2626;background:#fff0f0;border:1px solid #fca5a5;padding:2px 8px;border-radius:3px}
+.pf{margin-top:auto;padding-top:12px;border-top:1px solid #f0f4f8;
+  display:flex;justify-content:space-between;align-items:center;font-size:.58rem;color:#9ab0c8}
 
-  /* ── Progress bar ── */
-  .bar-wrap { height: 6px; background: #22324a; border-radius: 3px; margin-top: 12px; }
-  .bar-fill  { height: 6px; border-radius: 3px; background: #2f81f7; }
+/* ── section headings ── */
+.stag{font-size:.57rem;text-transform:uppercase;letter-spacing:.2em;color:#0d9488;font-weight:700;margin-bottom:5px}
+.stitle{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-.025em;
+  line-height:1.15;margin-bottom:16px;padding-left:13px;border-left:4px solid #0d9488}
+h2{font-size:.88rem;font-weight:800;color:#0b1420;margin:18px 0 10px;letter-spacing:-.01em}
+h3{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6e7681;margin:0 0 10px}
+p{margin-bottom:9px;font-size:.82rem}
 
-  /* ── Timeline ── */
-  .timeline { list-style: none; }
-  .timeline li { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #22324a; }
-  .tl-ts    { width: 180px; flex-shrink: 0; font-family: monospace; font-size: 11px; color: #9aa9bc; padding-top: 2px; }
-  .tl-icon  { width: 20px; flex-shrink: 0; text-align: center; }
-  .tl-body  { flex: 1; }
-  .tl-summary { font-weight: 500; }
-  .tl-meta    { font-size: 11px; color: #9aa9bc; margin-top: 2px; }
-  .ev-info    { color: #2f81f7; }
-  .ev-warn    { color: #d29922; }
-  .ev-success { color: #238636; }
-  .ev-danger  { color: #da3633; }
-  .ev-muted   { color: #9aa9bc; }
+/* ── risk hero ── */
+.risk-hero{background:linear-gradient(130deg,#0b1420 0%,#152338 100%);
+  border-radius:13px;padding:24px 28px;margin-bottom:18px;
+  display:flex;align-items:center;gap:28px;position:relative;overflow:hidden}
+.rh-ring{position:absolute;right:-50px;top:-50px;width:200px;height:200px;
+  border-radius:50%;border:28px solid rgba(255,255,255,.025)}
+.rh-info{flex:1;min-width:0}
 
-  /* ── Evidence table ── */
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { text-align: left; padding: 8px; background: #152338; color: #9aa9bc; font-weight: 600;
-       text-transform: uppercase; letter-spacing: .5px; font-size: 10px; }
-  td { padding: 8px; border-bottom: 1px solid #22324a; vertical-align: top; }
-  tr:last-child td { border-bottom: 0; }
-  .mono { font-family: monospace; font-size: 10px; word-break: break-all; color: #9aa9bc; }
+/* ── kpi cards ── */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid #e7eaf0;border-radius:10px;
+  padding:15px 15px 13px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:var(--c,#0d9488);border-radius:3px 3px 0 0}
+.kpi-lbl{font-size:.57rem;text-transform:uppercase;letter-spacing:.1em;color:#9aa5b5;font-weight:700;margin-bottom:7px}
+.kpi-val{font-size:1.55rem;font-weight:900;color:var(--c,#0d9488);letter-spacing:-.02em;line-height:1;margin-bottom:5px}
+.kpi-sub{font-size:.61rem;color:#9aa5b5}
+.kpi-bar{height:4px;background:#eef1f6;border-radius:2px;margin-top:7px;overflow:hidden}
+.kpi-bar-fill{height:100%;border-radius:2px;background:var(--c,#0d9488)}
 
-  /* ── Chain verification ── */
-  .chain-ok   { background: #0d2d0f; border: 1px solid #238636; border-radius: 6px; padding: 12px 16px; color: #4ade80; }
-  .chain-fail { background: #2d0f0f; border: 1px solid #da3633; border-radius: 6px; padding: 12px 16px; color: #f87171; }
+/* ── two-column ── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+.col-card{background:#f7f9fc;border:1px solid #e8edf4;border-radius:10px;padding:16px 18px}
+.stat-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e8edf4}
+.stat-row:last-child{border-bottom:none}
+.stat-lbl{font-size:.78rem;color:#6b7689}
+.stat-val{font-size:.78rem;font-weight:700;color:#0b1420}
+.stat-val.ok{color:#0d9488}
+.stat-val.fail{color:#da3633}
+.stat-val.muted{color:#9aa9bc;font-weight:400}
 
-  /* ── Print ── */
-  @media print {
-    body { background: #fff; }
-    .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .score-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .page-break { page-break-before: always; }
-  }
+/* ── callouts ── */
+.callout{border-radius:8px;padding:11px 15px;margin-bottom:14px;font-size:.77rem;line-height:1.6;
+  display:flex;gap:10px;align-items:flex-start}
+.callout-icon{flex-shrink:0;margin-top:1px}
+.co-ok{background:#f0fdf9;border:1px solid #d1fae5;color:#065f46}
+.co-danger{background:#fff5f5;border:1px solid #fecaca;color:#991b1b}
+
+/* ── status badge ── */
+.sbadge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:12px;
+  font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.sb-completed{background:#14532d;color:#86efac}
+.sb-aborted,.sb-failed,.sb-cancelled{background:#7f1d1d;color:#fca5a5}
+.sb-running{background:#1e3a5f;color:#93c5fd}
+.sb-default,.sb-pending{background:#1e293b;color:#94a3b8}
+
+/* ── tables ── */
+table{width:100%;border-collapse:collapse;font-size:.77rem;margin-bottom:14px}
+thead th{background:#f0f4f8;color:#5a7a9a;text-transform:uppercase;font-size:.57rem;
+  letter-spacing:.08em;font-weight:700;text-align:left;padding:8px 11px;
+  border-bottom:1.5px solid #e0e7ef}
+td{padding:8px 11px;border-bottom:1px solid #f0f4f8;vertical-align:middle;color:#1a2332}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#f7f9fc}
+tbody tr:nth-child(even) td{background:#fbfcfe}
+.mono{font-family:monospace;font-size:.7rem;color:#5a7a9a;word-break:break-all}
+
+/* ── timeline ── */
+.tl-item{display:flex;gap:14px;padding:11px 0;border-bottom:1px solid #f0f4f8}
+.tl-item:last-child{border-bottom:none}
+.tl-icon-wrap{width:30px;height:30px;border-radius:50%;background:#f0f4f8;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.9rem;margin-top:1px}
+.tl-body{flex:1;min-width:0}
+.tl-summary{font-size:.82rem;font-weight:600;color:#1a2332;line-height:1.4;margin-bottom:2px}
+.tl-ts{font-size:.62rem;color:#9aa9bc;font-family:monospace}
+.tl-meta{font-size:.68rem;color:#9aa9bc;margin-top:3px}
+.ev-info .tl-icon-wrap{background:#dbeafe;color:#1d4ed8}
+.ev-warn .tl-icon-wrap{background:#fef3c7;color:#d97706}
+.ev-success .tl-icon-wrap{background:#d1fae5;color:#059669}
+.ev-danger .tl-icon-wrap{background:#fee2e2;color:#dc2626}
+.ev-muted .tl-icon-wrap{background:#f3f4f6;color:#6b7280}
+.ev-info .tl-summary{color:#1d4ed8}
+.ev-warn .tl-summary{color:#b45309}
+.ev-success .tl-summary{color:#065f46}
+.ev-danger .tl-summary{color:#991b1b}
 </style>
 </head>
 <body>
 
-<!-- Cover -->
+<!-- ══════════════════ COVER ══════════════════ -->
+<div class="page">
 <div class="cover">
-  <div class="logo">Audspect · Exercise Report</div>
-  <h1>{{.Execution.Name}}</h1>
-  <div class="subtitle">Cyber Crisis Exercise — Post-Execution Report</div>
-  <dl class="cover-meta">
-    <div>
-      <dt>Execution ID</dt>
-      <dd>{{.Execution.ID}}</dd>
-    </div>
-    <div>
-      <dt>Plan</dt>
-      <dd>{{.Plan.Name}}</dd>
-    </div>
-    <div>
-      <dt>Status</dt>
-      <dd>
-        {{$s := lower .Execution.Status}}
-        <span class="status-badge status-{{$s}}">{{.Execution.Status}}</span>
-      </dd>
-    </div>
-    {{if .Execution.StartedAt}}<div>
-      <dt>Started</dt>
-      <dd>{{fmtTime .Execution.StartedAt}}</dd>
-    </div>{{end}}
-    {{if .Execution.CompletedAt}}<div>
-      <dt>Completed</dt>
-      <dd>{{fmtTime .Execution.CompletedAt}}</dd>
-    </div>{{end}}
-    <div>
-      <dt>Evidence Chain</dt>
-      <dd>{{if .ChainOK}}✅ Intact{{else}}⚠ {{.ChainErr}}{{end}}</dd>
-    </div>
-  </dl>
-</div>
+  <div class="cover-grain"></div>
+  <div class="cover-accent"></div>
+  <div class="cover-accent2"></div>
 
-<!-- Score Summary -->
-<div class="page section">
-  <h2>Exercise Score</h2>
-  {{if .Score}}
-  <div class="score-grid">
-    <!-- Overall -->
-    <div class="score-card">
-      <div class="score-card-title">Overall</div>
-      <div class="score-num">{{scoreBar .Score.Overall}}</div>
-      <div class="score-label">/ 100</div>
-      <div class="bar-wrap"><div class="bar-fill" style="width:{{scoreBar .Score.Overall}}%"></div></div>
-    </div>
-
-    <!-- Human Risk -->
-    <div class="score-card">
-      <div class="score-card-title">Human Risk</div>
-      <div class="stat-row"><span class="stat-label">Sent</span><span class="stat-val">{{.Score.Human.Sent}}</span></div>
-      <div class="stat-row"><span class="stat-label">Opened</span><span class="stat-val">{{.Score.Human.Opened}}</span></div>
-      <div class="stat-row"><span class="stat-label">Clicked</span><span class="stat-val">{{.Score.Human.Clicked}}</span></div>
-      <div class="stat-row"><span class="stat-label">Reported</span><span class="stat-val">{{.Score.Human.Reported}}</span></div>
-      <div class="stat-row"><span class="stat-label">Click Rate</span><span class="stat-val {{if gt .Score.Human.ClickRate 0.3}}fail{{else}}ok{{end}}">{{pct .Score.Human.ClickRate}}</span></div>
-      <div class="stat-row"><span class="stat-label">Report Rate</span><span class="stat-val {{if gt .Score.Human.ReportRate 0.5}}ok{{else}}fail{{end}}">{{pct .Score.Human.ReportRate}}</span></div>
-    </div>
-
-    <!-- Technical -->
-    <div class="score-card">
-      <div class="score-card-title">Technical Detection</div>
-      <div class="stat-row"><span class="stat-label">EDR Detected</span>
-        <span class="stat-val {{if .Score.Technical.EDRDetected}}ok{{else}}fail{{end}}">{{if .Score.Technical.EDRDetected}}Yes{{else}}No{{end}}</span></div>
-      <div class="stat-row"><span class="stat-label">SIEM Alerted</span>
-        <span class="stat-val {{if .Score.Technical.SIEMAlerted}}ok{{else}}fail{{end}}">{{if .Score.Technical.SIEMAlerted}}Yes{{else}}No{{end}}</span></div>
-      <div class="stat-row"><span class="stat-label">Ticket Created</span>
-        <span class="stat-val {{if .Score.Technical.TicketCreated}}ok{{else}}muted{{end}}">{{if .Score.Technical.TicketCreated}}Yes{{else}}—{{end}}</span></div>
-      <div class="stat-row"><span class="stat-label">MTTD</span>
-        <span class="stat-val">{{fmtDur .Score.Technical.MTTDSeconds}}</span></div>
-      <div class="stat-row"><span class="stat-label">MTTR</span>
-        <span class="stat-val">{{fmtDur .Score.Technical.MTTRSeconds}}</span></div>
-    </div>
-  </div>
-  {{else}}<p class="muted">Score not yet computed.</p>{{end}}
-</div>
-
-<!-- Timeline -->
-<div class="page section page-break">
-  <h2>Exercise Timeline</h2>
-  {{if .Timeline}}
-  <ul class="timeline">
-    {{range .Timeline}}
-    <li>
-      <span class="tl-ts">{{fmtTime .TS}}</span>
-      <span class="tl-icon">{{kindIcon .Kind}}</span>
-      <div class="tl-body">
-        <div class="tl-summary {{evClass .Summary}}">{{.Summary}}</div>
-        {{if .Actor}}<div class="tl-meta">actor: {{.Actor}}{{if .StepID}} · step: {{.StepID}}{{end}}</div>{{end}}
+  <div class="cover-header">
+    <div class="clogo">
+      <div class="clogo-mark">A</div>
+      <div>
+        <div class="clogo-name">Aud<span>spect</span> BAS</div>
+        <div class="clogo-sub">Breach &amp; Attack Simulation Platform</div>
       </div>
-    </li>
-    {{end}}
-  </ul>
-  {{else}}<p class="muted">No timeline events.</p>{{end}}
-</div>
-
-<!-- Steps Summary -->
-<div class="page section page-break">
-  <h2>Step Results</h2>
-  {{if .Steps}}
-  <table>
-    <thead><tr><th>#</th><th>Step ID</th><th>Type</th><th>Status</th><th>Started</th><th>Completed</th></tr></thead>
-    <tbody>
-    {{range $i, $s := .Steps}}
-    <tr>
-      <td>{{seq $i}}</td>
-      <td>{{$s.StepID}}</td>
-      <td>{{$s.StepType}}</td>
-      <td class="{{evClass (lower $s.Status)}}">{{$s.Status}}</td>
-      <td>{{if $s.StartedAt}}{{fmtTime $s.StartedAt}}{{else}}—{{end}}</td>
-      <td>{{if $s.CompletedAt}}{{fmtTime $s.CompletedAt}}{{else}}—{{end}}</td>
-    </tr>
-    {{end}}
-    </tbody>
-  </table>
-  {{else}}<p class="muted">No steps recorded.</p>{{end}}
-</div>
-
-<!-- Evidence Chain -->
-<div class="page section page-break">
-  <h2>Evidence Chain</h2>
-  <div class="{{if .ChainOK}}chain-ok{{else}}chain-fail{{end}}" style="margin-bottom:24px;">
-    {{if .ChainOK}}✅ Evidence chain is intact — all {{len .Evidence}} record(s) verified.
-    {{else}}⚠ Chain integrity failure: {{.ChainErr}}{{end}}
+    </div>
   </div>
-  {{if .Evidence}}
-  <table>
-    <thead><tr><th>Seq</th><th>Type</th><th>Actor</th><th>SHA-256</th><th>Prev Hash</th><th>Time</th></tr></thead>
-    <tbody>
-    {{range .Evidence}}
-    <tr>
-      <td>{{.Seq}}</td>
-      <td>{{.EvidenceType}}</td>
-      <td>{{.Actor}}</td>
-      <td class="mono">{{.SHA256}}</td>
-      <td class="mono">{{.PrevHash}}</td>
-      <td>{{fmtTime .CreatedAt}}</td>
-    </tr>
+
+  <div class="cover-body">
+    <div class="cover-eyebrow">Cyber Crisis Exercise Report</div>
+    <div class="cover-title">{{.Execution.Name}}</div>
+    <div class="cover-sub">{{.Plan.Name}}<br>Post-Execution Assessment — Confidential</div>
+    <div class="cover-rule"></div>
+
+    <div class="cover-grid">
+      <div class="cg-cell">
+        <div class="cg-label">Execution ID</div>
+        <div class="cg-value" style="font-size:.74rem;font-family:monospace">{{.Execution.ID}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Plan</div>
+        <div class="cg-value">{{.Plan.Name}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Status</div>
+        <div class="cg-value">
+          {{$s := lower .Execution.Status}}<span class="sbadge sb-{{$s}}">{{.Execution.Status}}</span>
+        </div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Evidence Chain</div>
+        <div class="cg-value" style="color:{{if .ChainOK}}#0d9488{{else}}#da3633{{end}};font-weight:700">
+          {{if .ChainOK}}&#10003; Intact{{else}}&#9888; Compromised{{end}}
+        </div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Started</div>
+        <div class="cg-value">{{if .Execution.StartedAt}}{{fmtTime .Execution.StartedAt}}{{else}}—{{end}}</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Completed</div>
+        <div class="cg-value">{{if .Execution.CompletedAt}}{{fmtTime .Execution.CompletedAt}}{{else}}—{{end}}</div>
+      </div>
+    </div>
+
+    <div class="cover-badges">
+      <div class="cb cb-conf">&#9888; CONFIDENTIAL — Authorised Recipients Only</div>
+      <div class="cb cb-ex">&#9654; Cyber Crisis Exercise &nbsp;&#183;&nbsp; Audspect BAS</div>
+    </div>
+  </div>
+
+  <div class="cover-bottom">
+    <div class="cover-bottom-copy">
+      Audspect BAS Platform &nbsp;&#183;&nbsp; Classification: CONFIDENTIAL<br>
+      This document contains sensitive exercise data. Do not distribute without authorisation.
+    </div>
+    {{if .Score}}
+    <div class="cover-scores">
+      <div class="cs-item">
+        <div class="cs-num" style="color:{{scoreColor .Score.Overall}}">{{scoreBar .Score.Overall}}</div>
+        <div class="cs-lbl">Overall Score</div>
+      </div>
+      <div class="cs-item">
+        <div class="cs-num" style="color:#2563eb">{{len .Steps}}</div>
+        <div class="cs-lbl">Steps</div>
+      </div>
+      <div class="cs-item">
+        <div class="cs-num" style="color:#9aa9bc">{{len .Evidence}}</div>
+        <div class="cs-lbl">Evidence</div>
+      </div>
+    </div>
     {{end}}
-    </tbody>
-  </table>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════ SCORE SUMMARY ════════════════ -->
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{.Execution.Name}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{.Plan.Name}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 1</div>
+<div class="stitle">Exercise Score Summary</div>
+
+{{if .Score}}
+<div class="risk-hero">
+  <div class="rh-ring"></div>
+  <svg width="120" height="120" viewBox="0 0 100 100" style="flex-shrink:0">
+    <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
+    <circle cx="50" cy="50" r="44" fill="none"
+      stroke="{{scoreColor .Score.Overall}}"
+      stroke-width="10" stroke-linecap="round"
+      stroke-dasharray="{{scoreArc .Score.Overall}} 276.46"
+      transform="rotate(-90 50 50)"/>
+    <text x="50" y="47" text-anchor="middle" fill="#fff" font-size="20" font-weight="700" font-family="system-ui,sans-serif">{{scoreBar .Score.Overall}}</text>
+    <text x="50" y="61" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="8" font-family="system-ui,sans-serif">/ 100</text>
+  </svg>
+  <div class="rh-info">
+    <div style="color:rgba(255,255,255,0.45);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">Overall Exercise Score</div>
+    <div style="font-size:2.2rem;font-weight:900;color:{{scoreColor .Score.Overall}};line-height:1">
+      {{scoreBar .Score.Overall}}<span style="font-size:1rem;color:rgba(255,255,255,0.3);font-weight:400"> / 100</span>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:9px;flex-wrap:wrap">
+      <span style="padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:600;background:rgba(37,99,235,0.15);color:#60a5fa;border:1px solid rgba(37,99,235,0.3)">&#128100; Human Risk</span>
+      <span style="padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:600;background:rgba(13,148,136,0.15);color:#2dd4bf;border:1px solid rgba(13,148,136,0.3)">&#128737; Technical Detection</span>
+      {{if .ChainOK}}<span style="padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:600;background:rgba(34,197,94,0.12);color:#4ade80;border:1px solid rgba(34,197,94,0.25)">&#128274; Chain Intact</span>{{end}}
+    </div>
+  </div>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi" style="--c:#da3633">
+    <div class="kpi-lbl">Click Rate</div>
+    <div class="kpi-val">{{pct .Score.Human.ClickRate}}</div>
+    <div class="kpi-sub">{{.Score.Human.Clicked}} of {{.Score.Human.Sent}} recipients</div>
+    <div class="kpi-bar"><div class="kpi-bar-fill" style="width:{{pctInt .Score.Human.ClickRate}}%"></div></div>
+  </div>
+  <div class="kpi" style="--c:#0d9488">
+    <div class="kpi-lbl">Report Rate</div>
+    <div class="kpi-val">{{pct .Score.Human.ReportRate}}</div>
+    <div class="kpi-sub">{{.Score.Human.Reported}} of {{.Score.Human.Sent}} reported</div>
+    <div class="kpi-bar"><div class="kpi-bar-fill" style="width:{{pctInt .Score.Human.ReportRate}}%"></div></div>
+  </div>
+  <div class="kpi" style="--c:#2563eb">
+    <div class="kpi-lbl">Mean Time to Detect</div>
+    <div class="kpi-val" style="font-size:1.05rem">{{fmtDur .Score.Technical.MTTDSeconds}}</div>
+    <div class="kpi-sub">incident → alert</div>
+  </div>
+  <div class="kpi" style="--c:#6366f1">
+    <div class="kpi-lbl">Mean Time to Respond</div>
+    <div class="kpi-val" style="font-size:1.05rem">{{fmtDur .Score.Technical.MTTRSeconds}}</div>
+    <div class="kpi-sub">alert → containment</div>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="col-card">
+    <h3>Human Risk</h3>
+    <div class="stat-row"><span class="stat-lbl">Emails Sent</span><span class="stat-val">{{.Score.Human.Sent}}</span></div>
+    <div class="stat-row"><span class="stat-lbl">Opened</span><span class="stat-val">{{.Score.Human.Opened}}</span></div>
+    <div class="stat-row"><span class="stat-lbl">Clicked</span>
+      <span class="stat-val {{if gt .Score.Human.ClickRate 0.3}}fail{{else}}ok{{end}}">{{.Score.Human.Clicked}}</span></div>
+    <div class="stat-row"><span class="stat-lbl">Reported</span>
+      <span class="stat-val {{if gt .Score.Human.ReportRate 0.5}}ok{{else}}fail{{end}}">{{.Score.Human.Reported}}</span></div>
+    <div class="stat-row"><span class="stat-lbl">Click Rate</span>
+      <span class="stat-val {{if gt .Score.Human.ClickRate 0.3}}fail{{else}}ok{{end}}">{{pct .Score.Human.ClickRate}}</span></div>
+    <div class="stat-row"><span class="stat-lbl">Report Rate</span>
+      <span class="stat-val {{if gt .Score.Human.ReportRate 0.5}}ok{{else}}fail{{end}}">{{pct .Score.Human.ReportRate}}</span></div>
+  </div>
+  <div class="col-card">
+    <h3>Technical Detection</h3>
+    <div class="stat-row"><span class="stat-lbl">EDR Detected</span>
+      <span class="stat-val {{if .Score.Technical.EDRDetected}}ok{{else}}fail{{end}}">{{if .Score.Technical.EDRDetected}}Yes{{else}}No{{end}}</span></div>
+    <div class="stat-row"><span class="stat-lbl">SIEM Alerted</span>
+      <span class="stat-val {{if .Score.Technical.SIEMAlerted}}ok{{else}}fail{{end}}">{{if .Score.Technical.SIEMAlerted}}Yes{{else}}No{{end}}</span></div>
+    <div class="stat-row"><span class="stat-lbl">Ticket Created</span>
+      <span class="stat-val {{if .Score.Technical.TicketCreated}}ok{{else}}muted{{end}}">{{if .Score.Technical.TicketCreated}}Yes{{else}}—{{end}}</span></div>
+    <div class="stat-row"><span class="stat-lbl">MTTD</span><span class="stat-val">{{fmtDur .Score.Technical.MTTDSeconds}}</span></div>
+    <div class="stat-row"><span class="stat-lbl">MTTR</span><span class="stat-val">{{fmtDur .Score.Technical.MTTRSeconds}}</span></div>
+  </div>
+</div>
+{{else}}
+<p style="color:#9aa9bc;font-style:italic;padding:24px 0">Score not yet computed for this execution.</p>
+{{end}}
+
+<div class="pf">
+  <span>Audspect BAS &mdash; Cyber Crisis Exercise</span>
+  <span>{{.Execution.Name}}</span>
+  <span>CONFIDENTIAL</span>
+</div>
+</div>
+</div>
+
+<!-- ════════════════ TIMELINE ════════════════ -->
+{{if .Timeline}}
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{.Execution.Name}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">Exercise Timeline</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 2</div>
+<div class="stitle">Exercise Timeline</div>
+
+{{range .Timeline}}
+{{$cls := evClass .Summary}}
+<div class="tl-item {{$cls}}">
+  <div class="tl-icon-wrap">{{kindIcon .Kind}}</div>
+  <div class="tl-body">
+    <div class="tl-summary">{{.Summary}}</div>
+    <div class="tl-ts">{{fmtTime .TS}}</div>
+    {{if or .Actor .StepID}}
+    <div class="tl-meta">
+      {{if .Actor}}actor: {{.Actor}}{{end}}{{if and .Actor .StepID}} &middot; {{end}}{{if .StepID}}step: {{.StepID}}{{end}}{{if .StepType}} ({{.StepType}}){{end}}
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+<div class="pf">
+  <span>Audspect BAS &mdash; Cyber Crisis Exercise</span>
+  <span>{{.Execution.Name}}</span>
+  <span>CONFIDENTIAL</span>
+</div>
+</div>
+</div>
+{{end}}
+
+<!-- ════════════ STEPS + EVIDENCE ════════════ -->
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{.Execution.Name}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">Steps &amp; Evidence Chain</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 3</div>
+<div class="stitle">Step Results</div>
+
+{{if .Steps}}
+<table>
+  <thead><tr><th>#</th><th>Step ID</th><th>Type</th><th>Status</th><th>Started</th><th>Completed</th></tr></thead>
+  <tbody>
+  {{range $i, $s := .Steps}}
+  {{$lc := lower $s.Status}}
+  <tr>
+    <td style="color:#9aa9bc">{{seq $i}}</td>
+    <td style="font-family:monospace;font-size:.72rem">{{$s.StepID}}</td>
+    <td style="color:#6b7689">{{$s.StepType}}</td>
+    <td><span class="sbadge sb-{{$lc}}">{{$s.Status}}</span></td>
+    <td style="color:#6b7689;font-size:.72rem">{{if $s.StartedAt}}{{fmtTime $s.StartedAt}}{{else}}—{{end}}</td>
+    <td style="color:#6b7689;font-size:.72rem">{{if $s.CompletedAt}}{{fmtTime $s.CompletedAt}}{{else}}—{{end}}</td>
+  </tr>
   {{end}}
+  </tbody>
+</table>
+{{else}}
+<p style="color:#9aa9bc;font-style:italic">No step records for this execution.</p>
+{{end}}
+
+<div class="stag" style="margin-top:24px">Section 4</div>
+<div class="stitle">Evidence Chain</div>
+
+{{if .ChainOK}}
+<div class="callout co-ok">
+  <span class="callout-icon">&#128274;</span>
+  <span>Evidence chain is intact — all {{len .Evidence}} record(s) verified successfully. No tampering detected.</span>
+</div>
+{{else}}
+<div class="callout co-danger">
+  <span class="callout-icon">&#9888;</span>
+  <span><strong>Chain integrity failure:</strong> {{.ChainErr}}</span>
+</div>
+{{end}}
+
+{{if .Evidence}}
+<table>
+  <thead><tr><th>Seq</th><th>Type</th><th>Actor</th><th>SHA-256 (truncated)</th><th>Prev Hash</th><th>Timestamp</th></tr></thead>
+  <tbody>
+  {{range .Evidence}}
+  <tr>
+    <td style="color:#9aa9bc">{{.Seq}}</td>
+    <td>{{.EvidenceType}}</td>
+    <td>{{.Actor}}</td>
+    <td class="mono">{{truncate .SHA256 20}}</td>
+    <td class="mono">{{truncate .PrevHash 20}}</td>
+    <td style="color:#6b7689;font-size:.72rem">{{fmtTime .CreatedAt}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+<div class="pf">
+  <span>Audspect BAS &mdash; Cyber Crisis Exercise</span>
+  <span>{{.Execution.Name}}</span>
+  <span>CONFIDENTIAL</span>
+</div>
+</div>
 </div>
 
 </body>
