@@ -43,7 +43,19 @@ type HeartbeatJobProgress struct {
 	Stage            string `json:"stage"`
 	TargetsCompleted int    `json:"targetsCompleted"`
 	TargetsTotal     int    `json:"targetsTotal"`
+	ProgressPercent  int    `json:"progressPercent"` // 0–100, pre-computed
 }
+
+// Execution stage constants — must match server-side APStage* constants.
+const (
+	APStageInitializing        = "initializing"
+	APStageProbing             = "probing"
+	APStageEnumeratingAdmins   = "enumerating_admins"
+	APStageEnumeratingSessions = "enumerating_sessions"
+	APStageRunningSharpHound   = "running_sharphound"
+	APStageBuildingGraph       = "building_graph"
+	APStageUploading           = "uploading"
+)
 
 // HeartbeatResponse is returned by the server on every POST /api/heartbeat.
 // The agent must act on State immediately: quarantined agents must not run scenarios.

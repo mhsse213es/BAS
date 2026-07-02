@@ -376,18 +376,43 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_at          timestamptz NOT NULL DEFAULT NOW(),
 			dispatched_at       timestamptz,
 			ack_at              timestamptz,
+			started_at          timestamptz,
 			completed_at        timestamptz,
 			last_heartbeat_at   timestamptz,
 			attempts            int         NOT NULL DEFAULT 0,
 			expires_at          timestamptz NOT NULL,
 			error               text        NOT NULL DEFAULT '',
-			progress            jsonb       NOT NULL DEFAULT '{}'
+			progress            jsonb       NOT NULL DEFAULT '{}',
+			metrics             jsonb       NOT NULL DEFAULT '{}'
 		)`,
+		// Idempotent migrations for tables that may already exist without these columns.
+		`ALTER TABLE attackpath_jobs ADD COLUMN IF NOT EXISTS started_at timestamptz`,
+		`ALTER TABLE attackpath_jobs ADD COLUMN IF NOT EXISTS metrics jsonb NOT NULL DEFAULT '{}'`,
 		`CREATE INDEX IF NOT EXISTS idx_attackpath_jobs_agent
 			ON attackpath_jobs(agent_id, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_attackpath_jobs_active
 			ON attackpath_jobs(expires_at)
 			WHERE status NOT IN ('completed','failed','timed_out','delivery_failed','cancelled')`,
+
+		// attackpath_collection_history: one row per completed (or failed) collection
+		// event. The full graph payload stays in attackpath_collections (latest only);
+		// history stores only the lightweight metadata operators need for audit and
+		// troubleshooting without growing unboundedly.
+		`CREATE TABLE IF NOT EXISTS attackpath_collection_history (
+			id              text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			agent_id        text        NOT NULL,
+			hostname        text        NOT NULL DEFAULT '',
+			source          text        NOT NULL DEFAULT 'agent',
+			collected_at    timestamptz NOT NULL,
+			node_count      int         NOT NULL DEFAULT 0,
+			edge_count      int         NOT NULL DEFAULT 0,
+			sharphound      boolean     NOT NULL DEFAULT false,
+			duration_ms     bigint      NOT NULL DEFAULT 0,
+			status          text        NOT NULL DEFAULT 'completed',
+			error_msg       text        NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_aph_agent_time
+			ON attackpath_collection_history(agent_id, collected_at DESC)`,
 
 		// ── Tamper events: filesystem integrity violations ─────────────────────
 		// Populated by integrity.StartWatcher when any protected file is modified,

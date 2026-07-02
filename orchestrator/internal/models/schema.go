@@ -256,6 +256,7 @@ type HeartbeatJobProgress struct {
 	Stage            string `json:"stage"`
 	TargetsCompleted int    `json:"targetsCompleted"`
 	TargetsTotal     int    `json:"targetsTotal"`
+	ProgressPercent  int    `json:"progressPercent"` // 0–100, pre-computed by agent
 }
 
 // HeartbeatResponse is returned to the agent after each heartbeat.

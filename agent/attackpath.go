@@ -82,8 +82,8 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 		if err := a.postJSON("/api/attackpath/jobs/"+cmd.JobID+"/ack", map[string]string{"agentId": a.id.AgentID}); err != nil {
 			log.Printf("[attackpath] ACK failed (job=%s): %v", cmd.JobID, err)
 		}
-		// Expose the job in heartbeats so the server can track that we're alive.
-		a.setCurrentJob(cmd.JobID, "probing", 0, len(cmd.Targets))
+		// initializing: post-ACK setup before probing begins
+		a.setCurrentJob(cmd.JobID, APStageInitializing, 0, len(cmd.Targets))
 		defer a.clearCurrentJob()
 	}
 
@@ -102,6 +102,9 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 	col.Nodes = append(col.Nodes, apNode{ID: self, Kind: "host", Label: a.id.Hostname, Role: role, Segment: cmd.Segment})
 
 	// Local-admin principals → admin-to self.
+	if cmd.JobID != "" {
+		a.setCurrentJob(cmd.JobID, APStageEnumeratingAdmins, 0, len(cmd.Targets))
+	}
 	for _, p := range collectLocalAdmins() {
 		id := strings.ToUpper(p)
 		col.Nodes = append(col.Nodes, apNode{ID: id, Kind: "user", Label: p})
@@ -109,6 +112,9 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 	}
 
 	// Interactive sessions → self has-session user (creds harvestable here).
+	if cmd.JobID != "" {
+		a.setCurrentJob(cmd.JobID, APStageEnumeratingSessions, 0, len(cmd.Targets))
+	}
 	for _, u := range collectSessions(a.id.Username) {
 		id := strings.ToUpper(u)
 		col.Nodes = append(col.Nodes, apNode{ID: id, Kind: "user", Label: u})
@@ -117,6 +123,9 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 
 	// Reachability probes against the explicit allowlist only.
 	total := len(cmd.Targets)
+	if cmd.JobID != "" {
+		a.setCurrentJob(cmd.JobID, APStageProbing, 0, total)
+	}
 	for i, t := range cmd.Targets {
 		t = strings.TrimSpace(t)
 		if t == "" || strings.EqualFold(shortHostname(t), shortHostname(a.id.Hostname)) {
@@ -135,14 +144,17 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 		}
 		// Update progress every 5 targets so heartbeats carry fresh counts.
 		if cmd.JobID != "" && (i+1)%5 == 0 {
-			a.setCurrentJob(cmd.JobID, "probing", i+1, total)
+			a.setCurrentJob(cmd.JobID, APStageProbing, i+1, total)
 		}
 	}
 
 	if cmd.JobID != "" {
-		a.setCurrentJob(cmd.JobID, "uploading", total, total)
+		a.setCurrentJob(cmd.JobID, APStageBuildingGraph, total, total)
 	}
 
+	if cmd.JobID != "" {
+		a.setCurrentJob(cmd.JobID, APStageUploading, total, total)
+	}
 	if err := a.postJSON("/api/attackpath/collect", col); err != nil {
 		log.Printf("[attackpath] collect submit failed: %v", err)
 	} else {

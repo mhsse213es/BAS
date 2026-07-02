@@ -43,19 +43,26 @@ type Agent struct {
 	runWG sync.WaitGroup // tracks in-flight scenario/scan goroutines so shutdown can wait for them to spool a Partial
 
 	// Attack-path job progress reported in each heartbeat (guarded by mu).
-	currentJobID         string
-	currentJobStage      string
-	currentJobCompleted  int
-	currentJobTotal      int
+	currentJobID        string
+	currentJobStage     string
+	currentJobCompleted int
+	currentJobTotal     int
+	currentJobPercent   int
 }
 
 // setCurrentJob records the active attack-path job so heartbeats carry progress.
+// progressPercent is computed by the caller; pass 0 when unknown.
 func (a *Agent) setCurrentJob(jobID, stage string, completed, total int) {
+	pct := 0
+	if total > 0 {
+		pct = completed * 100 / total
+	}
 	a.mu.Lock()
 	a.currentJobID = jobID
 	a.currentJobStage = stage
 	a.currentJobCompleted = completed
 	a.currentJobTotal = total
+	a.currentJobPercent = pct
 	a.mu.Unlock()
 }
 
@@ -66,6 +73,7 @@ func (a *Agent) clearCurrentJob() {
 	a.currentJobStage = ""
 	a.currentJobCompleted = 0
 	a.currentJobTotal = 0
+	a.currentJobPercent = 0
 	a.mu.Unlock()
 }
 
@@ -193,6 +201,7 @@ func (a *Agent) sendHeartbeat(status string) {
 	jobStage := a.currentJobStage
 	jobCompleted := a.currentJobCompleted
 	jobTotal := a.currentJobTotal
+	jobPercent := a.currentJobPercent
 	a.mu.Unlock()
 	hb := Heartbeat{
 		AgentID:       a.id.AgentID,
@@ -216,6 +225,7 @@ func (a *Agent) sendHeartbeat(status string) {
 			Stage:            jobStage,
 			TargetsCompleted: jobCompleted,
 			TargetsTotal:     jobTotal,
+			ProgressPercent:  jobPercent,
 		}
 	}
 	t0 := time.Now()

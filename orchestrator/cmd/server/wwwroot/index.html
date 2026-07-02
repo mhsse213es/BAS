@@ -2426,6 +2426,9 @@ body.theme-slate {
                 <button class="btn btn-outline btn-sm" onclick="apCollectClose()" style="padding:0.2rem 0.55rem">&#10005;</button>
               </div>
               <div id="ap-timeline" style="display:flex;flex-direction:column;gap:0;padding-left:0.1rem"></div>
+              <div id="ap-cancel-action" style="display:none;margin-top:0.75rem">
+                <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="_apCancelJob()">&#10005; Cancel Collection</button>
+              </div>
               <div id="ap-done-actions" style="display:none;margin-top:1rem;gap:0.5rem;flex-wrap:wrap">
                 <button class="btn btn-primary btn-sm" onclick="loadAttackPath();apCollectClose()">View Results</button>
                 <button id="ap-retry-btn" class="btn btn-outline btn-sm" style="display:none">&#8635; Retry</button>
@@ -3950,6 +3953,16 @@ function _apRetryJob(jobId) {
   }).catch(function(e) { showToast('Retry failed: ' + e.message, 'err'); });
 }
 
+var _apStageLabels = {
+  initializing:          'Initializing…',
+  probing:               'Probing targets',
+  enumerating_admins:    'Enumerating local admins',
+  enumerating_sessions:  'Enumerating active sessions',
+  running_sharphound:    'Running SharpHound',
+  building_graph:        'Building graph',
+  uploading:             'Uploading results'
+};
+
 // Render the timeline from a job object (status, progress, error).
 function _apRenderJobState(job) {
   if (!job) return;
@@ -3957,11 +3970,23 @@ function _apRenderJobState(job) {
   if (!tl) return;
   var s = job.status;
   var prog = job.progress;
-  var progDetail = prog && prog.stage ? prog.stage + (prog.targetsTotal > 0
-    ? ' — ' + prog.targetsCompleted + ' of ' + prog.targetsTotal + ' targets'
-    : '') : '';
+
+  var stageLabel = prog && prog.stage ? (_apStageLabels[prog.stage] || prog.stage) : '';
+  var pct = prog && prog.progressPercent > 0 ? prog.progressPercent : 0;
+  var pctBar = (pct > 0 && pct < 100)
+    ? '<div style="margin-top:0.3rem;width:100%;max-width:220px;background:var(--border);border-radius:4px;height:6px;overflow:hidden">' +
+      '<div style="width:' + pct + '%;background:var(--accent);height:100%;border-radius:4px;transition:width 0.4s"></div></div>' +
+      '<span style="font-size:0.72rem;color:var(--muted)">' + pct + '%</span>'
+    : '';
+  var progDetail = stageLabel
+    + (prog && prog.targetsTotal > 0 ? ' — ' + prog.targetsCompleted + '/' + prog.targetsTotal + ' targets' : '')
+    + (pctBar ? '<br>' + pctBar : '');
 
   var isTerminal = (s === 'completed' || s === 'failed' || s === 'timed_out' || s === 'delivery_failed' || s === 'cancelled');
+
+  // Cancel button: visible while job is active (dispatched or running), hidden once terminal.
+  var cancelEl = document.getElementById('ap-cancel-action');
+  if (cancelEl) cancelEl.style.display = (!isTerminal && s !== 'queued') ? '' : 'none';
 
   // Step states by job status
   var dispatchState = (s === 'queued') ? 'active' : 'done';
@@ -3974,26 +3999,40 @@ function _apRenderJobState(job) {
     ackState = probeState = uploadState = graphState = 'warn';
   }
 
+  var failReasonMap = {
+    delivery_failed: 'Agent did not ACK the command — check agent connectivity.',
+    timeout: 'Execution exceeded the allocated time window.',
+    agent_offline: 'Agent went offline during collection.',
+    upload_failed: 'Results upload failed.',
+    cancelled: 'Cancelled by operator.',
+    network_error: 'Network error during collection.',
+    authentication_failed: 'Agent authentication failed.',
+    permission_denied: 'Permission denied on the agent.'
+  };
+  var errorDisplay = failReasonMap[job.error] || job.error || '';
+
   var statusLabel = {
     queued: 'Queued — waiting for agent to connect',
-    dispatched: 'WS command sent — waiting for agent ACK (30 s window)…',
-    running: 'Agent acknowledged — ' + (progDetail || 'probing the network…'),
+    dispatched: 'Command delivered — waiting for agent ACK…',
+    running: stageLabel ? stageLabel : 'Execution in progress…',
     completed: 'Done',
-    failed: 'Failed — ' + (job.error || 'unknown error'),
-    timed_out: 'Timed out — agent did not complete within the allocated window. ' + (job.error || ''),
-    delivery_failed: 'Delivery failed — agent did not ACK the WS command. Check agent connectivity.',
-    cancelled: 'Cancelled by operator.'
+    failed: 'Failed — ' + errorDisplay,
+    timed_out: 'Timed out — ' + errorDisplay,
+    delivery_failed: 'Delivery failed — ' + errorDisplay,
+    cancelled: 'Cancelled — ' + (errorDisplay || 'by operator')
   }[s] || s;
 
   tl.innerHTML =
     _apStep(dispatchState, 'Job dispatched — ' + job.id.slice(0,8),
-      job.targetCount > 0 ? job.targetCount + ' target' + (job.targetCount === 1 ? '' : 's') + ' to probe' : '') +
+      job.targetCount > 0 ? job.targetCount + ' target' + (job.targetCount === 1 ? '' : 's') + ' queued' : '') +
     _apStep(ackState, statusLabel, '') +
-    _apStep(probeState, 'Agent probing…', progDetail) +
+    _apStep(probeState, 'Executing on agent', progDetail) +
     _apStep(uploadState, 'Uploading results…', '') +
-    _apStep(graphState, 'Graph built &amp; analysis complete', '');
+    _apStep(graphState, 'Graph built &amp; analysis complete',
+      job.metrics ? job.metrics.nodeCount + ' nodes · ' + job.metrics.edgeCount + ' edges' : '');
 
   if (isTerminal) {
+    if (cancelEl) cancelEl.style.display = 'none';
     var doneDiv = document.getElementById('ap-done-actions');
     if (doneDiv) doneDiv.style.display = 'flex';
     var retryBtn2 = document.getElementById('ap-retry-btn');
@@ -4001,6 +4040,14 @@ function _apRenderJobState(job) {
     var viewBtn = doneDiv && doneDiv.querySelector('button.btn-primary');
     if (viewBtn) viewBtn.style.display = (s === 'completed') ? '' : 'none';
   }
+}
+
+function _apCancelJob() {
+  if (!_apCurrentJobId) return;
+  if (!confirm('Cancel this collection? The agent will complete any in-progress probe but no results will be stored.')) return;
+  apicall('/api/attackpath/jobs/' + _apCurrentJobId + '/cancel', {method:'POST'})
+    .then(function(r) { if (r && r.job) _apRenderJobState(r.job); })
+    .catch(function(e) { showToast('Cancel failed: ' + e.message, 'err'); });
 }
 
 // Called from the WS onmessage handler for job lifecycle changes.
@@ -4037,16 +4084,15 @@ function _apOnProgress(msg) {
   if (!msg || !msg.data) return;
   var d = msg.data;
   if (_apCurrentJobId && d.jobId !== _apCurrentJobId) return;
-  var tl = document.getElementById('ap-timeline');
-  if (!tl || document.getElementById('ap-progress').style.display === 'none') return;
-  var prog = d.progress || {};
-  var detail = prog.stage ? prog.stage + (prog.targetsTotal > 0 ? ' — ' + prog.targetsCompleted + ' of ' + prog.targetsTotal + ' targets' : '') : '';
-  // Update the probing step in-place (step index 2 in the timeline)
-  var steps = tl.querySelectorAll('div[style*="border-bottom"]');
-  if (steps[2]) {
-    var titleEl = steps[2].querySelector('div[style*="font-weight:600"]');
-    if (titleEl) titleEl.textContent = 'Agent probing… ' + (prog.targetsTotal > 0 ? '(' + prog.targetsCompleted + '/' + prog.targetsTotal + ')' : '');
-  }
+  if (document.getElementById('ap-progress').style.display === 'none') return;
+  // Synthesise a minimal job object so _apRenderJobState can re-render fully.
+  _apRenderJobState({
+    id: d.jobId || _apCurrentJobId || '',
+    agentId: d.agentId || _apCollectAgentId || '',
+    status: 'running',
+    targetCount: 0,
+    progress: d.progress || {}
+  });
 }
 
 // Called from the WS handler when the server confirms a collection is stored (legacy event).

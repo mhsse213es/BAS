@@ -68,13 +68,15 @@ func (h *Handler) SubmitAttackPathCollection(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Compute duration from the job's ack_at (start of actual probing).
+	// Duration is measured from started_at (first execution heartbeat), not ack_at,
+	// so we capture execution time rather than delivery+queue+execution time.
 	var durationMs int64
 	if jobID != "" {
-		var ackAt *time.Time
-		h.db.QueryRow(r.Context(), `SELECT ack_at FROM attackpath_jobs WHERE id=$1`, jobID).Scan(&ackAt)
-		if ackAt != nil {
-			durationMs = time.Since(*ackAt).Milliseconds()
+		var startedAt *time.Time
+		h.db.QueryRow(r.Context(),
+			`SELECT started_at FROM attackpath_jobs WHERE id=$1`, jobID).Scan(&startedAt)
+		if startedAt != nil {
+			durationMs = time.Since(*startedAt).Milliseconds()
 		}
 	}
 
@@ -87,8 +89,14 @@ func (h *Handler) SubmitAttackPathCollection(w http.ResponseWriter, r *http.Requ
 		c.AgentID, c.Hostname, c.Source, c.CollectedAt,
 		len(c.Nodes), len(c.Edges), sharpHound, durationMs)
 
-	// Mark the job completed (also clears the progress column).
-	h.CompleteAPJob(r.Context(), c.AgentID, jobID)
+	// Mark the job completed with execution metrics.
+	metrics := APJobMetrics{
+		DurationMs:  durationMs,
+		NodeCount:   len(c.Nodes),
+		EdgeCount:   len(c.Edges),
+		TargetCount: len(c.Nodes), // approximation; actual target list is in job payload
+	}
+	h.CompleteAPJob(r.Context(), c.AgentID, jobID, metrics)
 
 	// Notify all browser sessions so the UI can advance its status timeline.
 	h.hub.BroadcastBrowsers(models.WSMessage{

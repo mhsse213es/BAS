@@ -3439,23 +3439,48 @@ function dispatchAPCollect() {
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
+var _apStageLabels = {
+  initializing:         'Initializing',
+  probing:              'Probing targets',
+  enumerating_admins:   'Enumerating local admins',
+  enumerating_sessions: 'Enumerating sessions',
+  running_sharphound:   'Running SharpHound',
+  building_graph:       'Building graph',
+  uploading:            'Uploading results'
+};
+var _apFailLabels = {
+  delivery_failed: 'Agent did not ACK — check connectivity.',
+  timeout: 'Execution exceeded the allocated time window.',
+  cancelled: 'Cancelled by operator.',
+  upload_failed: 'Results upload failed.',
+  network_error: 'Network error during collection.'
+};
 function _apOnJobUpdate(msg) {
   if (!msg || !msg.data) return;
   var job = msg.data;
   if (_apCurrentJobId && job.id !== _apCurrentJobId) return;
   if (job.status === 'completed') {
-    _apClearJobId();
-    _apCurrentJobId = null;
+    _apClearJobId(); _apCurrentJobId = null;
     loadAttackPath();
-    showToast('Attack-path collection complete — graph updated.', 'ok');
+    var m = job.metrics;
+    showToast('Collection complete — ' + (m ? m.nodeCount + ' nodes · ' + m.edgeCount + ' edges' : 'graph updated') + '.', 'ok');
   } else if (job.status === 'timed_out') {
     _apClearJobId(); _apCurrentJobId = null;
-    showToast('Attack-path job timed out — agent did not complete in time.', 'warn');
+    showToast('Attack-path job timed out — ' + (_apFailLabels.timeout), 'warn');
   } else if (job.status === 'delivery_failed') {
     _apClearJobId(); _apCurrentJobId = null;
-    showToast('Attack-path delivery failed — check agent connectivity.', 'err');
+    showToast('Delivery failed — ' + _apFailLabels.delivery_failed, 'err');
+  } else if (job.status === 'cancelled') {
+    _apClearJobId(); _apCurrentJobId = null;
+    showToast('Collection cancelled.', 'warn');
+  } else if (job.status === 'failed') {
+    _apClearJobId(); _apCurrentJobId = null;
+    showToast('Collection failed — ' + (_apFailLabels[job.error] || job.error || 'unknown'), 'err');
   } else if (job.status === 'running') {
-    showToast('Agent acknowledged job — probing network…', 'ok');
+    var prog = job.progress;
+    var stg = prog && prog.stage ? (_apStageLabels[prog.stage] || prog.stage) : '';
+    var pct = prog && prog.progressPercent > 0 ? ' ' + prog.progressPercent + '%' : '';
+    showToast('Agent executing — ' + (stg || 'in progress') + pct, 'ok');
   }
 }
 

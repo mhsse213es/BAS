@@ -17,16 +17,39 @@ import (
 
 // Job status constants — full lifecycle state machine.
 const (
-	APJobQueued          = "queued"          // created, waiting for WS dispatch
-	APJobDispatched      = "dispatched"      // WS sent, waiting for agent ACK (30s window)
-	APJobRunning         = "running"         // agent acknowledged, probing in progress
-	APJobCompleted       = "completed"       // results received and stored
-	APJobFailed          = "failed"          // agent reported error
-	APJobTimedOut        = "timed_out"       // exceeded expires_at without completion
-	APJobDeliveryFailed  = "delivery_failed" // no ACK within ackWindow
-	APJobCancelled       = "cancelled"       // operator cancelled
+	APJobQueued         = "queued"          // created, waiting for WS dispatch
+	APJobDispatched     = "dispatched"      // WS sent, waiting for agent ACK (30s window)
+	APJobRunning        = "running"         // agent acknowledged, execution in progress
+	APJobCompleted      = "completed"       // results received and stored
+	APJobFailed         = "failed"          // agent reported error
+	APJobTimedOut       = "timed_out"       // exceeded expires_at without completion
+	APJobDeliveryFailed = "delivery_failed" // no ACK within ackWindow
+	APJobCancelled      = "cancelled"       // operator cancelled
 
 	ackWindow = 30 * time.Second
+)
+
+// Execution stage enum — agent reports these in heartbeats to show granular progress.
+const (
+	APStageInitializing        = "initializing"         // post-ACK setup
+	APStageProbing             = "probing"               // TCP reachability scan
+	APStageEnumeratingAdmins   = "enumerating_admins"   // local admin group enumeration
+	APStageEnumeratingSessions = "enumerating_sessions" // active session enumeration
+	APStageRunningSharpHound   = "running_sharphound"   // SharpHound domain collection
+	APStageBuildingGraph       = "building_graph"       // building graph object
+	APStageUploading           = "uploading"            // uploading payload to server
+)
+
+// Failure reason taxonomy — use instead of arbitrary error strings.
+const (
+	APFailDeliveryFailed    = "delivery_failed"
+	APFailTimeout           = "timeout"
+	APFailAgentOffline      = "agent_offline"
+	APFailUploadFailed      = "upload_failed"
+	APFailCancelled         = "cancelled"
+	APFailNetworkError      = "network_error"
+	APFailAuthFailed        = "authentication_failed"
+	APFailPermissionDenied  = "permission_denied"
 )
 
 // APJobProgress is carried in the jobs table progress column and in heartbeats.
@@ -34,23 +57,34 @@ type APJobProgress struct {
 	Stage            string `json:"stage"`
 	TargetsCompleted int    `json:"targetsCompleted"`
 	TargetsTotal     int    `json:"targetsTotal"`
+	ProgressPercent  int    `json:"progressPercent"` // 0–100, pre-computed by agent
+}
+
+// APJobMetrics is persisted in the progress column when a job completes.
+type APJobMetrics struct {
+	DurationMs  int64 `json:"durationMs"`
+	NodeCount   int   `json:"nodeCount"`
+	EdgeCount   int   `json:"edgeCount"`
+	TargetCount int   `json:"targetCount"`
 }
 
 // APJob is the wire representation returned to the browser.
 type APJob struct {
-	ID               string         `json:"id"`
-	AgentID          string         `json:"agentId"`
-	Status           string         `json:"status"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	DispatchedAt     *time.Time     `json:"dispatchedAt,omitempty"`
-	AckAt            *time.Time     `json:"ackAt,omitempty"`
-	CompletedAt      *time.Time     `json:"completedAt,omitempty"`
-	LastHeartbeatAt  *time.Time     `json:"lastHeartbeatAt,omitempty"`
-	Attempts         int            `json:"attempts"`
-	ExpiresAt        time.Time      `json:"expiresAt"`
-	Error            string         `json:"error,omitempty"`
-	Progress         *APJobProgress `json:"progress,omitempty"`
-	TargetCount      int            `json:"targetCount"`
+	ID              string         `json:"id"`
+	AgentID         string         `json:"agentId"`
+	Status          string         `json:"status"`
+	CreatedAt       time.Time      `json:"createdAt"`
+	DispatchedAt    *time.Time     `json:"dispatchedAt,omitempty"`
+	AckAt           *time.Time     `json:"ackAt,omitempty"`
+	StartedAt       *time.Time     `json:"startedAt,omitempty"` // first progress heartbeat
+	CompletedAt     *time.Time     `json:"completedAt,omitempty"`
+	LastHeartbeatAt *time.Time     `json:"lastHeartbeatAt,omitempty"`
+	Attempts        int            `json:"attempts"`
+	ExpiresAt       time.Time      `json:"expiresAt"`
+	Error           string         `json:"error,omitempty"`
+	Progress        *APJobProgress `json:"progress,omitempty"`
+	Metrics         *APJobMetrics  `json:"metrics,omitempty"`
+	TargetCount     int            `json:"targetCount"`
 }
 
 // computeJobTimeout returns a dynamic timeout based on target count:
@@ -89,16 +123,16 @@ func (h *Handler) createAPJob(ctx context.Context, agentID string, payload map[s
 // loadAPJob reads one job by ID.
 func (h *Handler) loadAPJob(ctx context.Context, id string) (*APJob, error) {
 	var j APJob
-	var progressRaw []byte
-	var payloadRaw []byte
+	var progressRaw, metricsRaw, payloadRaw []byte
 	err := h.db.QueryRow(ctx,
 		`SELECT id, agent_id, status, payload, created_at, dispatched_at, ack_at,
-		        completed_at, last_heartbeat_at, attempts, expires_at, error, progress
+		        started_at, completed_at, last_heartbeat_at, attempts, expires_at,
+		        error, progress, metrics
 		   FROM attackpath_jobs WHERE id=$1`, id,
 	).Scan(&j.ID, &j.AgentID, &j.Status, &payloadRaw,
-		&j.CreatedAt, &j.DispatchedAt, &j.AckAt,
+		&j.CreatedAt, &j.DispatchedAt, &j.AckAt, &j.StartedAt,
 		&j.CompletedAt, &j.LastHeartbeatAt,
-		&j.Attempts, &j.ExpiresAt, &j.Error, &progressRaw)
+		&j.Attempts, &j.ExpiresAt, &j.Error, &progressRaw, &metricsRaw)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +142,12 @@ func (h *Handler) loadAPJob(ctx context.Context, id string) (*APJob, error) {
 			j.Progress = &p
 		}
 	}
-	// Extract target count from payload for display.
+	if len(metricsRaw) > 2 {
+		var m APJobMetrics
+		if json.Unmarshal(metricsRaw, &m) == nil {
+			j.Metrics = &m
+		}
+	}
 	var payload struct {
 		Targets []string `json:"targets"`
 	}
@@ -251,13 +290,15 @@ func (h *Handler) ListAttackPathJobs(w http.ResponseWriter, r *http.Request) {
 	if agentID != "" {
 		rows, err = h.db.Query(r.Context(),
 			`SELECT id, agent_id, status, payload, created_at, dispatched_at, ack_at,
-			        completed_at, last_heartbeat_at, attempts, expires_at, error, progress
+			        started_at, completed_at, last_heartbeat_at, attempts, expires_at,
+			        error, progress, metrics
 			   FROM attackpath_jobs WHERE agent_id=$1
 			  ORDER BY created_at DESC LIMIT $2`, agentID, limit)
 	} else {
 		rows, err = h.db.Query(r.Context(),
 			`SELECT id, agent_id, status, payload, created_at, dispatched_at, ack_at,
-			        completed_at, last_heartbeat_at, attempts, expires_at, error, progress
+			        started_at, completed_at, last_heartbeat_at, attempts, expires_at,
+			        error, progress, metrics
 			   FROM attackpath_jobs
 			  ORDER BY created_at DESC LIMIT $1`, limit)
 	}
@@ -270,17 +311,23 @@ func (h *Handler) ListAttackPathJobs(w http.ResponseWriter, r *http.Request) {
 	var out []APJob
 	for rows.Next() {
 		var j APJob
-		var progressRaw, payloadRaw []byte
+		var progressRaw, metricsRaw, payloadRaw []byte
 		if rows.Scan(&j.ID, &j.AgentID, &j.Status, &payloadRaw,
-			&j.CreatedAt, &j.DispatchedAt, &j.AckAt,
+			&j.CreatedAt, &j.DispatchedAt, &j.AckAt, &j.StartedAt,
 			&j.CompletedAt, &j.LastHeartbeatAt,
-			&j.Attempts, &j.ExpiresAt, &j.Error, &progressRaw) != nil {
+			&j.Attempts, &j.ExpiresAt, &j.Error, &progressRaw, &metricsRaw) != nil {
 			continue
 		}
 		if len(progressRaw) > 2 {
 			var p APJobProgress
 			if json.Unmarshal(progressRaw, &p) == nil && p.Stage != "" {
 				j.Progress = &p
+			}
+		}
+		if len(metricsRaw) > 2 {
+			var m APJobMetrics
+			if json.Unmarshal(metricsRaw, &m) == nil {
+				j.Metrics = &m
 			}
 		}
 		var payload struct {
@@ -301,9 +348,9 @@ func (h *Handler) ListAttackPathJobs(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CancelAttackPathJob(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	res, err := h.db.Exec(r.Context(),
-		`UPDATE attackpath_jobs SET status=$1, error='cancelled by operator'
-		  WHERE id=$2 AND status NOT IN ($3,$4,$5)`,
-		APJobCancelled, id, APJobCompleted, APJobCancelled, APJobFailed)
+		`UPDATE attackpath_jobs SET status=$1, error=$2
+		  WHERE id=$3 AND status NOT IN ($4,$5,$6)`,
+		APJobCancelled, APFailCancelled, id, APJobCompleted, APJobCancelled, APJobFailed)
 	if err != nil || res.RowsAffected() == 0 {
 		jsonError(w, "job not found or already terminal", http.StatusNotFound)
 		return
@@ -383,10 +430,10 @@ func (h *Handler) apJobTick(ctx context.Context) {
 	ackCutoff := time.Now().Add(-ackWindow)
 	rows, _ := h.db.Query(ctx,
 		`UPDATE attackpath_jobs
-		    SET status=$1, error='no ACK from agent within 30 seconds'
-		  WHERE status=$2 AND dispatched_at < $3
+		    SET status=$1, error=$2
+		  WHERE status=$3 AND dispatched_at < $4
 		  RETURNING id, agent_id`,
-		APJobDeliveryFailed, APJobDispatched, ackCutoff)
+		APJobDeliveryFailed, APFailDeliveryFailed, APJobDispatched, ackCutoff)
 	if rows != nil {
 		for rows.Next() {
 			var id, agentID string
@@ -402,10 +449,10 @@ func (h *Handler) apJobTick(ctx context.Context) {
 	// 2. timed_out: any active job past its expires_at.
 	rows2, _ := h.db.Query(ctx,
 		`UPDATE attackpath_jobs
-		    SET status=$1, error='collection did not complete within the allocated time'
-		  WHERE status IN ($2,$3,$4) AND expires_at < NOW()
+		    SET status=$1, error=$2
+		  WHERE status IN ($3,$4,$5) AND expires_at < NOW()
 		  RETURNING id, agent_id`,
-		APJobTimedOut, APJobQueued, APJobDispatched, APJobRunning)
+		APJobTimedOut, APFailTimeout, APJobQueued, APJobDispatched, APJobRunning)
 	if rows2 != nil {
 		for rows2.Next() {
 			var id, agentID string
@@ -451,13 +498,14 @@ func (h *Handler) RedeliverQueuedAPJobs(ctx context.Context, agentID string) {
 }
 
 // UpdateAPJobProgress updates the progress column from a heartbeat report and
-// broadcasts it to browser sessions.
+// broadcasts it to browser sessions. Also sets started_at on the first call.
 func (h *Handler) UpdateAPJobProgress(ctx context.Context, agentID, jobID string, p APJobProgress) {
 	raw, _ := json.Marshal(p)
 	now := time.Now()
 	res, err := h.db.Exec(ctx,
 		`UPDATE attackpath_jobs
-		    SET progress=$1, last_heartbeat_at=$2, status=$3
+		    SET progress=$1, last_heartbeat_at=$2, status=$3,
+		        started_at = COALESCE(started_at, $2)
 		  WHERE id=$4 AND agent_id=$5 AND status IN ($6,$7)`,
 		raw, now, APJobRunning, jobID, agentID, APJobRunning, APJobDispatched)
 	if err != nil || res.RowsAffected() == 0 {
@@ -474,32 +522,33 @@ func (h *Handler) UpdateAPJobProgress(ctx context.Context, agentID, jobID string
 	})
 }
 
-// CompleteAPJob marks a job completed and broadcasts. Called from SubmitAttackPathCollect.
-func (h *Handler) CompleteAPJob(ctx context.Context, agentID, jobID string) {
+// CompleteAPJob marks a job completed, stores execution metrics, and broadcasts.
+func (h *Handler) CompleteAPJob(ctx context.Context, agentID, jobID string, m APJobMetrics) {
 	if jobID == "" {
 		return
 	}
+	raw, _ := json.Marshal(m)
 	now := time.Now()
 	h.db.Exec(ctx,
 		`UPDATE attackpath_jobs
-		    SET status=$1, completed_at=$2, progress='{}'
-		  WHERE id=$3 AND agent_id=$4 AND status NOT IN ($5,$6,$7)`,
-		APJobCompleted, now, jobID, agentID,
+		    SET status=$1, completed_at=$2, progress='{}', metrics=$3
+		  WHERE id=$4 AND agent_id=$5 AND status NOT IN ($6,$7,$8)`,
+		APJobCompleted, now, raw, jobID, agentID,
 		APJobCompleted, APJobCancelled, APJobFailed)
 	if j, _ := h.loadAPJob(ctx, jobID); j != nil {
 		h.broadcastJobUpdate(j)
 	}
 }
 
-// FailAPJob marks a job failed with an error message.
-func (h *Handler) FailAPJob(ctx context.Context, agentID, jobID, errMsg string) {
+// FailAPJob marks a job failed with a typed failure reason.
+func (h *Handler) FailAPJob(ctx context.Context, agentID, jobID, reason string) {
 	if jobID == "" {
 		return
 	}
 	h.db.Exec(ctx,
 		`UPDATE attackpath_jobs SET status=$1, error=$2
 		  WHERE id=$3 AND agent_id=$4 AND status NOT IN ($5,$6)`,
-		APJobFailed, fmt.Sprintf("%.500s", errMsg),
+		APJobFailed, fmt.Sprintf("%.500s", reason),
 		jobID, agentID, APJobCompleted, APJobCancelled)
 	if j, _ := h.loadAPJob(ctx, jobID); j != nil {
 		h.broadcastJobUpdate(j)
