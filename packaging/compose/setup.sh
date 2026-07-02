@@ -69,7 +69,7 @@ export TERM="${TERM:-xterm}"
 
 # ── Config file loader ────────────────────────────────────────────────────────
 # Reads key=value pairs from setup.conf without sourcing (no arbitrary code exec).
-# Sets: INSTALL_DIR, DASHBOARD_PORT, DB_PASSWORD, ADMIN_PASSWORD, LIC_PATH
+# Sets: INSTALL_DIR, DASHBOARD_PORT, DB_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD, LIC_PATH
 # Generates: JWT_SECRET, AGENT_SECRET, CALDERA_API_KEY, CALDERA_API_KEY_BLUE
 load_config() {
   local cfg="$1"
@@ -89,6 +89,7 @@ load_config() {
       INSTALL_DIR)    INSTALL_DIR="$val"    ;;
       DASHBOARD_PORT) DASHBOARD_PORT="$val" ;;
       DB_PASSWORD)    DB_PASSWORD="$val"    ;;
+      ADMIN_EMAIL)    ADMIN_EMAIL="$val"    ;;
       ADMIN_PASSWORD) ADMIN_PASSWORD="$val" ;;
       LIC_PATH)       LIC_PATH="$val"       ;;
     esac
@@ -103,6 +104,7 @@ load_config() {
   local missing=false
   [[ -z "${LIC_PATH:-}"       ]] && { err "setup.conf: LIC_PATH is required.";       missing=true; }
   [[ -z "${DB_PASSWORD:-}"    ]] && { err "setup.conf: DB_PASSWORD is required.";    missing=true; }
+  [[ -z "${ADMIN_EMAIL:-}"    ]] && { err "setup.conf: ADMIN_EMAIL is required.";    missing=true; }
   [[ -z "${ADMIN_PASSWORD:-}" ]] && { err "setup.conf: ADMIN_PASSWORD is required."; missing=true; }
   $missing && exit 1
 
@@ -516,6 +518,7 @@ DASHBOARD_PORT=${DASHBOARD_PORT}
 BAS_LICENSE_PATH=/etc/bas/bas.lic
 CALDERA_API_KEY=${CALDERA_API_KEY}
 CALDERA_API_KEY_BLUE=${CALDERA_API_KEY_BLUE}
+BAS_ADMIN_EMAIL=${ADMIN_EMAIL}
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 EOF
   chmod 640 "${INSTALL_DIR}/.env"
@@ -704,6 +707,13 @@ input:disabled{opacity:.5}
     <p class="section-title">Admin Account</p>
     <div class="row">
       <div class="field">
+        <label>Admin Email <span style="color:#da3633">*</span></label>
+        <input type="email" id="ade" name="ADMIN_EMAIL" placeholder="bas-admin@corp.internal" required>
+      </div>
+      <div class="field"></div>
+    </div>
+    <div class="row">
+      <div class="field">
         <label>Password <span style="color:#4d5f72">(min 10)</span></label>
         <input type="password" id="adp" name="ADMIN_PASSWORD" required>
       </div>
@@ -740,6 +750,8 @@ frm.addEventListener("submit",async function(e){
   const dbp2=document.getElementById("dbp2").value;
   const adp=document.getElementById("adp").value;
   const adp2=document.getElementById("adp2").value;
+  const ade=document.getElementById("ade").value;
+  if(!ade||!ade.includes("@")){alert("A valid admin email address is required.");return;}
   if(dbp!==dbp2){alert("Database passwords do not match.");return;}
   if(adp!==adp2){alert("Admin passwords do not match.");return;}
   if(dbp.length<8){alert("Database password must be at least 8 characters.");return;}

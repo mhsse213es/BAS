@@ -100,8 +100,8 @@ func main() {
 		log.Printf("[+] EPSS scores seeded: %d CVE entries", n)
 	}
 
-	if err := seedDefaultAdmin(pool, cfg.AdminEmail, cfg.AdminPassword); err != nil {
-		log.Printf("[!] admin seed: %v", err)
+	if err := ensureAdminUser(pool, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+		log.Printf("[!] admin sync: %v", err)
 	}
 
 	// ── Scenario Engine ───────────────────────────────────────────────────
@@ -366,18 +366,14 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 	}
 }
 
-// seedDefaultAdmin creates the admin user on first run if no users exist.
-// adminUsername is used as the login name — if the operator supplied an email
-// via BAS_ADMIN_EMAIL / setup.conf that becomes the username so they can log
-// in with the same value they entered during installation. Falls back to
-// "admin" when no email is configured (dev / manual installs).
-func seedDefaultAdmin(pool *pgxpool.Pool, adminUsername, adminPassword string) error {
-	var count int
-	err := pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM users`).Scan(&count)
-	if err != nil || count > 0 {
-		return err
-	}
-
+// ensureAdminUser runs on every startup and guarantees the primary admin user
+// matches BAS_ADMIN_EMAIL / BAS_ADMIN_PASSWORD from the environment exactly.
+// It uses a single atomic CTE so no race is possible between check and write:
+//   - If no admin-role user exists → INSERT one.
+//   - If one exists → UPDATE its username and password to match the config.
+// This means setup.conf is always the source of truth; no manual DB work is
+// needed after a rebuild or credential rotation.
+func ensureAdminUser(pool *pgxpool.Pool, adminUsername, adminPassword string) error {
 	if adminUsername == "" {
 		adminUsername = "admin"
 	}
@@ -391,13 +387,30 @@ func seedDefaultAdmin(pool *pgxpool.Pool, adminUsername, adminPassword string) e
 	if err != nil {
 		return fmt.Errorf("bcrypt: %w", err)
 	}
-	_, err = pool.Exec(context.Background(),
-		`INSERT INTO users (username, password_hash, role, must_change_pw) VALUES ($1, $2, 'admin', $3)`,
-		adminUsername, string(hash), mustChange,
-	)
+
+	// Atomic upsert: find the oldest admin, update it; if none exists, insert.
+	// The two branches are mutually exclusive so the UPDATE touches 0 rows when
+	// the INSERT fires, and vice-versa.
+	_, err = pool.Exec(context.Background(), `
+		WITH existing AS (
+			SELECT id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1
+		),
+		ins AS (
+			INSERT INTO users (username, password_hash, role, is_active, must_change_pw)
+			SELECT $1, $2, 'admin', true, $3
+			WHERE NOT EXISTS (SELECT 1 FROM existing)
+		)
+		UPDATE users
+		   SET username       = $1,
+		       password_hash  = $2,
+		       is_active      = true,
+		       must_change_pw = $3
+		 WHERE id IN (SELECT id FROM existing)
+	`, adminUsername, string(hash), mustChange)
 	if err != nil {
-		return fmt.Errorf("insert admin: %w", err)
+		return fmt.Errorf("ensure admin: %w", err)
 	}
-	log.Printf("[+] Default admin seeded (username: %s) — change the password immediately via Settings → Users", adminUsername)
+
+	log.Printf("[+] Admin credentials synced from config (username: %s)", adminUsername)
 	return nil
 }
