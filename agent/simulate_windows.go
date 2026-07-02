@@ -332,14 +332,14 @@ func safeSimChecks() []SimCategory {
 			checkControlledFolderAccess(),
 		}},
 		{Phase: "account-security", Checks: []SimCheck{
-			checkAccountLockoutPolicy(),
-			checkPasswordMinLength(),
-			checkLocalAdminCount(),
-			checkDefaultAdminAccount(),
+			safecheckAccountLockout(),
+			safecheckPasswordMinLength(),
+			safecheckLocalAdminCount(),
+			safecheckBuiltinAdmin(),
 		}},
 		{Phase: "monitoring", Checks: []SimCheck{
-			checkAuditLogRetention(),
-			checkPatchCurrency(),
+			safecheckEventLogRetention(),
+			safecheckPatchAge(),
 		}},
 	}
 }
@@ -2220,6 +2220,152 @@ func checkPatchCurrency() SimCheck {
 				return "fail", fmt.Sprintf("Last patch installed %d days ago — exceeds SEBI CSCRF 30-day critical patch deadline.", days)
 			default:
 				return "fail", fmt.Sprintf("Last patch installed %d days ago — significantly overdue, high vulnerability exposure, CSCRF non-compliant.", days)
+			}
+		})
+}
+
+// ── Generic ATT&CK-framed safe-scan equivalents ───────────────────────────────
+// These mirror the logic of the CSCRF-specific checks above but use ATT&CK
+// tactic labels and neutral threat-impact language, so the safe-scan report
+// does not expose CSCRF framework names to non-CSCRF contexts.
+
+func safecheckAccountLockout() SimCheck {
+	return check("T1110.001", "Account Lockout Policy", "credential-access", "High",
+		"No account lockout lets attackers brute-force credentials indefinitely without being blocked.",
+		"Set via GPO: lockout threshold ≤ 5 attempts, duration ≥ 30 minutes, observation window ≥ 30 minutes.",
+		func() (string, string) {
+			out, err := exec.Command("net", "accounts").Output()
+			if err != nil {
+				return "skipped", "Could not query account lockout policy."
+			}
+			for _, line := range strings.Split(string(out), "\n") {
+				lower := strings.ToLower(strings.TrimSpace(line))
+				if strings.Contains(lower, "lockout threshold") {
+					if strings.Contains(lower, "never") {
+						return "fail", "Account lockout threshold = Never — unlimited brute-force permitted."
+					}
+					return "pass", fmt.Sprintf("Account lockout configured: %s", strings.TrimSpace(line))
+				}
+			}
+			return "fail", "Could not parse lockout threshold — manual policy verification required."
+		})
+}
+
+func safecheckPasswordMinLength() SimCheck {
+	return check("T1110", "Password Minimum Length Policy", "credential-access", "Medium",
+		"Short passwords are cracked in seconds by dictionary or brute-force attacks.",
+		"Set via GPO: Minimum password length ≥ 12 characters.",
+		func() (string, string) {
+			out, err := exec.Command("net", "accounts").Output()
+			if err != nil {
+				return "skipped", "Could not query password length policy."
+			}
+			for _, line := range strings.Split(string(out), "\n") {
+				lower := strings.ToLower(strings.TrimSpace(line))
+				if strings.Contains(lower, "minimum password length") {
+					fields := strings.Fields(strings.TrimSpace(line))
+					if len(fields) > 0 {
+						var length int
+						fmt.Sscanf(fields[len(fields)-1], "%d", &length)
+						if length == 0 {
+							return "fail", "Minimum password length = 0 (no minimum) — passwords can be empty."
+						}
+						if length >= 12 {
+							return "pass", fmt.Sprintf("Minimum password length = %d characters.", length)
+						}
+						return "fail", fmt.Sprintf("Minimum password length = %d — recommend ≥ 12 characters.", length)
+					}
+				}
+			}
+			return "skipped", "Could not parse password length — manual review required."
+		})
+}
+
+func safecheckLocalAdminCount() SimCheck {
+	return check("T1078.003", "Local Administrator Account Count", "privilege-escalation", "High",
+		"Excess local admin accounts widen the blast radius of any endpoint compromise via lateral movement.",
+		"Reduce local Administrators to one managed account. Deploy LAPS for randomised local admin passwords.",
+		func() (string, string) {
+			out, err := psRun(`(Get-LocalGroupMember -Group "Administrators" -ErrorAction SilentlyContinue | Measure-Object).Count`)
+			if err != nil {
+				return "skipped", "Could not enumerate local Administrators group."
+			}
+			var n int
+			fmt.Sscanf(strings.TrimSpace(out), "%d", &n)
+			if n <= 2 {
+				return "pass", fmt.Sprintf("%d local administrator(s) — minimal privileged account surface.", n)
+			}
+			if n <= 4 {
+				return "fail", fmt.Sprintf("%d local administrators — review and remove unnecessary accounts.", n)
+			}
+			return "fail", fmt.Sprintf("%d accounts in local Administrators — significantly exceeds least-privilege.", n)
+		})
+}
+
+func safecheckBuiltinAdmin() SimCheck {
+	return check("T1078.001", "Built-in Administrator Account Status", "initial-access", "High",
+		"An enabled default Administrator account with a known name is a prime target for password-spray attacks.",
+		"Disable: Computer Config → Windows Settings → Security Options → Accounts: Administrator account status = Disabled.",
+		func() (string, string) {
+			out, err := psRun(`(Get-LocalUser -Name "Administrator" -ErrorAction SilentlyContinue).Enabled`)
+			if err != nil {
+				return "pass", "Built-in Administrator account not found or inaccessible — likely renamed or removed."
+			}
+			v := strings.TrimSpace(strings.ToLower(out))
+			if v == "false" {
+				return "pass", "Built-in Administrator account is DISABLED — default credential brute-force mitigated."
+			}
+			if v == "true" {
+				return "fail", "Built-in Administrator account is ENABLED — disable or rename to reduce attack surface."
+			}
+			return "pass", "Built-in Administrator account appears disabled or renamed."
+		})
+}
+
+func safecheckEventLogRetention() SimCheck {
+	return check("T1562.002", "Security Event Log Retention Capacity", "defense-evasion", "High",
+		"Undersized event logs overwrite in hours, destroying evidence and preventing incident reconstruction.",
+		"Set Security log max size ≥ 1 GB via GPO. Forward logs to SIEM for long-term retention.",
+		func() (string, string) {
+			out, err := psRun(`(Get-WinEvent -ListLog Security -ErrorAction SilentlyContinue).MaximumSizeInBytes`)
+			if err != nil || strings.TrimSpace(out) == "" {
+				return "skipped", "Could not query Security event log configuration."
+			}
+			var sizeBytes int64
+			fmt.Sscanf(strings.TrimSpace(out), "%d", &sizeBytes)
+			sizeMB := sizeBytes / (1024 * 1024)
+			if sizeMB >= 1024 {
+				return "pass", fmt.Sprintf("Security log max size = %d MB (≥ 1 GB) — adequate on-disk retention.", sizeMB)
+			}
+			if sizeMB >= 256 {
+				return "fail", fmt.Sprintf("Security log max size = %d MB — recommend ≥ 1024 MB. Increase size or forward to SIEM.", sizeMB)
+			}
+			return "fail", fmt.Sprintf("Security log max size = %d MB — critically small, logs overwrite rapidly.", sizeMB)
+		})
+}
+
+func safecheckPatchAge() SimCheck {
+	return check("T1190", "Windows Update Currency", "initial-access", "High",
+		"Unpatched systems expose known CVEs — ransomware and worm campaigns routinely exploit months-old patches.",
+		"Enforce patch deployment via WSUS/SCCM/Intune with a 30-day SLA for critical updates.",
+		func() (string, string) {
+			out, err := psRun(`$h = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 1; if ($h -and $h.InstalledOn) { (New-TimeSpan -Start $h.InstalledOn -End (Get-Date)).Days } else { "-1" }`)
+			if err != nil || strings.TrimSpace(out) == "" || strings.TrimSpace(out) == "-1" {
+				return "skipped", "Could not determine last hotfix installation date — verify Windows Update history manually."
+			}
+			var days int
+			fmt.Sscanf(strings.TrimSpace(out), "%d", &days)
+			switch {
+			case days < 0:
+				return "skipped", "Last patch date not available."
+			case days <= 15:
+				return "pass", fmt.Sprintf("Last patch installed %d days ago — endpoint is current.", days)
+			case days <= 30:
+				return "pass", fmt.Sprintf("Last patch installed %d days ago — within 30-day threshold.", days)
+			case days <= 60:
+				return "fail", fmt.Sprintf("Last patch installed %d days ago — exceeds 30-day recommended window.", days)
+			default:
+				return "fail", fmt.Sprintf("Last patch installed %d days ago — significantly overdue, high vulnerability exposure.", days)
 			}
 		})
 }
