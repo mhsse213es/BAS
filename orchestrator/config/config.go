@@ -24,6 +24,11 @@ type Config struct {
 	AdminPassword     string `json:"admin_password,omitempty"`
 	AdminEmail        string `json:"admin_email,omitempty"` // used as the admin username on first-run seed
 
+	// PBKDF2Iterations controls the PBKDF2-HMAC-SHA256 iteration count for
+	// password hashing. Minimum enforced at runtime: 310000 (NIST SP 800-132).
+	// Set higher for deployments with additional time budget (e.g. 600000).
+	PBKDF2Iterations int `json:"pbkdf2_iterations,omitempty"`
+
 	// Exercise Engine — SMTP injector + tracker base URL
 	SMTPHost      string `json:"smtp_host,omitempty"`
 	SMTPPort      int    `json:"smtp_port,omitempty"`
@@ -47,11 +52,12 @@ type Config struct {
 // In Kubernetes the file is optional — DATABASE_URL and JWT_SECRET come from Secrets.
 func Load(path string) (*Config, error) {
 	cfg := &Config{
-		HTTPPort:      9000,
-		ScenariosDir:  "scenarios",
-		ARTDir:        "/art-atomics",
-		ARTPayloadDir: "/art-payloads",
-		KEVFile:       "/content/cisa-kev.json",
+		HTTPPort:         9000,
+		ScenariosDir:     "scenarios",
+		ARTDir:           "/art-atomics",
+		ARTPayloadDir:    "/art-payloads",
+		KEVFile:          "/content/cisa-kev.json",
+		PBKDF2Iterations: 310000,
 	}
 
 	// Try file first (local dev)
@@ -147,6 +153,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("BAS_ADMIN_EMAIL"); v != "" {
 		cfg.AdminEmail = v
+	}
+	if v := os.Getenv("BAS_PBKDF2_ITERATIONS"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.PBKDF2Iterations)
 	}
 
 	if cfg.DatabaseURL == "" {

@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/audspect/bas/config"
 	"github.com/audspect/bas/internal/api"
+	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/db"
@@ -42,6 +42,12 @@ func main() {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		log.Fatalf("[FATAL] config: %v", err)
+	}
+
+	// ── Cryptographic subsystem ───────────────────────────────────────────
+	auth.SetIterations(cfg.PBKDF2Iterations)
+	if err := auth.CryptoSelfTest(); err != nil {
+		log.Fatalf("[FATAL] crypto self-test: %v", err)
 	}
 
 	// ── License Check ─────────────────────────────────────────────────────
@@ -383,9 +389,9 @@ func ensureAdminUser(pool *pgxpool.Pool, adminUsername, adminPassword string) er
 		mustChange = true
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
+	hash, err := auth.HashPassword(adminPassword)
 	if err != nil {
-		return fmt.Errorf("bcrypt: %w", err)
+		return fmt.Errorf("hash admin password: %w", err)
 	}
 
 	// Atomic upsert: find the oldest admin, update it; if none exists, insert.
@@ -406,7 +412,7 @@ func ensureAdminUser(pool *pgxpool.Pool, adminUsername, adminPassword string) er
 		       is_active      = true,
 		       must_change_pw = $3
 		 WHERE id IN (SELECT id FROM existing)
-	`, adminUsername, string(hash), mustChange)
+	`, adminUsername, hash, mustChange)
 	if err != nil {
 		return fmt.Errorf("ensure admin: %w", err)
 	}

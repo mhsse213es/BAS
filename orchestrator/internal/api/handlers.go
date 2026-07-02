@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
@@ -229,13 +228,22 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	var id, hash, role string
 	var isActive, mustChangePw bool
-	err := h.db.QueryRow(r.Context(),
+	dbErr := h.db.QueryRow(r.Context(),
 		`SELECT id, password_hash, role, is_active, must_change_pw FROM users WHERE username = $1`, req.Username,
 	).Scan(&id, &hash, &role, &isActive, &mustChangePw)
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)) != nil {
+	// Evaluate password even on DB miss to prevent timing-based user enumeration.
+	// VerifyPassword on an empty string returns false without error.
+	ok, needsRehash, _ := auth.VerifyPassword(req.Password, hash)
+	if dbErr != nil || !ok {
 		h.auditLogAs(r, "", "user.login", req.Username, map[string]any{"username": req.Username, "reason": "invalid credentials"}, "fail")
 		jsonError(w, "invalid credentials", http.StatusUnauthorized)
 		return
+	}
+	// Transparent migration: upgrade bcrypt hash to PBKDF2-HMAC-SHA256 on login.
+	if needsRehash {
+		if newHash, hErr := auth.HashPassword(req.Password); hErr == nil {
+			h.db.Exec(r.Context(), `UPDATE users SET password_hash = $1 WHERE id = $2`, newHash, id)
+		}
 	}
 	if !isActive {
 		h.auditLogAs(r, id, "user.login", id, map[string]any{"username": req.Username, "reason": "account disabled"}, "fail")
@@ -291,14 +299,14 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		jsonError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	_, err = h.db.Exec(r.Context(),
 		`INSERT INTO users (username, password_hash, role, must_change_pw) VALUES ($1, $2, 'admin', false)`,
-		req.Email, string(hash),
+		req.Email, hash,
 	)
 	if err != nil {
 		jsonError(w, "failed to create admin user", http.StatusInternalServerError)
@@ -1902,7 +1910,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		jsonError(w, "password hashing failed", http.StatusInternalServerError)
 		return
@@ -1913,7 +1921,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		`INSERT INTO users (username, password_hash, role, must_change_pw)
 		 VALUES ($1, $2, $3, true)
 		 RETURNING id`,
-		req.Username, string(hash), req.Role,
+		req.Username, hash, req.Role,
 	).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
@@ -2012,19 +2020,19 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "user not found", http.StatusNotFound)
 		return
 	}
-	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.CurrentPassword)) != nil {
+	if ok, _, _ := auth.VerifyPassword(req.CurrentPassword, hash); !ok {
 		jsonError(w, "current password is incorrect", http.StatusUnauthorized)
 		return
 	}
 
-	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	newHash, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
 		jsonError(w, "password hashing failed", http.StatusInternalServerError)
 		return
 	}
 	h.db.Exec(r.Context(),
 		`UPDATE users SET password_hash = $1, must_change_pw = false WHERE id = $2`,
-		string(newHash), claims.UserID)
+		newHash, claims.UserID)
 
 	h.auditLog(r, "user.change_password", claims.UserID, nil, "ok")
 	respond(w, map[string]string{"status": "password updated"})
@@ -2044,14 +2052,14 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "password must be at least 8 characters", http.StatusBadRequest)
 		return
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	hash, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
 		jsonError(w, "password hashing failed", http.StatusInternalServerError)
 		return
 	}
 	h.db.Exec(r.Context(),
 		`UPDATE users SET password_hash = $1, must_change_pw = true WHERE id = $2`,
-		string(hash), targetID)
+		hash, targetID)
 	h.auditLog(r, "user.reset_password", targetID, nil, "ok")
 	respond(w, map[string]string{"status": "password reset — user must change on next login"})
 }
