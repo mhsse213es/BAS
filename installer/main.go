@@ -43,7 +43,6 @@ var (
 	procMessageBox       = user32.NewProc("MessageBoxW")
 	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
 	procSetWindowPos     = user32.NewProc("SetWindowPos")
-	procGetClientRect    = user32.NewProc("GetClientRect")
 	procBeginPaint       = user32.NewProc("BeginPaint")
 	procEndPaint         = user32.NewProc("EndPaint")
 	procFillRect         = user32.NewProc("FillRect")
@@ -52,17 +51,22 @@ var (
 	procInvalidateRect   = user32.NewProc("InvalidateRect")
 
 	procCreateSolidBrush = gdi32.NewProc("CreateSolidBrush")
+	procCreatePen        = gdi32.NewProc("CreatePen")
 	procCreateFont       = gdi32.NewProc("CreateFontW")
 	procSelectObject     = gdi32.NewProc("SelectObject")
 	procDeleteObject     = gdi32.NewProc("DeleteObject")
 	procGetStockObject   = gdi32.NewProc("GetStockObject")
 	procSetBkMode        = gdi32.NewProc("SetBkMode")
+	procSetBkColor       = gdi32.NewProc("SetBkColor")
 	procSetTextColor     = gdi32.NewProc("SetTextColor")
+	procMoveToEx         = gdi32.NewProc("MoveToEx")
+	procLineTo           = gdi32.NewProc("LineTo")
+	procRoundRect        = gdi32.NewProc("RoundRect")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
 )
 
-// ── Win32 constants ───────────────────────────────────────────────────────────
+// ── Win32 message / style constants ──────────────────────────────────────────
 
 const (
 	WM_CREATE         = 0x0001
@@ -72,54 +76,95 @@ const (
 	WM_CTLCOLORSTATIC = 0x0138
 	WM_CTLCOLOREDIT   = 0x0133
 	WM_SETFONT        = 0x0030
+	WM_DRAWITEM       = 0x002B
 
-	WS_OVERLAPPED   = 0x00000000
-	WS_CAPTION      = 0x00C00000
-	WS_SYSMENU      = 0x00080000
-	WS_MINIMIZEBOX  = 0x00020000
-	WS_VISIBLE      = 0x10000000
-	WS_CHILD        = 0x40000000
-	WS_BORDER       = 0x00800000
-	WS_TABSTOP      = 0x00010000
-	WS_VSCROLL      = 0x00200000
-	ES_LEFT         = 0x0000
-	ES_MULTILINE    = 0x0004
-	ES_AUTOVSCROLL  = 0x0040
-	ES_PASSWORD     = 0x0020
-	ES_READONLY     = 0x0800
-	SS_LEFT         = 0x00000000
-	BS_PUSHBUTTON   = 0x00000000
+	WS_OVERLAPPED    = 0x00000000
+	WS_CAPTION       = 0x00C00000
+	WS_SYSMENU       = 0x00080000
+	WS_MINIMIZEBOX   = 0x00020000
+	WS_VISIBLE       = 0x10000000
+	WS_CHILD         = 0x40000000
+	WS_BORDER        = 0x00800000
+	WS_TABSTOP       = 0x00010000
+	WS_VSCROLL       = 0x00200000
+	ES_LEFT          = 0x0000
+	ES_MULTILINE     = 0x0004
+	ES_AUTOVSCROLL   = 0x0040
+	ES_PASSWORD      = 0x0020
+	ES_READONLY      = 0x0800
+	SS_LEFT          = 0x00000000
+	BS_PUSHBUTTON    = 0x00000000
 	BS_DEFPUSHBUTTON = 0x00000001
+	BS_OWNERDRAW     = 0x0000000B // required for custom-painted buttons
 
 	SW_SHOW    = 5
 	TRANSPARENT = 1
-	WHITE_BRUSH = 0
+	NULL_PEN    = 8
 
 	SM_CXSCREEN = 0
 	SM_CYSCREEN = 1
 
-	DT_LEFT     = 0x00000000
-	DT_CENTER   = 0x00000001
-	DT_VCENTER  = 0x00000004
+	DT_LEFT       = 0x00000000
+	DT_CENTER     = 0x00000001
+	DT_RIGHT      = 0x00000002
+	DT_VCENTER    = 0x00000004
 	DT_SINGLELINE = 0x00000020
+	DT_NOCLIP     = 0x00000100
 
+	ODS_SELECTED = 0x0001
+)
+
+// ── Control IDs ───────────────────────────────────────────────────────────────
+
+const (
 	IDC_URL     = 101
 	IDC_SECRET  = 102
 	IDC_ENV     = 103
 	IDC_INSTALL = 104
 	IDC_CANCEL  = 105
 	IDC_STATUS  = 106
+)
 
+// ── Window geometry ───────────────────────────────────────────────────────────
+
+const (
 	WINW = 520
-	WINH = 520 // total window height including title bar (~30px non-client)
-	HDR  = 88  // header height
+	WINH = 572
+	HDR  = 108 // header stripe height (client coords)
+	LPAD = 24  // left/right gutter
+	FW   = WINW - LPAD*2 // usable field width = 472
+	EDTH = 28  // edit control height
+)
 
-	// Colours (BGR for Win32)
-	colHdrBg   = 0x201408 // #0b1420 dark navy
-	colHdrText = 0xFFFFFF
-	colBodyBg  = 0xF5F5F5
-	colAccent  = 0xF78102 // #2f81f7 blue
-	colLabel   = 0x333333
+// Layout — all in client coordinates (y=0 at top of client area).
+const (
+	ySec1     = HDR + 14       // "CONFIGURATION" section label
+	yURLLbl   = ySec1 + 20     // URL field label
+	yURLEdit  = yURLLbl + 16   // URL edit, h=EDTH, ends 200
+	ySecLbl   = yURLEdit + 36  // Secret field label
+	ySecEdit  = ySecLbl + 16   // Secret edit, h=EDTH, ends 252
+	yEnvLbl   = ySecEdit + 36  // Env label
+	yEnvEdit  = yEnvLbl + 16   // Env edit, h=EDTH, ends 304
+	yDivider  = yEnvEdit + 38  // horizontal rule
+	ySec2     = yDivider + 10  // "INSTALLATION LOG" label
+	yLog      = ySec2 + 20     // log edit area
+	yBtns     = 498            // button row
+	logH      = yBtns - yLog - 6
+)
+
+// ── Colours (Win32 COLORREF = 0x00BBGGRR) ────────────────────────────────────
+
+const (
+	colHdrBg     = uintptr(0x0020140B) // #0b1420 deep navy header
+	colBodyBg    = uintptr(0x00382315) // #152338 dark navy body
+	colSurface   = uintptr(0x00412A1B) // #1b2a41 input / elevated surface
+	colLogBg     = uintptr(0x0020140B) // #0b1420 terminal log
+	colAccent    = uintptr(0x00F7812F) // #2f81f7 accent blue
+	colAccentPrs = uintptr(0x00D06A26) // darker blue for pressed state
+	colBorder    = uintptr(0x004A3222) // #22324a border
+	colTextPri   = uintptr(0x00F3EDE6) // #e6edf3 primary text
+	colTextMut   = uintptr(0x00BCA99A) // #9aa9bc muted text
+	colWhite     = uintptr(0x00FFFFFF)
 )
 
 // ── Win32 structs ─────────────────────────────────────────────────────────────
@@ -149,49 +194,86 @@ type MSG struct {
 }
 
 type PAINTSTRUCT struct {
-	Hdc         uintptr
-	Erase       int32
-	RcPaint     [4]int32 // left,top,right,bottom
-	Restore     int32
-	IncUpdate   int32
-	Reserved    [32]byte
+	Hdc       uintptr
+	Erase     int32
+	RcPaint   [4]int32
+	Restore   int32
+	IncUpdate int32
+	Reserved  [32]byte
 }
 
-// ── Global state ──────────────────────────────────────────────────────────────
+// DRAWITEMSTRUCT — 64-bit layout has 4-byte pad after ItemState before HwndItem.
+type DRAWITEMSTRUCT struct {
+	CtlType    uint32
+	CtlID      uint32
+	ItemID     uint32
+	ItemAction uint32
+	ItemState  uint32
+	_          uint32 // alignment
+	HwndItem   uintptr
+	HDC        uintptr
+	RcItem     [4]int32 // left, top, right, bottom
+	ItemData   uintptr
+}
+
+// ── Global handles ────────────────────────────────────────────────────────────
 
 var (
-	hInst    uintptr
-	hMainWnd uintptr
+	hInst      uintptr
+	hMainWnd   uintptr
 	hURLEdit   uintptr
 	hSecEdit   uintptr
 	hEnvEdit   uintptr
 	hInstBtn   uintptr
 	hCancelBtn uintptr
 	hStatus    uintptr
-	hdrBrush   uintptr
-	bodyBrush  uintptr
-	hFont      uintptr
-	hFontBold  uintptr
+
+	// GDI resources — created once in WM_CREATE, destroyed in WM_DESTROY.
+	hdrBrush  uintptr
+	bodyBrush uintptr
+	surfBrush uintptr
+	logBrush  uintptr
+
+	hFont        uintptr // Segoe UI 15pt regular
+	hFontBold    uintptr // Segoe UI 15pt bold
+	hFontSmall   uintptr // Segoe UI 12pt regular (field labels)
+	hFontSection uintptr // Segoe UI 11pt bold (section caps)
+	hFontTitle   uintptr // Segoe UI 20pt bold (header title)
+	hFontSub     uintptr // Segoe UI 13pt regular (header subtitle)
+	hFontBadge   uintptr // Segoe UI 11pt bold (header badge)
+	hFontMono    uintptr // Consolas 13pt (log area)
 
 	wndProcCB = syscall.NewCallback(wndProc)
-
 	installing bool
 )
 
-// ── Win32 helpers ─────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 func utf16(s string) *uint16 {
 	p, _ := windows.UTF16PtrFromString(s)
 	return p
 }
 
-func createWindow(exStyle uint32, class, title string, style uint32,
-	x, y, w, h int, parent, menu, inst uintptr) uintptr {
+func mkFont(size, weight int32, face string) uintptr {
+	p := utf16(face)
+	f, _, _ := procCreateFont.Call(
+		uintptr(size), 0, 0, 0, uintptr(weight),
+		0, 0, 0, 0, 0, 0, 0, 0,
+		uintptr(unsafe.Pointer(p)),
+	)
+	runtime.KeepAlive(p)
+	return f
+}
+
+func createCtl(exStyle uint32, class, title string, style uint32,
+	x, y, w, h int, parent, id, inst uintptr) uintptr {
 	hwnd, _, _ := procCreateWindowEx.Call(
-		uintptr(exStyle), uintptr(unsafe.Pointer(utf16(class))),
+		uintptr(exStyle),
+		uintptr(unsafe.Pointer(utf16(class))),
 		uintptr(unsafe.Pointer(utf16(title))),
-		uintptr(style), uintptr(x), uintptr(y), uintptr(w), uintptr(h),
-		parent, menu, inst, 0,
+		uintptr(style),
+		uintptr(x), uintptr(y), uintptr(w), uintptr(h),
+		parent, id, inst, 0,
 	)
 	return hwnd
 }
@@ -212,12 +294,28 @@ func appendStatus(s string) {
 		cur += "\r\n"
 	}
 	setWindowText(hStatus, cur+s)
-	// Scroll to bottom
 	procSendMessage.Call(hStatus, 0x115 /*WM_VSCROLL*/, 7 /*SB_BOTTOM*/, 0)
 }
 
-func sendFont(hwnd, font uintptr) {
+func setFont(hwnd, font uintptr) {
 	procSendMessage.Call(hwnd, WM_SETFONT, font, 1)
+}
+
+// drawText draws s into the rectangle (x1,y1)-(x2,y2) with the given flags.
+func drawText(hdc uintptr, s string, x1, y1, x2, y2 int, flags uintptr) {
+	if s == "" {
+		return
+	}
+	p := utf16(s)
+	r := [4]int32{int32(x1), int32(y1), int32(x2), int32(y2)}
+	procDrawText.Call(hdc, uintptr(unsafe.Pointer(p)), ^uintptr(0),
+		uintptr(unsafe.Pointer(&r[0])), flags)
+	runtime.KeepAlive(p)
+}
+
+func fillRect(hdc uintptr, x1, y1, x2, y2 int, brush uintptr) {
+	r := [4]int32{int32(x1), int32(y1), int32(x2), int32(y2)}
+	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&r[0])), brush)
 }
 
 // ── Window procedure ──────────────────────────────────────────────────────────
@@ -226,96 +324,62 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	switch uint32(msg) {
 
 	case WM_CREATE:
+		// Brushes
 		hdrBrush, _, _ = procCreateSolidBrush.Call(colHdrBg)
 		bodyBrush, _, _ = procCreateSolidBrush.Call(colBodyBg)
-		segoeUI := utf16("Segoe UI")
-		hFont, _, _ = procCreateFont.Call(
-			16, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0,
-			uintptr(unsafe.Pointer(segoeUI)),
-		)
-		hFontBold, _, _ = procCreateFont.Call(
-			16, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 0, 0,
-			uintptr(unsafe.Pointer(segoeUI)),
-		)
-		runtime.KeepAlive(segoeUI)
+		surfBrush, _, _ = procCreateSolidBrush.Call(colSurface)
+		logBrush, _, _ = procCreateSolidBrush.Call(colLogBg)
+		// Fonts
+		hFont = mkFont(15, 400, "Segoe UI")
+		hFontBold = mkFont(15, 700, "Segoe UI")
+		hFontSmall = mkFont(12, 400, "Segoe UI")
+		hFontSection = mkFont(11, 700, "Segoe UI")
+		hFontTitle = mkFont(20, 700, "Segoe UI")
+		hFontSub = mkFont(13, 400, "Segoe UI")
+		hFontBadge = mkFont(11, 700, "Segoe UI")
+		hFontMono = mkFont(13, 400, "Consolas")
 		createControls(hwnd)
 		return 0
 
 	case WM_PAINT:
 		var ps PAINTSTRUCT
 		hdc, _, _ := procBeginPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
-		if hdc == 0 {
-			procEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
-			return 0
+		if hdc != 0 {
+			paintWindow(hdc)
 		}
-
-		var hdrRect [4]int32
-		hdrRect[2] = WINW
-		hdrRect[3] = HDR
-		procFillRect.Call(hdc, uintptr(unsafe.Pointer(&hdrRect)), hdrBrush)
-
-		procSetBkMode.Call(hdc, TRANSPARENT)
-		procSetTextColor.Call(hdc, colHdrText)
-
-		segoeUITitle := utf16("Segoe UI")
-		titleFont, _, _ := procCreateFont.Call(
-			22, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 0, 0,
-			uintptr(unsafe.Pointer(segoeUITitle)),
-		)
-		runtime.KeepAlive(segoeUITitle)
-		procSelectObject.Call(hdc, titleFont)
-
-		var tr [4]int32
-		tr[0], tr[1], tr[2], tr[3] = 20, 16, WINW-20, 48
-		titleStr := utf16("BAS Platform Agent Setup")
-		procDrawText.Call(hdc, uintptr(unsafe.Pointer(titleStr)),
-			^uintptr(0), uintptr(unsafe.Pointer(&tr)),
-			DT_LEFT|DT_VCENTER|DT_SINGLELINE)
-		runtime.KeepAlive(titleStr)
-
-		segoeUISub := utf16("Segoe UI")
-		subFont, _, _ := procCreateFont.Call(
-			14, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0,
-			uintptr(unsafe.Pointer(segoeUISub)),
-		)
-		runtime.KeepAlive(segoeUISub)
-		procSelectObject.Call(hdc, subFont)
-		procSetTextColor.Call(hdc, 0xCCCCCC)
-
-		var sr [4]int32
-		sr[0], sr[1], sr[2], sr[3] = 20, 48, WINW-20, 76
-		subStr := utf16("Breach & Attack Simulation - Audspect Security")
-		procDrawText.Call(hdc, uintptr(unsafe.Pointer(subStr)),
-			^uintptr(0), uintptr(unsafe.Pointer(&sr)),
-			DT_LEFT|DT_VCENTER|DT_SINGLELINE)
-		runtime.KeepAlive(subStr)
-
-		var bodyRect [4]int32
-		bodyRect[0], bodyRect[1], bodyRect[2], bodyRect[3] = 0, HDR, WINW, WINH
-		procFillRect.Call(hdc, uintptr(unsafe.Pointer(&bodyRect)), bodyBrush)
-
-		procDeleteObject.Call(titleFont)
-		procDeleteObject.Call(subFont)
 		procEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
 		return 0
 
+	case WM_DRAWITEM:
+		if dis := (*DRAWITEMSTRUCT)(unsafe.Pointer(lParam)); dis != nil {
+			drawButton(dis)
+		}
+		return 1
+
 	case WM_CTLCOLORSTATIC:
+		// All STATIC labels: transparent over body bg, muted text.
 		procSetBkMode.Call(wParam, TRANSPARENT)
-		procSetTextColor.Call(wParam, colLabel)
+		procSetTextColor.Call(wParam, colTextMut)
 		return bodyBrush
 
 	case WM_CTLCOLOREDIT:
-		procSetBkMode.Call(wParam, 1 /*OPAQUE*/)
-		procSetTextColor.Call(wParam, 0x111111)
-		white, _, _ := procGetStockObject.Call(WHITE_BRUSH)
-		return white
+		// Log edit: darkest bg, muted text (monospace terminal feel).
+		if lParam == hStatus {
+			procSetBkColor.Call(wParam, colLogBg)
+			procSetTextColor.Call(wParam, colTextMut)
+			return logBrush
+		}
+		// Input fields: dark surface, primary text.
+		procSetBkColor.Call(wParam, colSurface)
+		procSetTextColor.Call(wParam, colTextPri)
+		return surfBrush
 
 	case WM_COMMAND:
 		id := wParam & 0xFFFF
 		switch id {
 		case IDC_INSTALL:
 			if !installing {
-				go runInstall(hwnd)
+				go runInstall()
 			}
 		case IDC_CANCEL:
 			procDestroyWindow.Call(hwnd)
@@ -323,10 +387,13 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		return 0
 
 	case WM_DESTROY:
-		procDeleteObject.Call(hdrBrush)
-		procDeleteObject.Call(bodyBrush)
-		procDeleteObject.Call(hFont)
-		procDeleteObject.Call(hFontBold)
+		for _, h := range []uintptr{
+			hdrBrush, bodyBrush, surfBrush, logBrush,
+			hFont, hFontBold, hFontSmall, hFontSection,
+			hFontTitle, hFontSub, hFontBadge, hFontMono,
+		} {
+			procDeleteObject.Call(h)
+		}
 		procPostQuitMessage.Call(0)
 		return 0
 	}
@@ -334,63 +401,179 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	return r
 }
 
+// ── Paint ──────────────────────────────────────────────────────────────────────
+
+func paintWindow(hdc uintptr) {
+	nullPen, _, _ := procGetStockObject.Call(NULL_PEN)
+
+	// ── Body fill ─────────────────────────────────────────────────────────────
+	fillRect(hdc, 0, 0, WINW, WINH, bodyBrush)
+
+	// ── Header fill ───────────────────────────────────────────────────────────
+	fillRect(hdc, 0, 0, WINW, HDR, hdrBrush)
+
+	// Left accent bar (4px, full header height)
+	accentBrush, _, _ := procCreateSolidBrush.Call(colAccent)
+	fillRect(hdc, 0, 0, 4, HDR, accentBrush)
+	procDeleteObject.Call(accentBrush)
+
+	// Bottom accent line under header (2px)
+	accPen, _, _ := procCreatePen.Call(0, 2, colAccent)
+	procSelectObject.Call(hdc, accPen)
+	procMoveToEx.Call(hdc, 0, uintptr(HDR-1), 0)
+	procLineTo.Call(hdc, WINW, uintptr(HDR-1))
+	procSelectObject.Call(hdc, nullPen)
+	procDeleteObject.Call(accPen)
+
+	procSetBkMode.Call(hdc, TRANSPARENT)
+
+	// ── Header typography ─────────────────────────────────────────────────────
+	// Product word-mark
+	procSelectObject.Call(hdc, hFontTitle)
+	procSetTextColor.Call(hdc, colWhite)
+	drawText(hdc, "Audspect", LPAD+8, 13, 300, 44, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
+
+	// Subtitle
+	procSelectObject.Call(hdc, hFontSub)
+	procSetTextColor.Call(hdc, colTextMut)
+	drawText(hdc, "Breach & Attack Simulation Platform", LPAD+8, 48, WINW-LPAD, 70, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
+
+	// Badge: "AGENT SETUP" right-aligned in accent blue
+	procSelectObject.Call(hdc, hFontBadge)
+	procSetTextColor.Call(hdc, colAccent)
+	drawText(hdc, "AGENT SETUP", 0, 13, WINW-LPAD, 36, DT_RIGHT|DT_SINGLELINE|DT_NOCLIP)
+
+	// ── Body section headers ───────────────────────────────────────────────────
+	procSelectObject.Call(hdc, hFontSection)
+	procSetTextColor.Call(hdc, colTextMut)
+	drawText(hdc, "CONFIGURATION", LPAD, ySec1, WINW-LPAD, ySec1+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
+	drawText(hdc, "INSTALLATION LOG", LPAD, ySec2, WINW-LPAD, ySec2+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
+
+	// ── Field labels (drawn here, not STATIC controls, for consistent colour) ─
+	procSelectObject.Call(hdc, hFontSmall)
+	procSetTextColor.Call(hdc, colTextMut)
+	drawText(hdc, "Server URL", LPAD, yURLLbl, WINW-LPAD, yURLLbl+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
+	drawText(hdc, "Agent Secret", LPAD, ySecLbl, WINW-LPAD, ySecLbl+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
+	drawText(hdc, "Environment Label", LPAD, yEnvLbl, WINW-LPAD, yEnvLbl+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
+
+	// ── Divider between config and log sections ────────────────────────────────
+	divPen, _, _ := procCreatePen.Call(0, 1, colBorder)
+	procSelectObject.Call(hdc, divPen)
+	procMoveToEx.Call(hdc, LPAD, uintptr(yDivider), 0)
+	procLineTo.Call(hdc, WINW-LPAD, uintptr(yDivider))
+	procSelectObject.Call(hdc, nullPen)
+	procDeleteObject.Call(divPen)
+}
+
+// drawButton paints an owner-drawn button (WM_DRAWITEM).
+// Primary (IDC_INSTALL): accent blue fill, white bold text.
+// Secondary (IDC_CANCEL): dark surface fill, muted text, border.
+func drawButton(dis *DRAWITEMSTRUCT) {
+	pressed := (dis.ItemState & ODS_SELECTED) != 0
+	rc := dis.RcItem // copy to local so &rc[0] is a normal Go pointer
+	l, t, r, b := int(rc[0]), int(rc[1]), int(rc[2]), int(rc[3])
+	nullPen, _, _ := procGetStockObject.Call(NULL_PEN)
+
+	if dis.CtlID == IDC_INSTALL {
+		// Blue primary button.
+		bg := colAccent
+		if pressed {
+			bg = colAccentPrs
+		}
+		brush, _, _ := procCreateSolidBrush.Call(bg)
+		pen, _, _ := procCreatePen.Call(0, 1, bg)
+		procSelectObject.Call(dis.HDC, brush)
+		procSelectObject.Call(dis.HDC, pen)
+		procRoundRect.Call(dis.HDC,
+			uintptr(l), uintptr(t), uintptr(r), uintptr(b), 8, 8)
+		procDeleteObject.Call(brush)
+		procDeleteObject.Call(pen)
+
+		procSetBkMode.Call(dis.HDC, TRANSPARENT)
+		procSetTextColor.Call(dis.HDC, colWhite)
+		procSelectObject.Call(dis.HDC, hFontBold)
+		p := utf16("Validate & Install")
+		procDrawText.Call(dis.HDC, uintptr(unsafe.Pointer(p)), ^uintptr(0),
+			uintptr(unsafe.Pointer(&rc[0])),
+			DT_CENTER|DT_VCENTER|DT_SINGLELINE)
+		runtime.KeepAlive(p)
+	} else {
+		// Dark secondary button with muted border.
+		bg := colSurface
+		if pressed {
+			bg = colBorder
+		}
+		brush, _, _ := procCreateSolidBrush.Call(bg)
+		borderPen, _, _ := procCreatePen.Call(0, 1, colBorder)
+		procSelectObject.Call(dis.HDC, brush)
+		procSelectObject.Call(dis.HDC, borderPen)
+		procRoundRect.Call(dis.HDC,
+			uintptr(l), uintptr(t), uintptr(r), uintptr(b), 8, 8)
+		procDeleteObject.Call(brush)
+		procDeleteObject.Call(borderPen)
+		procSelectObject.Call(dis.HDC, nullPen)
+
+		procSetBkMode.Call(dis.HDC, TRANSPARENT)
+		procSetTextColor.Call(dis.HDC, colTextMut)
+		procSelectObject.Call(dis.HDC, hFont)
+		p := utf16("Exit")
+		procDrawText.Call(dis.HDC, uintptr(unsafe.Pointer(p)), ^uintptr(0),
+			uintptr(unsafe.Pointer(&rc[0])),
+			DT_CENTER|DT_VCENTER|DT_SINGLELINE)
+		runtime.KeepAlive(p)
+	}
+}
+
+// ── Control creation ──────────────────────────────────────────────────────────
+
 func createControls(hwnd uintptr) {
-	label := func(text string, x, y, w, h int) uintptr {
-		hw := createWindow(0, "STATIC", text,
-			WS_CHILD|WS_VISIBLE|SS_LEFT, x, y, w, h, hwnd, 0, hInst)
-		sendFont(hw, hFont)
-		return hw
-	}
-	edit := func(id, x, y, w, h int, style uint32) uintptr {
-		hw := createWindow(0x200 /*WS_EX_CLIENTEDGE*/, "EDIT", "",
-			WS_CHILD|WS_VISIBLE|WS_TABSTOP|style, x, y, w, h,
-			hwnd, uintptr(id), hInst)
-		sendFont(hw, hFont)
+	// Field labels are now painted in WM_PAINT (drawText) for consistent dark
+	// styling — STATIC controls inherit the system theme and are hard to fully
+	// dark-theme without subclassing, so we skip them here.
+
+	mkEdit := func(id, x, y, w, h int, style uint32) uintptr {
+		hw := createCtl(0, "EDIT", "",
+			WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_BORDER|style,
+			x, y, w, h, hwnd, uintptr(id), hInst)
+		setFont(hw, hFont)
 		return hw
 	}
 
-	const lx = 30 // left margin
-	const fw = WINW - 60 // field width
-
-	label("Server URL  (e.g. http://10.0.0.5:9000)", lx, HDR+16, fw, 20)
-	hURLEdit = edit(IDC_URL, lx, HDR+38, fw, 26, ES_LEFT)
+	hURLEdit = mkEdit(IDC_URL, LPAD, yURLEdit, FW, EDTH, ES_LEFT)
 	setWindowText(hURLEdit, "http://")
 
-	label("Agent Secret", lx, HDR+76, fw, 20)
-	hSecEdit = edit(IDC_SECRET, lx, HDR+98, fw, 26, ES_PASSWORD)
+	hSecEdit = mkEdit(IDC_SECRET, LPAD, ySecEdit, FW, EDTH, ES_PASSWORD)
 
-	label("Environment Label", lx, HDR+136, fw, 20)
-	hEnvEdit = edit(IDC_ENV, lx, HDR+158, fw, 26, ES_LEFT)
+	hEnvEdit = mkEdit(IDC_ENV, LPAD, yEnvEdit, FW, EDTH, ES_LEFT)
 	setWindowText(hEnvEdit, "Production")
 
-	label("Installation Log", lx, HDR+196, fw, 20)
-	hStatus = createWindow(0x200, "EDIT", "",
+	// Log area — dark terminal style, monospace.
+	hStatus = createCtl(0, "EDIT", "",
 		WS_CHILD|WS_VISIBLE|WS_BORDER|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL,
-		lx, HDR+218, fw, 118, hwnd, uintptr(IDC_STATUS), hInst)
-	sendFont(hStatus, hFont)
+		LPAD, yLog, FW, logH, hwnd, uintptr(IDC_STATUS), hInst)
+	setFont(hStatus, hFontMono)
 
-	hInstBtn = createWindow(0, "BUTTON", "  Validate & Install  ",
-		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_DEFPUSHBUTTON,
-		lx, HDR+350, 200, 34, hwnd, uintptr(IDC_INSTALL), hInst)
-	sendFont(hInstBtn, hFontBold)
+	// Primary button: BS_OWNERDRAW so we can paint it accent blue.
+	hInstBtn = createCtl(0, "BUTTON", "Validate & Install",
+		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_OWNERDRAW,
+		LPAD, yBtns, 196, 34, hwnd, uintptr(IDC_INSTALL), hInst)
 
-	hCancelBtn = createWindow(0, "BUTTON", "Exit",
-		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_PUSHBUTTON,
-		lx+210, HDR+350, 80, 34, hwnd, uintptr(IDC_CANCEL), hInst)
-	sendFont(hCancelBtn, hFont)
+	// Secondary button.
+	hCancelBtn = createCtl(0, "BUTTON", "Exit",
+		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_OWNERDRAW,
+		LPAD+206, yBtns, 76, 34, hwnd, uintptr(IDC_CANCEL), hInst)
 }
 
 // ── Install logic ─────────────────────────────────────────────────────────────
 
-func runInstall(hwnd uintptr) {
+func runInstall() {
 	installing = true
-	procEnableWindow.Call(hInstBtn, 0) // disable button
+	procEnableWindow.Call(hInstBtn, 0)
 
 	serverURL := getWindowText(hURLEdit)
 	secret := getWindowText(hSecEdit)
 	envLabel := getWindowText(hEnvEdit)
 
-	// Validate inputs
 	if serverURL == "" || serverURL == "http://" {
 		appendStatus("[ERROR] Server URL is required.")
 		procEnableWindow.Call(hInstBtn, 1)
@@ -404,7 +587,6 @@ func runInstall(hwnd uintptr) {
 		return
 	}
 
-	// Step 1: Validate connectivity + secret
 	appendStatus("[1/4] Validating server connectivity and secret...")
 	if err := validateEnrollment(serverURL, secret); err != nil {
 		appendStatus("[ERROR] " + err.Error())
@@ -415,7 +597,6 @@ func runInstall(hwnd uintptr) {
 	}
 	appendStatus("[1/4] Server validated OK.")
 
-	// Step 2: Extract agent binary
 	appendStatus("[2/4] Extracting agent binary...")
 	installDir := filepath.Join(os.Getenv("ProgramFiles"), "BASAgent")
 	if err := os.MkdirAll(installDir, 0755); err != nil {
@@ -433,7 +614,6 @@ func runInstall(hwnd uintptr) {
 	}
 	appendStatus("[2/4] Agent extracted to: " + agentPath)
 
-	// Step 3: Install service
 	appendStatus("[3/4] Installing BASAgent service...")
 	cmd := exec.Command(agentPath,
 		"--install",
@@ -441,10 +621,6 @@ func runInstall(hwnd uintptr) {
 		"--env", envLabel,
 		"--secret", secret,
 	)
-	// Anchor the child's working directory to the install dir, never the
-	// installer's own launch dir. Otherwise a spawned agent inherits the
-	// installer's cwd and holds a lock on it (e.g. the dist build folder),
-	// blocking later cleanup/rebuilds.
 	cmd.Dir = installDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()
@@ -457,30 +633,22 @@ func runInstall(hwnd uintptr) {
 		installing = false
 		return
 	}
-	if len(out) > 0 {
-		for _, line := range splitLines(string(out)) {
-			if line != "" {
-				appendStatus("        " + line)
-			}
+	for _, line := range splitLines(string(out)) {
+		if line != "" {
+			appendStatus("        " + line)
 		}
 	}
 
-	// Step 4: Start service
 	appendStatus("[4/4] Starting BASAgent service...")
 	sc := exec.Command("sc", "start", "BASAgent")
 	sc.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	scOut, scErr := sc.CombinedOutput()
 	if scErr != nil {
-		// Service may already be starting — check status
 		appendStatus("[~] sc start: " + string(scOut))
 	}
 
-	// Ensure the WebView2 runtime is present so the status console opens in a
-	// native window rather than falling back to the browser (best-effort).
 	ensureWebView2Runtime()
 
-	// Register and launch the tray status monitor (best-effort, non-fatal).
-	// Same binary as the agent, run with --tray in the user session.
 	if err := registerTrayStartup(agentPath); err != nil {
 		appendStatus("[~] Could not register status monitor for startup: " + err.Error())
 	} else {
@@ -489,22 +657,20 @@ func runInstall(hwnd uintptr) {
 	launchTray(agentPath)
 
 	appendStatus("")
-	appendStatus("========================================")
+	appendStatus("──────────────────────────────────────────")
 	appendStatus("  BAS Agent installed and started.")
-	appendStatus("  The agent will appear in the dashboard")
+	appendStatus("  The agent will enroll in the dashboard")
 	appendStatus("  within 30 seconds.")
-	appendStatus("  A status monitor icon will appear in")
-	appendStatus("  the system tray.")
-	appendStatus("========================================")
+	appendStatus("  Status monitor icon will appear in tray.")
+	appendStatus("──────────────────────────────────────────")
 
-	setWindowText(hInstBtn, "  Installed  ")
+	setWindowText(hInstBtn, "Installed")
 	setWindowText(hCancelBtn, "Close")
+	procInvalidateRect.Call(hInstBtn, 0, 1)
+	procInvalidateRect.Call(hCancelBtn, 0, 1)
 	installing = false
 }
 
-// registerTrayStartup adds `bas_agent.exe --tray` to the per-machine Run key so
-// the status monitor launches for every user at login. The agent service runs
-// as SYSTEM independently; this is only the unprivileged user-session UI.
 func registerTrayStartup(agentPath string) error {
 	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE,
 		`SOFTWARE\Microsoft\Windows\CurrentVersion\Run`, registry.SET_VALUE)
@@ -515,26 +681,15 @@ func registerTrayStartup(agentPath string) error {
 	return k.SetStringValue("BASAgentTray", `"`+agentPath+`" --tray`)
 }
 
-// launchTray starts the tray (agent --tray) in the current session so the icon
-// appears without requiring a logoff/logon.
 func launchTray(agentPath string) {
 	cmd := exec.Command(agentPath, "--tray")
-	// Anchor cwd to the install dir so the long-lived tray never holds a lock
-	// on the installer's launch dir (e.g. the dist build folder), which would
-	// block later cleanup/rebuilds.
 	cmd.Dir = filepath.Dir(agentPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	_ = cmd.Start() // fire and forget
+	_ = cmd.Start()
 }
 
-// webView2RuntimeClientGUID is the EdgeUpdate client ID for the Evergreen
-// WebView2 Runtime. A non-empty, non-zero "pv" value under this key means the
-// runtime is installed.
 const webView2RuntimeClientGUID = `{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`
 
-// webView2Installed reports whether the Edge WebView2 runtime is present, by
-// checking the per-machine (64-bit and WOW6432Node views) and per-user
-// EdgeUpdate registry entries.
 func webView2Installed() bool {
 	checks := []struct {
 		root registry.Key
@@ -558,16 +713,13 @@ func webView2Installed() bool {
 	return false
 }
 
-// ensureWebView2Runtime installs the bundled WebView2 runtime if it is missing.
-// Best-effort and non-fatal: if the runtime is absent and not bundled (or the
-// install fails), the agent status console simply falls back to the browser.
 func ensureWebView2Runtime() {
 	if webView2Installed() {
 		appendStatus("[+] WebView2 runtime present.")
 		return
 	}
 	if len(webview2RuntimeInstaller) == 0 {
-		appendStatus("[~] WebView2 runtime missing and not bundled - status console will open in the browser.")
+		appendStatus("[~] WebView2 runtime missing and not bundled — status console will open in browser.")
 		return
 	}
 	appendStatus("[*] Installing Microsoft Edge WebView2 runtime...")
@@ -584,30 +736,18 @@ func ensureWebView2Runtime() {
 		if len(out) > 0 {
 			appendStatus("        " + string(out))
 		}
-		appendStatus("    Status console will open in the browser until the runtime is installed.")
 		return
 	}
 	appendStatus("[+] WebView2 runtime installed.")
 }
 
-// validateEnrollment checks connectivity and token validity without creating
-// any agent records.
-//
-// Step 1: GET /health  — plain connectivity (no auth, always present).
-// Step 2: GET /ws/agent — token probe. The WS endpoint validates
-// X-Agent-Token before attempting the upgrade, so a non-WS request gets:
-//   401 → wrong token
-//   400/426/other → token accepted (upgrade refused because not a WS request)
 func validateEnrollment(serverURL, secret string) error {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
-		// Don't follow redirects — a redirect means something unexpected.
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-
-	// Step 1: connectivity
 	req, err := http.NewRequest(http.MethodGet, serverURL+"/health", nil)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
@@ -620,8 +760,6 @@ func validateEnrollment(serverURL, secret string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("server health check returned HTTP %d", resp.StatusCode)
 	}
-
-	// Step 2: token check via existing WebSocket endpoint
 	req2, err := http.NewRequest(http.MethodGet, serverURL+"/ws/agent", nil)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
@@ -662,42 +800,41 @@ func main() {
 
 	if !isElevated() {
 		procMessageBox.Call(0,
-			uintptr(unsafe.Pointer(utf16("This installer requires Administrator privileges.\n\nPlease right-click the file and choose \"Run as administrator\"."))),
-			uintptr(unsafe.Pointer(utf16("BAS Agent Setup"))),
+			uintptr(unsafe.Pointer(utf16("This installer requires Administrator privileges.\n\nRight-click the file and choose \"Run as administrator\"."))),
+			uintptr(unsafe.Pointer(utf16("Audspect BAS — Agent Setup"))),
 			0x10 /*MB_ICONERROR*/)
 		return
 	}
 
 	hInst, _, _ = procGetModuleHandle.Call(0)
 
-	className := utf16("BASInstallerWnd")
+	className := utf16("AudspectInstallerWnd")
 	wc := WNDCLASSEX{
-		Size:       uint32(unsafe.Sizeof(WNDCLASSEX{})),
-		WndProc:    wndProcCB,
-		Instance:   hInst,
-		Background: bodyBrush,
-		ClassName:  className,
+		Size:    uint32(unsafe.Sizeof(WNDCLASSEX{})),
+		WndProc: wndProcCB,
+		Instance: hInst,
+		ClassName: className,
 	}
 	wc.Cursor, _, _ = procLoadCursor.Call(0, 32512 /*IDC_ARROW*/)
 	procRegisterClassEx.Call(uintptr(unsafe.Pointer(&wc)))
 
-	winStyle := uint32(WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE)
-	hMainWnd = createWindow(0, "BASInstallerWnd",
-		"BAS Platform - Agent Setup",
-		winStyle, 100, 100, WINW, WINH, 0, 0, hInst)
-
+	style := uint32(WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE)
+	hMainWnd = createCtl(0, "AudspectInstallerWnd",
+		"Audspect BAS Platform — Agent Setup",
+		style, 0, 0, WINW, WINH, 0, 0, hInst)
 	if hMainWnd == 0 {
 		procMessageBox.Call(0,
-			uintptr(unsafe.Pointer(utf16("Failed to create installer window.\n\nThe installer may already be running, or Windows blocked the application."))),
-			uintptr(unsafe.Pointer(utf16("BAS Agent Setup"))),
-			0x10 /*MB_ICONERROR*/)
+			uintptr(unsafe.Pointer(utf16("Failed to create installer window.\n\nThe installer may already be running."))),
+			uintptr(unsafe.Pointer(utf16("Audspect BAS — Agent Setup"))),
+			0x10)
 		return
 	}
 
+	// Centre on screen.
 	sw, _, _ := procGetSystemMetrics.Call(SM_CXSCREEN)
 	sh, _, _ := procGetSystemMetrics.Call(SM_CYSCREEN)
 	procSetWindowPos.Call(hMainWnd, 0,
-		uintptr(int((int(sw)-WINW)/2)), uintptr(int((int(sh)-WINH)/2)), WINW, WINH,
+		uintptr(int(sw-WINW)/2), uintptr(int(sh-WINH)/2), WINW, WINH,
 		0x0040 /*SWP_SHOWWINDOW*/)
 
 	procShowWindow.Call(hMainWnd, SW_SHOW)
@@ -717,8 +854,8 @@ func main() {
 // ── UAC elevation ─────────────────────────────────────────────────────────────
 
 var (
-	shell32           = windows.NewLazySystemDLL("shell32.dll")
-	procShellExecute  = shell32.NewProc("ShellExecuteW")
+	shell32          = windows.NewLazySystemDLL("shell32.dll")
+	procShellExecute = shell32.NewProc("ShellExecuteW")
 )
 
 func isElevated() bool {
