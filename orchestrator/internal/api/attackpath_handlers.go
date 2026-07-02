@@ -67,6 +67,26 @@ func (h *Handler) SubmitAttackPathCollection(w http.ResponseWriter, r *http.Requ
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Compute duration from the job's ack_at (start of actual probing).
+	var durationMs int64
+	if jobID != "" {
+		var ackAt *time.Time
+		h.db.QueryRow(r.Context(), `SELECT ack_at FROM attackpath_jobs WHERE id=$1`, jobID).Scan(&ackAt)
+		if ackAt != nil {
+			durationMs = time.Since(*ackAt).Milliseconds()
+		}
+	}
+
+	// Record lightweight metadata in history (never overwrites the live graph).
+	sharpHound := c.Source == "sharphound"
+	h.db.Exec(r.Context(),
+		`INSERT INTO attackpath_collection_history
+		 (agent_id, hostname, source, collected_at, node_count, edge_count, sharphound, duration_ms, status)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'completed')`,
+		c.AgentID, c.Hostname, c.Source, c.CollectedAt,
+		len(c.Nodes), len(c.Edges), sharpHound, durationMs)
+
 	// Mark the job completed (also clears the progress column).
 	h.CompleteAPJob(r.Context(), c.AgentID, jobID)
 
@@ -80,6 +100,7 @@ func (h *Handler) SubmitAttackPathCollection(w http.ResponseWriter, r *http.Requ
 			"edges":       len(c.Edges),
 			"source":      c.Source,
 			"collectedAt": c.CollectedAt,
+			"durationMs":  durationMs,
 			"jobId":       jobID,
 		}),
 	})
@@ -153,13 +174,114 @@ func (h *Handler) GetAttackPathSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := attackpath.BuildAndAnalyze(cols, h.loadAssetTags(r))
+
+	// Build per-agent metadata from the live collections table so the UI can
+	// show "Current Graph" details (hostname, counts, timestamp) without a
+	// separate API call.
+	type agentMeta struct {
+		AgentID     string    `json:"agentId"`
+		Hostname    string    `json:"hostname"`
+		CollectedAt time.Time `json:"collectedAt"`
+		NodeCount   int       `json:"nodeCount"`
+		EdgeCount   int       `json:"edgeCount"`
+	}
+	var agentMetas []agentMeta
+	rows, _ := h.db.Query(r.Context(),
+		`SELECT agent_id, hostname, collected_at
+		   FROM attackpath_collections WHERE source='agent'
+		  ORDER BY collected_at DESC`)
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var m agentMeta
+			rows.Scan(&m.AgentID, &m.Hostname, &m.CollectedAt)
+			agentMetas = append(agentMetas, m)
+		}
+	}
+	// Annotate with node/edge counts from parsed collections.
+	for i, m := range agentMetas {
+		for _, c := range cols {
+			if c.AgentID == m.AgentID {
+				agentMetas[i].NodeCount = len(c.Nodes)
+				agentMetas[i].EdgeCount = len(c.Edges)
+				break
+			}
+		}
+	}
+
 	var latest time.Time
 	for _, c := range cols {
 		if c.CollectedAt.After(latest) {
 			latest = c.CollectedAt
 		}
 	}
-	respond(w, map[string]any{"collected": true, "agents": len(cols), "summary": s, "latestCollectedAt": latest})
+	respond(w, map[string]any{
+		"collected":        true,
+		"agents":           len(cols),
+		"summary":          s,
+		"latestCollectedAt": latest,
+		"agentMeta":        agentMetas,
+	})
+}
+
+// GetAttackPathHistory returns recent collection run metadata (no graph payloads).
+// GET /api/attackpath/history?agentId=X&limit=N  (Viewer+)
+func (h *Handler) GetAttackPathHistory(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agentId")
+	limit := 20
+
+	type historyRow struct {
+		ID          string    `json:"id"`
+		AgentID     string    `json:"agentId"`
+		Hostname    string    `json:"hostname"`
+		CollectedAt time.Time `json:"collectedAt"`
+		NodeCount   int       `json:"nodeCount"`
+		EdgeCount   int       `json:"edgeCount"`
+		SharpHound  bool      `json:"sharpHound"`
+		DurationMs  int64     `json:"durationMs"`
+		Status      string    `json:"status"`
+		ErrorMsg    string    `json:"errorMsg,omitempty"`
+	}
+
+	var dbRows interface {
+		Next() bool
+		Scan(...any) error
+		Close()
+	}
+	var err error
+	if agentID != "" {
+		dbRows, err = h.db.Query(r.Context(),
+			`SELECT id, agent_id, hostname, collected_at, node_count, edge_count,
+			        sharphound, duration_ms, status, error_msg
+			   FROM attackpath_collection_history WHERE agent_id=$1
+			  ORDER BY collected_at DESC LIMIT $2`, agentID, limit)
+	} else {
+		dbRows, err = h.db.Query(r.Context(),
+			`SELECT id, agent_id, hostname, collected_at, node_count, edge_count,
+			        sharphound, duration_ms, status, error_msg
+			   FROM attackpath_collection_history
+			  ORDER BY collected_at DESC LIMIT $1`, limit)
+	}
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer dbRows.Close()
+
+	var out []historyRow
+	for dbRows.Next() {
+		var row historyRow
+		if dbRows.Scan(&row.ID, &row.AgentID, &row.Hostname, &row.CollectedAt,
+			&row.NodeCount, &row.EdgeCount, &row.SharpHound, &row.DurationMs,
+			&row.Status, &row.ErrorMsg) != nil {
+			continue
+		}
+		out = append(out, row)
+	}
+	if out == nil {
+		out = []historyRow{}
+	}
+	respond(w, out)
 }
 
 // GetAttackPathAssets returns the host inventory — every host in the current

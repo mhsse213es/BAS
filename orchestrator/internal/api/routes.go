@@ -159,6 +159,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 
 		// Attack Path Validation — fleet lateral-movement graph summary.
 		r.Get("/api/attackpath/summary", h.GetAttackPathSummary)
+		r.Get("/api/attackpath/history", h.GetAttackPathHistory)
 		r.Get("/api/attackpath/assets", h.GetAttackPathAssets)
 		r.Get("/api/attackpath/schedule", h.GetAttackPathSchedule)
 		r.Get("/api/attackpath/subnet/{agentId}", h.GetAttackPathSubnet)

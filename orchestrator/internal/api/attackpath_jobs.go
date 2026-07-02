@@ -176,11 +176,6 @@ func (h *Handler) CreateAttackPathJob(w http.ResponseWriter, r *http.Request) {
 
 	cmd, shLoaded := buildCollectCmd(body.Targets, body.Segment, body.RunSharpHound, body.SharpHoundArgs)
 
-	var prevCollectedAt *time.Time
-	h.db.QueryRow(r.Context(),
-		`SELECT collected_at FROM attackpath_collections WHERE agent_id=$1 AND source='agent'`,
-		body.AgentID).Scan(&prevCollectedAt)
-
 	jobID, err := h.createAPJob(r.Context(), body.AgentID, cmd, len(body.Targets))
 	if err != nil {
 		jsonError(w, "create job: "+err.Error(), http.StatusInternalServerError)
@@ -201,9 +196,8 @@ func (h *Handler) CreateAttackPathJob(w http.ResponseWriter, r *http.Request) {
 	h.dispatchAPJobWS(r.Context(), j, cmd)
 
 	respond(w, map[string]any{
-		"job":                  j,
-		"sharpHoundDelivered":  shLoaded,
-		"previousCollectionAt": prevCollectedAt,
+		"job":                 j,
+		"sharpHoundDelivered": shLoaded,
 	})
 }
 

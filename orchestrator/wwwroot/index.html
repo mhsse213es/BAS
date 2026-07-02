@@ -2323,6 +2323,51 @@ body.theme-slate {
             <button class="btn btn-primary btn-sm" id="ap-collect-btn" onclick="openAPCollect()">&#9654; Run Collection</button>
           </div>
         </div>
+        <!-- Current Graph metadata bar — always visible when data exists -->
+        <div id="ap-current-graph-bar" style="display:none;margin-bottom:1rem">
+          <div class="dash-panel-body" style="padding:0.65rem 1rem;display:flex;align-items:center;flex-wrap:wrap;gap:1.5rem">
+            <div>
+              <div class="tiny muted" style="margin-bottom:0.1rem">Last collected</div>
+              <div style="font-size:0.82rem;font-weight:600;color:var(--text)" id="ap-meta-ts">—</div>
+            </div>
+            <div>
+              <div class="tiny muted" style="margin-bottom:0.1rem">Agent</div>
+              <div style="font-size:0.82rem;color:var(--text)" id="ap-meta-agent">—</div>
+            </div>
+            <div>
+              <div class="tiny muted" style="margin-bottom:0.1rem">Nodes</div>
+              <div style="font-size:0.82rem;color:var(--text)" id="ap-meta-nodes">—</div>
+            </div>
+            <div>
+              <div class="tiny muted" style="margin-bottom:0.1rem">Edges</div>
+              <div style="font-size:0.82rem;color:var(--text)" id="ap-meta-edges">—</div>
+            </div>
+            <div>
+              <div class="tiny muted" style="margin-bottom:0.1rem">Graph age</div>
+              <div style="font-size:0.82rem;color:var(--text)" id="ap-meta-age">—</div>
+            </div>
+            <div style="margin-left:auto">
+              <button class="btn btn-outline btn-sm" onclick="toggleAPHistory()" id="ap-history-toggle">&#128196; History</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Collection history panel -->
+        <div id="ap-history-panel" style="display:none;margin-bottom:1rem">
+          <div class="dash-panel-body" style="padding:1rem">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+              <div style="font-weight:700;font-size:0.88rem;color:var(--text)">Collection History</div>
+              <button class="btn btn-outline btn-sm" onclick="toggleAPHistory()">Close</button>
+            </div>
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Collected</th><th>Agent</th><th>Nodes</th><th>Edges</th><th>Duration</th><th>SharpHound</th><th>Status</th></tr></thead>
+                <tbody id="ap-history-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <div id="ap-assets" class="dash-panel" style="display:none;margin-bottom:1rem">
           <div class="dash-panel-body" style="padding:1rem">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.35rem">
@@ -2363,13 +2408,13 @@ body.theme-slate {
               <label style="display:flex;align-items:center;gap:0.45rem;font-size:0.8rem;color:var(--text);margin-bottom:0.8rem;cursor:pointer">
                 <input type="checkbox" id="ap-sharphound"> Run SharpHound (domain-joined hosts only)
               </label>
-              <!-- replacement warning — shown when a previous collection exists -->
-              <div id="ap-replace-warn" style="display:none;background:rgba(210,153,34,0.10);border:1px solid var(--warning);border-radius:6px;padding:0.55rem 0.75rem;margin-bottom:0.75rem;font-size:0.78rem;color:var(--warning)">
-                &#9888;&nbsp;<strong>Previous collection will be replaced.</strong> <span id="ap-replace-detail"></span>
-                This new collection supersedes the old one — no data is permanently lost until the agent reports back.
+              <!-- current graph context — neutral, informational -->
+              <div id="ap-current-ctx" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.75rem;font-size:0.78rem;color:var(--muted)">
+                Current graph: <span id="ap-current-ctx-ts" style="color:var(--text)"></span>
+                &mdash; a new collection will refresh the attack path graph.
               </div>
               <div style="display:flex;gap:0.5rem">
-                <button class="btn btn-primary btn-sm" onclick="dispatchAPCollect()">&#9654; Dispatch Collection</button>
+                <button class="btn btn-primary btn-sm" onclick="dispatchAPCollect()">&#9654; Start Collection</button>
                 <button class="btn btn-outline btn-sm" onclick="apCollectClose()">Cancel</button>
               </div>
             </div>
@@ -3627,7 +3672,74 @@ function apTable(title, cols, rows) {
   rows.forEach(function(r) { h += '<tr>' + r.map(function(c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; });
   return h + '</tbody></table></div>';
 }
+function _fmtDuration(ms) {
+  if (!ms || ms <= 0) return '—';
+  var s = Math.round(ms / 1000);
+  if (s < 60) return s + 's';
+  return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+}
+
+function _apUpdateMetaBar(d) {
+  var bar = document.getElementById('ap-current-graph-bar');
+  if (!bar) return;
+  if (!d || !d.collected || !d.agentMeta || !d.agentMeta.length) {
+    bar.style.display = 'none';
+    return;
+  }
+  var m = d.agentMeta[0]; // most recently collected agent
+  var ts = m.collectedAt ? new Date(m.collectedAt) : null;
+  var tsStr = ts ? ts.toLocaleString('en-GB', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+  var ageMs = ts ? Date.now() - ts.getTime() : 0;
+  var ageStr = ageMs > 0 ? ago(ts.toISOString()) : '—';
+  document.getElementById('ap-meta-ts').textContent = tsStr;
+  document.getElementById('ap-meta-agent').textContent = m.hostname || m.agentId || '—';
+  document.getElementById('ap-meta-nodes').textContent = m.nodeCount != null ? m.nodeCount : '—';
+  document.getElementById('ap-meta-edges').textContent = m.edgeCount != null ? m.edgeCount : '—';
+  document.getElementById('ap-meta-age').textContent = ageStr;
+  bar.style.display = '';
+}
+
+function toggleAPHistory() {
+  var p = document.getElementById('ap-history-panel');
+  if (p.style.display === 'none' || !p.style.display) {
+    p.style.display = '';
+    loadAPHistory();
+  } else {
+    p.style.display = 'none';
+  }
+}
+
+function loadAPHistory() {
+  var tb = document.getElementById('ap-history-body');
+  if (!tb) return;
+  tb.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+  apicall('/api/attackpath/history?limit=20').then(function(rows) {
+    if (!rows || !rows.length) {
+      tb.innerHTML = '<tr><td colspan="7" class="empty">No collection history yet.</td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map(function(r) {
+      var ts = r.collectedAt ? new Date(r.collectedAt).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+      var statusBadge = r.status === 'completed'
+        ? '<span style="color:var(--success)">&#10003; Completed</span>'
+        : '<span style="color:var(--danger)">&#10005; ' + x(r.status) + (r.errorMsg ? ': ' + x(r.errorMsg.slice(0,40)) : '') + '</span>';
+      return '<tr>' +
+        '<td style="font-family:var(--font-mono);font-size:0.76rem">' + ts + '</td>' +
+        '<td>' + x(r.hostname || r.agentId) + '</td>' +
+        '<td style="text-align:right">' + (r.nodeCount || 0) + '</td>' +
+        '<td style="text-align:right">' + (r.edgeCount || 0) + '</td>' +
+        '<td style="text-align:right">' + _fmtDuration(r.durationMs) + '</td>' +
+        '<td style="text-align:center">' + (r.sharpHound ? '&#10003;' : '&#8212;') + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '</tr>';
+    }).join('');
+  }).catch(function(e) {
+    tb.innerHTML = '<tr><td colspan="7" class="empty">' + x(e.message) + '</td></tr>';
+  });
+}
+
 function renderAttackPath(d) {
+  _apUpdateMetaBar(d);
   var body = document.getElementById('ap-body');
   if (!body) return;
   if (!d || !d.collected) {
@@ -3703,7 +3815,6 @@ function apCollectClose() {
   document.getElementById('ap-form').style.display = '';
   document.getElementById('ap-progress').style.display = 'none';
   document.getElementById('ap-done-actions').style.display = 'none';
-  document.getElementById('ap-replace-warn').style.display = 'none';
 }
 
 function openAPCollect() {
@@ -3713,40 +3824,29 @@ function openAPCollect() {
   document.getElementById('ap-form').style.display = '';
   document.getElementById('ap-progress').style.display = 'none';
   document.getElementById('ap-done-actions').style.display = 'none';
-  document.getElementById('ap-replace-warn').style.display = 'none';
   document.getElementById('ap-targets').value = '';
   document.getElementById('ap-target-count').textContent = '';
+
+  // Show neutral current-graph context note if we have metadata
+  var ctxEl = document.getElementById('ap-current-ctx');
+  var ctxTs = document.getElementById('ap-current-ctx-ts');
+  var metaTs = document.getElementById('ap-meta-ts');
+  if (metaTs && metaTs.textContent && metaTs.textContent !== '—') {
+    if (ctxTs) ctxTs.textContent = metaTs.textContent;
+    if (ctxEl) ctxEl.style.display = '';
+  } else {
+    if (ctxEl) ctxEl.style.display = 'none';
+  }
+
   function fill() {
     sel.innerHTML = (agents || []).map(function(a) {
       return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + (a.status === 'offline' ? ' (offline)' : '') + '</option>';
     }).join('') || '<option value="">No agents enrolled</option>';
     panel.style.display = '';
-    // check for previous collection on selected agent
-    apCheckPrevious();
   }
-  // wire agent change → re-check previous collection
-  sel.onchange = apCheckPrevious;
   if (!agents || !agents.length) {
     apicall('/api/agents').then(function(d) { agents = d || []; fill(); }).catch(function(e) { showToast(e.message, 'err'); });
   } else fill();
-}
-
-function apCheckPrevious() {
-  var agentId = document.getElementById('ap-agent').value;
-  if (!agentId) return;
-  // summary returns latest graph; if nodes > 0 there is a previous collection
-  apicall('/api/attackpath/summary').then(function(d) {
-    var warn = document.getElementById('ap-replace-warn');
-    var detail = document.getElementById('ap-replace-detail');
-    var nodes = (d && d.graph && d.graph.nodes) ? d.graph.nodes.length : 0;
-    if (nodes > 0) {
-      var ts = (d && d.graph && d.graph.collectedAt) ? new Date(d.graph.collectedAt).toLocaleString() : '';
-      detail.textContent = 'The existing graph has ' + nodes + ' host' + (nodes === 1 ? '' : 's') + (ts ? ' (collected ' + ts + ')' : '') + '. ';
-      warn.style.display = '';
-    } else {
-      warn.style.display = 'none';
-    }
-  }).catch(function() {});
 }
 
 function apCountTargets() {
@@ -3816,12 +3916,11 @@ function dispatchAPCollect() {
     var tl = document.getElementById('ap-timeline');
     var shNote = shEnabled ? (r.sharpHoundDelivered ? ' + SharpHound domain mapping' : ' (SharpHound binary not configured server-side — skipping)') : '';
     var shDetail = shEnabled && !r.sharpHoundDelivered ? 'SharpHound was requested but the binary is not configured on the server. TCP-only collection will proceed.' : '';
-    var prevNote = r.previousCollectionAt ? ' &mdash; <span style="color:var(--warning)">replaces collection from ' + new Date(r.previousCollectionAt).toLocaleString() + '</span>' : ' &mdash; first collection for this agent';
 
     var jobStatus = r.job && r.job.status;
     tl.innerHTML =
-      _apStep('done', 'Job created &amp; queued for ' + x(agentLabel) + ' at ' + _apTimestamp(),
-        targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' — job ' + (r.job ? r.job.id.slice(0,8) : '') + prevNote) +
+      _apStep('done', 'Collection started for ' + x(agentLabel) + ' at ' + _apTimestamp(),
+        targets.length + ' target' + (targets.length === 1 ? '' : 's') + ' queued — job ' + (r.job ? r.job.id.slice(0,8) : '')) +
       (shDetail ? _apStep('warn', 'SharpHound notice', shDetail) : '') +
       _apStep(jobStatus === 'dispatched' || jobStatus === 'running' ? 'done' : 'active',
         jobStatus === 'dispatched' ? 'WS command sent — waiting for agent ACK…'
