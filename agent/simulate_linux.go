@@ -136,10 +136,60 @@ func knownPostureScenarios() []string {
 	}
 }
 
+// safeSimChecks returns a curated read-only security-essentials check for Linux,
+// analogous to the Windows safe-sim. It is NOT the full CIS Ubuntu L1 benchmark
+// (that runs under the cis-ubuntu-l1 scenario); this is a faster representative
+// subset covering the controls most likely to let an attacker in.
+func safeSimChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "credential-access", Checks: []SimCheck{
+			checkSSHRootLogin(),
+			checkSSHEmptyPasswords(),
+			checkNoEmptyPasswords(),
+			checkShadowPerms(),
+		}},
+		{Phase: "defense-evasion", Checks: []SimCheck{
+			checkASLR(),
+			checkPtraceScope(),
+			checkAppArmorEnforcing(),
+		}},
+		{Phase: "execution", Checks: []SimCheck{
+			checkTmpNoexec(),
+			checkTmpNosuid(),
+			checkNXBit(),
+		}},
+		{Phase: "persistence", Checks: []SimCheck{
+			checkSUIDBinaries(),
+			checkCronAccess(),
+			checkWorldWritableStickyBit(),
+		}},
+		{Phase: "privilege-escalation", Checks: []SimCheck{
+			checkSudoLogged(),
+			checkPasswdPerms(),
+		}},
+		{Phase: "network-controls", Checks: []SimCheck{
+			checkUFWEnabled(),
+			checkIPForwarding(),
+			checkTelnetNotRunning(),
+		}},
+		{Phase: "monitoring", Checks: []SimCheck{
+			checkAuditdRunning(),
+			checkRsyslogRunning(),
+			checkJournaldPersistent(),
+		}},
+		{Phase: "account-security", Checks: []SimCheck{
+			checkPasswordMinLen(),
+			checkPasswordMaxAge(),
+			checkSSHMaxAuthTries(),
+			checkSSHProtocol2(),
+		}},
+	}
+}
+
 func RunScenarioChecks(scenarioID string) []SimCategory {
 	switch scenarioID {
 	case "safe-simulation":
-		return cisUbuntuL1()
+		return safeSimChecks()
 	case "cis-ubuntu-l1":
 		return cisUbuntuL1()
 	case "apt36-spearphish":
