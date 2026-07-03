@@ -1942,9 +1942,9 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     </td>
     <td style="font-size:0.8rem;color:#6e7681">{{humanize $p.tactic}}</td>
     <td style="text-align:right">
-      <strong style="font-size:1rem;color:{{if ge $p.priorityScore 70}}#da3633{{else if ge $p.priorityScore 40}}#d29922{{else if ge $p.priorityScore 20}}#2f81f7{{else}}#6e7681{{end}}">{{$p.priorityScore}}</strong>
+      <strong style="font-size:1rem;color:{{if ge $p.priorityScore 70.0}}#da3633{{else if ge $p.priorityScore 40.0}}#d29922{{else if ge $p.priorityScore 20.0}}#2f81f7{{else}}#6e7681{{end}}">{{$p.priorityScore}}</strong>
       <div style="width:50px;height:4px;background:#e5e7eb;border-radius:2px;margin:2px 0 0 auto">
-        <div style="height:4px;border-radius:2px;width:{{$p.priorityScore}}%;background:{{if ge $p.priorityScore 70}}#da3633{{else if ge $p.priorityScore 40}}#d29922{{else if ge $p.priorityScore 20}}#2f81f7{{else}}#6e7681{{end}}"></div>
+        <div style="height:4px;border-radius:2px;width:{{$p.priorityScore}}%;background:{{if ge $p.priorityScore 70.0}}#da3633{{else if ge $p.priorityScore 40.0}}#d29922{{else if ge $p.priorityScore 20.0}}#2f81f7{{else}}#6e7681{{end}}"></div>
       </div>
     </td>
     <td>
