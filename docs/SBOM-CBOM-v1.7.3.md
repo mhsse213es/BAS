@@ -154,7 +154,7 @@ Transitive dependencies. Hashes for all are recorded in `orchestrator/go.sum`. L
 
 ### 2.5 Installer — Go Libraries
 
-**Source:** `installer/go.mod` · Module: `audspect/installer` · Go version: `1.25`
+**Source:** `installer/go.mod` · Module: `audspect/installer` · Go version: `1.26` (build toolchain: `golang:1.26-alpine`; go.mod minimum compatibility: `1.25`)
 
 | Package | Version | Role | License | Type |
 |---|---|---|---|---|
@@ -192,7 +192,7 @@ Transitive dependencies. Hashes for all are recorded in `orchestrator/go.sum`. L
 | `postgres` | `16-alpine` | PostgreSQL 16.x — primary data store | Yes | Tag only — not pinned to digest |
 | `chromedp/headless-shell` | `latest` | Headless Chromium — HTML→PDF sidecar | Yes | ⚠️ Floating `:latest` |
 | `ghcr.io/mitre/caldera` | `latest` | MITRE Caldera ATT&CK simulation engine (base for custom image) | Yes | ⚠️ Floating `:latest` |
-| `gcr.io/distroless/static-debian12` | (default) | Orchestrator production runtime — no shell, no package manager | Yes | Tag only — not pinned to digest |
+| `gcr.io/distroless/static-debian12` | `latest` | Orchestrator production runtime — no shell, no package manager | Yes | ⚠️ Floating `:latest` |
 | `golang` | `1.26-alpine` | Build stage for orchestrator and agent binaries | No (build only) | Tag only |
 | `debian` | `bookworm-slim` | Build stage for .deb / .rpm agent packages | No (build only) | Tag only |
 | `alpine` | `latest` | ART sparse-clone and CISA KEV fetch stage | No (build only) | ⚠️ Floating `:latest` (build only) |
@@ -359,7 +359,7 @@ These tools run during the build process on the internet-connected Windows build
 | Parameter | Value |
 |---|---|
 | Protocol | Plain HTTP — `http.ListenAndServe` on port `9443` |
-| TLS | Not provided by the orchestrator process itself — TLS termination is handled by the operator's reverse proxy (nginx, Caddy, HAProxy) in front of port 9000 |
+| TLS | Not provided by the orchestrator process itself — TLS termination is handled by the operator's reverse proxy (nginx, Caddy, HAProxy) in front of port 9443 |
 | Agent C2 channel | WebSocket (`ws://`) over the same HTTP connection — encrypted only when the reverse proxy enforces `wss://` |
 
 ---
@@ -450,7 +450,7 @@ PURL format follows `pkg:pypi/<name>@<version>`. CPE vendor/product names follow
 | `postgres` | `16-alpine` | `pkg:docker/postgres@16-alpine` | `cpe:2.3:a:postgresql:postgresql:16:*:*:*:*:*:*:*` |
 | `chromedp/headless-shell` | `latest` | `pkg:docker/chromedp/headless-shell@latest` | `cpe:2.3:a:google:chrome:*:*:*:*:*:*:*:*` |
 | `ghcr.io/mitre/caldera` | `latest` | `pkg:docker/ghcr.io%2Fmitre/caldera@latest` | `cpe:2.3:a:mitre:caldera:*:*:*:*:*:*:*:*` |
-| `gcr.io/distroless/static-debian12` | (default) | `pkg:docker/gcr.io%2Fdistroless/static-debian12@latest` | `cpe:2.3:o:debian:debian_linux:12:*:*:*:*:*:*:*` |
+| `gcr.io/distroless/static-debian12` | `latest` | `pkg:docker/gcr.io%2Fdistroless/static-debian12@latest` | `cpe:2.3:o:debian:debian_linux:12:*:*:*:*:*:*:*` |
 | `golang` | `1.26-alpine` | `pkg:docker/golang@1.26-alpine` | `cpe:2.3:a:golang:go:1.26:*:*:*:*:*:*:*` |
 
 > **Verification note:** Go module hashes in this table are the `h1:` SHA-256 values from the respective `go.sum` files and match exactly what Go's module proxy and `go mod verify` check. To independently verify: `go mod download` + `go mod verify` in any module directory. PyPI package hashes can be cross-referenced at `https://pypi.org/pypi/<package>/<version>/json` under the `urls[].digests.sha256` field.
@@ -459,15 +459,16 @@ PURL format follows `pkg:pypi/<name>@<version>`. CPE vendor/product names follow
 
 ### 2.11 Dependency Relationships
 
-This section documents the dependency graph for each first-party module. Relationships are drawn directly from `go.mod` `require` directives.
+This section documents the dependency graph for each first-party component. Relationships are drawn directly from `go.mod` `require` directives.
 
-#### Orchestrator (`github.com/audspect/bas`)
+#### Orchestrator (bas-orchestrator)
 
 ```
-github.com/audspect/bas (orchestrator)
+bas-orchestrator
 ├── github.com/chromedp/chromedp v0.15.1                         [direct]
 │   ├── github.com/chromedp/cdproto 20260321001828-e3e3800016bc  [indirect]
 │   ├── github.com/chromedp/sysutil v1.1.0                       [indirect]
+│   │   └── golang.org/x/sys v0.42.0                             [indirect]
 │   ├── github.com/go-json-experiment/json 20260214004413-...     [indirect]
 │   ├── github.com/gobwas/httphead v0.1.0                         [indirect]
 │   ├── github.com/gobwas/pool v0.2.1                             [indirect]
@@ -482,8 +483,7 @@ github.com/audspect/bas (orchestrator)
 │   ├── github.com/jackc/puddle/v2 v2.2.1                         [indirect]
 │   ├── golang.org/x/sync v0.7.0                                  [indirect]
 │   └── golang.org/x/text v0.16.0                                 [indirect]
-├── golang.org/x/crypto v0.24.0                                   [direct]
-│   └── golang.org/x/sys v0.42.0                                  [indirect]
+└── golang.org/x/crypto v0.24.0                                   [direct]
 └── gopkg.in/yaml.v3 v3.0.1                                       [direct]
 
 Test-only indirect (not shipped in binary):
