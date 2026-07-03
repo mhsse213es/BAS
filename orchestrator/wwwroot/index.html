@@ -3311,8 +3311,13 @@ body.theme-slate {
 
       <!-- Caldera abilities -->
       <div id="bld-caldera" style="display:none">
-        <div class="form-group"><label>Caldera ability IDs (one per line or comma separated)</label>
-          <textarea id="bld-caldera-list" rows="4" placeholder="ability-uuid-1&#10;ability-uuid-2"></textarea></div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;justify-content:space-between">
+            <span>Caldera ability IDs (one per line or comma separated)</span>
+            <a href="javascript:void(0)" class="desc-toggle" style="font-size:0.78rem;white-space:nowrap;margin-left:0.75rem" onclick="openBuilderCalderaPicker();return false;">&#128269; Browse catalog</a>
+          </label>
+          <textarea id="bld-caldera-list" rows="4" placeholder="ability-uuid-1&#10;ability-uuid-2"></textarea>
+        </div>
         <div class="bld-mode-help">Each ability is fetched from the Caldera library and executed in order.</div>
       </div>
 
@@ -7347,7 +7352,8 @@ function applyPicker() {
   if (!ids.length) { showToast('Select at least one item', 'err'); return; }
   if (_pickerBuilderMode) {
     _pickerBuilderMode = false;
-    document.getElementById('bld-art-list').value = ids.join('\n');
+    var targetId = (_pickerFw === 'caldera') ? 'bld-caldera-list' : 'bld-art-list';
+    document.getElementById(targetId).value = ids.join('\n');
     closePicker();
     return;
   }
@@ -7464,6 +7470,49 @@ function openBuilderARTPicker() {
   apicall('/api/art/techniques').then(function(d) {
     if (Array.isArray(d) && d.length) { artCatalog = d; _fillDatalistFromCatalog(d); }
     doOpen(artCatalog);
+  }).catch(function(e) { showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
+}
+
+function openBuilderCalderaPicker() {
+  var existing = (document.getElementById('bld-caldera-list').value || '')
+    .split(/[\n,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+  function doOpen(catalog) {
+    if (!catalog.length) { showToast('Caldera catalog is empty or Caldera is offline', 'err'); return; }
+    _pickerBuilderMode = true;
+    _pickerItems = catalog;
+    _pickerScId = null; _pickerFw = 'caldera'; _pickerSel = {};
+    if (existing.length) {
+      existing.forEach(function(id) { _pickerSel[id] = true; });
+    } else {
+      catalog.forEach(function(t) { _pickerSel[t.id] = true; });
+    }
+    document.getElementById('picker-title').textContent = 'Select Caldera abilities';
+    document.getElementById('picker-sub').textContent = 'Tick the abilities to include. Search by name, tactic, or technique.';
+    document.getElementById('picker-search').value = '';
+    // Show Caldera metadata filters and reset them.
+    var filtersEl = document.getElementById('picker-caldera-filters');
+    if (filtersEl) filtersEl.style.display = '';
+    _pf = { plugin: 'all', payload: 'all', admin: 'all', platform: 'all', tactic: 'all' };
+    document.querySelectorAll('.pfbtn').forEach(function(b) {
+      b.classList.toggle('active', b.getAttribute('data-val') === 'all');
+    });
+    var tacticSel = document.getElementById('picker-tactic-sel');
+    if (tacticSel) {
+      var tacticSet = {};
+      catalog.forEach(function(it) { if (it.tactic) tacticSet[it.tactic] = true; });
+      tacticSel.innerHTML = '<option value="all">All tactics</option>' +
+        Object.keys(tacticSet).sort().map(function(t) {
+          return '<option value="' + x(t) + '">' + x(t) + '</option>';
+        }).join('');
+      tacticSel.value = 'all';
+    }
+    ensureCovStatus(renderPickerList);
+    document.getElementById('picker-overlay').classList.add('open');
+  }
+  if (calderaCatalog.length) { doOpen(calderaCatalog); return; }
+  apicall('/api/caldera/abilities').then(function(d) {
+    if (Array.isArray(d) && d.length) calderaCatalog = d;
+    doOpen(calderaCatalog);
   }).catch(function(e) { showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
 }
 
