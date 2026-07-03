@@ -4494,6 +4494,7 @@ function loadScenarios() {
         artTechniques:      s.artTechniques       || []
       };
     });
+    _enrichDatalistFromScenarios();
     renderScenarios();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -7431,6 +7432,25 @@ function _fillDatalistFromCatalog(list) {
     dl.appendChild(opt);
   });
   _artTechniquesCached = true;
+}
+
+function _enrichDatalistFromScenarios() {
+  var dl = document.getElementById('att-techniques');
+  if (!dl) return;
+  var existing = {};
+  dl.querySelectorAll('option').forEach(function(o) { existing[o.value] = true; });
+  var toAdd = {};
+  scenarios.forEach(function(s) {
+    (s.steps || []).forEach(function(st) {
+      var tid = st.techniqueId || st.technique_id || '';
+      if (tid && !existing[tid]) toAdd[tid] = true;
+    });
+  });
+  Object.keys(toAdd).sort().forEach(function(tid) {
+    var opt = document.createElement('option');
+    opt.value = tid;
+    dl.appendChild(opt);
+  });
 }
 
 function _populateARTDatalist() {
