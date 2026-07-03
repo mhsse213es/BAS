@@ -523,6 +523,7 @@
     }
     else if(s.state==="quarantined"){ setPill("bad","Quarantined"); setHero("bad","Quarantined","This agent was quarantined by the server. Contact your administrator."); }
     else if(s.state==="restricted"){ setPill("warn","Restricted"); setHero("warn","Restricted","Operating under restricted policy. Some simulations are disabled."); }
+    else if(s.status==="collecting"){ setPill("warn","Collecting Attack Path"); setHero("warn","Attack Path Collection In Progress","This agent is probing the network to build an attack path graph. Check the Current Operation panel below for stage progress."); }
     else if(s.status && s.status!=="idle"){ setPill("warn","Simulation Running"); setHero("warn","Simulation In Progress","A breach &amp; attack simulation is executing on this endpoint."); }
     else { setPill("ok","Idle"); setHero("ok","Idle","Agent healthy and connected. No simulation is running."); }
   }

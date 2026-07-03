@@ -78,12 +78,24 @@ const probeTimeout = 1500 * time.Millisecond
 func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 	// ACK immediately so the server knows we received the job and can transition
 	// dispatched→running. Fire-and-forget — a failed ACK doesn't abort the work.
+	// Surface AP collection in the local status console and heartbeat status.
+	totalTargets := len(cmd.Targets)
+	a.setStatus("collecting")
+	a.sendHeartbeat("collecting")
+	a.localSt.StartOperation("attackpath-collection", "Attack Path Collection", "", totalTargets)
+	defer func() {
+		a.localSt.CompleteOperation("Completed", LocalEvidenceStats{})
+		a.setStatus("idle")
+		a.sendHeartbeat("idle")
+	}()
+
 	if cmd.JobID != "" {
 		if err := a.postJSON("/api/attackpath/jobs/"+cmd.JobID+"/ack", map[string]string{"agentId": a.id.AgentID}); err != nil {
 			log.Printf("[attackpath] ACK failed (job=%s): %v", cmd.JobID, err)
 		}
 		// initializing: post-ACK setup before probing begins
-		a.setCurrentJob(cmd.JobID, APStageInitializing, 0, len(cmd.Targets))
+		a.setCurrentJob(cmd.JobID, APStageInitializing, 0, totalTargets)
+		a.localSt.UpdateProgress(0, totalTargets, "Initializing")
 		defer a.clearCurrentJob()
 	}
 
@@ -103,7 +115,8 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 
 	// Local-admin principals → admin-to self.
 	if cmd.JobID != "" {
-		a.setCurrentJob(cmd.JobID, APStageEnumeratingAdmins, 0, len(cmd.Targets))
+		a.setCurrentJob(cmd.JobID, APStageEnumeratingAdmins, 0, totalTargets)
+		a.localSt.UpdateProgress(0, totalTargets, "Enumerating Admins")
 	}
 	for _, p := range collectLocalAdmins() {
 		id := strings.ToUpper(p)
@@ -113,7 +126,8 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 
 	// Interactive sessions → self has-session user (creds harvestable here).
 	if cmd.JobID != "" {
-		a.setCurrentJob(cmd.JobID, APStageEnumeratingSessions, 0, len(cmd.Targets))
+		a.setCurrentJob(cmd.JobID, APStageEnumeratingSessions, 0, totalTargets)
+		a.localSt.UpdateProgress(0, totalTargets, "Enumerating Sessions")
 	}
 	for _, u := range collectSessions(a.id.Username) {
 		id := strings.ToUpper(u)
@@ -122,9 +136,9 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 	}
 
 	// Reachability probes against the explicit allowlist only.
-	total := len(cmd.Targets)
 	if cmd.JobID != "" {
-		a.setCurrentJob(cmd.JobID, APStageProbing, 0, total)
+		a.setCurrentJob(cmd.JobID, APStageProbing, 0, totalTargets)
+		a.localSt.UpdateProgress(0, totalTargets, "Probing")
 	}
 	for i, t := range cmd.Targets {
 		t = strings.TrimSpace(t)
@@ -144,16 +158,19 @@ func (a *Agent) runAttackPathCollect(cmd AttackPathCollectCommand) {
 		}
 		// Update progress every 5 targets so heartbeats carry fresh counts.
 		if cmd.JobID != "" && (i+1)%5 == 0 {
-			a.setCurrentJob(cmd.JobID, APStageProbing, i+1, total)
+			a.setCurrentJob(cmd.JobID, APStageProbing, i+1, totalTargets)
+			a.localSt.UpdateProgress(i+1, totalTargets, "Probing")
 		}
 	}
 
 	if cmd.JobID != "" {
-		a.setCurrentJob(cmd.JobID, APStageBuildingGraph, total, total)
+		a.setCurrentJob(cmd.JobID, APStageBuildingGraph, totalTargets, totalTargets)
+		a.localSt.UpdateProgress(totalTargets, totalTargets, "Building Graph")
 	}
 
 	if cmd.JobID != "" {
-		a.setCurrentJob(cmd.JobID, APStageUploading, total, total)
+		a.setCurrentJob(cmd.JobID, APStageUploading, totalTargets, totalTargets)
+		a.localSt.UpdateProgress(totalTargets, totalTargets, "Uploading")
 	}
 	if err := a.postJSON("/api/attackpath/collect", col); err != nil {
 		log.Printf("[attackpath] collect submit failed: %v", err)
