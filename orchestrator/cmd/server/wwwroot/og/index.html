@@ -2986,12 +2986,14 @@ body.theme-slate {
       <button class="tab-btn" onclick="showAgentTab('scenarios')">Scenarios</button>
       <button class="tab-btn" onclick="showAgentTab('logs')">Logs</button>
       <button class="tab-btn" onclick="showAgentTab('health')">Health</button>
+      <button class="tab-btn" onclick="showAgentTab('attackpath')">Attack Path</button>
     </div>
     <div class="drawer-body" style="overflow-y:auto">
       <div id="agt-tab-overview" class="tab-pane"></div>
       <div id="agt-tab-scenarios" class="tab-pane" style="display:none"></div>
       <div id="agt-tab-logs" class="tab-pane" style="display:none"></div>
       <div id="agt-tab-health" class="tab-pane" style="display:none"></div>
+      <div id="agt-tab-attackpath" class="tab-pane" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -3475,6 +3477,11 @@ function _apOnJobUpdate(msg) {
     apActiveJobs[agentId] = { jobId: job.id, status: job.status };
   }
   renderAgentRows();
+  // Refresh Attack Path tab in the agent detail drawer if it's showing this agent.
+  if (_agtDetailId && _agtDetailId === agentId) {
+    var apPane = document.getElementById('agt-tab-attackpath');
+    if (apPane && apPane.style.display !== 'none') loadAgtAttackPath(agentId);
+  }
   if (_apCurrentJobId && job.id !== _apCurrentJobId) return;
   if (job.status === 'completed') {
     _apClearJobId(); _apCurrentJobId = null;
@@ -5663,8 +5670,12 @@ function renderWizardReview() {
   var modeLabel = { posture: 'Posture — read-only', telemetry: 'Telemetry — identity-safe', lab: 'Lab — full-fidelity' }[mode] || mode;
   var fw = scenarioFramework(sc);
   var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
-  var subset = (_runSelection && _runSelection.scId === scId && _runSelection.ids.length)
-    ? (_runSelection.ids.length + ' ' + noun + ' (subset)') : 'All ' + noun;
+  var sel = _runSelection && _runSelection.scId === scId && _runSelection.ids.length;
+  var subset = sel
+    ? ((_runSelection.locked && _runSelection.ids.length === 1)
+        ? _runSelection.ids[0] + ' (targeted re-validate)'
+        : _runSelection.ids.length + ' ' + noun + ' (subset)')
+    : 'All ' + noun;
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl && reasonEl.value.trim()) ? reasonEl.value.trim() : '';
   var row = function(k, v) { return '<div class="wz-rev-row"><span>' + k + '</span><span>' + v + '</span></div>'; };
@@ -7012,6 +7023,9 @@ function confirmRun() {
     else if (_runSelection.fw === 'caldera') body.abilities = _runSelection.ids;
     else if (_runSelection.fw === 'steps') body.steps = _runSelection.ids.map(Number);
     else if (_runSelection.fw === 'posture') body.checks = _runSelection.ids;
+    if (_runSelection.locked && _runSelection.ids.length === 1) {
+      body.runLabel = _runSelection.ids[0] + ' — Re-validate';
+    }
   }
   apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
     method: 'POST', body: JSON.stringify(body)
@@ -8164,11 +8178,11 @@ function closeAgentDetail() {
   _agtDetailId = null;
 }
 function showAgentTab(tab) {
-  ['overview','scenarios','logs','health'].forEach(function(t) {
+  ['overview','scenarios','logs','health','attackpath'].forEach(function(t) {
     document.getElementById('agt-tab-' + t).style.display = (t === tab ? '' : 'none');
   });
   document.querySelectorAll('#agt-tab-bar .tab-btn').forEach(function(btn, i) {
-    var tabs = ['overview','scenarios','logs','health'];
+    var tabs = ['overview','scenarios','logs','health','attackpath'];
     btn.classList.toggle('active', tabs[i] === tab);
   });
   if (_agtLogRefresh) { clearInterval(_agtLogRefresh); _agtLogRefresh = null; }
@@ -8178,6 +8192,7 @@ function showAgentTab(tab) {
   if (tab === 'scenarios')  loadAgtScenarios(id);
   if (tab === 'logs')       { _agtLogTier = 'operational'; loadAgtLogs(id, _agtLogTier); _agtLogRefresh = setInterval(function(){ loadAgtLogs(_agtDetailId, _agtLogTier); }, 15000); }
   if (tab === 'health')     loadAgtHealth(id);
+  if (tab === 'attackpath') loadAgtAttackPath(id);
 }
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
@@ -8356,6 +8371,57 @@ function loadAgtHealth(agentId) {
       '<div style="margin-top:0.6rem;color:var(--muted);font-size:0.72rem">Heartbeat latency (ms) — last ' + points.length + ' samples. Red &gt;500ms, amber &gt;150ms.</div>' +
       '</div>';
   }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
+}
+
+// ── Attack Path tab ───────────────────────────────────────────────────────────
+function loadAgtAttackPath(agentId) {
+  var pane = document.getElementById('agt-tab-attackpath');
+  pane.innerHTML = '<div style="color:var(--muted);padding:1rem">Loading…</div>';
+  apicall('/api/attackpath/jobs?agentId=' + encodeURIComponent(agentId) + '&limit=10').then(function(jobs) {
+    if (!jobs || !jobs.length) {
+      pane.innerHTML = '<div style="padding:1rem;color:var(--muted)">No attack-path jobs found for this agent.</div>';
+      return;
+    }
+    var statusColor = {
+      completed: 'var(--success)', running: 'var(--accent)', dispatched: 'var(--accent)',
+      queued: 'var(--muted)', failed: 'var(--danger)', timed_out: 'var(--danger)',
+      delivery_failed: 'var(--danger)', cancelled: 'var(--muted)'
+    };
+    var stageLabels = {
+      initializing: 'Initializing', probing: 'Probing targets',
+      enumerating_admins: 'Enumerating admins', enumerating_sessions: 'Enumerating sessions',
+      running_sharphound: 'Running SharpHound', building_graph: 'Building graph', uploading: 'Uploading'
+    };
+    var rows = jobs.map(function(j) {
+      var sc = statusColor[j.status] || 'var(--muted)';
+      var prog = j.progress;
+      var detail = prog && prog.stage ? (stageLabels[prog.stage] || prog.stage) : '';
+      if (prog && prog.targetsTotal > 0) detail += ' — ' + prog.targetsCompleted + '/' + prog.targetsTotal;
+      if (j.status === 'completed' && j.metrics) detail = j.metrics.nodeCount + ' nodes, ' + j.metrics.edgeCount + ' edges';
+      if (j.error) detail = j.error;
+      var pct = prog && prog.progressPercent > 0 ? prog.progressPercent : 0;
+      var bar = (j.status === 'running' && pct > 0)
+        ? '<div style="margin-top:0.25rem;width:100%;max-width:200px;background:var(--border);border-radius:3px;height:4px;overflow:hidden">' +
+          '<div style="width:' + pct + '%;background:var(--accent);height:100%;border-radius:3px"></div></div>' : '';
+      return '<tr style="border-bottom:1px solid rgba(34,50,74,.4)">' +
+        '<td style="padding:0.35rem 0.5rem;color:var(--muted);font-size:0.72rem;white-space:nowrap">' + fmtTs(j.createdAt) + '</td>' +
+        '<td style="padding:0.35rem 0.5rem"><span style="color:' + sc + ';font-size:0.75rem;font-weight:600">' + x(j.status) + '</span></td>' +
+        '<td style="padding:0.35rem 0.5rem;font-size:0.75rem;color:var(--muted)">' + (j.targetCount || '—') + ' targets</td>' +
+        '<td style="padding:0.35rem 0.5rem;font-size:0.75rem;color:var(--muted)">' + x(detail) + bar + '</td>' +
+        '</tr>';
+    }).join('');
+    pane.innerHTML = '<div style="padding:0.75rem 1.25rem 0">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.79rem">' +
+      '<thead><tr style="border-bottom:1px solid var(--border)">' +
+      '<th style="padding:0.3rem 0.5rem;font-weight:600;font-size:0.7rem;color:var(--muted);text-align:left">Time</th>' +
+      '<th style="padding:0.3rem 0.5rem;font-weight:600;font-size:0.7rem;color:var(--muted);text-align:left">Status</th>' +
+      '<th style="padding:0.3rem 0.5rem;font-weight:600;font-size:0.7rem;color:var(--muted);text-align:left">Scope</th>' +
+      '<th style="padding:0.3rem 0.5rem;font-weight:600;font-size:0.7rem;color:var(--muted);text-align:left">Detail</th>' +
+      '</tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
+  }).catch(function(e) {
+    pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>';
+  });
 }
 
 function fmtTs(ts) {

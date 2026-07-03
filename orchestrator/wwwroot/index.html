@@ -9425,6 +9425,9 @@ function confirmRun() {
     else if (_runSelection.fw === 'caldera') body.abilities = _runSelection.ids;
     else if (_runSelection.fw === 'steps') body.steps = _runSelection.ids.map(Number);
     else if (_runSelection.fw === 'posture') body.checks = _runSelection.ids;
+    if (_runSelection.locked && _runSelection.ids.length === 1) {
+      body.runLabel = _runSelection.ids[0] + ' — Re-validate';
+    }
   }
   apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
     method: 'POST', body: JSON.stringify(body)
