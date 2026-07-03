@@ -3299,8 +3299,13 @@ body.theme-slate {
 
       <!-- ART techniques -->
       <div id="bld-art" style="display:none">
-        <div class="form-group"><label>ATT&amp;CK technique IDs (one per line or comma separated)</label>
-          <textarea id="bld-art-list" rows="4" placeholder="T1059.001&#10;T1003.001&#10;T1486"></textarea></div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;justify-content:space-between">
+            <span>ATT&amp;CK technique IDs (one per line or comma separated)</span>
+            <a href="javascript:void(0)" class="desc-toggle" style="font-size:0.78rem;white-space:nowrap;margin-left:0.75rem" onclick="openBuilderARTPicker();return false;">&#128269; Browse catalog</a>
+          </label>
+          <textarea id="bld-art-list" rows="4" placeholder="T1059.001&#10;T1003.001&#10;T1486"></textarea>
+        </div>
         <div class="bld-mode-help">Each technique is run via Atomic Red Team on the target endpoint.</div>
       </div>
 
@@ -4451,6 +4456,7 @@ function loadCatalogs() {
   // guard with Array.isArray — an error body must not be mistaken for a catalog.
   apicall('/api/art/techniques').then(function(d) {
     artCatalog = Array.isArray(d) ? d : [];
+    if (artCatalog.length) _fillDatalistFromCatalog(artCatalog);
     if (scenarios.length) renderScenarios();
   }).catch(function() {});
   apicall('/api/caldera/abilities').then(function(d) {
@@ -7339,6 +7345,12 @@ function updatePickerCount() {
 function applyPicker() {
   var ids = pickerSelectedIds();
   if (!ids.length) { showToast('Select at least one item', 'err'); return; }
+  if (_pickerBuilderMode) {
+    _pickerBuilderMode = false;
+    document.getElementById('bld-art-list').value = ids.join('\n');
+    closePicker();
+    return;
+  }
   // Preserve the agent chosen in the Run modal. For posture the catalog (and its
   // check IDs) is per-agent/per-OS, so reopening the modal must NOT reset to the
   // first agent — otherwise the selection would dispatch to the wrong endpoint.
@@ -7349,7 +7361,7 @@ function applyPicker() {
   openModal(_pickerScId, ag || null);
 }
 
-function closePicker() { document.getElementById('picker-overlay').classList.remove('open'); }
+function closePicker() { _pickerBuilderMode = false; document.getElementById('picker-overlay').classList.remove('open'); }
 
 function clearSelection() { _runSelection = null; renderModalSelection(); }
 
@@ -7400,20 +7412,59 @@ function renderModalSelection() {
 /* ── Scenario Builder ──────────────────────────────────────── */
 var _bldEditId = null;
 var _artTechniquesCached = false;
+var _pickerBuilderMode = false;
+
+function _fillDatalistFromCatalog(list) {
+  var dl = document.getElementById('att-techniques');
+  if (!dl || !list.length) return;
+  dl.innerHTML = '';
+  list.forEach(function(t) {
+    var opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name ? t.id + ' — ' + t.name : t.id;
+    dl.appendChild(opt);
+  });
+  _artTechniquesCached = true;
+}
 
 function _populateARTDatalist() {
   if (_artTechniquesCached) return;
+  // Reuse artCatalog if loadCatalogs() already fetched it.
+  if (artCatalog.length) { _fillDatalistFromCatalog(artCatalog); return; }
   apicall('/api/art/techniques').then(function(list) {
-    var dl = document.getElementById('att-techniques');
-    dl.innerHTML = '';
-    list.forEach(function(t) {
-      var opt = document.createElement('option');
-      opt.value = t.id;
-      opt.textContent = t.name ? t.id + ' — ' + t.name : t.id;
-      dl.appendChild(opt);
-    });
-    _artTechniquesCached = true;
+    if (Array.isArray(list) && list.length) {
+      artCatalog = list;
+      _fillDatalistFromCatalog(list);
+    }
   }).catch(function() { /* keep static fallback on error */ });
+}
+
+function openBuilderARTPicker() {
+  var existing = (document.getElementById('bld-art-list').value || '')
+    .split(/[\n,]+/).map(function(s) { return s.trim().toUpperCase(); }).filter(Boolean);
+  function doOpen(catalog) {
+    if (!catalog.length) { showToast('ART catalog is empty — reseed ART content', 'err'); return; }
+    _pickerBuilderMode = true;
+    _pickerItems = catalog;
+    _pickerScId = null; _pickerFw = 'art'; _pickerSel = {};
+    if (existing.length) {
+      existing.forEach(function(id) { _pickerSel[id] = true; });
+    } else {
+      catalog.forEach(function(t) { _pickerSel[t.id] = true; });
+    }
+    document.getElementById('picker-title').textContent = 'Select ART techniques';
+    document.getElementById('picker-sub').textContent = 'Tick the ATT&CK techniques to include. Search by ID or atomic name.';
+    document.getElementById('picker-search').value = '';
+    var filtersEl = document.getElementById('picker-caldera-filters');
+    if (filtersEl) filtersEl.style.display = 'none';
+    ensureCovStatus(renderPickerList);
+    document.getElementById('picker-overlay').classList.add('open');
+  }
+  if (artCatalog.length) { doOpen(artCatalog); return; }
+  apicall('/api/art/techniques').then(function(d) {
+    if (Array.isArray(d) && d.length) { artCatalog = d; _fillDatalistFromCatalog(d); }
+    doOpen(artCatalog);
+  }).catch(function(e) { showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
 }
 
 function openBuilder(id) {
