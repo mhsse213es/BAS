@@ -89,15 +89,40 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 		enc.Encode(report)
 	}
 
+	// Generate HTML once; reuse for both the HTML entry and Chrome PDF.
+	// Buffering avoids running GenerateHTML twice and gives Chrome the same
+	// content the user sees when they open the HTML file.
+	var htmlBuf bytes.Buffer
+	htmlErr := GenerateHTML(&htmlBuf, report, compSummaries)
+
 	// executive-report.html
 	if f, err := zw.Create(prefix + "executive-report.html"); err == nil {
-		GenerateHTML(f, report, compSummaries)
+		if htmlErr == nil {
+			f.Write(htmlBuf.Bytes())
+		} else {
+			fmt.Fprintf(f, "HTML generation failed: %v", htmlErr)
+		}
 	}
 
-	// executive-report.pdf — print-ready enterprise report (HTML→Chrome path, fpdf fallback)
+	// executive-report.pdf — Chrome renders the buffered HTML (new design).
+	// Use a fresh background context so the Chrome render is not subject to the
+	// HTTP write deadline, which may be nearly exhausted by the time we reach
+	// this entry (report build + JSON + HTML entries take ~10-20 s; the server
+	// write timeout is 90 s and Chrome can take up to 45 s).
 	if f, err := zw.Create(prefix + "executive-report.pdf"); err == nil {
-		if err := e.PDFFromReport(ctx, f, report, compSummaries, latestResults); err != nil {
-			fmt.Fprintf(f, "PDF generation failed: %v", err)
+		pdfWritten := false
+		if htmlErr == nil && htmlBuf.Len() > 0 {
+			chromeCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			if pdf, perr := htmlToPDF(chromeCtx, htmlBuf.Bytes()); perr == nil && len(pdf) > 0 {
+				f.Write(pdf)
+				pdfWritten = true
+			}
+			cancel()
+		}
+		if !pdfWritten {
+			if ferr := RenderReportPDF(f, report, latestResults); ferr != nil {
+				fmt.Fprintf(f, "PDF generation failed: %v", ferr)
+			}
 		}
 	}
 
