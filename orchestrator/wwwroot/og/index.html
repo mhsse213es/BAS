@@ -5663,8 +5663,12 @@ function renderWizardReview() {
   var modeLabel = { posture: 'Posture — read-only', telemetry: 'Telemetry — identity-safe', lab: 'Lab — full-fidelity' }[mode] || mode;
   var fw = scenarioFramework(sc);
   var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
-  var subset = (_runSelection && _runSelection.scId === scId && _runSelection.ids.length)
-    ? (_runSelection.ids.length + ' ' + noun + ' (subset)') : 'All ' + noun;
+  var sel = _runSelection && _runSelection.scId === scId && _runSelection.ids.length;
+  var subset = sel
+    ? ((_runSelection.locked && _runSelection.ids.length === 1)
+        ? _runSelection.ids[0] + ' (targeted re-validate)'
+        : _runSelection.ids.length + ' ' + noun + ' (subset)')
+    : 'All ' + noun;
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl && reasonEl.value.trim()) ? reasonEl.value.trim() : '';
   var row = function(k, v) { return '<div class="wz-rev-row"><span>' + k + '</span><span>' + v + '</span></div>'; };

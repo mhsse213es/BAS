@@ -4351,7 +4351,7 @@ function renderAgentRows() {
         '<div style="display:flex;flex-wrap:wrap;gap:3px">' +
         '<button class="btn btn-outline btn-sm" onclick="openAgentDetail(\'' + x(a.agentId) + '\')" title="View detail">&#128269; Detail</button>' +
         '<button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')" title="Run simulation">&#9654; Run</button>' +
-        '<button class="btn btn-outline btn-sm" onclick="safeScan(\'' + x(a.agentId) + '\')" title="Read-only simulation">&#128737; Scan</button>' +
+        '<button class="btn btn-outline btn-sm" onclick="safeScan(\'' + x(a.agentId) + '\')" title="Read-only simulation">&#128737; Safe Scan</button>' +
         '<button class="btn btn-outline btn-sm" onclick="openFullReport(\'' + x(a.agentId) + '\')" title="Open HTML report">&#128196; Report</button>' +
         '<button class="btn btn-outline btn-sm" onclick="downloadAuditPack(\'' + x(a.agentId) + '\')" title="Download audit pack">&#8659; Pack</button>' +
         '</div>' +
@@ -7065,8 +7065,12 @@ function renderWizardReview() {
   var modeLabel = { posture: 'Posture — read-only', telemetry: 'Telemetry — identity-safe', lab: 'Lab — full-fidelity' }[mode] || mode;
   var fw = scenarioFramework(sc);
   var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
-  var subset = (_runSelection && _runSelection.scId === scId && _runSelection.ids.length)
-    ? (_runSelection.ids.length + ' ' + noun + ' (subset)') : 'All ' + noun;
+  var sel = _runSelection && _runSelection.scId === scId && _runSelection.ids.length;
+  var subset = sel
+    ? ((_runSelection.locked && _runSelection.ids.length === 1)
+        ? _runSelection.ids[0] + ' (targeted re-validate)'
+        : _runSelection.ids.length + ' ' + noun + ' (subset)')
+    : 'All ' + noun;
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl && reasonEl.value.trim()) ? reasonEl.value.trim() : '';
   var row = function(k, v) { return '<div class="wz-rev-row"><span>' + k + '</span><span>' + v + '</span></div>'; };
