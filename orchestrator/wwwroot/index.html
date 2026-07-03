@@ -7399,9 +7399,26 @@ function renderModalSelection() {
 
 /* ── Scenario Builder ──────────────────────────────────────── */
 var _bldEditId = null;
+var _artTechniquesCached = false;
+
+function _populateARTDatalist() {
+  if (_artTechniquesCached) return;
+  apicall('/api/art/techniques').then(function(list) {
+    var dl = document.getElementById('att-techniques');
+    dl.innerHTML = '';
+    list.forEach(function(t) {
+      var opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name ? t.id + ' — ' + t.name : t.id;
+      dl.appendChild(opt);
+    });
+    _artTechniquesCached = true;
+  }).catch(function() { /* keep static fallback on error */ });
+}
 
 function openBuilder(id) {
   _bldEditId = id;
+  _populateARTDatalist();
   document.getElementById('bld-err').textContent = '';
   document.getElementById('builder-title').textContent = id ? 'Edit Scenario' : 'New Scenario';
   if (id) {
