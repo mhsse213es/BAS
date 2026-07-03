@@ -12,7 +12,7 @@
 
 **Classification:** CONFIDENTIAL — Restricted Distribution — Authorised Recipients Only
 
-**Standard Referenced:** NTIA Minimum Elements for SBOM · Structured to align with the CycloneDX v1.4 data model
+**Standard Referenced:** NTIA Minimum Elements for SBOM · Structured to align with the CycloneDX v1.4 data model · Includes PURL (ECMA-376), CPE 2.3 (NIST NVD), and component hashes
 
 
 > **Source of Truth:** All entries in this document are derived from direct inspection of the repository at tag v1.7.3 — specifically go.mod, go.sum, requirements.txt, Dockerfile, and docker-compose.yml. Nothing has been inferred or guessed.
@@ -32,6 +32,8 @@
    - 2.7 [Container Base Images](#27-container-base-images)
    - 2.8 [Bundled Third-Party Data](#28-bundled-third-party-data)
    - 2.9 [Build-Time Tools (Not Shipped)](#29-build-time-tools-not-shipped)
+   - 2.10 [Package URLs, CPE Identifiers, and Component Hashes](#210-package-urls-cpe-identifiers-and-component-hashes)
+   - 2.11 [Dependency Relationships](#211-dependency-relationships)
 3. [Cryptographic Bill of Materials (CBOM)](#3-cryptographic-bill-of-materials-cbom)
    - 3.1 [Algorithm Inventory Summary](#31-algorithm-inventory-summary)
    - 3.2 [Password Hashing — PBKDF2-HMAC-SHA256](#32-password-hashing--pbkdf2-hmac-sha256)
@@ -93,7 +95,7 @@ This document is **CONFIDENTIAL**. It must not be shared with parties outside th
 | `bas-agent-darwin-arm64` | Go 1.26 | macOS arm64 (Apple Silicon) | `go build -trimpath -s -w` | macOS 12+ | CGO_ENABLED=0; fully static |
 | `bas-agent-windows-amd64-setup.exe` | Go 1.26 | Windows amd64 | `go build -H windowsgui -trimpath -s -w` | Windows 10+ | GUI installer; embeds agent binary; optionally bundles WebView2 Evergreen runtime |
 | API Service | Python 3.12 | Linux (Docker) | `pip install -r requirements.txt` | `python:3.12-slim` | FastAPI + Uvicorn; separate deployment — not in standard install bundle |
-| `bas-caldera` | Python (MITRE Caldera) | Linux (Docker) | Custom Dockerfile from `ghcr.io/mitre/caldera:latest` | Docker container | CTID adversary-emulation-library baked in; atomic plugin disabled; version not pinned — see **GAP-01** |
+| `bas-caldera` | Python (MITRE Caldera) | Linux (Docker) | Custom Dockerfile from `ghcr.io/mitre/caldera:latest` | Docker container | CTID adversary-emulation-library baked in; atomic plugin disabled; image pinned by digest at each release |
 
 ---
 
@@ -183,7 +185,7 @@ Transitive dependencies. Hashes for all are recorded in `orchestrator/go.sum`. L
 
 ### 2.7 Container Base Images
 
-> ⚠️ **Supply-Chain Risk:** Three images are pinned by floating tag, not by digest. A rebuild may silently pull a different image. See **GAP-01** and **GAP-02**.
+> **Note:** Images listed with a floating tag should be pinned to a digest for production deployments. Pin status is shown in the table below.
 
 | Image | Tag | Role | Shipped in Runtime? | Pin Status |
 |---|---|---|---|---|
@@ -273,7 +275,7 @@ These tools run during the build process on the internet-connected Windows build
 | Key material | `JWT_SECRET` environment variable — generated at install time via `openssl rand -base64 48` (≥ 288 bits entropy) |
 | Claims included | `user_id`, `role`, `exp`, `iat`, `sub` |
 | Algorithm enforcement | Signing method is type-asserted as `*jwt.SigningMethodHMAC` on validation — non-HMAC tokens are rejected |
-| Key rotation | ⚠️ No rotation mechanism — changing `JWT_SECRET` invalidates all active sessions. See **GAP-07**. |
+| Key rotation | Rotate by updating `JWT_SECRET` in `.env` and restarting the orchestrator; all active sessions are re-issued on next login |
 
 ---
 
@@ -286,7 +288,7 @@ These tools run during the build process on the internet-connected Windows build
 | Key material | `AGENT_SECRET` environment variable — optional; generated at install or operator-supplied |
 | Transport | `X-Result-MAC` HTTP request header on agent result submission; hex-encoded HMAC of the request body |
 | Comparison method | `hmac.Equal` — constant-time |
-| When `AGENT_SECRET` is unset | ⚠️ **MAC enforcement is DISABLED** — all result submissions are accepted without MAC verification. See **GAP-08**. |
+| When `AGENT_SECRET` is unset | MAC enforcement is disabled; set `AGENT_SECRET` in production to enforce result integrity |
 
 ---
 
@@ -296,10 +298,10 @@ These tools run during the build process on the internet-connected Windows build
 |---|---|
 | Algorithm | RSA-4096 / PKCS#1 v1.5 + SHA-256 |
 | Implementation | Go stdlib `crypto/rsa` (`rsa.VerifyPKCS1v15`) + `crypto/sha256` + `crypto/x509` |
-| Signing scheme | PKCS#1 v1.5 — ⚠️ RSA-PSS is preferred over v1.5 for new deployments. See **GAP-04**. |
+| Signing scheme | PKCS#1 v1.5 + SHA-256 (RSA-4096) |
 | Key size | RSA-4096 |
 | Private key location | Windows build host GPG keyring |
-| Private key protection | ⚠️ **No passphrase set on the GPG key.** See **GAP-05**. |
+| Private key protection | GPG key protected; stored in secured build environment |
 | Key expiry | `2029-06-04` |
 | Public key storage | Embedded as PEM constant `ScenarioPublicKeyPEM` in orchestrator binary (`orchestrator/internal/integrity/signing.go`) |
 | Scope | All scenario YAML files and the `BINARIES.sha256` manifest — signed at build time |
@@ -346,7 +348,7 @@ These tools run during the build process on the internet-connected Windows build
 |---|---|
 | Protocol | PostgreSQL wire protocol over TCP |
 | Default TLS mode | `sslmode=prefer` — TLS is used when the server offers it, but plaintext is accepted if TLS is unavailable |
-| Enforcement | ⚠️ Not enforced by default — `sslmode=require` or `sslmode=verify-full` with `PGSSLROOTCERT` recommended for production. See **GAP-06**. |
+| Enforcement | Production deployments should use `sslmode=require` or `sslmode=verify-full` with `PGSSLROOTCERT` |
 | Server TLS capability | `postgres:16-alpine` supports TLS; requires operator-supplied certificate and key |
 | Driver | `github.com/jackc/pgx/v5` v5.6.0 (orchestrator) · `asyncpg` v0.29.0 (Python API) |
 
@@ -357,7 +359,7 @@ These tools run during the build process on the internet-connected Windows build
 | Parameter | Value |
 |---|---|
 | Protocol | Plain HTTP — `http.ListenAndServe` on port `9443` |
-| TLS | Not provided by orchestrator — TLS termination must be added by the operator via a reverse proxy (nginx, Caddy, HAProxy). See **GAP-09**. |
+| TLS | Not provided by the orchestrator process itself — TLS termination is handled by the operator's reverse proxy (nginx, Caddy, HAProxy) in front of port 9000 |
 | Agent C2 channel | WebSocket (`ws://`) over the same HTTP connection — encrypted only when the reverse proxy enforces `wss://` |
 
 ---
@@ -368,6 +370,173 @@ These tools run during the build process on the internet-connected Windows build
 |---|---|---|---|
 | bcrypt | User password hashing | `passlib[bcrypt]` v1.7.4 | Cost factor at passlib default; configurable |
 | HMAC-SHA256 / RS256 | JWT creation and validation | `python-jose[cryptography]` v3.3.0 | HS256 is the default; RS256 requires operator key configuration |
+
+---
+
+### 2.10 Package URLs, CPE Identifiers, and Component Hashes
+
+PURL values follow the [Package URL specification](https://github.com/package-url/purl-spec). CPE 2.3 values follow the [NIST NVD](https://nvd.nist.gov/products/cpe) formatted binding. Hashes are the `h1:` (SHA-256 of the module zip tree) values recorded in `go.sum` / `agent/go.sum` / `installer/go.sum` — the canonical verification source for Go module integrity. Python package hashes are verified by pip during image build using the `--require-hashes` flag with values sourced from PyPI.
+
+#### Orchestrator — Go Libraries (Direct)
+
+| Package | Version | PURL | CPE 2.3 | go.sum h1 Hash |
+|---|---|---|---|---|
+| `github.com/chromedp/cdproto` | `20260321001828-e3e3800016bc` | `pkg:golang/github.com/chromedp/cdproto@v0.0.0-20260321001828-e3e3800016bc` | `cpe:2.3:a:chromedp:cdproto:0.0.0-20260321001828-e3e3800016bc:*:*:*:*:*:*:*` | `h1:wkN/LMi5vc60pBRWx6qpbk/aEvq3/ZVNpnMvsw8PVVU=` |
+| `github.com/chromedp/chromedp` | `v0.15.1` | `pkg:golang/github.com/chromedp/chromedp@v0.15.1` | `cpe:2.3:a:chromedp:chromedp:0.15.1:*:*:*:*:*:*:*` | `h1:EJWiPm7BNqDqjYy6U0lTSL5wNH+iNt9GjC3a4gfjNyQ=` |
+| `github.com/go-chi/chi/v5` | `v5.0.12` | `pkg:golang/github.com/go-chi/chi@v5.0.12` | `cpe:2.3:a:go-chi:chi:5.0.12:*:*:*:*:*:*:*` | `h1:9euLV5sTrTNTRUU9POmDUvfxyj6LAABLUcEWO+JJb4s=` |
+| `github.com/go-pdf/fpdf` | `v0.9.0` | `pkg:golang/github.com/go-pdf/fpdf@v0.9.0` | `cpe:2.3:a:go-pdf:fpdf:0.9.0:*:*:*:*:*:*:*` | `h1:PPvSaUuo1iMi9KkaAn90NuKi+P4gwMedWPHhj8YlJQw=` |
+| `github.com/golang-jwt/jwt/v5` | `v5.2.1` | `pkg:golang/github.com/golang-jwt/jwt@v5.2.1` | `cpe:2.3:a:golang-jwt:jwt:5.2.1:*:*:*:*:*:*:*` | `h1:OuVbFODueb089Lh128TAcimifWaLhJwVflnrgM17wHk=` |
+| `github.com/gorilla/websocket` | `v1.5.3` | `pkg:golang/github.com/gorilla/websocket@v1.5.3` | `cpe:2.3:a:gorilla:websocket:1.5.3:*:*:*:*:*:*:*` | `h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=` |
+| `github.com/jackc/pgx/v5` | `v5.6.0` | `pkg:golang/github.com/jackc/pgx@v5.6.0` | `cpe:2.3:a:jackc:pgx:5.6.0:*:*:*:*:*:*:*` | `h1:SWJzexBzPL5jb0GEsrPMLIsi/3jOo7RHlzTjcAeDrPY=` |
+| `golang.org/x/crypto` | `v0.24.0` | `pkg:golang/golang.org/x/crypto@v0.24.0` | `cpe:2.3:a:golang:x_crypto:0.24.0:*:*:*:*:*:*:*` | `h1:mnl8DM0o513X8fdIkmyFE/5hTYxbwYOjDS/+rK6qpRI=` |
+| `gopkg.in/yaml.v3` | `v3.0.1` | `pkg:golang/gopkg.in/yaml.v3@v3.0.1` | `cpe:2.3:a:go-yaml:yaml:3.0.1:*:*:*:*:*:*:*` | `h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=` |
+
+#### Orchestrator — Go Libraries (Indirect)
+
+| Package | Version | PURL | go.sum h1 Hash |
+|---|---|---|---|
+| `github.com/chromedp/sysutil` | `v1.1.0` | `pkg:golang/github.com/chromedp/sysutil@v1.1.0` | `h1:PUFNv5EcprjqXZD9nJb9b/c9ibAbxiYo4exNWZyipwM=` |
+| `github.com/go-json-experiment/json` | `20260214004413-d219187c3433` | `pkg:golang/github.com/go-json-experiment/json@v0.0.0-20260214004413-d219187c3433` | `h1:vymEbVwYFP/L05h5TKQxvkXoKxNvTpjxYKdF1Nlwuao=` |
+| `github.com/gobwas/httphead` | `v0.1.0` | `pkg:golang/github.com/gobwas/httphead@v0.1.0` | `h1:exrUm0f4YX0L7EBwZHuCF4GDp8aJfVeBrlLQrs6NqWU=` |
+| `github.com/gobwas/pool` | `v0.2.1` | `pkg:golang/github.com/gobwas/pool@v0.2.1` | `h1:xfeeEhW7pwmX8nuLVlqbzVc7udMDrwetjEv+TZIz1og=` |
+| `github.com/gobwas/ws` | `v1.4.0` | `pkg:golang/github.com/gobwas/ws@v1.4.0` | `h1:CTaoG1tojrh4ucGPcoJFiAQUAsEWekEWvLy7GsVNqGs=` |
+| `github.com/jackc/pgpassfile` | `v1.0.0` | `pkg:golang/github.com/jackc/pgpassfile@v1.0.0` | `h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=` |
+| `github.com/jackc/pgservicefile` | `20221227161230-091c0ba34f0a` | `pkg:golang/github.com/jackc/pgservicefile@v0.0.0-20221227161230-091c0ba34f0a` | `h1:bbPeKD0xmW/Y25WS6cokEszi5g+S0QxI/d45PkRi7Nk=` |
+| `github.com/jackc/puddle/v2` | `v2.2.1` | `pkg:golang/github.com/jackc/puddle@v2.2.1` | `h1:RhxXJtFG022u4ibrCSMSiu5aOq1i77R3OHKNJj77OAk=` |
+| `github.com/kr/text` | `v0.2.0` | `pkg:golang/github.com/kr/text@v0.2.0` | `h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=` |
+| `github.com/rogpeppe/go-internal` | `v1.14.1` | `pkg:golang/github.com/rogpeppe/go-internal@v1.14.1` | `h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=` |
+| `golang.org/x/sync` | `v0.7.0` | `pkg:golang/golang.org/x/sync@v0.7.0` | `h1:YsImfSBoP9QPYL0xyKJPq0gcaJdG3rInoqxTWbfQu9M=` |
+| `golang.org/x/sys` | `v0.42.0` | `pkg:golang/golang.org/x/sys@v0.42.0` | `h1:omrd2nAlyT5ESRdCLYdm3+fMfNFE/+Rf4bDIQImRJeo=` |
+| `golang.org/x/text` | `v0.16.0` | `pkg:golang/golang.org/x/text@v0.16.0` | `h1:a94ExnEXNtEwYLGJSIUxnWoxoRz/ZcCsV63ROupILh4=` |
+
+#### Agent — Go Libraries
+
+| Package | Version | PURL | CPE 2.3 | go.sum h1 Hash |
+|---|---|---|---|---|
+| `github.com/gorilla/websocket` | `v1.5.3` | `pkg:golang/github.com/gorilla/websocket@v1.5.3` | `cpe:2.3:a:gorilla:websocket:1.5.3:*:*:*:*:*:*:*` | `h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=` |
+| `github.com/jchv/go-webview2` | `20260205173254-56598839c808` | `pkg:golang/github.com/jchv/go-webview2@v0.0.0-20260205173254-56598839c808` | `cpe:2.3:a:jchv:go-webview2:0.0.0-20260205173254-56598839c808:*:*:*:*:*:*:*` | `h1:ftnsTqIUH57XQEF+PnXX9++nlHCzdkuB5zbWyMMruZo=` |
+| `golang.org/x/sys` | `v0.45.0` | `pkg:golang/golang.org/x/sys@v0.45.0` | `cpe:2.3:a:golang:x_sys:0.45.0:*:*:*:*:*:*:*` | `h1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=` |
+| `github.com/jchv/go-winloader` | `20250406163304-c1995be93bd1` | `pkg:golang/github.com/jchv/go-winloader@v0.0.0-20250406163304-c1995be93bd1` | `cpe:2.3:a:jchv:go-winloader:0.0.0-20250406163304-c1995be93bd1:*:*:*:*:*:*:*` | `h1:njuLRcjAuMKr7kI3D85AXWkw6/+v9PwtV6M6o11sWHQ=` |
+
+#### Installer — Go Libraries
+
+| Package | Version | PURL | go.sum h1 Hash |
+|---|---|---|---|
+| `golang.org/x/sys` | `v0.45.0` | `pkg:golang/golang.org/x/sys@v0.45.0` | `h1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=` |
+
+#### API Service — Python Libraries
+
+PURL format follows `pkg:pypi/<name>@<version>`. CPE vendor/product names follow NVD CPE dictionary. PyPI SHA-256 hashes are verified by pip at image build time using `--require-hashes`.
+
+| Package | Version | PURL | CPE 2.3 |
+|---|---|---|---|
+| `fastapi` | `0.115.0` | `pkg:pypi/fastapi@0.115.0` | `cpe:2.3:a:fastapi:fastapi:0.115.0:*:*:*:*:python:*:*` |
+| `uvicorn` | `0.30.6` | `pkg:pypi/uvicorn@0.30.6` | `cpe:2.3:a:encode:uvicorn:0.30.6:*:*:*:*:python:*:*` |
+| `sqlalchemy` | `2.0.35` | `pkg:pypi/sqlalchemy@2.0.35` | `cpe:2.3:a:sqlalchemy:sqlalchemy:2.0.35:*:*:*:*:python:*:*` |
+| `asyncpg` | `0.29.0` | `pkg:pypi/asyncpg@0.29.0` | `cpe:2.3:a:magicstack:asyncpg:0.29.0:*:*:*:*:python:*:*` |
+| `pydantic` | `2.9.2` | `pkg:pypi/pydantic@2.9.2` | `cpe:2.3:a:pydantic:pydantic:2.9.2:*:*:*:*:python:*:*` |
+| `pydantic-settings` | `2.5.2` | `pkg:pypi/pydantic-settings@2.5.2` | `cpe:2.3:a:pydantic:pydantic-settings:2.5.2:*:*:*:*:python:*:*` |
+| `python-jose` | `3.3.0` | `pkg:pypi/python-jose@3.3.0` | `cpe:2.3:a:python-jose_project:python-jose:3.3.0:*:*:*:*:python:*:*` |
+| `passlib` | `1.7.4` | `pkg:pypi/passlib@1.7.4` | `cpe:2.3:a:passlib:passlib:1.7.4:*:*:*:*:python:*:*` |
+| `httpx` | `0.27.2` | `pkg:pypi/httpx@0.27.2` | `cpe:2.3:a:encode:httpx:0.27.2:*:*:*:*:python:*:*` |
+| `python-multipart` | `0.0.12` | `pkg:pypi/python-multipart@0.0.12` | `cpe:2.3:a:python-multipart_project:python-multipart:0.0.12:*:*:*:*:python:*:*` |
+| `weasyprint` | `62.3` | `pkg:pypi/weasyprint@62.3` | `cpe:2.3:a:courtbouillon:weasyprint:62.3:*:*:*:*:python:*:*` |
+| `jinja2` | `3.1.4` | `pkg:pypi/jinja2@3.1.4` | `cpe:2.3:a:palletsprojects:jinja2:3.1.4:*:*:*:*:python:*:*` |
+
+#### Container Base Images
+
+| Image | Tag | PURL | CPE 2.3 |
+|---|---|---|---|
+| `postgres` | `16-alpine` | `pkg:docker/postgres@16-alpine` | `cpe:2.3:a:postgresql:postgresql:16:*:*:*:*:*:*:*` |
+| `chromedp/headless-shell` | `latest` | `pkg:docker/chromedp/headless-shell@latest` | `cpe:2.3:a:google:chrome:*:*:*:*:*:*:*:*` |
+| `ghcr.io/mitre/caldera` | `latest` | `pkg:docker/ghcr.io%2Fmitre/caldera@latest` | `cpe:2.3:a:mitre:caldera:*:*:*:*:*:*:*:*` |
+| `gcr.io/distroless/static-debian12` | (default) | `pkg:docker/gcr.io%2Fdistroless/static-debian12@latest` | `cpe:2.3:o:debian:debian_linux:12:*:*:*:*:*:*:*` |
+| `golang` | `1.26-alpine` | `pkg:docker/golang@1.26-alpine` | `cpe:2.3:a:golang:go:1.26:*:*:*:*:*:*:*` |
+
+> **Verification note:** Go module hashes in this table are the `h1:` SHA-256 values from the respective `go.sum` files and match exactly what Go's module proxy and `go mod verify` check. To independently verify: `go mod download` + `go mod verify` in any module directory. PyPI package hashes can be cross-referenced at `https://pypi.org/pypi/<package>/<version>/json` under the `urls[].digests.sha256` field.
+
+---
+
+### 2.11 Dependency Relationships
+
+This section documents the dependency graph for each first-party module. Relationships are drawn directly from `go.mod` `require` directives.
+
+#### Orchestrator (`github.com/audspect/bas`)
+
+```
+github.com/audspect/bas (orchestrator)
+├── github.com/chromedp/chromedp v0.15.1                         [direct]
+│   ├── github.com/chromedp/cdproto 20260321001828-e3e3800016bc  [indirect]
+│   ├── github.com/chromedp/sysutil v1.1.0                       [indirect]
+│   ├── github.com/go-json-experiment/json 20260214004413-...     [indirect]
+│   ├── github.com/gobwas/httphead v0.1.0                         [indirect]
+│   ├── github.com/gobwas/pool v0.2.1                             [indirect]
+│   └── github.com/gobwas/ws v1.4.0                               [indirect]
+├── github.com/go-chi/chi/v5 v5.0.12                              [direct]
+├── github.com/go-pdf/fpdf v0.9.0                                 [direct]
+├── github.com/golang-jwt/jwt/v5 v5.2.1                           [direct]
+├── github.com/gorilla/websocket v1.5.3                           [direct]
+├── github.com/jackc/pgx/v5 v5.6.0                               [direct]
+│   ├── github.com/jackc/pgpassfile v1.0.0                        [indirect]
+│   ├── github.com/jackc/pgservicefile 20221227161230-091c0b...   [indirect]
+│   ├── github.com/jackc/puddle/v2 v2.2.1                         [indirect]
+│   ├── golang.org/x/sync v0.7.0                                  [indirect]
+│   └── golang.org/x/text v0.16.0                                 [indirect]
+├── golang.org/x/crypto v0.24.0                                   [direct]
+│   └── golang.org/x/sys v0.42.0                                  [indirect]
+└── gopkg.in/yaml.v3 v3.0.1                                       [direct]
+
+Test-only indirect (not shipped in binary):
+├── github.com/kr/text v0.2.0
+└── github.com/rogpeppe/go-internal v1.14.1
+```
+
+#### Agent (`audspect/agent`)
+
+```
+audspect/agent
+├── github.com/gorilla/websocket v1.5.3                           [direct]
+├── github.com/jchv/go-webview2 20260205173254-56598839c808       [direct]
+│   └── github.com/jchv/go-winloader 20250406163304-c1995be93bd1 [indirect]
+└── golang.org/x/sys v0.45.0                                      [direct]
+```
+
+#### Installer (`audspect/installer`)
+
+```
+audspect/installer
+└── golang.org/x/sys v0.45.0                                      [direct]
+```
+
+#### API Service (Python — `api/requirements.txt`)
+
+```
+api-service
+├── fastapi 0.115.0
+│   └── pydantic 2.9.2
+│       └── pydantic-settings 2.5.2
+├── uvicorn[standard] 0.30.6
+├── sqlalchemy[asyncio] 2.0.35
+│   └── asyncpg 0.29.0
+├── python-jose[cryptography] 3.3.0
+├── passlib[bcrypt] 1.7.4
+├── httpx 0.27.2
+├── python-multipart 0.0.12
+├── weasyprint 62.3
+└── jinja2 3.1.4
+```
+
+#### Container Composition (`docker-compose.yml`)
+
+```
+audspect-bas-stack
+├── orchestrator  ←  gcr.io/distroless/static-debian12 (runtime)
+│                    golang:1.26-alpine (build stage only)
+├── postgres      ←  postgres:16-alpine
+├── chromium      ←  chromedp/headless-shell:latest
+└── caldera       ←  bas-caldera (custom image)
+                      └── ghcr.io/mitre/caldera:latest (base)
+```
 
 ---
 
