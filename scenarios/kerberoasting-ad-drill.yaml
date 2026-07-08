@@ -1,0 +1,365 @@
+id: kerberoasting-ad-drill
+name: Kerberoasting & Active Directory Credential Theft Drill
+description: >
+  Eight-stage telemetry-safe Active Directory credential-access drill for
+  Windows domain members. Exercises the enumeration and ticket-request tradecraft
+  an adversary runs AFTER gaining a foothold but BEFORE lateral movement — the
+  reconnaissance every AD-attack path (Kerberoasting → DCSync → Domain Admin)
+  begins with.
+
+  KILL CHAIN STAGES (all read-only LDAP/Kerberos enumeration — no cracking):
+    1. SPN Enumeration        — setspn -Q + LDAP servicePrincipalName sweep (T1558.003)
+    2. Kerberoasting          — request a TGS-REP for a service SPN (no offline crack) (T1558.003)
+    3. AS-REP Roasting        — find accounts with Kerberos pre-auth disabled (T1558.004)
+    4. LDAP User/Computer Enum— DirectorySearcher user + computer harvest (T1087.002 / T1018)
+    5. Domain Trust Enum      — nltest /domain_trusts /all_trusts (T1482)
+    6. Privileged Group Enum  — Domain/Enterprise Admins membership (BloodHound-style) (T1069.002)
+    7. GPO Enumeration        — Group Policy discovery via LDAP/gpresult (T1615)
+    8. LAPS Readability Probe — test whether ms-Mcs-AdmPwd is readable (T1552.006)
+
+  SAFETY: Every stage is READ-ONLY directory/Kerberos enumeration. Stage 2 requests
+  a real service ticket (the same TGS-REP a Kerberoast produces) but NEVER extracts
+  or cracks the hash — it validates the request path and the resulting detection.
+  No accounts modified, no tickets exported, no passwords touched. On a non-domain
+  host every stage returns a clean SKIP. All steps [BAS-SIM-KRB] tagged.
+  PRODUCTION-SAFE: all stages run in telemetry mode. Windows domain members only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - kerberoasting
+  - as-rep-roasting
+  - active-directory
+  - credential-access
+  - bloodhound
+  - laps
+  - gpo
+  - t1558
+  - t1087
+  - t1018
+  - t1482
+  - t1069
+  - t1615
+  - t1552
+  - mitre
+mitre_phases:
+  - credential-access
+  - discovery
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: true
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — SPN Enumeration (T1558.003)
+  # ---------------------------------------------------------------------------
+  - name: "AD Stage 1 — Service Principal Name (SPN) Enumeration (T1558.003)"
+    technique_id: T1558.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs setspn -Q */* and an LDAP DirectorySearcher for servicePrincipalName (read-only). Enumerating SPNs is the first step of Kerberoasting — it reveals which service accounts have crackable tickets. No tickets requested here. Generates LDAP query traffic to the DC and Sysmon EID 1 (setspn.exe)."
+    telemetry:
+      - "Sysmon EID 1: setspn.exe -Q */*"
+      - "DC: LDAP search filter (servicePrincipalName=*) — Directory Services / 1644 if verbose LDAP logging enabled"
+    detection:
+      - "EDR: setspn.exe -Q enumeration — Sigma proc_creation_win_setspn_enum.yml"
+      - "SIEM: LDAP query for all servicePrincipalName values — Kerberoast reconnaissance IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $setspn = & setspn.exe -Q */* 2>&1 | Out-String
+      $spnCount = ([regex]::Matches($setspn, 'CN=')).Count
+      try {
+        $root = ([ADSI]"LDAP://RootDSE").defaultNamingContext
+        $ds = New-Object System.DirectoryServices.DirectorySearcher
+        $ds.Filter = "(&(objectClass=user)(servicePrincipalName=*))"
+        [void]$ds.PropertiesToLoad.Add("samaccountname")
+        $ldapCount = ($ds.FindAll()).Count
+      } catch { $ldapCount = -1 }
+      if ($spnCount -eq 0 -and $ldapCount -lt 0) {
+        Write-Output "SKIP: no domain / SPN enumeration unavailable — host is not domain-joined or the DC is unreachable. [BAS-SIM-KRB-S1]"
+      } else {
+        Write-Output "EXEC T1558.003: setspn found $spnCount SPN entries; LDAP servicePrincipalName sweep found $ldapCount kerberoastable accounts. Kerberoast reconnaissance Stage 1. [BAS-SIM-KRB-S1]"
+        Write-Output "FAIL: SPN enumeration ran unimpeded. Enumerating all servicePrincipalName values is the reconnaissance every Kerberoast begins with — ensure LDAP search auditing (Directory Services) and setspn.exe execution are monitored, and minimize service-account SPNs."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Kerberoasting: TGS-REP request (T1558.003)
+  # ---------------------------------------------------------------------------
+  - name: "AD Stage 2 — Kerberoasting TGS-REP Request (no crack) (T1558.003)"
+    technique_id: T1558.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Requests a Kerberos service ticket (TGS) for a discovered service SPN using the built-in KerberosRequestorSecurityToken class — exactly the request a Kerberoast performs — but does NOT extract, export, or crack the encrypted portion. Generates Security EID 4769 (TGS request) on the DC, ideally with RC4 (0x17) if the account is weakly configured. No modification of any account."
+    telemetry:
+      - "DC Security EID 4769: Kerberos service ticket requested (ticket encryption 0x17=RC4 is the Kerberoast tell)"
+      - "Sysmon EID 1: powershell.exe requesting a service ticket"
+    detection:
+      - "SIEM: EID 4769 with Ticket Encryption Type 0x17 (RC4) — high-fidelity Kerberoast IOC"
+      - "SIEM: single principal requesting many distinct service tickets in a short window"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $ds = New-Object System.DirectoryServices.DirectorySearcher
+        $ds.Filter = "(&(objectClass=user)(servicePrincipalName=*)(!samaccountname=krbtgt))"
+        [void]$ds.PropertiesToLoad.Add("servicePrincipalName")
+        $res = $ds.FindOne()
+        if (-not $res) { Write-Output "SKIP: no kerberoastable SPN accounts found (no domain / no service accounts). [BAS-SIM-KRB-S2]"; return }
+        $spn = $res.Properties["serviceprincipalname"][0]
+        Add-Type -AssemblyName System.IdentityModel -ErrorAction Stop
+        $ticket = New-Object System.IdentityModel.Tokens.KerberosRequestorSecurityToken -ArgumentList $spn
+        if ($ticket) {
+          Write-Output "EXEC T1558.003: requested a TGS-REP service ticket for SPN '$spn' (hash NOT extracted or cracked). This is the exact Kerberoast request. DC Security EID 4769 expected. [BAS-SIM-KRB-S2]"
+          Write-Output "FAIL: A service ticket was granted on demand for a service account SPN. If that account has a weak password and RC4 is allowed, the ticket is offline-crackable. Enforce AES-only, use gMSAs / 25+ char service passwords, and alert on EID 4769 RC4 tickets."
+        } else {
+          Write-Output "PASS: service ticket request did not complete — Kerberos ticket request was constrained. [BAS-SIM-KRB-S2]"
+        }
+      } catch {
+        Write-Output "SKIP: TGS-REP request could not be issued (no domain, no reachable KDC, or class unavailable). [BAS-SIM-KRB-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — AS-REP Roasting discovery (T1558.004)
+  # ---------------------------------------------------------------------------
+  - name: "AD Stage 3 — AS-REP Roastable Account Discovery (T1558.004)"
+    technique_id: T1558.004
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "LDAP query for accounts with the DONT_REQ_PREAUTH flag set (userAccountControl bit 0x400000) — read-only. These accounts are AS-REP roastable: an attacker can request their encrypted AS-REP without any credentials and crack it offline. This step finds them; it does not request or crack. Generates LDAP query traffic."
+    telemetry:
+      - "DC: LDAP search for userAccountControl:1.2.840.113556.1.4.803:=4194304"
+      - "Sysmon EID 1: powershell.exe LDAP enumeration"
+    detection:
+      - "SIEM: LDAP query filtering on DONT_REQ_PREAUTH — AS-REP Roast reconnaissance IOC"
+      - "SIEM: EID 4768 AS-REQ without pre-auth (encryption 0x17) — AS-REP roast in progress"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $ds = New-Object System.DirectoryServices.DirectorySearcher
+        $ds.Filter = "(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=4194304))"
+        [void]$ds.PropertiesToLoad.Add("samaccountname")
+        $roastable = $ds.FindAll()
+        $count = $roastable.Count
+      } catch { $count = -1 }
+      if ($count -lt 0) {
+        Write-Output "SKIP: AS-REP enumeration unavailable — host not domain-joined or DC unreachable. [BAS-SIM-KRB-S3]"
+      } elseif ($count -eq 0) {
+        Write-Output "PASS: no accounts have Kerberos pre-authentication disabled — no AS-REP roastable accounts exposed. [BAS-SIM-KRB-S3]"
+      } else {
+        Write-Output "EXEC T1558.004: found $count account(s) with DONT_REQ_PREAUTH set (AS-REP roastable). AS-REP Roast reconnaissance Stage 3 (no ticket requested). [BAS-SIM-KRB-S3]"
+        Write-Output "FAIL: $count account(s) are AS-REP roastable — their AS-REP can be requested with NO credentials and cracked offline. Enable Kerberos pre-authentication on every account (remove DONT_REQ_PREAUTH) and give any that legitimately need it a long random password."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — LDAP User & Computer Enumeration (T1087.002 / T1018)
+  # ---------------------------------------------------------------------------
+  - name: "AD Stage 4 — LDAP User & Computer Enumeration (T1087.002 / T1018)"
+    technique_id: T1087.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "DirectorySearcher harvest of all domain user and computer objects (read-only). This is the bulk directory dump that feeds an attacker's target list and BloodHound. No writes. Generates a large LDAP result set from the DC."
+    telemetry:
+      - "DC: broad LDAP search (objectClass=user) and (objectClass=computer)"
+      - "Sysmon EID 1: powershell.exe with ADSI/DirectorySearcher"
+    detection:
+      - "SIEM: single principal enumerating all users AND all computers via LDAP — mass directory harvest IOC"
+      - "EDR: LDAP enumeration volume anomaly from a workstation"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $du = New-Object System.DirectoryServices.DirectorySearcher
+        $du.Filter = "(objectClass=user)"; $du.PageSize = 500
+        $userCount = ($du.FindAll()).Count
+        $dc = New-Object System.DirectoryServices.DirectorySearcher
+        $dc.Filter = "(objectClass=computer)"; $dc.PageSize = 500
+        $compCount = ($dc.FindAll()).Count
+      } catch { $userCount = -1; $compCount = -1 }
+      if ($userCount -lt 0) {
+        Write-Output "SKIP: LDAP enumeration unavailable — host not domain-joined or DC unreachable. [BAS-SIM-KRB-S4]"
+      } else {
+        Write-Output "EXEC T1087.002/T1018: harvested $userCount user objects and $compCount computer objects via LDAP. Directory mass-enumeration Stage 4 (feeds BloodHound / target lists). [BAS-SIM-KRB-S4]"
+        Write-Output "FAIL: A standard user enumerated the entire directory (users + computers) unimpeded. Bulk LDAP harvesting should trigger a volume-based detection — this is the data BloodHound ingests to map attack paths."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — Domain Trust Enumeration (T1482)
+  # ---------------------------------------------------------------------------
+  - name: "AD Stage 5 — Domain Trust Enumeration (T1482)"
+    technique_id: T1482
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs nltest /domain_trusts /all_trusts (read-only). Trust enumeration reveals cross-domain and cross-forest attack paths an adversary can pivot along. No modification. Generates Sysmon EID 1 (nltest.exe)."
+    telemetry:
+      - "Sysmon EID 1: nltest.exe /domain_trusts /all_trusts"
+      - "Security EID 4688: nltest.exe from PowerShell parent"
+    detection:
+      - "EDR: nltest.exe /domain_trusts — Sigma proc_creation_win_nltest_recon.yml"
+      - "SIEM: trust enumeration from a workstation — lateral-path mapping IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $trusts = & nltest.exe /domain_trusts /all_trusts 2>&1 | Out-String
+      $hasTrusts = $trusts -match 'Trusted DC|List of domain trusts|trusted domains'
+      if (-not $hasTrusts) {
+        Write-Output "SKIP: no domain trusts enumerable — host not domain-joined or standalone domain. [BAS-SIM-KRB-S5]"
+      } else {
+        $trustCount = ([regex]::Matches($trusts, ':\s+[A-Za-z0-9._-]+\s+\(')).Count
+        Write-Output "EXEC T1482: nltest enumerated domain trusts (entries~$trustCount). Trust-mapping Stage 5 reveals cross-domain pivot paths. [BAS-SIM-KRB-S5]"
+        Write-Output "FAIL: Domain/forest trust enumeration ran unimpeded. nltest /domain_trusts from a workstation is a lateral-movement precursor — ensure it is detected and that inter-forest trusts enforce SID filtering and selective authentication."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 — Privileged Group Enumeration (T1069.002) — BloodHound-style
+  # ---------------------------------------------------------------------------
+  - name: "AD Stage 6 — Privileged Group Membership Enumeration (T1069.002)"
+    technique_id: T1069.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Enumerates membership of Domain Admins, Enterprise Admins, and Administrators via net group /domain and LDAP (read-only). This is the BloodHound-style privileged-account mapping that identifies the high-value targets to escalate toward. No modification."
+    telemetry:
+      - "Sysmon EID 1: net.exe / net1.exe group 'Domain Admins' /domain"
+      - "DC: LDAP search of adminCount=1 / privileged group members"
+    detection:
+      - "EDR: net group 'Domain Admins' / 'Enterprise Admins' /domain — Sigma proc_creation_win_net_enum.yml"
+      - "SIEM: enumeration of tier-0 group membership from a non-admin host — escalation-target recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $da = & net.exe group "Domain Admins" /domain 2>&1 | Out-String
+      $ea = & net.exe group "Enterprise Admins" /domain 2>&1 | Out-String
+      $domainJoined = $da -notmatch 'workstation is not|not be found|is not part'
+      if (-not $domainJoined) {
+        Write-Output "SKIP: privileged domain group enumeration unavailable — host not domain-joined or DC unreachable. [BAS-SIM-KRB-S6]"
+      } else {
+        $daMembers = ([regex]::Matches($da, '^\S', [System.Text.RegularExpressions.RegexOptions]::Multiline)).Count
+        Write-Output "EXEC T1069.002: enumerated Domain Admins + Enterprise Admins membership (BloodHound-style tier-0 mapping). Stage 6. [BAS-SIM-KRB-S6]"
+        Write-Output "FAIL: Tier-0 group membership (Domain/Enterprise Admins) was enumerable by a standard user. This identifies the exact escalation targets — reduce tier-0 membership, tier your admin accounts, and alert when privileged group membership is queried from a workstation."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 — GPO Enumeration (T1615)
+  # ---------------------------------------------------------------------------
+  - name: "AD Stage 7 — Group Policy Object Enumeration (T1615)"
+    technique_id: T1615
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 40
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs gpresult /r and an LDAP search of groupPolicyContainer objects (read-only). GPO enumeration reveals security configuration, deployed software, and misconfigured policies an attacker can abuse. No modification. Generates Sysmon EID 1 (gpresult.exe) and LDAP traffic."
+    telemetry:
+      - "Sysmon EID 1: gpresult.exe /r"
+      - "DC: LDAP search (objectClass=groupPolicyContainer)"
+    detection:
+      - "EDR: gpresult.exe enumeration from a script host — Sigma proc_creation_win_gpresult.yml"
+      - "SIEM: LDAP enumeration of GPO containers — configuration-mapping IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $gp = & gpresult.exe /r 2>&1 | Out-String
+      $applied = ([regex]::Matches($gp, 'Applied Group Policy Objects|GPO')).Count
+      try {
+        $ds = New-Object System.DirectoryServices.DirectorySearcher
+        $ds.Filter = "(objectClass=groupPolicyContainer)"
+        [void]$ds.PropertiesToLoad.Add("displayname")
+        $gpoCount = ($ds.FindAll()).Count
+      } catch { $gpoCount = -1 }
+      if ($applied -eq 0 -and $gpoCount -lt 0) {
+        Write-Output "SKIP: GPO enumeration unavailable — host not domain-joined or DC unreachable. [BAS-SIM-KRB-S7]"
+      } else {
+        Write-Output "EXEC T1615: gpresult ran and LDAP found $gpoCount GPO container(s). Group Policy discovery Stage 7 exposes security config + deployment paths. [BAS-SIM-KRB-S7]"
+        Write-Output "FAIL: GPO enumeration ran unimpeded. Attackers read GPOs to find weak policies, deployed agents, and (if writable) GPO-abuse escalation paths — ensure GPO read enumeration is monitored and no non-admin holds write on a GPO linked to tier-0."
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 — LAPS Readability Probe (T1552.006)
+  # ---------------------------------------------------------------------------
+  - name: "AD Stage 8 — LAPS (ms-Mcs-AdmPwd) Readability Probe (T1552.006)"
+    technique_id: T1552.006
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "LDAP query attempting to read the ms-Mcs-AdmPwd (legacy LAPS) / msLAPS-Password attribute on computer objects (read-only). If the current user can read it, local admin passwords are exposed — a direct lateral-movement key. This step only tests readability; it does not use any recovered password. No modification."
+    telemetry:
+      - "DC: LDAP search requesting ms-Mcs-AdmPwd / msLAPS-Password attribute"
+      - "Sysmon EID 1: powershell.exe LDAP query for LAPS attribute"
+    detection:
+      - "SIEM: read of ms-Mcs-AdmPwd by a non-authorized principal — LAPS password access IOC (audit via SACL on the attribute)"
+      - "SIEM: bulk LAPS attribute reads across many computers — credential harvesting"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      try {
+        $ds = New-Object System.DirectoryServices.DirectorySearcher
+        $ds.Filter = "(&(objectCategory=computer)(|(ms-Mcs-AdmPwd=*)(msLAPS-Password=*)))"
+        [void]$ds.PropertiesToLoad.Add("ms-mcs-admpwd")
+        [void]$ds.PropertiesToLoad.Add("mslaps-password")
+        [void]$ds.PropertiesToLoad.Add("name")
+        $found = $ds.FindAll()
+        $readable = 0
+        foreach ($c in $found) {
+          if ($c.Properties["ms-mcs-admpwd"].Count -gt 0 -or $c.Properties["mslaps-password"].Count -gt 0) { $readable++ }
+        }
+        $total = $found.Count
+      } catch { $total = -1; $readable = -1 }
+      if ($total -lt 0) {
+        Write-Output "SKIP: LAPS probe unavailable — host not domain-joined or DC unreachable. [BAS-SIM-KRB-S8]"
+      } elseif ($readable -eq 0) {
+        Write-Output "PASS: LAPS attribute (ms-Mcs-AdmPwd) is not readable under the current user context — local admin passwords are protected. [BAS-SIM-KRB-S8]"
+      } else {
+        Write-Output "EXEC T1552.006: current user can READ the LAPS password attribute on $readable computer object(s). LAPS readability Stage 8. [BAS-SIM-KRB-S8]"
+        Write-Output "FAIL: $readable local-admin password(s) are readable via LAPS by this user — a direct lateral-movement key. Restrict ms-Mcs-AdmPwd/msLAPS-Password read rights to authorized admins only, and audit every read of the attribute."
+      }
+    cleanup: ""

