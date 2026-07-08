@@ -26,42 +26,41 @@ var (
 	gdi32    = windows.NewLazySystemDLL("gdi32.dll")
 	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
 
-	procRegisterClassEx  = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
-	procShowWindow       = user32.NewProc("ShowWindow")
-	procUpdateWindow     = user32.NewProc("UpdateWindow")
-	procGetMessage       = user32.NewProc("GetMessageW")
-	procTranslateMessage = user32.NewProc("TranslateMessage")
-	procDispatchMessage  = user32.NewProc("DispatchMessageW")
-	procDefWindowProc    = user32.NewProc("DefWindowProcW")
-	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
-	procDestroyWindow    = user32.NewProc("DestroyWindow")
-	procLoadCursor       = user32.NewProc("LoadCursorW")
-	procGetWindowText    = user32.NewProc("GetWindowTextW")
-	procSetWindowText    = user32.NewProc("SetWindowTextW")
-	procSendMessage      = user32.NewProc("SendMessageW")
-	procMessageBox       = user32.NewProc("MessageBoxW")
-	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
-	procSetWindowPos     = user32.NewProc("SetWindowPos")
-	procBeginPaint       = user32.NewProc("BeginPaint")
-	procEndPaint         = user32.NewProc("EndPaint")
-	procFillRect         = user32.NewProc("FillRect")
-	procDrawText         = user32.NewProc("DrawTextW")
-	procEnableWindow     = user32.NewProc("EnableWindow")
-	procInvalidateRect   = user32.NewProc("InvalidateRect")
+	procRegisterClassEx        = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx         = user32.NewProc("CreateWindowExW")
+	procShowWindow              = user32.NewProc("ShowWindow")
+	procUpdateWindow            = user32.NewProc("UpdateWindow")
+	procGetMessage               = user32.NewProc("GetMessageW")
+	procTranslateMessage        = user32.NewProc("TranslateMessage")
+	procDispatchMessage         = user32.NewProc("DispatchMessageW")
+	procDefWindowProc           = user32.NewProc("DefWindowProcW")
+	procPostQuitMessage         = user32.NewProc("PostQuitMessage")
+	procDestroyWindow           = user32.NewProc("DestroyWindow")
+	procLoadCursor               = user32.NewProc("LoadCursorW")
+	procGetWindowText           = user32.NewProc("GetWindowTextW")
+	procSetWindowText           = user32.NewProc("SetWindowTextW")
+	procSendMessage              = user32.NewProc("SendMessageW")
+	procMessageBox               = user32.NewProc("MessageBoxW")
+	procGetSystemMetrics        = user32.NewProc("GetSystemMetrics")
+	procSetWindowPos            = user32.NewProc("SetWindowPos")
+	procBeginPaint                = user32.NewProc("BeginPaint")
+	procEndPaint                  = user32.NewProc("EndPaint")
+	procFillRect                  = user32.NewProc("FillRect")
+	procDrawText                  = user32.NewProc("DrawTextW")
+	procEnableWindow            = user32.NewProc("EnableWindow")
+	procInvalidateRect          = user32.NewProc("InvalidateRect")
+	procSetFocus                  = user32.NewProc("SetFocus")
+	procGetFocus                  = user32.NewProc("GetFocus")
+	procIsDialogMessage         = user32.NewProc("IsDialogMessageW")
+	procCreateAcceleratorTable  = user32.NewProc("CreateAcceleratorTableW")
+	procTranslateAccelerator    = user32.NewProc("TranslateAcceleratorW")
 
 	procCreateSolidBrush = gdi32.NewProc("CreateSolidBrush")
-	procCreatePen        = gdi32.NewProc("CreatePen")
 	procCreateFont       = gdi32.NewProc("CreateFontW")
 	procSelectObject     = gdi32.NewProc("SelectObject")
 	procDeleteObject     = gdi32.NewProc("DeleteObject")
-	procGetStockObject   = gdi32.NewProc("GetStockObject")
 	procSetBkMode        = gdi32.NewProc("SetBkMode")
-	procSetBkColor       = gdi32.NewProc("SetBkColor")
 	procSetTextColor     = gdi32.NewProc("SetTextColor")
-	procMoveToEx         = gdi32.NewProc("MoveToEx")
-	procLineTo           = gdi32.NewProc("LineTo")
-	procRoundRect        = gdi32.NewProc("RoundRect")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
 )
@@ -69,119 +68,118 @@ var (
 // ── Win32 message / style constants ──────────────────────────────────────────
 
 const (
-	WM_CREATE         = 0x0001
-	WM_DESTROY        = 0x0002
-	WM_PAINT          = 0x000F
-	WM_COMMAND        = 0x0111
-	WM_CTLCOLORSTATIC = 0x0138
-	WM_CTLCOLOREDIT   = 0x0133
-	WM_SETFONT        = 0x0030
-	WM_DRAWITEM       = 0x002B
+	WM_CREATE  = 0x0001
+	WM_DESTROY = 0x0002
+	WM_PAINT   = 0x000F
+	WM_COMMAND = 0x0111
+	WM_SETFONT = 0x0030
 
-	WS_OVERLAPPED    = 0x00000000
-	WS_CAPTION       = 0x00C00000
-	WS_SYSMENU       = 0x00080000
-	WS_MINIMIZEBOX   = 0x00020000
-	WS_VISIBLE       = 0x10000000
-	WS_CHILD         = 0x40000000
-	WS_BORDER        = 0x00800000
-	WS_TABSTOP       = 0x00010000
-	WS_VSCROLL       = 0x00200000
-	ES_LEFT          = 0x0000
-	ES_MULTILINE     = 0x0004
-	ES_AUTOVSCROLL   = 0x0040
-	ES_PASSWORD      = 0x0020
-	ES_READONLY      = 0x0800
+	WS_OVERLAPPED  = 0x00000000
+	WS_CAPTION     = 0x00C00000
+	WS_SYSMENU     = 0x00080000
+	WS_MINIMIZEBOX = 0x00020000
+	WS_VISIBLE     = 0x10000000
+	WS_CHILD       = 0x40000000
+	WS_BORDER      = 0x00800000
+	WS_TABSTOP     = 0x00010000
+	WS_GROUP       = 0x00020000
+	WS_VSCROLL     = 0x00200000
+	ES_LEFT        = 0x0000
+	ES_MULTILINE   = 0x0004
+	ES_AUTOVSCROLL = 0x0040
+	ES_PASSWORD    = 0x0020
+	ES_READONLY    = 0x0800
 	SS_LEFT          = 0x00000000
 	BS_PUSHBUTTON    = 0x00000000
 	BS_DEFPUSHBUTTON = 0x00000001
-	BS_OWNERDRAW     = 0x0000000B // required for custom-painted buttons
 
-	SW_SHOW    = 5
-	TRANSPARENT = 1
-	NULL_PEN    = 8
+	SW_SHOW = 5
 
 	SM_CXSCREEN = 0
 	SM_CYSCREEN = 1
 
 	DT_LEFT       = 0x00000000
-	DT_CENTER     = 0x00000001
-	DT_RIGHT      = 0x00000002
-	DT_VCENTER    = 0x00000004
 	DT_SINGLELINE = 0x00000020
 	DT_NOCLIP     = 0x00000100
+	DT_NOPREFIX   = 0x00000800
 
-	ODS_SELECTED = 0x0001
+	COLOR_BTNFACE = 15
+
+	EM_SETSEL = 0x00B1
+
+	FVIRTKEY = 0x01
+	FCONTROL = 0x08
 )
 
 // ── Control IDs ───────────────────────────────────────────────────────────────
 
 const (
-	IDC_URL     = 101
-	IDC_SECRET  = 102
-	IDC_ENV     = 103
-	IDC_INSTALL = 104
-	IDC_CANCEL  = 105
-	IDC_STATUS  = 106
+	IDC_URL        = 101
+	IDC_SECRET     = 102
+	IDC_ENV        = 103
+	IDC_INSTALL    = 104
+	IDC_CANCEL     = 105
+	IDC_STATUS     = 106
+	IDC_SELECTALL  = 107
 )
 
 // ── Window geometry ───────────────────────────────────────────────────────────
+//
+// Plain, native-looking Windows form: a slim identifying header banner
+// followed by an ordinary light-themed body. Sober on purpose — this is the
+// first thing an IT admin sees when installing an agent on a production
+// endpoint, and an unfamiliar/flashy UI reads as untrustworthy in that
+// context.
 
 const (
 	WINW = 520
-	WINH = 572
-	HDR  = 108 // header stripe height (client coords)
-	LPAD = 24  // left/right gutter
-	FW   = WINW - LPAD*2 // usable field width = 472
-	EDTH = 28  // edit control height
+	WINH = 594
+	HDR  = 96 // header banner height (client coords)
+	LPAD = 24 // left/right gutter
+	FW   = WINW - LPAD*2 // usable field width
+	EDTH = 28 // edit control height
 )
 
-// Layout — all in client coordinates (y=0 at top of client area).
 const (
-	ySec1     = HDR + 14       // "CONFIGURATION" section label
-	yURLLbl   = ySec1 + 20     // URL field label
-	yURLEdit  = yURLLbl + 16   // URL edit, h=EDTH, ends 200
-	ySecLbl   = yURLEdit + 36  // Secret field label
-	ySecEdit  = ySecLbl + 16   // Secret edit, h=EDTH, ends 252
-	yEnvLbl   = ySecEdit + 36  // Env label
-	yEnvEdit  = yEnvLbl + 16   // Env edit, h=EDTH, ends 304
-	yDivider  = yEnvEdit + 38  // horizontal rule
-	ySec2     = yDivider + 10  // "INSTALLATION LOG" label
-	yLog      = ySec2 + 20     // log edit area
-	yBtns     = 498            // button row
-	logH      = yBtns - yLog - 6
+	yURLLbl  = HDR + 24
+	yURLEdit = yURLLbl + 22
+	ySecLbl  = yURLEdit + EDTH + 20
+	ySecEdit = ySecLbl + 22
+	yEnvLbl  = ySecEdit + EDTH + 20
+	yEnvEdit = yEnvLbl + 22
+	yLogLbl  = yEnvEdit + EDTH + 24
+	yLog     = yLogLbl + 22
+	logH     = 160
+	yBtns    = yLog + logH + 18
 )
 
 // ── Colours (Win32 COLORREF = 0x00BBGGRR) ────────────────────────────────────
+//
+// Only the header banner is custom-painted; every other control uses the
+// system's default colours (white edits, light-grey body, native buttons)
+// so the window matches the look of any other Windows program.
 
 const (
-	colHdrBg     = uintptr(0x0020140B) // #0b1420 deep navy header
-	colBodyBg    = uintptr(0x00382315) // #152338 dark navy body
-	colSurface   = uintptr(0x00412A1B) // #1b2a41 input / elevated surface
-	colLogBg     = uintptr(0x0020140B) // #0b1420 terminal log
-	colAccent    = uintptr(0x00F7812F) // #2f81f7 accent blue
-	colAccentPrs = uintptr(0x00D06A26) // darker blue for pressed state
-	colBorder    = uintptr(0x004A3222) // #22324a border
-	colTextPri   = uintptr(0x00F3EDE6) // #e6edf3 primary text
-	colTextMut   = uintptr(0x00BCA99A) // #9aa9bc muted text
-	colWhite     = uintptr(0x00FFFFFF)
+	colHdrBg  = uintptr(0x0020140B) // dark navy header — brand identifier only
+	colWhite  = uintptr(0x00FFFFFF)
+	colHdrSub = uintptr(0x00C8C8C8) // neutral light grey subtitle text
 )
 
 // ── Win32 structs ─────────────────────────────────────────────────────────────
 
 type WNDCLASSEX struct {
-	Size        uint32
-	Style       uint32
-	WndProc     uintptr
-	ClsExtra    int32
-	WndExtra    int32
-	Instance    uintptr
-	Icon        uintptr
-	Cursor      uintptr
-	Background  uintptr
-	MenuName    *uint16
-	ClassName   *uint16
-	IconSm      uintptr
+	Size       uint32
+	Style      uint32
+	WndProc    uintptr
+	ClsExtra   int32
+	WndExtra   int32
+	Instance   uintptr
+	Icon       uintptr
+	Cursor     uintptr
+	Background uintptr
+	MenuName   *uint16
+	ClassName  *uint16
+	IconSm     uintptr
 }
 
 type MSG struct {
@@ -202,18 +200,12 @@ type PAINTSTRUCT struct {
 	Reserved  [32]byte
 }
 
-// DRAWITEMSTRUCT — 64-bit layout has 4-byte pad after ItemState before HwndItem.
-type DRAWITEMSTRUCT struct {
-	CtlType    uint32
-	CtlID      uint32
-	ItemID     uint32
-	ItemAction uint32
-	ItemState  uint32
-	_          uint32 // alignment
-	HwndItem   uintptr
-	HDC        uintptr
-	RcItem     [4]int32 // left, top, right, bottom
-	ItemData   uintptr
+// ACCEL mirrors the Win32 tagACCEL struct (fVirt:BYTE, pad, key:WORD, cmd:WORD).
+type ACCEL struct {
+	FVirt byte
+	_     byte
+	Key   uint16
+	Cmd   uint16
 }
 
 // ── Global handles ────────────────────────────────────────────────────────────
@@ -228,22 +220,16 @@ var (
 	hCancelBtn uintptr
 	hStatus    uintptr
 
-	// GDI resources — created once in WM_CREATE, destroyed in WM_DESTROY.
-	hdrBrush  uintptr
-	bodyBrush uintptr
-	surfBrush uintptr
-	logBrush  uintptr
+	hdrBrush uintptr // header banner fill — created once in WM_CREATE
 
-	hFont        uintptr // Segoe UI 15pt regular
-	hFontBold    uintptr // Segoe UI 15pt bold
-	hFontSmall   uintptr // Segoe UI 12pt regular (field labels)
-	hFontSection uintptr // Segoe UI 11pt bold (section caps)
-	hFontTitle   uintptr // Segoe UI 20pt bold (header title)
-	hFontSub     uintptr // Segoe UI 13pt regular (header subtitle)
-	hFontBadge   uintptr // Segoe UI 11pt bold (header badge)
-	hFontMono    uintptr // Consolas 13pt (log area)
+	hFont      uintptr // Segoe UI, regular — edits/buttons
+	hFontBold  uintptr // Segoe UI, bold — primary button
+	hFontSmall uintptr // Segoe UI, small — field labels
+	hFontTitle uintptr // Segoe UI, large bold — header title
+	hFontSub   uintptr // Segoe UI, regular — header subtitle
+	hFontMono  uintptr // Consolas — log area
 
-	wndProcCB = syscall.NewCallback(wndProc)
+	wndProcCB  = syscall.NewCallback(wndProc)
 	installing bool
 )
 
@@ -324,19 +310,12 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	switch uint32(msg) {
 
 	case WM_CREATE:
-		// Brushes
 		hdrBrush, _, _ = procCreateSolidBrush.Call(colHdrBg)
-		bodyBrush, _, _ = procCreateSolidBrush.Call(colBodyBg)
-		surfBrush, _, _ = procCreateSolidBrush.Call(colSurface)
-		logBrush, _, _ = procCreateSolidBrush.Call(colLogBg)
-		// Fonts
 		hFont = mkFont(15, 400, "Segoe UI")
 		hFontBold = mkFont(15, 700, "Segoe UI")
-		hFontSmall = mkFont(12, 400, "Segoe UI")
-		hFontSection = mkFont(11, 700, "Segoe UI")
-		hFontTitle = mkFont(20, 700, "Segoe UI")
-		hFontSub = mkFont(13, 400, "Segoe UI")
-		hFontBadge = mkFont(11, 700, "Segoe UI")
+		hFontSmall = mkFont(14, 400, "Segoe UI")
+		hFontTitle = mkFont(22, 700, "Segoe UI")
+		hFontSub = mkFont(14, 400, "Segoe UI")
 		hFontMono = mkFont(13, 400, "Consolas")
 		createControls(hwnd)
 		return 0
@@ -350,30 +329,6 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		procEndPaint.Call(hwnd, uintptr(unsafe.Pointer(&ps)))
 		return 0
 
-	case WM_DRAWITEM:
-		if dis := (*DRAWITEMSTRUCT)(unsafe.Pointer(lParam)); dis != nil {
-			drawButton(dis)
-		}
-		return 1
-
-	case WM_CTLCOLORSTATIC:
-		// All STATIC labels: transparent over body bg, muted text.
-		procSetBkMode.Call(wParam, TRANSPARENT)
-		procSetTextColor.Call(wParam, colTextMut)
-		return bodyBrush
-
-	case WM_CTLCOLOREDIT:
-		// Log edit: darkest bg, muted text (monospace terminal feel).
-		if lParam == hStatus {
-			procSetBkColor.Call(wParam, colLogBg)
-			procSetTextColor.Call(wParam, colTextMut)
-			return logBrush
-		}
-		// Input fields: dark surface, primary text.
-		procSetBkColor.Call(wParam, colSurface)
-		procSetTextColor.Call(wParam, colTextPri)
-		return surfBrush
-
 	case WM_COMMAND:
 		id := wParam & 0xFFFF
 		switch id {
@@ -383,14 +338,16 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			}
 		case IDC_CANCEL:
 			procDestroyWindow.Call(hwnd)
+		case IDC_SELECTALL:
+			if f, _, _ := procGetFocus.Call(); f == hURLEdit || f == hSecEdit || f == hEnvEdit || f == hStatus {
+				procSendMessage.Call(f, EM_SETSEL, 0, ^uintptr(0))
+			}
 		}
 		return 0
 
 	case WM_DESTROY:
 		for _, h := range []uintptr{
-			hdrBrush, bodyBrush, surfBrush, logBrush,
-			hFont, hFontBold, hFontSmall, hFontSection,
-			hFontTitle, hFontSub, hFontBadge, hFontMono,
+			hdrBrush, hFont, hFontBold, hFontSmall, hFontTitle, hFontSub, hFontMono,
 		} {
 			procDeleteObject.Call(h)
 		}
@@ -402,166 +359,69 @@ func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 }
 
 // ── Paint ──────────────────────────────────────────────────────────────────────
+//
+// Only the header banner is hand-painted; the body is left to the window
+// class's default background brush and the native controls draw themselves.
 
 func paintWindow(hdc uintptr) {
-	nullPen, _, _ := procGetStockObject.Call(NULL_PEN)
-
-	// ── Body fill ─────────────────────────────────────────────────────────────
-	fillRect(hdc, 0, 0, WINW, WINH, bodyBrush)
-
-	// ── Header fill ───────────────────────────────────────────────────────────
 	fillRect(hdc, 0, 0, WINW, HDR, hdrBrush)
+	procSetBkMode.Call(hdc, 1 /*TRANSPARENT*/)
 
-	// Left accent bar (4px, full header height)
-	accentBrush, _, _ := procCreateSolidBrush.Call(colAccent)
-	fillRect(hdc, 0, 0, 4, HDR, accentBrush)
-	procDeleteObject.Call(accentBrush)
-
-	// Bottom accent line under header (2px)
-	accPen, _, _ := procCreatePen.Call(0, 2, colAccent)
-	procSelectObject.Call(hdc, accPen)
-	procMoveToEx.Call(hdc, 0, uintptr(HDR-1), 0)
-	procLineTo.Call(hdc, WINW, uintptr(HDR-1))
-	procSelectObject.Call(hdc, nullPen)
-	procDeleteObject.Call(accPen)
-
-	procSetBkMode.Call(hdc, TRANSPARENT)
-
-	// ── Header typography ─────────────────────────────────────────────────────
-	// Product word-mark
 	procSelectObject.Call(hdc, hFontTitle)
 	procSetTextColor.Call(hdc, colWhite)
-	drawText(hdc, "Audspect", LPAD+8, 13, 300, 44, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
+	drawText(hdc, "BAS Platform Agent Setup", LPAD, 22, WINW-LPAD, 52,
+		DT_LEFT|DT_SINGLELINE|DT_NOCLIP|DT_NOPREFIX)
 
-	// Subtitle
 	procSelectObject.Call(hdc, hFontSub)
-	procSetTextColor.Call(hdc, colTextMut)
-	drawText(hdc, "Breach & Attack Simulation Platform", LPAD+8, 48, WINW-LPAD, 70, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
-
-	// Badge: "AGENT SETUP" right-aligned in accent blue
-	procSelectObject.Call(hdc, hFontBadge)
-	procSetTextColor.Call(hdc, colAccent)
-	drawText(hdc, "AGENT SETUP", 0, 13, WINW-LPAD, 36, DT_RIGHT|DT_SINGLELINE|DT_NOCLIP)
-
-	// ── Body section headers ───────────────────────────────────────────────────
-	procSelectObject.Call(hdc, hFontSection)
-	procSetTextColor.Call(hdc, colTextMut)
-	drawText(hdc, "CONFIGURATION", LPAD, ySec1, WINW-LPAD, ySec1+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
-	drawText(hdc, "INSTALLATION LOG", LPAD, ySec2, WINW-LPAD, ySec2+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
-
-	// ── Field labels (drawn here, not STATIC controls, for consistent colour) ─
-	procSelectObject.Call(hdc, hFontSmall)
-	procSetTextColor.Call(hdc, colTextMut)
-	drawText(hdc, "Server URL", LPAD, yURLLbl, WINW-LPAD, yURLLbl+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
-	drawText(hdc, "Agent Secret", LPAD, ySecLbl, WINW-LPAD, ySecLbl+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
-	drawText(hdc, "Environment Label", LPAD, yEnvLbl, WINW-LPAD, yEnvLbl+16, DT_LEFT|DT_SINGLELINE|DT_NOCLIP)
-
-	// ── Divider between config and log sections ────────────────────────────────
-	divPen, _, _ := procCreatePen.Call(0, 1, colBorder)
-	procSelectObject.Call(hdc, divPen)
-	procMoveToEx.Call(hdc, LPAD, uintptr(yDivider), 0)
-	procLineTo.Call(hdc, WINW-LPAD, uintptr(yDivider))
-	procSelectObject.Call(hdc, nullPen)
-	procDeleteObject.Call(divPen)
-}
-
-// drawButton paints an owner-drawn button (WM_DRAWITEM).
-// Primary (IDC_INSTALL): accent blue fill, white bold text.
-// Secondary (IDC_CANCEL): dark surface fill, muted text, border.
-func drawButton(dis *DRAWITEMSTRUCT) {
-	pressed := (dis.ItemState & ODS_SELECTED) != 0
-	rc := dis.RcItem // copy to local so &rc[0] is a normal Go pointer
-	l, t, r, b := int(rc[0]), int(rc[1]), int(rc[2]), int(rc[3])
-	nullPen, _, _ := procGetStockObject.Call(NULL_PEN)
-
-	if dis.CtlID == IDC_INSTALL {
-		// Blue primary button.
-		bg := colAccent
-		if pressed {
-			bg = colAccentPrs
-		}
-		brush, _, _ := procCreateSolidBrush.Call(bg)
-		pen, _, _ := procCreatePen.Call(0, 1, bg)
-		procSelectObject.Call(dis.HDC, brush)
-		procSelectObject.Call(dis.HDC, pen)
-		procRoundRect.Call(dis.HDC,
-			uintptr(l), uintptr(t), uintptr(r), uintptr(b), 8, 8)
-		procDeleteObject.Call(brush)
-		procDeleteObject.Call(pen)
-
-		procSetBkMode.Call(dis.HDC, TRANSPARENT)
-		procSetTextColor.Call(dis.HDC, colWhite)
-		procSelectObject.Call(dis.HDC, hFontBold)
-		p := utf16("Validate & Install")
-		procDrawText.Call(dis.HDC, uintptr(unsafe.Pointer(p)), ^uintptr(0),
-			uintptr(unsafe.Pointer(&rc[0])),
-			DT_CENTER|DT_VCENTER|DT_SINGLELINE)
-		runtime.KeepAlive(p)
-	} else {
-		// Dark secondary button with muted border.
-		bg := colSurface
-		if pressed {
-			bg = colBorder
-		}
-		brush, _, _ := procCreateSolidBrush.Call(bg)
-		borderPen, _, _ := procCreatePen.Call(0, 1, colBorder)
-		procSelectObject.Call(dis.HDC, brush)
-		procSelectObject.Call(dis.HDC, borderPen)
-		procRoundRect.Call(dis.HDC,
-			uintptr(l), uintptr(t), uintptr(r), uintptr(b), 8, 8)
-		procDeleteObject.Call(brush)
-		procDeleteObject.Call(borderPen)
-		procSelectObject.Call(dis.HDC, nullPen)
-
-		procSetBkMode.Call(dis.HDC, TRANSPARENT)
-		procSetTextColor.Call(dis.HDC, colTextMut)
-		procSelectObject.Call(dis.HDC, hFont)
-		p := utf16("Exit")
-		procDrawText.Call(dis.HDC, uintptr(unsafe.Pointer(p)), ^uintptr(0),
-			uintptr(unsafe.Pointer(&rc[0])),
-			DT_CENTER|DT_VCENTER|DT_SINGLELINE)
-		runtime.KeepAlive(p)
-	}
+	procSetTextColor.Call(hdc, colHdrSub)
+	drawText(hdc, "Breach & Attack Simulation - Audspect Security", LPAD, 58, WINW-LPAD, 80,
+		DT_LEFT|DT_SINGLELINE|DT_NOCLIP|DT_NOPREFIX)
 }
 
 // ── Control creation ──────────────────────────────────────────────────────────
 
 func createControls(hwnd uintptr) {
-	// Field labels are now painted in WM_PAINT (drawText) for consistent dark
-	// styling — STATIC controls inherit the system theme and are hard to fully
-	// dark-theme without subclassing, so we skip them here.
+	mkLabel := func(text string, x, y, w, h int) uintptr {
+		hw := createCtl(0, "STATIC", text, WS_CHILD|WS_VISIBLE|SS_LEFT, x, y, w, h, hwnd, 0, hInst)
+		setFont(hw, hFontSmall)
+		return hw
+	}
 
-	mkEdit := func(id, x, y, w, h int, style uint32) uintptr {
-		hw := createCtl(0, "EDIT", "",
-			WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_BORDER|style,
-			x, y, w, h, hwnd, uintptr(id), hInst)
+	mkEdit := func(id, x, y, w, h int, style uint32, tabstop bool) uintptr {
+		wsStyle := uint32(WS_CHILD | WS_VISIBLE | WS_BORDER | style)
+		if tabstop {
+			wsStyle |= WS_TABSTOP
+		}
+		hw := createCtl(0, "EDIT", "", wsStyle, x, y, w, h, hwnd, uintptr(id), hInst)
 		setFont(hw, hFont)
 		return hw
 	}
 
-	hURLEdit = mkEdit(IDC_URL, LPAD, yURLEdit, FW, EDTH, ES_LEFT)
+	mkLabel("Server URL  (e.g. http://10.0.0.5:9000)", LPAD, yURLLbl, FW, 18)
+	hURLEdit = mkEdit(IDC_URL, LPAD, yURLEdit, FW, EDTH, ES_LEFT, true)
 	setWindowText(hURLEdit, "http://")
 
-	hSecEdit = mkEdit(IDC_SECRET, LPAD, ySecEdit, FW, EDTH, ES_PASSWORD)
+	mkLabel("Agent Secret", LPAD, ySecLbl, FW, 18)
+	hSecEdit = mkEdit(IDC_SECRET, LPAD, ySecEdit, FW, EDTH, ES_PASSWORD, true)
 
-	hEnvEdit = mkEdit(IDC_ENV, LPAD, yEnvEdit, FW, EDTH, ES_LEFT)
+	mkLabel("Environment Label", LPAD, yEnvLbl, FW, 18)
+	hEnvEdit = mkEdit(IDC_ENV, LPAD, yEnvEdit, FW, EDTH, ES_LEFT, true)
 	setWindowText(hEnvEdit, "Production")
 
-	// Log area — dark terminal style, monospace.
-	hStatus = createCtl(0, "EDIT", "",
-		WS_CHILD|WS_VISIBLE|WS_BORDER|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL,
-		LPAD, yLog, FW, logH, hwnd, uintptr(IDC_STATUS), hInst)
+	mkLabel("Installation Log", LPAD, yLogLbl, FW, 18)
+	hStatus = mkEdit(IDC_STATUS, LPAD, yLog, FW, logH,
+		ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|WS_VSCROLL, true)
 	setFont(hStatus, hFontMono)
 
-	// Primary button: BS_OWNERDRAW so we can paint it accent blue.
-	hInstBtn = createCtl(0, "BUTTON", "Validate & Install",
-		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_OWNERDRAW,
+	hInstBtn = createCtl(0, "BUTTON", "Validate && Install",
+		WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_GROUP|BS_DEFPUSHBUTTON,
 		LPAD, yBtns, 196, 34, hwnd, uintptr(IDC_INSTALL), hInst)
+	setFont(hInstBtn, hFontBold)
 
-	// Secondary button.
 	hCancelBtn = createCtl(0, "BUTTON", "Exit",
-		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_OWNERDRAW,
+		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_PUSHBUTTON,
 		LPAD+206, yBtns, 76, 34, hwnd, uintptr(IDC_CANCEL), hInst)
+	setFont(hCancelBtn, hFont)
 }
 
 // ── Install logic ─────────────────────────────────────────────────────────────
@@ -666,8 +526,6 @@ func runInstall() {
 
 	setWindowText(hInstBtn, "Installed")
 	setWindowText(hCancelBtn, "Close")
-	procInvalidateRect.Call(hInstBtn, 0, 1)
-	procInvalidateRect.Call(hCancelBtn, 0, 1)
 	installing = false
 }
 
@@ -810,17 +668,18 @@ func main() {
 
 	className := utf16("AudspectInstallerWnd")
 	wc := WNDCLASSEX{
-		Size:    uint32(unsafe.Sizeof(WNDCLASSEX{})),
-		WndProc: wndProcCB,
-		Instance: hInst,
-		ClassName: className,
+		Size:       uint32(unsafe.Sizeof(WNDCLASSEX{})),
+		WndProc:    wndProcCB,
+		Instance:   hInst,
+		ClassName:  className,
+		Background: uintptr(COLOR_BTNFACE + 1), // default system light-grey body
 	}
 	wc.Cursor, _, _ = procLoadCursor.Call(0, 32512 /*IDC_ARROW*/)
 	procRegisterClassEx.Call(uintptr(unsafe.Pointer(&wc)))
 
 	style := uint32(WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE)
 	hMainWnd = createCtl(0, "AudspectInstallerWnd",
-		"Audspect BAS Platform — Agent Setup",
+		"BAS Platform - Agent Setup",
 		style, 0, 0, WINW, WINH, 0, 0, hInst)
 	if hMainWnd == 0 {
 		procMessageBox.Call(0,
@@ -839,12 +698,28 @@ func main() {
 
 	procShowWindow.Call(hMainWnd, SW_SHOW)
 	procUpdateWindow.Call(hMainWnd)
+	procSetFocus.Call(hURLEdit)
+
+	// Ctrl+A → select-all in whichever field currently has focus. Native EDIT
+	// controls don't bind this themselves; only Ctrl+C/V/X are built in.
+	accel := []ACCEL{{FVirt: FVIRTKEY | FCONTROL, Key: 'A', Cmd: IDC_SELECTALL}}
+	hAccel, _, _ := procCreateAcceleratorTable.Call(uintptr(unsafe.Pointer(&accel[0])), uintptr(len(accel)))
 
 	var msg MSG
 	for {
 		r, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
 		if r == 0 || r == ^uintptr(0) {
 			break
+		}
+		if h, _, _ := procTranslateAccelerator.Call(hMainWnd, hAccel, uintptr(unsafe.Pointer(&msg))); h != 0 {
+			continue
+		}
+		// IsDialogMessage drives Tab/Shift+Tab focus-cycling across the
+		// WS_TABSTOP controls below — this window is a plain CreateWindowEx
+		// window, not a real dialog, so nothing does that automatically
+		// without this call.
+		if h, _, _ := procIsDialogMessage.Call(hMainWnd, uintptr(unsafe.Pointer(&msg))); h != 0 {
+			continue
 		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		procDispatchMessage.Call(uintptr(unsafe.Pointer(&msg)))
