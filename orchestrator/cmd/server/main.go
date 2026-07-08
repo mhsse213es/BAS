@@ -157,7 +157,7 @@ func main() {
 	}
 
 	// ── Reporting Engine ──────────────────────────────────────────────────
-	reportingEngine := reporting.NewEngine(pool)
+	reportingEngine := reporting.NewEngine(pool).WithScenarios(engine)
 	log.Println("[+] Reporting engine ready")
 
 	// ── Ticketing Manager ─────────────────────────────────────────────────

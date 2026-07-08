@@ -121,6 +121,16 @@ type Step struct {
 	// The agent receives only PrivSpec.Effective() (a plain string) so the wire
 	// format is unchanged; the full spec is carried server-side for reporting.
 	RequiresPriv PrivSpec `yaml:"requires_priv,omitempty" json:"requiresPriv,omitempty"`
+
+	// ── Detection Validation Pack (optional) ─────────────────────────────────
+	// DetectionProfiles names reusable behavioral profiles whose expected
+	// detections apply to this step (resolved at load; see detection.go).
+	// ExpectedDetections are inline expectations that supplement or override the
+	// referenced profiles (merged by id — inline wins). A step with neither is
+	// unchanged from legacy behavior; both are server-side reporting metadata and
+	// are never sent to the agent.
+	DetectionProfiles  []string            `yaml:"detection_profiles,omitempty" json:"detectionProfiles,omitempty"`
+	ExpectedDetections []ExpectedDetection `yaml:"expected_detection,omitempty" json:"expectedDetections,omitempty"`
 }
 
 // LivePolicy is the per-scenario guardrail set applied to live (telemetry/lab)

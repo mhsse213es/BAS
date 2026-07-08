@@ -1,0 +1,28 @@
+# Detection Validation Profile — encoded PowerShell execution (T1059.001).
+# APT29 Stage 2 download cradle (-EncodedCommand). Behavioural: any obfuscated
+# / encoded PowerShell command line, independent of the payload.
+profile: windows_encoded_powershell
+version: 1
+expected_detection:
+  - id: encps-edr-encodedcmd
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: High
+      title: "Encoded PowerShell execution not detected"
+      remediation: >-
+        Enable Script Block Logging (EID 4104) and alert on powershell.exe with
+        -EncodedCommand / -e / -enc and high-entropy arguments (Sysmon EID 1 +
+        Security 4688). Correlate with outbound network for download cradles.
+      reference: "MITRE ATT&CK T1059.001 — PowerShell"
+  - id: encps-siem-scriptblock
+    provider: microsoft_sentinel
+    type: siem
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "Script Block Logging not analysed centrally"
+      remediation: >-
+        Forward EID 4104 to the SIEM and alert on decoded content containing
+        download/exec primitives (IEX, DownloadString, FromBase64String).
+      reference: "MITRE ATT&CK T1059.001 — PowerShell"

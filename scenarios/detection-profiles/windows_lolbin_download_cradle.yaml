@@ -1,0 +1,28 @@
+# Detection Validation Profile — LOLBin download cradle (T1105).
+# certutil / bitsadmin ingress-tool-transfer, as in Volt Typhoon Stage 7.
+# Behavioural: covers any signed-binary download cradle, not a single tool.
+profile: windows_lolbin_download_cradle
+version: 1
+expected_detection:
+  - id: cradle-edr-lolbin-net
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: High
+      title: "LOLBin download cradle not detected"
+      remediation: >-
+        Enable EDR/ASR coverage for certutil.exe / bitsadmin.exe making outbound
+        network connections or writing executables (Sysmon EID 1 + EID 3). These
+        binaries have no business downloading content on most endpoints.
+      reference: "MITRE ATT&CK T1105 — Ingress Tool Transfer"
+  - id: cradle-siem-proxy-egress
+    provider: microsoft_sentinel
+    type: siem
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "No egress analytic for LOLBin network activity"
+      remediation: >-
+        Correlate proxy/firewall egress logs with process telemetry to flag
+        certutil/bitsadmin/mshta reaching external hosts.
+      reference: "MITRE ATT&CK T1105 — Ingress Tool Transfer"

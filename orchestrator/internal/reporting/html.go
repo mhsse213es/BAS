@@ -107,6 +107,33 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 			return "#da3633"
 		}
 	},
+	// Detection Validation Pack — expected-detection status colour/label.
+	"dvStatusColor": func(s string) string {
+		switch s {
+		case "Detected":
+			return "#0d9488"
+		case "NotDetected":
+			return "#da3633"
+		case "Pending":
+			return "#d29922"
+		}
+		return "#6e7681" // Unknown / NotApplicable
+	},
+	"dvStatusLabel": func(s string) string {
+		switch s {
+		case "Detected":
+			return "DETECTED"
+		case "NotDetected":
+			return "SILENT"
+		case "Pending":
+			return "PENDING"
+		case "Unknown":
+			return "UNKNOWN"
+		case "NotApplicable":
+			return "N/A"
+		}
+		return s
+	},
 	"upper":    strings.ToUpper,
 	"lower":    strings.ToLower,
 	"add1":     func(i int) int { return i + 1 },
@@ -2795,6 +2822,121 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <div class="stitle">Detection Validation</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
+
+{{if .detectionValidation.hasData}}
+{{$dv := .detectionValidation}}
+<h3 style="margin-top:16px;margin-bottom:6px">Expected vs Observed — Control Validation</h3>
+<p style="color:#6e7681;font-size:0.85rem;margin-bottom:6px">This scenario declares the detections a mature SOC is expected to produce. Each expected control is compared against what actually fired. <strong>Detection Coverage</strong> = weighted share of verifiable required/recommended controls that responded. <strong>Verification Completeness</strong> = share of expectations conclusively verified on-host; off-host SIEM/identity/cloud controls await manual attestation and are not counted as failures.</p>
+{{if $dv.profiles}}
+<p style="color:#9aa5b5;font-size:0.72rem;margin-bottom:14px">Validated against {{range $i, $p := $dv.profiles}}{{if $i}}, {{end}}<strong>{{$p.profile}}</strong>&nbsp;v{{$p.version}}{{end}}</p>
+{{end}}
+
+<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+  <div style="flex:1;min-width:150px;padding:14px 16px;border-radius:6px;border:1px solid var(--line);background:var(--surface);text-align:center">
+    <div style="font-size:0.62rem;color:#6e7681;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Detection Coverage</div>
+    <div style="font-size:1.8rem;font-weight:700;color:{{compColor $dv.coverage}}">{{pct $dv.coverage}}</div>
+    <div style="font-size:0.66rem;color:#6e7681">{{$dv.detected}} of {{$dv.verified}} verifiable responded</div>
+  </div>
+  <div style="flex:1;min-width:150px;padding:14px 16px;border-radius:6px;border:1px solid var(--line);background:var(--surface);text-align:center">
+    <div style="font-size:0.62rem;color:#6e7681;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Verification Completeness</div>
+    <div style="font-size:1.8rem;font-weight:700;color:{{compColor $dv.verificationCompleteness}}">{{pct $dv.verificationCompleteness}}</div>
+    <div style="font-size:0.66rem;color:#6e7681">{{$dv.verified}} of {{$dv.expected}} expectations verified</div>
+  </div>
+  <div style="flex:1;min-width:150px;padding:14px 16px;border-radius:6px;border:1px solid var(--line);background:var(--surface);text-align:center">
+    <div style="font-size:0.62rem;color:#6e7681;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Telemetry Completeness</div>
+    <div style="font-size:1.8rem;font-weight:700;color:{{compColor $dv.telemetryCompleteness}}">{{pct $dv.telemetryCompleteness}}</div>
+    <div style="font-size:0.66rem;color:#6e7681">expected event IDs observed</div>
+  </div>
+</div>
+
+{{if $dv.byDomain}}
+<h4 style="margin-top:8px;margin-bottom:8px">Validation by Domain</h4>
+<table style="width:100%;margin-bottom:20px;max-width:680px">
+  <thead><tr>
+    <th style="text-align:left">Domain</th>
+    <th style="text-align:right">Expected</th>
+    <th style="text-align:right">Verified</th>
+    <th style="text-align:right">Detected</th>
+    <th style="text-align:right">Coverage</th>
+    <th style="text-align:right">Verification</th>
+  </tr></thead>
+  <tbody>
+  {{range $dv.byDomain}}
+  <tr>
+    <td style="text-transform:capitalize">{{.domain}}</td>
+    <td style="text-align:right">{{.expected}}</td>
+    <td style="text-align:right">{{.verified}}</td>
+    <td style="text-align:right">{{.detected}}</td>
+    <td style="text-align:right;font-weight:600;color:{{compColor .coverage}}">{{if .verified}}{{pct .coverage}}{{else}}—{{end}}</td>
+    <td style="text-align:right;color:#6e7681">{{pct .verificationCompleteness}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+<h4 style="margin-top:8px;margin-bottom:8px">Expected Detections</h4>
+<table style="width:100%;margin-bottom:20px">
+  <thead><tr>
+    <th style="text-align:left">Technique</th>
+    <th style="text-align:left">Expected Control</th>
+    <th style="text-align:left">Domain</th>
+    <th style="text-align:left">Confidence</th>
+    <th style="text-align:left">Verification</th>
+    <th style="text-align:left">Status</th>
+    <th style="text-align:left">Observed Source</th>
+  </tr></thead>
+  <tbody>
+  {{range $dv.rows}}
+  <tr>
+    <td><code style="font-size:0.75rem">{{.techniqueId}}</code></td>
+    <td style="font-size:0.82rem"><strong>{{.provider}}</strong></td>
+    <td style="font-size:0.8rem;text-transform:capitalize;color:#6e7681">{{.domain}}</td>
+    <td style="font-size:0.8rem;text-transform:capitalize">{{.confidence}}</td>
+    <td style="font-size:0.8rem;text-transform:capitalize;color:#6e7681">{{.verification}}</td>
+    <td><span style="font-size:0.76rem;font-weight:700;color:{{dvStatusColor .status}}">{{dvStatusLabel .status}}</span></td>
+    <td style="font-size:0.76rem;color:#6e7681;max-width:160px;word-break:break-word">{{if .source}}{{.source}}{{else}}—{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+
+{{if $dv.falseSilence}}
+<h4 style="margin-top:8px;margin-bottom:6px">Gap Analysis — False Silence</h4>
+<p style="color:#6e7681;font-size:0.82rem;margin-bottom:12px">Required or recommended controls that stayed silent when the technique executed. Each is an exploitable blind spot: the adversary action succeeded without raising the alert your policy expects.</p>
+{{range $dv.falseSilence}}
+<div style="border:1px solid var(--line);border-left:4px solid {{sevColor .severity}};border-radius:6px;padding:12px 14px;margin-bottom:10px;background:var(--surface)">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:4px">
+    <div style="font-weight:600;font-size:0.9rem">{{.title}}</div>
+    <span style="font-size:0.66rem;font-weight:700;text-transform:uppercase;color:{{sevColor .severity}};white-space:nowrap">{{.severity}}</span>
+  </div>
+  <div style="font-size:0.74rem;color:#6e7681;margin-bottom:6px"><code>{{.techniqueId}}</code> · {{.provider}} · <span style="text-transform:capitalize">{{.domain}}</span> · <span style="text-transform:capitalize">{{.confidence}}</span> control</div>
+  {{if .remediation}}<div style="font-size:0.8rem;margin-bottom:4px"><strong>Remediation:</strong> {{.remediation}}</div>{{end}}
+  {{if .reference}}<div style="font-size:0.72rem;color:#9aa5b5">Reference: {{.reference}}</div>{{end}}
+</div>
+{{end}}
+{{end}}
+
+{{if $dv.unexpectedDetections}}
+<h4 style="margin-top:16px;margin-bottom:6px">Unexpected Detections</h4>
+<p style="color:#6e7681;font-size:0.82rem;margin-bottom:12px">Controls that alerted with no matching expectation for the step. Confirm each is intended coverage rather than a noisy or duplicate rule.</p>
+<table style="width:100%;margin-bottom:20px">
+  <thead><tr><th style="text-align:left">Technique</th><th style="text-align:left">Alerting Control</th><th style="text-align:left">Severity</th><th style="text-align:left">Note</th></tr></thead>
+  <tbody>
+  {{range $dv.unexpectedDetections}}
+  <tr>
+    <td><code style="font-size:0.75rem">{{.techniqueId}}</code></td>
+    <td style="font-size:0.82rem">{{.provider}}</td>
+    <td style="font-size:0.78rem;color:#d29922">{{.severity}}</td>
+    <td style="font-size:0.76rem;color:#6e7681">{{.detail}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+<hr style="border:none;border-top:1px solid var(--line);margin:24px 0">
+{{end}}
 
 <h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
 <p style="color:#6e7681;font-size:0.85rem;margin-bottom:12px">Ranking of security products based on total detection count (most often) and speed (first to detect/lowest minimum MTTD).</p>

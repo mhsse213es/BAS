@@ -1,0 +1,16 @@
+# Detection Validation Profile — Registry Run-key persistence (T1547.001).
+# APT29 Stage 3: HKCU\...\Run value write.
+profile: windows_runkey_persistence
+version: 1
+expected_detection:
+  - id: runkey-edr-write
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Medium
+      title: "Run-key persistence write not detected"
+      remediation: >-
+        Alert on registry writes to HKCU/HKLM ...\CurrentVersion\Run and
+        RunOnce (Sysmon EID 13), especially values pointing at scripts,
+        LOLBins, or user-writable paths. Baseline approved autoruns.
+      reference: "MITRE ATT&CK T1547.001 — Registry Run Keys / Startup Folder"

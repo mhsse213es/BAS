@@ -1,0 +1,27 @@
+# Detection Validation Profile — Scheduled Task persistence (T1053.005).
+# Shared by Volt Typhoon Stage 9 and APT29 Stage 4 (schtasks /create).
+profile: windows_schtask_persistence
+version: 1
+expected_detection:
+  - id: schtask-edr-create
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Medium
+      title: "Scheduled-task persistence not detected"
+      remediation: >-
+        Alert on schtasks.exe /create and Security EID 4698 (a scheduled task
+        was created), especially tasks running from user-writable paths or with
+        SYSTEM context. Baseline legitimate task creation to cut noise.
+      reference: "MITRE ATT&CK T1053.005 — Scheduled Task"
+  - id: schtask-siem-4698
+    provider: microsoft_sentinel
+    type: siem
+    confidence: recommended
+    finding:
+      severity: Low
+      title: "No SIEM rule on Security EID 4698"
+      remediation: >-
+        Ingest and alert on Security EID 4698/4702 with the task XML action, and
+        enrich with the creating account for persistence hunting.
+      reference: "MITRE ATT&CK T1053.005 — Scheduled Task"

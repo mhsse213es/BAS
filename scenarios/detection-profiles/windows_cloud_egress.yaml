@@ -1,0 +1,28 @@
+# Detection Validation Profile — exfiltration to cloud storage (T1567.002).
+# Collection→Exfil Stage 10: reachability of external cloud-storage egress.
+profile: windows_cloud_egress
+version: 1
+expected_detection:
+  - id: cloudegress-network-upload
+    provider: microsoft_sentinel
+    type: network
+    confidence: required
+    finding:
+      severity: High
+      title: "Cloud-storage exfiltration path not detected"
+      remediation: >-
+        Alert on outbound connections to unsanctioned cloud-storage domains and
+        large upload volumes from endpoints. Enforce egress allow-listing and
+        route proxy logs to the SIEM for volumetric analysis.
+      reference: "MITRE ATT&CK T1567.002 — Exfiltration to Cloud Storage"
+  - id: cloudegress-dlp-block
+    provider: microsoft_purview
+    type: dlp
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "No DLP policy on cloud-storage uploads"
+      remediation: >-
+        Apply a DLP policy that inspects and blocks sensitive-data uploads to
+        web/cloud-storage destinations; alert the SOC on policy matches.
+      reference: "MITRE ATT&CK T1567.002 — Exfiltration to Cloud Storage"

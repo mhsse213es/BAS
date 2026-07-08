@@ -142,6 +142,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "Volt Typhoon Stage 3 — netsh Port Proxy Pivot Setup + Delete (T1090.001)"
     technique_id: T1090.001
+    detection_profiles:
+      - windows_netsh_portproxy
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -211,6 +213,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "Volt Typhoon Stage 5 — SAM & SYSTEM Hive Theft via reg save + Self-Delete (T1003.002)"
     technique_id: T1003.002
+    detection_profiles:
+      - windows_sam_theft
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -285,6 +289,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "Volt Typhoon Stage 7 — certutil + bitsadmin Download Cradle (T1105)"
     technique_id: T1105
+    detection_profiles:
+      - windows_lolbin_download_cradle
     framework: custom
     executor: powershell
     requires_priv: user
@@ -365,6 +371,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "Volt Typhoon Stage 9 — Scheduled Task + Service Persistence Create/Delete (T1053.005 / T1543.003)"
     technique_id: T1053.005
+    detection_profiles:
+      - windows_schtask_persistence
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -406,6 +414,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "Volt Typhoon Stage 10 — Event Log Enumeration via wevtutil (T1070.001)"
     technique_id: T1070.001
+    detection_profiles:
+      - windows_log_manipulation
     framework: custom
     executor: powershell
     requires_priv: admin

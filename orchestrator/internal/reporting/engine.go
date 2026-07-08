@@ -17,14 +17,32 @@ import (
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting/attackdata"
+	"github.com/audspect/bas/internal/scenario"
 )
+
+// ScenarioResolver is the slice of the scenario engine the reporting layer needs
+// to resolve a run's Detection Validation expectations. *scenario.Engine
+// satisfies it. Kept as an interface so reporting stays testable without a real
+// scenario engine, and nil-safe so a report renders fine when it is not wired.
+type ScenarioResolver interface {
+	Get(id string) (*scenario.Scenario, bool)
+	ResolveStepExpectations(step scenario.Step) ([]scenario.ExpectedDetection, []scenario.ProfileRef)
+}
 
 // Engine aggregates data from the DB into structured reports.
 type Engine struct {
-	db *pgxpool.Pool
+	db        *pgxpool.Pool
+	scenarios ScenarioResolver // nil until WithScenarios is called; Detection Validation stays inactive while nil
 }
 
 func NewEngine(db *pgxpool.Pool) *Engine { return &Engine{db: db} }
+
+// WithScenarios attaches the scenario resolver used to build the Detection
+// Validation section. Returns the engine for chaining.
+func (e *Engine) WithScenarios(r ScenarioResolver) *Engine {
+	e.scenarios = r
+	return e
+}
 
 // ── Report types ──────────────────────────────────────────────────────────────
 
@@ -41,6 +59,10 @@ type FullReport struct {
 	ObjectiveRisks      []ObjectiveRisk  `json:"objectiveRisks"`
 	Reverted            []string         `json:"reverted"` // endpoint changes rolled back post-run (cleanup evidence)
 	Detection           DetectionSummary `json:"detection"`
+	// DetectionValidation is the expected-vs-actual gap analysis (Detection
+	// Validation Pack). HasData is false — and the section renders as before —
+	// for any run whose scenario declares no expected_detection.
+	DetectionValidation DetectionValidationSection `json:"detectionValidation"`
 	TrendAnalysis       TrendSummary     `json:"trendAnalysis"`
 	AttackPath          AttackPath          `json:"attackPath"`
 	AttackFlow          []AttackFlowNode        `json:"attackFlow,omitempty"`
@@ -1322,7 +1344,7 @@ func (e *Engine) loadAssetTags(ctx context.Context) []attackpath.AssetTag {
 func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) (*FullReport, error) {
 	report := &FullReport{GeneratedAt: time.Now().UTC()}
 
-	var agentID, scenarioName, status string
+	var agentID, scenarioID, scenarioName, status string
 	var resultsRaw, scoreRaw []byte
 	var startedAt time.Time
 	var completedAt *time.Time
@@ -1332,12 +1354,12 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	var mttd *int64
 	var cpuBefore, cpuAfter, ramBefore, ramAfter, diskBefore, diskAfter float64
 	err := e.db.QueryRow(ctx,
-		`SELECT agent_id, name, status, results, score, started_at, completed_at, reverted,
+		`SELECT agent_id, scenario_id, name, status, results, score, started_at, completed_at, reverted,
 		        detection_rate, undetected_rate, mttd_ms, detection_summary,
 		        perf_cpu_before, perf_cpu_after, perf_ram_before, perf_ram_after, perf_disk_before, perf_disk_after,
 		        alerts_total, alerts_high_fidelity, noise_score
 		 FROM scenario_runs WHERE id = $1`, runID,
-	).Scan(&agentID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt, &revertedRaw,
+	).Scan(&agentID, &scenarioID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt, &revertedRaw,
 		&detRate, &undetRate, &mttd, &detSummaryRaw,
 		&cpuBefore, &cpuAfter, &ramBefore, &ramAfter, &diskBefore, &diskAfter,
 		&report.AlertsTotal, &report.AlertsHighFidelity, &report.NoiseScore)
@@ -1412,6 +1434,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	report.TopFindings = buildTopFindings(results, scenarioName)
 	report.ObjectiveRisks = buildObjectiveRisks(results)
 	report.Detection = buildDetectionSummary(results)
+	report.DetectionValidation = e.buildDetectionValidation(scenarioID, results)
 	report.AttackPath = buildAttackPath(results)
 	report.AttackFlow = BuildAttackFlow(results)
 	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
@@ -1532,11 +1555,11 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filter string) (*FullReport, error) {
 	report := &FullReport{GeneratedAt: time.Now().UTC()}
 
-	var campName, scenarioName string
+	var campName, scenarioID, scenarioName string
 	var startedAt time.Time
 	if err := e.db.QueryRow(ctx,
-		`SELECT name, scenario_name, started_at FROM campaigns WHERE id = $1`, campaignID,
-	).Scan(&campName, &scenarioName, &startedAt); err != nil {
+		`SELECT name, scenario_id, scenario_name, started_at FROM campaigns WHERE id = $1`, campaignID,
+	).Scan(&campName, &scenarioID, &scenarioName, &startedAt); err != nil {
 		return nil, fmt.Errorf("campaign %s not found: %w", campaignID, err)
 	}
 
@@ -1596,6 +1619,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 	report.TopFindings = buildTopFindings(allResults, scenarioName)
 	report.ObjectiveRisks = buildObjectiveRisks(allResults)
 	report.Detection = buildDetectionSummary(allResults)
+	report.DetectionValidation = e.buildDetectionValidation(scenarioID, allResults)
 	report.AttackPath = buildAttackPath(allResults)
 	report.TechniqueMatrix = buildTechniqueMatrix(allResults, nil)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)

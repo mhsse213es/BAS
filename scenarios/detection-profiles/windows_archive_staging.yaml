@@ -1,0 +1,20 @@
+# Detection Validation Profile — data collection & archive staging
+# (T1560.001). Collection→Exfil Stages 4-5 (Compress-Archive / 7-Zip / makecab).
+profile: windows_archive_staging
+version: 1
+expected_detection:
+  - id: archive-edr-compress
+    provider: microsoft_defender
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "Bulk archive staging not detected"
+      remediation: >-
+        Alert on Compress-Archive, 7z.exe, makecab.exe and rar.exe creating
+        large archives shortly after broad file access — the classic
+        collect-then-stage exfil precursor (Sysmon EID 1 + EID 11).
+      reference: "MITRE ATT&CK T1560.001 — Archive via Utility"
+  - id: archive-dlp-sensitive
+    provider: microsoft_purview
+    type: dlp
+    confidence: optional

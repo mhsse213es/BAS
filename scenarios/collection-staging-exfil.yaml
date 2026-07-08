@@ -172,6 +172,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "Exfil Stage 4 — Native Archive via Compress-Archive (T1560.001)"
     technique_id: T1560.001
+    detection_profiles:
+      - windows_archive_staging
     framework: custom
     executor: powershell
     requires_priv: user
@@ -430,6 +432,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "Exfil Stage 10 — Cloud Storage Egress Reachability (T1567.002)"
     technique_id: T1567.002
+    detection_profiles:
+      - windows_cloud_egress
     framework: custom
     executor: powershell
     requires_priv: user

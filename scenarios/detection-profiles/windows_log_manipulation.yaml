@@ -1,0 +1,17 @@
+# Detection Validation Profile — event-log enumeration / manipulation
+# (T1070.001). Volt Typhoon Stage 10 (wevtutil). Defence-evasion tampering with
+# the audit trail is itself a high-value signal.
+profile: windows_log_manipulation
+version: 1
+expected_detection:
+  - id: logtamper-edr-wevtutil
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: High
+      title: "Event-log tampering not detected"
+      remediation: >-
+        Alert on wevtutil.exe cl/clear-log and Security EID 1102 (audit log
+        cleared) / 104 (System log cleared). Log-clearing is rarely legitimate
+        outside maintenance windows — treat as high severity.
+      reference: "MITRE ATT&CK T1070.001 — Clear Windows Event Logs"

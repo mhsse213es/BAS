@@ -87,6 +87,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "APT29 Stage 2 — Encoded PowerShell Download Cradle Simulation (T1059.001)"
     technique_id: T1059.001
+    detection_profiles:
+      - windows_encoded_powershell
     framework: custom
     executor: powershell
     requires_priv: user
@@ -128,6 +130,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "APT29 Stage 3 — HKCU Run Key Persistence Write + Delete (T1547.001)"
     technique_id: T1547.001
+    detection_profiles:
+      - windows_runkey_persistence
     framework: custom
     executor: powershell
     requires_priv: user
@@ -168,6 +172,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "APT29 Stage 4 — Scheduled Task Persistence Simulation (T1053.005)"
     technique_id: T1053.005
+    detection_profiles:
+      - windows_schtask_persistence
     framework: custom
     executor: powershell
     requires_priv: user
@@ -208,6 +214,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "APT29 Stage 5 — DNS C2 Beacon Simulation (T1071.004)"
     technique_id: T1071.004
+    detection_profiles:
+      - windows_dns_c2
     framework: custom
     executor: powershell
     requires_priv: user

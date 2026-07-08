@@ -1,0 +1,30 @@
+# Detection Validation Profile — netsh portproxy internal pivot (T1090.001).
+# Volt Typhoon Stage 3 hallmark IOC: a PortProxy registry write / netsh
+# interface portproxy command. One of the highest-fidelity Volt Typhoon
+# signatures — required endpoint detection, near-zero false positives.
+profile: windows_netsh_portproxy
+version: 1
+expected_detection:
+  - id: portproxy-edr-netsh
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: High
+      title: "netsh portproxy pivot setup not detected"
+      remediation: >-
+        Alert on `netsh interface portproxy add v4tov4` and any write to
+        HKLM\SYSTEM\CurrentControlSet\Services\PortProxy (Sysmon EID 1 + EID 13).
+        Legitimate use is rare; page the SOC on match.
+      reference: "MITRE ATT&CK T1090.001 — Internal Proxy"
+  - id: portproxy-siem-registry
+    provider: microsoft_sentinel
+    type: siem
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "No SIEM analytic for PortProxy registry writes"
+      remediation: >-
+        Add a SIEM rule that fires on any PortProxy\v4tov4 registry-key creation;
+        correlate with the initiating account and host for lateral-movement
+        hunting.
+      reference: "MITRE ATT&CK T1090.001 — Internal Proxy"

@@ -1,0 +1,24 @@
+# Detection Validation Profile — SAM/SYSTEM registry-hive theft (T1003.002).
+# Volt Typhoon Stage 5 (`reg save HKLM\SAM` + `HKLM\SYSTEM`). Inherits the base
+# credential-access SIEM correlation and adds the required endpoint control.
+profile: windows_sam_theft
+version: 1
+extends:
+  - windows_credential_access
+expected_detection:
+  - id: sam-edr-hive-dump
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: High
+      title: "SAM/SYSTEM hive theft not detected by endpoint EDR"
+      remediation: >-
+        Verify the EDR rule for registry-hive export (`reg.exe save` / `reg.exe
+        export` of HKLM\SAM or HKLM\SYSTEM by a non-backup process, Sysmon EID 1)
+        is enabled and severed to the SOC. This is a near-zero-false-positive
+        credential-theft IOC.
+      reference: "MITRE ATT&CK T1003.002 — Security Account Manager"
+  - id: sam-siem-hive-write
+    provider: sigma
+    type: siem
+    confidence: optional

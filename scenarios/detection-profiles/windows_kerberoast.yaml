@@ -1,0 +1,33 @@
+# Detection Validation Profile — Kerberoasting (T1558.003).
+# AD drill Stages 1-2: SPN enumeration + TGS-REP requests. Primary signal is
+# identity-side (Defender for Identity / Security EID 4769 with RC4), so the
+# required control lives in the identity domain and awaits attestation on-host.
+profile: windows_kerberoast
+version: 1
+extends:
+  - windows_credential_access
+expected_detection:
+  - id: kerberoast-identity-tgsrep
+    provider: microsoft_defender_identity
+    type: identity
+    confidence: required
+    finding:
+      severity: High
+      title: "Kerberoasting TGS-REP requests not detected"
+      remediation: >-
+        Enable the identity-provider Kerberoasting analytic and alert on Security
+        EID 4769 with encryption type 0x17 (RC4) for service accounts. A burst of
+        TGS requests from one host for many SPNs is the core IOC.
+      reference: "MITRE ATT&CK T1558.003 — Kerberoasting"
+  - id: kerberoast-edr-spn-enum
+    provider: microsoft_defender
+    type: endpoint
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "SPN enumeration tooling not detected on the endpoint"
+      remediation: >-
+        Flag setspn.exe -q and LDAP/PowerShell SPN queries (e.g.
+        GetUserSPNs-style access) that enumerate service accounts prior to
+        roasting.
+      reference: "MITRE ATT&CK T1558.003 — Kerberoasting"

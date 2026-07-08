@@ -19,15 +19,25 @@ import (
 // can never write outside scenarios/custom/ via a crafted ID.
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,63}$`)
 
+// profilesSubdir holds Detection Validation profiles under the scenarios root.
+// It is walked by the profile loader, and explicitly skipped by the scenario
+// loader (profiles are not scenarios and would fail scenario parsing).
+const profilesSubdir = "detection-profiles"
+
 // Engine loads and manages scenario definitions from YAML files.
 type Engine struct {
 	dir       string
 	scenarios map[string]*Scenario
+	profiles  map[string]*DetectionProfile
 }
 
 // NewEngine creates an Engine that reads scenarios from dir.
 func NewEngine(dir string) *Engine {
-	return &Engine{dir: dir, scenarios: make(map[string]*Scenario)}
+	return &Engine{
+		dir:       dir,
+		scenarios: make(map[string]*Scenario),
+		profiles:  make(map[string]*DetectionProfile),
+	}
 }
 
 // Load reads all *.yaml files in the scenarios directory.
@@ -35,11 +45,22 @@ func NewEngine(dir string) *Engine {
 // Safe to call multiple times — reloads on each call.
 func (e *Engine) Load() error {
 	e.scenarios = make(map[string]*Scenario)
+	// Load Detection Validation profiles first so scenario resolution can
+	// reference them. Profile errors are logged, never fatal.
+	e.loadProfiles()
 	return filepath.WalkDir(e.dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err // directory-level error — abort
 		}
-		if d.IsDir() || filepath.Ext(path) != ".yaml" {
+		if d.IsDir() {
+			// Detection profiles live under scenarios/detection-profiles/ but are
+			// not scenarios — skip that whole subtree in the scenario loader.
+			if d.Name() == profilesSubdir {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".yaml" {
 			return nil
 		}
 		b, err := os.ReadFile(path)

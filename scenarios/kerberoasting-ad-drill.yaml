@@ -100,6 +100,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "AD Stage 2 — Kerberoasting TGS-REP Request (no crack) (T1558.003)"
     technique_id: T1558.003
+    detection_profiles:
+      - windows_kerberoast
     framework: custom
     executor: powershell
     requires_priv: user
@@ -142,6 +144,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "AD Stage 3 — AS-REP Roastable Account Discovery (T1558.004)"
     technique_id: T1558.004
+    detection_profiles:
+      - windows_asrep_roast
     framework: custom
     executor: powershell
     requires_priv: user

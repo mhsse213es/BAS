@@ -1,0 +1,29 @@
+# Detection Validation Profile — DNS command-and-control / tunnelling
+# (T1071.004). APT29 Stage 5 DNS beacon. The high-confidence signal is
+# network-side (DNS analytics), with an endpoint corroboration expectation.
+profile: windows_dns_c2
+version: 1
+expected_detection:
+  - id: dnsc2-network-tunnel
+    provider: microsoft_sentinel
+    type: network
+    confidence: required
+    finding:
+      severity: High
+      title: "DNS tunnelling / beaconing not detected"
+      remediation: >-
+        Deploy DNS analytics for high query volume to a single domain, unusually
+        long or high-entropy labels, and TXT/NULL record abuse. Correlate with
+        the querying host and process.
+      reference: "MITRE ATT&CK T1071.004 — DNS"
+  - id: dnsc2-edr-process
+    provider: microsoft_defender
+    type: endpoint
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "Beaconing process not correlated on the endpoint"
+      remediation: >-
+        Flag scripting engines (powershell.exe, wscript.exe) issuing repeated
+        DNS resolutions on a fixed cadence (Sysmon EID 22).
+      reference: "MITRE ATT&CK T1071.004 — DNS"

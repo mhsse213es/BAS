@@ -1,0 +1,19 @@
+# Detection Validation Profile — AS-REP roasting (T1558.004).
+# AD drill Stage 3: discovery of accounts with Kerberos pre-auth disabled.
+profile: windows_asrep_roast
+version: 1
+extends:
+  - windows_credential_access
+expected_detection:
+  - id: asrep-identity-preauth
+    provider: microsoft_defender_identity
+    type: identity
+    confidence: required
+    finding:
+      severity: High
+      title: "AS-REP roasting not detected"
+      remediation: >-
+        Alert on Security EID 4768 (AS-REQ) with pre-authentication not required
+        and RC4 encryption, and audit accounts carrying the
+        DONT_REQ_PREAUTH flag. Remove pre-auth exemptions where possible.
+      reference: "MITRE ATT&CK T1558.004 — AS-REP Roasting"
