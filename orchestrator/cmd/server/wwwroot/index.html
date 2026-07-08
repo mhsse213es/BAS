@@ -3299,15 +3299,25 @@ body.theme-slate {
 
       <!-- ART techniques -->
       <div id="bld-art" style="display:none">
-        <div class="form-group"><label>ATT&amp;CK technique IDs (one per line or comma separated)</label>
-          <textarea id="bld-art-list" rows="4" placeholder="T1059.001&#10;T1003.001&#10;T1486"></textarea></div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;justify-content:space-between">
+            <span>ATT&amp;CK technique IDs (one per line or comma separated)</span>
+            <a href="javascript:void(0)" class="desc-toggle" style="font-size:0.78rem;white-space:nowrap;margin-left:0.75rem" onclick="openBuilderARTPicker();return false;">&#128269; Browse catalog</a>
+          </label>
+          <textarea id="bld-art-list" rows="4" placeholder="T1059.001&#10;T1003.001&#10;T1486"></textarea>
+        </div>
         <div class="bld-mode-help">Each technique is run via Atomic Red Team on the target endpoint.</div>
       </div>
 
       <!-- Caldera abilities -->
       <div id="bld-caldera" style="display:none">
-        <div class="form-group"><label>Caldera ability IDs (one per line or comma separated)</label>
-          <textarea id="bld-caldera-list" rows="4" placeholder="ability-uuid-1&#10;ability-uuid-2"></textarea></div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;justify-content:space-between">
+            <span>Caldera ability IDs (one per line or comma separated)</span>
+            <a href="javascript:void(0)" class="desc-toggle" style="font-size:0.78rem;white-space:nowrap;margin-left:0.75rem" onclick="openBuilderCalderaPicker();return false;">&#128269; Browse catalog</a>
+          </label>
+          <textarea id="bld-caldera-list" rows="4" placeholder="ability-uuid-1&#10;ability-uuid-2"></textarea>
+        </div>
         <div class="bld-mode-help">Each ability is fetched from the Caldera library and executed in order.</div>
       </div>
 
@@ -3339,12 +3349,14 @@ body.theme-slate {
       <button class="tab-btn" onclick="showAgentTab('scenarios')">Scenarios</button>
       <button class="tab-btn" onclick="showAgentTab('logs')">Logs</button>
       <button class="tab-btn" onclick="showAgentTab('health')">Health</button>
+      <button class="tab-btn" onclick="showAgentTab('attackpath')">Attack Path</button>
     </div>
     <div class="drawer-body" style="overflow-y:auto">
       <div id="agt-tab-overview" class="tab-pane"></div>
       <div id="agt-tab-scenarios" class="tab-pane" style="display:none"></div>
       <div id="agt-tab-logs" class="tab-pane" style="display:none"></div>
       <div id="agt-tab-health" class="tab-pane" style="display:none"></div>
+      <div id="agt-tab-attackpath" class="tab-pane" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -4074,6 +4086,11 @@ function _apOnJobUpdate(msg) {
     apActiveJobs[agentId] = { jobId: job.id, status: job.status };
   }
   renderAgentRows();
+  // Refresh Attack Path tab in the agent detail drawer if it's showing this agent.
+  if (_agtDetailId && _agtDetailId === agentId) {
+    var apPane = document.getElementById('agt-tab-attackpath');
+    if (apPane && apPane.style.display !== 'none') loadAgtAttackPath(agentId);
+  }
   // Only update the progress panel if this is the panel's current job.
   if (_apCurrentJobId && job.id !== _apCurrentJobId) return;
   if (!_apCurrentJobId && job.id) {
@@ -4351,7 +4368,7 @@ function renderAgentRows() {
         '<div style="display:flex;flex-wrap:wrap;gap:3px">' +
         '<button class="btn btn-outline btn-sm" onclick="openAgentDetail(\'' + x(a.agentId) + '\')" title="View detail">&#128269; Detail</button>' +
         '<button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')" title="Run simulation">&#9654; Run</button>' +
-        '<button class="btn btn-outline btn-sm" onclick="safeScan(\'' + x(a.agentId) + '\')" title="Read-only simulation">&#128737; Scan</button>' +
+        '<button class="btn btn-outline btn-sm" onclick="safeScan(\'' + x(a.agentId) + '\')" title="Read-only simulation">&#128737; Safe Scan</button>' +
         '<button class="btn btn-outline btn-sm" onclick="openFullReport(\'' + x(a.agentId) + '\')" title="Open HTML report">&#128196; Report</button>' +
         '<button class="btn btn-outline btn-sm" onclick="downloadAuditPack(\'' + x(a.agentId) + '\')" title="Download audit pack">&#8659; Pack</button>' +
         '</div>' +
@@ -4444,6 +4461,7 @@ function loadCatalogs() {
   // guard with Array.isArray — an error body must not be mistaken for a catalog.
   apicall('/api/art/techniques').then(function(d) {
     artCatalog = Array.isArray(d) ? d : [];
+    if (artCatalog.length) _fillDatalistFromCatalog(artCatalog);
     if (scenarios.length) renderScenarios();
   }).catch(function() {});
   apicall('/api/caldera/abilities').then(function(d) {
@@ -4476,6 +4494,7 @@ function loadScenarios() {
         artTechniques:      s.artTechniques       || []
       };
     });
+    _enrichDatalistFromScenarios();
     renderScenarios();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -7065,8 +7084,12 @@ function renderWizardReview() {
   var modeLabel = { posture: 'Posture — read-only', telemetry: 'Telemetry — identity-safe', lab: 'Lab — full-fidelity' }[mode] || mode;
   var fw = scenarioFramework(sc);
   var noun = (fw === 'art') ? 'techniques' : (fw === 'caldera') ? 'abilities' : (fw === 'posture') ? 'checks' : 'steps';
-  var subset = (_runSelection && _runSelection.scId === scId && _runSelection.ids.length)
-    ? (_runSelection.ids.length + ' ' + noun + ' (subset)') : 'All ' + noun;
+  var sel = _runSelection && _runSelection.scId === scId && _runSelection.ids.length;
+  var subset = sel
+    ? ((_runSelection.locked && _runSelection.ids.length === 1)
+        ? _runSelection.ids[0] + ' (targeted re-validate)'
+        : _runSelection.ids.length + ' ' + noun + ' (subset)')
+    : 'All ' + noun;
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl && reasonEl.value.trim()) ? reasonEl.value.trim() : '';
   var row = function(k, v) { return '<div class="wz-rev-row"><span>' + k + '</span><span>' + v + '</span></div>'; };
@@ -7328,6 +7351,13 @@ function updatePickerCount() {
 function applyPicker() {
   var ids = pickerSelectedIds();
   if (!ids.length) { showToast('Select at least one item', 'err'); return; }
+  if (_pickerBuilderMode) {
+    _pickerBuilderMode = false;
+    var targetId = (_pickerFw === 'caldera') ? 'bld-caldera-list' : 'bld-art-list';
+    document.getElementById(targetId).value = ids.join('\n');
+    closePicker();
+    return;
+  }
   // Preserve the agent chosen in the Run modal. For posture the catalog (and its
   // check IDs) is per-agent/per-OS, so reopening the modal must NOT reset to the
   // first agent — otherwise the selection would dispatch to the wrong endpoint.
@@ -7338,7 +7368,7 @@ function applyPicker() {
   openModal(_pickerScId, ag || null);
 }
 
-function closePicker() { document.getElementById('picker-overlay').classList.remove('open'); }
+function closePicker() { _pickerBuilderMode = false; document.getElementById('picker-overlay').classList.remove('open'); }
 
 function clearSelection() { _runSelection = null; renderModalSelection(); }
 
@@ -7388,9 +7418,127 @@ function renderModalSelection() {
 
 /* ── Scenario Builder ──────────────────────────────────────── */
 var _bldEditId = null;
+var _artTechniquesCached = false;
+var _pickerBuilderMode = false;
+
+function _fillDatalistFromCatalog(list) {
+  var dl = document.getElementById('att-techniques');
+  if (!dl || !list.length) return;
+  dl.innerHTML = '';
+  list.forEach(function(t) {
+    var opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name ? t.id + ' — ' + t.name : t.id;
+    dl.appendChild(opt);
+  });
+  _artTechniquesCached = true;
+}
+
+function _enrichDatalistFromScenarios() {
+  var dl = document.getElementById('att-techniques');
+  if (!dl) return;
+  var existing = {};
+  dl.querySelectorAll('option').forEach(function(o) { existing[o.value] = true; });
+  var toAdd = {};
+  scenarios.forEach(function(s) {
+    (s.steps || []).forEach(function(st) {
+      var tid = st.techniqueId || st.technique_id || '';
+      if (tid && !existing[tid]) toAdd[tid] = true;
+    });
+  });
+  Object.keys(toAdd).sort().forEach(function(tid) {
+    var opt = document.createElement('option');
+    opt.value = tid;
+    dl.appendChild(opt);
+  });
+}
+
+function _populateARTDatalist() {
+  if (_artTechniquesCached) return;
+  // Reuse artCatalog if loadCatalogs() already fetched it.
+  if (artCatalog.length) { _fillDatalistFromCatalog(artCatalog); return; }
+  apicall('/api/art/techniques').then(function(list) {
+    if (Array.isArray(list) && list.length) {
+      artCatalog = list;
+      _fillDatalistFromCatalog(list);
+    }
+  }).catch(function() { /* keep static fallback on error */ });
+}
+
+function openBuilderARTPicker() {
+  var existing = (document.getElementById('bld-art-list').value || '')
+    .split(/[\n,]+/).map(function(s) { return s.trim().toUpperCase(); }).filter(Boolean);
+  function doOpen(catalog) {
+    if (!catalog.length) { showToast('ART catalog is empty — reseed ART content', 'err'); return; }
+    _pickerBuilderMode = true;
+    _pickerItems = catalog;
+    _pickerScId = null; _pickerFw = 'art'; _pickerSel = {};
+    if (existing.length) {
+      existing.forEach(function(id) { _pickerSel[id] = true; });
+    } else {
+      catalog.forEach(function(t) { _pickerSel[t.id] = true; });
+    }
+    document.getElementById('picker-title').textContent = 'Select ART techniques';
+    document.getElementById('picker-sub').textContent = 'Tick the ATT&CK techniques to include. Search by ID or atomic name.';
+    document.getElementById('picker-search').value = '';
+    var filtersEl = document.getElementById('picker-caldera-filters');
+    if (filtersEl) filtersEl.style.display = 'none';
+    ensureCovStatus(renderPickerList);
+    document.getElementById('picker-overlay').classList.add('open');
+  }
+  if (artCatalog.length) { doOpen(artCatalog); return; }
+  apicall('/api/art/techniques').then(function(d) {
+    if (Array.isArray(d) && d.length) { artCatalog = d; _fillDatalistFromCatalog(d); }
+    doOpen(artCatalog);
+  }).catch(function(e) { showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
+}
+
+function openBuilderCalderaPicker() {
+  var existing = (document.getElementById('bld-caldera-list').value || '')
+    .split(/[\n,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+  function doOpen(catalog) {
+    if (!catalog.length) { showToast('Caldera catalog is empty or Caldera is offline', 'err'); return; }
+    _pickerBuilderMode = true;
+    _pickerItems = catalog;
+    _pickerScId = null; _pickerFw = 'caldera'; _pickerSel = {};
+    if (existing.length) {
+      existing.forEach(function(id) { _pickerSel[id] = true; });
+    } else {
+      catalog.forEach(function(t) { _pickerSel[t.id] = true; });
+    }
+    document.getElementById('picker-title').textContent = 'Select Caldera abilities';
+    document.getElementById('picker-sub').textContent = 'Tick the abilities to include. Search by name, tactic, or technique.';
+    document.getElementById('picker-search').value = '';
+    // Show Caldera metadata filters and reset them.
+    var filtersEl = document.getElementById('picker-caldera-filters');
+    if (filtersEl) filtersEl.style.display = '';
+    _pf = { plugin: 'all', payload: 'all', admin: 'all', platform: 'all', tactic: 'all' };
+    document.querySelectorAll('.pfbtn').forEach(function(b) {
+      b.classList.toggle('active', b.getAttribute('data-val') === 'all');
+    });
+    var tacticSel = document.getElementById('picker-tactic-sel');
+    if (tacticSel) {
+      var tacticSet = {};
+      catalog.forEach(function(it) { if (it.tactic) tacticSet[it.tactic] = true; });
+      tacticSel.innerHTML = '<option value="all">All tactics</option>' +
+        Object.keys(tacticSet).sort().map(function(t) {
+          return '<option value="' + x(t) + '">' + x(t) + '</option>';
+        }).join('');
+      tacticSel.value = 'all';
+    }
+    ensureCovStatus(renderPickerList);
+    document.getElementById('picker-overlay').classList.add('open');
+  }
+  if (calderaCatalog.length) { doOpen(calderaCatalog); return; }
+  apicall('/api/caldera/abilities').then(function(d) {
+    if (Array.isArray(d) && d.length) calderaCatalog = d;
+    doOpen(calderaCatalog);
+  }).catch(function(e) { showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
+}
 
 function openBuilder(id) {
   _bldEditId = id;
+  _populateARTDatalist();
   document.getElementById('bld-err').textContent = '';
   document.getElementById('builder-title').textContent = id ? 'Edit Scenario' : 'New Scenario';
   if (id) {
@@ -9277,6 +9425,9 @@ function confirmRun() {
     else if (_runSelection.fw === 'caldera') body.abilities = _runSelection.ids;
     else if (_runSelection.fw === 'steps') body.steps = _runSelection.ids.map(Number);
     else if (_runSelection.fw === 'posture') body.checks = _runSelection.ids;
+    if (_runSelection.locked && _runSelection.ids.length === 1) {
+      body.runLabel = _runSelection.ids[0] + ' — Re-validate';
+    }
   }
   apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
     method: 'POST', body: JSON.stringify(body)
@@ -10505,11 +10656,11 @@ function closeAgentDetail() {
   _agtDetailId = null;
 }
 function showAgentTab(tab) {
-  ['overview','scenarios','logs','health'].forEach(function(t) {
+  ['overview','scenarios','logs','health','attackpath'].forEach(function(t) {
     document.getElementById('agt-tab-' + t).style.display = (t === tab ? '' : 'none');
   });
   document.querySelectorAll('#agt-tab-bar .tab-btn').forEach(function(btn, i) {
-    var tabs = ['overview','scenarios','logs','health'];
+    var tabs = ['overview','scenarios','logs','health','attackpath'];
     btn.classList.toggle('active', tabs[i] === tab);
   });
   if (_agtLogRefresh) { clearInterval(_agtLogRefresh); _agtLogRefresh = null; }
@@ -10519,6 +10670,7 @@ function showAgentTab(tab) {
   if (tab === 'scenarios')  loadAgtScenarios(id);
   if (tab === 'logs')       { _agtLogTier = 'operational'; loadAgtLogs(id, _agtLogTier); _agtLogRefresh = setInterval(function(){ loadAgtLogs(_agtDetailId, _agtLogTier); }, 15000); }
   if (tab === 'health')     loadAgtHealth(id);
+  if (tab === 'attackpath') loadAgtAttackPath(id);
 }
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
@@ -10730,6 +10882,57 @@ function loadAgtHealth(agentId) {
       '<div style="margin-top:0.6rem;color:var(--muted);font-size:0.72rem">Heartbeat latency (ms) — last ' + points.length + ' samples. Red &gt;500ms, amber &gt;150ms.</div>' +
       '</div>';
   }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
+}
+
+// ── Attack Path tab ───────────────────────────────────────────────────────────
+function loadAgtAttackPath(agentId) {
+  var pane = document.getElementById('agt-tab-attackpath');
+  pane.innerHTML = '<div style="color:var(--muted);padding:1rem">Loading…</div>';
+  apicall('/api/attackpath/jobs?agentId=' + encodeURIComponent(agentId) + '&limit=10').then(function(jobs) {
+    if (!jobs || !jobs.length) {
+      pane.innerHTML = '<div style="padding:1rem;color:var(--muted)">No attack-path jobs found for this agent.</div>';
+      return;
+    }
+    var statusColor = {
+      completed: 'var(--success)', running: 'var(--accent)', dispatched: 'var(--accent)',
+      queued: 'var(--muted)', failed: 'var(--danger)', timed_out: 'var(--danger)',
+      delivery_failed: 'var(--danger)', cancelled: 'var(--muted)'
+    };
+    var stageLabels = {
+      initializing: 'Initializing', probing: 'Probing targets',
+      enumerating_admins: 'Enumerating admins', enumerating_sessions: 'Enumerating sessions',
+      running_sharphound: 'Running SharpHound', building_graph: 'Building graph', uploading: 'Uploading'
+    };
+    var rows = jobs.map(function(j) {
+      var sc = statusColor[j.status] || 'var(--muted)';
+      var prog = j.progress;
+      var detail = prog && prog.stage ? (stageLabels[prog.stage] || prog.stage) : '';
+      if (prog && prog.targetsTotal > 0) detail += ' — ' + prog.targetsCompleted + '/' + prog.targetsTotal;
+      if (j.status === 'completed' && j.metrics) detail = j.metrics.nodeCount + ' nodes, ' + j.metrics.edgeCount + ' edges';
+      if (j.error) detail = j.error;
+      var pct = prog && prog.progressPercent > 0 ? prog.progressPercent : 0;
+      var bar = (j.status === 'running' && pct > 0)
+        ? '<div style="margin-top:0.25rem;width:100%;max-width:200px;background:var(--border);border-radius:3px;height:4px;overflow:hidden">' +
+          '<div style="width:' + pct + '%;background:var(--accent);height:100%;border-radius:3px"></div></div>' : '';
+      return '<tr style="border-bottom:1px solid rgba(34,50,74,.4)">' +
+        '<td style="padding:0.35rem 0.5rem;color:var(--muted);font-size:0.72rem;white-space:nowrap">' + fmtTs(j.createdAt) + '</td>' +
+        '<td style="padding:0.35rem 0.5rem"><span style="color:' + sc + ';font-size:0.75rem;font-weight:600">' + x(j.status) + '</span></td>' +
+        '<td style="padding:0.35rem 0.5rem;font-size:0.75rem;color:var(--muted)">' + (j.targetCount || '—') + ' targets</td>' +
+        '<td style="padding:0.35rem 0.5rem;font-size:0.75rem;color:var(--muted)">' + x(detail) + bar + '</td>' +
+        '</tr>';
+    }).join('');
+    pane.innerHTML = '<div style="padding:0.75rem 1.25rem 0">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.79rem">' +
+      '<thead><tr style="border-bottom:1px solid var(--border)">' +
+      '<th style="padding:0.3rem 0.5rem;font-weight:600;font-size:0.7rem;color:var(--muted);text-align:left">Time</th>' +
+      '<th style="padding:0.3rem 0.5rem;font-weight:600;font-size:0.7rem;color:var(--muted);text-align:left">Status</th>' +
+      '<th style="padding:0.3rem 0.5rem;font-weight:600;font-size:0.7rem;color:var(--muted);text-align:left">Scope</th>' +
+      '<th style="padding:0.3rem 0.5rem;font-weight:600;font-size:0.7rem;color:var(--muted);text-align:left">Detail</th>' +
+      '</tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
+  }).catch(function(e) {
+    pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>';
+  });
 }
 
 function fmtTs(ts) {
@@ -11045,6 +11248,9 @@ window.addEventListener('DOMContentLoaded', function() {
 
 // ── Variant Executor ───────────────────────────────────────────────────────
 var _vexRunPoll = null;
+var _vexActivePoll = null;          // tracks sweep/queue polling interval (cancellable)
+var _vexActiveScenarioRunId = null; // underlying scenario_run id of the current vex dispatch
+var _vexAbortRequested = false;     // set by stopVex(); checked at every queue step
 
 function loadVariantTab() {
   loadVariantStats();
@@ -11137,6 +11343,7 @@ function vexRunFullSweep() {
   if (!confirm('Start Full Variant Sweep:\n\n  ' + n + ' techniques dispatched sequentially\n  ~' + (n * 33).toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
 
   var techniques = _vexAllTechniques.map(function(t) { return t.id; });
+  _vexAbortRequested = false; _vexActiveScenarioRunId = null;
   _vexSweepRunning = true;
   var btn = document.getElementById('vex-sweep-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Sweeping…'; }
@@ -11152,15 +11359,22 @@ function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
   var pctEl = document.getElementById('vex-sweep-pct');
   var barEl = document.getElementById('vex-sweep-bar');
 
-  if (idx >= n) {
+  if (_vexAbortRequested || idx >= n) {
     _vexSweepRunning = false;
     if (btn) { btn.disabled = false; btn.textContent = '▶ Start Sweep'; }
-    if (statusEl) statusEl.textContent = 'Sweep complete — ' + n + ' techniques tested';
-    if (pctEl) pctEl.textContent = '100%';
-    if (barEl) barEl.style.width = '100%';
-    showToast('Full sweep complete — ' + n + ' techniques', 'ok');
-    loadVariantStats();
-    loadVariantCoverage();
+    var progEl = document.getElementById('vex-sweep-progress');
+    if (progEl) progEl.style.display = 'none';
+    if (_vexAbortRequested) {
+      if (statusEl) statusEl.textContent = 'Sweep stopped';
+      showToast('Sweep stopped', 'warn');
+    } else {
+      if (statusEl) statusEl.textContent = 'Sweep complete — ' + n + ' techniques tested';
+      if (pctEl) pctEl.textContent = '100%';
+      if (barEl) barEl.style.width = '100%';
+      showToast('Full sweep complete — ' + n + ' techniques', 'ok');
+      loadVariantStats();
+      loadVariantCoverage();
+    }
     return;
   }
 
@@ -11176,6 +11390,7 @@ function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
   }).then(function(resp) {
+    _vexActiveScenarioRunId = resp.scenarioRunId;
     // Poll until this technique's variant run completes, then continue.
     _vexSweepPollAndNext(resp.variantRunId, agentId, techniques, mode, advanced, idx);
   }).catch(function(e) {
@@ -11186,14 +11401,17 @@ function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
 }
 
 function _vexSweepPollAndNext(vrId, agentId, techniques, mode, advanced, idx) {
-  var poll = setInterval(function() {
+  if (_vexActivePoll) clearInterval(_vexActivePoll);
+  _vexActivePoll = setInterval(function() {
+    if (_vexAbortRequested) { clearInterval(_vexActivePoll); _vexActivePoll = null; return; }
     apicall('/api/variants/run/' + vrId).then(function(detail) {
-      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
-        clearInterval(poll);
+      var s = detail.run && detail.run.status;
+      if (s === 'completed' || s === 'failed' || s === 'partial') {
+        clearInterval(_vexActivePoll); _vexActivePoll = null;
         _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
       }
     }).catch(function() {
-      clearInterval(poll);
+      clearInterval(_vexActivePoll); _vexActivePoll = null;
       _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
     });
   }, 3000);
@@ -11280,6 +11498,7 @@ function runVariants() {
   var advanced = document.getElementById('vex-advanced') ? document.getElementById('vex-advanced').checked : false;
   if (!agentId) { showToast('Select an agent first', 'err'); return; }
   if (!techniques.length) { showToast('Check at least one technique', 'err'); return; }
+  _vexAbortRequested = false; _vexActiveScenarioRunId = null;
   var btn = document.getElementById('vex-run-btn');
   if (btn) { btn.disabled = true; }
   _vexRunVariantQueue(agentId, techniques, mode, advanced, 0);
@@ -11287,6 +11506,7 @@ function runVariants() {
 
 function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
   var btn = document.getElementById('vex-run-btn');
+  if (_vexAbortRequested) { if (btn) { btn.disabled = false; btn.textContent = 'Run'; } return; }
   if (idx >= techniques.length) {
     if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
     if (techniques.length > 1) showToast('All ' + techniques.length + ' techniques queued', 'ok');
@@ -11304,10 +11524,11 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
       panel.innerHTML = '<div class="card" style="padding:1.5rem">' +
         '<div class="card-title" style="margin-bottom:0.75rem">Queue Progress</div>' +
         '<div style="font-size:0.83rem;color:var(--muted);margin-bottom:0.6rem">Running <span style="font-family:var(--font-mono);color:var(--text)">' + x(tid) + '</span> — <span style="color:var(--accent);font-weight:600">' + (idx + 1) + ' / ' + techniques.length + '</span></div>' +
-        '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
+        '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:0.75rem">' +
           '<div style="height:4px;background:var(--accent);border-radius:2px;width:' + pct + '%;transition:width 0.4s"></div>' +
         '</div>' +
-        (idx > 0 ? '<div style="margin-top:0.6rem;font-size:0.74rem;color:var(--muted)">' + idx + ' completed</div>' : '') +
+        (idx > 0 ? '<div style="margin-bottom:0.6rem;font-size:0.74rem;color:var(--muted)">' + idx + ' completed</div>' : '') +
+        '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button>' +
       '</div>';
     }
   }
@@ -11317,6 +11538,7 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
   }).then(function(resp) {
+    _vexActiveScenarioRunId = resp.scenarioRunId;
     var vrId = resp.variantRunId;
     if (techniques.length === 1) {
       if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
@@ -11333,13 +11555,16 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
 }
 
 function _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, idx) {
-  var poll = setInterval(function() {
+  if (_vexActivePoll) clearInterval(_vexActivePoll);
+  _vexActivePoll = setInterval(function() {
+    if (_vexAbortRequested) { clearInterval(_vexActivePoll); _vexActivePoll = null; return; }
     apicall('/api/variants/run/' + vrId).then(function(detail) {
-      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
-        clearInterval(poll);
+      var s = detail.run && detail.run.status;
+      if (s === 'completed' || s === 'failed' || s === 'partial') {
+        clearInterval(_vexActivePoll); _vexActivePoll = null;
         _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1);
       }
-    }).catch(function() { clearInterval(poll); _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1); });
+    }).catch(function() { clearInterval(_vexActivePoll); _vexActivePoll = null; _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1); });
   }, 3000);
 }
 
@@ -11349,17 +11574,39 @@ function pollVariantRun(vrId) {
   if (panel) panel.innerHTML =
     '<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">' +
     '<div style="margin-bottom:0.5rem;font-size:0.9rem">Executing variants…</div>' +
-    '<div class="tiny" style="font-family:var(--font-mono)">' + x(vrId) + '</div></div>';
+    '<div class="tiny" style="font-family:var(--font-mono);margin-bottom:0.75rem">' + x(vrId) + '</div>' +
+    '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button></div>';
   _vexRunPoll = setInterval(function() {
     apicall('/api/variants/run/' + vrId).then(function(detail) {
+      if (detail.run && detail.run.scenarioRunId) _vexActiveScenarioRunId = detail.run.scenarioRunId;
       renderVariantRun(detail);
-      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
+      var s = detail.run && detail.run.status;
+      if (s === 'completed' || s === 'failed' || s === 'partial') {
         clearInterval(_vexRunPoll);
         loadVariantCoverage();
         loadVariantStats();
       }
     }).catch(function() {});
   }, 3000);
+}
+
+function stopVex() {
+  _vexAbortRequested = true;
+  if (_vexActivePoll) { clearInterval(_vexActivePoll); _vexActivePoll = null; }
+  clearInterval(_vexRunPoll); _vexRunPoll = null;
+  if (_vexActiveScenarioRunId) {
+    apicall('/api/scenarios/runs/' + encodeURIComponent(_vexActiveScenarioRunId) + '/cancel', { method: 'POST' }).catch(function(){});
+  }
+  var btn = document.getElementById('vex-run-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
+  _vexSweepRunning = false;
+  var sweepBtn = document.getElementById('vex-sweep-btn');
+  if (sweepBtn) { sweepBtn.disabled = false; sweepBtn.textContent = '▶ Start Sweep'; }
+  var prog = document.getElementById('vex-sweep-progress');
+  if (prog) prog.style.display = 'none';
+  var panel = document.getElementById('vex-result-panel');
+  if (panel) panel.innerHTML = '<div class="card" style="padding:1.25rem;color:var(--warning);text-align:center">&#9632; Variant run stopped</div>';
+  showToast('Variant run stopped', 'warn');
 }
 
 function renderVariantRun(detail) {

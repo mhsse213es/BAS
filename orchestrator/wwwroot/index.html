@@ -11248,6 +11248,9 @@ window.addEventListener('DOMContentLoaded', function() {
 
 // ── Variant Executor ───────────────────────────────────────────────────────
 var _vexRunPoll = null;
+var _vexActivePoll = null;          // tracks sweep/queue polling interval (cancellable)
+var _vexActiveScenarioRunId = null; // underlying scenario_run id of the current vex dispatch
+var _vexAbortRequested = false;     // set by stopVex(); checked at every queue step
 
 function loadVariantTab() {
   loadVariantStats();
@@ -11340,6 +11343,7 @@ function vexRunFullSweep() {
   if (!confirm('Start Full Variant Sweep:\n\n  ' + n + ' techniques dispatched sequentially\n  ~' + (n * 33).toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
 
   var techniques = _vexAllTechniques.map(function(t) { return t.id; });
+  _vexAbortRequested = false; _vexActiveScenarioRunId = null;
   _vexSweepRunning = true;
   var btn = document.getElementById('vex-sweep-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Sweeping…'; }
@@ -11355,15 +11359,22 @@ function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
   var pctEl = document.getElementById('vex-sweep-pct');
   var barEl = document.getElementById('vex-sweep-bar');
 
-  if (idx >= n) {
+  if (_vexAbortRequested || idx >= n) {
     _vexSweepRunning = false;
     if (btn) { btn.disabled = false; btn.textContent = '▶ Start Sweep'; }
-    if (statusEl) statusEl.textContent = 'Sweep complete — ' + n + ' techniques tested';
-    if (pctEl) pctEl.textContent = '100%';
-    if (barEl) barEl.style.width = '100%';
-    showToast('Full sweep complete — ' + n + ' techniques', 'ok');
-    loadVariantStats();
-    loadVariantCoverage();
+    var progEl = document.getElementById('vex-sweep-progress');
+    if (progEl) progEl.style.display = 'none';
+    if (_vexAbortRequested) {
+      if (statusEl) statusEl.textContent = 'Sweep stopped';
+      showToast('Sweep stopped', 'warn');
+    } else {
+      if (statusEl) statusEl.textContent = 'Sweep complete — ' + n + ' techniques tested';
+      if (pctEl) pctEl.textContent = '100%';
+      if (barEl) barEl.style.width = '100%';
+      showToast('Full sweep complete — ' + n + ' techniques', 'ok');
+      loadVariantStats();
+      loadVariantCoverage();
+    }
     return;
   }
 
@@ -11379,6 +11390,7 @@ function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
   }).then(function(resp) {
+    _vexActiveScenarioRunId = resp.scenarioRunId;
     // Poll until this technique's variant run completes, then continue.
     _vexSweepPollAndNext(resp.variantRunId, agentId, techniques, mode, advanced, idx);
   }).catch(function(e) {
@@ -11389,14 +11401,17 @@ function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
 }
 
 function _vexSweepPollAndNext(vrId, agentId, techniques, mode, advanced, idx) {
-  var poll = setInterval(function() {
+  if (_vexActivePoll) clearInterval(_vexActivePoll);
+  _vexActivePoll = setInterval(function() {
+    if (_vexAbortRequested) { clearInterval(_vexActivePoll); _vexActivePoll = null; return; }
     apicall('/api/variants/run/' + vrId).then(function(detail) {
-      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
-        clearInterval(poll);
+      var s = detail.run && detail.run.status;
+      if (s === 'completed' || s === 'failed' || s === 'partial') {
+        clearInterval(_vexActivePoll); _vexActivePoll = null;
         _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
       }
     }).catch(function() {
-      clearInterval(poll);
+      clearInterval(_vexActivePoll); _vexActivePoll = null;
       _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
     });
   }, 3000);
@@ -11483,6 +11498,7 @@ function runVariants() {
   var advanced = document.getElementById('vex-advanced') ? document.getElementById('vex-advanced').checked : false;
   if (!agentId) { showToast('Select an agent first', 'err'); return; }
   if (!techniques.length) { showToast('Check at least one technique', 'err'); return; }
+  _vexAbortRequested = false; _vexActiveScenarioRunId = null;
   var btn = document.getElementById('vex-run-btn');
   if (btn) { btn.disabled = true; }
   _vexRunVariantQueue(agentId, techniques, mode, advanced, 0);
@@ -11490,6 +11506,7 @@ function runVariants() {
 
 function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
   var btn = document.getElementById('vex-run-btn');
+  if (_vexAbortRequested) { if (btn) { btn.disabled = false; btn.textContent = 'Run'; } return; }
   if (idx >= techniques.length) {
     if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
     if (techniques.length > 1) showToast('All ' + techniques.length + ' techniques queued', 'ok');
@@ -11507,10 +11524,11 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
       panel.innerHTML = '<div class="card" style="padding:1.5rem">' +
         '<div class="card-title" style="margin-bottom:0.75rem">Queue Progress</div>' +
         '<div style="font-size:0.83rem;color:var(--muted);margin-bottom:0.6rem">Running <span style="font-family:var(--font-mono);color:var(--text)">' + x(tid) + '</span> — <span style="color:var(--accent);font-weight:600">' + (idx + 1) + ' / ' + techniques.length + '</span></div>' +
-        '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">' +
+        '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:0.75rem">' +
           '<div style="height:4px;background:var(--accent);border-radius:2px;width:' + pct + '%;transition:width 0.4s"></div>' +
         '</div>' +
-        (idx > 0 ? '<div style="margin-top:0.6rem;font-size:0.74rem;color:var(--muted)">' + idx + ' completed</div>' : '') +
+        (idx > 0 ? '<div style="margin-bottom:0.6rem;font-size:0.74rem;color:var(--muted)">' + idx + ' completed</div>' : '') +
+        '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button>' +
       '</div>';
     }
   }
@@ -11520,6 +11538,7 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
   }).then(function(resp) {
+    _vexActiveScenarioRunId = resp.scenarioRunId;
     var vrId = resp.variantRunId;
     if (techniques.length === 1) {
       if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
@@ -11536,13 +11555,16 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
 }
 
 function _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, idx) {
-  var poll = setInterval(function() {
+  if (_vexActivePoll) clearInterval(_vexActivePoll);
+  _vexActivePoll = setInterval(function() {
+    if (_vexAbortRequested) { clearInterval(_vexActivePoll); _vexActivePoll = null; return; }
     apicall('/api/variants/run/' + vrId).then(function(detail) {
-      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
-        clearInterval(poll);
+      var s = detail.run && detail.run.status;
+      if (s === 'completed' || s === 'failed' || s === 'partial') {
+        clearInterval(_vexActivePoll); _vexActivePoll = null;
         _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1);
       }
-    }).catch(function() { clearInterval(poll); _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1); });
+    }).catch(function() { clearInterval(_vexActivePoll); _vexActivePoll = null; _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1); });
   }, 3000);
 }
 
@@ -11552,17 +11574,39 @@ function pollVariantRun(vrId) {
   if (panel) panel.innerHTML =
     '<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted)">' +
     '<div style="margin-bottom:0.5rem;font-size:0.9rem">Executing variants…</div>' +
-    '<div class="tiny" style="font-family:var(--font-mono)">' + x(vrId) + '</div></div>';
+    '<div class="tiny" style="font-family:var(--font-mono);margin-bottom:0.75rem">' + x(vrId) + '</div>' +
+    '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button></div>';
   _vexRunPoll = setInterval(function() {
     apicall('/api/variants/run/' + vrId).then(function(detail) {
+      if (detail.run && detail.run.scenarioRunId) _vexActiveScenarioRunId = detail.run.scenarioRunId;
       renderVariantRun(detail);
-      if (detail.run && (detail.run.status === 'completed' || detail.run.status === 'failed')) {
+      var s = detail.run && detail.run.status;
+      if (s === 'completed' || s === 'failed' || s === 'partial') {
         clearInterval(_vexRunPoll);
         loadVariantCoverage();
         loadVariantStats();
       }
     }).catch(function() {});
   }, 3000);
+}
+
+function stopVex() {
+  _vexAbortRequested = true;
+  if (_vexActivePoll) { clearInterval(_vexActivePoll); _vexActivePoll = null; }
+  clearInterval(_vexRunPoll); _vexRunPoll = null;
+  if (_vexActiveScenarioRunId) {
+    apicall('/api/scenarios/runs/' + encodeURIComponent(_vexActiveScenarioRunId) + '/cancel', { method: 'POST' }).catch(function(){});
+  }
+  var btn = document.getElementById('vex-run-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
+  _vexSweepRunning = false;
+  var sweepBtn = document.getElementById('vex-sweep-btn');
+  if (sweepBtn) { sweepBtn.disabled = false; sweepBtn.textContent = '▶ Start Sweep'; }
+  var prog = document.getElementById('vex-sweep-progress');
+  if (prog) prog.style.display = 'none';
+  var panel = document.getElementById('vex-result-panel');
+  if (panel) panel.innerHTML = '<div class="card" style="padding:1.25rem;color:var(--warning);text-align:center">&#9632; Variant run stopped</div>';
+  showToast('Variant run stopped', 'warn');
 }
 
 function renderVariantRun(detail) {
