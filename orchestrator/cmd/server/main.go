@@ -25,6 +25,7 @@ import (
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ticketing"
@@ -163,6 +164,10 @@ func main() {
 	verificationStore := verification.NewStore(pool)
 	log.Println("[+] Verification store ready")
 
+	// ── CVE-ATT&CK Relationship Store ──────────────────────────────────────
+	relationshipStore := relationships.NewStore(pool)
+	log.Println("[+] Relationship store ready")
+
 	// ── Reporting Engine ──────────────────────────────────────────────────
 	reportingEngine := reporting.NewEngine(pool).
 		WithScenarios(engine).
@@ -235,7 +240,8 @@ func main() {
 		WithTicketing(ticketingManager).
 		WithLicensePath(cfg.LicensePath).
 		WithExercise(exStore, exExecutor, exChain).
-		WithVerificationStore(verificationStore)
+		WithVerificationStore(verificationStore).
+		WithRelationshipStore(relationshipStore)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), exTracker)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────

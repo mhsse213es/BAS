@@ -118,6 +118,61 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			cve_id       text NOT NULL REFERENCES cves(cve_id) ON DELETE CASCADE,
 			PRIMARY KEY (technique_id, cve_id)
 		)`,
+
+		// ── technique_cve_relationships: evidence-backed CVE↔ATT&CK provenance ──
+		// Supersedes the bare technique_cves join as the source of truth for
+		// scoring: a relationship carries WHY it exists (type, rationale), HOW
+		// confident the claim is (proposed vs. effective — a reviewer can
+		// promote/demote effective_confidence without rewriting the relationship),
+		// and its lifecycle (status). A (technique,cve) pair may have several
+		// relationships of different types; duplicates of the same type are
+		// rejected. Rows are mutable curated content (not an audit ledger like
+		// verification_history) — every change is instead written to the existing
+		// audit_logs table, capturing old/new confidence and rationale.
+		`CREATE TABLE IF NOT EXISTS technique_cve_relationships (
+			id                   text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			technique_id         text        NOT NULL REFERENCES techniques(technique_id) ON DELETE CASCADE,
+			cve_id               text        NOT NULL REFERENCES cves(cve_id) ON DELETE CASCADE,
+			relationship_type    text        NOT NULL,
+			proposed_confidence  text        NOT NULL DEFAULT 'Medium',
+			effective_confidence text        NOT NULL DEFAULT 'Medium',
+			primary_source       text        NOT NULL DEFAULT 'Analyst',
+			rationale            text        NOT NULL DEFAULT '',
+			status               text        NOT NULL DEFAULT 'Active', -- Active/Deprecated/Disputed/Retired
+			status_changed_by    text        NOT NULL DEFAULT '',
+			status_changed_at    timestamptz,
+			status_reason        text        NOT NULL DEFAULT '',
+			created_by           text        NOT NULL DEFAULT '',
+			created_at           timestamptz NOT NULL DEFAULT NOW(),
+			updated_by           text        NOT NULL DEFAULT '',
+			updated_at           timestamptz NOT NULL DEFAULT NOW(),
+			reviewed_by          text        NOT NULL DEFAULT '',
+			last_reviewed_at     timestamptz,
+			review_due_at        timestamptz,
+			UNIQUE (technique_id, cve_id, relationship_type)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_tcr_technique ON technique_cve_relationships (technique_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_tcr_cve       ON technique_cve_relationships (cve_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_tcr_active_scored ON technique_cve_relationships (technique_id)
+			WHERE status = 'Active' AND effective_confidence IN ('High','Medium')`,
+
+		// relationship_evidence: one relationship → many supporting references.
+		// Soft-delete only — evidence is provenance, never hard-erased.
+		`CREATE TABLE IF NOT EXISTS relationship_evidence (
+			id              text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			relationship_id text        NOT NULL REFERENCES technique_cve_relationships(id) ON DELETE CASCADE,
+			source          text        NOT NULL DEFAULT 'Analyst',
+			reference_type  text        NOT NULL DEFAULT 'URL', -- URL/CVE Advisory/PDF/Threat Report/Internal Note
+			reference_value text        NOT NULL DEFAULT '',
+			note            text        NOT NULL DEFAULT '',
+			priority        int         NOT NULL DEFAULT 0, -- lower = more prominent in display ordering
+			added_by        text        NOT NULL DEFAULT '',
+			added_at        timestamptz NOT NULL DEFAULT NOW(),
+			deleted         boolean     NOT NULL DEFAULT false,
+			deleted_by      text        NOT NULL DEFAULT '',
+			deleted_at      timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_reve_relationship ON relationship_evidence (relationship_id) WHERE NOT deleted`,
 		// Threat readiness history — one row per (run, actor) pair, written by the
 		// reporting engine when BuildFromRun generates a report. Powers trend analysis
 		// (are we improving against APT29 / LockBit over time?).

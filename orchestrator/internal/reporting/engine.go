@@ -83,16 +83,16 @@ type FullReport struct {
 	// Validation Pack). HasData is false — and the section renders as before —
 	// for any run whose scenario declares no expected_detection.
 	DetectionValidation DetectionValidationSection `json:"detectionValidation"`
-	TrendAnalysis       TrendSummary     `json:"trendAnalysis"`
-	AttackPath          AttackPath          `json:"attackPath"`
-	AttackFlow          []AttackFlowNode        `json:"attackFlow,omitempty"`
-	AttackFlowSummary   AttackFlowSummary       `json:"attackFlowSummary"`
+	TrendAnalysis       TrendSummary               `json:"trendAnalysis"`
+	AttackPath          AttackPath                 `json:"attackPath"`
+	AttackFlow          []AttackFlowNode           `json:"attackFlow,omitempty"`
+	AttackFlowSummary   AttackFlowSummary          `json:"attackFlowSummary"`
 	// VariantCoverage holds multi-variant evasion analysis for the HTML/PDF report.
 	// Populated from scenario_variant_technique_summary; nil for runs with no variant depth.
-	VariantCoverage         *VariantCoverageSection  `json:"variantCoverage,omitempty"`
+	VariantCoverage *VariantCoverageSection `json:"variantCoverage,omitempty"`
 	// CampaignVariantCoverage holds trend-focused multi-variant analysis for campaign reports.
 	// Populated from campaign_variant_summary; nil for non-campaign reports.
-	CampaignVariantCoverage *CampaignVariantSection  `json:"campaignVariantCoverage,omitempty"`
+	CampaignVariantCoverage *CampaignVariantSection `json:"campaignVariantCoverage,omitempty"`
 	// EnvRestoration summarises cleanup success for this run/campaign:
 	// what was touched, what was reverted, and what (if anything) was left behind.
 	EnvRestoration *EnvRestoration `json:"envRestoration,omitempty"`
@@ -137,21 +137,21 @@ type FullReport struct {
 	// attackpath.collect task has produced edges and the graph has been analyzed
 	// (Phase 1 collection). When present the report renders the Attack Path
 	// Validation section; otherwise that section shows a "not yet collected" state.
-	AttackPathValidation *attackpath.Summary `json:"attackPathValidation,omitempty"`
-	AttackSurfaceAge       int                `json:"attackSurfaceAge"`
-	OldestFindingName      string             `json:"oldestFindingName"`
-	OldestFindingID        string             `json:"oldestFindingID"`
-	OldestFindingSeverity  string             `json:"oldestFindingSeverity"`
-	AttackSurfaceSLAStatus string             `json:"attackSurfaceSLAStatus"`
-	DetectionSources       []DetectionSource  `json:"detectionSources,omitempty"`
-	PerfCPUBefore          float64            `json:"perfCpuBefore"`
-	PerfCPUAfter           float64            `json:"perfCpuAfter"`
-	PerfRAMBefore          float64            `json:"perfRamBefore"`
-	PerfRAMAfter           float64            `json:"perfRamAfter"`
-	PerfDiskBefore         float64            `json:"perfDiskBefore"`
-	PerfDiskAfter          float64            `json:"perfDiskAfter"`
-	CleanupFailed          bool               `json:"cleanupFailed"`
-	CleanupFailedCount     int                `json:"cleanupFailedCount"`
+	AttackPathValidation   *attackpath.Summary `json:"attackPathValidation,omitempty"`
+	AttackSurfaceAge       int                 `json:"attackSurfaceAge"`
+	OldestFindingName      string              `json:"oldestFindingName"`
+	OldestFindingID        string              `json:"oldestFindingID"`
+	OldestFindingSeverity  string              `json:"oldestFindingSeverity"`
+	AttackSurfaceSLAStatus string              `json:"attackSurfaceSLAStatus"`
+	DetectionSources       []DetectionSource   `json:"detectionSources,omitempty"`
+	PerfCPUBefore          float64             `json:"perfCpuBefore"`
+	PerfCPUAfter           float64             `json:"perfCpuAfter"`
+	PerfRAMBefore          float64             `json:"perfRamBefore"`
+	PerfRAMAfter           float64             `json:"perfRamAfter"`
+	PerfDiskBefore         float64             `json:"perfDiskBefore"`
+	PerfDiskAfter          float64             `json:"perfDiskAfter"`
+	CleanupFailed          bool                `json:"cleanupFailed"`
+	CleanupFailedCount     int                 `json:"cleanupFailedCount"`
 	// CoverageBreakdown is the 3-bucket prevention/detection breakdown derived from
 	// TechniqueMatrix (DetectionVerdict field). It powers the Coverage Analytics
 	// page and is used in the executive summary score cards.
@@ -234,7 +234,7 @@ type VariantTechRow struct {
 	Bypassed          int      `json:"bypassed"`
 	BypassRate        float64  `json:"bypassRate"`
 	HasBypass         bool     `json:"hasBypass"`
-	Severity          string   `json:"severity,omitempty"`          // Critical|High|Medium|Low
+	Severity          string   `json:"severity,omitempty"` // Critical|High|Medium|Low
 	BestBypassLabel   string   `json:"bestBypassLabel,omitempty"`
 	Headline          string   `json:"headline,omitempty"`
 	RemediationPoints []string `json:"remediationPoints,omitempty"`
@@ -243,23 +243,23 @@ type VariantTechRow struct {
 // CampaignVariantSection holds trend-focused variant analysis for campaign HTML/PDF
 // reports. Sourced from campaign_variant_summary (pre-computed per campaign).
 type CampaignVariantSection struct {
-	HasData          bool              `json:"hasData"`
-	TechniquesTested int               `json:"techniquesTested"`
-	VariantsExecuted int               `json:"variantsExecuted"`
-	Blocked          int               `json:"blocked"`
-	Detected         int               `json:"detected"`
-	Bypassed         int               `json:"bypassed"`
-	RunCount         int               `json:"runCount"`
-	PreventionScore  float64           `json:"preventionScore"`
-	DetectionScore   float64           `json:"detectionScore"`
-	TopBypasses      []CampTopBypass   `json:"topBypasses"`
-	TacticBreakdown  []CampTacticRow   `json:"tacticBreakdown"`
-	HasTrend         bool              `json:"hasTrend"`
-	TrendImproved    bool              `json:"trendImproved"`
-	PrevBypassed     int               `json:"prevBypassed"`
-	ImprovementPct   float64           `json:"improvementPct"`
-	TrendDelta       int               `json:"trendDelta"` // positive = regression, negative = improvement
-	TrendNote        string            `json:"trendNote"`
+	HasData          bool            `json:"hasData"`
+	TechniquesTested int             `json:"techniquesTested"`
+	VariantsExecuted int             `json:"variantsExecuted"`
+	Blocked          int             `json:"blocked"`
+	Detected         int             `json:"detected"`
+	Bypassed         int             `json:"bypassed"`
+	RunCount         int             `json:"runCount"`
+	PreventionScore  float64         `json:"preventionScore"`
+	DetectionScore   float64         `json:"detectionScore"`
+	TopBypasses      []CampTopBypass `json:"topBypasses"`
+	TacticBreakdown  []CampTacticRow `json:"tacticBreakdown"`
+	HasTrend         bool            `json:"hasTrend"`
+	TrendImproved    bool            `json:"trendImproved"`
+	PrevBypassed     int             `json:"prevBypassed"`
+	ImprovementPct   float64         `json:"improvementPct"`
+	TrendDelta       int             `json:"trendDelta"` // positive = regression, negative = improvement
+	TrendNote        string          `json:"trendNote"`
 }
 
 // CampTopBypass is a technique that bypassed controls in multiple campaign runs.
@@ -331,7 +331,7 @@ type TechniqueRow struct {
 	TechniqueName    string `json:"techniqueName"`
 	Tactic           string `json:"tactic"`
 	Severity         string `json:"severity"`
-	ExecVerdict      string `json:"execVerdict"`               // pass|fail|blocked|error|skipped
+	ExecVerdict      string `json:"execVerdict"`                // pass|fail|blocked|error|skipped
 	DetectionVerdict string `json:"detectionVerdict,omitempty"` // prevented|detected|undetected
 	AlertChannel     string `json:"alertChannel,omitempty"`
 	AlertProvider    string `json:"alertProvider,omitempty"`
@@ -354,10 +354,10 @@ type TechniqueRow struct {
 	RequestedPrivPref string `json:"requestedPrivPref,omitempty"`
 	// ExecutedAs is the actual privilege tier used at runtime.
 	// "Legacy" when the step was unannotated. "User→Admin" flags a WTS fallback.
-	ExecutedAs  string `json:"executedAs"`
-	Details        string `json:"details,omitempty"`
-	Remediation    string `json:"remediation,omitempty"`
-	BusinessImpact string `json:"businessImpact,omitempty"`
+	ExecutedAs     string          `json:"executedAs"`
+	Details        string          `json:"details,omitempty"`
+	Remediation    string          `json:"remediation,omitempty"`
+	BusinessImpact string          `json:"businessImpact,omitempty"`
 	Command        string          `json:"command,omitempty"`   // human-readable step command from scenario YAML
 	Framework      string          `json:"framework,omitempty"` // art | caldera | sigma | custom
 	RemPlan        RemediationPlan `json:"remPlan,omitempty"`
@@ -380,7 +380,7 @@ type CoverageBreakdown struct {
 	PreventionRate    int               `json:"preventionRate"`    // prevented/attempted*100
 	DetectionCoverage int               `json:"detectionCoverage"` // (prevented+detectedOnly)/attempted*100
 	ByTactic          []TacticBreakdown `json:"byTactic"`
-	MissedTechniques  []TechniqueRow    `json:"missedTechniques"`  // top-20 missed+detectedOnly rows, action items
+	MissedTechniques  []TechniqueRow    `json:"missedTechniques"` // top-20 missed+detectedOnly rows, action items
 }
 
 // TacticBreakdown is the per-tactic 3-bucket row for the Coverage Analytics page.
@@ -431,7 +431,7 @@ func buildCoverageBreakdown(matrix []TechniqueRow) CoverageBreakdown {
 		}
 	}
 	if cb.Attempted > 0 {
-		cb.PreventionRate    = cb.Prevented * 100 / cb.Attempted
+		cb.PreventionRate = cb.Prevented * 100 / cb.Attempted
 		cb.DetectionCoverage = (cb.Prevented + cb.DetectedOnly) * 100 / cb.Attempted
 	}
 	// sort tactics: most missed first, then alpha.
@@ -796,26 +796,26 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 	rows := make([]TechniqueRow, 0, len(results))
 	for _, r := range results {
 		row := TechniqueRow{
-			TechniqueID:    r.Technique.ID,
-			TechniqueName:  r.Technique.Name,
-			Tactic:         r.Technique.Tactic,
-			Severity:       r.Severity,
-			ExecVerdict:    string(r.Result),
-			DurationMs:     r.DurationMs,
-			CleanupVerdict: r.CleanupVerdict,
+			TechniqueID:       r.Technique.ID,
+			TechniqueName:     r.Technique.Name,
+			Tactic:            r.Technique.Tactic,
+			Severity:          r.Severity,
+			ExecVerdict:       string(r.Result),
+			DurationMs:        r.DurationMs,
+			CleanupVerdict:    r.CleanupVerdict,
 			RequestedPriv:     privLabel(r.RequestedPriv),
 			RequestedPrivMin:  privLabel(r.RequestedPrivMin),
 			RequestedPrivPref: privLabel(r.RequestedPrivPref),
 			ExecutedAs:        privLabel(r.ExecutedAs),
-			Details:        r.Details,
-			Remediation:    r.Remediation,
-			BusinessImpact: tacticBusinessImpact(r.Technique.Tactic, r.Technique.ID),
-			Command:        r.Command,
-			Framework:      r.Framework,
-			RemPlan:        remediationPlan(r.Technique.Tactic, r.Technique.ID, r.Severity),
+			Details:           r.Details,
+			Remediation:       r.Remediation,
+			BusinessImpact:    tacticBusinessImpact(r.Technique.Tactic, r.Technique.ID),
+			Command:           r.Command,
+			Framework:         r.Framework,
+			RemPlan:           remediationPlan(r.Technique.Tactic, r.Technique.ID, r.Severity),
 		}
 		if r.BlockingControl != nil {
-			row.ControlName   = r.BlockingControl.Name
+			row.ControlName = r.BlockingControl.Name
 			row.ControlRuleID = r.BlockingControl.RuleID
 		}
 		if row.ControlName == "" && (r.Result == models.ResultPass || r.Result == models.ResultBlocked) {
@@ -854,28 +854,46 @@ func buildPrivilegeSummary(matrix []TechniqueRow) PrivilegeSummary {
 		switch r.ExecutedAs {
 		case "Legacy":
 			ps.Legacy++
-			if p { ps.LegacyPrevented++ }
+			if p {
+				ps.LegacyPrevented++
+			}
 		case "System":
 			ps.System++
-			if p { ps.SystemPrevented++ }
+			if p {
+				ps.SystemPrevented++
+			}
 		case "Admin":
 			ps.Admin++
-			if p { ps.AdminPrevented++ }
+			if p {
+				ps.AdminPrevented++
+			}
 		default:
 			if strings.Contains(r.ExecutedAs, "→") {
 				ps.Fallbacks++
 				ps.Admin++ // fell back to admin
-				if p { ps.AdminPrevented++ }
+				if p {
+					ps.AdminPrevented++
+				}
 			} else {
 				ps.User++
-				if p { ps.UserPrevented++ }
+				if p {
+					ps.UserPrevented++
+				}
 			}
 		}
 	}
-	if ps.User > 0 { ps.UserRate = ps.UserPrevented * 100 / ps.User }
-	if ps.Admin > 0 { ps.AdminRate = ps.AdminPrevented * 100 / ps.Admin }
-	if ps.System > 0 { ps.SystemRate = ps.SystemPrevented * 100 / ps.System }
-	if ps.Legacy > 0 { ps.LegacyRate = ps.LegacyPrevented * 100 / ps.Legacy }
+	if ps.User > 0 {
+		ps.UserRate = ps.UserPrevented * 100 / ps.User
+	}
+	if ps.Admin > 0 {
+		ps.AdminRate = ps.AdminPrevented * 100 / ps.Admin
+	}
+	if ps.System > 0 {
+		ps.SystemRate = ps.SystemPrevented * 100 / ps.System
+	}
+	if ps.Legacy > 0 {
+		ps.LegacyRate = ps.LegacyPrevented * 100 / ps.Legacy
+	}
 	return ps
 }
 
@@ -1084,13 +1102,13 @@ type TacticEntry struct {
 
 // Finding is a single Critical or High severity failure surfaced in the report.
 type Finding struct {
-	TechniqueID   string `json:"techniqueId"`
-	TechniqueName string `json:"techniqueName"`
-	Tactic        string `json:"tactic"`
-	Severity      string `json:"severity"`
-	Details       string `json:"details"`
-	Remediation   string `json:"remediation"`
-	ScenarioName  string `json:"scenarioName"`
+	TechniqueID      string          `json:"techniqueId"`
+	TechniqueName    string          `json:"techniqueName"`
+	Tactic           string          `json:"tactic"`
+	Severity         string          `json:"severity"`
+	Details          string          `json:"details"`
+	Remediation      string          `json:"remediation"`
+	ScenarioName     string          `json:"scenarioName"`
 	BusinessImpact   string          `json:"businessImpact,omitempty"`
 	ExecVerdict      string          `json:"execVerdict,omitempty"`
 	ExecutedAs       string          `json:"executedAs,omitempty"`
@@ -2563,7 +2581,6 @@ func formatFloat(f float64) string {
 	return fmt.Sprintf("%.1f", f)
 }
 
-
 func FilterResults(results []models.SimulationResult, filter string) []models.SimulationResult {
 	if filter == "" || filter == "all" {
 		return results
@@ -2936,11 +2953,11 @@ type EnvRestoration struct {
 	StepsLeaked      int     `json:"stepsLeaked"`
 	StepsNoCleanup   int     `json:"stepsNoCleanup"`
 	RevertedCount    int     `json:"revertedCount"`
-	CleanupRate      float64 `json:"cleanupRate"`   // stepsCleaned/(cleaned+leaked)*100
-	CoverageRate     float64 `json:"coverageRate"`  // stepsWithCleanup/stepsTotal*100
-	ImpactLevel      string  `json:"impactLevel"`   // "clean"|"minor"|"persistent"
+	CleanupRate      float64 `json:"cleanupRate"`  // stepsCleaned/(cleaned+leaked)*100
+	CoverageRate     float64 `json:"coverageRate"` // stepsWithCleanup/stepsTotal*100
+	ImpactLevel      string  `json:"impactLevel"`  // "clean"|"minor"|"persistent"
 	ImpactLabel      string  `json:"impactLabel"`
-	StatusLabel      string  `json:"statusLabel"`   // "Successful"|"Attention Required"|"Failed"
+	StatusLabel      string  `json:"statusLabel"` // "Successful"|"Attention Required"|"Failed"
 	ExecSummary      string  `json:"execSummary"`
 	// Campaign-level breakdown (zero for run reports)
 	RunCount       int `json:"runCount,omitempty"`
@@ -3007,10 +3024,12 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 
 // ── KEV Exposure ──────────────────────────────────────────────────────────────
 
-// populateKEVExposure batch-queries technique_cves+cves to determine which
-// techniques in the report have active CISA KEV CVEs, classifies each by control
-// outcome, and enriches report.TopFindings with KEV flags. Silent no-op when the
-// cves table is empty (KEV file not loaded).
+// populateKEVExposure batch-queries technique_cve_relationships+cves to
+// determine which techniques in the report have active CISA KEV CVEs,
+// classifies each by control outcome, and enriches report.TopFindings with KEV
+// flags. Only Active relationships with High/Medium effective confidence count
+// — a Low-confidence (analyst hypothesis) link never inflates exposure. Silent
+// no-op when the cves table is empty (KEV file not loaded).
 func (e *Engine) populateKEVExposure(ctx context.Context, report *FullReport) {
 	if len(report.TechniqueMatrix) == 0 {
 		return
@@ -3034,10 +3053,10 @@ func (e *Engine) populateKEVExposure(ctx context.Context, report *FullReport) {
 	kevMap := map[string]kevRow{}
 
 	rows, err := e.db.Query(ctx, `
-		SELECT tc.technique_id, COUNT(*) AS kev_count, bool_or(c.known_ransomware) AS ransomware
-		FROM technique_cves tc
+		SELECT tc.technique_id, COUNT(DISTINCT tc.cve_id) AS kev_count, bool_or(c.known_ransomware) AS ransomware
+		FROM technique_cve_relationships tc
 		JOIN cves c ON c.cve_id = tc.cve_id AND c.source = 'cisa-kev'
-		WHERE tc.technique_id = ANY($1)
+		WHERE tc.technique_id = ANY($1) AND tc.status = 'Active' AND tc.effective_confidence IN ('High','Medium')
 		GROUP BY tc.technique_id`, ids)
 	if err != nil {
 		return
@@ -3115,9 +3134,12 @@ func (e *Engine) populateKEVExposure(ctx context.Context, report *FullReport) {
 // ── EPSS Priority Scores ──────────────────────────────────────────────────────
 
 // populatePriorityScores computes a composite priority for each tested technique
-// using KEV flag (from DB), EPSS score (from cve_epss via technique_cves), and
-// ATT&CK threat-actor count (from embedded STIX). Techniques with no signal and
-// verdict != fail are omitted. Silent no-op when the cve_epss table is empty.
+// using KEV flag (from DB), EPSS score (from cve_epss via
+// technique_cve_relationships), and ATT&CK threat-actor count (from embedded
+// STIX). Only Active relationships with High/Medium effective confidence
+// contribute — a Low-confidence (illustrative) link is shown in the report but
+// never moves this score. Techniques with no signal and verdict != fail are
+// omitted. Silent no-op when the cve_epss table is empty.
 func (e *Engine) populatePriorityScores(ctx context.Context, report *FullReport) {
 	if len(report.TechniqueMatrix) == 0 {
 		return
@@ -3139,10 +3161,10 @@ func (e *Engine) populatePriorityScores(ctx context.Context, report *FullReport)
 	// KEV count per technique
 	kevMap := map[string]int{}
 	if rows, err := e.db.Query(ctx, `
-		SELECT tc.technique_id, COUNT(*) AS cnt
-		FROM technique_cves tc
+		SELECT tc.technique_id, COUNT(DISTINCT tc.cve_id) AS cnt
+		FROM technique_cve_relationships tc
 		JOIN cves c ON c.cve_id = tc.cve_id AND c.source = 'cisa-kev'
-		WHERE tc.technique_id = ANY($1)
+		WHERE tc.technique_id = ANY($1) AND tc.status = 'Active' AND tc.effective_confidence IN ('High','Medium')
 		GROUP BY tc.technique_id`, ids); err == nil {
 		for rows.Next() {
 			var tid string
@@ -3154,20 +3176,42 @@ func (e *Engine) populatePriorityScores(ctx context.Context, report *FullReport)
 		rows.Close()
 	}
 
-	// EPSS max score + percentile per technique (via technique_cves → cve_epss)
+	// EPSS max score + percentile per technique (via technique_cve_relationships → cve_epss)
 	type epssData struct{ score, pct float64 }
 	epssMap := map[string]epssData{}
 	if rows, err := e.db.Query(ctx, `
 		SELECT tc.technique_id, MAX(ce.epss_score), MAX(ce.percentile)
-		FROM technique_cves tc
+		FROM technique_cve_relationships tc
 		JOIN cve_epss ce ON ce.cve_id = tc.cve_id
-		WHERE tc.technique_id = ANY($1)
+		WHERE tc.technique_id = ANY($1) AND tc.status = 'Active' AND tc.effective_confidence IN ('High','Medium')
 		GROUP BY tc.technique_id`, ids); err == nil {
 		for rows.Next() {
 			var tid string
 			var sc, pct float64
 			if rows.Scan(&tid, &sc, &pct) == nil {
 				epssMap[strings.ToUpper(tid)] = epssData{sc, pct * 100}
+			}
+		}
+		rows.Close()
+	}
+
+	// Relationship count + primary source per technique — provenance for the
+	// scored CVEs behind KEV/EPSS, so the report can say why a ranking exists.
+	type relProv struct {
+		count   int
+		primary string
+	}
+	relMap := map[string]relProv{}
+	if rows, err := e.db.Query(ctx, `
+		SELECT technique_id, COUNT(*), MAX(primary_source)
+		FROM technique_cve_relationships
+		WHERE technique_id = ANY($1) AND status = 'Active' AND effective_confidence IN ('High','Medium')
+		GROUP BY technique_id`, ids); err == nil {
+		for rows.Next() {
+			var tid, primary string
+			var cnt int
+			if rows.Scan(&tid, &cnt, &primary) == nil {
+				relMap[strings.ToUpper(tid)] = relProv{cnt, primary}
 			}
 		}
 		rows.Close()
@@ -3207,18 +3251,21 @@ func (e *Engine) populatePriorityScores(ctx context.Context, report *FullReport)
 		if score == 0 && verdict != "fail" {
 			continue // passed with no signal — no actionable output
 		}
+		rp := relMap[tid]
 		priorities = append(priorities, TechniquePriority{
-			TechniqueID:      tid,
-			Name:             nameOf[tid],
-			Tactic:           tacticOf[tid],
-			Verdict:          verdict,
-			KEV:              kevCnt > 0,
-			KEVCount:         kevCnt,
-			EPSSScore:        ep.score,
-			EPSSPercentile:   ep.pct,
-			ThreatActorCount: actors,
-			PriorityScore:    score,
-			PriorityTier:     priorityTierFor(score),
+			TechniqueID:       tid,
+			Name:              nameOf[tid],
+			Tactic:            tacticOf[tid],
+			Verdict:           verdict,
+			KEV:               kevCnt > 0,
+			KEVCount:          kevCnt,
+			EPSSScore:         ep.score,
+			EPSSPercentile:    ep.pct,
+			ThreatActorCount:  actors,
+			PriorityScore:     score,
+			PriorityTier:      priorityTierFor(score),
+			RelationshipCount: rp.count,
+			PrimarySource:     rp.primary,
 		})
 	}
 	if len(priorities) == 0 {

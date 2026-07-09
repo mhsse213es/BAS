@@ -26,6 +26,7 @@ import (
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ticketing"
@@ -49,15 +50,16 @@ type Handler struct {
 	artEPSSFile      string               // FIRST EPSS CSV/GZ (EPSS_FILE)
 	artContentVer    string               // recorded content-pack version
 	manifest         *integrity.Manifest  // binary hash manifest — nil means verification disabled
-	complianceMapper *compliance.Mapper    // nil when not loaded
-	reportingEngine  *reporting.Engine     // nil when not loaded
-	scheduler        *connector.Scheduler  // nil when no sources configured
-	ticketing        *ticketing.Manager    // nil when no connectors configured
+	complianceMapper *compliance.Mapper   // nil when not loaded
+	reportingEngine  *reporting.Engine    // nil when not loaded
+	scheduler        *connector.Scheduler // nil when no sources configured
+	ticketing        *ticketing.Manager   // nil when no connectors configured
 	licPath          string               // path to bas.lic for Settings → License display
 	exerciseStore    *exercise.Store
 	exerciseExecutor *exercise.Executor
 	exerciseChain    *exercise.EvidenceChain
-	verification     *verification.Store // nil when not loaded — SP2 verification store
+	verification     *verification.Store  // nil when not loaded — SP2 verification store
+	relationships    *relationships.Store // nil when not loaded — CVE-ATT&CK Relationship Store
 }
 
 // New creates a Handler.
@@ -809,10 +811,10 @@ type dispatchOpts struct {
 	Abilities    []string
 	Steps        []int
 	Checks       []string
-	CampaignID   string              // "" for ad-hoc single runs
-	InitiatedBy  *string             // requesting user id (nil if unauthenticated)
+	CampaignID   string                // "" for ad-hoc single runs
+	InitiatedBy  *string               // requesting user id (nil if unauthenticated)
 	VariantDepth scenario.VariantDepth // "none"|"quick"|"standard"|"full"; "" == "none"
-	RunLabel     string              // overrides sc.Name in scenario_runs.name when set
+	RunLabel     string                // overrides sc.Name in scenario_runs.name when set
 }
 
 // nullIfEmpty maps "" to a SQL NULL so an ad-hoc run leaves campaign_id null
@@ -1068,17 +1070,17 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	scenarioID := chi.URLParam(r, "id")
 	var req struct {
-		AgentID      string               `json:"agentId"`
-		Mode         string               `json:"mode"`         // posture (default) | telemetry | lab
-		ConfirmLive  bool                 `json:"confirmLive"`  // required ack for any live run (telemetry/lab)
-		ConfirmLab   bool                 `json:"confirmLab"`   // second-stage approval, required for lab mode
-		Reason       string               `json:"reason"`       // optional operator justification (audited)
-		Techniques   []string             `json:"techniques"`   // optional ART technique subset
-		Abilities    []string             `json:"abilities"`    // optional Caldera ability subset
-		Steps        []int                `json:"steps"`        // optional step subset — indices into scenario step list
-		Checks       []string             `json:"checks"`       // optional posture-check subset (local_check scenarios)
+		AgentID      string                `json:"agentId"`
+		Mode         string                `json:"mode"`         // posture (default) | telemetry | lab
+		ConfirmLive  bool                  `json:"confirmLive"`  // required ack for any live run (telemetry/lab)
+		ConfirmLab   bool                  `json:"confirmLab"`   // second-stage approval, required for lab mode
+		Reason       string                `json:"reason"`       // optional operator justification (audited)
+		Techniques   []string              `json:"techniques"`   // optional ART technique subset
+		Abilities    []string              `json:"abilities"`    // optional Caldera ability subset
+		Steps        []int                 `json:"steps"`        // optional step subset — indices into scenario step list
+		Checks       []string              `json:"checks"`       // optional posture-check subset (local_check scenarios)
 		VariantDepth scenario.VariantDepth `json:"variantDepth"` // ""|"none"|"quick"|"standard"|"full"
-		RunLabel     string               `json:"runLabel"`     // optional override for scenario_runs.name
+		RunLabel     string                `json:"runLabel"`     // optional override for scenario_runs.name
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -2300,17 +2302,17 @@ func (h *Handler) GetCalderaStatus(w http.ResponseWriter, r *http.Request) {
 // AdversaryTemplate is a curated BAS playbook that bundles BAS-native scenarios,
 // ART technique sets, and a matching Caldera adversary into one named run template.
 type AdversaryTemplate struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	ShortName      string   `json:"shortName"`            // actor/theme chip label
-	Description    string   `json:"description"`
-	Category       string   `json:"category"`             // apt | ransomware | technique | insider
-	ThreatActor    string   `json:"threatActor,omitempty"`
-	MITREGroup     string   `json:"mitreGroup,omitempty"` // e.g. "G0016"
-	Tactics        []string `json:"tactics"`
-	KeyTechniques  []string `json:"keyTechniques"`        // representative IDs shown in UI
-	Risk           string   `json:"risk"`                 // critical | high | medium
-	EstDuration    string   `json:"estDuration"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	ShortName     string   `json:"shortName"` // actor/theme chip label
+	Description   string   `json:"description"`
+	Category      string   `json:"category"` // apt | ransomware | technique | insider
+	ThreatActor   string   `json:"threatActor,omitempty"`
+	MITREGroup    string   `json:"mitreGroup,omitempty"` // e.g. "G0016"
+	Tactics       []string `json:"tactics"`
+	KeyTechniques []string `json:"keyTechniques"` // representative IDs shown in UI
+	Risk          string   `json:"risk"`          // critical | high | medium
+	EstDuration   string   `json:"estDuration"`
 	// Execution sources — each is optional; UI shows which are configured.
 	BASScenarioID  string   `json:"basScenarioId,omitempty"`
 	ARTTechniques  []string `json:"artTechniques,omitempty"`
@@ -2324,87 +2326,87 @@ type AdversaryTemplate struct {
 var adversaryTemplates = []AdversaryTemplate{
 	{
 		ID: "apt29-quick", Name: "APT29 Quick", ShortName: "APT29",
-		Description:  "Five-stage Cozy Bear / NOBELIUM post-compromise tradecraft (domain recon, encoded loader, run-key persistence, scheduled task, DNS C2 beacon). ~15 min, production-safe.",
-		Category: "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
-		Tactics:  []string{"discovery", "execution", "persistence", "command-and-control"},
+		Description: "Five-stage Cozy Bear / NOBELIUM post-compromise tradecraft (domain recon, encoded loader, run-key persistence, scheduled task, DNS C2 beacon). ~15 min, production-safe.",
+		Category:    "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
+		Tactics:       []string{"discovery", "execution", "persistence", "command-and-control"},
 		KeyTechniques: []string{"T1059.001", "T1482", "T1087.001", "T1547.001", "T1071.004"},
-		Risk: "high", EstDuration: "~15 min",
-		BASScenarioID: "apt29-kill-chain",
-		ARTTechniques: []string{"T1482", "T1087.001", "T1059.001", "T1547.001", "T1053.005", "T1071.004"},
+		Risk:          "high", EstDuration: "~15 min",
+		BASScenarioID:  "apt29-kill-chain",
+		ARTTechniques:  []string{"T1482", "T1087.001", "T1059.001", "T1547.001", "T1053.005", "T1071.004"},
 		CalderaAdvName: "APT29",
-		Tags: []string{"apt29", "cozy-bear", "nobelium", "kill-chain"},
+		Tags:           []string{"apt29", "cozy-bear", "nobelium", "kill-chain"},
 	},
 	{
 		ID: "apt29-full", Name: "APT29 Full", ShortName: "APT29",
-		Description:  "Extended APT29 emulation adding credential access, process injection, LOLBin proxy execution, and domain account enumeration on top of the Quick chain. ~45 min.",
-		Category: "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
-		Tactics:  []string{"discovery", "credential-access", "execution", "defense-evasion", "persistence", "command-and-control"},
+		Description: "Extended APT29 emulation adding credential access, process injection, LOLBin proxy execution, and domain account enumeration on top of the Quick chain. ~45 min.",
+		Category:    "apt", ThreatActor: "APT29 — Cozy Bear / NOBELIUM", MITREGroup: "G0016",
+		Tactics:       []string{"discovery", "credential-access", "execution", "defense-evasion", "persistence", "command-and-control"},
 		KeyTechniques: []string{"T1003.001", "T1059.001", "T1087.002", "T1218.011", "T1055.001", "T1482"},
-		Risk: "high", EstDuration: "~45 min",
-		BASScenarioID: "apt29-kill-chain",
-		ARTTechniques: []string{"T1482", "T1087.001", "T1087.002", "T1059.001", "T1059.003", "T1003.001", "T1055.001", "T1218.011", "T1547.001", "T1053.005", "T1071.004"},
+		Risk:          "high", EstDuration: "~45 min",
+		BASScenarioID:  "apt29-kill-chain",
+		ARTTechniques:  []string{"T1482", "T1087.001", "T1087.002", "T1059.001", "T1059.003", "T1003.001", "T1055.001", "T1218.011", "T1547.001", "T1053.005", "T1071.004"},
 		CalderaAdvName: "APT29",
-		Tags: []string{"apt29", "cozy-bear", "nobelium", "full-chain"},
+		Tags:           []string{"apt29", "cozy-bear", "nobelium", "full-chain"},
 	},
 	{
 		ID: "ransomware-chain", Name: "Ransomware Chain", ShortName: "Ransomware",
-		Description:  "LockBit 3.0 kill chain: defense enumeration, VSS probe, SMB lateral movement prep, XOR-benign file + ransom note drop, log clearing attempt. No real encryption. ~20 min.",
-		Category: "ransomware", ThreatActor: "LockBit 3.0 / Wizard Spider", MITREGroup: "G0102",
-		Tactics:  []string{"discovery", "defense-evasion", "lateral-movement", "impact"},
+		Description: "LockBit 3.0 kill chain: defense enumeration, VSS probe, SMB lateral movement prep, XOR-benign file + ransom note drop, log clearing attempt. No real encryption. ~20 min.",
+		Category:    "ransomware", ThreatActor: "LockBit 3.0 / Wizard Spider", MITREGroup: "G0102",
+		Tactics:       []string{"discovery", "defense-evasion", "lateral-movement", "impact"},
 		KeyTechniques: []string{"T1518.001", "T1490", "T1486", "T1021.002", "T1070.001"},
-		Risk: "critical", EstDuration: "~20 min",
-		BASScenarioID: "lockbit-kill-chain",
-		ARTTechniques: []string{"T1518.001", "T1490", "T1486", "T1070.001", "T1021.002"},
+		Risk:          "critical", EstDuration: "~20 min",
+		BASScenarioID:  "lockbit-kill-chain",
+		ARTTechniques:  []string{"T1518.001", "T1490", "T1486", "T1070.001", "T1021.002"},
 		CalderaAdvName: "Wizard Spider",
-		Tags: []string{"ransomware", "lockbit", "wizard-spider"},
+		Tags:           []string{"ransomware", "lockbit", "wizard-spider"},
 	},
 	{
 		ID: "credential-theft", Name: "Credential Theft", ShortName: "CredTheft",
-		Description:  "Multi-vector credential harvesting: LSASS, SAM, Kerberoasting, NTLM relay probe, Credential Manager dump, and browser credential access. ~15 min.",
-		Category: "technique",
-		Tactics:  []string{"credential-access"},
+		Description:   "Multi-vector credential harvesting: LSASS, SAM, Kerberoasting, NTLM relay probe, Credential Manager dump, and browser credential access. ~15 min.",
+		Category:      "technique",
+		Tactics:       []string{"credential-access"},
 		KeyTechniques: []string{"T1003.001", "T1003.002", "T1558.003", "T1555.003", "T1110.001"},
-		Risk: "high", EstDuration: "~15 min",
-		BASScenarioID: "credential-access",
-		ARTTechniques: []string{"T1003.001", "T1003.002", "T1558.003", "T1555.003", "T1110.001"},
+		Risk:          "high", EstDuration: "~15 min",
+		BASScenarioID:  "credential-access",
+		ARTTechniques:  []string{"T1003.001", "T1003.002", "T1558.003", "T1555.003", "T1110.001"},
 		CalderaAdvName: "FIN6",
-		Tags: []string{"credential-access", "lsass", "kerberoasting"},
+		Tags:           []string{"credential-access", "lsass", "kerberoasting"},
 	},
 	{
 		ID: "lateral-movement", Name: "Lateral Movement", ShortName: "LatMov",
-		Description:  "SMB and WMI-based lateral movement chain with pass-the-hash probe, admin share enumeration, and remote execution simulation. ~20 min.",
-		Category: "technique",
-		Tactics:  []string{"lateral-movement", "credential-access", "execution"},
+		Description:   "SMB and WMI-based lateral movement chain with pass-the-hash probe, admin share enumeration, and remote execution simulation. ~20 min.",
+		Category:      "technique",
+		Tactics:       []string{"lateral-movement", "credential-access", "execution"},
 		KeyTechniques: []string{"T1021.001", "T1021.002", "T1550.002", "T1047"},
-		Risk: "high", EstDuration: "~20 min",
-		BASScenarioID: "caldera-lateral-movement",
-		ARTTechniques: []string{"T1021.001", "T1021.002", "T1550.002"},
+		Risk:          "high", EstDuration: "~20 min",
+		BASScenarioID:  "caldera-lateral-movement",
+		ARTTechniques:  []string{"T1021.001", "T1021.002", "T1550.002"},
 		CalderaAdvName: "APT29",
-		Tags: []string{"lateral-movement", "smb", "pass-the-hash"},
+		Tags:           []string{"lateral-movement", "smb", "pass-the-hash"},
 	},
 	{
 		ID: "data-exfiltration", Name: "Data Exfiltration", ShortName: "Exfil",
-		Description:  "Staged data collection and exfiltration simulation: local file staging, DNS tunnel probe, HTTPS exfil beacon, and cloud-storage upload attempt. ~15 min.",
-		Category: "technique",
-		Tactics:  []string{"collection", "exfiltration"},
+		Description:   "Staged data collection and exfiltration simulation: local file staging, DNS tunnel probe, HTTPS exfil beacon, and cloud-storage upload attempt. ~15 min.",
+		Category:      "technique",
+		Tactics:       []string{"collection", "exfiltration"},
 		KeyTechniques: []string{"T1041", "T1048.003", "T1030", "T1074.001"},
-		Risk: "medium", EstDuration: "~15 min",
-		BASScenarioID: "exposure-validation",
-		ARTTechniques: []string{"T1041", "T1048.003", "T1030", "T1074.001"},
+		Risk:          "medium", EstDuration: "~15 min",
+		BASScenarioID:  "exposure-validation",
+		ARTTechniques:  []string{"T1041", "T1048.003", "T1030", "T1074.001"},
 		CalderaAdvName: "APT36",
-		Tags: []string{"exfiltration", "dns-tunnel", "data-theft"},
+		Tags:           []string{"exfiltration", "dns-tunnel", "data-theft"},
 	},
 	{
 		ID: "insider-threat", Name: "Insider Threat", ShortName: "Insider",
-		Description:  "Scattered Spider social-engineering chain simulating privileged-access abuse: MFA fatigue probe, account enumeration, defense tool disablement, staged data access. ~20 min.",
-		Category: "insider", ThreatActor: "Scattered Spider", MITREGroup: "G1015",
-		Tactics:  []string{"initial-access", "discovery", "defense-evasion", "collection"},
+		Description: "Scattered Spider social-engineering chain simulating privileged-access abuse: MFA fatigue probe, account enumeration, defense tool disablement, staged data access. ~20 min.",
+		Category:    "insider", ThreatActor: "Scattered Spider", MITREGroup: "G1015",
+		Tactics:       []string{"initial-access", "discovery", "defense-evasion", "collection"},
 		KeyTechniques: []string{"T1078", "T1087.001", "T1562.001", "T1070.001", "T1048.003"},
-		Risk: "high", EstDuration: "~20 min",
-		BASScenarioID: "scattered-spider-kill-chain",
-		ARTTechniques: []string{"T1078", "T1087.001", "T1562.001", "T1070.001", "T1048.003"},
+		Risk:          "high", EstDuration: "~20 min",
+		BASScenarioID:  "scattered-spider-kill-chain",
+		ARTTechniques:  []string{"T1078", "T1087.001", "T1562.001", "T1070.001", "T1048.003"},
 		CalderaAdvName: "Scattered Spider",
-		Tags: []string{"insider-threat", "scattered-spider", "social-engineering"},
+		Tags:           []string{"insider-threat", "scattered-spider", "social-engineering"},
 	},
 }
 
@@ -2660,9 +2662,9 @@ func (h *Handler) GetUnifiedTechniques(w http.ResponseWriter, r *http.Request) {
 type analyticsVerdict int
 
 const (
-	verdictMissed      analyticsVerdict = 0
+	verdictMissed       analyticsVerdict = 0
 	verdictDetectedOnly analyticsVerdict = 1
-	verdictPrevented   analyticsVerdict = 2
+	verdictPrevented    analyticsVerdict = 2
 )
 
 func verdictString(v analyticsVerdict) string {
@@ -2709,7 +2711,7 @@ type PrivilegeCoverage struct {
 
 // TierStat is the prevention/detection summary for one execution tier.
 type TierStat struct {
-	Tier           string `json:"tier"`           // user | admin | system | inherited
+	Tier           string `json:"tier"` // user | admin | system | inherited
 	Attempted      int    `json:"attempted"`
 	Prevented      int    `json:"prevented"`
 	DetectedOnly   int    `json:"detectedOnly"`
@@ -2775,7 +2777,7 @@ type RunAnalyticSummary struct {
 //   limit      — max runs to include, default 20, max 100
 func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 	scenarioID := r.URL.Query().Get("scenarioId")
-	agentID    := r.URL.Query().Get("agentId")
+	agentID := r.URL.Query().Get("agentId")
 	limit := 20
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
 		limit = l
@@ -2797,13 +2799,13 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type techEntry struct {
-		name    string
-		tactic  string
-		best    analyticsVerdict // best across all runs
-		runs    int
-		prev    int
-		det     int
-		miss    int
+		name   string
+		tactic string
+		best   analyticsVerdict // best across all runs
+		runs   int
+		prev   int
+		det    int
+		miss   int
 		// per-tier tallies: tier → [attempted, prevented, detectedOnly, missed]
 		tierStats map[string]*[4]int
 	}
@@ -2811,7 +2813,7 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 		name  string
 		tiers map[string]bool
 	}
-	techMap   := map[string]*techEntry{}
+	techMap := map[string]*techEntry{}
 	tacticMap := map[string]*TacticAnalytic{}
 	privTechs := map[string]*privTechEntry{} // techniqueID → tiers seen
 	var recent []RunAnalyticSummary
@@ -2943,7 +2945,7 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 		techList = append(techList, TechniqueAnalytic{
 			TechniqueID: tid, Name: e.name, Tactic: e.tactic,
 			BestVerdict: verdictString(e.best),
-			RunCount: e.runs, Prevented: e.prev, DetectedOnly: e.det, Missed: e.miss,
+			RunCount:    e.runs, Prevented: e.prev, DetectedOnly: e.det, Missed: e.miss,
 		})
 	}
 	sort.Slice(techList, func(i, j int) bool {
@@ -2981,7 +2983,7 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if summ.Attempted > 0 {
-		summ.PreventionRate    = summ.Prevented * 100 / summ.Attempted
+		summ.PreventionRate = summ.Prevented * 100 / summ.Attempted
 		summ.DetectionCoverage = (summ.Prevented + summ.DetectedOnly) * 100 / summ.Attempted
 	}
 
@@ -3035,11 +3037,11 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(gapTechs, func(i, j int) bool { return gapTechs[i].TechniqueID < gapTechs[j].TechniqueID })
 
 	respond(w, CoverageAnalytics{
-		RunsAnalyzed: runsAnalyzed,
-		Summary:      summ,
-		ByTechnique:  techList,
-		ByTactic:     tacList,
-		RecentRuns:   recent,
+		RunsAnalyzed:      runsAnalyzed,
+		Summary:           summ,
+		ByTechnique:       techList,
+		ByTactic:          tacList,
+		RecentRuns:        recent,
 		PrivilegeCoverage: PrivilegeCoverage{ByTier: tierStats, GapTechs: gapTechs},
 	})
 }
@@ -3714,13 +3716,20 @@ func (h *Handler) GetComplianceDashboardScores(w http.ResponseWriter, r *http.Re
 // complianceShortName returns the dashboard display label for a framework ID.
 func complianceShortName(id string) string {
 	switch id {
-	case "SEBI_CSCRF":     return "SEBI CSCRF"
-	case "RBI_CSF":        return "RBI CSF"
-	case "CERT_IN":        return "CERT-In"
-	case "IRDAI_CSF":      return "IRDAI"
-	case "ISO_27001_2022": return "ISO 27001"
-	case "NIST_CSF_2":     return "NIST CSF"
-	case "PCI_DSS_V4":     return "PCI DSS v4"
+	case "SEBI_CSCRF":
+		return "SEBI CSCRF"
+	case "RBI_CSF":
+		return "RBI CSF"
+	case "CERT_IN":
+		return "CERT-In"
+	case "IRDAI_CSF":
+		return "IRDAI"
+	case "ISO_27001_2022":
+		return "ISO 27001"
+	case "NIST_CSF_2":
+		return "NIST CSF"
+	case "PCI_DSS_V4":
+		return "PCI DSS v4"
 	}
 	return id
 }

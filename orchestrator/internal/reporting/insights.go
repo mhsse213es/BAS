@@ -534,8 +534,8 @@ func humanizeTactic(slug string) string {
 // enrichment — no external API required.
 type ReadinessScore struct {
 	GroupName           string  `json:"groupName"`
-	TotalTechs          int     `json:"totalTechs"`          // techniques MITRE attributes to this group
-	TestedTechs         int     `json:"testedTechs"`         // overlap with this run
+	TotalTechs          int     `json:"totalTechs"`  // techniques MITRE attributes to this group
+	TestedTechs         int     `json:"testedTechs"` // overlap with this run
 	PreventedTechs      int     `json:"preventedTechs"`
 	DetectedTechs       int     `json:"detectedTechs"`       // not prevented but alert raised
 	AllowedTechs        int     `json:"allowedTechs"`        // not prevented, no alert
@@ -545,10 +545,10 @@ type ReadinessScore struct {
 	ReadinessBand       string  `json:"readinessBand"`       // "High"/"Medium"/"Low"
 	ConfidenceBand      string  `json:"confidenceBand"`      // "High"/"Medium"/"Low"
 	// Trend fields — populated by Engine.enrichReadinessTrends when history exists.
-	HasTrend               bool    `json:"hasTrend"`
-	TrendDirection         string  `json:"trendDirection"`          // "up"/"down"/"stable"
-	PreventionDelta        float64 `json:"preventionDelta"`         // signed delta vs previous run
-	DetectionDelta         float64 `json:"detectionDelta"`
+	HasTrend                bool    `json:"hasTrend"`
+	TrendDirection          string  `json:"trendDirection"`  // "up"/"down"/"stable"
+	PreventionDelta         float64 `json:"preventionDelta"` // signed delta vs previous run
+	DetectionDelta          float64 `json:"detectionDelta"`
 	PrevPreventionReadiness float64 `json:"prevPreventionReadiness"` // previous run value
 	PrevDetectionReadiness  float64 `json:"prevDetectionReadiness"`
 }
@@ -626,17 +626,19 @@ func buildRansomwareReadiness(matrix []TechniqueRow) []ReadinessScore {
 // exploitation probability, and ATT&CK group attribution into a Priority Tier.
 // Used by the EPSS Priority Index report section and /api/ti/priority endpoint.
 type TechniquePriority struct {
-	TechniqueID      string  `json:"techniqueId"`
-	Name             string  `json:"name"`
-	Tactic           string  `json:"tactic"`
-	Verdict          string  `json:"verdict"`          // fail/pass/blocked
-	KEV              bool    `json:"kev"`
-	KEVCount         int     `json:"kevCount"`
-	EPSSScore        float64 `json:"epssScore"`        // highest EPSS prob (0–1) among linked CVEs
-	EPSSPercentile   float64 `json:"epssPercentile"`   // percentile × 100 → 0–100 range
-	ThreatActorCount int     `json:"threatActorCount"` // ATT&CK groups that use this technique
-	PriorityScore    int     `json:"priorityScore"`    // 0–100 composite
-	PriorityTier     string  `json:"priorityTier"`     // Critical / High / Medium / Low
+	TechniqueID       string  `json:"techniqueId"`
+	Name              string  `json:"name"`
+	Tactic            string  `json:"tactic"`
+	Verdict           string  `json:"verdict"` // fail/pass/blocked
+	KEV               bool    `json:"kev"`
+	KEVCount          int     `json:"kevCount"`
+	EPSSScore         float64 `json:"epssScore"`                   // highest EPSS prob (0–1) among linked CVEs
+	EPSSPercentile    float64 `json:"epssPercentile"`              // percentile × 100 → 0–100 range
+	ThreatActorCount  int     `json:"threatActorCount"`            // ATT&CK groups that use this technique
+	PriorityScore     int     `json:"priorityScore"`               // 0–100 composite
+	PriorityTier      string  `json:"priorityTier"`                // Critical / High / Medium / Low
+	RelationshipCount int     `json:"relationshipCount,omitempty"` // scored (Active, High/Medium) CVE relationships behind KEV/EPSS
+	PrimarySource     string  `json:"primarySource,omitempty"`     // primary_source of the strongest contributing relationship
 }
 
 // computePriorityScore derives a 0–100 composite from threat signals.
@@ -702,8 +704,8 @@ func buildReadinessScores(matrix []TechniqueRow) []ReadinessScore {
 			continue
 		}
 		isPrevented := r.ExecVerdict == "pass" || r.ExecVerdict == "blocked"
-		isDetected  := !isPrevented && r.DetectionVerdict == "detected"
-		isAllowed   := !isPrevented && !isDetected && r.ExecVerdict == "fail"
+		isDetected := !isPrevented && r.DetectionVerdict == "detected"
+		isAllowed := !isPrevented && !isDetected && r.ExecVerdict == "fail"
 		rowMap[tid] = slot{isPrevented, isDetected, isAllowed}
 	}
 
@@ -730,8 +732,8 @@ func buildReadinessScores(matrix []TechniqueRow) []ReadinessScore {
 		}
 
 		prevPct := float64(prevented) / float64(tested) * 100
-		detPct  := float64(prevented+detected) / float64(tested) * 100
-		covPct  := 0.0
+		detPct := float64(prevented+detected) / float64(tested) * 100
+		covPct := 0.0
 		if len(techIDs) > 0 {
 			covPct = float64(tested) / float64(len(techIDs)) * 100
 		}

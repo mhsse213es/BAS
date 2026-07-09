@@ -1966,6 +1966,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td>
       <code style="font-size:0.8rem">{{$p.techniqueId}}</code>
       <div style="font-size:0.75rem;color:#374151">{{$p.name}}</div>
+      {{if $p.relationshipCount}}<div style="font-size:0.65rem;color:#6e7681">{{$p.relationshipCount}} scored relationship{{if ne $p.relationshipCount 1}}s{{end}}{{if $p.primarySource}} &middot; {{$p.primarySource}}{{end}}</div>{{end}}
     </td>
     <td style="font-size:0.8rem;color:#6e7681">{{humanize $p.tactic}}</td>
     <td style="text-align:right">
@@ -1999,7 +2000,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   {{end}}
   </tbody>
 </table>
-<p style="font-size:0.72rem;color:#6e7681;margin-top:10px">EPSS scores from FIRST.org (offline snapshot). KEV from CISA Known Exploited Vulnerabilities catalog. ATT&amp;CK attribution from MITRE &copy; The MITRE Corporation.</p>
+<p style="font-size:0.72rem;color:#6e7681;margin-top:10px">EPSS scores from FIRST.org (offline snapshot). KEV from CISA Known Exploited Vulnerabilities catalog. ATT&amp;CK attribution from MITRE &copy; The MITRE Corporation. CVE↔technique relationships shown here are Active with High/Medium confidence only — Low-confidence (illustrative) links are excluded from this score.</p>
 <div class="pf">
   <span>{{.agent.hostname}} &#8212; EPSS Priority Index</span>
   {{template "pf-right" .}}

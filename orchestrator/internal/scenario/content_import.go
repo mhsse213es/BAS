@@ -149,6 +149,11 @@ func SeedContent(ctx context.Context, pool *pgxpool.Pool, atomicsDir, payloadDir
 	} else if n > 0 {
 		log.Printf("[content] CVE backfill added %d technique links", n)
 	}
+	if n, err := seedRelationshipsFromLegacyCVEs(ctx, pool); err != nil {
+		log.Printf("[content] seed CVE relationships: %v", err)
+	} else if n > 0 {
+		log.Printf("[content] Relationship Store: migrated %d technique-CVE relationships", n)
+	}
 
 	if !force && version != "" {
 		var recVer string
@@ -520,6 +525,71 @@ func backfillTechniqueCVEs(ctx context.Context, pool *pgxpool.Pool) (int, error)
 			}
 			inserted += int(tag.RowsAffected())
 		}
+	}
+	return inserted, nil
+}
+
+// seedRelationshipsFromLegacyCVEs converts each (technique_id, cve_id) pair
+// already present in technique_cves into a relationship in
+// technique_cve_relationships, for pairs that don't have one yet. This is the
+// one-time migration path from the old bare join to the evidence-backed
+// Relationship Store: legacy links carry no provenance beyond "someone curated
+// this", so they land as relationship_type=Commonly Associated,
+// confidence=Medium, primary_source=Migrated, with a single evidence item
+// recording the legacy origin. Additive and idempotent — the unique constraint
+// on (technique_id, cve_id, relationship_type) makes re-runs no-ops.
+func seedRelationshipsFromLegacyCVEs(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT tc.technique_id, tc.cve_id FROM technique_cves tc
+		WHERE NOT EXISTS (
+			SELECT 1 FROM technique_cve_relationships r
+			WHERE r.technique_id = tc.technique_id AND r.cve_id = tc.cve_id
+			  AND r.relationship_type = 'Commonly Associated'
+		)`)
+	if err != nil {
+		return 0, err
+	}
+	type pair struct{ techID, cveID string }
+	var pairs []pair
+	for rows.Next() {
+		var p pair
+		if err := rows.Scan(&p.techID, &p.cveID); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		pairs = append(pairs, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	inserted := 0
+	for _, p := range pairs {
+		var relID string
+		err := pool.QueryRow(ctx, `
+			INSERT INTO technique_cve_relationships
+				(technique_id, cve_id, relationship_type, proposed_confidence,
+				 effective_confidence, primary_source, rationale, created_by, updated_by)
+			VALUES ($1,$2,'Commonly Associated','Medium','Medium','Migrated',
+				'Migrated from the legacy curated CVE mapping.','migration','migration')
+			ON CONFLICT (technique_id, cve_id, relationship_type) DO NOTHING
+			RETURNING id`, p.techID, p.cveID).Scan(&relID)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				continue // ON CONFLICT DO NOTHING hit — already migrated
+			}
+			return inserted, err
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO relationship_evidence
+				(relationship_id, source, reference_type, reference_value, note, added_by)
+			VALUES ($1,'Migrated','Internal Note','',
+				'Carried over from technique_cves at Relationship Store migration.','migration')`,
+			relID); err != nil {
+			return inserted, err
+		}
+		inserted++
 	}
 	return inserted, nil
 }

@@ -259,6 +259,20 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanUploadEvidence)).Post("/api/verifications/{id}/evidence", h.UploadVerificationEvidence)
 		r.With(auth.RequirePermission(auth.CanDeleteEvidence)).Delete("/api/evidence/{id}", h.DeleteEvidence)
 
+		// CVE↔ATT&CK Relationship Store — evidence-backed, confidence-scored
+		// technique-CVE relationships. Reads are Viewer+; curation and review are
+		// gated on separate permissions so confidence promotion/demotion isn't
+		// self-service for the same analyst who proposed it.
+		r.Get("/api/techniques/{id}/relationships", h.ListTechniqueRelationships)
+		r.Get("/api/relationships/{id}", h.GetRelationship)
+		r.Get("/api/relationships/{id}/evidence", h.ListRelationshipEvidence)
+		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Post("/api/relationships", h.CreateRelationship)
+		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Put("/api/relationships/{id}", h.UpdateRelationship)
+		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Post("/api/relationships/{id}/evidence", h.AddRelationshipEvidence)
+		r.With(auth.RequirePermission(auth.CanCurateThreatIntel)).Delete("/api/relationship-evidence/{id}", h.DeleteRelationshipEvidence)
+		r.With(auth.RequirePermission(auth.CanReviewThreatIntel)).Post("/api/relationships/{id}/review", h.ReviewRelationship)
+		r.With(auth.RequirePermission(auth.CanReviewThreatIntel)).Post("/api/relationships/{id}/status", h.SetRelationshipStatus)
+
 		// Admin only — config + user management + connector
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin))

@@ -14,25 +14,33 @@ const (
 	CanDeleteEvidence Permission = "verification:evidence:delete" // soft-delete evidence
 	CanReview         Permission = "verification:review"          // approve/reject in the review pipeline
 	CanExport         Permission = "verification:export"          // export verification data
+
+	// CVE↔ATT&CK Relationship Store permissions.
+	CanCurateThreatIntel Permission = "threatintel:curate" // create/edit relationships + evidence
+	CanReviewThreatIntel Permission = "threatintel:review" // promote/demote effective confidence, change lifecycle status
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
 // read-only and holds none of the verification permissions.
 var rolePermissions = map[Role]map[Permission]bool{
 	RoleAdmin: {
-		CanVerify:         true,
-		CanUploadEvidence: true,
-		CanDeleteEvidence: true,
-		CanReview:         true,
-		CanExport:         true,
+		CanVerify:            true,
+		CanUploadEvidence:    true,
+		CanDeleteEvidence:    true,
+		CanReview:            true,
+		CanExport:            true,
+		CanCurateThreatIntel: true,
+		CanReviewThreatIntel: true,
 	},
 	RoleAnalyst: {
-		CanVerify:         true,
-		CanUploadEvidence: true,
-		CanReview:         true,
-		CanExport:         true,
-		// CanDeleteEvidence intentionally withheld — deletion is admin-only so a
-		// single analyst cannot quietly remove audit material.
+		CanVerify:            true,
+		CanUploadEvidence:    true,
+		CanReview:            true,
+		CanExport:            true,
+		CanCurateThreatIntel: true,
+		// CanDeleteEvidence and CanReviewThreatIntel intentionally withheld —
+		// deletion and confidence review are admin-only so a single analyst
+		// cannot quietly remove audit material or self-approve their own claim.
 	},
 	RoleViewer: {},
 }
@@ -47,7 +55,8 @@ func HasPermission(role Role, perm Permission) bool {
 func Permissions(role Role) []Permission {
 	set := rolePermissions[role]
 	out := make([]Permission, 0, len(set))
-	for _, p := range []Permission{CanVerify, CanUploadEvidence, CanDeleteEvidence, CanReview, CanExport} {
+	for _, p := range []Permission{CanVerify, CanUploadEvidence, CanDeleteEvidence, CanReview, CanExport,
+		CanCurateThreatIntel, CanReviewThreatIntel} {
 		if set[p] {
 			out = append(out, p)
 		}
