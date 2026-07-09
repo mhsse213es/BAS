@@ -18,6 +18,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/verification"
 )
 
 // ScenarioResolver is the slice of the scenario engine the reporting layer needs
@@ -29,10 +30,21 @@ type ScenarioResolver interface {
 	ResolveStepExpectations(step scenario.Step) ([]scenario.ExpectedDetection, []scenario.ProfileRef)
 }
 
+// VerificationResolver is the slice of the Verification Store the reporting
+// layer READS to overlay analyst/API attestations on top of the automatic
+// on-host verdicts. *verification.Store satisfies it. Kept as an interface so
+// reporting stays testable and nil-safe: when nil, only automatic verification
+// contributes (exactly the SP1 behaviour).
+type VerificationResolver interface {
+	CurrentForRun(ctx context.Context, runID string) (map[string]verification.Record, error)
+	EvidenceCountsForRun(ctx context.Context, runID string) (map[string]int, error)
+}
+
 // Engine aggregates data from the DB into structured reports.
 type Engine struct {
-	db        *pgxpool.Pool
-	scenarios ScenarioResolver // nil until WithScenarios is called; Detection Validation stays inactive while nil
+	db            *pgxpool.Pool
+	scenarios     ScenarioResolver     // nil until WithScenarios is called; Detection Validation stays inactive while nil
+	verifications VerificationResolver // nil until WithVerifications is called; only automatic verdicts contribute while nil
 }
 
 func NewEngine(db *pgxpool.Pool) *Engine { return &Engine{db: db} }
@@ -41,6 +53,14 @@ func NewEngine(db *pgxpool.Pool) *Engine { return &Engine{db: db} }
 // Validation section. Returns the engine for chaining.
 func (e *Engine) WithScenarios(r ScenarioResolver) *Engine {
 	e.scenarios = r
+	return e
+}
+
+// WithVerifications attaches the Verification Store so manual (SP2) and API
+// (SP3) attestations overlay the automatic verdicts. Returns the engine for
+// chaining.
+func (e *Engine) WithVerifications(r VerificationResolver) *Engine {
+	e.verifications = r
 	return e
 }
 
@@ -1434,7 +1454,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	report.TopFindings = buildTopFindings(results, scenarioName)
 	report.ObjectiveRisks = buildObjectiveRisks(results)
 	report.Detection = buildDetectionSummary(results)
-	report.DetectionValidation = e.buildDetectionValidation(scenarioID, results)
+	report.DetectionValidation = e.buildDetectionValidation(ctx, runID, scenarioID, results)
 	report.AttackPath = buildAttackPath(results)
 	report.AttackFlow = BuildAttackFlow(results)
 	report.AttackFlowSummary = summariseAttackFlow(report.AttackFlow)
@@ -1619,7 +1639,9 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 	report.TopFindings = buildTopFindings(allResults, scenarioName)
 	report.ObjectiveRisks = buildObjectiveRisks(allResults)
 	report.Detection = buildDetectionSummary(allResults)
-	report.DetectionValidation = e.buildDetectionValidation(scenarioID, allResults)
+	// Campaign aggregates many runs; per-run manual attestations are overlaid on
+	// the per-run report, not the campaign roll-up. Pass runID="" → automatic only.
+	report.DetectionValidation = e.buildDetectionValidation(ctx, "", scenarioID, allResults)
 	report.AttackPath = buildAttackPath(allResults)
 	report.TechniqueMatrix = buildTechniqueMatrix(allResults, nil)
 	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)

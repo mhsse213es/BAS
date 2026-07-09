@@ -10,6 +10,7 @@ package reporting
 // I/O — SP2 (manual) and SP3 (API) add verifiers without changing it.
 
 import (
+	"context"
 	"regexp"
 	"sort"
 	"strings"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/verification"
 )
 
 // Verification statuses for a single expected detection.
@@ -148,6 +150,34 @@ func (apiVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 	return r
 }
 
+// applyOverride replaces an automatic verdict with a stored attestation. Only an
+// Approved workflow yields a resolved status that feeds Coverage; Pending,
+// NeedsReview and Rejected all read as Pending (unresolved) for scoring so an
+// in-flight review never inflates the score.
+func applyOverride(vr *VerificationResult, ov StoredVerification) {
+	if ov.Source != "" {
+		vr.Source = ov.Source
+	}
+	vr.VerifiedBy = ov.VerifiedBy
+	if !ov.VerifiedAt.IsZero() {
+		vr.Timestamp = ov.VerifiedAt.UTC()
+	}
+	if ov.WorkflowState != verification.StateApproved {
+		vr.Status = StatusPending
+		return
+	}
+	switch ov.Result {
+	case verification.ResultDetected:
+		vr.Status = StatusDetected
+	case verification.ResultNotDetected:
+		vr.Status = StatusNotDetected
+	case verification.ResultNotApplicable:
+		vr.Status = StatusNotApplicable
+	default:
+		vr.Status = StatusPending
+	}
+}
+
 // providerMatches reports whether an observed provider/control string
 // corresponds to an expected provider registry key. Matches on the provider's
 // display name or the distinctive trailing token of its key
@@ -210,16 +240,39 @@ type DomainValidationRow struct {
 	VerificationCompleteness float64 `json:"verificationCompleteness"`
 }
 
-// ExpectationRow is one expected-vs-observed row in the detail table.
+// ExpectationRow is one expected-vs-observed row in the detail table. The
+// attestation columns (Analyst … Comments) are populated from the Verification
+// Store when a manual/API verdict overrides the automatic one.
 type ExpectationRow struct {
-	TechniqueID  string `json:"techniqueId"`
-	ExpectedID   string `json:"expectedId"`
-	Provider     string `json:"provider"`
-	Domain       string `json:"domain"`
-	Confidence   string `json:"confidence"`
-	Verification string `json:"verification"`
-	Status       string `json:"status"`
-	Source       string `json:"source,omitempty"`
+	TechniqueID   string `json:"techniqueId"`
+	ExpectedID    string `json:"expectedId"`
+	Provider      string `json:"provider"`
+	Domain        string `json:"domain"`
+	Confidence    string `json:"confidence"`
+	Verification  string `json:"verification"`
+	Status        string `json:"status"`
+	Source        string `json:"source,omitempty"`
+	WorkflowState string `json:"workflowState,omitempty"` // Pending/NeedsReview/Approved/Rejected
+	Analyst       string `json:"analyst,omitempty"`       // who attested
+	Timestamp     string `json:"timestamp,omitempty"`     // when attested (RFC3339)
+	EvidenceCount int    `json:"evidenceCount"`
+	Integrity     string `json:"integrity,omitempty"` // "SHA-256 recorded at upload"
+	Comments      string `json:"comments,omitempty"`
+}
+
+// StoredVerification is the reporting-layer view of one active attestation from
+// the Verification Store. It carries only what scoring and the report table
+// need, so the pure builder never imports the store's persistence types.
+type StoredVerification struct {
+	Result        string    // Detected / NotDetected / NotApplicable
+	WorkflowState string    // Pending / NeedsReview / Approved / Rejected
+	Source        string    // automatic / manual / api / imported / migration
+	VerifiedBy    string    // analyst id or connector name
+	VerifiedAt    time.Time // attestation time
+	Note          string    // analyst comment
+	AlertID       string    // linked alert / ticket reference
+	EvidenceCount int       // non-deleted evidence items attached
+	HashRecorded  bool      // at least one evidence item carries a content hash
 }
 
 // GapFinding is a False Silence — an expected (required/recommended) control that
@@ -249,7 +302,7 @@ type UnexpectedDetectionRow struct {
 // runs the verification engine over them. Returns an empty (HasData=false)
 // section when the resolver is unwired, the scenario is unknown, or no step
 // declares any expectation — all of which render exactly as before.
-func (e *Engine) buildDetectionValidation(scenarioID string, results []models.SimulationResult) DetectionValidationSection {
+func (e *Engine) buildDetectionValidation(ctx context.Context, runID, scenarioID string, results []models.SimulationResult) DetectionValidationSection {
 	if e.scenarios == nil || scenarioID == "" {
 		return DetectionValidationSection{}
 	}
@@ -270,12 +323,57 @@ func (e *Engine) buildDetectionValidation(scenarioID string, results []models.Si
 			ProfileRefs: refs,
 		})
 	}
-	return BuildDetectionValidation(specs, results)
+	// Overlay stored attestations (manual SP2 / API SP3). Off-host expectations
+	// the automatic engine could only mark Pending become resolved here once an
+	// analyst or connector has verified them. Kept read-only: reporting consumes
+	// the store, never writes it.
+	overrides := e.storedVerifications(ctx, runID)
+	return BuildDetectionValidationWithStore(specs, results, overrides)
 }
 
-// BuildDetectionValidation runs the verification engine over every step's
-// expectations and rolls the results into the report section.
+// storedVerifications loads the run's active attestations from the Verification
+// Store and folds in each verification's evidence count. Returns nil when the
+// store is unwired or runID is empty (campaign roll-up), so scoring falls back
+// to automatic-only — identical to SP1.
+func (e *Engine) storedVerifications(ctx context.Context, runID string) map[string]StoredVerification {
+	if e.verifications == nil || runID == "" {
+		return nil
+	}
+	recs, err := e.verifications.CurrentForRun(ctx, runID)
+	if err != nil || len(recs) == 0 {
+		return nil
+	}
+	counts, _ := e.verifications.EvidenceCountsForRun(ctx, runID)
+	out := make(map[string]StoredVerification, len(recs))
+	for expID, r := range recs {
+		n := counts[r.ID]
+		out[expID] = StoredVerification{
+			Result:        r.Result,
+			WorkflowState: r.WorkflowState,
+			Source:        r.Source,
+			VerifiedBy:    r.VerifiedBy,
+			VerifiedAt:    r.VerifiedAt,
+			Note:          r.Note,
+			AlertID:       r.AlertID,
+			EvidenceCount: n,
+			HashRecorded:  n > 0,
+		}
+	}
+	return out
+}
+
+// BuildDetectionValidation runs the automatic verification engine over every
+// step's expectations and rolls the results into the report section. Equivalent
+// to BuildDetectionValidationWithStore with no stored attestations.
 func BuildDetectionValidation(specs []StepDetectionSpec, results []models.SimulationResult) DetectionValidationSection {
+	return BuildDetectionValidationWithStore(specs, results, nil)
+}
+
+// BuildDetectionValidationWithStore is BuildDetectionValidation plus an overlay
+// of stored attestations keyed by expectation id. Where a stored attestation
+// exists it is authoritative — the automatic verdict is replaced by the
+// analyst/API verdict, and only an Approved workflow feeds Coverage.
+func BuildDetectionValidationWithStore(specs []StepDetectionSpec, results []models.SimulationResult, overrides map[string]StoredVerification) DetectionValidationSection {
 	sec := DetectionValidationSection{}
 
 	// Any expectations at all?
@@ -313,6 +411,32 @@ func BuildDetectionValidation(specs []StepDetectionSpec, results []models.Simula
 
 		for _, exp := range expected {
 			vr := verifyExpectation(exp, ev)
+			row := ExpectationRow{
+				TechniqueID:   spec.TechniqueID,
+				ExpectedID:    exp.ID,
+				Provider:      providerDisplay(exp.Provider),
+				Confidence:    exp.Confidence,
+				Verification:  scenario.ResolveVerification(exp),
+				Status:        vr.Status,
+				Source:        vr.Source,
+				WorkflowState: verification.StateApproved, // automatic verdicts are final
+			}
+			// A stored attestation (manual/API) overrides the automatic verdict.
+			if ov, ok := overrides[exp.ID]; ok {
+				applyOverride(&vr, ov)
+				row.Status = vr.Status
+				row.Source = vr.Source
+				row.WorkflowState = ov.WorkflowState
+				row.Analyst = ov.VerifiedBy
+				if !ov.VerifiedAt.IsZero() {
+					row.Timestamp = ov.VerifiedAt.UTC().Format(time.RFC3339)
+				}
+				row.EvidenceCount = ov.EvidenceCount
+				row.Comments = ov.Note
+				if ov.HashRecorded {
+					row.Integrity = "SHA-256 recorded at upload"
+				}
+			}
 			domain := vr.Domain
 			dw := domAgg[domain]
 			if dw == nil {
@@ -321,19 +445,12 @@ func BuildDetectionValidation(specs []StepDetectionSpec, results []models.Simula
 			}
 			w := scenario.ConfidenceWeight(exp.Confidence)
 
-			sec.Rows = append(sec.Rows, ExpectationRow{
-				TechniqueID:  spec.TechniqueID,
-				ExpectedID:   exp.ID,
-				Provider:     providerDisplay(exp.Provider),
-				Domain:       domain,
-				Confidence:   exp.Confidence,
-				Verification: scenario.ResolveVerification(exp),
-				Status:       vr.Status,
-				Source:       vr.Source,
-			})
+			row.Domain = domain
+			sec.Rows = append(sec.Rows, row)
 
-			// Optional expectations are informational: counted nowhere.
-			if exp.Confidence == scenario.ConfidenceOptional {
+			// Optional expectations are informational; NotApplicable attestations
+			// are excluded by the analyst — neither is scored.
+			if exp.Confidence == scenario.ConfidenceOptional || vr.Status == StatusNotApplicable {
 				continue
 			}
 

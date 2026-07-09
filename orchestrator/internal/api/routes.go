@@ -247,6 +247,18 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/compliance/report", h.GetComplianceReport)
 		r.Get("/api/compliance/scores", h.GetComplianceDashboardScores)
 
+		// Detection Validation SP2 — manual verification queue + evidence store.
+		// Reads are Viewer+; writes are gated on fine-grained permissions so a
+		// large SOC can separate verifier, reviewer and evidence-deletion rights.
+		r.Get("/api/me/permissions", h.GetMyPermissions)
+		r.Get("/api/scenarios/runs/{runId}/verifications", h.ListRunVerifications)
+		r.Get("/api/scenarios/runs/{runId}/verifications/{expectationId}/history", h.GetVerificationHistory)
+		r.Get("/api/verifications/{id}/evidence", h.ListVerificationEvidence)
+		r.Get("/api/evidence/{id}/download", h.DownloadEvidence)
+		r.With(auth.RequirePermission(auth.CanVerify)).Post("/api/verifications", h.CreateVerification)
+		r.With(auth.RequirePermission(auth.CanUploadEvidence)).Post("/api/verifications/{id}/evidence", h.UploadVerificationEvidence)
+		r.With(auth.RequirePermission(auth.CanDeleteEvidence)).Delete("/api/evidence/{id}", h.DeleteEvidence)
+
 		// Admin only — config + user management + connector
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin))

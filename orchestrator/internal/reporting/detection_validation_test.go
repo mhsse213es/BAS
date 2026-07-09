@@ -2,9 +2,11 @@ package reporting
 
 import (
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/verification"
 )
 
 func endpointExp(id, provider, confidence string) scenario.ExpectedDetection {
@@ -141,6 +143,66 @@ func TestBuildDetectionValidationNoExpectations(t *testing.T) {
 	sec := BuildDetectionValidation(nil, []models.SimulationResult{{ID: "T1000"}})
 	if sec.HasData {
 		t.Error("HasData should be false with no expectations (backward compatible)")
+	}
+}
+
+// siemExp is a required off-host (manual) SIEM expectation — Pending until an
+// analyst attests it.
+func siemExp(id string) scenario.ExpectedDetection {
+	return scenario.ExpectedDetection{
+		ID:         id,
+		Provider:   "microsoft_sentinel",
+		Confidence: scenario.ConfidenceRequired,
+		Finding:    scenario.ExpectedFinding{Title: "gap: " + id, Severity: "High"},
+	}
+}
+
+func TestBuildDetectionValidationStoreOverlay(t *testing.T) {
+	specs := []StepDetectionSpec{{
+		TechniqueID: "T1078",
+		Expected:    []scenario.ExpectedDetection{siemExp("siem-signin")},
+	}}
+	results := []models.SimulationResult{{ID: "T1078", DetectionVerdict: "undetected"}}
+
+	// No attestation → the required SIEM expectation is Pending: it counts toward
+	// the Expected denominator but is unresolved, so Coverage/Completeness are 0.
+	base := BuildDetectionValidation(specs, results)
+	if base.Expected != 1 || base.Verified != 0 {
+		t.Fatalf("no-attestation: Expected=%d Verified=%d want 1/0", base.Expected, base.Verified)
+	}
+	if base.Coverage != 0 || base.VerificationCompleteness != 0 {
+		t.Errorf("no-attestation: Coverage=%.0f Completeness=%.0f want 0/0", base.Coverage, base.VerificationCompleteness)
+	}
+
+	// Approved + Detected → resolved detected → full coverage + completeness.
+	det := BuildDetectionValidationWithStore(specs, results, map[string]StoredVerification{
+		"siem-signin": {Result: verification.ResultDetected, WorkflowState: verification.StateApproved,
+			Source: verification.SourceManual, VerifiedBy: "amy", VerifiedAt: time.Now(), EvidenceCount: 2, HashRecorded: true},
+	})
+	if det.Detected != 1 || det.Coverage != 100 || det.VerificationCompleteness != 100 {
+		t.Errorf("approved-detected: Detected=%d Coverage=%.0f Completeness=%.0f want 1/100/100", det.Detected, det.Coverage, det.VerificationCompleteness)
+	}
+	if len(det.Rows) != 1 || det.Rows[0].Analyst != "amy" || det.Rows[0].EvidenceCount != 2 || det.Rows[0].Integrity == "" {
+		t.Errorf("approved-detected: row attestation columns not populated: %+v", det.Rows[0])
+	}
+
+	// NeedsReview must NOT count — an in-flight review can't inflate the score.
+	rev := BuildDetectionValidationWithStore(specs, results, map[string]StoredVerification{
+		"siem-signin": {Result: verification.ResultDetected, WorkflowState: verification.StateNeedsReview, Source: verification.SourceManual},
+	})
+	if rev.Verified != 0 || rev.Coverage != 0 {
+		t.Errorf("needs-review: Verified=%d Coverage=%.0f want 0/0 (unresolved)", rev.Verified, rev.Coverage)
+	}
+
+	// Approved + NotApplicable → excluded from scoring entirely.
+	na := BuildDetectionValidationWithStore(specs, results, map[string]StoredVerification{
+		"siem-signin": {Result: verification.ResultNotApplicable, WorkflowState: verification.StateApproved, Source: verification.SourceManual},
+	})
+	if na.Expected != 0 {
+		t.Errorf("not-applicable: Expected=%d want 0 (excluded)", na.Expected)
+	}
+	if len(na.Rows) != 1 {
+		t.Errorf("not-applicable: still expected 1 detail row, got %d", len(na.Rows))
 	}
 }
 

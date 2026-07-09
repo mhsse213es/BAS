@@ -2885,6 +2885,10 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <th style="text-align:left">Verification</th>
     <th style="text-align:left">Status</th>
     <th style="text-align:left">Observed Source</th>
+    <th style="text-align:left">Analyst</th>
+    <th style="text-align:left">Verified</th>
+    <th style="text-align:left">Evidence</th>
+    <th style="text-align:left">Integrity</th>
   </tr></thead>
   <tbody>
   {{range $dv.rows}}
@@ -2894,8 +2898,15 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td style="font-size:0.8rem;text-transform:capitalize;color:#6e7681">{{.domain}}</td>
     <td style="font-size:0.8rem;text-transform:capitalize">{{.confidence}}</td>
     <td style="font-size:0.8rem;text-transform:capitalize;color:#6e7681">{{.verification}}</td>
-    <td><span style="font-size:0.76rem;font-weight:700;color:{{dvStatusColor .status}}">{{dvStatusLabel .status}}</span></td>
+    <td>
+      <span style="font-size:0.76rem;font-weight:700;color:{{dvStatusColor .status}}">{{dvStatusLabel .status}}</span>
+      {{if .workflowState}}{{if ne .workflowState "Approved"}}<span style="font-size:0.64rem;color:#d29922;display:block">{{.workflowState}}</span>{{end}}{{end}}
+    </td>
     <td style="font-size:0.76rem;color:#6e7681;max-width:160px;word-break:break-word">{{if .source}}{{.source}}{{else}}—{{end}}</td>
+    <td style="font-size:0.76rem;color:#6e7681">{{if .analyst}}{{.analyst}}{{else}}—{{end}}</td>
+    <td style="font-size:0.72rem;color:#6e7681;white-space:nowrap">{{if .timestamp}}{{.timestamp}}{{else}}—{{end}}</td>
+    <td style="font-size:0.76rem;color:#6e7681;text-align:center">{{if .evidenceCount}}{{.evidenceCount}}{{else}}—{{end}}</td>
+    <td style="font-size:0.7rem;color:#238636;max-width:150px">{{if .integrity}}✓ {{.integrity}}{{else}}—{{end}}</td>
   </tr>
   {{end}}
   </tbody>

@@ -29,6 +29,7 @@ import (
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ticketing"
+	"github.com/audspect/bas/internal/verification"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -56,6 +57,7 @@ type Handler struct {
 	exerciseStore    *exercise.Store
 	exerciseExecutor *exercise.Executor
 	exerciseChain    *exercise.EvidenceChain
+	verification     *verification.Store // nil when not loaded — SP2 verification store
 }
 
 // New creates a Handler.

@@ -28,6 +28,7 @@ import (
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ticketing"
+	"github.com/audspect/bas/internal/verification"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -156,8 +157,16 @@ func main() {
 		log.Printf("[+] Compliance mapper loaded (%d frameworks)", len(complianceMapper.Frameworks()))
 	}
 
+	// ── Verification Store (Detection Validation SP2) ─────────────────────
+	// Independent store for analyst/API attestations + evidence. Reporting
+	// consumes it read-only; the API writes to it.
+	verificationStore := verification.NewStore(pool)
+	log.Println("[+] Verification store ready")
+
 	// ── Reporting Engine ──────────────────────────────────────────────────
-	reportingEngine := reporting.NewEngine(pool).WithScenarios(engine)
+	reportingEngine := reporting.NewEngine(pool).
+		WithScenarios(engine).
+		WithVerifications(verificationStore)
 	log.Println("[+] Reporting engine ready")
 
 	// ── Ticketing Manager ─────────────────────────────────────────────────
@@ -225,7 +234,8 @@ func main() {
 		WithScheduler(scheduler).
 		WithTicketing(ticketingManager).
 		WithLicensePath(cfg.LicensePath).
-		WithExercise(exStore, exExecutor, exChain)
+		WithExercise(exStore, exExecutor, exChain).
+		WithVerificationStore(verificationStore)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), exTracker)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────

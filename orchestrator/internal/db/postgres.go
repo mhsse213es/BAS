@@ -733,6 +733,71 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_siem_corr_run    ON siem_correlations (run_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_siem_corr_agent  ON siem_correlations (agent_id, correlated_at DESC)`,
+
+		// ── Detection Validation SP2: manual-verification store ───────────────
+		// verification_history is APPEND-ONLY (audit-log semantics). A new
+		// attestation inserts a fresh row (active=true), points supersedes_id at
+		// the prior active row, and flips that row to active=false — never an
+		// in-place UPDATE of a status. The partial unique index guarantees at most
+		// one active row per (run_id, expectation_id) even under concurrent writes.
+		// result (Detected/NotDetected/NotApplicable) is kept distinct from
+		// workflow_state (Pending/NeedsReview/Approved/Rejected): only an Approved
+		// workflow with a Detected/NotDetected result feeds Coverage.
+		`CREATE TABLE IF NOT EXISTS verification_history (
+			id                  text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			run_id              text        NOT NULL,
+			expectation_id      text        NOT NULL,
+			profile_name        text        NOT NULL DEFAULT '',
+			profile_version     int         NOT NULL DEFAULT 0,
+			technique_id        text        NOT NULL DEFAULT '',
+			domain              text        NOT NULL DEFAULT '',
+			provider            text        NOT NULL DEFAULT '',
+			result              text        NOT NULL DEFAULT '',
+			workflow_state      text        NOT NULL DEFAULT 'Pending',
+			verification_source text        NOT NULL DEFAULT 'manual',
+			note                text        NOT NULL DEFAULT '',
+			alert_id            text        NOT NULL DEFAULT '',
+			verified_by         text        NOT NULL DEFAULT '',
+			verified_at         timestamptz NOT NULL DEFAULT NOW(),
+			supersedes_id       text        NOT NULL DEFAULT '',
+			active              boolean     NOT NULL DEFAULT true
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_verif_active_one
+			ON verification_history (run_id, expectation_id) WHERE active`,
+		`CREATE INDEX IF NOT EXISTS idx_verif_run     ON verification_history (run_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_verif_lookup  ON verification_history (run_id, expectation_id, verified_at DESC)`,
+
+		// verification_evidence separates metadata from the bytes so storage can
+		// move to filesystem/S3/Azure/URL later with NO schema migration — only a
+		// new storage_type + storage_key written by the store. Every upload is
+		// hashed (hash_algorithm + content_hash) at receipt. Soft-delete keeps the
+		// row (evidence is audit material) and records who/when.
+		`CREATE TABLE IF NOT EXISTS verification_evidence (
+			id                text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			verification_id   text        NOT NULL,
+			storage_type      text        NOT NULL DEFAULT 'database',
+			storage_key       text        NOT NULL DEFAULT '',
+			hash_algorithm    text        NOT NULL DEFAULT 'SHA-256',
+			content_hash      text        NOT NULL DEFAULT '',
+			original_filename text        NOT NULL DEFAULT '',
+			display_filename  text        NOT NULL DEFAULT '',
+			mime              text        NOT NULL DEFAULT '',
+			size              bigint      NOT NULL DEFAULT 0,
+			uploaded_by       text        NOT NULL DEFAULT '',
+			uploaded_at       timestamptz NOT NULL DEFAULT NOW(),
+			deleted           boolean     NOT NULL DEFAULT false,
+			deleted_by        text        NOT NULL DEFAULT '',
+			deleted_at        timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_verif_evidence_vid ON verification_evidence (verification_id) WHERE NOT deleted`,
+
+		// verification_evidence_blob holds bytes only when storage_type='database'.
+		// Kept in its own table so the metadata row stays light and a move to
+		// external storage just stops writing here.
+		`CREATE TABLE IF NOT EXISTS verification_evidence_blob (
+			id     text  PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			bytes  bytea NOT NULL
+		)`,
 	}
 
 	for _, s := range stmts {
