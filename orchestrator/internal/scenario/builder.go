@@ -538,7 +538,7 @@ func buildCalderaAllWindowsSteps(calderaURL, apiKey string) ([]ScenarioStep, err
 		})
 	}
 	if len(steps) == 0 {
-		return nil, fmt.Errorf("Caldera returned no abilities with a Windows executor")
+		return nil, fmt.Errorf("caldera returned no abilities with a Windows executor")
 	}
 	return steps, nil
 }

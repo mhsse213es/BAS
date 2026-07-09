@@ -1,0 +1,60 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orchestrator
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: orchestrator/go.mod
+
+      - name: gofmt check
+        run: |
+          fmt_out=$(gofmt -l .)
+          if [ -n "$fmt_out" ]; then
+            echo "The following files are not gofmt'd:"
+            echo "$fmt_out"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: staticcheck
+        run: staticcheck ./...
+
+      - name: go build
+        env:
+          CGO_ENABLED: "0"
+        run: go build ./...
+
+      - name: go test (race + coverage)
+        run: go test ./... -race -coverprofile=coverage.out
+
+      - name: coverage HTML report
+        run: go tool cover -html=coverage.out -o coverage.html
+
+      - name: coverage package summary
+        run: go run ./scripts/coveragesummary -profile=coverage.out | tee coverage-summary.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            orchestrator/coverage.out
+            orchestrator/coverage.html
+            orchestrator/coverage-summary.txt
