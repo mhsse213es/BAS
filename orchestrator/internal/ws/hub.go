@@ -106,7 +106,7 @@ func (h *Hub) ServeBrowserWS(w http.ResponseWriter, r *http.Request) {
 
 // SendToAgent delivers a message to a specific connected agent.
 // Returns false if the agent is not currently connected.
-func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) bool {
+func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) (sent bool) {
 	h.mu.RLock()
 	c, ok := h.agents[agentID]
 	h.mu.RUnlock()
@@ -114,6 +114,17 @@ func (h *Hub) SendToAgent(agentID string, msg models.WSMessage) bool {
 		return false
 	}
 	b, _ := json.Marshal(msg)
+	// readPump closes c.send when the agent disconnects, and does so
+	// independently of (and slightly before) this Hub removing the agent
+	// from h.agents — so a disconnect landing between our lookup above and
+	// the send below can hit an already-closed channel. Sending on a closed
+	// channel panics unconditionally; recover and report it exactly like
+	// "not connected", which is what it functionally is.
+	defer func() {
+		if recover() != nil {
+			sent = false
+		}
+	}()
 	select {
 	case c.send <- b:
 		return true
