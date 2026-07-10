@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -33,6 +34,17 @@ import (
 	"github.com/audspect/bas/internal/verification"
 	"github.com/audspect/bas/internal/ws"
 )
+
+// isUniqueViolation reports whether err is a Postgres unique-constraint
+// violation (SQLSTATE 23505) — the losing side of a concurrent insert.
+// Same pattern as internal/relationships and internal/verification.
+func isUniqueViolation(err error) bool {
+	var pgErr interface{ SQLState() string }
+	if errors.As(err, &pgErr) {
+		return pgErr.SQLState() == "23505"
+	}
+	return false
+}
 
 // Handler holds shared dependencies for all API handlers.
 type Handler struct {
@@ -913,6 +925,11 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		runID, sc.ID, agentID, runName, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth,
 	)
 	if err != nil {
+		if isUniqueViolation(err) {
+			// Lost the race to a concurrent dispatch to the same agent —
+			// report the same outcome a pre-existing running run would.
+			return "", "agent busy", nil
+		}
 		return "", "", err
 	}
 

@@ -89,6 +89,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// dispatched. Needed to interpret results from dynamically-built ART/Caldera
 		// runs, whose steps are not stored in the scenario's static Steps.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS step_meta jsonb NOT NULL DEFAULT '{}'`,
+		// Prevents a TOCTOU race in dispatchRun's busy guard: without this,
+		// two concurrent dispatch requests to the same idle agent can both
+		// pass the "no running run" check and both insert a 'running' row.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_scenario_runs_agent_running ON scenario_runs(agent_id) WHERE status = 'running'`,
 		// reverted: list of endpoint changes the agent rolled back after the run
 		// (registry keys, files) — surfaced as the report's cleanup-verification.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS reverted jsonb NOT NULL DEFAULT '[]'`,
