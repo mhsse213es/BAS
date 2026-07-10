@@ -19,6 +19,15 @@ func step(id string, deps ...string) PlanStep {
 	return PlanStep{ID: id, Type: StepTypeNotify, DependsOn: deps}
 }
 
+func TestValidationErrors_Error(t *testing.T) {
+	if got := (ValidationErrors{"a", "b"}).Error(); got != "a; b" {
+		t.Fatalf("Error() = %q, want %q", got, "a; b")
+	}
+	if got := (ValidationErrors{}).Error(); got != "" {
+		t.Fatalf("empty Error() = %q, want empty", got)
+	}
+}
+
 func TestValidatePlan_ValidLinearAndDiamond(t *testing.T) {
 	linear := &Plan{Steps: []PlanStep{step("a"), step("b", "a"), step("c", "b")}}
 	if errs := ValidatePlan(linear); len(errs) != 0 {

@@ -358,6 +358,123 @@ func TestBuiltinHandlers_SynchronousGuards(t *testing.T) {
 	})
 }
 
+func TestAdvance_ApprovalTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		ctx := context.Background()
+		ex := seedRunningExecution(t, store, e, []PlanStep{{ID: "ap", Type: StepTypeApproval, TimeoutSecs: 1}})
+
+		// UpsertStepExecution does not persist started_at from the struct (in the
+		// real flow it is set by the Running transition), so back-date it via SQL.
+		se := &StepExecution{ExecutionID: ex.ID, StepID: "ap", StepType: StepTypeApproval, Status: StepWaiting}
+		if err := store.UpsertStepExecution(ctx, se); err != nil {
+			t.Fatalf("UpsertStepExecution: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`UPDATE exercise_step_executions SET started_at = NOW() - interval '1 minute' WHERE execution_id=$1 AND step_id=$2`,
+			ex.ID, "ap"); err != nil {
+			t.Fatalf("back-date started_at: %v", err)
+		}
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "ap")
+		if got.Status != StepCompleted {
+			t.Fatalf("timed-out approval status = %q, want completed", got.Status)
+		}
+	})
+}
+
+func TestAdvance_EventWaitTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		ctx := context.Background()
+		ex := seedRunningExecution(t, store, e, []PlanStep{{ID: "wa", Type: StepTypeWaitForAgent, TimeoutSecs: 1}})
+
+		se := &StepExecution{ExecutionID: ex.ID, StepID: "wa", StepType: StepTypeWaitForAgent, Status: StepWaiting}
+		if err := store.UpsertStepExecution(ctx, se); err != nil {
+			t.Fatalf("UpsertStepExecution: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`UPDATE exercise_step_executions SET started_at = NOW() - interval '1 minute' WHERE execution_id=$1 AND step_id=$2`,
+			ex.ID, "wa"); err != nil {
+			t.Fatalf("back-date started_at: %v", err)
+		}
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "wa")
+		if got.Status != StepCompleted {
+			t.Fatalf("timed-out event-wait status = %q, want completed", got.Status)
+		}
+	})
+}
+
+func TestAdvance_ResolvesVariables(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		ev := NewEvidenceChain(store)
+		reg := NewRegistry()
+		e := NewExecutor(store, ev, reg, NewPollScheduler(time.Hour), nil)
+		ctx := context.Background()
+
+		// A handler that records the (already-resolved) NotifyMsg it receives.
+		var seen string
+		reg.Register(StepTypeNotify, StepHandlerFunc(func(_ context.Context, ex *Execution, ps *PlanStep, _ *StepExecution) error {
+			seen = ps.Config.NotifyMsg
+			return store.SetStepStatus(context.Background(), ex.ID, ps.ID, StepCompleted, "")
+		}))
+
+		p := &Plan{Name: "P",
+			Variables: []VarDef{{Name: "Msg", Type: VarTypeString}},
+			Steps:     []PlanStep{{ID: "n", Type: StepTypeNotify, Config: StepConfig{NotifyMsg: "hi ${Msg}"}}}}
+		if err := store.CreatePlan(ctx, p); err != nil {
+			t.Fatalf("CreatePlan: %v", err)
+		}
+		ex := &Execution{PlanID: p.ID, Name: "R", Status: ExecDraft, Variables: map[string]string{"Msg": "there"}}
+		if err := store.CreateExecution(ctx, ex); err != nil {
+			t.Fatalf("CreateExecution: %v", err)
+		}
+		if err := e.LaunchExecution(ctx, ex.ID); err != nil {
+			t.Fatalf("LaunchExecution: %v", err)
+		}
+		got, _ := store.GetExecution(ctx, ex.ID)
+		if err := e.advance(ctx, got); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+		if seen != "hi there" {
+			t.Fatalf("dispatchStep did not resolve ${Msg}: handler saw %q", seen)
+		}
+	})
+}
+
+func TestCreatePlan_VersionPreserved(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		ctx := context.Background()
+		p := &Plan{Name: "P", Version: 3, Steps: []PlanStep{{ID: "a", Type: StepTypeNotify}}}
+		if err := store.CreatePlan(ctx, p); err != nil {
+			t.Fatalf("CreatePlan: %v", err)
+		}
+		got, _ := store.GetPlan(ctx, p.ID)
+		if got.Version != 3 {
+			t.Fatalf("Version = %d, want 3 (max1 must preserve values >= 1)", got.Version)
+		}
+	})
+}
+
 // ex2step fetches the PlanStep for a given step id from the execution's plan.
 func ex2step(store *Store, ex *Execution, stepID string) PlanStep {
 	plan, _ := store.GetPlan(context.Background(), ex.PlanID)
