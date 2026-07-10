@@ -24,7 +24,7 @@ type TestDB struct {
 
 // newTestDB starts a postgres:16-alpine container (matching production —
 // see packaging/compose/docker-compose.yml), applies the real schema via
-// db.EnsureSchema + db.EnsureContentSchema, and returns a ready harness.
+// db.EnsureSchema + db.EnsureContentSchema + db.EnsureExerciseSchema, and returns a ready harness.
 func newTestDB(ctx context.Context) (*TestDB, error) {
 	container, err := tcpostgres.Run(ctx, "postgres:16-alpine",
 		tcpostgres.WithDatabase("bas_test"),
@@ -66,6 +66,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		pool.Close()
 		_ = container.Terminate(ctx)
 		return nil, fmt.Errorf("testutil: EnsureContentSchema: %w", err)
+	}
+	if err := db.EnsureExerciseSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(ctx)
+		return nil, fmt.Errorf("testutil: EnsureExerciseSchema: %w", err)
 	}
 
 	return &TestDB{
