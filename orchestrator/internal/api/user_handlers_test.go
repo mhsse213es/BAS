@@ -15,6 +15,73 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func TestCreateUser_MalformedBody(t *testing.T) {
+	h := New(nil, ws.NewHub(), nil, testJWTSecret)
+	req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader([]byte("{not json")))
+	rec := httptest.NewRecorder()
+	h.CreateUser(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestChangePassword_NoClaimsUnauthorized(t *testing.T) {
+	h := New(nil, ws.NewHub(), nil, testJWTSecret)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/change-password", nil)
+	rec := httptest.NewRecorder()
+	h.ChangePassword(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (no claims in context)", rec.Code)
+	}
+}
+
+func TestChangePassword_MalformedBodyAndShortPassword(t *testing.T) {
+	userID := "does-not-matter-claims-check-runs-first"
+	malformed := authedRequest(t, http.MethodPost, "/api/auth/change-password", bytes.NewReader([]byte("{not json")), auth.RoleViewer, userID)
+	h := New(nil, ws.NewHub(), nil, testJWTSecret)
+	if rec := callAuthed(h.ChangePassword, malformed); rec.Code != http.StatusBadRequest {
+		t.Fatalf("malformed body: status = %d, want 400", rec.Code)
+	}
+
+	shortBody, _ := json.Marshal(map[string]string{"currentPassword": "whatever", "newPassword": "short"})
+	shortReq := authedRequest(t, http.MethodPost, "/api/auth/change-password", bytes.NewReader(shortBody), auth.RoleViewer, userID)
+	if rec := callAuthed(h.ChangePassword, shortReq); rec.Code != http.StatusBadRequest {
+		t.Fatalf("short new password: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestResetPassword_MalformedBodyAndShortPassword(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		adminID := seedUser(t, pool, "priya", "password123", "admin", true)
+		targetID := seedUser(t, pool, "raj", "password123", "viewer", true)
+
+		malformed := withURLParam(authedRequest(t, http.MethodPost, "/api/users/"+targetID+"/reset-password", bytes.NewReader([]byte("{not json")), auth.RoleAdmin, adminID), "id", targetID)
+		if rec := callAuthed(h.ResetPassword, malformed); rec.Code != http.StatusBadRequest {
+			t.Fatalf("malformed body: status = %d, want 400", rec.Code)
+		}
+
+		shortBody, _ := json.Marshal(map[string]string{"newPassword": "short"})
+		shortReq := withURLParam(authedRequest(t, http.MethodPost, "/api/users/"+targetID+"/reset-password", bytes.NewReader(shortBody), auth.RoleAdmin, adminID), "id", targetID)
+		if rec := callAuthed(h.ResetPassword, shortReq); rec.Code != http.StatusBadRequest {
+			t.Fatalf("short new password: status = %d, want 400", rec.Code)
+		}
+	})
+}
+
+func TestGetMyPermissions_NoClaimsUnauthorized(t *testing.T) {
+	h := New(nil, ws.NewHub(), nil, testJWTSecret)
+	req := httptest.NewRequest(http.MethodGet, "/api/me/permissions", nil)
+	rec := httptest.NewRecorder()
+	h.GetMyPermissions(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (no claims in context)", rec.Code)
+	}
+}
+
 func TestCreateUser_ValidationAndDuplicate(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

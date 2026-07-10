@@ -173,6 +173,16 @@ func TestLogin_LegacyBcryptHashUpgradesTransparently(t *testing.T) {
 	})
 }
 
+func TestSetup_MalformedBody(t *testing.T) {
+	h := New(nil, ws.NewHub(), nil, testJWTSecret)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/setup", bytes.NewReader([]byte("{not json")))
+	rec := httptest.NewRecorder()
+	h.Setup(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
 func TestSetup_FirstRunThenConflict(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
