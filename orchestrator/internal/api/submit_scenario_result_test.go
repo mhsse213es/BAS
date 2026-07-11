@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -281,6 +282,428 @@ func TestSubmitScenarioResult_UnknownTaskIDFallsBackToCustom(t *testing.T) {
 		}
 		if len(results) != 1 || results[0].Framework != "custom" {
 			t.Fatalf("results = %+v, want one result with Framework=custom fallback", results)
+		}
+	})
+}
+
+func TestSubmitScenarioResult_ScoreComputedWhenResultsNonEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		seedRunRow(t, pool, "score-run", "sc-score", "agent-score", "running")
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "score-run", ScenarioID: "sc-score", AgentID: "agent-score",
+			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var scoreRaw []byte
+		if err := pool.QueryRow(context.Background(), `SELECT score FROM scenario_runs WHERE id=$1`, "score-run").Scan(&scoreRaw); err != nil {
+			t.Fatalf("read score: %v", err)
+		}
+		var score models.Score
+		if err := json.Unmarshal(scoreRaw, &score); err != nil {
+			t.Fatalf("decode score: %v", err)
+		}
+		if score.Trend != "Baseline" {
+			t.Fatalf("trend = %q, want Baseline (no prior run)", score.Trend)
+		}
+		if score.TotalTechniques != 1 {
+			t.Fatalf("totalTechniques = %d, want 1", score.TotalTechniques)
+		}
+	})
+}
+
+func TestSubmitScenarioResult_ScoreSkippedWhenResultsEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		seedRunRow(t, pool, "score-empty-run", "sc-score-empty", "agent-score-empty", "running")
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "score-empty-run", ScenarioID: "sc-score-empty", AgentID: "agent-score-empty",
+			Partial: true, Results: []scenario.ExecResult{},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var scoreRaw []byte
+		if err := pool.QueryRow(context.Background(), `SELECT score FROM scenario_runs WHERE id=$1`, "score-empty-run").Scan(&scoreRaw); err != nil {
+			t.Fatalf("read score: %v", err)
+		}
+		if len(scoreRaw) != 0 {
+			t.Fatalf("score = %s, want untouched/NULL (no results to score)", scoreRaw)
+		}
+	})
+}
+
+func TestSubmitScenarioResult_PrevScorePickedFromSameScenarioAgent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+
+		priorScore := models.Score{Trend: "Baseline", TacticBreakdown: map[string]models.TacticScore{}, CriticalFailures: []models.CriticalFailure{}}
+		priorScoreJSON, _ := json.Marshal(priorScore)
+		if _, err := pool.Exec(context.Background(), `INSERT INTO agents (agent_id, hostname, state) VALUES ('agent-prev','h','active')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at, completed_at, score)
+			 VALUES ('prev-run','sc-prev','agent-prev','x','completed',NOW() - interval '1 hour',NOW() - interval '1 hour',$1)`,
+			priorScoreJSON); err != nil {
+			t.Fatalf("seed prior run: %v", err)
+		}
+		seedRunRow(t, pool, "current-run", "sc-prev", "agent-prev", "running")
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "current-run", ScenarioID: "sc-prev", AgentID: "agent-prev",
+			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var scoreRaw []byte
+		if err := pool.QueryRow(context.Background(), `SELECT score FROM scenario_runs WHERE id=$1`, "current-run").Scan(&scoreRaw); err != nil {
+			t.Fatalf("read score: %v", err)
+		}
+		var score models.Score
+		_ = json.Unmarshal(scoreRaw, &score)
+		if score.Trend == "Baseline" {
+			t.Fatalf("trend = Baseline, want a prior score to have been picked up (non-Baseline)")
+		}
+	})
+}
+
+func TestSubmitScenarioResult_PrevScoreExcludesOtherAgentsAndScenarios(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+
+		priorScore := models.Score{Trend: "Baseline", TacticBreakdown: map[string]models.TacticScore{}, CriticalFailures: []models.CriticalFailure{}}
+		priorScoreJSON, _ := json.Marshal(priorScore)
+		if _, err := pool.Exec(context.Background(), `INSERT INTO agents (agent_id, hostname, state) VALUES ('agent-other','h','active')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		// Same scenario, different agent — must NOT be picked up as prevScore.
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at, completed_at, score)
+			 VALUES ('prev-other-agent','sc-excl','agent-other','x','completed',NOW() - interval '1 hour',NOW() - interval '1 hour',$1)`,
+			priorScoreJSON); err != nil {
+			t.Fatalf("seed prior run (other agent): %v", err)
+		}
+		seedRunRow(t, pool, "current-excl-run", "sc-excl", "agent-excl", "running")
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "current-excl-run", ScenarioID: "sc-excl", AgentID: "agent-excl",
+			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var scoreRaw []byte
+		if err := pool.QueryRow(context.Background(), `SELECT score FROM scenario_runs WHERE id=$1`, "current-excl-run").Scan(&scoreRaw); err != nil {
+			t.Fatalf("read score: %v", err)
+		}
+		var score models.Score
+		_ = json.Unmarshal(scoreRaw, &score)
+		if score.Trend != "Baseline" {
+			t.Fatalf("trend = %q, want Baseline (a different agent's prior run must not be picked up)", score.Trend)
+		}
+	})
+}
+
+func TestSubmitScenarioResult_HygieneScoreOrchestration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		engine := scenario.NewEngine(t.TempDir())
+		cases := []struct {
+			name        string
+			verdicts    []string
+			wantHygiene float64
+			wantLeaked  int
+		}{
+			{"no cleanup verdicts at all", []string{"", ""}, 100.0, 0},
+			{"all reverted", []string{"reverted", "reverted"}, 100.0, 0},
+			{"one leaked of two cleanable", []string{"reverted", "leaked"}, 50.0, 1},
+			{"one partial of two cleanable", []string{"reverted", "partial"}, 50.0, 1},
+		}
+		for i, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				h := New(pool, ws.NewHub(), engine, "")
+				runID := fmt.Sprintf("hygiene-run-%d", i)
+				seedRunRow(t, pool, runID, "sc-hygiene", "agent-hygiene", "running")
+
+				results := make([]scenario.ExecResult, len(tc.verdicts))
+				for j, v := range tc.verdicts {
+					results[j] = scenario.ExecResult{TaskID: fmt.Sprintf("t%d", j), ExitCode: 0, Stdout: "PASS: ok", CleanupVerdict: v}
+				}
+				body := rawResultBody(t, scenario.RawRunResult{RunID: runID, ScenarioID: "sc-hygiene", AgentID: "agent-hygiene", Results: results})
+				rec := httptest.NewRecorder()
+				h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+				if rec.Code != http.StatusOK {
+					t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+				}
+
+				var hygiene float64
+				var leaked int
+				if err := pool.QueryRow(context.Background(), `SELECT hygiene_score, leaked_steps FROM scenario_runs WHERE id=$1`, runID).Scan(&hygiene, &leaked); err != nil {
+					t.Fatalf("read hygiene: %v", err)
+				}
+				if hygiene != tc.wantHygiene {
+					t.Fatalf("hygiene_score = %v, want %v", hygiene, tc.wantHygiene)
+				}
+				if leaked != tc.wantLeaked {
+					t.Fatalf("leaked_steps = %d, want %d", leaked, tc.wantLeaked)
+				}
+			})
+		}
+	})
+}
+
+func TestSubmitScenarioResult_FindingsFireOnCompletedRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{{Name: "step-0", TechniqueID: "T1059", Framework: "custom", Command: "echo 0"}}
+		sc, engine := minimalLiveScenario(t, "sc-findings", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "agent-findings"
+		seedRunRow(t, pool, "findings-run", sc.ID, agentID, "running")
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "findings-run", ScenarioID: sc.ID, AgentID: agentID,
+			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, Stdout: "FAIL: allowed"}},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM findings WHERE agent_id=$1 AND technique_id='T1059'`, agentID,
+		).Scan(&count); err != nil {
+			t.Fatalf("count findings: %v", err)
+		}
+		if count == 0 {
+			t.Fatal("expected a findings row for a completed run with a FAIL result, got none")
+		}
+	})
+}
+
+func TestSubmitScenarioResult_FindingsSkippedOnPartialRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{{Name: "step-0", TechniqueID: "T1059", Framework: "custom", Command: "echo 0"}}
+		sc, engine := minimalLiveScenario(t, "sc-findings-partial", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "agent-findings-partial"
+		seedRunRow(t, pool, "findings-partial-run", sc.ID, agentID, "running")
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "findings-partial-run", ScenarioID: sc.ID, AgentID: agentID, Partial: true,
+			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, Stdout: "FAIL: allowed"}},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM findings WHERE agent_id=$1 AND technique_id='T1059'`, agentID,
+		).Scan(&count); err != nil {
+			t.Fatalf("count findings: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("expected no findings row for a Partial run (must not heal on incomplete data), got %d", count)
+		}
+	})
+}
+
+func TestSubmitScenarioResult_VariantFanOutsFireForVariantRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{
+			{Name: "base-1", TechniqueID: "T1059", Framework: "custom", Command: "echo b1", Executor: "powershell"},
+		}
+		sc, engine := minimalLiveScenario(t, "sc-variant-fanout", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "agent-variant-fanout"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		runID, skip, err := h.dispatchRun(context.Background(), sc, agentID, dispatchOpts{Mode: "telemetry", VariantDepth: scenario.VariantDepthQuick})
+		if err != nil || skip != "" {
+			t.Fatalf("variant dispatch: skip=%q err=%v", skip, err)
+		}
+		fake.WaitForMessage(t, 2*time.Second)
+
+		var metaRaw []byte
+		if err := pool.QueryRow(context.Background(), `SELECT step_meta FROM scenario_runs WHERE id=$1`, runID).Scan(&metaRaw); err != nil {
+			t.Fatalf("read step_meta: %v", err)
+		}
+		var meta map[string]scenario.StepMeta
+		if err := json.Unmarshal(metaRaw, &meta); err != nil {
+			t.Fatalf("decode step_meta: %v", err)
+		}
+		var variantTaskID string
+		for taskID, m := range meta {
+			if m.BaseTaskID != "" {
+				variantTaskID = taskID
+				break
+			}
+		}
+		if variantTaskID == "" {
+			t.Fatal("expected at least one variant step in step_meta")
+		}
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: runID, ScenarioID: sc.ID, AgentID: agentID,
+			Results: []scenario.ExecResult{{TaskID: variantTaskID, ExitCode: 0, Stdout: "PASS: blocked"}},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM scenario_variant_results WHERE run_id=$1`, runID,
+		).Scan(&count); err != nil {
+			t.Fatalf("count variant results: %v", err)
+		}
+		if count == 0 {
+			t.Fatal("expected a scenario_variant_results row for a variant-bearing run, got none")
+		}
+	})
+}
+
+func TestSubmitScenarioResult_VariantFanOutsNoOpForNonVariantRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{{Name: "step-0", TechniqueID: "T1059", Framework: "custom", Command: "echo 0"}}
+		sc, engine := minimalLiveScenario(t, "sc-no-variant-fanout", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "agent-no-variant-fanout"
+		// step_meta left at its '{}' default — no dispatch, no variant meta.
+		seedRunRow(t, pool, "no-variant-run", sc.ID, agentID, "running")
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "no-variant-run", ScenarioID: sc.ID, AgentID: agentID,
+			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, Stdout: "PASS: ok"}},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM scenario_variant_results WHERE run_id=$1`, "no-variant-run",
+		).Scan(&count); err != nil {
+			t.Fatalf("count variant results: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("expected no scenario_variant_results rows for a non-variant run, got %d", count)
+		}
+	})
+}
+
+func TestSubmitScenarioResult_BroadcastsToConnectedBrowser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		seedRunRow(t, pool, "broadcast-run", "sc-broadcast", "agent-broadcast", "running")
+		browser := startFakeBrowser(t, h.hub)
+		defer browser.Disconnect(t)
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "broadcast-run", ScenarioID: "sc-broadcast", AgentID: "agent-broadcast",
+			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		env := browser.WaitForMessage(t, 2*time.Second)
+		if env.Type != models.MsgScenarioResult {
+			t.Fatalf("message type = %q, want %q", env.Type, models.MsgScenarioResult)
+		}
+		if env.AgentID != "agent-broadcast" {
+			t.Fatalf("message agentId = %q, want agent-broadcast", env.AgentID)
+		}
+		var data struct {
+			RunID      string `json:"runId"`
+			ScenarioID string `json:"scenarioId"`
+			AgentID    string `json:"agentId"`
+			Status     string `json:"status"`
+		}
+		if err := json.Unmarshal(env.Data, &data); err != nil {
+			t.Fatalf("decode broadcast data: %v", err)
+		}
+		if data.RunID != "broadcast-run" || data.ScenarioID != "sc-broadcast" || data.AgentID != "agent-broadcast" || data.Status != "completed" {
+			t.Fatalf("broadcast data = %+v, want matching runId/scenarioId/agentId/status=completed", data)
+		}
+	})
+}
+
+func TestSubmitScenarioResult_NoBrowsersConnected_StillReturns200(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		seedRunRow(t, pool, "no-browser-run", "sc-no-browser", "agent-no-browser", "running")
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "no-browser-run", ScenarioID: "sc-no-browser", AgentID: "agent-no-browser",
+			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
+		})
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
 	})
 }
