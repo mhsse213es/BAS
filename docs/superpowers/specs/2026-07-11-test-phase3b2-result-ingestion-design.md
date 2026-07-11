@@ -58,8 +58,9 @@ agent is unreachable.
   logic) — only that `SubmitScenarioResult` picks the right interpretation
   path (`Checks` vs `Results`) and falls back correctly on an unknown
   `TaskID`.
-- A full audit-log matrix for `CancelRun` — only confirms an entry is
-  written on both branches; exhaustive audit-log behavior is 3a's territory.
+- `CancelRun`'s `h.auditLog` call — fire-and-forget goroutine, same
+  async-fan-out exclusion as `SubmitScenarioResult`'s three background
+  fan-outs; audit logging's own correctness is 3a's territory.
 
 ## File Structure
 
@@ -199,7 +200,11 @@ omission for a gap.
 2. `TestCancelRun_TerminalStatus` — table-driven: `completed`, `partial`, `failed` → each 409, row unchanged
 3. `TestCancelRun_Running_AgentOnline` — fake agent receives `MsgCommandCancel{runId}`; response `{runId, status:"cancelling"}`; DB row still `running` after the call
 4. `TestCancelRun_Running_AgentOffline` — DB flips to `partial` with `completed_at` set; response `{runId, status:"partial"}`
-5. `TestCancelRun_AuditLogWritten` — both branches write an audit-log entry (existence check only)
+Note: `h.auditLog` is fire-and-forget (dispatches its DB insert in a
+goroutine — see `audit.go:39`), so it falls under the same async-fan-out
+exclusion already agreed for `SubmitScenarioResult`. No test asserts on the
+audit-log row for `CancelRun`; audit logging's own correctness is 3a's
+territory.
 
 ## Verification
 
