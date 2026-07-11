@@ -63,6 +63,44 @@ func TestSubmitScenarioResult_MAC_Matrix(t *testing.T) {
 	})
 }
 
+// The agent-token gate (validateAgentAuth) is a separate, earlier trust
+// boundary than the MAC: it runs first and rejects before the body is even
+// read. The MAC matrix always passes a matching token, so this test owns the
+// wrong-token path and confirms it rejects before any run mutation.
+func TestSubmitScenarioResult_AgentTokenRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		engine := scenario.NewEngine(t.TempDir())
+		h := New(pool, ws.NewHub(), engine, "").WithAgentSecret("s3cr3t")
+		seedRunRow(t, pool, "token-guard-run", "sc-token-guard", "agent-token-guard", "running")
+
+		body := rawResultBody(t, scenario.RawRunResult{
+			RunID: "token-guard-run", ScenarioID: "sc-token-guard", AgentID: "agent-token-guard",
+			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: should never persist"}},
+		})
+		// Wrong X-Agent-Token; MAC would be valid, but the token gate runs first.
+		req := submitResultReq("wrong-token", signResultMAC("s3cr3t", body), body)
+		rec := httptest.NewRecorder()
+		h.SubmitScenarioResult(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", rec.Code)
+		}
+
+		var status string
+		var completedAt *time.Time
+		if err := pool.QueryRow(context.Background(),
+			`SELECT status, completed_at FROM scenario_runs WHERE id = $1`, "token-guard-run",
+		).Scan(&status, &completedAt); err != nil {
+			t.Fatalf("read run: %v", err)
+		}
+		if status != "running" || completedAt != nil {
+			t.Fatalf("run was mutated despite agent-token rejection: status=%q completedAt=%v", status, completedAt)
+		}
+	})
+}
+
 func TestSubmitScenarioResult_MAC_RejectionPrecedesMutation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

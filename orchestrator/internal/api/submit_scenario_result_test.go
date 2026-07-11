@@ -15,6 +15,30 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// submitResultOK submits raw with valid (bypass) auth and asserts 200.
+func submitResultOK(t *testing.T, h *Handler, raw scenario.RawRunResult) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.SubmitScenarioResult(rec, validSubmitResultReq("", rawResultBody(t, raw)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("submit result: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+// readRunResults decodes the run's persisted results column.
+func readRunResults(t *testing.T, pool *pgxpool.Pool, runID string) []models.SimulationResult {
+	t.Helper()
+	var resultsRaw []byte
+	if err := pool.QueryRow(context.Background(), `SELECT results FROM scenario_runs WHERE id=$1`, runID).Scan(&resultsRaw); err != nil {
+		t.Fatalf("read results: %v", err)
+	}
+	var results []models.SimulationResult
+	if err := json.Unmarshal(resultsRaw, &results); err != nil {
+		t.Fatalf("decode results: %v", err)
+	}
+	return results
+}
+
 func TestSubmitScenarioResult_MissingRunID(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
@@ -73,37 +97,19 @@ func TestSubmitScenarioResult_REPLACENotAppend(t *testing.T) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		seedRunRow(t, pool, "replace-run", "sc-missing", "agent-replace", "running")
 
-		first := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "replace-run", ScenarioID: "sc-missing", AgentID: "agent-replace",
 			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: first"}},
 		})
-		rec1 := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec1, validSubmitResultReq("", first))
-		if rec1.Code != http.StatusOK {
-			t.Fatalf("first submit: status = %d", rec1.Code)
-		}
-
-		second := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "replace-run", ScenarioID: "sc-missing", AgentID: "agent-replace",
 			Results: []scenario.ExecResult{
 				{TaskID: "t1", ExitCode: 0, Stdout: "FAIL: second-a"},
 				{TaskID: "t2", ExitCode: 0, Stdout: "PASS: second-b"},
 			},
 		})
-		rec2 := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec2, validSubmitResultReq("", second))
-		if rec2.Code != http.StatusOK {
-			t.Fatalf("second submit: status = %d", rec2.Code)
-		}
 
-		var resultsRaw []byte
-		if err := pool.QueryRow(context.Background(), `SELECT results FROM scenario_runs WHERE id=$1`, "replace-run").Scan(&resultsRaw); err != nil {
-			t.Fatalf("read results: %v", err)
-		}
-		var results []models.SimulationResult
-		if err := json.Unmarshal(resultsRaw, &results); err != nil {
-			t.Fatalf("decode results: %v", err)
-		}
+		results := readRunResults(t, pool, "replace-run")
 		if len(results) != 2 {
 			t.Fatalf("results has %d entries, want 2 (REPLACE, not append)", len(results))
 		}
@@ -130,15 +136,10 @@ func TestSubmitScenarioResult_LateSubmissionHealsPartialToCompleted(t *testing.T
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		seedRunRow(t, pool, "heal-run", "sc-heal", "agent-heal", "partial")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "heal-run", ScenarioID: "sc-heal", AgentID: "agent-heal",
 			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: late but complete"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var status string
 		if err := pool.QueryRow(context.Background(), `SELECT status FROM scenario_runs WHERE id=$1`, "heal-run").Scan(&status); err != nil {
@@ -158,15 +159,10 @@ func TestSubmitScenarioResult_PartialFlag_SetsPartialStatus(t *testing.T) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		seedRunRow(t, pool, "partial-flag-run", "sc-partial-flag", "agent-partial-flag", "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "partial-flag-run", ScenarioID: "sc-partial-flag", AgentID: "agent-partial-flag", Partial: true,
 			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: incomplete run"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var status string
 		var completedAt *time.Time
@@ -192,24 +188,12 @@ func TestSubmitScenarioResult_ResultsInterpretedViaSteps(t *testing.T) {
 		h := New(pool, ws.NewHub(), engine, "")
 		seedRunRow(t, pool, "interp-run", sc.ID, "agent-interp", "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "interp-run", ScenarioID: sc.ID, AgentID: "agent-interp",
 			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, Stdout: "PASS: ok"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
-		var resultsRaw []byte
-		if err := pool.QueryRow(context.Background(), `SELECT results FROM scenario_runs WHERE id=$1`, "interp-run").Scan(&resultsRaw); err != nil {
-			t.Fatalf("read results: %v", err)
-		}
-		var results []models.SimulationResult
-		if err := json.Unmarshal(resultsRaw, &results); err != nil {
-			t.Fatalf("decode results: %v", err)
-		}
+		results := readRunResults(t, pool, "interp-run")
 		if len(results) != 1 || results[0].Technique.ID != "T1059" || results[0].Result != models.ResultPass {
 			t.Fatalf("results = %+v, want one T1059 pass result derived via scenario.Interpret", results)
 		}
@@ -224,7 +208,7 @@ func TestSubmitScenarioResult_ChecksTakePriorityOverResults(t *testing.T) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		seedRunRow(t, pool, "checks-run", "sc-checks", "agent-checks", "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "checks-run", ScenarioID: "sc-checks", AgentID: "agent-checks",
 			Results: []scenario.ExecResult{{TaskID: "should-be-ignored", ExitCode: 0, Stdout: "PASS: ignored"}},
 			Checks: []scenario.SimCheckResult{{
@@ -232,22 +216,47 @@ func TestSubmitScenarioResult_ChecksTakePriorityOverResults(t *testing.T) {
 				Tactic: "defense-evasion", Result: "pass", Severity: "High",
 			}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
-		var resultsRaw []byte
-		if err := pool.QueryRow(context.Background(), `SELECT results FROM scenario_runs WHERE id=$1`, "checks-run").Scan(&resultsRaw); err != nil {
-			t.Fatalf("read results: %v", err)
-		}
-		var results []models.SimulationResult
-		if err := json.Unmarshal(resultsRaw, &results); err != nil {
-			t.Fatalf("decode results: %v", err)
-		}
+		results := readRunResults(t, pool, "checks-run")
 		if len(results) != 1 || results[0].ID != "chk-1" || results[0].Technique.ID != "T1218" {
 			t.Fatalf("results = %+v, want exactly the Checks entry (Results must be ignored when Checks is present)", results)
+		}
+	})
+}
+
+// The Checks path derives a severity when the agent omits one: first from the
+// technique's tactic, then falling back to "Medium". This is the handler's own
+// derivation (not a called subsystem), so it's in scope.
+func TestSubmitScenarioResult_ChecksSeverityFallback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		seedRunRow(t, pool, "sev-fallback-run", "sc-sev-fallback", "agent-sev-fallback", "running")
+
+		// chk-default: no severity, no tactic → must default to "Medium".
+		// chk-tactic:  no severity, but a tactic → must derive a non-empty
+		//              severity from the tactic (not the "Medium" default).
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: "sev-fallback-run", ScenarioID: "sc-sev-fallback", AgentID: "agent-sev-fallback",
+			Checks: []scenario.SimCheckResult{
+				{ID: "chk-default", TechniqueID: "T1059", TechniqueName: "x", Result: "pass"},
+				{ID: "chk-tactic", TechniqueID: "T1003", TechniqueName: "y", Tactic: "credential-access", Result: "pass"},
+			},
+		})
+
+		results := readRunResults(t, pool, "sev-fallback-run")
+		byID := map[string]models.SimulationResult{}
+		for _, r := range results {
+			byID[r.ID] = r
+		}
+		if got := byID["chk-default"].Severity; got != "Medium" {
+			t.Fatalf("chk-default severity = %q, want Medium (no severity, no tactic)", got)
+		}
+		got := byID["chk-tactic"].Severity
+		if got == "" || got == "Medium" {
+			t.Fatalf("chk-tactic severity = %q, want a non-empty tactic-derived value distinct from the Medium default", got)
 		}
 	})
 }
@@ -262,24 +271,12 @@ func TestSubmitScenarioResult_UnknownTaskIDFallsBackToCustom(t *testing.T) {
 		h := New(pool, ws.NewHub(), engine, "")
 		seedRunRow(t, pool, "unknown-task-run", sc.ID, "agent-unknown-task", "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "unknown-task-run", ScenarioID: sc.ID, AgentID: "agent-unknown-task",
 			Results: []scenario.ExecResult{{TaskID: "not-in-scenario-or-step-meta", ExitCode: 0, Stdout: "PASS: ok"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
-		var resultsRaw []byte
-		if err := pool.QueryRow(context.Background(), `SELECT results FROM scenario_runs WHERE id=$1`, "unknown-task-run").Scan(&resultsRaw); err != nil {
-			t.Fatalf("read results: %v", err)
-		}
-		var results []models.SimulationResult
-		if err := json.Unmarshal(resultsRaw, &results); err != nil {
-			t.Fatalf("decode results: %v", err)
-		}
+		results := readRunResults(t, pool, "unknown-task-run")
 		if len(results) != 1 || results[0].Framework != "custom" {
 			t.Fatalf("results = %+v, want one result with Framework=custom fallback", results)
 		}
@@ -294,15 +291,10 @@ func TestSubmitScenarioResult_ScoreComputedWhenResultsNonEmpty(t *testing.T) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		seedRunRow(t, pool, "score-run", "sc-score", "agent-score", "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "score-run", ScenarioID: "sc-score", AgentID: "agent-score",
 			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var scoreRaw []byte
 		if err := pool.QueryRow(context.Background(), `SELECT score FROM scenario_runs WHERE id=$1`, "score-run").Scan(&scoreRaw); err != nil {
@@ -329,15 +321,10 @@ func TestSubmitScenarioResult_ScoreSkippedWhenResultsEmpty(t *testing.T) {
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		seedRunRow(t, pool, "score-empty-run", "sc-score-empty", "agent-score-empty", "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "score-empty-run", ScenarioID: "sc-score-empty", AgentID: "agent-score-empty",
 			Partial: true, Results: []scenario.ExecResult{},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var scoreRaw []byte
 		if err := pool.QueryRow(context.Background(), `SELECT score FROM scenario_runs WHERE id=$1`, "score-empty-run").Scan(&scoreRaw); err != nil {
@@ -369,15 +356,10 @@ func TestSubmitScenarioResult_PrevScorePickedFromSameScenarioAgent(t *testing.T)
 		}
 		seedRunRow(t, pool, "current-run", "sc-prev", "agent-prev", "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "current-run", ScenarioID: "sc-prev", AgentID: "agent-prev",
 			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var scoreRaw []byte
 		if err := pool.QueryRow(context.Background(), `SELECT score FROM scenario_runs WHERE id=$1`, "current-run").Scan(&scoreRaw); err != nil {
@@ -410,17 +392,22 @@ func TestSubmitScenarioResult_PrevScoreExcludesOtherAgentsAndScenarios(t *testin
 			priorScoreJSON); err != nil {
 			t.Fatalf("seed prior run (other agent): %v", err)
 		}
+		// Same agent, different scenario — must NOT be picked up either.
+		if _, err := pool.Exec(context.Background(), `INSERT INTO agents (agent_id, hostname, state) VALUES ('agent-excl','h','active')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at, completed_at, score)
+			 VALUES ('prev-other-scenario','sc-other','agent-excl','x','completed',NOW() - interval '1 hour',NOW() - interval '1 hour',$1)`,
+			priorScoreJSON); err != nil {
+			t.Fatalf("seed prior run (other scenario): %v", err)
+		}
 		seedRunRow(t, pool, "current-excl-run", "sc-excl", "agent-excl", "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "current-excl-run", ScenarioID: "sc-excl", AgentID: "agent-excl",
 			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var scoreRaw []byte
 		if err := pool.QueryRow(context.Background(), `SELECT score FROM scenario_runs WHERE id=$1`, "current-excl-run").Scan(&scoreRaw); err != nil {
@@ -429,7 +416,7 @@ func TestSubmitScenarioResult_PrevScoreExcludesOtherAgentsAndScenarios(t *testin
 		var score models.Score
 		_ = json.Unmarshal(scoreRaw, &score)
 		if score.Trend != "Baseline" {
-			t.Fatalf("trend = %q, want Baseline (a different agent's prior run must not be picked up)", score.Trend)
+			t.Fatalf("trend = %q, want Baseline (neither a different agent's nor a different scenario's prior run may be picked up)", score.Trend)
 		}
 	})
 }
@@ -461,12 +448,7 @@ func TestSubmitScenarioResult_HygieneScoreOrchestration(t *testing.T) {
 				for j, v := range tc.verdicts {
 					results[j] = scenario.ExecResult{TaskID: fmt.Sprintf("t%d", j), ExitCode: 0, Stdout: "PASS: ok", CleanupVerdict: v}
 				}
-				body := rawResultBody(t, scenario.RawRunResult{RunID: runID, ScenarioID: "sc-hygiene", AgentID: "agent-hygiene", Results: results})
-				rec := httptest.NewRecorder()
-				h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-				if rec.Code != http.StatusOK {
-					t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-				}
+				submitResultOK(t, h, scenario.RawRunResult{RunID: runID, ScenarioID: "sc-hygiene", AgentID: "agent-hygiene", Results: results})
 
 				var hygiene float64
 				var leaked int
@@ -495,15 +477,10 @@ func TestSubmitScenarioResult_FindingsFireOnCompletedRun(t *testing.T) {
 		agentID := "agent-findings"
 		seedRunRow(t, pool, "findings-run", sc.ID, agentID, "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "findings-run", ScenarioID: sc.ID, AgentID: agentID,
 			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, Stdout: "FAIL: allowed"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var count int
 		if err := pool.QueryRow(context.Background(),
@@ -528,15 +505,10 @@ func TestSubmitScenarioResult_FindingsSkippedOnPartialRun(t *testing.T) {
 		agentID := "agent-findings-partial"
 		seedRunRow(t, pool, "findings-partial-run", sc.ID, agentID, "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "findings-partial-run", ScenarioID: sc.ID, AgentID: agentID, Partial: true,
 			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, Stdout: "FAIL: allowed"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var count int
 		if err := pool.QueryRow(context.Background(),
@@ -590,15 +562,10 @@ func TestSubmitScenarioResult_VariantFanOutsFireForVariantRun(t *testing.T) {
 			t.Fatal("expected at least one variant step in step_meta")
 		}
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: runID, ScenarioID: sc.ID, AgentID: agentID,
 			Results: []scenario.ExecResult{{TaskID: variantTaskID, ExitCode: 0, Stdout: "PASS: blocked"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var count int
 		if err := pool.QueryRow(context.Background(),
@@ -624,15 +591,10 @@ func TestSubmitScenarioResult_VariantFanOutsNoOpForNonVariantRun(t *testing.T) {
 		// step_meta left at its '{}' default — no dispatch, no variant meta.
 		seedRunRow(t, pool, "no-variant-run", sc.ID, agentID, "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "no-variant-run", ScenarioID: sc.ID, AgentID: agentID,
 			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, Stdout: "PASS: ok"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		var count int
 		if err := pool.QueryRow(context.Background(),
@@ -656,15 +618,10 @@ func TestSubmitScenarioResult_BroadcastsToConnectedBrowser(t *testing.T) {
 		browser := startFakeBrowser(t, h.hub)
 		defer browser.Disconnect(t)
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "broadcast-run", ScenarioID: "sc-broadcast", AgentID: "agent-broadcast",
 			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 
 		env := browser.WaitForMessage(t, 2*time.Second)
 		if env.Type != models.MsgScenarioResult {
@@ -696,14 +653,9 @@ func TestSubmitScenarioResult_NoBrowsersConnected_StillReturns200(t *testing.T) 
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		seedRunRow(t, pool, "no-browser-run", "sc-no-browser", "agent-no-browser", "running")
 
-		body := rawResultBody(t, scenario.RawRunResult{
+		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "no-browser-run", ScenarioID: "sc-no-browser", AgentID: "agent-no-browser",
 			Results: []scenario.ExecResult{{TaskID: "t0", ExitCode: 0, Stdout: "PASS: ok"}},
 		})
-		rec := httptest.NewRecorder()
-		h.SubmitScenarioResult(rec, validSubmitResultReq("", body))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-		}
 	})
 }
