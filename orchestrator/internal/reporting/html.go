@@ -2825,7 +2825,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <tr>
     <td style="font-weight:600">{{.techniqueId}}{{if .techniqueName}}<br><span style="font-weight:400;font-size:0.78rem;color:#6e7681">{{.techniqueName}}</span>{{end}}</td>
     <td style="font-size:0.82rem;color:#6e7681">{{if .tactic}}{{humanize .tactic}}{{end}}</td>
-    <td><span style="font-size:0.78rem;padding:2px 8px;border-radius:4px;font-weight:700;background:{{verdictBg .verdict}};color:{{verdictColor .verdict}}">{{.verdict}}</span></td>
+    <td><span style="font-size:0.78rem;padding:2px 8px;border-radius:4px;font-weight:700;background:{{verdictBg .execVerdict}};color:{{verdictColor .execVerdict}}">{{upper .execVerdict}}</span></td>
     <td style="font-weight:700;color:{{cleanupVerdictColor .cleanupVerdict}}">{{cleanupVerdictLabel .cleanupVerdict}}</td>
   </tr>
   {{end}}{{end}}

@@ -107,15 +107,13 @@ func TestGenerateHTML_EnvRestorationRunLevel_ZeroCampaignFields(t *testing.T) {
 
 // TestGenerateHTML_EnvRestorationCampaign_RunBreakdownRenders is the positive
 // counterpart to the two tests above: a real campaign-level EnvRestoration
-// (RunCount > 1) must still render the Campaign Run Breakdown block, proving
-// the nil/zero-value guards didn't also suppress the legitimate case.
-//
-// StepsLeaked is deliberately kept at 0 here so the "Steps Requiring Manual
-// Remediation" table (html.go, gated on stepsLeaked > 0) is not reached: that
-// table references `.verdict`, a key TechniqueRow never populates (only
-// `execVerdict` exists — see engine.go), so it errors whenever reached. That
-// is a distinct, pre-existing bug outside this patch's four-fix scope and was
-// flagged separately rather than fixed here.
+// (RunCount > 1, StepsLeaked > 0) must render both the Campaign Run
+// Breakdown block and the "Steps Requiring Manual Remediation" table,
+// proving the nil/zero-value guards didn't also suppress the legitimate
+// case. StepsLeaked > 0 also regression-tests the table's row rendering: it
+// used to reference `.verdict`, a key TechniqueRow never populates (only
+// `execVerdict` exists — see engine.go), so the table errored whenever
+// reached. html.go now reads `.execVerdict` there instead.
 func TestGenerateHTML_EnvRestorationCampaign_RunBreakdownRenders(t *testing.T) {
 	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	rep := robustnessReport(now)
@@ -124,9 +122,9 @@ func TestGenerateHTML_EnvRestorationCampaign_RunBreakdownRenders(t *testing.T) {
 			Severity: "High", ExecVerdict: "fail", CleanupVerdict: "leaked"},
 	}
 	rep.EnvRestoration = &EnvRestoration{
-		HasData: true, StepsTotal: 3, StepsWithCleanup: 3, StepsCleaned: 3, StepsLeaked: 0,
-		CleanupRate: 100, CoverageRate: 100, ImpactLevel: "clean",
-		ImpactLabel: "Clean", StatusLabel: "Successful", ExecSummary: "All steps reverted.",
+		HasData: true, StepsTotal: 3, StepsWithCleanup: 3, StepsCleaned: 2, StepsLeaked: 1,
+		CleanupRate: 66.7, CoverageRate: 100, ImpactLevel: "minor",
+		ImpactLabel: "Minor", StatusLabel: "Attention Required", ExecSummary: "One step left an artifact.",
 		RunCount: 3, RunsClean: 2, RunsWithIssues: 1,
 	}
 	var buf bytes.Buffer
@@ -134,7 +132,10 @@ func TestGenerateHTML_EnvRestorationCampaign_RunBreakdownRenders(t *testing.T) {
 		t.Fatalf("GenerateHTML errored after %d bytes: %v", buf.Len(), err)
 	}
 	out := buf.String()
-	for _, want := range []string{"Campaign Run Breakdown", "Residual Changes", "LEAKED"} {
+	for _, want := range []string{
+		"Campaign Run Breakdown", "Residual Changes",
+		"Steps Requiring Manual Remediation", "T1003.001", "FAIL", "LEAKED",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered report missing %q", want)
 		}
