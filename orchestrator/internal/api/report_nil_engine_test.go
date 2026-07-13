@@ -46,3 +46,34 @@ func TestReportHandlers_NilEngine503(t *testing.T) {
 		}
 	})
 }
+
+// TestComplianceHandlers_NilMapper503 covers every complianceMapper-dependent
+// endpoint in 3d.2 scope with a Handler that has no compliance mapper
+// attached (no WithCompliance call). refreshComplianceSnapshots is excluded —
+// it's a fire-and-forget goroutine, not an HTTP handler, and its own nil-noop
+// guard is pinned by TestRefreshComplianceSnapshots_NilMapper_NoOp.
+func TestComplianceHandlers_NilMapper503(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		// No WithCompliance — complianceMapper stays nil.
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		cases := []struct {
+			name string
+			fn   http.HandlerFunc
+			req  *http.Request
+		}{
+			{"ListComplianceFrameworks", h.ListComplianceFrameworks, httptest.NewRequest(http.MethodGet, "/x", nil)},
+			{"GetComplianceReport", h.GetComplianceReport, httptest.NewRequest(http.MethodGet, "/x?framework=SEBI_CSCRF&agentId=a", nil)},
+			{"GetComplianceDashboardScores", h.GetComplianceDashboardScores, httptest.NewRequest(http.MethodGet, "/x", nil)},
+		}
+		for _, c := range cases {
+			rec := httptest.NewRecorder()
+			c.fn(rec, c.req)
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Errorf("%s: status = %d, want 503", c.name, rec.Code)
+			}
+		}
+	})
+}
