@@ -163,16 +163,14 @@ func TestUpsertVariantFindingsForRun_SequentialStaysRunning(t *testing.T) {
 	})
 }
 
-// TestUpsertVariantFindingsForRun_RepeatedCallDuplicatesRows characterizes a
-// latent gap rather than asserting an idealized behavior: variant_findings
-// has NO unique constraint on (variant_run_id, task_id) — only its
-// auto-generated id primary key — so the `ON CONFLICT DO NOTHING` in the
-// INSERT never actually matches anything and is effectively dead code.
-// Calling this function twice with the same ALLOWED result (as would happen
-// on an at-least-once result redelivery — see [[project_run_reconciliation]])
-// creates TWO rows, not one. Flagged as a product finding, not fixed here —
-// out of 3e.6's scope per the user's minimal-changes standing instruction.
-func TestUpsertVariantFindingsForRun_RepeatedCallDuplicatesRows(t *testing.T) {
+// TestUpsertVariantFindingsForRun_RepeatedCallIsIdempotent pins the fixed
+// dedup contract: variant_findings now has a unique index on
+// (variant_run_id, task_id) (internal/db/postgres.go), so the `ON CONFLICT DO
+// NOTHING` in upsertVariantFindingsForRun's INSERT has a real constraint to
+// arbitrate against. Calling this function twice with the same ALLOWED
+// result — as happens on an at-least-once result redelivery, see
+// [[project_run_reconciliation]] — now produces exactly one row, not two.
+func TestUpsertVariantFindingsForRun_RepeatedCallIsIdempotent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
 	}
@@ -188,8 +186,8 @@ func TestUpsertVariantFindingsForRun_RepeatedCallDuplicatesRows(t *testing.T) {
 		pool.QueryRow(context.Background(),
 			`SELECT COUNT(*) FROM variant_findings WHERE variant_run_id=$1 AND task_id=$2`, variantRunID, taskID,
 		).Scan(&n)
-		if n != 2 {
-			t.Fatalf("got %d rows after two identical calls, want 2 (documents the missing dedup constraint — see the comment on this test)", n)
+		if n != 1 {
+			t.Fatalf("got %d rows after two identical calls, want 1 (unique index should dedup via ON CONFLICT DO NOTHING)", n)
 		}
 	})
 }

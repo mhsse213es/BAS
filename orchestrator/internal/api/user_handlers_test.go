@@ -181,12 +181,49 @@ func TestUpdateUser_RoleChangeAndSelfDeactivationBlocked(t *testing.T) {
 			t.Fatalf("self-deactivation: status = %d, want 400", rec3.Code)
 		}
 
-		// Characterization: no equivalent self-role-change protection exists —
-		// an admin CAN demote their own role. Not a fix target for this phase.
+		// Self-role-change is blocked — same self-modification guard as
+		// self-deactivation/self-delete, so an admin can't escalate or lock
+		// themselves out; role changes must come from a second admin.
 		selfDemote, _ := json.Marshal(map[string]any{"role": "viewer"})
 		req4 := withURLParam(authedRequest(t, http.MethodPut, "/api/users/"+adminID, bytes.NewReader(selfDemote), auth.RoleAdmin, adminID), "id", adminID)
-		if rec4 := callAuthed(h.UpdateUser, req4); rec4.Code != http.StatusOK {
-			t.Fatalf("self role change: status = %d, want 200 (characterizes current unguarded behavior)", rec4.Code)
+		if rec4 := callAuthed(h.UpdateUser, req4); rec4.Code != http.StatusBadRequest {
+			t.Fatalf("self role change: status = %d, want 400", rec4.Code)
+		}
+		var adminRole string
+		if err := pool.QueryRow(context.Background(), `SELECT role FROM users WHERE id=$1`, adminID).Scan(&adminRole); err != nil {
+			t.Fatalf("read admin role: %v", err)
+		}
+		if adminRole != "admin" {
+			t.Fatalf("admin role = %q, want unchanged admin", adminRole)
+		}
+	})
+}
+
+// TestUpdateUser_OtherAdminCanChangeThisAdminsRole pins that the self-role
+// guard is scoped to the acting user only — a second admin can still change
+// a different admin's role (the guard checks claims.UserID == targetID, not
+// the target's role).
+func TestUpdateUser_OtherAdminCanChangeThisAdminsRole(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		actingAdminID := seedUser(t, pool, "iris", "password123", "admin", true)
+		targetAdminID := seedUser(t, pool, "jack", "password123", "admin", true)
+
+		body, _ := json.Marshal(map[string]any{"role": "analyst"})
+		req := withURLParam(authedRequest(t, http.MethodPut, "/api/users/"+targetAdminID, bytes.NewReader(body), auth.RoleAdmin, actingAdminID), "id", targetAdminID)
+		rec := callAuthed(h.UpdateUser, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var role string
+		if err := pool.QueryRow(context.Background(), `SELECT role FROM users WHERE id=$1`, targetAdminID).Scan(&role); err != nil {
+			t.Fatalf("read role: %v", err)
+		}
+		if role != "analyst" {
+			t.Fatalf("role = %q, want analyst", role)
 		}
 	})
 }

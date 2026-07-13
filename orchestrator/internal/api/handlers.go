@@ -304,6 +304,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   secureCookies(),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   86400,
 	})
@@ -364,10 +365,20 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   secureCookies(),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// secureCookies reports whether Set-Cookie should include Secure (cookie only
+// sent over HTTPS). Opt-in via COOKIE_SECURE=true once a TLS-terminating
+// reverse proxy sits in front of the orchestrator — defaults to false so
+// on-prem HTTP-only deployments (the common case pre-TLS-proxy setup) aren't
+// silently broken by a cookie the browser refuses to send back.
+func secureCookies() bool {
+	return os.Getenv("COOKIE_SECURE") == "true"
 }
 
 // ── Agents ────────────────────────────────────────────────────────────────────
@@ -2014,6 +2025,13 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Prevent admin from deactivating their own account
 	if req.IsActive != nil && !*req.IsActive && claims != nil && claims.UserID == targetID {
 		jsonError(w, "cannot deactivate your own account", http.StatusBadRequest)
+		return
+	}
+	// Prevent admin from changing their own role — same self-modification
+	// guard as deactivation/deletion, so a session can't escalate or lock
+	// itself out and privilege changes always go through a second admin.
+	if req.Role != nil && claims != nil && claims.UserID == targetID {
+		jsonError(w, "cannot change your own role", http.StatusBadRequest)
 		return
 	}
 

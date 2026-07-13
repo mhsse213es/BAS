@@ -98,13 +98,12 @@ func TestGetExerciseReportPDF_NotFound(t *testing.T) {
 	})
 }
 
-// TestGetExerciseReportPDF_NoSidecarConfigured characterizes a real gap:
-// unlike the full-report PDF path (Engine.PDFFromReport in
-// internal/reporting/htmlpdf.go), reporting.ExerciseReportPDF has no fpdf
-// fallback — it calls htmlToPDF directly and surfaces its error as a 500 when
-// CHROME_WS_URL is unconfigured. This contradicts exercise.go's own package
-// doc comment ("PDF (HTML→Chrome sidecar with fpdf fallback)"). Flagged, not
-// fixed, per the "flag unrelated bugs, don't fix without asking" policy.
+// TestGetExerciseReportPDF_NoSidecarConfigured pins the fix: ExerciseReportPDF
+// now falls back to a plain fpdf-rendered summary when the Chrome sidecar is
+// unconfigured or unreachable (exerciseReportFallbackPDF in
+// internal/reporting/exercise.go), mirroring the fallback the full-report PDF
+// path already had (Engine.PDFFromReport in htmlpdf.go). The endpoint always
+// returns a PDF now, matching exercise.go's own doc comment.
 func TestGetExerciseReportPDF_NoSidecarConfigured(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
@@ -116,8 +115,14 @@ func TestGetExerciseReportPDF_NoSidecarConfigured(t *testing.T) {
 
 		rec := httptest.NewRecorder()
 		h.GetExerciseReportPDF(rec, withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", execID))
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want 500 (no fpdf fallback exists for exercise reports, unlike full reports)", rec.Code)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		if rec.Header().Get("Content-Type") != "application/pdf" {
+			t.Errorf("content-type = %q, want application/pdf", rec.Header().Get("Content-Type"))
+		}
+		if !strings.HasPrefix(rec.Body.String(), "%PDF") {
+			t.Error("body is not a PDF")
 		}
 	})
 }

@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	fpdf "github.com/go-pdf/fpdf"
+
 	"github.com/audspect/bas/internal/exercise"
 )
 
@@ -206,19 +208,116 @@ func ExerciseReportHTML(w io.Writer, rep *ExerciseReport) error {
 
 // ── PDF export ────────────────────────────────────────────────────────────────
 
-// ExerciseReportPDF renders the HTML report and prints it to PDF.
-// Uses the Chrome sidecar if available, returns an error otherwise.
+// ExerciseReportPDF renders the HTML report and prints it to PDF via the
+// Chrome sidecar; when the sidecar is unconfigured or unreachable it falls
+// back to a plain fpdf-rendered summary (exerciseReportFallbackPDF), mirroring
+// the fpdf-fallback pattern the full BAS report uses (Engine.PDFFromReport in
+// htmlpdf.go) so this export never hard-depends on the sidecar being up.
 func ExerciseReportPDF(ctx context.Context, w io.Writer, rep *ExerciseReport) error {
 	var buf bytes.Buffer
-	if err := ExerciseReportHTML(&buf, rep); err != nil {
-		return fmt.Errorf("render HTML: %w", err)
+	if err := ExerciseReportHTML(&buf, rep); err == nil {
+		if pdf, perr := htmlToPDF(ctx, buf.Bytes()); perr == nil && len(pdf) > 0 {
+			_, werr := w.Write(pdf)
+			return werr
+		}
 	}
-	pdf, err := htmlToPDF(ctx, buf.Bytes())
-	if err != nil {
-		return fmt.Errorf("html→pdf: %w", err)
+	return exerciseReportFallbackPDF(w, rep)
+}
+
+// exerciseReportFallbackPDF renders a plain (non-styled) PDF summary directly
+// via fpdf, with no dependency on the Chrome sidecar: title/status, execution
+// metadata, score, a step table, and the evidence/event timeline.
+func exerciseReportFallbackPDF(w io.Writer, rep *ExerciseReport) error {
+	if rep.Timeline == nil {
+		rep.Timeline = BuildTimeline(rep)
 	}
-	_, err = w.Write(pdf)
-	return err
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.SetAutoPageBreak(true, 18)
+	tr := pdf.UnicodeTranslatorFromDescriptor("")
+	pdf.AddPage()
+
+	ex, plan := rep.Execution, rep.Plan
+	name := ex.Name
+	if name == "" && plan != nil {
+		name = plan.Name
+	}
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.CellFormat(0, 10, tr("Exercise Report"), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.CellFormat(0, 6, tr(fmt.Sprintf("%s — %s", name, ex.Status)), "", 1, "L", false, 0, "")
+	pdf.Ln(2)
+
+	planLabel := "—"
+	if plan != nil {
+		planLabel = fmt.Sprintf("%s (v%d)", plan.Name, plan.Version)
+	}
+	rows := [][2]string{
+		{"Execution ID", ex.ID},
+		{"Plan", planLabel},
+		{"Status", string(ex.Status)},
+		{"Initiated by", emptyDash(ex.InitiatedBy)},
+		{"Started", fmtTimePtr(ex.StartedAt)},
+		{"Completed", fmtTimePtr(ex.CompletedAt)},
+		{"Evidence chain", chainStatusLabel(rep)},
+	}
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.CellFormat(0, 7, tr("Summary"), "", 1, "L", false, 0, "")
+	for _, r := range rows {
+		pdf.SetFont("Helvetica", "B", 9)
+		pdf.CellFormat(45, 6, tr(r[0]), "", 0, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 9)
+		pdf.CellFormat(0, 6, tr(r[1]), "", 1, "L", false, 0, "")
+	}
+	pdf.Ln(3)
+
+	if rep.Score != nil {
+		pdf.SetFont("Helvetica", "B", 11)
+		pdf.CellFormat(0, 7, tr("Score"), "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "", 9)
+		pdf.CellFormat(0, 6, tr(fmt.Sprintf("Overall: %.1f", rep.Score.Overall)), "", 1, "L", false, 0, "")
+		pdf.Ln(2)
+	}
+
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.CellFormat(0, 7, tr(fmt.Sprintf("Steps (%d)", len(rep.Steps))), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "B", 8)
+	pdf.CellFormat(70, 6, tr("Step"), "1", 0, "L", false, 0, "")
+	pdf.CellFormat(40, 6, tr("Type"), "1", 0, "L", false, 0, "")
+	pdf.CellFormat(0, 6, tr("Status"), "1", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 8)
+	for _, s := range rep.Steps {
+		pdf.CellFormat(70, 6, tr(s.StepID), "1", 0, "L", false, 0, "")
+		pdf.CellFormat(40, 6, tr(string(s.StepType)), "1", 0, "L", false, 0, "")
+		pdf.CellFormat(0, 6, tr(string(s.Status)), "1", 1, "L", false, 0, "")
+	}
+	pdf.Ln(3)
+
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.CellFormat(0, 7, tr(fmt.Sprintf("Timeline (%d)", len(rep.Timeline))), "", 1, "L", false, 0, "")
+	pdf.SetFont("Helvetica", "", 8)
+	for _, e := range rep.Timeline {
+		pdf.MultiCell(0, 5, tr(fmt.Sprintf("%s  [%s]  %s  %s",
+			e.TS.UTC().Format(time.RFC3339), e.Kind, emptyDash(e.Actor), e.Summary)), "", "L", false)
+	}
+
+	return pdf.Output(w)
+}
+
+func fmtTimePtr(t *time.Time) string {
+	if t == nil {
+		return "—"
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+func chainStatusLabel(rep *ExerciseReport) string {
+	if rep.ChainOK {
+		return "intact"
+	}
+	if rep.ChainErr != "" {
+		return "TAMPERED: " + rep.ChainErr
+	}
+	return "TAMPERED"
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

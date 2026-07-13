@@ -154,6 +154,19 @@ func (h *Handler) AcknowledgeAllTamperEvents(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
+
+	// Re-enable dispatch if no unacknowledged critical events remain — same
+	// guard as AcknowledgeTamperEvent, so "Acknowledge All" doesn't leave
+	// dispatch permanently blocked.
+	var count int
+	_ = h.db.QueryRow(r.Context(), `
+		SELECT COUNT(*) FROM tamper_events
+		WHERE acknowledged = false AND severity = 'critical'
+	`).Scan(&count)
+	if count == 0 {
+		integrity.DispatchBlocked.Store(false)
+	}
+
 	h.auditLog(r, "tamper.acknowledge_all", "", nil, "ok")
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"ok":true}`))

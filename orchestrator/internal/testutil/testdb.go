@@ -136,10 +136,15 @@ func (d *TestDB) RunInTx(t *testing.T, fn func(tx pgx.Tx)) {
 // RunWithPool runs fn with the raw pool, for code that manages its own
 // transactions internally and can't accept an injected pgx.Tx. Truncates
 // all public-schema tables after fn returns so the next test starts clean.
+// The truncate is deferred (not a plain trailing call) so it still runs when
+// fn fails via t.Fatal/t.Fatalf — that unwinds the goroutine with
+// runtime.Goexit, which skips everything after fn's call site but still runs
+// deferred functions. Without this, a failing fn would leak its DB state into
+// every subsequent test in the same run.
 func (d *TestDB) RunWithPool(t *testing.T, fn func(pool *pgxpool.Pool)) {
 	t.Helper()
+	defer truncateAll(t, d.Pool)
 	fn(d.Pool)
-	truncateAll(t, d.Pool)
 }
 
 func truncateAll(t *testing.T, pool *pgxpool.Pool) {

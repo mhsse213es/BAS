@@ -110,15 +110,14 @@ func TestCreateExerciseTemplate_Success(t *testing.T) {
 	})
 }
 
-// TestCreateExerciseTemplate_NameLengthCollisionOverwrites characterizes a
-// real bug in CreateExerciseTemplate (exercise_handlers.go): when no ID is
-// supplied it generates one as "custom-"+len(name) (the code's own comment
-// calls this "crude; real ID from DB gen"). Two templates whose names share
-// the same length collide onto the same generated ID, and since
-// UpsertTemplate is an ON CONFLICT (id) DO UPDATE, the second silently
-// overwrites the first instead of creating a separate template. Flagged,
-// not fixed, per the "flag unrelated bugs, don't fix without asking" policy.
-func TestCreateExerciseTemplate_NameLengthCollisionOverwrites(t *testing.T) {
+// TestCreateExerciseTemplate_SameLengthNamesDoNotCollide pins the fix for a
+// real bug: CreateExerciseTemplate used to generate an unset ID as
+// "custom-"+len(name), so any two template names of equal length collided
+// onto the same ID and silently overwrote each other via UpsertTemplate's
+// ON CONFLICT (id) DO UPDATE. It now uses newID() (the same handler-side
+// unique-ID convention used for campaigns/runs/reports), so two templates
+// whose names share a length get distinct IDs and both persist.
+func TestCreateExerciseTemplate_SameLengthNamesDoNotCollide(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
 	}
@@ -138,16 +137,16 @@ func TestCreateExerciseTemplate_NameLengthCollisionOverwrites(t *testing.T) {
 		var secondOut exercise.Template
 		json.Unmarshal(second.Body.Bytes(), &secondOut)
 
-		if firstOut.ID != secondOut.ID {
-			t.Fatalf("expected the length-based ID scheme to collide (got distinct IDs %q and %q) — bug may already be fixed, update this test", firstOut.ID, secondOut.ID)
+		if firstOut.ID == secondOut.ID {
+			t.Fatalf("expected distinct IDs for same-length names, got the same ID %q for both", firstOut.ID)
 		}
 
 		listRec := httptest.NewRecorder()
 		h.ListExerciseTemplates(listRec, httptest.NewRequest(http.MethodGet, "/x", nil))
 		var list []exercise.Template
 		json.Unmarshal(listRec.Body.Bytes(), &list)
-		if len(list) != 1 || list[0].Name != "BBBBB" {
-			t.Fatalf("list = %+v, want exactly 1 template named BBBBB (AAAAA silently overwritten)", list)
+		if len(list) != 2 {
+			t.Fatalf("list = %+v, want 2 distinct templates (AAAAA and BBBBB)", list)
 		}
 	})
 }

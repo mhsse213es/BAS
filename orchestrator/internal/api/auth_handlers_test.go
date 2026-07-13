@@ -58,7 +58,7 @@ func TestLogin_Success(t *testing.T) {
 			t.Error("cookie HttpOnly = false, want true")
 		}
 		if tokenCookie.Secure {
-			t.Error("cookie Secure = true — characterization expected false (see spec finding: no Secure flag is ever set)")
+			t.Error("cookie Secure = true, want false when COOKIE_SECURE is unset (default, preserves HTTP-only on-prem deployments)")
 		}
 		if tokenCookie.SameSite != http.SameSiteStrictMode {
 			t.Errorf("cookie SameSite = %v, want Strict", tokenCookie.SameSite)
@@ -68,6 +68,47 @@ func TestLogin_Success(t *testing.T) {
 		}
 		if tokenCookie.MaxAge != 86400 {
 			t.Errorf("cookie MaxAge = %d, want 86400", tokenCookie.MaxAge)
+		}
+	})
+}
+
+// TestLogin_CookieSecure_OptInViaEnv pins that setting COOKIE_SECURE=true
+// (for deployments behind a TLS-terminating reverse proxy) makes both Login
+// and Logout set Secure on the bas_token cookie.
+func TestLogin_CookieSecure_OptInViaEnv(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		t.Setenv("COOKIE_SECURE", "true")
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		seedUser(t, pool, "secure-alice", "correct-horse-battery", "analyst", true)
+
+		loginRec := httptest.NewRecorder()
+		h.Login(loginRec, loginReq("secure-alice", "correct-horse-battery"))
+		if loginRec.Code != http.StatusOK {
+			t.Fatalf("login status = %d, body = %s", loginRec.Code, loginRec.Body.String())
+		}
+		var loginCookie *http.Cookie
+		for _, c := range loginRec.Result().Cookies() {
+			if c.Name == "bas_token" {
+				loginCookie = c
+			}
+		}
+		if loginCookie == nil || !loginCookie.Secure {
+			t.Fatalf("login cookie = %+v, want Secure=true with COOKIE_SECURE=true", loginCookie)
+		}
+
+		logoutRec := httptest.NewRecorder()
+		h.Logout(logoutRec, httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil))
+		var logoutCookie *http.Cookie
+		for _, c := range logoutRec.Result().Cookies() {
+			if c.Name == "bas_token" {
+				logoutCookie = c
+			}
+		}
+		if logoutCookie == nil || !logoutCookie.Secure {
+			t.Fatalf("logout cookie = %+v, want Secure=true with COOKIE_SECURE=true", logoutCookie)
 		}
 	})
 }

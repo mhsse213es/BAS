@@ -293,7 +293,7 @@ func (h *Handler) CreateExerciseTemplate(w http.ResponseWriter, r *http.Request)
 	t.BuiltIn = false
 	t.Author = actorID(r)
 	if t.ID == "" {
-		t.ID = "custom-" + fmt.Sprintf("%d", len(t.Name)) // crude; real ID from DB gen
+		t.ID = "custom-" + newID()
 	}
 	if err := h.exerciseStore.UpsertTemplate(r.Context(), &t); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

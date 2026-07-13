@@ -507,6 +507,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_variant_findings_run  ON variant_findings (variant_run_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_variant_findings_tech ON variant_findings (technique_id)`,
 
+		// Dedup rows created before the unique index below existed (retried
+		// result deliveries used to create duplicates — the ON CONFLICT DO
+		// NOTHING in upsertVariantFindingsForRun's INSERT had no constraint to
+		// arbitrate against). Keeps one arbitrary row per (variant_run_id, task_id).
+		`DELETE FROM variant_findings a USING variant_findings b
+			WHERE a.id > b.id AND a.variant_run_id = b.variant_run_id AND a.task_id = b.task_id`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_variant_findings_run_task ON variant_findings (variant_run_id, task_id)`,
+
 		// payload_families: named PS script payloads per technique.
 		// Generate() is applied to each family, so total variants scale with family count.
 		`CREATE TABLE IF NOT EXISTS payload_families (

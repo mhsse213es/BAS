@@ -204,13 +204,11 @@ func TestAcknowledgeAllTamperEvents_MarksAllAcknowledged(t *testing.T) {
 	})
 }
 
-// TestAcknowledgeAllTamperEvents_DoesNotClearDispatchBlocked characterizes a
-// gap rather than an idealized behavior: unlike AcknowledgeTamperEvent,
-// AcknowledgeAllTamperEvents never touches integrity.DispatchBlocked at all
-// — so acknowledging every event via "Acknowledge All", including a critical
-// one, leaves dispatch blocked. Flagged as a product finding, not fixed here
-// — out of 3e.3's scope per the user's minimal-changes standing instruction.
-func TestAcknowledgeAllTamperEvents_DoesNotClearDispatchBlocked(t *testing.T) {
+// TestAcknowledgeAllTamperEvents_ClearsDispatchBlocked pins the fix: like
+// AcknowledgeTamperEvent, AcknowledgeAllTamperEvents now re-checks for
+// remaining unacknowledged critical events and clears integrity.DispatchBlocked
+// when none remain, so "Acknowledge All" no longer leaves dispatch stuck blocked.
+func TestAcknowledgeAllTamperEvents_ClearsDispatchBlocked(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
 	}
@@ -234,8 +232,8 @@ func TestAcknowledgeAllTamperEvents_DoesNotClearDispatchBlocked(t *testing.T) {
 		if unackedCritical != 0 {
 			t.Fatalf("precondition failed: %d critical events still unacknowledged", unackedCritical)
 		}
-		if integrity.DispatchBlocked.Load() != true {
-			t.Fatal("this test documents that DispatchBlocked stays true after Acknowledge All (see comment) — if this now fails, the product gap has been fixed and this test should be updated")
+		if integrity.DispatchBlocked.Load() != false {
+			t.Fatal("expected DispatchBlocked to clear once Acknowledge All leaves no unacknowledged critical events")
 		}
 	})
 }
