@@ -1341,7 +1341,23 @@ func (h *Handler) CloneScenario(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req) // body is optional
 
-	clone := *src // shallow copy is fine — we overwrite the slices/fields we change
+	// Deep-copy via a JSON round-trip so the clone never aliases the source's
+	// slice backing arrays or its LivePolicy pointer target — a plain `*src`
+	// struct copy only copies slice headers and the pointer itself, leaving
+	// e.g. Steps/Tags/CalderaAbilities/LivePolicy shared with the original
+	// until the clone happens to be fully overwritten. A JSON round-trip also
+	// stays correct automatically if Scenario grows new reference-typed
+	// fields later, unlike copying each field by hand.
+	raw, err := json.Marshal(src)
+	if err != nil {
+		jsonError(w, "clone: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var clone scenario.Scenario
+	if err := json.Unmarshal(raw, &clone); err != nil {
+		jsonError(w, "clone: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	clone.Source = ""
 	clone.IntelSource = ""
 	clone.IntelSourceID = ""

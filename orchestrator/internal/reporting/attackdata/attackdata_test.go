@@ -1,6 +1,9 @@
 package attackdata
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // The embedded ATT&CK dataset must load and carry authoritative enrichment for a
 // well-known technique.
@@ -104,5 +107,54 @@ func TestHasAuthoritativeFromMetadata(t *testing.T) {
 	}
 	if (&Enrichment{}).HasAuthoritative() {
 		t.Error("empty enrichment must not be authoritative")
+	}
+}
+
+// GroupTechniqueIndex must load the real bundled STIX data and correctly
+// invert it into group→techniques. "Wizard Spider" / T1055.001 is the same
+// real group/technique pair internal/api's ti_suggest_pack_test.go already
+// relies on for its ransomware-pack test, so this pins the same known-good
+// fact at the source.
+func TestGroupTechniqueIndex_ContainsKnownGroupAndTechnique(t *testing.T) {
+	idx := GroupTechniqueIndex()
+	if len(idx) == 0 {
+		t.Fatal("GroupTechniqueIndex returned an empty index")
+	}
+	techs, ok := idx["Wizard Spider"]
+	if !ok || len(techs) == 0 {
+		t.Fatalf("expected a non-empty technique list for Wizard Spider, got %v (ok=%v)", techs, ok)
+	}
+	if !slices.Contains(techs, "T1055.001") {
+		t.Errorf("expected T1055.001 among Wizard Spider's techniques, got %v", techs)
+	}
+}
+
+// The index is built once (sync.Once) and cached — repeated calls must
+// return the identical data, not silently recompute or drift.
+func TestGroupTechniqueIndex_Idempotent(t *testing.T) {
+	first := GroupTechniqueIndex()
+	second := GroupTechniqueIndex()
+	if len(first) != len(second) {
+		t.Fatalf("group counts differ across calls: %d vs %d", len(first), len(second))
+	}
+	for g, techs := range first {
+		if len(second[g]) != len(techs) {
+			t.Fatalf("technique count for group %q differs across calls: %d vs %d", g, len(techs), len(second[g]))
+		}
+	}
+}
+
+// Every entry must have a non-empty group name and at least one technique —
+// the inversion loop only ever creates an entry via append, so a present key
+// with zero techniques would indicate a construction bug.
+func TestGroupTechniqueIndex_NoEmptyGroupsOrTechniqueLists(t *testing.T) {
+	idx := GroupTechniqueIndex()
+	for g, techs := range idx {
+		if g == "" {
+			t.Error("found an empty group name key")
+		}
+		if len(techs) == 0 {
+			t.Errorf("group %q has an empty technique list", g)
+		}
 	}
 }

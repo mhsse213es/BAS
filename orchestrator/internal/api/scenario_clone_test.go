@@ -183,18 +183,9 @@ func TestCloneScenario_SourceNotFound(t *testing.T) {
 	})
 }
 
-// TestCloneScenario_IndependentFromOriginal exercises the documented public
-// contract only: after cloning, editing the clone through the real API
-// (UpdateScenario) must never affect the original. It does NOT assert
-// independence of the underlying slice-typed fields (Steps/Tags/MITREPhases/
-// SupportedOS/CalderaAbilities/ARTTechniques) — CloneScenario does a shallow
-// `clone := *src` (handlers.go:1333) that shares those slices' backing arrays
-// with the source until the clone is independently re-saved. That is a
-// latent aliasing hazard, recorded as a finding in the phase summary, not a
-// contractual guarantee: a future in-place slice mutation on either side
-// (e.g. an append within capacity, or `clone.Tags[0] = ...`) could corrupt
-// the other. See
-// docs/superpowers/specs/2026-07-12-test-phase3b3-scenario-authoring-design.md.
+// TestCloneScenario_IndependentFromOriginal exercises the public contract:
+// after cloning, editing the clone through the real API (UpdateScenario)
+// must never affect the original.
 func TestCloneScenario_IndependentFromOriginal(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
@@ -226,6 +217,80 @@ func TestCloneScenario_IndependentFromOriginal(t *testing.T) {
 		}
 		if orig.Name != "Test Scenario indep-src" {
 			t.Fatalf("original mutated by editing its clone: name = %q", orig.Name)
+		}
+	})
+}
+
+// TestCloneScenario_SlicesAndLivePolicyAreIndependentCopies pins the fix for
+// a real aliasing bug: CloneScenario used to do a shallow `clone := *src`,
+// which only copies slice headers and the LivePolicy pointer itself — the
+// backing arrays and the pointed-to struct stayed shared with the source
+// until the clone was independently re-saved. An in-place mutation on either
+// side (e.g. `clone.Tags[0] = ...`, or through the LivePolicy pointer) could
+// corrupt the other. CloneScenario now deep-copies via a JSON round-trip;
+// this test mutates the CLONE'S in-memory fields directly (not through the
+// API, to catch aliasing regardless of how UpdateScenario happens to behave)
+// and confirms the ORIGINAL's backing data is untouched.
+func TestCloneScenario_SlicesAndLivePolicyAreIndependentCopies(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		_, e := newFileEngine(t)
+		src := minimalScenario("alias-src")
+		src.Tags = []string{"tag-a", "tag-b"}
+		src.MITREPhases = []string{"execution"}
+		src.CalderaAbilities = []string{"ability-1"}
+		src.ARTTechniques = []string{"T1059.001"}
+		src.SupportedOS = []string{"windows"}
+		src.LivePolicy = &scenario.LivePolicy{MaxSprayAttempts: 3, SprayAccountAllowlist: []string{"svc-account"}}
+		seedCustomScenario(t, e, src)
+		h := New(pool, ws.NewHub(), e, "")
+
+		cloneReq := withURLParam(httptest.NewRequest(http.MethodPost, "/api/scenarios/alias-src/clone", nil), "id", "alias-src")
+		cloneRec := httptest.NewRecorder()
+		h.CloneScenario(cloneRec, cloneReq)
+		if cloneRec.Code != http.StatusCreated {
+			t.Fatalf("clone status = %d, body = %s", cloneRec.Code, cloneRec.Body.String())
+		}
+
+		clone, ok := e.Get("alias-src-copy")
+		if !ok {
+			t.Fatalf("clone missing from engine")
+		}
+		// Mutate every reference-typed field on the clone in place.
+		clone.Tags[0] = "MUTATED"
+		clone.MITREPhases[0] = "MUTATED"
+		clone.CalderaAbilities[0] = "MUTATED"
+		clone.ARTTechniques[0] = "MUTATED"
+		clone.SupportedOS[0] = "MUTATED"
+		clone.LivePolicy.MaxSprayAttempts = 999
+		clone.LivePolicy.SprayAccountAllowlist[0] = "MUTATED"
+
+		orig, ok := e.Get("alias-src")
+		if !ok {
+			t.Fatalf("original scenario missing")
+		}
+		if orig.Tags[0] != "tag-a" {
+			t.Errorf("orig.Tags[0] = %q, want unaffected tag-a (aliasing bug regressed)", orig.Tags[0])
+		}
+		if orig.MITREPhases[0] != "execution" {
+			t.Errorf("orig.MITREPhases[0] = %q, want unaffected execution", orig.MITREPhases[0])
+		}
+		if orig.CalderaAbilities[0] != "ability-1" {
+			t.Errorf("orig.CalderaAbilities[0] = %q, want unaffected ability-1", orig.CalderaAbilities[0])
+		}
+		if orig.ARTTechniques[0] != "T1059.001" {
+			t.Errorf("orig.ARTTechniques[0] = %q, want unaffected T1059.001", orig.ARTTechniques[0])
+		}
+		if orig.SupportedOS[0] != "windows" {
+			t.Errorf("orig.SupportedOS[0] = %q, want unaffected windows", orig.SupportedOS[0])
+		}
+		if orig.LivePolicy.MaxSprayAttempts != 3 {
+			t.Errorf("orig.LivePolicy.MaxSprayAttempts = %d, want unaffected 3", orig.LivePolicy.MaxSprayAttempts)
+		}
+		if orig.LivePolicy.SprayAccountAllowlist[0] != "svc-account" {
+			t.Errorf("orig.LivePolicy.SprayAccountAllowlist[0] = %q, want unaffected svc-account", orig.LivePolicy.SprayAccountAllowlist[0])
 		}
 	})
 }
