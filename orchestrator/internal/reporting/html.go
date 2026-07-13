@@ -138,7 +138,43 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 	"lower":    strings.ToLower,
 	"add1":     func(i int) int { return i + 1 },
 	"humanize": humanizeTactic,
-	"join":     func(s []string) string { return strings.Join(s, ", ") },
+	// join renders a []string report field as a comma-separated list. It also
+	// accepts []any because the template executes against a json-round-tripped
+	// map[string]any (see GenerateHTML) — a JSON array always decodes as []any
+	// regardless of the source Go field's static type — and nil/absent so a
+	// missing key doesn't abort the render.
+	"join": func(v any) string {
+		switch s := v.(type) {
+		case []string:
+			return strings.Join(s, ", ")
+		case []any:
+			parts := make([]string, 0, len(s))
+			for _, e := range s {
+				if str, ok := e.(string); ok {
+					parts = append(parts, str)
+				} else {
+					parts = append(parts, fmt.Sprint(e))
+				}
+			}
+			return strings.Join(parts, ", ")
+		}
+		return ""
+	},
+	// str coerces a template value to a string, defaulting to "" for nil or a
+	// non-string type — used to guard builtin `eq` comparisons (e.g.
+	// {{eq (str .cleanupVerdict) "reverted"}}) against a missing/omitempty map
+	// key, which otherwise surfaces as a nil interface and errors `eq` outright.
+	"str": func(v any) string {
+		s, _ := v.(string)
+		return s
+	},
+	// num coerces a template value to float64, defaulting to 0 for nil or a
+	// non-numeric type — used to guard builtin `gt`/`lt` comparisons against a
+	// missing/omitempty map key (numbers decode as float64 in the report map).
+	"num": func(v any) float64 {
+		f, _ := v.(float64)
+		return f
+	},
 	// techActors returns up to 3 ATT&CK group names that use the given technique ID,
 	// or nil when none are found in the bundled STIX data.
 	"techActors": func(techID string) []string {
@@ -199,9 +235,12 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return "NO DATA"
 	},
-	// cleanupVerdictColor maps a cleanup verdict to a CSS color.
-	"cleanupVerdictColor": func(v string) string {
-		switch v {
+	// cleanupVerdictColor maps a cleanup verdict to a CSS color. Accepts any
+	// because CleanupVerdict is omitempty (engine.go) — an empty/absent verdict
+	// arrives as a missing map key, i.e. a nil interface{}, not a "" string.
+	"cleanupVerdictColor": func(v any) string {
+		s, _ := v.(string)
+		switch s {
 		case "reverted":
 			return "#0d9488" // green — cleanup command succeeded
 		case "partial":
@@ -211,9 +250,11 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return "#6e7681" // grey — no cleanup defined
 	},
-	// cleanupVerdictLabel maps a cleanup verdict to a display label.
-	"cleanupVerdictLabel": func(v string) string {
-		switch v {
+	// cleanupVerdictLabel maps a cleanup verdict to a display label. Accepts
+	// any for the same reason as cleanupVerdictColor above.
+	"cleanupVerdictLabel": func(v any) string {
+		s, _ := v.(string)
+		switch s {
 		case "reverted":
 			return "REVERTED"
 		case "partial":
@@ -2586,13 +2627,13 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
           {{end}}</div>
           <div class="fc-ev-sec">
             <div class="fc-ev-sec-lbl">Cleanup &amp; Residual Risk</div>
-            {{if eq .cleanupVerdict "reverted"}}
+            {{if eq (str .cleanupVerdict) "reverted"}}
               <div class="fc-ev-row"><div class="fc-ev-k">Cleanup</div><div class="fc-ev-v ok">&#10003; Reverted</div></div>
               <div class="fc-ev-row"><div class="fc-ev-k">Residual Risk</div><div class="fc-ev-v fc-rr-none">None</div></div>
-            {{else if eq .cleanupVerdict "partial"}}
+            {{else if eq (str .cleanupVerdict) "partial"}}
               <div class="fc-ev-row"><div class="fc-ev-k">Cleanup</div><div class="fc-ev-v warn">Partial</div></div>
               <div class="fc-ev-row"><div class="fc-ev-k">Residual Risk</div><div class="fc-ev-v fc-rr-partial">Partial &#8212; artifacts may remain; manual review advised</div></div>
-            {{else if eq .cleanupVerdict "leaked"}}
+            {{else if eq (str .cleanupVerdict) "leaked"}}
               <div class="fc-ev-row"><div class="fc-ev-k">Cleanup</div><div class="fc-ev-v bad">Leaked (timeout / failure)</div></div>
               <div class="fc-ev-row"><div class="fc-ev-k">Residual Risk</div><div class="fc-ev-v fc-rr-leaked">Manual verification required</div></div>
             {{else}}
@@ -2755,14 +2796,15 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   {{end}}
 </div>
 
+{{if .envRestoration}}
 {{/* ── Campaign run breakdown (only for campaign reports with multi-run data) ── */}}
-{{if gt .envRestoration.runCount 1.0}}
+{{if gt (num .envRestoration.runCount) 1.0}}
 <div style="background:#f7f9fc;border-radius:6px;padding:12px 16px;margin-top:16px;font-size:0.85rem">
   <div style="font-weight:700;color:#1e293b;margin-bottom:6px">Campaign Run Breakdown</div>
   <div style="display:flex;gap:24px;color:#374151">
     <span>Total Runs: <strong>{{.envRestoration.runCount}}</strong></span>
     <span style="color:#15803d">Perfect Cleanup: <strong>{{.envRestoration.runsClean}}</strong></span>
-    <span style="color:{{if gt .envRestoration.runsWithIssues 0.0}}#da3633{{else}}#6e7681{{end}}">Residual Changes: <strong>{{.envRestoration.runsWithIssues}}</strong></span>
+    <span style="color:{{if gt (num .envRestoration.runsWithIssues) 0.0}}#da3633{{else}}#6e7681{{end}}">Residual Changes: <strong>{{.envRestoration.runsWithIssues}}</strong></span>
   </div>
 </div>
 {{end}}
@@ -2779,7 +2821,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <th>Cleanup Status</th>
   </tr></thead>
   <tbody>
-  {{range .techniqueMatrix}}{{if or (eq .cleanupVerdict "partial") (eq .cleanupVerdict "leaked")}}
+  {{range .techniqueMatrix}}{{if or (eq (str .cleanupVerdict) "partial") (eq (str .cleanupVerdict) "leaked")}}
   <tr>
     <td style="font-weight:600">{{.techniqueId}}{{if .techniqueName}}<br><span style="font-weight:400;font-size:0.78rem;color:#6e7681">{{.techniqueName}}</span>{{end}}</td>
     <td style="font-size:0.82rem;color:#6e7681">{{if .tactic}}{{humanize .tactic}}{{end}}</td>
@@ -2789,6 +2831,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   {{end}}{{end}}
   </tbody>
 </table>
+{{end}}
 {{end}}
 
 {{/* ── Agent-confirmed rollback list ── */}}

@@ -160,7 +160,11 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 			var completedAt *time.Time
 			rows.Scan(&runID, &runName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt)
 
-			fname := prefix + "runs/" + sanitize(runName) + "-" + runID[:8] + ".json"
+			idShort := runID
+			if len(idShort) > 8 {
+				idShort = idShort[:8]
+			}
+			fname := prefix + "runs/" + sanitize(runName) + "-" + idShort + ".json"
 			if f, err := zw.Create(fname); err == nil {
 				var results []models.SimulationResult
 				var score models.Score

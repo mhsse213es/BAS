@@ -251,6 +251,45 @@ func TestGetAuditPack_ZIPStructure(t *testing.T) {
 	})
 }
 
+// TestGetAuditPack_ShortRunID_NoPanic regression-tests auditpack.go:163, which
+// used to slice runID[:8] unconditionally and panicked (slice bounds out of
+// range) whenever a run ID was under 8 characters. Production IDs are always
+// long enough (hex-nanos ~15 chars, or 36-char UUIDs) that this was never
+// reachable in prod, but the slice was still an unguarded landmine — this
+// pins the len(runID) guard added alongside it.
+func TestGetAuditPack_ShortRunID_NoPanic(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedReportableRun(t, pool, "ap5", "agent-ap-short", reportRunOpts{})
+		h := newReportingHandler(t, pool, nil)
+		rec := httptest.NewRecorder()
+		h.GetAuditPack(rec, fullReq("/api/report/audit-pack", "agent-ap-short"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		raw := rec.Body.Bytes()
+		zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+		if err != nil {
+			t.Fatalf("not a valid zip: %v", err)
+		}
+		var found bool
+		for _, f := range zr.File {
+			if strings.Contains(f.Name, "/runs/") && strings.HasSuffix(f.Name, "-ap5.json") {
+				found = true
+			}
+		}
+		if !found {
+			var have []string
+			for _, f := range zr.File {
+				have = append(have, f.Name)
+			}
+			t.Fatalf("expected a runs/*-ap5.json entry (short ID used as-is); have %v", have)
+		}
+	})
+}
+
 // TestAggregateAgentResults_DedupAndUnion pins the dedup-by-result-ID and
 // union-across-completed/partial business logic (white-box call).
 func TestAggregateAgentResults_DedupAndUnion(t *testing.T) {

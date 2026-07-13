@@ -1,0 +1,174 @@
+package reporting
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/audspect/bas/internal/models"
+)
+
+// robustnessReport builds the minimal FullReport needed to reach the report
+// sections these regression tests target (Executive Summary, the Detection
+// Validation Matrix, Technical Findings cards, and the Environment
+// Restoration section). Callers override TechniqueMatrix/EnvRestoration/
+// Glossary for the specific bug under test.
+func robustnessReport(now time.Time) *FullReport {
+	return &FullReport{
+		GeneratedAt: now,
+		Agent: models.Agent{
+			AgentID: "agent-rt", Hostname: "RT-HOST", IPAddress: "10.0.0.9",
+		},
+		Summary: ExecutiveSummary{
+			RiskScore: 50, Classification: "Medium Risk",
+			TotalRuns: 1, TotalTechniques: 1, LastRunAt: now, LastScenarioName: "Robustness Test",
+		},
+		Reliability: Reliability{Attempted: 1, Valid: 1, Confidence: "High"},
+	}
+}
+
+// TestGenerateHTML_CleanupVerdictOmitted regression-tests html.go's cleanup-
+// verdict rendering: TechniqueRow.CleanupVerdict is `omitempty` (engine.go),
+// so a technique with no cleanup verdict is a genuinely common shape (e.g. a
+// step that never ran a cleanup command) and arrives at the template as a
+// missing map key — a nil interface{} — rather than "". Before the fix, both
+// the bare `{{eq .cleanupVerdict "..."}}` comparisons and the
+// cleanupVerdictColor/cleanupVerdictLabel funcs (typed for `string`) errored
+// on that nil and aborted the render.
+func TestGenerateHTML_CleanupVerdictOmitted(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	rep := robustnessReport(now)
+	rep.TechniqueMatrix = []TechniqueRow{
+		{
+			TechniqueID: "T1059.001", TechniqueName: "PowerShell", Tactic: "execution",
+			Severity: "Critical", ExecVerdict: "fail",
+			// CleanupVerdict intentionally left "" (zero value, dropped by omitempty).
+		},
+	}
+	var buf bytes.Buffer
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML errored after %d bytes: %v", buf.Len(), err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "T1059.001") {
+		t.Fatalf("rendered report missing the seeded technique; output %d bytes", len(out))
+	}
+	// cleanupVerdictLabel's fallback for an unset verdict is an em dash.
+	if !strings.Contains(out, "—") {
+		t.Errorf("expected the no-cleanup-defined fallback label (—) in output")
+	}
+}
+
+// TestGenerateHTML_EnvRestorationNil regression-tests that a FullReport with
+// EnvRestoration == nil (real shape: engine.go only assigns it when
+// buildEnvRestoration reports HasData) renders cleanly. Before the fix, the
+// campaign-run-breakdown and leaked-steps blocks sat outside the
+// `{{if .envRestoration}}` guard and dereferenced a nil `.envRestoration` via
+// `.envRestoration.runCount` / `.envRestoration.stepsLeaked`, aborting the
+// render regardless of the run/gt argument coercion.
+func TestGenerateHTML_EnvRestorationNil(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	rep := robustnessReport(now)
+	rep.EnvRestoration = nil
+	var buf bytes.Buffer
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML errored after %d bytes: %v", buf.Len(), err)
+	}
+	if strings.Contains(buf.String(), "Campaign Run Breakdown") {
+		t.Error("Campaign Run Breakdown should not render when envRestoration is nil")
+	}
+}
+
+// TestGenerateHTML_EnvRestorationRunLevel_ZeroCampaignFields regression-tests
+// the common single-run shape: EnvRestoration is non-nil (HasData true) but
+// RunCount/RunsClean/RunsWithIssues are the campaign-only fields, left at
+// their zero value and dropped by omitempty (engine.go). Before the fix,
+// `{{if gt .envRestoration.runCount 1.0}}` compared a missing key (nil) with
+// the builtin `gt`, which errors on a nil operand.
+func TestGenerateHTML_EnvRestorationRunLevel_ZeroCampaignFields(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	rep := robustnessReport(now)
+	rep.EnvRestoration = &EnvRestoration{
+		HasData: true, StepsTotal: 1, StepsWithCleanup: 1, StepsCleaned: 1,
+		CleanupRate: 100, CoverageRate: 100, ImpactLevel: "clean",
+		ImpactLabel: "Clean", StatusLabel: "Successful", ExecSummary: "All steps reverted.",
+		// RunCount / RunsClean / RunsWithIssues intentionally left at zero
+		// (omitempty) — the real shape for a single-run report.
+	}
+	var buf bytes.Buffer
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML errored after %d bytes: %v", buf.Len(), err)
+	}
+	if strings.Contains(buf.String(), "Campaign Run Breakdown") {
+		t.Error("Campaign Run Breakdown should not render for a single-run report (runCount <= 1)")
+	}
+}
+
+// TestGenerateHTML_EnvRestorationCampaign_RunBreakdownRenders is the positive
+// counterpart to the two tests above: a real campaign-level EnvRestoration
+// (RunCount > 1) must still render the Campaign Run Breakdown block, proving
+// the nil/zero-value guards didn't also suppress the legitimate case.
+//
+// StepsLeaked is deliberately kept at 0 here so the "Steps Requiring Manual
+// Remediation" table (html.go, gated on stepsLeaked > 0) is not reached: that
+// table references `.verdict`, a key TechniqueRow never populates (only
+// `execVerdict` exists — see engine.go), so it errors whenever reached. That
+// is a distinct, pre-existing bug outside this patch's four-fix scope and was
+// flagged separately rather than fixed here.
+func TestGenerateHTML_EnvRestorationCampaign_RunBreakdownRenders(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	rep := robustnessReport(now)
+	rep.TechniqueMatrix = []TechniqueRow{
+		{TechniqueID: "T1003.001", TechniqueName: "LSASS Memory", Tactic: "credential-access",
+			Severity: "High", ExecVerdict: "fail", CleanupVerdict: "leaked"},
+	}
+	rep.EnvRestoration = &EnvRestoration{
+		HasData: true, StepsTotal: 3, StepsWithCleanup: 3, StepsCleaned: 3, StepsLeaked: 0,
+		CleanupRate: 100, CoverageRate: 100, ImpactLevel: "clean",
+		ImpactLabel: "Clean", StatusLabel: "Successful", ExecSummary: "All steps reverted.",
+		RunCount: 3, RunsClean: 2, RunsWithIssues: 1,
+	}
+	var buf bytes.Buffer
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML errored after %d bytes: %v", buf.Len(), err)
+	}
+	out := buf.String()
+	for _, want := range []string{"Campaign Run Breakdown", "Residual Changes", "LEAKED"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rendered report missing %q", want)
+		}
+	}
+}
+
+// TestGenerateHTML_GlossaryDataSourcesAndMitigations regression-tests
+// html.go's `join` template func against GlossaryEntry.DataSources/
+// Mitigations ([]string, engine.go). GenerateHTML renders from a
+// json-round-tripped map[string]any (garble-safe render path — see
+// GenerateHTML's doc comment), so a populated []string arrives at the
+// template as []interface{}, not []string. `join` was typed
+// `func([]string) string`, so the template engine rejected the argument
+// outright before the fix.
+func TestGenerateHTML_GlossaryDataSourcesAndMitigations(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	rep := robustnessReport(now)
+	rep.Glossary = []GlossaryEntry{
+		{
+			TechniqueID: "T1059.001", Name: "PowerShell", Tactic: "execution",
+			Description: "Adversaries may abuse PowerShell.",
+			DataSources: []string{"Process monitoring", "Command-line logging"},
+			Mitigations: []string{"Disable or restrict PowerShell (M1042)"},
+		},
+	}
+	var buf bytes.Buffer
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML errored after %d bytes: %v", buf.Len(), err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Process monitoring, Command-line logging") {
+		t.Errorf("expected joined data sources in output")
+	}
+	if !strings.Contains(out, "Disable or restrict PowerShell (M1042)") {
+		t.Errorf("expected joined mitigations in output")
+	}
+}
