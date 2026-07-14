@@ -28,13 +28,13 @@ const (
 
 // Node is a vertex: a host, a user, or a group.
 type Node struct {
-	ID        string   `json:"id"`              // stable identity (hostname, SID, user@domain)
-	Kind      NodeKind `json:"kind"`            // host | user | group
-	Label     string   `json:"label"`           // human-readable name
-	Role      HostRole `json:"role,omitempty"`  // hosts only
-	Segment   string   `json:"segment,omitempty"` // network segment / VLAN tag (for segmentation analysis)
-	CrownJewel string  `json:"crownJewel,omitempty"` // "" or a tag like "ERP", "FileServer", "Backup"
-	HighValue bool     `json:"highValue,omitempty"`  // Domain Admins group / DA-equivalent (domain-compromise target)
+	ID         string   `json:"id"`                   // stable identity (hostname, SID, user@domain)
+	Kind       NodeKind `json:"kind"`                 // host | user | group
+	Label      string   `json:"label"`                // human-readable name
+	Role       HostRole `json:"role,omitempty"`       // hosts only
+	Segment    string   `json:"segment,omitempty"`    // network segment / VLAN tag (for segmentation analysis)
+	CrownJewel string   `json:"crownJewel,omitempty"` // "" or a tag like "ERP", "FileServer", "Backup"
+	HighValue  bool     `json:"highValue,omitempty"`  // Domain Admins group / DA-equivalent (domain-compromise target)
 }
 
 // EdgeKind is a traversable relationship an attacker can use.
@@ -114,4 +114,19 @@ func (g *Graph) EdgeCount() int {
 		n += len(es)
 	}
 	return n
+}
+
+// EdgesTo returns every edge whose To == id (order unspecified). Used by
+// internal/pathcorrelation to find the edges that make a choke-point node
+// dangerous.
+func (g *Graph) EdgesTo(id string) []Edge {
+	var out []Edge
+	for _, es := range g.adj {
+		for _, e := range es {
+			if e.To == id {
+				out = append(out, e)
+			}
+		}
+	}
+	return out
 }

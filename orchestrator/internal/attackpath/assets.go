@@ -9,7 +9,7 @@ import "strings"
 // SharpHound arrives still applies after the host is reconciled to its SID.
 type AssetTag struct {
 	HostKey    string `json:"hostKey"`              // hostname (any form; normalized on apply)
-	Label      string `json:"label,omitempty"`     // last-seen display name (UI convenience)
+	Label      string `json:"label,omitempty"`      // last-seen display name (UI convenience)
 	CrownJewel string `json:"crownJewel,omitempty"` // "" clears the tag; else "ERP"/"FileServer"/…
 	Segment    string `json:"segment,omitempty"`
 	HighValue  bool   `json:"highValue,omitempty"`
@@ -61,9 +61,17 @@ func (g *Graph) applyAssetTags(tags []AssetTag) {
 // BuildAndAnalyze is the one-call pipeline the server uses: merge collections,
 // reconcile identities, overlay operator asset tags, then analyze.
 func BuildAndAnalyze(cols []Collection, tags []AssetTag) Summary {
+	_, s := BuildGraphAndAnalyze(cols, tags)
+	return s
+}
+
+// BuildGraphAndAnalyze is BuildAndAnalyze but also returns the built graph,
+// for callers (internal/pathcorrelation) that need to run further graph
+// queries beyond the Summary.
+func BuildGraphAndAnalyze(cols []Collection, tags []AssetTag) (*Graph, Summary) {
 	g := BuildGraph(cols...)
 	g.applyAssetTags(tags)
-	return g.Analyze()
+	return g, g.Analyze()
 }
 
 // HostInventory is the list of host nodes in the current graph with their
