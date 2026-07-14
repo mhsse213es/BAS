@@ -1,0 +1,116 @@
+[
+  {
+    "author": "Audspect",
+    "description": "Detects encoded PowerShell command execution",
+    "detection": "title: Suspicious PowerShell Encoded Command\nid: 12345678-1234-1234-1234-123456789012\nstatus: stable\ndescription: Detects encoded PowerShell command execution\nauthor: Audspect\nreferences:\n    - https://attack.mitre.org/techniques/T1059/001/\ntags:\n    - attack.execution\n    - attack.t1059.001\nlogsource:\n    category: process_creation\n    product: windows\ndetection:\n    selection:\n        Image|endswith: '\\powershell.exe'\n        CommandLine|contains: '-EncodedCommand'\n    condition: selection\nfalsepositives:\n    - Legitimate admin scripts using encoded commands\nlevel: medium\n",
+    "failures": [],
+    "falsePositives": [
+      "Legitimate admin scripts using encoded commands"
+    ],
+    "id": "AUDRULE-000001",
+    "logSource": {
+      "category": "process_creation",
+      "product": "windows",
+      "service": ""
+    },
+    "references": [
+      "https://attack.mitre.org/techniques/T1059/001/"
+    ],
+    "severity": "medium",
+    "sigmaId": "12345678-1234-1234-1234-123456789012",
+    "status": "stable",
+    "techniqueIds": [
+      "T1059.001"
+    ],
+    "title": "Suspicious PowerShell Encoded Command",
+    "translations": [
+      {
+        "backend": "microsoft_sentinel",
+        "generator": "pySigma 1.4.0 / pysigma-backend-kusto 1.0.1",
+        "language": "KQL",
+        "query": "Image endswith \"\\\\powershell.exe\" and CommandLine contains \"-EncodedCommand\""
+      },
+      {
+        "backend": "microsoft_defender",
+        "generator": "pySigma 1.4.0 / pysigma-backend-microsoft365defender 0.3.2",
+        "language": "KQL",
+        "query": "Image endswith \"\\\\powershell.exe\" and CommandLine contains \"-EncodedCommand\""
+      },
+      {
+        "backend": "splunk",
+        "generator": "pySigma 1.4.0 / pysigma-backend-splunk 2.1.0",
+        "language": "SPL",
+        "query": "Image=\"*\\\\powershell.exe\" CommandLine=\"*-EncodedCommand*\""
+      },
+      {
+        "backend": "elastic",
+        "generator": "pySigma 1.4.0 / pysigma-backend-elasticsearch 2.1.0",
+        "language": "Lucene",
+        "query": "Image:*\\\\powershell.exe AND CommandLine:*\\-EncodedCommand*"
+      },
+      {
+        "backend": "crowdstrike",
+        "generator": "pySigma 1.4.0 / pysigma-backend-crowdstrike 3.0.0",
+        "language": "LogScale",
+        "query": "Image=/\\\\powershell\\.exe$/i CommandLine=/-EncodedCommand/i"
+      }
+    ]
+  },
+  {
+    "author": "Audspect",
+    "description": "Detects setspn.exe or PowerShell SPN enumeration commonly used before a Kerberoasting attack",
+    "detection": "title: Kerberoasting via SPN Enumeration Tooling\nid: 87654321-4321-4321-4321-210987654321\nstatus: stable\ndescription: Detects setspn.exe or PowerShell SPN enumeration commonly used before a Kerberoasting attack\nauthor: Audspect\nreferences:\n    - https://attack.mitre.org/techniques/T1558/003/\ntags:\n    - attack.credential_access\n    - attack.t1558.003\nlogsource:\n    category: process_creation\n    product: windows\ndetection:\n    selection_setspn:\n        Image|endswith: '\\setspn.exe'\n        CommandLine|contains: '-Q'\n    selection_powershell:\n        Image|endswith: '\\powershell.exe'\n        CommandLine|contains: 'GetUserSPNs'\n    condition: selection_setspn or selection_powershell\nfalsepositives:\n    - Legitimate AD administration and SPN auditing\nlevel: medium\n",
+    "failures": [],
+    "falsePositives": [
+      "Legitimate AD administration and SPN auditing"
+    ],
+    "id": "AUDRULE-000002",
+    "logSource": {
+      "category": "process_creation",
+      "product": "windows",
+      "service": ""
+    },
+    "references": [
+      "https://attack.mitre.org/techniques/T1558/003/"
+    ],
+    "severity": "medium",
+    "sigmaId": "87654321-4321-4321-4321-210987654321",
+    "status": "stable",
+    "techniqueIds": [
+      "T1558.003"
+    ],
+    "title": "Kerberoasting via SPN Enumeration Tooling",
+    "translations": [
+      {
+        "backend": "microsoft_sentinel",
+        "generator": "pySigma 1.4.0 / pysigma-backend-kusto 1.0.1",
+        "language": "KQL",
+        "query": "(Image endswith \"\\\\setspn.exe\" and CommandLine contains \"-Q\") or (Image endswith \"\\\\powershell.exe\" and CommandLine contains \"GetUserSPNs\")"
+      },
+      {
+        "backend": "microsoft_defender",
+        "generator": "pySigma 1.4.0 / pysigma-backend-microsoft365defender 0.3.2",
+        "language": "KQL",
+        "query": "(Image endswith \"\\\\setspn.exe\" and CommandLine contains \"-Q\") or (Image endswith \"\\\\powershell.exe\" and CommandLine contains \"GetUserSPNs\")"
+      },
+      {
+        "backend": "splunk",
+        "generator": "pySigma 1.4.0 / pysigma-backend-splunk 2.1.0",
+        "language": "SPL",
+        "query": "(Image=\"*\\\\setspn.exe\" CommandLine=\"*-Q*\") OR (Image=\"*\\\\powershell.exe\" CommandLine=\"*GetUserSPNs*\")"
+      },
+      {
+        "backend": "elastic",
+        "generator": "pySigma 1.4.0 / pysigma-backend-elasticsearch 2.1.0",
+        "language": "Lucene",
+        "query": "(Image:*\\\\setspn.exe AND CommandLine:*\\-Q*) OR (Image:*\\\\powershell.exe AND CommandLine:*GetUserSPNs*)"
+      },
+      {
+        "backend": "crowdstrike",
+        "generator": "pySigma 1.4.0 / pysigma-backend-crowdstrike 3.0.0",
+        "language": "LogScale",
+        "query": "(Image=/\\\\setspn\\.exe$/i CommandLine=/-Q/i) or (Image=/\\\\powershell\\.exe$/i CommandLine=/GetUserSPNs/i)"
+      }
+    ]
+  }
+]

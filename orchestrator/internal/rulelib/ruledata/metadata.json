@@ -1,0 +1,16 @@
+{
+  "backends": {
+    "crowdstrike": 2,
+    "elastic": 2,
+    "microsoft_defender": 2,
+    "microsoft_sentinel": 2,
+    "splunk": 2
+  },
+  "generatedAt": "2026-07-14T07:21:12.189835+00:00",
+  "generatorVersion": "1.4.0",
+  "ruleCount": 2,
+  "schemaVersion": 1,
+  "sigmaCommit": "n/a (curated sigma_seed/, not a SigmaHQ checkout)",
+  "techniqueCount": 2,
+  "translationFailures": []
+}
