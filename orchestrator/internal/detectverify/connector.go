@@ -13,6 +13,7 @@ package detectverify
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -79,4 +80,18 @@ type VerifyResult struct {
 type Connector interface {
 	Verify(ctx context.Context, req VerifyRequest) (VerifyResult, error)
 	TestConnection(ctx context.Context) error
+}
+
+// NewConnector builds the Connector for cfg.Provider. Returns an error for
+// any provider not yet implemented — QRadar/Splunk/Elastic/CrowdStrike/
+// Trellix arrive in later slices using this same framework.
+func NewConnector(cfg Config) (Connector, error) {
+	switch cfg.Provider {
+	case "microsoft_sentinel":
+		return newSentinelConnector(cfg), nil
+	case "microsoft_defender":
+		return newDefenderXDRConnector(cfg), nil
+	default:
+		return nil, fmt.Errorf("detectverify: provider %q not supported", cfg.Provider)
+	}
 }
