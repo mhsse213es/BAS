@@ -810,6 +810,27 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			id     text  PRIMARY KEY DEFAULT gen_random_uuid()::text,
 			bytes  bytea NOT NULL
 		)`,
+
+		// ── Detection Verification Connectors (SP1 first slice) ────────────────
+		// detection_connectors: one row per Sentinel/Defender XDR (and later
+		// QRadar/Splunk/Elastic/CrowdStrike/Trellix) API connector. Deliberately
+		// separate from siem_configs — Defender XDR is not a SIEM, and this
+		// package (internal/detectverify) is independent of internal/siem. See
+		// docs/superpowers/specs/2026-07-14-detection-verification-connectors-design.md.
+		`CREATE TABLE IF NOT EXISTS detection_connectors (
+			id                    text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name                  text        NOT NULL,
+			provider              text        NOT NULL,
+			enabled               boolean     NOT NULL DEFAULT true,
+			auto_verify           boolean     NOT NULL DEFAULT false,
+			tenant_id             text        NOT NULL DEFAULT '',
+			client_id             text        NOT NULL DEFAULT '',
+			client_secret         text        NOT NULL DEFAULT '',
+			workspace_id          text        NOT NULL DEFAULT '',
+			verify_delay_seconds  int         NOT NULL DEFAULT 120,
+			created_at            timestamptz NOT NULL DEFAULT NOW(),
+			updated_at            timestamptz NOT NULL DEFAULT NOW()
+		)`,
 	}
 
 	for _, s := range stmts {
