@@ -50,6 +50,12 @@ type ExpectedDetection struct {
 	// met (a False Silence gap). The report invents no message text — it uses
 	// exactly what the expectation author wrote.
 	Finding ExpectedFinding `yaml:"finding,omitempty" json:"finding,omitempty"`
+
+	// RuleIDs optionally links this expectation to one or more Detection Rule
+	// Library entries (internal/rulelib.Rule.ID, e.g. "AUDRULE-000001"). Empty
+	// is fully backward compatible — existing profiles render exactly as
+	// before. One technique commonly maps to several rules, hence a slice.
+	RuleIDs []string `yaml:"rule_ids,omitempty" json:"ruleIds,omitempty"`
 }
 
 // ExpectedEvidence is the structured proof attached to an expected detection.

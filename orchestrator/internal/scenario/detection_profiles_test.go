@@ -3,6 +3,8 @@ package scenario
 import (
 	"path/filepath"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // validExpectation is a minimal required expectation used across tests.
@@ -157,5 +159,30 @@ func TestSeedProfilesLoad(t *testing.T) {
 	}
 	if !resolvedAny {
 		t.Error("no volt-typhoon step carried detection_profiles")
+	}
+}
+
+func TestExpectedDetection_RuleIDsRoundTripsThroughYAML(t *testing.T) {
+	yamlDoc := []byte(`
+profile: test_profile
+version: 1
+expected_detection:
+  - id: exp-1
+    provider: microsoft_sentinel
+    confidence: required
+    rule_ids: ["AUDRULE-000001", "AUDRULE-000002"]
+  - id: exp-2
+    provider: microsoft_defender
+    confidence: recommended
+`)
+	var p DetectionProfile
+	if err := yaml.Unmarshal(yamlDoc, &p); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if got := p.Expected[0].RuleIDs; len(got) != 2 || got[0] != "AUDRULE-000001" || got[1] != "AUDRULE-000002" {
+		t.Fatalf("Expected[0].RuleIDs = %v, want [AUDRULE-000001 AUDRULE-000002]", got)
+	}
+	if got := p.Expected[1].RuleIDs; len(got) != 0 {
+		t.Fatalf("Expected[1].RuleIDs = %v, want empty when rule_ids is omitted", got)
 	}
 }
