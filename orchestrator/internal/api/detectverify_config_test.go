@@ -29,10 +29,13 @@ func detectverifyConfigReq(body map[string]any) *http.Request {
 // fakeDetectConnector is a no-network Connector used by handler tests so
 // TestDetectionConnector can be exercised without a real Entra/Sentinel/Graph
 // endpoint.
-type fakeDetectConnector struct{ testErr error }
+type fakeDetectConnector struct {
+	testErr error
+	result  detectverify.VerifyResult // defaults to the zero value (Verdict="" reads as NotDetected)
+}
 
 func (f *fakeDetectConnector) Verify(ctx context.Context, req detectverify.VerifyRequest) (detectverify.VerifyResult, error) {
-	return detectverify.VerifyResult{}, nil
+	return f.result, nil
 }
 func (f *fakeDetectConnector) TestConnection(ctx context.Context) error { return f.testErr }
 

@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/detectverify"
+	"github.com/audspect/bas/internal/models"
 )
 
 // ── Detection Connector Config CRUD (Admin only) ───────────────────────────
@@ -200,4 +202,164 @@ func (h *Handler) buildDetectConnector(cfg detectverify.Config) (detectverify.Co
 		return h.detectVerifyConnector(cfg)
 	}
 	return detectverify.NewConnector(cfg)
+}
+
+// ── Correlation / Trigger ───────────────────────────────────────────────────
+
+// TriggerDetectionVerification manually runs API detection verification for a
+// completed run against every enabled connector.
+// POST /api/detectverify/run/{runId}
+func (h *Handler) TriggerDetectionVerification(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runId")
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		h.runDetectionVerification(ctx, runID)
+	}()
+	h.auditLog(r, "detectverify.triggered", runID, nil, "ok")
+	respond(w, map[string]any{"status": "verifying", "runId": runID,
+		"message": "Detection verification started — results will appear in the run report shortly"})
+}
+
+// AutoVerifyDetection is called from SubmitScenarioResult when a run
+// completes. Fires one independent, delayed verification pass per enabled
+// connector with auto_verify=true — mirrors AutoCorrelateSIEM's per-config
+// dispatch exactly. Each goroutine sleeps its own verify_delay_seconds before
+// querying, to absorb SIEM/XDR ingestion lag.
+func (h *Handler) AutoVerifyDetection(runID string) {
+	rows, err := h.db.Query(context.Background(),
+		`SELECT id, verify_delay_seconds FROM detection_connectors
+		  WHERE enabled=true AND auto_verify=true ORDER BY created_at ASC`)
+	if err != nil || rows == nil {
+		return
+	}
+	type target struct {
+		id    string
+		delay int
+	}
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.id, &t.delay); err != nil {
+			continue
+		}
+		targets = append(targets, t)
+	}
+	rows.Close()
+
+	for _, t := range targets {
+		go func() {
+			if t.delay > 0 {
+				time.Sleep(time.Duration(t.delay) * time.Second)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			h.runDetectionVerificationForConnector(ctx, runID, t.id)
+		}()
+	}
+}
+
+// loadRunForVerification loads the scenario ID, host name/IP, and stored
+// results for a run — the same data AutoCorrelateSIEM's call site already
+// reads for SIEM correlation, plus the scenario ID VerifyRun needs to resolve
+// expectations.
+func (h *Handler) loadRunForVerification(ctx context.Context, runID string) (scenarioID, agentHost, agentIP string, results []models.SimulationResult, err error) {
+	var resultsRaw []byte
+	err = h.db.QueryRow(ctx,
+		`SELECT sr.scenario_id, COALESCE(a.hostname,''), COALESCE(a.ip_address,''), sr.results
+		   FROM scenario_runs sr
+		   LEFT JOIN agents a ON a.agent_id = sr.agent_id
+		  WHERE sr.id = $1`, runID,
+	).Scan(&scenarioID, &agentHost, &agentIP, &resultsRaw)
+	if err != nil {
+		return "", "", "", nil, err
+	}
+	_ = json.Unmarshal(resultsRaw, &results)
+	return scenarioID, agentHost, agentIP, results, nil
+}
+
+// runDetectionVerification checks a run against every enabled connector.
+// Used by the manual trigger endpoint.
+func (h *Handler) runDetectionVerification(ctx context.Context, runID string) {
+	if h.verification == nil {
+		return
+	}
+	scenarioID, host, ip, results, err := h.loadRunForVerification(ctx, runID)
+	if err != nil {
+		log.Printf("[detectverify] load run %s: %v", runID, err)
+		return
+	}
+	connectors, err := h.enabledDetectionConnectors(ctx)
+	if err != nil || len(connectors) == 0 {
+		return
+	}
+	summary := detectverify.VerifyRun(ctx, detectverify.VerifyRunParams{
+		RunID: runID, ScenarioID: scenarioID, HostName: host, HostIP: ip,
+		Results: results, Scenarios: h.engine, Store: h.verification, Connectors: connectors,
+	})
+	log.Printf("[detectverify] run %s: checked=%d attested=%d errors=%d",
+		runID, summary.Checked, summary.Attested, summary.Errors)
+}
+
+// runDetectionVerificationForConnector checks a run against exactly one
+// connector. Used by the auto-verify path so each connector gets its own
+// independently-timed delay.
+func (h *Handler) runDetectionVerificationForConnector(ctx context.Context, runID, connectorID string) {
+	if h.verification == nil {
+		return
+	}
+	scenarioID, host, ip, results, err := h.loadRunForVerification(ctx, runID)
+	if err != nil {
+		log.Printf("[detectverify] load run %s: %v", runID, err)
+		return
+	}
+	cfg, err := h.loadDetectionConnector(ctx, connectorID)
+	if err != nil {
+		return
+	}
+	conn, err := h.buildDetectConnector(*cfg)
+	if err != nil {
+		log.Printf("[detectverify] build connector %s: %v", connectorID, err)
+		return
+	}
+	summary := detectverify.VerifyRun(ctx, detectverify.VerifyRunParams{
+		RunID: runID, ScenarioID: scenarioID, HostName: host, HostIP: ip,
+		Results: results, Scenarios: h.engine, Store: h.verification,
+		Connectors: map[string]detectverify.Connector{cfg.Provider: conn},
+	})
+	log.Printf("[detectverify] run %s connector %s: checked=%d attested=%d errors=%d",
+		runID, connectorID, summary.Checked, summary.Attested, summary.Errors)
+}
+
+// enabledDetectionConnectors builds a live Connector for every enabled
+// detection_connectors row, keyed by provider.
+func (h *Handler) enabledDetectionConnectors(ctx context.Context) (map[string]detectverify.Connector, error) {
+	rows, err := h.db.Query(ctx, `SELECT id FROM detection_connectors WHERE enabled=true ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+
+	out := map[string]detectverify.Connector{}
+	for _, id := range ids {
+		cfg, err := h.loadDetectionConnector(ctx, id)
+		if err != nil {
+			continue
+		}
+		conn, err := h.buildDetectConnector(*cfg)
+		if err != nil {
+			log.Printf("[detectverify] build connector %s: %v", id, err)
+			continue
+		}
+		out[cfg.Provider] = conn
+	}
+	return out, nil
 }

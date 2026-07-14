@@ -186,6 +186,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			// SIEM Correlation — trigger and results (Analyst+)
 			r.Post("/api/siem/correlate/{runId}", h.TriggerSIEMCorrelation)
 			r.Get("/api/siem/correlations/{runId}", h.GetSIEMCorrelations)
+			// Detection Verification — manual trigger (Analyst+)
+			r.Post("/api/detectverify/run/{runId}", h.TriggerDetectionVerification)
 			r.Post("/api/campaigns", h.CreateCampaign)
 			r.Post("/api/campaigns/{id}/stop", h.StopCampaign)
 			r.Post("/api/findings/{id}/status", h.SetFindingStatus)
@@ -328,6 +330,13 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Put("/api/siem/configs/{id}", h.UpdateSIEMConfig)
 			r.Delete("/api/siem/configs/{id}", h.DeleteSIEMConfig)
 			r.Post("/api/siem/configs/{id}/test", h.TestSIEMConfig)
+
+			// Detection Verification — connector management (Admin only)
+			r.Get("/api/detectverify/configs", h.ListDetectionConnectors)
+			r.Post("/api/detectverify/configs", h.CreateDetectionConnector)
+			r.Put("/api/detectverify/configs/{id}", h.UpdateDetectionConnector)
+			r.Delete("/api/detectverify/configs/{id}", h.DeleteDetectionConnector)
+			r.Post("/api/detectverify/configs/{id}/test", h.TestDetectionConnector)
 
 			// Exercise plan authoring — Admin only
 			r.Post("/api/exercises/plans", h.CreateExercisePlan)

@@ -1815,6 +1815,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 			).Scan(&agentIP, &runStart)
 			runEnd := time.Now()
 			h.AutoCorrelateSIEM(runID, agentID, agentIP, runStart, runEnd, sr)
+			h.AutoVerifyDetection(runID)
 		}()
 	}
 
