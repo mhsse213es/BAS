@@ -30,6 +30,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/reporting"
+	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
@@ -77,6 +78,7 @@ type Handler struct {
 	exerciseChain    *exercise.EvidenceChain
 	verification     *verification.Store  // nil when not loaded — SP2 verification store
 	relationships    *relationships.Store // nil when not loaded — CVE-ATT&CK Relationship Store
+	rules            *rulelib.Engine      // nil when not loaded — Detection Rule Library
 }
 
 // New creates a Handler.
@@ -207,6 +209,12 @@ func (h *Handler) WithExercise(store *exercise.Store, exec *exercise.Executor, c
 		}
 		return runID, nil
 	})
+	return h
+}
+
+// WithRuleLibrary attaches the Detection Rule Library engine.
+func (h *Handler) WithRuleLibrary(e *rulelib.Engine) *Handler {
+	h.rules = e
 	return h
 }
 

@@ -128,6 +128,13 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/agents/{agentId}/logs/security", h.GetSecLogs)
 		r.Get("/api/agents/{agentId}/telemetry", h.GetTelemetry)
 
+		// Detection Rule Library — read-only, Viewer+.
+		r.Get("/api/rules", h.ListRules)
+		r.Get("/api/rules/{id}", h.GetRule)
+		r.Get("/api/rules/search", h.SearchRules)
+		r.Get("/api/rules/technique/{id}", h.RulesByTechnique)
+		r.Get("/api/rules/export", h.ExportRule)
+
 		// Viewer+ — safe read-only simulation makes no changes to the endpoint
 		r.Post("/api/scan/safe/{agentId}", h.SafeScan)
 

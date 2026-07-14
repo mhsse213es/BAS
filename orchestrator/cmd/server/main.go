@@ -27,6 +27,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/reporting"
+	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
@@ -241,7 +242,8 @@ func main() {
 		WithLicensePath(cfg.LicensePath).
 		WithExercise(exStore, exExecutor, exChain).
 		WithVerificationStore(verificationStore).
-		WithRelationshipStore(relationshipStore)
+		WithRelationshipStore(relationshipStore).
+		WithRuleLibrary(rulelib.NewEngine())
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), exTracker)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
