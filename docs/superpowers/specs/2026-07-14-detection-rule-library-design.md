@@ -18,7 +18,7 @@ Python (dev-time only, never shipped, no runtime dependency introduced)
   scripts/rulelib-gen/
     load_sigma.py    — filter a curated local SigmaHQ checkout to rules tagging a
                         technique present in scenarios/detection-profiles/*.yaml
-    translate.py      — pySigma + 6 backend plugins, per-rule per-backend, isolated
+    translate.py      — pySigma + 5 backend plugins, per-rule per-backend, isolated
                         failure handling (one backend's failure never blocks others)
     validate.py        — quality gate (see Validation below)
     export.py          — writes internal/rulelib/ruledata/{rules.json,metadata.json}
@@ -74,13 +74,15 @@ type LogSource struct {
 
 type Translation struct {
     Backend     string    // provider-registry key: "microsoft_sentinel" | "microsoft_defender"
-                           // | "splunk" | "qradar" | "elastic" | "crowdstrike"
-    Language    string    // "KQL" | "SPL" | "AQL" | "DSL" | "LogScale"
+                           // | "splunk" | "elastic" | "crowdstrike"
+    Language    string    // "KQL" | "SPL" | "DSL" | "LogScale"
     Query       string
-    Generator   string    // e.g. "pySigma 1.2 / pysigma-backend-splunk 1.0.3"
+    Generator   string    // e.g. "pySigma 1.4.0 / pysigma-backend-splunk 2.1.0"
     GeneratedAt time.Time
 }
 ```
+
+**Backend list (verified 2026-07-14, corrected from the original draft):** 5 backends, not 6 — `pysigma-backend-qradar` requires an old, incompatible pySigma core (`pysigma<0.10.0`) that cannot coexist in the same environment as the other five (`pysigma-backend-kusto` for Sentinel, `pysigma-backend-microsoft365defender` for Defender XDR, `pysigma-backend-splunk`, `pysigma-backend-elasticsearch`, `pysigma-backend-crowdstrike` — all require `pysigma>=1.0`). QRadar is dropped from this slice; it isn't wired into `internal/detectverify` yet either. Revisit if QRadar's backend matures or when its connector gets built.
 
 `internal/scenario.ExpectedDetection` (existing type) gains exactly one new field:
 
@@ -95,9 +97,9 @@ One technique commonly maps to several rules (e.g. T1059.001 → encoded-PowerSh
 Four stages, each its own Python module, run in sequence by `build.py`:
 
 1. **`load_sigma.py`** — reads rules from a local checkout of the upstream [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma) repository at a path the operator provides (e.g. `--sigma-dir`, same convention as the existing `attackdata/gen/main.go --sigma=DIR` flag). Obtaining/updating that checkout (`git clone`/`git pull`) is a documented manual prerequisite for running the generator, not something the script automates — the generator only reads, never fetches over the network, keeping it usable in an air-gapped dev environment too. It keeps only rules whose `tags` include an `attack.tXXXX` matching a technique ID already declared somewhere in `scenarios/detection-profiles/*.yaml`. This is the scoping decision: first slice covers only techniques the platform already ships detection-profile content for (~13 profiles today), not all of SigmaHQ.
-2. **`translate.py`** — for each loaded rule, attempts conversion via pySigma against all 6 backend plugins independently; a conversion exception for one backend is caught and recorded, not propagated — the other 5 backends still get attempted.
+2. **`translate.py`** — for each loaded rule, attempts conversion via pySigma against all 5 backend plugins independently; a conversion exception for one backend is caught and recorded, not propagated — the other backends still get attempted.
 3. **`validate.py`** — the quality gate:
-   - **Fails the build** (nonzero exit, nothing written) when: a rule has **zero** successful translations across all 6 backends; a rule's Sigma content is malformed; a rule tags a technique ID that doesn't exist in the bundled ATT&CK STIX; the output contains duplicate `AUDRULE-*` or duplicate upstream Sigma IDs; **any single backend's failure rate across all attempted rules exceeds 25%** (this is the systemic-regression guard — a backend plugin update or API-shape change that breaks conversion wholesale must block the build, not silently ship a gutted library for that vendor).
+   - **Fails the build** (nonzero exit, nothing written) when: a rule has **zero** successful translations across all 5 backends; a rule's Sigma content is malformed; a rule tags a technique ID that doesn't exist in the bundled ATT&CK STIX; the output contains duplicate `AUDRULE-*` or duplicate upstream Sigma IDs; **any single backend's failure rate across all attempted rules exceeds 25%** (this is the systemic-regression guard — a backend plugin update or API-shape change that breaks conversion wholesale must block the build, not silently ship a gutted library for that vendor).
    - **Warns only** (recorded, build continues): an individual rule/backend translation failure below the 25% threshold — normal, expected variance in per-vendor Sigma coverage.
 4. **`export.py`** — writes `internal/rulelib/ruledata/rules.json` (the `Rule` array) and `internal/rulelib/ruledata/metadata.json`:
    ```json
@@ -108,9 +110,9 @@ Four stages, each its own Python module, run in sequence by `build.py`:
      "generatedAt": "2026-07-14T00:00:00Z",
      "ruleCount": 47,
      "techniqueCount": 13,
-     "backends": {"sentinel": 46, "splunk": 45, "elastic": 47, "defender": 44, "qradar": 31, "crowdstrike": 39},
+     "backends": {"sentinel": 46, "splunk": 45, "elastic": 47, "defender": 44, "crowdstrike": 39},
      "translationFailures": [
-       {"ruleId": "AUDRULE-000023", "sigmaId": "...", "backend": "qradar", "reason": "unsupported aggregation"}
+       {"ruleId": "AUDRULE-000023", "sigmaId": "...", "backend": "elastic", "reason": "unsupported aggregation"}
      ]
    }
    ```
@@ -131,7 +133,7 @@ GET /api/rules                                          — paginated list
 GET /api/rules/{id}                                      — one rule: full Sigma metadata + all translations
 GET /api/rules/search?technique=&backend=&status=&severity=&logsource=&q=
 GET /api/rules/technique/{id}                              — convenience wrapper over search
-GET /api/rules/export?id=&format=sigma|kql|spl|aql|dsl|logscale   — raw text download
+GET /api/rules/export?id=&format=sigma|kql|spl|dsl|logscale   — raw text download
 ```
 
 Filtering is expressed as query parameters on one search endpoint, not a route per dimension (avoids route proliferation as filter dimensions grow).
