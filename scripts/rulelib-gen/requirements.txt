@@ -1,0 +1,7 @@
+pysigma==1.4.0
+pysigma-backend-splunk==2.1.0
+pysigma-backend-elasticsearch==2.1.0
+pysigma-backend-microsoft365defender==0.3.2
+pysigma-backend-crowdstrike==3.0.0
+pyyaml>=6.0.1
+pytest>=8.0.0
