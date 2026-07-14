@@ -75,7 +75,7 @@ type LogSource struct {
 type Translation struct {
     Backend     string    // provider-registry key: "microsoft_sentinel" | "microsoft_defender"
                            // | "splunk" | "elastic" | "crowdstrike"
-    Language    string    // "KQL" | "SPL" | "DSL" | "LogScale"
+    Language    string    // "KQL" | "SPL" | "Lucene" | "LogScale"
     Query       string
     Generator   string    // e.g. "pySigma 1.4.0 / pysigma-backend-splunk 2.1.0"
     GeneratedAt time.Time
@@ -133,7 +133,7 @@ GET /api/rules                                          — paginated list
 GET /api/rules/{id}                                      — one rule: full Sigma metadata + all translations
 GET /api/rules/search?technique=&backend=&status=&severity=&logsource=&q=
 GET /api/rules/technique/{id}                              — convenience wrapper over search
-GET /api/rules/export?id=&format=sigma|kql|spl|dsl|logscale   — raw text download
+GET /api/rules/export?id=&format=sigma|kql|spl|lucene|logscale   — raw text download
 ```
 
 Filtering is expressed as query parameters on one search endpoint, not a route per dimension (avoids route proliferation as filter dimensions grow).
