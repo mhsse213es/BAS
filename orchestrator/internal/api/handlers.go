@@ -21,6 +21,7 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
+	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/exercise"
@@ -51,6 +52,10 @@ type Handler struct {
 	db               *pgxpool.Pool
 	hub              *ws.Hub
 	engine           *scenario.Engine
+	// detectVerifyConnector builds a detectverify.Connector for a config.
+	// nil in production (New leaves it unset; call sites fall back to
+	// detectverify.NewConnector) — tests override it to avoid real HTTP calls.
+	detectVerifyConnector func(detectverify.Config) (detectverify.Connector, error)
 	secret           string
 	agentSecret      string // optional shared secret for agent-facing endpoints
 	calderaURL       string
