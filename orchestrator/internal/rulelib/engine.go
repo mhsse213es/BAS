@@ -19,6 +19,7 @@ const currentSchemaVersion = 1
 type Engine struct {
 	rules    []Rule
 	metadata Metadata
+	idx      indexes
 }
 
 // NewEngine loads the embedded rule bundle. On any parse failure or schema
@@ -59,7 +60,7 @@ func loadFromBytes(rulesRaw, metaRaw []byte) *Engine {
 		log.Printf("[rulelib] parse rules.json: %v — rule library disabled", err)
 		return &Engine{}
 	}
-	return &Engine{rules: rules, metadata: meta}
+	return &Engine{rules: rules, metadata: meta, idx: buildIndexes(rules)}
 }
 
 func (e *Engine) RuleCount() int     { return len(e.rules) }
