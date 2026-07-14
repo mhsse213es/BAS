@@ -1,0 +1,82 @@
+// Package detectverify queries Microsoft Sentinel and Microsoft Defender XDR
+// for whether they detected a run's executed techniques, then writes the
+// verdict into the Verification Store (internal/verification) with
+// Source=api. It is deliberately independent of internal/siem — see
+// docs/superpowers/specs/2026-07-14-detection-verification-connectors-design.md
+// for why the two packages are not merged.
+//
+// This package does no database I/O. internal/api owns the
+// detection_connectors config table and calls VerifyRun (orchestrate.go)
+// with everything it needs already loaded.
+package detectverify
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+)
+
+// Verdicts a connector can return for one expectation.
+const (
+	VerdictDetected    = "Detected"
+	VerdictNotDetected = "NotDetected"
+)
+
+// Confidence levels matchAlerts assigns to a Detected verdict.
+const (
+	ConfidenceHigh   = "high"
+	ConfidenceMedium = "medium"
+)
+
+// Config holds the connection settings for one detection connector —
+// persisted in detection_connectors, loaded by internal/api and passed to
+// NewConnector.
+type Config struct {
+	ID                 string
+	Name               string
+	Provider           string // "microsoft_sentinel" | "microsoft_defender"
+	Enabled            bool
+	AutoVerify         bool
+	TenantID           string
+	ClientID           string
+	ClientSecret       string
+	WorkspaceID        string // Sentinel only; empty for Defender XDR
+	VerifyDelaySeconds int
+}
+
+// VerifyRequest is one expectation to check against a provider, scoped to a
+// single host and time window.
+type VerifyRequest struct {
+	RunID          string
+	ExpectationID  string
+	TechniqueID    string
+	HostName       string
+	HostIP         string
+	StepExecutedAt time.Time // the step's actual execution time — used for latency
+	WindowStart    time.Time // padded query window start
+	WindowEnd      time.Time // padded query window end
+}
+
+// MatchedAlert is one vendor alert that satisfied a VerifyRequest.
+type MatchedAlert struct {
+	AlertID   string          `json:"alertId"`
+	RuleName  string          `json:"ruleName"`
+	Timestamp time.Time       `json:"timestamp"`
+	Severity  string          `json:"severity"`
+	RawJSON   json.RawMessage `json:"raw,omitempty"`
+}
+
+// VerifyResult is the outcome of checking one expectation against a provider.
+type VerifyResult struct {
+	Verdict          string // Detected | NotDetected
+	Confidence       string // high | medium ("" when NotDetected)
+	MatchedAlerts    []MatchedAlert
+	DetectionLatency time.Duration // 0 when NotDetected
+	InvestigationURL string
+}
+
+// Connector is one vendor's detection-verification API client.
+type Connector interface {
+	Verify(ctx context.Context, req VerifyRequest) (VerifyResult, error)
+	TestConnection(ctx context.Context) error
+}
