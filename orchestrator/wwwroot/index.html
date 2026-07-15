@@ -1203,6 +1203,12 @@ body.theme-slate {
           </svg>
           Attack Paths
         </div>
+        <div class="nav-item" data-tab="exposure" onclick="showTab('exposure')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.2"/>
+          </svg>
+          Exposure Explorer
+        </div>
         <div class="nav-item disabled">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/>
@@ -2619,6 +2625,28 @@ body.theme-slate {
         </div>
       </div>
 
+      <!-- Exposure Explorer -->
+      <div id="tab-exposure" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Exposure Explorer</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Per-asset attack-path exposure, detection coverage, CVE/KEV/EPSS risk, threat-group attribution, and findings — one composite Exposure Score per host.</div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="loadExposureAssets()">Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Host</th><th>Managed</th><th>Exposure</th><th>Attack Path</th><th>Detection</th>
+                <th>Crown Jewel</th><th>Open Findings</th><th>KEV</th>
+              </tr>
+            </thead>
+            <tbody id="exp-table-body"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Findings -->
       <div id="tab-findings" style="display:none">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -3388,6 +3416,16 @@ body.theme-slate {
   </div>
 </div>
 
+<div id="exposure-detail-overlay" class="drawer-overlay" onclick="if(event.target===this)closeExposureDetail()">
+  <div class="drawer" style="width:640px;max-width:96vw">
+    <div class="drawer-header">
+      <h3 id="exp-detail-title">Asset</h3>
+      <button class="drawer-close" onclick="closeExposureDetail()">&#10005;</button>
+    </div>
+    <div class="drawer-body" style="overflow-y:auto" id="exp-detail-body"></div>
+  </div>
+</div>
+
 <!-- common ATT&CK techniques for autocomplete -->
 <datalist id="att-techniques">
   <option value="T1059.001">PowerShell</option>
@@ -3484,7 +3522,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -3612,7 +3650,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','integrations'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','integrations'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -3634,6 +3672,7 @@ function showTab(name) {
   if (name === 'reports') loadReports();
   if (name === 'verification') loadVerificationTab();
   if (name === 'attackpath') loadAttackPath();
+  if (name === 'exposure') loadExposureAssets();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
   if (name === 'dashboard') {
@@ -3985,6 +4024,104 @@ function apCard(label, val, col, sub) {
     '<div class="kpi-value" style="color:' + col + '">' + val + '</div>' +
     '<div class="tiny muted">' + (sub || '') + '</div></div>';
 }
+
+function loadExposureAssets() {
+  var body = document.getElementById('exp-table-body');
+  body.innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
+  apicall('/api/exposure/assets').then(function(assets) {
+    if (!assets || !assets.length) {
+      body.innerHTML = '<tr><td colspan="8" class="empty">No assets found — enroll an agent or run attack-path collection.</td></tr>';
+      return;
+    }
+    body.innerHTML = assets.map(function(a) {
+      return '<tr style="cursor:pointer" onclick="openExposureDetail(\'' + x(a.asset.hostKey) + '\')">' +
+        '<td style="font-weight:600">' + x(a.asset.label) + '</td>' +
+        '<td>' + (a.asset.managed ? '<span class="badge">Managed</span>' : '<span class="badge" style="color:var(--muted)">Discovered</span>') + '</td>' +
+        '<td style="color:' + apColor(a.exposureScore) + ';font-weight:700">' + a.exposureScore + '</td>' +
+        '<td>' + a.attackPathScore + '</td>' +
+        '<td>' + a.detectionCoverageScore + '</td>' +
+        '<td>' + (a.asset.crownJewel ? '<span class="badge" style="color:var(--warning);border-color:var(--warning)">' + x(a.asset.crownJewel) + '</span>' : '') + '</td>' +
+        '<td>' + a.openFindingsCount + '</td>' +
+        '<td>' + (a.kevExposed ? '<span class="badge" style="color:var(--danger);border-color:var(--danger)">KEV</span>' : '') + '</td>' +
+        '</tr>';
+    }).join('');
+  }).catch(function(e) {
+    body.innerHTML = '<tr><td colspan="8" class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</td></tr>';
+  });
+}
+
+function _expGapPriorityColor(p) {
+  return p === 'Critical' ? 'var(--danger)' : p === 'High' ? '#f0883e' : p === 'Medium' ? 'var(--warning)' : 'var(--success)';
+}
+
+function openExposureDetail(hostKey) {
+  document.getElementById('exp-detail-title').textContent = hostKey;
+  var body = document.getElementById('exp-detail-body');
+  body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
+  document.getElementById('exposure-detail-overlay').classList.add('open');
+  apicall('/api/exposure/assets/' + encodeURIComponent(hostKey)).then(function(p) {
+    var h = '<div class="kpi-row" style="margin-bottom:1rem">' +
+      apCard('Exposure Score', p.scores.exposureScore + '<span style="font-size:0.9rem;color:var(--muted)">/100</span>', apColor(p.scores.exposureScore), 'higher is safer') +
+      apCard('Attack Path', p.scores.attackPathScore, apColor(p.scores.attackPathScore), '') +
+      apCard('Detection', p.scores.detectionCoverageScore, apColor(p.scores.detectionCoverageScore), '') +
+      apCard('Vulnerability', p.scores.vulnerabilityScore, apColor(p.scores.vulnerabilityScore), '') +
+      '</div>';
+
+    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Prioritized Recommendations</div>';
+    if (p.recommendations && p.recommendations.length) {
+      h += '<div class="tbl-wrap" style="margin-bottom:1rem"><table><thead><tr><th>From</th><th>Via</th><th>To</th><th>Priority</th><th>Reason</th></tr></thead><tbody>';
+      p.recommendations.forEach(function(g) {
+        h += '<tr><td>' + x(g.edge.from) + '</td><td>' + x(g.edge.kind) + '</td><td>' + x(g.edge.to) + '</td>' +
+          '<td style="font-weight:700;color:' + _expGapPriorityColor(g.priority) + '">' + x(g.priority) + '</td>' +
+          '<td style="color:var(--muted);font-size:0.8rem">' + x(g.reason) + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+    } else {
+      h += '<div class="tiny muted" style="margin-bottom:1rem">No gaps on this asset&apos;s attack paths.</div>';
+    }
+
+    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Vulnerabilities</div>';
+    if (p.vulnerabilities && p.vulnerabilities.length) {
+      h += '<div class="tbl-wrap" style="margin-bottom:1rem"><table><thead><tr><th>CVE</th><th>CVSS</th><th>KEV</th><th>EPSS</th><th>Technique</th></tr></thead><tbody>';
+      p.vulnerabilities.forEach(function(v) {
+        h += '<tr><td>' + x(v.cveId) + '</td><td>' + (v.cvss || '—') + '</td><td>' + (v.kev ? 'Yes' : '') + '</td>' +
+          '<td>' + (v.epssScore || '—') + '</td><td>' + x(v.techniqueId) + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+    } else {
+      h += '<div class="tiny muted" style="margin-bottom:1rem">No mapped CVEs.</div>';
+    }
+
+    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Findings</div>';
+    if (!p.findings.collected) {
+      h += '<div class="tiny muted" style="margin-bottom:1rem">Not enrolled — no scan history.</div>';
+    } else if (p.findings.findings && p.findings.findings.length) {
+      h += '<div class="tbl-wrap" style="margin-bottom:1rem"><table><thead><tr><th>Technique</th><th>Severity</th><th>State</th></tr></thead><tbody>';
+      p.findings.findings.forEach(function(f) {
+        h += '<tr><td>' + x(f.techniqueName || f.techniqueId) + '</td><td>' + x(f.severity) + '</td><td>' + x(f.exposureState) + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+    } else {
+      h += '<div class="tiny muted" style="margin-bottom:1rem">No open findings.</div>';
+    }
+
+    h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Threat Groups</div>';
+    if (p.threatIntel && p.threatIntel.length) {
+      h += p.threatIntel.map(function(g) { return '<span class="badge" style="margin:2px">' + x(g.groupName) + '</span>'; }).join('');
+    } else {
+      h += '<div class="tiny muted">No attributed threat groups.</div>';
+    }
+
+    body.innerHTML = h;
+  }).catch(function(e) {
+    body.innerHTML = '<div class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</div>';
+  });
+}
+
+function closeExposureDetail() {
+  document.getElementById('exposure-detail-overlay').classList.remove('open');
+}
+
 function apNodePill(name, isTarget) {
   var col = isTarget ? 'var(--danger)' : 'var(--border)';
   var bg = isTarget ? 'rgba(218,54,51,0.12)' : 'var(--surface)';
