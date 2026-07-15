@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -474,6 +475,51 @@ func TestStopCampaign_MarksStoppedAndFreesRunningChildren(t *testing.T) {
 		}
 		if childStatus != "partial" {
 			t.Errorf("child run status = %q, want partial", childStatus)
+		}
+	})
+}
+
+// TestStopCampaign_Running_AgentOnline pins: when a running child's agent is
+// connected, StopCampaign sends it command_cancel (mirroring CancelRun) instead
+// of relabeling the row immediately — the agent must actually stop executing,
+// not keep running unaware and later heal the row back past the cancellation.
+func TestStopCampaign_Running_AgentOnline(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		agentID := "sc-camp-online-agent"
+		runID := "sc-camp-online-run"
+		seedCampaign(t, pool, "sc-camp-online", "Stop Campaign Online Scenario")
+		seedReportableRun(t, pool, runID, agentID, reportRunOpts{CampaignID: "sc-camp-online", Status: "running"})
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.StopCampaign(rec, campaignReq("/api/campaigns/sc-camp-online/stop", "sc-camp-online", ""))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+
+		env := fake.WaitForMessage(t, 2*time.Second)
+		if env.Type != models.MsgCommandCancel {
+			t.Fatalf("message type = %q, want %q", env.Type, models.MsgCommandCancel)
+		}
+		var data map[string]string
+		if err := json.Unmarshal(env.Data, &data); err != nil {
+			t.Fatalf("decode command data: %v", err)
+		}
+		if data["runId"] != runID {
+			t.Fatalf("command data = %+v, want runId=%s", data, runID)
+		}
+
+		var status string
+		if err := pool.QueryRow(context.Background(), `SELECT status FROM scenario_runs WHERE id=$1`, runID).Scan(&status); err != nil {
+			t.Fatalf("read run: %v", err)
+		}
+		if status != "running" {
+			t.Fatalf("run status = %q, want still running (agent will report back)", status)
 		}
 	})
 }

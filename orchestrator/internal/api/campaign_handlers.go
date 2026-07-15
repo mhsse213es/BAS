@@ -412,8 +412,8 @@ func (h *Handler) GetCampaign(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// StopCampaign marks a campaign stopped and frees its still-running children as
-// 'partial' (their executed steps stand). POST /api/campaigns/{id}/stop
+// StopCampaign marks a campaign stopped and cancels its still-running children.
+// POST /api/campaigns/{id}/stop
 func (h *Handler) StopCampaign(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ct, err := h.db.Exec(r.Context(), `UPDATE campaigns SET stopped_at=NOW() WHERE id=$1 AND stopped_at IS NULL`, id)
@@ -428,24 +428,39 @@ func (h *Handler) StopCampaign(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Free still-running children (best-effort), mirroring the staleness monitor:
-	// their executed steps stand, so they become 'partial' rather than 'failed'.
+	// Cancel still-running children the same way CancelRun does: send each
+	// agent a command_cancel so it actually stops executing, rather than just
+	// relabeling the DB row while the agent keeps running in the background
+	// unaware — a late "completed" submission from an agent that was never
+	// told to stop would otherwise heal the row back past this cancellation
+	// (SubmitScenarioResult's REPLACE has no status guard by design, for the
+	// separate case of an agent reconnecting after a staleness false-flip).
+	// Only agents that are unreachable get the immediate DB fallback, since
+	// they will never submit a result to reconcile the status themselves.
 	rows, _ := h.db.Query(r.Context(),
-		`SELECT id FROM scenario_runs WHERE campaign_id=$1 AND status='running'`, id)
-	var runIDs []string
+		`SELECT id, agent_id FROM scenario_runs WHERE campaign_id=$1 AND status='running'`, id)
+	type runRef struct{ id, agentID string }
+	var runs []runRef
 	for rows != nil && rows.Next() {
-		var rid string
-		if rows.Scan(&rid) == nil {
-			runIDs = append(runIDs, rid)
+		var rr runRef
+		if rows.Scan(&rr.id, &rr.agentID) == nil {
+			runs = append(runs, rr)
 		}
 	}
 	if rows != nil {
 		rows.Close()
 	}
-	for _, rid := range runIDs {
-		_, _ = h.db.Exec(r.Context(),
-			`UPDATE scenario_runs SET status='partial', completed_at=NOW() WHERE id=$1 AND status='running'`, rid)
+	for _, rr := range runs {
+		sent := h.hub.SendToAgent(rr.agentID, models.WSMessage{
+			Type:    models.MsgCommandCancel,
+			AgentID: rr.agentID,
+			Data:    map[string]string{"runId": rr.id},
+		})
+		if !sent {
+			_, _ = h.db.Exec(r.Context(),
+				`UPDATE scenario_runs SET status='partial', completed_at=NOW() WHERE id=$1 AND status='running'`, rr.id)
+		}
 	}
-	h.auditLog(r, "campaign.stop", id, map[string]any{"cancelledRuns": len(runIDs)}, "ok")
-	respond(w, map[string]any{"stopped": true, "cancelled": len(runIDs)})
+	h.auditLog(r, "campaign.stop", id, map[string]any{"cancelledRuns": len(runs)}, "ok")
+	respond(w, map[string]any{"stopped": true, "cancelled": len(runs)})
 }
