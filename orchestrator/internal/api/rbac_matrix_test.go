@@ -97,6 +97,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/attackpath/jobs", tierAny, ""},
 	{http.MethodGet, "/api/attackpath/jobs/{id}", tierAny, ""},
 	{http.MethodGet, "/api/attackpath/correlation", tierAny, ""},
+	{http.MethodGet, "/api/exposure/assets", tierAny, ""},
+	{http.MethodGet, "/api/exposure/assets/{hostKey}", tierAny, ""},
 	{http.MethodGet, "/api/exercises/plans", tierAny, ""},
 	{http.MethodGet, "/api/exercises/plans/{id}", tierAny, ""},
 	{http.MethodGet, "/api/exercises/templates", tierAny, ""},
