@@ -175,6 +175,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/attackpath/subnet/{agentId}", h.GetAttackPathSubnet)
 		r.Get("/api/attackpath/jobs", h.ListAttackPathJobs)
 		r.Get("/api/attackpath/jobs/{id}", h.GetAttackPathJob)
+		r.Get("/api/attackpath/correlation", h.GetAttackPathCorrelation)
 
 		// Analyst + Admin only — can trigger scans, run scenarios, and
 		// author custom scenarios from the dashboard.
