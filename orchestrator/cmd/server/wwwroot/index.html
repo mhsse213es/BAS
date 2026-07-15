@@ -12062,7 +12062,12 @@ function renderVariantRun(detail) {
   var html = '<div class="card">';
   html += '<div class="card-title" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">';
   html += '<span>Results — <span style="font-family:var(--font-mono)">' + x(run.techniqueId || '') + '</span></span>';
+  html += '<span style="display:flex;align-items:center;gap:0.5rem">';
   html += '<span class="badge" style="background:' + statusCol + '22;color:' + statusCol + ';border:1px solid ' + statusCol + '44">' + x(run.status || 'running') + '</span>';
+  if (run.status === 'running') {
+    html += '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button>';
+  }
+  html += '</span>';
   html += '</div>';
 
   html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:0.75rem">';
