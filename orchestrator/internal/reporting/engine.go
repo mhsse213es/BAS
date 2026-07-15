@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"strings"
@@ -16,7 +17,9 @@ import (
 	"github.com/audspect/bas/internal/attackpath"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/pathcorrelation"
 	"github.com/audspect/bas/internal/reporting/attackdata"
+	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/verification"
 )
@@ -40,11 +43,21 @@ type VerificationResolver interface {
 	EvidenceCountsForRun(ctx context.Context, runID string) (map[string]int, error)
 }
 
+// RuleLibraryResolver is the slice of the SP2 Rule Library engine the
+// reporting layer needs for the Attack Path Detection Coverage section.
+// *rulelib.Engine satisfies it; nil-safe: WithRuleLibrary is optional and
+// that section stays inactive while nil, same convention as
+// ScenarioResolver/VerificationResolver above.
+type RuleLibraryResolver interface {
+	RulesByTechnique(techniqueID string) []rulelib.Rule
+}
+
 // Engine aggregates data from the DB into structured reports.
 type Engine struct {
 	db            *pgxpool.Pool
 	scenarios     ScenarioResolver     // nil until WithScenarios is called; Detection Validation stays inactive while nil
 	verifications VerificationResolver // nil until WithVerifications is called; only automatic verdicts contribute while nil
+	rules         RuleLibraryResolver  // nil until WithRuleLibrary is called; Attack Path Detection Coverage stays inactive while nil
 }
 
 func NewEngine(db *pgxpool.Pool) *Engine { return &Engine{db: db} }
@@ -61,6 +74,13 @@ func (e *Engine) WithScenarios(r ScenarioResolver) *Engine {
 // chaining.
 func (e *Engine) WithVerifications(r VerificationResolver) *Engine {
 	e.verifications = r
+	return e
+}
+
+// WithRuleLibrary attaches the Rule Library resolver used by the Attack Path
+// Detection Coverage section. Returns the engine for chaining.
+func (e *Engine) WithRuleLibrary(r RuleLibraryResolver) *Engine {
+	e.rules = r
 	return e
 }
 
@@ -137,21 +157,26 @@ type FullReport struct {
 	// attackpath.collect task has produced edges and the graph has been analyzed
 	// (Phase 1 collection). When present the report renders the Attack Path
 	// Validation section; otherwise that section shows a "not yet collected" state.
-	AttackPathValidation   *attackpath.Summary `json:"attackPathValidation,omitempty"`
-	AttackSurfaceAge       int                 `json:"attackSurfaceAge"`
-	OldestFindingName      string              `json:"oldestFindingName"`
-	OldestFindingID        string              `json:"oldestFindingID"`
-	OldestFindingSeverity  string              `json:"oldestFindingSeverity"`
-	AttackSurfaceSLAStatus string              `json:"attackSurfaceSLAStatus"`
-	DetectionSources       []DetectionSource   `json:"detectionSources,omitempty"`
-	PerfCPUBefore          float64             `json:"perfCpuBefore"`
-	PerfCPUAfter           float64             `json:"perfCpuAfter"`
-	PerfRAMBefore          float64             `json:"perfRamBefore"`
-	PerfRAMAfter           float64             `json:"perfRamAfter"`
-	PerfDiskBefore         float64             `json:"perfDiskBefore"`
-	PerfDiskAfter          float64             `json:"perfDiskAfter"`
-	CleanupFailed          bool                `json:"cleanupFailed"`
-	CleanupFailedCount     int                 `json:"cleanupFailedCount"`
+	AttackPathValidation *attackpath.Summary `json:"attackPathValidation,omitempty"`
+	// PathCorrelation is the SP3 Attack Path <-> Detection Correlation
+	// annotation of AttackPathValidation's dangerous paths and choke points.
+	// nil under the exact same conditions as AttackPathValidation (no
+	// collection yet), or when WithRuleLibrary was never called.
+	PathCorrelation        *pathcorrelation.AttackPathCorrelation `json:"pathCorrelation,omitempty"`
+	AttackSurfaceAge       int                                    `json:"attackSurfaceAge"`
+	OldestFindingName      string                                 `json:"oldestFindingName"`
+	OldestFindingID        string                                 `json:"oldestFindingID"`
+	OldestFindingSeverity  string                                 `json:"oldestFindingSeverity"`
+	AttackSurfaceSLAStatus string                                 `json:"attackSurfaceSLAStatus"`
+	DetectionSources       []DetectionSource                      `json:"detectionSources,omitempty"`
+	PerfCPUBefore          float64                                `json:"perfCpuBefore"`
+	PerfCPUAfter           float64                                `json:"perfCpuAfter"`
+	PerfRAMBefore          float64                                `json:"perfRamBefore"`
+	PerfRAMAfter           float64                                `json:"perfRamAfter"`
+	PerfDiskBefore         float64                                `json:"perfDiskBefore"`
+	PerfDiskAfter          float64                                `json:"perfDiskAfter"`
+	CleanupFailed          bool                                   `json:"cleanupFailed"`
+	CleanupFailedCount     int                                    `json:"cleanupFailedCount"`
 	// CoverageBreakdown is the 3-bucket prevention/detection breakdown derived from
 	// TechniqueMatrix (DetectionVerdict field). It powers the Coverage Analytics
 	// page and is used in the executive summary score cards.
@@ -366,9 +391,10 @@ type TechniqueRow struct {
 // CoverageBreakdown is the 3-bucket summary of all technique-level verdicts
 // within a report. Every technique that was executed (not errored/skipped) lands
 // in exactly one bucket:
-//   Prevented     — execution was blocked (pass/blocked verdict)
-//   DetectedOnly  — execution succeeded but an EDR/SIEM alert fired (fail+detected)
-//   Missed        — execution succeeded with no detection (fail+undetected / no telemetry)
+//
+//	Prevented     — execution was blocked (pass/blocked verdict)
+//	DetectedOnly  — execution succeeded but an EDR/SIEM alert fired (fail+detected)
+//	Missed        — execution succeeded with no detection (fail+undetected / no telemetry)
 //
 // Rates are integers 0-100. HasData is false when TechniqueMatrix is empty.
 type CoverageBreakdown struct {
@@ -1281,7 +1307,10 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	// ── 8. Executive-grade derivations (exposure, insights, action plan, …) ─
 	deriveExecutive(report, latestResults, nil)
 
-	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
+	if g, s := e.loadAttackPathGraph(ctx); g != nil {
+		report.AttackPathValidation = &s
+		report.PathCorrelation = e.loadPathCorrelation(ctx, g, s)
+	}
 	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
 
 	e.populateAttackSurfaceAge(ctx, report, agentID)
@@ -1328,16 +1357,19 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	return report, nil
 }
 
-// loadAttackPathSummary builds the fleet attack-path graph from every agent's
-// stored collection and analyzes it. Returns nil when no collection exists yet
-// (the report then renders the "not yet collected" state) and never fails a
+// loadAttackPathGraph builds the fleet attack-path graph from every agent's
+// stored collection and analyzes it, returning both the graph and its
+// Summary. Returns (nil, zero Summary) when no collection exists yet (the
+// report then renders the "not yet collected" state) and never fails a
 // report on a DB error. Attack paths are inherently fleet-wide — lateral
-// movement spans hosts — so the same summary attaches to per-agent, per-run, and
-// campaign reports alike.
-func (e *Engine) loadAttackPathSummary(ctx context.Context) *attackpath.Summary {
+// movement spans hosts — so the same graph attaches to per-agent, per-run,
+// and campaign reports alike. The graph (not just the Summary) is exposed
+// because loadPathCorrelation (SP3) needs to run further graph queries
+// beyond what Summary already computed.
+func (e *Engine) loadAttackPathGraph(ctx context.Context) (*attackpath.Graph, attackpath.Summary) {
 	rows, err := e.db.Query(ctx, `SELECT payload FROM attackpath_collections`)
 	if err != nil {
-		return nil
+		return nil, attackpath.Summary{}
 	}
 	defer rows.Close()
 	var cols []attackpath.Collection
@@ -1352,10 +1384,38 @@ func (e *Engine) loadAttackPathSummary(ctx context.Context) *attackpath.Summary 
 		}
 	}
 	if len(cols) == 0 {
+		return nil, attackpath.Summary{}
+	}
+	return attackpath.BuildGraphAndAnalyze(cols, e.loadAssetTags(ctx))
+}
+
+// loadPathCorrelation runs the SP3 correlation engine against an
+// already-built graph/summary. Returns nil when g is nil (nothing collected)
+// or when the Rule Library resolver was never wired — same nil-safe
+// convention as every other optional report section. Errors are logged, not
+// propagated: a correlation failure must never fail the whole report.
+func (e *Engine) loadPathCorrelation(ctx context.Context, g *attackpath.Graph, s attackpath.Summary) *pathcorrelation.AttackPathCorrelation {
+	if g == nil || e.rules == nil {
 		return nil
 	}
-	s := attackpath.BuildAndAnalyze(cols, e.loadAssetTags(ctx))
-	return &s
+	// e.rules is a RuleLibraryResolver interface value already — passing it
+	// straight into pathcorrelation.Correlate's RuleLibrary parameter is
+	// safe here (no typed-nil risk, unlike the *rulelib.Engine call site in
+	// the API handler) because e.rules is only ever set via WithRuleLibrary
+	// with a genuinely non-nil argument, and the g==nil / e.rules==nil check
+	// above already guards the nil case explicitly.
+	paths := pathcorrelation.DefaultPaths(g, s)
+	corr, err := pathcorrelation.Correlate(
+		ctx, g, s, paths,
+		pathcorrelation.DefaultEdgeTechniqueMapper{},
+		pathcorrelation.NewSQLRunLookup(e.db),
+		e.rules,
+	)
+	if err != nil {
+		log.Printf("warn: pathcorrelation.Correlate: %v", err)
+		return nil
+	}
+	return &corr
 }
 
 // loadAssetTags reads operator-supplied host tags (crown jewel / segment /
@@ -1557,7 +1617,10 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	// MTTD-per-tactic is available here (unlike the agent posture Build).
 	deriveExecutive(report, results, report.DetectionTechniques)
 
-	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
+	if g, s := e.loadAttackPathGraph(ctx); g != nil {
+		report.AttackPathValidation = &s
+		report.PathCorrelation = e.loadPathCorrelation(ctx, g, s)
+	}
 	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
 
 	e.populateAttackSurfaceAge(ctx, report, agentID)
@@ -1699,7 +1762,10 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 	// is not meaningful here — pass nil dets (MTTD renders "—").
 	deriveExecutive(report, allResults, nil)
 
-	report.AttackPathValidation = e.loadAttackPathSummary(ctx)
+	if g, s := e.loadAttackPathGraph(ctx); g != nil {
+		report.AttackPathValidation = &s
+		report.PathCorrelation = e.loadPathCorrelation(ctx, g, s)
+	}
 	applyAttackPathToSummary(&report.Summary, report.AttackPathValidation)
 
 	e.populateCampaignAttackSurfaceAge(ctx, report, campaignID)
@@ -2392,7 +2458,7 @@ func buildRecommendations(score models.Score, heatmap []TacticEntry) []string {
 // applyAttackPathToSummary copies the attack-path score into the executive
 // summary and appends lateral-movement recommendations when the graph shows
 // domain compromise, reachable crown jewels, or segmentation violations.
-// Called after loadAttackPathSummary so the summary fields stay consistent.
+// Called after loadAttackPathGraph so the summary fields stay consistent.
 func applyAttackPathToSummary(s *ExecutiveSummary, ap *attackpath.Summary) {
 	if ap == nil {
 		return

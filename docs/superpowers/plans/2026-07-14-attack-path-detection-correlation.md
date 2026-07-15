@@ -1182,7 +1182,7 @@ func TestCorrelate_AllGapPath_ScoresLowerThanOneCoveredHop(t *testing.T) {
 
 	oneCovered, err := Correlate(context.Background(), g, s, paths, DefaultEdgeTechniqueMapper{},
 		&fakeRunLookup{found: map[string]VerificationResult{
-			"T1078": {Confidence: ConfidenceHost, Evidence: Evidence{RunID: "run3"}}, // MemberOf's stronger technique
+			"T1021.002": {Confidence: ConfidenceHost, Evidence: Evidence{RunID: "run3"}}, // SMB edge's sole technique -> fully Covered
 		}}, rules)
 	if err != nil {
 		t.Fatalf("Correlate: %v", err)

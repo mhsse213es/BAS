@@ -1720,6 +1720,50 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </tbody>
 </table>
 {{end}}
+
+{{with .pathCorrelation}}
+<h3>Attack Path Detection Coverage</h3>
+<p style="color:#6e7681;font-size:0.82rem">{{.summary}}</p>
+<div class="score-row">
+  <div class="scard" style="border-left:3px solid {{scoreColor .detectionCoverageScore}}">
+    <div class="scard-label">Detection Coverage Score</div>
+    <div class="scard-value" style="color:{{scoreColor .detectionCoverageScore}}">{{.detectionCoverageScore}}<span style="font-size:0.9rem;color:#6e7681">/100</span></div>
+    <div style="font-size:0.8rem;color:#6e7681">higher is safer · independent of Attack Path Score</div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Verified Coverage</div>
+    <div class="scard-value" style="font-size:1.2rem">{{.statistics.verifiedCovered}}<span style="font-size:0.9rem;color:#6e7681">/{{.statistics.edgesTotal}}</span></div>
+    <div style="font-size:0.8rem;color:#6e7681">{{.statistics.verifiedPartial}} partial · {{.statistics.verifiedGap}} gap · {{.statistics.verifiedUnknown}} unknown</div>
+  </div>
+  {{if .statistics.highestRiskTechnique}}
+  <div class="scard" style="border-left:3px solid #da3633">
+    <div class="scard-label">Highest-Risk Technique</div>
+    <div class="scard-value" style="color:#da3633;font-size:1.2rem">{{.statistics.highestRiskTechnique}}</div>
+    <div style="font-size:0.8rem;color:#6e7681">largest cumulative contribution across all gaps</div>
+  </div>
+  {{end}}
+</div>
+
+{{if .gaps}}
+<h4 style="margin-top:14px">Prioritized Detection Gaps</h4>
+<p style="color:#6e7681;font-size:0.82rem">Edges an attacker could cross with no fully verified detection, ranked by how many paths cross them and how close they sit to a high-value target.</p>
+<table>
+  <thead><tr><th>From</th><th>Via</th><th>To</th><th>Technique(s)</th><th>Priority</th><th>Reason</th></tr></thead>
+  <tbody>
+  {{range .gaps}}
+  <tr>
+    <td style="font-weight:600">{{.edge.from}}</td>
+    <td>{{upper .edge.kind}}</td>
+    <td style="font-weight:600">{{.edge.to}}</td>
+    <td>{{range .techniques}}{{.techniqueId}} {{end}}</td>
+    <td style="font-weight:700;color:{{exposureColor .priority}}">{{.priority}}</td>
+    <td style="color:#6e7681;font-size:0.82rem">{{.reason}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+{{end}}
 {{else}}
 <p style="color:#6e7681">No attack-path data has been collected yet. Enable the <code>attackpath.collect</code> task on enrolled agents to map lateral-movement reachability, blast radius, segmentation, and crown-jewel exposure across the fleet.</p>
 {{end}}

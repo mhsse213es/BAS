@@ -169,10 +169,18 @@ func main() {
 	relationshipStore := relationships.NewStore(pool)
 	log.Println("[+] Relationship store ready")
 
+	// ── Detection Rule Library (SP2) ────────────────────────────────────────
+	// Constructed once and shared: the API serves it directly (rulelib_handlers.go)
+	// and the reporting engine consumes it read-only for Attack Path Detection
+	// Coverage (SP3).
+	rulesEngine := rulelib.NewEngine()
+	log.Println("[+] Rule Library ready")
+
 	// ── Reporting Engine ──────────────────────────────────────────────────
 	reportingEngine := reporting.NewEngine(pool).
 		WithScenarios(engine).
-		WithVerifications(verificationStore)
+		WithVerifications(verificationStore).
+		WithRuleLibrary(rulesEngine)
 	log.Println("[+] Reporting engine ready")
 
 	// ── Ticketing Manager ─────────────────────────────────────────────────
@@ -243,7 +251,7 @@ func main() {
 		WithExercise(exStore, exExecutor, exChain).
 		WithVerificationStore(verificationStore).
 		WithRelationshipStore(relationshipStore).
-		WithRuleLibrary(rulelib.NewEngine())
+		WithRuleLibrary(rulesEngine)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), exTracker)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
@@ -395,6 +403,7 @@ func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 // It uses a single atomic CTE so no race is possible between check and write:
 //   - If no admin-role user exists → INSERT one.
 //   - If one exists → UPDATE its username and password to match the config.
+//
 // This means setup.conf is always the source of truth; no manual DB work is
 // needed after a rebuild or credential rotation.
 func ensureAdminUser(pool *pgxpool.Pool, adminUsername, adminPassword string) error {
