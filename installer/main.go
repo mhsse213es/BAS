@@ -28,32 +28,33 @@ var (
 
 	procRegisterClassEx        = user32.NewProc("RegisterClassExW")
 	procCreateWindowEx         = user32.NewProc("CreateWindowExW")
-	procShowWindow              = user32.NewProc("ShowWindow")
-	procUpdateWindow            = user32.NewProc("UpdateWindow")
-	procGetMessage               = user32.NewProc("GetMessageW")
-	procTranslateMessage        = user32.NewProc("TranslateMessage")
-	procDispatchMessage         = user32.NewProc("DispatchMessageW")
-	procDefWindowProc           = user32.NewProc("DefWindowProcW")
-	procPostQuitMessage         = user32.NewProc("PostQuitMessage")
-	procDestroyWindow           = user32.NewProc("DestroyWindow")
-	procLoadCursor               = user32.NewProc("LoadCursorW")
-	procGetWindowText           = user32.NewProc("GetWindowTextW")
-	procSetWindowText           = user32.NewProc("SetWindowTextW")
-	procSendMessage              = user32.NewProc("SendMessageW")
-	procMessageBox               = user32.NewProc("MessageBoxW")
-	procGetSystemMetrics        = user32.NewProc("GetSystemMetrics")
-	procSetWindowPos            = user32.NewProc("SetWindowPos")
-	procBeginPaint                = user32.NewProc("BeginPaint")
-	procEndPaint                  = user32.NewProc("EndPaint")
-	procFillRect                  = user32.NewProc("FillRect")
-	procDrawText                  = user32.NewProc("DrawTextW")
-	procEnableWindow            = user32.NewProc("EnableWindow")
-	procInvalidateRect          = user32.NewProc("InvalidateRect")
-	procSetFocus                  = user32.NewProc("SetFocus")
-	procGetFocus                  = user32.NewProc("GetFocus")
-	procIsDialogMessage         = user32.NewProc("IsDialogMessageW")
-	procCreateAcceleratorTable  = user32.NewProc("CreateAcceleratorTableW")
-	procTranslateAccelerator    = user32.NewProc("TranslateAcceleratorW")
+	procShowWindow             = user32.NewProc("ShowWindow")
+	procUpdateWindow           = user32.NewProc("UpdateWindow")
+	procGetMessage             = user32.NewProc("GetMessageW")
+	procTranslateMessage       = user32.NewProc("TranslateMessage")
+	procDispatchMessage        = user32.NewProc("DispatchMessageW")
+	procDefWindowProc          = user32.NewProc("DefWindowProcW")
+	procPostQuitMessage        = user32.NewProc("PostQuitMessage")
+	procDestroyWindow          = user32.NewProc("DestroyWindow")
+	procLoadCursor             = user32.NewProc("LoadCursorW")
+	procGetWindowText          = user32.NewProc("GetWindowTextW")
+	procSetWindowText          = user32.NewProc("SetWindowTextW")
+	procSendMessage            = user32.NewProc("SendMessageW")
+	procMessageBox             = user32.NewProc("MessageBoxW")
+	procGetSystemMetrics       = user32.NewProc("GetSystemMetrics")
+	procSetWindowPos           = user32.NewProc("SetWindowPos")
+	procBeginPaint             = user32.NewProc("BeginPaint")
+	procEndPaint               = user32.NewProc("EndPaint")
+	procFillRect               = user32.NewProc("FillRect")
+	procDrawText               = user32.NewProc("DrawTextW")
+	procEnableWindow           = user32.NewProc("EnableWindow")
+	procInvalidateRect         = user32.NewProc("InvalidateRect")
+	procSetFocus               = user32.NewProc("SetFocus")
+	procGetFocus               = user32.NewProc("GetFocus")
+	procIsDialogMessage        = user32.NewProc("IsDialogMessageW")
+	procCreateAcceleratorTable = user32.NewProc("CreateAcceleratorTableW")
+	procTranslateAccelerator   = user32.NewProc("TranslateAcceleratorW")
+	procAdjustWindowRectEx     = user32.NewProc("AdjustWindowRectEx")
 
 	procCreateSolidBrush = gdi32.NewProc("CreateSolidBrush")
 	procCreateFont       = gdi32.NewProc("CreateFontW")
@@ -74,21 +75,21 @@ const (
 	WM_COMMAND = 0x0111
 	WM_SETFONT = 0x0030
 
-	WS_OVERLAPPED  = 0x00000000
-	WS_CAPTION     = 0x00C00000
-	WS_SYSMENU     = 0x00080000
-	WS_MINIMIZEBOX = 0x00020000
-	WS_VISIBLE     = 0x10000000
-	WS_CHILD       = 0x40000000
-	WS_BORDER      = 0x00800000
-	WS_TABSTOP     = 0x00010000
-	WS_GROUP       = 0x00020000
-	WS_VSCROLL     = 0x00200000
-	ES_LEFT        = 0x0000
-	ES_MULTILINE   = 0x0004
-	ES_AUTOVSCROLL = 0x0040
-	ES_PASSWORD    = 0x0020
-	ES_READONLY    = 0x0800
+	WS_OVERLAPPED    = 0x00000000
+	WS_CAPTION       = 0x00C00000
+	WS_SYSMENU       = 0x00080000
+	WS_MINIMIZEBOX   = 0x00020000
+	WS_VISIBLE       = 0x10000000
+	WS_CHILD         = 0x40000000
+	WS_BORDER        = 0x00800000
+	WS_TABSTOP       = 0x00010000
+	WS_GROUP         = 0x00020000
+	WS_VSCROLL       = 0x00200000
+	ES_LEFT          = 0x0000
+	ES_MULTILINE     = 0x0004
+	ES_AUTOVSCROLL   = 0x0040
+	ES_PASSWORD      = 0x0020
+	ES_READONLY      = 0x0800
 	SS_LEFT          = 0x00000000
 	BS_PUSHBUTTON    = 0x00000000
 	BS_DEFPUSHBUTTON = 0x00000001
@@ -114,13 +115,13 @@ const (
 // ── Control IDs ───────────────────────────────────────────────────────────────
 
 const (
-	IDC_URL        = 101
-	IDC_SECRET     = 102
-	IDC_ENV        = 103
-	IDC_INSTALL    = 104
-	IDC_CANCEL     = 105
-	IDC_STATUS     = 106
-	IDC_SELECTALL  = 107
+	IDC_URL       = 101
+	IDC_SECRET    = 102
+	IDC_ENV       = 103
+	IDC_INSTALL   = 104
+	IDC_CANCEL    = 105
+	IDC_STATUS    = 106
+	IDC_SELECTALL = 107
 )
 
 // ── Window geometry ───────────────────────────────────────────────────────────
@@ -133,11 +134,10 @@ const (
 
 const (
 	WINW = 520
-	WINH = 594
-	HDR  = 96 // header banner height (client coords)
-	LPAD = 24 // left/right gutter
+	HDR  = 96            // header banner height (client coords)
+	LPAD = 24            // left/right gutter
 	FW   = WINW - LPAD*2 // usable field width
-	EDTH = 28 // edit control height
+	EDTH = 28            // edit control height
 )
 
 const (
@@ -151,6 +151,13 @@ const (
 	yLog     = yLogLbl + 22
 	logH     = 160
 	yBtns    = yLog + logH + 18
+	btnH     = 34
+	// WINCLIENTH is the CLIENT area height the layout above needs — buttons'
+	// bottom edge plus a bottom margin. Must be turned into an outer window
+	// size via AdjustWindowRectEx (see main()), not passed to CreateWindowEx
+	// directly: CreateWindowEx's height is the OUTER window size (title bar +
+	// borders included), so using this raw value there clips the button row.
+	WINCLIENTH = yBtns + btnH + 24
 )
 
 // ── Colours (Win32 COLORREF = 0x00BBGGRR) ────────────────────────────────────
@@ -189,6 +196,10 @@ type MSG struct {
 	LParam  uintptr
 	Time    uint32
 	Pt      struct{ X, Y int32 }
+}
+
+type RECT struct {
+	Left, Top, Right, Bottom int32
 }
 
 type PAINTSTRUCT struct {
@@ -415,12 +426,12 @@ func createControls(hwnd uintptr) {
 
 	hInstBtn = createCtl(0, "BUTTON", "Validate && Install",
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_GROUP|BS_DEFPUSHBUTTON,
-		LPAD, yBtns, 196, 34, hwnd, uintptr(IDC_INSTALL), hInst)
+		LPAD, yBtns, 196, btnH, hwnd, uintptr(IDC_INSTALL), hInst)
 	setFont(hInstBtn, hFontBold)
 
 	hCancelBtn = createCtl(0, "BUTTON", "Exit",
 		WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_PUSHBUTTON,
-		LPAD+206, yBtns, 76, 34, hwnd, uintptr(IDC_CANCEL), hInst)
+		LPAD+206, yBtns, 76, btnH, hwnd, uintptr(IDC_CANCEL), hInst)
 	setFont(hCancelBtn, hFont)
 }
 
@@ -678,9 +689,20 @@ func main() {
 	procRegisterClassEx.Call(uintptr(unsafe.Pointer(&wc)))
 
 	style := uint32(WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE)
+
+	// The layout consts above (yBtns etc.) are CLIENT coordinates, but
+	// CreateWindowEx's w/h are OUTER window dimensions — the title bar and
+	// borders eat into that. Passing WINCLIENTH straight to CreateWindowEx
+	// clipped the bottom button row. AdjustWindowRectEx gives the outer size
+	// that actually yields a WINW x WINCLIENTH client area.
+	rect := RECT{0, 0, int32(WINW), int32(WINCLIENTH)}
+	procAdjustWindowRectEx.Call(uintptr(unsafe.Pointer(&rect)), uintptr(style), 0, 0)
+	outerW := int(rect.Right - rect.Left)
+	outerH := int(rect.Bottom - rect.Top)
+
 	hMainWnd = createCtl(0, "AudspectInstallerWnd",
 		"BAS Platform - Agent Setup",
-		style, 0, 0, WINW, WINH, 0, 0, hInst)
+		style, 0, 0, outerW, outerH, 0, 0, hInst)
 	if hMainWnd == 0 {
 		procMessageBox.Call(0,
 			uintptr(unsafe.Pointer(utf16("Failed to create installer window.\n\nThe installer may already be running."))),
@@ -692,8 +714,10 @@ func main() {
 	// Centre on screen.
 	sw, _, _ := procGetSystemMetrics.Call(SM_CXSCREEN)
 	sh, _, _ := procGetSystemMetrics.Call(SM_CYSCREEN)
+	cx := (int(sw) - outerW) / 2
+	cy := (int(sh) - outerH) / 2
 	procSetWindowPos.Call(hMainWnd, 0,
-		uintptr(int(sw-WINW)/2), uintptr(int(sh-WINH)/2), WINW, WINH,
+		uintptr(cx), uintptr(cy), uintptr(outerW), uintptr(outerH),
 		0x0040 /*SWP_SHOWWINDOW*/)
 
 	procShowWindow.Call(hMainWnd, SW_SHOW)
