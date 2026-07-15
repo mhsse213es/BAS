@@ -72,3 +72,44 @@ type ParsedVariable struct {
 	Key         string `json:"variable_key"`
 	Description string `json:"variable_description"`
 }
+
+// Scenario is the normalized summary of one OpenAEV scenario — mirrors the
+// openaev_scenarios table row. Kept separate from Detail so list views never
+// touch the (potentially large) full bundle content.
+type Scenario struct {
+	OpenAEVScenarioID string
+	Name              string
+	Category          string
+	Severity          string
+	Platforms         []string
+	TechniqueIDs      []string
+	Tags              []string
+	ObjectivesCount   int
+	InjectsCount      int
+	SourceUpdatedAt   time.Time
+}
+
+// Detail is the richer normalized content stored in openaev_bundles.bundle —
+// everything Scenario omits, kept even though nothing consumes it yet (the
+// future Exercise Engine will).
+type Detail struct {
+	Description string            `json:"description"`
+	Objectives  []DetailObjective `json:"objectives"`
+	Injects     []DetailInject    `json:"injects"`
+	Variables   []DetailVariable  `json:"variables"`
+}
+
+type DetailObjective struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+type DetailInject struct {
+	Title        string   `json:"title"`
+	TechniqueIDs []string `json:"techniqueIds"`
+}
+
+type DetailVariable struct {
+	Key         string `json:"key"`
+	Description string `json:"description"`
+}
