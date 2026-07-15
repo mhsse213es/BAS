@@ -1,0 +1,113 @@
+package api
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"encoding/json"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/ws"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// fixtureBundleForHandlerTest builds a minimal OpenAEV export ZIP the same
+// way openaev.buildFixtureZip does — duplicated here (not imported) since
+// that helper is unexported in another package.
+func fixtureBundleForHandlerTest(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	hdr := &zip.FileHeader{Name: "Handler Test Scenario.json", Method: zip.Deflate}
+	hdr.Comment = "Scenario"
+	w, _ := zw.CreateHeader(hdr)
+	w.Write([]byte(`{"export_version":1,"scenario_information":{"scenario_id":"sc-handler-test","scenario_name":"Handler Test Scenario","scenario_updated_at":"2026-07-10T00:00:00Z"}}`))
+	zw.Close()
+	return buf.Bytes()
+}
+
+func TestGetOpenAEVConfig_RedactsToken(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureSchema(context.Background(), pool)
+		pool.Exec(context.Background(),
+			`INSERT INTO openaev_config (id, base_url, bearer_token, enabled) VALUES (1, 'https://openaev.local', 'super-secret', true)
+			 ON CONFLICT (id) DO UPDATE SET base_url = EXCLUDED.base_url, bearer_token = EXCLUDED.bearer_token, enabled = EXCLUDED.enabled`)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.GetOpenAEVConfig(rec, httptest.NewRequest(http.MethodGet, "/api/openaev/config", nil))
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if out["baseUrl"] != "https://openaev.local" {
+			t.Errorf("baseUrl = %v", out["baseUrl"])
+		}
+		if _, present := out["bearerToken"]; present {
+			t.Error("bearerToken must never be present in the response")
+		}
+	})
+}
+
+func TestListOpenAEVScenarios_EmptyByDefault(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureContentSchema(context.Background(), pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.ListOpenAEVScenarios(rec, httptest.NewRequest(http.MethodGet, "/api/openaev/scenarios", nil))
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var out []any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if len(out) != 0 {
+			t.Errorf("expected empty list, got %d entries", len(out))
+		}
+	})
+}
+
+func TestImportOpenAEVBundle_ParsesAndStores(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureSchema(context.Background(), pool)
+		db.EnsureContentSchema(context.Background(), pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		fw, _ := mw.CreateFormFile("file", "scenario.zip")
+		fw.Write(fixtureBundleForHandlerTest(t))
+		mw.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/openaev/import", &body)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.ImportOpenAEVBundle(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var scenarioCount int
+		pool.QueryRow(context.Background(), `SELECT count(*) FROM openaev_scenarios`).Scan(&scenarioCount)
+		if scenarioCount != 1 {
+			t.Errorf("openaev_scenarios rows = %d, want 1", scenarioCount)
+		}
+	})
+}
