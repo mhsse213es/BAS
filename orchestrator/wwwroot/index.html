@@ -1238,6 +1238,13 @@ body.theme-slate {
           </svg>
           Integrations
         </div>
+        <div class="nav-item" data-tab="openaev" onclick="showTab('openaev')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/>
+            <rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>
+          </svg>
+          OpenAEV Connector
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Administration</div>
@@ -2812,6 +2819,24 @@ body.theme-slate {
         </div>
       </div>
 
+      <!-- ── OpenAEV Connector — synced scenario content library ────────── -->
+      <div id="tab-openaev" style="display:none">
+        <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+            <span>OpenAEV Connector</span>
+            <span id="openaev-status-badge" class="badge"></span>
+          </div>
+          <div id="openaev-config-panel" style="margin-top:0.75rem"></div>
+        </div>
+        <div class="tbl-wrap">
+          <table id="openaev-scenarios-table">
+            <thead><tr><th>Name</th><th>Category</th><th>Severity</th><th>Techniques</th><th>Injects</th><th>Synced</th></tr></thead>
+            <tbody id="openaev-scenarios-body"></tbody>
+          </table>
+        </div>
+        <div id="openaev-scenarios-empty" class="empty" style="display:none">No scenarios synced yet.</div>
+      </div>
+
       <!-- Compliance (reached from the Reports hub) -->
       <div id="tab-compliance" style="display:none">
         <div style="margin-bottom:0.75rem">
@@ -3426,6 +3451,16 @@ body.theme-slate {
   </div>
 </div>
 
+<div id="openaev-detail-overlay" class="drawer-overlay" onclick="if(event.target===this)closeOpenAEVDetail()">
+  <div class="drawer" style="width:640px;max-width:96vw">
+    <div class="drawer-header">
+      <h3 id="openaev-detail-title">Scenario</h3>
+      <button class="drawer-close" onclick="closeOpenAEVDetail()">&#10005;</button>
+    </div>
+    <div class="drawer-body" style="overflow-y:auto" id="openaev-detail-body"></div>
+  </div>
+</div>
+
 <!-- common ATT&CK techniques for autocomplete -->
 <datalist id="att-techniques">
   <option value="T1059.001">PowerShell</option>
@@ -3522,7 +3557,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', openaev:'OpenAEV Connector' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -3650,7 +3685,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','integrations'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','integrations','openaev'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -3673,6 +3708,7 @@ function showTab(name) {
   if (name === 'verification') loadVerificationTab();
   if (name === 'attackpath') loadAttackPath();
   if (name === 'exposure') loadExposureAssets();
+  if (name === 'openaev') loadOpenAEVTab();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
   if (name === 'dashboard') {
@@ -4120,6 +4156,115 @@ function openExposureDetail(hostKey) {
 
 function closeExposureDetail() {
   document.getElementById('exposure-detail-overlay').classList.remove('open');
+}
+
+// ── OpenAEV Connector tab ─────────────────────────────────────────────────
+function loadOpenAEVTab() {
+  var configPanel = document.getElementById('openaev-config-panel');
+  if (ROLE === 'admin') {
+    apicall('/api/openaev/config').then(function(cfg) {
+      configPanel.innerHTML =
+        '<div class="kpi-row">' +
+          '<input id="oaev-url" type="text" placeholder="https://openaev.example.local" value="' + x(cfg.baseUrl || '') + '" class="inp-sm" style="flex:1">' +
+          '<input id="oaev-token" type="password" placeholder="Bearer token (leave blank to keep current)" class="inp-sm" style="flex:1">' +
+          '<label class="tiny muted" style="display:flex;align-items:center;gap:0.3rem"><input type="checkbox" id="oaev-enabled" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
+        '</div>' +
+        '<div class="kpi-row" style="margin-top:0.5rem">' +
+          '<button class="btn btn-outline btn-sm" onclick="testOpenAEVConfig()">Test Connection</button>' +
+          '<button class="btn btn-primary btn-sm" onclick="saveOpenAEVConfig()">Save</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="syncOpenAEVNow()">Sync Now</button>' +
+          '<span id="oaev-test-result" class="tiny muted"></span>' +
+        '</div>';
+    }).catch(function() {});
+  } else {
+    configPanel.innerHTML = '';
+  }
+
+  apicall('/api/openaev/status').then(function(s) {
+    var badge = document.getElementById('openaev-status-badge');
+    var color = s.lastSyncStatus === 'ok' ? apColor(100) : s.lastSyncStatus === 'error' ? apColor(0) : 'var(--muted)';
+    badge.textContent = x(s.lastSyncStatus || 'never');
+    badge.style.color = color;
+  }).catch(function() {});
+
+  apicall('/api/openaev/scenarios').then(function(list) {
+    var body = document.getElementById('openaev-scenarios-body');
+    var empty = document.getElementById('openaev-scenarios-empty');
+    if (!list || !list.length) {
+      body.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    body.innerHTML = list.map(function(sc) {
+      return '<tr style="cursor:pointer" onclick="openOpenAEVDetail(\'' + x(sc.OpenAEVScenarioID) + '\')">' +
+        '<td>' + x(sc.Name) + '</td>' +
+        '<td>' + x(sc.Category) + '</td>' +
+        '<td>' + x(sc.Severity) + '</td>' +
+        '<td>' + (sc.TechniqueIDs || []).length + '</td>' +
+        '<td>' + sc.InjectsCount + '</td>' +
+        '<td class="tiny muted">' + x(sc.SourceUpdatedAt || '') + '</td>' +
+        '</tr>';
+    }).join('');
+  }).catch(function() {});
+}
+
+function testOpenAEVConfig() {
+  var resultEl = document.getElementById('oaev-test-result');
+  resultEl.textContent = 'Testing…';
+  apicall('/api/openaev/config/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      baseUrl: document.getElementById('oaev-url').value,
+      bearerToken: document.getElementById('oaev-token').value
+    })
+  }).then(function(res) {
+    resultEl.textContent = res.ok ? ('OK — ' + res.scenarioCount + ' scenarios visible') : ('Failed: ' + res.error);
+    resultEl.style.color = res.ok ? 'var(--success)' : 'var(--danger)';
+  }).catch(function(e) {
+    resultEl.textContent = 'Failed: ' + (e.message || 'error');
+    resultEl.style.color = 'var(--danger)';
+  });
+}
+
+function saveOpenAEVConfig() {
+  apicall('/api/openaev/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      baseUrl: document.getElementById('oaev-url').value,
+      bearerToken: document.getElementById('oaev-token').value,
+      pollIntervalHours: 24,
+      enabled: document.getElementById('oaev-enabled').checked
+    })
+  }).then(function() {
+    showToast('OpenAEV config saved', 'ok');
+    loadOpenAEVTab();
+  }).catch(function(e) { showToast('Save failed: ' + (e.message || 'error'), 'err'); });
+}
+
+function syncOpenAEVNow() {
+  apicall('/api/openaev/sync', { method: 'POST' }).then(function() {
+    showToast('OpenAEV sync started', 'ok');
+    loadOpenAEVTab();
+  }).catch(function(e) { showToast('Sync failed: ' + (e.message || 'error'), 'err'); });
+}
+
+function openOpenAEVDetail(id) {
+  apicall('/api/openaev/scenarios/' + encodeURIComponent(id)).then(function(d) {
+    document.getElementById('openaev-detail-title').textContent = d.scenario.Name;
+    var body = document.getElementById('openaev-detail-body');
+    var injectsHtml = (d.detail.injects || []).map(function(inj) {
+      return '<div class="kpi-row"><span>' + x(inj.title) + '</span><span class="tiny muted">' + (inj.techniqueIds || []).join(', ') + '</span></div>';
+    }).join('');
+    body.innerHTML = '<div class="tiny muted">' + x(d.detail.description || '') + '</div>' + injectsHtml;
+    document.getElementById('openaev-detail-overlay').classList.add('open');
+  }).catch(function() {});
+}
+
+function closeOpenAEVDetail() {
+  document.getElementById('openaev-detail-overlay').classList.remove('open');
 }
 
 function apNodePill(name, isTarget) {
