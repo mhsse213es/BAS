@@ -831,6 +831,20 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_at            timestamptz NOT NULL DEFAULT NOW(),
 			updated_at            timestamptz NOT NULL DEFAULT NOW()
 		)`,
+
+		// openaev_config: singleton row for the OpenAEV Connector's connection
+		// settings. See docs/superpowers/specs/2026-07-15-openaev-connector-design.md.
+		`CREATE TABLE IF NOT EXISTS openaev_config (
+			id                  int         PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+			base_url            text        NOT NULL DEFAULT '',
+			bearer_token        text        NOT NULL DEFAULT '',
+			poll_interval_hours int         NOT NULL DEFAULT 24,
+			enabled             boolean     NOT NULL DEFAULT false,
+			last_sync_at        timestamptz,
+			last_sync_status    text        NOT NULL DEFAULT 'never',
+			last_error          text        NOT NULL DEFAULT '',
+			updated_at          timestamptz NOT NULL DEFAULT NOW()
+		)`,
 	}
 
 	for _, s := range stmts {

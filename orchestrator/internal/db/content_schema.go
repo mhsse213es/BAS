@@ -88,6 +88,36 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			imported_at     timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
+		// ── OpenAEV Connector content: synced scenario definitions ────────────
+		// See docs/superpowers/specs/2026-07-15-openaev-connector-design.md.
+		`CREATE TABLE IF NOT EXISTS openaev_bundles (
+			id                   text        PRIMARY KEY,
+			openaev_scenario_id  text        NOT NULL,
+			bundle               jsonb       NOT NULL,
+			content_hash         text        NOT NULL,
+			size_bytes           int         NOT NULL DEFAULT 0,
+			source_version       int         NOT NULL DEFAULT 1,
+			synced_at            timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS openaev_scenarios (
+			openaev_scenario_id text        PRIMARY KEY,
+			name                text        NOT NULL,
+			category            text        NOT NULL DEFAULT '',
+			severity            text        NOT NULL DEFAULT '',
+			platforms           text[]      NOT NULL DEFAULT '{}',
+			technique_ids       text[]      NOT NULL DEFAULT '{}',
+			tags                text[]      NOT NULL DEFAULT '{}',
+			objectives_count    int         NOT NULL DEFAULT 0,
+			injects_count       int         NOT NULL DEFAULT 0,
+			source_updated_at   timestamptz NOT NULL,
+			content_hash        text        NOT NULL DEFAULT '',
+			bundle_id           text        REFERENCES openaev_bundles(id),
+			sync_revision       int         NOT NULL DEFAULT 1,
+			imported_at         timestamptz NOT NULL DEFAULT NOW(),
+			updated_at          timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
 		// ── Knowledge graph: created now to avoid a future migration ──────────
 		`CREATE TABLE IF NOT EXISTS cves (
 			cve_id      text        PRIMARY KEY,              -- e.g. CVE-2024-3400
