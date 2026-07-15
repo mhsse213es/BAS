@@ -25,6 +25,7 @@ import (
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/openaev"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/rulelib"
@@ -203,6 +204,42 @@ func main() {
 	scheduler := connector.NewScheduler(mispClient, openctiClient, gen, engine, cfg.ThreatIntelPollHours)
 	scheduler.Start()
 	defer scheduler.Stop()
+
+	// ── OpenAEV Connector ─────────────────────────────────────────────────
+	// connector.Scheduler above is hardcoded to MISP/OpenCTI/Generator — not
+	// reusable here. exercise.PollScheduler is the actual generic ticker
+	// abstraction in this codebase, so this reuses that instead. Ticks hourly
+	// (fixed) but the job itself re-reads poll_interval_hours from
+	// openaev_config each tick and no-ops if not due yet — this way an Admin
+	// UI change to the interval takes effect without a server restart.
+	openaevScheduler := exercise.NewPollScheduler(1 * time.Hour)
+	openaevScheduler.Start(func(ctx context.Context) {
+		var baseURL, token string
+		var enabled bool
+		var pollHours int
+		var lastSyncAt *time.Time
+		if err := pool.QueryRow(ctx,
+			`SELECT base_url, bearer_token, enabled, poll_interval_hours, last_sync_at FROM openaev_config WHERE id = 1`,
+		).Scan(&baseURL, &token, &enabled, &pollHours, &lastSyncAt); err != nil || !enabled {
+			return // not configured / disabled — no-op, not an error
+		}
+		if lastSyncAt != nil && time.Since(*lastSyncAt) < time.Duration(pollHours)*time.Hour {
+			return // not due yet
+		}
+		store := openaev.NewSQLStore(pool)
+		importer := openaev.NewImporter(store)
+		provider := openaev.NewRESTProvider(baseURL, token)
+		result, syncErr := importer.SyncAll(ctx, provider)
+		status := "ok"
+		lastErr := ""
+		if syncErr != nil {
+			status = "error"
+			lastErr = syncErr.Error()
+		}
+		pool.Exec(ctx, `UPDATE openaev_config SET last_sync_at = NOW(), last_sync_status = $1, last_error = $2 WHERE id = 1`, status, lastErr)
+		log.Printf("[openaev] sync: created=%d updated=%d skipped=%d errored=%d", result.Created, result.Updated, result.Skipped, result.Errored)
+	})
+	defer openaevScheduler.Stop()
 
 	// ── Exercise Engine ───────────────────────────────────────────────────
 	if err := db.EnsureExerciseSchema(context.Background(), pool); err != nil {
