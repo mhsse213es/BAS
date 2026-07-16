@@ -1245,6 +1245,12 @@ body.theme-slate {
           </svg>
           OpenAEV Connector
         </div>
+        <div class="nav-item" data-tab="exercises" onclick="showTab('exercises')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M2 8h3l2-5 2 10 2-5h3"/>
+          </svg>
+          Exercises
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Administration</div>
@@ -2837,6 +2843,29 @@ body.theme-slate {
         <div id="openaev-scenarios-empty" class="empty" style="display:none">No scenarios synced yet.</div>
       </div>
 
+      <div id="tab-exercises" style="display:none">
+        <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+          <div class="card-title">Exercise Plans</div>
+          <div class="tbl-wrap" style="margin-top:0.5rem">
+            <table>
+              <thead><tr><th>Name</th><th>Steps</th><th>Created</th><th></th></tr></thead>
+              <tbody id="ex-plans-body"></tbody>
+            </table>
+          </div>
+          <div id="ex-plans-empty" class="empty" style="display:none">No exercise plans yet. Create one from an OpenAEV scenario.</div>
+        </div>
+        <div class="card" style="padding:1rem 1.2rem">
+          <div class="card-title">Executions</div>
+          <div class="tbl-wrap" style="margin-top:0.5rem">
+            <table>
+              <thead><tr><th>Name</th><th>Status</th><th>Started</th></tr></thead>
+              <tbody id="ex-execs-body"></tbody>
+            </table>
+          </div>
+          <div id="ex-execs-empty" class="empty" style="display:none">No executions yet.</div>
+        </div>
+      </div>
+
       <!-- Compliance (reached from the Reports hub) -->
       <div id="tab-compliance" style="display:none">
         <div style="margin-bottom:0.75rem">
@@ -3461,6 +3490,16 @@ body.theme-slate {
   </div>
 </div>
 
+<div id="exercise-detail-overlay" class="drawer-overlay" onclick="if(event.target===this)closeExerciseDetail()">
+  <div class="drawer" style="width:640px;max-width:96vw">
+    <div class="drawer-header">
+      <h3 id="exercise-detail-title">Execution</h3>
+      <button class="drawer-close" onclick="closeExerciseDetail()">&#10005;</button>
+    </div>
+    <div class="drawer-body" style="overflow-y:auto" id="exercise-detail-body"></div>
+  </div>
+</div>
+
 <!-- common ATT&CK techniques for autocomplete -->
 <datalist id="att-techniques">
   <option value="T1059.001">PowerShell</option>
@@ -3557,7 +3596,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', openaev:'OpenAEV Connector' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', openaev:'OpenAEV Connector', exercises:'Exercises' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -3685,7 +3724,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','integrations','openaev'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','integrations','openaev','exercises'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -3709,6 +3748,7 @@ function showTab(name) {
   if (name === 'attackpath') loadAttackPath();
   if (name === 'exposure') loadExposureAssets();
   if (name === 'openaev') loadOpenAEVTab();
+  if (name === 'exercises') loadExercisesTab();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
   if (name === 'dashboard') {
@@ -4259,12 +4299,118 @@ function openOpenAEVDetail(id) {
       return '<div class="kpi-row"><span>' + x(inj.title) + '</span><span class="tiny muted">' + (inj.techniqueIds || []).join(', ') + '</span></div>';
     }).join('');
     body.innerHTML = '<div class="tiny muted">' + x(d.detail.description || '') + '</div>' + injectsHtml;
+    if (ROLE === 'admin') {
+      body.innerHTML += '<div style="margin-top:1rem"><button class="btn btn-primary btn-sm" onclick="createPlanFromOpenAEV(\'' + x(id) + '\')">Create Exercise Plan</button></div>';
+    }
     document.getElementById('openaev-detail-overlay').classList.add('open');
   }).catch(function() {});
 }
 
 function closeOpenAEVDetail() {
   document.getElementById('openaev-detail-overlay').classList.remove('open');
+}
+
+function loadExercisesTab() {
+  apicall('/api/exercises/plans').then(function(plans) {
+    var body = document.getElementById('ex-plans-body');
+    var empty = document.getElementById('ex-plans-empty');
+    if (!plans || !plans.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    body.innerHTML = plans.map(function(p) {
+      return '<tr>' +
+        '<td>' + x(p.name) + '</td>' +
+        '<td>' + (p.steps ? p.steps.length : 0) + '</td>' +
+        '<td class="tiny muted">' + x(p.created_at || '') + '</td>' +
+        '<td><button class="btn btn-primary btn-sm" onclick="launchExercisePrompt(\'' + x(p.id) + '\')">Launch</button></td>' +
+        '</tr>';
+    }).join('');
+  }).catch(function() {});
+
+  apicall('/api/exercises/executions').then(function(execs) {
+    var body = document.getElementById('ex-execs-body');
+    var empty = document.getElementById('ex-execs-empty');
+    if (!execs || !execs.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+    body.innerHTML = execs.map(function(e) {
+      return '<tr style="cursor:pointer" onclick="openExerciseDetail(\'' + x(e.id) + '\')">' +
+        '<td>' + x(e.name || e.plan_id) + '</td>' +
+        '<td><span class="badge">' + x(e.status) + '</span></td>' +
+        '<td class="tiny muted">' + x(e.started_at || e.created_at || '') + '</td>' +
+        '</tr>';
+    }).join('');
+  }).catch(function() {});
+}
+
+function launchExercisePrompt(planId) {
+  apicall('/api/exercises/plans/' + encodeURIComponent(planId)).then(function(p) {
+    var vars = p.variables || [];
+    var values = {};
+    for (var i = 0; i < vars.length; i++) {
+      var v = vars[i];
+      var ans = prompt('Value for "' + v.name + '"' + (v.description ? ' (' + v.description + ')' : '') + ':', v.default || '');
+      if (ans === null) return;
+      values[v.name] = ans;
+    }
+    apicall('/api/exercises/executions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan_id: planId, name: p.name, targets: [], variables: values })
+    }).then(function(ex) {
+      return apicall('/api/exercises/executions/' + encodeURIComponent(ex.id) + '/launch', { method: 'POST' });
+    }).then(function() {
+      showToast('Exercise launched', 'ok');
+      loadExercisesTab();
+    }).catch(function(e) { showToast('Launch failed: ' + (e.message || 'error'), 'err'); });
+  }).catch(function() {});
+}
+
+function openExerciseDetail(id) {
+  apicall('/api/exercises/executions/' + encodeURIComponent(id)).then(function(d) {
+    var ex = d.execution || {}, steps = d.steps || [];
+    document.getElementById('exercise-detail-title').textContent = ex.name || ex.plan_id || 'Execution';
+    var sc = ex.score;
+    var scoreHtml = sc ?
+      ('<div class="kpi-row" style="margin-bottom:0.75rem">' +
+        '<span class="badge">Overall ' + (sc.overall != null ? sc.overall.toFixed(0) : '—') + '</span>' +
+        '<span class="badge">Click rate ' + ((sc.human && sc.human.click_rate != null) ? (sc.human.click_rate * 100).toFixed(0) + '%' : '—') + '</span>' +
+        '<span class="badge">EDR ' + ((sc.technical && sc.technical.edr_detected) ? 'detected' : '—') + '</span>' +
+        '<span class="badge">SLA ' + ((sc.management && sc.management.sla_met) ? 'met' : '—') + '</span>' +
+        '</div>') :
+      '<div class="tiny muted" style="margin-bottom:0.75rem">Not yet scored</div>';
+    var stepsHtml = steps.map(function(s) {
+      var canApprove = s.status === 'waiting' && s.step_type === 'approval';
+      return '<div class="kpi-row" style="justify-content:space-between">' +
+        '<span>' + x(s.step_id) + ' <span class="tiny muted">' + x(s.step_type) + '</span></span>' +
+        '<span><span class="badge">' + x(s.status) + '</span>' +
+        (canApprove ? ' <button class="btn btn-outline btn-sm" onclick="approveExStep(\'' + x(id) + '\',\'' + x(s.step_id) + '\')">Approve</button>' : '') +
+        '</span></div>';
+    }).join('');
+    var actions = (ex.status === 'running' || ex.status === 'paused') ?
+      '<button class="btn btn-outline btn-sm" onclick="abortExecution(\'' + x(id) + '\')">Abort</button>' : '';
+    document.getElementById('exercise-detail-body').innerHTML = scoreHtml + stepsHtml + '<div style="margin-top:0.75rem">' + actions + '</div>';
+    document.getElementById('exercise-detail-overlay').classList.add('open');
+  }).catch(function() {});
+}
+
+function closeExerciseDetail() {
+  document.getElementById('exercise-detail-overlay').classList.remove('open');
+}
+
+function approveExStep(id, stepId) {
+  apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/steps/' + encodeURIComponent(stepId) + '/approve', { method: 'POST' })
+    .then(function() { showToast('Step approved', 'ok'); openExerciseDetail(id); })
+    .catch(function(e) { showToast('Approve failed: ' + (e.message || 'error'), 'err'); });
+}
+
+function abortExecution(id) {
+  apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/abort', { method: 'POST' })
+    .then(function() { showToast('Execution aborted', 'ok'); openExerciseDetail(id); loadExercisesTab(); })
+    .catch(function(e) { showToast('Abort failed: ' + (e.message || 'error'), 'err'); });
+}
+
+function createPlanFromOpenAEV(id) {
+  apicall('/api/openaev/scenarios/' + encodeURIComponent(id) + '/create-plan', { method: 'POST' })
+    .then(function() { showToast('Exercise plan created', 'ok'); closeOpenAEVDetail(); showTab('exercises'); })
+    .catch(function(e) { showToast('Create failed: ' + (e.message || 'error'), 'err'); });
 }
 
 function apNodePill(name, isTarget) {
