@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -189,19 +190,26 @@ func main() {
 	ticketingManager.Start(context.Background())
 	log.Println("[+] Ticketing manager ready")
 
-	// ── Threat-Intel Connector ────────────────────────────────────────────
-	var mispClient *connector.MISPClient
+	// ── Threat-Intel Connector (layered: air-gapped bundle floor + live overlay) ─
+	var tiSources []connector.Source
 	if cfg.MISPUrl != "" && cfg.MISPApiKey != "" {
-		mispClient = connector.NewMISPClient(cfg.MISPUrl, cfg.MISPApiKey, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
+		tiSources = append(tiSources, connector.NewMISPClient(cfg.MISPUrl, cfg.MISPApiKey, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions))
 		log.Printf("[+] MISP connector configured: %s", cfg.MISPUrl)
 	}
-	var openctiClient *connector.OpenCTIClient
 	if cfg.OpenCTIUrl != "" && cfg.OpenCTIApiKey != "" {
-		openctiClient = connector.NewOpenCTIClient(cfg.OpenCTIUrl, cfg.OpenCTIApiKey, cfg.ThreatIntelSectors)
+		tiSources = append(tiSources, connector.NewOpenCTIClient(cfg.OpenCTIUrl, cfg.OpenCTIApiKey, cfg.ThreatIntelSectors))
 		log.Printf("[+] OpenCTI connector configured: %s", cfg.OpenCTIUrl)
 	}
+	// Air-gapped floor: only add the bundle source when a signed ti-bundle.json is
+	// actually present. Verified with the release key via integrity.VerifyScenarioFile.
+	if cfg.TIBundleDir != "" {
+		if _, err := os.Stat(filepath.Join(cfg.TIBundleDir, connector.BundleFileName)); err == nil {
+			tiSources = append(tiSources, connector.NewBundleSource(cfg.TIBundleDir, integrity.VerifyScenarioFile))
+			log.Printf("[+] Threat-intel bundle found in %s (air-gapped source)", cfg.TIBundleDir)
+		}
+	}
 	gen := connector.NewGenerator(cfg.ScenariosDir)
-	scheduler := connector.NewScheduler(mispClient, openctiClient, gen, engine, cfg.ThreatIntelPollHours)
+	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours)
 	scheduler.Start()
 	defer scheduler.Stop()
 

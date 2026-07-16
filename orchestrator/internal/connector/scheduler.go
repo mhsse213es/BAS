@@ -12,8 +12,7 @@ import (
 // Scheduler polls MISP and OpenCTI on a configurable interval and
 // regenerates intel scenarios into the scenarios/intel/ directory.
 type Scheduler struct {
-	misp      *MISPClient
-	opencti   *OpenCTIClient
+	sources   []Source
 	generator *Generator
 	engine    *scenario.Engine
 	interval  time.Duration
@@ -24,10 +23,10 @@ type Scheduler struct {
 	stopCh chan struct{}
 }
 
-// NewScheduler creates a Scheduler. Pass nil for either client to disable it.
+// NewScheduler creates a Scheduler over the given threat-intel sources (any of
+// MISP, OpenCTI, BundleSource). An empty slice leaves the connector idle.
 func NewScheduler(
-	misp *MISPClient,
-	opencti *OpenCTIClient,
+	sources []Source,
 	generator *Generator,
 	engine *scenario.Engine,
 	pollHours int,
@@ -36,8 +35,7 @@ func NewScheduler(
 		pollHours = 24
 	}
 	s := &Scheduler{
-		misp:      misp,
-		opencti:   opencti,
+		sources:   sources,
 		generator: generator,
 		engine:    engine,
 		interval:  time.Duration(pollHours) * time.Hour,
@@ -45,17 +43,25 @@ func NewScheduler(
 		stopCh:    make(chan struct{}),
 	}
 	s.status = ConnectorStatus{
-		MISPEnabled:    misp != nil,
-		OpenCTIEnabled: opencti != nil,
 		LastSyncStatus: "never",
 		NextSyncAt:     time.Now().Add(s.interval),
+	}
+	for _, src := range sources {
+		switch src.Name() {
+		case "misp":
+			s.status.MISPEnabled = true
+		case "opencti":
+			s.status.OpenCTIEnabled = true
+		case "bundle":
+			s.status.BundleEnabled = true
+		}
 	}
 	return s
 }
 
 // Start launches the background polling goroutine.
 func (s *Scheduler) Start() {
-	if s.misp == nil && s.opencti == nil {
+	if len(s.sources) == 0 {
 		log.Println("[connector] no sources configured — connector idle")
 		return
 	}
@@ -111,38 +117,33 @@ func (s *Scheduler) sync() {
 	start := time.Now()
 
 	var actors []ThreatActor
+	var bundleVersion string
 
-	// ── MISP ──────────────────────────────────────────────────────────────
-	if s.misp != nil {
-		mActors, err := s.misp.Fetch()
+	// Fetch every configured source. The bundle (air-gapped floor) and live
+	// providers (MISP/OpenCTI overlay) are treated uniformly; a single source
+	// failing is logged and skipped, never aborting the others.
+	for _, src := range s.sources {
+		got, err := src.Fetch()
 		if err != nil {
-			log.Printf("[connector/misp] fetch error: %v", err)
-			s.setError("MISP: " + err.Error())
-		} else {
-			log.Printf("[connector/misp] %d actors fetched", len(mActors))
-			actors = append(actors, mActors...)
+			log.Printf("[connector/%s] fetch error: %v", src.Name(), err)
+			s.setError(src.Name() + ": " + err.Error())
+			continue
 		}
-	}
-
-	// ── OpenCTI ───────────────────────────────────────────────────────────
-	if s.opencti != nil {
-		oActors, err := s.opencti.Fetch()
-		if err != nil {
-			log.Printf("[connector/opencti] fetch error: %v", err)
-			s.setError("OpenCTI: " + err.Error())
-		} else {
-			log.Printf("[connector/opencti] %d actors fetched", len(oActors))
-			actors = append(actors, oActors...)
+		log.Printf("[connector/%s] %d actors fetched", src.Name(), len(got))
+		actors = append(actors, got...)
+		if bs, ok := src.(*BundleSource); ok {
+			bundleVersion = bs.Version()
 		}
 	}
 
 	if len(actors) == 0 {
 		log.Println("[connector] no actors returned from any source")
-		s.setOK(0, 0, 0)
+		s.setOK(0, 0, 0, bundleVersion)
 		return
 	}
 
-	// Merge actors with the same name from different sources
+	// Merge actors with the same name across sources — bundle floor + live
+	// overlay compose here, since mergeActors unions their techniques.
 	actors = mergeActors(actors)
 
 	// ── Generate scenarios ────────────────────────────────────────────────
@@ -166,10 +167,10 @@ func (s *Scheduler) sync() {
 	log.Printf("[connector] sync complete in %s — created:%d updated:%d skipped:%d",
 		elapsed, result.Created, result.Updated, result.Skipped)
 
-	s.setOK(result.Created, result.Updated, len(actors))
+	s.setOK(result.Created, result.Updated, len(actors), bundleVersion)
 }
 
-func (s *Scheduler) setOK(created, updated, total int) {
+func (s *Scheduler) setOK(created, updated, total int, bundleVersion string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.status.LastSyncAt = time.Now()
@@ -178,6 +179,9 @@ func (s *Scheduler) setOK(created, updated, total int) {
 	s.status.ScenariosCreated += created
 	s.status.ScenariosUpdated += updated
 	s.status.TotalActors = total
+	if bundleVersion != "" {
+		s.status.BundleVersion = bundleVersion
+	}
 	s.status.NextSyncAt = time.Now().Add(s.interval)
 }
 

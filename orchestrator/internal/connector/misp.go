@@ -36,6 +36,9 @@ func NewMISPClient(baseURL, apiKey string, sectors, regions []string) *MISPClien
 	}
 }
 
+// Name identifies this source. Implements Source.
+func (c *MISPClient) Name() string { return "misp" }
+
 // Fetch returns all threat actors with MITRE ATT&CK technique mappings.
 func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 	events, err := c.listEvents()

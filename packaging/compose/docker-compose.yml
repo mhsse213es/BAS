@@ -116,6 +116,8 @@ services:
       SMS_GATEWAY_FROM:  ${SMS_GATEWAY_FROM:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
+      # ── Air-gapped threat-intel bundle (optional — signed ti-bundle.json) ────
+      TI_BUNDLE_DIR:     ${TI_BUNDLE_DIR:-/intel-bundles}
       # ── SharpHound AD collector (optional — see volumes above) ──────────────
       BAS_SHARPHOUND_PATH:     ${BAS_SHARPHOUND_PATH:-}
     volumes:
@@ -134,6 +136,10 @@ services:
       # ART external payloads (gsecdump, etc.) — drop binaries in ./art-payloads
       # on the host to enable payload-dependent atomics; empty by default.
       - ./art-payloads:/art-payloads:ro
+      # Air-gapped threat-intel bundle (OPTIONAL) — drop a signed ti-bundle.json
+      # in ./intel-bundles on the host to seed threat actors without internet.
+      # The connector only activates the bundle source when the file is present.
+      - ${TI_BUNDLE_DIR_HOST:-./intel-bundles}:/intel-bundles:ro
       # SharpHound (OPTIONAL) — drop SharpHound.exe in ./sharphound/ on the host
       # and set BAS_SHARPHOUND_PATH=/sharphound/SharpHound.exe in .env to enable
       # AD graph collection from domain-joined agents. Volume is safe to omit when

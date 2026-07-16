@@ -28,6 +28,9 @@ func NewOpenCTIClient(baseURL, apiKey string, sectors []string) *OpenCTIClient {
 	}
 }
 
+// Name identifies this source. Implements Source.
+func (c *OpenCTIClient) Name() string { return "opencti" }
+
 // Fetch returns threat actors with their MITRE ATT&CK technique mappings.
 func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
 	actorsRaw, err := c.queryThreatActors()

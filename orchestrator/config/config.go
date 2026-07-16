@@ -53,6 +53,10 @@ type Config struct {
 	ThreatIntelPollHours int      `json:"threat_intel_poll_hours,omitempty"` // default 24
 	ThreatIntelSectors   []string `json:"threat_intel_sectors,omitempty"`    // e.g. ["financial-services","banking"]
 	ThreatIntelRegions   []string `json:"threat_intel_regions,omitempty"`    // e.g. ["Asia","India"]
+
+	// Air-gapped threat-intel: dir holding a signed ti-bundle.json (bundle floor;
+	// live MISP/OpenCTI above overlay on top when configured).
+	TIBundleDir string `json:"ti_bundle_dir,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -65,6 +69,7 @@ func Load(path string) (*Config, error) {
 		ARTPayloadDir:    "/art-payloads",
 		KEVFile:          "/content/cisa-kev.json",
 		PBKDF2Iterations: 310000,
+		TIBundleDir:      "/intel-bundles",
 	}
 
 	// Try file first (local dev)
@@ -166,6 +171,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("THREAT_INTEL_POLL_HOURS"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.ThreatIntelPollHours)
+	}
+	if v := os.Getenv("TI_BUNDLE_DIR"); v != "" {
+		cfg.TIBundleDir = v
 	}
 	if v := os.Getenv("BAS_LICENSE_PATH"); v != "" {
 		cfg.LicensePath = v
