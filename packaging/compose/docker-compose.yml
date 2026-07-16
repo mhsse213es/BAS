@@ -116,7 +116,14 @@ services:
       # scenarios is read-write: the threat-intel connector writes generated
       # YAMLs into scenarios/intel/. Keep writable even if connector is unused.
       - ./scenarios:/scenarios
-      - ./wwwroot:/wwwroot:ro
+      # NOTE: wwwroot is intentionally NOT bind-mounted. The dashboard SPA is baked
+      # into the image (Dockerfile `COPY orchestrator/wwwroot /wwwroot`) and its
+      # SHA-256 is compiled into the binary (expectedWWWRootHash) from the SAME file
+      # in the SAME build. Mounting a host ./wwwroot over it lets the served file
+      # drift from the compiled hash (different release, git pull, CRLF/BOM bytes),
+      # which trips the startup integrity check and crash-loops the container.
+      # UI updates ship via a new image only — that is what keeps tamper-detection
+      # meaningful. Do NOT re-add a wwwroot bind-mount.
       - ./bas.lic:/etc/bas/bas.lic:ro
       # ART external payloads (gsecdump, etc.) — drop binaries in ./art-payloads
       # on the host to enable payload-dependent atomics; empty by default.
