@@ -6,13 +6,15 @@ import "time"
 type StepType string
 
 const (
-	StepTypeSendEmail       StepType = "send_email"
-	StepTypeSendSMS         StepType = "send_sms"
-	StepTypeAgentTask       StepType = "agent_task"
-	StepTypeWait            StepType = "wait"
-	StepTypeApproval        StepType = "approval"
-	StepTypeWebhook         StepType = "webhook"
-	StepTypeNotify          StepType = "notify"
+	StepTypeSendEmail StepType = "send_email"
+	StepTypeSendSMS   StepType = "send_sms"
+	StepTypeAgentTask StepType = "agent_task"
+	StepTypeWait      StepType = "wait"
+	StepTypeApproval  StepType = "approval"
+	StepTypeWebhook   StepType = "webhook"
+	StepTypeNotify    StepType = "notify"
+	StepTypeSlack     StepType = "slack"
+	StepTypeTeams     StepType = "teams"
 	// Event-based waits — step enters StepWaiting and the trigger registry
 	// checks the condition on every executor tick.
 	StepTypeWaitForAgent     StepType = "wait_for_agent"     // waits until a BAS run completes
@@ -26,7 +28,7 @@ type StepStatus string
 const (
 	StepPending   StepStatus = "pending"
 	StepRunning   StepStatus = "running"
-	StepWaiting   StepStatus = "waiting"   // awaiting external event (approval, SIEM alert, etc.)
+	StepWaiting   StepStatus = "waiting" // awaiting external event (approval, SIEM alert, etc.)
 	StepCompleted StepStatus = "completed"
 	StepFailed    StepStatus = "failed"
 	StepCancelled StepStatus = "cancelled"
@@ -47,10 +49,10 @@ const (
 
 // PlanStep is a single node in the exercise DAG.
 type PlanStep struct {
-	ID          string     `json:"id"`
-	Type        StepType   `json:"type"`
-	Label       string     `json:"label"`
-	DependsOn   []string   `json:"depends_on,omitempty"`
+	ID        string   `json:"id"`
+	Type      StepType `json:"type"`
+	Label     string   `json:"label"`
+	DependsOn []string `json:"depends_on,omitempty"`
 	// Condition controls whether this step runs.
 	// Supported forms:
 	//   ""                        → always run (default)
@@ -86,6 +88,10 @@ type StepConfig struct {
 	// notify (same as email but to operator/admin, not exercise target)
 	NotifyEmail string `json:"notify_email,omitempty"`
 	NotifyMsg   string `json:"notify_msg,omitempty"`
+	// slack
+	Slack *SlackStepConfig `json:"slack,omitempty"`
+	// teams
+	Teams *TeamsStepConfig `json:"teams,omitempty"`
 	// wait_for_agent
 	WaitForAgent *WaitForAgentConfig `json:"wait_for_agent,omitempty"`
 	// wait_for_detection
@@ -109,6 +115,14 @@ type EmailConfig struct {
 type SMSConfig struct {
 	To   []string `json:"to"`
 	Body string   `json:"body"`
+}
+
+type SlackStepConfig struct {
+	Text string `json:"text"`
+}
+
+type TeamsStepConfig struct {
+	Text string `json:"text"`
 }
 
 type AgentTaskConfig struct {
@@ -170,13 +184,13 @@ type Execution struct {
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 	// Variables holds the operator-provided values that override plan defaults.
 	// The executor resolves ${VarName} against these before dispatching each step.
-	Variables   map[string]string      `json:"variables,omitempty"`
-	PlanVersion int                    `json:"plan_version,omitempty"`
-	Score       *ExerciseScore         `json:"score,omitempty"`
-	StartedAt   *time.Time             `json:"started_at,omitempty"`
-	CompletedAt *time.Time             `json:"completed_at,omitempty"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
+	Variables   map[string]string `json:"variables,omitempty"`
+	PlanVersion int               `json:"plan_version,omitempty"`
+	Score       *ExerciseScore    `json:"score,omitempty"`
+	StartedAt   *time.Time        `json:"started_at,omitempty"`
+	CompletedAt *time.Time        `json:"completed_at,omitempty"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
 }
 
 // Target is a participant in the exercise (human or agent).
@@ -232,13 +246,13 @@ type ExerciseScore struct {
 }
 
 type HumanScore struct {
-	Sent               int `json:"sent"`
-	Opened             int `json:"opened"`
-	Clicked            int `json:"clicked"`
-	AttachmentOpened   int `json:"attachment_opened"`
-	CredentialsEntered int `json:"credentials_entered"`
-	Reported           int `json:"reported"`
-	AvgTimeToReportS   int `json:"avg_time_to_report_s,omitempty"`
+	Sent               int     `json:"sent"`
+	Opened             int     `json:"opened"`
+	Clicked            int     `json:"clicked"`
+	AttachmentOpened   int     `json:"attachment_opened"`
+	CredentialsEntered int     `json:"credentials_entered"`
+	Reported           int     `json:"reported"`
+	AvgTimeToReportS   int     `json:"avg_time_to_report_s,omitempty"`
 	ClickRate          float64 `json:"click_rate"`
 	ReportRate         float64 `json:"report_rate"`
 }
@@ -255,10 +269,10 @@ type TechnicalScore struct {
 }
 
 type ManagementScore struct {
-	SLAMet            bool `json:"sla_met"`
+	SLAMet             bool `json:"sla_met"`
 	EscalationOccurred bool `json:"escalation_occurred"`
-	ExecNotified      bool `json:"exec_notified"`
-	IRProcessFollowed bool `json:"ir_process_followed"`
+	ExecNotified       bool `json:"exec_notified"`
+	IRProcessFollowed  bool `json:"ir_process_followed"`
 }
 
 // AgentDispatchFn allows the exercise executor to trigger BAS runs without
@@ -302,15 +316,15 @@ type VarDef struct {
 // Template is a parameterized exercise plan blueprint.
 // Templates ship with the platform; operators can also author custom ones.
 type Template struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Version     int       `json:"version"`
-	Category    string    `json:"category"`   // "phishing" | "ransomware" | "insider" | …
-	Description string    `json:"description"`
-	Variables   []VarDef  `json:"variables"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Version     int        `json:"version"`
+	Category    string     `json:"category"` // "phishing" | "ransomware" | "insider" | …
+	Description string     `json:"description"`
+	Variables   []VarDef   `json:"variables"`
 	Steps       []PlanStep `json:"steps"`
-	BuiltIn     bool      `json:"built_in"`
-	Author      string    `json:"author"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	BuiltIn     bool       `json:"built_in"`
+	Author      string     `json:"author"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }

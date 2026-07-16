@@ -26,7 +26,7 @@ func exerciseHandler(t *testing.T, pool *pgxpool.Pool) *Handler {
 	chain := exercise.NewEvidenceChain(store)
 	reg := exercise.NewRegistry()
 	exec := exercise.NewExecutor(store, chain, reg, exercise.NewPollScheduler(time.Hour), nil)
-	exec.RegisterBuiltins(nil)
+	exec.RegisterBuiltins(nil, nil, nil, nil)
 	exec.RegisterBuiltinTriggers()
 	return New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").WithExercise(store, exec, chain)
 }

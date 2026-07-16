@@ -321,7 +321,7 @@ func TestBuiltinHandlers_SynchronousGuards(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		e, store := newTestExecutor(pool)
-		e.RegisterBuiltins(nil) // nil SMTP injector
+		e.RegisterBuiltins(nil, nil, nil, nil) // nil injectors
 		ctx := context.Background()
 
 		// send_email with nil SMTP → Failed (synchronous guard).

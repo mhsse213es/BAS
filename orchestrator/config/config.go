@@ -38,6 +38,13 @@ type Config struct {
 	SMTPFromName  string `json:"smtp_from_name,omitempty"`
 	PublicBaseURL string `json:"public_base_url,omitempty"` // e.g. "https://bas.internal" for tracking pixel URLs
 
+	// Exercise Engine — communication injectors (SMS gateway + chat webhooks)
+	SMSGatewayURL   string `json:"sms_gateway_url,omitempty"`
+	SMSGatewayToken string `json:"sms_gateway_token,omitempty"`
+	SMSGatewayFrom  string `json:"sms_gateway_from,omitempty"`
+	SlackWebhookURL string `json:"slack_webhook_url,omitempty"`
+	TeamsWebhookURL string `json:"teams_webhook_url,omitempty"`
+
 	// Threat-intel connector (MISP / OpenCTI)
 	MISPUrl              string   `json:"misp_url,omitempty"`
 	MISPApiKey           string   `json:"misp_api_key,omitempty"`
@@ -129,6 +136,21 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("PUBLIC_BASE_URL"); v != "" {
 		cfg.PublicBaseURL = v
+	}
+	if v := os.Getenv("SMS_GATEWAY_URL"); v != "" {
+		cfg.SMSGatewayURL = v
+	}
+	if v := os.Getenv("SMS_GATEWAY_TOKEN"); v != "" {
+		cfg.SMSGatewayToken = v
+	}
+	if v := os.Getenv("SMS_GATEWAY_FROM"); v != "" {
+		cfg.SMSGatewayFrom = v
+	}
+	if v := os.Getenv("SLACK_WEBHOOK_URL"); v != "" {
+		cfg.SlackWebhookURL = v
+	}
+	if v := os.Getenv("TEAMS_WEBHOOK_URL"); v != "" {
+		cfg.TeamsWebhookURL = v
 	}
 	if v := os.Getenv("MISP_URL"); v != "" {
 		cfg.MISPUrl = v

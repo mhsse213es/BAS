@@ -55,22 +55,23 @@ func TestHandleApproval_EntersWaitingWithEvidence(t *testing.T) {
 	})
 }
 
-func TestHandleSendSMS_Completes(t *testing.T) {
+func TestHandleSendSMS_UnconfiguredFails(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		e, store := newTestExecutor(pool)
 		ctx := context.Background()
-		ex := seedRunningExecution(t, store, e, []PlanStep{{ID: "s", Type: StepTypeSendSMS}})
+		ex := seedRunningExecution(t, store, e, []PlanStep{{ID: "s", Type: StepTypeSendSMS, Config: StepConfig{SMS: &SMSConfig{To: []string{"+15550000"}, Body: "hi"}}}})
 		ps := ex2step(store, ex, "s")
 		se, _ := store.GetStepExecByStepID(ctx, ex.ID, "s")
-		if err := e.handleSendSMS(ctx, ex, &ps, se); err != nil {
+		// With no gateway configured the handler fails the step synchronously.
+		if err := e.handleSendSMS(nil)(ctx, ex, &ps, se); err != nil {
 			t.Fatalf("handleSendSMS: %v", err)
 		}
 		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "s")
-		if got.Status != StepCompleted {
-			t.Fatalf("SMS stub status = %q, want completed", got.Status)
+		if got.Status != StepFailed {
+			t.Fatalf("SMS with nil gateway status = %q, want failed", got.Status)
 		}
 	})
 }

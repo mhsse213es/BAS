@@ -60,14 +60,16 @@ func (e *Executor) Start() {
 func (e *Executor) Stop() { e.scheduler.Stop() }
 
 // RegisterBuiltins wires the standard step handlers into the registry.
-func (e *Executor) RegisterBuiltins(smtp *SMTPInjector) {
+func (e *Executor) RegisterBuiltins(smtp *SMTPInjector, sms *SMSInjector, slack *SlackInjector, teams *TeamsInjector) {
 	e.registry.Register(StepTypeSendEmail, StepHandlerFunc(e.handleSendEmail(smtp)))
-	e.registry.Register(StepTypeSendSMS, StepHandlerFunc(e.handleSendSMS))
+	e.registry.Register(StepTypeSendSMS, StepHandlerFunc(e.handleSendSMS(sms)))
 	e.registry.Register(StepTypeAgentTask, StepHandlerFunc(e.handleAgentTask))
 	e.registry.Register(StepTypeWait, StepHandlerFunc(e.handleWait))
 	e.registry.Register(StepTypeApproval, StepHandlerFunc(e.handleApproval))
 	e.registry.Register(StepTypeWebhook, StepHandlerFunc(e.handleWebhook))
 	e.registry.Register(StepTypeNotify, StepHandlerFunc(e.handleNotify))
+	e.registry.Register(StepTypeSlack, StepHandlerFunc(e.handleSlack(slack)))
+	e.registry.Register(StepTypeTeams, StepHandlerFunc(e.handleTeams(teams)))
 	// Event-based wait steps: enter StepWaiting immediately, then the
 	// trigger registry fires them when the condition is satisfied.
 	e.registry.Register(StepTypeWaitForAgent, StepHandlerFunc(e.handleWaitForAgent))
@@ -279,9 +281,79 @@ func (e *Executor) handleSendEmail(smtp *SMTPInjector) func(context.Context, *Ex
 	}
 }
 
-func (e *Executor) handleSendSMS(_ context.Context, ex *Execution, ps *PlanStep, _ *StepExecution) error {
-	log.Printf("[exercise] SMS step %s/%s — no gateway configured (stub)", ex.ID, ps.ID)
-	return e.store.SetStepStatus(context.Background(), ex.ID, ps.ID, StepCompleted, "")
+func (e *Executor) handleSendSMS(sms *SMSInjector) func(context.Context, *Execution, *PlanStep, *StepExecution) error {
+	return func(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+		if sms == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "SMS gateway not configured")
+		}
+		cfg := ps.Config.SMS
+		if cfg == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing sms config")
+		}
+		go func() {
+			bctx := context.Background()
+			result, err := sms.Send(bctx, cfg.To, cfg.Body)
+			if err != nil {
+				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
+				return
+			}
+			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
+			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
+			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "sms_sent", "system", "sms_injector", result)
+			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
+		}()
+		return nil
+	}
+}
+
+func (e *Executor) handleSlack(slack *SlackInjector) func(context.Context, *Execution, *PlanStep, *StepExecution) error {
+	return func(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+		if slack == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "Slack not configured")
+		}
+		cfg := ps.Config.Slack
+		if cfg == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing slack config")
+		}
+		go func() {
+			bctx := context.Background()
+			result, err := slack.Send(bctx, cfg.Text)
+			if err != nil {
+				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
+				return
+			}
+			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
+			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
+			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "slack_sent", "system", "slack_injector", result)
+			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
+		}()
+		return nil
+	}
+}
+
+func (e *Executor) handleTeams(teams *TeamsInjector) func(context.Context, *Execution, *PlanStep, *StepExecution) error {
+	return func(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {
+		if teams == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "Teams not configured")
+		}
+		cfg := ps.Config.Teams
+		if cfg == nil {
+			return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed, "missing teams config")
+		}
+		go func() {
+			bctx := context.Background()
+			result, err := teams.Send(bctx, cfg.Text)
+			if err != nil {
+				_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
+				return
+			}
+			_ = e.store.SetStepResult(bctx, ex.ID, ps.ID, result)
+			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepCompleted, "")
+			_, _ = e.evidence.Append(bctx, ex.ID, se.ID, "teams_sent", "system", "teams_injector", result)
+			_ = e.store.RecordEvent(bctx, ex.ID, ps.ID, "step_completed", "system", result)
+		}()
+		return nil
+	}
 }
 
 func (e *Executor) handleAgentTask(_ context.Context, ex *Execution, ps *PlanStep, se *StepExecution) error {

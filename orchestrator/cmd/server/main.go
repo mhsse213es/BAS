@@ -259,10 +259,26 @@ func main() {
 			TrackerBaseURL: cfg.PublicBaseURL,
 		}, exStore)
 	}
+	var smsInj *exercise.SMSInjector
+	if cfg.SMSGatewayURL != "" {
+		smsInj = exercise.NewSMSInjector(exercise.SMSGatewayConfig{
+			URL:       cfg.SMSGatewayURL,
+			AuthToken: cfg.SMSGatewayToken,
+			From:      cfg.SMSGatewayFrom,
+		})
+	}
+	var slackInj *exercise.SlackInjector
+	if cfg.SlackWebhookURL != "" {
+		slackInj = exercise.NewSlackInjector(cfg.SlackWebhookURL)
+	}
+	var teamsInj *exercise.TeamsInjector
+	if cfg.TeamsWebhookURL != "" {
+		teamsInj = exercise.NewTeamsInjector(cfg.TeamsWebhookURL)
+	}
 	exRegistry := exercise.NewRegistry()
 	exScheduler := exercise.NewPollScheduler(5 * time.Second)
 	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil)
-	exExecutor.RegisterBuiltins(smtpInj)
+	exExecutor.RegisterBuiltins(smtpInj, smsInj, slackInj, teamsInj)
 	exExecutor.RegisterBuiltinTriggers()
 	if err := exStore.SeedBuiltinTemplates(context.Background()); err != nil {
 		log.Printf("warn: seed built-in exercise templates: %v", err)
