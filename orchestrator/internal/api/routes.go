@@ -359,6 +359,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Post("/api/openaev/config/test", h.TestOpenAEVConfig)
 			r.Post("/api/openaev/sync", h.SyncOpenAEV)
 			r.Post("/api/openaev/import", h.ImportOpenAEVBundle)
+			r.Post("/api/openaev/scenarios/{id}/create-plan", h.CreateExercisePlanFromOpenAEV)
 
 			// Exercise plan authoring — Admin only
 			r.Post("/api/exercises/plans", h.CreateExercisePlan)

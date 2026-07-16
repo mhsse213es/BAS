@@ -196,3 +196,27 @@ func (h *Handler) ImportOpenAEVBundle(w http.ResponseWriter, r *http.Request) {
 	h.auditLog(r, "openaev.import", "", map[string]any{"result": result}, "ok")
 	respond(w, result)
 }
+
+// POST /api/openaev/scenarios/{id}/create-plan — Admin.
+// Builds an editable exercise plan from a synced OpenAEV scenario
+// (structure-preserving skeleton — see openaev.BuildPlan).
+func (h *Handler) CreateExercisePlanFromOpenAEV(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	store := openaev.NewSQLStore(h.db)
+	sc, detail, found, err := store.Get(r.Context(), id)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		jsonError(w, "scenario not found", http.StatusNotFound)
+		return
+	}
+	plan := openaev.BuildPlan(sc, detail)
+	if err := h.exerciseStore.CreatePlan(r.Context(), &plan); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "openaev.create_plan", plan.ID, map[string]any{"scenario_id": id, "name": plan.Name}, "success")
+	respond(w, map[string]string{"plan_id": plan.ID})
+}

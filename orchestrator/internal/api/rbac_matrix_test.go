@@ -214,6 +214,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/openaev/config/test", tierAdminOnly, ""},
 	{http.MethodPost, "/api/openaev/sync", tierAdminOnly, ""},
 	{http.MethodPost, "/api/openaev/import", tierAdminOnly, ""},
+	{http.MethodPost, "/api/openaev/scenarios/{id}/create-plan", tierAdminOnly, ""},
 	{http.MethodPost, "/api/exercises/plans", tierAdminOnly, ""},
 	{http.MethodPost, "/api/exercises/plans/validate", tierAdminOnly, ""},
 	{http.MethodPut, "/api/exercises/plans/{id}", tierAdminOnly, ""},
