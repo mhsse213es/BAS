@@ -1764,6 +1764,10 @@ body.theme-slate {
               <span id="cs-opencti" class="conn-cfg-val">—</span>
             </div>
             <div class="conn-cfg-row">
+              <span class="conn-cfg-label">Bundle (air-gapped)</span>
+              <span id="cs-bundle" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
               <span class="conn-cfg-label">Last Sync</span>
               <span id="cs-last-sync" class="conn-cfg-val">—</span>
             </div>
@@ -10957,6 +10961,7 @@ function loadConnectorStatus() {
   apicall('/api/connector/status').then(function(s) {
     document.getElementById('cs-misp').textContent    = s.mispEnabled    ? '✓ Enabled' : '✗ Not configured';
     document.getElementById('cs-opencti').textContent = s.openctiEnabled ? '✓ Enabled' : '✗ Not configured';
+    document.getElementById('cs-bundle').textContent = s.bundleEnabled ? ('✓ Enabled (v' + (s.bundleVersion || '?') + ')') : '✗ Not configured';
     document.getElementById('cs-last-sync').textContent = s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : 'Never';
     document.getElementById('cs-created').textContent = (s.scenariosCreated || 0) + ' created, ' + (s.scenariosUpdated || 0) + ' updated';
     document.getElementById('cs-next').textContent = s.nextSyncAt ? new Date(s.nextSyncAt).toLocaleString() : '—';

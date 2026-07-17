@@ -32,7 +32,7 @@ func TestNewScheduler_StatusFlags(t *testing.T) {
 func TestMergeActors_UnionsTechniques(t *testing.T) {
 	// Layering: same actor from the bundle floor and a live overlay → the
 	// techniques are unioned, which is what makes bundle+live compose for free.
-	merged := mergeActors([]ThreatActor{
+	merged := MergeActors([]ThreatActor{
 		{Name: "APT36", Source: "bundle", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
 		{Name: "APT36", Source: "misp", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
 	})

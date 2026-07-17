@@ -143,8 +143,8 @@ func (s *Scheduler) sync() {
 	}
 
 	// Merge actors with the same name across sources — bundle floor + live
-	// overlay compose here, since mergeActors unions their techniques.
-	actors = mergeActors(actors)
+	// overlay compose here, since MergeActors unions their techniques.
+	actors = MergeActors(actors)
 
 	// ── Generate scenarios ────────────────────────────────────────────────
 	result, err := s.generator.Write(actors)
@@ -194,9 +194,9 @@ func (s *Scheduler) setError(msg string) {
 	s.status.NextSyncAt = time.Now().Add(s.interval)
 }
 
-// mergeActors combines actors with the same name (case-insensitive) from
+// MergeActors combines actors with the same name (case-insensitive) from
 // different sources into one actor with the union of their techniques.
-func mergeActors(actors []ThreatActor) []ThreatActor {
+func MergeActors(actors []ThreatActor) []ThreatActor {
 	byName := make(map[string]*ThreatActor)
 	for _, a := range actors {
 		key := actorKey(a.Name)
