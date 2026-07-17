@@ -827,10 +827,16 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			client_id             text        NOT NULL DEFAULT '',
 			client_secret         text        NOT NULL DEFAULT '',
 			workspace_id          text        NOT NULL DEFAULT '',
+			base_url              text        NOT NULL DEFAULT '',
+			api_token             text        NOT NULL DEFAULT '',
 			verify_delay_seconds  int         NOT NULL DEFAULT 120,
 			created_at            timestamptz NOT NULL DEFAULT NOW(),
 			updated_at            timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		// base_url/api_token: generic credential storage for non-Azure-shaped
+		// providers (Splunk, QRadar, ...) that don't have tenant/client/secret.
+		`ALTER TABLE detection_connectors ADD COLUMN IF NOT EXISTS base_url  text NOT NULL DEFAULT ''`,
+		`ALTER TABLE detection_connectors ADD COLUMN IF NOT EXISTS api_token text NOT NULL DEFAULT ''`,
 
 		// openaev_config: singleton row for the OpenAEV Connector's connection
 		// settings. See docs/superpowers/specs/2026-07-15-openaev-connector-design.md.

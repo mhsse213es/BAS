@@ -19,7 +19,7 @@ import (
 // GET /api/detectverify/configs
 func (h *Handler) ListDetectionConnectors(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
-		`SELECT id, name, provider, enabled, auto_verify, tenant_id, workspace_id,
+		`SELECT id, name, provider, enabled, auto_verify, tenant_id, workspace_id, base_url,
 		        verify_delay_seconds, created_at, updated_at
 		   FROM detection_connectors ORDER BY created_at ASC`)
 	if err != nil {
@@ -35,6 +35,7 @@ func (h *Handler) ListDetectionConnectors(w http.ResponseWriter, r *http.Request
 		AutoVerify         bool      `json:"autoVerify"`
 		TenantID           string    `json:"tenantId"`
 		WorkspaceID        string    `json:"workspaceId"`
+		BaseURL            string    `json:"baseUrl"`
 		VerifyDelaySeconds int       `json:"verifyDelaySeconds"`
 		CreatedAt          time.Time `json:"createdAt"`
 		UpdatedAt          time.Time `json:"updatedAt"`
@@ -43,7 +44,7 @@ func (h *Handler) ListDetectionConnectors(w http.ResponseWriter, r *http.Request
 	for rows.Next() {
 		var rv row
 		if err := rows.Scan(&rv.ID, &rv.Name, &rv.Provider, &rv.Enabled, &rv.AutoVerify,
-			&rv.TenantID, &rv.WorkspaceID, &rv.VerifyDelaySeconds, &rv.CreatedAt, &rv.UpdatedAt); err != nil {
+			&rv.TenantID, &rv.WorkspaceID, &rv.BaseURL, &rv.VerifyDelaySeconds, &rv.CreatedAt, &rv.UpdatedAt); err != nil {
 			continue
 		}
 		out = append(out, rv)
@@ -66,15 +67,17 @@ func (h *Handler) CreateDetectionConnector(w http.ResponseWriter, r *http.Reques
 		ClientID           string `json:"clientId"`
 		ClientSecret       string `json:"clientSecret"`
 		WorkspaceID        string `json:"workspaceId"`
+		BaseURL            string `json:"baseUrl"`
+		APIToken           string `json:"apiToken"`
 		VerifyDelaySeconds int    `json:"verifyDelaySeconds"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil || req.Name == "" || req.Provider == "" {
 		jsonError(w, "name and provider are required", http.StatusBadRequest)
 		return
 	}
-	validProviders := map[string]bool{"microsoft_sentinel": true, "microsoft_defender": true}
+	validProviders := map[string]bool{"microsoft_sentinel": true, "microsoft_defender": true, "splunk": true}
 	if !validProviders[req.Provider] {
-		jsonError(w, "provider must be microsoft_sentinel | microsoft_defender", http.StatusBadRequest)
+		jsonError(w, "provider must be microsoft_sentinel | microsoft_defender | splunk", http.StatusBadRequest)
 		return
 	}
 	if req.VerifyDelaySeconds <= 0 {
@@ -83,10 +86,10 @@ func (h *Handler) CreateDetectionConnector(w http.ResponseWriter, r *http.Reques
 	var id string
 	err := h.db.QueryRow(r.Context(),
 		`INSERT INTO detection_connectors
-		 (name, provider, enabled, auto_verify, tenant_id, client_id, client_secret, workspace_id, verify_delay_seconds)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+		 (name, provider, enabled, auto_verify, tenant_id, client_id, client_secret, workspace_id, base_url, api_token, verify_delay_seconds)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
 		req.Name, req.Provider, req.Enabled, req.AutoVerify,
-		req.TenantID, req.ClientID, req.ClientSecret, req.WorkspaceID, req.VerifyDelaySeconds,
+		req.TenantID, req.ClientID, req.ClientSecret, req.WorkspaceID, req.BaseURL, req.APIToken, req.VerifyDelaySeconds,
 	).Scan(&id)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -108,6 +111,8 @@ func (h *Handler) UpdateDetectionConnector(w http.ResponseWriter, r *http.Reques
 		ClientID           string `json:"clientId"`
 		ClientSecret       string `json:"clientSecret"`
 		WorkspaceID        string `json:"workspaceId"`
+		BaseURL            string `json:"baseUrl"`
+		APIToken           string `json:"apiToken"`
 		VerifyDelaySeconds int    `json:"verifyDelaySeconds"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil {
@@ -115,20 +120,25 @@ func (h *Handler) UpdateDetectionConnector(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	// Preserve masked sensitive values (UI returns "***" for secrets it can't show).
-	var existingSecret string
-	h.db.QueryRow(r.Context(), `SELECT client_secret FROM detection_connectors WHERE id=$1`, id).Scan(&existingSecret)
+	var existingSecret, existingToken string
+	h.db.QueryRow(r.Context(), `SELECT client_secret, api_token FROM detection_connectors WHERE id=$1`, id).
+		Scan(&existingSecret, &existingToken)
 	if req.ClientSecret == "***" {
 		req.ClientSecret = existingSecret
+	}
+	if req.APIToken == "***" {
+		req.APIToken = existingToken
 	}
 	if req.VerifyDelaySeconds <= 0 {
 		req.VerifyDelaySeconds = 120
 	}
 	ct, err := h.db.Exec(r.Context(),
 		`UPDATE detection_connectors SET name=$1, enabled=$2, auto_verify=$3, tenant_id=$4,
-		        client_id=$5, client_secret=$6, workspace_id=$7, verify_delay_seconds=$8, updated_at=NOW()
-		  WHERE id=$9`,
+		        client_id=$5, client_secret=$6, workspace_id=$7, base_url=$8, api_token=$9,
+		        verify_delay_seconds=$10, updated_at=NOW()
+		  WHERE id=$11`,
 		req.Name, req.Enabled, req.AutoVerify, req.TenantID,
-		req.ClientID, req.ClientSecret, req.WorkspaceID, req.VerifyDelaySeconds, id)
+		req.ClientID, req.ClientSecret, req.WorkspaceID, req.BaseURL, req.APIToken, req.VerifyDelaySeconds, id)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -185,10 +195,11 @@ func (h *Handler) loadDetectionConnector(ctx context.Context, id string) (*detec
 	var cfg detectverify.Config
 	err := h.db.QueryRow(ctx,
 		`SELECT id, name, provider, enabled, auto_verify, tenant_id, client_id, client_secret,
-		        workspace_id, verify_delay_seconds
+		        workspace_id, base_url, api_token, verify_delay_seconds
 		   FROM detection_connectors WHERE id=$1`, id,
 	).Scan(&cfg.ID, &cfg.Name, &cfg.Provider, &cfg.Enabled, &cfg.AutoVerify,
-		&cfg.TenantID, &cfg.ClientID, &cfg.ClientSecret, &cfg.WorkspaceID, &cfg.VerifyDelaySeconds)
+		&cfg.TenantID, &cfg.ClientID, &cfg.ClientSecret, &cfg.WorkspaceID,
+		&cfg.BaseURL, &cfg.APIToken, &cfg.VerifyDelaySeconds)
 	if err != nil {
 		return nil, err
 	}

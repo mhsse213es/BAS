@@ -35,13 +35,15 @@ const (
 type Config struct {
 	ID                 string
 	Name               string
-	Provider           string // "microsoft_sentinel" | "microsoft_defender"
+	Provider           string // "microsoft_sentinel" | "microsoft_defender" | "splunk"
 	Enabled            bool
 	AutoVerify         bool
 	TenantID           string
 	ClientID           string
 	ClientSecret       string
 	WorkspaceID        string // Sentinel only; empty for Defender XDR
+	BaseURL            string // Splunk/QRadar: management API base URL
+	APIToken           string // Splunk/QRadar: bearer token
 	VerifyDelaySeconds int
 }
 
@@ -83,14 +85,16 @@ type Connector interface {
 }
 
 // NewConnector builds the Connector for cfg.Provider. Returns an error for
-// any provider not yet implemented — QRadar/Splunk/Elastic/CrowdStrike/
-// Trellix arrive in later slices using this same framework.
+// any provider not yet implemented — QRadar/Elastic/CrowdStrike/Trellix
+// arrive in later slices using this same framework.
 func NewConnector(cfg Config) (Connector, error) {
 	switch cfg.Provider {
 	case "microsoft_sentinel":
 		return newSentinelConnector(cfg), nil
 	case "microsoft_defender":
 		return newDefenderXDRConnector(cfg), nil
+	case "splunk":
+		return newSplunkConnector(cfg), nil
 	default:
 		return nil, fmt.Errorf("detectverify: provider %q not supported", cfg.Provider)
 	}
