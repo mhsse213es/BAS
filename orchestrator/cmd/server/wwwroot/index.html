@@ -2404,11 +2404,11 @@ body.theme-slate {
               <div style="font-weight:700;color:var(--text)">Asset Tagging — Crown Jewels &amp; Segments</div>
               <button class="btn btn-outline btn-sm" onclick="document.getElementById('ap-assets').style.display='none'">Close</button>
             </div>
-            <div class="tiny muted" style="margin-bottom:0.75rem">Tag the high-value assets the collectors can't infer. A crown-jewel tag makes a host show up in crown-jewel exposure and scoring; tier-0 marks a custom domain-compromise target. Tags follow the host across reachability and SharpHound identities.</div>
+            <div class="tiny muted" style="margin-bottom:0.75rem">Tag the high-value assets the collectors can't infer. A crown-jewel tag makes a host show up in crown-jewel exposure and scoring; tier-0 marks a custom domain-compromise target. Criticality/Flags feed the Exposure Explorer's risk score — see the Exposure Explorer tab. Tags follow the host across reachability and SharpHound identities.</div>
             <div class="tbl-wrap">
               <table>
-                <thead><tr><th>Host</th><th>Crown-Jewel Tag</th><th>Segment</th><th style="text-align:center">Tier-0</th><th></th></tr></thead>
-                <tbody id="ap-assets-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+                <thead><tr><th>Host</th><th>Crown-Jewel Tag</th><th>Segment</th><th style="text-align:center">Tier-0</th><th>Criticality</th><th>Flags</th><th></th></tr></thead>
+                <tbody id="ap-assets-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -4931,19 +4931,30 @@ function openAPAssets() {
     renderAPAssets();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
+var AP_CRIT_TIERS = ['', 'low', 'medium', 'high', 'critical'];
 function renderAPAssets() {
   var tb = document.getElementById('ap-assets-body');
   if (!AP_ASSETS.length) {
-    tb.innerHTML = '<tr><td colspan="5" class="empty">No hosts discovered yet — run a collection first.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="7" class="empty">No hosts discovered yet — run a collection first.</td></tr>';
     return;
   }
   tb.innerHTML = AP_ASSETS.map(function(a, i) {
+    var tierOpts = AP_CRIT_TIERS.map(function(t) {
+      return '<option value="' + t + '"' + (a.criticalityTier === t ? ' selected' : '') + '>' + (t || '—') + '</option>';
+    }).join('');
     return '<tr>' +
       '<td style="font-family:var(--font-mono);font-size:0.76rem">' + x(a.label || a.hostKey) +
         (a.label && a.label.toUpperCase() !== (a.hostKey || '').toUpperCase() ? '<div class="tiny muted">' + x(a.hostKey) + '</div>' : '') + '</td>' +
       '<td><input id="apt-cj-' + i + '" value="' + x(a.crownJewel || '') + '" placeholder="e.g. ERP, FileServer" style="' + AP_INPUT_STYLE + '"></td>' +
       '<td><input id="apt-seg-' + i + '" value="' + x(a.segment || '') + '" placeholder="e.g. server-vlan" style="' + AP_INPUT_STYLE + '"></td>' +
       '<td style="text-align:center"><input type="checkbox" id="apt-hv-' + i + '"' + (a.highValue ? ' checked' : '') + '></td>' +
+      '<td><select id="apt-crit-' + i + '" style="' + AP_INPUT_STYLE + '">' + tierOpts + '</select></td>' +
+      '<td style="font-size:0.72rem;white-space:nowrap">' +
+        '<label style="margin-right:0.4rem"><input type="checkbox" id="apt-if-' + i + '"' + (a.internetFacing ? ' checked' : '') + '> Internet</label>' +
+        '<label style="margin-right:0.4rem"><input type="checkbox" id="apt-ie-' + i + '"' + (a.identityExposed ? ' checked' : '') + '> Identity</label>' +
+        '<label style="margin-right:0.4rem"><input type="checkbox" id="apt-prod-' + i + '"' + (a.production ? ' checked' : '') + '> Prod</label>' +
+        '<input id="apt-cs-' + i + '" value="' + x((a.complianceScope || []).join(', ')) + '" placeholder="compliance scope, comma-sep" style="' + AP_INPUT_STYLE + ';margin-top:0.2rem;display:block;width:160px">' +
+      '</td>' +
       '<td><button class="btn btn-outline btn-sm" onclick="saveAPAsset(' + i + ')">Save</button></td>' +
     '</tr>';
   }).join('');
@@ -4951,14 +4962,22 @@ function renderAPAssets() {
 function saveAPAsset(i) {
   var a = AP_ASSETS[i];
   if (!a) return;
+  var cs = document.getElementById('apt-cs-' + i).value.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
   var payload = {
     hostKey: a.hostKey, label: a.label || '',
     crownJewel: document.getElementById('apt-cj-' + i).value.trim(),
     segment: document.getElementById('apt-seg-' + i).value.trim(),
-    highValue: document.getElementById('apt-hv-' + i).checked
+    highValue: document.getElementById('apt-hv-' + i).checked,
+    criticalityTier: document.getElementById('apt-crit-' + i).value,
+    internetFacing: document.getElementById('apt-if-' + i).checked,
+    identityExposed: document.getElementById('apt-ie-' + i).checked,
+    production: document.getElementById('apt-prod-' + i).checked,
+    complianceScope: cs
   };
   apicall('/api/attackpath/assets', { method: 'POST', body: JSON.stringify(payload) }).then(function() {
     a.crownJewel = payload.crownJewel; a.segment = payload.segment; a.highValue = payload.highValue;
+    a.criticalityTier = payload.criticalityTier; a.internetFacing = payload.internetFacing;
+    a.identityExposed = payload.identityExposed; a.production = payload.production; a.complianceScope = payload.complianceScope;
     showToast('Saved ' + (a.label || a.hostKey), 'ok');
     loadAttackPath();
   }).catch(function(e) { showToast(e.message, 'err'); });
@@ -11299,6 +11318,7 @@ function fetchAuditPage() {
           if (d2.type) parts.push('type: ' + d2.type);
           if (d2.crownJewel) parts.push('crown-jewel: ' + d2.crownJewel);
           if (d2.highValue) parts.push('high-value');
+          if (d2.criticalityTier) parts.push('criticality: ' + d2.criticalityTier);
           if (d2.version) parts.push('v: ' + d2.version);
           if (d2.techniqueCount != null) parts.push('techniques: ' + d2.techniqueCount);
           if (d2.enabled != null) parts.push('enabled: ' + d2.enabled);
