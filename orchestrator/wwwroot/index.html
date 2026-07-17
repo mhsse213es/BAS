@@ -2693,6 +2693,8 @@ body.theme-slate {
           </div>
         </div>
         <div class="kpi-row" id="ed-kpi-row"><div class="empty">Loading…</div></div>
+        <div id="ed-forecast"></div>
+        <div id="ed-exposure"></div>
       </div>
 
       <!-- Recommendations -->
@@ -4198,9 +4200,12 @@ function loadExecDashboard() {
   var days = rangeEl ? rangeEl.value : '90';
   Promise.all([
     apicall('/api/dashboard/current'),
-    apicall('/api/dashboard/trends?days=' + encodeURIComponent(days))
+    apicall('/api/dashboard/trends?days=' + encodeURIComponent(days)),
+    apicall('/api/predict/risk')
   ]).then(function(res) {
     renderExecDashboard(res[0], res[1]);
+    renderForecast(res[2] && res[2].forecast);
+    renderExposure(res[2] && res[2].exposure);
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
@@ -4252,6 +4257,106 @@ function renderExecDashboard(current, trends) {
     edKpiCard('Exposure Score', current.exposureScore, exp) +
     edKpiCard('Detection Coverage', current.detectionCoverage, det) +
     edKpiCard('Fleet Assets', current.assetCount, cnt);
+}
+
+function edForecastChart(fc) {
+  var hist = (fc && fc.history) || [];
+  var proj = (fc && fc.hasForecast && fc.projected) ? fc.projected : [];
+  var all = hist.concat(proj);
+  if (all.length < 2) return '';
+  var w = 520, h = 120, pad = 10;
+  var xs = all.map(function(p) { return p.dayIndex; });
+  var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+  var rangeX = (maxX - minX) || 1;
+  var vals = [];
+  all.forEach(function(p) {
+    vals.push(p.score);
+    if (typeof p.high === 'number') vals.push(p.high);
+    if (typeof p.low === 'number') vals.push(p.low);
+  });
+  var minY = Math.min.apply(null, vals), maxY = Math.max.apply(null, vals);
+  var rangeY = (maxY - minY) || 1;
+  function sx(x) { return pad + ((x - minX) / rangeX) * (w - 2 * pad); }
+  function sy(v) { return (h - pad) - ((v - minY) / rangeY) * (h - 2 * pad); }
+  var svg = '<svg width="100%" height="' + h + '" viewBox="0 0 ' + w + ' ' + h +
+    '" preserveAspectRatio="none" style="max-width:100%;margin-top:0.5rem">';
+  if (proj.length) {
+    var top = proj.map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.high).toFixed(1); });
+    var bot = proj.slice().reverse().map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.low).toFixed(1); });
+    svg += '<polygon points="' + top.concat(bot).join(' ') + '" fill="var(--accent)" opacity="0.12"/>';
+  }
+  var histPts = hist.map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.score).toFixed(1); }).join(' ');
+  svg += '<polyline points="' + histPts + '" fill="none" stroke="var(--accent)" stroke-width="1.8"/>';
+  if (proj.length && hist.length) {
+    var last = hist[hist.length - 1];
+    var projPts = [sx(last.dayIndex).toFixed(1) + ',' + sy(last.score).toFixed(1)]
+      .concat(proj.map(function(p) { return sx(p.dayIndex).toFixed(1) + ',' + sy(p.score).toFixed(1); })).join(' ');
+    svg += '<polyline points="' + projPts + '" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="4 3"/>';
+  }
+  svg += '</svg>';
+  return svg;
+}
+
+function edDirectionLabel(fc) {
+  var d = (fc && fc.direction) || 'unknown';
+  var col = 'var(--muted)';
+  if (d === 'improving') col = 'var(--success)';
+  else if (d === 'worsening') col = 'var(--danger)';
+  return '<span style="color:' + col + ';font-weight:700;text-transform:capitalize">' + x(d) + '</span>';
+}
+
+function renderForecast(fc) {
+  var el = document.getElementById('ed-forecast');
+  if (!el) return;
+  if (!fc) { el.innerHTML = ''; return; }
+  var conf = (fc.confidence && fc.confidence !== 'none')
+    ? '<span class="badge">' + x(fc.confidence) + ' confidence</span>' : '';
+  var chart = edForecastChart(fc);
+  var note = !fc.hasForecast
+    ? '<div class="tiny muted" style="margin-top:0.4rem">' + x(fc.note || 'Insufficient history for a forecast.') + '</div>'
+    : '';
+  el.innerHTML = '<div class="card" style="margin-top:1rem;padding:1rem">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center">' +
+      '<div><span class="kpi-label">Risk-score forecast</span> &nbsp;' + edDirectionLabel(fc) + '</div>' +
+      conf +
+    '</div>' +
+    (chart || '<div class="tiny muted" style="margin-top:0.4rem">Not enough data to chart yet.</div>') +
+    note +
+  '</div>';
+}
+
+function renderExposure(exp) {
+  var el = document.getElementById('ed-exposure');
+  if (!el) return;
+  if (!exp || !exp.hasData) {
+    el.innerHTML = '<div class="card" style="margin-top:1rem;padding:1rem">' +
+      '<span class="kpi-label">Open exposure windows</span>' +
+      '<div class="tiny muted" style="margin-top:0.4rem">No open findings.</div></div>';
+    return;
+  }
+  function stat(l, v) { return '<div><div class="kpi-label">' + l + '</div><div class="kpi-value">' + v + '</div></div>'; }
+  var strip = '<div style="display:flex;gap:1.75rem;margin:0.5rem 0 0.75rem">' +
+    stat('Open', exp.openCount) + stat('Worst days', exp.worstDaysOpen) +
+    stat('Median days', exp.medianDaysOpen) + stat('Over ' + exp.thresholdDays + 'd', exp.overThreshold) + '</div>';
+  var rows = (exp.worst || []).map(function(it) {
+    var over = it.daysOpen > exp.thresholdDays;
+    return '<tr>' +
+      '<td><div style="font-weight:600">' + x(it.techniqueId) + '</div>' +
+        '<div class="tiny muted">' + x(it.techniqueName) + '</div></td>' +
+      '<td class="tiny">' + x(it.severity) + '</td>' +
+      '<td style="' + (over ? 'color:var(--danger);font-weight:700' : '') + '">' + it.daysOpen + '</td>' +
+      '<td class="tiny">' + x(it.firstSeen) + '</td>' +
+      '<td>' + (it.reopenedCount
+        ? '<span class="badge" style="color:var(--warning);border-color:var(--warning)">&times;' + it.reopenedCount + '</span>'
+        : '<span class="tiny muted">&mdash;</span>') + '</td>' +
+      '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="card" style="margin-top:1rem;padding:1rem">' +
+    '<span class="kpi-label">Open exposure windows</span>' + strip +
+    '<div class="tbl-wrap"><table><thead><tr>' +
+      '<th>Technique</th><th>Severity</th><th>Days open</th><th>First seen</th><th>Reopened</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+  '</div>';
 }
 
 var REC_SCENARIO = null;
