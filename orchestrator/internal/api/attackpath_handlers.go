@@ -353,6 +353,11 @@ func (h *Handler) SetAttackPathAsset(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "hostKey is required", http.StatusBadRequest)
 		return
 	}
+	// pgx marshals a nil Go slice to SQL NULL, not '{}' — violates
+	// compliance_scope's NOT NULL constraint when the request omits it.
+	if t.ComplianceScope == nil {
+		t.ComplianceScope = []string{}
+	}
 	// An empty tag clears the assignment — now checks all 8 tag fields, not
 	// just the 3 legacy ones, so clearing crown-jewel/segment/high-value
 	// alone doesn't orphan a criticality tag still set on the same row.
