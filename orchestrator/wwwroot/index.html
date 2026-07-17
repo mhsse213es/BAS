@@ -1215,6 +1215,12 @@ body.theme-slate {
           </svg>
           Executive Dashboard
         </div>
+        <div class="nav-item" data-tab="recommendations" onclick="showTab('recommendations')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M8 1.5l1.8 4.1 4.2.4-3.2 2.8 1 4.2L8 10.8 4.2 13l1-4.2L2 6l4.2-.4z"/>
+          </svg>
+          Recommendations
+        </div>
         <div class="nav-item disabled">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/>
@@ -2689,6 +2695,36 @@ body.theme-slate {
         <div class="kpi-row" id="ed-kpi-row"><div class="empty">Loading…</div></div>
       </div>
 
+      <!-- Recommendations -->
+      <div id="tab-recommendations" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Recommendations</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">What to simulate next, ranked by threat priority, how overdue the technique is for testing, and whether it traverses a real path in your environment.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <select id="rec-limit" onchange="loadRecommendations()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+              <option value="10">Top 10</option>
+              <option value="20" selected>Top 20</option>
+              <option value="50">Top 50</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="copyRecommendedScenario()">Copy scenario techniques</button>
+            <button class="btn btn-outline btn-sm" onclick="loadRecommendations()">Refresh</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Technique</th><th>Tactic</th><th>Score</th><th>Coverage</th>
+                <th>Threat</th><th>Environment</th><th>Why</th>
+              </tr>
+            </thead>
+            <tbody id="rec-table-body"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Findings -->
       <div id="tab-findings" style="display:none">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -3625,7 +3661,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', openaev:'OpenAEV Connector', exercises:'Exercises' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', openaev:'OpenAEV Connector', exercises:'Exercises' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -3753,7 +3789,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','integrations','openaev','exercises'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','openaev','exercises'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -3777,6 +3813,7 @@ function showTab(name) {
   if (name === 'attackpath') loadAttackPath();
   if (name === 'exposure') loadExposureAssets();
   if (name === 'exec-dashboard') loadExecDashboard();
+  if (name === 'recommendations') loadRecommendations();
   if (name === 'openaev') loadOpenAEVTab();
   if (name === 'exercises') loadExercisesTab();
   if (name === 'variants') loadVariantTab();
@@ -4215,6 +4252,76 @@ function renderExecDashboard(current, trends) {
     edKpiCard('Exposure Score', current.exposureScore, exp) +
     edKpiCard('Detection Coverage', current.detectionCoverage, det) +
     edKpiCard('Fleet Assets', current.assetCount, cnt);
+}
+
+var REC_SCENARIO = null;
+
+function recTierColor(tier) {
+  return tier === 'Critical' ? 'var(--danger)'
+       : tier === 'High'     ? '#f0883e'
+       : tier === 'Medium'   ? 'var(--warning)'
+       : 'var(--muted)';
+}
+
+function recCoverageBadge(state) {
+  if (state === 'never-tested') return '<span class="badge" style="color:var(--danger);border-color:var(--danger)">Never tested</span>';
+  if (state === 'stale')        return '<span class="badge" style="color:var(--warning);border-color:var(--warning)">Stale</span>';
+  return '<span class="badge" style="color:var(--muted)">Recent</span>';
+}
+
+function loadRecommendations() {
+  var limEl = document.getElementById('rec-limit');
+  var limit = limEl ? limEl.value : '20';
+  var body = document.getElementById('rec-table-body');
+  body.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+  apicall('/api/recommend/simulations?limit=' + encodeURIComponent(limit))
+    .then(function(data) { renderRecommendations(data); })
+    .catch(function(e) {
+      body.innerHTML = '<tr><td colspan="7" class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</td></tr>';
+    });
+}
+
+function renderRecommendations(data) {
+  var body = document.getElementById('rec-table-body');
+  REC_SCENARIO = data.suggestedScenario || null;
+  var list = (data && data.techniques) || [];
+  if (!list.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">No recommendations yet — seed ATT&CK/ART content to rank techniques.</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(function(t) {
+    var threat = [];
+    if (t.kev) threat.push('<span class="badge" style="color:var(--danger);border-color:var(--danger)">KEV</span>');
+    if (t.epssPercentile) threat.push('<span class="badge">EPSS ' + Math.round(t.epssPercentile) + '</span>');
+    if (t.threatActors) threat.push('<span class="badge">' + t.threatActors + ' group' + (t.threatActors === 1 ? '' : 's') + '</span>');
+    return '<tr>' +
+      '<td><div style="font-weight:600">' + x(t.techniqueId) + '</div>' +
+        '<div class="tiny muted">' + x(t.name) + '</div></td>' +
+      '<td class="tiny">' + x(t.tactic) + '</td>' +
+      '<td><span style="color:' + recTierColor(t.tier) + ';font-weight:700">' + t.score + '</span>' +
+        '<div class="tiny" style="color:' + recTierColor(t.tier) + '">' + x(t.tier) + '</div></td>' +
+      '<td>' + recCoverageBadge(t.coverageState) + '</td>' +
+      '<td>' + (threat.join(' ') || '<span class="tiny muted">—</span>') + '</td>' +
+      '<td>' + (t.environmentRisk ? '<span class="badge" style="color:var(--accent);border-color:var(--accent)">' + t.environmentRisk + '</span>'
+                                  : '<span class="tiny muted">—</span>') + '</td>' +
+      '<td class="tiny muted">' + x((t.reasons || []).join(' · ')) + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function copyRecommendedScenario() {
+  if (!REC_SCENARIO || !REC_SCENARIO.artTechniques || !REC_SCENARIO.artTechniques.length) {
+    showToast('Nothing to copy yet — load recommendations first.', 'err');
+    return;
+  }
+  var text = REC_SCENARIO.artTechniques.join(', ');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() {
+      showToast('Copied ' + REC_SCENARIO.artTechniques.length + ' technique IDs — paste into the scenario builder.');
+    }).catch(function() { showToast(text); });
+  } else {
+    showToast(text);
+  }
 }
 
 function _expGapPriorityColor(p) {
