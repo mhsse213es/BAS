@@ -136,6 +136,67 @@ func TestGetAttackPathAssets_OverlaysStoredTagsAndUntaggedHosts(t *testing.T) {
 	})
 }
 
+// TestSetAttackPathAsset_CriticalityFieldsRoundTrip pins that the 5 new SP6
+// fields persist and come back through GetAttackPathAssets, and that
+// clearing now requires ALL 8 fields empty — clearing only the legacy 3
+// must NOT delete a row that still carries a criticality tag.
+func TestSetAttackPathAsset_CriticalityFieldsRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := attackpathHandler(t, pool)
+		setRec := httptest.NewRecorder()
+		h.SetAttackPathAsset(setRec, assetTagReq(attackpath.AssetTag{
+			HostKey: "dc01.corp.local", CriticalityTier: "critical", InternetFacing: true,
+			IdentityExposed: true, Production: true, ComplianceScope: []string{"SEBI-CSCRF", "PCI-DSS"},
+		}))
+		if setRec.Code != http.StatusOK {
+			t.Fatalf("set: status = %d, body = %s", setRec.Code, setRec.Body.String())
+		}
+
+		getRec := httptest.NewRecorder()
+		h.GetAttackPathAssets(getRec, httptest.NewRequest(http.MethodGet, "/x", nil))
+		var out struct {
+			Assets []attackpath.AssetTag `json:"assets"`
+		}
+		json.Unmarshal(getRec.Body.Bytes(), &out)
+		var got attackpath.AssetTag
+		for _, a := range out.Assets {
+			if a.HostKey == "DC01" {
+				got = a
+			}
+		}
+		if got.CriticalityTier != "critical" || !got.InternetFacing || !got.IdentityExposed || !got.Production {
+			t.Fatalf("criticality fields did not round-trip: %+v", got)
+		}
+		if len(got.ComplianceScope) != 2 {
+			t.Fatalf("compliance scope did not round-trip: %+v", got.ComplianceScope)
+		}
+
+		// Clearing only the legacy fields (CrownJewel/Segment/HighValue all
+		// empty/false) must NOT delete the row — CriticalityTier is still set.
+		clearAttemptRec := httptest.NewRecorder()
+		h.SetAttackPathAsset(clearAttemptRec, assetTagReq(attackpath.AssetTag{
+			HostKey: "dc01.corp.local", CriticalityTier: "critical",
+		}))
+		var n int
+		pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM attackpath_asset_tags WHERE host_key='DC01'`).Scan(&n)
+		if n != 1 {
+			t.Fatalf("row should survive when a criticality field is still set, found %d rows", n)
+		}
+
+		// Clearing every field (all 8) deletes it.
+		clearRec := httptest.NewRecorder()
+		h.SetAttackPathAsset(clearRec, assetTagReq(attackpath.AssetTag{HostKey: "dc01.corp.local"}))
+		var out2 map[string]any
+		json.Unmarshal(clearRec.Body.Bytes(), &out2)
+		if out2["cleared"] != true {
+			t.Fatalf("out = %+v, want cleared:true", out2)
+		}
+	})
+}
+
 func TestGetAttackPathSubnet_MissingAgentID(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

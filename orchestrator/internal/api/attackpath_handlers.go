@@ -155,7 +155,9 @@ func (h *Handler) loadAttackPathCollections(r *http.Request) []attackpath.Collec
 // loadAssetTags reads every operator asset tag.
 func (h *Handler) loadAssetTags(r *http.Request) []attackpath.AssetTag {
 	rows, err := h.db.Query(r.Context(),
-		`SELECT host_key, label, crown_jewel, segment, high_value FROM attackpath_asset_tags`)
+		`SELECT host_key, label, crown_jewel, segment, high_value,
+		        criticality_tier, internet_facing, identity_exposed, production, compliance_scope
+		   FROM attackpath_asset_tags`)
 	if err != nil {
 		return nil
 	}
@@ -163,7 +165,8 @@ func (h *Handler) loadAssetTags(r *http.Request) []attackpath.AssetTag {
 	var tags []attackpath.AssetTag
 	for rows.Next() {
 		var t attackpath.AssetTag
-		if rows.Scan(&t.HostKey, &t.Label, &t.CrownJewel, &t.Segment, &t.HighValue) == nil {
+		if rows.Scan(&t.HostKey, &t.Label, &t.CrownJewel, &t.Segment, &t.HighValue,
+			&t.CriticalityTier, &t.InternetFacing, &t.IdentityExposed, &t.Production, &t.ComplianceScope) == nil {
 			tags = append(tags, t)
 		}
 	}
@@ -326,6 +329,11 @@ func (h *Handler) GetAttackPathAssets(w http.ResponseWriter, r *http.Request) {
 			inv[i].CrownJewel = t.CrownJewel
 			inv[i].Segment = t.Segment
 			inv[i].HighValue = t.HighValue
+			inv[i].CriticalityTier = t.CriticalityTier
+			inv[i].InternetFacing = t.InternetFacing
+			inv[i].IdentityExposed = t.IdentityExposed
+			inv[i].Production = t.Production
+			inv[i].ComplianceScope = t.ComplianceScope
 		}
 	}
 	respond(w, map[string]any{"assets": inv})
@@ -345,8 +353,11 @@ func (h *Handler) SetAttackPathAsset(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "hostKey is required", http.StatusBadRequest)
 		return
 	}
-	// An empty tag clears the assignment.
-	if t.CrownJewel == "" && t.Segment == "" && !t.HighValue {
+	// An empty tag clears the assignment — now checks all 8 tag fields, not
+	// just the 3 legacy ones, so clearing crown-jewel/segment/high-value
+	// alone doesn't orphan a criticality tag still set on the same row.
+	if t.CrownJewel == "" && t.Segment == "" && !t.HighValue &&
+		t.CriticalityTier == "" && !t.InternetFacing && !t.IdentityExposed && !t.Production && len(t.ComplianceScope) == 0 {
 		if _, err := h.db.Exec(r.Context(), `DELETE FROM attackpath_asset_tags WHERE host_key=$1`, key); err != nil {
 			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -356,17 +367,30 @@ func (h *Handler) SetAttackPathAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.db.Exec(r.Context(),
-		`INSERT INTO attackpath_asset_tags (host_key, label, crown_jewel, segment, high_value, updated_at)
-		 VALUES ($1,$2,$3,$4,$5,NOW())
+		`INSERT INTO attackpath_asset_tags
+		   (host_key, label, crown_jewel, segment, high_value,
+		    criticality_tier, internet_facing, identity_exposed, production, compliance_scope, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
 		 ON CONFLICT (host_key) DO UPDATE
 		   SET label=EXCLUDED.label, crown_jewel=EXCLUDED.crown_jewel,
-		       segment=EXCLUDED.segment, high_value=EXCLUDED.high_value, updated_at=NOW()`,
-		key, t.Label, t.CrownJewel, t.Segment, t.HighValue); err != nil {
+		       segment=EXCLUDED.segment, high_value=EXCLUDED.high_value,
+		       criticality_tier=EXCLUDED.criticality_tier, internet_facing=EXCLUDED.internet_facing,
+		       identity_exposed=EXCLUDED.identity_exposed, production=EXCLUDED.production,
+		       compliance_scope=EXCLUDED.compliance_scope, updated_at=NOW()`,
+		key, t.Label, t.CrownJewel, t.Segment, t.HighValue,
+		t.CriticalityTier, t.InternetFacing, t.IdentityExposed, t.Production, t.ComplianceScope); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.auditLog(r, "attackpath.asset_tag", key, map[string]any{"crownJewel": t.CrownJewel, "segment": t.Segment, "highValue": t.HighValue, "label": t.Label}, "ok")
-	respond(w, map[string]any{"hostKey": key, "crownJewel": t.CrownJewel, "segment": t.Segment, "highValue": t.HighValue})
+	h.auditLog(r, "attackpath.asset_tag", key, map[string]any{
+		"crownJewel": t.CrownJewel, "segment": t.Segment, "highValue": t.HighValue,
+		"criticalityTier": t.CriticalityTier, "label": t.Label,
+	}, "ok")
+	respond(w, map[string]any{
+		"hostKey": key, "crownJewel": t.CrownJewel, "segment": t.Segment, "highValue": t.HighValue,
+		"criticalityTier": t.CriticalityTier, "internetFacing": t.InternetFacing,
+		"identityExposed": t.IdentityExposed, "production": t.Production, "complianceScope": t.ComplianceScope,
+	})
 }
 
 // buildCollectCmd assembles the command_attackpath_collect WS payload, loading
