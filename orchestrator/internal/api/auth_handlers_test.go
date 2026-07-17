@@ -266,3 +266,66 @@ func TestLogout_ClearsCookie(t *testing.T) {
 		t.Fatalf("cookies = %+v, want single bas_token cookie with MaxAge=-1", cookies)
 	}
 }
+
+func TestLogin_TokenCarriesTenantContext(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+
+		seedUser(t, pool, "tenant-user", "correct-horse-battery", "admin", true) // lands in 'default' via the column DEFAULT
+
+		hash, err := auth.HashPassword("correct-horse-battery")
+		if err != nil {
+			t.Fatalf("HashPassword: %v", err)
+		}
+		if _, err := pool.Exec(t.Context(),
+			`INSERT INTO users (username, password_hash, role, is_active, tenant_id) VALUES ('pa-user', $1, 'admin', true, NULL)`,
+			hash,
+		); err != nil {
+			t.Fatalf("seed platform-admin user: %v", err)
+		}
+
+		rec := httptest.NewRecorder()
+		h.Login(rec, loginReq("tenant-user", "correct-horse-battery"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("tenant-user login status = %d, body=%s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Token string `json:"token"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		claims, err := auth.ValidateToken(resp.Token, testJWTSecret)
+		if err != nil {
+			t.Fatalf("ValidateToken: %v", err)
+		}
+		if claims.TenantID == nil || *claims.TenantID != "default" {
+			t.Errorf("tenant-user TenantID = %v, want default", claims.TenantID)
+		}
+		if claims.IsPlatformAdmin {
+			t.Error("tenant-user IsPlatformAdmin = true, want false")
+		}
+
+		rec = httptest.NewRecorder()
+		h.Login(rec, loginReq("pa-user", "correct-horse-battery"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("pa-user login status = %d, body=%s", rec.Code, rec.Body.String())
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		claims, err = auth.ValidateToken(resp.Token, testJWTSecret)
+		if err != nil {
+			t.Fatalf("ValidateToken: %v", err)
+		}
+		if claims.TenantID != nil {
+			t.Errorf("pa-user TenantID = %v, want nil", claims.TenantID)
+		}
+		if !claims.IsPlatformAdmin {
+			t.Error("pa-user IsPlatformAdmin = false, want true")
+		}
+	})
+}

@@ -281,9 +281,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	var id, hash, role string
 	var isActive, mustChangePw bool
+	var tenantID *string
 	dbErr := h.db.QueryRow(r.Context(),
-		`SELECT id, password_hash, role, is_active, must_change_pw FROM users WHERE username = $1`, req.Username,
-	).Scan(&id, &hash, &role, &isActive, &mustChangePw)
+		`SELECT id, password_hash, role, is_active, must_change_pw, tenant_id FROM users WHERE username = $1`, req.Username,
+	).Scan(&id, &hash, &role, &isActive, &mustChangePw, &tenantID)
 	// Evaluate password even on DB miss to prevent timing-based user enumeration.
 	// VerifyPassword on an empty string returns false without error.
 	ok, needsUpgrade, _ := auth.VerifyPassword(req.Password, hash)
@@ -304,7 +305,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.GenerateToken(id, auth.Role(role), h.secret, 24*time.Hour)
+	// tenant_id IS NULL marks a platform-admin (belongs to no single tenant).
+	token, err := auth.GenerateTenantToken(id, auth.Role(role), tenantID, tenantID == nil, h.secret, 24*time.Hour)
 	if err != nil {
 		jsonError(w, "token generation failed", http.StatusInternalServerError)
 		return

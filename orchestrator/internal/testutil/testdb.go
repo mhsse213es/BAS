@@ -169,4 +169,13 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 			t.Fatalf("testutil: truncate %s: %v", name, err)
 		}
 	}
+	// Truncation wiped the tenants bootstrap row. Restore the invariant
+	// EnsureSchema establishes ("a 'default' tenant always exists") so
+	// users.tenant_id's FK and its DEFAULT 'default' keep working for every
+	// subsequent test in the shared container.
+	if _, err := pool.Exec(ctx, `INSERT INTO tenants (id, name, slug, status)
+		VALUES ('default', 'Default Tenant', 'default', 'active')
+		ON CONFLICT (id) DO NOTHING`); err != nil {
+		t.Fatalf("testutil: reseed default tenant: %v", err)
+	}
 }
