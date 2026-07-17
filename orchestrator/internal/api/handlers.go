@@ -21,9 +21,9 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
-	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/license"
@@ -50,35 +50,35 @@ func isUniqueViolation(err error) bool {
 
 // Handler holds shared dependencies for all API handlers.
 type Handler struct {
-	db               *pgxpool.Pool
-	hub              *ws.Hub
-	engine           *scenario.Engine
+	db     *pgxpool.Pool
+	hub    *ws.Hub
+	engine *scenario.Engine
 	// detectVerifyConnector builds a detectverify.Connector for a config.
 	// nil in production (New leaves it unset; call sites fall back to
 	// detectverify.NewConnector) — tests override it to avoid real HTTP calls.
 	detectVerifyConnector func(detectverify.Config) (detectverify.Connector, error)
-	secret           string
-	agentSecret      string // optional shared secret for agent-facing endpoints
-	calderaURL       string
-	calderaKey       string
-	artStore         *scenario.ARTStore
-	artContentDir    string               // seed source for ART atomics (ART_DIR)
-	artPayloadDir    string               // seed source for ART payload binaries (ART_PAYLOAD_DIR)
-	artKEVFile       string               // CISA KEV catalog JSON (KEV_FILE)
-	artEPSSFile      string               // FIRST EPSS CSV/GZ (EPSS_FILE)
-	artContentVer    string               // recorded content-pack version
-	manifest         *integrity.Manifest  // binary hash manifest — nil means verification disabled
-	complianceMapper *compliance.Mapper   // nil when not loaded
-	reportingEngine  *reporting.Engine    // nil when not loaded
-	scheduler        *connector.Scheduler // nil when no sources configured
-	ticketing        *ticketing.Manager   // nil when no connectors configured
-	licPath          string               // path to bas.lic for Settings → License display
-	exerciseStore    *exercise.Store
-	exerciseExecutor *exercise.Executor
-	exerciseChain    *exercise.EvidenceChain
-	verification     *verification.Store  // nil when not loaded — SP2 verification store
-	relationships    *relationships.Store // nil when not loaded — CVE-ATT&CK Relationship Store
-	rules            *rulelib.Engine      // nil when not loaded — Detection Rule Library
+	secret                string
+	agentSecret           string // optional shared secret for agent-facing endpoints
+	calderaURL            string
+	calderaKey            string
+	artStore              *scenario.ARTStore
+	artContentDir         string               // seed source for ART atomics (ART_DIR)
+	artPayloadDir         string               // seed source for ART payload binaries (ART_PAYLOAD_DIR)
+	artKEVFile            string               // CISA KEV catalog JSON (KEV_FILE)
+	artEPSSFile           string               // FIRST EPSS CSV/GZ (EPSS_FILE)
+	artContentVer         string               // recorded content-pack version
+	manifest              *integrity.Manifest  // binary hash manifest — nil means verification disabled
+	complianceMapper      *compliance.Mapper   // nil when not loaded
+	reportingEngine       *reporting.Engine    // nil when not loaded
+	scheduler             *connector.Scheduler // nil when no sources configured
+	ticketing             *ticketing.Manager   // nil when no connectors configured
+	licPath               string               // path to bas.lic for Settings → License display
+	exerciseStore         *exercise.Store
+	exerciseExecutor      *exercise.Executor
+	exerciseChain         *exercise.EvidenceChain
+	verification          *verification.Store  // nil when not loaded — SP2 verification store
+	relationships         *relationships.Store // nil when not loaded — CVE-ATT&CK Relationship Store
+	rules                 *rulelib.Engine      // nil when not loaded — Detection Rule Library
 }
 
 // New creates a Handler.
@@ -2839,9 +2839,10 @@ type RunAnalyticSummary struct {
 // outcomes are excluded from counts. Viewer+.
 //
 // Query params:
-//   scenarioId — filter to one scenario (optional)
-//   agentId    — filter to one agent (optional)
-//   limit      — max runs to include, default 20, max 100
+//
+//	scenarioId — filter to one scenario (optional)
+//	agentId    — filter to one agent (optional)
+//	limit      — max runs to include, default 20, max 100
 func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 	scenarioID := r.URL.Query().Get("scenarioId")
 	agentID := r.URL.Query().Get("agentId")
