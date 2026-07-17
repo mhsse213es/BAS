@@ -125,6 +125,17 @@ func (g *Graph) EdgeCount() int {
 	return n
 }
 
+// Edges returns every edge in the graph (order unspecified). Used by
+// internal/recommend to decide which ATT&CK techniques are relevant to this
+// environment — adj is unexported, so there is no other way to enumerate them.
+func (g *Graph) Edges() []Edge {
+	out := make([]Edge, 0, g.EdgeCount())
+	for _, es := range g.adj {
+		out = append(out, es...)
+	}
+	return out
+}
+
 // EdgesTo returns every edge whose To == id (order unspecified). Used by
 // internal/pathcorrelation to find the edges that make a choke-point node
 // dangerous.
