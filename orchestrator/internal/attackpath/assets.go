@@ -13,6 +13,13 @@ type AssetTag struct {
 	CrownJewel string `json:"crownJewel,omitempty"` // "" clears the tag; else "ERP"/"FileServer"/…
 	Segment    string `json:"segment,omitempty"`
 	HighValue  bool   `json:"highValue,omitempty"`
+
+	// SP6 asset criticality — see Node's matching fields in graph.go.
+	CriticalityTier string   `json:"criticalityTier,omitempty"`
+	InternetFacing  bool     `json:"internetFacing,omitempty"`
+	IdentityExposed bool     `json:"identityExposed,omitempty"`
+	Production      bool     `json:"production,omitempty"`
+	ComplianceScope []string `json:"complianceScope,omitempty"`
 }
 
 // HostKey returns the reconciliation/tagging key for a node: its short hostname,
@@ -54,6 +61,21 @@ func (g *Graph) applyAssetTags(tags []AssetTag) {
 		if t.HighValue {
 			n.HighValue = true
 		}
+		if t.CriticalityTier != "" {
+			n.CriticalityTier = t.CriticalityTier
+		}
+		if t.InternetFacing {
+			n.InternetFacing = true
+		}
+		if t.IdentityExposed {
+			n.IdentityExposed = true
+		}
+		if t.Production {
+			n.Production = true
+		}
+		if len(t.ComplianceScope) > 0 {
+			n.ComplianceScope = t.ComplianceScope
+		}
 		g.nodes[id] = n
 	}
 }
@@ -84,11 +106,16 @@ func (g *Graph) HostInventory() []AssetTag {
 			continue
 		}
 		out = append(out, AssetTag{
-			HostKey:    hostKey(n),
-			Label:      n.Label,
-			CrownJewel: n.CrownJewel,
-			Segment:    n.Segment,
-			HighValue:  n.HighValue,
+			HostKey:         hostKey(n),
+			Label:           n.Label,
+			CrownJewel:      n.CrownJewel,
+			Segment:         n.Segment,
+			HighValue:       n.HighValue,
+			CriticalityTier: n.CriticalityTier,
+			InternetFacing:  n.InternetFacing,
+			IdentityExposed: n.IdentityExposed,
+			Production:      n.Production,
+			ComplianceScope: n.ComplianceScope,
 		})
 	}
 	return out

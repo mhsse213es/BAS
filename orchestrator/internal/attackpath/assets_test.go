@@ -74,3 +74,44 @@ func TestHostInventory(t *testing.T) {
 		t.Fatalf("inventory should reflect applied tag: %+v", inv)
 	}
 }
+
+func TestApplyAssetTagsCriticalityFields(t *testing.T) {
+	cols := []Collection{{
+		AgentID: "ws01", Source: "agent",
+		Nodes: []Node{{ID: "WS01", Kind: KindHost, Role: RoleEndpoint}},
+	}}
+	tags := []AssetTag{{
+		HostKey: "WS01", CriticalityTier: "high", InternetFacing: true,
+		IdentityExposed: true, Production: true, ComplianceScope: []string{"SEBI-CSCRF", "PCI-DSS"},
+	}}
+	g := BuildGraph(cols...)
+	g.applyAssetTags(tags)
+	n, ok := g.nodes["WS01"]
+	if !ok {
+		t.Fatalf("expected node WS01 in graph")
+	}
+	if n.CriticalityTier != "high" || !n.InternetFacing || !n.IdentityExposed || !n.Production {
+		t.Fatalf("criticality fields not applied: %+v", n)
+	}
+	if len(n.ComplianceScope) != 2 || n.ComplianceScope[0] != "SEBI-CSCRF" {
+		t.Fatalf("compliance scope not applied: %+v", n.ComplianceScope)
+	}
+}
+
+func TestHostInventoryIncludesCriticalityFields(t *testing.T) {
+	g := BuildGraph(Collection{AgentID: "a", Edges: []Edge{{From: "A", To: "B", Kind: EdgeSMB}}})
+	g.applyAssetTags([]AssetTag{{HostKey: "B", CriticalityTier: "critical", Production: true}})
+	inv := g.HostInventory()
+	var found bool
+	for _, h := range inv {
+		if h.HostKey == "B" {
+			if h.CriticalityTier != "critical" || !h.Production {
+				t.Fatalf("inventory should reflect criticality fields: %+v", h)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected host B in inventory: %+v", inv)
+	}
+}

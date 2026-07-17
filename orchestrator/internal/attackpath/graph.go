@@ -35,6 +35,15 @@ type Node struct {
 	Segment    string   `json:"segment,omitempty"`    // network segment / VLAN tag (for segmentation analysis)
 	CrownJewel string   `json:"crownJewel,omitempty"` // "" or a tag like "ERP", "FileServer", "Backup"
 	HighValue  bool     `json:"highValue,omitempty"`  // Domain Admins group / DA-equivalent (domain-compromise target)
+
+	// SP6 asset criticality — operator-tagged, same overlay mechanism as
+	// CrownJewel/HighValue above. Role==RoleDC (already set from SharpHound
+	// data, see sharphound.go) is the one criticality signal NOT tagged here.
+	CriticalityTier string   `json:"criticalityTier,omitempty"` // "" | low | medium | high | critical
+	InternetFacing  bool     `json:"internetFacing,omitempty"`
+	IdentityExposed bool     `json:"identityExposed,omitempty"`
+	Production      bool     `json:"production,omitempty"`
+	ComplianceScope []string `json:"complianceScope,omitempty"`
 }
 
 // EdgeKind is a traversable relationship an attacker can use.
