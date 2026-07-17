@@ -360,13 +360,26 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// network segment, tier-0 override) the collectors cannot know. Keyed by
 		// normalized hostname so a tag survives reconciliation to the SID node.
 		`CREATE TABLE IF NOT EXISTS attackpath_asset_tags (
-			host_key    text        PRIMARY KEY,
-			label       text        NOT NULL DEFAULT '',
-			crown_jewel text        NOT NULL DEFAULT '',
-			segment     text        NOT NULL DEFAULT '',
-			high_value  boolean     NOT NULL DEFAULT false,
-			updated_at  timestamptz NOT NULL DEFAULT NOW()
+			host_key         text        PRIMARY KEY,
+			label            text        NOT NULL DEFAULT '',
+			crown_jewel      text        NOT NULL DEFAULT '',
+			segment          text        NOT NULL DEFAULT '',
+			high_value       boolean     NOT NULL DEFAULT false,
+			criticality_tier text        NOT NULL DEFAULT '',
+			internet_facing  boolean     NOT NULL DEFAULT false,
+			identity_exposed boolean     NOT NULL DEFAULT false,
+			production       boolean     NOT NULL DEFAULT false,
+			compliance_scope text[]      NOT NULL DEFAULT '{}',
+			updated_at       timestamptz NOT NULL DEFAULT NOW()
 		)`,
+		// SP6 asset criticality: widens the existing operator asset-tag row
+		// (crown_jewel/high_value) with graduated criticality factors rather
+		// than a parallel table — see docs/superpowers/specs/2026-07-17-sp6-asset-criticality-design.md.
+		`ALTER TABLE attackpath_asset_tags ADD COLUMN IF NOT EXISTS criticality_tier text    NOT NULL DEFAULT ''`,
+		`ALTER TABLE attackpath_asset_tags ADD COLUMN IF NOT EXISTS internet_facing  boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE attackpath_asset_tags ADD COLUMN IF NOT EXISTS identity_exposed boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE attackpath_asset_tags ADD COLUMN IF NOT EXISTS production       boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE attackpath_asset_tags ADD COLUMN IF NOT EXISTS compliance_scope text[]  NOT NULL DEFAULT '{}'`,
 
 		// attackpath_jobs: lifecycle record for every operator-initiated or scheduled
 		// attack-path collection. Tracks the full state machine from queued through
