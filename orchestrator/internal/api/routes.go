@@ -179,6 +179,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/exposure/assets", h.GetExposureAssets)
 		r.Get("/api/exposure/assets/{hostKey}", h.GetExposureAsset)
 
+		// Executive Dashboard — Phase 6. Fleet-wide risk/exposure/detection
+		// trends, read-only (Viewer+).
+		r.Get("/api/dashboard/current", h.GetDashboardCurrent)
+		r.Get("/api/dashboard/trends", h.GetDashboardTrends)
+
 		// OpenAEV Connector — read-only, Viewer+.
 		r.Get("/api/openaev/status", h.GetOpenAEVStatus)
 		r.Get("/api/openaev/scenarios", h.ListOpenAEVScenarios)
