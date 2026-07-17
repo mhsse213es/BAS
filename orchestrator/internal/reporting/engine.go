@@ -3313,7 +3313,7 @@ func (e *Engine) populatePriorityScores(ctx context.Context, report *FullReport)
 		kevCnt := kevMap[tid]
 		ep := epssMap[tid]
 		actors := actorCount[tid]
-		score := computePriorityScore(kevCnt > 0, ep.pct, actors, verdict)
+		score := ComputePriorityScore(kevCnt > 0, ep.pct, actors, verdict)
 		if score == 0 && verdict != "fail" {
 			continue // passed with no signal — no actionable output
 		}
@@ -3329,7 +3329,7 @@ func (e *Engine) populatePriorityScores(ctx context.Context, report *FullReport)
 			EPSSPercentile:    ep.pct,
 			ThreatActorCount:  actors,
 			PriorityScore:     score,
-			PriorityTier:      priorityTierFor(score),
+			PriorityTier:      PriorityTierFor(score),
 			RelationshipCount: rp.count,
 			PrimarySource:     rp.primary,
 		})

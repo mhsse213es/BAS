@@ -641,10 +641,12 @@ type TechniquePriority struct {
 	PrimarySource     string  `json:"primarySource,omitempty"`     // primary_source of the strongest contributing relationship
 }
 
-// computePriorityScore derives a 0–100 composite from threat signals.
+// ComputePriorityScore derives a 0–100 composite from threat signals.
 // KEV: +40; EPSS percentile ≥90: +30, ≥70: +20, ≥50: +10, ≥30: +5;
 // ThreatActors ≥5: +20, ≥2: +10, ≥1: +5; Verdict==fail: +10 bonus.
-func computePriorityScore(kev bool, epssPercentile float64, actors int, verdict string) int {
+// Exported so internal/recommend can score never-tested techniques with the
+// same weights the per-run report already uses.
+func ComputePriorityScore(kev bool, epssPercentile float64, actors int, verdict string) int {
 	s := 0
 	if kev {
 		s += 40
@@ -676,8 +678,9 @@ func computePriorityScore(kev bool, epssPercentile float64, actors int, verdict 
 	return s
 }
 
-// priorityTierFor converts a 0–100 score to a display tier label.
-func priorityTierFor(score int) string {
+// PriorityTierFor converts a 0–100 score to a display tier label. Exported
+// alongside ComputePriorityScore so consumers get the same bands.
+func PriorityTierFor(score int) string {
 	switch {
 	case score >= 70:
 		return "Critical"

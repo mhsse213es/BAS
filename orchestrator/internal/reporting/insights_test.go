@@ -115,7 +115,7 @@ func TestReliabilityConfidence(t *testing.T) {
 	}
 }
 
-// computePriorityScore's documented weights: KEV +40; EPSS percentile
+// ComputePriorityScore's documented weights: KEV +40; EPSS percentile
 // tiers 90/70/50/30 → +30/+20/+10/+5; threat-actor tiers 5/2/1 → +20/+10/+5;
 // verdict=="fail" bonus +10; clamped at 100.
 func TestComputePriorityScore(t *testing.T) {
@@ -145,8 +145,8 @@ func TestComputePriorityScore(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := computePriorityScore(c.kev, c.epssPercentile, c.actors, c.verdict); got != c.want {
-				t.Errorf("computePriorityScore(kev=%v, epss=%.0f, actors=%d, verdict=%q) = %d, want %d",
+			if got := ComputePriorityScore(c.kev, c.epssPercentile, c.actors, c.verdict); got != c.want {
+				t.Errorf("ComputePriorityScore(kev=%v, epss=%.0f, actors=%d, verdict=%q) = %d, want %d",
 					c.kev, c.epssPercentile, c.actors, c.verdict, got, c.want)
 			}
 		})
@@ -162,8 +162,8 @@ func TestPriorityTierFor(t *testing.T) {
 		{39, "Medium"}, {20, "Medium"}, {19, "Low"}, {0, "Low"},
 	}
 	for _, c := range cases {
-		if got := priorityTierFor(c.score); got != c.want {
-			t.Errorf("priorityTierFor(%d) = %q, want %q", c.score, got, c.want)
+		if got := PriorityTierFor(c.score); got != c.want {
+			t.Errorf("PriorityTierFor(%d) = %q, want %q", c.score, got, c.want)
 		}
 	}
 }
