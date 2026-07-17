@@ -246,6 +246,15 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			technique_id text NOT NULL REFERENCES techniques(technique_id) ON DELETE CASCADE,
 			PRIMARY KEY (scenario_id, technique_id)
 		)`,
+
+		// Phase 7 Multi-Tenancy — the 5 tenant-owned tables in this file.
+		// The other 13 tables here are the global ATT&CK/ART/CVE/OWASP catalog
+		// and deliberately stay unscoped (spec Decision 5).
+		`ALTER TABLE openaev_bundles ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE openaev_scenarios ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE scenario_techniques ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE threat_readiness_history ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 	}
 
 	for _, s := range stmts {
