@@ -101,6 +101,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/exposure/assets/{hostKey}", tierAny, ""},
 	{http.MethodGet, "/api/dashboard/current", tierAny, ""},
 	{http.MethodGet, "/api/dashboard/trends", tierAny, ""},
+	{http.MethodGet, "/api/recommend/simulations", tierAny, ""},
 	{http.MethodGet, "/api/openaev/status", tierAny, ""},
 	{http.MethodGet, "/api/openaev/scenarios", tierAny, ""},
 	{http.MethodGet, "/api/openaev/scenarios/{id}", tierAny, ""},

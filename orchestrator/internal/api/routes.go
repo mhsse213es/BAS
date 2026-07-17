@@ -184,6 +184,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/dashboard/current", h.GetDashboardCurrent)
 		r.Get("/api/dashboard/trends", h.GetDashboardTrends)
 
+		// Recommendation Engine — Phase 6. Best-next-simulation ranking,
+		// read-only (Viewer+).
+		r.Get("/api/recommend/simulations", h.GetRecommendedSimulations)
+
 		// OpenAEV Connector — read-only, Viewer+.
 		r.Get("/api/openaev/status", h.GetOpenAEVStatus)
 		r.Get("/api/openaev/scenarios", h.ListOpenAEVScenarios)
