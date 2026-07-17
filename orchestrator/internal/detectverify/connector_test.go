@@ -12,10 +12,13 @@ func TestNewConnector_DispatchesKnownProviders(t *testing.T) {
 	if _, err := NewConnector(Config{Provider: "splunk", BaseURL: "https://splunk.example"}); err != nil {
 		t.Errorf("splunk: %v", err)
 	}
+	if _, err := NewConnector(Config{Provider: "qradar", BaseURL: "https://qradar.example"}); err != nil {
+		t.Errorf("qradar: %v", err)
+	}
 }
 
 func TestNewConnector_UnsupportedProvider_ReturnsError(t *testing.T) {
-	if _, err := NewConnector(Config{Provider: "qradar"}); err == nil {
+	if _, err := NewConnector(Config{Provider: "crowdstrike"}); err == nil {
 		t.Fatal("expected an error for a provider not yet implemented in this slice")
 	}
 }

@@ -85,8 +85,8 @@ type Connector interface {
 }
 
 // NewConnector builds the Connector for cfg.Provider. Returns an error for
-// any provider not yet implemented — QRadar/Elastic/CrowdStrike/Trellix
-// arrive in later slices using this same framework.
+// any provider not yet implemented — Elastic/CrowdStrike/Trellix arrive in
+// later slices using this same framework.
 func NewConnector(cfg Config) (Connector, error) {
 	switch cfg.Provider {
 	case "microsoft_sentinel":
@@ -95,6 +95,8 @@ func NewConnector(cfg Config) (Connector, error) {
 		return newDefenderXDRConnector(cfg), nil
 	case "splunk":
 		return newSplunkConnector(cfg), nil
+	case "qradar":
+		return newQRadarConnector(cfg), nil
 	default:
 		return nil, fmt.Errorf("detectverify: provider %q not supported", cfg.Provider)
 	}
