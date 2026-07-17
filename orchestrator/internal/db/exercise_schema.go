@@ -144,6 +144,16 @@ func EnsureExerciseSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			received_at  timestamptz NOT NULL DEFAULT NOW()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_ex_hook_token ON exercise_webhook_calls(token)`,
+
+		// Phase 7 Multi-Tenancy — every table in this file is tenant-owned.
+		`ALTER TABLE exercise_events ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE exercise_evidence ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE exercise_executions ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE exercise_plans ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE exercise_step_executions ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE exercise_track_tokens ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE exercise_webhook_calls ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 	}
 	for _, s := range stmts {
 		if _, err := pool.Exec(ctx, s); err != nil {
