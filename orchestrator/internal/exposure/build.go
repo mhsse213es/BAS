@@ -82,12 +82,19 @@ func Build(ctx context.Context, g *attackpath.Graph, s attackpath.Summary,
 			AttackPath: p.apCtx,
 			Detection:  p.detect,
 		}
+		isDC := false
 		if p.asset.nodeID != "" {
 			if n, ok := g.Node(p.asset.nodeID); ok {
 				profile.Asset.Label = n.Label
 				profile.Asset.CrownJewel = n.CrownJewel
 				profile.Asset.Segment = n.Segment
 				profile.Asset.HighValue = n.HighValue
+				profile.Asset.CriticalityTier = n.CriticalityTier
+				profile.Asset.InternetFacing = n.InternetFacing
+				profile.Asset.IdentityExposed = n.IdentityExposed
+				profile.Asset.Production = n.Production
+				profile.Asset.ComplianceScope = n.ComplianceScope
+				isDC = n.Role == attackpath.RoleDC
 			}
 		}
 		if p.asset.agent != nil {
@@ -165,16 +172,31 @@ func Build(ctx context.Context, g *attackpath.Graph, s attackpath.Summary,
 			}
 		}
 
+		critRisk := float64(CriticalityRisk(AssetCriticalityInputs{
+			CriticalityTier:    profile.Asset.CriticalityTier,
+			InternetFacing:     profile.Asset.InternetFacing,
+			IdentityExposed:    profile.Asset.IdentityExposed,
+			Production:         profile.Asset.Production,
+			ComplianceScope:    profile.Asset.ComplianceScope,
+			IsDomainController: isDC,
+			ThreatGroupCount:   len(profile.ThreatIntel),
+		}))
+
 		attackPathScore := clamp100(100 - int(p.apRisk+0.5))
 		detectionScore := clamp100(100 - int(p.detRisk+0.5))
 		vulnScore := clamp100(100 - int(worst+0.5))
-		exposureRisk := 0.40*p.apRisk + 0.35*p.detRisk + 0.25*worst
+		// SP6: criticality is a 4th weighted term, reweighted from
+		// .40/.35/.25 — see docs/superpowers/specs/2026-07-17-sp6-asset-criticality-design.md
+		// and ADR-009 for why (accepted trade-off: a well-defended critical
+		// asset still costs up to 20 points, by design).
+		exposureRisk := 0.30*p.apRisk + 0.30*p.detRisk + 0.20*worst + 0.20*critRisk
 		exposureScore := clamp100(100 - int(exposureRisk+0.5))
 		profile.Scores = ScoreBreakdown{
 			ExposureScore:          exposureScore,
 			AttackPathScore:        attackPathScore,
 			DetectionCoverageScore: detectionScore,
 			VulnerabilityScore:     vulnScore,
+			CriticalityRisk:        int(critRisk),
 		}
 
 		ag.profiles[p.asset.hostKey] = profile
@@ -224,6 +246,8 @@ func (ag *AssetGraph) Summaries() []AssetSummary {
 			WorstCVESeverity:       worst,
 			KEVExposed:             kev,
 			OpenFindingsCount:      p.Findings.OpenCount,
+			CriticalityTier:        p.Asset.CriticalityTier,
+			CriticalityRisk:        p.Scores.CriticalityRisk,
 		})
 	}
 	return out

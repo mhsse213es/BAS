@@ -37,6 +37,53 @@ func TestBuild_EmptyInputsProduceNoAssets(t *testing.T) {
 	}
 }
 
+// TestBuild_CriticalityTierRaisesExposureRisk isolates the new 4th term: two
+// leaf hosts identical in every other respect (same distance from the entry
+// point, same single SMB touching edge, zero CVEs) should differ ONLY in
+// CriticalityRisk/ExposureScore once one is tagged critical.
+func TestBuild_CriticalityTierRaisesExposureRisk(t *testing.T) {
+	cols := []attackpath.Collection{
+		{AgentID: "ws01", Source: "agent",
+			Nodes: []attackpath.Node{{ID: "WS01", Kind: attackpath.KindHost, Role: attackpath.RoleEndpoint}},
+			Edges: []attackpath.Edge{
+				{From: "WS01", To: "PLAIN01", Kind: attackpath.EdgeSMB},
+				{From: "WS01", To: "CRIT01", Kind: attackpath.EdgeSMB},
+			}},
+		{AgentID: "plain01", Source: "agent",
+			Nodes: []attackpath.Node{{ID: "PLAIN01", Kind: attackpath.KindHost, Role: attackpath.RoleServer}}},
+		{AgentID: "crit01", Source: "agent",
+			Nodes: []attackpath.Node{{ID: "CRIT01", Kind: attackpath.KindHost, Role: attackpath.RoleServer, CriticalityTier: "critical"}}},
+	}
+	g, s := attackpath.BuildGraphAndAnalyze(cols, nil)
+	paths := pathcorrelation.DefaultPaths(g, s)
+	corr, err := pathcorrelation.Correlate(context.Background(), g, s, paths, pathcorrelation.DefaultEdgeTechniqueMapper{},
+		nilRunLookup{}, nilRuleLibrary{})
+	if err != nil {
+		t.Fatalf("Correlate: %v", err)
+	}
+	ag, err := Build(context.Background(), g, s, corr,
+		&fakeRelLookup{byTech: map[string][]relationships.Relationship{}}, &fakeEnricher{meta: map[string]CVEMeta{}}, nil, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	plain, ok := ag.Profile("PLAIN01")
+	if !ok {
+		t.Fatalf("expected a profile for PLAIN01")
+	}
+	crit, ok := ag.Profile("CRIT01")
+	if !ok {
+		t.Fatalf("expected a profile for CRIT01")
+	}
+	if crit.Scores.CriticalityRisk <= plain.Scores.CriticalityRisk {
+		t.Fatalf("CRIT01 (tier=critical) should have higher CriticalityRisk than untagged PLAIN01: crit=%d plain=%d",
+			crit.Scores.CriticalityRisk, plain.Scores.CriticalityRisk)
+	}
+	if crit.Scores.ExposureScore >= plain.Scores.ExposureScore {
+		t.Fatalf("with identical attack-path/detection/vulnerability posture, the critical-tagged asset should score lower (more exposed): crit=%d plain=%d",
+			crit.Scores.ExposureScore, plain.Scores.ExposureScore)
+	}
+}
+
 func TestBuild_HostOnDAPath_LowExposureScore(t *testing.T) {
 	g, s, corr := buildDaFixtureCorrelation(t)
 	rels := &fakeRelLookup{byTech: map[string][]relationships.Relationship{}}
@@ -51,7 +98,14 @@ func TestBuild_HostOnDAPath_LowExposureScore(t *testing.T) {
 	if profile.Scores.AttackPathScore != 0 {
 		t.Fatalf("host on the shortest DA path should have AttackPathScore 0, got %d", profile.Scores.AttackPathScore)
 	}
-	if profile.Scores.ExposureScore >= 50 {
+	// Threshold recalibrated for SP6's reweighted formula (.40/.35/.25 ->
+	// .30/.30/.20/.20): WS01 is untagged/non-DC but still picks up a +5
+	// CriticalityRisk bump (T1021.002 has attributed ATT&CK groups in the
+	// bundled data, so ThreatGroupCount>0), landing this fixture's score at
+	// 51 instead of the pre-reweight 39. See ADR-009 and
+	// docs/superpowers/specs/2026-07-17-sp6-asset-criticality-design.md for
+	// why this shift is expected, not a regression.
+	if profile.Scores.ExposureScore >= 52 {
 		t.Fatalf("a host on the DA path with zero detection coverage should score low, got %d", profile.Scores.ExposureScore)
 	}
 }
