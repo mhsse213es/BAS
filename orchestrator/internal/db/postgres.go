@@ -27,6 +27,21 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	stmts := []string{
 		`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`,
 
+		// Phase 7 Multi-Tenancy — tenant registry. Must precede users so
+		// users.tenant_id's REFERENCES clause resolves. The 'default' bootstrap
+		// row makes every pre-tenancy install a single-tenant instance whose
+		// one tenant is id'd 'default'; existing behavior is unchanged.
+		`CREATE TABLE IF NOT EXISTS tenants (
+			id         text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name       text        NOT NULL,
+			slug       text        NOT NULL UNIQUE,
+			status     text        NOT NULL DEFAULT 'active',
+			created_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`INSERT INTO tenants (id, name, slug, status)
+		 VALUES ('default', 'Default Tenant', 'default', 'active')
+		 ON CONFLICT (id) DO NOTHING`,
+
 		`CREATE TABLE IF NOT EXISTS users (
 			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
 			username      text        UNIQUE NOT NULL,
@@ -41,6 +56,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// Idempotent migrations for existing deployments
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_pw boolean NOT NULL DEFAULT false`,
+		// tenant_id: NULL = platform-admin (belongs to no single tenant);
+		// non-NULL = regular tenant user. DEFAULT 'default' backfills every
+		// pre-tenancy row and covers INSERTs that omit the column.
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id text REFERENCES tenants(id) DEFAULT 'default'`,
 
 		`CREATE TABLE IF NOT EXISTS agents (
 			agent_id       text        PRIMARY KEY,
