@@ -331,6 +331,12 @@ func main() {
 	// when the operator-configured interval has elapsed.
 	api.StartAttackPathScheduler(context.Background(), pool, hub)
 
+	// ── Dashboard Snapshot Scheduler ──────────────────────────────────────
+	// Snapshots fleet-wide risk/exposure/detection-coverage into
+	// dashboard_snapshots once a day, powering the Executive Dashboard tab's
+	// trend charts.
+	api.StartDashboardScheduler(context.Background(), pool)
+
 	// ── Attack-Path Job Monitor ───────────────────────────────────────────
 	// Every 15 s: enforces ack-window (dispatched→delivery_failed if no ACK
 	// within 30 s) and expires_at (running/queued→timed_out).
