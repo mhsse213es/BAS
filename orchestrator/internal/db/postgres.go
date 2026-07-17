@@ -898,6 +898,44 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			UNIQUE(snapshot_date)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_dashboard_snapshots_date ON dashboard_snapshots(snapshot_date DESC)`,
+
+		// Phase 7 Multi-Tenancy — tenant_id on every operational table.
+		// DEFAULT 'default' backfills existing rows and covers every INSERT
+		// that doesn't specify tenant_id explicitly (matches Task 1's users.tenant_id).
+		`ALTER TABLE agent_op_logs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE agent_sec_logs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE agent_telemetry ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE attackpath_asset_tags ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE attackpath_collection_history ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE attackpath_collections ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE attackpath_jobs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE attackpath_schedule ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE campaign_variant_summary ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE compliance_snapshots ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE detection_connectors ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE finding_tickets ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE findings ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE openaev_config ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE payload_families ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE report_log ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE run_events ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE scenario_variant_results ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE scenario_variant_technique_summary ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE siem_configs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE siem_correlations ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE tamper_events ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE ticketing_configs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE variant_findings ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE variant_run_steps ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE variant_runs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE verification_evidence ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE verification_evidence_blob ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE verification_history ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 	}
 
 	for _, s := range stmts {
