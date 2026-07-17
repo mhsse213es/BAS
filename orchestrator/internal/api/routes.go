@@ -384,6 +384,16 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 			r.Post("/api/exercises/templates", h.CreateExerciseTemplate)
 			r.Post("/api/exercises/templates/{id}/instantiate", h.InstantiateExerciseTemplate)
 		})
+
+		// Platform-admin only — Phase 7 Multi-Tenancy. Orthogonal to the role
+		// tiers above: platform-admin is "which tenant, or none," not "what
+		// permission level."
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequirePlatformAdmin())
+			r.Post("/api/tenants", h.CreateTenant)
+			r.Get("/api/tenants", h.ListTenants)
+			r.Patch("/api/tenants/{id}", h.UpdateTenant)
+		})
 	})
 
 	// Static files — serve the dashboard SPA from the embedded FS (tamper-proof).

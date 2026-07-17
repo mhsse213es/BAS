@@ -21,6 +21,7 @@ const (
 	tierAnalystAdmin
 	tierAdminOnly
 	tierPermission
+	tierPlatformAdmin // orthogonal to role — see auth.RequirePlatformAdmin
 )
 
 type routeCase struct {
@@ -236,6 +237,11 @@ var routeMatrix = []routeCase{
 	{http.MethodDelete, "/api/relationship-evidence/{id}", tierPermission, auth.CanCurateThreatIntel},
 	{http.MethodPost, "/api/relationships/{id}/review", tierPermission, auth.CanReviewThreatIntel},
 	{http.MethodPost, "/api/relationships/{id}/status", tierPermission, auth.CanReviewThreatIntel},
+
+	// ── platform-admin only (Phase 7 Multi-Tenancy) ─────────────────────
+	{http.MethodPost, "/api/tenants", tierPlatformAdmin, ""},
+	{http.MethodGet, "/api/tenants", tierPlatformAdmin, ""},
+	{http.MethodPatch, "/api/tenants/{id}", tierPlatformAdmin, ""},
 }
 
 // publicRoutes lists every routes.go registration OUTSIDE the JWT-authenticated
@@ -271,6 +277,11 @@ func tierAllows(tier authTier, perm auth.Permission, role auth.Role) bool {
 		return role == auth.RoleAdmin
 	case tierPermission:
 		return auth.HasPermission(role, perm)
+	case tierPlatformAdmin:
+		// No Role alone ever grants platform-admin — the boundary test's
+		// role-based identities must all be forbidden. The positive case
+		// (a real platform-admin token passes) is TestPlatformAdminRoutes_Gating.
+		return false
 	default:
 		return false
 	}
@@ -337,6 +348,38 @@ func TestRBACMatrix_AuthorizationBoundary(t *testing.T) {
 					}
 				})
 			}
+		}
+	})
+}
+
+// TestPlatformAdminRoutes_Gating proves the positive case tierAllows can't
+// express: a genuine platform-admin token (IsPlatformAdmin claim, no tenant)
+// clears the gate, while a tenant-scoped RoleAdmin token does not.
+func TestPlatformAdminRoutes_Gating(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		router := mountTestRouter(t)
+
+		platformAdminTok, _ := auth.GenerateTenantToken("pa-1", auth.RoleAdmin, nil, true, testJWTSecret, time.Hour)
+		tenantID := "default"
+		tenantAdminTok, _ := auth.GenerateTenantToken("ta-1", auth.RoleAdmin, &tenantID, false, testJWTSecret, time.Hour)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/tenants", nil)
+		req.Header.Set("Authorization", "Bearer "+platformAdminTok)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("platform-admin GET /api/tenants status = %d, want 200", rec.Code)
+		}
+
+		req = httptest.NewRequest(http.MethodGet, "/api/tenants", nil)
+		req.Header.Set("Authorization", "Bearer "+tenantAdminTok)
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("tenant-admin (RoleAdmin, not platform-admin) GET /api/tenants status = %d, want 403", rec.Code)
 		}
 	})
 }
