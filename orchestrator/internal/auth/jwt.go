@@ -16,18 +16,26 @@ const (
 	RoleViewer  Role = "viewer"  // read-only: view reports and agents
 )
 
-// Claims is the JWT payload.
+// Claims is the JWT payload. TenantID is nil for a platform-admin (who
+// belongs to no single tenant) and non-nil for a regular tenant user.
+// IsPlatformAdmin is an orthogonal flag — which tenant, or none — distinct
+// from Role, which answers what permission level within that scope.
 type Claims struct {
-	UserID string `json:"user_id"`
-	Role   Role   `json:"role"`
+	UserID          string  `json:"user_id"`
+	Role            Role    `json:"role"`
+	TenantID        *string `json:"tenant_id,omitempty"`
+	IsPlatformAdmin bool    `json:"is_platform_admin,omitempty"`
 	jwt.RegisteredClaims
 }
 
-// GenerateToken creates a signed JWT for the given user and role.
-func GenerateToken(userID string, role Role, secret string, ttl time.Duration) (string, error) {
+// GenerateTenantToken creates a signed JWT carrying tenant context.
+// tenantID must be nil when isPlatformAdmin is true, and non-nil otherwise.
+func GenerateTenantToken(userID string, role Role, tenantID *string, isPlatformAdmin bool, secret string, ttl time.Duration) (string, error) {
 	claims := Claims{
-		UserID: userID,
-		Role:   role,
+		UserID:          userID,
+		Role:            role,
+		TenantID:        tenantID,
+		IsPlatformAdmin: isPlatformAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -35,6 +43,14 @@ func GenerateToken(userID string, role Role, secret string, ttl time.Duration) (
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+}
+
+// GenerateToken creates a signed JWT for the given user and role, with no
+// tenant context. Equivalent to GenerateTenantToken with tenantID=nil,
+// isPlatformAdmin=false — kept as a separate, stable-signature function so
+// the many pre-tenancy call sites across the codebase never need to change.
+func GenerateToken(userID string, role Role, secret string, ttl time.Duration) (string, error) {
+	return GenerateTenantToken(userID, role, nil, false, secret, ttl)
 }
 
 // ValidateToken parses and validates a JWT, returning its claims.

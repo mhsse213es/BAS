@@ -24,6 +24,60 @@ func TestGenerateAndValidateToken_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestGenerateTenantToken_RoundTrip(t *testing.T) {
+	tenantID := "acme"
+	tok, err := GenerateTenantToken("user-1", RoleAdmin, &tenantID, false, "secret", time.Hour)
+	if err != nil {
+		t.Fatalf("GenerateTenantToken: %v", err)
+	}
+	claims, err := ValidateToken(tok, "secret")
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	if claims.TenantID == nil || *claims.TenantID != "acme" {
+		t.Errorf("TenantID = %v, want acme", claims.TenantID)
+	}
+	if claims.IsPlatformAdmin {
+		t.Error("IsPlatformAdmin = true, want false")
+	}
+}
+
+func TestGenerateTenantToken_PlatformAdminHasNoTenant(t *testing.T) {
+	tok, err := GenerateTenantToken("admin-1", RoleAdmin, nil, true, "secret", time.Hour)
+	if err != nil {
+		t.Fatalf("GenerateTenantToken: %v", err)
+	}
+	claims, err := ValidateToken(tok, "secret")
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	if claims.TenantID != nil {
+		t.Errorf("TenantID = %v, want nil for platform-admin", claims.TenantID)
+	}
+	if !claims.IsPlatformAdmin {
+		t.Error("IsPlatformAdmin = false, want true")
+	}
+}
+
+func TestGenerateToken_StillHasNoTenantContext(t *testing.T) {
+	// GenerateToken must keep working exactly as before, with zero tenant
+	// claims, so every pre-tenancy call site keeps compiling and passing.
+	tok, err := GenerateToken("user-1", RoleAnalyst, "secret", time.Hour)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	claims, err := ValidateToken(tok, "secret")
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	if claims.TenantID != nil {
+		t.Errorf("TenantID = %v, want nil", claims.TenantID)
+	}
+	if claims.IsPlatformAdmin {
+		t.Error("IsPlatformAdmin = true, want false")
+	}
+}
+
 func TestValidateToken_WrongSecret(t *testing.T) {
 	tok, _ := GenerateToken("user-1", RoleAdmin, "secret-a", time.Hour)
 	if _, err := ValidateToken(tok, "secret-b"); err == nil {

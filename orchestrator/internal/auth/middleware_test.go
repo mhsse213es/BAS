@@ -107,6 +107,37 @@ func TestRequireRole_AllowedRolePasses(t *testing.T) {
 	}
 }
 
+func TestRequirePlatformAdmin_PlatformAdminPasses(t *testing.T) {
+	tok, _ := GenerateTenantToken("pa-1", RoleAdmin, nil, true, "secret", time.Hour)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	called := false
+	handler := Middleware("secret")(RequirePlatformAdmin()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if !called || rec.Code != http.StatusOK {
+		t.Fatalf("called=%v status=%d, want called=true status=200", called, rec.Code)
+	}
+}
+
+func TestRequirePlatformAdmin_TenantAdminForbidden(t *testing.T) {
+	tenantID := "acme"
+	tok, _ := GenerateTenantToken("ta-1", RoleAdmin, &tenantID, false, "secret", time.Hour)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	handler := Middleware("secret")(RequirePlatformAdmin()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("next handler must not be called for a non-platform-admin, even with RoleAdmin")
+	})))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+}
+
 func TestRequireRole_DisallowedRoleForbidden(t *testing.T) {
 	tok, _ := GenerateToken("u1", RoleViewer, "secret", time.Hour)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
