@@ -864,6 +864,21 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			last_error          text        NOT NULL DEFAULT '',
 			updated_at          timestamptz NOT NULL DEFAULT NOW()
 		)`,
+
+		// dashboard_snapshots: Phase 6 executive dashboard. One row per day
+		// (UNIQUE(snapshot_date) makes the daily scheduler's upsert idempotent).
+		// See docs/superpowers/specs/2026-07-17-phase6-executive-dashboards-design.md.
+		`CREATE TABLE IF NOT EXISTS dashboard_snapshots (
+			id                 bigserial   PRIMARY KEY,
+			snapshot_date      date        NOT NULL,
+			avg_risk_score     int         NOT NULL,
+			exposure_score     int         NOT NULL,
+			detection_coverage int         NOT NULL,
+			asset_count        int         NOT NULL DEFAULT 0,
+			created_at         timestamptz NOT NULL DEFAULT NOW(),
+			UNIQUE(snapshot_date)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_dashboard_snapshots_date ON dashboard_snapshots(snapshot_date DESC)`,
 	}
 
 	for _, s := range stmts {
