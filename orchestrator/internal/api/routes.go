@@ -188,6 +188,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// read-only (Viewer+).
 		r.Get("/api/recommend/simulations", h.GetRecommendedSimulations)
 
+		// Predictive Risk — Phase 6. Risk-score forecast + exposure windows,
+		// read-only (Viewer+).
+		r.Get("/api/predict/risk", h.GetPredictRisk)
+
 		// OpenAEV Connector — read-only, Viewer+.
 		r.Get("/api/openaev/status", h.GetOpenAEVStatus)
 		r.Get("/api/openaev/scenarios", h.ListOpenAEVScenarios)
