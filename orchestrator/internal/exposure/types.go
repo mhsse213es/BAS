@@ -24,6 +24,13 @@ type AssetIdentity struct {
 	CrownJewel string `json:"crownJewel,omitempty"`
 	Segment    string `json:"segment,omitempty"`
 	HighValue  bool   `json:"highValue,omitempty"`
+
+	// SP6 asset criticality.
+	CriticalityTier string   `json:"criticalityTier,omitempty"`
+	InternetFacing  bool     `json:"internetFacing,omitempty"`
+	IdentityExposed bool     `json:"identityExposed,omitempty"`
+	Production      bool     `json:"production,omitempty"`
+	ComplianceScope []string `json:"complianceScope,omitempty"`
 }
 
 // ScoreBreakdown — all fields 0-100, higher = safer. AttackPathScore and
@@ -35,6 +42,7 @@ type ScoreBreakdown struct {
 	AttackPathScore        int `json:"attackPathScore"`
 	DetectionCoverageScore int `json:"detectionCoverageScore"`
 	VulnerabilityScore     int `json:"vulnerabilityScore"`
+	CriticalityRisk        int `json:"criticalityRisk"` // 0-100, higher = matters more (not inverted like the scores above)
 }
 
 // AttackPathContext is this asset's position in the attack-path graph.
@@ -119,6 +127,8 @@ type AssetSummary struct {
 	WorstCVESeverity       float64       `json:"worstCveSeverity,omitempty"`
 	KEVExposed             bool          `json:"kevExposed"`
 	OpenFindingsCount      int           `json:"openFindingsCount"`
+	CriticalityTier        string        `json:"criticalityTier,omitempty"`
+	CriticalityRisk        int           `json:"criticalityRisk"`
 }
 
 // AgentRow is the minimal projection of the `agents` table Build needs to
