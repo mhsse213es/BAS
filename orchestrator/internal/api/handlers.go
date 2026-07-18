@@ -1987,6 +1987,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 		Role     string `json:"role"`
+		TenantID string `json:"tenantId"` // platform-admin only; ignored otherwise
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" || req.Password == "" {
 		jsonError(w, "username and password are required", http.StatusBadRequest)
@@ -2004,6 +2005,28 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims, ok := auth.ClaimsFrom(r.Context())
+	tenantID := req.TenantID
+	switch {
+	case !ok:
+		jsonError(w, "no caller identity", http.StatusForbidden)
+		return
+	case claims.IsPlatformAdmin:
+		if tenantID == "" {
+			jsonError(w, "tenantId is required for platform-admin-created users", http.StatusBadRequest)
+			return
+		}
+	case claims.TenantID != nil:
+		// A tenant admin can only ever create users within their own
+		// tenant — the request body's tenantId is silently overridden,
+		// not merely validated, so it can never be used to smuggle a
+		// user into a different tenant.
+		tenantID = *claims.TenantID
+	default:
+		jsonError(w, "no tenant context", http.StatusForbidden)
+		return
+	}
+
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		jsonError(w, "password hashing failed", http.StatusInternalServerError)
@@ -2012,10 +2035,10 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	var id string
 	err = h.db.QueryRow(r.Context(),
-		`INSERT INTO users (username, password_hash, role, must_change_pw)
-		 VALUES ($1, $2, $3, true)
+		`INSERT INTO users (username, password_hash, role, must_change_pw, tenant_id)
+		 VALUES ($1, $2, $3, true, $4)
 		 RETURNING id`,
-		req.Username, hash, req.Role,
+		req.Username, hash, req.Role, tenantID,
 	).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {

@@ -91,8 +91,17 @@ func TestCreateUser_ValidationAndDuplicate(t *testing.T) {
 
 		post := func(payload map[string]any) *httptest.ResponseRecorder {
 			body, _ := json.Marshal(payload)
+			req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
+			// CreateUser now derives the new user's tenant from the caller's
+			// claims; inject a default-tenant admin the way auth.Middleware
+			// would, preserving this test's original intent (a regular admin
+			// creating users in their own tenant).
+			tenantID := "default"
+			req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{
+				UserID: "test-admin", Role: auth.RoleAdmin, TenantID: &tenantID,
+			}))
 			rec := httptest.NewRecorder()
-			h.CreateUser(rec, httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body)))
+			h.CreateUser(rec, req)
 			return rec
 		}
 

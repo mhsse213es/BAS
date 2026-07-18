@@ -6,9 +6,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -106,4 +108,71 @@ func TestUpdateTenant_SuspendAndRename(t *testing.T) {
 			t.Errorf("name=%q status=%q, want New Name/suspended", name, status)
 		}
 	})
+}
+
+func TestCreateUser_PlatformAdminMustSpecifyTenant(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := tenantHandler(t, pool)
+		platformAdminTok, _ := auth.GenerateTenantToken("pa-1", auth.RoleAdmin, nil, true, testJWTSecret, time.Hour)
+
+		body := `{"username":"noTenant","password":"correcthorsebatterystaple","role":"viewer"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+platformAdminTok)
+		req = withClaims(t, req, testJWTSecret)
+		rec := httptest.NewRecorder()
+		h.CreateUser(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("platform-admin CreateUser with no tenantId status = %d, want 400", rec.Code)
+		}
+	})
+}
+
+func TestCreateUser_TenantAdminIgnoresRequestedTenantId(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := tenantHandler(t, pool)
+		var otherTenantID string
+		if err := pool.QueryRow(t.Context(), `INSERT INTO tenants (name, slug) VALUES ('Other', 'other') RETURNING id`).Scan(&otherTenantID); err != nil {
+			t.Fatalf("seed other tenant: %v", err)
+		}
+		defaultTenant := "default"
+		tenantAdminTok, _ := auth.GenerateTenantToken("ta-1", auth.RoleAdmin, &defaultTenant, false, testJWTSecret, time.Hour)
+
+		body := `{"username":"sneaky","password":"correcthorsebatterystaple","role":"viewer","tenantId":"` + otherTenantID + `"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+tenantAdminTok)
+		req = withClaims(t, req, testJWTSecret)
+		rec := httptest.NewRecorder()
+		h.CreateUser(rec, req)
+		if rec.Code != http.StatusCreated { // CreateUser's established success code
+			t.Fatalf("CreateUser status = %d, body=%s", rec.Code, rec.Body.String())
+		}
+
+		var gotTenant string
+		if err := pool.QueryRow(t.Context(), `SELECT tenant_id FROM users WHERE username = 'sneaky'`).Scan(&gotTenant); err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+		if gotTenant != "default" {
+			t.Errorf("created user's tenant_id = %q, want default (the caller's own tenant, not the requested other)", gotTenant)
+		}
+	})
+}
+
+// withClaims puts the request's own bearer token's claims into its context,
+// the way auth.Middleware would in the real router — CreateUser reads
+// caller identity via auth.ClaimsFrom, and these tests call the handler
+// directly (bypassing Mount's middleware chain), so this must be done by hand.
+func withClaims(t *testing.T, req *http.Request, secret string) *http.Request {
+	t.Helper()
+	tok := strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")
+	claims, err := auth.ValidateToken(tok, secret)
+	if err != nil {
+		t.Fatalf("ValidateToken: %v", err)
+	}
+	return req.WithContext(auth.ContextWithClaims(req.Context(), claims))
 }

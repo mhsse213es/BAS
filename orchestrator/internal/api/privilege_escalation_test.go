@@ -122,7 +122,8 @@ func TestPrivilegeEscalation_ExtraneousFieldsIgnored(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		router := mountTestRouter(t)
 		adminID := seedUser(t, pool, "rex", "password123", "admin", true)
-		tok, _ := auth.GenerateToken(adminID, auth.RoleAdmin, testJWTSecret, time.Hour)
+		defaultTenant := "default"
+		tok, _ := auth.GenerateTenantToken(adminID, auth.RoleAdmin, &defaultTenant, false, testJWTSecret, time.Hour)
 
 		body, _ := json.Marshal(map[string]any{
 			"username": "sam",
