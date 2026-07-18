@@ -302,87 +302,86 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanReviewThreatIntel)).Post("/api/relationships/{id}/review", h.ReviewRelationship)
 		r.With(auth.RequirePermission(auth.CanReviewThreatIntel)).Post("/api/relationships/{id}/status", h.SetRelationshipStatus)
 
-		// Admin only — config + user management + connector
-		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireRole(auth.RoleAdmin))
-			r.Put("/api/agents/{agentId}/state", h.SetAgentState)
-			r.Get("/api/license", h.GetLicenseInfo)
-			r.Get("/api/config/connection", h.GetConnectionConfig)
-			r.Get("/api/users", h.ListUsers)
-			r.Post("/api/users", h.CreateUser)
-			r.Put("/api/users/{id}", h.UpdateUser)
-			r.Delete("/api/users/{id}", h.DeleteUser)
-			r.Post("/api/users/{id}/reset-password", h.ResetPassword)
+		// Admin only — config + user management + connector. Gated per-route
+		// since the 2026-07-18 RBAC permission expansion (see
+		// docs/superpowers/specs/2026-07-18-phase7-rbac-permission-expansion-design.md).
+		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/agents/{agentId}/state", h.SetAgentState)
+		r.With(auth.RequirePermission(auth.CanViewLicense)).Get("/api/license", h.GetLicenseInfo)
+		r.With(auth.RequirePermission(auth.CanViewConnectionConfig)).Get("/api/config/connection", h.GetConnectionConfig)
+		r.With(auth.RequirePermission(auth.CanListUsers)).Get("/api/users", h.ListUsers)
+		r.With(auth.RequirePermission(auth.CanCreateUser)).Post("/api/users", h.CreateUser)
+		r.With(auth.RequirePermission(auth.CanUpdateUser)).Put("/api/users/{id}", h.UpdateUser)
+		r.With(auth.RequirePermission(auth.CanDeleteUser)).Delete("/api/users/{id}", h.DeleteUser)
+		r.With(auth.RequirePermission(auth.CanResetUserPassword)).Post("/api/users/{id}/reset-password", h.ResetPassword)
 
-			// Caldera engine status
-			r.Get("/api/caldera/status", h.GetCalderaStatus)
+		// Caldera engine status
+		r.With(auth.RequirePermission(auth.CanViewCalderaStatus)).Get("/api/caldera/status", h.GetCalderaStatus)
 
-			// Threat-intel connector
-			r.Get("/api/connector/status", h.GetConnectorStatus)
-			r.Post("/api/connector/sync", h.TriggerConnectorSync)
-			r.Delete("/api/connector/scenarios/{id}", h.DeleteIntelScenario)
+		// Threat-intel connector
+		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/connector/status", h.GetConnectorStatus)
+		r.With(auth.RequirePermission(auth.CanSyncConnector)).Post("/api/connector/sync", h.TriggerConnectorSync)
+		r.With(auth.RequirePermission(auth.CanDeleteConnectorScenario)).Delete("/api/connector/scenarios/{id}", h.DeleteIntelScenario)
 
-			// Attack-path schedule config — enables periodic fleet collection.
-			r.Post("/api/attackpath/schedule", h.SetAttackPathSchedule)
+		// Attack-path schedule config — enables periodic fleet collection.
+		r.With(auth.RequirePermission(auth.CanSetAttackPathSchedule)).Post("/api/attackpath/schedule", h.SetAttackPathSchedule)
 
-			// ART content: status + content-pack reseed (no image rebuild)
-			r.Get("/api/art/content/status", h.GetARTContentStatus)
-			r.Post("/api/art/content/reseed", h.ReseedART)
+		// ART content: status + content-pack reseed (no image rebuild)
+		r.With(auth.RequirePermission(auth.CanViewARTContentStatus)).Get("/api/art/content/status", h.GetARTContentStatus)
+		r.With(auth.RequirePermission(auth.CanReseedARTContent)).Post("/api/art/content/reseed", h.ReseedART)
 
-			// Filesystem integrity — tamper event log + acknowledgement
-			r.Get("/api/tamper-events", h.GetTamperEvents)
-			r.Post("/api/tamper-events/{id}/acknowledge", h.AcknowledgeTamperEvent)
-			r.Post("/api/tamper-events/acknowledge-all", h.AcknowledgeAllTamperEvents)
+		// Filesystem integrity — tamper event log + acknowledgement
+		r.With(auth.RequirePermission(auth.CanViewTamperEvents)).Get("/api/tamper-events", h.GetTamperEvents)
+		r.With(auth.RequirePermission(auth.CanAcknowledgeTamperEvent)).Post("/api/tamper-events/{id}/acknowledge", h.AcknowledgeTamperEvent)
+		r.With(auth.RequirePermission(auth.CanAcknowledgeAllTamperEvents)).Post("/api/tamper-events/acknowledge-all", h.AcknowledgeAllTamperEvents)
 
-			// Audit log — append-only record of all operator actions
-			r.Get("/api/audit-logs", h.GetAuditLogs)
+		// Audit log — append-only record of all operator actions
+		r.With(auth.RequirePermission(auth.CanViewAuditLogs)).Get("/api/audit-logs", h.GetAuditLogs)
 
-			// Ticketing — ITSM connector management (admin only)
-			r.Get("/api/ticketing/configs", h.ListTicketingConfigs)
-			r.Post("/api/ticketing/configs", h.CreateTicketingConfig)
-			r.Put("/api/ticketing/configs/{id}", h.UpdateTicketingConfig)
-			r.Delete("/api/ticketing/configs/{id}", h.DeleteTicketingConfig)
-			r.Post("/api/ticketing/configs/{id}/test", h.TestTicketingConfig)
-			r.Post("/api/ticketing/probe", h.ProbeTicketingConfig)
-			r.Post("/api/ticketing/probe/projects", h.ProbeListProjects)
-			r.Post("/api/ticketing/sync", h.TriggerTicketingSync)
+		// Ticketing — ITSM connector management (admin only)
+		r.With(auth.RequirePermission(auth.CanListTicketingConfigs)).Get("/api/ticketing/configs", h.ListTicketingConfigs)
+		r.With(auth.RequirePermission(auth.CanCreateTicketingConfig)).Post("/api/ticketing/configs", h.CreateTicketingConfig)
+		r.With(auth.RequirePermission(auth.CanUpdateTicketingConfig)).Put("/api/ticketing/configs/{id}", h.UpdateTicketingConfig)
+		r.With(auth.RequirePermission(auth.CanDeleteTicketingConfig)).Delete("/api/ticketing/configs/{id}", h.DeleteTicketingConfig)
+		r.With(auth.RequirePermission(auth.CanTestTicketingConfig)).Post("/api/ticketing/configs/{id}/test", h.TestTicketingConfig)
+		r.With(auth.RequirePermission(auth.CanProbeTicketingConfig)).Post("/api/ticketing/probe", h.ProbeTicketingConfig)
+		r.With(auth.RequirePermission(auth.CanProbeTicketingProjects)).Post("/api/ticketing/probe/projects", h.ProbeListProjects)
+		r.With(auth.RequirePermission(auth.CanSyncTicketing)).Post("/api/ticketing/sync", h.TriggerTicketingSync)
 
-			// Payload family management — write/delete restricted to Admin
-			r.Post("/api/payload-families", h.CreatePayloadFamily)
-			r.Delete("/api/payload-families/{id}", h.DeletePayloadFamily)
+		// Payload family management — write/delete restricted to Admin
+		r.With(auth.RequirePermission(auth.CanCreatePayloadFamily)).Post("/api/payload-families", h.CreatePayloadFamily)
+		r.With(auth.RequirePermission(auth.CanDeletePayloadFamily)).Delete("/api/payload-families/{id}", h.DeletePayloadFamily)
 
-			// SIEM Correlation — connector management (Admin only)
-			r.Get("/api/siem/configs", h.ListSIEMConfigs)
-			r.Post("/api/siem/configs", h.CreateSIEMConfig)
-			r.Put("/api/siem/configs/{id}", h.UpdateSIEMConfig)
-			r.Delete("/api/siem/configs/{id}", h.DeleteSIEMConfig)
-			r.Post("/api/siem/configs/{id}/test", h.TestSIEMConfig)
+		// SIEM Correlation — connector management (Admin only)
+		r.With(auth.RequirePermission(auth.CanListSIEMConfigs)).Get("/api/siem/configs", h.ListSIEMConfigs)
+		r.With(auth.RequirePermission(auth.CanCreateSIEMConfig)).Post("/api/siem/configs", h.CreateSIEMConfig)
+		r.With(auth.RequirePermission(auth.CanUpdateSIEMConfig)).Put("/api/siem/configs/{id}", h.UpdateSIEMConfig)
+		r.With(auth.RequirePermission(auth.CanDeleteSIEMConfig)).Delete("/api/siem/configs/{id}", h.DeleteSIEMConfig)
+		r.With(auth.RequirePermission(auth.CanTestSIEMConfig)).Post("/api/siem/configs/{id}/test", h.TestSIEMConfig)
 
-			// Detection Verification — connector management (Admin only)
-			r.Get("/api/detectverify/configs", h.ListDetectionConnectors)
-			r.Post("/api/detectverify/configs", h.CreateDetectionConnector)
-			r.Put("/api/detectverify/configs/{id}", h.UpdateDetectionConnector)
-			r.Delete("/api/detectverify/configs/{id}", h.DeleteDetectionConnector)
-			r.Post("/api/detectverify/configs/{id}/test", h.TestDetectionConnector)
+		// Detection Verification — connector management (Admin only)
+		r.With(auth.RequirePermission(auth.CanListDetectionConnectors)).Get("/api/detectverify/configs", h.ListDetectionConnectors)
+		r.With(auth.RequirePermission(auth.CanCreateDetectionConnector)).Post("/api/detectverify/configs", h.CreateDetectionConnector)
+		r.With(auth.RequirePermission(auth.CanUpdateDetectionConnector)).Put("/api/detectverify/configs/{id}", h.UpdateDetectionConnector)
+		r.With(auth.RequirePermission(auth.CanDeleteDetectionConnector)).Delete("/api/detectverify/configs/{id}", h.DeleteDetectionConnector)
+		r.With(auth.RequirePermission(auth.CanTestDetectionConnector)).Post("/api/detectverify/configs/{id}/test", h.TestDetectionConnector)
 
-			// OpenAEV Connector — config + sync + air-gapped import (Admin only)
-			r.Get("/api/openaev/config", h.GetOpenAEVConfig)
-			r.Put("/api/openaev/config", h.PutOpenAEVConfig)
-			r.Post("/api/openaev/config/test", h.TestOpenAEVConfig)
-			r.Post("/api/openaev/sync", h.SyncOpenAEV)
-			r.Post("/api/openaev/import", h.ImportOpenAEVBundle)
-			r.Post("/api/openaev/scenarios/{id}/create-plan", h.CreateExercisePlanFromOpenAEV)
+		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
+		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)
+		r.With(auth.RequirePermission(auth.CanUpdateOpenAEVConfig)).Put("/api/openaev/config", h.PutOpenAEVConfig)
+		r.With(auth.RequirePermission(auth.CanTestOpenAEVConfig)).Post("/api/openaev/config/test", h.TestOpenAEVConfig)
+		r.With(auth.RequirePermission(auth.CanSyncOpenAEV)).Post("/api/openaev/sync", h.SyncOpenAEV)
+		r.With(auth.RequirePermission(auth.CanImportOpenAEVBundle)).Post("/api/openaev/import", h.ImportOpenAEVBundle)
+		r.With(auth.RequirePermission(auth.CanCreateExercisePlanFromOpenAEV)).Post("/api/openaev/scenarios/{id}/create-plan", h.CreateExercisePlanFromOpenAEV)
 
-			// Exercise plan authoring — Admin only
-			r.Post("/api/exercises/plans", h.CreateExercisePlan)
-			r.Post("/api/exercises/plans/validate", h.ValidateExercisePlan)
-			r.Put("/api/exercises/plans/{id}", h.UpdateExercisePlan)
-			r.Delete("/api/exercises/plans/{id}", h.DeleteExercisePlan)
+		// Exercise plan authoring — Admin only
+		r.With(auth.RequirePermission(auth.CanCreateExercisePlan)).Post("/api/exercises/plans", h.CreateExercisePlan)
+		r.With(auth.RequirePermission(auth.CanValidateExercisePlan)).Post("/api/exercises/plans/validate", h.ValidateExercisePlan)
+		r.With(auth.RequirePermission(auth.CanUpdateExercisePlan)).Put("/api/exercises/plans/{id}", h.UpdateExercisePlan)
+		r.With(auth.RequirePermission(auth.CanDeleteExercisePlan)).Delete("/api/exercises/plans/{id}", h.DeleteExercisePlan)
 
-			// Exercise templates — Admin only for write, all authenticated for read
-			r.Post("/api/exercises/templates", h.CreateExerciseTemplate)
-			r.Post("/api/exercises/templates/{id}/instantiate", h.InstantiateExerciseTemplate)
-		})
+		// Exercise templates — Admin only for write, all authenticated for read
+		r.With(auth.RequirePermission(auth.CanCreateExerciseTemplate)).Post("/api/exercises/templates", h.CreateExerciseTemplate)
+		r.With(auth.RequirePermission(auth.CanInstantiateExerciseTemplate)).Post("/api/exercises/templates/{id}/instantiate", h.InstantiateExerciseTemplate)
 
 		// Platform-admin only — Phase 7 Multi-Tenancy. Orthogonal to the role
 		// tiers above: platform-admin is "which tenant, or none," not "what
