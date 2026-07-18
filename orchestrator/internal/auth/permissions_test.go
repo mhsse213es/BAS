@@ -55,6 +55,38 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 	tested := map[Permission]bool{
 		CanVerify: true, CanUploadEvidence: true, CanDeleteEvidence: true,
 		CanReview: true, CanExport: true, CanCurateThreatIntel: true, CanReviewThreatIntel: true,
+
+		CanTriggerScan: true, CanCollectAttackPath: true, CanCreateAttackPathJob: true,
+		CanCancelAttackPathJob: true, CanRetryAttackPathJob: true, CanSetAttackPathAsset: true,
+		CanRunScenario: true, CanRunCalderaAdversary: true, CanRunAdversaryTemplate: true,
+		CanCancelScenarioRun: true, CanCorrelateSIEM: true, CanViewSIEMCorrelations: true,
+		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true,
+		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
+		CanCreateScenario: true, CanUploadScenario: true, CanCloneScenario: true,
+		CanUpdateScenario: true, CanDeleteScenario: true, CanGenerateVariants: true,
+		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
+		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
+		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
+		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true,
+
+		CanSetAgentState: true, CanViewLicense: true, CanViewConnectionConfig: true,
+		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
+		CanResetUserPassword: true, CanViewCalderaStatus: true, CanViewConnectorStatus: true,
+		CanSyncConnector: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
+		CanViewARTContentStatus: true, CanReseedARTContent: true, CanViewTamperEvents: true,
+		CanAcknowledgeTamperEvent: true, CanAcknowledgeAllTamperEvents: true, CanViewAuditLogs: true,
+		CanListTicketingConfigs: true, CanCreateTicketingConfig: true, CanUpdateTicketingConfig: true,
+		CanDeleteTicketingConfig: true, CanTestTicketingConfig: true, CanProbeTicketingConfig: true,
+		CanProbeTicketingProjects: true, CanSyncTicketing: true, CanCreatePayloadFamily: true,
+		CanDeletePayloadFamily: true, CanListSIEMConfigs: true, CanCreateSIEMConfig: true,
+		CanUpdateSIEMConfig: true, CanDeleteSIEMConfig: true, CanTestSIEMConfig: true,
+		CanListDetectionConnectors: true, CanCreateDetectionConnector: true,
+		CanUpdateDetectionConnector: true, CanDeleteDetectionConnector: true,
+		CanTestDetectionConnector: true, CanViewOpenAEVConfig: true, CanUpdateOpenAEVConfig: true,
+		CanTestOpenAEVConfig: true, CanSyncOpenAEV: true, CanImportOpenAEVBundle: true,
+		CanCreateExercisePlanFromOpenAEV: true, CanCreateExercisePlan: true,
+		CanValidateExercisePlan: true, CanUpdateExercisePlan: true, CanDeleteExercisePlan: true,
+		CanCreateExerciseTemplate: true, CanInstantiateExerciseTemplate: true,
 	}
 	for _, p := range Permissions(RoleAdmin) {
 		if !tested[p] {
@@ -68,7 +100,34 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 
 func TestPermissions_Ordering(t *testing.T) {
 	got := Permissions(RoleAdmin)
-	want := []Permission{CanVerify, CanUploadEvidence, CanDeleteEvidence, CanReview, CanExport, CanCurateThreatIntel, CanReviewThreatIntel}
+	want := []Permission{
+		CanVerify, CanUploadEvidence, CanDeleteEvidence, CanReview, CanExport,
+		CanCurateThreatIntel, CanReviewThreatIntel,
+
+		CanTriggerScan, CanCollectAttackPath, CanCreateAttackPathJob, CanCancelAttackPathJob,
+		CanRetryAttackPathJob, CanSetAttackPathAsset, CanRunScenario, CanRunCalderaAdversary,
+		CanRunAdversaryTemplate, CanCancelScenarioRun, CanCorrelateSIEM, CanViewSIEMCorrelations,
+		CanRunDetectionVerification, CanCreateCampaign, CanStopCampaign, CanSetFindingStatus,
+		CanPushToITSM, CanBulkPushToITSM, CanCreateScenario, CanUploadScenario, CanCloneScenario,
+		CanUpdateScenario, CanDeleteScenario, CanGenerateVariants, CanRunVariants, CanViewVariantRun,
+		CanViewVariantCoverage, CanViewVariantStats, CanListPayloadFamilies, CanViewPayloadFamily,
+		CanLaunchExerciseExecution, CanAbortExerciseExecution, CanApproveExerciseStep,
+		CanInjectExerciseEvidence,
+
+		CanSetAgentState, CanViewLicense, CanViewConnectionConfig, CanListUsers, CanCreateUser,
+		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
+		CanSyncConnector, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
+		CanReseedARTContent, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,
+		CanViewAuditLogs, CanListTicketingConfigs, CanCreateTicketingConfig, CanUpdateTicketingConfig,
+		CanDeleteTicketingConfig, CanTestTicketingConfig, CanProbeTicketingConfig, CanProbeTicketingProjects,
+		CanSyncTicketing, CanCreatePayloadFamily, CanDeletePayloadFamily, CanListSIEMConfigs,
+		CanCreateSIEMConfig, CanUpdateSIEMConfig, CanDeleteSIEMConfig, CanTestSIEMConfig,
+		CanListDetectionConnectors, CanCreateDetectionConnector, CanUpdateDetectionConnector,
+		CanDeleteDetectionConnector, CanTestDetectionConnector, CanViewOpenAEVConfig, CanUpdateOpenAEVConfig,
+		CanTestOpenAEVConfig, CanSyncOpenAEV, CanImportOpenAEVBundle, CanCreateExercisePlanFromOpenAEV,
+		CanCreateExercisePlan, CanValidateExercisePlan, CanUpdateExercisePlan, CanDeleteExercisePlan,
+		CanCreateExerciseTemplate, CanInstantiateExerciseTemplate,
+	}
 	if len(got) != len(want) {
 		t.Fatalf("Permissions(RoleAdmin) len = %d, want %d", len(got), len(want))
 	}
@@ -122,5 +181,70 @@ func TestRequirePermission_GrantedDeniedNoClaims(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if *called || rec.Code != http.StatusForbidden {
 		t.Fatalf("no-claims case: called=%v status=%d, want called=false status=403", *called, rec.Code)
+	}
+}
+
+// TestPermissionGrants_MatchMigrationInventory is the regression guard for
+// the 2026-07-18 RBAC permission expansion: it proves the grant map matches
+// the migration's own inventory (34 Group-A permissions granted to both
+// Admin and Analyst; 51 Group-B permissions granted to Admin only), so a
+// future edit to routes.go or permissions.go can't silently drift the two
+// apart. See docs/superpowers/specs/2026-07-18-phase7-rbac-permission-expansion-design.md.
+func TestPermissionGrants_MatchMigrationInventory(t *testing.T) {
+	groupA := []Permission{
+		CanTriggerScan, CanCollectAttackPath, CanCreateAttackPathJob, CanCancelAttackPathJob,
+		CanRetryAttackPathJob, CanSetAttackPathAsset, CanRunScenario, CanRunCalderaAdversary,
+		CanRunAdversaryTemplate, CanCancelScenarioRun, CanCorrelateSIEM, CanViewSIEMCorrelations,
+		CanRunDetectionVerification, CanCreateCampaign, CanStopCampaign, CanSetFindingStatus,
+		CanPushToITSM, CanBulkPushToITSM, CanCreateScenario, CanUploadScenario, CanCloneScenario,
+		CanUpdateScenario, CanDeleteScenario, CanGenerateVariants, CanRunVariants, CanViewVariantRun,
+		CanViewVariantCoverage, CanViewVariantStats, CanListPayloadFamilies, CanViewPayloadFamily,
+		CanLaunchExerciseExecution, CanAbortExerciseExecution, CanApproveExerciseStep,
+		CanInjectExerciseEvidence,
+	}
+	if len(groupA) != 34 {
+		t.Fatalf("groupA has %d entries, want 34", len(groupA))
+	}
+
+	groupB := []Permission{
+		CanSetAgentState, CanViewLicense, CanViewConnectionConfig, CanListUsers, CanCreateUser,
+		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
+		CanSyncConnector, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
+		CanReseedARTContent, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,
+		CanViewAuditLogs, CanListTicketingConfigs, CanCreateTicketingConfig, CanUpdateTicketingConfig,
+		CanDeleteTicketingConfig, CanTestTicketingConfig, CanProbeTicketingConfig, CanProbeTicketingProjects,
+		CanSyncTicketing, CanCreatePayloadFamily, CanDeletePayloadFamily, CanListSIEMConfigs,
+		CanCreateSIEMConfig, CanUpdateSIEMConfig, CanDeleteSIEMConfig, CanTestSIEMConfig,
+		CanListDetectionConnectors, CanCreateDetectionConnector, CanUpdateDetectionConnector,
+		CanDeleteDetectionConnector, CanTestDetectionConnector, CanViewOpenAEVConfig, CanUpdateOpenAEVConfig,
+		CanTestOpenAEVConfig, CanSyncOpenAEV, CanImportOpenAEVBundle, CanCreateExercisePlanFromOpenAEV,
+		CanCreateExercisePlan, CanValidateExercisePlan, CanUpdateExercisePlan, CanDeleteExercisePlan,
+		CanCreateExerciseTemplate, CanInstantiateExerciseTemplate,
+	}
+	if len(groupB) != 51 {
+		t.Fatalf("groupB has %d entries, want 51", len(groupB))
+	}
+
+	for _, p := range groupA {
+		if !HasPermission(RoleAdmin, p) {
+			t.Errorf("RoleAdmin missing group-A permission %q", p)
+		}
+		if !HasPermission(RoleAnalyst, p) {
+			t.Errorf("RoleAnalyst missing group-A permission %q", p)
+		}
+		if HasPermission(RoleViewer, p) {
+			t.Errorf("RoleViewer unexpectedly holds group-A permission %q", p)
+		}
+	}
+	for _, p := range groupB {
+		if !HasPermission(RoleAdmin, p) {
+			t.Errorf("RoleAdmin missing group-B permission %q", p)
+		}
+		if HasPermission(RoleAnalyst, p) {
+			t.Errorf("RoleAnalyst unexpectedly holds admin-only group-B permission %q", p)
+		}
+		if HasPermission(RoleViewer, p) {
+			t.Errorf("RoleViewer unexpectedly holds group-B permission %q", p)
+		}
 	}
 }
