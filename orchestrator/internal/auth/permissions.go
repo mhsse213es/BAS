@@ -67,8 +67,8 @@ const (
 	// Exercise Engine executions — Analyst+Admin can run and observe.
 	CanLaunchExerciseExecution Permission = "exercises:executions:launch"
 	CanAbortExerciseExecution  Permission = "exercises:executions:abort"
-	CanApproveExerciseStep    Permission = "exercises:executions:approve-step"
-	CanInjectExerciseEvidence Permission = "exercises:executions:inject-evidence"
+	CanApproveExerciseStep     Permission = "exercises:executions:approve-step"
+	CanInjectExerciseEvidence  Permission = "exercises:executions:inject-evidence"
 
 	// Admin-only: agent state, license, connection config.
 	CanSetAgentState        Permission = "agents:set-state"
