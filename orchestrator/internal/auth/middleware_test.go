@@ -91,22 +91,6 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 	}
 }
 
-func TestRequireRole_AllowedRolePasses(t *testing.T) {
-	tok, _ := GenerateToken("u1", RoleAdmin, "secret", time.Hour)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer "+tok)
-	called := false
-	handler := Middleware("secret")(RequireRole(RoleAdmin, RoleAnalyst)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusOK)
-	})))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if !called || rec.Code != http.StatusOK {
-		t.Fatalf("called=%v status=%d, want called=true status=200", called, rec.Code)
-	}
-}
-
 func TestRequirePlatformAdmin_PlatformAdminPasses(t *testing.T) {
 	tok, _ := GenerateTenantToken("pa-1", RoleAdmin, nil, true, "secret", time.Hour)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -135,35 +119,6 @@ func TestRequirePlatformAdmin_TenantAdminForbidden(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
-	}
-}
-
-func TestRequireRole_DisallowedRoleForbidden(t *testing.T) {
-	tok, _ := GenerateToken("u1", RoleViewer, "secret", time.Hour)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer "+tok)
-	handler := Middleware("secret")(RequireRole(RoleAdmin)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Error("next handler must not be called for a disallowed role")
-	})))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", rec.Code)
-	}
-}
-
-func TestRequireRole_NoClaimsInContext_DenyByDefault(t *testing.T) {
-	// RequireRole invoked directly, bypassing Middleware — simulates a
-	// misconfigured route with no auth middleware in front of it. Must
-	// deny, not panic.
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	handler := RequireRole(RoleAdmin, RoleAnalyst, RoleViewer)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Error("next handler must not be called with no claims in context")
-	}))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403 (deny-by-default)", rec.Code)
 	}
 }
 
@@ -200,7 +155,7 @@ func TestAuthorizationPrecedence(t *testing.T) {
 			if tc.bearer != "" {
 				req.Header.Set("Authorization", "Bearer "+tc.bearer)
 			}
-			handler := Middleware("secret")(RequireRole(RoleAdmin)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := Middleware("secret")(RequirePermission(CanDeleteEvidence)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			})))
 			rec := httptest.NewRecorder()

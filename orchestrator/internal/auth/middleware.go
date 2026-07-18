@@ -47,28 +47,9 @@ func tokenFromRequest(r *http.Request) string {
 	return ""
 }
 
-// RequireRole rejects requests from users whose role is not in the allowed list.
-func RequireRole(roles ...Role) func(http.Handler) http.Handler {
-	allowed := make(map[Role]bool, len(roles))
-	for _, r := range roles {
-		allowed[r] = true
-	}
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims, ok := ClaimsFrom(r.Context())
-			if !ok || !allowed[claims.Role] {
-				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 // RequirePlatformAdmin rejects requests from users who are not
-// platform-admins. Distinct from RequireRole: platform-admin is an
-// orthogonal flag (which tenant, or none), not a fourth RBAC tier (what
-// permission level).
+// platform-admins. Platform-admin is an orthogonal flag (which tenant, or
+// none) checked independently of role/permission — not a fourth RBAC tier.
 func RequirePlatformAdmin() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
