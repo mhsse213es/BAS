@@ -198,54 +198,53 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/openaev/scenarios/{id}", h.GetOpenAEVScenario)
 
 		// Analyst + Admin only — can trigger scans, run scenarios, and
-		// author custom scenarios from the dashboard.
-		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleAnalyst))
-			r.Post("/api/scan/{agentId}", h.TriggerScan)
-			r.Post("/api/attackpath/collect/{agentId}", h.DispatchAttackPathCollect)
-			r.Post("/api/attackpath/jobs", h.CreateAttackPathJob)
-			r.Post("/api/attackpath/jobs/{id}/cancel", h.CancelAttackPathJob)
-			r.Post("/api/attackpath/jobs/{id}/retry", h.RetryAttackPathJob)
-			r.Post("/api/attackpath/assets", h.SetAttackPathAsset)
-			r.Post("/api/scenarios/{id}/run", h.RunScenario)
-			r.Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)
-			r.Post("/api/adversary-templates/{id}/run", h.RunAdversaryTemplate)
-			r.Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
-			// SIEM Correlation — trigger and results (Analyst+)
-			r.Post("/api/siem/correlate/{runId}", h.TriggerSIEMCorrelation)
-			r.Get("/api/siem/correlations/{runId}", h.GetSIEMCorrelations)
-			// Detection Verification — manual trigger (Analyst+)
-			r.Post("/api/detectverify/run/{runId}", h.TriggerDetectionVerification)
-			r.Post("/api/campaigns", h.CreateCampaign)
-			r.Post("/api/campaigns/{id}/stop", h.StopCampaign)
-			r.Post("/api/findings/{id}/status", h.SetFindingStatus)
-			r.Post("/api/ticketing/push", h.PushFindingToITSM)
-			r.Post("/api/ticketing/push/bulk", h.BulkPushToITSM)
+		// author custom scenarios from the dashboard. Gated per-route since
+		// the 2026-07-18 RBAC permission expansion (see
+		// docs/superpowers/specs/2026-07-18-phase7-rbac-permission-expansion-design.md).
+		r.With(auth.RequirePermission(auth.CanTriggerScan)).Post("/api/scan/{agentId}", h.TriggerScan)
+		r.With(auth.RequirePermission(auth.CanCollectAttackPath)).Post("/api/attackpath/collect/{agentId}", h.DispatchAttackPathCollect)
+		r.With(auth.RequirePermission(auth.CanCreateAttackPathJob)).Post("/api/attackpath/jobs", h.CreateAttackPathJob)
+		r.With(auth.RequirePermission(auth.CanCancelAttackPathJob)).Post("/api/attackpath/jobs/{id}/cancel", h.CancelAttackPathJob)
+		r.With(auth.RequirePermission(auth.CanRetryAttackPathJob)).Post("/api/attackpath/jobs/{id}/retry", h.RetryAttackPathJob)
+		r.With(auth.RequirePermission(auth.CanSetAttackPathAsset)).Post("/api/attackpath/assets", h.SetAttackPathAsset)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/scenarios/{id}/run", h.RunScenario)
+		r.With(auth.RequirePermission(auth.CanRunCalderaAdversary)).Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)
+		r.With(auth.RequirePermission(auth.CanRunAdversaryTemplate)).Post("/api/adversary-templates/{id}/run", h.RunAdversaryTemplate)
+		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
+		// SIEM Correlation — trigger and results (Analyst+)
+		r.With(auth.RequirePermission(auth.CanCorrelateSIEM)).Post("/api/siem/correlate/{runId}", h.TriggerSIEMCorrelation)
+		r.With(auth.RequirePermission(auth.CanViewSIEMCorrelations)).Get("/api/siem/correlations/{runId}", h.GetSIEMCorrelations)
+		// Detection Verification — manual trigger (Analyst+)
+		r.With(auth.RequirePermission(auth.CanRunDetectionVerification)).Post("/api/detectverify/run/{runId}", h.TriggerDetectionVerification)
+		r.With(auth.RequirePermission(auth.CanCreateCampaign)).Post("/api/campaigns", h.CreateCampaign)
+		r.With(auth.RequirePermission(auth.CanStopCampaign)).Post("/api/campaigns/{id}/stop", h.StopCampaign)
+		r.With(auth.RequirePermission(auth.CanSetFindingStatus)).Post("/api/findings/{id}/status", h.SetFindingStatus)
+		r.With(auth.RequirePermission(auth.CanPushToITSM)).Post("/api/ticketing/push", h.PushFindingToITSM)
+		r.With(auth.RequirePermission(auth.CanBulkPushToITSM)).Post("/api/ticketing/push/bulk", h.BulkPushToITSM)
 
-			// Custom scenario builder
-			r.Post("/api/scenarios", h.CreateScenario)
-			r.Post("/api/scenarios/upload", h.UploadScenario)
-			r.Post("/api/scenarios/{id}/clone", h.CloneScenario)
-			r.Put("/api/scenarios/{id}", h.UpdateScenario)
-			r.Delete("/api/scenarios/{id}", h.DeleteScenario)
+		// Custom scenario builder
+		r.With(auth.RequirePermission(auth.CanCreateScenario)).Post("/api/scenarios", h.CreateScenario)
+		r.With(auth.RequirePermission(auth.CanUploadScenario)).Post("/api/scenarios/upload", h.UploadScenario)
+		r.With(auth.RequirePermission(auth.CanCloneScenario)).Post("/api/scenarios/{id}/clone", h.CloneScenario)
+		r.With(auth.RequirePermission(auth.CanUpdateScenario)).Put("/api/scenarios/{id}", h.UpdateScenario)
+		r.With(auth.RequirePermission(auth.CanDeleteScenario)).Delete("/api/scenarios/{id}", h.DeleteScenario)
 
-			// Variant executor — multi-variant technique execution
-			r.Post("/api/variants/generate", h.GenerateVariants)
-			r.Post("/api/variants/run", h.RunVariants)
-			r.Get("/api/variants/run/{id}", h.GetVariantRun)
-			r.Get("/api/variants/coverage", h.GetVariantCoverage)
-			r.Get("/api/variants/stats", h.GetVariantStats)
+		// Variant executor — multi-variant technique execution
+		r.With(auth.RequirePermission(auth.CanGenerateVariants)).Post("/api/variants/generate", h.GenerateVariants)
+		r.With(auth.RequirePermission(auth.CanRunVariants)).Post("/api/variants/run", h.RunVariants)
+		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/variants/run/{id}", h.GetVariantRun)
+		r.With(auth.RequirePermission(auth.CanViewVariantCoverage)).Get("/api/variants/coverage", h.GetVariantCoverage)
+		r.With(auth.RequirePermission(auth.CanViewVariantStats)).Get("/api/variants/stats", h.GetVariantStats)
 
-			// Payload families (Phase 3) — mutation/delete is Admin only (see below)
-			r.Get("/api/payload-families", h.GetPayloadFamilies)
-			r.Get("/api/payload-families/{techniqueId}", h.GetTechniqueFamilies)
+		// Payload families (Phase 3) — mutation/delete is Admin only (see below)
+		r.With(auth.RequirePermission(auth.CanListPayloadFamilies)).Get("/api/payload-families", h.GetPayloadFamilies)
+		r.With(auth.RequirePermission(auth.CanViewPayloadFamily)).Get("/api/payload-families/{techniqueId}", h.GetTechniqueFamilies)
 
-			// Exercise Engine — Analyst+ can run and observe exercises.
-			r.Post("/api/exercises/executions/{id}/launch", h.LaunchExerciseExecution)
-			r.Post("/api/exercises/executions/{id}/abort", h.AbortExerciseExecution)
-			r.Post("/api/exercises/executions/{id}/steps/{stepId}/approve", h.ApproveExerciseStep)
-			r.Post("/api/exercises/executions/{id}/evidence", h.InjectEvidence)
-		})
+		// Exercise Engine — Analyst+ can run and observe exercises.
+		r.With(auth.RequirePermission(auth.CanLaunchExerciseExecution)).Post("/api/exercises/executions/{id}/launch", h.LaunchExerciseExecution)
+		r.With(auth.RequirePermission(auth.CanAbortExerciseExecution)).Post("/api/exercises/executions/{id}/abort", h.AbortExerciseExecution)
+		r.With(auth.RequirePermission(auth.CanApproveExerciseStep)).Post("/api/exercises/executions/{id}/steps/{stepId}/approve", h.ApproveExerciseStep)
+		r.With(auth.RequirePermission(auth.CanInjectExerciseEvidence)).Post("/api/exercises/executions/{id}/evidence", h.InjectEvidence)
 
 		// Exercise — read access for all authenticated roles.
 		r.Get("/api/exercises/plans", h.ListExercisePlans)
