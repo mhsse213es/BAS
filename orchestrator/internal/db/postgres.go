@@ -916,6 +916,22 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE compliance_snapshots ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE dashboard_snapshots ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		// detection_connectors already had a column named tenant_id — the
+		// Azure AD tenant ID for that connector's OAuth (client_id/client_secret
+		// neighbor), unrelated to Audspect's own multi-tenancy. The ADD COLUMN
+		// IF NOT EXISTS above silently no-op'd on this table when the prior
+		// Multi-Tenancy migration ran. Renamed here first (idempotent: only
+		// fires once, since after the first run tenant_id no longer exists
+		// under the old meaning), then the real column is added. See
+		// docs/superpowers/specs/2026-07-19-phase7-sso-oidc-design.md.
+		`DO $$
+		BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'detection_connectors' AND column_name = 'tenant_id')
+			   AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'detection_connectors' AND column_name = 'azure_tenant_id')
+			THEN
+				ALTER TABLE detection_connectors RENAME COLUMN tenant_id TO azure_tenant_id;
+			END IF;
+		END $$`,
 		`ALTER TABLE detection_connectors ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE finding_tickets ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE findings ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
@@ -936,6 +952,31 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE verification_evidence ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE verification_evidence_blob ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE verification_history ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+
+		// SSO (OIDC) — Phase 7 Identity & Access, Part 2. One OIDC config per
+		// tenant; client_secret is masked in every API response (never
+		// returned in cleartext once saved). UNIQUE(tenant_id) — exactly one
+		// IdP per tenant for this slice. See
+		// docs/superpowers/specs/2026-07-19-phase7-sso-oidc-design.md.
+		`CREATE TABLE IF NOT EXISTS sso_configs (
+			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			tenant_id     text        NOT NULL REFERENCES tenants(id),
+			issuer_url    text        NOT NULL,
+			client_id     text        NOT NULL,
+			client_secret text        NOT NULL,
+			default_role  text        NOT NULL DEFAULT 'viewer',
+			enabled       boolean     NOT NULL DEFAULT true,
+			created_at    timestamptz NOT NULL DEFAULT NOW(),
+			updated_at    timestamptz NOT NULL DEFAULT NOW(),
+			UNIQUE (tenant_id)
+		)`,
+
+		// users.auth_source: 'local' or 'sso'. Login (password flow) rejects
+		// outright when auth_source = 'sso', in addition to the password
+		// check already failing against a random placeholder hash — explicit
+		// defense-in-depth, not reliance on the hash being merely
+		// impractical to guess.
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_source text NOT NULL DEFAULT 'local'`,
 	}
 
 	for _, s := range stmts {

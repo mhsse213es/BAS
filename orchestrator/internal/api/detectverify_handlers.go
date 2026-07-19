@@ -19,7 +19,7 @@ import (
 // GET /api/detectverify/configs
 func (h *Handler) ListDetectionConnectors(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
-		`SELECT id, name, provider, enabled, auto_verify, tenant_id, workspace_id, base_url,
+		`SELECT id, name, provider, enabled, auto_verify, azure_tenant_id, workspace_id, base_url,
 		        verify_delay_seconds, created_at, updated_at
 		   FROM detection_connectors ORDER BY created_at ASC`)
 	if err != nil {
@@ -88,7 +88,7 @@ func (h *Handler) CreateDetectionConnector(w http.ResponseWriter, r *http.Reques
 	var id string
 	err := h.db.QueryRow(r.Context(),
 		`INSERT INTO detection_connectors
-		 (name, provider, enabled, auto_verify, tenant_id, client_id, client_secret, workspace_id, base_url, api_token, verify_delay_seconds)
+		 (name, provider, enabled, auto_verify, azure_tenant_id, client_id, client_secret, workspace_id, base_url, api_token, verify_delay_seconds)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
 		req.Name, req.Provider, req.Enabled, req.AutoVerify,
 		req.TenantID, req.ClientID, req.ClientSecret, req.WorkspaceID, req.BaseURL, req.APIToken, req.VerifyDelaySeconds,
@@ -135,7 +135,7 @@ func (h *Handler) UpdateDetectionConnector(w http.ResponseWriter, r *http.Reques
 		req.VerifyDelaySeconds = 120
 	}
 	ct, err := h.db.Exec(r.Context(),
-		`UPDATE detection_connectors SET name=$1, enabled=$2, auto_verify=$3, tenant_id=$4,
+		`UPDATE detection_connectors SET name=$1, enabled=$2, auto_verify=$3, azure_tenant_id=$4,
 		        client_id=$5, client_secret=$6, workspace_id=$7, base_url=$8, api_token=$9,
 		        verify_delay_seconds=$10, updated_at=NOW()
 		  WHERE id=$11`,
@@ -196,7 +196,7 @@ func (h *Handler) TestDetectionConnector(w http.ResponseWriter, r *http.Request)
 func (h *Handler) loadDetectionConnector(ctx context.Context, id string) (*detectverify.Config, error) {
 	var cfg detectverify.Config
 	err := h.db.QueryRow(ctx,
-		`SELECT id, name, provider, enabled, auto_verify, tenant_id, client_id, client_secret,
+		`SELECT id, name, provider, enabled, auto_verify, azure_tenant_id, client_id, client_secret,
 		        workspace_id, base_url, api_token, verify_delay_seconds
 		   FROM detection_connectors WHERE id=$1`, id,
 	).Scan(&cfg.ID, &cfg.Name, &cfg.Provider, &cfg.Enabled, &cfg.AutoVerify,
