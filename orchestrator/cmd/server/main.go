@@ -78,6 +78,14 @@ func main() {
 	}
 	log.Println("[+] Schema verified")
 
+	// ── DB role hardening (opt-in) ────────────────────────────────────────
+	// Demote the runtime role to NOSUPERUSER/NOBYPASSRLS so RLS can enforce.
+	// No-op unless BAS_DB_BREAKGLASS_PASSWORD is set. MUST run after all schema
+	// DDL above — it drops this session's superuser privileges.
+	if err := db.HardenRuntimeRole(context.Background(), pool, cfg.DBBreakGlassPassword); err != nil {
+		log.Fatalf("[FATAL] db role hardening: %v", err)
+	}
+
 	// ── Seed ART content into Postgres (disk is the seed source, DB the runtime
 	// source of truth). Idempotent — unchanged techniques are left untouched and
 	// payload binaries stay on disk (only metadata is recorded).
