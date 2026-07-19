@@ -58,6 +58,13 @@ type Engine struct {
 	scenarios     ScenarioResolver     // nil until WithScenarios is called; Detection Validation stays inactive while nil
 	verifications VerificationResolver // nil until WithVerifications is called; only automatic verdicts contribute while nil
 	rules         RuleLibraryResolver  // nil until WithRuleLibrary is called; Attack Path Detection Coverage stays inactive while nil
+	// sectors/regions are the deployment's own configured values
+	// (config.Config.ThreatIntelSectors/ThreatIntelRegions), set via
+	// WithSectorRegion. Empty means priority scores never get the
+	// sector/region bonus. See
+	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
+	sectors []string
+	regions []string
 }
 
 func NewEngine(db *pgxpool.Pool) *Engine { return &Engine{db: db} }
@@ -83,6 +90,23 @@ func (e *Engine) WithRuleLibrary(r RuleLibraryResolver) *Engine {
 	e.rules = r
 	return e
 }
+
+// WithSectorRegion attaches the deployment's own sector/region, used to
+// weight technique priority scores toward actors that target them. Returns
+// the engine for chaining.
+func (e *Engine) WithSectorRegion(sectors, regions []string) *Engine {
+	e.sectors = sectors
+	e.regions = regions
+	return e
+}
+
+// Sectors returns the configured deployment sectors, for callers (like
+// internal/api's recommend handler) that hold an *Engine and need the same
+// values without duplicating storage.
+func (e *Engine) Sectors() []string { return e.sectors }
+
+// Regions returns the configured deployment regions, mirroring Sectors.
+func (e *Engine) Regions() []string { return e.regions }
 
 // ── Report types ──────────────────────────────────────────────────────────────
 
@@ -3292,6 +3316,15 @@ func (e *Engine) populatePriorityScores(ctx context.Context, report *FullReport)
 		}
 	}
 
+	// Sector/region relevance — see
+	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
+	// Returns an empty map immediately (no query) when neither is configured.
+	sectorRegionRelevant, err := SectorRegionRelevantTechniques(ctx, e.db, e.sectors, e.regions)
+	if err != nil {
+		log.Printf("[reporting] sector/region relevance lookup: %v", err)
+		sectorRegionRelevant = map[string]bool{}
+	}
+
 	// First verdict per technique (matrix is newest-run-first ordered)
 	verdicts := map[string]string{}
 	nameOf := map[string]string{}
@@ -3313,7 +3346,7 @@ func (e *Engine) populatePriorityScores(ctx context.Context, report *FullReport)
 		kevCnt := kevMap[tid]
 		ep := epssMap[tid]
 		actors := actorCount[tid]
-		score := ComputePriorityScore(kevCnt > 0, ep.pct, actors, verdict)
+		score := ComputePriorityScore(kevCnt > 0, ep.pct, actors, verdict, sectorRegionRelevant[tid])
 		if score == 0 && verdict != "fail" {
 			continue // passed with no signal — no actionable output
 		}

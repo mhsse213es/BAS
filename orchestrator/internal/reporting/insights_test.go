@@ -1,7 +1,10 @@
 package reporting
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting/attackdata"
@@ -145,12 +148,74 @@ func TestComputePriorityScore(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := ComputePriorityScore(c.kev, c.epssPercentile, c.actors, c.verdict); got != c.want {
-				t.Errorf("ComputePriorityScore(kev=%v, epss=%.0f, actors=%d, verdict=%q) = %d, want %d",
+			if got := ComputePriorityScore(c.kev, c.epssPercentile, c.actors, c.verdict, false); got != c.want {
+				t.Errorf("ComputePriorityScore(kev=%v, epss=%.0f, actors=%d, verdict=%q, sectorRegionRelevant=false) = %d, want %d",
 					c.kev, c.epssPercentile, c.actors, c.verdict, got, c.want)
 			}
 		})
 	}
+}
+
+func TestComputePriorityScore_SectorRegionRelevant(t *testing.T) {
+	if got := ComputePriorityScore(false, 0, 0, "pass", true); got != 10 {
+		t.Errorf("sectorRegionRelevant alone = %d, want 10", got)
+	}
+	if got := ComputePriorityScore(true, 95, 6, "fail", true); got != 100 {
+		t.Errorf("everything maxed + sectorRegionRelevant = %d, want 100 (clamped)", got)
+	}
+	if got := ComputePriorityScore(false, 0, 0, "pass", false); got != 0 {
+		t.Errorf("sectorRegionRelevant=false with no other signals = %d, want 0", got)
+	}
+}
+
+func TestSectorRegionRelevantTechniques_EmptyInputsSkipQuery(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		relevant, err := SectorRegionRelevantTechniques(t.Context(), pool, nil, nil)
+		if err != nil {
+			t.Fatalf("SectorRegionRelevantTechniques: %v", err)
+		}
+		if len(relevant) != 0 {
+			t.Errorf("expected an empty map when sectors/regions are both empty, got %v", relevant)
+		}
+	})
+}
+
+func TestSectorRegionRelevantTechniques_MatchesByNameAndAlias(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		groupIdx := attackdata.GroupTechniqueIndex()
+		if len(groupIdx) == 0 {
+			t.Skip("no embedded ATT&CK group data available")
+		}
+		var knownGroup string
+		for g := range groupIdx {
+			knownGroup = g
+			break
+		}
+
+		_, err := pool.Exec(t.Context(),
+			`INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source)
+			 VALUES ($1, '{}', $2, $3, 'bundle')`,
+			knownGroup, []string{"government"}, []string{"south-asia"})
+		if err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+
+		relevant, err := SectorRegionRelevantTechniques(t.Context(), pool, []string{"government"}, nil)
+		if err != nil {
+			t.Fatalf("SectorRegionRelevantTechniques: %v", err)
+		}
+		for _, tid := range groupIdx[knownGroup] {
+			if !relevant[strings.ToUpper(tid)] {
+				t.Errorf("expected technique %s (under group %q) to be marked relevant", tid, knownGroup)
+			}
+		}
+	})
 }
 
 func TestPriorityTierFor(t *testing.T) {

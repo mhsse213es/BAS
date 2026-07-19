@@ -1,9 +1,12 @@
 package reporting
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting/attackdata"
@@ -643,10 +646,11 @@ type TechniquePriority struct {
 
 // ComputePriorityScore derives a 0–100 composite from threat signals.
 // KEV: +40; EPSS percentile ≥90: +30, ≥70: +20, ≥50: +10, ≥30: +5;
-// ThreatActors ≥5: +20, ≥2: +10, ≥1: +5; Verdict==fail: +10 bonus.
+// ThreatActors ≥5: +20, ≥2: +10, ≥1: +5; Verdict==fail: +10 bonus;
+// sectorRegionRelevant: +10 bonus (see SectorRegionRelevantTechniques).
 // Exported so internal/recommend can score never-tested techniques with the
 // same weights the per-run report already uses.
-func ComputePriorityScore(kev bool, epssPercentile float64, actors int, verdict string) int {
+func ComputePriorityScore(kev bool, epssPercentile float64, actors int, verdict string, sectorRegionRelevant bool) int {
 	s := 0
 	if kev {
 		s += 40
@@ -670,6 +674,9 @@ func ComputePriorityScore(kev bool, epssPercentile float64, actors int, verdict 
 		s += 5
 	}
 	if verdict == "fail" {
+		s += 10
+	}
+	if sectorRegionRelevant {
 		s += 10
 	}
 	if s > 100 {
@@ -778,4 +785,88 @@ func buildReadinessScores(matrix []TechniqueRow) []ReadinessScore {
 		return scores[i].TestedTechs > scores[j].TestedTechs
 	})
 	return scores
+}
+
+// SectorRegionRelevantTechniques returns the set of technique IDs backed by
+// at least one persisted threat_actor_profiles row whose sectors/regions
+// overlap the given values. Matching is exact-normalized name/alias against
+// ATT&CK's canonical STIX group names — no fuzzy matching, so a near-miss
+// produces no bonus rather than a wrong one. Returns an empty map (no query
+// issued) when both sectors and regions are empty. See
+// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
+func SectorRegionRelevantTechniques(ctx context.Context, db *pgxpool.Pool, sectors, regions []string) (map[string]bool, error) {
+	relevant := map[string]bool{}
+	if len(sectors) == 0 && len(regions) == 0 {
+		return relevant, nil
+	}
+
+	rows, err := db.Query(ctx, `SELECT name, aliases, sectors, regions FROM threat_actor_profiles`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type profile struct {
+		name    string
+		aliases []string
+		sectors []string
+		regions []string
+	}
+	var profiles []profile
+	for rows.Next() {
+		var p profile
+		if rows.Scan(&p.name, &p.aliases, &p.sectors, &p.regions) != nil {
+			continue
+		}
+		profiles = append(profiles, p)
+	}
+
+	groupIdx := attackdata.GroupTechniqueIndex()
+	for groupName, techIDs := range groupIdx {
+		normGroup := normalizeActorName(groupName)
+		for _, p := range profiles {
+			if !sectorRegionOverlap(p.sectors, sectors) && !sectorRegionOverlap(p.regions, regions) {
+				continue
+			}
+			matched := normalizeActorName(p.name) == normGroup
+			if !matched {
+				for _, alias := range p.aliases {
+					if normalizeActorName(alias) == normGroup {
+						matched = true
+						break
+					}
+				}
+			}
+			if matched {
+				for _, tid := range techIDs {
+					relevant[strings.ToUpper(tid)] = true
+				}
+				break
+			}
+		}
+	}
+	return relevant, nil
+}
+
+// normalizeActorName mirrors internal/connector's actorKey() normalization
+// (lowercase, strip spaces/hyphens) so actor names/aliases can be matched
+// against ATT&CK's canonical STIX group names without importing
+// internal/connector for one small helper.
+func normalizeActorName(name string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(name, " ", ""), "-", ""))
+}
+
+// sectorRegionOverlap is a case-insensitive set-intersection check —
+// internal/reporting's own small equivalent of internal/connector's
+// intersects(), kept local since reporting has no other dependency on
+// connector.
+func sectorRegionOverlap(a, b []string) bool {
+	for _, x := range a {
+		for _, y := range b {
+			if strings.EqualFold(x, y) {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -182,7 +182,8 @@ func main() {
 	reportingEngine := reporting.NewEngine(pool).
 		WithScenarios(engine).
 		WithVerifications(verificationStore).
-		WithRuleLibrary(rulesEngine)
+		WithRuleLibrary(rulesEngine).
+		WithSectorRegion(cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
 	log.Println("[+] Reporting engine ready")
 
 	// ── Ticketing Manager ─────────────────────────────────────────────────
