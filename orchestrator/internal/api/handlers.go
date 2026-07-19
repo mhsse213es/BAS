@@ -2126,11 +2126,47 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Role != nil {
-		h.db.Exec(r.Context(), `UPDATE users SET role = $1 WHERE id = $2`, *req.Role, targetID)
+	tenantID, isPlatformAdmin := callerTenant(r)
+	notFound := false
+	err := db.WithTenant(r.Context(), h.db, tenantID, isPlatformAdmin, func(tx pgx.Tx) error {
+		// Existence + tenant-scope check up front: a target in another tenant
+		// (or nonexistent) is indistinguishable from not-found, so a
+		// cross-tenant write returns 404 without leaking which ids exist
+		// elsewhere. Once the row is confirmed in-tenant, the UPDATEs key on
+		// the primary-key id alone.
+		var exists bool
+		var checkErr error
+		if isPlatformAdmin {
+			checkErr = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, targetID).Scan(&exists)
+		} else {
+			checkErr = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND tenant_id = $2)`, targetID, tenantID).Scan(&exists)
+		}
+		if checkErr != nil {
+			return checkErr
+		}
+		if !exists {
+			notFound = true
+			return nil
+		}
+		if req.Role != nil {
+			if _, err := tx.Exec(r.Context(), `UPDATE users SET role = $1 WHERE id = $2`, *req.Role, targetID); err != nil {
+				return err
+			}
+		}
+		if req.IsActive != nil {
+			if _, err := tx.Exec(r.Context(), `UPDATE users SET is_active = $1 WHERE id = $2`, *req.IsActive, targetID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	if req.IsActive != nil {
-		h.db.Exec(r.Context(), `UPDATE users SET is_active = $1 WHERE id = $2`, *req.IsActive, targetID)
+	if notFound {
+		jsonError(w, "user not found", http.StatusNotFound)
+		return
 	}
 	h.auditLog(r, "user.update", targetID, nil, "ok")
 	w.WriteHeader(http.StatusOK)
