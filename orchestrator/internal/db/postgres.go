@@ -994,6 +994,20 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at    timestamptz NOT NULL DEFAULT NOW(),
 			UNIQUE (tenant_id)
 		)`,
+
+		// Sector/region weighting — SP5's last item. Upserted by
+		// internal/connector's scheduler after every sync; read by
+		// internal/reporting to weight technique priority scores. See
+		// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
+		`CREATE TABLE IF NOT EXISTS threat_actor_profiles (
+			name       text        PRIMARY KEY,
+			aliases    text[]      NOT NULL DEFAULT '{}',
+			sectors    text[]      NOT NULL DEFAULT '{}',
+			regions    text[]      NOT NULL DEFAULT '{}',
+			source     text        NOT NULL DEFAULT '',
+			last_seen  timestamptz,
+			updated_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
 	}
 
 	for _, s := range stmts {
