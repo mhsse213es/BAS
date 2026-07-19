@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/auth"
@@ -1952,15 +1953,27 @@ func (h *Handler) GetConnectionConfig(w http.ResponseWriter, r *http.Request) {
 // ── User Management (admin only) ─────────────────────────────────────────────
 
 // GET /api/users
-func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(r.Context(),
-		`SELECT id, username, role, is_active, must_change_pw, created_at, last_login
-		 FROM users ORDER BY created_at ASC`)
-	if err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
-		return
+// callerTenant derives the tenant scope for a request from its JWT claims.
+// Platform admins get cross-tenant access (isPlatformAdmin=true); everyone
+// else — including tenant-less legacy tokens and direct-call unit tests with
+// no claims — is scoped to their tenant, defaulting to the canonical 'default'
+// tenant that the whole schema uses as its single-tenant baseline. In
+// production these handlers sit behind auth middleware, so claims are always
+// present; the no-claims path exists only for direct-call tests.
+func callerTenant(r *http.Request) (tenantID string, isPlatformAdmin bool) {
+	tenantID = "default"
+	claims, ok := auth.ClaimsFrom(r.Context())
+	if !ok {
+		return tenantID, false
 	}
-	defer rows.Close()
+	if claims.TenantID != nil {
+		tenantID = *claims.TenantID
+	}
+	return tenantID, claims.IsPlatformAdmin
+}
+
+func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	tenantID, isPlatformAdmin := callerTenant(r)
 
 	type UserRow struct {
 		ID           string     `json:"id"`
@@ -1972,12 +1985,31 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		LastLogin    *time.Time `json:"lastLogin"`
 	}
 	var users []UserRow
-	for rows.Next() {
-		var u UserRow
-		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.IsActive, &u.MustChangePw, &u.CreatedAt, &u.LastLogin); err != nil {
-			continue
+	err := db.WithTenant(r.Context(), h.db, tenantID, isPlatformAdmin, func(tx pgx.Tx) error {
+		q := `SELECT id, username, role, is_active, must_change_pw, created_at, last_login FROM users`
+		args := []any{}
+		if !isPlatformAdmin {
+			q += ` WHERE tenant_id = $1`
+			args = append(args, tenantID)
 		}
-		users = append(users, u)
+		q += ` ORDER BY created_at ASC`
+		rows, qerr := tx.Query(r.Context(), q, args...)
+		if qerr != nil {
+			return qerr
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var u UserRow
+			if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.IsActive, &u.MustChangePw, &u.CreatedAt, &u.LastLogin); err != nil {
+				continue
+			}
+			users = append(users, u)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	if users == nil {
 		users = []UserRow{}
