@@ -76,6 +76,21 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// ITSM inbound webhook — no JWT auth; connector validates via HMAC or IP allowlist
 	r.Post("/api/ticketing/webhook/{configId}", h.ReceiveTicketingWebhook)
 
+	// SCIM (RFC 7644) — own per-tenant bearer-token auth, not JWT. See
+	// docs/superpowers/specs/2026-07-19-phase7-scim-provisioning-design.md.
+	r.Group(func(r chi.Router) {
+		r.Use(h.scimAuth)
+		r.Get("/scim/v2/ServiceProviderConfig", h.SCIMServiceProviderConfig)
+		r.Get("/scim/v2/ResourceTypes", h.SCIMResourceTypes)
+		r.Get("/scim/v2/Schemas", h.SCIMSchemas)
+		r.Post("/scim/v2/Users", h.SCIMCreateUser)
+		r.Get("/scim/v2/Users", h.SCIMListUsers)
+		r.Get("/scim/v2/Users/{id}", h.SCIMGetUser)
+		r.Put("/scim/v2/Users/{id}", h.SCIMReplaceUser)
+		r.Patch("/scim/v2/Users/{id}", h.SCIMPatchUser)
+		r.Delete("/scim/v2/Users/{id}", h.SCIMDeleteUser)
+	})
+
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
