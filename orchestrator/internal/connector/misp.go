@@ -216,7 +216,7 @@ func (c *MISPClient) extractActor(ev mispEventIndex) *ThreatActor {
 	}
 
 	// Apply sector/region filter
-	if len(c.sectors) > 0 && !intersects(actor.Sectors, c.sectors) {
+	if !passesSectorRegionFilter(actor.Sectors, actor.Regions, c.sectors, c.regions) {
 		return nil
 	}
 
@@ -318,4 +318,20 @@ func intersects(a, b []string) bool {
 		}
 	}
 	return false
+}
+
+// passesSectorRegionFilter reports whether an actor should be kept, given
+// the client's configured sector/region filters. An empty filter on either
+// axis means "no restriction" for that axis — this fixes a bug where the
+// region filter was accepted (stored on MISPClient, passed via
+// NewMISPClient) but never actually applied; only the sector filter was.
+// See docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
+func passesSectorRegionFilter(actorSectors, actorRegions, filterSectors, filterRegions []string) bool {
+	if len(filterSectors) > 0 && !intersects(actorSectors, filterSectors) {
+		return false
+	}
+	if len(filterRegions) > 0 && !intersects(actorRegions, filterRegions) {
+		return false
+	}
+	return true
 }

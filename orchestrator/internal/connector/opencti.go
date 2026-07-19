@@ -15,7 +15,17 @@ type OpenCTIClient struct {
 	baseURL    string
 	apiKey     string
 	httpClient *http.Client
-	sectors    []string
+	// sectors is currently unused: unlike MISP, OpenCTI's GraphQL query
+	// (octiThreatActorNode) never fetches sector/region relationship data,
+	// so ThreatActor.Sectors/Regions are always empty for OpenCTI-sourced
+	// actors. Wiring a filter check against always-empty data here would
+	// silently reject every OpenCTI actor once ThreatIntelSectors is
+	// configured — a regression, not a fix. Left unused deliberately,
+	// documented rather than silently fixed incorrectly. Properly
+	// supporting this needs OpenCTI's actual sector/region GraphQL schema,
+	// which can't be verified without a live instance. See
+	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
+	sectors []string
 }
 
 // NewOpenCTIClient creates an OpenCTI GraphQL client.
