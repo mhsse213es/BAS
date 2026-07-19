@@ -57,6 +57,12 @@ type Config struct {
 	// Air-gapped threat-intel: dir holding a signed ti-bundle.json (bundle floor;
 	// live MISP/OpenCTI above overlay on top when configured).
 	TIBundleDir string `json:"ti_bundle_dir,omitempty"`
+
+	// DB role hardening (opt-in): when set, the orchestrator demotes its runtime
+	// Postgres role to NOSUPERUSER/NOBYPASSRLS at startup (so RLS can enforce)
+	// after creating a bas_breakglass recovery superuser with this password.
+	// Unset = hardening inactive (default). Env: BAS_DB_BREAKGLASS_PASSWORD.
+	DBBreakGlassPassword string `json:"db_breakglass_password,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -87,6 +93,9 @@ func Load(path string) (*Config, error) {
 	// Environment variables override file values (Kubernetes / Docker)
 	if v := os.Getenv("DATABASE_URL"); v != "" {
 		cfg.DatabaseURL = v
+	}
+	if v := os.Getenv("BAS_DB_BREAKGLASS_PASSWORD"); v != "" {
+		cfg.DBBreakGlassPassword = v
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWTSecret = v
