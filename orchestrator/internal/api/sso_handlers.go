@@ -27,10 +27,10 @@ type SSOConfig struct {
 
 var validSSORoles = map[string]bool{"viewer": true, "analyst": true, "admin": true}
 
-// effectiveSSOTenantID resolves which tenant's SSO config the caller may
+// effectiveCallerTenantID resolves which tenant's SSO config the caller may
 // act on: a tenant user always acts on their own tenant; a platform-admin
 // (who belongs to no tenant) must specify one explicitly via ?tenantId=.
-func (h *Handler) effectiveSSOTenantID(r *http.Request) (string, bool) {
+func (h *Handler) effectiveCallerTenantID(r *http.Request) (string, bool) {
 	claims, ok := auth.ClaimsFrom(r.Context())
 	if !ok {
 		return "", false
@@ -48,7 +48,7 @@ func (h *Handler) effectiveSSOTenantID(r *http.Request) (string, bool) {
 // GetSSOConfig returns the caller's tenant's SSO config (secret masked).
 // GET /api/sso/config
 func (h *Handler) GetSSOConfig(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := h.effectiveSSOTenantID(r)
+	tenantID, ok := h.effectiveCallerTenantID(r)
 	if !ok {
 		jsonError(w, "no tenant context", http.StatusForbidden)
 		return
@@ -69,7 +69,7 @@ func (h *Handler) GetSSOConfig(w http.ResponseWriter, r *http.Request) {
 // CreateSSOConfig creates the caller's tenant's SSO config.
 // POST /api/sso/config
 func (h *Handler) CreateSSOConfig(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := h.effectiveSSOTenantID(r)
+	tenantID, ok := h.effectiveCallerTenantID(r)
 	if !ok {
 		jsonError(w, "no tenant context", http.StatusForbidden)
 		return
@@ -114,7 +114,7 @@ func (h *Handler) CreateSSOConfig(w http.ResponseWriter, r *http.Request) {
 // clientSecret preserves the existing value.
 // PUT /api/sso/config/{id}
 func (h *Handler) UpdateSSOConfig(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := h.effectiveSSOTenantID(r)
+	tenantID, ok := h.effectiveCallerTenantID(r)
 	if !ok {
 		jsonError(w, "no tenant context", http.StatusForbidden)
 		return
@@ -162,7 +162,7 @@ func (h *Handler) UpdateSSOConfig(w http.ResponseWriter, r *http.Request) {
 // config just stops new SSO logins.
 // DELETE /api/sso/config/{id}
 func (h *Handler) DeleteSSOConfig(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := h.effectiveSSOTenantID(r)
+	tenantID, ok := h.effectiveCallerTenantID(r)
 	if !ok {
 		jsonError(w, "no tenant context", http.StatusForbidden)
 		return
@@ -185,7 +185,7 @@ func (h *Handler) DeleteSSOConfig(w http.ResponseWriter, r *http.Request) {
 // without performing a full login.
 // POST /api/sso/config/{id}/test
 func (h *Handler) TestSSOConfig(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := h.effectiveSSOTenantID(r)
+	tenantID, ok := h.effectiveCallerTenantID(r)
 	if !ok {
 		jsonError(w, "no tenant context", http.StatusForbidden)
 		return

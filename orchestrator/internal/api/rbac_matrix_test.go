@@ -242,6 +242,11 @@ var routeMatrix = []routeCase{
 	{http.MethodPut, "/api/sso/config/{id}", tierPermission, auth.CanManageSSOConfig},
 	{http.MethodDelete, "/api/sso/config/{id}", tierPermission, auth.CanManageSSOConfig},
 	{http.MethodPost, "/api/sso/config/{id}/test", tierPermission, auth.CanManageSSOConfig},
+	{http.MethodGet, "/api/scim/config", tierPermission, auth.CanViewSCIMConfig},
+	{http.MethodPost, "/api/scim/config", tierPermission, auth.CanManageSCIMConfig},
+	{http.MethodPut, "/api/scim/config/{id}", tierPermission, auth.CanManageSCIMConfig},
+	{http.MethodPost, "/api/scim/config/{id}/rotate", tierPermission, auth.CanManageSCIMConfig},
+	{http.MethodDelete, "/api/scim/config/{id}", tierPermission, auth.CanManageSCIMConfig},
 
 	// ── platform-admin only (Phase 7 Multi-Tenancy) ─────────────────────
 	{http.MethodPost, "/api/tenants", tierPlatformAdmin, ""},

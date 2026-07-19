@@ -312,6 +312,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanManageSSOConfig)).Delete("/api/sso/config/{id}", h.DeleteSSOConfig)
 		r.With(auth.RequirePermission(auth.CanManageSSOConfig)).Post("/api/sso/config/{id}/test", h.TestSSOConfig)
 
+		// SCIM provisioning config — tenant-scoped CRUD. See
+		// docs/superpowers/specs/2026-07-19-phase7-scim-provisioning-design.md.
+		r.With(auth.RequirePermission(auth.CanViewSCIMConfig)).Get("/api/scim/config", h.GetSCIMConfig)
+		r.With(auth.RequirePermission(auth.CanManageSCIMConfig)).Post("/api/scim/config", h.CreateSCIMConfig)
+		r.With(auth.RequirePermission(auth.CanManageSCIMConfig)).Put("/api/scim/config/{id}", h.UpdateSCIMConfig)
+		r.With(auth.RequirePermission(auth.CanManageSCIMConfig)).Post("/api/scim/config/{id}/rotate", h.RotateSCIMConfig)
+		r.With(auth.RequirePermission(auth.CanManageSCIMConfig)).Delete("/api/scim/config/{id}", h.DeleteSCIMConfig)
+
 		// Admin only — config + user management + connector. Gated per-route
 		// since the 2026-07-18 RBAC permission expansion (see
 		// docs/superpowers/specs/2026-07-18-phase7-rbac-permission-expansion-design.md).
