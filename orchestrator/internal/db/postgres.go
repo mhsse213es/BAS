@@ -953,6 +953,33 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE verification_evidence_blob ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE verification_history ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 
+		// SP7 Multi-Tenancy — users-table pilot. Create a tenant-isolation RLS
+		// policy on users so it is reviewable and syntax-checked at boot, but
+		// deliberately DO NOT enable RLS: the production role (bas_user) is a
+		// Postgres superuser and bypasses RLS regardless, and Login/ChangePassword/
+		// bootstrap query users with no tenant context and would be blocked the
+		// moment RLS enforces. Activation is gated on the bas_user ->
+		// NOSUPERUSER/NOBYPASSRLS role-hardening follow-up, at which point a future
+		// migration uncomments the ENABLE/FORCE lines below AND routes the
+		// tenant-agnostic auth paths through a platform-admin WithTenant context.
+		// Enable-when-ready (do NOT uncomment without that follow-up):
+		//   ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+		//   ALTER TABLE users FORCE ROW LEVEL SECURITY;
+		// See docs/superpowers/specs/2026-07-19-multitenancy-users-pilot-design.md.
+		`DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'tenant_isolation'
+			) THEN
+				CREATE POLICY tenant_isolation ON users
+					USING (
+						tenant_id = current_setting('app.tenant_id', true)
+						OR current_setting('app.is_platform_admin', true)::boolean
+					);
+			END IF;
+		END
+		$$;`,
+
 		// SSO (OIDC) — Phase 7 Identity & Access, Part 2. One OIDC config per
 		// tenant; client_secret is masked in every API response (never
 		// returned in cleartext once saved). UNIQUE(tenant_id) — exactly one

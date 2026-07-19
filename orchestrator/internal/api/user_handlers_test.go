@@ -387,6 +387,35 @@ func TestConcurrentChangePassword(t *testing.T) {
 
 // TestConcurrentResetPassword mirrors TestConcurrentChangePassword for the
 // admin-initiated reset path.
+// TestUsersRLSPolicyDormant pins the pilot's central safety property: the
+// tenant_isolation policy exists on users (reviewable, syntax-checked at boot),
+// but RLS stays DISABLED — enabling it is gated on the bas_user role hardening
+// (see the migration comment in postgres.go). A future accidental ENABLE would
+// fail this test.
+func TestUsersRLSPolicyDormant(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		var rlsEnabled bool
+		if err := pool.QueryRow(context.Background(),
+			`SELECT relrowsecurity FROM pg_class WHERE relname = 'users'`).Scan(&rlsEnabled); err != nil {
+			t.Fatalf("read pg_class.relrowsecurity: %v", err)
+		}
+		if rlsEnabled {
+			t.Fatal("RLS is ENABLED on users — this pilot must leave it dormant until DB-role hardening")
+		}
+		var policyCount int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM pg_policies WHERE tablename = 'users' AND policyname = 'tenant_isolation'`).Scan(&policyCount); err != nil {
+			t.Fatalf("read pg_policies: %v", err)
+		}
+		if policyCount != 1 {
+			t.Fatalf("expected the dormant tenant_isolation policy to exist, found %d", policyCount)
+		}
+	})
+}
+
 func TestConcurrentResetPassword(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
