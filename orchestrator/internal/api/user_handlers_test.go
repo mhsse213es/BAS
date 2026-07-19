@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -392,6 +393,96 @@ func TestConcurrentChangePassword(t *testing.T) {
 // but RLS stays DISABLED — enabling it is gated on the bas_user role hardening
 // (see the migration comment in postgres.go). A future accidental ENABLE would
 // fail this test.
+// TestUsers_TenantIsolation exercises the whole pilot: a tenant-scoped admin
+// cannot see, modify, or delete a user in another tenant, while a platform
+// admin sees across tenants. Claims are injected directly (not via a bearer
+// token) so the handlers are called without the auth middleware — withURLParam
+// preserves the injected context.
+func TestUsers_TenantIsolation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+
+		aAdmin := seedUser(t, pool, "iso-a-admin", "password123", "admin", true)
+		aUser := seedUser(t, pool, "iso-a-user", "password123", "viewer", true)
+		bUser := seedUser(t, pool, "iso-b-user", "password123", "viewer", true)
+		if _, err := pool.Exec(context.Background(), `UPDATE users SET tenant_id = 'tenant-b' WHERE id = $1`, bUser); err != nil {
+			t.Fatalf("move user to tenant-b: %v", err)
+		}
+
+		defaultTenant := "default"
+		asDefaultAdmin := func(method, path string, body io.Reader) *http.Request {
+			req := httptest.NewRequest(method, path, body)
+			return req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{
+				UserID: aAdmin, Role: auth.RoleAdmin, TenantID: &defaultTenant,
+			}))
+		}
+		callID := func(fn http.HandlerFunc, req *http.Request, id string) *httptest.ResponseRecorder {
+			rec := httptest.NewRecorder()
+			fn(rec, withURLParam(req, "id", id))
+			return rec
+		}
+
+		// 1. Default-tenant admin lists — sees default users, NOT tenant-b's.
+		listRec := httptest.NewRecorder()
+		h.ListUsers(listRec, asDefaultAdmin(http.MethodGet, "/api/users", nil))
+		var listed []map[string]any
+		_ = json.Unmarshal(listRec.Body.Bytes(), &listed)
+		for _, u := range listed {
+			if u["username"] == "iso-b-user" {
+				t.Fatalf("default-tenant admin must not see tenant-b user: %v", listed)
+			}
+		}
+
+		// 2. Cross-tenant update → 404, no mutation.
+		body, _ := json.Marshal(map[string]any{"role": "admin"})
+		if rec := callID(h.UpdateUser, asDefaultAdmin(http.MethodPut, "/api/users/"+bUser, bytes.NewReader(body)), bUser); rec.Code != http.StatusNotFound {
+			t.Fatalf("cross-tenant update: status = %d, want 404", rec.Code)
+		}
+		var bRole string
+		pool.QueryRow(context.Background(), `SELECT role FROM users WHERE id = $1`, bUser).Scan(&bRole)
+		if bRole != "viewer" {
+			t.Fatalf("tenant-b user role mutated cross-tenant: %q", bRole)
+		}
+
+		// 3. Cross-tenant delete → 404, row survives.
+		if rec := callID(h.DeleteUser, asDefaultAdmin(http.MethodDelete, "/api/users/"+bUser, nil), bUser); rec.Code != http.StatusNotFound {
+			t.Fatalf("cross-tenant delete: status = %d, want 404", rec.Code)
+		}
+		var bCount int
+		pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM users WHERE id = $1`, bUser).Scan(&bCount)
+		if bCount != 1 {
+			t.Fatalf("tenant-b user deleted cross-tenant, rows = %d", bCount)
+		}
+
+		// 4. Platform admin sees across tenants.
+		paReq := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+		paReq = paReq.WithContext(auth.ContextWithClaims(paReq.Context(), &auth.Claims{
+			UserID: "platform-admin", Role: auth.RoleAdmin, IsPlatformAdmin: true,
+		}))
+		paRec := httptest.NewRecorder()
+		h.ListUsers(paRec, paReq)
+		var all []map[string]any
+		_ = json.Unmarshal(paRec.Body.Bytes(), &all)
+		var sawB bool
+		for _, u := range all {
+			if u["username"] == "iso-b-user" {
+				sawB = true
+			}
+		}
+		if !sawB {
+			t.Fatalf("platform admin should see tenant-b user: %v", all)
+		}
+
+		// 5. Same-tenant delete still works (predicate doesn't over-block).
+		if rec := callID(h.DeleteUser, asDefaultAdmin(http.MethodDelete, "/api/users/"+aUser, nil), aUser); rec.Code != http.StatusNoContent {
+			t.Fatalf("same-tenant delete: status = %d, want 204", rec.Code)
+		}
+	})
+}
+
 func TestUsersRLSPolicyDormant(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
