@@ -525,6 +525,16 @@ Copy-Item "$ComposeDir\verify.sh" "$OutDir\verify.sh"
 $verifyText = (Get-Content "$OutDir\verify.sh" -Raw) -replace "`r`n", "`n"
 [System.IO.File]::WriteAllText("$OutDir\verify.sh", $verifyText)
 
+# Client-facing verification guide — staged into the bundle so MANIFEST.sha256
+# hash-covers it. A second copy is placed at the dist\ delivery root in step 9b
+# so it is readable before unzip (when the Layer-1 GPG check actually happens).
+if (Test-Path "$ComposeDir\VERIFY.md") {
+    Copy-Item "$ComposeDir\VERIFY.md" "$OutDir\VERIFY.md"
+    $verifyMdText = (Get-Content "$OutDir\VERIFY.md" -Raw) -replace "`r`n", "`n"
+    [System.IO.File]::WriteAllText("$OutDir\VERIFY.md", $verifyMdText)
+    Log "  Verification guide staged: VERIFY.md"
+}
+
 $ManifestPath = Join-Path $OutDir "MANIFEST.sha256"
 $prefixLen = $OutDir.Length + 1
 $lines = Get-ChildItem -Path $OutDir -Recurse -File |
@@ -585,6 +595,17 @@ Log "  ZIP: $ZipPath ($ZipSizeMB MB)"
 $zipHash = (Get-FileHash -Path $ZipPath -Algorithm SHA256).Hash.ToLower()
 [System.IO.File]::WriteAllText("$ZipPath.sha256", "$zipHash  $(Split-Path -Leaf $ZipPath)`n")
 Log "  Checksum: $ZipPath.sha256"
+
+# Stage the verification guide at the delivery root too, so the client can read
+# it BEFORE unzipping (when the Layer-1 GPG check happens). Unconditional — the
+# guide ships even when GPG signing is skipped. A hash-covered copy is already
+# inside the zip (step 7b).
+if (Test-Path "$ComposeDir\VERIFY.md") {
+    Copy-Item "$ComposeDir\VERIFY.md" "$DistDir\VERIFY.md" -Force
+    $distVerifyMd = (Get-Content "$DistDir\VERIFY.md" -Raw) -replace "`r`n", "`n"
+    [System.IO.File]::WriteAllText("$DistDir\VERIFY.md", $distVerifyMd)
+    Log "  Verification guide staged in dist\: VERIFY.md"
+}
 
 # -- 9b. GPG-sign the bundle (skipped gracefully if no signing key) ------------
 # Produces bas-install-<version>.zip.asc and stages a self-contained verify kit
