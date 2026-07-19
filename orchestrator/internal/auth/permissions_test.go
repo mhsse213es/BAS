@@ -88,6 +88,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanValidateExercisePlan: true, CanUpdateExercisePlan: true, CanDeleteExercisePlan: true,
 		CanCreateExerciseTemplate: true, CanInstantiateExerciseTemplate: true,
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
+		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 	}
 	for _, p := range Permissions(RoleAdmin) {
 		if !tested[p] {
@@ -130,6 +131,8 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanCreateExerciseTemplate, CanInstantiateExerciseTemplate,
 
 		CanViewSSOConfig, CanManageSSOConfig,
+
+		CanViewSCIMConfig, CanManageSCIMConfig,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Permissions(RoleAdmin) len = %d, want %d", len(got), len(want))

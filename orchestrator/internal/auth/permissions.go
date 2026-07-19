@@ -148,6 +148,12 @@ const (
 	// from the RBAC-expansion migration.
 	CanViewSSOConfig   Permission = "sso:config:view"
 	CanManageSSOConfig Permission = "sso:config:manage"
+
+	// SCIM provisioning — Admin only. Separate from SSO's permissions:
+	// different protocol, different admin action (rotate a token vs.
+	// configure an IdP issuer).
+	CanViewSCIMConfig   Permission = "scim:config:view"
+	CanManageSCIMConfig Permission = "scim:config:manage"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -196,6 +202,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanValidateExercisePlan: true, CanUpdateExercisePlan: true, CanDeleteExercisePlan: true,
 		CanCreateExerciseTemplate: true, CanInstantiateExerciseTemplate: true,
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
+		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -263,6 +270,8 @@ func Permissions(role Role) []Permission {
 		CanCreateExerciseTemplate, CanInstantiateExerciseTemplate,
 
 		CanViewSSOConfig, CanManageSSOConfig,
+
+		CanViewSCIMConfig, CanManageSCIMConfig,
 	} {
 		if set[p] {
 			out = append(out, p)
