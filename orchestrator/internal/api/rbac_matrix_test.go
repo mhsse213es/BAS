@@ -237,6 +237,11 @@ var routeMatrix = []routeCase{
 	{http.MethodDelete, "/api/relationship-evidence/{id}", tierPermission, auth.CanCurateThreatIntel},
 	{http.MethodPost, "/api/relationships/{id}/review", tierPermission, auth.CanReviewThreatIntel},
 	{http.MethodPost, "/api/relationships/{id}/status", tierPermission, auth.CanReviewThreatIntel},
+	{http.MethodGet, "/api/sso/config", tierPermission, auth.CanViewSSOConfig},
+	{http.MethodPost, "/api/sso/config", tierPermission, auth.CanManageSSOConfig},
+	{http.MethodPut, "/api/sso/config/{id}", tierPermission, auth.CanManageSSOConfig},
+	{http.MethodDelete, "/api/sso/config/{id}", tierPermission, auth.CanManageSSOConfig},
+	{http.MethodPost, "/api/sso/config/{id}/test", tierPermission, auth.CanManageSSOConfig},
 
 	// ── platform-admin only (Phase 7 Multi-Tenancy) ─────────────────────
 	{http.MethodPost, "/api/tenants", tierPlatformAdmin, ""},

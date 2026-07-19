@@ -302,6 +302,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanReviewThreatIntel)).Post("/api/relationships/{id}/review", h.ReviewRelationship)
 		r.With(auth.RequirePermission(auth.CanReviewThreatIntel)).Post("/api/relationships/{id}/status", h.SetRelationshipStatus)
 
+		// SSO (OIDC) config — tenant-scoped CRUD. See
+		// docs/superpowers/specs/2026-07-19-phase7-sso-oidc-design.md.
+		r.With(auth.RequirePermission(auth.CanViewSSOConfig)).Get("/api/sso/config", h.GetSSOConfig)
+		r.With(auth.RequirePermission(auth.CanManageSSOConfig)).Post("/api/sso/config", h.CreateSSOConfig)
+		r.With(auth.RequirePermission(auth.CanManageSSOConfig)).Put("/api/sso/config/{id}", h.UpdateSSOConfig)
+		r.With(auth.RequirePermission(auth.CanManageSSOConfig)).Delete("/api/sso/config/{id}", h.DeleteSSOConfig)
+		r.With(auth.RequirePermission(auth.CanManageSSOConfig)).Post("/api/sso/config/{id}/test", h.TestSSOConfig)
+
 		// Admin only — config + user management + connector. Gated per-route
 		// since the 2026-07-18 RBAC permission expansion (see
 		// docs/superpowers/specs/2026-07-18-phase7-rbac-permission-expansion-design.md).
