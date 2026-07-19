@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/attackpath"
+	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/testutil"
 )
 
@@ -70,7 +71,7 @@ func rankOf(recs Recommendations, id string) int {
 
 func TestBuild_EmptyUniverse_ReturnsEmptyNotError(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -94,7 +95,7 @@ func TestBuild_OnlyARTTestableTechniquesAreRanked(t *testing.T) {
 		// Seeded technique with NO art_atomic_tests row — must not be ranked.
 		mustExec(t, pool, `INSERT INTO techniques (technique_id, name, tactic) VALUES ('T1136.001', 'Local Account', 'persistence')`)
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -115,7 +116,7 @@ func TestBuild_KEVOutranksNoSignal(t *testing.T) {
 		seedTechnique(t, pool, "T1217", "Browser Bookmark Discovery", "discovery")
 		seedKEV(t, pool, "T1003.001", "CVE-2024-0001")
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -133,6 +134,46 @@ func TestBuild_KEVOutranksNoSignal(t *testing.T) {
 	})
 }
 
+func TestBuild_SectorRegionRelevantOutranksNonRelevant(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		groupIdx := attackdata.GroupTechniqueIndex()
+		if len(groupIdx) == 0 {
+			t.Skip("no embedded ATT&CK group data available")
+		}
+		var relevantGroup, relevantTech string
+		for g, techs := range groupIdx {
+			if len(techs) > 0 {
+				relevantGroup, relevantTech = g, techs[0]
+				break
+			}
+		}
+
+		seedTechnique(t, pool, relevantTech, "Relevant Technique", "execution")
+		seedTechnique(t, pool, "T9999", "Non-Relevant Technique", "execution")
+
+		_, err := pool.Exec(context.Background(),
+			`INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source)
+			 VALUES ($1, '{}', $2, '{}', 'bundle')`,
+			relevantGroup, []string{"government"})
+		if err != nil {
+			t.Fatalf("seed profile: %v", err)
+		}
+
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, []string{"government"}, nil)
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+
+		relevantRank, nonRelevantRank := rankOf(recs, relevantTech), rankOf(recs, "T9999")
+		if relevantRank == -1 || nonRelevantRank == -1 {
+			t.Fatalf("expected both techniques ranked, got %+v", recs.Techniques)
+		}
+		if relevantRank >= nonRelevantRank {
+			t.Errorf("sector-relevant technique (rank %d) did not outrank non-relevant one (rank %d)", relevantRank, nonRelevantRank)
+		}
+	})
+}
+
 // TestBuild_NeverTestedOutranksRecentlyTested: identical threat signals, but one
 // was tested today. The untested one must rank first.
 func TestBuild_NeverTestedOutranksRecentlyTested(t *testing.T) {
@@ -146,7 +187,7 @@ func TestBuild_NeverTestedOutranksRecentlyTested(t *testing.T) {
 			`[{"technique":{"id":"T1055","name":"Process Injection","tactic":"defense-evasion"},
 			   "result":"pass","executedAt":"2026-07-17T10:00:00Z"}]`)
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -180,7 +221,7 @@ func TestBuild_ErroredRunsCountAsNeverTested(t *testing.T) {
 			`[{"technique":{"id":"T1055","name":"Process Injection","tactic":"defense-evasion"},
 			   "result":"error","executedAt":"2026-07-17T10:00:00Z"}]`)
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -208,7 +249,7 @@ func TestBuild_EnvironmentRelevanceRaisesRank(t *testing.T) {
 		g := attackpath.New()
 		g.AddEdge(attackpath.Edge{From: "HOST-A", To: "HOST-B", Kind: attackpath.EdgeSMB})
 
-		recs, err := Build(context.Background(), pool, g, attackpath.Summary{}, 20)
+		recs, err := Build(context.Background(), pool, g, attackpath.Summary{}, 20, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -235,7 +276,7 @@ func TestBuild_SuggestedScenarioCarriesTopN(t *testing.T) {
 		seedTechnique(t, pool, "T1217", "Browser Bookmark Discovery", "discovery")
 		seedKEV(t, pool, "T1003.001", "CVE-2024-0001")
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 2)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 2, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}

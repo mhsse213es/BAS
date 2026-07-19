@@ -39,7 +39,7 @@ type coverageRow struct {
 // having relevance fabricated for it.
 //
 // Nil-safe: unseeded content returns an empty Recommendations, never an error.
-func Build(ctx context.Context, pool *pgxpool.Pool, g *attackpath.Graph, s attackpath.Summary, limit int) (Recommendations, error) {
+func Build(ctx context.Context, pool *pgxpool.Pool, g *attackpath.Graph, s attackpath.Summary, limit int, sectors, regions []string) (Recommendations, error) {
 	if limit <= 0 {
 		limit = defaultLimit
 	}
@@ -66,6 +66,10 @@ func Build(ctx context.Context, pool *pgxpool.Pool, g *attackpath.Graph, s attac
 		return Recommendations{}, err
 	}
 	actors := actorCounts()
+	sectorRegionRelevant, err := reporting.SectorRegionRelevantTechniques(ctx, pool, sectors, regions)
+	if err != nil {
+		sectorRegionRelevant = map[string]bool{}
+	}
 	env := buildEnvIndex(g, s, pathcorrelation.DefaultEdgeTechniqueMapper{})
 
 	now := time.Now().UTC()
@@ -92,7 +96,7 @@ func Build(ctx context.Context, pool *pgxpool.Pool, g *attackpath.Graph, s attac
 			EPSSPercentile: epss[key],
 			ThreatActors:   actors[key],
 		}
-		t.ThreatPriority = reporting.ComputePriorityScore(t.KEV, t.EPSSPercentile, t.ThreatActors, verdict)
+		t.ThreatPriority = reporting.ComputePriorityScore(t.KEV, t.EPSSPercentile, t.ThreatActors, verdict, sectorRegionRelevant[key])
 		t.CoverageGap = CoverageGap(lastTested, now)
 		t.EnvironmentRisk = EnvironmentRisk(env.inGraph[key], env.onCriticalPath[key], env.targetsCritical[key])
 		t.Score = RecommendationScore(t.ThreatPriority, t.CoverageGap, t.EnvironmentRisk)

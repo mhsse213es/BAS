@@ -27,7 +27,12 @@ func (h *Handler) GetRecommendedSimulations(w http.ResponseWriter, r *http.Reque
 	cols := h.loadAttackPathCollections(r)
 	g, s := attackpath.BuildGraphAndAnalyze(cols, h.loadAssetTags(r))
 
-	recs, err := recommend.Build(r.Context(), h.db, g, s, limit)
+	var sectors, regions []string
+	if h.reportingEngine != nil {
+		sectors = h.reportingEngine.Sectors()
+		regions = h.reportingEngine.Regions()
+	}
+	recs, err := recommend.Build(r.Context(), h.db, g, s, limit, sectors, regions)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
