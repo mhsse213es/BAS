@@ -2181,8 +2181,28 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "cannot delete your own account", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.db.Exec(r.Context(), `DELETE FROM users WHERE id = $1`, targetID); err != nil {
+	tenantID, isPlatformAdmin := callerTenant(r)
+	var deleted int64
+	err := db.WithTenant(r.Context(), h.db, tenantID, isPlatformAdmin, func(tx pgx.Tx) error {
+		q := `DELETE FROM users WHERE id = $1`
+		args := []any{targetID}
+		if !isPlatformAdmin {
+			q += ` AND tenant_id = $2`
+			args = append(args, tenantID)
+		}
+		ct, derr := tx.Exec(r.Context(), q, args...)
+		if derr != nil {
+			return derr
+		}
+		deleted = ct.RowsAffected()
+		return nil
+	})
+	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if deleted == 0 {
+		jsonError(w, "user not found", http.StatusNotFound)
 		return
 	}
 	h.auditLog(r, "user.delete", targetID, nil, "ok")

@@ -250,11 +250,11 @@ func TestDeleteUser_SelfBlockedNonexistentIsNoop(t *testing.T) {
 			t.Fatalf("self-delete: status = %d, want 400", rec.Code)
 		}
 
-		// Characterization: deleting a nonexistent id still returns 204 — the
-		// handler doesn't check rows-affected.
+		// SP7 pilot: DeleteUser now checks rows-affected, so a nonexistent id
+		// (like a cross-tenant one) returns 404 instead of the old 204.
 		req2 := withURLParam(authedRequest(t, http.MethodDelete, "/api/users/does-not-exist", nil, auth.RoleAdmin, adminID), "id", "does-not-exist")
-		if rec2 := callAuthed(h.DeleteUser, req2); rec2.Code != http.StatusNoContent {
-			t.Fatalf("nonexistent id delete: status = %d, want 204 (current idempotent-ish behavior)", rec2.Code)
+		if rec2 := callAuthed(h.DeleteUser, req2); rec2.Code != http.StatusNotFound {
+			t.Fatalf("nonexistent id delete: status = %d, want 404", rec2.Code)
 		}
 	})
 }
