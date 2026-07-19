@@ -4,10 +4,10 @@ import "testing"
 
 func TestPassesSectorRegionFilter(t *testing.T) {
 	cases := []struct {
-		name                          string
+		name                         string
 		actorSectors, actorRegions   []string
 		filterSectors, filterRegions []string
-		want                          bool
+		want                         bool
 	}{
 		{"no filters configured", []string{"banking"}, []string{"apac"}, nil, nil, true},
 		{"sector matches, no region filter", []string{"banking"}, nil, []string{"banking"}, nil, true},
