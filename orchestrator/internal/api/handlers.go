@@ -279,16 +279,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var id, hash, role string
+	var id, hash, role, authSource string
 	var isActive, mustChangePw bool
 	var tenantID *string
 	dbErr := h.db.QueryRow(r.Context(),
-		`SELECT id, password_hash, role, is_active, must_change_pw, tenant_id FROM users WHERE username = $1`, req.Username,
-	).Scan(&id, &hash, &role, &isActive, &mustChangePw, &tenantID)
+		`SELECT id, password_hash, role, is_active, must_change_pw, tenant_id, auth_source FROM users WHERE username = $1`, req.Username,
+	).Scan(&id, &hash, &role, &isActive, &mustChangePw, &tenantID, &authSource)
 	// Evaluate password even on DB miss to prevent timing-based user enumeration.
 	// VerifyPassword on an empty string returns false without error.
 	ok, needsUpgrade, _ := auth.VerifyPassword(req.Password, hash)
-	if dbErr != nil || !ok {
+	// SSO-provisioned accounts are rejected explicitly, not just by their
+	// password hash being an unguessable random placeholder — defense in
+	// depth, so password login stays blocked even if that hash were ever
+	// mishandled. See docs/superpowers/specs/2026-07-19-phase7-sso-oidc-design.md.
+	if dbErr != nil || !ok || authSource == "sso" {
 		h.auditLogAs(r, "", "user.login", req.Username, map[string]any{"username": req.Username, "reason": "invalid credentials"}, "fail")
 		jsonError(w, "invalid credentials", http.StatusUnauthorized)
 		return

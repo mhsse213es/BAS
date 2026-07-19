@@ -256,6 +256,8 @@ var publicRoutes = map[string]bool{
 	"POST /api/auth/login":                        true,
 	"POST /api/auth/logout":                       true,
 	"POST /api/auth/setup":                        true,
+	"GET /login/{tenantSlug}/sso":                  true,
+	"GET /api/auth/sso/callback":                   true,
 	"GET /api/agents/ping":                        true,
 	"POST /api/agents/enroll":                     true,
 	"POST /api/agents/events":                     true,
