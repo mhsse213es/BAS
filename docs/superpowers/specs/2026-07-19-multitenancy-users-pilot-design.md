@@ -59,9 +59,30 @@ middleware):
 
 | Caller | `claims.IsPlatformAdmin` | `claims.TenantID` | Behaviour |
 |---|---|---|---|
-| Platform admin | `true` | `nil` | Cross-tenant: no `WHERE` filter; `WithTenant("", true)` |
+| Platform admin | `true` | `nil` | Cross-tenant: no `WHERE` filter; `WithTenant("default", true)` |
 | Tenant user | `false` | non-nil | Scoped: `WHERE tenant_id = *claims.TenantID`; `WithTenant(*claims.TenantID, false)` |
-| Neither | — | — | `403` (defense-in-depth; should not occur post-auth) |
+| Tenant-less / no claims | `false` | `nil` (or claims absent) | Scoped to `'default'` — the single-tenant baseline |
+
+Derivation (one small block, shared by all three handlers):
+
+```go
+claims, ok := auth.ClaimsFrom(r.Context())
+isPlatformAdmin := ok && claims.IsPlatformAdmin
+tenantID := "default"
+if ok && claims.TenantID != nil {
+    tenantID = *claims.TenantID
+}
+```
+
+**Why default to `'default'` rather than `403`:** the whole schema uses
+`tenant_id … DEFAULT 'default'`, and before multi-tenancy is rolled out every
+row and every legacy/4-arg-`GenerateToken` session belongs to the `'default'`
+tenant. A tenant-less caller is therefore correctly and safely scoped to
+`'default'` (least privilege — one tenant, never "see all", which stays gated on
+`IsPlatformAdmin`). A hard `403` would instead break the current single-tenant
+deployment and every existing direct-call test. In production these three
+handlers sit behind auth middleware + `RequirePermission`, so `ok` is always
+true; the `ok == false` path exists only for direct-call unit tests.
 
 ### Prong 1 — App-layer `WHERE tenant_id` filtering (real protection, live today)
 
@@ -129,11 +150,19 @@ enabling RLS on the table has no runtime effect.
 
 ## Error handling
 
-- Missing/!ok claims → `403` (no caller identity).
+- Tenant context is always derivable (defaults to `'default'`, see above) — no
+  new `403` path is introduced.
 - `WithTenant`/query errors → `500` with the error message, matching the
   existing handlers' behaviour.
 - Zero rows affected on update/delete → `404` (see Prong 1).
 - Self-modification attempts → `400` (existing behaviour, unchanged).
+
+**One existing characterization test changes.**
+`TestDeleteUser_SelfBlockedNonexistentIsNoop` currently asserts that deleting a
+nonexistent id returns `204` ("the handler doesn't check rows-affected"). Prong
+1 deliberately changes that to `404`, so this test's expectation and comment are
+updated as part of the pilot — the behaviour change is intended, not a
+regression.
 
 ## Testing
 
