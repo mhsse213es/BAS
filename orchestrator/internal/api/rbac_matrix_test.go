@@ -329,7 +329,8 @@ func TestRBACMatrix_AuthorizationBoundary(t *testing.T) {
 				t.Run(rc.method+" "+rc.path+"/"+id.name, func(t *testing.T) {
 					req := httptest.NewRequest(rc.method, concretePath(rc.path), nil)
 					if !id.anon {
-						tok, err := auth.GenerateToken("matrix-"+id.name, id.role, testJWTSecret, time.Hour)
+						tenantID := "default"
+					tok, err := auth.GenerateTenantToken("matrix-"+id.name, id.role, &tenantID, false, testJWTSecret, time.Hour)
 						if err != nil {
 							t.Fatalf("mint token: %v", err)
 						}
