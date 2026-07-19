@@ -256,8 +256,8 @@ var publicRoutes = map[string]bool{
 	"POST /api/auth/login":                        true,
 	"POST /api/auth/logout":                       true,
 	"POST /api/auth/setup":                        true,
-	"GET /login/{tenantSlug}/sso":                  true,
-	"GET /api/auth/sso/callback":                   true,
+	"GET /login/{tenantSlug}/sso":                 true,
+	"GET /api/auth/sso/callback":                  true,
 	"GET /api/agents/ping":                        true,
 	"POST /api/agents/enroll":                     true,
 	"POST /api/agents/events":                     true,
@@ -330,7 +330,7 @@ func TestRBACMatrix_AuthorizationBoundary(t *testing.T) {
 					req := httptest.NewRequest(rc.method, concretePath(rc.path), nil)
 					if !id.anon {
 						tenantID := "default"
-					tok, err := auth.GenerateTenantToken("matrix-"+id.name, id.role, &tenantID, false, testJWTSecret, time.Hour)
+						tok, err := auth.GenerateTenantToken("matrix-"+id.name, id.role, &tenantID, false, testJWTSecret, time.Hour)
 						if err != nil {
 							t.Fatalf("mint token: %v", err)
 						}
