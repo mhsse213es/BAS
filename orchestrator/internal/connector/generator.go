@@ -17,11 +17,20 @@ const minTechniques = 2 // minimum techniques before generating a scenario
 // Generator converts ThreatActor profiles into BAS scenario YAML files.
 type Generator struct {
 	intelDir string // e.g. "scenarios/intel"
+	// sectors/regions are the deployment's own configured values
+	// (config.Config.ThreatIntelSectors/ThreatIntelRegions) — when a
+	// generated actor's own Sectors/Regions overlap these, the scenario
+	// gets an extra relevance tag. Empty means no tags are ever added. See
+	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
+	sectors []string
+	regions []string
 }
 
-// NewGenerator creates a Generator that writes to intelDir.
-func NewGenerator(scenariosDir string) *Generator {
-	return &Generator{intelDir: filepath.Join(scenariosDir, "intel")}
+// NewGenerator creates a Generator that writes to intelDir, tagging
+// generated scenarios as sector/region-relevant when a threat actor's own
+// Sectors/Regions overlap the given values.
+func NewGenerator(scenariosDir string, sectors, regions []string) *Generator {
+	return &Generator{intelDir: filepath.Join(scenariosDir, "intel"), sectors: sectors, regions: regions}
 }
 
 // GenerateResult summarises what was written in one sync.
@@ -55,7 +64,7 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 			continue
 		}
 
-		yaml := buildYAML(actor, fp)
+		yaml := g.buildYAML(actor, fp)
 		if err := os.WriteFile(fname, []byte(yaml), 0644); err != nil {
 			log.Printf("[connector/gen] write %s: %v", fname, err)
 			continue
@@ -68,7 +77,7 @@ func (g *Generator) Write(actors []ThreatActor) (GenerateResult, error) {
 
 // ── YAML builder ──────────────────────────────────────────────────────────────
 
-func buildYAML(actor ThreatActor, fingerprint string) string {
+func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
 	id := "intel-" + fingerprint
 	date := time.Now().UTC().Format("2006-01-02")
 
@@ -91,6 +100,12 @@ func buildYAML(actor ThreatActor, fingerprint string) string {
 	tags := []string{"intel", "auto-generated", strings.ToLower(strings.ReplaceAll(actor.Name, " ", "-"))}
 	if len(actor.Sectors) > 0 {
 		tags = append(tags, actor.Sectors...)
+	}
+	if intersects(actor.Sectors, g.sectors) {
+		tags = append(tags, "sector-relevant")
+	}
+	if intersects(actor.Regions, g.regions) {
+		tags = append(tags, "region-relevant")
 	}
 
 	// Description

@@ -208,8 +208,8 @@ func main() {
 			log.Printf("[+] Threat-intel bundle found in %s (air-gapped source)", cfg.TIBundleDir)
 		}
 	}
-	gen := connector.NewGenerator(cfg.ScenariosDir)
-	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours)
+	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
+	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool)
 	scheduler.Start()
 	defer scheduler.Stop()
 

@@ -1,10 +1,13 @@
 package connector
 
 import (
+	"context"
 	"log"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/scenario"
 )
@@ -16,6 +19,10 @@ type Scheduler struct {
 	generator *Generator
 	engine    *scenario.Engine
 	interval  time.Duration
+	// pool persists fetched actor profiles (sectors/regions) for
+	// internal/reporting's priority-score weighting. See
+	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
+	pool *pgxpool.Pool
 
 	mu     sync.RWMutex
 	status ConnectorStatus
@@ -30,6 +37,7 @@ func NewScheduler(
 	generator *Generator,
 	engine *scenario.Engine,
 	pollHours int,
+	pool *pgxpool.Pool,
 ) *Scheduler {
 	if pollHours <= 0 {
 		pollHours = 24
@@ -39,6 +47,7 @@ func NewScheduler(
 		generator: generator,
 		engine:    engine,
 		interval:  time.Duration(pollHours) * time.Hour,
+		pool:      pool,
 		syncCh:    make(chan struct{}, 1),
 		stopCh:    make(chan struct{}),
 	}
@@ -146,6 +155,10 @@ func (s *Scheduler) sync() {
 	// overlay compose here, since MergeActors unions their techniques.
 	actors = MergeActors(actors)
 
+	// Persist actor profiles (sectors/regions) for reporting's priority-score
+	// weighting — see docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
+	s.upsertActorProfiles(actors)
+
 	// ── Generate scenarios ────────────────────────────────────────────────
 	result, err := s.generator.Write(actors)
 	if err != nil {
@@ -219,4 +232,33 @@ func MergeActors(actors []ThreatActor) []ThreatActor {
 
 func actorKey(name string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(name, " ", ""), "-", ""))
+}
+
+// upsertActorProfiles persists each actor's sectors/regions/aliases so
+// internal/reporting can weight technique priority scores by sector/region
+// relevance. A single actor's upsert failing is logged and skipped, never
+// aborting the rest — same discipline sync() already applies to source
+// fetches. No-op when pool is nil (e.g. a test that never calls sync()).
+func (s *Scheduler) upsertActorProfiles(actors []ThreatActor) {
+	if s.pool == nil {
+		return
+	}
+	ctx := context.Background()
+	for _, a := range actors {
+		var lastSeen *time.Time
+		if !a.LastSeen.IsZero() {
+			t := a.LastSeen
+			lastSeen = &t
+		}
+		_, err := s.pool.Exec(ctx,
+			`INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source, last_seen, updated_at)
+			 VALUES ($1,$2,$3,$4,$5,$6,NOW())
+			 ON CONFLICT (name) DO UPDATE SET
+			   aliases = EXCLUDED.aliases, sectors = EXCLUDED.sectors, regions = EXCLUDED.regions,
+			   source = EXCLUDED.source, last_seen = EXCLUDED.last_seen, updated_at = NOW()`,
+			a.Name, a.Aliases, a.Sectors, a.Regions, a.Source, lastSeen)
+		if err != nil {
+			log.Printf("[connector] upsert actor profile %q: %v", a.Name, err)
+		}
+	}
 }
