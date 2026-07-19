@@ -977,6 +977,23 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// defense-in-depth, not reliance on the hash being merely
 		// impractical to guess.
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_source text NOT NULL DEFAULT 'local'`,
+
+		// SCIM provisioning — Phase 7 Identity & Access, Part 3. One SCIM
+		// config per tenant; token_hash is a SHA-256 hash, the cleartext
+		// token is never stored and is shown to the admin exactly once
+		// (creation/rotation response). UNIQUE(tenant_id) — exactly one
+		// SCIM app per tenant for this slice. See
+		// docs/superpowers/specs/2026-07-19-phase7-scim-provisioning-design.md.
+		`CREATE TABLE IF NOT EXISTS scim_configs (
+			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			tenant_id     text        NOT NULL REFERENCES tenants(id),
+			token_hash    text        NOT NULL,
+			default_role  text        NOT NULL DEFAULT 'viewer',
+			enabled       boolean     NOT NULL DEFAULT true,
+			created_at    timestamptz NOT NULL DEFAULT NOW(),
+			updated_at    timestamptz NOT NULL DEFAULT NOW(),
+			UNIQUE (tenant_id)
+		)`,
 	}
 
 	for _, s := range stmts {
