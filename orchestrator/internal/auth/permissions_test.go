@@ -87,6 +87,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanCreateExercisePlanFromOpenAEV: true, CanCreateExercisePlan: true,
 		CanValidateExercisePlan: true, CanUpdateExercisePlan: true, CanDeleteExercisePlan: true,
 		CanCreateExerciseTemplate: true, CanInstantiateExerciseTemplate: true,
+		CanViewSSOConfig: true, CanManageSSOConfig: true,
 	}
 	for _, p := range Permissions(RoleAdmin) {
 		if !tested[p] {
@@ -127,6 +128,8 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanTestOpenAEVConfig, CanSyncOpenAEV, CanImportOpenAEVBundle, CanCreateExercisePlanFromOpenAEV,
 		CanCreateExercisePlan, CanValidateExercisePlan, CanUpdateExercisePlan, CanDeleteExercisePlan,
 		CanCreateExerciseTemplate, CanInstantiateExerciseTemplate,
+
+		CanViewSSOConfig, CanManageSSOConfig,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Permissions(RoleAdmin) len = %d, want %d", len(got), len(want))

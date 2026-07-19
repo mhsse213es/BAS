@@ -142,6 +142,12 @@ const (
 	CanDeleteExercisePlan          Permission = "exercises:plans:delete"
 	CanCreateExerciseTemplate      Permission = "exercises:templates:create"
 	CanInstantiateExerciseTemplate Permission = "exercises:templates:instantiate"
+
+	// SSO (OIDC) config — Admin only. New capability, not a route that
+	// existed before this slice, so it doesn't inherit a Group A/B grant
+	// from the RBAC-expansion migration.
+	CanViewSSOConfig   Permission = "sso:config:view"
+	CanManageSSOConfig Permission = "sso:config:manage"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -189,6 +195,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanCreateExercisePlanFromOpenAEV: true, CanCreateExercisePlan: true,
 		CanValidateExercisePlan: true, CanUpdateExercisePlan: true, CanDeleteExercisePlan: true,
 		CanCreateExerciseTemplate: true, CanInstantiateExerciseTemplate: true,
+		CanViewSSOConfig: true, CanManageSSOConfig: true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -254,6 +261,8 @@ func Permissions(role Role) []Permission {
 		CanTestOpenAEVConfig, CanSyncOpenAEV, CanImportOpenAEVBundle, CanCreateExercisePlanFromOpenAEV,
 		CanCreateExercisePlan, CanValidateExercisePlan, CanUpdateExercisePlan, CanDeleteExercisePlan,
 		CanCreateExerciseTemplate, CanInstantiateExerciseTemplate,
+
+		CanViewSSOConfig, CanManageSSOConfig,
 	} {
 		if set[p] {
 			out = append(out, p)
