@@ -89,3 +89,36 @@ func TestBuildCalderaAllWindowsStepsSetsFidelity(t *testing.T) {
 		t.Errorf("drop tool Fidelity = %q, want lab-only", got["drop tool"])
 	}
 }
+
+func TestBuildCalderaAllWindowsStepsSetsRequiresPriv(t *testing.T) {
+	const abilitiesJSON = `[
+	  {"ability_id":"a1","name":"safe recon","technique_id":"T1082","tactic":"discovery","privilege":"",
+	   "executors":[{"platform":"windows","name":"psh","command":"systeminfo"}]},
+	  {"ability_id":"a2","name":"clear logs","technique_id":"T1070.001","tactic":"defense-evasion","privilege":"Elevated",
+	   "executors":[{"platform":"windows","name":"psh","command":"Clear-Eventlog Security"}]}
+	]`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/abilities" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(abilitiesJSON))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	steps, err := buildCalderaAllWindowsSteps(srv.URL, "")
+	if err != nil {
+		t.Fatalf("buildCalderaAllWindowsSteps: %v", err)
+	}
+	got := map[string]string{}
+	for _, s := range steps {
+		got[s.Name] = s.RequiresPriv
+	}
+	if got["safe recon"] != "user" {
+		t.Errorf("safe recon RequiresPriv = %q, want user", got["safe recon"])
+	}
+	if got["clear logs"] != "admin" {
+		t.Errorf("clear logs RequiresPriv = %q, want admin", got["clear logs"])
+	}
+}

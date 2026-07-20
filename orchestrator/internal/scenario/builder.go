@@ -29,9 +29,9 @@ func TaskID(techniqueID, name string) string {
 // definitions are NOT stored in the scenario's static Steps. Persisted with the
 // run and read back when the agent returns results.
 type StepMeta struct {
-	TechniqueID      string       `json:"techniqueId"`
-	Name             string       `json:"name"`
-	Framework        string       `json:"framework"`
+	TechniqueID string `json:"techniqueId"`
+	Name        string `json:"name"`
+	Framework   string `json:"framework"`
 	// Variant fields — populated only for variant steps (BaseTaskID non-empty).
 	// Persisted in scenario_runs.step_meta so the result processor can write
 	// scenario_variant_results without re-querying at submission time.
@@ -442,14 +442,15 @@ func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]Scena
 			techniqueID = ab.Tactic
 		}
 		steps = append(steps, ScenarioStep{
-			TaskID:      TaskID(techniqueID, ab.Name),
-			TechniqueID: techniqueID,
-			Name:        ab.Name,
-			Framework:   "caldera",
-			Executor:    "powershell",
-			Command:     cmd,
-			TimeoutSec:  60,
-			Fidelity:    calderaStepFidelity(*ab),
+			TaskID:       TaskID(techniqueID, ab.Name),
+			TechniqueID:  techniqueID,
+			Name:         ab.Name,
+			Framework:    "caldera",
+			Executor:     "powershell",
+			Command:      cmd,
+			TimeoutSec:   60,
+			Fidelity:     calderaStepFidelity(*ab),
+			RequiresPriv: mapCalderaElevation(ab.Privilege).Effective(),
 		})
 	}
 
@@ -479,14 +480,15 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 			techniqueID = ab.Tactic
 		}
 		steps = append(steps, ScenarioStep{
-			TaskID:      TaskID(techniqueID, ab.Name),
-			TechniqueID: techniqueID,
-			Name:        ab.Name,
-			Framework:   "caldera",
-			Executor:    "powershell",
-			Command:     cmd,
-			TimeoutSec:  60,
-			Fidelity:    calderaStepFidelity(*ab),
+			TaskID:       TaskID(techniqueID, ab.Name),
+			TechniqueID:  techniqueID,
+			Name:         ab.Name,
+			Framework:    "caldera",
+			Executor:     "powershell",
+			Command:      cmd,
+			TimeoutSec:   60,
+			Fidelity:     calderaStepFidelity(*ab),
+			RequiresPriv: mapCalderaElevation(ab.Privilege).Effective(),
 		})
 	}
 	if len(steps) == 0 {
@@ -546,14 +548,15 @@ func buildCalderaAllWindowsSteps(calderaURL, apiKey string) ([]ScenarioStep, err
 			techniqueID = ab.Tactic
 		}
 		steps = append(steps, ScenarioStep{
-			TaskID:      TaskID(techniqueID, ab.Name),
-			TechniqueID: techniqueID,
-			Name:        ab.Name,
-			Framework:   "caldera",
-			Executor:    "powershell",
-			Command:     cmd,
-			TimeoutSec:  60,
-			Fidelity:    calderaStepFidelity(ab),
+			TaskID:       TaskID(techniqueID, ab.Name),
+			TechniqueID:  techniqueID,
+			Name:         ab.Name,
+			Framework:    "caldera",
+			Executor:     "powershell",
+			Command:      cmd,
+			TimeoutSec:   60,
+			Fidelity:     calderaStepFidelity(ab),
+			RequiresPriv: mapCalderaElevation(ab.Privilege).Effective(),
 		})
 	}
 	if len(steps) == 0 {
