@@ -2705,14 +2705,15 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		AgentID            string `json:"agentId"`
-		Mode               string `json:"mode"`
-		ConfirmLive        bool   `json:"confirmLive"`
-		ConfirmLab         bool   `json:"confirmLab"`
-		Reason             string `json:"reason"`
-		UseBAS             bool   `json:"useBas"`
-		UseART             bool   `json:"useArt"`
-		CalderaAdversaryID string `json:"calderaAdversaryId"` // frontend resolves name→UUID
+		AgentID            string                   `json:"agentId"`
+		Mode               string                   `json:"mode"`
+		ConfirmLive        bool                     `json:"confirmLive"`
+		ConfirmLab         bool                     `json:"confirmLab"`
+		Reason             string                   `json:"reason"`
+		UseBAS             bool                     `json:"useBas"`
+		UseART             bool                     `json:"useArt"`
+		CalderaAdversaryID string                   `json:"calderaAdversaryId"` // frontend resolves name→UUID
+		ExecutionPolicy    scenario.ExecutionPolicy `json:"executionPolicy,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request: "+err.Error(), http.StatusBadRequest)
@@ -2738,7 +2739,7 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 
 	base := dispatchOpts{
 		Mode: req.Mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab,
-		Reason: req.Reason, InitiatedBy: uid,
+		Reason: req.Reason, InitiatedBy: uid, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
 	}
 
 	// BAS-native scenario dispatch.
