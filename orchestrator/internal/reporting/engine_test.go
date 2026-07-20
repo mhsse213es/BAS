@@ -283,3 +283,65 @@ func TestBuildSkipBreakdown(t *testing.T) {
 		t.Errorf("buildSkipBreakdown = %+v, want %+v", got, want)
 	}
 }
+
+func TestBuildCoverageSummary(t *testing.T) {
+	cases := []struct {
+		name            string
+		results         []models.SimulationResult
+		totalBase       int
+		eligibleBase    int
+		wantExecuted    int
+		wantScenarioPct int
+		wantEligiblePct int
+	}{
+		{
+			name: "no filtering — every step executed",
+			results: []models.SimulationResult{
+				{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultPass},
+				{Technique: models.AttackTechnique{ID: "T1548"}, Result: models.ResultFail},
+			},
+			totalBase: 2, eligibleBase: 2,
+			wantExecuted: 2, wantScenarioPct: 100, wantEligiblePct: 100,
+		},
+		{
+			name: "policy skip excluded from Executed",
+			results: []models.SimulationResult{
+				{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultPass},
+				{Technique: models.AttackTechnique{ID: "T1548"}, Result: models.ResultSkipped, SkipReason: models.SkipReasonPolicyPrivilege},
+			},
+			totalBase: 2, eligibleBase: 1,
+			wantExecuted: 1, wantScenarioPct: 50, wantEligiblePct: 100,
+		},
+		{
+			name: "non-policy skip still counts as executed",
+			results: []models.SimulationResult{
+				{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultSkipped, SkipReason: models.SkipReasonMissingContent},
+			},
+			totalBase: 1, eligibleBase: 1,
+			wantExecuted: 1, wantScenarioPct: 100, wantEligiblePct: 100,
+		},
+		{
+			name: "dispatched but never returned — Executed < Eligible",
+			results: []models.SimulationResult{
+				{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultPass},
+			},
+			totalBase: 2, eligibleBase: 2,
+			wantExecuted: 1, wantScenarioPct: 50, wantEligiblePct: 50,
+		},
+		{
+			name:      "zero denominators — no coverage data available",
+			results:   nil,
+			totalBase: 0, eligibleBase: 0,
+			wantExecuted: 0, wantScenarioPct: 0, wantEligiblePct: 0,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := buildCoverageSummary(c.results, c.totalBase, c.eligibleBase)
+			if got.Executed != c.wantExecuted || got.ScenarioCoveragePct != c.wantScenarioPct || got.EligibleCoveragePct != c.wantEligiblePct {
+				t.Errorf("buildCoverageSummary() = %+v, want Executed=%d ScenarioCoveragePct=%d EligibleCoveragePct=%d",
+					got, c.wantExecuted, c.wantScenarioPct, c.wantEligiblePct)
+			}
+		})
+	}
+}

@@ -226,6 +226,15 @@ type FullReport struct {
 	// deriveExecutive so a policy-constrained run reads as "compliant," not
 	// "incomplete."
 	SkipBreakdown SkipBreakdown `json:"skipBreakdown"`
+	// StepsTotalBase/StepsEligibleBase are read directly from
+	// scenario_runs.steps_total_base/steps_eligible_base (captured once at
+	// dispatch time) — the raw inputs to Coverage, computed by deriveExecutive.
+	StepsTotalBase    int `json:"stepsTotalBase"`
+	StepsEligibleBase int `json:"stepsEligibleBase"`
+	// Coverage reports Scenario Coverage (executed/total) and Eligible Coverage
+	// (executed/eligible) so a policy-constrained run reads as complete against
+	// what it could run, not incomplete against everything the scenario defines.
+	Coverage CoverageSummary `json:"coverage"`
 }
 
 // PrivilegeSummary is the per-tier step count and prevention breakdown for the privilege table.
@@ -979,6 +988,47 @@ func buildSkipBreakdown(results []models.SimulationResult) SkipBreakdown {
 	return sb
 }
 
+// CoverageSummary reports how much of a scenario's base-technique steps were
+// attemptable (Eligible) and defined (ScenarioTotal), against how many
+// actually executed. Separate from SkipBreakdown's "why" and separate from
+// PASS/FAIL scoring — this is a completeness metric, not a security score.
+type CoverageSummary struct {
+	ScenarioTotal int `json:"scenarioTotal"`
+	Eligible      int `json:"eligible"`
+	Executed      int `json:"executed"`
+	// ScenarioCoveragePct = Executed/ScenarioTotal*100 (0 when ScenarioTotal==0).
+	ScenarioCoveragePct int `json:"scenarioCoveragePct"`
+	// EligibleCoveragePct = Executed/Eligible*100 (0 when Eligible==0).
+	EligibleCoveragePct int `json:"eligibleCoveragePct"`
+}
+
+// buildCoverageSummary derives Executed from results — distinct base
+// techniques (by Technique.ID, the same key groupResultsByTechnique uses)
+// with at least one non-policy-skip result — and combines it with the
+// dispatch-time-captured totalBase/eligibleBase counts into both coverage
+// ratios. A policy-skipped technique was never dispatched to the agent at
+// all, so it must not count as executed. A zero denominator means coverage
+// data isn't available for this run (e.g. it predates this feature) — 0%,
+// not an error.
+func buildCoverageSummary(results []models.SimulationResult, totalBase, eligibleBase int) CoverageSummary {
+	executable := make([]models.SimulationResult, 0, len(results))
+	for _, r := range results {
+		if r.SkipReason == models.SkipReasonPolicyPrivilege {
+			continue
+		}
+		executable = append(executable, r)
+	}
+	executed := len(groupResultsByTechnique(executable))
+	cs := CoverageSummary{ScenarioTotal: totalBase, Eligible: eligibleBase, Executed: executed}
+	if totalBase > 0 {
+		cs.ScenarioCoveragePct = executed * 100 / totalBase
+	}
+	if eligibleBase > 0 {
+		cs.EligibleCoveragePct = executed * 100 / eligibleBase
+	}
+	return cs
+}
+
 // killChainAction renders a concise adversary-action label for a kill-chain node.
 func killChainAction(r models.SimulationResult) string {
 	for _, s := range []string{r.ThreatImpact, r.Details} {
@@ -1285,12 +1335,13 @@ func (e *Engine) Build(ctx context.Context, agentID string, filter string) (*Ful
 	var latestScore models.Score
 
 	latestRow := e.db.QueryRow(ctx,
-		`SELECT name, results, score, started_at, reverted
+		`SELECT name, results, score, started_at, reverted, steps_total_base, steps_eligible_base
 		 FROM scenario_runs
 		 WHERE agent_id = $1 AND status IN ('completed','partial')
 		 ORDER BY started_at DESC LIMIT 1`, agentID)
 	var resultsRaw, scoreRaw2, revertedRaw []byte
-	if err := latestRow.Scan(&latestScenarioName, &resultsRaw, &scoreRaw2, &latestRunAt, &revertedRaw); err == nil {
+	if err := latestRow.Scan(&latestScenarioName, &resultsRaw, &scoreRaw2, &latestRunAt, &revertedRaw,
+		&report.StepsTotalBase, &report.StepsEligibleBase); err == nil {
 		json.Unmarshal(resultsRaw, &latestResults)
 		json.Unmarshal(scoreRaw2, &latestScore)
 		json.Unmarshal(revertedRaw, &report.Reverted)
@@ -1511,12 +1562,13 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 		`SELECT agent_id, scenario_id, name, status, results, score, started_at, completed_at, reverted,
 		        detection_rate, undetected_rate, mttd_ms, detection_summary,
 		        perf_cpu_before, perf_cpu_after, perf_ram_before, perf_ram_after, perf_disk_before, perf_disk_after,
-		        alerts_total, alerts_high_fidelity, noise_score
+		        alerts_total, alerts_high_fidelity, noise_score, steps_total_base, steps_eligible_base
 		 FROM scenario_runs WHERE id = $1`, runID,
 	).Scan(&agentID, &scenarioID, &scenarioName, &status, &resultsRaw, &scoreRaw, &startedAt, &completedAt, &revertedRaw,
 		&detRate, &undetRate, &mttd, &detSummaryRaw,
 		&cpuBefore, &cpuAfter, &ramBefore, &ramAfter, &diskBefore, &diskAfter,
-		&report.AlertsTotal, &report.AlertsHighFidelity, &report.NoiseScore)
+		&report.AlertsTotal, &report.AlertsHighFidelity, &report.NoiseScore,
+		&report.StepsTotalBase, &report.StepsEligibleBase)
 	if err != nil {
 		return nil, fmt.Errorf("run %s not found: %w", runID, err)
 	}
@@ -1722,7 +1774,7 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 
 	rows, err := e.db.Query(ctx,
 		`SELECT sr.id, sr.agent_id, COALESCE(a.hostname,''), sr.status, sr.results, sr.score,
-		        sr.started_at, sr.completed_at
+		        sr.started_at, sr.completed_at, sr.steps_total_base, sr.steps_eligible_base
 		   FROM scenario_runs sr LEFT JOIN agents a ON a.agent_id = sr.agent_id
 		  WHERE sr.campaign_id = $1 ORDER BY sr.started_at`, campaignID)
 	if err != nil {
@@ -1738,9 +1790,13 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 		var resultsRaw, scoreRaw []byte
 		var sAt time.Time
 		var cAt *time.Time
-		if rows.Scan(&rid, &agentID, &hostname, &status, &resultsRaw, &scoreRaw, &sAt, &cAt) != nil {
+		var stepsTotalBase, stepsEligibleBase int
+		if rows.Scan(&rid, &agentID, &hostname, &status, &resultsRaw, &scoreRaw, &sAt, &cAt,
+			&stepsTotalBase, &stepsEligibleBase) != nil {
 			continue
 		}
+		report.StepsTotalBase += stepsTotalBase
+		report.StepsEligibleBase += stepsEligibleBase
 		runCount++
 		agentSet[agentID] = true
 		var results []models.SimulationResult

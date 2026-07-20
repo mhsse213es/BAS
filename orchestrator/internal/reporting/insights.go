@@ -443,6 +443,7 @@ func deriveExecutive(report *FullReport, results []models.SimulationResult, dets
 	report.ActionPlan = buildActionPlan(results)
 	report.Reliability = buildReliability(report.Summary)
 	report.SkipBreakdown = buildSkipBreakdown(results)
+	report.Coverage = buildCoverageSummary(results, report.StepsTotalBase, report.StepsEligibleBase)
 	report.Glossary = buildGlossary(results)
 	report.ExecutiveConclusion = buildExecutiveConclusion(report.Summary, report.Insights, report.Detection, report.ActionPlan, report.SkipBreakdown)
 	report.DetectionSources = buildDetectionSources(results)
