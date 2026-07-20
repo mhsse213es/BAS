@@ -200,6 +200,49 @@ func TestSubmitScenarioResult_ResultsInterpretedViaSteps(t *testing.T) {
 	})
 }
 
+func TestSubmitScenarioResult_MergesPolicySkippedResults(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalLiveScenario(t, "int-submit-merge")
+		h := New(pool, ws.NewHub(), engine, "")
+		runID := "run-merge-test"
+		agentID := "agent-merge-test"
+		seedRunRow(t, pool, runID, sc.ID, agentID, "running")
+
+		policySkipped := []models.SimulationResult{
+			{ID: "policy-skip-1", Result: models.ResultSkipped, SkipReason: models.SkipReasonPolicyPrivilege,
+				Technique: models.AttackTechnique{ID: "T1548"}},
+		}
+		skippedJSON, _ := json.Marshal(policySkipped)
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE scenario_runs SET policy_skipped_results = $1 WHERE id = $2`, skippedJSON, runID,
+		); err != nil {
+			t.Fatalf("seed policy_skipped_results: %v", err)
+		}
+
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: runID, ScenarioID: sc.ID, AgentID: agentID,
+			Results: []scenario.ExecResult{{TaskID: "real-1", Stdout: "the operation completed successfully", ExitCode: 0}},
+		})
+
+		results := readRunResults(t, pool, runID)
+		if len(results) != 2 {
+			t.Fatalf("results = %d entries, want 2 (1 real + 1 policy-skipped): %+v", len(results), results)
+		}
+		var sawPolicySkip bool
+		for _, r := range results {
+			if r.SkipReason == models.SkipReasonPolicyPrivilege {
+				sawPolicySkip = true
+			}
+		}
+		if !sawPolicySkip {
+			t.Fatalf("results = %+v, missing the policy-skipped entry", results)
+		}
+	})
+}
+
 func TestSubmitScenarioResult_ChecksTakePriorityOverResults(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

@@ -1730,6 +1730,20 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Merge in any steps the server itself excluded before dispatch under a
+	// MaxPrivilege execution policy — persisted once at dispatch time into a
+	// separate column specifically so this merge survives every retry of this
+	// handler without needing to touch the agent's own REPLACE semantics above.
+	var policySkippedJSON []byte
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT policy_skipped_results FROM scenario_runs WHERE id = $1`, raw.RunID,
+	).Scan(&policySkippedJSON); err == nil && len(policySkippedJSON) > 0 {
+		var policySkipped []models.SimulationResult
+		if json.Unmarshal(policySkippedJSON, &policySkipped) == nil {
+			simResults = append(simResults, policySkipped...)
+		}
+	}
+
 	status := "completed"
 	if raw.Partial {
 		status = "partial"
