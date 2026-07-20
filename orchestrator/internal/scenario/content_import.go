@@ -197,6 +197,22 @@ func SeedContent(ctx context.Context, pool *pgxpool.Pool, atomicsDir, payloadDir
 	return techCount, payloadCount, nil
 }
 
+// currentARTImportVersion identifies the ART importer's normalization format.
+// Bump this whenever normalizeAtomic starts populating a new field from raw
+// ART data — every already-seeded technique will then be automatically
+// re-normalized and re-upserted on the next boot, even though its underlying
+// YAML content hash hasn't changed. v1: original import (no privilege data).
+// v2: adds requires_priv / original_elevation_required (this fix).
+const currentARTImportVersion = 2
+
+// shouldReimportTechnique reports whether a technique needs a fresh
+// normalize-and-upsert pass: either its raw YAML content changed, or it was
+// last imported by an older importer format and needs upgrading even though
+// the content itself is unchanged.
+func shouldReimportTechnique(existingHash, newHash string, existingVersion int) bool {
+	return existingHash != newHash || existingVersion < currentARTImportVersion
+}
+
 // importAtomics walks atomicsDir for T*.yaml files and upserts each technique's
 // raw YAML and normalized tests. Unchanged techniques (same content hash) are
 // left untouched. Returns the count of techniques with at least one Windows test.
@@ -232,12 +248,13 @@ func importAtomics(ctx context.Context, pool *pgxpool.Pool, dir string) (int, er
 		sum := sha256.Sum256(data)
 		hash := hex.EncodeToString(sum[:])
 
-		var existing string
+		var existingHash string
+		var existingVersion int
 		_ = pool.QueryRow(ctx,
-			`SELECT content_hash FROM art_atomic_raw WHERE technique_id = $1`, techniqueID,
-		).Scan(&existing)
-		if existing == hash {
-			count++ // present and current
+			`SELECT content_hash, import_version FROM art_atomic_raw WHERE technique_id = $1`, techniqueID,
+		).Scan(&existingHash, &existingVersion)
+		if !shouldReimportTechnique(existingHash, hash, existingVersion) {
+			count++ // present, current content, and imported at the current parser version
 			continue
 		}
 
@@ -273,11 +290,12 @@ func upsertTechnique(ctx context.Context, pool *pgxpool.Pool, techniqueID, displ
 	}
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO art_atomic_raw (technique_id, yaml, content_hash, updated_at)
-		 VALUES ($1, $2, $3, NOW())
+		`INSERT INTO art_atomic_raw (technique_id, yaml, content_hash, import_version, updated_at)
+		 VALUES ($1, $2, $3, $4, NOW())
 		 ON CONFLICT (technique_id) DO UPDATE SET
-		   yaml = EXCLUDED.yaml, content_hash = EXCLUDED.content_hash, updated_at = NOW()`,
-		techniqueID, rawYAML, hash,
+		   yaml = EXCLUDED.yaml, content_hash = EXCLUDED.content_hash,
+		   import_version = EXCLUDED.import_version, updated_at = NOW()`,
+		techniqueID, rawYAML, hash, currentARTImportVersion,
 	); err != nil {
 		return fmt.Errorf("raw: %w", err)
 	}
@@ -299,9 +317,10 @@ func upsertTechnique(ctx context.Context, pool *pgxpool.Pool, techniqueID, displ
 		}
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO art_atomic_tests
-			   (technique_id, test_index, name, executor, command, cleanup, platform, timeout_sec, required_payloads, framework, updated_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'art', NOW())`,
+			   (technique_id, test_index, name, executor, command, cleanup, platform, timeout_sec, required_payloads, framework, requires_priv, original_elevation_required, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'art', $10, $11, NOW())`,
 			techniqueID, t.Index, t.Name, t.Executor, t.Command, t.Cleanup, t.Platform, t.TimeoutSec, payloads,
+			t.RequiresPriv.Effective(), t.OriginalElevationRequired,
 		); err != nil {
 			return fmt.Errorf("insert test %d: %w", t.Index, err)
 		}

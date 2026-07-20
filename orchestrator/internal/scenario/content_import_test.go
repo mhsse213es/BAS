@@ -137,3 +137,28 @@ func TestNormalizeAtomic_ElevationRequired(t *testing.T) {
 		t.Error("plain test OriginalElevationRequired = true, want false")
 	}
 }
+
+func TestShouldReimportTechnique(t *testing.T) {
+	cases := []struct {
+		name            string
+		existingHash    string
+		newHash         string
+		existingVersion int
+		want            bool
+	}{
+		{"unseen technique", "", "abc", 0, true},
+		{"content changed, version current", "abc", "def", currentARTImportVersion, true},
+		{"content unchanged, version stale", "abc", "abc", currentARTImportVersion - 1, true},
+		{"content unchanged, version current — skip", "abc", "abc", currentARTImportVersion, false},
+		{"content unchanged, version newer than current — skip", "abc", "abc", currentARTImportVersion + 1, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := shouldReimportTechnique(c.existingHash, c.newHash, c.existingVersion)
+			if got != c.want {
+				t.Errorf("shouldReimportTechnique(%q,%q,%d) = %v, want %v",
+					c.existingHash, c.newHash, c.existingVersion, got, c.want)
+			}
+		})
+	}
+}
