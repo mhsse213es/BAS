@@ -11339,6 +11339,29 @@ function loadComplianceScores(agentId) {
   }).catch(function() {});
 }
 
+function complianceWhy(fw) {
+  var tested = fw.testedControls || 0;
+  if (tested === 0) return 'No controls tested yet — run a scenario to generate compliance evidence.';
+  var pct = Math.round(fw.compliancePct || 0);
+  var passing = fw.passingControls || 0;
+  var failing = fw.failingControls || 0;
+  var untested = fw.untestedControls != null ? fw.untestedControls : 0;
+  if (fw.enrolledAgentCount > 1) {
+    return pct + '% compliant — worst of ' + fw.enrolledAgentCount + ' enrolled endpoints. Click for full breakdown.';
+  }
+  return pct + '% compliant — ' + passing + ' of ' + tested + ' tested controls passing, ' +
+    failing + ' failing, ' + untested + ' untested.';
+}
+
+function openComplianceDetail(frameworkId, agentId) {
+  showTab('compliance');
+  var fwSel = document.getElementById('cmp-fw-sel');
+  var agSel = document.getElementById('cmp-agent-sel');
+  if (fwSel) fwSel.value = frameworkId;
+  if (agSel && agentId) agSel.value = agentId;
+  loadComplianceReport();
+}
+
 function complianceTile(fw) {
   var pct     = fw.compliancePct  || 0;
   var cov     = fw.coveragePct    || 0;
@@ -11375,7 +11398,8 @@ function complianceTile(fw) {
 
   return '<div class="kpi-card stat-tile" ' +
     'style="border-left:3px solid ' + borderColor + ';cursor:pointer;min-width:155px;max-width:220px" ' +
-    'onclick="showTab(\'compliance\')" title="' + x(fw.frameworkName) + '">' +
+    'onclick="openComplianceDetail(\'' + x(fw.frameworkId) + '\', \'' + x(fw.agentId) + '\')" ' +
+    'title="' + x(fw.frameworkName) + '\n' + x(complianceWhy(fw)) + '">' +
     '<div class="stat-top">' +
       '<div style="flex:1;min-width:0">' +
         '<div class="kpi-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + x(fw.shortName) + '</div>' +
@@ -12367,6 +12391,9 @@ function renderComplianceReport(r) {
         '<div class="cmp-fw-badge" style="color:' + fwColor + ';background:' + fwColor + '22;border-color:' + fwColor + '44">' + x(r.framework.id || '') + '</div>' +
         '<div class="cmp-fw-name">' + x(r.framework.name || '') + '</div>' +
         '<div class="cmp-fw-version">' + x(r.framework.version || '') + '</div>' +
+        '<div class="cmp-header-narrative" style="margin-top:0.5rem;font-size:0.85rem;line-height:1.5;color:var(--text-dim);max-width:520px">' +
+          x(r.narrative || '') +
+        '</div>' +
       '</div>' +
       '<div class="cmp-header-gauge">' +
         '<svg width="128" height="128" viewBox="0 0 130 130">' +
