@@ -66,6 +66,14 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			UNIQUE (technique_id, test_index)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_atomic_tests_technique ON art_atomic_tests(technique_id)`,
+		`ALTER TABLE art_atomic_raw ADD COLUMN IF NOT EXISTS import_version int NOT NULL DEFAULT 1`,
+		// requires_priv is the normalized effective privilege tier ('' | 'user' | 'admin'),
+		// derived from the framework's raw elevation signal by the importer's
+		// normalization layer (see mapARTElevation in internal/scenario/art.go).
+		// original_elevation_required preserves ART's raw upstream boolean as
+		// provenance, independent of how this platform currently interprets it.
+		`ALTER TABLE art_atomic_tests ADD COLUMN IF NOT EXISTS requires_priv text NOT NULL DEFAULT ''`,
+		`ALTER TABLE art_atomic_tests ADD COLUMN IF NOT EXISTS original_elevation_required boolean NOT NULL DEFAULT false`,
 
 		// ── Payload metadata (binaries remain on disk) ────────────────────────
 		`CREATE TABLE IF NOT EXISTS art_payloads (
