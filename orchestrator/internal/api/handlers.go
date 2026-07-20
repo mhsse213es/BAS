@@ -1198,8 +1198,8 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Steps        []int                 `json:"steps"`        // optional step subset — indices into scenario step list
 		Checks       []string              `json:"checks"`       // optional posture-check subset (local_check scenarios)
 		VariantDepth scenario.VariantDepth `json:"variantDepth"` // ""|"none"|"quick"|"standard"|"full"
-		RunLabel     string                `json:"runLabel"`     // optional override for scenario_runs.name
-		MaxPrivilege string                `json:"maxPrivilege"` // ""|"user"|"admin"|"system" — execution policy ceiling
+		RunLabel        string                   `json:"runLabel"` // optional override for scenario_runs.name
+		ExecutionPolicy scenario.ExecutionPolicy `json:"executionPolicy,omitempty"` // operator-set execution constraints (e.g. maxPrivilege)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -1339,7 +1339,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab, Reason: req.Reason,
 		Techniques: req.Techniques, Abilities: req.Abilities, Steps: req.Steps, Checks: req.Checks,
 		InitiatedBy: initiatedBy, VariantDepth: req.VariantDepth, RunLabel: req.RunLabel,
-		MaxPrivilege: req.MaxPrivilege,
+		MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

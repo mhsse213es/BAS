@@ -156,7 +156,8 @@ func TestRunScenarioIntegration_MaxPrivilegeFiltersStep(t *testing.T) {
 
 		rec := httptest.NewRecorder()
 		h.RunScenario(rec, runScenarioReq(sc.ID, map[string]any{
-			"agentId": agentID, "mode": "telemetry", "confirmLive": true, "maxPrivilege": "user",
+			"agentId": agentID, "mode": "telemetry", "confirmLive": true,
+			"executionPolicy": map[string]any{"maxPrivilege": "user"},
 		}))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
@@ -220,7 +221,8 @@ func TestRunScenarioIntegration_MaxPrivilegeAllFilteredCompletesImmediately(t *t
 
 		rec := httptest.NewRecorder()
 		h.RunScenario(rec, runScenarioReq(sc.ID, map[string]any{
-			"agentId": agentID, "mode": "telemetry", "confirmLive": true, "maxPrivilege": "user",
+			"agentId": agentID, "mode": "telemetry", "confirmLive": true,
+			"executionPolicy": map[string]any{"maxPrivilege": "user"},
 		}))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
