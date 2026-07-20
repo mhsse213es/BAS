@@ -20,6 +20,7 @@ type Config struct {
 	EPSSFile          string `json:"epss_file,omitempty"`           // FIRST EPSS CSV/CSV.GZ (optional); seeds cve_epss for KEV-linked CVEs
 	CalderaURL        string `json:"caldera_url,omitempty"`
 	CalderaAPIKey     string `json:"caldera_api_key,omitempty"`
+	OTXAPIKey         string `json:"otx_api_key,omitempty"`
 	LicensePath       string `json:"license_path,omitempty"`
 	AdminPassword     string `json:"admin_password,omitempty"`
 	AdminEmail        string `json:"admin_email,omitempty"` // used as the admin username on first-run seed
@@ -126,6 +127,9 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("CALDERA_API_KEY"); v != "" {
 		cfg.CalderaAPIKey = v
+	}
+	if v := os.Getenv("OTX_API_KEY"); v != "" {
+		cfg.OTXAPIKey = v
 	}
 	if v := os.Getenv("AGENT_SECRET"); v != "" {
 		cfg.AgentSecret = v
