@@ -2037,7 +2037,8 @@ body.theme-slate {
         <div class="sec-hdr">
           <h2>BFSI Scenarios <span id="sc-cnt" class="cnt">0</span></h2>
           <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
-            <input type="search" id="sc-search" placeholder="Search name, tag, technique…" oninput="renderScenarios()"
+            <input type="search" id="sc-search" placeholder="Search name, tag, technique…"
+                   oninput="if (!this.value.trim() && scenarioView === 'search') { scenarioView = 'landing'; } renderScenarios()"
                    style="padding:0.45rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;min-width:200px">
             <select id="sc-filter-source" onchange="renderScenarios()"
                     style="padding:0.45rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
@@ -5649,6 +5650,10 @@ function openScenarioCategory(key) {
   renderScenarios();
 }
 function closeScenarioCategoryView() {
+  if (scenarioView === 'search') {
+    var se = document.getElementById('sc-search');
+    if (se) se.value = '';
+  }
   scenarioView = 'landing';
   closeScenarioOverlay();
   history.pushState({ scenarioView: 'landing' }, '', '#tab-scenarios');
@@ -5657,7 +5662,12 @@ function closeScenarioCategoryView() {
 window.addEventListener('popstate', function(e) {
   var tab = document.getElementById('tab-scenarios');
   if (!tab || tab.style.display === 'none') return;
-  scenarioView = (e.state && e.state.scenarioView) || 'landing';
+  var view = (e.state && e.state.scenarioView) || 'landing';
+  if (view === 'landing') {
+    var se = document.getElementById('sc-search');
+    if (se) se.value = '';
+  }
+  scenarioView = view;
   closeScenarioOverlay();
   renderScenarios();
 });
@@ -5691,6 +5701,25 @@ function renderScenarios() {
     return true;
   });
   document.getElementById('sc-cnt').textContent = filtered.length;
+
+  if (q) { scenarioView = 'search'; }
+
+  if (scenarioView === 'search') {
+    landingEl.style.display = 'none';
+    catEl.style.display = 'block';
+    var results = filtered.filter(function(s) {
+      var hay = [s.id, s.name, s.description, (s.tags || []).join(' '),
+                 (s.mitrePhases || []).join(' '), (s.artTechniques || []).join(' '),
+                 s.intelActor].join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+    document.getElementById('sc-backbar-title').textContent = 'Search results for: "' + x(searchEl.value.trim()) + '" (' + results.length + ')';
+    var sgrid = document.getElementById('sc-tile-grid');
+    sgrid.innerHTML = results.length
+      ? '<div class="sc-fade">' + renderScenarioTileGroup(results) + '</div>'
+      : '<p class="empty">No scenarios match your search.</p>';
+    return;
+  }
 
   if (scenarioView === 'landing') {
     catEl.style.display = 'none';
