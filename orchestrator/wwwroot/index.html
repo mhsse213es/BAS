@@ -2002,6 +2002,13 @@ body.theme-slate {
               <option value="custom">Custom</option>
               <option value="intel">Threat intel</option>
             </select>
+            <select id="sc-filter-os" onchange="renderScenarios()"
+                    style="padding:0.45rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+              <option value="all">All OS</option>
+              <option value="windows">Windows</option>
+              <option value="linux">Linux</option>
+              <option value="darwin">macOS</option>
+            </select>
             <button id="sc-new-btn" class="btn btn-primary btn-sm" style="width:auto;padding:0.45rem 0.9rem" onclick="openBuilder(null)">+ New Scenario</button>
             <button id="sc-upload-btn" class="btn btn-outline btn-sm" onclick="document.getElementById('sc-upload-file').click()">&#8657; Upload YAML</button>
             <input type="file" id="sc-upload-file" accept=".yaml,.yml" style="display:none" onchange="uploadScenarioFile(this)">
@@ -5547,7 +5554,8 @@ function loadScenarios() {
         intelSource:        s.intelSource         || '',
         intelActor:         s.intelActor          || '',
         intelConfidence:    s.intelConfidence      || '',
-        artTechniques:      s.artTechniques       || []
+        artTechniques:      s.artTechniques       || [],
+        supportedOs:        s.supportedOs         || []
       };
     });
     _enrichDatalistFromScenarios();
@@ -5577,7 +5585,11 @@ function renderScenarios() {
     return;
   }
 
+  var osEl = document.getElementById('sc-filter-os');
+  var osFilter = osEl ? osEl.value : 'all';
+
   var matches = scenarios.filter(function(s) {
+    if (osFilter !== 'all' && (s.supportedOs || []).indexOf(osFilter) === -1) return false;
     if (src !== 'all') {
       var srcVal = s.intelSource ? 'intel' : (s.source || 'builtin');
       if (srcVal !== src) return false;
