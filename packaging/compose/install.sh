@@ -252,6 +252,44 @@ _check_compose() {
   fi
 }
 
+# ── Docker CE installation ─────────────────────────────────────────────────────
+# Installs from Docker's own officially documented apt/dnf repositories.
+# Called only after explicit operator consent (see mode_install).
+_install_docker() {
+  local os_id
+  os_id=$(grep -oP '(?<=^ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "unknown")
+  case "$os_id" in
+    ubuntu|debian)
+      apt-get update -qq
+      apt-get install -y -qq ca-certificates curl gnupg lsb-release
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL "https://download.docker.com/linux/${os_id}/gpg" \
+        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      chmod a+r /etc/apt/keyrings/docker.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/${os_id} $(lsb_release -cs) stable" \
+        > /etc/apt/sources.list.d/docker.list
+      apt-get update -qq
+      apt-get install -y -qq \
+        docker-ce docker-ce-cli containerd.io \
+        docker-buildx-plugin docker-compose-plugin
+      ;;
+    rocky|rhel|centos)
+      dnf install -y -q dnf-plugins-core
+      dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+      dnf install -y -q \
+        docker-ce docker-ce-cli containerd.io \
+        docker-buildx-plugin docker-compose-plugin
+      ;;
+    *)
+      err "Automatic Docker install is not supported on this OS (${os_id})."
+      info "Install Docker CE manually: https://docs.docker.com/engine/install/"
+      exit 1
+      ;;
+  esac
+  systemctl enable --now docker
+}
+
 _check_ram() {
   local mb
   mb=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
