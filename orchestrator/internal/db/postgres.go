@@ -940,6 +940,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE report_log ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE run_events ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		// policy_skipped_results holds SimulationResults the server itself
+		// synthesized at dispatch time for steps a run's MaxPrivilege execution
+		// policy excluded before ever contacting the agent. Written once at
+		// dispatch, never touched again — kept separate from `results` (which
+		// the agent's own submission always REPLACES wholesale) so a later
+		// agent submission can never silently wipe these out. Merged into
+		// `results` by SubmitScenarioResult before scoring/persisting.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS policy_skipped_results jsonb NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE scenario_variant_results ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE scenario_variant_technique_summary ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE siem_configs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
