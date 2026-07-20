@@ -60,7 +60,7 @@ func knownPostureScenarios() []string {
 		"safe-simulation", "apt36-spearphish", "apt36-kill-chain",
 		"ransomware-drill", "ad-credential-access", "upi-fraud-killchain",
 		"cscrf-mii-drill", "purplesharp-ad-drill", "lolbin-execution",
-		"lolbin-execution-coverage",
+		"lolbin-execution-coverage", "os-patch-posture",
 	}
 }
 
@@ -68,6 +68,8 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	switch scenarioID {
 	case "safe-simulation":
 		return safeSimChecks()
+	case "os-patch-posture":
+		return osPatchPostureChecks()
 	case "apt36-spearphish":
 		return apt36Checks()
 	case "apt36-kill-chain":
@@ -2196,6 +2198,14 @@ func checkAuditLogRetention() SimCheck {
 			}
 			return "fail", fmt.Sprintf("Security log max size = %dMB — critically small, logs overwrite rapidly. SEBI CSCRF non-compliant.", sizeMB)
 		})
+}
+
+func osPatchPostureChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "initial-access", Checks: []SimCheck{
+			checkPatchCurrency(),
+		}},
+	}
 }
 
 func checkPatchCurrency() SimCheck {
