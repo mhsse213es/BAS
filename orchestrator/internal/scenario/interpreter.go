@@ -48,6 +48,11 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		checkResult, details = interpretCustom(result, combined)
 	}
 
+	var skipReason string
+	if checkResult == models.ResultSkipped {
+		skipReason = classifySkipReason(details)
+	}
+
 	return models.SimulationResult{
 		ID: TaskID(step.TechniqueID, step.Name),
 		Technique: models.AttackTechnique{
@@ -59,6 +64,7 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		Severity:       sev,
 		ThreatImpact:   models.ThreatImpact(tactic, techniqueID, techniqueName),
 		Details:        details,
+		SkipReason:     skipReason,
 		Remediation:    models.Remediation(checkResult, tactic, techniqueID, techniqueName),
 		RawOutput:      truncate(combined, 3000),
 		DurationMs:     result.DurationMs,

@@ -189,3 +189,55 @@ func TestInterpretARTRanToCompletionIsFail(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifySkipReason(t *testing.T) {
+	cases := []struct {
+		name   string
+		detail string
+		want   string
+	}{
+		{"ART missing payload", "requires external payload(s) not available on server: gsecdump.exe — drop them in ART_PAYLOAD_DIR to enable this test", models.SkipReasonMissingContent},
+		{"ART not in local store with OS", "ART technique T1003 not in local store for windows", models.SkipReasonPlatformUnavailable},
+		{"ART not in local store no OS", "ART technique T1003 not in local store", models.SkipReasonPlatformUnavailable},
+		{"malformed step no command", "No command defined for step 'my-step'", models.SkipReasonPlatformUnavailable},
+		{"caldera not configured", "Caldera not configured — set CALDERA_URL to enable ability abc123", models.SkipReasonPlatformUnavailable},
+		{"caldera ability not found", "Caldera ability abc123 not found", models.SkipReasonPlatformUnavailable},
+		{"unrecognized text", "some future skip reason nobody has written yet", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := classifySkipReason(c.detail); got != c.want {
+				t.Errorf("classifySkipReason(%q) = %q, want %q", c.detail, got, c.want)
+			}
+		})
+	}
+}
+
+func TestInterpret_SetsSkipReason(t *testing.T) {
+	cases := []struct {
+		name   string
+		stdout string
+		want   string
+	}{
+		{"ART missing payload", "SKIP: requires external payload(s) not available on server: gsecdump.exe", models.SkipReasonMissingContent},
+		{"ART not in local store", "SKIP: ART technique T1003 not in local store for windows", models.SkipReasonPlatformUnavailable},
+		{"unmatched skip text (e.g. policy marker) leaves SkipReason empty", "SKIP: requires admin privilege, execution policy caps at user", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			step := Step{TechniqueID: "T1003", Name: "test", Framework: "art"}
+			res := Interpret(step, ExecResult{ExitCode: 0, Stdout: c.stdout})
+			if res.Result != models.ResultSkipped {
+				t.Fatalf("Result = %q, want skipped", res.Result)
+			}
+			if res.SkipReason != c.want {
+				t.Errorf("SkipReason = %q, want %q", res.SkipReason, c.want)
+			}
+		})
+	}
+	// A non-skip result must never carry a SkipReason.
+	passRes := Interpret(Step{TechniqueID: "T1059", Framework: "art"}, ExecResult{ExitCode: 0, Stdout: "the operation completed successfully"})
+	if passRes.SkipReason != "" {
+		t.Errorf("non-skip SkipReason = %q, want empty", passRes.SkipReason)
+	}
+}

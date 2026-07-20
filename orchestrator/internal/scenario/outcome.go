@@ -3,6 +3,8 @@ package scenario
 import (
 	"fmt"
 	"strings"
+
+	"github.com/audspect/bas/internal/models"
 )
 
 // ExecutionOutcome is the coarse outcome of running a step, kept separate from
@@ -138,6 +140,26 @@ func classifyExecutionError(lower string, exitCode int) ErrorReason {
 		return ErrMalformedContent
 	}
 	return ErrNone
+}
+
+// classifySkipReason maps the free-text detail of a "SKIP:" marker (already
+// stripped of its prefix) to a models.SkipReason* bucket. Every message this
+// matches against is authored by our own server code (art.go/builder.go),
+// never third-party program output, so this is a small, fully-enumerable
+// vocabulary — not a fragile heuristic. Returns "" for unrecognized text
+// (the reporting layer's bucket aggregation falls that back to Platform).
+func classifySkipReason(detail string) string {
+	lower := strings.ToLower(detail)
+	switch {
+	case strings.Contains(lower, "not available on server"):
+		return models.SkipReasonMissingContent
+	case strings.Contains(lower, "not in local store"),
+		strings.Contains(lower, "no command defined"),
+		strings.Contains(lower, "caldera not configured"),
+		strings.Contains(lower, "caldera ability") && strings.Contains(lower, "not found"):
+		return models.SkipReasonPlatformUnavailable
+	}
+	return ""
 }
 
 // ranToCompletion reports whether output shows the technique actually executed,

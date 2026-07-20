@@ -63,9 +63,10 @@ type SimulationResult struct {
 	// SkipReason distinguishes WHY a Result=ResultSkipped entry was skipped,
 	// matching the lightweight plain-string classification style already used
 	// by Framework/DetectionVerdict/CleanupVerdict/ExecutedAs on this struct.
-	// Empty for all pre-existing skip causes (missing payload, technique not in
-	// local store, etc.) — only set for skips this platform itself decided to
-	// make, not ones discovered by parsing agent output.
+	// Set for every skip: either synthesized directly (policy-privilege) or
+	// classified from the "SKIP:" marker text at Interpret time (see
+	// scenario.classifySkipReason) — a self-authored, fully-enumerable
+	// vocabulary, not a heuristic guess at unpredictable agent output.
 	SkipReason string `json:"skipReason,omitempty"`
 
 	// Evidence fields — populated from agent ExecResult; displayed in the UI evidence panel.
@@ -80,6 +81,17 @@ type SimulationResult struct {
 // because a step's RequiresPriv exceeded the run's MaxPrivilege execution
 // policy — the step was never dispatched to the agent at all.
 const SkipReasonPolicyPrivilege = "policy-privilege"
+
+// SkipReasonMissingContent marks a skip caused by content unavailable on the
+// server — e.g. an ART atomic test's required external payload was never
+// staged in ART_PAYLOAD_DIR.
+const SkipReasonMissingContent = "missing-content"
+
+// SkipReasonPlatformUnavailable marks a skip caused by an environment/tooling
+// gap: the technique isn't available for the target OS, Caldera isn't
+// configured, a referenced Caldera ability doesn't exist, or a step has no
+// executable command at all.
+const SkipReasonPlatformUnavailable = "platform-unavailable"
 
 // DetectionAlert is the alert record that matched this technique during the
 // post-run detection sweep. Mirrors detect.AlertRecord (server-side package)
