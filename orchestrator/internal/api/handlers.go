@@ -858,6 +858,10 @@ type dispatchOpts struct {
 	InitiatedBy  *string               // requesting user id (nil if unauthenticated)
 	VariantDepth scenario.VariantDepth // "none"|"quick"|"standard"|"full"; "" == "none"
 	RunLabel     string                // overrides sc.Name in scenario_runs.name when set
+	// MaxPrivilege is an execution-policy ceiling: "" (default, unconstrained) |
+	// "user" | "admin" | "system". Steps whose RequiresPriv exceeds this tier are
+	// filtered out before dispatch — see dispatchRun's policy filter.
+	MaxPrivilege string
 }
 
 // nullIfEmpty maps "" to a SQL NULL so an ad-hoc run leaves campaign_id null
@@ -878,6 +882,28 @@ func nullIfEmpty(s string) any {
 // (or a failed one, for a lost WS send). err is non-nil only for genuine
 // failures (DB / build). Request- and scenario-level guardrails (mode validity,
 // confirmLive/confirmLab, executable, execution window) are the caller's job.
+// synthesizePolicySkipResult builds the SimulationResult for a step that was
+// never dispatched to the agent because its RequiresPriv exceeded the run's
+// MaxPrivilege execution policy. Reuses the existing scenario.Interpret path
+// (via a constructed "SKIP:" marker, the same convention every framework's
+// interpreter already recognizes) so severity/threat-impact/remediation
+// lookups are identical to any other skip — only SkipReason distinguishes it.
+func synthesizePolicySkipResult(st scenario.ScenarioStep, maxPrivilege string) models.SimulationResult {
+	step := scenario.Step{
+		TechniqueID:  st.TechniqueID,
+		Name:         st.Name,
+		Framework:    st.Framework,
+		RequiresPriv: scenario.PrivSpec{Minimum: st.RequiresPriv},
+	}
+	result := scenario.ExecResult{
+		TaskID: st.TaskID,
+		Stdout: fmt.Sprintf("SKIP: requires %s privilege, execution policy caps at %s", st.RequiresPriv, maxPrivilege),
+	}
+	sim := scenario.Interpret(step, result)
+	sim.SkipReason = models.SkipReasonPolicyPrivilege
+	return sim
+}
+
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
 	live := o.Mode == "telemetry" || o.Mode == "lab"
 
@@ -1076,6 +1102,50 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		}
 	}
 
+	// Execution-policy privilege ceiling: steps that require a higher tier than
+	// MaxPrivilege are never dispatched. Each one gets a synthesized, scored-out
+	// Skipped result instead of being attempted — mirrors the lab-only filter
+	// above, but unlike it, filtering out EVERY step here is a legitimate outcome
+	// ("nothing was executable under this policy"), not a hard failure.
+	if o.MaxPrivilege != "" {
+		kept := make([]scenario.ScenarioStep, 0, len(steps))
+		var policySkipped []models.SimulationResult
+		for _, st := range steps {
+			if scenario.PrivilegeExceeds(st.RequiresPriv, o.MaxPrivilege) {
+				policySkipped = append(policySkipped, synthesizePolicySkipResult(st, o.MaxPrivilege))
+				continue
+			}
+			kept = append(kept, st)
+		}
+		steps = kept
+		if len(policySkipped) > 0 {
+			log.Printf("[scenario] run %s: %d step(s) exceeded MaxPrivilege=%s, skipped by policy",
+				runID, len(policySkipped), o.MaxPrivilege)
+			skippedJSON, _ := json.Marshal(policySkipped)
+			if _, err := h.db.Exec(context.Background(),
+				`UPDATE scenario_runs SET policy_skipped_results = $1 WHERE id = $2`, skippedJSON, runID,
+			); err != nil {
+				return "", "", fmt.Errorf("persist policy-skipped results: %w", err)
+			}
+		}
+		if len(steps) == 0 {
+			// Every step was excluded by policy — a legitimate, reportable
+			// outcome, not a failure. Complete the run immediately using only
+			// the synthesized results; there is nothing to dispatch, and
+			// waiting for an agent submission that will never arrive would
+			// hang the run.
+			skippedJSON, _ := json.Marshal(policySkipped)
+			_, err := h.db.Exec(context.Background(),
+				`UPDATE scenario_runs SET status = 'completed', results = $1::jsonb, completed_at = NOW() WHERE id = $2`,
+				skippedJSON, runID,
+			)
+			if err != nil {
+				return "", "", fmt.Errorf("complete all-policy-skipped run: %w", err)
+			}
+			return runID, "", nil
+		}
+	}
+
 	// ── Variant expansion layer ───────────────────────────────────────────────
 	// Each base step is followed by its variant steps (encoding × privilege ×
 	// exec-context combos). The agent sees a flat step list — it has no concept
@@ -1129,6 +1199,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Checks       []string              `json:"checks"`       // optional posture-check subset (local_check scenarios)
 		VariantDepth scenario.VariantDepth `json:"variantDepth"` // ""|"none"|"quick"|"standard"|"full"
 		RunLabel     string                `json:"runLabel"`     // optional override for scenario_runs.name
+		MaxPrivilege string                `json:"maxPrivilege"` // ""|"user"|"admin"|"system" — execution policy ceiling
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -1268,6 +1339,7 @@ func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab, Reason: req.Reason,
 		Techniques: req.Techniques, Abilities: req.Abilities, Steps: req.Steps, Checks: req.Checks,
 		InitiatedBy: initiatedBy, VariantDepth: req.VariantDepth, RunLabel: req.RunLabel,
+		MaxPrivilege: req.MaxPrivilege,
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

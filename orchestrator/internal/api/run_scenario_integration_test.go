@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -131,6 +132,120 @@ func TestRunScenarioIntegration_TechniqueAndStepSubset(t *testing.T) {
 		}
 		if len(cmd.Steps) != 1 || cmd.Steps[0].Name != "step-0" {
 			t.Fatalf("cmd.Steps = %+v, want exactly [step-0]", cmd.Steps)
+		}
+	})
+}
+
+func TestRunScenarioIntegration_MaxPrivilegeFiltersStep(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{
+			{Name: "user-step", TechniqueID: "T1059", Framework: "custom", Command: "echo user",
+				RequiresPriv: scenario.PrivSpec{Minimum: "user"}},
+			{Name: "admin-step", TechniqueID: "T1548", Framework: "custom", Command: "echo admin",
+				RequiresPriv: scenario.PrivSpec{Minimum: "admin"}},
+		}
+		sc, engine := minimalLiveScenario(t, "int-maxpriv-mixed", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "int-agent-maxpriv-mixed"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.RunScenario(rec, runScenarioReq(sc.ID, map[string]any{
+			"agentId": agentID, "mode": "telemetry", "confirmLive": true, "maxPrivilege": "user",
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		runID, _ := resp["runId"].(string)
+		if runID == "" {
+			t.Fatalf("resp = %+v, want a non-empty runId", resp)
+		}
+
+		env := fake.WaitForMessage(t, 2*time.Second)
+		var cmd scenario.ScenarioCommand
+		if err := json.Unmarshal(env.Data, &cmd); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(cmd.Steps) != 1 || cmd.Steps[0].Name != "user-step" {
+			t.Fatalf("cmd.Steps = %+v, want exactly [user-step] (admin-step must be filtered)", cmd.Steps)
+		}
+
+		var skippedJSON []byte
+		if err := pool.QueryRow(context.Background(),
+			`SELECT policy_skipped_results FROM scenario_runs WHERE id = $1`, runID,
+		).Scan(&skippedJSON); err != nil {
+			t.Fatalf("read policy_skipped_results: %v", err)
+		}
+		var skipped []models.SimulationResult
+		if err := json.Unmarshal(skippedJSON, &skipped); err != nil {
+			t.Fatalf("unmarshal policy_skipped_results: %v", err)
+		}
+		if len(skipped) != 1 {
+			t.Fatalf("policy_skipped_results = %d entries, want 1", len(skipped))
+		}
+		if skipped[0].Result != models.ResultSkipped {
+			t.Errorf("skipped[0].Result = %q, want %q", skipped[0].Result, models.ResultSkipped)
+		}
+		if skipped[0].SkipReason != models.SkipReasonPolicyPrivilege {
+			t.Errorf("skipped[0].SkipReason = %q, want %q", skipped[0].SkipReason, models.SkipReasonPolicyPrivilege)
+		}
+		if skipped[0].Technique.ID != "T1548" {
+			t.Errorf("skipped[0].Technique.ID = %q, want T1548", skipped[0].Technique.ID)
+		}
+	})
+}
+
+func TestRunScenarioIntegration_MaxPrivilegeAllFilteredCompletesImmediately(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{
+			{Name: "admin-step", TechniqueID: "T1548", Framework: "custom", Command: "echo admin",
+				RequiresPriv: scenario.PrivSpec{Minimum: "admin"}},
+		}
+		sc, engine := minimalLiveScenario(t, "int-maxpriv-all", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "int-agent-maxpriv-all"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.RunScenario(rec, runScenarioReq(sc.ID, map[string]any{
+			"agentId": agentID, "mode": "telemetry", "confirmLive": true, "maxPrivilege": "user",
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		runID, _ := resp["runId"].(string)
+		if runID == "" {
+			t.Fatalf("resp = %+v, want a non-empty runId", resp)
+		}
+
+		var status string
+		var resultsJSON []byte
+		if err := pool.QueryRow(context.Background(),
+			`SELECT status, results FROM scenario_runs WHERE id = $1`, runID,
+		).Scan(&status, &resultsJSON); err != nil {
+			t.Fatalf("read run: %v", err)
+		}
+		if status != "completed" {
+			t.Fatalf("status = %q, want completed (run should finish immediately, no agent round-trip)", status)
+		}
+		var results []models.SimulationResult
+		_ = json.Unmarshal(resultsJSON, &results)
+		if len(results) != 1 || results[0].SkipReason != models.SkipReasonPolicyPrivilege {
+			t.Fatalf("results = %+v, want exactly 1 policy-privilege skip", results)
 		}
 	})
 }
