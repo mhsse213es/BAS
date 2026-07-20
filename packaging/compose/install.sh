@@ -3,11 +3,15 @@
 #
 # Usage:
 #   sudo bash install.sh --check                          # prereq report (attach to CAB)
-#   sudo bash install.sh --install  --config setup.conf  # first-time install
+#   sudo bash install.sh --install  --config setup.conf [--yes]  # first-time install
 #   sudo bash install.sh --upgrade  --config setup.conf  # in-place upgrade
 #   sudo bash install.sh --rollback                      # restore previous version
 #   sudo bash install.sh --status                        # current state
 #   sudo bash install.sh --uninstall [--purge-images] [--yes]
+#
+# If Docker/Docker Compose are missing, --install asks for explicit
+# confirmation before installing Docker CE from Docker's official
+# repository. --yes also grants that consent, for unattended runs.
 #
 # All secrets not supplied in setup.conf are auto-generated and written to
 # ${DATA_DIR}/.env which is readable only by root. setup.conf is the
@@ -228,9 +232,10 @@ _check_os() {
   esac
 }
 
+# Callers use results+=( "$(_check_docker)" ) -- that $(...) runs this in a
+# subshell, so it cannot set NEED_DOCKER itself; mode_install sets it directly.
 _check_docker() {
   if ! command -v docker &>/dev/null; then
-    NEED_DOCKER=true
     echo "INST:Docker -not installed (installer can install it with your consent)"; return
   fi
   if ! docker info &>/dev/null 2>&1; then
@@ -247,7 +252,6 @@ _check_compose() {
     ver=$(docker compose version 2>/dev/null | grep -oP '[\d]+\.[\d]+\.[\d]+' | head -1 || echo "?")
     echo "PASS:Docker Compose -${ver}"
   else
-    NEED_COMPOSE=true
     echo "INST:Docker Compose -not installed (installer can install it with your consent)"
   fi
 }
@@ -461,11 +465,15 @@ mode_install() {
 
   local LOG_FILE="${DATA_DIR}/install.log"
 
-  step "1/9  Prerequisite checks"
+  step "1/10  Prerequisite checks"
   local results=()
   results+=( "$(_check_os)" )
   results+=( "$(_check_docker)" )
   results+=( "$(_check_compose)" )
+  # _check_docker/_check_compose run inside $(...) subshells above and can't
+  # set NEED_DOCKER/NEED_COMPOSE themselves -- mirror their own detection here.
+  command -v docker &>/dev/null || NEED_DOCKER=true
+  docker compose version &>/dev/null 2>&1 || NEED_COMPOSE=true
   results+=( "$(_check_ram)" )
   results+=( "$(_check_cpu)" )
   results+=( "$(_check_disk "$DATA_DIR")" )
@@ -476,7 +484,25 @@ mode_install() {
   results+=( "$(_check_licence "$LIC_PATH")" )
   render_checks "${results[@]}" || exit 1
 
-  step "2/9  Creating data directories"
+  step "2/10  Docker Engine"
+  if $NEED_DOCKER || $NEED_COMPOSE; then
+    echo ""
+    echo "  Docker and/or Docker Compose are not installed on this host."
+    echo "  The installer can download and install Docker CE from Docker's official"
+    echo "  repository (download.docker.com) and enable it as a system service."
+    echo ""
+    if ! $YES; then
+      read -rp "  Install Docker CE now from the official Docker repository? [yes/N] " confirm
+      [[ "$confirm" == "yes" ]] || { err "Docker is required to continue. Install it manually (or re-run with --yes) and re-run --install."; exit 1; }
+    fi
+    _install_docker
+    DOCKER_AUTO_INSTALLED=true
+    log "Docker CE installed: $(docker --version)"
+  else
+    log "Docker already present -skipping"
+  fi
+
+  step "3/10  Creating data directories"
   mkdir -p "${DATA_DIR}"/{data/postgres,logs,backups,scenarios,wwwroot,art-payloads,sharphound}
   chmod 750 "${DATA_DIR}"
   # scenarios is written by the orchestrator container (runs as UID 65532 -distroless nonroot).
@@ -484,7 +510,7 @@ mode_install() {
   chown -R 65532:65532 "${DATA_DIR}/scenarios"
   log "Created: ${DATA_DIR}"
 
-  step "3/9  Loading Docker images (air-gap safe -no pull)"
+  step "4/10  Loading Docker images (air-gap safe -no pull)"
   local images_dir="${SCRIPT_DIR}/images"
   if [[ -d "$images_dir" ]]; then
     for tar in "${images_dir}"/*.tar; do
@@ -497,7 +523,7 @@ mode_install() {
     warn "images/ directory not found -Docker will attempt to pull (requires internet)"
   fi
 
-  step "4/9  Staging bundle files"
+  step "5/10  Staging bundle files"
   # Scenarios
   if [[ -d "${SCRIPT_DIR}/scenarios" ]]; then
     cp -r "${SCRIPT_DIR}/scenarios/." "${DATA_DIR}/scenarios/"
@@ -528,26 +554,26 @@ mode_install() {
     log "TLS certificates installed"
   fi
 
-  step "5/9  Writing .env (root-readable only)"
+  step "6/10  Writing .env (root-readable only)"
   _write_env
   log ".env written to ${DATA_DIR}/.env"
 
-  step "6/9  Installing docker-compose.yml"
+  step "7/10  Installing docker-compose.yml"
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
   log "Compose file installed"
 
-  step "7/9  Installing systemd service (auto-start on boot)"
+  step "8/10  Installing systemd service (auto-start on boot)"
   _write_systemd_unit
   systemctl daemon-reload
   systemctl enable "${SERVICE_NAME}"
   log "Systemd service enabled: ${SERVICE_NAME}.service"
 
-  step "8/9  Starting stack"
+  step "9/10  Starting stack"
   systemctl start "${SERVICE_NAME}"
   log "Stack started via systemd"
   _wait_healthy
 
-  step "9/9  Creating admin user"
+  step "10/10  Creating admin user"
   _create_admin
 
   _write_install_log "$LOG_FILE"
@@ -885,6 +911,8 @@ _create_admin() {
 
 _write_install_log() {
   local log_file="$1"
+  local docker_note="pre-existing"
+  $DOCKER_AUTO_INSTALLED && docker_note="auto-installed by installer"
   {
     echo "Audspect BAS -Install Log"
     echo "Timestamp : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
@@ -894,6 +922,7 @@ _write_install_log() {
     echo "Port      : ${BAS_PORT}"
     echo "TLS       : ${BAS_TLS}"
     echo "Admin     : ${ADMIN_EMAIL}"
+    echo "Docker CE : ${docker_note}"
   } >> "$log_file"
   chmod 640 "$log_file"
 }
