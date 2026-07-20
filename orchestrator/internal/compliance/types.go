@@ -43,6 +43,7 @@ type ComplianceReport struct {
 	RunID        string            `json:"runId"`
 	ScenarioName string            `json:"scenarioName"`
 	GeneratedAt  time.Time         `json:"generatedAt"`
+	Narrative    string            `json:"narrative"`
 	Summary      ComplianceSummary `json:"summary"`
 	Domains      []DomainResult    `json:"domains"`
 	Controls     []ControlResult   `json:"controls"`

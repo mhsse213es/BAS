@@ -219,26 +219,109 @@ func (m *Mapper) GenerateReport(
 
 	meta := fw.FrameworkMeta
 
+	summary := ComplianceSummary{
+		TotalControls:     totalControls,
+		TestableControls:  testableControls,
+		ManualControls:    manualControls,
+		TestedControls:    testedControls,
+		PassingControls:   passingControls,
+		FailingControls:   failingControls,
+		UntestedControls:  testableControls - testedControls,
+		CoveragePercent:   coveragePct,
+		CompliancePercent: compliancePct,
+	}
+
 	return &ComplianceReport{
 		Framework:    meta,
 		AgentID:      agentID,
 		RunID:        runID,
 		ScenarioName: scenarioName,
 		GeneratedAt:  time.Now().UTC(),
-		Summary: ComplianceSummary{
-			TotalControls:     totalControls,
-			TestableControls:  testableControls,
-			ManualControls:    manualControls,
-			TestedControls:    testedControls,
-			PassingControls:   passingControls,
-			FailingControls:   failingControls,
-			UntestedControls:  testableControls - testedControls,
-			CoveragePercent:   coveragePct,
-			CompliancePercent: compliancePct,
-		},
-		Domains:  domains,
-		Controls: controlResults,
+		Narrative:    buildNarrative(summary, domains, controlResults),
+		Summary:      summary,
+		Domains:      domains,
+		Controls:     controlResults,
 	}, nil
+}
+
+// buildNarrative turns a compliance report's numbers into one or two plain-
+// language sentences explaining what's driving the score. Grounded entirely
+// in already-computed data (never fabricates a root cause it can't show
+// evidence for).
+func buildNarrative(s ComplianceSummary, domains []DomainResult, controls []ControlResult) string {
+	if s.TestedControls == 0 {
+		return "No controls have been tested yet — run a scenario to generate compliance evidence."
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%.0f%% compliant — %d of %d tested controls are passing.",
+		s.CompliancePercent, s.PassingControls, s.TestedControls)
+
+	if s.FailingControls > 0 {
+		// domains is already sorted alphabetically by GenerateReport, so a
+		// strict > comparison deterministically picks the alphabetically-first
+		// domain on a tie.
+		var topDomain string
+		topDomainFails := 0
+		for _, d := range domains {
+			if d.Failing > topDomainFails {
+				topDomain = d.Name
+				topDomainFails = d.Failing
+			}
+		}
+
+		// Tally failing techniques across all control evidence, then sort for
+		// a deterministic pick -- map iteration order is not stable in Go, so
+		// this can't just take the first map entry with the highest count.
+		type techFail struct {
+			id, name string
+			n        int
+		}
+		byTech := map[string]*techFail{}
+		for _, c := range controls {
+			for _, ev := range c.Evidence {
+				if ev.Result != "fail" {
+					continue
+				}
+				t := byTech[ev.TechniqueID]
+				if t == nil {
+					t = &techFail{id: ev.TechniqueID, name: ev.TechniqueName}
+					byTech[ev.TechniqueID] = t
+				}
+				t.n++
+			}
+		}
+		techs := make([]*techFail, 0, len(byTech))
+		for _, t := range byTech {
+			techs = append(techs, t)
+		}
+		sort.Slice(techs, func(i, j int) bool {
+			if techs[i].n != techs[j].n {
+				return techs[i].n > techs[j].n
+			}
+			return techs[i].id < techs[j].id // deterministic tie-break
+		})
+
+		fmt.Fprintf(&b, " %d control(s) are failing", s.FailingControls)
+		if topDomain != "" {
+			fmt.Fprintf(&b, ", most concentrated in %s (%d of %d)", topDomain, topDomainFails, s.FailingControls)
+		}
+		b.WriteString(".")
+		if len(techs) > 0 {
+			top := techs[0]
+			if top.name != "" {
+				fmt.Fprintf(&b, " The most common failing technique is %s (%s).", top.name, top.id)
+			} else {
+				fmt.Fprintf(&b, " The most common failing technique is %s.", top.id)
+			}
+		}
+	}
+
+	if s.UntestedControls > 0 {
+		fmt.Fprintf(&b, " %d control(s) haven't been tested yet — run additional scenarios to close coverage gaps.", s.UntestedControls)
+	}
+
+	return b.String()
 }
 
 // WriteCSV writes the compliance report as a CSV to w.
