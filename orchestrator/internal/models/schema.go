@@ -60,6 +60,13 @@ type SimulationResult struct {
 	// ExecutedAs records the actual privilege tier used: "user" | "user→admin" |
 	// "admin" | "system" | "" (empty = legacy unannotated step).
 	ExecutedAs string `json:"executedAs,omitempty"`
+	// SkipReason distinguishes WHY a Result=ResultSkipped entry was skipped,
+	// matching the lightweight plain-string classification style already used
+	// by Framework/DetectionVerdict/CleanupVerdict/ExecutedAs on this struct.
+	// Empty for all pre-existing skip causes (missing payload, technique not in
+	// local store, etc.) — only set for skips this platform itself decided to
+	// make, not ones discovered by parsing agent output.
+	SkipReason string `json:"skipReason,omitempty"`
 
 	// Evidence fields — populated from agent ExecResult; displayed in the UI evidence panel.
 	Command   string    `json:"command,omitempty"`   // human-readable step command from the scenario YAML
@@ -68,6 +75,11 @@ type SimulationResult struct {
 	PID       int       `json:"pid,omitempty"`
 	StartedAt time.Time `json:"startedAt"`
 }
+
+// SkipReasonPolicyPrivilege marks a SimulationResult synthesized server-side
+// because a step's RequiresPriv exceeded the run's MaxPrivilege execution
+// policy — the step was never dispatched to the agent at all.
+const SkipReasonPolicyPrivilege = "policy-privilege"
 
 // DetectionAlert is the alert record that matched this technique during the
 // post-run detection sweep. Mirrors detect.AlertRecord (server-side package)

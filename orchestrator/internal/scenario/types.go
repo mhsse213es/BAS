@@ -80,6 +80,27 @@ func (p PrivSpec) Effective() string {
 // IsZero reports whether no privilege tier has been declared.
 func (p PrivSpec) IsZero() bool { return p.Minimum == "" && p.Preferred == "" }
 
+// privilegeTierRank orders privilege tiers from lowest to highest. Unrecognized
+// values (including "" — unannotated/legacy) rank as the lowest tier, "user" —
+// an unknown or missing tier is never treated as more privileged than it
+// actually is, so a MaxPrivilege ceiling never accidentally excludes it.
+var privilegeTierRank = map[string]int{
+	"user":   0,
+	"admin":  1,
+	"system": 2,
+}
+
+// PrivilegeExceeds reports whether stepTier is strictly above the maxTier
+// ceiling. An empty maxTier means no ceiling (never exceeds). Used to decide
+// whether a step must be filtered out of a run under an execution policy's
+// MaxPrivilege constraint.
+func PrivilegeExceeds(stepTier, maxTier string) bool {
+	if maxTier == "" {
+		return false
+	}
+	return privilegeTierRank[stepTier] > privilegeTierRank[maxTier]
+}
+
 // YAMLPayload defines a file the server should stage on the endpoint before a step runs.
 // Content is base64-encoded. Defined in scenario YAML alongside the step.
 type YAMLPayload struct {
