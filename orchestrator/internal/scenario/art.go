@@ -96,7 +96,7 @@ func NewARTStore(dir string, payloads *PayloadStore) (*ARTStore, error) {
 func NewARTStoreFromDB(ctx context.Context, pool *pgxpool.Pool, payloads *PayloadStore) (*ARTStore, error) {
 	s := &ARTStore{steps: make(map[string][]ScenarioStep), payloads: payloads}
 	rows, err := pool.Query(ctx,
-		`SELECT technique_id, name, executor, command, cleanup, timeout_sec, required_payloads, platform
+		`SELECT technique_id, name, executor, command, cleanup, timeout_sec, required_payloads, platform, requires_priv
 		   FROM art_atomic_tests
 		  ORDER BY technique_id, test_index`)
 	if err != nil {
@@ -104,10 +104,10 @@ func NewARTStoreFromDB(ctx context.Context, pool *pgxpool.Pool, payloads *Payloa
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var tech, name, executor, command, cleanup, platform string
+		var tech, name, executor, command, cleanup, platform, requiresPriv string
 		var timeout int
 		var required []string
-		if err := rows.Scan(&tech, &name, &executor, &command, &cleanup, &timeout, &required, &platform); err != nil {
+		if err := rows.Scan(&tech, &name, &executor, &command, &cleanup, &timeout, &required, &platform, &requiresPriv); err != nil {
 			return nil, err
 		}
 		tech = strings.ToUpper(tech)
@@ -127,6 +127,7 @@ func NewARTStoreFromDB(ctx context.Context, pool *pgxpool.Pool, payloads *Payloa
 			Command:          command,
 			TimeoutSec:       timeout,
 			Cleanup:          cleanup,
+			RequiresPriv:     requiresPriv,
 			requiredPayloads: required,
 		})
 	}

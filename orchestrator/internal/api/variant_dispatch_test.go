@@ -160,6 +160,41 @@ func TestGenerateVariants_ARTStoreNoStepsForTechnique(t *testing.T) {
 	})
 }
 
+// TestARTStoreFromDB_CarriesRequiresPriv pins the read side of the ART
+// privilege-import fix: a technique seeded with requires_priv='admin' must
+// produce a ScenarioStep with RequiresPriv == "admin", proving the value
+// actually reaches the runtime step the agent receives, not just the DB row.
+func TestARTStoreFromDB_CarriesRequiresPriv(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO techniques (technique_id, name, tactic) VALUES ('T1548.777','Privileged Test','privilege-escalation')
+			 ON CONFLICT (technique_id) DO NOTHING`); err != nil {
+			t.Fatalf("seed technique: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO art_atomic_tests (technique_id, test_index, name, executor, command, requires_priv, original_elevation_required)
+			 VALUES ('T1548.777', 0, 'elevated-step', 'powershell', 'whoami', 'admin', true)`); err != nil {
+			t.Fatalf("seed art_atomic_tests: %v", err)
+		}
+
+		store, err := scenario.NewARTStoreFromDB(ctx, pool, nil)
+		if err != nil {
+			t.Fatalf("NewARTStoreFromDB: %v", err)
+		}
+		steps := store.GetSteps("T1548.777")
+		if len(steps) != 1 {
+			t.Fatalf("got %d steps, want 1", len(steps))
+		}
+		if steps[0].RequiresPriv != "admin" {
+			t.Errorf("RequiresPriv = %q, want admin", steps[0].RequiresPriv)
+		}
+	})
+}
+
 // TestGenerateVariants_FromPayloadFamilies pins the second resolveTemplates
 // path: when families exist for the technique (and no override given),
 // templates are generated per-family.
