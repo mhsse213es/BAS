@@ -3721,6 +3721,7 @@ var TOKEN    = ''; // kept in memory only — never persisted to localStorage
 var ROLE     = localStorage.getItem('bas_role')  || '';
 var socket   = null;
 var scenarios = [];
+var overlayPinned = null; // scenario id of the pinned tile's overlay, or null
 var agents   = [];
 var artCatalog = [];      // live ART catalog: [{id,name,tests}]
 var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
@@ -5659,7 +5660,7 @@ function renderScenarios() {
 
   if (emMatches.length > 0 && src !== 'intel') {
     document.getElementById('em-section').style.display = 'block';
-    gridEm.innerHTML = emMatches.map(scenarioCardHTML).join('');
+    gridEm.innerHTML = '<div class="sc-fade">' + renderScenarioTileGroup(emMatches) + '</div>';
   } else {
     document.getElementById('em-section').style.display = 'none';
     gridEm.innerHTML = '';
@@ -5667,7 +5668,7 @@ function renderScenarios() {
 
   if (otherMatches.length > 0) {
     document.getElementById('other-section').style.display = 'block';
-    grid.innerHTML = otherMatches.map(scenarioCardHTML).join('');
+    grid.innerHTML = '<div class="sc-fade">' + renderScenarioTileGroup(otherMatches) + '</div>';
   } else {
     if (emMatches.length === 0) {
       var emptyMsg;
@@ -5724,6 +5725,131 @@ function toggleDesc(id, el) {
   fEl.style.display = expanded ? 'none' : 'inline';
   el.textContent = expanded ? 'Read more' : 'Read less';
 }
+
+function scenarioSourceOf(s) {
+  return s.intelSource ? 'intel' : (s.source || 'builtin');
+}
+var SCENARIO_SOURCE_LABELS = { builtin: 'Built-in', custom: 'Custom', intel: 'Threat-Intel' };
+var SCENARIO_SOURCE_ORDER = ['builtin', 'custom', 'intel'];
+
+function scenarioTileOSBadges(s) {
+  var osArr = s.supportedOs || [];
+  if (!osArr.length) return '';
+  var osIcons = { windows: '⊞', linux: '🐧', darwin: '⌘' };
+  var osColors = {
+    windows: 'rgba(47,129,247,0.15);color:#58a6ff;border-color:rgba(47,129,247,0.4)',
+    linux:   'rgba(47,216,195,0.15);color:#5cead8;border-color:rgba(47,216,195,0.4)',
+    darwin:  'rgba(154,169,188,0.15);color:#9aa9bc;border-color:rgba(154,169,188,0.35)'
+  };
+  return osArr.map(function(os) {
+    var lc = os.toLowerCase();
+    var col = osColors[lc] || 'rgba(154,169,188,0.12);color:#9aa9bc;border-color:rgba(154,169,188,0.35)';
+    return '<span class="tag" style="background:' + col + ';font-size:0.6rem;padding:1px 5px" title="Supported OS: ' + x(os) + '">' + (osIcons[lc] || x(os)) + '</span>';
+  }).join('');
+}
+
+function scenarioTileMitreBadge(s) {
+  var phases = s.mitrePhases || [];
+  if (!phases.length) return '';
+  var extra = phases.length > 1 ? ' <span style="opacity:0.7">+' + (phases.length - 1) + '</span>' : '';
+  return '<span class="tag" style="font-size:0.6rem;padding:1px 5px" title="' + x(phases.join(', ')) + '">' + x(phases[0]) + extra + '</span>';
+}
+
+function scenarioTileHTML(s) {
+  var color = s.intelSource ? '#2f81f7' : stripeColor(s.id);
+  var sid = x(s.id);
+  return '<div class="sc-tile" tabindex="0" role="button" aria-expanded="false" data-sid="' + sid + '" ' +
+    'onmouseenter="previewScenarioOverlay(\'' + sid + '\')" onmouseleave="unpreviewScenarioOverlay(\'' + sid + '\')" ' +
+    'onclick="toggleScenarioPin(event,\'' + sid + '\')" ' +
+    'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();toggleScenarioPin(event,\'' + sid + '\');}">' +
+    '<div class="sc-tile-stripe" style="background:' + color + '"></div>' +
+    '<div class="sc-tile-name">' + x(s.name) + '</div>' +
+    '<div class="sc-tile-badges">' + scenarioTileOSBadges(s) + scenarioTileMitreBadge(s) + '</div>' +
+    '<div class="sc-tile-detail" id="scd-' + sid + '">' + scenarioDetailHTML(s) + '</div>' +
+  '</div>';
+}
+
+function renderScenarioTileGroup(list) {
+  var bySrc = { builtin: [], custom: [], intel: [] };
+  list.forEach(function(s) { bySrc[scenarioSourceOf(s)].push(s); });
+  return SCENARIO_SOURCE_ORDER.map(function(k) {
+    if (!bySrc[k].length) return '';
+    return '<div class="sc-src-group">' +
+      '<div class="sc-src-hdr"><span class="chev">&#9660;</span>' + x(SCENARIO_SOURCE_LABELS[k]) + ' (' + bySrc[k].length + ')</div>' +
+      '<div class="sc-src-body">' + bySrc[k].map(scenarioTileHTML).join('') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function _scOverlayEl(id) { return document.getElementById('scd-' + id); }
+function _scTileEl(id) {
+  var d = _scOverlayEl(id);
+  return d ? d.parentElement : null;
+}
+
+// Keeps the 420px overlay from clipping past the right edge of the viewport
+// for tiles that aren't in the leftmost grid column.
+function _scPositionOverlay(id) {
+  var detail = _scOverlayEl(id);
+  var tile = _scTileEl(id);
+  if (!detail || !tile) return;
+  detail.style.left = '';
+  detail.style.right = '';
+  var rect = tile.getBoundingClientRect();
+  if (rect.left + 420 > window.innerWidth - 16) {
+    detail.style.left = 'auto';
+    detail.style.right = '0';
+  }
+}
+
+function previewScenarioOverlay(id) {
+  if (overlayPinned) return; // a pinned overlay is never disturbed by hovering elsewhere
+  var detail = _scOverlayEl(id);
+  if (!detail) return;
+  _scPositionOverlay(id);
+  detail.classList.add('show');
+}
+function unpreviewScenarioOverlay(id) {
+  if (overlayPinned === id) return; // pinned overlays only close via toggle/ESC/outside-click
+  var detail = _scOverlayEl(id);
+  if (detail) detail.classList.remove('show');
+}
+function toggleScenarioPin(event, id) {
+  // A click on a button/link inside the already-open detail panel must not
+  // re-toggle the tile's own pin state — the panel is a DOM child of the
+  // tile, so such clicks bubble up to this same handler.
+  if (event.target.closest && event.target.closest('.sc-tile-detail')) return;
+  event.stopPropagation();
+  if (overlayPinned === id) { closeScenarioOverlay(); return; }
+  closeScenarioOverlay();
+  overlayPinned = id;
+  var tile = _scTileEl(id);
+  var detail = _scOverlayEl(id);
+  if (tile) { tile.classList.add('pinned'); tile.setAttribute('aria-expanded', 'true'); }
+  if (detail) { _scPositionOverlay(id); detail.classList.add('show'); }
+}
+function closeScenarioOverlay() {
+  if (!overlayPinned) return;
+  var tile = _scTileEl(overlayPinned);
+  var detail = _scOverlayEl(overlayPinned);
+  if (tile) { tile.classList.remove('pinned'); tile.setAttribute('aria-expanded', 'false'); }
+  if (detail) detail.classList.remove('show');
+  overlayPinned = null;
+}
+document.addEventListener('click', function(e) {
+  if (!overlayPinned) return;
+  var detail = _scOverlayEl(overlayPinned);
+  var tile = _scTileEl(overlayPinned);
+  if ((detail && detail.contains(e.target)) || (tile && tile.contains(e.target))) return;
+  closeScenarioOverlay();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && overlayPinned) {
+    var tile = _scTileEl(overlayPinned);
+    closeScenarioOverlay();
+    if (tile) tile.focus();
+  }
+});
 
 function scenarioDetailHTML(s) {
       var visibleTags = (s.tags || []).filter(function(t) {
