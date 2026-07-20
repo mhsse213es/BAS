@@ -1189,17 +1189,17 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 func (h *Handler) RunScenario(w http.ResponseWriter, r *http.Request) {
 	scenarioID := chi.URLParam(r, "id")
 	var req struct {
-		AgentID      string                `json:"agentId"`
-		Mode         string                `json:"mode"`         // posture (default) | telemetry | lab
-		ConfirmLive  bool                  `json:"confirmLive"`  // required ack for any live run (telemetry/lab)
-		ConfirmLab   bool                  `json:"confirmLab"`   // second-stage approval, required for lab mode
-		Reason       string                `json:"reason"`       // optional operator justification (audited)
-		Techniques   []string              `json:"techniques"`   // optional ART technique subset
-		Abilities    []string              `json:"abilities"`    // optional Caldera ability subset
-		Steps        []int                 `json:"steps"`        // optional step subset — indices into scenario step list
-		Checks       []string              `json:"checks"`       // optional posture-check subset (local_check scenarios)
-		VariantDepth scenario.VariantDepth `json:"variantDepth"` // ""|"none"|"quick"|"standard"|"full"
-		RunLabel        string                   `json:"runLabel"` // optional override for scenario_runs.name
+		AgentID         string                   `json:"agentId"`
+		Mode            string                   `json:"mode"`                      // posture (default) | telemetry | lab
+		ConfirmLive     bool                     `json:"confirmLive"`               // required ack for any live run (telemetry/lab)
+		ConfirmLab      bool                     `json:"confirmLab"`                // second-stage approval, required for lab mode
+		Reason          string                   `json:"reason"`                    // optional operator justification (audited)
+		Techniques      []string                 `json:"techniques"`                // optional ART technique subset
+		Abilities       []string                 `json:"abilities"`                 // optional Caldera ability subset
+		Steps           []int                    `json:"steps"`                     // optional step subset — indices into scenario step list
+		Checks          []string                 `json:"checks"`                    // optional posture-check subset (local_check scenarios)
+		VariantDepth    scenario.VariantDepth    `json:"variantDepth"`              // ""|"none"|"quick"|"standard"|"full"
+		RunLabel        string                   `json:"runLabel"`                  // optional override for scenario_runs.name
 		ExecutionPolicy scenario.ExecutionPolicy `json:"executionPolicy,omitempty"` // operator-set execution constraints (e.g. maxPrivilege)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {

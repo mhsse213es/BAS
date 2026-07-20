@@ -133,7 +133,7 @@ type Step struct {
 	// These document the risk and expected detection signal of a live step so
 	// operators see the blast radius before running and SOC teams know what to
 	// look for. Surfaced in the run results; ignored in posture mode.
-	Risk        string   `yaml:"risk,omitempty"         json:"risk,omitempty"`         // low | medium | high
+	Risk        string   `yaml:"risk,omitempty"         json:"risk,omitempty"`        // low | medium | high
 	BlastRadius string   `yaml:"blast_radius,omitempty" json:"blastRadius,omitempty"` // short human label, e.g. "spawns benign child process; no persistence"
 	Reversible  bool     `yaml:"reversible,omitempty"   json:"reversible,omitempty"`  // true = self-cleaning / no residual change
 	Telemetry   []string `yaml:"telemetry,omitempty"    json:"telemetry,omitempty"`   // expected events, e.g. "Security EID 4688", "Sysmon EID 1"
@@ -197,8 +197,8 @@ type Scenario struct {
 	ARTAllWindows      bool     `yaml:"art_all_windows,omitempty"      json:"artAllWindows,omitempty"`
 	// ARTAllPlatform runs every ART technique available for the agent's OS.
 	// Used by linux-full / darwin-full sweep scenarios; respects supported_os.
-	ARTAllPlatform     bool     `yaml:"art_all_platform,omitempty"     json:"artAllPlatform,omitempty"`
-	ARTTechniques      []string `yaml:"art_techniques,omitempty"       json:"artTechniques,omitempty"`
+	ARTAllPlatform bool     `yaml:"art_all_platform,omitempty"     json:"artAllPlatform,omitempty"`
+	ARTTechniques  []string `yaml:"art_techniques,omitempty"       json:"artTechniques,omitempty"`
 
 	// LivePolicy holds the guardrails enforced during live (telemetry/lab) runs.
 	LivePolicy *LivePolicy `yaml:"live_policy,omitempty" json:"livePolicy,omitempty"`
@@ -247,9 +247,9 @@ type Payload struct {
 // The server builds these from Step definitions before sending to the agent.
 // The agent has no framework knowledge — it only sees executor + command.
 type ScenarioStep struct {
-	TaskID      string    `json:"taskId"`      // stable hash for result correlation
-	TechniqueID string    `json:"techniqueId"` // for logging/telemetry on agent
-	Name        string    `json:"name"`        // for logging on agent
+	TaskID      string `json:"taskId"`      // stable hash for result correlation
+	TechniqueID string `json:"techniqueId"` // for logging/telemetry on agent
+	Name        string `json:"name"`        // for logging on agent
 	// Framework is retained server-side only (json:"-" keeps it off the agent
 	// wire) so results from dynamically-built steps can be interpreted by the
 	// correct framework handler (art|caldera|custom).
@@ -266,11 +266,11 @@ type ScenarioStep struct {
 	// (e.g. "gsecdump.exe"). Resolved at dispatch: found files are shipped in
 	// Payloads, a missing one turns the step into a clean SKIP. Server-internal.
 	requiredPayloads []string
-	Executor    string    `json:"executor"`    // powershell|cmd|wmi|mshta|rundll32|cscript|wscript|regsvr32|schtasks
-	Command     string    `json:"command"`     // concrete command, ready to run
-	TimeoutSec  int       `json:"timeoutSec"`
-	Payloads    []Payload `json:"payloads,omitempty"` // files to stage before executing
-	Cleanup     string    `json:"cleanup,omitempty"`  // cleanup command run after step (pass or fail)
+	Executor         string    `json:"executor"` // powershell|cmd|wmi|mshta|rundll32|cscript|wscript|regsvr32|schtasks
+	Command          string    `json:"command"`  // concrete command, ready to run
+	TimeoutSec       int       `json:"timeoutSec"`
+	Payloads         []Payload `json:"payloads,omitempty"` // files to stage before executing
+	Cleanup          string    `json:"cleanup,omitempty"`  // cleanup command run after step (pass or fail)
 	// Resource is the step's curated lock profile. nil → the agent runs the step
 	// serially (always safe). Set centrally by AttachProfiles at dispatch.
 	Resource *ResourceProfile `json:"resource,omitempty"`

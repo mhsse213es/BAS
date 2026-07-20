@@ -295,7 +295,9 @@ func TestRegisterBuiltinTriggersAndSetDispatch(t *testing.T) {
 		if !e.triggers.Has(StepTypeWaitForAgent) || !e.triggers.Has(StepTypeWaitForDetection) || !e.triggers.Has(StepTypeWaitForWebhook) {
 			t.Fatal("RegisterBuiltinTriggers must register all three event triggers")
 		}
-		e.SetDispatch(func(agentID, scenarioID, techniqueID string, policy scenario.ExecutionPolicy) (string, error) { return "run-1", nil })
+		e.SetDispatch(func(agentID, scenarioID, techniqueID string, policy scenario.ExecutionPolicy) (string, error) {
+			return "run-1", nil
+		})
 	})
 }
 
