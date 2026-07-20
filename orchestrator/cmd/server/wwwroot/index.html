@@ -3718,6 +3718,7 @@ var socket   = null;
 var scenarios = [];
 var overlayPinned = null; // scenario id of the pinned tile's overlay, or null
 var scenarioView = 'landing'; // 'landing' | 'em' | 'other'
+var scenarioSrcCollapsed = { em: {}, other: {}, search: {} };
 var agents   = [];
 var artCatalog = [];      // live ART catalog: [{id,name,tests}]
 var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
@@ -5716,7 +5717,7 @@ function renderScenarios() {
     document.getElementById('sc-backbar-title').textContent = 'Search results for: "' + x(searchEl.value.trim()) + '" (' + results.length + ')';
     var sgrid = document.getElementById('sc-tile-grid');
     sgrid.innerHTML = results.length
-      ? '<div class="sc-fade">' + renderScenarioTileGroup(results) + '</div>'
+      ? '<div class="sc-fade">' + renderScenarioTileGroup('search', results) + '</div>'
       : '<p class="empty">No scenarios match your search.</p>';
     return;
   }
@@ -5735,7 +5736,7 @@ function renderScenarios() {
   document.getElementById('sc-backbar-title').textContent = cat.label + ' (' + inCat.length + ')';
   var grid = document.getElementById('sc-tile-grid');
   grid.innerHTML = inCat.length
-    ? '<div class="sc-fade">' + renderScenarioTileGroup(inCat) + '</div>'
+    ? '<div class="sc-fade">' + renderScenarioTileGroup(scenarioView, inCat) + '</div>'
     : '<p class="empty">No scenarios match your filter.</p>';
 }
 
@@ -5813,16 +5814,25 @@ function scenarioTileHTML(s) {
   '</div>';
 }
 
-function renderScenarioTileGroup(list) {
+function renderScenarioTileGroup(viewKey, list) {
   var bySrc = { builtin: [], custom: [], intel: [] };
   list.forEach(function(s) { bySrc[scenarioSourceOf(s)].push(s); });
   return SCENARIO_SOURCE_ORDER.map(function(k) {
     if (!bySrc[k].length) return '';
+    var collapsed = !!(scenarioSrcCollapsed[viewKey] && scenarioSrcCollapsed[viewKey][k]);
     return '<div class="sc-src-group">' +
-      '<div class="sc-src-hdr"><span class="chev">&#9660;</span>' + x(SCENARIO_SOURCE_LABELS[k]) + ' (' + bySrc[k].length + ')</div>' +
-      '<div class="sc-src-body">' + bySrc[k].map(scenarioTileHTML).join('') + '</div>' +
+      '<div class="sc-src-hdr' + (collapsed ? ' collapsed' : '') + '" onclick="toggleScenarioSrcGroup(\'' + viewKey + '\',\'' + k + '\')">' +
+        '<span class="chev">&#9660;</span>' + x(SCENARIO_SOURCE_LABELS[k]) + ' (' + bySrc[k].length + ')' +
+      '</div>' +
+      '<div class="sc-src-body' + (collapsed ? ' collapsed' : '') + '">' + bySrc[k].map(scenarioTileHTML).join('') + '</div>' +
     '</div>';
   }).join('');
+}
+
+function toggleScenarioSrcGroup(viewKey, srcKey) {
+  if (!scenarioSrcCollapsed[viewKey]) scenarioSrcCollapsed[viewKey] = {};
+  scenarioSrcCollapsed[viewKey][srcKey] = !scenarioSrcCollapsed[viewKey][srcKey];
+  renderScenarios();
 }
 
 function _scOverlayEl(id) { return document.getElementById('scd-' + id); }
