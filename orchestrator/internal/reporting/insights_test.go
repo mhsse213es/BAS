@@ -359,3 +359,16 @@ func TestBuildReadinessScores_SortedWorstPreventionFirst(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildExecutiveConclusion_PolicySkipSentence(t *testing.T) {
+	s := ExecutiveSummary{PassedTechniques: 20, FailedTechniques: 6, PreventionScore: 76.9}
+	withPolicy := buildExecutiveConclusion(s, Insights{}, DetectionSummary{}, nil, SkipBreakdown{Policy: 14})
+	if !strings.Contains(withPolicy, "14 techniques requiring administrative privileges were intentionally excluded") {
+		t.Errorf("conclusion = %q, want a policy-skip sentence naming 14", withPolicy)
+	}
+
+	withoutPolicy := buildExecutiveConclusion(s, Insights{}, DetectionSummary{}, nil, SkipBreakdown{Content: 3, Platform: 2})
+	if strings.Contains(withoutPolicy, "intentionally excluded") {
+		t.Errorf("conclusion = %q, want no policy sentence when Policy=0 (Content/Platform skips get no narrative)", withoutPolicy)
+	}
+}

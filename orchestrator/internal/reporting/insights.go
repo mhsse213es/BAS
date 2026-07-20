@@ -306,13 +306,16 @@ func buildReliability(s ExecutiveSummary) Reliability {
 
 // buildExecutiveConclusion writes the 2–4 sentence narrative a CISO reads first.
 // Strictly assembled from observed results.
-func buildExecutiveConclusion(s ExecutiveSummary, ins Insights, det DetectionSummary, plan []ActionItem) string {
+func buildExecutiveConclusion(s ExecutiveSummary, ins Insights, det DetectionSummary, plan []ActionItem, skip SkipBreakdown) string {
 	if s.PassedTechniques+s.FailedTechniques == 0 {
 		return "No techniques were executed against this endpoint, so no security conclusion can be drawn. Run a scenario to generate assessment evidence."
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "This assessment executed %d techniques against %s, of which %d were not prevented (prevention score %.0f%%, %s exposure). ",
 		s.PassedTechniques+s.FailedTechniques, "the endpoint", s.FailedTechniques, s.PreventionScore, strings.ToLower(exposureLevel(s.PreventionScore)))
+	if skip.Policy > 0 {
+		fmt.Fprintf(&b, "%d techniques requiring administrative privileges were intentionally excluded by the execution policy. ", skip.Policy)
+	}
 	if ins.Least != nil && ins.Least.PassPct < 100 {
 		fmt.Fprintf(&b, "Protection is weakest in %s (%d%% prevented). ", humanizeTactic(ins.Least.Tactic), ins.Least.PassPct)
 	}
@@ -439,8 +442,9 @@ func deriveExecutive(report *FullReport, results []models.SimulationResult, dets
 	report.Insights = buildInsights(report.TacticHeatmap, report.Detection)
 	report.ActionPlan = buildActionPlan(results)
 	report.Reliability = buildReliability(report.Summary)
+	report.SkipBreakdown = buildSkipBreakdown(results)
 	report.Glossary = buildGlossary(results)
-	report.ExecutiveConclusion = buildExecutiveConclusion(report.Summary, report.Insights, report.Detection, report.ActionPlan)
+	report.ExecutiveConclusion = buildExecutiveConclusion(report.Summary, report.Insights, report.Detection, report.ActionPlan, report.SkipBreakdown)
 	report.DetectionSources = buildDetectionSources(results)
 }
 

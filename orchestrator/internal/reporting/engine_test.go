@@ -267,3 +267,19 @@ func TestBuildObjectiveRisks(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildSkipBreakdown(t *testing.T) {
+	results := []models.SimulationResult{
+		{Result: models.ResultSkipped, SkipReason: models.SkipReasonPolicyPrivilege},
+		{Result: models.ResultSkipped, SkipReason: models.SkipReasonPolicyPrivilege},
+		{Result: models.ResultSkipped, SkipReason: models.SkipReasonMissingContent},
+		{Result: models.ResultSkipped, SkipReason: models.SkipReasonPlatformUnavailable},
+		{Result: models.ResultSkipped, SkipReason: ""}, // unrecognized/legacy skip
+		{Result: models.ResultPass},                    // not a skip — must not be counted
+	}
+	got := buildSkipBreakdown(results)
+	want := SkipBreakdown{Policy: 2, Content: 1, Platform: 2}
+	if got != want {
+		t.Errorf("buildSkipBreakdown = %+v, want %+v", got, want)
+	}
+}

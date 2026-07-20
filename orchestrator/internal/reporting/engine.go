@@ -222,6 +222,10 @@ type FullReport struct {
 	// PrivilegeSummary counts steps by execution context across the TechniqueMatrix.
 	// Populated alongside TechniqueMatrix so the summary page can show privilege coverage.
 	PrivilegeSummary PrivilegeSummary `json:"privilegeSummary"`
+	// SkipBreakdown counts Result=Skipped entries by SkipReason. Populated by
+	// deriveExecutive so a policy-constrained run reads as "compliant," not
+	// "incomplete."
+	SkipBreakdown SkipBreakdown `json:"skipBreakdown"`
 }
 
 // PrivilegeSummary is the per-tier step count and prevention breakdown for the privilege table.
@@ -945,6 +949,34 @@ func buildPrivilegeSummary(matrix []TechniqueRow) PrivilegeSummary {
 		ps.LegacyRate = ps.LegacyPrevented * 100 / ps.Legacy
 	}
 	return ps
+}
+
+// SkipBreakdown counts Result=Skipped entries by SkipReason.
+type SkipBreakdown struct {
+	Policy   int `json:"policy"`
+	Content  int `json:"content"`
+	Platform int `json:"platform"`
+}
+
+// buildSkipBreakdown counts skipped results by SkipReason. An empty or
+// unrecognized reason falls into Platform — an unclassified skip is still an
+// environment gap, not a policy decision.
+func buildSkipBreakdown(results []models.SimulationResult) SkipBreakdown {
+	var sb SkipBreakdown
+	for _, r := range results {
+		if r.Result != models.ResultSkipped {
+			continue
+		}
+		switch r.SkipReason {
+		case models.SkipReasonPolicyPrivilege:
+			sb.Policy++
+		case models.SkipReasonMissingContent:
+			sb.Content++
+		default:
+			sb.Platform++
+		}
+	}
+	return sb
 }
 
 // killChainAction renders a concise adversary-action label for a kill-chain node.
