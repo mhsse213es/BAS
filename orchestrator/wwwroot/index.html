@@ -2060,21 +2060,15 @@ body.theme-slate {
           </div>
         </div>
 
-        <!-- Endpoint Mastery Section -->
-        <div id="em-section" style="margin-bottom: 2rem;">
-          <h3 style="font-size: 1.1rem; color: var(--accent); margin-bottom: 1rem; display: flex; align-items: center; gap: 8px;">
-            <svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z" stroke-width="2" fill="none"/></svg>
-            Endpoint Mastery Scenarios <span id="em-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">0</span>
-          </h3>
-          <div id="sc-grid-em" class="cards"></div>
-        </div>
+        <!-- Scenario Library: category landing + drill-down tile view -->
+        <div id="sc-landing" class="sc-landing"></div>
 
-        <!-- Other Scenarios Section -->
-        <div id="other-section">
-          <h3 id="other-title" style="font-size: 1.1rem; color: var(--muted); margin-bottom: 1rem;">
-            Standard &amp; Custom Scenarios <span id="other-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">0</span>
-          </h3>
-          <div id="sc-grid" class="cards"></div>
+        <div id="sc-category-view" style="display:none">
+          <div class="sc-backbar">
+            <button class="sc-back-btn" onclick="closeScenarioCategoryView()">&larr; Back</button>
+            <h2 id="sc-backbar-title"></h2>
+          </div>
+          <div id="sc-tile-grid"></div>
         </div>
 
         <!-- Threat Actor Library (Caldera emu adversary profiles) -->
@@ -3722,6 +3716,7 @@ var ROLE     = localStorage.getItem('bas_role')  || '';
 var socket   = null;
 var scenarios = [];
 var overlayPinned = null; // scenario id of the pinned tile's overlay, or null
+var scenarioView = 'landing'; // 'landing' | 'em' | 'other'
 var agents   = [];
 var artCatalog = [];      // live ART catalog: [{id,name,tests}]
 var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
@@ -3872,6 +3867,7 @@ function showTab(name) {
   if (name === 'exercises') loadExercisesTab();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
+  if (name === 'scenarios') { scenarioView = 'landing'; closeScenarioOverlay(); if (scenarios.length) renderScenarios(); }
   if (name === 'dashboard') {
     loadDashboard();
     // Start a periodic campaign-status poll so the "Live campaigns" tiles
@@ -5608,91 +5604,110 @@ function loadScenarios() {
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
-// renderScenarios filters the loaded scenarios by the search box + source
-// filter, then paints the grid. Called on load and whenever a filter changes.
-function renderScenarios() {
-  var grid = document.getElementById('sc-grid');
-  var gridEm = document.getElementById('sc-grid-em');
-  if (!grid || !gridEm) return;
+var SCENARIO_CATEGORIES = {
+  em:    { label: 'Endpoint Mastery',
+           icon: '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z" stroke-width="2" fill="none"/></svg>' },
+  other: { label: 'Standard & Custom',
+           icon: '<svg style="width:18px;height:18px;stroke:var(--muted)" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2"/><path d="M3 9h18M9 21V9" stroke-width="2"/></svg>' }
+};
 
-  var searchEl = document.getElementById('sc-search');
-  var srcEl = document.getElementById('sc-filter-source');
-  var q = (searchEl ? searchEl.value : '').trim().toLowerCase();
-  var src = srcEl ? srcEl.value : 'all';
+function scenarioCategoryOf(s) {
+  return ((s.id || '').indexOf('em-') === 0 || (s.tags || []).indexOf('endpoint-mastery') !== -1) ? 'em' : 'other';
+}
+
+function scenarioCategoryCounts(list, key) {
+  var inCat = list.filter(function(s) { return scenarioCategoryOf(s) === key; });
+  var counts = { total: inCat.length, builtin: 0, custom: 0, intel: 0 };
+  inCat.forEach(function(s) { counts[scenarioSourceOf(s)]++; });
+  return counts;
+}
+
+function renderScenarioLanding(list) {
+  var el = document.getElementById('sc-landing');
+  if (!el) return;
+  var html = ['em', 'other'].map(function(key) {
+    var cat = SCENARIO_CATEGORIES[key];
+    var c = scenarioCategoryCounts(list, key);
+    if (c.total === 0) return '';
+    var breakdown = [c.builtin ? c.builtin + ' Built-in' : '', c.custom ? c.custom + ' Custom' : '', c.intel ? c.intel + ' Intel' : '']
+      .filter(Boolean).join(' · ');
+    return '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
+      'onclick="openScenarioCategory(\'' + key + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openScenarioCategory(\'' + key + '\');}">' +
+      '<h3>' + cat.icon + x(cat.label) + '</h3>' +
+      '<div class="sc-cat-count">' + c.total + ' scenario' + (c.total === 1 ? '' : 's') + '</div>' +
+      '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
+    '</div>';
+  }).join('');
+  el.innerHTML = html || '<p class="empty">No scenarios loaded.</p>';
+}
+
+function openScenarioCategory(key) {
+  scenarioView = key;
+  closeScenarioOverlay();
+  history.pushState({ scenarioView: key }, '', '#tab-scenarios/' + key);
+  renderScenarios();
+}
+function closeScenarioCategoryView() {
+  scenarioView = 'landing';
+  closeScenarioOverlay();
+  history.pushState({ scenarioView: 'landing' }, '', '#tab-scenarios');
+  renderScenarios();
+}
+window.addEventListener('popstate', function(e) {
+  var tab = document.getElementById('tab-scenarios');
+  if (!tab || tab.style.display === 'none') return;
+  scenarioView = (e.state && e.state.scenarioView) || 'landing';
+  closeScenarioOverlay();
+  renderScenarios();
+});
+
+// renderScenarios filters the loaded scenarios by the search box + source/OS
+// filters, then dispatches to either the category landing or a drilled-in
+// category's tile grid depending on scenarioView.
+function renderScenarios() {
+  var landingEl = document.getElementById('sc-landing');
+  var catEl = document.getElementById('sc-category-view');
+  if (!landingEl || !catEl) return;
 
   if (!scenarios.length) {
-    grid.innerHTML = '<p class="empty">No scenarios loaded.</p>';
-    gridEm.innerHTML = '';
+    catEl.style.display = 'none';
+    landingEl.style.display = 'block';
+    landingEl.innerHTML = '<p class="empty">No scenarios loaded.</p>';
     document.getElementById('sc-cnt').textContent = 0;
-    document.getElementById('em-cnt').textContent = 0;
-    document.getElementById('other-cnt').textContent = 0;
-    document.getElementById('em-section').style.display = 'none';
     return;
   }
 
+  var searchEl = document.getElementById('sc-search');
+  var srcEl = document.getElementById('sc-filter-source');
   var osEl = document.getElementById('sc-filter-os');
+  var q = (searchEl ? searchEl.value : '').trim().toLowerCase();
+  var src = srcEl ? srcEl.value : 'all';
   var osFilter = osEl ? osEl.value : 'all';
 
-  var matches = scenarios.filter(function(s) {
+  var filtered = scenarios.filter(function(s) {
     if (osFilter !== 'all' && (s.supportedOs || []).indexOf(osFilter) === -1) return false;
-    if (src !== 'all') {
-      var srcVal = s.intelSource ? 'intel' : (s.source || 'builtin');
-      if (srcVal !== src) return false;
-    }
-    if (!q) return true;
-    var hay = [s.id, s.name, s.description, (s.tags || []).join(' '),
-               (s.mitrePhases || []).join(' '), (s.artTechniques || []).join(' '),
-               s.intelActor].join(' ').toLowerCase();
-    return hay.indexOf(q) !== -1;
+    if (src !== 'all' && scenarioSourceOf(s) !== src) return false;
+    return true;
   });
+  document.getElementById('sc-cnt').textContent = filtered.length;
 
-  document.getElementById('sc-cnt').textContent = matches.length;
-
-  var emMatches = matches.filter(function(s) {
-    return (s.id || '').startsWith('em-') || (s.tags || []).indexOf('endpoint-mastery') !== -1;
-  });
-  var otherMatches = matches.filter(function(s) {
-    return !((s.id || '').startsWith('em-') || (s.tags || []).indexOf('endpoint-mastery') !== -1);
-  });
-
-  document.getElementById('em-cnt').textContent = emMatches.length;
-  document.getElementById('other-cnt').textContent = otherMatches.length;
-
-  if (emMatches.length > 0 && src !== 'intel') {
-    document.getElementById('em-section').style.display = 'block';
-    gridEm.innerHTML = '<div class="sc-fade">' + renderScenarioTileGroup(emMatches) + '</div>';
-  } else {
-    document.getElementById('em-section').style.display = 'none';
-    gridEm.innerHTML = '';
+  if (scenarioView === 'landing') {
+    catEl.style.display = 'none';
+    landingEl.style.display = 'block';
+    renderScenarioLanding(filtered);
+    return;
   }
 
-  if (otherMatches.length > 0) {
-    document.getElementById('other-section').style.display = 'block';
-    grid.innerHTML = '<div class="sc-fade">' + renderScenarioTileGroup(otherMatches) + '</div>';
-  } else {
-    if (emMatches.length === 0) {
-      var emptyMsg;
-      if (src === 'intel') {
-        emptyMsg = '<div style="padding:2rem 1rem;text-align:center">' +
-          '<div style="font-size:1.5rem;margin-bottom:0.6rem">&#128268;</div>' +
-          '<div style="font-weight:600;color:var(--text);margin-bottom:0.4rem">No Threat Intel scenarios yet</div>' +
-          '<div style="color:var(--muted);font-size:0.82rem;max-width:480px;margin:0 auto;line-height:1.6">' +
-            'Threat Intel scenarios are auto-generated when a <strong>MISP</strong> or <strong>OpenCTI</strong> ' +
-            'instance is connected. The platform pulls threat-actor TTP profiles from those feeds and creates ' +
-            'one scenario per actor.<br><br>' +
-            'To enable: go to <strong>Integrations &rarr; Threat Intel Connector</strong> and configure your MISP/OpenCTI URL and API key.' +
-          '</div>' +
-        '</div>';
-      } else {
-        emptyMsg = '<p class="empty">No scenarios match your filter.</p>';
-      }
-      document.getElementById('other-section').style.display = 'block';
-      grid.innerHTML = emptyMsg;
-    } else {
-      document.getElementById('other-section').style.display = 'none';
-      grid.innerHTML = '';
-    }
-  }
+  landingEl.style.display = 'none';
+  catEl.style.display = 'block';
+  var cat = SCENARIO_CATEGORIES[scenarioView];
+  var inCat = filtered.filter(function(s) { return scenarioCategoryOf(s) === scenarioView; });
+  document.getElementById('sc-backbar-title').textContent = cat.label + ' (' + inCat.length + ')';
+  var grid = document.getElementById('sc-tile-grid');
+  grid.innerHTML = inCat.length
+    ? '<div class="sc-fade">' + renderScenarioTileGroup(inCat) + '</div>'
+    : '<p class="empty">No scenarios match your filter.</p>';
 }
 
 // Collapsible description: shows a short preview with a "Read more" / "Read less"
