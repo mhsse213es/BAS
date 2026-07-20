@@ -67,6 +67,9 @@ MODE=""
 CONFIG_FILE=""
 PURGE_IMAGES=false
 YES=false
+NEED_DOCKER=false
+NEED_COMPOSE=false
+DOCKER_AUTO_INSTALLED=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -227,7 +230,8 @@ _check_os() {
 
 _check_docker() {
   if ! command -v docker &>/dev/null; then
-    echo "FAIL:Docker -not installed (required)"; return
+    NEED_DOCKER=true
+    echo "INST:Docker -not installed (installer can install it with your consent)"; return
   fi
   if ! docker info &>/dev/null 2>&1; then
     echo "FAIL:Docker -daemon not running (start it before install)"; return
@@ -243,7 +247,8 @@ _check_compose() {
     ver=$(docker compose version 2>/dev/null | grep -oP '[\d]+\.[\d]+\.[\d]+' | head -1 || echo "?")
     echo "PASS:Docker Compose -${ver}"
   else
-    echo "FAIL:Docker Compose -plugin not found (install docker-compose-plugin)"
+    NEED_COMPOSE=true
+    echo "INST:Docker Compose -not installed (installer can install it with your consent)"
   fi
 }
 
@@ -352,6 +357,7 @@ render_checks() {
       PASS) echo -e "  ${GREEN}[PASS]${NC} $msg" ;;
       FAIL) echo -e "  ${RED}[FAIL]${NC} $msg"; fails=$((fails + 1)) ;;
       WARN) echo -e "  ${YELLOW}[WARN]${NC} $msg"; warns=$((warns + 1)) ;;
+      INST) echo -e "  ${CYAN}[INST]${NC} $msg" ;;
       INFO) echo -e "        $msg" ;;
     esac
   done
