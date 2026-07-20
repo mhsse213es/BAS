@@ -6,6 +6,20 @@ import (
 	"testing"
 )
 
+func TestMapCalderaElevation(t *testing.T) {
+	if got := mapCalderaElevation("Elevated"); got.Effective() != "admin" {
+		t.Errorf(`mapCalderaElevation("Elevated") = %q, want admin`, got.Effective())
+	}
+	if got := mapCalderaElevation(""); got.Effective() != "user" {
+		t.Errorf(`mapCalderaElevation("") = %q, want user`, got.Effective())
+	}
+	// Defensive: any value this platform doesn't recognize is treated as
+	// unprivileged rather than silently escalating a step to admin.
+	if got := mapCalderaElevation("Unknown"); got.Effective() != "user" {
+		t.Errorf(`mapCalderaElevation("Unknown") = %q, want user`, got.Effective())
+	}
+}
+
 func TestCalderaStepFidelity(t *testing.T) {
 	withPayload := calderaAbilityFull{Executors: []calderaExecutor{
 		{Platform: "windows", Name: "psh", Command: "x", Payloads: []string{"mimikatz.exe"}},

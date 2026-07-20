@@ -375,6 +375,25 @@ type calderaAbilityFull struct {
 	TechniqueID string            `json:"technique_id"`
 	Tactic      string            `json:"tactic"`
 	Executors   []calderaExecutor `json:"executors"`
+	// Privilege is Caldera's own execution-context field on the ability
+	// (not per-executor). Confirmed via a live Caldera instance
+	// (ghcr.io/mitre/caldera:latest, /api/v2/abilities): exactly two
+	// observed values, "Elevated" and "" (empty = no requirement).
+	Privilege string `json:"privilege"`
+}
+
+// mapCalderaElevation translates Caldera's raw ability-level privilege
+// string into this platform's framework-agnostic privilege tier (PrivSpec).
+// This is the Caldera-specific half of the import normalization boundary,
+// mirroring mapARTElevation in art.go — nothing downstream of the
+// buildCaldera* functions ever sees Caldera's raw "Elevated"/"" strings
+// again, only PrivSpec. Any value other than "Elevated" (including unknown
+// future values) is treated as unprivileged rather than silently escalating.
+func mapCalderaElevation(privilege string) PrivSpec {
+	if privilege == "Elevated" {
+		return PrivSpec{Minimum: "admin"}
+	}
+	return PrivSpec{Minimum: "user"}
 }
 
 // buildCalderaAdversarySteps fetches an adversary profile from Caldera,
