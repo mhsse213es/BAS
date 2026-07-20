@@ -12,6 +12,7 @@ import (
 	"github.com/audspect/bas/internal/campaign"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting"
+	"github.com/audspect/bas/internal/scenario"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -21,19 +22,20 @@ import (
 // POST /api/campaigns
 func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name        string   `json:"name"`
-		ScenarioID  string   `json:"scenarioId"`
-		AgentIDs    []string `json:"agentIds"`
-		Mode        string   `json:"mode"`
-		ConfirmLive bool     `json:"confirmLive"`
-		ConfirmLab  bool     `json:"confirmLab"`
-		Reason      string   `json:"reason"`
-		Techniques  []string `json:"techniques"`
-		Abilities   []string `json:"abilities"`
-		Steps       []int    `json:"steps"`
-		Checks      []string `json:"checks"`
-		Notes       string   `json:"notes"`
-		Tags        []string `json:"tags"`
+		Name            string                   `json:"name"`
+		ScenarioID      string                   `json:"scenarioId"`
+		AgentIDs        []string                 `json:"agentIds"`
+		Mode            string                   `json:"mode"`
+		ConfirmLive     bool                     `json:"confirmLive"`
+		ConfirmLab      bool                     `json:"confirmLab"`
+		Reason          string                   `json:"reason"`
+		Techniques      []string                 `json:"techniques"`
+		Abilities       []string                 `json:"abilities"`
+		Steps           []int                    `json:"steps"`
+		Checks          []string                 `json:"checks"`
+		Notes           string                   `json:"notes"`
+		Tags            []string                 `json:"tags"`
+		ExecutionPolicy scenario.ExecutionPolicy `json:"executionPolicy,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" || req.ScenarioID == "" || len(req.AgentIDs) == 0 {
 		jsonError(w, "name, scenarioId and at least one agentId are required", http.StatusBadRequest)
@@ -90,6 +92,7 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 	id := newID()
 	subset, _ := json.Marshal(map[string]any{
 		"techniques": req.Techniques, "abilities": req.Abilities, "steps": req.Steps, "checks": req.Checks,
+		"executionPolicy": req.ExecutionPolicy,
 	})
 	targets, _ := json.Marshal(req.AgentIDs)
 	tags, _ := json.Marshal(req.Tags)
@@ -104,7 +107,7 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 	opts := dispatchOpts{
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab, Reason: req.Reason,
 		Techniques: req.Techniques, Abilities: req.Abilities, Steps: req.Steps, Checks: req.Checks,
-		CampaignID: id, InitiatedBy: initiatedBy,
+		CampaignID: id, InitiatedBy: initiatedBy, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
 	}
 	skips := []map[string]string{}
 	dispatched := 0

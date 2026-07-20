@@ -294,6 +294,76 @@ func TestCreateCampaign_FanOutDispatchedAndSkipped(t *testing.T) {
 	})
 }
 
+func TestCreateCampaign_ExecutionPolicyFiltersStep(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{
+			{Name: "user-step", TechniqueID: "T1059", Framework: "custom", Command: "echo user",
+				RequiresPriv: scenario.PrivSpec{Minimum: "user"}},
+			{Name: "admin-step", TechniqueID: "T1548", Framework: "custom", Command: "echo admin",
+				RequiresPriv: scenario.PrivSpec{Minimum: "admin"}},
+		}
+		sc, engine := minimalLiveScenario(t, "cc-execpolicy-sc", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "cc-execpolicy-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.CreateCampaign(rec, createCampaignReq(map[string]any{
+			"name": "ExecPolicy Campaign", "scenarioId": sc.ID, "agentIds": []string{agentID},
+			"mode": "telemetry", "confirmLive": true,
+			"executionPolicy": map[string]any{"maxPrivilege": "user"},
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		env := fake.WaitForMessage(t, 2*time.Second)
+		var cmd scenario.ScenarioCommand
+		if err := json.Unmarshal(env.Data, &cmd); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(cmd.Steps) != 1 || cmd.Steps[0].Name != "user-step" {
+			t.Fatalf("cmd.Steps = %+v, want exactly [user-step] (admin-step must be filtered)", cmd.Steps)
+		}
+
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		campID, _ := out["campaignId"].(string)
+		if campID == "" {
+			t.Fatal("campaignId missing from response")
+		}
+
+		var skippedJSON, subsetJSON []byte
+		if err := pool.QueryRow(context.Background(),
+			`SELECT sr.policy_skipped_results, c.subset
+			   FROM scenario_runs sr JOIN campaigns c ON c.id = sr.campaign_id
+			  WHERE sr.campaign_id=$1 AND sr.agent_id=$2`,
+			campID, agentID,
+		).Scan(&skippedJSON, &subsetJSON); err != nil {
+			t.Fatalf("query policy_skipped_results/subset: %v", err)
+		}
+		var skipped []models.SimulationResult
+		if err := json.Unmarshal(skippedJSON, &skipped); err != nil {
+			t.Fatalf("unmarshal policy_skipped_results: %v", err)
+		}
+		if len(skipped) != 1 || skipped[0].SkipReason != models.SkipReasonPolicyPrivilege {
+			t.Fatalf("policy_skipped_results = %+v, want 1 policy-privilege skip", skipped)
+		}
+
+		var subset map[string]any
+		json.Unmarshal(subsetJSON, &subset)
+		ep, _ := subset["executionPolicy"].(map[string]any)
+		if ep["maxPrivilege"] != "user" {
+			t.Fatalf("campaigns.subset executionPolicy = %+v, want maxPrivilege=user", subset)
+		}
+	})
+}
+
 func TestListCampaigns_Empty(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
