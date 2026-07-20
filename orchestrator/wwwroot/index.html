@@ -544,8 +544,8 @@ code {
 .sc-tile-badges { display:flex; flex-wrap:wrap; gap:0.25rem; }
 .sc-tile-detail {
   display:none; position:absolute; left:0; top:100%; width:420px; max-width:90vw; z-index:20;
-  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
-  box-shadow:0 8px 28px rgba(0,0,0,0.35); padding:1rem 1rem 1rem 1.2rem; margin-top:4px;
+  background:var(--elevated); border:1px solid rgba(47,129,247,0.4); border-radius:var(--radius-lg);
+  box-shadow:0 12px 36px rgba(0,0,0,0.45); padding:1rem 1rem 1rem 1.2rem; margin-top:4px;
 }
 .sc-tile-detail.show { display:block; animation:scFadeIn 0.18s ease; }
 .pfbtn { padding: 2px 8px; font-size: 0.72rem; font-family: inherit; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); cursor: pointer; white-space: nowrap; }
@@ -2069,6 +2069,13 @@ body.theme-slate {
             <button class="sc-back-btn" onclick="closeScenarioCategoryView()">&larr; Back</button>
             <h2 id="sc-backbar-title"></h2>
           </div>
+          <div id="sc-tmpl-filters" style="display:none;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+            <button class="pfbtn active" data-tf="cat" data-val="all"        onclick="setTmplFilter('cat','all')">All</button>
+            <button class="pfbtn"        data-tf="cat" data-val="apt"        onclick="setTmplFilter('cat','apt')">APT</button>
+            <button class="pfbtn"        data-tf="cat" data-val="ransomware" onclick="setTmplFilter('cat','ransomware')">Ransomware</button>
+            <button class="pfbtn"        data-tf="cat" data-val="technique"  onclick="setTmplFilter('cat','technique')">Technique</button>
+            <button class="pfbtn"        data-tf="cat" data-val="insider"    onclick="setTmplFilter('cat','insider')">Insider</button>
+          </div>
           <div id="sc-tile-grid"></div>
         </div>
 
@@ -2090,28 +2097,6 @@ body.theme-slate {
             Adversary emulation profiles from the MITRE CTID library — each is a sequenced kill-chain of ATT&amp;CK-mapped abilities. Click a card to see the ability chain; <strong>Run</strong> dispatches the full emulation to an agent.
           </div>
           <div id="adv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.75rem"></div>
-        </div>
-
-        <!-- Adversary Templates — curated BAS+ART+Caldera playbooks -->
-        <div id="tmpl-section" style="margin-top:2rem">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
-            <h3 style="font-size:1.1rem;color:var(--text);margin:0;display:flex;align-items:center;gap:8px">
-              <svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2" stroke-linejoin="round"/></svg>
-              Adversary Templates
-              <span id="tmpl-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">7</span>
-            </h3>
-            <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center">
-              <button class="pfbtn active" data-tf="cat" data-val="all"        onclick="setTmplFilter('cat','all')">All</button>
-              <button class="pfbtn"        data-tf="cat" data-val="apt"        onclick="setTmplFilter('cat','apt')">APT</button>
-              <button class="pfbtn"        data-tf="cat" data-val="ransomware" onclick="setTmplFilter('cat','ransomware')">Ransomware</button>
-              <button class="pfbtn"        data-tf="cat" data-val="technique"  onclick="setTmplFilter('cat','technique')">Technique</button>
-              <button class="pfbtn"        data-tf="cat" data-val="insider"    onclick="setTmplFilter('cat','insider')">Insider</button>
-            </div>
-          </div>
-          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem">
-            Pre-built playbooks that combine BAS-native scenarios, ART technique sweeps, and Caldera adversary emulation into one named threat simulation. Each source is dispatched as a separate run — mix and match based on what's configured.
-          </div>
-          <div id="tmpl-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:0.85rem"></div>
         </div>
       </div>
 
@@ -5624,6 +5609,8 @@ function scenarioCategoryCounts(list, key) {
   return counts;
 }
 
+var TMPL_ICON = '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2" stroke-linejoin="round"/></svg>';
+
 function renderScenarioLanding(list) {
   var el = document.getElementById('sc-landing');
   if (!el) return;
@@ -5641,6 +5628,14 @@ function renderScenarioLanding(list) {
       '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
     '</div>';
   }).join('');
+  if (_templates.length) {
+    html += '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
+      'onclick="openScenarioCategory(\'templates\')" ' +
+      'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openScenarioCategory(\'templates\');}">' +
+      '<h3>' + TMPL_ICON + 'Adversary Templates</h3>' +
+      '<div class="sc-cat-count">' + _templates.length + ' template' + (_templates.length === 1 ? '' : 's') + '</div>' +
+    '</div>';
+  }
   el.innerHTML = html || '<p class="empty">No scenarios loaded.</p>';
 }
 
@@ -5702,6 +5697,7 @@ function renderScenarios() {
     return true;
   });
   document.getElementById('sc-cnt').textContent = filtered.length;
+  document.getElementById('sc-tmpl-filters').style.display = 'none';
 
   if (q) { scenarioView = 'search'; }
 
@@ -5726,6 +5722,14 @@ function renderScenarios() {
     catEl.style.display = 'none';
     landingEl.style.display = 'block';
     renderScenarioLanding(filtered);
+    return;
+  }
+
+  if (scenarioView === 'templates') {
+    landingEl.style.display = 'none';
+    catEl.style.display = 'block';
+    document.getElementById('sc-tmpl-filters').style.display = 'flex';
+    renderTemplateGrid();
     return;
   }
 
@@ -6436,6 +6440,7 @@ function loadAdversaryTemplates() {
   apicall('/api/adversary-templates').catch(function() { return []; }).then(function(d) {
     _templates = Array.isArray(d) ? d : [];
     renderTemplateGrid();
+    if (scenarios.length) renderScenarios();
   });
 }
 
@@ -6448,6 +6453,7 @@ function setTmplFilter(dim, val) {
 }
 
 function renderTemplateGrid() {
+  if (scenarioView !== 'templates') return; // #sc-tile-grid is shared across categories — only paint when this one is active
   var cat = _tmplFilter.cat;
   var filtered = _templates.filter(function(t) {
     return cat === 'all' || t.category === cat;
@@ -6493,10 +6499,14 @@ function renderTemplateGrid() {
     '</div>';
   }).join('');
 
-  var grid = document.getElementById('tmpl-grid');
-  if (grid) grid.innerHTML = html || '<div class="empty" style="padding:1.5rem">No templates in this category.</div>';
-  var cnt = document.getElementById('tmpl-cnt');
-  if (cnt) cnt.textContent = filtered.length;
+  var grid = document.getElementById('sc-tile-grid');
+  if (grid) {
+    grid.innerHTML = html
+      ? '<div class="sc-fade" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:0.85rem">' + html + '</div>'
+      : '<div class="empty" style="padding:1.5rem">No templates in this category.</div>';
+  }
+  var titleEl = document.getElementById('sc-backbar-title');
+  if (titleEl) titleEl.textContent = 'Adversary Templates (' + filtered.length + ')';
 }
 
 function openTmplRun(templateId) {
