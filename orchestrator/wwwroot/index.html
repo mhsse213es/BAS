@@ -504,6 +504,50 @@ code {
 .card-meta { font-size: 0.72rem; color: var(--muted); }
 .desc-toggle { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .desc-toggle:hover { text-decoration: underline; }
+
+/* Scenario drill-down: landing, tiles, click-pinned overlay */
+@keyframes scFadeIn { from { opacity:0; } to { opacity:1; } }
+.sc-fade { animation: scFadeIn 0.18s ease; }
+
+.sc-landing { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem; }
+.sc-cat-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+  padding:1.1rem 1.2rem; cursor:pointer; transition:border-color 0.15s, box-shadow 0.15s;
+}
+.sc-cat-card:hover, .sc-cat-card:focus-visible { border-color: rgba(47,129,247,0.4); box-shadow: 0 2px 12px rgba(0,0,0,0.2); outline:none; }
+.sc-cat-card h3 { font-size:1rem; font-weight:600; margin-bottom:0.4rem; display:flex; align-items:center; gap:8px; }
+.sc-cat-count { font-size:0.8rem; color:var(--text); margin-bottom:0.25rem; }
+.sc-cat-breakdown { font-size:0.72rem; color:var(--muted); }
+
+.sc-backbar { display:flex; align-items:center; gap:0.6rem; margin-bottom:1.2rem; }
+.sc-back-btn { background:none; border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:0.35rem 0.7rem; font-size:0.8rem; cursor:pointer; }
+.sc-back-btn:hover { border-color:var(--accent); }
+.sc-backbar h2 { font-size:1.05rem; margin:0; }
+
+.sc-src-group { margin-bottom:1.4rem; }
+.sc-src-hdr { display:flex; align-items:center; gap:0.5rem; cursor:pointer; user-select:none; margin-bottom:0.7rem; font-size:0.85rem; font-weight:600; color:var(--muted); }
+.sc-src-hdr .chev { transition:transform 0.15s; display:inline-block; }
+.sc-src-hdr.collapsed .chev { transform:rotate(-90deg); }
+.sc-src-body { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:0.7rem; }
+.sc-src-body.collapsed { display:none; }
+
+.sc-tile {
+  position:relative; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:0.7rem 0.7rem 0.7rem 0.9rem; cursor:pointer; min-height:64px;
+  display:flex; flex-direction:column; justify-content:center; gap:0.3rem;
+  transition:border-color 0.15s;
+}
+.sc-tile:hover, .sc-tile:focus-visible { border-color:rgba(47,129,247,0.4); outline:none; }
+.sc-tile.pinned { border-color:var(--accent); }
+.sc-tile-stripe { position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:var(--radius) 0 0 var(--radius); }
+.sc-tile-name { font-size:0.82rem; font-weight:600; line-height:1.3; }
+.sc-tile-badges { display:flex; flex-wrap:wrap; gap:0.25rem; }
+.sc-tile-detail {
+  display:none; position:absolute; left:0; top:100%; width:420px; max-width:90vw; z-index:20;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+  box-shadow:0 8px 28px rgba(0,0,0,0.35); padding:1rem 1rem 1rem 1.2rem; margin-top:4px;
+}
+.sc-tile-detail.show { display:block; animation:scFadeIn 0.18s ease; }
 .pfbtn { padding: 2px 8px; font-size: 0.72rem; font-family: inherit; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); cursor: pointer; white-space: nowrap; }
 .pfbtn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .pfbtn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
