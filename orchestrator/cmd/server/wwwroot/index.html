@@ -5681,8 +5681,7 @@ function toggleDesc(id, el) {
   el.textContent = expanded ? 'Read more' : 'Read less';
 }
 
-function scenarioCardHTML(s) {
-      var color = stripeColor(s.id);
+function scenarioDetailHTML(s) {
       var visibleTags = (s.tags || []).filter(function(t) {
         return t !== 'intel' && t !== 'auto-generated';
       });
@@ -5701,16 +5700,14 @@ function scenarioCardHTML(s) {
             'onclick="deleteIntelScenario(\'' + x(s.id) + '\')" title="Delete intel scenario">&#10005;</button>'
           : '';
         var footerMeta = techCount + ' techniques' + deleteBtn;
-        return '<div class="card">' +
-          '<div class="card-stripe" style="background:#2f81f7"></div>' +
-          '<div>' + intelBadge + '</div>' +
+        return '<div>' + intelBadge + '</div>' +
           '<h3>' + x(s.name) + '</h3>' +
           descHtml(s.description, s.id, {limit:120, style:'font-size:0.78rem;color:var(--muted)'}) +
           '<div class="tags">' + tags + '</div>' +
           '<div class="card-footer">' +
             '<div class="card-meta">' + footerMeta + '</div>' +
             '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
-          '</div></div>';
+          '</div>';
       }
       var canEdit = (ROLE === 'admin' || ROLE === 'analyst');
       var customBadge = s.source === 'custom'
@@ -5784,9 +5781,7 @@ function scenarioCardHTML(s) {
           'title="Choose which ' + fwNoun + ' to run">&#9881; Customize</button> '
         : '';
 
-      return '<div class="card">' +
-        '<div class="card-stripe" style="background:' + color + '"></div>' +
-        '<div>' + customBadge + '</div>' +
+      return '<div>' + customBadge + '</div>' +
         '<h3>' + x(s.name) + '</h3>' +
         descHtml(s.description, s.id, {limit:140}) +
         '<div class="tags">' + osBadge + tags + '</div>' +
@@ -5796,7 +5791,12 @@ function scenarioCardHTML(s) {
             editBtns + customizeBtn +
             '<button class="btn btn-outline-green btn-sm" onclick="openModal(\'' + x(s.id) + '\',null)">&#9654; Run</button>' +
           '</div>' +
-        '</div></div>';
+        '</div>';
+}
+
+function scenarioCardHTML(s) {
+  var color = s.intelSource ? '#2f81f7' : stripeColor(s.id);
+  return '<div class="card"><div class="card-stripe" style="background:' + color + '"></div>' + scenarioDetailHTML(s) + '</div>';
 }
 
 // ── Campaigns ────────────────────────────────────────────────────────────────
