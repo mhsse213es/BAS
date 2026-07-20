@@ -101,6 +101,14 @@ func PrivilegeExceeds(stepTier, maxTier string) bool {
 	return privilegeTierRank[stepTier] > privilegeTierRank[maxTier]
 }
 
+// ExecutionPolicy carries operator-set execution constraints for a dispatch
+// request. Today it has one field; it's the deliberate extension point for
+// future constraints (NetworkIsolation, AllowReboot, etc.) without another
+// wire-format change.
+type ExecutionPolicy struct {
+	MaxPrivilege string `json:"maxPrivilege,omitempty"`
+}
+
 // YAMLPayload defines a file the server should stage on the endpoint before a step runs.
 // Content is base64-encoded. Defined in scenario YAML alongside the step.
 type YAMLPayload struct {

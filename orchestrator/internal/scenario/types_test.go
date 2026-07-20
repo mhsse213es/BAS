@@ -1,6 +1,9 @@
 package scenario
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestPrivilegeExceeds(t *testing.T) {
 	cases := []struct {
@@ -25,5 +28,28 @@ func TestPrivilegeExceeds(t *testing.T) {
 				t.Errorf("PrivilegeExceeds(%q, %q) = %v, want %v", c.stepTier, c.maxTier, got, c.want)
 			}
 		})
+	}
+}
+
+func TestExecutionPolicyJSONRoundTrip(t *testing.T) {
+	in := ExecutionPolicy{MaxPrivilege: "user"}
+	raw, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if string(raw) != `{"maxPrivilege":"user"}` {
+		t.Errorf("marshal = %s, want {\"maxPrivilege\":\"user\"}", raw)
+	}
+	var out ExecutionPolicy
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out != in {
+		t.Errorf("round-trip = %+v, want %+v", out, in)
+	}
+
+	empty, _ := json.Marshal(ExecutionPolicy{})
+	if string(empty) != `{}` {
+		t.Errorf("empty policy marshal = %s, want {} (omitempty)", empty)
 	}
 }
