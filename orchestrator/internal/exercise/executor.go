@@ -366,7 +366,7 @@ func (e *Executor) handleAgentTask(_ context.Context, ex *Execution, ps *PlanSte
 	}
 	go func() {
 		bctx := context.Background()
-		runID, err := e.dispatch(cfg.AgentID, cfg.ScenarioID, cfg.TechniqueID)
+		runID, err := e.dispatch(cfg.AgentID, cfg.ScenarioID, cfg.TechniqueID, ex.ExecutionPolicy)
 		if err != nil {
 			_ = e.store.SetStepStatus(bctx, ex.ID, ps.ID, StepFailed, err.Error())
 			return

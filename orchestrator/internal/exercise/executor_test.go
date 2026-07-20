@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/scenario"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -484,4 +485,53 @@ func ex2step(store *Store, ex *Execution, stepID string) PlanStep {
 		}
 	}
 	return PlanStep{ID: stepID}
+}
+
+func TestHandleAgentTask_PassesExecutionPolicyThroughDispatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		e.RegisterBuiltins(nil, nil, nil, nil)
+		received := make(chan scenario.ExecutionPolicy, 1)
+		e.SetDispatch(func(agentID, scenarioID, techniqueID string, policy scenario.ExecutionPolicy) (string, error) {
+			received <- policy
+			return "run-1", nil
+		})
+
+		ctx := context.Background()
+		p := &Plan{Name: "P", Steps: []PlanStep{
+			{ID: "at", Type: StepTypeAgentTask, Config: StepConfig{AgentTask: &AgentTaskConfig{AgentID: "agent-1", ScenarioID: "sc-1"}}},
+		}}
+		if err := store.CreatePlan(ctx, p); err != nil {
+			t.Fatalf("CreatePlan: %v", err)
+		}
+		ex := &Execution{PlanID: p.ID, Name: "R", Status: ExecDraft, ExecutionPolicy: scenario.ExecutionPolicy{MaxPrivilege: "user"}}
+		if err := store.CreateExecution(ctx, ex); err != nil {
+			t.Fatalf("CreateExecution: %v", err)
+		}
+		if err := e.LaunchExecution(ctx, ex.ID); err != nil {
+			t.Fatalf("LaunchExecution: %v", err)
+		}
+		got, err := store.GetExecution(ctx, ex.ID)
+		if err != nil {
+			t.Fatalf("GetExecution: %v", err)
+		}
+		if got.ExecutionPolicy.MaxPrivilege != "user" {
+			t.Fatalf("ExecutionPolicy did not survive persist/reload: got %+v", got.ExecutionPolicy)
+		}
+		if err := e.advance(ctx, got); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+
+		select {
+		case policy := <-received:
+			if policy.MaxPrivilege != "user" {
+				t.Fatalf("dispatch received MaxPrivilege = %q, want user", policy.MaxPrivilege)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for dispatch to be called")
+		}
+	})
 }

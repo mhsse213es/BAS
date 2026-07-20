@@ -10,6 +10,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/reporting"
+	"github.com/audspect/bas/internal/scenario"
 )
 
 // actorID extracts the authenticated username from the JWT context.
@@ -132,10 +133,11 @@ func (h *Handler) GetExerciseExecution(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CreateExerciseExecution(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		PlanID    string            `json:"plan_id"`
-		Name      string            `json:"name"`
-		Targets   []exercise.Target `json:"targets"`
-		Variables map[string]string `json:"variables"`
+		PlanID          string                   `json:"plan_id"`
+		Name            string                   `json:"name"`
+		Targets         []exercise.Target        `json:"targets"`
+		Variables       map[string]string        `json:"variables"`
+		ExecutionPolicy scenario.ExecutionPolicy `json:"execution_policy,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -156,13 +158,14 @@ func (h *Handler) CreateExerciseExecution(w http.ResponseWriter, r *http.Request
 		return
 	}
 	ex := &exercise.Execution{
-		PlanID:      req.PlanID,
-		Name:        req.Name,
-		Status:      exercise.ExecDraft,
-		InitiatedBy: actorID(r),
-		Targets:     req.Targets,
-		Variables:   req.Variables,
-		PlanVersion: plan.Version,
+		PlanID:          req.PlanID,
+		Name:            req.Name,
+		Status:          exercise.ExecDraft,
+		InitiatedBy:     actorID(r),
+		Targets:         req.Targets,
+		Variables:       req.Variables,
+		PlanVersion:     plan.Version,
+		ExecutionPolicy: req.ExecutionPolicy,
 	}
 	if err := h.exerciseStore.CreateExecution(r.Context(), ex); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)

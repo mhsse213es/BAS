@@ -188,14 +188,15 @@ func (h *Handler) WithExercise(store *exercise.Store, exec *exercise.Executor, c
 	h.exerciseExecutor = exec
 	h.exerciseChain = chain
 	// Wire AgentDispatchFn: exercise step type "agent_task" → existing BAS engine.
-	exec.SetDispatch(func(agentID, scenarioID, techniqueID string) (string, error) {
+	exec.SetDispatch(func(agentID, scenarioID, techniqueID string, policy scenario.ExecutionPolicy) (string, error) {
 		var techniques []string
 		if techniqueID != "" {
 			techniques = []string{techniqueID}
 		}
 		opts := dispatchOpts{
-			Mode:       "posture",
-			Techniques: techniques,
+			Mode:         "posture",
+			Techniques:   techniques,
+			MaxPrivilege: policy.MaxPrivilege,
 		}
 		sc, ok := h.engine.Get(scenarioID)
 		if !ok {

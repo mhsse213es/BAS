@@ -66,6 +66,10 @@ func EnsureExerciseSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_ex_exec_status ON exercise_executions(status)`,
 		`ALTER TABLE exercise_executions ADD COLUMN IF NOT EXISTS variables_json jsonb NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE exercise_executions ADD COLUMN IF NOT EXISTS plan_version   int NOT NULL DEFAULT 1`,
+		// execution_policy_json carries the operator-set ExecutionPolicy (e.g.
+		// MaxPrivilege) from CreateExerciseExecution through to the executor's
+		// AgentDispatchFn callback when an agent_task step fires.
+		`ALTER TABLE exercise_executions ADD COLUMN IF NOT EXISTS execution_policy_json jsonb NOT NULL DEFAULT '{}'`,
 
 		// ── Step Executions (per-node runtime state) ──────────────────────────
 		`CREATE TABLE IF NOT EXISTS exercise_step_executions (

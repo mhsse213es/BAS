@@ -1,6 +1,10 @@
 package exercise
 
-import "time"
+import (
+	"time"
+
+	"github.com/audspect/bas/internal/scenario"
+)
 
 // StepType identifies what an exercise step does.
 type StepType string
@@ -187,10 +191,14 @@ type Execution struct {
 	Variables   map[string]string `json:"variables,omitempty"`
 	PlanVersion int               `json:"plan_version,omitempty"`
 	Score       *ExerciseScore    `json:"score,omitempty"`
-	StartedAt   *time.Time        `json:"started_at,omitempty"`
-	CompletedAt *time.Time        `json:"completed_at,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	// ExecutionPolicy is set at creation time (LaunchExerciseExecution takes no
+	// body, so it cannot be set at launch) and read back by the executor when
+	// an agent_task step fires, threading it through AgentDispatchFn.
+	ExecutionPolicy scenario.ExecutionPolicy `json:"execution_policy,omitempty"`
+	StartedAt       *time.Time               `json:"started_at,omitempty"`
+	CompletedAt     *time.Time               `json:"completed_at,omitempty"`
+	CreatedAt       time.Time                `json:"created_at"`
+	UpdatedAt       time.Time                `json:"updated_at"`
 }
 
 // Target is a participant in the exercise (human or agent).
@@ -277,7 +285,7 @@ type ManagementScore struct {
 
 // AgentDispatchFn allows the exercise executor to trigger BAS runs without
 // importing the api package (avoids circular dependency).
-type AgentDispatchFn func(agentID, scenarioID, techniqueID string) (runID string, err error)
+type AgentDispatchFn func(agentID, scenarioID, techniqueID string, policy scenario.ExecutionPolicy) (runID string, err error)
 
 // ── Variable system ───────────────────────────────────────────────────────────
 

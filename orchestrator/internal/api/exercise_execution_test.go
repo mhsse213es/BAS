@@ -7,8 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/exercise"
+	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -300,6 +304,113 @@ func TestApproveExerciseStep_CompletesStepAndRecordsEvidence(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("expected a step_approved evidence entry from %s, got %+v", uid, evidence)
+		}
+	})
+}
+
+// TestExerciseExecution_ExecutionPolicyPropagatesToBASDispatch proves the
+// full async path: an operator-set ExecutionPolicy on a CreateExerciseExecution
+// request survives persist → launch → the executor's poll loop → the
+// AgentDispatchFn callback → dispatchRun's existing MaxPrivilege filter,
+// landing exactly where every other launch path lands. The scenario's one
+// step is admin-tier and the policy caps at user, so dispatchRun's existing
+// all-filtered-completes-immediately behavior fires — no fake WS agent needed.
+//
+// This test builds its own Handler/Executor (rather than reusing
+// exerciseHandler, which fixes a 1-hour poll interval and its own internal
+// engine) because it needs a fast poll interval and a custom scenario
+// registered under a specific ID.
+func TestExerciseExecution_ExecutionPolicyPropagatesToBASDispatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{
+			{Name: "admin-step", TechniqueID: "T1548", Framework: "custom", Command: "echo admin",
+				RequiresPriv: scenario.PrivSpec{Minimum: "admin"}},
+		}
+		_, engine := minimalLiveScenario(t, "ee-execpolicy-sc", steps...)
+		seedActiveAgent(t, pool, "ee-execpolicy-agent", "Windows")
+
+		store := exercise.NewStore(pool)
+		chain := exercise.NewEvidenceChain(store)
+		reg := exercise.NewRegistry()
+		exec := exercise.NewExecutor(store, chain, reg, exercise.NewPollScheduler(50*time.Millisecond), nil)
+		exec.RegisterBuiltins(nil, nil, nil, nil)
+		exec.RegisterBuiltinTriggers()
+		h := New(pool, ws.NewHub(), engine, "").WithExercise(store, exec, chain)
+		exec.Start()
+		t.Cleanup(exec.Stop)
+
+		planRec := httptest.NewRecorder()
+		h.CreateExercisePlan(planRec, exercisePlanReq(map[string]any{
+			"name": "Admin Only",
+			"steps": []exercise.PlanStep{{
+				ID: "at", Type: exercise.StepTypeAgentTask,
+				Config: exercise.StepConfig{AgentTask: &exercise.AgentTaskConfig{
+					AgentID: "ee-execpolicy-agent", ScenarioID: "ee-execpolicy-sc",
+				}},
+			}},
+		}))
+		var plan struct {
+			ID string `json:"id"`
+		}
+		json.Unmarshal(planRec.Body.Bytes(), &plan)
+		if plan.ID == "" {
+			t.Fatalf("plan create failed: %s", planRec.Body.String())
+		}
+
+		execRec := httptest.NewRecorder()
+		h.CreateExerciseExecution(execRec, exerciseExecutionReq(map[string]any{
+			"plan_id": plan.ID, "name": "Run",
+			"execution_policy": map[string]any{"maxPrivilege": "user"},
+		}))
+		var execOut struct {
+			ID string `json:"id"`
+		}
+		json.Unmarshal(execRec.Body.Bytes(), &execOut)
+		if execOut.ID == "" {
+			t.Fatalf("execution create failed: %s", execRec.Body.String())
+		}
+
+		launchRec := httptest.NewRecorder()
+		h.LaunchExerciseExecution(launchRec, withURLParam(httptest.NewRequest(http.MethodPost, "/x", nil), "id", execOut.ID))
+		if launchRec.Code != http.StatusOK {
+			t.Fatalf("launch: status = %d, body = %s", launchRec.Code, launchRec.Body.String())
+		}
+
+		// Poll for the agent_task step to complete and yield a bas_run_id —
+		// the poll scheduler's tick fires asynchronously.
+		deadline := time.Now().Add(3 * time.Second)
+		var runID string
+		for time.Now().Before(deadline) {
+			se, _ := store.GetStepExecByStepID(context.Background(), execOut.ID, "at")
+			if se != nil && se.Status == exercise.StepCompleted {
+				if v, ok := se.Result["bas_run_id"].(string); ok {
+					runID = v
+				}
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		if runID == "" {
+			t.Fatal("timed out waiting for the agent_task step to complete")
+		}
+
+		var status string
+		var resultsJSON []byte
+		if err := pool.QueryRow(context.Background(),
+			`SELECT status, results FROM scenario_runs WHERE id=$1`, runID,
+		).Scan(&status, &resultsJSON); err != nil {
+			t.Fatalf("query scenario_runs: %v", err)
+		}
+		if status != "completed" {
+			t.Fatalf("status = %q, want completed (all steps filtered by policy)", status)
+		}
+		var results []models.SimulationResult
+		json.Unmarshal(resultsJSON, &results)
+		if len(results) != 1 || results[0].SkipReason != models.SkipReasonPolicyPrivilege {
+			t.Fatalf("results = %+v, want exactly 1 policy-privilege skip", results)
 		}
 	})
 }
