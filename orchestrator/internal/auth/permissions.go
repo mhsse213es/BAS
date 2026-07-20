@@ -38,6 +38,7 @@ const (
 	CanCorrelateSIEM            Permission = "siem:correlate"
 	CanViewSIEMCorrelations     Permission = "siem:correlations:view"
 	CanRunDetectionVerification Permission = "detectverify:run"
+	CanLookupIOC                Permission = "ioc:lookup"
 
 	// Campaigns, findings, ITSM push — Analyst+Admin.
 	CanCreateCampaign   Permission = "campaigns:create"
@@ -181,7 +182,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
-		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true,
+		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
 
 		CanSetAgentState: true, CanViewLicense: true, CanViewConnectionConfig: true,
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
@@ -226,7 +227,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
-		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true,
+		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
 	},
 	RoleViewer: {},
 }
@@ -253,7 +254,7 @@ func Permissions(role Role) []Permission {
 		CanUpdateScenario, CanDeleteScenario, CanGenerateVariants, CanRunVariants, CanViewVariantRun,
 		CanViewVariantCoverage, CanViewVariantStats, CanListPayloadFamilies, CanViewPayloadFamily,
 		CanLaunchExerciseExecution, CanAbortExerciseExecution, CanApproveExerciseStep,
-		CanInjectExerciseEvidence,
+		CanInjectExerciseEvidence, CanLookupIOC,
 
 		CanSetAgentState, CanViewLicense, CanViewConnectionConfig, CanListUsers, CanCreateUser,
 		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,

@@ -67,7 +67,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanRunVariants: true, CanViewVariantRun: true, CanViewVariantCoverage: true,
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
-		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true,
+		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
 
 		CanSetAgentState: true, CanViewLicense: true, CanViewConnectionConfig: true,
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
@@ -114,7 +114,7 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanUpdateScenario, CanDeleteScenario, CanGenerateVariants, CanRunVariants, CanViewVariantRun,
 		CanViewVariantCoverage, CanViewVariantStats, CanListPayloadFamilies, CanViewPayloadFamily,
 		CanLaunchExerciseExecution, CanAbortExerciseExecution, CanApproveExerciseStep,
-		CanInjectExerciseEvidence,
+		CanInjectExerciseEvidence, CanLookupIOC,
 
 		CanSetAgentState, CanViewLicense, CanViewConnectionConfig, CanListUsers, CanCreateUser,
 		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
