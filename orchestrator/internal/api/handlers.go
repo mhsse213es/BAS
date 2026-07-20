@@ -27,6 +27,7 @@ import (
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/integrity"
+	"github.com/audspect/bas/internal/ioc"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/relationships"
@@ -62,6 +63,7 @@ type Handler struct {
 	agentSecret           string // optional shared secret for agent-facing endpoints
 	calderaURL            string
 	calderaKey            string
+	iocProvider           ioc.Provider // nil when OTX_API_KEY is unset
 	artStore              *scenario.ARTStore
 	artContentDir         string               // seed source for ART atomics (ART_DIR)
 	artPayloadDir         string               // seed source for ART payload binaries (ART_PAYLOAD_DIR)
@@ -144,6 +146,14 @@ func (h *Handler) PingAgent(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) WithCaldera(url, key string) *Handler {
 	h.calderaURL = url
 	h.calderaKey = key
+	return h
+}
+
+// WithIOCProvider attaches the threat-intel lookup provider (nil when
+// OTX_API_KEY is unset -- LookupIOC degrades to a clear 503, same pattern
+// as GetCalderaAdversaries when CALDERA_URL is empty).
+func (h *Handler) WithIOCProvider(provider ioc.Provider) *Handler {
+	h.iocProvider = provider
 	return h
 }
 
@@ -3521,6 +3531,45 @@ var calderaAdversaryCache struct {
 	mu      sync.Mutex
 	at      time.Time
 	entries []CalderaAdversarySummary
+}
+
+// GET /api/threatintel/lookup?type={ip|domain|url|hash|cve}&value={value}
+func (h *Handler) LookupIOC(w http.ResponseWriter, r *http.Request) {
+	if h.iocProvider == nil {
+		jsonError(w, "threat intel not configured — set OTX_API_KEY and restart", http.StatusServiceUnavailable)
+		return
+	}
+	iocType := r.URL.Query().Get("type")
+	value := r.URL.Query().Get("value")
+	if value == "" {
+		jsonError(w, "value is required", http.StatusBadRequest)
+		return
+	}
+
+	var (
+		result *ioc.Result
+		err    error
+	)
+	switch iocType {
+	case "ip":
+		result, err = h.iocProvider.LookupIP(r.Context(), value)
+	case "domain":
+		result, err = h.iocProvider.LookupDomain(r.Context(), value)
+	case "url":
+		result, err = h.iocProvider.LookupURL(r.Context(), value)
+	case "hash":
+		result, err = h.iocProvider.LookupHash(r.Context(), value)
+	case "cve":
+		result, err = h.iocProvider.LookupCVE(r.Context(), value)
+	default:
+		jsonError(w, "type must be one of: ip, domain, url, hash, cve", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		jsonError(w, "lookup failed: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	respond(w, result)
 }
 
 // GET /api/caldera/adversaries — list adversary profiles from the Caldera library.

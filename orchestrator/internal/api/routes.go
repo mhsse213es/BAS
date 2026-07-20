@@ -233,6 +233,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanViewSIEMCorrelations)).Get("/api/siem/correlations/{runId}", h.GetSIEMCorrelations)
 		// Detection Verification — manual trigger (Analyst+)
 		r.With(auth.RequirePermission(auth.CanRunDetectionVerification)).Post("/api/detectverify/run/{runId}", h.TriggerDetectionVerification)
+		r.With(auth.RequirePermission(auth.CanLookupIOC)).Get("/api/threatintel/lookup", h.LookupIOC)
 		r.With(auth.RequirePermission(auth.CanCreateCampaign)).Post("/api/campaigns", h.CreateCampaign)
 		r.With(auth.RequirePermission(auth.CanStopCampaign)).Post("/api/campaigns/{id}/stop", h.StopCampaign)
 		r.With(auth.RequirePermission(auth.CanSetFindingStatus)).Post("/api/findings/{id}/status", h.SetFindingStatus)

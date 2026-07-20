@@ -24,6 +24,7 @@ import (
 	"github.com/audspect/bas/internal/exercise"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/integrity"
+	"github.com/audspect/bas/internal/ioc"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/openaev"
@@ -311,6 +312,17 @@ func main() {
 	log.Println("[+] Exercise engine ready")
 
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────
+	var iocProvider ioc.Provider
+	if cfg.OTXAPIKey != "" {
+		var err error
+		iocProvider, err = ioc.NewProvider(ioc.Config{Provider: "otx", APIKey: cfg.OTXAPIKey})
+		if err != nil {
+			log.Printf("[!] ioc provider init warning: %v", err)
+		} else {
+			log.Println("[+] IOC threat-intel provider ready (OTX)")
+		}
+	}
+
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
@@ -327,7 +339,8 @@ func main() {
 		WithExercise(exStore, exExecutor, exChain).
 		WithVerificationStore(verificationStore).
 		WithRelationshipStore(relationshipStore).
-		WithRuleLibrary(rulesEngine)
+		WithRuleLibrary(rulesEngine).
+		WithIOCProvider(iocProvider)
 	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), exTracker)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
