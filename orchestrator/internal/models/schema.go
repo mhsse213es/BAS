@@ -34,22 +34,22 @@ type AttackTechnique struct {
 // SimulationResult is the normalised output of a single technique execution.
 // Every framework (ART, Caldera, Sigma, custom) produces this format.
 type SimulationResult struct {
-	ID           string          `json:"id"`
-	Technique    AttackTechnique `json:"technique"`
-	Result       CheckResult     `json:"result"`
-	Severity     string          `json:"severity"`     // Critical | High | Medium | Low
-	ThreatImpact string          `json:"threatImpact"` // what an attacker achieves on Fail
-	Details      string          `json:"details"`
-	Remediation  string          `json:"remediation"`
-	RawOutput    string          `json:"rawOutput,omitempty"`
-	DurationMs   int64           `json:"durationMs"`
-	ExecutedAt   time.Time       `json:"executedAt"`
-	Framework        string          `json:"framework"`               // art | caldera | sigma | custom
-	Events           []string        `json:"events,omitempty"`        // Windows Event IDs observed (per-step tokens)
-	DetectionVerdict string           `json:"detectionVerdict,omitempty"`  // prevented | detected | undetected (populated after agent posts detections)
-	DetectionAlert   *DetectionAlert  `json:"detectionAlert,omitempty"`    // matched EDR/AV alert when DetectionVerdict=detected
-	CleanupVerdict   string           `json:"cleanupVerdict,omitempty"`    // reverted | partial | leaked (populated from agent cleanup exit code)
-	BlockingControl  *BlockingControl `json:"blockingControl,omitempty"`   // specific control that prevented the technique (populated when DetectionVerdict=prevented)
+	ID               string           `json:"id"`
+	Technique        AttackTechnique  `json:"technique"`
+	Result           CheckResult      `json:"result"`
+	Severity         string           `json:"severity"`     // Critical | High | Medium | Low
+	ThreatImpact     string           `json:"threatImpact"` // what an attacker achieves on Fail
+	Details          string           `json:"details"`
+	Remediation      string           `json:"remediation"`
+	RawOutput        string           `json:"rawOutput,omitempty"`
+	DurationMs       int64            `json:"durationMs"`
+	ExecutedAt       time.Time        `json:"executedAt"`
+	Framework        string           `json:"framework"`                  // art | caldera | sigma | custom
+	Events           []string         `json:"events,omitempty"`           // Windows Event IDs observed (per-step tokens)
+	DetectionVerdict string           `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
+	DetectionAlert   *DetectionAlert  `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
+	CleanupVerdict   string           `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
+	BlockingControl  *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
 	// RequestedPriv is the effective tier sent to the agent (PrivSpec.Effective()).
 	// Empty means the step was unannotated (legacy).
 	RequestedPriv string `json:"requestedPriv,omitempty"`
@@ -70,7 +70,7 @@ type SimulationResult struct {
 	SkipReason string `json:"skipReason,omitempty"`
 
 	// Evidence fields — populated from agent ExecResult; displayed in the UI evidence panel.
-	Command   string    `json:"command,omitempty"`   // human-readable step command from the scenario YAML
+	Command   string    `json:"command,omitempty"` // human-readable step command from the scenario YAML
 	ExitCode  int       `json:"exitCode,omitempty"`
 	TimedOut  bool      `json:"timedOut,omitempty"`
 	PID       int       `json:"pid,omitempty"`
@@ -104,8 +104,8 @@ type DetectionAlert struct {
 	ProcessName string    `json:"processName,omitempty"`
 	CommandLine string    `json:"commandLine,omitempty"`
 	Timestamp   time.Time `json:"timestamp"`
-	Confidence  string    `json:"confidence"`           // high | low
-	MTTDMs      int64     `json:"mttdMs,omitempty"`     // ms from step execution to alert
+	Confidence  string    `json:"confidence"`       // high | low
+	MTTDMs      int64     `json:"mttdMs,omitempty"` // ms from step execution to alert
 }
 
 // BlockingControl identifies the specific security control that prevented a
@@ -271,7 +271,7 @@ type Heartbeat struct {
 	// Attack-path job progress — only populated when the agent is actively running
 	// a collection job. The server uses this to update the job's progress column
 	// and broadcast live progress to browser sessions.
-	CurrentJobID string          `json:"currentJobId,omitempty"`
+	CurrentJobID string               `json:"currentJobId,omitempty"`
 	JobProgress  HeartbeatJobProgress `json:"jobProgress,omitempty"`
 }
 
@@ -299,27 +299,27 @@ type WSMessage struct {
 
 // WebSocket message type constants.
 const (
-	MsgHeartbeat       = "heartbeat"
-	MsgAgentUpdate     = "agentUpdate"
-	MsgCommandScan     = "command_scan"
-	MsgCommandScenario = "command_scenario"
-	MsgCommandSimulate = "command_simulate"
-	MsgCommandCancel   = "command_cancel"
-	MsgScenarioResult  = "scenario_result"
-	MsgPatchStatus     = "patch_status_update"
-	MsgCommandPatches  = "command_install_patches"
-	MsgPolicyUpdate    = "policy_update"
-	MsgRunEvent        = "run_event"
+	MsgHeartbeat                = "heartbeat"
+	MsgAgentUpdate              = "agentUpdate"
+	MsgCommandScan              = "command_scan"
+	MsgCommandScenario          = "command_scenario"
+	MsgCommandSimulate          = "command_simulate"
+	MsgCommandCancel            = "command_cancel"
+	MsgScenarioResult           = "scenario_result"
+	MsgPatchStatus              = "patch_status_update"
+	MsgCommandPatches           = "command_install_patches"
+	MsgPolicyUpdate             = "policy_update"
+	MsgRunEvent                 = "run_event"
 	MsgCommandAttackPathCollect = "command_attackpath_collect"
 	// MsgAttackPathCollected is broadcast to browser sessions when an agent
 	// submits a completed attack-path collection so the UI can update live.
 	MsgAttackPathCollected = "attackpath_collected"
 	// Attack-path job lifecycle events — broadcast to browser sessions so the
 	// UI state machine can advance without polling.
-	MsgAPJobUpdate        = "ap_job_update"        // any status change
-	MsgAPJobProgress      = "ap_job_progress"      // agent heartbeat progress tick
-	MsgAgentReconnected   = "agent_reconnected"     // agent came back online
-	MsgAgentDisconnected  = "agent_disconnected"    // agent WS dropped
+	MsgAPJobUpdate       = "ap_job_update"      // any status change
+	MsgAPJobProgress     = "ap_job_progress"    // agent heartbeat progress tick
+	MsgAgentReconnected  = "agent_reconnected"  // agent came back online
+	MsgAgentDisconnected = "agent_disconnected" // agent WS dropped
 	// MsgTamperAlert is broadcast to all browser sessions when the filesystem
 	// watcher detects an unexpected modification to a protected file.
 	MsgTamperAlert = "tamper_alert"

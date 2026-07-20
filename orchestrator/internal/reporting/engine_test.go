@@ -275,7 +275,7 @@ func TestBuildSkipBreakdown(t *testing.T) {
 		{Result: models.ResultSkipped, SkipReason: models.SkipReasonMissingContent},
 		{Result: models.ResultSkipped, SkipReason: models.SkipReasonPlatformUnavailable},
 		{Result: models.ResultSkipped, SkipReason: ""}, // unrecognized/legacy skip
-		{Result: models.ResultPass},                    // not a skip — must not be counted
+		{Result: models.ResultPass}, // not a skip — must not be counted
 	}
 	got := buildSkipBreakdown(results)
 	want := SkipBreakdown{Policy: 2, Content: 1, Platform: 2}
