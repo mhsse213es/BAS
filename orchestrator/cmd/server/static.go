@@ -50,6 +50,34 @@ func resolveWWWRoot() string {
 	return "./wwwroot" // fall back; will 404 with a clear message
 }
 
+// isDir reports whether path exists and is a directory.
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// resolveScenariosDir returns configured unchanged if it already exists as a
+// directory (this is the case in Docker/prod, where SCENARIOS_DIR is always
+// set explicitly and bind-mounted). Otherwise it tries a short list of
+// fallback candidates relative to the process CWD — chiefly "../scenarios",
+// which handles the common `go run ./cmd/server` dev invocation from
+// orchestrator/, where the real scenarios/ directory is a sibling of
+// orchestrator/, not a child of it (the default "scenarios" only resolves
+// correctly when launched from the repo root). If nothing matches, returns
+// configured unchanged — identical to today's behavior, so this can never
+// make an already-working setup worse.
+func resolveScenariosDir(configured string) string {
+	if isDir(configured) {
+		return configured
+	}
+	for _, c := range []string{"/scenarios", "./scenarios", "../scenarios", "../../scenarios"} {
+		if isDir(c) {
+			return c
+		}
+	}
+	return configured
+}
+
 func StaticHandler() http.Handler {
 	wwwrootDir := resolveWWWRoot()
 	reporting.SetWWWRoot(wwwrootDir)

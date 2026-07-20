@@ -48,6 +48,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("[FATAL] config: %v", err)
 	}
+	// Resolves to cfg.ScenariosDir unchanged when it already exists (always
+	// true in Docker/prod, where SCENARIOS_DIR is set explicitly). Falls back
+	// to a sibling "../scenarios" for a bare `go run ./cmd/server` launched
+	// from orchestrator/, where the default CWD-relative "scenarios" doesn't
+	// exist. See resolveScenariosDir in static.go.
+	cfg.ScenariosDir = resolveScenariosDir(cfg.ScenariosDir)
 
 	// ── Cryptographic subsystem ───────────────────────────────────────────
 	auth.SetIterations(cfg.PBKDF2Iterations)
