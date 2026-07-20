@@ -3682,11 +3682,12 @@ func (h *Handler) RunCalderaAdversary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		AgentID     string `json:"agentId"`
-		Mode        string `json:"mode"`
-		ConfirmLive bool   `json:"confirmLive"`
-		ConfirmLab  bool   `json:"confirmLab"`
-		Reason      string `json:"reason"`
+		AgentID         string                   `json:"agentId"`
+		Mode            string                   `json:"mode"`
+		ConfirmLive     bool                     `json:"confirmLive"`
+		ConfirmLab      bool                     `json:"confirmLab"`
+		Reason          string                   `json:"reason"`
+		ExecutionPolicy scenario.ExecutionPolicy `json:"executionPolicy,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.AgentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -3725,7 +3726,7 @@ func (h *Handler) RunCalderaAdversary(w http.ResponseWriter, r *http.Request) {
 
 	runID, skipReason, err := h.dispatchRun(r.Context(), synthSc, req.AgentID, dispatchOpts{
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab,
-		Reason: req.Reason, InitiatedBy: initiatedBy,
+		Reason: req.Reason, InitiatedBy: initiatedBy, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
 	})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
