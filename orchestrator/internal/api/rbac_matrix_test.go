@@ -518,18 +518,20 @@ func TestUserHandlers_MalformedPathParams(t *testing.T) {
 		h := New(pool, ws.NewHub(), nil, testJWTSecret)
 		adminID := seedUser(t, pool, "peggy", "password123", "admin", true)
 
-		// Empty id segment.
+		// Empty id segment. DELETE ... WHERE id='' affects 0 rows, no SQL error —
+		// DeleteUser reports that as 404 "user not found", not a silent 204.
 		req := withURLParam(authedRequest(t, http.MethodDelete, "/api/users/", nil, auth.RoleAdmin, adminID), "id", "")
 		rec := callAuthed(h.DeleteUser, req)
-		if rec.Code != http.StatusNoContent {
-			t.Fatalf("empty id: status = %d, want 204 (DELETE ... WHERE id='' affects 0 rows, no error)", rec.Code)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("empty id: status = %d, want 404 (DELETE ... WHERE id='' affects 0 rows, reported as not-found)", rec.Code)
 		}
 
-		// SQL-metacharacter id — must be treated as inert parameterized data.
+		// SQL-metacharacter id — must be treated as inert parameterized data,
+		// affecting 0 rows (404), never executed as SQL.
 		req2 := withURLParam(authedRequest(t, http.MethodDelete, "/api/users/x", nil, auth.RoleAdmin, adminID), "id", "' OR 1=1--")
 		rec2 := callAuthed(h.DeleteUser, req2)
-		if rec2.Code != http.StatusNoContent {
-			t.Fatalf("SQL-metacharacter id: status = %d, want 204", rec2.Code)
+		if rec2.Code != http.StatusNotFound {
+			t.Fatalf("SQL-metacharacter id: status = %d, want 404", rec2.Code)
 		}
 		var remaining int
 		if err := pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM users`).Scan(&remaining); err != nil {

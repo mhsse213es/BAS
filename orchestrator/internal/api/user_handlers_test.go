@@ -408,7 +408,12 @@ func TestUsers_TenantIsolation(t *testing.T) {
 		aAdmin := seedUser(t, pool, "iso-a-admin", "password123", "admin", true)
 		aUser := seedUser(t, pool, "iso-a-user", "password123", "viewer", true)
 		bUser := seedUser(t, pool, "iso-b-user", "password123", "viewer", true)
-		if _, err := pool.Exec(context.Background(), `UPDATE users SET tenant_id = 'tenant-b' WHERE id = $1`, bUser); err != nil {
+		var tenantBID string
+		if err := pool.QueryRow(context.Background(),
+			`INSERT INTO tenants (name, slug) VALUES ('Tenant B', 'tenant-b') RETURNING id`).Scan(&tenantBID); err != nil {
+			t.Fatalf("seed tenant-b: %v", err)
+		}
+		if _, err := pool.Exec(context.Background(), `UPDATE users SET tenant_id = $1 WHERE id = $2`, tenantBID, bUser); err != nil {
 			t.Fatalf("move user to tenant-b: %v", err)
 		}
 
