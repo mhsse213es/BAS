@@ -86,3 +86,54 @@ func TestNormalizeAtomicMissingTechnique(t *testing.T) {
 		t.Fatal("expected error for missing attack_technique")
 	}
 }
+
+func TestMapARTElevation(t *testing.T) {
+	if got := mapARTElevation(true); got.Effective() != "admin" {
+		t.Errorf("mapARTElevation(true) = %q, want admin", got.Effective())
+	}
+	if got := mapARTElevation(false); got.Effective() != "user" {
+		t.Errorf("mapARTElevation(false) = %q, want user", got.Effective())
+	}
+}
+
+const elevationAtomicYAML = `
+attack_technique: T1548.002
+display_name: Bypass UAC
+atomic_tests:
+  - name: Elevated test
+    supported_platforms:
+      - windows
+    executor:
+      name: powershell
+      command: whoami
+      elevation_required: true
+  - name: Non-elevated test
+    supported_platforms:
+      - windows
+    executor:
+      name: powershell
+      command: whoami
+`
+
+func TestNormalizeAtomic_ElevationRequired(t *testing.T) {
+	_, _, tests, err := normalizeAtomic([]byte(elevationAtomicYAML))
+	if err != nil {
+		t.Fatalf("normalizeAtomic: %v", err)
+	}
+	if len(tests) != 2 {
+		t.Fatalf("got %d tests, want 2", len(tests))
+	}
+	elevated, plain := tests[0], tests[1]
+	if elevated.RequiresPriv.Effective() != "admin" {
+		t.Errorf("elevated test RequiresPriv = %q, want admin", elevated.RequiresPriv.Effective())
+	}
+	if !elevated.OriginalElevationRequired {
+		t.Error("elevated test OriginalElevationRequired = false, want true")
+	}
+	if plain.RequiresPriv.Effective() != "user" {
+		t.Errorf("plain test RequiresPriv = %q, want user", plain.RequiresPriv.Effective())
+	}
+	if plain.OriginalElevationRequired {
+		t.Error("plain test OriginalElevationRequired = true, want false")
+	}
+}

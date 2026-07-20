@@ -26,14 +26,16 @@ import (
 // in art_atomic_tests. It is the parsed/runtime form — no YAML, no #{...} args,
 // payload-folder references already rewritten to $env:BAS_PAYLOAD_DIR.
 type normalizedTest struct {
-	Index            int
-	Name             string
-	Executor         string
-	Command          string
-	Cleanup          string
-	Platform         string
-	TimeoutSec       int
-	RequiredPayloads []string
+	Index                     int
+	Name                      string
+	Executor                  string
+	Command                   string
+	Cleanup                   string
+	Platform                  string
+	TimeoutSec                int
+	RequiredPayloads          []string
+	RequiresPriv              PrivSpec
+	OriginalElevationRequired bool
 }
 
 // normalizeAtomic parses one ART atomic YAML file into a technique ID, its
@@ -77,6 +79,8 @@ func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []norm
 			Index: i, Name: name, Executor: executor,
 			Command: cmd, Cleanup: cleanup, Platform: "windows",
 			TimeoutSec: 120, RequiredPayloads: required,
+			RequiresPriv:              mapARTElevation(test.Executor.ElevationRequired),
+			OriginalElevationRequired: test.Executor.ElevationRequired,
 		})
 	}
 
@@ -103,6 +107,8 @@ func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []norm
 			Index: i, Name: name, Executor: "bash",
 			Command: cmd, Cleanup: cleanup, Platform: platform,
 			TimeoutSec: 120, RequiredPayloads: required,
+			RequiresPriv:              mapARTElevation(test.Executor.ElevationRequired),
+			OriginalElevationRequired: test.Executor.ElevationRequired,
 		})
 	}
 

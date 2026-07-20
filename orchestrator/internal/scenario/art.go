@@ -35,9 +35,25 @@ type artInputArg struct {
 }
 
 type artExecutor struct {
-	Name           string `yaml:"name"`
-	Command        string `yaml:"command"`
-	CleanupCommand string `yaml:"cleanup_command"`
+	Name              string `yaml:"name"`
+	Command           string `yaml:"command"`
+	CleanupCommand    string `yaml:"cleanup_command"`
+	ElevationRequired bool   `yaml:"elevation_required"`
+}
+
+// mapARTElevation translates Atomic Red Team's raw executor.elevation_required
+// boolean into this platform's framework-agnostic privilege tier (PrivSpec).
+// This is the ART-specific half of the import normalization boundary —
+// nothing downstream of normalizeAtomic ever sees "elevation_required" again,
+// only PrivSpec. A future importer for a different framework (a different raw
+// signal shape — required_integrity, requires_sudo, run_as, ...) gets its own
+// mapXyzElevation function that converges on the same PrivSpec, keeping the
+// rest of the engine source-agnostic.
+func mapARTElevation(required bool) PrivSpec {
+	if required {
+		return PrivSpec{Minimum: "admin"}
+	}
+	return PrivSpec{Minimum: "user"}
 }
 
 // ARTStore holds pre-loaded ART atomic steps keyed by ATT&CK technique ID.
