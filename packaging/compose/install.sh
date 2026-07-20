@@ -350,8 +350,8 @@ render_checks() {
     local msg="${line#*:}"
     case "$severity" in
       PASS) echo -e "  ${GREEN}[PASS]${NC} $msg" ;;
-      FAIL) echo -e "  ${RED}[FAIL]${NC} $msg"; (( fails++ )) ;;
-      WARN) echo -e "  ${YELLOW}[WARN]${NC} $msg"; (( warns++ )) ;;
+      FAIL) echo -e "  ${RED}[FAIL]${NC} $msg"; fails=$((fails + 1)) ;;
+      WARN) echo -e "  ${YELLOW}[WARN]${NC} $msg"; warns=$((warns + 1)) ;;
       INFO) echo -e "        $msg" ;;
     esac
   done
