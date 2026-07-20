@@ -1265,6 +1265,8 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
       <td>Skipped (Content)</td><td><strong>{{.skipBreakdown.content}}</strong></td></tr>
   <tr><td>Skipped (Platform)</td><td><strong>{{.skipBreakdown.platform}}</strong></td>
       <td></td><td></td></tr>
+  <tr><td>Scenario Coverage</td><td colspan="3"><strong>{{.coverage.executed}}/{{.coverage.scenarioTotal}}</strong> ({{.coverage.scenarioCoveragePct}}%)</td></tr>
+  <tr><td>Eligible Coverage</td><td colspan="3"><strong>{{.coverage.executed}}/{{.coverage.eligible}}</strong> ({{.coverage.eligibleCoveragePct}}%)</td></tr>
 </table>
 
 <h3>Simulation Reliability</h3>

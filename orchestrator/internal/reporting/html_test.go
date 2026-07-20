@@ -85,6 +85,10 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 		},
 		Reliability:   Reliability{Attempted: 12, Valid: 12, Confidence: "High"},
 		SkipBreakdown: SkipBreakdown{Policy: 4, Content: 1, Platform: 2},
+		Coverage: CoverageSummary{
+			ScenarioTotal: 40, Eligible: 26, Executed: 26,
+			ScenarioCoveragePct: 65, EligibleCoveragePct: 100,
+		},
 		Glossary: []GlossaryEntry{
 			{TechniqueID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access",
 				Description: "Adversaries may dump credentials from the OS.", Detection: "Monitor LSASS access."},
@@ -130,6 +134,10 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 		"Skipped (Policy)",        // execution-summary row label
 		"Skipped (Content)",       // execution-summary row label
 		"Skipped (Platform)",      // execution-summary row label
+		"Scenario Coverage",       // new coverage row label
+		"Eligible Coverage",       // new coverage row label
+		"26/40",                   // scenario coverage ratio
+		"26/26",                   // eligible coverage ratio
 		"Detection Score",         // elevated alongside prevention
 		"Exposure: High",          // exposure level chip
 		"7/12",                    // penetration ratio
