@@ -200,6 +200,19 @@ func TestRunScenarioIntegration_MaxPrivilegeFiltersStep(t *testing.T) {
 		if skipped[0].Technique.ID != "T1548" {
 			t.Errorf("skipped[0].Technique.ID = %q, want T1548", skipped[0].Technique.ID)
 		}
+
+		var stepsTotalBase, stepsEligibleBase int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT steps_total_base, steps_eligible_base FROM scenario_runs WHERE id = $1`, runID,
+		).Scan(&stepsTotalBase, &stepsEligibleBase); err != nil {
+			t.Fatalf("read coverage columns: %v", err)
+		}
+		if stepsTotalBase != 2 {
+			t.Errorf("steps_total_base = %d, want 2 (both steps, before filtering)", stepsTotalBase)
+		}
+		if stepsEligibleBase != 1 {
+			t.Errorf("steps_eligible_base = %d, want 1 (user-step only, after policy filter)", stepsEligibleBase)
+		}
 	})
 }
 
@@ -248,6 +261,19 @@ func TestRunScenarioIntegration_MaxPrivilegeAllFilteredCompletesImmediately(t *t
 		_ = json.Unmarshal(resultsJSON, &results)
 		if len(results) != 1 || results[0].SkipReason != models.SkipReasonPolicyPrivilege {
 			t.Fatalf("results = %+v, want exactly 1 policy-privilege skip", results)
+		}
+
+		var stepsTotalBase, stepsEligibleBase int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT steps_total_base, steps_eligible_base FROM scenario_runs WHERE id = $1`, runID,
+		).Scan(&stepsTotalBase, &stepsEligibleBase); err != nil {
+			t.Fatalf("read coverage columns: %v", err)
+		}
+		if stepsTotalBase != 1 {
+			t.Errorf("steps_total_base = %d, want 1", stepsTotalBase)
+		}
+		if stepsEligibleBase != 0 {
+			t.Errorf("steps_eligible_base = %d, want 0 (every step was policy-filtered)", stepsEligibleBase)
 		}
 	})
 }

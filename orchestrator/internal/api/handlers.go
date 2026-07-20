@@ -1079,6 +1079,10 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
 		return "", "", fmt.Errorf("build steps: %w", err)
 	}
+	// stepsTotalBase captures the scenario's full base-technique step count for
+	// this run's configuration (reflecting any operator-selected subset) before
+	// any runtime filtering — the "Total" side of Scenario Coverage.
+	stepsTotalBase := len(steps)
 
 	// Dynamically-built Caldera abilities carry their own fidelity tag. Payload-
 	// bearing abilities (e.g. emu APT chains) are "lab-only" and must never fire
@@ -1137,14 +1141,27 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			// hang the run.
 			skippedJSON, _ := json.Marshal(policySkipped)
 			_, err := h.db.Exec(context.Background(),
-				`UPDATE scenario_runs SET status = 'completed', results = $1::jsonb, completed_at = NOW() WHERE id = $2`,
-				skippedJSON, runID,
+				`UPDATE scenario_runs SET status = 'completed', results = $1::jsonb, completed_at = NOW(),
+				        steps_total_base = $2, steps_eligible_base = 0 WHERE id = $3`,
+				skippedJSON, stepsTotalBase, runID,
 			)
 			if err != nil {
 				return "", "", fmt.Errorf("complete all-policy-skipped run: %w", err)
 			}
 			return runID, "", nil
 		}
+	}
+
+	// stepsEligibleBase is captured here, after both the lab-only and
+	// MaxPrivilege filters have run (but before variant expansion) — the
+	// "Eligible" side of Eligible Coverage. When o.MaxPrivilege=="", this
+	// reflects only the lab-only filter's outcome, matching Total.
+	stepsEligibleBase := len(steps)
+	if _, err := h.db.Exec(context.Background(),
+		`UPDATE scenario_runs SET steps_total_base = $1, steps_eligible_base = $2 WHERE id = $3`,
+		stepsTotalBase, stepsEligibleBase, runID,
+	); err != nil {
+		return "", "", fmt.Errorf("persist coverage counts: %w", err)
 	}
 
 	// ── Variant expansion layer ───────────────────────────────────────────────

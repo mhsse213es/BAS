@@ -940,6 +940,13 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE report_log ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE run_events ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		// steps_total_base/steps_eligible_base capture the run's base-technique
+		// step counts at dispatch time — Total (before any runtime filtering)
+		// and Eligible (after the lab-only and MaxPrivilege filters, before
+		// variant expansion). Written once, mirroring policy_skipped_results;
+		// no retroactive backfill for runs that predate this column.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_total_base int NOT NULL DEFAULT 0`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_eligible_base int NOT NULL DEFAULT 0`,
 		// policy_skipped_results holds SimulationResults the server itself
 		// synthesized at dispatch time for steps a run's MaxPrivilege execution
 		// policy excluded before ever contacting the agent. Written once at
