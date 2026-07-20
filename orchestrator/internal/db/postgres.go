@@ -1064,18 +1064,19 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 
 // ComplianceSnapshot is the persisted compliance score for one (agent, framework) pair.
 type ComplianceSnapshot struct {
-	AgentID          string    `json:"agentId"`
-	FrameworkID      string    `json:"frameworkId"`
-	SnapshotAt       time.Time `json:"snapshotAt"`
-	RunCount         int       `json:"runCount"`
-	CompliancePct    float64   `json:"compliancePct"`
-	CoveragePct      float64   `json:"coveragePct"`
-	TotalControls    int       `json:"totalControls"`
-	TestableControls int       `json:"testableControls"`
-	TestedControls   int       `json:"testedControls"`
-	PassingControls  int       `json:"passingControls"`
-	FailingControls  int       `json:"failingControls"`
-	ManualControls   int       `json:"manualControls"`
+	AgentID            string    `json:"agentId"`
+	FrameworkID        string    `json:"frameworkId"`
+	SnapshotAt         time.Time `json:"snapshotAt"`
+	RunCount           int       `json:"runCount"`
+	CompliancePct      float64   `json:"compliancePct"`
+	CoveragePct        float64   `json:"coveragePct"`
+	TotalControls      int       `json:"totalControls"`
+	TestableControls   int       `json:"testableControls"`
+	TestedControls     int       `json:"testedControls"`
+	PassingControls    int       `json:"passingControls"`
+	FailingControls    int       `json:"failingControls"`
+	ManualControls     int       `json:"manualControls"`
+	EnrolledAgentCount int       `json:"enrolledAgentCount,omitempty"` // fleet-wide only; 0 in single-agent queries
 }
 
 // UpsertComplianceSnapshot writes (or overwrites) the compliance score snapshot
@@ -1139,20 +1140,14 @@ func GetComplianceScores(ctx context.Context, pool *pgxpool.Pool, agentID string
 // per framework aggregated across all agents — the fleet-wide CISO view.
 func GetFleetComplianceScores(ctx context.Context, pool *pgxpool.Pool) ([]ComplianceSnapshot, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT framework_id,
-		       MIN(snapshot_at)        AS snapshot_at,
-		       SUM(run_count)          AS run_count,
-		       MIN(compliance_pct)     AS compliance_pct,
-		       MIN(coverage_pct)       AS coverage_pct,
-		       MAX(total_controls)     AS total_controls,
-		       MAX(testable_controls)  AS testable_controls,
-		       SUM(tested_controls)    AS tested_controls,
-		       SUM(passing_controls)   AS passing_controls,
-		       SUM(failing_controls)   AS failing_controls,
-		       MAX(manual_controls)    AS manual_controls
+		SELECT DISTINCT ON (framework_id)
+		       framework_id, agent_id, snapshot_at, run_count,
+		       compliance_pct, coverage_pct,
+		       total_controls, testable_controls, tested_controls,
+		       passing_controls, failing_controls, manual_controls,
+		       COUNT(*) OVER (PARTITION BY framework_id) AS enrolled_agent_count
 		FROM compliance_snapshots
-		GROUP BY framework_id
-		ORDER BY framework_id`)
+		ORDER BY framework_id, compliance_pct ASC, snapshot_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -1160,11 +1155,11 @@ func GetFleetComplianceScores(ctx context.Context, pool *pgxpool.Pool) ([]Compli
 	var out []ComplianceSnapshot
 	for rows.Next() {
 		var s ComplianceSnapshot
-		s.AgentID = "*"
-		if err := rows.Scan(&s.FrameworkID, &s.SnapshotAt, &s.RunCount,
+		if err := rows.Scan(&s.FrameworkID, &s.AgentID, &s.SnapshotAt, &s.RunCount,
 			&s.CompliancePct, &s.CoveragePct,
 			&s.TotalControls, &s.TestableControls, &s.TestedControls,
-			&s.PassingControls, &s.FailingControls, &s.ManualControls); err != nil {
+			&s.PassingControls, &s.FailingControls, &s.ManualControls,
+			&s.EnrolledAgentCount); err != nil {
 			continue
 		}
 		out = append(out, s)
