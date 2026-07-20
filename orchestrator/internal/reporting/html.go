@@ -84,6 +84,7 @@ var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{
 		}
 		return v
 	},
+	"addInt": func(a, b float64) int { return int(a) + int(b) },
 	"filterLabel": func(f string) string {
 		switch f {
 		case "prevented":
@@ -1252,6 +1253,18 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <td>Kill-Chain Amplifier</td><td><strong>{{fmtScore .summary.killChainAmplifier}}×</strong></td>
     <td>Mean Time-to-Detect</td><td><strong>{{mttd .summary.mttdMs}}</strong></td>
   </tr>
+</table>
+
+<h3>Execution Summary</h3>
+<table>
+  <tr><td>Executed</td><td><strong>{{addInt .summary.passedTechniques .summary.failedTechniques}}</strong></td>
+      <td>Succeeded</td><td style="color:#0d9488"><strong>{{.summary.passedTechniques}}</strong></td></tr>
+  <tr><td>Failed</td><td style="color:#da3633"><strong>{{.summary.failedTechniques}}</strong></td>
+      <td></td><td></td></tr>
+  <tr><td>Skipped (Policy)</td><td><strong>{{.skipBreakdown.policy}}</strong></td>
+      <td>Skipped (Content)</td><td><strong>{{.skipBreakdown.content}}</strong></td></tr>
+  <tr><td>Skipped (Platform)</td><td><strong>{{.skipBreakdown.platform}}</strong></td>
+      <td></td><td></td></tr>
 </table>
 
 <h3>Simulation Reliability</h3>

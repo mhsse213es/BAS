@@ -83,7 +83,8 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 			{Tactic: "credential-access", Objective: "Credential Theft", Failures: 3, ScorePoints: 30,
 				Recommendation: "Enable Credential Guard / LSASS protection and alert on LSASS access."},
 		},
-		Reliability: Reliability{Attempted: 12, Valid: 12, Confidence: "High"},
+		Reliability:   Reliability{Attempted: 12, Valid: 12, Confidence: "High"},
+		SkipBreakdown: SkipBreakdown{Policy: 4, Content: 1, Platform: 2},
 		Glossary: []GlossaryEntry{
 			{TechniqueID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access",
 				Description: "Adversaries may dump credentials from the OS.", Detection: "Monitor LSASS access."},
@@ -125,6 +126,10 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 		"10.0.0.5",                // agent.ipAddress
 		"High Risk",               // summary.classification
 		"Assessment Summary",      // §2 heading
+		"Execution Summary",       // new §2 sub-table heading
+		"Skipped (Policy)",        // execution-summary row label
+		"Skipped (Content)",       // execution-summary row label
+		"Skipped (Platform)",      // execution-summary row label
 		"Detection Score",         // elevated alongside prevention
 		"Exposure: High",          // exposure level chip
 		"7/12",                    // penetration ratio
