@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ── Linux System Helpers ──────────────────────────────────────────────────────
@@ -132,7 +133,7 @@ func knownPostureScenarios() []string {
 		"safe-simulation", "cis-ubuntu-l1", "apt36-spearphish", "apt36-kill-chain",
 		"ransomware-drill", "ad-credential-access", "upi-fraud-killchain",
 		"cscrf-mii-drill", "purplesharp-ad-drill", "lolbin-execution",
-		"lolbin-execution-coverage",
+		"lolbin-execution-coverage", "os-patch-posture",
 	}
 }
 
@@ -190,6 +191,8 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	switch scenarioID {
 	case "safe-simulation":
 		return safeSimChecks()
+	case "os-patch-posture":
+		return osPatchPostureChecks()
 	case "cis-ubuntu-l1":
 		return cisUbuntuL1()
 	case "apt36-spearphish":
@@ -1253,5 +1256,101 @@ func checkBashrcWorldWritable() SimCheck {
 				return "pass", "System shell init files are not world-writable — login-time command injection prevented."
 			}
 			return "fail", fmt.Sprintf("World-writable shell init file(s): %s — attacker can inject login persistence.", strings.Join(ww, ", "))
+		})
+}
+
+// ── OS Patch Vulnerability Posture ─────────────────────────────────────────────
+
+// packageManager returns "apt", "dnf", or "" if neither is found on PATH.
+func packageManager() string {
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		return "apt"
+	}
+	if _, err := exec.LookPath("dnf"); err == nil {
+		return "dnf"
+	}
+	return ""
+}
+
+func osPatchPostureChecks() []SimCategory {
+	return []SimCategory{
+		{Phase: "initial-access", Checks: []SimCheck{
+			checkPendingSecurityUpdates(),
+			checkLastPatchAge(),
+		}},
+	}
+}
+
+func checkPendingSecurityUpdates() SimCheck {
+	return check("T1082", "Pending Security Updates (CSCRF-5.1)", "cscrf-business-continuity", "High",
+		"Unpatched packages with known CVEs are a primary ransomware and worm entry point.",
+		"Apply pending security updates via apt/dnf, or enable unattended-upgrades / dnf-automatic.",
+		func() (string, string) {
+			switch packageManager() {
+			case "apt":
+				out, err := exec.Command("apt", "list", "--upgradable").Output()
+				if err != nil {
+					return "skipped", "Could not enumerate upgradable packages via apt — verify manually."
+				}
+				n := 0
+				for _, line := range strings.Split(string(out), "\n") {
+					if strings.Contains(strings.ToLower(line), "-security") {
+						n++
+					}
+				}
+				if n == 0 {
+					return "pass", "No pending security updates (apt)."
+				}
+				return "fail", fmt.Sprintf("%d pending security update(s) found (apt) — apply promptly.", n)
+			case "dnf":
+				out, err := exec.Command("dnf", "updateinfo", "list", "security").Output()
+				if err != nil {
+					return "skipped", "Could not enumerate security updates via dnf — verify manually."
+				}
+				n := 0
+				for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+					if strings.TrimSpace(line) != "" {
+						n++
+					}
+				}
+				if n == 0 {
+					return "pass", "No pending security updates (dnf)."
+				}
+				return "fail", fmt.Sprintf("%d pending security update(s) found (dnf) — apply promptly.", n)
+			default:
+				return "skipped", "Neither apt nor dnf found — cannot determine pending security updates."
+			}
+		})
+}
+
+func checkLastPatchAge() SimCheck {
+	return check("T1082", "Patch Currency — Last Update Age (CSCRF-5.1)", "cscrf-business-continuity", "High",
+		"SEBI CSCRF mandates critical patches within 30 days of release. Unpatched endpoints are primary ransomware entry.",
+		"Enforce patch deployment via unattended-upgrades/dnf-automatic or a patch management tool. Set 30-day SLA for critical patches per CSCRF schedule.",
+		func() (string, string) {
+			var path string
+			switch packageManager() {
+			case "apt":
+				path = "/var/log/apt/history.log"
+			case "dnf":
+				path = "/var/lib/rpm/rpmdb.sqlite"
+			default:
+				return "skipped", "Neither apt nor dnf found — cannot determine last patch date."
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return "skipped", fmt.Sprintf("Could not read %s — verify patch history manually.", path)
+			}
+			days := int(time.Since(info.ModTime()).Hours() / 24)
+			switch {
+			case days <= 15:
+				return "pass", fmt.Sprintf("Last patch installed %d days ago — well within SEBI CSCRF 30-day critical patch window.", days)
+			case days <= 30:
+				return "pass", fmt.Sprintf("Last patch installed %d days ago — within CSCRF 30-day threshold.", days)
+			case days <= 60:
+				return "fail", fmt.Sprintf("Last patch installed %d days ago — exceeds SEBI CSCRF 30-day critical patch deadline.", days)
+			default:
+				return "fail", fmt.Sprintf("Last patch installed %d days ago — significantly overdue, high vulnerability exposure, CSCRF non-compliant.", days)
+			}
 		})
 }
