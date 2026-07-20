@@ -6018,11 +6018,6 @@ function scenarioDetailHTML(s) {
         '</div>';
 }
 
-function scenarioCardHTML(s) {
-  var color = s.intelSource ? '#2f81f7' : stripeColor(s.id);
-  return '<div class="card"><div class="card-stripe" style="background:' + color + '"></div>' + scenarioDetailHTML(s) + '</div>';
-}
-
 // ── Campaigns ────────────────────────────────────────────────────────────────
 function campaignMixBar(s) {
   var seg = function(v, c) { return v > 0 ? '<i style="flex:' + v + ';background:' + c + '"></i>' : ''; };
