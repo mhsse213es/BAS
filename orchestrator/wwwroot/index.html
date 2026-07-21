@@ -9324,10 +9324,14 @@ function viewRunResults(run) {
       checks + '</div>';
   }).join('');
 
+  // scorePanel + run-report-extra (findings/recommendations/attack-flow-summary/
+  // alert-fatigue/attack-surface-age/readiness) live INSIDE rv-table so they hide
+  // and show together with the Results tab — previously they sat outside the tab
+  // toggle entirely and stayed visible under every tab, which is what made
+  // switching to Attack Flow or Variant Coverage look like it was appending that
+  // tab's data after the Results content instead of replacing it.
   document.getElementById('results-body').innerHTML =
-    scorePanel +
-    '<div id="run-report-extra"></div>' +
-    '<div id="rv-table">' + checksHtml + '</div>' +
+    '<div id="rv-table">' + scorePanel + '<div id="run-report-extra"></div>' + checksHtml + '</div>' +
     '<div id="rv-flow" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>' +
     '<div id="rv-coverage" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading variant coverage&#8230;</div></div>' +
     '<div id="rv-siem" style="display:none"></div>';
