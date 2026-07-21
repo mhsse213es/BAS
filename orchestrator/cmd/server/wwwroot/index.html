@@ -10785,45 +10785,122 @@ function downloadRunPDF(runId) {
   });
 }
 
+function frameworkDisplayName(fw) {
+  return { art: 'Atomic Red Team', caldera: 'Caldera', posture: 'Posture Checks', steps: 'Custom Steps' }[fw] || fw || 'Unknown';
+}
+
+function genBatchId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'batch-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
 function confirmRun() {
   var scenarioId = _modalScId || document.getElementById('modal-sc').value;
-  var agentId    = document.getElementById('modal-agent').value;
-  if (!scenarioId || !agentId) { showToast('Select scenario and agent', 'err'); return; }
+  var primaryId  = document.getElementById('modal-agent').value;
+  if (!scenarioId || !primaryId) { showToast('Select scenario and agent', 'err'); return; }
+  var agentIds = [primaryId].concat(additionalAgentIds());
+  var multi = agentIds.length > 1;
+
+  var sc = scenarios.find(function(s) { return s.id === scenarioId; });
   var modeWrap = document.getElementById('modal-mode-wrap');
   var mode = (modeWrap.style.display !== 'none') ? document.getElementById('modal-mode').value : 'posture';
   var confirmLive = false, confirmLab = false;
+
+  var agentListText = agentIds.map(function(id) {
+    var a = agents.find(function(ag) { return ag.agentId === id; });
+    return '• ' + (a ? a.agentId + ' — ' + a.hostname : id);
+  }).join('\n');
+  var header = 'Scenario: ' + (sc ? sc.name : scenarioId) + '\nFramework: ' + frameworkDisplayName(scenarioFramework(sc));
+
   if (mode === 'telemetry') {
-    if (!confirm('TELEMETRY mode runs real, identity-safe techniques and WILL generate EDR/SIEM alerts.\n\nProceed only on an approved, monitored target. Continue?')) return;
+    var telemetryMsg = multi
+      ? 'TELEMETRY mode runs real, identity-safe techniques and WILL generate EDR/SIEM alerts.\n\n' +
+        header + '\n\nAgents (' + agentIds.length + '):\n' + agentListText +
+        '\n\nProceed only on approved, monitored targets. Continue?'
+      : 'TELEMETRY mode runs real, identity-safe techniques and WILL generate EDR/SIEM alerts.\n\nProceed only on an approved, monitored target. Continue?';
+    if (!confirm(telemetryMsg)) return;
     confirmLive = true;
   } else if (mode === 'lab') {
-    if (!confirm('LAB mode runs FULL-FIDELITY techniques (LSASS dump, allowlisted spray) and will trigger EDR.\n\nISOLATED AD RANGE ONLY — never production. Continue?')) return;
+    var labMsg = multi
+      ? 'LAB mode runs FULL-FIDELITY techniques (LSASS dump, allowlisted spray) and will trigger EDR.\n\n' +
+        header + '\n\nAgents (' + agentIds.length + '):\n' + agentListText +
+        '\n\nISOLATED AD RANGE ONLY — never production. Continue?'
+      : 'LAB mode runs FULL-FIDELITY techniques (LSASS dump, allowlisted spray) and will trigger EDR.\n\nISOLATED AD RANGE ONLY — never production. Continue?';
+    if (!confirm(labMsg)) return;
     if (!confirm('Second confirmation required for LAB mode.\n\nConfirm the target is an isolated lab/range with a snapshot?')) return;
     confirmLive = true; confirmLab = true;
+  } else if (multi) {
+    // Posture mode has zero confirmation for a single agent today; a batch of 2+
+    // targets is a bigger blast radius, so gate it with one lightweight confirm.
+    var postureMsg = 'Run scenario?\n\n' + header + '\n\nAgents (' + agentIds.length + '):\n' + agentListText + '\n\nProceed?';
+    if (!confirm(postureMsg)) return;
   }
+
   var reasonEl = document.getElementById('modal-reason');
   var reason = (mode !== 'posture' && reasonEl) ? reasonEl.value.trim() : '';
   var variantDepthEl = document.getElementById('modal-variant-depth');
   var variantDepth = (variantDepthEl && document.getElementById('modal-variant-wrap').style.display !== 'none')
     ? variantDepthEl.value : 'none';
-  var body = { agentId: agentId, mode: mode, confirmLive: confirmLive, confirmLab: confirmLab,
-               reason: reason, variantDepth: variantDepth };
+
+  var baseBody = { mode: mode, confirmLive: confirmLive, confirmLab: confirmLab,
+                    reason: reason, variantDepth: variantDepth, batchId: genBatchId() };
   if (_runSelection && _runSelection.scId === scenarioId && _runSelection.ids.length) {
-    if (_runSelection.fw === 'art') body.techniques = _runSelection.ids;
-    else if (_runSelection.fw === 'caldera') body.abilities = _runSelection.ids;
-    else if (_runSelection.fw === 'steps') body.steps = _runSelection.ids.map(Number);
-    else if (_runSelection.fw === 'posture') body.checks = _runSelection.ids;
+    if (_runSelection.fw === 'art') baseBody.techniques = _runSelection.ids;
+    else if (_runSelection.fw === 'caldera') baseBody.abilities = _runSelection.ids;
+    else if (_runSelection.fw === 'steps') baseBody.steps = _runSelection.ids.map(Number);
+    else if (_runSelection.fw === 'posture') baseBody.checks = _runSelection.ids;
     if (_runSelection.locked && _runSelection.ids.length === 1) {
-      body.runLabel = _runSelection.ids[0] + ' — Re-validate';
+      baseBody.runLabel = _runSelection.ids[0] + ' — Re-validate';
     }
   }
-  apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
-    method: 'POST', body: JSON.stringify(body)
-  }).then(function(res) {
-    if (res && res.error) { showToast('Run failed: ' + res.error, 'err'); return; }
+
+  var runBtn = document.getElementById('modal-run-btn');
+  if (multi) {
+    runBtn.disabled = true;
+    runBtn.innerHTML = 'Dispatching to ' + agentIds.length + ' agents…';
+  }
+
+  // Each dispatch is independent: a rejected promise or a {error:...} response
+  // body is normalized into a resolved {ok:false} result so one agent's failure
+  // can never abort or block the others (equivalent to Promise.allSettled).
+  var dispatches = agentIds.map(function(agentId) {
+    var body = Object.assign({ agentId: agentId }, baseBody);
+    return apicall('/api/scenarios/' + encodeURIComponent(scenarioId) + '/run', {
+      method: 'POST', body: JSON.stringify(body)
+    }).then(function(res) {
+      if (res && res.error) return { agentId: agentId, ok: false, error: res.error };
+      return { agentId: agentId, ok: true, runId: res && res.runId, mode: res && res.mode };
+    }).catch(function(e) {
+      return { agentId: agentId, ok: false, error: e.message };
+    });
+  });
+
+  Promise.all(dispatches).then(function(results) {
+    if (multi) { runBtn.disabled = false; runBtn.innerHTML = '&#9654; Run'; }
+    var ok = results.filter(function(r) { return r.ok; });
+    var failed = results.filter(function(r) { return !r.ok; });
+
+    if (!multi) {
+      if (failed.length) { showToast('Run failed: ' + failed[0].error, 'err'); return; }
+      closeModal();
+      showToast('Dispatched (' + (ok[0].mode || mode) + ') — Run ID: ' + ok[0].runId, 'ok');
+      showTab('runs'); loadRuns();
+      return;
+    }
+
     closeModal();
-    showToast('Dispatched (' + (res.mode || mode) + ') — Run ID: ' + res.runId, 'ok');
+    if (!failed.length) {
+      showToast('Dispatched to ' + ok.length + ' agents.', 'ok');
+    } else if (ok.length) {
+      showToast('Dispatched to ' + ok.length + '/' + agentIds.length + ' agents. Failed: ' +
+        failed.map(function(f) { return f.agentId + ' (' + f.error + ')'; }).join(', '), 'err');
+    } else {
+      showToast('All ' + agentIds.length + ' dispatches failed. ' +
+        failed.map(function(f) { return f.agentId + ' (' + f.error + ')'; }).join(', '), 'err');
+    }
+    // Successful runs (if any) are real and worth seeing, same as the single-agent path.
     showTab('runs'); loadRuns();
-  }).catch(function(e) { showToast('Run failed: ' + e.message, 'err'); });
+  });
 }
 
 function connectWS() {
