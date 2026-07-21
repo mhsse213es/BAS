@@ -86,6 +86,9 @@ func main() {
 	if err := db.EnsureIOCSchema(context.Background(), pool); err != nil {
 		log.Fatalf("[FATAL] ioc schema bootstrap: %v", err)
 	}
+	if err := db.EnsureIOCEnrichmentSchema(context.Background(), pool); err != nil {
+		log.Fatalf("[FATAL] ioc enrichment schema bootstrap: %v", err)
+	}
 	log.Println("[+] Schema verified")
 
 	// ── DB role hardening (opt-in) ────────────────────────────────────────
