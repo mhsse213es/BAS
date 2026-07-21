@@ -83,3 +83,130 @@ func TestTestConnection_Success(t *testing.T) {
 		t.Fatalf("TestConnection: %v", err)
 	}
 }
+
+func newTestClientWithActionURLs(t *testing.T, tokenURL, actionTokenURL, actionBaseURL string) *Client {
+	t.Helper()
+	c := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
+	*c.TokenURL() = tokenURL
+	*c.ActionTokenURL() = actionTokenURL
+	c.ActionBaseURL = actionBaseURL
+	return c
+}
+
+func TestResolveDevice_FindsAndCaches(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+
+	var queryCalls int
+	machinesSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queryCalls++
+		if r.URL.Query().Get("$filter") != "computerDnsName eq 'HOST1'" {
+			t.Errorf("$filter = %q", r.URL.Query().Get("$filter"))
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"value": []map[string]any{{"id": "machine-123", "computerDnsName": "HOST1"}},
+		})
+	}))
+	defer machinesSrv.Close()
+
+	c := newTestClientWithActionURLs(t, "", actionTokenSrv.URL, machinesSrv.URL)
+	id, err := c.ResolveDevice(context.Background(), "HOST1")
+	if err != nil {
+		t.Fatalf("ResolveDevice: %v", err)
+	}
+	if id != "machine-123" {
+		t.Fatalf("id = %q, want machine-123", id)
+	}
+
+	id2, err := c.ResolveDevice(context.Background(), "HOST1")
+	if err != nil {
+		t.Fatalf("ResolveDevice (cached): %v", err)
+	}
+	if id2 != "machine-123" {
+		t.Fatalf("cached id = %q, want machine-123", id2)
+	}
+	if queryCalls != 1 {
+		t.Fatalf("queryCalls = %d, want 1 (second ResolveDevice should reuse the cache)", queryCalls)
+	}
+}
+
+func TestResolveDevice_NoMatch_ReturnsError(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+	machinesSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"value": []map[string]any{}})
+	}))
+	defer machinesSrv.Close()
+
+	c := newTestClientWithActionURLs(t, "", actionTokenSrv.URL, machinesSrv.URL)
+	if _, err := c.ResolveDevice(context.Background(), "NOHOST"); err == nil {
+		t.Fatal("expected an error when no machine matches the hostname")
+	}
+}
+
+func TestIsolate_CallsIsolateEndpoint(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+
+	var gotPath string
+	var gotBody map[string]any
+	actionSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]any{"id": "action-abc"})
+	}))
+	defer actionSrv.Close()
+
+	c := newTestClientWithActionURLs(t, "", actionTokenSrv.URL, actionSrv.URL)
+	actionID, err := c.Isolate(context.Background(), "machine-123")
+	if err != nil {
+		t.Fatalf("Isolate: %v", err)
+	}
+	if actionID != "action-abc" {
+		t.Fatalf("actionID = %q, want action-abc", actionID)
+	}
+	if gotPath != "/machines/machine-123/isolate" {
+		t.Fatalf("path = %q, want /machines/machine-123/isolate", gotPath)
+	}
+	if gotBody["IsolationType"] != "Full" {
+		t.Fatalf("body = %v, want IsolationType=Full", gotBody)
+	}
+}
+
+func TestRelease_CallsUnisolateEndpoint(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+
+	var gotPath string
+	actionSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewEncoder(w).Encode(map[string]any{"id": "action-def"})
+	}))
+	defer actionSrv.Close()
+
+	c := newTestClientWithActionURLs(t, "", actionTokenSrv.URL, actionSrv.URL)
+	actionID, err := c.Release(context.Background(), "machine-123")
+	if err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if actionID != "action-def" {
+		t.Fatalf("actionID = %q, want action-def", actionID)
+	}
+	if gotPath != "/machines/machine-123/unisolate" {
+		t.Fatalf("path = %q, want /machines/machine-123/unisolate", gotPath)
+	}
+}
+
+func TestMachineAction_HTTPError_ReturnsError(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+	actionSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer actionSrv.Close()
+
+	c := newTestClientWithActionURLs(t, "", actionTokenSrv.URL, actionSrv.URL)
+	if _, err := c.Isolate(context.Background(), "machine-999"); err == nil {
+		t.Fatal("expected an error from a 403 machine action response")
+	}
+}
