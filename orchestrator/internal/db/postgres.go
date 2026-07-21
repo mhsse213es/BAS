@@ -870,6 +870,51 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE detection_connectors ADD COLUMN IF NOT EXISTS base_url  text NOT NULL DEFAULT ''`,
 		`ALTER TABLE detection_connectors ADD COLUMN IF NOT EXISTS api_token text NOT NULL DEFAULT ''`,
 
+		// ── EPP Response Actions ─────────────────────────────────────────────
+		// action_connectors: one row per CrowdStrike/Defender response-action
+		// connector. Deliberately separate from detection_connectors — a
+		// customer can enable detection verification against a vendor without
+		// enabling write-capable response actions against the same vendor. See
+		// docs/superpowers/specs/2026-07-21-epp-response-actions-design.md.
+		`CREATE TABLE IF NOT EXISTS action_connectors (
+			id                        text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name                      text        NOT NULL,
+			provider                  text        NOT NULL,
+			enabled                   boolean     NOT NULL DEFAULT true,
+			tenant_id                 text        NOT NULL DEFAULT '',
+			client_id                 text        NOT NULL DEFAULT '',
+			client_secret             text        NOT NULL DEFAULT '',
+			base_url                  text        NOT NULL DEFAULT '',
+			kill_process_script_name  text        NOT NULL DEFAULT '',
+			created_at                timestamptz NOT NULL DEFAULT NOW(),
+			updated_at                timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
+		// action_requests IS the audit trail for every executed response
+		// action — every field of internal/actions.Action is a column here,
+		// not a derived log line. duration is one subtraction of
+		// dispatched_at from completed_at, not a stored column (avoids drift).
+		`CREATE TABLE IF NOT EXISTS action_requests (
+			id                  text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			type                text        NOT NULL,
+			target_type         text        NOT NULL,
+			target_identifier   text        NOT NULL,
+			parameters          jsonb       NOT NULL DEFAULT '{}',
+			connector_id        text        NOT NULL,
+			status              text        NOT NULL,
+			resolved_device_id  text        NOT NULL DEFAULT '',
+			vendor_request_id   text        NOT NULL DEFAULT '',
+			error               text        NOT NULL DEFAULT '',
+			requested_by        text        NOT NULL DEFAULT '',
+			reason              text        NOT NULL DEFAULT '',
+			ticket_ref          text        NOT NULL DEFAULT '',
+			run_id              text        NOT NULL DEFAULT '',
+			requested_at        timestamptz NOT NULL DEFAULT NOW(),
+			dispatched_at       timestamptz,
+			completed_at        timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_action_requests_run_id ON action_requests (run_id) WHERE run_id != ''`,
+
 		// openaev_config: singleton row for the OpenAEV Connector's connection
 		// settings. See docs/superpowers/specs/2026-07-15-openaev-connector-design.md.
 		`CREATE TABLE IF NOT EXISTS openaev_config (
