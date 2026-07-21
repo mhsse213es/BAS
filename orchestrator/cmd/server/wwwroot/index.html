@@ -9182,6 +9182,8 @@ function viewRunResults(run) {
         '<span>Total: <strong style="color:var(--text)">' + (s.totalTechniques || 0) + '</strong></span>' +
         '<span style="color:var(--success)">Pass: <strong>' + (s.passedTechniques || 0) + '</strong></span>' +
         '<span style="color:var(--danger)">Fail: <strong>' + (s.failedTechniques || 0) + '</strong></span>' +
+        (s.skippedTechniques ? '<span>Skipped: <strong style="color:var(--muted)">' + s.skippedTechniques + '</strong></span>' : '') +
+        (s.erroredTechniques ? '<span>Errored: <strong style="color:var(--warning)">' + s.erroredTechniques + '</strong></span>' : '') +
         '<span>Confidence: <strong style="color:var(--text)">' + (s.confidence || 0) + '%</strong></span>' +
         (s.previousPreventionScore ? '<span>Prev Prevention: <strong>' + Math.round(s.previousPreventionScore) + '%</strong></span>' : '') +
       '</div>';
