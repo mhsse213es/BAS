@@ -400,6 +400,13 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanDeleteDetectionConnector)).Delete("/api/detectverify/configs/{id}", h.DeleteDetectionConnector)
 		r.With(auth.RequirePermission(auth.CanTestDetectionConnector)).Post("/api/detectverify/configs/{id}/test", h.TestDetectionConnector)
 
+		// EPP Response Actions — connector management (Admin only)
+		r.With(auth.RequirePermission(auth.CanListResponseConnectors)).Get("/api/actions/configs", h.ListResponseConnectors)
+		r.With(auth.RequirePermission(auth.CanCreateResponseConnector)).Post("/api/actions/configs", h.CreateResponseConnector)
+		r.With(auth.RequirePermission(auth.CanUpdateResponseConnector)).Put("/api/actions/configs/{id}", h.UpdateResponseConnector)
+		r.With(auth.RequirePermission(auth.CanDeleteResponseConnector)).Delete("/api/actions/configs/{id}", h.DeleteResponseConnector)
+		r.With(auth.RequirePermission(auth.CanTestResponseConnector)).Post("/api/actions/configs/{id}/test", h.TestResponseConnector)
+
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)
 		r.With(auth.RequirePermission(auth.CanUpdateOpenAEVConfig)).Put("/api/openaev/config", h.PutOpenAEVConfig)

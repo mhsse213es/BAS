@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/actions"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
@@ -59,6 +60,10 @@ type Handler struct {
 	// nil in production (New leaves it unset; call sites fall back to
 	// detectverify.NewConnector) — tests override it to avoid real HTTP calls.
 	detectVerifyConnector func(detectverify.Config) (detectverify.Connector, error)
+	// actionVendorClient builds an actions.VendorClient for a config. nil in
+	// production (call sites fall back to actions.NewVendorClient) — tests
+	// override it to avoid real HTTP calls.
+	actionVendorClient func(actions.ConnectorConfig) (actions.VendorClient, error)
 	secret                string
 	agentSecret           string // optional shared secret for agent-facing endpoints
 	calderaURL            string
