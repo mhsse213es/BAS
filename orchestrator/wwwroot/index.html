@@ -648,7 +648,7 @@ code {
   transition: background 0.15s, color 0.15s;
 }
 .drawer-close:hover { background: var(--elevated); color: var(--text); }
-.drawer-body { flex: 1; overflow-y: auto; padding: 1.25rem; }
+.drawer-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 1.25rem; }
 .drawer-body::-webkit-scrollbar { width: 3px; }
 .drawer-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
@@ -9820,7 +9820,10 @@ function renderRunReportExtra(rep) {
           '<span style="font-size:0.6rem;color:#e6c069">&#9632; Detected</span>' +
           '<span style="font-size:0.6rem;color:var(--muted)">&#9632; Missed</span>' +
         '</span></div>' +
-      '<div class="killchain">' + nodes + '</div></div>';
+      // .killchain's steps are min-width:178px each and don't wrap by design
+      // (it's a horizontal timeline) -- scope the horizontal scroll to just
+      // this element instead of letting it force the whole drawer to scroll.
+      '<div style="overflow-x:auto"><div class="killchain">' + nodes + '</div></div></div>';
   }
 
   // Alert Fatigue & Noise Score
