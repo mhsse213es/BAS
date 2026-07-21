@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -38,23 +39,43 @@ type AlertQuery struct {
 	WindowEnd   time.Time
 }
 
-// Client is a CrowdStrike Falcon API client. QueryURL/DetailURL are
-// exported so tests outside this package (internal/detectverify) can point
-// them at an httptest.Server.
+// deviceCacheEntry is one hostname's cached device-ID resolution.
+type deviceCacheEntry struct {
+	deviceID  string
+	expiresAt time.Time
+}
+
+// deviceCacheTTL matches the existing ioc_enrichment cache's TTL philosophy
+// — long enough that a large fleet doesn't hammer a rate-limited endpoint,
+// short enough that a device re-image or hostname change isn't stale for
+// long.
+const deviceCacheTTL = 15 * time.Minute
+
+// Client is a CrowdStrike Falcon API client. QueryURL/DetailURL/
+// DeviceQueryURL/ActionURL are exported so tests outside this package
+// (internal/detectverify) can point them at an httptest.Server.
 type Client struct {
-	QueryURL   string // defaults to <baseURL>/alerts/queries/alerts/v2
-	DetailURL  string // defaults to <baseURL>/alerts/entities/alerts/v2
-	tokens     *tokenSource
-	httpClient *http.Client
+	QueryURL       string // defaults to <baseURL>/alerts/queries/alerts/v2
+	DetailURL      string // defaults to <baseURL>/alerts/entities/alerts/v2
+	DeviceQueryURL string // defaults to <baseURL>/devices/queries/devices/v1
+	ActionURL      string // defaults to <baseURL>/devices/entities/devices-actions/v2
+	tokens         *tokenSource
+	httpClient     *http.Client
+
+	deviceCacheMu sync.Mutex
+	deviceCache   map[string]deviceCacheEntry
 }
 
 func New(cfg Config) *Client {
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	return &Client{
-		QueryURL:   base + "/alerts/queries/alerts/v2",
-		DetailURL:  base + "/alerts/entities/alerts/v2",
-		tokens:     newTokenSource(cfg.BaseURL, cfg.ClientID, cfg.ClientSecret),
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		QueryURL:       base + "/alerts/queries/alerts/v2",
+		DetailURL:      base + "/alerts/entities/alerts/v2",
+		DeviceQueryURL: base + "/devices/queries/devices/v1",
+		ActionURL:      base + "/devices/entities/devices-actions/v2",
+		tokens:         newTokenSource(cfg.BaseURL, cfg.ClientID, cfg.ClientSecret),
+		httpClient:     &http.Client{Timeout: 30 * time.Second},
+		deviceCache:    make(map[string]deviceCacheEntry),
 	}
 }
 
@@ -79,6 +100,107 @@ func (c *Client) QueryAlerts(ctx context.Context, q AlertQuery) ([]Alert, error)
 func (c *Client) TestConnection(ctx context.Context) error {
 	_, err := c.queryAlertIDs(ctx, "")
 	return err
+}
+
+// ResolveDevice returns hostname's CrowdStrike device ID (the "aid" the
+// response-action endpoints require), caching the result for
+// deviceCacheTTL. This is a prerequisite for mutation, not verification —
+// QueryAlerts never calls this; only Isolate/Release (and, in a later plan,
+// KillProcess/QuarantineFile) do.
+func (c *Client) ResolveDevice(ctx context.Context, hostname string) (string, error) {
+	c.deviceCacheMu.Lock()
+	if e, ok := c.deviceCache[hostname]; ok && time.Now().Before(e.expiresAt) {
+		c.deviceCacheMu.Unlock()
+		return e.deviceID, nil
+	}
+	c.deviceCacheMu.Unlock()
+
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return "", err
+	}
+	q := url.Values{}
+	q.Set("filter", fmt.Sprintf(`hostname:'%s'`, escapeFQL(hostname)))
+	q.Set("limit", "1")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.DeviceQueryURL+"?"+q.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("crowdstrike resolve device: %w", err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("crowdstrike resolve device: HTTP %d: %s", resp.StatusCode, data)
+	}
+	var out struct {
+		Resources []string `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("crowdstrike: parse device query response: %w", err)
+	}
+	if len(out.Resources) == 0 {
+		return "", fmt.Errorf("crowdstrike: no device found for hostname %q", hostname)
+	}
+	deviceID := out.Resources[0]
+
+	c.deviceCacheMu.Lock()
+	c.deviceCache[hostname] = deviceCacheEntry{deviceID: deviceID, expiresAt: time.Now().Add(deviceCacheTTL)}
+	c.deviceCacheMu.Unlock()
+	return deviceID, nil
+}
+
+// Isolate network-contains deviceID (Falcon's "contain" action), returning
+// the vendor's trace ID for the audit trail.
+func (c *Client) Isolate(ctx context.Context, deviceID string) (string, error) {
+	return c.deviceAction(ctx, "contain", deviceID)
+}
+
+// Release lifts network containment on deviceID.
+func (c *Client) Release(ctx context.Context, deviceID string) (string, error) {
+	return c.deviceAction(ctx, "lift_containment", deviceID)
+}
+
+func (c *Client) deviceAction(ctx context.Context, actionName, deviceID string) (string, error) {
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return "", err
+	}
+	body, _ := json.Marshal(map[string][]string{"ids": {deviceID}})
+	reqURL := c.ActionURL + "?" + url.Values{"action_name": {actionName}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("crowdstrike device action %s: %w", actionName, err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("crowdstrike device action %s: HTTP %d: %s", actionName, resp.StatusCode, data)
+	}
+	var out struct {
+		Meta struct {
+			TraceID string `json:"trace_id"`
+		} `json:"meta"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("crowdstrike: parse device action response: %w", err)
+	}
+	if len(out.Errors) > 0 {
+		return "", fmt.Errorf("crowdstrike device action %s: %s", actionName, out.Errors[0].Message)
+	}
+	return out.Meta.TraceID, nil
 }
 
 func buildFQLFilter(q AlertQuery) string {

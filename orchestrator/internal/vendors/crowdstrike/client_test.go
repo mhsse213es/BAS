@@ -129,3 +129,129 @@ func TestTestConnection_Success(t *testing.T) {
 		t.Fatalf("TestConnection: %v", err)
 	}
 }
+
+func newTestClientWithDeviceAndActionURLs(t *testing.T, tokenURL, deviceURL, actionURL string) *Client {
+	t.Helper()
+	c := New(Config{BaseURL: "https://api.crowdstrike.com", ClientID: "c1", ClientSecret: "s1"})
+	*c.TokenURL() = tokenURL
+	c.DeviceQueryURL = deviceURL
+	c.ActionURL = actionURL
+	return c
+}
+
+func TestResolveDevice_FindsAndCaches(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	var queryCalls int
+	deviceSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queryCalls++
+		if r.URL.Query().Get("filter") != `hostname:'HOST1'` {
+			t.Errorf("filter = %q", r.URL.Query().Get("filter"))
+		}
+		json.NewEncoder(w).Encode(map[string]any{"resources": []string{"device-123"}})
+	}))
+	defer deviceSrv.Close()
+
+	c := newTestClientWithDeviceAndActionURLs(t, tokenSrv.URL, deviceSrv.URL, "")
+	id, err := c.ResolveDevice(context.Background(), "HOST1")
+	if err != nil {
+		t.Fatalf("ResolveDevice: %v", err)
+	}
+	if id != "device-123" {
+		t.Fatalf("id = %q, want device-123", id)
+	}
+
+	// Second call within the TTL must hit the cache, not the API again.
+	id2, err := c.ResolveDevice(context.Background(), "HOST1")
+	if err != nil {
+		t.Fatalf("ResolveDevice (cached): %v", err)
+	}
+	if id2 != "device-123" {
+		t.Fatalf("cached id = %q, want device-123", id2)
+	}
+	if queryCalls != 1 {
+		t.Fatalf("queryCalls = %d, want 1 (second ResolveDevice should reuse the cache)", queryCalls)
+	}
+}
+
+func TestResolveDevice_NoMatch_ReturnsError(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	deviceSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"resources": []string{}})
+	}))
+	defer deviceSrv.Close()
+
+	c := newTestClientWithDeviceAndActionURLs(t, tokenSrv.URL, deviceSrv.URL, "")
+	if _, err := c.ResolveDevice(context.Background(), "NOHOST"); err == nil {
+		t.Fatal("expected an error when no device matches the hostname")
+	}
+}
+
+func TestIsolate_SendsContainAction(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	var gotActionName string
+	var gotBody map[string][]string
+	actionSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotActionName = r.URL.Query().Get("action_name")
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]any{"meta": map[string]any{"trace_id": "trace-abc"}})
+	}))
+	defer actionSrv.Close()
+
+	c := newTestClientWithDeviceAndActionURLs(t, tokenSrv.URL, "", actionSrv.URL)
+	traceID, err := c.Isolate(context.Background(), "device-123")
+	if err != nil {
+		t.Fatalf("Isolate: %v", err)
+	}
+	if traceID != "trace-abc" {
+		t.Fatalf("traceID = %q, want trace-abc", traceID)
+	}
+	if gotActionName != "contain" {
+		t.Fatalf("action_name = %q, want contain", gotActionName)
+	}
+	if len(gotBody["ids"]) != 1 || gotBody["ids"][0] != "device-123" {
+		t.Fatalf("body ids = %v, want [device-123]", gotBody["ids"])
+	}
+}
+
+func TestRelease_SendsLiftContainmentAction(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	var gotActionName string
+	actionSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotActionName = r.URL.Query().Get("action_name")
+		json.NewEncoder(w).Encode(map[string]any{"meta": map[string]any{"trace_id": "trace-def"}})
+	}))
+	defer actionSrv.Close()
+
+	c := newTestClientWithDeviceAndActionURLs(t, tokenSrv.URL, "", actionSrv.URL)
+	traceID, err := c.Release(context.Background(), "device-123")
+	if err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if traceID != "trace-def" {
+		t.Fatalf("traceID = %q, want trace-def", traceID)
+	}
+	if gotActionName != "lift_containment" {
+		t.Fatalf("action_name = %q, want lift_containment", gotActionName)
+	}
+}
+
+func TestDeviceAction_VendorReportsError_ReturnsError(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	actionSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"errors": []map[string]any{{"message": "device not found"}}})
+	}))
+	defer actionSrv.Close()
+
+	c := newTestClientWithDeviceAndActionURLs(t, tokenSrv.URL, "", actionSrv.URL)
+	if _, err := c.Isolate(context.Background(), "device-999"); err == nil {
+		t.Fatal("expected an error when the vendor response body carries an errors[] entry")
+	}
+}
