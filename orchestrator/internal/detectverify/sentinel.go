@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/audspect/bas/internal/platform/msauth"
 )
 
 // sentinelConnector queries Microsoft Sentinel's underlying Log Analytics
@@ -16,14 +18,14 @@ import (
 // requested window. Authenticates via Entra client-credentials.
 type sentinelConnector struct {
 	queryURL   string // overridable in tests; defaults to the Log Analytics API
-	tokens     *entraTokenSource
+	tokens     *msauth.EntraTokenSource
 	httpClient *http.Client
 }
 
 func newSentinelConnector(cfg Config) *sentinelConnector {
 	return &sentinelConnector{
 		queryURL: "https://api.loganalytics.io/v1/workspaces/" + cfg.WorkspaceID + "/query",
-		tokens: newEntraTokenSource(cfg.TenantID, cfg.ClientID, cfg.ClientSecret,
+		tokens: msauth.NewEntraTokenSource(cfg.TenantID, cfg.ClientID, cfg.ClientSecret,
 			"https://api.loganalytics.io/.default"),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}

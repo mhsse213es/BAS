@@ -1,4 +1,4 @@
-package detectverify
+package msauth
 
 import (
 	"context"
@@ -12,13 +12,15 @@ import (
 	"time"
 )
 
-// entraTokenSource fetches and caches an Entra ID (Azure AD) OAuth2
-// client-credentials token for one (tenant, client, scope) triple. Both the
-// Sentinel and Defender XDR connectors use this — they differ only in scope
-// (api.loganalytics.io vs graph.microsoft.com).
-type entraTokenSource struct {
+// EntraTokenSource fetches and caches an Entra ID (Azure AD) OAuth2
+// client-credentials token for one (tenant, client, scope) triple. Shared by
+// every Microsoft-family connector in this codebase (Sentinel in
+// internal/detectverify, Defender in internal/vendors/defender) — they
+// differ only in scope (api.loganalytics.io vs graph.microsoft.com vs
+// api.securitycenter.microsoft.com).
+type EntraTokenSource struct {
 	tenantID, clientID, clientSecret, scope string
-	tokenURL                                string // overridable in tests; defaults to login.microsoftonline.com
+	TokenURL                                string // overridable in tests; defaults to login.microsoftonline.com
 	httpClient                              *http.Client
 
 	mu        sync.Mutex
@@ -26,20 +28,20 @@ type entraTokenSource struct {
 	expiresAt time.Time
 }
 
-func newEntraTokenSource(tenantID, clientID, clientSecret, scope string) *entraTokenSource {
-	return &entraTokenSource{
+func NewEntraTokenSource(tenantID, clientID, clientSecret, scope string) *EntraTokenSource {
+	return &EntraTokenSource{
 		tenantID:     tenantID,
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		scope:        scope,
-		tokenURL:     "https://login.microsoftonline.com/" + tenantID + "/oauth2/v2.0/token",
+		TokenURL:     "https://login.microsoftonline.com/" + tenantID + "/oauth2/v2.0/token",
 		httpClient:   &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
 // Token returns a cached token when it has more than 60s left, else fetches
 // a fresh one via the client-credentials grant.
-func (e *entraTokenSource) Token(ctx context.Context) (string, error) {
+func (e *EntraTokenSource) Token(ctx context.Context) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.cached != "" && time.Now().Before(e.expiresAt) {
@@ -52,7 +54,7 @@ func (e *entraTokenSource) Token(ctx context.Context) (string, error) {
 		"client_secret": {e.clientSecret},
 		"scope":         {e.scope},
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.tokenURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", err
 	}

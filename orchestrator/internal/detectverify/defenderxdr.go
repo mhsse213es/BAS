@@ -9,21 +9,27 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/audspect/bas/internal/platform/msauth"
 )
 
 // defenderXDRConnector queries Microsoft Defender XDR's Graph security alerts
 // API (alerts_v2) for alerts in the run's window whose evidence names the
 // run's host. Authenticates via Entra client-credentials.
+//
+// TEMPORARY: this file is rewritten as a thin wrapper over
+// internal/vendors/defender in Task 3 of this plan — this edit only patches
+// the msauth import to keep the package compiling between Task 1 and Task 3.
 type defenderXDRConnector struct {
 	baseURL    string // overridable in tests; defaults to Microsoft Graph
-	tokens     *entraTokenSource
+	tokens     *msauth.EntraTokenSource
 	httpClient *http.Client
 }
 
 func newDefenderXDRConnector(cfg Config) *defenderXDRConnector {
 	return &defenderXDRConnector{
 		baseURL: "https://graph.microsoft.com/v1.0",
-		tokens: newEntraTokenSource(cfg.TenantID, cfg.ClientID, cfg.ClientSecret,
+		tokens: msauth.NewEntraTokenSource(cfg.TenantID, cfg.ClientID, cfg.ClientSecret,
 			"https://graph.microsoft.com/.default"),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}

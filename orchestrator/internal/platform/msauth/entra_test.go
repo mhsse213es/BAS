@@ -1,4 +1,4 @@
-package detectverify
+package msauth
 
 import (
 	"context"
@@ -24,8 +24,8 @@ func TestEntraTokenSource_FetchesAndCaches(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ts := newEntraTokenSource("tenant-1", "client-1", "secret-1", "https://api.loganalytics.io/.default")
-	ts.tokenURL = srv.URL
+	ts := NewEntraTokenSource("tenant-1", "client-1", "secret-1", "https://api.loganalytics.io/.default")
+	ts.TokenURL = srv.URL
 
 	tok, err := ts.Token(context.Background())
 	if err != nil {
@@ -54,8 +54,8 @@ func TestEntraTokenSource_HTTPErrorSurfaces(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ts := newEntraTokenSource("tenant-1", "client-1", "bad-secret", "scope")
-	ts.tokenURL = srv.URL
+	ts := NewEntraTokenSource("tenant-1", "client-1", "bad-secret", "scope")
+	ts.TokenURL = srv.URL
 
 	if _, err := ts.Token(context.Background()); err == nil {
 		t.Fatal("expected an error from a 401 token response")

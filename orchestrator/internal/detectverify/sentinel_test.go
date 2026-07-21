@@ -21,7 +21,7 @@ func newTestSentinelConnector(t *testing.T, tokenURL, queryURL string) *sentinel
 	c := newSentinelConnector(Config{
 		Provider: "microsoft_sentinel", TenantID: "t1", ClientID: "c1", ClientSecret: "s1", WorkspaceID: "w1",
 	})
-	c.tokens.tokenURL = tokenURL
+	c.tokens.TokenURL = tokenURL
 	c.queryURL = queryURL
 	return c
 }
