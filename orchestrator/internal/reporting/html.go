@@ -3337,5 +3337,70 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 </div>
 </div>
 
+<!-- ═══ 21. THREAT INTELLIGENCE ═══════════════════════════════════════════ -->
+{{if .threatIntel}}
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">{{if .scope}}{{.scope.title}}{{else}}{{.summary.lastScenarioName}}{{end}}</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">{{if .scope}}Campaign{{else}}{{.agent.hostname}}{{end}}</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag">Section 21</div>
+<div class="stitle">Threat Intelligence</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Indicators of compromise (IPs, domains, URLs, file hashes, CVEs) observed in this run's execution evidence, checked against {{.threatIntel.provider}} threat intelligence. Answers: did this execution produce artifacts already known to the security community?</p>
+
+<div class="score-row">
+  <div class="scard">
+    <div class="scard-label">Extracted IOCs</div>
+    <div class="scard-value">{{.threatIntel.summary.extractedCount}}</div>
+  </div>
+  <div class="scard" style="border-left:3px solid {{if gt .threatIntel.summary.maliciousAssociatedCount 0.0}}#da3633{{else}}#6e7681{{end}}">
+    <div class="scard-label">Malicious-Associated</div>
+    <div class="scard-value" style="color:{{if gt .threatIntel.summary.maliciousAssociatedCount 0.0}}#da3633{{else}}#6e7681{{end}}">{{.threatIntel.summary.maliciousAssociatedCount}}</div>
+  </div>
+  <div class="scard" style="border-left:3px solid {{if gt .threatIntel.summary.suspiciousCount 0.0}}#d29922{{else}}#6e7681{{end}}">
+    <div class="scard-label">Suspicious</div>
+    <div class="scard-value" style="color:{{if gt .threatIntel.summary.suspiciousCount 0.0}}#d29922{{else}}#6e7681{{end}}">{{.threatIntel.summary.suspiciousCount}}</div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Unknown</div>
+    <div class="scard-value">{{.threatIntel.summary.unknownCount}}</div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Pending</div>
+    <div class="scard-value">{{.threatIntel.summary.pendingCount}}</div>
+  </div>
+</div>
+
+<table>
+  <thead><tr><th>Type</th><th>Indicator</th><th>Technique(s)</th><th>Tier</th><th>Pulses</th><th>Malware / Adversary / Tags</th></tr></thead>
+  {{range .threatIntel.indicators}}
+  <tr>
+    <td>{{upper .type}}</td>
+    <td style="font-family:monospace;font-size:0.78rem">{{.value}}</td>
+    <td style="font-size:0.78rem">{{range $i,$t := .techniqueIds}}{{if $i}}, {{end}}{{$t}}{{end}}</td>
+    <td><strong style="{{if eq .tier "malicious-associated"}}color:#da3633{{else if eq .tier "suspicious"}}color:#d29922{{else if eq .tier "pending"}}color:#6e7681{{else}}color:#374151{{end}}">{{if eq .tier "malicious-associated"}}Malicious-Associated{{else if eq .tier "suspicious"}}Suspicious{{else if eq .tier "pending"}}Pending{{else}}Unknown{{end}}</strong></td>
+    <td>{{.pulseCount}}</td>
+    <td style="font-size:0.78rem">{{range $i,$m := .malwareFamilies}}{{if $i}}, {{end}}{{$m}}{{end}}{{if and .malwareFamilies .adversaryNames}} &nbsp;·&nbsp; {{end}}{{range $i,$a := .adversaryNames}}{{if $i}}, {{end}}{{$a}}{{end}}{{if and (or .malwareFamilies .adversaryNames) .tags}} &nbsp;·&nbsp; {{end}}{{range $i,$g := .tags}}{{if $i}}, {{end}}{{$g}}{{end}}</td>
+  </tr>
+  {{end}}
+</table>
+
+<div class="pf">
+  <span>{{.agent.hostname}} — Threat Intelligence</span>
+  <span>Generated {{fmtTime .generatedAt}} &nbsp;·&nbsp; Audspect BAS Platform &nbsp;·&nbsp; CONFIDENTIAL</span>
+</div>
+</div>
+</div>
+{{end}}
+
 </body>
 </html>`
