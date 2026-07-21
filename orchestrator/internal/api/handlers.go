@@ -3555,26 +3555,14 @@ func (h *Handler) LookupIOC(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "value is required", http.StatusBadRequest)
 		return
 	}
-
-	var (
-		result *ioc.Result
-		err    error
-	)
 	switch iocType {
-	case "ip":
-		result, err = h.iocProvider.LookupIP(r.Context(), value)
-	case "domain":
-		result, err = h.iocProvider.LookupDomain(r.Context(), value)
-	case "url":
-		result, err = h.iocProvider.LookupURL(r.Context(), value)
-	case "hash":
-		result, err = h.iocProvider.LookupHash(r.Context(), value)
-	case "cve":
-		result, err = h.iocProvider.LookupCVE(r.Context(), value)
+	case "ip", "domain", "url", "hash", "cve":
 	default:
 		jsonError(w, "type must be one of: ip, domain, url, hash, cve", http.StatusBadRequest)
 		return
 	}
+
+	result, err := ioc.Lookup(r.Context(), h.iocProvider, iocType, value)
 	if err != nil {
 		jsonError(w, "lookup failed: "+err.Error(), http.StatusBadGateway)
 		return

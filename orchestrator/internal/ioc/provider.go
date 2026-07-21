@@ -14,6 +14,10 @@ type Provider interface {
 	LookupURL(ctx context.Context, url string) (*Result, error)
 	LookupHash(ctx context.Context, hash string) (*Result, error)
 	LookupCVE(ctx context.Context, cveID string) (*Result, error)
+	// Name identifies which provider produced a Result -- used to key the
+	// enrichment cache (internal/db/ioc_enrichment.go) so different providers'
+	// results for the same indicator never collide.
+	Name() string
 }
 
 // Result is one indicator's enrichment, normalized across providers.
@@ -26,6 +30,7 @@ type Result struct {
 	MalwareFamilies []string        `json:"malwareFamilies,omitempty"`
 	AdversaryNames  []string        `json:"adversaryNames,omitempty"`
 	Industries      []string        `json:"industries,omitempty"`
+	Tags            []string        `json:"tags,omitempty"`
 	Confidence      string          `json:"confidence"` // unknown | low | high
 	RawResponse     json.RawMessage `json:"raw,omitempty"`
 }

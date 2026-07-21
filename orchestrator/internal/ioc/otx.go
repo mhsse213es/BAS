@@ -26,6 +26,8 @@ func newOTXProvider(cfg Config) *otxProvider {
 	}
 }
 
+func (p *otxProvider) Name() string { return "otx" }
+
 func (p *otxProvider) LookupIP(ctx context.Context, ip string) (*Result, error) {
 	return p.lookup(ctx, "IPv4", ip, "ip")
 }
@@ -77,7 +79,7 @@ func (p *otxProvider) lookup(ctx context.Context, otxType, value, resultType str
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return &Result{Indicator: value, Type: resultType, Provider: "otx", Confidence: ConfidenceUnknown}, nil
+		return &Result{Indicator: value, Type: resultType, Provider: p.Name(), Confidence: ConfidenceUnknown}, nil
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -93,8 +95,16 @@ func (p *otxProvider) lookup(ctx context.Context, otxType, value, resultType str
 	}
 
 	pulseNames := make([]string, 0, len(raw.PulseInfo.Pulses))
+	tagSet := map[string]bool{}
+	var tags []string
 	for _, pulse := range raw.PulseInfo.Pulses {
 		pulseNames = append(pulseNames, pulse.Name)
+		for _, tag := range pulse.Tags {
+			if !tagSet[tag] {
+				tagSet[tag] = true
+				tags = append(tags, tag)
+			}
+		}
 	}
 
 	confidence := ConfidenceUnknown
@@ -108,12 +118,13 @@ func (p *otxProvider) lookup(ctx context.Context, otxType, value, resultType str
 	return &Result{
 		Indicator:       value,
 		Type:            resultType,
-		Provider:        "otx",
+		Provider:        p.Name(),
 		PulseCount:      raw.PulseInfo.Count,
 		PulseNames:      pulseNames,
 		MalwareFamilies: raw.PulseInfo.Related.Alienvault.MalwareFamilies,
 		AdversaryNames:  raw.PulseInfo.Related.Alienvault.Adversary,
 		Industries:      raw.PulseInfo.Related.Alienvault.Industries,
+		Tags:            tags,
 		Confidence:      confidence,
 		RawResponse:     json.RawMessage(body),
 	}, nil

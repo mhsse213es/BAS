@@ -132,3 +132,30 @@ func TestNewProvider_UnknownProvider(t *testing.T) {
 		t.Fatal("NewProvider with an unknown provider name returned no error")
 	}
 }
+
+func TestOTXLookup_TagsAggregatedAcrossPulses(t *testing.T) {
+	p := testProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"indicator":"evil.example.com","pulse_info":{"count":2,"pulses":[{"name":"A","tags":["apt","emotet"]},{"name":"B","tags":["emotet","banking"]}],"related":{"alienvault":{"adversary":[],"malware_families":[],"industries":[]}}}}`))
+	})
+
+	got, err := p.LookupDomain(context.Background(), "evil.example.com")
+	if err != nil {
+		t.Fatalf("LookupDomain: %v", err)
+	}
+	wantTags := map[string]bool{"apt": true, "emotet": true, "banking": true}
+	if len(got.Tags) != len(wantTags) {
+		t.Fatalf("Tags = %v, want 3 unique tags", got.Tags)
+	}
+	for _, tag := range got.Tags {
+		if !wantTags[tag] {
+			t.Errorf("unexpected tag %q", tag)
+		}
+	}
+}
+
+func TestOTXProvider_Name(t *testing.T) {
+	p := testProvider(t, func(w http.ResponseWriter, r *http.Request) {})
+	if got := p.Name(); got != "otx" {
+		t.Errorf("Name() = %q, want otx", got)
+	}
+}
