@@ -72,6 +72,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(ctx)
 		return nil, fmt.Errorf("testutil: EnsureExerciseSchema: %w", err)
 	}
+	if err := db.EnsureIOCSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(ctx)
+		return nil, fmt.Errorf("testutil: EnsureIOCSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,
