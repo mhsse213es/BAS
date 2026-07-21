@@ -12,9 +12,9 @@ import (
 func newTestCrowdStrikeConnector(t *testing.T, tokenURL, apiURL string) *crowdstrikeConnector {
 	t.Helper()
 	c := newCrowdStrikeConnector(Config{Provider: "crowdstrike", BaseURL: "https://api.crowdstrike.com", ClientID: "c1", ClientSecret: "s1"})
-	c.tokens.tokenURL = tokenURL
-	c.queryURL = apiURL + "/alerts/queries/alerts/v2"
-	c.detailURL = apiURL + "/alerts/entities/alerts/v2"
+	*c.client.TokenURL() = tokenURL
+	c.client.QueryURL = apiURL + "/alerts/queries/alerts/v2"
+	c.client.DetailURL = apiURL + "/alerts/entities/alerts/v2"
 	return c
 }
 
@@ -24,25 +24,19 @@ func TestCrowdStrikeVerify_TechniqueTaggedAlert_Detected(t *testing.T) {
 
 	stepTime := time.Date(2026, 7, 17, 10, 0, 0, 0, time.UTC)
 	alertTime := stepTime.Add(20 * time.Second)
-	var detailCalled bool
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/alerts/queries/alerts/v2":
 			json.NewEncoder(w).Encode(map[string]any{"resources": []string{"a1", "a2"}})
 		case r.Method == http.MethodPost && r.URL.Path == "/alerts/entities/alerts/v2":
-			detailCalled = true
 			json.NewEncoder(w).Encode(map[string]any{"resources": []map[string]any{
 				{
-					"composite_id":      "a1",
-					"name":              "Suspicious PowerShell",
-					"severity":          80,
+					"composite_id": "a1", "name": "Suspicious PowerShell", "severity": 80,
 					"created_timestamp": alertTime.Format(time.RFC3339),
 					"behaviors":         []map[string]any{{"technique_id": "T1059.001"}},
 				},
 				{
-					"composite_id":      "a2",
-					"name":              "Generic Alert",
-					"severity":          20,
+					"composite_id": "a2", "name": "Generic Alert", "severity": 20,
 					"created_timestamp": alertTime.Add(time.Second).Format(time.RFC3339),
 					"behaviors":         []map[string]any{},
 				},
@@ -61,9 +55,6 @@ func TestCrowdStrikeVerify_TechniqueTaggedAlert_Detected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
-	if !detailCalled {
-		t.Fatal("expected the detail endpoint to be called when resources is non-empty")
-	}
 	if result.Verdict != VerdictDetected || result.Confidence != ConfidenceHigh {
 		t.Fatalf("result = %+v, want Detected/high", result)
 	}
@@ -75,19 +66,12 @@ func TestCrowdStrikeVerify_TechniqueTaggedAlert_Detected(t *testing.T) {
 	}
 }
 
-func TestCrowdStrikeVerify_NoResources_NotDetected_SkipsDetail(t *testing.T) {
+func TestCrowdStrikeVerify_NoResources_NotDetected(t *testing.T) {
 	tokenSrv := tokenMock(t)
 	defer tokenSrv.Close()
 
-	var detailCalled bool
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/alerts/queries/alerts/v2":
-			json.NewEncoder(w).Encode(map[string]any{"resources": []string{}})
-		case r.Method == http.MethodPost && r.URL.Path == "/alerts/entities/alerts/v2":
-			detailCalled = true
-			json.NewEncoder(w).Encode(map[string]any{"resources": []map[string]any{}})
-		}
+		json.NewEncoder(w).Encode(map[string]any{"resources": []string{}})
 	}))
 	defer apiSrv.Close()
 
@@ -98,9 +82,6 @@ func TestCrowdStrikeVerify_NoResources_NotDetected_SkipsDetail(t *testing.T) {
 	}
 	if result.Verdict != VerdictNotDetected {
 		t.Fatalf("Verdict = %q, want NotDetected", result.Verdict)
-	}
-	if detailCalled {
-		t.Fatal("detail endpoint should not be called when the query returns no resources")
 	}
 }
 

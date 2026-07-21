@@ -1,4 +1,4 @@
-package detectverify
+package crowdstrike
 
 import (
 	"context"
@@ -12,14 +12,12 @@ import (
 	"time"
 )
 
-// crowdstrikeTokenSource fetches and caches a CrowdStrike Falcon OAuth2
-// client-credentials token. Structurally identical to entraTokenSource
-// (same cache-until-60s-left rule) but without an Entra-style scope
-// parameter — the token grants whatever scopes the API client was
-// provisioned with in the Falcon console.
-type crowdstrikeTokenSource struct {
+// tokenSource fetches and caches a CrowdStrike Falcon OAuth2
+// client-credentials token. The token grants whatever scopes the API client
+// was provisioned with in the Falcon console.
+type tokenSource struct {
 	clientID, clientSecret string
-	tokenURL               string // overridable in tests; defaults to <baseURL>/oauth2/token
+	TokenURL               string // overridable in tests; defaults to <baseURL>/oauth2/token
 	httpClient             *http.Client
 
 	mu        sync.Mutex
@@ -27,18 +25,18 @@ type crowdstrikeTokenSource struct {
 	expiresAt time.Time
 }
 
-func newCrowdStrikeTokenSource(baseURL, clientID, clientSecret string) *crowdstrikeTokenSource {
-	return &crowdstrikeTokenSource{
+func newTokenSource(baseURL, clientID, clientSecret string) *tokenSource {
+	return &tokenSource{
 		clientID:     clientID,
 		clientSecret: clientSecret,
-		tokenURL:     strings.TrimRight(baseURL, "/") + "/oauth2/token",
+		TokenURL:     strings.TrimRight(baseURL, "/") + "/oauth2/token",
 		httpClient:   &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
 // Token returns a cached token when it has more than 60s left, else fetches
 // a fresh one via the client-credentials grant.
-func (c *crowdstrikeTokenSource) Token(ctx context.Context) (string, error) {
+func (c *tokenSource) Token(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.cached != "" && time.Now().Before(c.expiresAt) {
@@ -50,7 +48,7 @@ func (c *crowdstrikeTokenSource) Token(ctx context.Context) (string, error) {
 		"client_id":     {c.clientID},
 		"client_secret": {c.clientSecret},
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", err
 	}

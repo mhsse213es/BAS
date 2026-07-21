@@ -1,4 +1,4 @@
-package detectverify
+package crowdstrike
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestCrowdStrikeTokenSource_FetchesAndCaches(t *testing.T) {
+func TestTokenSource_FetchesAndCaches(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -21,8 +21,8 @@ func TestCrowdStrikeTokenSource_FetchesAndCaches(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ts := newCrowdStrikeTokenSource("https://api.crowdstrike.com", "client-1", "secret-1")
-	ts.tokenURL = srv.URL
+	ts := newTokenSource("https://api.crowdstrike.com", "client-1", "secret-1")
+	ts.TokenURL = srv.URL
 
 	tok, err := ts.Token(context.Background())
 	if err != nil {
@@ -44,15 +44,15 @@ func TestCrowdStrikeTokenSource_FetchesAndCaches(t *testing.T) {
 	}
 }
 
-func TestCrowdStrikeTokenSource_HTTPErrorSurfaces(t *testing.T) {
+func TestTokenSource_HTTPErrorSurfaces(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte(`{"errors":[{"message":"invalid client"}]}`))
 	}))
 	defer srv.Close()
 
-	ts := newCrowdStrikeTokenSource("https://api.crowdstrike.com", "client-1", "bad-secret")
-	ts.tokenURL = srv.URL
+	ts := newTokenSource("https://api.crowdstrike.com", "client-1", "bad-secret")
+	ts.TokenURL = srv.URL
 
 	if _, err := ts.Token(context.Background()); err == nil {
 		t.Fatal("expected an error from a 401 token response")
