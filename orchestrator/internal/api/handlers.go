@@ -1903,6 +1903,10 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	if err := db.UpsertRunIOCs(r.Context(), h.db, raw.RunID, raw.ScenarioID, indicators); err != nil {
 		log.Printf("[!] ioc extraction: failed to persist for run %s: %v", raw.RunID, err)
 	}
+	// Threat-intel enrichment — background, never blocks this response. Uses a
+	// fresh context because the HTTP request context will be cancelled by the
+	// time the goroutine runs (same pattern as refreshComplianceSnapshots below).
+	go h.enrichRunIOCs(context.Background(), raw.RunID)
 
 	// Pre-compute per-technique variant summary then, if the run belongs to a
 	// campaign, refresh the campaign-level aggregate. Sequenced in one goroutine
@@ -3983,6 +3987,49 @@ func (h *Handler) refreshComplianceSnapshots(ctx context.Context, agentID string
 			FailingControls:  s.FailingControls,
 			ManualControls:   s.ManualControls,
 		})
+	}
+}
+
+const iocEnrichmentTTL = 24 * time.Hour
+
+// enrichRunIOCs is the enrichment pipeline entry point: for every distinct
+// indicator extracted from a run, ask the configured threat-intel provider
+// about it -- unless a fresh cache row already exists. Never blocks the HTTP
+// response (always called via `go`). No-op when no provider is configured.
+func (h *Handler) enrichRunIOCs(ctx context.Context, runID string) {
+	if h.iocProvider == nil {
+		return
+	}
+	indicators, err := db.GetRunIOCs(ctx, h.db, runID, "", "")
+	if err != nil {
+		log.Printf("[!] ioc enrichment: failed to load indicators for run %s: %v", runID, err)
+		return
+	}
+	providerName := h.iocProvider.Name()
+	for _, ind := range indicators {
+		cached, err := db.GetIOCEnrichment(ctx, h.db, ind.Type, ind.Value, providerName)
+		if err != nil {
+			log.Printf("[!] ioc enrichment: cache read failed for %s %s: %v", ind.Type, ind.Value, err)
+			continue
+		}
+		if cached != nil && cached.TTLExpiresAt.After(time.Now()) {
+			continue // fresh cache hit -- no external call
+		}
+
+		start := time.Now()
+		result, lookupErr := ioc.Lookup(ctx, h.iocProvider, ind.Type, ind.Value)
+		durationMs := int(time.Since(start).Milliseconds())
+		ttlExpiresAt := time.Now().Add(iocEnrichmentTTL)
+
+		if lookupErr != nil {
+			if err := db.UpsertIOCEnrichmentFailure(ctx, h.db, ind.Type, ind.Value, providerName, lookupErr, ttlExpiresAt); err != nil {
+				log.Printf("[!] ioc enrichment: failed to cache failure for %s %s: %v", ind.Type, ind.Value, err)
+			}
+			continue
+		}
+		if err := db.UpsertIOCEnrichmentSuccess(ctx, h.db, ind.Type, ind.Value, providerName, result, durationMs, ttlExpiresAt); err != nil {
+			log.Printf("[!] ioc enrichment: failed to cache result for %s %s: %v", ind.Type, ind.Value, err)
+		}
 	}
 }
 
