@@ -12,8 +12,8 @@ import (
 func newTestDefenderXDRConnector(t *testing.T, tokenURL, graphURL string) *defenderXDRConnector {
 	t.Helper()
 	c := newDefenderXDRConnector(Config{Provider: "microsoft_defender", TenantID: "t1", ClientID: "c1", ClientSecret: "s1"})
-	c.tokens.TokenURL = tokenURL
-	c.baseURL = graphURL
+	*c.client.TokenURL() = tokenURL
+	c.client.BaseURL = graphURL
 	return c
 }
 
