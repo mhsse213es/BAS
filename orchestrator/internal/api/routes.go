@@ -407,6 +407,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanDeleteResponseConnector)).Delete("/api/actions/configs/{id}", h.DeleteResponseConnector)
 		r.With(auth.RequirePermission(auth.CanTestResponseConnector)).Post("/api/actions/configs/{id}/test", h.TestResponseConnector)
 
+		// EPP Response Actions — execute + audit trail
+		r.With(auth.RequirePermission(auth.CanExecuteResponseAction)).Post("/api/actions/run", h.ExecuteResponseAction)
+		r.With(auth.RequirePermission(auth.CanViewResponseActions)).Get("/api/actions", h.ListResponseActions)
+
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)
 		r.With(auth.RequirePermission(auth.CanUpdateOpenAEVConfig)).Put("/api/openaev/config", h.PutOpenAEVConfig)

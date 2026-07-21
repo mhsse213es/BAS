@@ -10,6 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/actions"
+	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -160,4 +162,231 @@ func TestTestResponseConnector_NotFound(t *testing.T) {
 			t.Fatalf("status = %d, want 404", rec.Code)
 		}
 	})
+}
+
+// fakeActionVendorClient mirrors internal/actions' own test double — this
+// package tests the HTTP layer's wiring (validation, persistence, audit),
+// not vendor dispatch logic (already covered in internal/actions and
+// internal/vendors/*).
+type fakeActionVendorClient struct {
+	resolveDeviceErr error
+	isolateID        string
+}
+
+func (f *fakeActionVendorClient) ResolveDevice(ctx context.Context, hostname string) (string, error) {
+	if f.resolveDeviceErr != nil {
+		return "", f.resolveDeviceErr
+	}
+	return "device-fake-1", nil
+}
+func (f *fakeActionVendorClient) Isolate(ctx context.Context, deviceID string) (string, error) {
+	return f.isolateID, nil
+}
+func (f *fakeActionVendorClient) Release(ctx context.Context, deviceID string) (string, error) {
+	return "release-id", nil
+}
+func (f *fakeActionVendorClient) KillProcess(ctx context.Context, deviceID string, pid int) (string, error) {
+	return "kill-id", nil
+}
+func (f *fakeActionVendorClient) QuarantineFile(ctx context.Context, deviceID, param string) (string, error) {
+	return "quarantine-id", nil
+}
+
+func seedActionConnector(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+	var id string
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO action_connectors (name, provider, enabled, base_url, client_id, client_secret)
+		 VALUES ('test-cs', 'crowdstrike', true, 'https://api.crowdstrike.com', 'c1', 's1') RETURNING id`,
+	).Scan(&id)
+	if err != nil {
+		t.Fatalf("seed action_connectors: %v", err)
+	}
+	return id
+}
+
+func seedTestAgent(t *testing.T, pool *pgxpool.Pool, hostname string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(),
+		`INSERT INTO agents (agent_id, hostname) VALUES ($1, $2) ON CONFLICT (agent_id) DO NOTHING`,
+		"agent-"+hostname, hostname)
+	if err != nil {
+		t.Fatalf("seed agents: %v", err)
+	}
+}
+
+func actionRunReq(body map[string]any) *http.Request {
+	data, _ := json.Marshal(body)
+	return httptest.NewRequest(http.MethodPost, "/api/actions/run", bytes.NewReader(data))
+}
+
+func TestExecuteResponseAction_Isolate_Success(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := actionsHandler(t, pool)
+		h.actionVendorClient = func(cfg actions.ConnectorConfig) (actions.VendorClient, error) {
+			return &fakeActionVendorClient{isolateID: "trace-xyz"}, nil
+		}
+		connID := seedActionConnector(t, pool)
+		seedTestAgent(t, pool, "WIN-TEST-01")
+
+		req := authedRequest(t, http.MethodPost, "/api/actions/run", bytes.NewReader(mustJSON(t, map[string]any{
+			"type": actions.TypeIsolate, "hostname": "WIN-TEST-01", "connectorId": connID,
+			"reason": "confirmed ransomware simulation success",
+		})), auth.RoleAdmin, "admin-1")
+		w := callAuthed(h.ExecuteResponseAction, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			ID              string `json:"id"`
+			Status          string `json:"status"`
+			VendorRequestID string `json:"vendorRequestId"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		if resp.Status != actions.StatusCompleted {
+			t.Fatalf("status = %q, want %q", resp.Status, actions.StatusCompleted)
+		}
+		if resp.VendorRequestID != "trace-xyz" {
+			t.Fatalf("vendorRequestId = %q, want trace-xyz", resp.VendorRequestID)
+		}
+
+		var persistedStatus, persistedRequestedBy string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT status, requested_by FROM action_requests WHERE id=$1`, resp.ID,
+		).Scan(&persistedStatus, &persistedRequestedBy); err != nil {
+			t.Fatalf("action_requests row not found: %v", err)
+		}
+		if persistedStatus != actions.StatusCompleted {
+			t.Fatalf("persisted status = %q, want completed", persistedStatus)
+		}
+		if persistedRequestedBy != "admin-1" {
+			t.Fatalf("persisted requested_by = %q, want admin-1", persistedRequestedBy)
+		}
+	})
+}
+
+func TestExecuteResponseAction_UnknownHostname_Rejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := actionsHandler(t, pool)
+		h.actionVendorClient = func(cfg actions.ConnectorConfig) (actions.VendorClient, error) {
+			return &fakeActionVendorClient{}, nil
+		}
+		connID := seedActionConnector(t, pool)
+
+		w := httptest.NewRecorder()
+		h.ExecuteResponseAction(w, actionRunReq(map[string]any{
+			"type": actions.TypeIsolate, "hostname": "NOT-AN-ENROLLED-AGENT", "connectorId": connID,
+			"reason": "test",
+		}))
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestExecuteResponseAction_MissingReason_Rejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := actionsHandler(t, pool)
+		connID := seedActionConnector(t, pool)
+		seedTestAgent(t, pool, "WIN-TEST-02")
+
+		w := httptest.NewRecorder()
+		h.ExecuteResponseAction(w, actionRunReq(map[string]any{
+			"type": actions.TypeIsolate, "hostname": "WIN-TEST-02", "connectorId": connID,
+		}))
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestExecuteResponseAction_VendorFailure_PersistsFailedStatus(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := actionsHandler(t, pool)
+		h.actionVendorClient = func(cfg actions.ConnectorConfig) (actions.VendorClient, error) {
+			return &fakeActionVendorClient{resolveDeviceErr: context.DeadlineExceeded}, nil
+		}
+		connID := seedActionConnector(t, pool)
+		seedTestAgent(t, pool, "WIN-TEST-03")
+
+		w := httptest.NewRecorder()
+		h.ExecuteResponseAction(w, actionRunReq(map[string]any{
+			"type": actions.TypeIsolate, "hostname": "WIN-TEST-03", "connectorId": connID,
+			"reason": "test",
+		}))
+
+		// A vendor-level failure is still a 200 with status=failed in the
+		// body — matching this codebase's existing TestDetectionConnector
+		// convention (respond({"ok": false, ...}) rather than an HTTP error
+		// status) — because the request itself was well-formed; only the
+		// vendor call failed.
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Status string `json:"status"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		if resp.Status != actions.StatusFailed {
+			t.Fatalf("status = %q, want failed", resp.Status)
+		}
+	})
+}
+
+func TestListResponseActions_ReturnsPersistedRows(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := actionsHandler(t, pool)
+		h.actionVendorClient = func(cfg actions.ConnectorConfig) (actions.VendorClient, error) {
+			return &fakeActionVendorClient{isolateID: "trace-list-1"}, nil
+		}
+		connID := seedActionConnector(t, pool)
+		seedTestAgent(t, pool, "WIN-TEST-04")
+
+		h.ExecuteResponseAction(httptest.NewRecorder(), actionRunReq(map[string]any{
+			"type": actions.TypeIsolate, "hostname": "WIN-TEST-04", "connectorId": connID,
+			"reason": "test", "runId": "run-abc",
+		}))
+
+		w := httptest.NewRecorder()
+		h.ListResponseActions(w, httptest.NewRequest(http.MethodGet, "/api/actions?runId=run-abc", nil))
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var rows []map[string]any
+		json.Unmarshal(w.Body.Bytes(), &rows)
+		if len(rows) != 1 {
+			t.Fatalf("rows = %d, want 1", len(rows))
+		}
+		if rows[0]["runId"] != "run-abc" {
+			t.Fatalf("rows[0].runId = %v, want run-abc", rows[0]["runId"])
+		}
+	})
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return data
 }

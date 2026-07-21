@@ -3,12 +3,16 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/actions"
+	"github.com/audspect/bas/internal/auth"
 )
 
 // ── Response Connector Config CRUD (Admin only) ────────────────────────────
@@ -200,4 +204,182 @@ func (h *Handler) buildActionVendorClient(cfg actions.ConnectorConfig) (actions.
 		return h.actionVendorClient(cfg)
 	}
 	return actions.NewVendorClient(cfg)
+}
+
+// ── Execute + audit trail ───────────────────────────────────────────────────
+
+// ExecuteResponseAction executes one EPP response action against a
+// configured connector. The target hostname must belong to a currently-
+// enrolled agent — this is the safety rail preventing an operator from
+// acting on a host outside the BAS fleet.
+// POST /api/actions/run
+func (h *Handler) ExecuteResponseAction(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Type        string         `json:"type"`
+		Hostname    string         `json:"hostname"`
+		Parameters  map[string]any `json:"parameters"`
+		ConnectorID string         `json:"connectorId"`
+		Reason      string         `json:"reason"`
+		TicketRef   string         `json:"ticketRef"`
+		RunID       string         `json:"runId"`
+	}
+	if json.NewDecoder(r.Body).Decode(&req) != nil || req.Type == "" || req.Hostname == "" || req.ConnectorID == "" {
+		jsonError(w, "type, hostname, and connectorId are required", http.StatusBadRequest)
+		return
+	}
+	if req.Reason == "" {
+		jsonError(w, "reason is required", http.StatusBadRequest)
+		return
+	}
+	validTypes := map[string]bool{
+		actions.TypeIsolate: true, actions.TypeRelease: true,
+		actions.TypeKillProcess: true, actions.TypeQuarantineFile: true,
+	}
+	if !validTypes[req.Type] {
+		jsonError(w, "type must be endpoint.isolate | endpoint.release | endpoint.kill_process | endpoint.quarantine_file", http.StatusBadRequest)
+		return
+	}
+
+	var agentExists bool
+	if err := h.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM agents WHERE hostname=$1)`, req.Hostname).Scan(&agentExists); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !agentExists {
+		jsonError(w, "hostname must match a currently-enrolled agent", http.StatusBadRequest)
+		return
+	}
+
+	connCfg, enabled, err := h.loadResponseConnector(r.Context(), req.ConnectorID)
+	if err != nil {
+		jsonError(w, "connector not found", http.StatusNotFound)
+		return
+	}
+	if !enabled {
+		jsonError(w, "connector is disabled", http.StatusBadRequest)
+		return
+	}
+
+	client, err := h.buildActionVendorClient(*connCfg)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	actorID := ""
+	if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+		actorID = claims.UserID
+	}
+	actionReq := actions.Request{
+		Type:        req.Type,
+		Target:      actions.Target{Type: "hostname", Identifier: req.Hostname},
+		Parameters:  req.Parameters,
+		ConnectorID: req.ConnectorID,
+		RequestedBy: actorID,
+		Reason:      req.Reason,
+		TicketRef:   req.TicketRef,
+		RunID:       req.RunID,
+	}
+	action := actions.Execute(r.Context(), client, actionReq)
+
+	id, persistErr := h.persistActionRequest(r.Context(), action)
+	if persistErr != nil {
+		log.Printf("[actions] failed to persist action request: %v", persistErr)
+	}
+	h.auditLog(r, "actions.executed", id,
+		map[string]any{"type": action.Type, "hostname": req.Hostname, "connectorId": req.ConnectorID}, action.Status)
+
+	respond(w, map[string]any{
+		"id": id, "status": action.Status, "vendorRequestId": action.VendorRequestID, "error": action.Error,
+	})
+}
+
+// ListResponseActions returns the response-action audit trail, most-recent
+// first, optionally filtered by runId and/or hostname.
+// GET /api/actions?runId=&hostname=&limit=
+func (h *Handler) ListResponseActions(w http.ResponseWriter, r *http.Request) {
+	runID := r.URL.Query().Get("runId")
+	hostname := r.URL.Query().Get("hostname")
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+
+	query := `SELECT id, type, target_type, target_identifier, connector_id, status,
+	                 resolved_device_id, vendor_request_id, error, requested_by, reason, ticket_ref, run_id,
+	                 requested_at, dispatched_at, completed_at
+	            FROM action_requests WHERE true`
+	var args []any
+	if runID != "" {
+		args = append(args, runID)
+		query += fmt.Sprintf(" AND run_id=$%d", len(args))
+	}
+	if hostname != "" {
+		args = append(args, hostname)
+		query += fmt.Sprintf(" AND target_identifier=$%d", len(args))
+	}
+	args = append(args, limit)
+	query += fmt.Sprintf(" ORDER BY requested_at DESC LIMIT $%d", len(args))
+
+	rows, err := h.db.Query(r.Context(), query, args...)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	type row struct {
+		ID               string     `json:"id"`
+		Type             string     `json:"type"`
+		TargetType       string     `json:"targetType"`
+		Hostname         string     `json:"hostname"`
+		ConnectorID      string     `json:"connectorId"`
+		Status           string     `json:"status"`
+		ResolvedDeviceID string     `json:"resolvedDeviceId"`
+		VendorRequestID  string     `json:"vendorRequestId"`
+		Error            string     `json:"error"`
+		RequestedBy      string     `json:"requestedBy"`
+		Reason           string     `json:"reason"`
+		TicketRef        string     `json:"ticketRef"`
+		RunID            string     `json:"runId"`
+		RequestedAt      time.Time  `json:"requestedAt"`
+		DispatchedAt     *time.Time `json:"dispatchedAt,omitempty"`
+		CompletedAt      *time.Time `json:"completedAt,omitempty"`
+	}
+	var out []row
+	for rows.Next() {
+		var rv row
+		if err := rows.Scan(&rv.ID, &rv.Type, &rv.TargetType, &rv.Hostname, &rv.ConnectorID, &rv.Status,
+			&rv.ResolvedDeviceID, &rv.VendorRequestID, &rv.Error, &rv.RequestedBy, &rv.Reason, &rv.TicketRef,
+			&rv.RunID, &rv.RequestedAt, &rv.DispatchedAt, &rv.CompletedAt); err != nil {
+			continue
+		}
+		out = append(out, rv)
+	}
+	if out == nil {
+		out = []row{}
+	}
+	respond(w, out)
+}
+
+// persistActionRequest writes a completed Execute() result into
+// action_requests and returns the row's generated id.
+func (h *Handler) persistActionRequest(ctx context.Context, a actions.Action) (string, error) {
+	paramsJSON, err := json.Marshal(a.Parameters)
+	if err != nil {
+		paramsJSON = []byte("{}")
+	}
+	var id string
+	err = h.db.QueryRow(ctx,
+		`INSERT INTO action_requests
+		 (type, target_type, target_identifier, parameters, connector_id, status,
+		  resolved_device_id, vendor_request_id, error, requested_by, reason, ticket_ref, run_id,
+		  requested_at, dispatched_at, completed_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+		a.Type, a.Target.Type, a.Target.Identifier, paramsJSON, a.ConnectorID, a.Status,
+		a.ResolvedDeviceID, a.VendorRequestID, a.Error, a.RequestedBy, a.Reason, a.TicketRef, a.RunID,
+		a.RequestedAt, a.DispatchedAt, a.CompletedAt,
+	).Scan(&id)
+	return id, err
 }
