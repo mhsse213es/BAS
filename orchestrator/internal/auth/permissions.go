@@ -128,6 +128,21 @@ const (
 	CanDeleteDetectionConnector Permission = "detectverify:configs:delete"
 	CanTestDetectionConnector   Permission = "detectverify:configs:test"
 
+	// EPP Response Actions — CanExecuteResponseAction is Admin-only,
+	// deliberately stricter than every other "run" permission in this file
+	// (all of which are Analyst+Admin): unlike detectverify (read-only),
+	// executing a response action can isolate a live host, kill a process,
+	// or delete/quarantine a file. CanViewResponseActions (the audit trail)
+	// is Analyst+Admin like other "view" permissions; connector config is
+	// Admin-only like every other connector config in this file.
+	CanExecuteResponseAction   Permission = "actions:execute"
+	CanViewResponseActions     Permission = "actions:view"
+	CanListResponseConnectors  Permission = "actions:connectors:list"
+	CanCreateResponseConnector Permission = "actions:connectors:create"
+	CanUpdateResponseConnector Permission = "actions:connectors:update"
+	CanDeleteResponseConnector Permission = "actions:connectors:delete"
+	CanTestResponseConnector   Permission = "actions:connectors:test"
+
 	// Admin-only: OpenAEV Connector config + sync + air-gapped import.
 	CanViewOpenAEVConfig             Permission = "openaev:config:view"
 	CanUpdateOpenAEVConfig           Permission = "openaev:config:update"
@@ -197,7 +212,10 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanUpdateSIEMConfig: true, CanDeleteSIEMConfig: true, CanTestSIEMConfig: true,
 		CanListDetectionConnectors: true, CanCreateDetectionConnector: true,
 		CanUpdateDetectionConnector: true, CanDeleteDetectionConnector: true,
-		CanTestDetectionConnector: true, CanViewOpenAEVConfig: true, CanUpdateOpenAEVConfig: true,
+		CanTestDetectionConnector: true, CanExecuteResponseAction: true, CanViewResponseActions: true,
+		CanListResponseConnectors: true, CanCreateResponseConnector: true, CanUpdateResponseConnector: true,
+		CanDeleteResponseConnector: true, CanTestResponseConnector: true,
+		CanViewOpenAEVConfig: true, CanUpdateOpenAEVConfig: true,
 		CanTestOpenAEVConfig: true, CanSyncOpenAEV: true, CanImportOpenAEVBundle: true,
 		CanCreateExercisePlanFromOpenAEV: true, CanCreateExercisePlan: true,
 		CanValidateExercisePlan: true, CanUpdateExercisePlan: true, CanDeleteExercisePlan: true,
@@ -228,6 +246,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewVariantStats: true, CanListPayloadFamilies: true, CanViewPayloadFamily: true,
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
+		CanViewResponseActions: true,
 	},
 	RoleViewer: {},
 }
@@ -265,7 +284,10 @@ func Permissions(role Role) []Permission {
 		CanSyncTicketing, CanCreatePayloadFamily, CanDeletePayloadFamily, CanListSIEMConfigs,
 		CanCreateSIEMConfig, CanUpdateSIEMConfig, CanDeleteSIEMConfig, CanTestSIEMConfig,
 		CanListDetectionConnectors, CanCreateDetectionConnector, CanUpdateDetectionConnector,
-		CanDeleteDetectionConnector, CanTestDetectionConnector, CanViewOpenAEVConfig, CanUpdateOpenAEVConfig,
+		CanDeleteDetectionConnector, CanTestDetectionConnector,
+		CanExecuteResponseAction, CanViewResponseActions, CanListResponseConnectors,
+		CanCreateResponseConnector, CanUpdateResponseConnector, CanDeleteResponseConnector, CanTestResponseConnector,
+		CanViewOpenAEVConfig, CanUpdateOpenAEVConfig,
 		CanTestOpenAEVConfig, CanSyncOpenAEV, CanImportOpenAEVBundle, CanCreateExercisePlanFromOpenAEV,
 		CanCreateExercisePlan, CanValidateExercisePlan, CanUpdateExercisePlan, CanDeleteExercisePlan,
 		CanCreateExerciseTemplate, CanInstantiateExerciseTemplate,
