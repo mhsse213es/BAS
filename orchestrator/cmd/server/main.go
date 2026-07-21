@@ -326,6 +326,7 @@ func main() {
 			log.Printf("[!] ioc provider init warning: %v", err)
 		} else {
 			log.Println("[+] IOC threat-intel provider ready (OTX)")
+			reportingEngine.WithThreatIntelProvider(iocProvider.Name())
 		}
 	}
 

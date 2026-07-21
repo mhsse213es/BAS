@@ -65,6 +65,11 @@ type Engine struct {
 	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
 	sectors []string
 	regions []string
+	// threatIntelProvider is the configured ioc.Provider's name (e.g. "otx"),
+	// set via WithThreatIntelProvider. Empty means the Threat Intelligence
+	// section stays inactive -- matches the same "nil/empty means feature off"
+	// convention as the fields above.
+	threatIntelProvider string
 }
 
 func NewEngine(db *pgxpool.Pool) *Engine { return &Engine{db: db} }
@@ -97,6 +102,16 @@ func (e *Engine) WithRuleLibrary(r RuleLibraryResolver) *Engine {
 func (e *Engine) WithSectorRegion(sectors, regions []string) *Engine {
 	e.sectors = sectors
 	e.regions = regions
+	return e
+}
+
+// WithThreatIntelProvider attaches the name of the configured ioc.Provider
+// (e.g. "otx") so populateThreatIntel knows which provider's ioc_enrichment
+// rows to read -- the cache is provider-keyed, so an unfiltered join would be
+// ambiguous if a provider is ever switched and old rows linger. Returns the
+// engine for chaining.
+func (e *Engine) WithThreatIntelProvider(name string) *Engine {
+	e.threatIntelProvider = name
 	return e
 }
 
@@ -235,6 +250,42 @@ type FullReport struct {
 	// (executed/eligible) so a policy-constrained run reads as complete against
 	// what it could run, not incomplete against everything the scenario defines.
 	Coverage CoverageSummary `json:"coverage"`
+	// ThreatIntel is the configured provider's enrichment of this run's
+	// extracted IOCs (run_iocs). Nil when no provider is configured or the run
+	// has no IOCs. Populated by BuildFromRun only (single-run reports).
+	ThreatIntel *ThreatIntelSection `json:"threatIntel,omitempty"`
+}
+
+// ThreatIntelSection is the report's "did this execution produce artifacts
+// known to threat intelligence" answer -- summary-first, then per-indicator
+// detail. No field here is called "confidence": tiers are derived from raw
+// pulse counts under honest, non-authoritative names.
+type ThreatIntelSection struct {
+	Provider   string                 `json:"provider"` // "otx"
+	Summary    ThreatIntelSummary     `json:"summary"`
+	Indicators []ThreatIntelIndicator `json:"indicators"` // sorted worst-tier-first
+}
+
+type ThreatIntelSummary struct {
+	ExtractedCount           int `json:"extractedCount"`
+	PendingCount             int `json:"pendingCount"`
+	UnknownCount             int `json:"unknownCount"`
+	SuspiciousCount          int `json:"suspiciousCount"`
+	MaliciousAssociatedCount int `json:"maliciousAssociatedCount"`
+}
+
+type ThreatIntelIndicator struct {
+	Type            string   `json:"type"` // ip | domain | url | hash | cve
+	Value           string   `json:"value"`
+	TechniqueIDs    []string `json:"techniqueIds"`
+	SimulationIDs   []string `json:"simulationIds"`
+	Tier            string   `json:"tier"` // pending | unknown | suspicious | malicious-associated
+	PulseCount      int      `json:"pulseCount"`
+	PulseNames      []string `json:"pulseNames,omitempty"`
+	MalwareFamilies []string `json:"malwareFamilies,omitempty"`
+	AdversaryNames  []string `json:"adversaryNames,omitempty"`
+	Industries      []string `json:"industries,omitempty"`
+	Tags            []string `json:"tags,omitempty"`
 }
 
 // PrivilegeSummary is the per-tier step count and prevention breakdown for the privilege table.
@@ -1751,6 +1802,7 @@ func (e *Engine) BuildFromRun(ctx context.Context, runID string, filter string) 
 	e.enrichReadinessTrends(ctx, agentID, report.RansomwareReadiness, runID)
 	e.persistReadinessHistory(ctx, runID, agentID, report.ReadinessScores)
 	e.populateKEVExposure(ctx, report)
+	e.populateThreatIntel(ctx, report, runID)
 	e.populatePriorityScores(ctx, report)
 
 	return report, nil
@@ -3306,6 +3358,95 @@ func (e *Engine) populateKEVExposure(ctx context.Context, report *FullReport) {
 			report.TopFindings[i].KEV = true
 			report.TopFindings[i].KEVCount = kr.count
 		}
+	}
+}
+
+// populateThreatIntel joins run_iocs with ioc_enrichment for the configured
+// provider and classifies each indicator into an honest, non-"confidence"
+// tier based on raw pulse count. Leaves report.ThreatIntel nil when no
+// provider is configured or the run has no extracted IOCs.
+func (e *Engine) populateThreatIntel(ctx context.Context, report *FullReport, runID string) {
+	if e.threatIntelProvider == "" {
+		return
+	}
+	rows, err := e.db.Query(ctx, `
+		SELECT ri.indicator_type, ri.indicator_value, ri.technique_ids, ri.simulation_ids,
+		       ie.pulse_count, ie.pulse_names, ie.malware_families, ie.adversary_names,
+		       ie.industries, ie.tags, ie.last_success_at
+		FROM run_iocs ri
+		LEFT JOIN ioc_enrichment ie
+		  ON ie.indicator_type = ri.indicator_type
+		 AND ie.indicator_value = ri.indicator_value
+		 AND ie.provider = $2
+		WHERE ri.run_id = $1`, runID, e.threatIntelProvider)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	var allIndicators []ThreatIntelIndicator
+	var extracted, pending, unknown, suspicious, malicious int
+	for rows.Next() {
+		var techniqueIDsJSON, simulationIDsJSON []byte
+		var pulseNamesJSON, malwareJSON, adversaryJSON, industriesJSON, tagsJSON []byte
+		var pulseCount *int
+		var lastSuccessAt *time.Time
+		var ind ThreatIntelIndicator
+		if err := rows.Scan(&ind.Type, &ind.Value, &techniqueIDsJSON, &simulationIDsJSON,
+			&pulseCount, &pulseNamesJSON, &malwareJSON, &adversaryJSON, &industriesJSON, &tagsJSON,
+			&lastSuccessAt); err != nil {
+			continue
+		}
+		_ = json.Unmarshal(techniqueIDsJSON, &ind.TechniqueIDs)
+		_ = json.Unmarshal(simulationIDsJSON, &ind.SimulationIDs)
+
+		extracted++
+		// No row at all (pulseCount nil), or a row that only ever recorded
+		// failures (lastSuccessAt nil) -- either way we have no confirmed
+		// pulse data to show, so this indicator is "pending", not "unknown".
+		if pulseCount == nil || lastSuccessAt == nil {
+			ind.Tier = "pending"
+			pending++
+		} else {
+			ind.PulseCount = *pulseCount
+			_ = json.Unmarshal(pulseNamesJSON, &ind.PulseNames)
+			_ = json.Unmarshal(malwareJSON, &ind.MalwareFamilies)
+			_ = json.Unmarshal(adversaryJSON, &ind.AdversaryNames)
+			_ = json.Unmarshal(industriesJSON, &ind.Industries)
+			_ = json.Unmarshal(tagsJSON, &ind.Tags)
+			switch {
+			case ind.PulseCount >= 3:
+				ind.Tier = "malicious-associated"
+				malicious++
+			case ind.PulseCount >= 1:
+				ind.Tier = "suspicious"
+				suspicious++
+			default:
+				ind.Tier = "unknown"
+				unknown++
+			}
+		}
+		allIndicators = append(allIndicators, ind)
+	}
+	if extracted == 0 {
+		return
+	}
+
+	tierRank := map[string]int{"malicious-associated": 0, "suspicious": 1, "unknown": 2, "pending": 3}
+	sort.Slice(allIndicators, func(i, j int) bool {
+		return tierRank[allIndicators[i].Tier] < tierRank[allIndicators[j].Tier]
+	})
+
+	report.ThreatIntel = &ThreatIntelSection{
+		Provider: e.threatIntelProvider,
+		Summary: ThreatIntelSummary{
+			ExtractedCount:           extracted,
+			PendingCount:             pending,
+			UnknownCount:             unknown,
+			SuspiciousCount:          suspicious,
+			MaliciousAssociatedCount: malicious,
+		},
+		Indicators: allIndicators,
 	}
 }
 
