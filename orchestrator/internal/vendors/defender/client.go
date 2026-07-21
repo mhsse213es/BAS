@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,14 @@ type Config struct {
 	TenantID     string
 	ClientID     string
 	ClientSecret string
+	// KillProcessScriptName is the filename of a PowerShell script the
+	// customer has already uploaded to their Defender Live Response script
+	// library. Defender has no built-in "kill process" machine action —
+	// this is the only way to do it via API. Defaults to
+	// "Audspect-KillProcess.ps1" if empty, which will NOT exist in a fresh
+	// tenant; KillProcess fails with a vendor error until the customer
+	// uploads a script under this name (or configures a different name).
+	KillProcessScriptName string
 }
 
 // Alert is one Defender XDR alert, normalized for detectverify's
@@ -52,20 +61,27 @@ const deviceCacheTTL = 15 * time.Minute
 // BaseURL/ActionBaseURL are exported so tests outside this package
 // (internal/detectverify) can point them at an httptest.Server.
 type Client struct {
-	BaseURL       string // defaults to https://graph.microsoft.com/v1.0
-	ActionBaseURL string // defaults to https://api.securitycenter.microsoft.com/api
-	tokens        *msauth.EntraTokenSource
-	actionTokens  *msauth.EntraTokenSource
-	httpClient    *http.Client
+	BaseURL               string // defaults to https://graph.microsoft.com/v1.0
+	ActionBaseURL         string // defaults to https://api.securitycenter.microsoft.com/api
+	LiveResponseURL       string // defaults to "" — see New(), it's built from ActionBaseURL per machine ID, not a fixed URL; kept as an explicit override point for tests
+	tokens                *msauth.EntraTokenSource
+	actionTokens          *msauth.EntraTokenSource
+	httpClient            *http.Client
+	killProcessScriptName string
 
 	deviceCacheMu sync.Mutex
 	deviceCache   map[string]deviceCacheEntry
 }
 
 func New(cfg Config) *Client {
+	scriptName := cfg.KillProcessScriptName
+	if scriptName == "" {
+		scriptName = "Audspect-KillProcess.ps1"
+	}
 	return &Client{
-		BaseURL:       "https://graph.microsoft.com/v1.0",
-		ActionBaseURL: "https://api.securitycenter.microsoft.com/api",
+		BaseURL:               "https://graph.microsoft.com/v1.0",
+		ActionBaseURL:         "https://api.securitycenter.microsoft.com/api",
+		killProcessScriptName: scriptName,
 		tokens: msauth.NewEntraTokenSource(cfg.TenantID, cfg.ClientID, cfg.ClientSecret,
 			"https://graph.microsoft.com/.default"),
 		actionTokens: msauth.NewEntraTokenSource(cfg.TenantID, cfg.ClientID, cfg.ClientSecret,
@@ -202,6 +218,57 @@ func (c *Client) QuarantineFile(ctx context.Context, deviceID, sha1 string) (str
 	return c.machineAction(ctx, deviceID, "StopAndQuarantineFile", map[string]any{
 		"Sha1": sha1, "Comment": "Quarantined by Audspect BAS response action",
 	})
+}
+
+// KillProcess runs a customer-provided PowerShell script via Defender Live
+// Response to kill pid on deviceID. Returns the machine action ID — this
+// acknowledges the vendor accepted the request, not that the script
+// finished running (see Global Constraints: no polling to completion).
+// Requires Config.KillProcessScriptName (or its default) to already exist
+// in the tenant's Live Response script library — see the Config field doc.
+func (c *Client) KillProcess(ctx context.Context, deviceID string, pid int) (string, error) {
+	token, err := c.actionTokens.Token(ctx)
+	if err != nil {
+		return "", err
+	}
+	body, _ := json.Marshal(map[string]any{
+		"Comment": "Kill process via Audspect BAS response action",
+		"Commands": []map[string]any{
+			{
+				"type": "RunScript",
+				"params": []map[string]string{
+					{"key": "ScriptName", "value": c.killProcessScriptName},
+					{"key": "Args", "value": strconv.Itoa(pid)},
+				},
+			},
+		},
+	})
+	reqURL := c.ActionBaseURL + "/machines/" + deviceID + "/runliveresponse"
+	if c.LiveResponseURL != "" {
+		reqURL = c.LiveResponseURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("defender kill process: %w", err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("defender kill process: HTTP %d: %s", resp.StatusCode, data)
+	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("defender: parse live response action: %w", err)
+	}
+	return out.ID, nil
 }
 
 func (c *Client) machineAction(ctx context.Context, deviceID, verb string, body map[string]any) (string, error) {

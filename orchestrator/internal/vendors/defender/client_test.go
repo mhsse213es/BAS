@@ -253,3 +253,91 @@ func TestQuarantineFile_HTTPError_ReturnsError(t *testing.T) {
 		t.Fatal("expected an error from a 400 StopAndQuarantineFile response")
 	}
 }
+
+func newTestClientWithLiveResponseURL(t *testing.T, actionTokenURL, liveResponseURL, scriptName string) *Client {
+	t.Helper()
+	c := New(Config{TenantID: "t1", ClientID: "c1", ClientSecret: "s1", KillProcessScriptName: scriptName})
+	*c.ActionTokenURL() = actionTokenURL
+	c.LiveResponseURL = liveResponseURL
+	return c
+}
+
+func TestKillProcess_CallsRunLiveResponseWithConfiguredScript(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+
+	var gotBody map[string]any
+	lrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]any{"id": "machineaction-1"})
+	}))
+	defer lrSrv.Close()
+
+	c := newTestClientWithLiveResponseURL(t, actionTokenSrv.URL, lrSrv.URL, "Contoso-KillProc.ps1")
+	actionID, err := c.KillProcess(context.Background(), "machine-123", 4821)
+	if err != nil {
+		t.Fatalf("KillProcess: %v", err)
+	}
+	if actionID != "machineaction-1" {
+		t.Fatalf("actionID = %q, want machineaction-1", actionID)
+	}
+	commands, ok := gotBody["Commands"].([]any)
+	if !ok || len(commands) != 1 {
+		t.Fatalf("Commands = %v, want exactly one command", gotBody["Commands"])
+	}
+	cmd, ok := commands[0].(map[string]any)
+	if !ok || cmd["type"] != "RunScript" {
+		t.Fatalf("commands[0] = %v, want type=RunScript", commands[0])
+	}
+	params, ok := cmd["params"].([]any)
+	if !ok || len(params) != 2 {
+		t.Fatalf("params = %v, want ScriptName and Args", cmd["params"])
+	}
+	scriptParam, ok := params[0].(map[string]any)
+	if !ok || scriptParam["key"] != "ScriptName" || scriptParam["value"] != "Contoso-KillProc.ps1" {
+		t.Fatalf("params[0] = %v, want key=ScriptName value=Contoso-KillProc.ps1", params[0])
+	}
+	argsParam, ok := params[1].(map[string]any)
+	if !ok || argsParam["key"] != "Args" || argsParam["value"] != "4821" {
+		t.Fatalf("params[1] = %v, want key=Args value=4821", params[1])
+	}
+}
+
+func TestKillProcess_EmptyScriptName_DefaultsToAudspectScript(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+
+	var gotBody map[string]any
+	lrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]any{"id": "machineaction-2"})
+	}))
+	defer lrSrv.Close()
+
+	c := newTestClientWithLiveResponseURL(t, actionTokenSrv.URL, lrSrv.URL, "")
+	if _, err := c.KillProcess(context.Background(), "machine-123", 100); err != nil {
+		t.Fatalf("KillProcess: %v", err)
+	}
+	commands := gotBody["Commands"].([]any)
+	cmd := commands[0].(map[string]any)
+	params := cmd["params"].([]any)
+	scriptParam := params[0].(map[string]any)
+	if scriptParam["value"] != "Audspect-KillProcess.ps1" {
+		t.Fatalf("default script name = %v, want Audspect-KillProcess.ps1", scriptParam["value"])
+	}
+}
+
+func TestKillProcess_HTTPError_ReturnsError(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+	lrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":{"message":"Script not found in library"}}`))
+	}))
+	defer lrSrv.Close()
+
+	c := newTestClientWithLiveResponseURL(t, actionTokenSrv.URL, lrSrv.URL, "")
+	if _, err := c.KillProcess(context.Background(), "machine-123", 100); err == nil {
+		t.Fatal("expected an error when the vendor reports the script isn't found")
+	}
+}
