@@ -255,3 +255,123 @@ func TestDeviceAction_VendorReportsError_ReturnsError(t *testing.T) {
 		t.Fatal("expected an error when the vendor response body carries an errors[] entry")
 	}
 }
+
+func newTestClientWithRTRURLs(t *testing.T, tokenURL, sessionURL, commandURL string) *Client {
+	t.Helper()
+	c := New(Config{BaseURL: "https://api.crowdstrike.com", ClientID: "c1", ClientSecret: "s1"})
+	*c.TokenURL() = tokenURL
+	c.RTRSessionURL = sessionURL
+	c.RTRCommandURL = commandURL
+	return c
+}
+
+func TestKillProcess_RunsSessionThenKillCommand(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	var gotSessionDeviceID string
+	var gotCommand map[string]string
+	var sessionDeleteCalled bool
+	rtrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/sessions":
+			var body map[string]string
+			json.NewDecoder(r.Body).Decode(&body)
+			gotSessionDeviceID = body["device_id"]
+			json.NewEncoder(w).Encode(map[string]any{"resources": []map[string]any{{"session_id": "sess-1"}}})
+		case r.Method == http.MethodPost && r.URL.Path == "/commands":
+			json.NewDecoder(r.Body).Decode(&gotCommand)
+			json.NewEncoder(w).Encode(map[string]any{"cloud_request_id": "req-1"})
+		case r.Method == http.MethodDelete && r.URL.Path == "/sessions":
+			sessionDeleteCalled = true
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer rtrSrv.Close()
+
+	c := newTestClientWithRTRURLs(t, tokenSrv.URL, rtrSrv.URL+"/sessions", rtrSrv.URL+"/commands")
+	reqID, err := c.KillProcess(context.Background(), "device-123", 4821)
+	if err != nil {
+		t.Fatalf("KillProcess: %v", err)
+	}
+	if reqID != "req-1" {
+		t.Fatalf("reqID = %q, want req-1", reqID)
+	}
+	if gotSessionDeviceID != "device-123" {
+		t.Fatalf("session device_id = %q, want device-123", gotSessionDeviceID)
+	}
+	if gotCommand["base_command"] != "kill" || gotCommand["command_string"] != "kill 4821" || gotCommand["session_id"] != "sess-1" {
+		t.Fatalf("command = %+v, want base_command=kill command_string='kill 4821' session_id=sess-1", gotCommand)
+	}
+	if !sessionDeleteCalled {
+		t.Fatal("expected the RTR session to be closed after the command was sent")
+	}
+}
+
+func TestQuarantineFile_RunsSessionThenRmCommand(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+
+	var gotCommand map[string]string
+	rtrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/sessions":
+			json.NewEncoder(w).Encode(map[string]any{"resources": []map[string]any{{"session_id": "sess-2"}}})
+		case r.Method == http.MethodPost && r.URL.Path == "/commands":
+			json.NewDecoder(r.Body).Decode(&gotCommand)
+			json.NewEncoder(w).Encode(map[string]any{"cloud_request_id": "req-2"})
+		case r.Method == http.MethodDelete && r.URL.Path == "/sessions":
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer rtrSrv.Close()
+
+	c := newTestClientWithRTRURLs(t, tokenSrv.URL, rtrSrv.URL+"/sessions", rtrSrv.URL+"/commands")
+	reqID, err := c.QuarantineFile(context.Background(), "device-123", `C:\Users\victim\evil.exe`)
+	if err != nil {
+		t.Fatalf("QuarantineFile: %v", err)
+	}
+	if reqID != "req-2" {
+		t.Fatalf("reqID = %q, want req-2", reqID)
+	}
+	if gotCommand["base_command"] != "rm" || gotCommand["command_string"] != `rm "C:\Users\victim\evil.exe"` {
+		t.Fatalf(`command = %+v, want base_command=rm command_string='rm "C:\Users\victim\evil.exe"'`, gotCommand)
+	}
+}
+
+func TestKillProcess_SessionStartFails_ReturnsError(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	rtrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer rtrSrv.Close()
+
+	c := newTestClientWithRTRURLs(t, tokenSrv.URL, rtrSrv.URL+"/sessions", rtrSrv.URL+"/commands")
+	if _, err := c.KillProcess(context.Background(), "device-123", 1234); err == nil {
+		t.Fatal("expected an error when the RTR session fails to start")
+	}
+}
+
+func TestKillProcess_CommandReportsError_ReturnsError(t *testing.T) {
+	tokenSrv := tokenMock(t)
+	defer tokenSrv.Close()
+	rtrSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/sessions":
+			json.NewEncoder(w).Encode(map[string]any{"resources": []map[string]any{{"session_id": "sess-3"}}})
+		case r.Method == http.MethodPost && r.URL.Path == "/commands":
+			json.NewEncoder(w).Encode(map[string]any{"errors": []map[string]any{{"message": "device offline"}}})
+		case r.Method == http.MethodDelete && r.URL.Path == "/sessions":
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer rtrSrv.Close()
+
+	c := newTestClientWithRTRURLs(t, tokenSrv.URL, rtrSrv.URL+"/sessions", rtrSrv.URL+"/commands")
+	if _, err := c.KillProcess(context.Background(), "device-123", 1234); err == nil {
+		t.Fatal("expected an error when the RTR command response carries an errors[] entry")
+	}
+}

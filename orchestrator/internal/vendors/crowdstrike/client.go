@@ -52,13 +52,16 @@ type deviceCacheEntry struct {
 const deviceCacheTTL = 15 * time.Minute
 
 // Client is a CrowdStrike Falcon API client. QueryURL/DetailURL/
-// DeviceQueryURL/ActionURL are exported so tests outside this package
-// (internal/detectverify) can point them at an httptest.Server.
+// DeviceQueryURL/ActionURL/RTRSessionURL/RTRCommandURL are exported so
+// tests outside this package (internal/detectverify) can point them at an
+// httptest.Server.
 type Client struct {
 	QueryURL       string // defaults to <baseURL>/alerts/queries/alerts/v2
 	DetailURL      string // defaults to <baseURL>/alerts/entities/alerts/v2
 	DeviceQueryURL string // defaults to <baseURL>/devices/queries/devices/v1
 	ActionURL      string // defaults to <baseURL>/devices/entities/devices-actions/v2
+	RTRSessionURL  string // defaults to <baseURL>/real-time-response/entities/sessions/v1
+	RTRCommandURL  string // defaults to <baseURL>/real-time-response/entities/active-responder-command/v1
 	tokens         *tokenSource
 	httpClient     *http.Client
 
@@ -73,6 +76,8 @@ func New(cfg Config) *Client {
 		DetailURL:      base + "/alerts/entities/alerts/v2",
 		DeviceQueryURL: base + "/devices/queries/devices/v1",
 		ActionURL:      base + "/devices/entities/devices-actions/v2",
+		RTRSessionURL:  base + "/real-time-response/entities/sessions/v1",
+		RTRCommandURL:  base + "/real-time-response/entities/active-responder-command/v1",
 		tokens:         newTokenSource(cfg.BaseURL, cfg.ClientID, cfg.ClientSecret),
 		httpClient:     &http.Client{Timeout: 30 * time.Second},
 		deviceCache:    make(map[string]deviceCacheEntry),
@@ -201,6 +206,137 @@ func (c *Client) deviceAction(ctx context.Context, actionName, deviceID string) 
 		return "", fmt.Errorf("crowdstrike device action %s: %s", actionName, out.Errors[0].Message)
 	}
 	return out.Meta.TraceID, nil
+}
+
+// KillProcess runs Falcon RTR's "kill" responder command for pid on
+// deviceID, via a short-lived RTR session. Returns the vendor's
+// cloud_request_id — this acknowledges the vendor accepted the command, not
+// that it has finished executing (see Global Constraints: no polling to
+// completion).
+func (c *Client) KillProcess(ctx context.Context, deviceID string, pid int) (string, error) {
+	return c.runRTRCommand(ctx, deviceID, "kill", fmt.Sprintf("kill %d", pid))
+}
+
+// QuarantineFile runs Falcon RTR's "rm" responder command against filePath
+// on deviceID. CrowdStrike RTR has no command verb named "quarantine" —
+// deletion via "rm" is the closest available responder action; confirm
+// against current Falcon RTR command docs before relying on this in
+// production (see Global Constraints).
+func (c *Client) QuarantineFile(ctx context.Context, deviceID, filePath string) (string, error) {
+	return c.runRTRCommand(ctx, deviceID, "rm", fmt.Sprintf(`rm "%s"`, filePath))
+}
+
+// runRTRCommand starts an RTR session on deviceID, sends one responder
+// command, and best-effort closes the session (cleanup uses a fresh
+// background context so a caller-cancelled ctx doesn't leave a dangling
+// session).
+func (c *Client) runRTRCommand(ctx context.Context, deviceID, baseCommand, commandString string) (string, error) {
+	sessionID, err := c.startRTRSession(ctx, deviceID)
+	if err != nil {
+		return "", err
+	}
+	defer c.closeRTRSession(context.Background(), sessionID)
+
+	return c.executeRTRCommand(ctx, deviceID, sessionID, baseCommand, commandString)
+}
+
+func (c *Client) startRTRSession(ctx context.Context, deviceID string) (string, error) {
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return "", err
+	}
+	body, _ := json.Marshal(map[string]string{"device_id": deviceID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.RTRSessionURL, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("crowdstrike start RTR session: %w", err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("crowdstrike start RTR session: HTTP %d: %s", resp.StatusCode, data)
+	}
+	var out struct {
+		Resources []struct {
+			SessionID string `json:"session_id"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("crowdstrike: parse RTR session response: %w", err)
+	}
+	if len(out.Resources) == 0 || out.Resources[0].SessionID == "" {
+		return "", fmt.Errorf("crowdstrike: RTR session response did not include a session_id")
+	}
+	return out.Resources[0].SessionID, nil
+}
+
+func (c *Client) executeRTRCommand(ctx context.Context, deviceID, sessionID, baseCommand, commandString string) (string, error) {
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return "", err
+	}
+	body, _ := json.Marshal(map[string]string{
+		"base_command": baseCommand, "command_string": commandString,
+		"session_id": sessionID, "device_id": deviceID,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.RTRCommandURL, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("crowdstrike RTR command %s: %w", baseCommand, err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("crowdstrike RTR command %s: HTTP %d: %s", baseCommand, resp.StatusCode, data)
+	}
+	var out struct {
+		CloudRequestID string `json:"cloud_request_id"`
+		Errors         []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("crowdstrike: parse RTR command response: %w", err)
+	}
+	if len(out.Errors) > 0 {
+		return "", fmt.Errorf("crowdstrike RTR command %s: %s", baseCommand, out.Errors[0].Message)
+	}
+	if out.CloudRequestID == "" {
+		return "", fmt.Errorf("crowdstrike: RTR command response did not include a cloud_request_id")
+	}
+	return out.CloudRequestID, nil
+}
+
+// closeRTRSession is best-effort cleanup — a failure to close a session
+// leaves it to expire on its own on CrowdStrike's side, so errors here are
+// not surfaced to the caller (the response action itself already
+// succeeded or failed by the time this runs).
+func (c *Client) closeRTRSession(ctx context.Context, sessionID string) {
+	token, err := c.tokens.Token(ctx)
+	if err != nil {
+		return
+	}
+	reqURL := c.RTRSessionURL + "?" + url.Values{"session_id": {sessionID}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, reqURL, nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
 }
 
 func buildFQLFilter(q AlertQuery) string {
