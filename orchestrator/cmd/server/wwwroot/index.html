@@ -8462,8 +8462,20 @@ function renderWizardReview() {
     var vd = variantDepthEl2.value || 'none';
     variantLabel = { none: 'None (base only)', quick: 'Quick (~5 per PS step)', standard: 'Standard (~15 per PS step)', full: 'Full (33 per PS step)' }[vd] || vd;
   }
+  var addlIds = additionalAgentIds();
+  var agentsRow;
+  if (addlIds.length) {
+    var allIds = [agSel.value].concat(addlIds);
+    var names = allIds.map(function(id) {
+      var a = agents.find(function(ag) { return ag.agentId === id; });
+      return x(a ? (a.agentId + ' — ' + a.hostname) : id);
+    });
+    agentsRow = '<div class="wz-rev-row"><span>Agents (' + allIds.length + ')</span><span>' + names.join('<br>') + '</span></div>';
+  } else {
+    agentsRow = row('Target agent', x(agTxt));
+  }
   var html = row('Scenario', x(sc ? sc.name : scId)) +
-             row('Target agent', x(agTxt)) +
+             agentsRow +
              row('Mode', x(modeLabel)) +
              row('Scope', x(subset)) +
              (variantLabel ? row('Variant depth', x(variantLabel)) : '') +
@@ -8471,6 +8483,10 @@ function renderWizardReview() {
   var warnEl = document.getElementById('modal-mode-warn');
   if (warnEl.style.display !== 'none' && warnEl.innerHTML.trim()) {
     html += '<div class="wz-rev-warn">' + warnEl.innerHTML + '</div>';
+  }
+  if (fw === 'posture' && sel && addlIds.length) {
+    html += '<div class="wz-rev-warn">This check subset was built from ' + x(agTxt) +
+      '\'s catalog — any check not present on other selected agents will report not applicable.</div>';
   }
   document.getElementById('wz-review').innerHTML = html;
 }
