@@ -115,6 +115,10 @@ services:
       OPENCTI_URL:             ${OPENCTI_URL:-}
       OPENCTI_API_KEY:         ${OPENCTI_API_KEY:-}
       THREAT_INTEL_POLL_HOURS: ${THREAT_INTEL_POLL_HOURS:-24}
+      # ── OTX IOC Enrichment (optional — leave blank to disable) ───────────────
+      # Distinct from the MISP/OpenCTI connector above — enriches run_iocs
+      # (extracted indicators) against LevelBLUE OTX. See internal/ioc.
+      OTX_API_KEY: ${OTX_API_KEY:-}
       # ── Exercise comm injectors (optional — leave blank to disable) ──────────
       SMS_GATEWAY_URL:   ${SMS_GATEWAY_URL:-}
       SMS_GATEWAY_TOKEN: ${SMS_GATEWAY_TOKEN:-}
