@@ -210,3 +210,46 @@ func TestMachineAction_HTTPError_ReturnsError(t *testing.T) {
 		t.Fatal("expected an error from a 403 machine action response")
 	}
 }
+
+func TestQuarantineFile_CallsStopAndQuarantineFileEndpoint(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+
+	var gotPath string
+	var gotBody map[string]any
+	actionSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]any{"id": "action-quarantine-1"})
+	}))
+	defer actionSrv.Close()
+
+	c := newTestClientWithActionURLs(t, "", actionTokenSrv.URL, actionSrv.URL)
+	actionID, err := c.QuarantineFile(context.Background(), "machine-123", "aabbccddeeff00112233445566778899aabbccdd")
+	if err != nil {
+		t.Fatalf("QuarantineFile: %v", err)
+	}
+	if actionID != "action-quarantine-1" {
+		t.Fatalf("actionID = %q, want action-quarantine-1", actionID)
+	}
+	if gotPath != "/machines/machine-123/StopAndQuarantineFile" {
+		t.Fatalf("path = %q, want /machines/machine-123/StopAndQuarantineFile", gotPath)
+	}
+	if gotBody["Sha1"] != "aabbccddeeff00112233445566778899aabbccdd" {
+		t.Fatalf("body Sha1 = %v, want the test sha1", gotBody["Sha1"])
+	}
+}
+
+func TestQuarantineFile_HTTPError_ReturnsError(t *testing.T) {
+	actionTokenSrv := tokenMock(t)
+	defer actionTokenSrv.Close()
+	actionSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer actionSrv.Close()
+
+	c := newTestClientWithActionURLs(t, "", actionTokenSrv.URL, actionSrv.URL)
+	if _, err := c.QuarantineFile(context.Background(), "machine-123", "badhash"); err == nil {
+		t.Fatal("expected an error from a 400 StopAndQuarantineFile response")
+	}
+}

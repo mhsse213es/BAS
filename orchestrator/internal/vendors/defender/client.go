@@ -194,6 +194,16 @@ func (c *Client) Release(ctx context.Context, deviceID string) (string, error) {
 	})
 }
 
+// QuarantineFile stops and quarantines the file identified by sha1
+// wherever it's running/present on deviceID. Defender identifies files by
+// hash for this action, not by path — this is the vendor-documented
+// StopAndQuarantineFile machine action.
+func (c *Client) QuarantineFile(ctx context.Context, deviceID, sha1 string) (string, error) {
+	return c.machineAction(ctx, deviceID, "StopAndQuarantineFile", map[string]any{
+		"Sha1": sha1, "Comment": "Quarantined by Audspect BAS response action",
+	})
+}
+
 func (c *Client) machineAction(ctx context.Context, deviceID, verb string, body map[string]any) (string, error) {
 	token, err := c.actionTokens.Token(ctx)
 	if err != nil {
