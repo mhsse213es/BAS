@@ -3190,9 +3190,18 @@ body.theme-slate {
 
       <!-- Step 2: Target -->
       <div class="wz-pane" data-pane="2" style="display:none">
-        <label class="modal-lbl">Target Agent</label>
+        <label class="modal-lbl">Primary Agent</label>
         <select id="modal-agent" onchange="renderRunMode()"></select>
         <p class="sub2" style="margin-top:0.55rem">The endpoint that will execute this run.</p>
+
+        <div id="modal-addl-wrap" style="display:none;margin-top:0.9rem">
+          <label class="modal-lbl">Run on Additional Agents <span class="tiny muted" id="modal-addl-cnt">(0 selected)</span></label>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:0.4rem">
+            <button class="btn btn-outline btn-sm" onclick="selectAllAdditionalAgents()">Select all</button>
+          </div>
+          <div id="modal-addl-list" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
+          <p class="sub2" style="margin-top:0.4rem">Same scenario, mode, and options will be dispatched to each checked agent.</p>
+        </div>
       </div>
 
       <!-- Step 3: Options (customize subset + execution mode) -->
@@ -3710,6 +3719,7 @@ var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
 var _toast;
 var _modalScId = null;
 var _runSelection = null;  // {scId, fw:'art'|'caldera', ids:[]} — operator-chosen subset for the next run
+var _addlSel = {};  // {agentId: true} — checked "Run on Additional Agents" state for the next run
 var _editUserId = null;
 var _pwForced = false;
 
@@ -8187,6 +8197,7 @@ function openModal(scenarioId, preAgent, lockAgent) {
            x(a.agentId) + ' — ' + x(a.hostname) + osLabel + '</option>';
   }).join('');
   document.getElementById('modal-mode').value = 'posture'; // always default to safe
+  _addlSel = {};
   renderRunMode();
   document.getElementById('run-overlay').classList.add('open');
   // Wizard: skip Scenario step when scenarioId fixed; skip Target step when agent is
@@ -8207,6 +8218,7 @@ function openModal(scenarioId, preAgent, lockAgent) {
 // scenarios, and toggles the live-execution warning.
 function renderRunMode() {
   renderModalSelection();
+  renderAdditionalAgents();
   var id = _modalScId || document.getElementById('modal-sc').value;
   var sc = scenarios.find(function(s) { return s.id === id; });
   var wrap = document.getElementById('modal-mode-wrap');
@@ -8307,6 +8319,59 @@ function renderRunMode() {
     variantWrap.style.display = showVariant ? 'block' : 'none';
     if (showVariant) updateVariantDepthNote();
   }
+}
+
+// additionalAgentIds returns checked, OS-eligible, non-primary agent IDs in
+// `agents` array order — this ordering is load-bearing: the review list and
+// dispatch order both rely on it matching render order exactly.
+function additionalAgentIds() {
+  var primaryId = document.getElementById('modal-agent').value;
+  return agents.filter(function(a) { return a.agentId !== primaryId && _addlSel[a.agentId]; })
+               .map(function(a) { return a.agentId; });
+}
+
+function eligibleAdditionalAgents() {
+  var primaryId = document.getElementById('modal-agent').value;
+  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var sc = scenarios.find(function(s) { return s.id === scId; });
+  var supported = ((sc && sc.supportedOs) || []).map(function(o) { return o.toLowerCase(); });
+  return agents.filter(function(a) {
+    if (a.agentId === primaryId) return false;
+    if (supported.length && supported.indexOf(cmpAgentOS(a)) === -1) return false;
+    return true;
+  });
+}
+
+function renderAdditionalAgents() {
+  var wrap = document.getElementById('modal-addl-wrap');
+  var list = document.getElementById('modal-addl-list');
+  if (!wrap || !list) return;
+  var eligible = eligibleAdditionalAgents();
+  // Prune selections for agents that just became ineligible (scenario or primary
+  // agent changed) so additionalAgentIds() never returns a hidden/stale checkbox.
+  var eligibleIds = {};
+  eligible.forEach(function(a) { eligibleIds[a.agentId] = true; });
+  Object.keys(_addlSel).forEach(function(k) { if (!eligibleIds[k]) delete _addlSel[k]; });
+  if (!eligible.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  list.innerHTML = eligible.map(function(a) {
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+      '<input type="checkbox" ' + (_addlSel[a.agentId] ? 'checked' : '') +
+      ' onchange="_addlSel[\'' + x(a.agentId) + '\']=this.checked;renderAdditionalAgentsCount()">' +
+      '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + ' · ' + cmpAgentOS(a) + '</span></label>';
+  }).join('');
+  renderAdditionalAgentsCount();
+}
+
+function renderAdditionalAgentsCount() {
+  var n = additionalAgentIds().length;
+  var el = document.getElementById('modal-addl-cnt');
+  if (el) el.textContent = '(' + n + ' selected)';
+}
+
+function selectAllAdditionalAgents() {
+  eligibleAdditionalAgents().forEach(function(a) { _addlSel[a.agentId] = true; });
+  renderAdditionalAgents();
 }
 
 // updateVariantDepthNote updates the helper text below the variant depth selector
