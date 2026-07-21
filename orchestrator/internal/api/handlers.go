@@ -1894,6 +1894,16 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	// Persist per-variant execution evidence to scenario_variant_results.
 	// Runs without VariantDepth (none) are a no-op (no variant meta in dispatchedMeta).
 	h.persistVariantResults(r.Context(), raw.RunID, raw.ScenarioID, simResults, dispatchedMeta)
+
+	// IOC extraction — parse stdout/stderr/details for indicators (IPs, domains,
+	// URLs, hashes, CVEs). Non-fatal: extraction failure must not fail result
+	// ingestion, since this is enrichment, not core scoring. Runs on partial
+	// runs too — completed steps' output is still real evidence.
+	indicators := ioc.BuildRunIndicators(raw.Results, raw.Checks, stepMap)
+	if err := db.UpsertRunIOCs(r.Context(), h.db, raw.RunID, raw.ScenarioID, indicators); err != nil {
+		log.Printf("[!] ioc extraction: failed to persist for run %s: %v", raw.RunID, err)
+	}
+
 	// Pre-compute per-technique variant summary then, if the run belongs to a
 	// campaign, refresh the campaign-level aggregate. Sequenced in one goroutine
 	// so the campaign summary always reads freshly-written technique rows.
