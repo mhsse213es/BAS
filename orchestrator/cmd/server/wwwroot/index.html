@@ -1810,15 +1810,50 @@ body.theme-slate {
             <h2>Threat Intel Connector</h2>
             <button class="btn btn-outline btn-sm" onclick="triggerConnectorSync()" id="connector-sync-btn">Sync Now</button>
           </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0.75rem;margin-bottom:0.75rem">
+            <div class="conn-cfg-card" id="cs-misp-card">
+              <div style="font-weight:600;font-size:0.82rem;color:var(--text);margin-bottom:0.5rem">MISP</div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Status</span>
+                <span id="cs-misp-status" class="conn-cfg-val">—</span>
+              </div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Events</span>
+                <span id="cs-misp-events" class="conn-cfg-val">—</span>
+              </div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Actors extracted</span>
+                <span id="cs-misp-actors" class="conn-cfg-val">—</span>
+              </div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Last Fetch</span>
+                <span id="cs-misp-lastfetch" class="conn-cfg-val">—</span>
+              </div>
+              <div id="cs-misp-error" style="display:none;margin-top:0.5rem;font-size:0.72rem;color:#f85149"></div>
+            </div>
+            <div class="conn-cfg-card" id="cs-opencti-card">
+              <div style="font-weight:600;font-size:0.82rem;color:var(--text);margin-bottom:0.5rem">OpenCTI</div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Status</span>
+                <span id="cs-opencti-status" class="conn-cfg-val">—</span>
+              </div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Threat Actor Nodes</span>
+                <span id="cs-opencti-nodes" class="conn-cfg-val">—</span>
+              </div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Actors extracted</span>
+                <span id="cs-opencti-actors" class="conn-cfg-val">—</span>
+              </div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Last Fetch</span>
+                <span id="cs-opencti-lastfetch" class="conn-cfg-val">—</span>
+              </div>
+              <div id="cs-opencti-error" style="display:none;margin-top:0.5rem;font-size:0.72rem;color:#f85149"></div>
+            </div>
+          </div>
+
           <div class="conn-cfg-card" id="connector-status-card">
-            <div class="conn-cfg-row">
-              <span class="conn-cfg-label">MISP</span>
-              <span id="cs-misp" class="conn-cfg-val">—</span>
-            </div>
-            <div class="conn-cfg-row">
-              <span class="conn-cfg-label">OpenCTI</span>
-              <span id="cs-opencti" class="conn-cfg-val">—</span>
-            </div>
             <div class="conn-cfg-row">
               <span class="conn-cfg-label">OTX (AlienVault)</span>
               <span id="cs-otx" class="conn-cfg-val">—</span>
@@ -12136,13 +12171,40 @@ function loadCalderaStatus() {
   });
 }
 
+// _renderConnectorCard fills one per-connector card (MISP/OpenCTI) from its
+// ConnectorStatus.BySource entry. rawCountElId differs per connector because
+// the two label their raw fetch count differently ("Events" for MISP vs
+// "Threat Actor Nodes" for OpenCTI) — they're genuinely different kinds of
+// raw data, not the same concept under two names. See
+// docs/superpowers/specs/2026-07-22-connector-rich-status-cards-design.md.
+function _renderConnectorCard(prefix, enabled, stat, rawCountElId) {
+  var statusEl = document.getElementById('cs-' + prefix + '-status');
+  if (!enabled) {
+    statusEl.textContent = '✗ Not configured';
+    statusEl.style.color = 'var(--muted)';
+  } else if (stat && stat.error) {
+    statusEl.textContent = '⚠ Error';
+    statusEl.style.color = '#f85149';
+  } else {
+    statusEl.textContent = '✓ Connected';
+    statusEl.style.color = '#5cead8';
+  }
+  document.getElementById(rawCountElId).textContent = stat ? stat.rawCount.toLocaleString() : '—';
+  document.getElementById('cs-' + prefix + '-actors').textContent = stat ? stat.actorCount.toLocaleString() : '—';
+  document.getElementById('cs-' + prefix + '-lastfetch').textContent = (stat && stat.fetchedAt) ? new Date(stat.fetchedAt).toLocaleString() : '—';
+  var errEl = document.getElementById('cs-' + prefix + '-error');
+  if (stat && stat.error) { errEl.textContent = stat.error; errEl.style.display = ''; }
+  else { errEl.style.display = 'none'; }
+}
+
 function loadConnectorStatus() {
   var wrap = document.getElementById('connector-status-wrap');
   if (!wrap) return;
   wrap.style.display = '';
   apicall('/api/connector/status').then(function(s) {
-    document.getElementById('cs-misp').textContent    = s.mispEnabled    ? '✓ Enabled' : '✗ Not configured';
-    document.getElementById('cs-opencti').textContent = s.openctiEnabled ? '✓ Enabled' : '✗ Not configured';
+    var bySource = s.bySource || {};
+    _renderConnectorCard('misp', s.mispEnabled, bySource.misp, 'cs-misp-events');
+    _renderConnectorCard('opencti', s.openctiEnabled, bySource.opencti, 'cs-opencti-nodes');
     document.getElementById('cs-otx').textContent     = s.otxEnabled     ? '✓ Enabled' : '✗ Not configured';
     document.getElementById('cs-bundle').textContent = s.bundleEnabled ? ('✓ Enabled (v' + (s.bundleVersion || '?') + ')') : '✗ Not configured';
     document.getElementById('cs-last-sync').textContent = s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : 'Never';
