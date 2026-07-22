@@ -2921,6 +2921,74 @@ body.theme-slate {
             <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="showTab('findings')">View Findings →</button>
           </div>
         </div>
+
+        <!-- EPP Response Connectors — separate from the ITSM connectors above:
+             these are write-capable (isolate/kill/quarantine), not read-only. -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:2rem 0 1rem;flex-wrap:wrap">
+          <div>
+            <h2 style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">EPP Response Connectors</h2>
+            <div style="font-size:0.8rem;color:var(--muted)">CrowdStrike / Defender credentials for isolate, kill process, and quarantine actions from the Findings tab.</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openAddResponseConnector()">+ Add Connector</button>
+        </div>
+        <div id="response-connectors-list"><div class="empty" style="padding:2rem">Loading connectors…</div></div>
+
+        <!-- Add / Edit response connector (inline form) -->
+        <div id="response-connector-form-wrap" style="display:none;margin-top:1.25rem">
+          <div class="conn-cfg-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+              <div style="font-size:0.85rem;font-weight:600;color:var(--text)" id="response-connector-form-title">Add Connector</div>
+              <button class="btn btn-outline btn-sm" onclick="closeResponseConnectorForm()">✕ Cancel</button>
+            </div>
+            <input type="hidden" id="rc-id">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
+              <div>
+                <div class="conn-cfg-label" style="margin-bottom:0.3rem">Name</div>
+                <input id="rc-name" type="text" placeholder="e.g. Prod CrowdStrike" class="inp-sm" style="width:100%">
+              </div>
+              <div>
+                <div class="conn-cfg-label" style="margin-bottom:0.3rem">Provider</div>
+                <select id="rc-provider" class="inp-sm" style="width:100%" onchange="renderResponseConnectorFields()">
+                  <option value="crowdstrike">CrowdStrike Falcon</option>
+                  <option value="microsoft_defender">Microsoft Defender for Endpoint</option>
+                </select>
+              </div>
+            </div>
+            <div id="rc-crowdstrike-fields" style="display:none;margin-bottom:0.75rem">
+              <div class="conn-cfg-label" style="margin-bottom:0.3rem">Base URL</div>
+              <input id="rc-base-url" type="text" placeholder="https://api.crowdstrike.com" class="inp-sm" style="width:100%">
+            </div>
+            <div id="rc-defender-fields" style="display:none;margin-bottom:0.75rem">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+                <div>
+                  <div class="conn-cfg-label" style="margin-bottom:0.3rem">Tenant ID</div>
+                  <input id="rc-tenant-id" type="text" placeholder="Entra tenant ID" class="inp-sm" style="width:100%">
+                </div>
+                <div>
+                  <div class="conn-cfg-label" style="margin-bottom:0.3rem">Kill Process Script Name <span class="tiny muted">(optional)</span></div>
+                  <input id="rc-kill-script" type="text" placeholder="Audspect-KillProcess.ps1" class="inp-sm" style="width:100%">
+                </div>
+              </div>
+              <div style="font-size:0.68rem;color:var(--warning);margin-top:0.35rem">⚠ Kill Process requires this script to already exist in the tenant's Defender Live Response script library — Defender has no built-in kill-process action.</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem">
+              <div>
+                <div class="conn-cfg-label" style="margin-bottom:0.3rem">Client ID</div>
+                <input id="rc-client-id" type="text" placeholder="API client ID" class="inp-sm" style="width:100%">
+              </div>
+              <div>
+                <div class="conn-cfg-label" style="margin-bottom:0.3rem">Client Secret</div>
+                <input id="rc-client-secret" type="password" placeholder="••••••" class="inp-sm" style="width:100%">
+              </div>
+            </div>
+            <label class="conn-cfg-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;margin-bottom:0.75rem">
+              <input type="checkbox" id="rc-enabled" checked> Enabled
+            </label>
+            <div style="display:flex;gap:0.5rem">
+              <button class="btn btn-primary btn-sm" onclick="saveResponseConnectorForm()">Save</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ── OpenAEV Connector — synced scenario content library ────────── -->
@@ -3879,7 +3947,7 @@ function showTab(name) {
       }
     }, 5000);
   }
-  if (name === 'integrations') loadIntegrations();
+  if (name === 'integrations') { loadIntegrations(); loadResponseConnectors(renderResponseConnectorList); }
   if (name === 'compliance') initComplianceTab();
   if (name === 'settings') {
     if (ROLE === 'admin') {
@@ -7830,6 +7898,134 @@ function deleteConnector(id, name) {
   if (!confirm('Delete connector "' + name + '"? This cannot be undone.')) return;
   apicall('/api/ticketing/configs/' + encodeURIComponent(id), { method: 'DELETE' })
     .then(function() { showToast('Connector deleted', 'ok'); loadIntegrations(); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// ── EPP Response Connectors ─────────────────────────────────────────────────
+// Deliberately separate from the ticketing connector functions above: this
+// API's request body is flat (no nested "settings" object) and there are
+// only two fixed providers, so this doesn't reuse CONNECTOR_FIELDS/
+// renderConnectorSettings — that machinery is ticketing-specific (auto-create
+// policy, project pickers) and would be a worse fit than a small dedicated form.
+var _responseConnectors = null;
+
+function loadResponseConnectors(cb) {
+  apicall('/api/actions/configs').then(function(list) {
+    _responseConnectors = list || [];
+    if (cb) cb(_responseConnectors);
+  }).catch(function() { _responseConnectors = []; if (cb) cb([]); });
+}
+
+function renderResponseConnectorList(list) {
+  var el = document.getElementById('response-connectors-list');
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = '<div class="conn-cfg-card" style="text-align:center;padding:2rem;color:var(--muted)">' +
+      '<div style="margin-bottom:0.5rem">No response connectors configured.</div>' +
+      '<div class="tiny">Add a CrowdStrike or Defender connector to enable Respond actions from Findings.</div></div>';
+    return;
+  }
+  var providerLabels = { crowdstrike: 'CrowdStrike Falcon', microsoft_defender: 'Microsoft Defender for Endpoint' };
+  el.innerHTML = list.map(function(c) {
+    var statusColor = c.enabled ? 'var(--success)' : 'var(--muted)';
+    var statusLabel = c.enabled ? 'Enabled' : 'Disabled';
+    var statusDot = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusColor + ';margin-right:5px"></span>' + statusLabel;
+    return '<div class="conn-cfg-card" style="margin-bottom:0.75rem">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">' +
+        '<div><div style="font-weight:600;font-size:0.85rem;color:var(--text)">' + x(c.name) + '</div>' +
+          '<div class="tiny muted">' + (providerLabels[c.provider] || c.provider) + '</div></div>' +
+        '<div style="display:flex;align-items:center;gap:0.65rem">' +
+          '<span class="tiny" style="color:' + statusColor + '">' + statusDot + '</span>' +
+          '<button class="btn btn-outline btn-sm" onclick="testResponseConnectorById(\'' + x(c.id) + '\',this)">Test</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="openEditResponseConnector(\'' + x(c.id) + '\')">Edit</button>' +
+          '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)" onclick="deleteResponseConnector(\'' + x(c.id) + '\',\'' + x(c.name) + '\')">Delete</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderResponseConnectorFields() {
+  var prov = document.getElementById('rc-provider').value;
+  document.getElementById('rc-crowdstrike-fields').style.display = (prov === 'crowdstrike') ? '' : 'none';
+  document.getElementById('rc-defender-fields').style.display = (prov === 'microsoft_defender') ? '' : 'none';
+}
+
+function openAddResponseConnector() {
+  document.getElementById('rc-id').value = '';
+  document.getElementById('rc-name').value = '';
+  document.getElementById('rc-provider').value = 'crowdstrike';
+  document.getElementById('rc-base-url').value = '';
+  document.getElementById('rc-tenant-id').value = '';
+  document.getElementById('rc-kill-script').value = '';
+  document.getElementById('rc-client-id').value = '';
+  document.getElementById('rc-client-secret').value = '';
+  document.getElementById('rc-enabled').checked = true;
+  document.getElementById('response-connector-form-title').textContent = 'Add Connector';
+  renderResponseConnectorFields();
+  document.getElementById('response-connector-form-wrap').style.display = '';
+  document.getElementById('response-connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openEditResponseConnector(id) {
+  var c = (_responseConnectors || []).find(function(cfg) { return cfg.id === id; });
+  if (!c) return;
+  document.getElementById('rc-id').value = c.id;
+  document.getElementById('rc-name').value = c.name || '';
+  document.getElementById('rc-provider').value = c.provider || 'crowdstrike';
+  document.getElementById('rc-base-url').value = c.baseUrl || '';
+  document.getElementById('rc-tenant-id').value = c.tenantId || '';
+  document.getElementById('rc-kill-script').value = c.killProcessScriptName || '';
+  document.getElementById('rc-client-id').value = c.clientId || '';
+  document.getElementById('rc-client-secret').value = '***';
+  document.getElementById('rc-enabled').checked = !!c.enabled;
+  document.getElementById('response-connector-form-title').textContent = 'Edit Connector';
+  renderResponseConnectorFields();
+  document.getElementById('response-connector-form-wrap').style.display = '';
+  document.getElementById('response-connector-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeResponseConnectorForm() {
+  document.getElementById('response-connector-form-wrap').style.display = 'none';
+}
+
+function saveResponseConnectorForm() {
+  var id = document.getElementById('rc-id').value;
+  var body = {
+    name:                  document.getElementById('rc-name').value,
+    provider:              document.getElementById('rc-provider').value,
+    enabled:               document.getElementById('rc-enabled').checked,
+    baseUrl:               document.getElementById('rc-base-url').value,
+    tenantId:              document.getElementById('rc-tenant-id').value,
+    killProcessScriptName: document.getElementById('rc-kill-script').value,
+    clientId:              document.getElementById('rc-client-id').value,
+    clientSecret:          document.getElementById('rc-client-secret').value
+  };
+  if (!body.name || !body.provider) { showToast('Name and provider are required', 'err'); return; }
+  var url = id ? '/api/actions/configs/' + encodeURIComponent(id) : '/api/actions/configs';
+  var method = id ? 'PUT' : 'POST';
+  apicall(url, { method: method, body: JSON.stringify(body) })
+    .then(function() {
+      showToast('Connector saved', 'ok');
+      closeResponseConnectorForm();
+      loadResponseConnectors(renderResponseConnectorList);
+    }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function testResponseConnectorById(id, btn) {
+  var orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
+  apicall('/api/actions/configs/' + encodeURIComponent(id) + '/test', { method: 'POST' })
+    .then(function(r) {
+      showToast(r.ok ? 'Connection OK' : 'Failed: ' + (r.error || 'unknown'), r.ok ? 'ok' : 'err');
+    }).catch(function(e) { showToast(e.message, 'err'); })
+    .finally(function() { if (btn) { btn.disabled = false; btn.textContent = orig; } });
+}
+
+function deleteResponseConnector(id, name) {
+  if (!confirm('Delete connector "' + name + '"? This cannot be undone.')) return;
+  apicall('/api/actions/configs/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function() { showToast('Connector deleted', 'ok'); loadResponseConnectors(renderResponseConnectorList); })
     .catch(function(e) { showToast(e.message, 'err'); });
 }
 
