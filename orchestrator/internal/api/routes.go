@@ -341,6 +341,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// since the 2026-07-18 RBAC permission expansion (see
 		// docs/superpowers/specs/2026-07-18-phase7-rbac-permission-expansion-design.md).
 		r.With(auth.RequirePermission(auth.CanSetAgentState)).Put("/api/agents/{agentId}/state", h.SetAgentState)
+		r.With(auth.RequirePermission(auth.CanStopAgent)).Post("/api/agents/{agentId}/stop", h.StopAgent)
 		r.With(auth.RequirePermission(auth.CanViewLicense)).Get("/api/license", h.GetLicenseInfo)
 		r.With(auth.RequirePermission(auth.CanViewConnectionConfig)).Get("/api/config/connection", h.GetConnectionConfig)
 		r.With(auth.RequirePermission(auth.CanListUsers)).Get("/api/users", h.ListUsers)

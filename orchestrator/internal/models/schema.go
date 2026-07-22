@@ -248,6 +248,14 @@ type Agent struct {
 	EnrolledAt    *time.Time    `json:"enrolledAt,omitempty"`
 	LastUpdate    time.Time     `json:"lastUpdate"`
 	Sims          int           `json:"sims"` // scenario runs dispatched to this agent (all time)
+	// StoppedBy/StoppedAt/StopReason are set when an Admin dispatches a
+	// durable remote stop (see StopAgent handler); cleared on re-enroll.
+	// StoppedBy holds the raw user ID (matches audit_logs.actor_id);
+	// StoppedByName is resolved read-time via a users join for display.
+	StoppedBy     *string    `json:"stoppedBy,omitempty"`
+	StoppedByName *string    `json:"stoppedByName,omitempty"`
+	StoppedAt     *time.Time `json:"stoppedAt,omitempty"`
+	StopReason    *string    `json:"stopReason,omitempty"`
 }
 
 // Heartbeat is sent by agents periodically.
@@ -326,6 +334,10 @@ const (
 	// MsgRevalidationStarted is broadcast when the auto-revalidation loop
 	// dispatches a targeted re-run after an ITSM ticket is resolved.
 	MsgRevalidationStarted = "revalidation_started"
+	// MsgCommandStopAgent tells a connected agent to durably stop itself —
+	// finalize any in-flight run, disable its platform service so it does not
+	// restart on its own, then exit. Payload: {"reason": string}.
+	MsgCommandStopAgent = "command_stop_agent"
 )
 
 // ── ATT&CK Normalisation ──────────────────────────────────────────────────────

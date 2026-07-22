@@ -69,7 +69,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
 
-		CanSetAgentState: true, CanViewLicense: true, CanViewConnectionConfig: true,
+		CanSetAgentState: true, CanStopAgent: true, CanViewLicense: true, CanViewConnectionConfig: true,
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
 		CanResetUserPassword: true, CanViewCalderaStatus: true, CanViewConnectorStatus: true,
 		CanSyncConnector: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
@@ -120,7 +120,7 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanLaunchExerciseExecution, CanAbortExerciseExecution, CanApproveExerciseStep,
 		CanInjectExerciseEvidence, CanLookupIOC,
 
-		CanSetAgentState, CanViewLicense, CanViewConnectionConfig, CanListUsers, CanCreateUser,
+		CanSetAgentState, CanStopAgent, CanViewLicense, CanViewConnectionConfig, CanListUsers, CanCreateUser,
 		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
 		CanSyncConnector, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
 		CanReseedARTContent, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,

@@ -86,6 +86,11 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// heartbeat (presence only) — shown as the report's security context.
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS security_products jsonb NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS posture_catalog jsonb NOT NULL DEFAULT '{}'`,
+		// Remote stop (see docs/superpowers/specs/2026-07-22-agent-remote-stop-design.md).
+		// stopped_by stores the acting user's ID, not a display name.
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS stopped_by  text`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS stopped_at  timestamptz`,
+		`ALTER TABLE agents ADD COLUMN IF NOT EXISTS stop_reason text`,
 
 		`CREATE TABLE IF NOT EXISTS scenario_runs (
 			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,

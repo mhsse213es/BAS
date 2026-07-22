@@ -178,6 +178,7 @@ var routeMatrix = []routeCase{
 
 	// ── admin only (per-permission since the 2026-07-18 RBAC expansion) ────
 	{http.MethodPut, "/api/agents/{agentId}/state", tierPermission, auth.CanSetAgentState},
+	{http.MethodPost, "/api/agents/{agentId}/stop", tierPermission, auth.CanStopAgent},
 	{http.MethodGet, "/api/license", tierPermission, auth.CanViewLicense},
 	{http.MethodGet, "/api/config/connection", tierPermission, auth.CanViewConnectionConfig},
 	{http.MethodGet, "/api/users", tierPermission, auth.CanListUsers},

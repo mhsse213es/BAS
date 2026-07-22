@@ -425,8 +425,10 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 		`SELECT a.agent_id, a.hostname, a.ip_address, a.os_version, a.username, a.status, a.env_label,
 		        a.has_report, a.binary_hash, a.binary_trusted, a.last_update,
 		        COALESCE(a.state, 'active'), COALESCE(a.policy_json::text, '{}'), a.enrolled_at,
-		        (SELECT COUNT(*) FROM scenario_runs sr WHERE sr.agent_id = a.agent_id) AS sims
-		 FROM agents a ORDER BY a.last_update DESC`)
+		        (SELECT COUNT(*) FROM scenario_runs sr WHERE sr.agent_id = a.agent_id) AS sims,
+		        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason
+		 FROM agents a LEFT JOIN users u ON u.id = a.stopped_by
+		 ORDER BY a.last_update DESC`)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -441,7 +443,8 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&a.AgentID, &a.Hostname, &a.IPAddress, &a.OSVersion,
 			&a.Username, &a.Status, &a.EnvLabel, &a.HasReport,
 			&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate,
-			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims); err != nil {
+			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims,
+			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason); err != nil {
 			continue
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
@@ -490,6 +493,49 @@ func (h *Handler) SetAgentState(w http.ResponseWriter, r *http.Request) {
 	h.auditLog(r, "agent.state", agentID, map[string]any{"state": body.State}, "ok")
 	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: agentID})
 	respond(w, map[string]any{"agentId": agentID, "state": body.State})
+}
+
+// POST /api/agents/{agentId}/stop — durably stops a connected agent: the
+// agent finalizes any in-flight run, disables its platform service so it
+// does not restart on its own (not on crash-recovery, not on next boot),
+// then exits. There is no remote way to start it again — see
+// docs/superpowers/specs/2026-07-22-agent-remote-stop-design.md.
+// Admin-only; the route group enforces the permission check.
+func (h *Handler) StopAgent(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Reason) == "" {
+		jsonError(w, "reason is required", http.StatusBadRequest)
+		return
+	}
+
+	sent := h.hub.SendToAgent(agentID, models.WSMessage{
+		Type:    models.MsgCommandStopAgent,
+		AgentID: agentID,
+		Data:    map[string]string{"reason": body.Reason},
+	})
+	if !sent {
+		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
+		return
+	}
+
+	actorID := ""
+	if claims, ok := auth.ClaimsFrom(r.Context()); ok {
+		actorID = claims.UserID
+	}
+	_, err := h.db.Exec(r.Context(),
+		`UPDATE agents SET stopped_by = $1, stopped_at = NOW(), stop_reason = $2 WHERE agent_id = $3`,
+		actorID, body.Reason, agentID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.auditLog(r, "agent.stop", agentID, map[string]any{"reason": body.Reason}, "ok")
+	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: agentID})
+	respond(w, map[string]any{"agentId": agentID, "status": "stop_dispatched"})
 }
 
 // agentFiles is the explicit allowlist of downloadable agent artifacts.
@@ -708,6 +754,11 @@ func (h *Handler) EnrollAgent(w http.ResponseWriter, r *http.Request) {
 			policy_json    = EXCLUDED.policy_json,
 			posture_catalog = EXCLUDED.posture_catalog,
 			enrolled_at    = COALESCE(agents.enrolled_at, NOW()),
+			-- A fresh enrollment is itself evidence someone restarted the agent —
+			-- clear any prior remote-stop record unconditionally.
+			stopped_by     = NULL,
+			stopped_at     = NULL,
+			stop_reason    = NULL,
 			last_update    = NOW()`,
 		req.AgentID, req.Hostname, req.IPAddress, req.OSVersion, req.Username,
 		req.EnvLabel, req.BinaryHash, trusted, policyJSON, postureCatalog,

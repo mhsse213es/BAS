@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -489,6 +490,84 @@ func TestAgentLifecycle_EndToEndChain(t *testing.T) {
 			if a.AgentID == agentID && a.State != models.AgentStateQuarantined {
 				t.Fatalf("final GetAgents state = %q, want quarantined", a.State)
 			}
+		}
+	})
+}
+
+func TestStopAgent_RequiresReason(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		body, _ := json.Marshal(map[string]string{"reason": ""})
+		req := withURLParam(httptest.NewRequest(http.MethodPost, "/api/agents/agent-x/stop", bytes.NewReader(body)), "agentId", "agent-x")
+		rec := httptest.NewRecorder()
+		h.StopAgent(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("empty reason: status = %d, want 400", rec.Code)
+		}
+	})
+}
+
+func TestStopAgent_NotConnected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		agentID := "agent-stop-notconn"
+		h.EnrollAgent(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/agents/enroll", bytes.NewReader(enrollBody(agentID, nil))))
+
+		body, _ := json.Marshal(map[string]string{"reason": "decommissioning"})
+		req := withURLParam(httptest.NewRequest(http.MethodPost, "/api/agents/"+agentID+"/stop", bytes.NewReader(body)), "agentId", agentID)
+		rec := httptest.NewRecorder()
+		h.StopAgent(rec, req)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("agent not connected: status = %d, want 503", rec.Code)
+		}
+	})
+}
+
+func TestStopAgent_Success(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		hub := ws.NewHub()
+		h := New(pool, hub, nil, "")
+		agentID := "agent-stop-ok"
+		h.EnrollAgent(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/agents/enroll", bytes.NewReader(enrollBody(agentID, nil))))
+
+		fake := startFakeAgent(t, hub, agentID)
+
+		body, _ := json.Marshal(map[string]string{"reason": "decommissioning host"})
+		req := authedRequest(t, http.MethodPost, "/api/agents/"+agentID+"/stop", bytes.NewReader(body), auth.RoleAdmin, "admin-1")
+		req = withURLParam(req, "agentId", agentID)
+		rec := callAuthed(h.StopAgent, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("stop dispatch: status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		env := fake.WaitForMessage(t, 2*time.Second)
+		if env.Type != models.MsgCommandStopAgent {
+			t.Fatalf("WS message type = %q, want %q", env.Type, models.MsgCommandStopAgent)
+		}
+		var payload struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.Unmarshal(env.Data, &payload); err != nil || payload.Reason != "decommissioning host" {
+			t.Fatalf("WS payload = %+v, err = %v, want reason=decommissioning host", payload, err)
+		}
+
+		var stoppedBy, stopReason string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT stopped_by, stop_reason FROM agents WHERE agent_id=$1`, agentID,
+		).Scan(&stoppedBy, &stopReason); err != nil {
+			t.Fatalf("read stop columns: %v", err)
+		}
+		if stoppedBy != "admin-1" || stopReason != "decommissioning host" {
+			t.Fatalf("stopped_by=%q stop_reason=%q, want admin-1/decommissioning host", stoppedBy, stopReason)
 		}
 	})
 }
