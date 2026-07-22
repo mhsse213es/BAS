@@ -13160,12 +13160,19 @@ function loadVariantTab() {
   populateVexTechniques();
 }
 
+// _vexAvailableVariants caches the server-computed real variant total (ART
+// atomic tests x encoding/privilege/context) once loadVariantStats resolves,
+// so the Full Sweep confirm dialog can quote the same number shown in the
+// "Total Variants" stat card instead of a separate rough guess.
+var _vexAvailableVariants = 0;
+
 function loadVariantStats() {
   apicall('/api/variants/stats').then(function(s) {
     var el = document.getElementById('vex-stats');
     if (!el) return;
     var artTech = s.artTechniqueCount || 0;
     var artAtomic = s.artAtomicCount || 0;
+    _vexAvailableVariants = s.availableVariants || 0;
     el.innerHTML =
       vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null) +
       vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString() + ' ART tests across ' + artTech + ' techniques \xd7 encoding/privilege/context') +
@@ -13241,7 +13248,12 @@ function vexRunFullSweep() {
   var n = _vexAllTechniques.length;
   var mode = (document.getElementById('vex-sweep-mode') || {}).value || 'sequential';
   var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
-  if (!confirm('Start Full Variant Sweep:\n\n  ' + n + ' techniques dispatched sequentially\n  ~' + (n * 33).toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
+  // Quote the same real, server-computed total shown in the "Total Variants"
+  // stat card (loadVariantStats) rather than a separate rough estimate — the
+  // two used to disagree (e.g. ~10k here vs ~27k above) because this dialog
+  // computed its own guess independently of the actual variant count.
+  var variantTotal = _vexAvailableVariants || (n * 33);
+  if (!confirm('Start Full Variant Sweep:\n\n  ' + n + ' techniques dispatched sequentially\n  ~' + variantTotal.toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
 
   var techniques = _vexAllTechniques.map(function(t) { return t.id; });
   _vexAbortRequested = false; _vexActiveScenarioRunId = null;
