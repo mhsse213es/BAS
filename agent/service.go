@@ -23,6 +23,16 @@ const (
 	svcDescription = "Next-Gen Breach & Attack Simulation endpoint agent. Runs security posture checks and reports results to the BAS orchestrator."
 )
 
+// stopRequested signals agentSvc.Execute()'s own select loop from the
+// WS-command goroutine (agent.go's stopSelf), so a remote stop while
+// running as a Windows service goes through the same clean SERVICE_STOPPED
+// handshake as a normal svc.Stop — calling os.Exit() directly from a
+// different goroutine would skip that handshake and could look like a
+// crash to SCM, triggering ApplyServiceRecovery's auto-restart. stopSelf
+// already ran finalize/heartbeat/disable before signaling, so no payload
+// is needed here — an empty struct is enough.
+var stopRequested = make(chan struct{}, 1)
+
 // ── Service Handler ───────────────────────────────────────────────────────────
 
 type agentSvc struct{}
@@ -65,6 +75,11 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 		select {
 		case <-ticker.C:
 			agent.sendHeartbeat(agent.getStatus())
+		case <-stopRequested:
+			// stopSelf (agent.go) already ran finalize/heartbeat/disable before
+			// signaling here — this just performs the clean SCM handshake.
+			status <- svc.Status{State: svc.StopPending, WaitHint: uint32((shutdownGrace + 5*time.Second) / time.Millisecond)}
+			return false, 0
 		case c := <-r:
 			switch c.Cmd {
 			case svc.Stop, svc.Shutdown:
@@ -300,4 +315,46 @@ func writeServiceParams(serverURL, envLabel string) error {
 		return err
 	}
 	return k.SetStringValue("BAS_ENV_LABEL", envLabel)
+}
+
+// platformDisableAutoStart sets the service's start type to Disabled so it
+// does not start at the endpoint's next boot. Safe to call on a running
+// service — only affects future start attempts, not this one.
+func platformDisableAutoStart() error {
+	m, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("connect SCM: %w", err)
+	}
+	defer m.Disconnect()
+	s, err := m.OpenService(svcName)
+	if err != nil {
+		return fmt.Errorf("open service: %w", err)
+	}
+	defer s.Close()
+	cfg, err := s.Config()
+	if err != nil {
+		return fmt.Errorf("query service config: %w", err)
+	}
+	cfg.StartType = mgr.StartDisabled
+	if err := s.UpdateConfig(cfg); err != nil {
+		return fmt.Errorf("update service config: %w", err)
+	}
+	log.Printf("[svc] service start type set to Disabled — will not start at next boot")
+	return nil
+}
+
+// platformExitAfterStop ends this process. When running as a Windows
+// service, it hands off to agentSvc.Execute()'s own select loop (via
+// stopRequested) instead of exiting directly, so SCM sees a clean stop
+// rather than a crash. In console mode there is no SCM handshake to honor,
+// so it exits directly.
+func platformExitAfterStop() {
+	if isWindowsService() {
+		select {
+		case stopRequested <- struct{}{}:
+		default:
+		}
+		return
+	}
+	os.Exit(0)
 }

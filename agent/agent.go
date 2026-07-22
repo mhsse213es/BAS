@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -76,6 +77,8 @@ func (a *Agent) clearCurrentJob() {
 	a.currentJobPercent = 0
 	a.mu.Unlock()
 }
+
+var errDisableFailedForTest = errors.New("disable failed (test)")
 
 func newAgent(cfg Config, id Identity) *Agent {
 	a := &Agent{
@@ -314,6 +317,33 @@ func (a *Agent) shutdownFinalize(grace time.Duration) {
 	case <-time.After(grace):
 		log.Printf("[!] simulation did not finalize within %s — partial may be incomplete", grace)
 	}
+}
+
+// platformDisableAutoStartFn and platformExitAfterStopFn are indirections
+// over the real platform-specific functions (defined per-OS in
+// service.go/service_linux.go/service_darwin.go) so tests can substitute
+// no-op stand-ins instead of actually disabling a service or exiting the
+// test process.
+var (
+	platformDisableAutoStartFn = platformDisableAutoStart
+	platformExitAfterStopFn    = platformExitAfterStop
+)
+
+// stopSelf performs a durable, operator-requested shutdown: finalize any
+// in-flight run, send a final heartbeat, disable the platform service so it
+// does not come back (not on crash-recovery, not on next boot), then exit.
+// See docs/superpowers/specs/2026-07-22-agent-remote-stop-design.md for why
+// the disable step must run before exit, and why it differs per platform.
+func (a *Agent) stopSelf(reason string) {
+	log.Printf("[*] Stop requested by operator: %s", reason)
+	a.logger.Op("warn", "lifecycle", "agent stopped by operator request: "+reason)
+	a.shutdownFinalize(shutdownGrace)
+	a.sendHeartbeat("offline")
+	platformRestoreOnShutdown()
+	if err := platformDisableAutoStartFn(); err != nil {
+		log.Printf("[!] disable auto-start: %v — agent may restart at next boot", err)
+	}
+	platformExitAfterStopFn()
 }
 
 // disconnectedFor reports how long the server link has been down, or 0 if connected.
@@ -927,6 +957,16 @@ func (a *Agent) connectWS() {
 				} else {
 					log.Printf("[~] command_cancel received but no scenario is running")
 				}
+
+			case "command_stop_agent":
+				var body struct {
+					Reason string `json:"reason"`
+				}
+				if err := json.Unmarshal(msg.Data, &body); err != nil {
+					log.Printf("[!] WS: bad stop command: %v", err)
+					continue
+				}
+				go a.stopSelf(body.Reason)
 
 			default:
 				log.Printf("[~] WS: unhandled message type %q", msg.Type)

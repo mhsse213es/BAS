@@ -105,3 +105,19 @@ func readServiceParams() (serverURL, envLabel string) {
 	}
 	return serverURL, envLabel
 }
+
+// platformDisableAutoStart removes bas-agent.service's boot-time enablement
+// so it does not start at the endpoint's next boot. Best-effort: a failure
+// here is logged by the caller (stopSelf) but does not block the stop
+// itself — the process still exits now; it just isn't guaranteed to stay
+// stopped across a reboot.
+func platformDisableAutoStart() error {
+	return exec.Command("systemctl", "disable", "bas-agent.service").Run()
+}
+
+// platformExitAfterStop ends this process. The systemd unit's
+// Restart=on-failure policy does not fire on a clean exit (code 0), so no
+// SCM-style handshake is needed here unlike Windows.
+func platformExitAfterStop() {
+	os.Exit(0)
+}

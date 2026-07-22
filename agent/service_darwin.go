@@ -86,3 +86,22 @@ func readServiceParams() (serverURL, envLabel string) {
 	}
 	return serverURL, envLabel
 }
+
+// platformDisableAutoStart unloads the launchd job with the persistent
+// "-w" (disabled) flag, so it does not start at the endpoint's next boot.
+// Unlike Linux/Windows, this must run BEFORE the process exits, not after:
+// the launchd plist's KeepAlive=true restarts the job unconditionally on
+// ANY exit (clean or not), so exiting first would just be relaunched before
+// this had a chance to disable it. Note this call itself typically
+// terminates the process as a side effect of unloading — that's expected;
+// platformExitAfterStop below becomes a no-op in that case.
+func platformDisableAutoStart() error {
+	return exec.Command("launchctl", "unload", "-w", darwinPlistPath).Run()
+}
+
+// platformExitAfterStop ends this process. On macOS the disable step above
+// usually already ended it — this is a fallback for the case where it did
+// not (e.g. an older launchd that doesn't synchronously kill on unload).
+func platformExitAfterStop() {
+	os.Exit(0)
+}
