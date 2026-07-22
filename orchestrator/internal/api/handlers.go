@@ -3876,16 +3876,32 @@ func (h *Handler) RunCalderaAdversary(w http.ResponseWriter, r *http.Request) {
 
 // ── Threat-Intel Connector (Admin only) ───────────────────────────────────────
 
+// connectorStatusResponse adds OTX's enabled flag alongside the MISP/OpenCTI
+// bundle-sync status from the connector package. OTX has no sync/schedule of
+// its own (it's a synchronous on-demand lookup, not a periodic bundle sync),
+// so it doesn't belong in connector.ConnectorStatus itself — this wraps the
+// response instead, keeping that struct scoped to what the scheduler tracks.
+type connectorStatusResponse struct {
+	connector.ConnectorStatus
+	OTXEnabled bool `json:"otxEnabled"`
+}
+
 // GET /api/connector/status
 func (h *Handler) GetConnectorStatus(w http.ResponseWriter, r *http.Request) {
 	if h.scheduler == nil {
-		respond(w, connector.ConnectorStatus{
-			LastSyncStatus: "never",
-			LastError:      "No threat-intel sources configured. Set MISP_URL/MISP_API_KEY or OPENCTI_URL/OPENCTI_API_KEY.",
+		respond(w, connectorStatusResponse{
+			ConnectorStatus: connector.ConnectorStatus{
+				LastSyncStatus: "never",
+				LastError:      "No threat-intel sources configured. Set MISP_URL/MISP_API_KEY or OPENCTI_URL/OPENCTI_API_KEY.",
+			},
+			OTXEnabled: h.iocProvider != nil,
 		})
 		return
 	}
-	respond(w, h.scheduler.Status())
+	respond(w, connectorStatusResponse{
+		ConnectorStatus: h.scheduler.Status(),
+		OTXEnabled:      h.iocProvider != nil,
+	})
 }
 
 // POST /api/connector/sync  — triggers an immediate sync in background
