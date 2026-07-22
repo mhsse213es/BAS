@@ -13176,21 +13176,35 @@ function loadVariantStats() {
     if (!el) return;
     var artTech = s.artTechniqueCount || 0;
     var artAtomic = s.artAtomicCount || 0;
+    var perFamily = s.variantsPerFamily || 56;
     _vexAvailableVariants = s.availableVariants || 0;
     el.innerHTML =
-      vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null) +
-      vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString() + ' ART tests across ' + artTech + ' techniques \xd7 encoding/privilege/context') +
-      vexStatCard('Custom Payload Families', s.payloadFamilyCount,   'var(--text)',   s.payloadFamilyCount + ' families \xd7 ' + (s.variantsPerFamily || 56) + ' variants = ' + (s.payloadFamilyVariants || 0).toLocaleString()) +
-      vexStatCard('Custom-Enhanced Techniques', s.techniquesWithFamilies, 'var(--text)', 'of ' + artTech + ' ART techniques have custom payload families');
+      vexStatCard('Executed Variants',     s.executedVariants,       'var(--accent)', null,
+        'How many individual variant executions (encoding \xd7 privilege \xd7 context combinations) have actually completed so far, summed across every finished variant run — not the total available.') +
+      vexStatCard('Total Variants',        s.availableVariants,      'var(--text)',   artAtomic.toLocaleString() + ' ART tests across ' + artTech + ' techniques \xd7 encoding/privilege/context',
+        'The full combinatorial test space: every one of the ' + artAtomic.toLocaleString() + ' ART atomic tests (across ' + artTech + ' techniques) multiplied by the encoding, privilege, and execution-context variations BAS can generate for it. This is what a Full Sweep dispatches in total, not what has run yet.') +
+      vexStatCard('Custom Payload Families', s.payloadFamilyCount,   'var(--text)',   s.payloadFamilyCount + ' families \xd7 ' + perFamily + ' variants = ' + (s.payloadFamilyVariants || 0).toLocaleString(),
+        'Custom (non-ART) payload families you’ve authored yourself. Each one expands into ' + perFamily + ' variants (encoding/obfuscation/delivery combinations) — counted separately from, and in addition to, the ART-derived Total Variants figure.') +
+      vexStatCard('Custom-Enhanced Techniques', s.techniquesWithFamilies, 'var(--text)', 'of ' + artTech + ' ART techniques have custom payload families',
+        'How many of the ' + artTech + ' ART techniques have at least one custom payload family attached, giving them extra variant coverage beyond their standard ART atomic tests.');
     _updateSweepVariantCount(s.availableVariants);
   }).catch(function() {});
 }
 
-function vexStatCard(label, val, col, sub) {
-  return '<div class="kpi-card"><div class="kpi-label">' + label + '</div>' +
+function vexStatCard(label, val, col, sub, help) {
+  return '<div class="kpi-card" style="position:relative">' +
+    (help ? '<button type="button" class="btn btn-sm" onclick="showVexStatHelp(\'' + x(label) + '\',\'' + x(help) + '\')" title="What does this number mean?" style="position:absolute;top:0.5rem;right:0.5rem;width:18px;height:18px;padding:0;line-height:16px;text-align:center;border-radius:50%;font-size:0.68rem;font-weight:700;color:var(--muted);background:transparent;border:1px solid var(--border)">?</button>' : '') +
+    '<div class="kpi-label">' + label + '</div>' +
     '<div class="kpi-value" style="color:' + col + '">' + (val || 0).toLocaleString() + '</div>' +
     (sub ? '<div style="font-size:0.65rem;color:var(--muted);margin-top:0.15rem">' + sub + '</div>' : '') +
     '</div>';
+}
+
+// showVexStatHelp explains what a Variant Executor stat card's number means —
+// each card has a small "?" button since the always-visible caption under the
+// number isn't always enough context on its own for a first-time viewer.
+function showVexStatHelp(label, help) {
+  showToast(label + ': ' + help, 'ok');
 }
 
 function populateVexAgents() {
