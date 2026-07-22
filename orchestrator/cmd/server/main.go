@@ -230,6 +230,10 @@ func main() {
 			log.Printf("[+] Threat-intel bundle found in %s (air-gapped source)", cfg.TIBundleDir)
 		}
 	}
+	if cfg.OTXAPIKey != "" {
+		tiSources = append(tiSources, connector.NewOTXSource(cfg.OTXAPIKey))
+		log.Printf("[+] OTX connector configured (periodic sync)")
+	}
 	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
 	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool)
 	scheduler.Start()

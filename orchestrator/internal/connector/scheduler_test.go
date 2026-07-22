@@ -73,6 +73,39 @@ func TestScheduler_Sync_PopulatesBySourcePerSource(t *testing.T) {
 	}
 }
 
+func TestScheduler_Sync_ZeroActorSourceDoesNotDisruptOthers(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	otxStat := SourceStat{Name: "otx", RawCount: 47, ActorCount: 0, FetchedAt: time.Now()}
+	s := NewScheduler([]Source{
+		fakeSource{
+			name:   "misp",
+			actors: []ThreatActor{{Name: "APT36", Techniques: []TechniqueRef{{ID: "T1059.001"}, {ID: "T1566.001"}}}},
+			stats:  SourceStat{Name: "misp", RawCount: 5, ActorCount: 1, FetchedAt: time.Now()},
+		},
+		fakeSource{
+			name:   "otx",
+			actors: nil,
+			stats:  otxStat,
+		},
+	}, NewGenerator(t.TempDir(), nil, nil), scenario.NewEngine(t.TempDir()), 24, sharedDB.Pool)
+
+	s.sync()
+
+	st := s.Status()
+	if len(st.BySource) != 2 {
+		t.Fatalf("BySource = %+v, want 2 entries", st.BySource)
+	}
+	otx, ok := st.BySource["otx"]
+	if !ok || otx.RawCount != 47 || otx.ActorCount != 0 || otx.Error != "" {
+		t.Fatalf("BySource[otx] = %+v, want RawCount=47 ActorCount=0 Error=\"\"", otx)
+	}
+	if st.TotalActors != 1 {
+		t.Fatalf("TotalActors = %d, want 1 (otx contributes zero, misp contributes 1)", st.TotalActors)
+	}
+}
+
 func TestMergeActors_UnionsTechniques(t *testing.T) {
 	// Layering: same actor from the bundle floor and a live overlay → the
 	// techniques are unioned, which is what makes bundle+live compose for free.
