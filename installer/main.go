@@ -582,23 +582,48 @@ func webView2Installed() bool {
 	return false
 }
 
+// webView2InstallerGlob matches the Microsoft Edge WebView2 Runtime "Evergreen
+// Standalone Installer" filename. A glob (not an exact name) because Microsoft
+// has changed this filename before and may again — matching a pattern means a
+// future rename doesn't require a BAS code change or rebuild, just re-dropping
+// the renamed file in the same spot.
+const webView2InstallerGlob = "*WebView2*RuntimeInstaller*.exe"
+
+// findWebView2InstallerIn globs dir for the runtime installer. Returns "" if
+// none or more than one match is found — an ambiguous match is treated as
+// "not found" rather than guessing which file to run.
+func findWebView2InstallerIn(dir string) string {
+	matches, err := filepath.Glob(filepath.Join(dir, webView2InstallerGlob))
+	if err != nil || len(matches) != 1 {
+		return ""
+	}
+	return matches[0]
+}
+
+// findWebView2Installer looks for the runtime installer next to the running
+// installer.exe — nowhere else (never Downloads, %TEMP%, the current working
+// directory, or %ProgramData%), so behavior is deterministic and this never
+// risks executing an unexpected binary from a writable/shared location.
+func findWebView2Installer() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return findWebView2InstallerIn(filepath.Dir(exePath))
+}
+
 func ensureWebView2Runtime() {
 	if webView2Installed() {
 		appendStatus("[+] WebView2 runtime present.")
 		return
 	}
-	if len(webview2RuntimeInstaller) == 0 {
-		appendStatus("[~] WebView2 runtime missing and not bundled — status console will open in browser.")
+	installerPath := findWebView2Installer()
+	if installerPath == "" {
+		appendStatus("[~] WebView2 runtime missing (no runtime installer found next to this installer) — status console will open in browser.")
 		return
 	}
 	appendStatus("[*] Installing Microsoft Edge WebView2 runtime...")
-	tmp := filepath.Join(os.TempDir(), "MicrosoftEdgeWebView2RuntimeInstaller.exe")
-	if err := os.WriteFile(tmp, webview2RuntimeInstaller, 0755); err != nil {
-		appendStatus("[~] Could not stage WebView2 installer: " + err.Error())
-		return
-	}
-	defer os.Remove(tmp)
-	cmd := exec.Command(tmp, "/silent", "/install")
+	cmd := exec.Command(installerPath, "/silent", "/install")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		appendStatus("[~] WebView2 runtime install failed: " + err.Error())

@@ -20,11 +20,19 @@ is never committed.
 
 ## How it is used
 
-- When the file is present, `packaging/windows-build.ps1` and the Docker build
-  detect it and compile the installer with `-tags webview2bundled`, embedding it
-  (see `installer/webview2_bundled.go`).
-- At install time, the GUI installer checks the WebView2 registry key and, if
-  the runtime is missing, runs the embedded installer with `/silent /install`
-  before launching the tray (see `ensureWebView2Runtime` in `main.go`).
-- A bare `go build` (no tag) ignores the file and keeps the browser fallback
-  (see `installer/webview2_stub.go`), so the binary is optional for dev builds.
+The runtime is shipped as a **separate file next to `installer.exe`**, not
+embedded — embedding it via `go:embed` would balloon `installer.exe` from
+~14MB to ~190MB, which this project treats as unacceptable.
+
+- The filename just needs to match the pattern `*WebView2*RuntimeInstaller*.exe`
+  (the file Microsoft ships today already does) — not an exact name, so a
+  future Microsoft rename doesn't require a BAS code change, just re-dropping
+  the renamed file here.
+- `packaging/windows-build.ps1` and the Docker build (`orchestrator/Dockerfile`)
+  both copy whichever matching file is present here alongside the built
+  installer in their output — no build tag, no embedding.
+- At install time, the GUI installer looks for that same pattern **only in its
+  own directory** (never Downloads/%TEMP%/CWD/%ProgramData%) and runs it
+  directly with `/silent /install` if found (see `ensureWebView2Runtime` and
+  `findWebView2Installer` in `main.go`). If no match is found, it logs a
+  message and the status console falls back to opening in the browser.
