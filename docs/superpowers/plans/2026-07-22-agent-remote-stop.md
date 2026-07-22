@@ -710,6 +710,12 @@ var stopRequested = make(chan struct{}, 1)
 
 Find:
 ```go
+	for {
+		select {
+		case <-ticker.C:
+			agent.sendHeartbeat(agent.getStatus())
+		case c := <-r:
+			switch c.Cmd {
 			case svc.Stop, svc.Shutdown:
 				// Tell the SCM how long we may take so it doesn't kill us before an
 				// in-flight run finalizes its Partial to the spool.
@@ -719,8 +725,19 @@ Find:
 				RestoreSystemDialogs()
 				return false, 0
 ```
-Replace with:
+Replace with (note the new `case <-stopRequested:` is a sibling of `case c := <-r:` in the *outer* select — it cannot go inside `switch c.Cmd { ... }`, since that switch compares `c.Cmd` values and a channel-receive case is a different kind of expression entirely; mixing them is a compile error):
 ```go
+	for {
+		select {
+		case <-ticker.C:
+			agent.sendHeartbeat(agent.getStatus())
+		case <-stopRequested:
+			// stopSelf (agent.go) already ran finalize/heartbeat/disable before
+			// signaling here — this just performs the clean SCM handshake.
+			status <- svc.Status{State: svc.StopPending, WaitHint: uint32((shutdownGrace + 5*time.Second) / time.Millisecond)}
+			return false, 0
+		case c := <-r:
+			switch c.Cmd {
 			case svc.Stop, svc.Shutdown:
 				// Tell the SCM how long we may take so it doesn't kill us before an
 				// in-flight run finalizes its Partial to the spool.
@@ -728,11 +745,6 @@ Replace with:
 				agent.shutdownFinalize(shutdownGrace)
 				agent.sendHeartbeat("offline")
 				RestoreSystemDialogs()
-				return false, 0
-			case <-stopRequested:
-				// stopSelf (agent.go) already ran finalize/heartbeat/disable before
-				// signaling here — this just performs the clean SCM handshake.
-				status <- svc.Status{State: svc.StopPending, WaitHint: uint32((shutdownGrace + 5*time.Second) / time.Millisecond)}
 				return false, 0
 ```
 
