@@ -25,7 +25,8 @@ type OpenCTIClient struct {
 	// supporting this needs OpenCTI's actual sector/region GraphQL schema,
 	// which can't be verified without a live instance. See
 	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
-	sectors []string
+	sectors  []string
+	lastStat SourceStat
 }
 
 // NewOpenCTIClient creates an OpenCTI GraphQL client.
@@ -45,6 +46,7 @@ func (c *OpenCTIClient) Name() string { return "opencti" }
 func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
 	actorsRaw, err := c.queryThreatActors()
 	if err != nil {
+		c.lastStat = SourceStat{Name: "opencti", Error: err.Error(), FetchedAt: time.Now()}
 		return nil, fmt.Errorf("opencti query actors: %w", err)
 	}
 	log.Printf("[connector/opencti] fetched %d threat actors", len(actorsRaw))
@@ -57,8 +59,12 @@ func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
 		}
 		actors = append(actors, *actor)
 	}
+	c.lastStat = SourceStat{Name: "opencti", RawCount: len(actorsRaw), ActorCount: len(actors), FetchedAt: time.Now()}
 	return actors, nil
 }
+
+// Stats implements StatsSource.
+func (c *OpenCTIClient) Stats() SourceStat { return c.lastStat }
 
 // ── GraphQL types ─────────────────────────────────────────────────────────────
 

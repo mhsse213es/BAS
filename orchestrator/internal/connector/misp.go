@@ -17,6 +17,7 @@ type MISPClient struct {
 	httpClient *http.Client
 	sectors    []string
 	regions    []string
+	lastStat   SourceStat
 }
 
 // NewMISPClient creates a MISP client. Skips TLS verification for self-signed
@@ -43,6 +44,7 @@ func (c *MISPClient) Name() string { return "misp" }
 func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 	events, err := c.listEvents()
 	if err != nil {
+		c.lastStat = SourceStat{Name: "misp", Error: err.Error(), FetchedAt: time.Now()}
 		return nil, fmt.Errorf("misp list events: %w", err)
 	}
 	log.Printf("[connector/misp] fetched %d events", len(events))
@@ -71,8 +73,12 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 			out = append(out, *a)
 		}
 	}
+	c.lastStat = SourceStat{Name: "misp", RawCount: len(events), ActorCount: len(out), FetchedAt: time.Now()}
 	return out, nil
 }
+
+// Stats implements StatsSource.
+func (c *MISPClient) Stats() SourceStat { return c.lastStat }
 
 // ── MISP API types ────────────────────────────────────────────────────────────
 
