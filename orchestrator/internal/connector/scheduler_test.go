@@ -1,7 +1,9 @@
 package connector
 
 import (
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -12,10 +14,12 @@ type fakeSource struct {
 	name   string
 	actors []ThreatActor
 	err    error
+	stats  SourceStat
 }
 
 func (f fakeSource) Name() string                  { return f.name }
 func (f fakeSource) Fetch() ([]ThreatActor, error) { return f.actors, f.err }
+func (f fakeSource) Stats() SourceStat             { return f.stats }
 
 func TestNewScheduler_StatusFlags(t *testing.T) {
 	s := NewScheduler([]Source{
@@ -32,6 +36,40 @@ func TestNewScheduler_StatusFlags(t *testing.T) {
 	}
 	if st.LastSyncStatus != "never" {
 		t.Fatalf("status = %q, want never", st.LastSyncStatus)
+	}
+}
+
+func TestScheduler_Sync_PopulatesBySourcePerSource(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	mispStat := SourceStat{Name: "misp", RawCount: 5, ActorCount: 2, FetchedAt: time.Now()}
+	s := NewScheduler([]Source{
+		fakeSource{
+			name:   "misp",
+			actors: []ThreatActor{{Name: "APT36", Techniques: []TechniqueRef{{ID: "T1059.001"}, {ID: "T1566.001"}}}},
+			stats:  mispStat,
+		},
+		fakeSource{
+			name: "opencti",
+			err:  errors.New("opencti unreachable"),
+			stats: SourceStat{Name: "opencti", Error: "opencti unreachable", FetchedAt: time.Now()},
+		},
+	}, NewGenerator(t.TempDir(), nil, nil), scenario.NewEngine(t.TempDir()), 24, sharedDB.Pool)
+
+	s.sync()
+
+	st := s.Status()
+	if len(st.BySource) != 2 {
+		t.Fatalf("BySource = %+v, want 2 entries", st.BySource)
+	}
+	misp, ok := st.BySource["misp"]
+	if !ok || misp.RawCount != 5 || misp.ActorCount != 2 || misp.Error != "" {
+		t.Fatalf("BySource[misp] = %+v, want RawCount=5 ActorCount=2 Error=\"\"", misp)
+	}
+	opencti, ok := st.BySource["opencti"]
+	if !ok || opencti.Error != "opencti unreachable" {
+		t.Fatalf("BySource[opencti] = %+v, want Error=\"opencti unreachable\"", opencti)
 	}
 }
 

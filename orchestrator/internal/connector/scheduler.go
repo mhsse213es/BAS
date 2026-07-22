@@ -127,15 +127,19 @@ func (s *Scheduler) sync() {
 
 	var actors []ThreatActor
 	var bundleVersion string
+	bySource := map[string]SourceStat{}
 
 	// Fetch every configured source. The bundle (air-gapped floor) and live
 	// providers (MISP/OpenCTI overlay) are treated uniformly; a single source
 	// failing is logged and skipped, never aborting the others.
 	for _, src := range s.sources {
 		got, err := src.Fetch()
+		if ss, ok := src.(StatsSource); ok {
+			bySource[src.Name()] = ss.Stats()
+		}
 		if err != nil {
 			log.Printf("[connector/%s] fetch error: %v", src.Name(), err)
-			s.setError(src.Name() + ": " + err.Error())
+			s.setError(src.Name()+": "+err.Error(), bySource)
 			continue
 		}
 		log.Printf("[connector/%s] %d actors fetched", src.Name(), len(got))
@@ -147,7 +151,7 @@ func (s *Scheduler) sync() {
 
 	if len(actors) == 0 {
 		log.Println("[connector] no actors returned from any source")
-		s.setOK(0, 0, 0, bundleVersion)
+		s.setOK(0, 0, 0, bundleVersion, bySource)
 		return
 	}
 
@@ -163,7 +167,7 @@ func (s *Scheduler) sync() {
 	result, err := s.generator.Write(actors)
 	if err != nil {
 		log.Printf("[connector/gen] write error: %v", err)
-		s.setError("Generator: " + err.Error())
+		s.setError("Generator: "+err.Error(), bySource)
 		return
 	}
 
@@ -180,10 +184,10 @@ func (s *Scheduler) sync() {
 	log.Printf("[connector] sync complete in %s — created:%d updated:%d skipped:%d",
 		elapsed, result.Created, result.Updated, result.Skipped)
 
-	s.setOK(result.Created, result.Updated, len(actors), bundleVersion)
+	s.setOK(result.Created, result.Updated, len(actors), bundleVersion, bySource)
 }
 
-func (s *Scheduler) setOK(created, updated, total int, bundleVersion string) {
+func (s *Scheduler) setOK(created, updated, total int, bundleVersion string, bySource map[string]SourceStat) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.status.LastSyncAt = time.Now()
@@ -195,15 +199,17 @@ func (s *Scheduler) setOK(created, updated, total int, bundleVersion string) {
 	if bundleVersion != "" {
 		s.status.BundleVersion = bundleVersion
 	}
+	s.status.BySource = bySource
 	s.status.NextSyncAt = time.Now().Add(s.interval)
 }
 
-func (s *Scheduler) setError(msg string) {
+func (s *Scheduler) setError(msg string, bySource map[string]SourceStat) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.status.LastSyncAt = time.Now()
 	s.status.LastSyncStatus = "error"
 	s.status.LastError = msg
+	s.status.BySource = bySource
 	s.status.NextSyncAt = time.Now().Add(s.interval)
 }
 
