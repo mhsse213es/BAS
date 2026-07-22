@@ -3128,11 +3128,15 @@ body.theme-slate {
           <div id="vex-sweep-progress" style="display:none;margin-top:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;font-size:0.78rem">
               <span id="vex-sweep-status" style="color:var(--muted)"></span>
-              <span id="vex-sweep-pct" style="font-weight:700;color:var(--accent)"></span>
+              <span style="display:flex;align-items:center;gap:0.6rem">
+                <span id="vex-sweep-pct" style="font-weight:700;color:var(--accent)"></span>
+                <button id="vex-sweep-stop-btn" class="btn btn-outline btn-sm" style="display:none;color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:0.7rem" onclick="stopVex()">&#9632; Stop</button>
+              </span>
             </div>
             <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
               <div id="vex-sweep-bar" style="height:5px;background:var(--accent);border-radius:3px;width:0%;transition:width 0.5s ease"></div>
             </div>
+            <div id="vex-sweep-timing" class="tiny muted" style="margin-top:0.4rem"></div>
           </div>
         </div>
 
@@ -13239,6 +13243,34 @@ function _updateSweepVariantCount(availableVariants) {
 }
 
 var _vexSweepRunning = false;
+var _vexSweepStartedAt = null; // Date the current/last sweep started, or null if none run yet this session
+
+// _vexFormatDuration renders a millisecond duration as e.g. "2m 14s" or "1h 05m 30s".
+function _vexFormatDuration(ms) {
+  var totalSec = Math.max(0, Math.round(ms / 1000));
+  var h = Math.floor(totalSec / 3600);
+  var m = Math.floor((totalSec % 3600) / 60);
+  var s = totalSec % 60;
+  if (h > 0) return h + 'h ' + (m < 10 ? '0' : '') + m + 'm ' + (s < 10 ? '0' : '') + s + 's';
+  if (m > 0) return m + 'm ' + (s < 10 ? '0' : '') + s + 's';
+  return s + 's';
+}
+
+// _vexRenderSweepTiming updates the "Started ... / Elapsed .../ Completed ..." line.
+// endLabel is null while the sweep is still running (shows a live elapsed time),
+// or 'Completed'/'Stopped' once it reaches a terminal state (freezes the duration).
+function _vexRenderSweepTiming(endLabel) {
+  var el = document.getElementById('vex-sweep-timing');
+  if (!el || !_vexSweepStartedAt) return;
+  var startTxt = _vexSweepStartedAt.toLocaleTimeString();
+  if (!endLabel) {
+    el.textContent = 'Started ' + startTxt + ' · Elapsed ' + _vexFormatDuration(Date.now() - _vexSweepStartedAt.getTime());
+    return;
+  }
+  var endedAt = new Date();
+  el.textContent = 'Started ' + startTxt + ' · ' + endLabel + ' ' + endedAt.toLocaleTimeString() +
+    ' (' + _vexFormatDuration(endedAt.getTime() - _vexSweepStartedAt.getTime()) + ')';
+}
 
 function vexRunFullSweep() {
   if (_vexSweepRunning) { showToast('Sweep already in progress', 'err'); return; }
@@ -13258,10 +13290,14 @@ function vexRunFullSweep() {
   var techniques = _vexAllTechniques.map(function(t) { return t.id; });
   _vexAbortRequested = false; _vexActiveScenarioRunId = null;
   _vexSweepRunning = true;
+  _vexSweepStartedAt = new Date();
   var btn = document.getElementById('vex-sweep-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Sweeping…'; }
   var prog = document.getElementById('vex-sweep-progress');
   if (prog) prog.style.display = 'block';
+  var stopBtn = document.getElementById('vex-sweep-stop-btn');
+  if (stopBtn) stopBtn.style.display = '';
+  _vexRenderSweepTiming(null);
   _vexSweepQueue(agentId, techniques, mode, advanced, 0);
 }
 
@@ -13275,15 +13311,21 @@ function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
   if (_vexAbortRequested || idx >= n) {
     _vexSweepRunning = false;
     if (btn) { btn.disabled = false; btn.textContent = '▶ Start Sweep'; }
-    var progEl = document.getElementById('vex-sweep-progress');
-    if (progEl) progEl.style.display = 'none';
+    var stopBtnEl = document.getElementById('vex-sweep-stop-btn');
+    if (stopBtnEl) stopBtnEl.style.display = 'none';
+    // Progress panel stays visible (not hidden) after a sweep ends, so the
+    // start/end timestamps remain on screen until the next sweep begins —
+    // previously this block hid the whole panel immediately, discarding any
+    // record of when the sweep ran the moment the toast faded.
     if (_vexAbortRequested) {
       if (statusEl) statusEl.textContent = 'Sweep stopped';
+      _vexRenderSweepTiming('Stopped');
       showToast('Sweep stopped', 'warn');
     } else {
       if (statusEl) statusEl.textContent = 'Sweep complete — ' + n + ' techniques tested';
       if (pctEl) pctEl.textContent = '100%';
       if (barEl) barEl.style.width = '100%';
+      _vexRenderSweepTiming('Completed');
       showToast('Full sweep complete — ' + n + ' techniques', 'ok');
       loadVariantStats();
       loadVariantCoverage();
@@ -13297,6 +13339,7 @@ function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
   if (pctEl) pctEl.textContent = pct + '%';
   if (barEl) barEl.style.width = pct + '%';
   if (btn) btn.textContent = (idx + 1) + '/' + n + ' Sweeping…';
+  _vexRenderSweepTiming(null);
 
   apicall('/api/variants/run', {
     method: 'POST',
@@ -13504,6 +13547,12 @@ function pollVariantRun(vrId) {
 }
 
 function stopVex() {
+  // stopVex() is shared by the single-run "Stop" button and the Full Sweep
+  // panel's Stop button — the sweep's own polling loop (_vexSweepPollAndNext)
+  // clears itself and never calls back into _vexSweepQueue once stopped, so
+  // the "sweep stopped" UI/timing update has to happen directly here, not in
+  // _vexSweepQueue's abort branch (which only fires on a narrow race window).
+  var wasSweeping = _vexSweepRunning;
   _vexAbortRequested = true;
   if (_vexActivePoll) { clearInterval(_vexActivePoll); _vexActivePoll = null; }
   clearInterval(_vexRunPoll); _vexRunPoll = null;
@@ -13515,6 +13564,20 @@ function stopVex() {
   _vexSweepRunning = false;
   var sweepBtn = document.getElementById('vex-sweep-btn');
   if (sweepBtn) { sweepBtn.disabled = false; sweepBtn.textContent = '▶ Start Sweep'; }
+  var stopBtnEl = document.getElementById('vex-sweep-stop-btn');
+  if (stopBtnEl) stopBtnEl.style.display = 'none';
+
+  if (wasSweeping) {
+    // Keep the progress panel visible (with the final status/timing) instead
+    // of hiding it — matches the "sweep complete" path, so the operator can
+    // still see when the sweep started/stopped after the toast fades.
+    var statusEl = document.getElementById('vex-sweep-status');
+    if (statusEl) statusEl.textContent = 'Sweep stopped';
+    _vexRenderSweepTiming('Stopped');
+    showToast('Sweep stopped', 'warn');
+    return;
+  }
+
   var prog = document.getElementById('vex-sweep-progress');
   if (prog) prog.style.display = 'none';
   var panel = document.getElementById('vex-result-panel');
