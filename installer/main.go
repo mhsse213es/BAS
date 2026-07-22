@@ -518,7 +518,7 @@ func runInstall() {
 		appendStatus("[~] sc start: " + string(scOut))
 	}
 
-	ensureWebView2Runtime()
+	nativeConsole := ensureWebView2Runtime()
 
 	if err := registerTrayStartup(agentPath); err != nil {
 		appendStatus("[~] Could not register status monitor for startup: " + err.Error())
@@ -533,6 +533,14 @@ func runInstall() {
 	appendStatus("  The agent will enroll in the dashboard")
 	appendStatus("  within 30 seconds.")
 	appendStatus("  Status monitor icon will appear in tray.")
+	if nativeConsole {
+		appendStatus("  Native status console: enabled.")
+	} else {
+		appendStatus("  ⚠ Native status console: NOT available — the tray icon")
+		appendStatus("    will open the dashboard in your browser instead of a")
+		appendStatus("    native window. Drop the WebView2 runtime installer next")
+		appendStatus("    to this installer and re-run it to enable the native console.")
+	}
 	appendStatus("──────────────────────────────────────────")
 
 	setWindowText(hInstBtn, "Installed")
@@ -612,15 +620,20 @@ func findWebView2Installer() string {
 	return findWebView2InstallerIn(filepath.Dir(exePath))
 }
 
-func ensureWebView2Runtime() {
+// ensureWebView2Runtime installs the WebView2 runtime if it's missing and a
+// sibling installer is present. Returns whether the runtime ends up available
+// (already present, or just installed) — the caller surfaces this explicitly
+// in the final install summary so the operator isn't left to infer it from an
+// early progress line that may have scrolled past.
+func ensureWebView2Runtime() bool {
 	if webView2Installed() {
 		appendStatus("[+] WebView2 runtime present.")
-		return
+		return true
 	}
 	installerPath := findWebView2Installer()
 	if installerPath == "" {
 		appendStatus("[~] WebView2 runtime missing (no runtime installer found next to this installer) — status console will open in browser.")
-		return
+		return false
 	}
 	appendStatus("[*] Installing Microsoft Edge WebView2 runtime...")
 	cmd := exec.Command(installerPath, "/silent", "/install")
@@ -630,9 +643,10 @@ func ensureWebView2Runtime() {
 		if len(out) > 0 {
 			appendStatus("        " + string(out))
 		}
-		return
+		return false
 	}
 	appendStatus("[+] WebView2 runtime installed.")
+	return true
 }
 
 func validateEnrollment(serverURL, secret string) error {
