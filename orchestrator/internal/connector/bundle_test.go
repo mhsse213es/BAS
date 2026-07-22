@@ -43,6 +43,28 @@ func TestBundleSource_Fetch_Valid(t *testing.T) {
 	if bs.Version() != "2026-07-17" {
 		t.Fatalf("version = %q", bs.Version())
 	}
+
+	stat := bs.Stats()
+	if stat.Name != "bundle" || stat.RawCount != 1 || stat.ActorCount != 1 || stat.Error != "" {
+		t.Fatalf("Stats() = %+v, want Name=bundle RawCount=1 ActorCount=1 Error=\"\"", stat)
+	}
+	if stat.FetchedAt.IsZero() {
+		t.Fatal("Stats().FetchedAt should be set after a successful Fetch")
+	}
+}
+
+func TestBundleSource_Stats_RecordsErrorOnFailedFetch(t *testing.T) {
+	bs := NewBundleSource(t.TempDir(), func(string) error { return nil })
+	if _, err := bs.Fetch(); err == nil {
+		t.Fatal("expected error for missing bundle")
+	}
+	stat := bs.Stats()
+	if stat.Name != "bundle" || stat.Error == "" {
+		t.Fatalf("Stats() = %+v, want Name=bundle with Error set", stat)
+	}
+	if stat.RawCount != 0 || stat.ActorCount != 0 {
+		t.Fatalf("Stats() = %+v, want zero counts on a failed fetch", stat)
+	}
 }
 
 func TestBundleSource_Fetch_VerifyFails(t *testing.T) {

@@ -27,17 +27,40 @@ type TechniqueRef struct {
 	Tactic string `json:"tactic,omitempty"` // execution
 }
 
+// SourceStat is one threat-intel source's numbers from its most recent fetch.
+// RawCount and ActorCount differ because MISP/OpenCTI results are filtered to
+// actors with 2+ mapped ATT&CK techniques before being merged — RawCount is
+// what the source returned before that filter (MISP: events; OpenCTI: raw
+// threat-actor nodes), ActorCount is what passed it. The bundle source applies
+// no such filter, so its RawCount and ActorCount are always equal.
+type SourceStat struct {
+	Name       string    `json:"name"` // "misp" | "opencti" | "bundle"
+	RawCount   int       `json:"rawCount"`
+	ActorCount int       `json:"actorCount"`
+	FetchedAt  time.Time `json:"fetchedAt"`
+	Error      string    `json:"error,omitempty"` // set instead of counts when this source's fetch failed
+}
+
+// StatsSource is implemented by sources that can report their last fetch's raw
+// numbers. Checked via type assertion in Scheduler.sync (the same pattern
+// already used there for *BundleSource's Version()) — sources that don't
+// implement it are simply skipped, not an error.
+type StatsSource interface {
+	Stats() SourceStat
+}
+
 // ConnectorStatus is the live state of the connector — returned by the API.
 type ConnectorStatus struct {
-	MISPEnabled      bool      `json:"mispEnabled"`
-	OpenCTIEnabled   bool      `json:"openctiEnabled"`
-	BundleEnabled    bool      `json:"bundleEnabled"`
-	BundleVersion    string    `json:"bundleVersion,omitempty"`
-	LastSyncAt       time.Time `json:"lastSyncAt"`
-	LastSyncStatus   string    `json:"lastSyncStatus"` // "ok" | "error" | "never"
-	LastError        string    `json:"lastError,omitempty"`
-	ScenariosCreated int       `json:"scenariosCreated"`
-	ScenariosUpdated int       `json:"scenariosUpdated"`
-	TotalActors      int       `json:"totalActors"`
-	NextSyncAt       time.Time `json:"nextSyncAt"`
+	MISPEnabled      bool                  `json:"mispEnabled"`
+	OpenCTIEnabled   bool                  `json:"openctiEnabled"`
+	BundleEnabled    bool                  `json:"bundleEnabled"`
+	BundleVersion    string                `json:"bundleVersion,omitempty"`
+	LastSyncAt       time.Time             `json:"lastSyncAt"`
+	LastSyncStatus   string                `json:"lastSyncStatus"` // "ok" | "error" | "never"
+	LastError        string                `json:"lastError,omitempty"`
+	ScenariosCreated int                   `json:"scenariosCreated"`
+	ScenariosUpdated int                   `json:"scenariosUpdated"`
+	TotalActors      int                   `json:"totalActors"`
+	NextSyncAt       time.Time             `json:"nextSyncAt"`
+	BySource         map[string]SourceStat `json:"bySource,omitempty"` // keyed by Source.Name()
 }

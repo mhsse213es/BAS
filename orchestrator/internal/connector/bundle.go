@@ -23,9 +23,10 @@ type Bundle struct {
 // signature verifier is injected (production passes integrity.VerifyScenarioFile)
 // so the crypto is reused and the source can be unit-tested without the private key.
 type BundleSource struct {
-	path    string
-	verify  func(path string) error
-	version string
+	path     string
+	verify   func(path string) error
+	version  string
+	lastStat SourceStat
 }
 
 // NewBundleSource creates a BundleSource reading <dir>/ti-bundle.json. verify may
@@ -48,15 +49,18 @@ func (b *BundleSource) Version() string { return b.version }
 func (b *BundleSource) Fetch() ([]ThreatActor, error) {
 	if b.verify != nil {
 		if err := b.verify(b.path); err != nil {
+			b.lastStat = SourceStat{Name: "bundle", Error: err.Error(), FetchedAt: time.Now()}
 			return nil, fmt.Errorf("ti bundle verify: %w", err)
 		}
 	}
 	raw, err := os.ReadFile(b.path)
 	if err != nil {
+		b.lastStat = SourceStat{Name: "bundle", Error: err.Error(), FetchedAt: time.Now()}
 		return nil, fmt.Errorf("read ti bundle: %w", err)
 	}
 	var bundle Bundle
 	if err := json.Unmarshal(raw, &bundle); err != nil {
+		b.lastStat = SourceStat{Name: "bundle", Error: err.Error(), FetchedAt: time.Now()}
 		return nil, fmt.Errorf("parse ti bundle %s: %w", b.path, err)
 	}
 	// Stamp provenance so status/downstream can distinguish bundle-provided actors.
@@ -66,5 +70,9 @@ func (b *BundleSource) Fetch() ([]ThreatActor, error) {
 		}
 	}
 	b.version = bundle.Version
+	b.lastStat = SourceStat{Name: "bundle", RawCount: len(bundle.Actors), ActorCount: len(bundle.Actors), FetchedAt: time.Now()}
 	return bundle.Actors, nil
 }
+
+// Stats implements StatsSource.
+func (b *BundleSource) Stats() SourceStat { return b.lastStat }
