@@ -3326,6 +3326,45 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- Response Action Modal (Isolate / Release / Kill Process / Quarantine File) -->
+<div id="respond-overlay" class="overlay">
+  <div class="modal" style="width:440px">
+    <h3>Response Action</h3>
+    <p class="sub2" id="respond-target-sub"></p>
+
+    <label class="modal-lbl">Action</label>
+    <select id="respond-action" onchange="renderRespondFields()">
+      <option value="endpoint.isolate">Isolate host</option>
+      <option value="endpoint.release">Release from isolation</option>
+      <option value="endpoint.kill_process">Kill process</option>
+      <option value="endpoint.quarantine_file">Quarantine file</option>
+    </select>
+
+    <label class="modal-lbl" style="margin-top:0.6rem">Connector</label>
+    <select id="respond-connector" onchange="renderRespondFields()"></select>
+
+    <div id="respond-extra-field" style="margin-top:0.6rem;display:none">
+      <label class="modal-lbl" id="respond-extra-label"></label>
+      <input type="text" id="respond-extra-value" placeholder=""
+             style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+    </div>
+
+    <label class="modal-lbl" style="margin-top:0.6rem">Reason <span class="tiny muted">(required)</span></label>
+    <input type="text" id="respond-reason" placeholder="e.g. confirmed ransomware simulation success"
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+
+    <label class="modal-lbl" style="margin-top:0.6rem">Ticket reference <span class="tiny muted">(optional)</span></label>
+    <input type="text" id="respond-ticket" placeholder="e.g. INC0012345"
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeRespondModal()">Cancel</button>
+      <span style="flex:1"></span>
+      <button id="respond-submit-btn" class="btn btn-outline-green btn-sm" onclick="submitRespondAction()">&#9654; Execute</button>
+    </div>
+  </div>
+</div>
+
 <!-- Technique / Ability Picker -->
 <div id="picker-overlay" class="overlay">
   <div class="modal" style="width:580px;display:flex;flex-direction:column;max-height:88vh">
@@ -7365,17 +7404,19 @@ function quickTriageFinding(id, sel) {
 }
 function openFinding(id) {
   apicall('/api/findings/' + encodeURIComponent(id)).then(function(f) {
+    _currentFinding = f;
     var e = f.enrichment || {};
     document.getElementById('results-title').textContent = (f.techniqueName || f.techniqueId) + ' — Finding';
     var row = function(k, v) { return v && v.length ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:140px">' + k + '</span><span style="flex:1">' + v + '</span></div>' : ''; };
     var list = function(a) { return (a || []).map(x).join(', '); };
     var canPush = (ROLE === 'admin' || ROLE === 'analyst');
     var pushBtn = canPush ? '<button class="btn btn-outline btn-sm" onclick="pushFindingToITSM(\'' + x(f.id) + '\')">+ Ticket</button>' : '';
+    var respondBtn = (ROLE === 'admin') ? '<button class="btn btn-outline btn-sm" onclick="openRespondModal()">Respond</button>' : '';
     var actions = (canPush
       ? ['open', 'triaged', 'remediated', 'risk_accepted'].filter(function(st) { return st !== f.status; })
           .map(function(st) { return '<button class="btn btn-outline btn-sm" onclick="setFindingStatus(\'' + x(f.id) + '\',\'' + st + '\')">' + st.replace('_', ' ') + '</button>'; }).join(' ')
       : '');
-    document.getElementById('results-export').innerHTML = (actions ? actions + ' ' : '') + pushBtn;
+    document.getElementById('results-export').innerHTML = (actions ? actions + ' ' : '') + pushBtn + (pushBtn && respondBtn ? ' ' : '') + respondBtn;
     var ticketSectionId = 'finding-tickets-' + f.id;
     document.getElementById('results-body').innerHTML =
       '<div style="margin-bottom:0.9rem">' + findingSevBadge(f.severity, f.exposureState) +
@@ -8027,6 +8068,119 @@ function deleteResponseConnector(id, name) {
   apicall('/api/actions/configs/' + encodeURIComponent(id), { method: 'DELETE' })
     .then(function() { showToast('Connector deleted', 'ok'); loadResponseConnectors(renderResponseConnectorList); })
     .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// ── Respond (EPP response actions from the Findings drawer) ────────────────
+var _currentFinding = null;
+var RESPOND_ACTION_LABELS = {
+  'endpoint.isolate': 'Isolate host', 'endpoint.release': 'Release from isolation',
+  'endpoint.kill_process': 'Kill process', 'endpoint.quarantine_file': 'Quarantine file'
+};
+
+function _respondTargetHostname() {
+  if (!_currentFinding) return '';
+  var agent = (agents || []).find(function(a) { return a.agentId === _currentFinding.agentId; });
+  return agent ? (agent.hostname || agent.agentId) : _currentFinding.agentId;
+}
+
+function openRespondModal() {
+  if (!_currentFinding) return;
+  var hostname = _respondTargetHostname();
+  document.getElementById('respond-target-sub').textContent = 'Target: ' + hostname;
+  document.getElementById('respond-action').value = 'endpoint.isolate';
+  document.getElementById('respond-reason').value = '';
+  document.getElementById('respond-ticket').value = '';
+  document.getElementById('respond-extra-value').value = '';
+
+  loadResponseConnectors(function(list) {
+    var enabled = (list || []).filter(function(c) { return c.enabled; });
+    var sel = document.getElementById('respond-connector');
+    if (!enabled.length) {
+      sel.innerHTML = '<option value="">No enabled connector configured</option>';
+    } else {
+      sel.innerHTML = enabled.map(function(c) {
+        return '<option value="' + x(c.id) + '" data-provider="' + x(c.provider) + '">' + x(c.name) + '</option>';
+      }).join('');
+    }
+    renderRespondFields();
+  });
+
+  document.getElementById('respond-overlay').classList.add('open');
+}
+
+function closeRespondModal() {
+  document.getElementById('respond-overlay').classList.remove('open');
+}
+
+function renderRespondFields() {
+  var action = document.getElementById('respond-action').value;
+  var connSel = document.getElementById('respond-connector');
+  var provider = (connSel.options[connSel.selectedIndex] || {}).getAttribute
+    ? connSel.options[connSel.selectedIndex].getAttribute('data-provider') : '';
+  var wrap = document.getElementById('respond-extra-field');
+  var label = document.getElementById('respond-extra-label');
+  var input = document.getElementById('respond-extra-value');
+
+  if (action === 'endpoint.kill_process') {
+    wrap.style.display = '';
+    label.textContent = 'Process ID (PID)';
+    input.placeholder = 'e.g. 4821';
+  } else if (action === 'endpoint.quarantine_file') {
+    wrap.style.display = '';
+    if (provider === 'microsoft_defender') {
+      label.textContent = 'File SHA1 hash';
+      input.placeholder = 'e.g. aabbccddeeff00112233445566778899aabbccdd';
+    } else {
+      label.textContent = 'File path';
+      input.placeholder = 'e.g. C:\\Users\\victim\\evil.exe';
+    }
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function submitRespondAction() {
+  if (!_currentFinding) return;
+  var action = document.getElementById('respond-action').value;
+  var connectorId = document.getElementById('respond-connector').value;
+  var reason = document.getElementById('respond-reason').value.trim();
+  var ticketRef = document.getElementById('respond-ticket').value.trim();
+  var hostname = _respondTargetHostname();
+
+  if (!connectorId) { showToast('Select a connector', 'err'); return; }
+  if (!reason) { showToast('Reason is required', 'err'); return; }
+
+  var parameters = {};
+  if (action === 'endpoint.kill_process') {
+    var pid = parseInt(document.getElementById('respond-extra-value').value, 10);
+    if (!pid || pid <= 0) { showToast('Enter a valid process ID', 'err'); return; }
+    parameters.pid = pid;
+  } else if (action === 'endpoint.quarantine_file') {
+    var target = document.getElementById('respond-extra-value').value.trim();
+    if (!target) { showToast('Enter the quarantine target', 'err'); return; }
+    parameters.quarantineTarget = target;
+  }
+
+  var label = RESPOND_ACTION_LABELS[action] || action;
+  if (!confirm(label + '\n\nHost: ' + hostname + '\nReason: ' + reason + '\n\nProceed?')) return;
+
+  var btn = document.getElementById('respond-submit-btn');
+  btn.disabled = true;
+  apicall('/api/actions/run', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: action, hostname: hostname, parameters: parameters, connectorId: connectorId,
+      reason: reason, ticketRef: ticketRef
+    })
+  }).then(function(res) {
+    btn.disabled = false;
+    if (res && res.status === 'completed') {
+      showToast('Dispatched — ' + label, 'ok');
+      closeRespondModal();
+    } else {
+      showToast('Failed: ' + (res && res.error ? res.error : 'unknown error'), 'err');
+    }
+  }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
 }
 
 function triggerTicketingSync() {
