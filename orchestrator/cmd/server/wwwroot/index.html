@@ -2082,21 +2082,24 @@ body.theme-slate {
         <!-- Threat Actor Library (Caldera emu adversary profiles) -->
         <div id="adversary-section" style="margin-top:2rem;display:none">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
-            <h3 style="font-size:1.1rem;color:var(--accent);margin:0;display:flex;align-items:center;gap:8px">
+            <h3 class="sc-src-hdr" id="adversary-hdr" onclick="toggleAdversarySection()" style="font-size:1.1rem;color:var(--accent);margin:0;gap:8px">
+              <span class="chev" style="font-size:0.75rem">&#9660;</span>
               <svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke-width="2"/><circle cx="9" cy="7" r="4" stroke-width="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke-width="2"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke-width="2"/></svg>
               Threat Actor Library
               <span id="adversary-cnt" class="cnt" style="font-size:0.8rem;background:var(--elevated);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">0</span>
             </h3>
             <div style="display:flex;gap:0.4rem;align-items:center">
-              <input type="search" id="adv-search" placeholder="Search actor…" oninput="renderAdversaryLibrary()"
+              <input type="search" id="adv-search" placeholder="Search actor…" oninput="renderAdversaryLibrary()" onclick="event.stopPropagation()"
                      style="padding:0.4rem 0.65rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:inherit;min-width:160px">
-              <button class="btn btn-outline btn-sm" onclick="loadAdversaries()">Refresh</button>
+              <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();loadAdversaries()">Refresh</button>
             </div>
           </div>
-          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem">
-            Adversary emulation profiles from the MITRE CTID library — each is a sequenced kill-chain of ATT&amp;CK-mapped abilities. Click a card to see the ability chain; <strong>Run</strong> dispatches the full emulation to an agent.
+          <div id="adversary-body">
+            <div style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem">
+              Adversary emulation profiles from the MITRE CTID library — each is a sequenced kill-chain of ATT&amp;CK-mapped abilities. Click a card to see the ability chain; <strong>Run</strong> dispatches the full emulation to an agent.
+            </div>
+            <div id="adv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.75rem"></div>
           </div>
-          <div id="adv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0.75rem"></div>
         </div>
       </div>
 
@@ -6782,6 +6785,20 @@ function confirmTmplRun() {
 
 var _adversaries = [];
 var _advDrawerID = null;
+var _adversaryCollapsed = false;
+
+// toggleAdversarySection collapses/expands the Threat Actor Library, mirroring
+// the chevron/collapse pattern the scenario source groups above it already use
+// (.sc-src-hdr/.collapsed) — this section previously had no way to collapse at
+// all. renderAdversaryLibrary() (called on every search keystroke and refresh)
+// never touches #adversary-hdr/#adversary-body, so this state survives re-renders.
+function toggleAdversarySection() {
+  _adversaryCollapsed = !_adversaryCollapsed;
+  var hdr = document.getElementById('adversary-hdr');
+  var body = document.getElementById('adversary-body');
+  if (hdr) hdr.classList.toggle('collapsed', _adversaryCollapsed);
+  if (body) body.style.display = _adversaryCollapsed ? 'none' : '';
+}
 
 function loadAdversaries() {
   apicall('/api/caldera/adversaries').then(function(data) {
