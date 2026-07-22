@@ -53,8 +53,13 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 
 	status <- svc.Status{
 		State:   svc.Running,
-		Accepts: svc.AcceptStop | svc.AcceptShutdown,
+		Accepts: svc.AcceptStop | svc.AcceptShutdown | svc.AcceptSessionChange,
 	}
+
+	// Covers a session that was already active before the service started (or
+	// restarted, e.g. via svcUpdate) — SessionChange notifications only fire for
+	// transitions that happen after we start accepting them, not retroactively.
+	launchTrayForActiveSession()
 
 	for {
 		select {
@@ -70,6 +75,13 @@ func (s *agentSvc) Execute(_ []string, r <-chan svc.ChangeRequest, status chan<-
 				agent.sendHeartbeat("offline")
 				RestoreSystemDialogs()
 				return false, 0
+			case svc.SessionChange:
+				// WTS_SESSION_LOGON (5): a user has just logged on to a session.
+				// WTS_CONSOLE_CONNECT (1): a session was connected to the console
+				// (covers fast user switching / RDP reconnect to console).
+				if c.EventType == windows.WTS_SESSION_LOGON || c.EventType == windows.WTS_CONSOLE_CONNECT {
+					launchTrayForActiveSession()
+				}
 			case svc.Interrogate:
 				status <- c.CurrentStatus
 			}

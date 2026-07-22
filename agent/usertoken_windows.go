@@ -3,6 +3,10 @@
 package main
 
 import (
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -219,6 +223,51 @@ func buildUserEnv(tok windows.Token, step ScenarioStep) ([]string, error) {
 		env = patchEnv(env, k, v)
 	}
 	return env, nil
+}
+
+// launchTrayForActiveSession spawns "<exe> --tray" inside the current
+// interactive user session, if one exists. It is a no-op when no user is
+// logged in (headless / locked with no session yet).
+//
+// The service (running as SYSTEM in Session 0) cannot show UI itself, and
+// relying solely on the HKLM ...\Run registry entry the installer writes is
+// not reliable across every shutdown/power-on cycle — Explorer's processing
+// of that key is best-effort and was observed to silently not fire on some
+// endpoints, leaving the tray permanently absent until a manual relaunch.
+// The service actively (re)asserting the tray here, on its own startup and
+// on every session logon/connect event (see service.go), makes the icon's
+// presence independent of whether Explorer's Run-key processing happens to
+// run. A redundant launch into a session that already has the tray running
+// is a harmless no-op — the tray's own session-local singleton mutex
+// (trayAlreadyRunning in tray_windows.go) makes the second instance exit
+// immediately without disturbing the first icon.
+func launchTrayForActiveSession() {
+	tok, ok := activeUserToken()
+	if !ok {
+		return
+	}
+	defer tok.Close()
+
+	exe, err := os.Executable()
+	if err != nil {
+		log.Printf("[svc] launch tray: resolve exe path: %v", err)
+		return
+	}
+
+	// buildUserEnv only needs a token here — PayloadDir/Env are scenario-step
+	// concepts that don't apply to launching the tray, so a zero-value step
+	// is intentional, not a shortcut.
+	env, _ := buildUserEnv(tok, ScenarioStep{})
+
+	cmd := exec.Command(exe, "--tray")
+	cmd.Dir = filepath.Dir(exe)
+	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{Token: syscall.Token(tok)}
+	if err := cmd.Start(); err != nil {
+		log.Printf("[svc] launch tray: %v", err)
+		return
+	}
+	_ = cmd.Process.Release() // tray runs independently; we don't wait on it
 }
 
 // patchEnv replaces the first occurrence of key=… in env, or appends if absent.
