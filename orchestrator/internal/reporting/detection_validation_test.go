@@ -320,3 +320,27 @@ func TestBuildDetectionValidationGoldenOutput(t *testing.T) {
 		t.Errorf("golden output changed.\ngot:  %+v\nwant: %+v", got, want)
 	}
 }
+
+// TestVerifyExpectationDispatchesByOutcomeFamily proves the DLP dispatch
+// branch added in Phase B only affects outcome_family: dlp expectations —
+// every "detection"-family expectation (the default, and the only family
+// that existed before Phase B) keeps routing to automaticVerifier exactly as
+// Phase A left it.
+func TestVerifyExpectationDispatchesByOutcomeFamily(t *testing.T) {
+	dlpExpDetection := scenario.ExpectedDetection{
+		ID: "d", Provider: "trellix_dlp", Type: scenario.DomainDLP,
+		OutcomeFamily: "dlp", ExpectedOutcome: "Block",
+		Verification: scenario.VerificationAutomatic, Confidence: scenario.ConfidenceRequired,
+		Finding: scenario.ExpectedFinding{Title: "t", Severity: "High"},
+	}
+	r := verifyExpectation(dlpExpDetection, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked"})
+	if r.Comparison != Match {
+		t.Errorf("dlp-family expectation: got comparison=%v want Match (should have routed to dlpVerifier)", r.Comparison)
+	}
+
+	detExp := endpointExp("e", "microsoft_defender", scenario.ConfidenceRequired)
+	r = verifyExpectation(detExp, StepEvidence{DetectionVerdict: "detected", AlertProvider: "Microsoft Defender"})
+	if r.Status != StatusDetected || r.Comparison != Match {
+		t.Errorf("detection-family expectation: got status=%s comparison=%v — Phase A dispatch must be unaffected", r.Status, r.Comparison)
+	}
+}

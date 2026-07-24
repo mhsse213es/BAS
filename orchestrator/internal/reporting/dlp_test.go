@@ -1,6 +1,10 @@
 package reporting
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/audspect/bas/internal/scenario"
+)
 
 func TestDLPComparator(t *testing.T) {
 	c := dlpComparator{}
@@ -34,5 +38,58 @@ func TestDLPComparator(t *testing.T) {
 func TestDLPComparatorRegistered(t *testing.T) {
 	if _, ok := comparatorFor("dlp").(dlpComparator); !ok {
 		t.Error("comparatorFor(\"dlp\") should return the registered dlpComparator")
+	}
+}
+
+func dlpExp(id, expectedOutcome string) scenario.ExpectedDetection {
+	return scenario.ExpectedDetection{
+		ID:              id,
+		Provider:        "trellix_dlp",
+		Type:            scenario.DomainDLP,
+		OutcomeFamily:   "dlp",
+		ExpectedOutcome: expectedOutcome,
+		Verification:    scenario.VerificationAutomatic,
+		Confidence:      scenario.ConfidenceRequired,
+		Finding:         scenario.ExpectedFinding{Title: "t", Severity: "High"},
+	}
+}
+
+func TestDLPVerifier(t *testing.T) {
+	exp := dlpExp("dlp-usb-block", "Block")
+
+	// marker present, blocked, matches expected Block → Detected
+	r := dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "some output\nDLP_OBSERVATION: OperationBlocked\n"})
+	if r.Status != StatusDetected || r.Comparison != Match {
+		t.Errorf("blocked-match: got status=%s comparison=%v", r.Status, r.Comparison)
+	}
+
+	// marker present, succeeded, mismatches expected Block → NotDetected
+	r = dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "some output\nDLP_OBSERVATION: OperationSucceeded\n"})
+	if r.Status != StatusNotDetected || r.Comparison != Mismatch {
+		t.Errorf("succeeded-mismatch: got status=%s comparison=%v", r.Status, r.Comparison)
+	}
+
+	// no marker at all → Unknown, never a false Detected/NotDetected
+	r = dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "some output with no marker at all"})
+	if r.Status != StatusUnknown || r.Comparison != MissingEvidence {
+		t.Errorf("no-marker: got status=%s comparison=%v", r.Status, r.Comparison)
+	}
+
+	// marker present but with an unrecognized token → Unknown, never guessed
+	r = dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: SomeGarbageToken"})
+	if r.Status != StatusUnknown || r.Comparison != MissingEvidence {
+		t.Errorf("garbage-token: got status=%s comparison=%v", r.Status, r.Comparison)
+	}
+
+	// marker not on the last line — must still be found
+	r = dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked\nsome trailing cleanup line"})
+	if r.Status != StatusDetected {
+		t.Errorf("marker-not-last-line: got status=%s want Detected", r.Status)
+	}
+
+	// ExpectedOutcome/ObservedOutcome are populated for diagnostics
+	r = dlpVerifier{}.Verify(exp, StepEvidence{RawOutput: "DLP_OBSERVATION: OperationBlocked"})
+	if r.ExpectedOutcome != "Block" || r.ObservedOutcome != ObservationBlocked {
+		t.Errorf("outcome fields: got expected=%q observed=%q", r.ExpectedOutcome, r.ObservedOutcome)
 	}
 }

@@ -1,5 +1,11 @@
 package reporting
 
+import (
+	"regexp"
+
+	"github.com/audspect/bas/internal/scenario"
+)
+
 // DLP Validation Suite — Phase B, the first real consumer of the Outcome
 // Validation Framework (Phase A). Registers the "dlp" outcome family's
 // comparator and a local-observation verifier that never claims more than an
@@ -55,4 +61,33 @@ func (dlpComparator) Compare(expected, observed string) ComparisonResult {
 
 func init() {
 	RegisterComparator("dlp", dlpComparator{})
+}
+
+var dlpMarkerRe = regexp.MustCompile(`(?m)^DLP_OBSERVATION:\s*(\S+)$`)
+
+// dlpVerifier resolves DLP expectations from a step's self-reported outcome
+// marker. The script itself does the post-condition check (did the file land
+// on the USB path, does Get-Clipboard now match, etc.) and prints exactly
+// one deterministic line; this verifier only parses it. It never re-derives
+// observations from vendor-specific error text — that would be exactly the
+// fragile heuristic classifySkipReason's own doc comment warns against for
+// third-party output. An absent or unrecognized marker always resolves to
+// ObservationUnknown — never guessed as a known primitive.
+type dlpVerifier struct{}
+
+func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) VerificationResult {
+	r := baseResult(exp, ev, "automatic")
+	r.ExpectedOutcome = scenario.ResolveExpectedOutcome(exp)
+
+	observed := ObservationUnknown
+	if m := dlpMarkerRe.FindStringSubmatch(ev.RawOutput); m != nil {
+		switch m[1] {
+		case ObservationSucceeded, ObservationBlocked:
+			observed = m[1]
+		}
+	}
+	r.ObservedOutcome = observed
+	r.Comparison = comparatorFor("dlp").Compare(r.ExpectedOutcome, r.ObservedOutcome)
+	r.Status = collapseToStatus(r.Comparison)
+	return r
 }

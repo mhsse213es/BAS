@@ -46,6 +46,7 @@ type StepEvidence struct {
 	BlockingControl   string   // BlockingControl.Name when prevented
 	Events            []string // raw Windows event tokens ("1116:...Defender/Operational")
 	ExpectedTelemetry []string // step's expected telemetry lines (for completeness)
+	RawOutput         string   // full step output text; read by verifiers that parse a self-reported marker, e.g. dlpVerifier
 }
 
 // VerificationResult is the outcome of checking one expected detection.
@@ -82,6 +83,9 @@ type Verifier interface {
 func verifyExpectation(exp scenario.ExpectedDetection, ev StepEvidence) VerificationResult {
 	switch scenario.ResolveVerification(exp) {
 	case scenario.VerificationAutomatic:
+		if scenario.ResolveOutcomeFamily(exp) == "dlp" {
+			return dlpVerifier{}.Verify(exp, ev)
+		}
 		return automaticVerifier{}.Verify(exp, ev)
 	case scenario.VerificationAPI:
 		return apiVerifier{}.Verify(exp, ev)
@@ -575,6 +579,7 @@ func evidenceByTechnique(results []models.SimulationResult) map[string]StepEvide
 			TechniqueID:      r.ID,
 			DetectionVerdict: r.DetectionVerdict,
 			Events:           r.Events,
+			RawOutput:        r.RawOutput,
 		}
 		if r.DetectionAlert != nil {
 			ev.AlertProvider = r.DetectionAlert.Provider
