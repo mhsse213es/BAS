@@ -367,3 +367,38 @@ func TestDelete_NotFoundAndBuiltinGuarded(t *testing.T) {
 		t.Fatalf("builtin scenario should not have been removed from memory")
 	}
 }
+
+func TestParseYAML_UbuntuHardeningValidation(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "ubuntu-hardening-validation.yaml"))
+	if err != nil {
+		t.Fatalf("read scenario file: %v", err)
+	}
+	sc, err := ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if sc.ID != "ubuntu-hardening-validation" {
+		t.Fatalf("id = %q, want ubuntu-hardening-validation", sc.ID)
+	}
+	if !sc.Executable {
+		t.Fatalf("expected executable: true")
+	}
+	if sc.LocalCheck {
+		t.Fatalf("expected local_check to be unset — this scenario runs real attack techniques, not posture checks")
+	}
+	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "linux" {
+		t.Fatalf("supported_os = %v, want [linux]", sc.SupportedOS)
+	}
+	wantTechniques := []string{
+		"T1547.006", "T1055", "T1003", "T1562.001", "T1554", "T1078",
+		"T1046", "T1200", "T1222", "T1059", "T1548.001", "T1548.003",
+	}
+	if len(sc.ARTTechniques) != len(wantTechniques) {
+		t.Fatalf("art_techniques count = %d, want %d (%v)", len(sc.ARTTechniques), len(wantTechniques), sc.ARTTechniques)
+	}
+	for i, want := range wantTechniques {
+		if sc.ARTTechniques[i] != want {
+			t.Fatalf("art_techniques[%d] = %q, want %q", i, sc.ARTTechniques[i], want)
+		}
+	}
+}

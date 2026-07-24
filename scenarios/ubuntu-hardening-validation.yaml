@@ -1,0 +1,70 @@
+id: ubuntu-hardening-validation
+name: Ubuntu Hardening Validation — Attack Resistance Check
+description: >
+  Attempts real attack techniques that Ubuntu hardening baselines (CIS
+  Ubuntu L1/L2, Ubuntu STIG, DISA STIG, or an internal baseline) are
+  supposed to block or detect. Complements scenarios/cis-ubuntu-l1.yaml,
+  which only reads configuration state — this scenario tests whether that
+  configuration actually holds up under attack. Compliance answers "is the
+  control configured?"; this scenario answers "does it actually resist an
+  attack?"
+
+  Covers: kernel module loading, process-injection resistance (exercises
+  the same ASLR/ptrace-scope hardening cis-ubuntu-l1 checks — not a direct
+  sysctl toggle, since Atomic Red Team's T1055 atomics test injection
+  itself), core-dump credential exposure, auditd tamper resistance,
+  protected-binary integrity, SSH authentication hardening, firewall
+  egress control, removable-media policy, filesystem permission
+  hardening, /tmp noexec enforcement, SUID/GTFOBins abuse resistance, and
+  sudo/pkexec escalation resistance.
+
+  Each technique runs ALL available Linux atomics (depth mode) so every
+  variant is tested against your hardening controls. Some techniques below
+  may execute zero tests if Atomic Red Team has not yet published a Linux
+  atomic for that technique — that is a content-library gap, not a
+  scenario defect (verified during authoring — see the design spec).
+
+  Expected verdicts:
+    PASS = the hardening control held; the attack was blocked or alerted
+    FAIL = the attack succeeded despite the hardening control
+    SKIP = the atomic requires a precondition not present on this host
+
+  Safety: uses Atomic Red Team's benign demonstration commands, not
+  destructive payloads. Several techniques (auditd stop, USB mount, sudo
+  escalation) are lab-only in effect — expect service disruption if run
+  outside an isolated test endpoint. Run only on dedicated test endpoints.
+author: Audspect Research
+executable: true
+supported_os: [linux]
+tags:
+  - hardening
+  - attack-validation
+  - linux
+  - ubuntu
+  - art
+  - atomic-red-team
+  - cis
+  - cis-ubuntu-l1
+  - mitre-attack
+mitre_phases:
+  - initial-access
+  - execution
+  - persistence
+  - privilege-escalation
+  - defense-evasion
+  - credential-access
+  - discovery
+
+art_techniques:
+  - T1547.006   # Kernel Modules and Extensions (insmod/modprobe loading — CIS kernel-module restriction controls)
+  - T1055       # Process Injection (ptrace/LD_PRELOAD — exercises ASLR/ptrace-scope hardening; cis-ubuntu-l1 tags its ASLR check the same technique_id)
+  - T1003       # OS Credential Dumping (core-dump-based credential exposure — pairs with cis-ubuntu-l1's fs.suid_dumpable check)
+  - T1562.001   # Disable or Modify Tools (auditd stop/disable — also covered by linux-defense-evasion.yaml; included here for a single hardening-focused run)
+  - T1554       # Compromise Client Software Binary (protected-binary tamper / integrity monitoring)
+  - T1078       # Valid Accounts (SSH root login / weak authentication — pairs with cis-ubuntu-l1's PermitRootLogin check)
+  - T1046       # Network Service Discovery (port scan / firewall egress bypass — pairs with cis-ubuntu-l1's UFW check)
+  - T1200       # Hardware Additions (removable media / USB mount policy bypass)
+  - T1222       # File and Directory Permissions Modification (/etc, /usr/bin write attempts without privilege)
+  - T1059       # Command and Scripting Interpreter (execute from /tmp — pairs with cis-ubuntu-l1's /tmp noexec check)
+  - T1548.001   # Setuid and Setgid (SUID/GTFOBins abuse — also covered by linux-privilege-escalation.yaml; included here for a single hardening-focused run)
+  - T1548.003   # Sudo and Sudo Caching (sudo/pkexec escalation — also covered by linux-privilege-escalation.yaml; included here for a single hardening-focused run)
