@@ -28,6 +28,8 @@ func TestValidateExpectation(t *testing.T) {
 		"bad confidence":   {ID: "a", Provider: "microsoft_defender", Confidence: "maybe"},
 		"bad verification": {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, Verification: "psychic"},
 		"bad domain":       {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, Type: "galaxy"},
+		"bad outcome family":   {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, OutcomeFamily: "nope"},
+		"bad expected outcome": {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceOptional, ExpectedOutcome: "Warn"},
 		"required no find":  {ID: "a", Provider: "microsoft_defender", Confidence: ConfidenceRequired},
 	}
 	for name, exp := range cases {

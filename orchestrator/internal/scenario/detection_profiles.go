@@ -122,6 +122,13 @@ func validateExpectation(exp ExpectedDetection) error {
 	if exp.Type != "" && !validDomain(exp.Type) {
 		return fmt.Errorf("id %q: invalid type/domain %q", exp.ID, exp.Type)
 	}
+	family := ResolveOutcomeFamily(exp)
+	if exp.OutcomeFamily != "" && !familyKnown(family) {
+		return fmt.Errorf("id %q: unknown outcome_family %q", exp.ID, exp.OutcomeFamily)
+	}
+	if exp.ExpectedOutcome != "" && !ValidOutcome(family, exp.ExpectedOutcome) {
+		return fmt.Errorf("id %q: invalid expected_outcome %q for family %q", exp.ID, exp.ExpectedOutcome, family)
+	}
 	// A required-confidence expectation must carry a finding so the report can
 	// emit something concrete on a False Silence gap.
 	if exp.Confidence == ConfidenceRequired {

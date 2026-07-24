@@ -56,6 +56,20 @@ type ExpectedDetection struct {
 	// is fully backward compatible — existing profiles render exactly as
 	// before. One technique commonly maps to several rules, hence a slice.
 	RuleIDs []string `yaml:"rule_ids,omitempty" json:"ruleIds,omitempty"`
+
+	// OutcomeFamily selects which outcome vocabulary and comparison semantics
+	// this expectation uses. Empty defaults to "detection" — today's implicit
+	// binary detected/not-detected model — so every existing scenario and
+	// detection profile is unaffected. Distinct from Type/domain: domain
+	// answers where a finding groups in the report matrix, OutcomeFamily
+	// answers what shape its expected/observed values take. They are not 1:1
+	// — two incompatible outcome vocabularies could share one domain.
+	OutcomeFamily string `yaml:"outcome_family,omitempty" json:"outcomeFamily,omitempty"`
+
+	// ExpectedOutcome is the outcome value this expectation requires, drawn
+	// from its family's catalog. Empty defaults to the family's implicit
+	// expectation ("Detected" for the "detection" family).
+	ExpectedOutcome string `yaml:"expected_outcome,omitempty" json:"expectedOutcome,omitempty"`
 }
 
 // ExpectedEvidence is the structured proof attached to an expected detection.
