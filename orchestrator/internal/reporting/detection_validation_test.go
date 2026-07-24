@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -223,5 +224,80 @@ func TestUnexpectedDetection(t *testing.T) {
 	}
 	if sec.UnexpectedDetections[0].Severity != UnexpectedReview {
 		t.Errorf("default severity=%q want %q", sec.UnexpectedDetections[0].Severity, UnexpectedReview)
+	}
+}
+
+// TestBuildDetectionValidationGoldenOutput locks in the full
+// DetectionValidationSection output for a representative multi-domain,
+// multi-confidence fixture — the automated form of the Outcome Validation
+// Framework's "byte-identical existing reports" acceptance criterion. It must
+// pass before and after the Phase A refactor with zero changes to `want`.
+func TestBuildDetectionValidationGoldenOutput(t *testing.T) {
+	specs := []StepDetectionSpec{
+		{
+			TechniqueID: "T1003.002",
+			ProfileRefs: []scenario.ProfileRef{{Profile: "windows_credential_access", Version: 2}},
+			Expected: []scenario.ExpectedDetection{
+				endpointExp("ep-match", "microsoft_defender", scenario.ConfidenceRequired),
+			},
+		},
+		{
+			TechniqueID: "T1562.001",
+			Expected: []scenario.ExpectedDetection{
+				endpointExp("ep-mismatch", "microsoft_defender", scenario.ConfidenceRequired),
+			},
+		},
+		{
+			TechniqueID: "T1090.001",
+			Expected: []scenario.ExpectedDetection{
+				{ID: "net-unknown", Provider: "microsoft_sentinel", Type: scenario.DomainNetwork, Verification: scenario.VerificationAutomatic, Confidence: scenario.ConfidenceRequired, Finding: scenario.ExpectedFinding{Title: "t", Severity: "High"}},
+			},
+		},
+		{
+			TechniqueID: "T1055",
+			Expected: []scenario.ExpectedDetection{
+				endpointExp("ep-optional", "crowdstrike", scenario.ConfidenceOptional),
+			},
+		},
+	}
+	results := []models.SimulationResult{
+		{ID: "T1003.002", DetectionVerdict: "detected", DetectionAlert: &models.DetectionAlert{Provider: "Microsoft Defender"}},
+		{ID: "T1562.001", DetectionVerdict: "detected", DetectionAlert: &models.DetectionAlert{Provider: "CrowdStrike Falcon"}},
+		{ID: "T1090.001", DetectionVerdict: "detected", DetectionAlert: &models.DetectionAlert{Provider: "Microsoft Sentinel"}},
+		{ID: "T1055", DetectionVerdict: "undetected"},
+	}
+
+	got := BuildDetectionValidation(specs, results)
+	want := DetectionValidationSection{
+		HasData:                  true,
+		Coverage:                 50,
+		VerificationCompleteness: 66.7,
+		Overall:                  50,
+		TelemetryCompleteness:    0,
+		Expected:                 3,
+		Verified:                 2,
+		Detected:                 1,
+		ByDomain: []DomainValidationRow{
+			{Domain: "endpoint", Expected: 2, Verified: 2, Detected: 1, Coverage: 50, VerificationCompleteness: 100},
+			{Domain: "network", Expected: 1, Verified: 0, Detected: 0, Coverage: 0, VerificationCompleteness: 0},
+		},
+		Rows: []ExpectationRow{
+			{TechniqueID: "T1003.002", ExpectedID: "ep-match", Provider: "Microsoft Defender", Domain: "endpoint", Confidence: "required", Verification: "automatic", Status: "Detected", Source: "Microsoft Defender", WorkflowState: "Approved"},
+			{TechniqueID: "T1562.001", ExpectedID: "ep-mismatch", Provider: "Microsoft Defender", Domain: "endpoint", Confidence: "required", Verification: "automatic", Status: "NotDetected", WorkflowState: "Approved"},
+			{TechniqueID: "T1090.001", ExpectedID: "net-unknown", Provider: "Microsoft Sentinel", Domain: "network", Confidence: "required", Verification: "automatic", Status: "Unknown", WorkflowState: "Approved"},
+			{TechniqueID: "T1055", ExpectedID: "ep-optional", Provider: "CrowdStrike Falcon", Domain: "endpoint", Confidence: "optional", Verification: "automatic", Status: "NotDetected", WorkflowState: "Approved"},
+		},
+		FalseSilence: []GapFinding{
+			{TechniqueID: "T1562.001", Provider: "Microsoft Defender", Domain: "endpoint", Confidence: "required", Severity: "High", Title: "gap: ep-mismatch", Remediation: "fix it"},
+		},
+		UnexpectedDetections: []UnexpectedDetectionRow{
+			{TechniqueID: "T1562.001", Provider: "CrowdStrike Falcon", Severity: "Review", Detail: "A control alerted with no matching expectation for this step — confirm it is intended coverage, not a noisy or duplicate rule."},
+		},
+		Profiles: []scenario.ProfileRef{
+			{Profile: "windows_credential_access", Version: 2},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("golden output changed.\ngot:  %+v\nwant: %+v", got, want)
 	}
 }
