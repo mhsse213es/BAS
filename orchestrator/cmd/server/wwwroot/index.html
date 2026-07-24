@@ -417,7 +417,7 @@ main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 }
 
 /* ── Tables ────────────────────────────────────────────────── */
-.tbl-wrap { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.tbl-wrap { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow-x: auto; overflow-y: hidden; }
 table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 thead { position: sticky; top: 0; z-index: 1; }
 th {
@@ -1294,13 +1294,6 @@ body.theme-slate {
           </svg>
           Integrations
         </div>
-        <div class="nav-item" data-tab="openaev" onclick="showTab('openaev')">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
-            <rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/>
-            <rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>
-          </svg>
-          OpenAEV Connector
-        </div>
         <div class="nav-item" data-tab="exercises" onclick="showTab('exercises')">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M2 8h3l2-5 2 10 2-5h3"/>
@@ -1850,6 +1843,13 @@ body.theme-slate {
                 <span id="cs-opencti-lastfetch" class="conn-cfg-val">—</span>
               </div>
               <div id="cs-opencti-error" style="display:none;margin-top:0.5rem;font-size:0.72rem;color:#f85149"></div>
+            </div>
+            <div class="conn-cfg-card" id="cs-openaev-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+                <div style="font-weight:600;font-size:0.82rem;color:var(--text)">OpenAEV</div>
+                <span id="openaev-status-badge" class="badge"></span>
+              </div>
+              <div id="openaev-config-panel"></div>
             </div>
           </div>
 
@@ -3033,25 +3033,18 @@ body.theme-slate {
         </div>
       </div>
 
-      <!-- ── OpenAEV Connector — synced scenario content library ────────── -->
-      <div id="tab-openaev" style="display:none">
-        <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
-          <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
-            <span>OpenAEV Connector</span>
-            <span id="openaev-status-badge" class="badge"></span>
-          </div>
-          <div id="openaev-config-panel" style="margin-top:0.75rem"></div>
-        </div>
-        <div class="tbl-wrap">
-          <table id="openaev-scenarios-table">
-            <thead><tr><th>Name</th><th>Category</th><th>Severity</th><th>Techniques</th><th>Injects</th><th>Synced</th></tr></thead>
-            <tbody id="openaev-scenarios-body"></tbody>
-          </table>
-        </div>
-        <div id="openaev-scenarios-empty" class="empty" style="display:none">No scenarios synced yet.</div>
-      </div>
-
       <div id="tab-exercises" style="display:none">
+        <!-- OpenAEV Scenarios — synced content library, feeds "Create Exercise Plan" below -->
+        <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+          <div class="card-title">OpenAEV Scenarios</div>
+          <div class="tbl-wrap" style="margin-top:0.5rem">
+            <table id="openaev-scenarios-table">
+              <thead><tr><th>Name</th><th>Category</th><th>Severity</th><th>Techniques</th><th>Injects</th><th>Synced</th></tr></thead>
+              <tbody id="openaev-scenarios-body"></tbody>
+            </table>
+          </div>
+          <div id="openaev-scenarios-empty" class="empty" style="display:none">No scenarios synced yet.</div>
+        </div>
         <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
           <div class="card-title">Exercise Plans</div>
           <div class="tbl-wrap" style="margin-top:0.5rem">
@@ -3878,7 +3871,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', openaev:'OpenAEV Connector', exercises:'Exercises' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', exercises:'Exercises' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -4010,7 +4003,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','openaev','exercises'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','exercises'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -4035,7 +4028,6 @@ function showTab(name) {
   if (name === 'exposure') loadExposureAssets();
   if (name === 'exec-dashboard') loadExecDashboard();
   if (name === 'recommendations') loadRecommendations();
-  if (name === 'openaev') loadOpenAEVTab();
   if (name === 'exercises') loadExercisesTab();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
@@ -4721,9 +4713,13 @@ function closeExposureDetail() {
   document.getElementById('exposure-detail-overlay').classList.remove('open');
 }
 
-// ── OpenAEV Connector tab ─────────────────────────────────────────────────
-function loadOpenAEVTab() {
+// ── OpenAEV Connector — config/status card lives in Settings → Threat Intel,
+// alongside MISP/OpenCTI/OTX (see loadConnectorStatus). Synced scenarios live
+// in the Exercises tab (see loadExercisesTab), since that's where they turn
+// into exercise plans.
+function loadOpenAEVConfig() {
   var configPanel = document.getElementById('openaev-config-panel');
+  if (!configPanel) return;
   if (ROLE === 'admin') {
     apicall('/api/openaev/config').then(function(cfg) {
       configPanel.innerHTML =
@@ -4749,7 +4745,9 @@ function loadOpenAEVTab() {
     badge.textContent = x(s.lastSyncStatus || 'never');
     badge.style.color = color;
   }).catch(function() {});
+}
 
+function loadOpenAEVScenarios() {
   apicall('/api/openaev/scenarios').then(function(list) {
     var body = document.getElementById('openaev-scenarios-body');
     var empty = document.getElementById('openaev-scenarios-empty');
@@ -4803,14 +4801,14 @@ function saveOpenAEVConfig() {
     })
   }).then(function() {
     showToast('OpenAEV config saved', 'ok');
-    loadOpenAEVTab();
+    loadOpenAEVConfig();
   }).catch(function(e) { showToast('Save failed: ' + (e.message || 'error'), 'err'); });
 }
 
 function syncOpenAEVNow() {
   apicall('/api/openaev/sync', { method: 'POST' }).then(function() {
     showToast('OpenAEV sync started', 'ok');
-    loadOpenAEVTab();
+    loadOpenAEVConfig();
   }).catch(function(e) { showToast('Sync failed: ' + (e.message || 'error'), 'err'); });
 }
 
@@ -4834,6 +4832,7 @@ function closeOpenAEVDetail() {
 }
 
 function loadExercisesTab() {
+  loadOpenAEVScenarios();
   apicall('/api/exercises/plans').then(function(plans) {
     var body = document.getElementById('ex-plans-body');
     var empty = document.getElementById('ex-plans-empty');
@@ -5554,7 +5553,7 @@ function showSettingsSection(name) {
   });
   if (name === 'users') loadUsers();
   else if (name === 'engine') loadCalderaStatus();
-  else if (name === 'intel') loadConnectorStatus();
+  else if (name === 'intel') { loadConnectorStatus(); loadOpenAEVConfig(); }
   else if (name === 'art') loadARTContentStatus();
   else if (name === 'audit') loadAuditLogs();
   else if (name === 'license') loadLicenseInfo();
