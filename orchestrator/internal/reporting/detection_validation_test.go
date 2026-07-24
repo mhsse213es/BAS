@@ -46,26 +46,45 @@ func TestAutomaticVerifier(t *testing.T) {
 	if r.Status != StatusDetected {
 		t.Errorf("detected-match: got %s want Detected", r.Status)
 	}
+	if r.ExpectedOutcome != "Detected" || r.ObservedOutcome != "Detected" || r.Comparison != Match {
+		t.Errorf("detected-match outcome fields: got expected=%q observed=%q comparison=%v", r.ExpectedOutcome, r.ObservedOutcome, r.Comparison)
+	}
+
 	// detected by a different provider → NotDetected (the expected one stayed silent)
 	r = automaticVerifier{}.Verify(exp, StepEvidence{DetectionVerdict: "detected", AlertProvider: "CrowdStrike Falcon"})
 	if r.Status != StatusNotDetected {
 		t.Errorf("detected-mismatch: got %s want NotDetected", r.Status)
 	}
+	if r.ObservedOutcome != "NotDetected" || r.Comparison != Mismatch {
+		t.Errorf("detected-mismatch outcome fields: got observed=%q comparison=%v", r.ObservedOutcome, r.Comparison)
+	}
+
 	// prevented by the expected control → Detected
 	r = automaticVerifier{}.Verify(exp, StepEvidence{DetectionVerdict: "prevented", BlockingControl: "Defender ASR"})
 	if r.Status != StatusDetected {
 		t.Errorf("prevented-match: got %s want Detected", r.Status)
 	}
+	if r.Comparison != Match {
+		t.Errorf("prevented-match comparison: got %v want Match", r.Comparison)
+	}
+
 	// undetected → NotDetected
 	r = automaticVerifier{}.Verify(exp, StepEvidence{DetectionVerdict: "undetected"})
 	if r.Status != StatusNotDetected {
 		t.Errorf("undetected: got %s want NotDetected", r.Status)
 	}
+	if r.ObservedOutcome != "NotDetected" || r.Comparison != Mismatch {
+		t.Errorf("undetected outcome fields: got observed=%q comparison=%v", r.ObservedOutcome, r.Comparison)
+	}
+
 	// non-endpoint domain is not on-host observable → Unknown
 	netExp := scenario.ExpectedDetection{ID: "n", Provider: "microsoft_sentinel", Type: scenario.DomainNetwork, Confidence: scenario.ConfidenceRequired, Finding: scenario.ExpectedFinding{Title: "t", Severity: "High"}}
 	r = automaticVerifier{}.Verify(netExp, StepEvidence{DetectionVerdict: "detected", AlertProvider: "Microsoft Defender"})
 	if r.Status != StatusUnknown {
 		t.Errorf("non-endpoint: got %s want Unknown", r.Status)
+	}
+	if r.ObservedOutcome != "" || r.Comparison != MissingEvidence {
+		t.Errorf("non-endpoint outcome fields: got observed=%q comparison=%v want empty/MissingEvidence", r.ObservedOutcome, r.Comparison)
 	}
 }
 

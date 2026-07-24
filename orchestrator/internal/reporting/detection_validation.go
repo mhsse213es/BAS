@@ -60,6 +60,14 @@ type VerificationResult struct {
 	Timestamp   time.Time
 	Finding     scenario.ExpectedFinding
 	TechniqueID string
+
+	// ExpectedOutcome/ObservedOutcome/Comparison are the Outcome Validation
+	// Framework's richer internal computation — not surfaced in any report
+	// JSON (ExpectationRow has no equivalent fields). Status remains the only
+	// field existing scoring/report code consumes, now derived from Comparison.
+	ExpectedOutcome string
+	ObservedOutcome string
+	Comparison      ComparisonResult
 }
 
 // Verifier resolves one expectation against observed evidence. The dispatch in
@@ -103,9 +111,23 @@ type automaticVerifier struct{}
 
 func (automaticVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) VerificationResult {
 	r := baseResult(exp, ev, "automatic")
+	r.ExpectedOutcome = scenario.ResolveExpectedOutcome(exp)
+	r.ObservedOutcome, r.Source = observeDetectionOutcome(exp, ev)
+	r.Comparison = comparatorFor(scenario.ResolveOutcomeFamily(exp)).Compare(r.ExpectedOutcome, r.ObservedOutcome)
+	r.Status = collapseToStatus(r.Comparison)
+	return r
+}
+
+// observeDetectionOutcome is automaticVerifier's pre-existing evidence switch,
+// extracted verbatim and translated into a (token, source) pair instead of
+// setting Status/Source directly. The empty-string token means "not
+// observable by this verifier at all" (non-endpoint domain) — distinct from
+// the "NotDetected" token, which means "observable, but no matching control
+// responded." Collapsing both to the same empty signal would make MissingEvidence
+// and Mismatch indistinguishable, breaking today's Unknown-vs-NotDetected split.
+func observeDetectionOutcome(exp scenario.ExpectedDetection, ev StepEvidence) (outcome, source string) {
 	if scenario.ResolveDomain(exp) != scenario.DomainEndpoint {
-		r.Status = StatusUnknown
-		return r
+		return "", ""
 	}
 	switch ev.DetectionVerdict {
 	case "detected":
@@ -114,20 +136,17 @@ func (automaticVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence)
 			src = classifyDetection(ev.Events).Source
 		}
 		if providerMatches(exp.Provider, src) {
-			r.Status, r.Source = StatusDetected, src
-		} else {
-			r.Status = StatusNotDetected
+			return "Detected", src
 		}
+		return "NotDetected", ""
 	case "prevented":
 		if providerMatches(exp.Provider, ev.BlockingControl) {
-			r.Status, r.Source = StatusDetected, ev.BlockingControl
-		} else {
-			r.Status = StatusNotDetected
+			return "Detected", ev.BlockingControl
 		}
+		return "NotDetected", ""
 	default: // undetected / empty
-		r.Status = StatusNotDetected
+		return "NotDetected", ""
 	}
-	return r
 }
 
 // manualVerifier is an SP1 stub — off-host expectations await analyst attestation
