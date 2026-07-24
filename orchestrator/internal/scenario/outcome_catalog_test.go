@@ -53,3 +53,20 @@ func TestFamilyKnown(t *testing.T) {
 		t.Error("an unregistered family should not be known")
 	}
 }
+
+func TestDLPOutcomeCatalogRegistered(t *testing.T) {
+	for _, v := range []string{"Allow", "Block", "Warn", "Justify", "Audit", "Quarantine", "Encrypt", "Redact"} {
+		if !ValidOutcome("dlp", v) {
+			t.Errorf("dlp catalog missing value %q", v)
+		}
+	}
+	if ValidOutcome("dlp", "NotARealValue") {
+		t.Error("dlp catalog should not validate an unregistered value")
+	}
+	if !familyKnown("dlp") {
+		t.Error("dlp family should be known once registered")
+	}
+	if got := ResolveExpectedOutcome(ExpectedDetection{OutcomeFamily: "dlp"}); got != "Block" {
+		t.Errorf("dlp family's implicit expected outcome: got %q want Block", got)
+	}
+}

@@ -77,6 +77,17 @@ func init() {
 		Values:           []string{"Detected", "NotDetected"},
 		ImplicitExpected: "Detected",
 	})
+	// "dlp" — Phase B (Data Protection Validation, DLP capability). The full
+	// catalog is richer than any current verifier can prove: only Block/Allow
+	// are locally observable (see internal/reporting/dlp.go's dlpComparator).
+	// Warn/Justify/Audit/Quarantine/Encrypt/Redact exist so a future DLP
+	// product connector can populate profiles that declare them, without a
+	// catalog change.
+	RegisterOutcomeCatalog(OutcomeCatalog{
+		Family:           "dlp",
+		Values:           []string{"Allow", "Block", "Warn", "Justify", "Audit", "Quarantine", "Encrypt", "Redact"},
+		ImplicitExpected: "Block",
+	})
 }
 
 // ResolveOutcomeFamily returns the outcome family for an expectation: its
