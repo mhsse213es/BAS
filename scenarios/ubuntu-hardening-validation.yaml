@@ -33,6 +33,21 @@ description: >
   destructive payloads. Several techniques (auditd stop, USB mount, sudo
   escalation) are lab-only in effect — expect service disruption if run
   outside an isolated test endpoint. Run only on dedicated test endpoints.
+
+  Status: scenario complete.
+  Known limitation: actual execution coverage depends on the deployed ART
+  content library — this scenario is written against the intended
+  security behaviors CIS controls should enforce, not audited against
+  today's content inventory.
+  Verification pending: confirm each art_techniques entry below has real
+  Linux atomic coverage against the production content database (query:
+  SELECT technique_id, test_index, name FROM art_atomic_tests WHERE
+  technique_id = ANY(...) AND platform='linux').
+  Acceptance criterion: every technique below either (a) maps to one or
+  more Linux ART atomics, or (b) is intentionally a native/local BAS
+  action where ART has no equivalent. If verification finds a gap, the
+  fix is a native/local execution fallback for that technique — not
+  removing or silently downgrading the control.
 author: Audspect Research
 executable: true
 supported_os: [linux]
