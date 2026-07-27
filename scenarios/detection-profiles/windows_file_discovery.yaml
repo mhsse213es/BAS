@@ -1,0 +1,18 @@
+# Detection Validation Profile — file and directory discovery (T1083).
+# Pre-encryption target enumeration; informational — very noisy, low
+# standalone signal, but relevant context alongside later-stage detections.
+profile: windows_file_discovery
+version: 1
+expected_detection:
+  - id: file-discovery-edr
+    provider: microsoft_defender
+    confidence: optional
+    finding:
+      severity: Low
+      title: "Mass file enumeration not observed as a distinct signal"
+      remediation: >-
+        File-discovery commands alone rarely warrant standalone detection —
+        this expectation is informational, correlated with later-stage
+        (encryption, VSS-inhibition) detections rather than scored on its
+        own.
+      reference: "MITRE ATT&CK T1083 — File and Directory Discovery"

@@ -1,0 +1,16 @@
+# Detection Validation Profile — SMB/Windows Admin Shares lateral movement
+# probe (T1021.002). LockBit-style spreading via administrative shares.
+profile: windows_smb_lateral_probe
+version: 1
+expected_detection:
+  - id: smb-lateral-edr
+    provider: microsoft_defender
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "SMB admin-share lateral movement probe not detected"
+      remediation: >-
+        Alert on connections to ADMIN$/C$ shares from non-administrative
+        source hosts, or unusual volume of admin-share authentication
+        attempts — a common ransomware lateral-spreading technique.
+      reference: "MITRE ATT&CK T1021.002 — SMB/Windows Admin Shares"

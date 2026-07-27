@@ -1,0 +1,17 @@
+# Detection Validation Profile — network share discovery (T1135).
+# Reconnaissance for lateral-spreading targets; informational, low
+# standalone signal like T1083.
+profile: windows_network_share_discovery
+version: 1
+expected_detection:
+  - id: share-discovery-edr
+    provider: microsoft_defender
+    confidence: optional
+    finding:
+      severity: Low
+      title: "Network share enumeration not observed as a distinct signal"
+      remediation: >-
+        Share-enumeration commands alone rarely warrant standalone
+        detection — informational, correlated with later lateral-movement
+        or encryption-stage detections.
+      reference: "MITRE ATT&CK T1135 — Network Share Discovery"

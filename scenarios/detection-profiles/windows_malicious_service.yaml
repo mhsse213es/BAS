@@ -1,0 +1,18 @@
+# Detection Validation Profile — Windows service creation (T1543.003) used
+# for persistence or as a ransomware deployment vector (e.g. PsExec-style
+# service-based lateral execution).
+profile: windows_malicious_service
+version: 1
+expected_detection:
+  - id: malicious-service-edr
+    provider: microsoft_defender
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "Suspicious service creation not detected"
+      remediation: >-
+        Alert on new-service creation (Security EID 4697 / System EID 7045)
+        with an unusual binary path, especially from a non-administrative
+        parent process or shortly before other ransomware-precursor
+        activity.
+      reference: "MITRE ATT&CK T1543.003 — Windows Service"

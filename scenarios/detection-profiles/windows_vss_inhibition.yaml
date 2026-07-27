@@ -1,0 +1,54 @@
+# Detection Validation Profile — inhibit system recovery (T1490). The single
+# highest-value ransomware precursor signature: an attacker who can delete
+# shadow copies and backup catalogs has removed the victim's ability to
+# recover without paying. Four sub-behaviors, one profile — all are the same
+# underlying intent (destroy recovery options) observed at different layers.
+profile: windows_vss_inhibition
+version: 1
+expected_detection:
+  - id: vss-enum-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: High
+      title: "VSS/shadow-copy enumeration not detected"
+      remediation: >-
+        Alert on vssadmin/wmic shadowcopy/Get-CimInstance Win32_ShadowCopy
+        enumeration — reconnaissance immediately preceding shadow-copy
+        deletion.
+      reference: "MITRE ATT&CK T1490 — Inhibit System Recovery"
+  - id: vss-delete-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Critical
+      title: "VSS/shadow-copy deletion not blocked"
+      remediation: >-
+        Enable Defender's "Block process creations originating from PSExec
+        and WMI commands" and "Block process modifications of backups" ASR
+        rules; alert on vssadmin delete shadows / wmic shadowcopy delete.
+        This is the single most actionable ransomware kill-switch available
+        to endpoint controls.
+      reference: "MITRE ATT&CK T1490 — Inhibit System Recovery"
+  - id: backup-catalog-delete-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Critical
+      title: "Backup catalog deletion not blocked"
+      remediation: >-
+        Alert on wbadmin delete catalog / wbadmin delete systemstatebackup —
+        removes the Windows Server Backup catalog, another recovery-removal
+        vector distinct from VSS.
+      reference: "MITRE ATT&CK T1490 — Inhibit System Recovery"
+  - id: bootloader-recovery-disable-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Critical
+      title: "Bootloader recovery-options tampering not blocked"
+      remediation: >-
+        Alert on bcdedit /set {default} recoveryenabled no and bcdedit
+        /set {default} bootstatuspolicy ignoreallfailures — disables Windows
+        Recovery Environment, a final recovery-removal step.
+      reference: "MITRE ATT&CK T1490 — Inhibit System Recovery"

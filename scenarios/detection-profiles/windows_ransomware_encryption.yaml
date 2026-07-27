@@ -1,0 +1,32 @@
+# Detection Validation Profile — data encrypted for impact (T1486). The
+# defining ransomware behavior: mass file encryption plus the accompanying
+# ransom note. This is what Defender's ransomware-specific protections
+# (Controlled Folder Access, behavioral ransomware detection) exist for.
+profile: windows_ransomware_encryption
+version: 1
+expected_detection:
+  - id: mass-encryption-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Critical
+      title: "Mass file encryption pattern not detected/blocked"
+      remediation: >-
+        Enable Controlled Folder Access and Defender's ransomware-specific
+        behavioral protection. Alert on high-frequency file create+rename+
+        delete in a short window, or a burst of files acquiring a new,
+        unrecognized extension — the canonical ransomware encryption
+        signature.
+      reference: "MITRE ATT&CK T1486 — Data Encrypted for Impact"
+  - id: ransom-note-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Critical
+      title: "Ransom note deployment not detected"
+      remediation: >-
+        Alert on identical/near-identical text files being written to
+        multiple directories in a short window — ransom-note deployment is
+        a distinctive, high-fidelity signal that co-occurs with mass
+        encryption.
+      reference: "MITRE ATT&CK T1486 — Data Encrypted for Impact"

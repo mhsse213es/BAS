@@ -1,0 +1,18 @@
+# Detection Validation Profile — service stop (T1489) targeting backup
+# services specifically — removes the last line of defense before
+# encryption, alongside VSS/backup-catalog deletion.
+profile: windows_backup_service_stop
+version: 1
+expected_detection:
+  - id: backup-service-stop-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Critical
+      title: "Backup service stop not detected/blocked"
+      remediation: >-
+        Alert on Stop-Service/sc stop targeting known backup-agent service
+        names (Veeam, Backup Exec, Windows Server Backup, etc.) — stopping
+        the backup service immediately before encryption is a
+        high-fidelity, high-severity ransomware precursor.
+      reference: "MITRE ATT&CK T1489 — Service Stop"

@@ -1,0 +1,28 @@
+# Detection Validation Profile — impair defenses via Defender tampering
+# (T1562.001). Attackers disable/exclude before deploying payloads;
+# Tamper Protection exists specifically to prevent this class of action.
+profile: windows_defender_tampering
+version: 1
+expected_detection:
+  - id: defender-exclusion-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: High
+      title: "Defender exclusion addition not detected/blocked"
+      remediation: >-
+        Enable Tamper Protection to block unauthorized Add-MpPreference
+        -ExclusionPath/-ExclusionProcess changes; alert on exclusion-list
+        modifications outside change-managed maintenance windows.
+      reference: "MITRE ATT&CK T1562.001 — Disable or Modify Tools"
+  - id: defender-rtp-disable-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: High
+      title: "Defender real-time protection disable not detected/blocked"
+      remediation: >-
+        Enable Tamper Protection to block Set-MpPreference
+        -DisableRealtimeMonitoring; RTP disable immediately preceding
+        payload execution is a high-fidelity ransomware precursor.
+      reference: "MITRE ATT&CK T1562.001 — Disable or Modify Tools"

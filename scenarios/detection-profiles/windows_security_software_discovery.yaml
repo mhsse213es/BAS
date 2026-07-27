@@ -1,0 +1,17 @@
+# Detection Validation Profile — security-software discovery (T1518.001).
+# Ransomware precursor: enumerating installed AV/EDR before payload deployment.
+profile: windows_security_software_discovery
+version: 1
+expected_detection:
+  - id: secsoft-discovery-edr
+    provider: microsoft_defender
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "Security software discovery not detected"
+      remediation: >-
+        Alert on enumeration of AV/EDR processes and services (e.g. querying
+        Windows Security Center, WMI AntiVirusProduct class, or common vendor
+        process/service names) — a common ransomware precursor to confirm the
+        target environment before deploying a payload.
+      reference: "MITRE ATT&CK T1518.001 — Security Software Discovery"
