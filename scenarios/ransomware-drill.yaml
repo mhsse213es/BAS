@@ -61,6 +61,8 @@ live_policy:
 steps:
   - name: "File Enumeration (BFSI high-value filename markers)"
     technique_id: T1083
+    detection_profiles:
+      - windows_file_discovery
     framework: custom
     executor: powershell
     requires_priv: user
@@ -97,6 +99,8 @@ steps:
 
   - name: "Defender Exclusion Invocation (cmdline probe  -  no state change)"
     technique_id: T1562.001
+    detection_profiles:
+      - windows_defender_tampering
     framework: custom
     executor: powershell
     requires_priv: user
@@ -121,6 +125,8 @@ steps:
 
   - name: "Event Log Clear Probe (nonexistent log  -  process telemetry only)"
     technique_id: T1070.001
+    detection_profiles:
+      - windows_log_manipulation
     framework: custom
     executor: powershell
     requires_priv: user
@@ -145,6 +151,8 @@ steps:
 
   - name: "VSS + Backup Catalog Enumeration"
     technique_id: T1490
+    detection_profiles:
+      - windows_vss_inhibition
     framework: custom
     executor: powershell
     requires_priv: user
@@ -170,6 +178,8 @@ steps:
 
   - name: "Benign File Rename Probe (.bas_locked extension)"
     technique_id: T1486
+    detection_profiles:
+      - windows_ransomware_encryption
     framework: custom
     executor: powershell
     requires_priv: user
@@ -211,6 +221,8 @@ steps:
 
   - name: "XOR Encryption Simulation (lab  -  isolated temp dir, forced cleanup)"
     technique_id: T1486
+    detection_profiles:
+      - windows_ransomware_encryption
     framework: custom
     executor: powershell
     requires_priv: user
@@ -268,6 +280,8 @@ steps:
 
   - name: "VSS Shadow Copy Deletion (lab  -  requires BAS_CONFIRM_VSS_DELETE=true)"
     technique_id: T1490
+    detection_profiles:
+      - windows_vss_inhibition
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -304,6 +318,8 @@ steps:
 
   - name: "Defender RTP Disable (lab  -  mandatory restoration + health check)"
     technique_id: T1562.001
+    detection_profiles:
+      - windows_defender_tampering
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -340,6 +356,8 @@ steps:
 
   - name: "Malicious Service Probe (lab  -  creation + lineage logging)"
     technique_id: T1543.003
+    detection_profiles:
+      - windows_malicious_service
     framework: custom
     executor: powershell
     requires_priv: admin
