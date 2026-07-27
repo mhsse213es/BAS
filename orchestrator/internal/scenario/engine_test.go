@@ -588,3 +588,49 @@ func TestParseYAML_NewRansomwareFamiliesDetectionProfilesWired(t *testing.T) {
 		}
 	}
 }
+
+func TestParseYAML_InsiderThreatDetectionProfilesWired(t *testing.T) {
+	cases := []struct {
+		file        string
+		stepName    string
+		wantProfile string
+	}{
+		{"../../../scenarios/insider-threat-kill-chain.yaml", "Insider Stage 1 — Sensitive-File Search Outside Normal Job Scope (T1083 / T1005)", "windows_file_discovery"},
+		{"../../../scenarios/insider-threat-kill-chain.yaml", "Insider Stage 2 — Personal Webmail Exfiltration Reachability (T1567)", "windows_webmail_egress"},
+		{"../../../scenarios/insider-threat-kill-chain.yaml", "Insider Stage 3 — Mass File Rename/Delete Sabotage (T1485)", "windows_data_destruction"},
+	}
+
+	parsed := map[string]*Scenario{}
+	for _, tc := range cases {
+		if _, ok := parsed[tc.file]; ok {
+			continue
+		}
+		data, err := os.ReadFile(tc.file)
+		if err != nil {
+			t.Fatalf("read %s: %v", tc.file, err)
+		}
+		sc, err := ParseYAML(data)
+		if err != nil {
+			t.Fatalf("ParseYAML %s: %v", tc.file, err)
+		}
+		parsed[tc.file] = sc
+	}
+
+	for _, tc := range cases {
+		sc := parsed[tc.file]
+		var step *Step
+		for i := range sc.Steps {
+			if sc.Steps[i].Name == tc.stepName {
+				step = &sc.Steps[i]
+				break
+			}
+		}
+		if step == nil {
+			t.Errorf("%s: step %q not found", tc.file, tc.stepName)
+			continue
+		}
+		if len(step.DetectionProfiles) != 1 || step.DetectionProfiles[0] != tc.wantProfile {
+			t.Errorf("%s / %q: DetectionProfiles = %v, want [%s]", tc.file, tc.stepName, step.DetectionProfiles, tc.wantProfile)
+		}
+	}
+}
