@@ -51,3 +51,67 @@ func TestBuiltinTemplates_DetectionBridgeWiring(t *testing.T) {
 			waitDetection.Config.WaitForDetection.ExecutionStepID)
 	}
 }
+
+func TestBuiltinTemplates_PurpleTeamDetectionBridgeWiring(t *testing.T) {
+	findStep := func(steps []PlanStep, id string) *PlanStep {
+		for i := range steps {
+			if steps[i].ID == id {
+				return &steps[i]
+			}
+		}
+		return nil
+	}
+	findTemplate := func(id string) *Template {
+		for i := range BuiltinTemplates {
+			if BuiltinTemplates[i].ID == id {
+				return &BuiltinTemplates[i]
+			}
+		}
+		return nil
+	}
+
+	cases := []struct {
+		templateID          string
+		wantExecutionStepID string
+	}{
+		{"builtin-purple-apt29", "drill_sim"},
+	}
+	for _, tc := range cases {
+		tpl := findTemplate(tc.templateID)
+		if tpl == nil {
+			t.Fatalf("%s: template not found", tc.templateID)
+		}
+		wait := findStep(tpl.Steps, "wait_detect")
+		if wait == nil || wait.Config.WaitForDetection == nil {
+			t.Fatalf("%s: wait_detect step or its WaitForDetection config is missing", tc.templateID)
+		}
+		if wait.Config.WaitForDetection.ExecutionStepID != tc.wantExecutionStepID {
+			t.Errorf("%s: ExecutionStepID = %q, want %q", tc.templateID, wait.Config.WaitForDetection.ExecutionStepID, tc.wantExecutionStepID)
+		}
+	}
+}
+
+func TestBuiltinTemplates_PurpleTeamMetadataPopulated(t *testing.T) {
+	findTemplate := func(id string) *Template {
+		for i := range BuiltinTemplates {
+			if BuiltinTemplates[i].ID == id {
+				return &BuiltinTemplates[i]
+			}
+		}
+		return nil
+	}
+
+	ids := []string{"builtin-purple-apt29"}
+	for _, id := range ids {
+		tpl := findTemplate(id)
+		if tpl == nil {
+			t.Fatalf("%s: template not found", id)
+		}
+		if tpl.Metadata.SuccessCriteria == "" {
+			t.Errorf("%s: Metadata.SuccessCriteria is empty", id)
+		}
+		if len(tpl.Metadata.ExpectedTechniques) == 0 {
+			t.Errorf("%s: Metadata.ExpectedTechniques is empty", id)
+		}
+	}
+}

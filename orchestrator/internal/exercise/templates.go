@@ -270,4 +270,73 @@ var BuiltinTemplates = []Template{
 			},
 		},
 	},
+
+	// ── 6. APT29 Kill Chain Purple Team Drill ─────────────────────────────────
+	{
+		ID:          "builtin-purple-apt29",
+		Name:        "APT29 Kill Chain Purple Team Drill",
+		Version:     1,
+		Category:    "purple-team",
+		Description: "Runs the APT29 (Cozy Bear) kill-chain simulation — GPO discovery, encoded PowerShell execution, registry run-key persistence, scheduled-task persistence, DNS-over-HTTPS C2 — and measures SOC detection latency across the full multi-stage chain.",
+		Author:      "Audspect",
+		BuiltIn:     true,
+		Variables: []VarDef{
+			{Name: "AgentID", Type: VarTypeEndpoint, Required: true, Description: "Target agent for the simulation"},
+			{Name: "ScenarioID", Type: VarTypeString, Required: true, Default: "apt29-kill-chain", Description: "Scenario to execute"},
+			{Name: "DetectionTimeout", Type: VarTypeDuration, Default: "30m", Description: "Max time to wait for detection before timing out"},
+			{Name: "SOCNotifyEmail", Type: VarTypeEmailList, Description: "Email to notify when drill completes"},
+		},
+		Metadata: TemplateMetadata{
+			SuccessCriteria: "The technical gate confirms at least one kill-chain stage was detected within the detection timeout (MTTD/MTTR recorded); full stage-by-stage coverage across all five stages is then reviewed by the SOC at the approval step using the complete evidence chain, not just the count that satisfied the gate. Only microsoft_defender (EDR-domain) evidence resolves automatically today — the microsoft_sentinel (SIEM) stage's detection requires either a configured Sentinel API connector or a SOC analyst manually attesting via the Detection Verification UI during the exercise.",
+			LearningObjectives: []string{
+				"Validate multi-stage kill-chain visibility across endpoint and SIEM",
+				"Measure detection latency for a nation-state-style intrusion pattern",
+				"Identify which chain stage, if any, breaks detection coverage",
+			},
+			ExpectedTechniques:      []string{"T1482", "T1059.001", "T1547.001", "T1053.005", "T1071.004"},
+			ExpectedDetections:      []string{"Microsoft Defender", "Microsoft Sentinel"},
+			RecommendedParticipants: []string{"SOC Analyst", "Detection Engineer", "IR Lead (approval)"},
+			RecommendedDuration:     "1-2 hours",
+			DiscussionPrompts: []string{
+				"Which stage of the chain, if any, went undetected?",
+				"What logging or rule change would close that gap fastest?",
+				"Did any single stage's detection alone give away the whole chain, or did the SOC need to correlate across stages?",
+			},
+		},
+		Steps: []PlanStep{
+			{
+				ID: "drill_sim", Type: StepTypeAgentTask, Label: "Trigger APT29 kill-chain simulation",
+				Config: StepConfig{AgentTask: &AgentTaskConfig{AgentID: "${AgentID}", ScenarioID: "${ScenarioID}"}},
+			},
+			{
+				ID: "wait_sim_done", Type: StepTypeWaitForAgent, Label: "Wait for simulation to complete",
+				DependsOn:   []string{"drill_sim"},
+				Config:      StepConfig{WaitForAgent: &WaitForAgentConfig{AgentTaskStepID: "drill_sim"}},
+				TimeoutSecs: 1800,
+			},
+			{
+				ID: "wait_detect", Type: StepTypeWaitForDetection, Label: "Wait for SOC detection",
+				DependsOn:   []string{"wait_sim_done"},
+				TimeoutSecs: 1800,
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
+					DetectionTypes:  []string{"edr_detected", "siem_alerted", "security_control_detected"},
+					ExecutionStepID: "drill_sim",
+				}},
+			},
+			{
+				ID: "approval_response", Type: StepTypeApproval, Label: "SOC: confirm incident response completed",
+				DependsOn:   []string{"wait_detect"},
+				TimeoutSecs: 7200,
+				Config: StepConfig{
+					ApprovalPrompt: "Has the SOC completed triage, containment, and documented the incident across all detected kill-chain stages?",
+					ApproverRoles:  []string{"admin", "analyst"},
+				},
+			},
+			{
+				ID: "drill_complete", Type: StepTypeNotify, Label: "APT29 drill complete — check MTTD/MTTR",
+				DependsOn: []string{"approval_response"},
+				Config:    StepConfig{NotifyMsg: "APT29 Kill Chain Purple Team Drill complete. Review the technical score, MTTD/MTTR, and per-stage detection coverage."},
+			},
+		},
+	},
 }
