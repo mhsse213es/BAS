@@ -1,0 +1,398 @@
+id: blackcat-kill-chain
+name: BlackCat/ALPHV Kill Chain — Ransomware Emulation
+description: >
+  Eight-stage telemetry-safe emulation of the BlackCat/ALPHV ransomware kill
+  chain targeting Windows endpoints. Reflects documented BlackCat tradecraft
+  validated against CISA AA23-353A: Rust-based Ransomware-as-a-Service,
+  intermittent encryption, self-propagation via PsExec/Group Policy.
+
+  KILL CHAIN STAGES:
+    1. Domain Discovery      — AD/privileged-account/DC enumeration (T1087.002)
+    2. Defense Discovery     — security software enumeration (T1518.001)
+    3. Credential Access     — SAM/SYSTEM hive theft via reg save (T1003.002)
+    4. Defense Evasion       — Defender Real-Time Protection disable (T1562.001)
+    5. Lateral Movement      — malicious service, PsExec-style (T1543.003)
+    6. Ransomware Simulation — XOR-encoded benign file + ransom note, .blackcat extension (T1486)
+    7. Recovery Inhibition   — VSS snapshot enumeration (T1490)
+    8. Log Clearing Attempt  — wevtutil cl attempt, blocked or audit (T1070.001)
+
+  NOTE: BlackCat's real initial access is via purchased access-broker
+  credentials, valid accounts, or phishing — not represented as an
+  executable step since none of these are safely agent-simulatable.
+
+  SAFETY: No real encryption of user data. XOR is applied to a single BAS-
+  created temp file with [BAS-SIM-BLACKCAT] content only. Ransom note is
+  cleaned up immediately. Stages 4 and 5 are lab-only (Defender RTP toggle,
+  throwaway service creation) — both self-restore/self-clean within the
+  step but are excluded from production campaigns via fidelity metadata.
+  All other stages are production-safe. Windows only. [BAS-SIM] tagged
+  throughout.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - blackcat
+  - alphv
+  - ransomware
+  - bfsi
+  - kill-chain
+  - t1003
+  - t1070
+  - t1087
+  - t1486
+  - t1490
+  - t1518
+  - t1543
+  - t1562
+  - mitre
+mitre_phases:
+  - discovery
+  - credential-access
+  - defense-evasion
+  - lateral-movement
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Domain Discovery (T1087.002)
+  # ---------------------------------------------------------------------------
+  - name: "BlackCat Stage 1 — AD Domain & Privileged Account Discovery (T1087.002)"
+    technique_id: T1087.002
+    detection_profiles:
+      - windows_ad_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs net group \"Domain Admins\" /domain, net view, and nltest /dclist: (all read-only, current-token). No accounts touched. Generates Sysmon EID 1 (net.exe / nltest.exe)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: net.exe group / view, nltest.exe /dclist"
+      - "Security EID 4688: net.exe and nltest.exe spawned by powershell.exe"
+    detection:
+      - "EDR: nltest.exe /dclist and net group 'Domain Admins' /domain from a single host — Sigma rule proc_creation_win_net_enum.yml"
+      - "SIEM: domain-controller and privileged-group enumeration chained together — pre-credential-theft recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $domainAdmins = & net.exe group "Domain Admins" /domain 2>&1 | Out-String
+      $computers    = & net.exe view 2>&1 | Out-String
+      $dcList       = & nltest.exe /dclist: 2>&1 | Out-String
+      $domainJoined = $domainAdmins -notmatch 'workstation is not|not be found|is not part'
+      Write-Output "EXEC T1087.002: AdFind-style domain enumeration -- Domain Admins group, network computer list (net view), and DC list (nltest) queried (domain_joined=$domainJoined). BlackCat/ALPHV uses this recon to map privileged accounts and domain controllers before credential theft. [BAS-SIM-BLACKCAT-S1]"
+      Write-Output "FAIL: domain enumeration completed unimpeded via built-in LOLBins (net.exe, nltest.exe) -- no AdFind binary required. Alert on nltest.exe /dclist and net group 'Domain Admins' /domain from non-IT accounts."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Defense Discovery (T1518.001)
+  # ---------------------------------------------------------------------------
+  - name: "BlackCat Stage 2 — Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    detection_profiles:
+      - windows_security_software_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Queries WMI AntiVirusProduct, AntiSpywareProduct, FirewallProduct to enumerate installed security products. Read-only. Generates ScriptBlock EID 4104 and WMI-Activity EID 5857-5861."
+    reversible: true
+    telemetry:
+      - "WMI-Activity EID 5857-5861: Get-WmiObject SecurityCenter2 query"
+      - "PowerShell ScriptBlock EID 4104: AntiVirusProduct WMI class enumeration"
+      - "Sysmon EID 1: powershell.exe WMI query (ransomware reconnaissance pattern)"
+    detection:
+      - "EDR: WMI security product enumeration from PowerShell  -  Sigma rule win_wmi_security_product_discovery.yml"
+      - "SIEM: Get-WmiObject Win32_Product or SecurityCenter2 — pre-ransomware recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $avProducts = Get-WmiObject -Namespace 'root\SecurityCenter2' -Class 'AntiVirusProduct' -ErrorAction SilentlyContinue
+      $fwProducts = Get-WmiObject -Namespace 'root\SecurityCenter2' -Class 'FirewallProduct' -ErrorAction SilentlyContinue
+      $avNames = ($avProducts | ForEach-Object { $_.displayName }) -join ', '
+      $fwNames = ($fwProducts | ForEach-Object { $_.displayName }) -join ', '
+      if ($avProducts -or $fwProducts) {
+        Write-Output "EXEC T1518.001: security software enumerated. AV=[$avNames] FW=[$fwNames]. BlackCat uses this to decide whether to proceed or disable controls. [BAS-SIM-BLACKCAT-S2]"
+        Write-Output "FAIL: security product names are enumerable via WMI SecurityCenter2. EDR should alert on this WMI class access from PowerShell."
+      } else {
+        Write-Output "PASS: SecurityCenter2 namespace not accessible or no products registered  -  WMI security product enumeration blocked/empty. [BAS-SIM-BLACKCAT-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Credential Access: SAM/SYSTEM Hive Theft (T1003.002)
+  # ---------------------------------------------------------------------------
+  - name: "BlackCat Stage 3 — SAM & SYSTEM Hive Theft via reg save (T1003.002)"
+    technique_id: T1003.002
+    detection_profiles:
+      - windows_sam_theft
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 40
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: high
+    reversible: true
+    blast_radius: "Attempts reg save HKLM\\SAM and HKLM\\SYSTEM to a temp file, then deletes both immediately. The saved SAM hive is encrypted with the bootkey (which is NOT exported), so the artifact is unusable, and it is removed in the same step. Generates Sysmon EID 1 (reg.exe save) + EID 11 (file create) + immediate delete."
+    telemetry:
+      - "Sysmon EID 1: reg.exe save HKLM\\SAM / HKLM\\SYSTEM"
+      - "Sysmon EID 11: hive file written to %TEMP% then deleted"
+      - "Security EID 4688: reg.exe with 'save' argument targeting SAM/SYSTEM"
+    detection:
+      - "EDR: reg.exe save hklm\\sam — Sigma proc_creation_win_reg_save_sam.yml (offline hash-theft IOC)"
+      - "SIEM: reg SAVE targeting SAM or SYSTEM hive — page immediately, extremely rare in normal ops"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $samOut = Join-Path $env:TEMP "bas_blackcat_sam_$runId.hive"
+      $sysOut = Join-Path $env:TEMP "bas_blackcat_sys_$runId.hive"
+      & reg.exe save HKLM\SAM $samOut /y 2>&1 | Out-Null
+      & reg.exe save HKLM\SYSTEM $sysOut /y 2>&1 | Out-Null
+      $samSaved = Test-Path $samOut
+      $sysSaved = Test-Path $sysOut
+      Remove-Item $samOut,$sysOut -Force -ErrorAction SilentlyContinue
+      if ($samSaved -or $sysSaved) {
+        Write-Output "EXEC T1003.002: reg save of SAM=$samSaved SYSTEM=$sysSaved to %TEMP% then deleted. BlackCat steals these hives for OFFLINE hash extraction. reg.exe SAVE telemetry (Sysmon EID 1) expected. [BAS-SIM-BLACKCAT-S3]"
+        Write-Output "FAIL: reg.exe was able to SAVE the SAM/SYSTEM hive unblocked — local password hashes can be exfiltrated for offline cracking. 'reg save hklm\\sam' should be a paging alert. Verify EDR blocked or at least alerted."
+      } else {
+        Write-Output "PASS: reg save of SAM/SYSTEM was blocked or denied — EDR/WDAC prevented offline hive theft. [BAS-SIM-BLACKCAT-S3]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_blackcat_sam_*') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_blackcat_sys_*') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Defense Evasion: Defender RTP Disable (T1562.001)
+  # ---------------------------------------------------------------------------
+  - name: "BlackCat Stage 4 — Defender RTP Disable (lab  -  mandatory restoration + health check) (T1562.001)"
+    technique_id: T1562.001
+    detection_profiles:
+      - windows_defender_tampering
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 45
+    fidelity: lab-only
+    production_safe: false
+    risk: high
+    blast_radius: "Attempts to disable Defender Real-Time Protection via Set-MpPreference. Immediately re-enables. Post-test health verification confirms restoration. EDR will alert."
+    reversible: true
+    telemetry:
+      - "Security EID 4657 (registry value modified): HKLM\\...\\Windows Defender\\DisableRealtimeMonitoring"
+      - "Defender event log: EID 5001 (RTP disabled) + EID 5000 (re-enabled)"
+    detection:
+      - "EDR: Defender RTP disabled  -  immediate P1 alert in any mature SOC"
+      - "SIEM: WMI/registry change to Defender configuration from non-management process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $before = (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
+      Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+      $disabled = -not (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
+      Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
+      $restored = (Get-MpComputerStatus -ErrorAction SilentlyContinue).RealTimeProtectionEnabled
+      $tamperBlocked = (Get-MpComputerStatus -ErrorAction SilentlyContinue).IsTamperProtected
+      if (-not $disabled) {
+        Write-Output "PASS: Defender RTP disable attempt failed  -  Tamper Protection or EDR blocked the change (tamperProtected=$tamperBlocked). [BAS-SIM-BLACKCAT-S4]"
+      } elseif ($restored) {
+        Write-Output "FAIL: Defender RTP was disabled then re-enabled (restoration verified=true). HEALTH: RTP now $restored, tamperProtected=$tamperBlocked. Expect Defender EID 5001+5000. [BAS-SIM-BLACKCAT-S4]"
+      } else {
+        Set-MpPreference -DisableRealtimeMonitoring $false -Force -ErrorAction SilentlyContinue
+        Write-Output "CRITICAL: Defender RTP disabled and re-enable failed  -  manual restoration required. Run: Set-MpPreference -DisableRealtimeMonitoring $false [BAS-SIM-BLACKCAT-S4]"
+      }
+    cleanup: |
+      Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — Lateral Movement: Malicious Service (T1543.003)
+  # ---------------------------------------------------------------------------
+  - name: "BlackCat Stage 5 — Malicious Service Probe (lab  -  PsExec-style self-propagation) (T1543.003)"
+    technique_id: T1543.003
+    detection_profiles:
+      - windows_malicious_service
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 45
+    fidelity: lab-only
+    production_safe: false
+    risk: medium
+    blast_radius: "Creates a benign service (cmd.exe /c echo) via sc.exe, logs binary path + parent process + execution lineage, starts, stops, deletes. Used by BlackCat/ALPHV for lateral spread via PsExec-style service deployment."
+    reversible: true
+    telemetry:
+      - "Security EID 4697 (service installed) + EID 7045 (new service installed in system)"
+      - "Security EID 4688 (sc.exe create + start + stop + delete)"
+    detection:
+      - "SIEM: new service installed with binary path in non-standard directory  -  PsExec lateral-spread signal"
+      - "EDR: service binary path pointing to cmd.exe or user-writable path"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $svcName   = 'BAS-SIM-BlackCatSvc'
+      $svcBin    = "$env:SystemRoot\System32\cmd.exe /c echo BAS-SIM-T1543"
+      $parentPid = $PID
+      $parentImg = (Get-Process -Id $parentPid -ErrorAction SilentlyContinue).MainModule.FileName
+      sc.exe create $svcName binPath= "`"$svcBin`"" start= demand 2>&1 | Out-Null
+      $created = (Get-Service -Name $svcName -ErrorAction SilentlyContinue) -ne $null
+      if ($created) {
+        sc.exe start $svcName 2>&1 | Out-Null
+        Start-Sleep -Milliseconds 500
+        sc.exe stop  $svcName 2>&1 | Out-Null
+        sc.exe delete $svcName 2>&1 | Out-Null
+        $gone = (Get-Service -Name $svcName -ErrorAction SilentlyContinue) -eq $null
+        Write-Output "FAIL: service '$svcName' created+started+deleted (removed=$gone). BinaryPath='$svcBin'. Parent=$parentImg (PID=$parentPid). Expect EID 4697+7045. BlackCat/PsExec service deployment vector confirmed. [BAS-SIM-BLACKCAT-S5]"
+      } else {
+        Write-Output "PASS: sc.exe service creation blocked  -  AppLocker / restricted token / policy prevented malicious service deployment. [BAS-SIM-BLACKCAT-S5]"
+      }
+    cleanup: |
+      sc.exe stop   BAS-SIM-BlackCatSvc 2>&1 | Out-Null
+      sc.exe delete BAS-SIM-BlackCatSvc 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 — Ransomware Impact Simulation (T1486)
+  # ---------------------------------------------------------------------------
+  - name: "BlackCat Stage 6 — Ransomware Payload Simulation (T1486)"
+    technique_id: T1486
+    detection_profiles:
+      - windows_ransomware_encryption
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates one BAS-owned plaintext file in %TEMP%, XOR-encodes it (simulating encryption), writes a benign ransom note ([BAS-SIM-BLACKCAT] only), then DELETES BOTH immediately. No user data touched. No real ransomware code. Generates Sysmon EID 11 (file create x2) and EID 23 (file delete x2). Real BlackCat uses intermittent (partial-file) encryption to evade heuristics -- not functionally replicated here since chunk size does not change the endpoint detection surface being validated."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: bas_blackcat_<id>.txt created in %TEMP%"
+      - "Sysmon EID 11: bas_blackcat_<id>.blackcat (encrypted simulation) created"
+      - "Sysmon EID 11: bas_ransom_<id>.txt (ransom note) created"
+      - "Sysmon EID 23: all files deleted in cleanup"
+    detection:
+      - "EDR: high-frequency file create + rename + delete in short window  -  Sigma rule win_security_susp_file_modifications.yml"
+      - "Defender: ransom-pattern file creation heuristic (many .blackcat extension files)"
+      - "EDR: PowerShell creating and immediately deleting files with suspicious extension"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $plainFile = Join-Path $env:TEMP "bas_blackcat_$runId.txt"
+      $encFile   = Join-Path $env:TEMP "bas_blackcat_$runId.blackcat"
+      $noteFile  = Join-Path $env:TEMP "bas_ransom_$runId.txt"
+      $plainContent = '[BAS-SIM-BLACKCAT] T1486 ransomware simulation target file'
+      [System.IO.File]::WriteAllText($plainFile, $plainContent, [System.Text.Encoding]::UTF8)
+      # Simulate XOR encryption (key=0x42 = 'B' for BlackCat)
+      $key = 0x42
+      $bytes = [System.Text.Encoding]::UTF8.GetBytes($plainContent)
+      $enc   = $bytes | ForEach-Object { $_ -bxor $key }
+      [System.IO.File]::WriteAllBytes($encFile, [byte[]]$enc)
+      # Ransom note (benign BAS simulation content only)
+      $note = '[BAS-SIM-BLACKCAT] ALPHV/BlackCat Ransomware Simulation Note' + [char]13 + [char]10 +
+              'This is a BAS simulation. No real files were encrypted.' + [char]13 + [char]10 +
+              'Run ID: ' + $runId
+      [System.IO.File]::WriteAllText($noteFile, $note, [System.Text.Encoding]::UTF8)
+      $created = (Test-Path $plainFile) -and (Test-Path $encFile) -and (Test-Path $noteFile)
+      Remove-Item $plainFile,$encFile,$noteFile -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $plainFile) -and -not (Test-Path $encFile) -and -not (Test-Path $noteFile)
+      if ($created) {
+        Write-Output "EXEC T1486: ransomware simulation completed — target file XOR-encoded (.blackcat), ransom note written, all cleaned=$cleaned. Sysmon EID 11+23 expected. [BAS-SIM-BLACKCAT-S6]"
+        Write-Output "FAIL: File encryption simulation ran unblocked. Defender ransomware protection and controlled folder access should have flagged this pattern."
+      } else {
+        Write-Output "PASS: Ransomware simulation file creation blocked  -  Controlled Folder Access or EDR prevented file write to %TEMP%. [BAS-SIM-BLACKCAT-S6]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_blackcat_*') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_ransom_*') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 — Recovery Inhibition: VSS Enumeration (T1490)
+  # ---------------------------------------------------------------------------
+  - name: "BlackCat Stage 7 — VSS Snapshot Enumeration (T1490)"
+    technique_id: T1490
+    detection_profiles:
+      - windows_vss_inhibition
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs vssadmin list shadows to enumerate VSS snapshots (READ ONLY). BlackCat deletes these via 'vssadmin delete shadows /all /quiet' — we enumerate only to show the attack surface. Generates Sysmon EID 1: vssadmin.exe with 'list' argument."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: vssadmin.exe list shadows (pre-wipe reconnaissance)"
+      - "Security EID 4688: vssadmin.exe spawned by powershell.exe"
+    detection:
+      - "EDR: vssadmin.exe invoked from PowerShell  -  Sigma rule proc_creation_win_vssadmin_susp_commands.yml"
+      - "SIEM: vssadmin list shadows — pre-ransomware VSS enumeration IOC (LockBit, Conti, BlackCat all do this)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      $shadowCount = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
+      if ($shadowCount -gt 0) {
+        Write-Output "EXEC T1490: $shadowCount VSS shadow copy(ies) enumerated. BlackCat would now run 'vssadmin delete shadows /all /quiet' to destroy backups. Sysmon EID 1 vssadmin.exe logged. [BAS-SIM-BLACKCAT-S7]"
+        Write-Output "FAIL: VSS snapshots exist and are enumerable ($shadowCount found). If BlackCat reached this stage, backups would be destroyed before encryption. Ensure immutable cloud backup or Veeam hardened repo is NOT reachable from endpoint."
+      } else {
+        Write-Output "PASS: No VSS shadow copies found or vssadmin blocked  -  recovery inhibition surface is reduced. [BAS-SIM-BLACKCAT-S7]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 — Indicator Removal: Event Log Clearing Attempt (T1070.001)
+  # ---------------------------------------------------------------------------
+  - name: "BlackCat Stage 8 — Event Log Clearing Attempt (T1070.001)"
+    technique_id: T1070.001
+    detection_profiles:
+      - windows_log_manipulation
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a BAS-owned custom event log (BAS-Sim-BlackCat), attempts wevtutil cl on it, then removes the log. Does NOT touch System/Security/Application logs. Generates Security EID 1102 if the clear succeeds, and Sysmon EID 1 wevtutil.exe."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: wevtutil.exe with cl argument (log-clearing pattern)"
+      - "Security EID 1102: audit log cleared (if wevtutil cl succeeds on custom log)"
+      - "Security EID 4688: wevtutil.exe spawned by powershell.exe"
+    detection:
+      - "EDR: wevtutil.exe with 'cl' argument  -  Sigma rule proc_creation_win_wevtutil_clear_logs.yml"
+      - "SIEM: Security EID 1102 event log cleared  -  high-priority anti-forensics IOC"
+      - "SIEM: wevtutil.exe invoked from PowerShell at unusual time"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $logName = 'BAS-Sim-BlackCat'
+      $exists = [System.Diagnostics.EventLog]::Exists($logName)
+      if (-not $exists) {
+        try { New-EventLog -LogName $logName -Source 'BAS-Sim' -ErrorAction Stop } catch {}
+      }
+      $created = [System.Diagnostics.EventLog]::Exists($logName)
+      if ($created) {
+        $clOut = & wevtutil.exe cl $logName 2>&1 | Out-String
+        $cleared = $clOut -notmatch 'Access is denied|The specified channel could not be found|error'
+        try { Remove-EventLog -LogName $logName -ErrorAction SilentlyContinue } catch {}
+        if ($cleared) {
+          Write-Output "EXEC T1070.001: wevtutil cl on BAS custom log succeeded (exit 0). BlackCat uses 'wevtutil cl System' 'wevtutil cl Security' after ransomware deployment. Sysmon EID 1 wevtutil.exe logged. [BAS-SIM-BLACKCAT-S8]"
+          Write-Output "FAIL: wevtutil cl ran without EDR intervention. Ensure wevtutil.exe invocation from PowerShell triggers an alert. Security EID 1102 should generate a SIEM alert."
+        } else {
+          Write-Output "PASS: wevtutil cl was blocked or failed  -  $($clOut.Trim()). [BAS-SIM-BLACKCAT-S8]"
+        }
+      } else {
+        Write-Output "SKIP: Could not create test event log (insufficient privilege). wevtutil cl test skipped. [BAS-SIM-BLACKCAT-S8]"
+      }
+    cleanup: |
+      try { Remove-EventLog -LogName 'BAS-Sim-BlackCat' -ErrorAction SilentlyContinue } catch {}
