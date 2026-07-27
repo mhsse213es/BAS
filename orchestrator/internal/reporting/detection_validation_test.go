@@ -88,6 +88,16 @@ func TestAutomaticVerifier(t *testing.T) {
 	}
 }
 
+func TestAutomaticVerifier_ThreadsRuleIDs(t *testing.T) {
+	exp := endpointExp("e1", "microsoft_defender", scenario.ConfidenceRequired)
+	exp.RuleIDs = []string{"AUDRULE-000001", "AUDRULE-000002"}
+
+	r := automaticVerifier{}.Verify(exp, StepEvidence{DetectionVerdict: "detected", AlertProvider: "Microsoft Defender"})
+	if len(r.RuleIDs) != 2 || r.RuleIDs[0] != "AUDRULE-000001" || r.RuleIDs[1] != "AUDRULE-000002" {
+		t.Errorf("RuleIDs = %v, want [AUDRULE-000001 AUDRULE-000002]", r.RuleIDs)
+	}
+}
+
 func TestBuildDetectionValidationScoring(t *testing.T) {
 	specs := []StepDetectionSpec{
 		{

@@ -69,6 +69,14 @@ type VerificationResult struct {
 	ExpectedOutcome string
 	ObservedOutcome string
 	Comparison      ComparisonResult
+
+	// RuleIDs links this verdict to Detection Rule Library entries
+	// (internal/rulelib.Rule.ID), carried through from the live
+	// ExpectedDetection.RuleIDs at verification time. Not surfaced in any
+	// report JSON today — read by the automatic-verdict-persistence poller
+	// (internal/verifysync) so it can persist the linkage onto
+	// verification.Record.
+	RuleIDs []string
 }
 
 // Verifier resolves one expectation against observed evidence. The dispatch in
@@ -104,6 +112,7 @@ func baseResult(exp scenario.ExpectedDetection, ev StepEvidence, verifiedBy stri
 		Timestamp:   time.Now().UTC(),
 		Finding:     exp.Finding,
 		TechniqueID: ev.TechniqueID,
+		RuleIDs:     exp.RuleIDs,
 	}
 }
 
