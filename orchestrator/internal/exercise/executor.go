@@ -4,9 +4,12 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/audspect/bas/internal/verification"
 )
 
 // cryptoRandRead is a package-level alias so tests can stub it.
@@ -16,12 +19,21 @@ var cryptoRandRead = crand.Read
 // It advances step state machines and fires registered step handlers.
 // The polling cadence is controlled by the injected Scheduler.
 type Executor struct {
-	store     *Store
-	evidence  *EvidenceChain
-	registry  *Registry
-	triggers  *TriggerRegistry
-	scheduler Scheduler
-	dispatch  AgentDispatchFn
+	store        *Store
+	evidence     *EvidenceChain
+	registry     *Registry
+	triggers     *TriggerRegistry
+	scheduler    Scheduler
+	dispatch     AgentDispatchFn
+	verification VerificationReader
+}
+
+// VerificationReader is the narrow read interface the detection bridge
+// needs from internal/verification.Store — kept narrow so internal/exercise
+// does not take a hard dependency on the whole verification package
+// surface. *verification.Store satisfies it.
+type VerificationReader interface {
+	CurrentApprovedForRun(ctx context.Context, runID string) ([]verification.Record, error)
 }
 
 // NewExecutor builds an Executor with a pluggable Registry and Scheduler.
@@ -44,6 +56,14 @@ func (e *Executor) SetDispatch(fn AgentDispatchFn) { e.dispatch = fn }
 // WithTriggers replaces the trigger registry (useful in tests).
 func (e *Executor) WithTriggers(t *TriggerRegistry) *Executor {
 	e.triggers = t
+	return e
+}
+
+// WithVerification wires the verification-store reader the detection bridge
+// uses. Nil-safe: a wait_for_detection step with ExecutionStepID set but no
+// verification reader configured behaves as if ExecutionStepID were empty.
+func (e *Executor) WithVerification(v VerificationReader) *Executor {
+	e.verification = v
 	return e
 }
 
@@ -493,8 +513,14 @@ func (e *Executor) triggerWaitForAgent(ctx context.Context, _ *Execution, _ *Pla
 	return false, nil, nil
 }
 
-func (e *Executor) triggerWaitForDetection(ctx context.Context, ex *Execution, ps *PlanStep, _ *StepExecution) (bool, map[string]any, error) {
+func (e *Executor) triggerWaitForDetection(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution) (bool, map[string]any, error) {
 	cfg := ps.Config.WaitForDetection
+	if cfg != nil && cfg.ExecutionStepID != "" && e.verification != nil {
+		if err := e.bridgeVerifiedDetections(ctx, ex, ps, se, cfg.ExecutionStepID); err != nil {
+			return false, nil, err
+		}
+	}
+
 	var types []string
 	minCount := 1
 	if cfg != nil {
@@ -511,6 +537,71 @@ func (e *Executor) triggerWaitForDetection(ctx context.Context, ex *Execution, p
 		return true, map[string]any{"detection_count": n}, nil
 	}
 	return false, nil, nil
+}
+
+// bridgeVerifiedDetections resolves executionStepID's BAS run, reads its
+// approved verification records, translates them into exercise evidence via
+// ResolveDetectionEvidence, and appends any new evidence. A permanent
+// misconfiguration (bad executionStepID, or a completed step with no
+// bas_run_id) fails the step visibly via SetStepStatus rather than
+// returning a bare error — triggers.Check's caller only log.Printf's a
+// returned error and retries forever, which would leave the step silently
+// stuck. A run that simply hasn't produced results yet is not an error.
+func (e *Executor) bridgeVerifiedDetections(ctx context.Context, ex *Execution, ps *PlanStep, se *StepExecution, executionStepID string) error {
+	plan, err := e.store.GetPlan(ctx, ex.PlanID)
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, s := range plan.Steps {
+		if s.ID == executionStepID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed,
+			fmt.Sprintf("wait_for_detection: execution_step_id %q does not reference a valid plan step", executionStepID))
+	}
+
+	srcSE, err := e.store.GetStepExecByStepID(ctx, ex.ID, executionStepID)
+	if err != nil {
+		// Referenced step is valid but hasn't started/produced a
+		// StepExecution row yet — not an error, just not ready.
+		return nil
+	}
+	if srcSE.Status != StepCompleted {
+		return nil // still running — not an error, just not ready.
+	}
+	runID, _ := srcSE.Result["bas_run_id"].(string)
+	if runID == "" {
+		return e.store.SetStepStatus(ctx, ex.ID, ps.ID, StepFailed,
+			fmt.Sprintf("wait_for_detection: execution step %q completed but produced no bas_run_id", executionStepID))
+	}
+
+	records, err := e.verification.CurrentApprovedForRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	existing, err := e.store.ListEvidence(ctx, ex.ID)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, ev := range existing {
+		if ev.StepExecutionID != se.ID {
+			continue
+		}
+		if id, _ := ev.Payload["expectation_id"].(string); id != "" {
+			seen[id] = true
+		}
+	}
+	for _, p := range ResolveDetectionEvidence(records, seen) {
+		if _, err := e.evidence.Append(ctx, ex.ID, se.ID, p.EvidenceType, "system", "verification_bridge", p.Payload); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (e *Executor) triggerWaitForWebhook(ctx context.Context, _ *Execution, _ *PlanStep, se *StepExecution) (bool, map[string]any, error) {

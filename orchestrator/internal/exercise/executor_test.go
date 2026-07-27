@@ -2,10 +2,12 @@ package exercise
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/verification"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -532,6 +534,338 @@ func TestHandleAgentTask_PassesExecutionPolicyThroughDispatch(t *testing.T) {
 			}
 		case <-time.After(2 * time.Second):
 			t.Fatal("timed out waiting for dispatch to be called")
+		}
+	})
+}
+
+type fakeVerificationReader struct {
+	records []verification.Record
+	err     error
+}
+
+func (f fakeVerificationReader) CurrentApprovedForRun(context.Context, string) ([]verification.Record, error) {
+	return f.records, f.err
+}
+
+func TestBridgeVerifiedDetections_HappyPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		e.WithVerification(fakeVerificationReader{records: []verification.Record{
+			{ExpectationID: "exp-1", RunID: "run-1", Domain: "endpoint", Result: verification.ResultDetected},
+		}})
+		ctx := context.Background()
+
+		ex := seedRunningExecution(t, store, e, []PlanStep{
+			{ID: "sim", Type: StepTypeNotify},
+			{ID: "wait_detect", Type: StepTypeWaitForDetection, DependsOn: []string{"sim"},
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{ExecutionStepID: "sim"}}},
+		})
+		// "sim" step completed and produced a bas_run_id.
+		simSE := &StepExecution{ExecutionID: ex.ID, StepID: "sim", StepType: StepTypeNotify,
+			Status: StepCompleted, Result: map[string]any{"bas_run_id": "run-1"}}
+		if err := store.UpsertStepExecution(ctx, simSE); err != nil {
+			t.Fatalf("UpsertStepExecution sim: %v", err)
+		}
+		waitSE := &StepExecution{ExecutionID: ex.ID, StepID: "wait_detect", StepType: StepTypeWaitForDetection, Status: StepWaiting}
+		if err := store.UpsertStepExecution(ctx, waitSE); err != nil {
+			t.Fatalf("UpsertStepExecution wait_detect: %v", err)
+		}
+
+		e.RegisterBuiltinTriggers()
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+
+		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "wait_detect")
+		if got.Status != StepCompleted {
+			t.Fatalf("wait_detect status = %q, want completed", got.Status)
+		}
+
+		evs, err := store.ListEvidence(ctx, ex.ID)
+		if err != nil {
+			t.Fatalf("ListEvidence: %v", err)
+		}
+		found := false
+		for _, ev := range evs {
+			if ev.EvidenceType == "edr_detected" {
+				found = true
+				if ev.Payload["expectation_id"] != "exp-1" {
+					t.Errorf("evidence payload expectation_id = %v, want exp-1", ev.Payload["expectation_id"])
+				}
+			}
+		}
+		if !found {
+			t.Fatal("no edr_detected evidence was appended")
+		}
+	})
+}
+
+func TestBridgeVerifiedDetections_NotDetectedKeepsWaiting(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		e.WithVerification(fakeVerificationReader{records: []verification.Record{
+			{ExpectationID: "exp-1", RunID: "run-1", Domain: "endpoint", Result: verification.ResultNotDetected},
+		}})
+		ctx := context.Background()
+
+		ex := seedRunningExecution(t, store, e, []PlanStep{
+			{ID: "sim", Type: StepTypeNotify},
+			{ID: "wait_detect", Type: StepTypeWaitForDetection, DependsOn: []string{"sim"},
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{ExecutionStepID: "sim"}}},
+		})
+		simSE := &StepExecution{ExecutionID: ex.ID, StepID: "sim", StepType: StepTypeNotify,
+			Status: StepCompleted, Result: map[string]any{"bas_run_id": "run-1"}}
+		_ = store.UpsertStepExecution(ctx, simSE)
+		waitSE := &StepExecution{ExecutionID: ex.ID, StepID: "wait_detect", StepType: StepTypeWaitForDetection, Status: StepWaiting}
+		_ = store.UpsertStepExecution(ctx, waitSE)
+
+		e.RegisterBuiltinTriggers()
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+
+		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "wait_detect")
+		if got.Status != StepWaiting {
+			t.Fatalf("wait_detect status = %q, want still waiting (NotDetected produces no evidence)", got.Status)
+		}
+	})
+}
+
+func TestBridgeVerifiedDetections_MissingPlanStepFailsVisibly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		e.WithVerification(fakeVerificationReader{})
+		ctx := context.Background()
+
+		ex := seedRunningExecution(t, store, e, []PlanStep{
+			{ID: "wait_detect", Type: StepTypeWaitForDetection,
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{ExecutionStepID: "typo-does-not-exist"}}},
+		})
+		waitSE := &StepExecution{ExecutionID: ex.ID, StepID: "wait_detect", StepType: StepTypeWaitForDetection, Status: StepWaiting}
+		_ = store.UpsertStepExecution(ctx, waitSE)
+
+		e.RegisterBuiltinTriggers()
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+
+		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "wait_detect")
+		if got.Status != StepFailed {
+			t.Fatalf("wait_detect status = %q, want failed", got.Status)
+		}
+		if !strings.Contains(got.Error, "typo-does-not-exist") {
+			t.Errorf("error = %q, want it to mention the bad execution_step_id", got.Error)
+		}
+	})
+}
+
+func TestBridgeVerifiedDetections_CompletedStepNoRunIDFailsVisibly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		e.WithVerification(fakeVerificationReader{})
+		ctx := context.Background()
+
+		ex := seedRunningExecution(t, store, e, []PlanStep{
+			{ID: "approve", Type: StepTypeApproval},
+			{ID: "wait_detect", Type: StepTypeWaitForDetection, DependsOn: []string{"approve"},
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{ExecutionStepID: "approve"}}},
+		})
+		// "approve" completed but is not an agent_task — no bas_run_id in its Result.
+		approveSE := &StepExecution{ExecutionID: ex.ID, StepID: "approve", StepType: StepTypeApproval,
+			Status: StepCompleted, Result: map[string]any{"approver": "manager"}}
+		_ = store.UpsertStepExecution(ctx, approveSE)
+		waitSE := &StepExecution{ExecutionID: ex.ID, StepID: "wait_detect", StepType: StepTypeWaitForDetection, Status: StepWaiting}
+		_ = store.UpsertStepExecution(ctx, waitSE)
+
+		e.RegisterBuiltinTriggers()
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+
+		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "wait_detect")
+		if got.Status != StepFailed {
+			t.Fatalf("wait_detect status = %q, want failed", got.Status)
+		}
+	})
+}
+
+func TestBridgeVerifiedDetections_EmptyExecutionStepIDUnchangedBehavior(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		e.WithVerification(fakeVerificationReader{records: []verification.Record{
+			{ExpectationID: "exp-1", RunID: "run-1", Domain: "endpoint", Result: verification.ResultDetected},
+		}})
+		ctx := context.Background()
+
+		// ExecutionStepID deliberately unset (builtin-bec's regression shape).
+		ex := seedRunningExecution(t, store, e, []PlanStep{
+			{ID: "wait_detect", Type: StepTypeWaitForDetection,
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{}}},
+		})
+		waitSE := &StepExecution{ExecutionID: ex.ID, StepID: "wait_detect", StepType: StepTypeWaitForDetection, Status: StepWaiting}
+		_ = store.UpsertStepExecution(ctx, waitSE)
+
+		e.RegisterBuiltinTriggers()
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+
+		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "wait_detect")
+		if got.Status != StepWaiting {
+			t.Fatalf("wait_detect status = %q, want still waiting (no bridge, no external evidence posted)", got.Status)
+		}
+		evs, _ := store.ListEvidence(ctx, ex.ID)
+		if len(evs) != 0 {
+			t.Fatalf("evidence count = %d, want 0 — bridge must not run when ExecutionStepID is empty", len(evs))
+		}
+	})
+}
+
+func TestBridgeVerifiedDetections_NilVerificationReaderUnchangedBehavior(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool) // no WithVerification call
+		ctx := context.Background()
+
+		ex := seedRunningExecution(t, store, e, []PlanStep{
+			{ID: "sim", Type: StepTypeNotify},
+			{ID: "wait_detect", Type: StepTypeWaitForDetection, DependsOn: []string{"sim"},
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{ExecutionStepID: "sim"}}},
+		})
+		simSE := &StepExecution{ExecutionID: ex.ID, StepID: "sim", StepType: StepTypeNotify,
+			Status: StepCompleted, Result: map[string]any{"bas_run_id": "run-1"}}
+		_ = store.UpsertStepExecution(ctx, simSE)
+		waitSE := &StepExecution{ExecutionID: ex.ID, StepID: "wait_detect", StepType: StepTypeWaitForDetection, Status: StepWaiting}
+		_ = store.UpsertStepExecution(ctx, waitSE)
+
+		e.RegisterBuiltinTriggers()
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+
+		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "wait_detect")
+		if got.Status != StepWaiting {
+			t.Fatalf("wait_detect status = %q, want still waiting — nil verification reader must not panic or fire", got.Status)
+		}
+	})
+}
+
+func TestBridgeVerifiedDetections_NoDuplicateEvidenceAcrossTicks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		reader := &mutableVerificationReader{records: []verification.Record{
+			{ExpectationID: "exp-1", RunID: "run-1", Domain: "endpoint", Result: verification.ResultDetected},
+		}}
+		e.WithVerification(reader)
+		ctx := context.Background()
+
+		ex := seedRunningExecution(t, store, e, []PlanStep{
+			{ID: "sim", Type: StepTypeNotify},
+			{ID: "wait_detect", Type: StepTypeWaitForDetection, DependsOn: []string{"sim"},
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{ExecutionStepID: "sim", MinCount: 2}}},
+		})
+		simSE := &StepExecution{ExecutionID: ex.ID, StepID: "sim", StepType: StepTypeNotify,
+			Status: StepCompleted, Result: map[string]any{"bas_run_id": "run-1"}}
+		_ = store.UpsertStepExecution(ctx, simSE)
+		waitSE := &StepExecution{ExecutionID: ex.ID, StepID: "wait_detect", StepType: StepTypeWaitForDetection, Status: StepWaiting}
+		_ = store.UpsertStepExecution(ctx, waitSE)
+
+		e.RegisterBuiltinTriggers()
+		if err := e.advance(ctx, ex); err != nil { // tick 1: exp-1 detected
+			t.Fatalf("advance 1: %v", err)
+		}
+		// tick 2: exp-1 unchanged (must not duplicate), exp-2 newly detected.
+		reader.records = append(reader.records, verification.Record{
+			ExpectationID: "exp-2", RunID: "run-1", Domain: "endpoint", Result: verification.ResultDetected,
+		})
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance 2: %v", err)
+		}
+
+		evs, err := store.ListEvidence(ctx, ex.ID)
+		if err != nil {
+			t.Fatalf("ListEvidence: %v", err)
+		}
+		bridged := 0
+		seen := map[string]bool{}
+		for _, ev := range evs {
+			if ev.EvidenceType != "edr_detected" {
+				continue
+			}
+			bridged++
+			if id, _ := ev.Payload["expectation_id"].(string); id != "" {
+				if seen[id] {
+					t.Fatalf("duplicate evidence for expectation_id %q", id)
+				}
+				seen[id] = true
+			}
+		}
+		if bridged != 2 {
+			t.Fatalf("bridged evidence count = %d, want 2 (one per expectation, no duplicates)", bridged)
+		}
+	})
+}
+
+type mutableVerificationReader struct {
+	records []verification.Record
+}
+
+func (m *mutableVerificationReader) CurrentApprovedForRun(context.Context, string) ([]verification.Record, error) {
+	return m.records, nil
+}
+
+func TestBridgeVerifiedDetections_ReferencedStepNotYetCompletedKeepsWaiting(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		e.WithVerification(fakeVerificationReader{})
+		ctx := context.Background()
+
+		// "sim" is a real plan step but has not been dispatched/completed yet
+		// (still StepPending, as seedRunningExecution leaves an un-started
+		// dependency) — this must be treated as "not ready", not an error.
+		ex := seedRunningExecution(t, store, e, []PlanStep{
+			{ID: "sim", Type: StepTypeNotify},
+			{ID: "wait_detect", Type: StepTypeWaitForDetection, DependsOn: []string{"sim"},
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{ExecutionStepID: "sim"}}},
+		})
+		// wait_detect is forced into StepWaiting directly (bypassing the
+		// normal DependsOn gate) purely to exercise the trigger in
+		// isolation; "sim" is deliberately left at its seeded StepPending
+		// status with no Result.
+		waitSE := &StepExecution{ExecutionID: ex.ID, StepID: "wait_detect", StepType: StepTypeWaitForDetection, Status: StepWaiting}
+		_ = store.UpsertStepExecution(ctx, waitSE)
+
+		e.RegisterBuiltinTriggers()
+		if err := e.advance(ctx, ex); err != nil {
+			t.Fatalf("advance: %v", err)
+		}
+
+		got, _ := store.GetStepExecByStepID(ctx, ex.ID, "wait_detect")
+		if got.Status != StepWaiting {
+			t.Fatalf("wait_detect status = %q, want still waiting (referenced step not completed yet is not an error)", got.Status)
 		}
 	})
 }
