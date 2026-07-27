@@ -34,6 +34,7 @@ import (
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
+	"github.com/audspect/bas/internal/verifysync"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -187,6 +188,16 @@ func main() {
 	// consumes it read-only; the API writes to it.
 	verificationStore := verification.NewStore(pool)
 	log.Println("[+] Verification store ready")
+
+	// ── Automatic Verdict Persistence (Purple Team Phase A0) ───────────────
+	// Automatic (on-host) verification results were never persisted to
+	// verification_history — only manual/API attestations were. This poller
+	// closes that gap so Store.CurrentForRun/History are complete for every
+	// consumer, not just human-reviewed expectations.
+	verifyJob := verifysync.NewJob(pool, verificationStore, engine)
+	verifySyncScheduler := exercise.NewPollScheduler(5 * time.Minute)
+	verifySyncScheduler.Start(verifyJob.Tick)
+	log.Println("[+] Automatic verdict persistence poller started")
 
 	// ── CVE-ATT&CK Relationship Store ──────────────────────────────────────
 	relationshipStore := relationships.NewStore(pool)
