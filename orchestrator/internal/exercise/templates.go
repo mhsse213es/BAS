@@ -339,4 +339,73 @@ var BuiltinTemplates = []Template{
 			},
 		},
 	},
+
+	// ── 7. Volt Typhoon LOTL Purple Team Drill ────────────────────────────────
+	{
+		ID:          "builtin-purple-volt-typhoon",
+		Name:        "Volt Typhoon LOTL Purple Team Drill",
+		Version:     1,
+		Category:    "purple-team",
+		Description: "Runs the Volt Typhoon living-off-the-land simulation — network config discovery, SAM theft, LOLBin download cradles, scheduled-task persistence, log manipulation — with no malware involved, testing whether the SOC can detect abuse of built-in Windows tools.",
+		Author:      "Audspect",
+		BuiltIn:     true,
+		Variables: []VarDef{
+			{Name: "AgentID", Type: VarTypeEndpoint, Required: true, Description: "Target agent for the simulation"},
+			{Name: "ScenarioID", Type: VarTypeString, Required: true, Default: "volt-typhoon-lotl", Description: "Scenario to execute"},
+			{Name: "DetectionTimeout", Type: VarTypeDuration, Default: "30m", Description: "Max time to wait for detection before timing out"},
+			{Name: "SOCNotifyEmail", Type: VarTypeEmailList, Description: "Email to notify when drill completes"},
+		},
+		Metadata: TemplateMetadata{
+			SuccessCriteria: "The technical gate confirms at least one LOTL technique was detected within the detection timeout; full coverage across all techniques is reviewed by the SOC at the approval step using the complete evidence chain. Only microsoft_defender (EDR-domain) evidence resolves automatically today — the microsoft_sentinel/Sigma (SIEM) techniques require either a configured Sentinel API connector or a SOC analyst manually attesting via the Detection Verification UI during the exercise.",
+			LearningObjectives: []string{
+				"Validate detection coverage for native-tool abuse, not just malware",
+				"Identify which built-in Windows utilities your EDR alerts on by default vs. only with custom rules",
+				"Measure SOC readiness against a nation-state LOTL tradecraft pattern",
+			},
+			ExpectedTechniques:      []string{"T1082", "T1016", "T1090.001", "T1087.001", "T1003.002", "T1003.003", "T1105", "T1218.005", "T1053.005", "T1070.001"},
+			ExpectedDetections:      []string{"Microsoft Defender", "Microsoft Sentinel", "Sigma-based SIEM rule"},
+			RecommendedParticipants: []string{"SOC Analyst", "Detection Engineer", "IR Lead (approval)"},
+			RecommendedDuration:     "1-2 hours",
+			DiscussionPrompts: []string{
+				"Which built-in Windows tools does your EDR alert on by default vs. only with custom rules?",
+				"Would this activity have blended into normal admin behavior in your environment?",
+				"Which detection, if any, was the first real signal — and how long did it take to fire?",
+			},
+		},
+		Steps: []PlanStep{
+			{
+				ID: "drill_sim", Type: StepTypeAgentTask, Label: "Trigger Volt Typhoon LOTL simulation",
+				Config: StepConfig{AgentTask: &AgentTaskConfig{AgentID: "${AgentID}", ScenarioID: "${ScenarioID}"}},
+			},
+			{
+				ID: "wait_sim_done", Type: StepTypeWaitForAgent, Label: "Wait for simulation to complete",
+				DependsOn:   []string{"drill_sim"},
+				Config:      StepConfig{WaitForAgent: &WaitForAgentConfig{AgentTaskStepID: "drill_sim"}},
+				TimeoutSecs: 1800,
+			},
+			{
+				ID: "wait_detect", Type: StepTypeWaitForDetection, Label: "Wait for SOC detection",
+				DependsOn:   []string{"wait_sim_done"},
+				TimeoutSecs: 1800,
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
+					DetectionTypes:  []string{"edr_detected", "siem_alerted", "security_control_detected"},
+					ExecutionStepID: "drill_sim",
+				}},
+			},
+			{
+				ID: "approval_response", Type: StepTypeApproval, Label: "SOC: confirm incident response completed",
+				DependsOn:   []string{"wait_detect"},
+				TimeoutSecs: 7200,
+				Config: StepConfig{
+					ApprovalPrompt: "Has the SOC completed triage, containment, and documented the incident for this LOTL activity?",
+					ApproverRoles:  []string{"admin", "analyst"},
+				},
+			},
+			{
+				ID: "drill_complete", Type: StepTypeNotify, Label: "Volt Typhoon drill complete — check MTTD/MTTR",
+				DependsOn: []string{"approval_response"},
+				Config:    StepConfig{NotifyMsg: "Volt Typhoon LOTL Purple Team Drill complete. Review the technical score, MTTD/MTTR, and which native-tool techniques went undetected."},
+			},
+		},
+	},
 }
