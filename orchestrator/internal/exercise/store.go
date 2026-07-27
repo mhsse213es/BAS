@@ -229,38 +229,40 @@ func (s *Store) ListRunningExecutions(ctx context.Context) ([]Execution, error) 
 func (s *Store) UpsertTemplate(ctx context.Context, t *Template) error {
 	vars, _ := json.Marshal(t.Variables)
 	steps, _ := json.Marshal(t.Steps)
+	meta, _ := json.Marshal(t.Metadata)
 	_, err := s.db.Exec(ctx,
-		`INSERT INTO exercise_templates (id, name, version, category, description, variables_json, steps_json, built_in, author)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		`INSERT INTO exercise_templates (id, name, version, category, description, variables_json, steps_json, built_in, author, metadata_json)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		 ON CONFLICT (id) DO UPDATE SET
 		   name=$2, version=$3, category=$4, description=$5,
-		   variables_json=$6, steps_json=$7, author=$9, updated_at=NOW()`,
+		   variables_json=$6, steps_json=$7, author=$9, metadata_json=$10, updated_at=NOW()`,
 		t.ID, t.Name, t.Version, t.Category, t.Description,
-		vars, steps, t.BuiltIn, t.Author)
+		vars, steps, t.BuiltIn, t.Author, meta)
 	return err
 }
 
 func (s *Store) GetTemplate(ctx context.Context, id string) (*Template, error) {
 	var t Template
-	var varsRaw, stepsRaw []byte
+	var varsRaw, stepsRaw, metaRaw []byte
 	err := s.db.QueryRow(ctx,
 		`SELECT id, name, version, category, description, variables_json, steps_json,
-		        built_in, author, created_at, updated_at
+		        built_in, author, created_at, updated_at, metadata_json
 		 FROM exercise_templates WHERE id=$1`, id,
 	).Scan(&t.ID, &t.Name, &t.Version, &t.Category, &t.Description,
-		&varsRaw, &stepsRaw, &t.BuiltIn, &t.Author, &t.CreatedAt, &t.UpdatedAt)
+		&varsRaw, &stepsRaw, &t.BuiltIn, &t.Author, &t.CreatedAt, &t.UpdatedAt, &metaRaw)
 	if err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal(varsRaw, &t.Variables)
 	_ = json.Unmarshal(stepsRaw, &t.Steps)
+	_ = json.Unmarshal(metaRaw, &t.Metadata)
 	return &t, nil
 }
 
 func (s *Store) ListTemplates(ctx context.Context) ([]Template, error) {
 	rows, err := s.db.Query(ctx,
 		`SELECT id, name, version, category, description, variables_json, steps_json,
-		        built_in, author, created_at, updated_at
+		        built_in, author, created_at, updated_at, metadata_json
 		 FROM exercise_templates ORDER BY built_in DESC, name`)
 	if err != nil {
 		return nil, err
@@ -269,13 +271,14 @@ func (s *Store) ListTemplates(ctx context.Context) ([]Template, error) {
 	var out []Template
 	for rows.Next() {
 		var t Template
-		var varsRaw, stepsRaw []byte
+		var varsRaw, stepsRaw, metaRaw []byte
 		if err := rows.Scan(&t.ID, &t.Name, &t.Version, &t.Category, &t.Description,
-			&varsRaw, &stepsRaw, &t.BuiltIn, &t.Author, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			&varsRaw, &stepsRaw, &t.BuiltIn, &t.Author, &t.CreatedAt, &t.UpdatedAt, &metaRaw); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(varsRaw, &t.Variables)
 		_ = json.Unmarshal(stepsRaw, &t.Steps)
+		_ = json.Unmarshal(metaRaw, &t.Metadata)
 		out = append(out, t)
 	}
 	return out, rows.Err()

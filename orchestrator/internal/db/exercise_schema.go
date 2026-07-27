@@ -156,6 +156,7 @@ func EnsureExerciseSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE exercise_plans ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE exercise_step_executions ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS metadata_json jsonb NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE exercise_track_tokens ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE exercise_webhook_calls ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 	}

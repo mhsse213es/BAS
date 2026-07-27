@@ -347,4 +347,21 @@ type Template struct {
 	Author      string     `json:"author"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+	Metadata    TemplateMetadata `json:"metadata,omitempty"`
+}
+
+// TemplateMetadata is structured descriptive content distinguishing one
+// exercise template from another beyond its one-line Description — success
+// criteria, learning objectives, and logistics an operator or a future
+// template-picker UI can render without parsing free text. Optional on
+// every field: a template with no populated metadata (every pre-Phase-B
+// built-in) renders with all fields empty, not an error.
+type TemplateMetadata struct {
+	SuccessCriteria         string   `json:"success_criteria,omitempty"`
+	LearningObjectives      []string `json:"learning_objectives,omitempty"`
+	ExpectedTechniques      []string `json:"expected_techniques,omitempty"`      // MITRE ATT&CK technique IDs
+	ExpectedDetections      []string `json:"expected_detections,omitempty"`      // provider/control display names
+	RecommendedParticipants []string `json:"recommended_participants,omitempty"` // roles, e.g. "SOC Analyst"
+	RecommendedDuration     string   `json:"recommended_duration,omitempty"`     // e.g. "1-2 hours"
+	DiscussionPrompts       []string `json:"discussion_prompts,omitempty"`
 }

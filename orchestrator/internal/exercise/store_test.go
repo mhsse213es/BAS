@@ -193,6 +193,22 @@ func TestTemplate_UpsertAndSeed(t *testing.T) {
 			t.Fatalf("GetTemplate = %+v (err %v)", got, err)
 		}
 
+		// Metadata round-trips through Postgres, not just Go-side construction.
+		tpl.Metadata = TemplateMetadata{
+			SuccessCriteria:    "test criterion",
+			ExpectedTechniques: []string{"T1055"},
+		}
+		if err := store.UpsertTemplate(ctx, tpl); err != nil {
+			t.Fatalf("UpsertTemplate with metadata: %v", err)
+		}
+		gotMeta, err := store.GetTemplate(ctx, "tpl-1")
+		if err != nil {
+			t.Fatalf("GetTemplate after metadata upsert: %v", err)
+		}
+		if gotMeta.Metadata.SuccessCriteria != "test criterion" || len(gotMeta.Metadata.ExpectedTechniques) != 1 || gotMeta.Metadata.ExpectedTechniques[0] != "T1055" {
+			t.Fatalf("Metadata did not round-trip: %+v", gotMeta.Metadata)
+		}
+
 		// SeedBuiltinTemplates is idempotent.
 		if err := store.SeedBuiltinTemplates(ctx); err != nil {
 			t.Fatalf("SeedBuiltinTemplates 1: %v", err)
