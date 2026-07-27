@@ -153,6 +153,18 @@ type WaitForDetectionConfig struct {
 	// MinCount is the minimum number of matching evidence records required.
 	// Defaults to 1.
 	MinCount int `json:"min_count,omitempty"`
+
+	// ExecutionStepID is the step ID (in the same plan) whose result holds
+	// bas_run_id — the BAS run this detection step validates. Named
+	// ExecutionStepID rather than AgentTaskStepID (unlike
+	// WaitForAgentConfig's field) because the producer of that run ID may
+	// not always be an agent_task step in the future; this field answers
+	// "which step produced the verification records I consume," not "was
+	// it specifically an agent task." Empty preserves today's exact
+	// behavior: external/webhook/manual evidence only, no BAS-run lookup —
+	// this is the correct (unchanged) setting for detection sources that
+	// aren't BAS runs at all, e.g. builtin-bec's phishing-report flow.
+	ExecutionStepID string `json:"execution_step_id,omitempty"`
 }
 
 // WaitForWebhookConfig waits for an inbound HTTP POST to /x/hook/{token}.
