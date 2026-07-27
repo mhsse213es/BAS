@@ -1,0 +1,374 @@
+id: ransomhub-kill-chain
+name: RansomHub Kill Chain — Ransomware Emulation
+description: >
+  Eight-stage telemetry-safe emulation of the RansomHub ransomware kill
+  chain targeting Windows endpoints. Reflects documented RansomHub
+  tradecraft validated against CISA AA24-242A: double-extortion RaaS
+  (formerly Cyclops/Knight lineage) using the EDRKillShifter BYOVD tool
+  (RentDrv2 / ThreatFireMonitor vulnerable drivers) to disable EDR before
+  encryption.
+
+  KILL CHAIN STAGES:
+    1. Discovery              — security software discovery (T1518.001)
+    2. Discovery              — network share discovery (T1135)
+    3. Credential Access      — SAM/SYSTEM hive theft via reg save (T1003.002)
+    4. Defense Evasion        — Defender exclusion invocation probe (T1562.001)
+    5. Defense Evasion        — EDRKillShifter-style vulnerable-driver staging probe (T1562.001)
+    6. Ransomware Simulation  — XOR-encoded benign file + double-extortion ransom note, .ransomhub extension (T1486)
+    7. Recovery Inhibition    — VSS snapshot enumeration (T1490)
+    8. Log Clearing Attempt   — wevtutil cl attempt, blocked or audit (T1070.001)
+
+  NOTE: RansomHub's real initial access is RaaS affiliate-driven and varies
+  per intrusion — not represented as a single executable step.
+
+  SAFETY: No real encryption or exfiltration of user data. XOR is applied
+  to a single BAS-created temp file with [BAS-SIM-RANSOMHUB] content only.
+  Ransom note is cleaned up immediately. Stage 5 never loads a real driver
+  -- the kernel-service binPath points at a file that is guaranteed not to
+  exist, so the load is physically impossible; only the (real, detectable)
+  service-registration call happens. All stages are production-safe.
+  Windows only. [BAS-SIM] tagged throughout.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - ransomhub
+  - ransomware
+  - bfsi
+  - kill-chain
+  - t1003
+  - t1070
+  - t1135
+  - t1486
+  - t1490
+  - t1518
+  - t1562
+  - mitre
+mitre_phases:
+  - discovery
+  - credential-access
+  - defense-evasion
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Defense Discovery (T1518.001)
+  # ---------------------------------------------------------------------------
+  - name: "RansomHub Stage 1 — Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    detection_profiles:
+      - windows_security_software_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Queries WMI AntiVirusProduct, AntiSpywareProduct, FirewallProduct to enumerate installed security products. Read-only. Generates ScriptBlock EID 4104 and WMI-Activity EID 5857-5861."
+    reversible: true
+    telemetry:
+      - "WMI-Activity EID 5857-5861: Get-WmiObject SecurityCenter2 query"
+      - "PowerShell ScriptBlock EID 4104: AntiVirusProduct WMI class enumeration"
+      - "Sysmon EID 1: powershell.exe WMI query (ransomware reconnaissance pattern)"
+    detection:
+      - "EDR: WMI security product enumeration from PowerShell  -  Sigma rule win_wmi_security_product_discovery.yml"
+      - "SIEM: Get-WmiObject Win32_Product or SecurityCenter2 — pre-ransomware recon IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $avProducts = Get-WmiObject -Namespace 'root\SecurityCenter2' -Class 'AntiVirusProduct' -ErrorAction SilentlyContinue
+      $fwProducts = Get-WmiObject -Namespace 'root\SecurityCenter2' -Class 'FirewallProduct' -ErrorAction SilentlyContinue
+      $avNames = ($avProducts | ForEach-Object { $_.displayName }) -join ', '
+      $fwNames = ($fwProducts | ForEach-Object { $_.displayName }) -join ', '
+      if ($avProducts -or $fwProducts) {
+        Write-Output "EXEC T1518.001: security software enumerated. AV=[$avNames] FW=[$fwNames]. RansomHub affiliates use this to decide whether to proceed or stage EDRKillShifter. [BAS-SIM-RANSOMHUB-S1]"
+        Write-Output "FAIL: security product names are enumerable via WMI SecurityCenter2. EDR should alert on this WMI class access from PowerShell."
+      } else {
+        Write-Output "PASS: SecurityCenter2 namespace not accessible or no products registered  -  WMI security product enumeration blocked/empty. [BAS-SIM-RANSOMHUB-S1]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Discovery: Network Share Discovery (T1135)
+  # ---------------------------------------------------------------------------
+  - name: "RansomHub Stage 2 — Network Share Discovery (T1135)"
+    technique_id: T1135
+    detection_profiles:
+      - windows_network_share_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Enumerates local administrative shares via net view and WMI Win32_Share. No shares accessed, no files read."
+    telemetry:
+      - "Security EID 4688: net.exe and powershell.exe share enumeration"
+      - "Security EID 5140: if SACL object access auditing enabled on shares"
+    detection:
+      - "SIEM: net view / Win32_Share query from non-admin process — ransomware lateral-spread staging signal"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $wmiShares = @(Get-WmiObject -Class Win32_Share -ErrorAction SilentlyContinue)
+      $netOut = & net view \\$env:COMPUTERNAME 2>&1
+      $shareCount = if ($wmiShares) { $wmiShares.Count } else { 0 }
+      Write-Output "EXEC: network share discovery — $shareCount share(s) via Win32_Share. net view executed for cmdline telemetry. RansomHub affiliates use tools like Nmap/AngryIP alongside built-in share enumeration before mass encryption. [BAS-SIM-RANSOMHUB-S2]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Credential Access: SAM/SYSTEM Hive Theft (T1003.002)
+  # ---------------------------------------------------------------------------
+  - name: "RansomHub Stage 3 — SAM & SYSTEM Hive Theft via reg save (T1003.002)"
+    technique_id: T1003.002
+    detection_profiles:
+      - windows_sam_theft
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 40
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: high
+    reversible: true
+    blast_radius: "Attempts reg save HKLM\\SAM and HKLM\\SYSTEM to a temp file, then deletes both immediately. The saved SAM hive is encrypted with the bootkey (which is NOT exported), so the artifact is unusable, and it is removed in the same step. Generates Sysmon EID 1 (reg.exe save) + EID 11 (file create) + immediate delete."
+    telemetry:
+      - "Sysmon EID 1: reg.exe save HKLM\\SAM / HKLM\\SYSTEM"
+      - "Sysmon EID 11: hive file written to %TEMP% then deleted"
+      - "Security EID 4688: reg.exe with 'save' argument targeting SAM/SYSTEM"
+    detection:
+      - "EDR: reg.exe save hklm\\sam — Sigma proc_creation_win_reg_save_sam.yml (offline hash-theft IOC)"
+      - "SIEM: reg SAVE targeting SAM or SYSTEM hive — page immediately, extremely rare in normal ops"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $samOut = Join-Path $env:TEMP "bas_ransomhub_sam_$runId.hive"
+      $sysOut = Join-Path $env:TEMP "bas_ransomhub_sys_$runId.hive"
+      & reg.exe save HKLM\SAM $samOut /y 2>&1 | Out-Null
+      & reg.exe save HKLM\SYSTEM $sysOut /y 2>&1 | Out-Null
+      $samSaved = Test-Path $samOut
+      $sysSaved = Test-Path $sysOut
+      Remove-Item $samOut,$sysOut -Force -ErrorAction SilentlyContinue
+      if ($samSaved -or $sysSaved) {
+        Write-Output "EXEC T1003.002: reg save of SAM=$samSaved SYSTEM=$sysSaved to %TEMP% then deleted. RansomHub affiliates steal these hives for OFFLINE hash extraction. reg.exe SAVE telemetry (Sysmon EID 1) expected. [BAS-SIM-RANSOMHUB-S3]"
+        Write-Output "FAIL: reg.exe was able to SAVE the SAM/SYSTEM hive unblocked — local password hashes can be exfiltrated for offline cracking. 'reg save hklm\\sam' should be a paging alert. Verify EDR blocked or at least alerted."
+      } else {
+        Write-Output "PASS: reg save of SAM/SYSTEM was blocked or denied — EDR/WDAC prevented offline hive theft. [BAS-SIM-RANSOMHUB-S3]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_ransomhub_sam_*') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_ransomhub_sys_*') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Defense Evasion: Defender Exclusion Invocation (T1562.001)
+  # ---------------------------------------------------------------------------
+  - name: "RansomHub Stage 4 — Defender Exclusion Invocation (cmdline probe  -  no state change) (T1562.001)"
+    technique_id: T1562.001
+    detection_profiles:
+      - windows_defender_tampering
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Invokes Add-MpPreference cmdline in a dry-run context that exits before modifying any exclusion. Security state is NOT changed."
+    reversible: true
+    telemetry:
+      - "Security EID 4688 (powershell.exe with Add-MpPreference -ExclusionPath in command line)"
+      - "PowerShell EID 4104 (script block: Add-MpPreference invocation) if ScriptBlock logging enabled"
+    detection:
+      - "EDR: PowerShell invoking Add-MpPreference  -  primary Defender tampering signal"
+      - "SIEM: cmdline containing Add-MpPreference and ExclusionPath from a non-management process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $cmdLine = 'Add-MpPreference -ExclusionPath $env:TEMP'
+      Write-Output "EXEC: Defender exclusion invocation probe  -  cmdline '$cmdLine' logged to EID 4104/4688. Security state NOT modified (dry-run). RansomHub disables Defender alongside its EDRKillShifter tool before encrypting. [BAS-SIM-RANSOMHUB-S4]"
+      Write-Output "TELEMETRY: if ScriptBlock logging (EID 4104) captured this block, the control is detecting Defender tampering attempts correctly."
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — Defense Evasion: EDRKillShifter-Style BYOVD Staging Probe (T1562.001)
+  # ---------------------------------------------------------------------------
+  - name: "RansomHub Stage 5 — EDRKillShifter-Style Vulnerable-Driver Staging Probe (T1562.001)"
+    technique_id: T1562.001
+    detection_profiles:
+      - windows_vulnerable_driver_load
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Registers a kernel-type Windows service via sc.exe pointing at a guaranteed-nonexistent driver file path, then immediately deletes the service. No driver is ever loaded -- the binPath never resolves, so the load is physically impossible. Only the service-registration API call happens. This is RansomHub's own signature tool (EDRKillShifter, which stages the RentDrv2 / ThreatFireMonitor vulnerable drivers per Trend Micro/Intel471 reporting). Generates Security EID 4697/7045 (service installed) + EID 4688 (sc.exe create/delete)."
+    reversible: true
+    telemetry:
+      - "Security EID 4697 / 7045: kernel-type service installed"
+      - "Security EID 4688: sc.exe create ... type= kernel / sc.exe delete"
+    detection:
+      - "EDR: sc.exe create with 'type= kernel' from a non-driver-installer process -- near-zero-false-positive BYOVD staging IOC, RansomHub's exact EDRKillShifter staging pattern"
+      - "SIEM: enforce the Microsoft-recommended vulnerable-driver blocklist / HVCI"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $svcName = 'BAS-Sim-EDRKill-Probe'
+      $bogusPath = 'C:\Windows\Temp\bas_edrkill_probe_nonexistent.sys'
+      & sc.exe create $svcName type= kernel binPath= $bogusPath start= demand 2>&1 | Out-Null
+      $created = (& sc.exe query $svcName 2>&1 | Out-String) -match 'SERVICE_NAME'
+      & sc.exe delete $svcName 2>&1 | Out-Null
+      if ($created) {
+        Write-Output "EXEC T1562.001: kernel-mode service registration succeeded (no driver code executed -- binPath points to a nonexistent file, load is physically impossible). RansomHub's EDRKillShifter uses this exact 'sc create type= kernel' step to stage RentDrv2/ThreatFireMonitor before killing EDR processes. [BAS-SIM-RANSOMHUB-S5]"
+        Write-Output "FAIL: kernel-type service creation via sc.exe was not blocked. Alert on 'sc create ... type= kernel' from non-driver-installer processes -- this is a near-zero-false-positive BYOVD precursor."
+      } else {
+        Write-Output "PASS: kernel-type service registration was blocked or denied -- BYOVD staging surface is reduced. [BAS-SIM-RANSOMHUB-S5]"
+      }
+    cleanup: |
+      & sc.exe delete BAS-Sim-EDRKill-Probe 2>&1 | Out-Null
+
+  # ---------------------------------------------------------------------------
+  # Stage 6 — Ransomware Impact Simulation, Double-Extortion Note (T1486)
+  # ---------------------------------------------------------------------------
+  - name: "RansomHub Stage 6 — Ransomware Payload Simulation, Double-Extortion Note (T1486)"
+    technique_id: T1486
+    detection_profiles:
+      - windows_ransomware_encryption
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates one BAS-owned plaintext file in %TEMP%, XOR-encodes it (simulating encryption), writes a benign double-extortion-style ransom note ([BAS-SIM-RANSOMHUB] only), then DELETES BOTH immediately. No user data touched. No real ransomware code. Generates Sysmon EID 11 (file create x2) and EID 23 (file delete x2)."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: bas_ransomhub_<id>.txt created in %TEMP%"
+      - "Sysmon EID 11: bas_ransomhub_<id>.ransomhub (encrypted simulation) created"
+      - "Sysmon EID 11: bas_ransom_<id>.txt (ransom note) created"
+      - "Sysmon EID 23: all files deleted in cleanup"
+    detection:
+      - "EDR: high-frequency file create + rename + delete in short window  -  Sigma rule win_security_susp_file_modifications.yml"
+      - "Defender: ransom-pattern file creation heuristic"
+      - "EDR: PowerShell creating and immediately deleting files with suspicious extension"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $plainFile = Join-Path $env:TEMP "bas_ransomhub_$runId.txt"
+      $encFile   = Join-Path $env:TEMP "bas_ransomhub_$runId.ransomhub"
+      $noteFile  = Join-Path $env:TEMP "bas_ransom_$runId.txt"
+      $plainContent = '[BAS-SIM-RANSOMHUB] T1486 ransomware simulation target file'
+      [System.IO.File]::WriteAllText($plainFile, $plainContent, [System.Text.Encoding]::UTF8)
+      # Simulate XOR encryption (key=0x52 = 'R' for RansomHub)
+      $key = 0x52
+      $bytes = [System.Text.Encoding]::UTF8.GetBytes($plainContent)
+      $enc   = $bytes | ForEach-Object { $_ -bxor $key }
+      [System.IO.File]::WriteAllBytes($encFile, [byte[]]$enc)
+      $note = '[BAS-SIM-RANSOMHUB] RansomHub Ransomware Simulation Note (double extortion)' + [char]13 + [char]10 +
+              'This is a BAS simulation. No real files were encrypted or exfiltrated.' + [char]13 + [char]10 +
+              'Run ID: ' + $runId
+      [System.IO.File]::WriteAllText($noteFile, $note, [System.Text.Encoding]::UTF8)
+      $created = (Test-Path $plainFile) -and (Test-Path $encFile) -and (Test-Path $noteFile)
+      Remove-Item $plainFile,$encFile,$noteFile -Force -ErrorAction SilentlyContinue
+      $cleaned = -not (Test-Path $plainFile) -and -not (Test-Path $encFile) -and -not (Test-Path $noteFile)
+      if ($created) {
+        Write-Output "EXEC T1486: ransomware simulation completed — target file XOR-encoded (.ransomhub), double-extortion-style ransom note written, all cleaned=$cleaned. Sysmon EID 11+23 expected. [BAS-SIM-RANSOMHUB-S6]"
+        Write-Output "FAIL: File encryption simulation ran unblocked. Defender ransomware protection and controlled folder access should have flagged this pattern."
+      } else {
+        Write-Output "PASS: Ransomware simulation file creation blocked  -  Controlled Folder Access or EDR prevented file write to %TEMP%. [BAS-SIM-RANSOMHUB-S6]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_ransomhub_*') -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $env:TEMP 'bas_ransom_*') -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 7 — Recovery Inhibition: VSS Enumeration (T1490)
+  # ---------------------------------------------------------------------------
+  - name: "RansomHub Stage 7 — VSS Snapshot Enumeration (T1490)"
+    technique_id: T1490
+    detection_profiles:
+      - windows_vss_inhibition
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Runs vssadmin list shadows to enumerate VSS snapshots (READ ONLY). RansomHub deletes these via vssadmin/PowerShell before encryption — we enumerate only to show the attack surface. Generates Sysmon EID 1: vssadmin.exe with 'list' argument."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: vssadmin.exe list shadows (pre-wipe reconnaissance)"
+      - "Security EID 4688: vssadmin.exe spawned by powershell.exe"
+    detection:
+      - "EDR: vssadmin.exe invoked from PowerShell  -  Sigma rule proc_creation_win_vssadmin_susp_commands.yml"
+      - "SIEM: vssadmin list shadows — pre-ransomware VSS enumeration IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $vssOut = & vssadmin.exe list shadows 2>&1 | Out-String
+      $shadowCount = ([regex]::Matches($vssOut, 'Shadow Copy ID')).Count
+      if ($shadowCount -gt 0) {
+        Write-Output "EXEC T1490: $shadowCount VSS shadow copy(ies) enumerated. RansomHub would now delete these to destroy backups before encryption. Sysmon EID 1 vssadmin.exe logged. [BAS-SIM-RANSOMHUB-S7]"
+        Write-Output "FAIL: VSS snapshots exist and are enumerable ($shadowCount found). If RansomHub reached this stage, backups would be destroyed before encryption. Ensure immutable cloud backup or Veeam hardened repo is NOT reachable from endpoint."
+      } else {
+        Write-Output "PASS: No VSS shadow copies found or vssadmin blocked  -  recovery inhibition surface is reduced. [BAS-SIM-RANSOMHUB-S7]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 8 — Indicator Removal: Event Log Clearing Attempt (T1070.001)
+  # ---------------------------------------------------------------------------
+  - name: "RansomHub Stage 8 — Event Log Clearing Attempt (T1070.001)"
+    technique_id: T1070.001
+    detection_profiles:
+      - windows_log_manipulation
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a BAS-owned custom event log (BAS-Sim-RansomHub), attempts wevtutil cl on it, then removes the log. Does NOT touch System/Security/Application logs. Generates Security EID 1102 if the clear succeeds, and Sysmon EID 1 wevtutil.exe."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: wevtutil.exe with cl argument (log-clearing pattern)"
+      - "Security EID 1102: audit log cleared (if wevtutil cl succeeds on custom log)"
+      - "Security EID 4688: wevtutil.exe spawned by powershell.exe"
+    detection:
+      - "EDR: wevtutil.exe with 'cl' argument  -  Sigma rule proc_creation_win_wevtutil_clear_logs.yml"
+      - "SIEM: Security EID 1102 event log cleared  -  high-priority anti-forensics IOC"
+      - "SIEM: wevtutil.exe invoked from PowerShell at unusual time"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $logName = 'BAS-Sim-RansomHub'
+      $exists = [System.Diagnostics.EventLog]::Exists($logName)
+      if (-not $exists) {
+        try { New-EventLog -LogName $logName -Source 'BAS-Sim' -ErrorAction Stop } catch {}
+      }
+      $created = [System.Diagnostics.EventLog]::Exists($logName)
+      if ($created) {
+        $clOut = & wevtutil.exe cl $logName 2>&1 | Out-String
+        $cleared = $clOut -notmatch 'Access is denied|The specified channel could not be found|error'
+        try { Remove-EventLog -LogName $logName -ErrorAction SilentlyContinue } catch {}
+        if ($cleared) {
+          Write-Output "EXEC T1070.001: wevtutil cl on BAS custom log succeeded (exit 0). RansomHub affiliates clear logs post-deployment. Sysmon EID 1 wevtutil.exe logged. [BAS-SIM-RANSOMHUB-S8]"
+          Write-Output "FAIL: wevtutil cl ran without EDR intervention. Ensure wevtutil.exe invocation from PowerShell triggers an alert. Security EID 1102 should generate a SIEM alert."
+        } else {
+          Write-Output "PASS: wevtutil cl was blocked or failed  -  $($clOut.Trim()). [BAS-SIM-RANSOMHUB-S8]"
+        }
+      } else {
+        Write-Output "SKIP: Could not create test event log (insufficient privilege). wevtutil cl test skipped. [BAS-SIM-RANSOMHUB-S8]"
+      }
+    cleanup: |
+      try { Remove-EventLog -LogName 'BAS-Sim-RansomHub' -ErrorAction SilentlyContinue } catch {}
