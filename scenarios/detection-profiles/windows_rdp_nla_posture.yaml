@@ -3,6 +3,7 @@
 # precondition: brute-forceable/credential-stuffable RDP or VPN without MFA.
 profile: windows_rdp_nla_posture
 version: 1
+technique_ids: [T1021.001]
 expected_detection:
   - id: rdp-nla-posture-edr
     provider: microsoft_defender

@@ -4,6 +4,7 @@
 # (Controlled Folder Access, behavioral ransomware detection) exist for.
 profile: windows_ransomware_encryption
 version: 1
+technique_ids: [T1486]
 expected_detection:
   - id: mass-encryption-edr
     provider: microsoft_defender

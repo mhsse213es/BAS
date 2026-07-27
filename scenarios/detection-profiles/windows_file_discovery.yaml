@@ -3,6 +3,7 @@
 # standalone signal, but relevant context alongside later-stage detections.
 profile: windows_file_discovery
 version: 1
+technique_ids: [T1083]
 expected_detection:
   - id: file-discovery-edr
     provider: microsoft_defender

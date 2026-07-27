@@ -2,6 +2,7 @@
 # Shared by Volt Typhoon Stage 9 and APT29 Stage 4 (schtasks /create).
 profile: windows_schtask_persistence
 version: 1
+technique_ids: [T1053.005]
 expected_detection:
   - id: schtask-edr-create
     provider: microsoft_defender

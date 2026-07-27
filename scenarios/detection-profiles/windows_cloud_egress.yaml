@@ -2,6 +2,7 @@
 # Collection→Exfil Stage 10: reachability of external cloud-storage egress.
 profile: windows_cloud_egress
 version: 1
+technique_ids: [T1567.002]
 expected_detection:
   - id: cloudegress-network-upload
     provider: microsoft_sentinel

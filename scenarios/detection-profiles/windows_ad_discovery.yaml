@@ -4,6 +4,7 @@
 # lateral movement.
 profile: windows_ad_discovery
 version: 1
+technique_ids: [T1087.002]
 expected_detection:
   - id: ad-discovery-edr
     provider: microsoft_defender

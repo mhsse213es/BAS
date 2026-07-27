@@ -3,6 +3,7 @@
 # service-based lateral execution).
 profile: windows_malicious_service
 version: 1
+technique_ids: [T1543.003]
 expected_detection:
   - id: malicious-service-edr
     provider: microsoft_defender

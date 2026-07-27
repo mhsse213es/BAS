@@ -2,6 +2,7 @@
 # AD drill Stage 3: discovery of accounts with Kerberos pre-auth disabled.
 profile: windows_asrep_roast
 version: 1
+technique_ids: [T1558.004]
 extends:
   - windows_credential_access
 expected_detection:

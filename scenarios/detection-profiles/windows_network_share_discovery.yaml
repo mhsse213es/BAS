@@ -3,6 +3,7 @@
 # standalone signal like T1083.
 profile: windows_network_share_discovery
 version: 1
+technique_ids: [T1135]
 expected_detection:
   - id: share-discovery-edr
     provider: microsoft_defender

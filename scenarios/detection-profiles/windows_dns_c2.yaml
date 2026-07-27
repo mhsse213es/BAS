@@ -3,6 +3,7 @@
 # network-side (DNS analytics), with an endpoint corroboration expectation.
 profile: windows_dns_c2
 version: 1
+technique_ids: [T1071.004]
 expected_detection:
   - id: dnsc2-network-tunnel
     provider: microsoft_sentinel

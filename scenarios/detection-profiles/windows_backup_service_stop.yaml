@@ -3,6 +3,7 @@
 # encryption, alongside VSS/backup-catalog deletion.
 profile: windows_backup_service_stop
 version: 1
+technique_ids: [T1489]
 expected_detection:
   - id: backup-service-stop-edr
     provider: microsoft_defender

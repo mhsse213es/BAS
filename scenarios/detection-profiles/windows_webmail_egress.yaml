@@ -4,6 +4,7 @@
 # entirely since it never transits corporate mail flow.
 profile: windows_webmail_egress
 version: 1
+technique_ids: [T1567]
 expected_detection:
   - id: webmailegress-network-upload
     provider: microsoft_sentinel

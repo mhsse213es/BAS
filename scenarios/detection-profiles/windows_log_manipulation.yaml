@@ -3,6 +3,7 @@
 # the audit trail is itself a high-value signal.
 profile: windows_log_manipulation
 version: 1
+technique_ids: [T1070.001]
 expected_detection:
   - id: logtamper-edr-wevtutil
     provider: microsoft_defender

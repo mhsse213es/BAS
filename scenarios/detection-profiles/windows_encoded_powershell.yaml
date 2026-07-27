@@ -3,6 +3,7 @@
 # / encoded PowerShell command line, independent of the payload.
 profile: windows_encoded_powershell
 version: 1
+technique_ids: [T1059.001]
 expected_detection:
   - id: encps-edr-encodedcmd
     provider: microsoft_defender

@@ -3,6 +3,7 @@
 # credential-access SIEM correlation and adds the required endpoint control.
 profile: windows_sam_theft
 version: 1
+technique_ids: [T1003.002]
 extends:
   - windows_credential_access
 expected_detection:

@@ -5,6 +5,7 @@
 # underlying intent (destroy recovery options) observed at different layers.
 profile: windows_vss_inhibition
 version: 1
+technique_ids: [T1490]
 expected_detection:
   - id: vss-enum-edr
     provider: microsoft_defender

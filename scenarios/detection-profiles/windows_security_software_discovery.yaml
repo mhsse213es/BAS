@@ -2,6 +2,7 @@
 # Ransomware precursor: enumerating installed AV/EDR before payload deployment.
 profile: windows_security_software_discovery
 version: 1
+technique_ids: [T1518.001]
 expected_detection:
   - id: secsoft-discovery-edr
     provider: microsoft_defender

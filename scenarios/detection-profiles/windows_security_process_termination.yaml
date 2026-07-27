@@ -3,6 +3,7 @@
 # names by image name before encrypting.
 profile: windows_security_process_termination
 version: 1
+technique_ids: [T1562.001]
 expected_detection:
   - id: security-process-taskkill-edr
     provider: microsoft_defender

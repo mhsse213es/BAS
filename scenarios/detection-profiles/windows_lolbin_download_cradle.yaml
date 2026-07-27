@@ -3,6 +3,7 @@
 # Behavioural: covers any signed-binary download cradle, not a single tool.
 profile: windows_lolbin_download_cradle
 version: 1
+technique_ids: [T1105]
 expected_detection:
   - id: cradle-edr-lolbin-net
     provider: microsoft_defender

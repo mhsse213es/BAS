@@ -3,6 +3,7 @@
 # bulk-destruction EDR signature, without encryption or a ransom note.
 profile: windows_data_destruction
 version: 1
+technique_ids: [T1485]
 expected_detection:
   - id: mass-destruction-edr
     provider: microsoft_defender

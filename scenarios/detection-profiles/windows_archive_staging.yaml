@@ -2,6 +2,7 @@
 # (T1560.001). Collection→Exfil Stages 4-5 (Compress-Archive / 7-Zip / makecab).
 profile: windows_archive_staging
 version: 1
+technique_ids: [T1560.001]
 expected_detection:
   - id: archive-edr-compress
     provider: microsoft_defender

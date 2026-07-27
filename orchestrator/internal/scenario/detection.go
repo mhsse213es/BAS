@@ -114,6 +114,19 @@ type DetectionProfile struct {
 	// Source is set at load time from the file location; not persisted. Mirrors
 	// Scenario.Source semantics ("builtin" content must be signature-verified).
 	Source string `yaml:"-" json:"source,omitempty"`
+
+	// TechniqueIDs lists the ATT&CK techniques this behavioral profile is
+	// relevant to. Additive metadata only -- does not change resolution,
+	// inheritance, or scoring. A many-to-many hint, consistent with this
+	// struct's design philosophy above: one profile can cover several
+	// techniques (e.g. windows_dlp_exfiltration spans 5 DLP channels), and
+	// one technique can legitimately have several profiles for different
+	// sub-behaviors (e.g. T1562.001 has windows_defender_tampering,
+	// windows_security_process_termination, and
+	// windows_vulnerable_driver_load -- three different implementations
+	// of "impair defenses"). Consumed by connector.Generator (Detection
+	// Profile Inheritance) and internal/coverage (Coverage Matrix).
+	TechniqueIDs []string `yaml:"technique_ids,omitempty" json:"techniqueIds,omitempty"`
 }
 
 // ProfileRef records a resolved profile + its version for a run's audit line

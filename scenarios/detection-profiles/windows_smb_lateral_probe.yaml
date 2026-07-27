@@ -2,6 +2,7 @@
 # probe (T1021.002). LockBit-style spreading via administrative shares.
 profile: windows_smb_lateral_probe
 version: 1
+technique_ids: [T1021.002]
 expected_detection:
   - id: smb-lateral-edr
     provider: microsoft_defender

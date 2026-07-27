@@ -4,6 +4,7 @@
 # required control lives in the identity domain and awaits attestation on-host.
 profile: windows_kerberoast
 version: 1
+technique_ids: [T1558.003]
 extends:
   - windows_credential_access
 expected_detection:

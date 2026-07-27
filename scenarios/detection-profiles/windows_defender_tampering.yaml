@@ -3,6 +3,7 @@
 # Tamper Protection exists specifically to prevent this class of action.
 profile: windows_defender_tampering
 version: 1
+technique_ids: [T1562.001]
 expected_detection:
   - id: defender-exclusion-edr
     provider: microsoft_defender

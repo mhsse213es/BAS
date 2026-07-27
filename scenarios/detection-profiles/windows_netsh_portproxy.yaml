@@ -4,6 +4,7 @@
 # signatures — required endpoint detection, near-zero false positives.
 profile: windows_netsh_portproxy
 version: 1
+technique_ids: [T1090.001]
 expected_detection:
   - id: portproxy-edr-netsh
     provider: microsoft_defender

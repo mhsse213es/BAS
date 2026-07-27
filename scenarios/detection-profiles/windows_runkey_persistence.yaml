@@ -2,6 +2,7 @@
 # APT29 Stage 3: HKCU\...\Run value write.
 profile: windows_runkey_persistence
 version: 1
+technique_ids: [T1547.001]
 expected_detection:
   - id: runkey-edr-write
     provider: microsoft_defender

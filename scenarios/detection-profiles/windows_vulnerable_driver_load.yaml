@@ -4,6 +4,7 @@
 # other ransomware groups per Halcyon reporting (2024).
 profile: windows_vulnerable_driver_load
 version: 1
+technique_ids: [T1562.001]
 expected_detection:
   - id: byovd-kernel-service-edr
     provider: microsoft_defender
