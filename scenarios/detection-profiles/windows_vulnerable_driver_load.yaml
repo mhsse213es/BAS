@@ -1,0 +1,22 @@
+# Detection Validation Profile — vulnerable-driver (BYOVD) staging for EDR
+# termination (T1562.001). RansomHub's EDRKillShifter tool (RentDrv2 /
+# ThreatFireMonitor vulnerable drivers), also documented reused by Play and
+# other ransomware groups per Halcyon reporting (2024).
+profile: windows_vulnerable_driver_load
+version: 1
+expected_detection:
+  - id: byovd-kernel-service-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Critical
+      title: "Kernel-mode service registration (BYOVD precursor) not detected"
+      remediation: >-
+        Alert on `sc.exe create` / `New-Service` with `type= kernel` from a
+        non-driver-installer process, and enforce Microsoft's vulnerable
+        driver blocklist (HVCI / WDAC or the built-in
+        Microsoft-recommended-driver-block-list). This is a near-zero-
+        false-positive BYOVD staging IOC used by RansomHub's EDRKillShifter
+        and multiple other ransomware EDR-killer tools to disable
+        endpoint protection immediately before encryption.
+      reference: "MITRE ATT&CK T1562.001 — Impair Defenses: Disable or Modify Tools (BYOVD)"

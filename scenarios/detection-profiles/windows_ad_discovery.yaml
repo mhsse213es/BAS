@@ -1,0 +1,20 @@
+# Detection Validation Profile — AdFind/Grixba-style Active Directory
+# enumeration (T1087.002 / T1018). Documented recon pattern for BlackCat,
+# Play (via Grixba), and RansomHub affiliates before credential theft and
+# lateral movement.
+profile: windows_ad_discovery
+version: 1
+expected_detection:
+  - id: ad-discovery-edr
+    provider: microsoft_defender
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "Domain account/group/controller enumeration not detected"
+      remediation: >-
+        Alert on `nltest.exe /dclist`, `net group "Domain Admins" /domain`,
+        and `net view` chained together from a single host in a short
+        window — a common pre-credential-theft recon pattern that does not
+        require the AdFind binary and can be performed entirely with
+        built-in LOLBins.
+      reference: "MITRE ATT&CK T1087.002 — Account Discovery: Domain Account"

@@ -1,0 +1,18 @@
+# Detection Validation Profile — RDP enabled without Network Level
+# Authentication (T1021.001). Akira's documented initial-access
+# precondition: brute-forceable/credential-stuffable RDP or VPN without MFA.
+profile: windows_rdp_nla_posture
+version: 1
+expected_detection:
+  - id: rdp-nla-posture-edr
+    provider: microsoft_defender
+    confidence: recommended
+    finding:
+      severity: High
+      title: "RDP enabled without NLA enforcement"
+      remediation: >-
+        Enforce Network Level Authentication on every RDP-reachable
+        endpoint and require MFA for RDP/VPN logon. Akira and multiple
+        other ransomware affiliates use RDP/VPN access without MFA as
+        their primary initial-access vector.
+      reference: "MITRE ATT&CK T1021.001 — Remote Services: Remote Desktop Protocol"

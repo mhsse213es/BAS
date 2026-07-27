@@ -1,0 +1,19 @@
+# Detection Validation Profile — security-process termination via taskkill
+# (T1562.001). Cl0p's classic encryptor targets specific AV/EDR process
+# names by image name before encrypting.
+profile: windows_security_process_termination
+version: 1
+expected_detection:
+  - id: security-process-taskkill-edr
+    provider: microsoft_defender
+    confidence: required
+    finding:
+      severity: Critical
+      title: "taskkill targeting security-product process names not detected"
+      remediation: >-
+        Alert on `taskkill.exe /F /IM` (or `Stop-Process`) invoked with an
+        AV/EDR-associated process image name as its argument, independent
+        of whether the named process actually exists on the host — the
+        command-line pattern itself is the high-fidelity signal Cl0p's
+        encryptor produces immediately before deploying.
+      reference: "MITRE ATT&CK T1562.001 — Impair Defenses: Disable or Modify Tools"
