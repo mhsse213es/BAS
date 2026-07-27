@@ -548,4 +548,74 @@ var BuiltinTemplates = []Template{
 			},
 		},
 	},
+
+	// ── 10. DLP Exfiltration Purple Team Drill ─────────────────────────────────
+	{
+		ID:          "builtin-purple-dlp-exfil",
+		Name:        "DLP Exfiltration Purple Team Drill",
+		Version:     1,
+		Category:    "purple-team",
+		Description: "Runs the DLP exfiltration validation simulation — synthetic regulated data (PAN/Aadhaar/SWIFT/UPI/credit-card) attempted over USB, clipboard, print, archive, and local-staging channels — and measures whether DLP policy actually blocks each channel, not just logs it.",
+		Author:      "Audspect",
+		BuiltIn:     true,
+		Variables: []VarDef{
+			{Name: "AgentID", Type: VarTypeEndpoint, Required: true, Description: "Target agent for the simulation"},
+			{Name: "ScenarioID", Type: VarTypeString, Required: true, Default: "dlp-exfiltration-validation", Description: "Scenario to execute"},
+			{Name: "DetectionTimeout", Type: VarTypeDuration, Default: "30m", Description: "Max time to wait for detection before timing out"},
+			{Name: "SOCNotifyEmail", Type: VarTypeEmailList, Description: "Email to notify when drill completes"},
+		},
+		Metadata: TemplateMetadata{
+			SuccessCriteria: "DLP policy blocks regulated-data exfiltration across all five channels (USB, clipboard, print, archive, local-staging) within the detection timeout — a policy that only logs/warns does not meet this criterion (see the DLP Validation Suite's asymmetric truth table: a local verifier can only prove Block, not softer outcomes).",
+			LearningObjectives: []string{
+				"Validate DLP policy actually blocks (not just logs) regulated-data exfiltration",
+				"Confirm coverage across all agent-native channels an insider or malware could use, not only network egress",
+				"Identify which channel, if any, DLP policy doesn't yet cover",
+			},
+			ExpectedTechniques:      []string{"T1052.001", "T1115", "T1052", "T1560.001", "T1074.001"},
+			ExpectedDetections:      []string{"Trellix DLP"},
+			RecommendedParticipants: []string{"SOC Analyst", "DLP/Compliance Administrator", "IR Lead (approval)"},
+			RecommendedDuration:     "1-2 hours",
+			DiscussionPrompts: []string{
+				"Which of the five channels, if any, was NOT blocked by DLP policy?",
+				"Is the gap a policy-coverage gap or an agent-visibility gap?",
+				"Would this synthetic data pattern (PAN/Aadhaar/SWIFT/UPI/credit-card) be representative of what your DLP policy is actually tuned to catch in production?",
+			},
+		},
+		Steps: []PlanStep{
+			{
+				ID: "drill_sim", Type: StepTypeAgentTask, Label: "Trigger DLP exfiltration simulation",
+				Config: StepConfig{AgentTask: &AgentTaskConfig{AgentID: "${AgentID}", ScenarioID: "${ScenarioID}"}},
+			},
+			{
+				ID: "wait_sim_done", Type: StepTypeWaitForAgent, Label: "Wait for simulation to complete",
+				DependsOn:   []string{"drill_sim"},
+				Config:      StepConfig{WaitForAgent: &WaitForAgentConfig{AgentTaskStepID: "drill_sim"}},
+				TimeoutSecs: 1800,
+			},
+			{
+				ID: "wait_detect", Type: StepTypeWaitForDetection, Label: "Wait for DLP block confirmation",
+				DependsOn:   []string{"wait_sim_done"},
+				TimeoutSecs: 1800,
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
+					DetectionTypes:  []string{"security_control_detected"},
+					MinCount:        5, // all 5 channels — one coherent claim, unlike the other templates' default MinCount:1
+					ExecutionStepID: "drill_sim",
+				}},
+			},
+			{
+				ID: "approval_response", Type: StepTypeApproval, Label: "SOC/Compliance: confirm DLP coverage reviewed",
+				DependsOn:   []string{"wait_detect"},
+				TimeoutSecs: 7200,
+				Config: StepConfig{
+					ApprovalPrompt: "Has the SOC/DLP team reviewed which of the five channels were blocked vs. not blocked?",
+					ApproverRoles:  []string{"admin", "analyst"},
+				},
+			},
+			{
+				ID: "drill_complete", Type: StepTypeNotify, Label: "DLP drill complete — check per-channel block coverage",
+				DependsOn: []string{"approval_response"},
+				Config:    StepConfig{NotifyMsg: "DLP Exfiltration Purple Team Drill complete. Review per-channel block coverage across USB, clipboard, print, archive, and local-staging."},
+			},
+		},
+	},
 }

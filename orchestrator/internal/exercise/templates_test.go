@@ -78,6 +78,7 @@ func TestBuiltinTemplates_PurpleTeamDetectionBridgeWiring(t *testing.T) {
 		{"builtin-purple-volt-typhoon", "drill_sim"},
 		{"builtin-purple-kerberoasting", "drill_sim"},
 		{"builtin-purple-collection-exfil", "drill_sim"},
+		{"builtin-purple-dlp-exfil", "drill_sim"},
 	}
 	for _, tc := range cases {
 		tpl := findTemplate(tc.templateID)
@@ -104,7 +105,7 @@ func TestBuiltinTemplates_PurpleTeamMetadataPopulated(t *testing.T) {
 		return nil
 	}
 
-	ids := []string{"builtin-purple-apt29", "builtin-purple-volt-typhoon", "builtin-purple-kerberoasting", "builtin-purple-collection-exfil"}
+	ids := []string{"builtin-purple-apt29", "builtin-purple-volt-typhoon", "builtin-purple-kerberoasting", "builtin-purple-collection-exfil", "builtin-purple-dlp-exfil"}
 	for _, id := range ids {
 		tpl := findTemplate(id)
 		if tpl == nil {
@@ -141,5 +142,33 @@ func TestBuiltinTemplates_KerberoastingIdentityOnlyGate(t *testing.T) {
 	types := wait.Config.WaitForDetection.DetectionTypes
 	if len(types) != 1 || types[0] != "security_control_detected" {
 		t.Errorf("DetectionTypes = %v, want exactly [security_control_detected] — an EDR alert must not be able to satisfy this identity-focused drill's gate", types)
+	}
+}
+
+func TestBuiltinTemplates_DLPRequiresAllFiveChannels(t *testing.T) {
+	var tpl *Template
+	for i := range BuiltinTemplates {
+		if BuiltinTemplates[i].ID == "builtin-purple-dlp-exfil" {
+			tpl = &BuiltinTemplates[i]
+		}
+	}
+	if tpl == nil {
+		t.Fatal("builtin-purple-dlp-exfil: template not found")
+	}
+	var wait *PlanStep
+	for i := range tpl.Steps {
+		if tpl.Steps[i].ID == "wait_detect" {
+			wait = &tpl.Steps[i]
+		}
+	}
+	if wait == nil || wait.Config.WaitForDetection == nil {
+		t.Fatal("wait_detect step or its WaitForDetection config is missing")
+	}
+	if wait.Config.WaitForDetection.MinCount != 5 {
+		t.Errorf("MinCount = %d, want 5 — DLP's five channels are one coherent claim, not partial-credit signal", wait.Config.WaitForDetection.MinCount)
+	}
+	types := wait.Config.WaitForDetection.DetectionTypes
+	if len(types) != 1 || types[0] != "security_control_detected" {
+		t.Errorf("DetectionTypes = %v, want exactly [security_control_detected]", types)
 	}
 }
