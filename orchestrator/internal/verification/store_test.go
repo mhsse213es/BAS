@@ -52,6 +52,54 @@ func TestAttest_DefaultsWorkflowStateAndSource(t *testing.T) {
 	})
 }
 
+func TestAttest_PersistsRuleIDs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		rec, err := store.Attest(context.Background(), AttestInput{
+			RunID: "run-rule-1", ExpectationID: "exp-rule-1", VerifiedBy: "alice",
+			RuleIDs: []string{"AUDRULE-000001", "AUDRULE-000002"},
+		})
+		if err != nil {
+			t.Fatalf("Attest: %v", err)
+		}
+		if len(rec.RuleIDs) != 2 || rec.RuleIDs[0] != "AUDRULE-000001" || rec.RuleIDs[1] != "AUDRULE-000002" {
+			t.Fatalf("rec.RuleIDs = %v, want [AUDRULE-000001 AUDRULE-000002]", rec.RuleIDs)
+		}
+
+		// Round-trip through a fresh read, not just the RETURNING clause.
+		reread, err := store.CurrentForRun(context.Background(), "run-rule-1")
+		if err != nil {
+			t.Fatalf("CurrentForRun: %v", err)
+		}
+		if len(reread["exp-rule-1"].RuleIDs) != 2 {
+			t.Fatalf("reread RuleIDs = %v, want 2 entries", reread["exp-rule-1"].RuleIDs)
+		}
+	})
+}
+
+func TestAttest_NilRuleIDsDoesNotViolateNotNull(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		// RuleIDs deliberately left nil (zero value) — must not violate the
+		// rule_ids text[] NOT NULL column constraint.
+		rec, err := store.Attest(context.Background(), AttestInput{
+			RunID: "run-rule-2", ExpectationID: "exp-rule-2", VerifiedBy: "alice",
+		})
+		if err != nil {
+			t.Fatalf("Attest with nil RuleIDs: %v", err)
+		}
+		if len(rec.RuleIDs) != 0 {
+			t.Fatalf("rec.RuleIDs = %v, want empty", rec.RuleIDs)
+		}
+	})
+}
+
 func TestAttest_SecondAttestationSupersedesFirst(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

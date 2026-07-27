@@ -1017,6 +1017,7 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE verification_evidence ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE verification_evidence_blob ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE verification_history ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+		`ALTER TABLE verification_history ADD COLUMN IF NOT EXISTS rule_ids text[] NOT NULL DEFAULT '{}'`,
 
 		// SP7 Multi-Tenancy — users-table pilot. Create a tenant-isolation RLS
 		// policy on users so it is reviewable and syntax-checked at boot, but

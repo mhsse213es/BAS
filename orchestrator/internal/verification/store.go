@@ -90,6 +90,7 @@ type Record struct {
 	VerifiedAt     time.Time `json:"verifiedAt"`
 	SupersedesID   string    `json:"supersedesId,omitempty"`
 	Active         bool      `json:"active"`
+	RuleIDs        []string  `json:"ruleIds,omitempty"`
 }
 
 // Evidence is one row of verification_evidence (metadata only; bytes live in
@@ -127,6 +128,7 @@ type AttestInput struct {
 	Note           string
 	AlertID        string
 	VerifiedBy     string
+	RuleIDs        []string
 }
 
 // EvidenceInput is the payload for an evidence upload. Bytes are hashed and
@@ -150,13 +152,13 @@ func NewStore(db *pgxpool.Pool) *Store { return &Store{db: db} }
 
 const recordCols = `id, run_id, expectation_id, profile_name, profile_version,
 	technique_id, domain, provider, result, workflow_state, verification_source,
-	note, alert_id, verified_by, verified_at, supersedes_id, active`
+	note, alert_id, verified_by, verified_at, supersedes_id, active, rule_ids`
 
 func scanRecord(row pgx.Row) (Record, error) {
 	var r Record
 	err := row.Scan(&r.ID, &r.RunID, &r.ExpectationID, &r.ProfileName, &r.ProfileVersion,
 		&r.TechniqueID, &r.Domain, &r.Provider, &r.Result, &r.WorkflowState, &r.Source,
-		&r.Note, &r.AlertID, &r.VerifiedBy, &r.VerifiedAt, &r.SupersedesID, &r.Active)
+		&r.Note, &r.AlertID, &r.VerifiedBy, &r.VerifiedAt, &r.SupersedesID, &r.Active, &r.RuleIDs)
 	return r, err
 }
 
@@ -251,16 +253,21 @@ func (s *Store) Attest(ctx context.Context, in AttestInput) (Record, error) {
 		}
 	}
 
+	ruleIDs := in.RuleIDs
+	if ruleIDs == nil {
+		ruleIDs = []string{}
+	}
+
 	rec, err := scanRecord(tx.QueryRow(ctx,
 		`INSERT INTO verification_history
 			(run_id, expectation_id, profile_name, profile_version, technique_id,
 			 domain, provider, result, workflow_state, verification_source,
-			 note, alert_id, verified_by, supersedes_id, active)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,true)
+			 note, alert_id, verified_by, supersedes_id, active, rule_ids)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,true,$15)
 		 RETURNING `+recordCols,
 		in.RunID, in.ExpectationID, in.ProfileName, in.ProfileVersion, in.TechniqueID,
 		in.Domain, in.Provider, in.Result, in.WorkflowState, in.Source,
-		in.Note, in.AlertID, in.VerifiedBy, priorID))
+		in.Note, in.AlertID, in.VerifiedBy, priorID, ruleIDs))
 	if err != nil {
 		if isUniqueViolation(err) {
 			return Record{}, ErrConflict
