@@ -243,6 +243,55 @@ type StepDetectionSpec struct {
 	ProfileRefs []scenario.ProfileRef
 }
 
+// ComputeAutomaticVerifications runs the automatic verification engine over
+// every step's expectations for one run and returns the raw, unaggregated
+// per-expectation results — the same per-expectation computation
+// BuildDetectionValidationWithStore performs internally, exposed here for
+// callers (the automatic-verdict-persistence poller, internal/verifysync)
+// that need individual verdicts rather than a rendered report section. Kept
+// as its own small loop rather than sharing BuildDetectionValidationWithStore's
+// larger loop — that loop also builds report rows and running score
+// aggregates in the same pass, and forcing a shared call there would risk
+// the byte-identical-report guarantee TestBuildDetectionValidationGoldenOutput
+// protects.
+func ComputeAutomaticVerifications(specs []StepDetectionSpec, results []models.SimulationResult) []VerificationResult {
+	evByTech := evidenceByTechnique(results)
+	var out []VerificationResult
+	for _, spec := range specs {
+		ev := evByTech[spec.TechniqueID]
+		ev.TechniqueID = spec.TechniqueID
+		for _, exp := range spec.Expected {
+			out = append(out, verifyExpectation(exp, ev))
+		}
+	}
+	return out
+}
+
+// ResolveStepDetectionSpecs resolves a scenario's steps into their detection
+// expectations via the given resolver. Returns nil if the scenario is
+// unknown or declares no expectations anywhere — callers should treat that
+// as nothing to verify, not an error.
+func ResolveStepDetectionSpecs(scenarios ScenarioResolver, scenarioID string) []StepDetectionSpec {
+	sc, ok := scenarios.Get(scenarioID)
+	if !ok {
+		return nil
+	}
+	var specs []StepDetectionSpec
+	for _, step := range sc.Steps {
+		exp, refs := scenarios.ResolveStepExpectations(step)
+		if len(exp) == 0 {
+			continue
+		}
+		specs = append(specs, StepDetectionSpec{
+			TechniqueID: step.TechniqueID,
+			Expected:    exp,
+			Telemetry:   step.Telemetry,
+			ProfileRefs: refs,
+		})
+	}
+	return specs
+}
+
 // DetectionValidationSection is the report section for expected-vs-actual gap
 // analysis. HasData is false when no step in the run declared any expectation
 // (backward-compatible: such runs render exactly as before).
@@ -338,23 +387,7 @@ func (e *Engine) buildDetectionValidation(ctx context.Context, runID, scenarioID
 	if e.scenarios == nil || scenarioID == "" {
 		return DetectionValidationSection{}
 	}
-	sc, ok := e.scenarios.Get(scenarioID)
-	if !ok {
-		return DetectionValidationSection{}
-	}
-	var specs []StepDetectionSpec
-	for _, step := range sc.Steps {
-		exp, refs := e.scenarios.ResolveStepExpectations(step)
-		if len(exp) == 0 {
-			continue
-		}
-		specs = append(specs, StepDetectionSpec{
-			TechniqueID: step.TechniqueID,
-			Expected:    exp,
-			Telemetry:   step.Telemetry,
-			ProfileRefs: refs,
-		})
-	}
+	specs := ResolveStepDetectionSpecs(e.scenarios, scenarioID)
 	// Overlay stored attestations (manual SP2 / API SP3). Off-host expectations
 	// the automatic engine could only mark Pending become resolved here once an
 	// analyst or connector has verified them. Kept read-only: reporting consumes

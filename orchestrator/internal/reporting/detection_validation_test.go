@@ -98,6 +98,68 @@ func TestAutomaticVerifier_ThreadsRuleIDs(t *testing.T) {
 	}
 }
 
+func TestComputeAutomaticVerifications(t *testing.T) {
+	specs := []StepDetectionSpec{
+		{
+			TechniqueID: "T1055",
+			Expected:    []scenario.ExpectedDetection{endpointExp("e1", "microsoft_defender", scenario.ConfidenceRequired)},
+		},
+	}
+	results := []models.SimulationResult{
+		{ID: "T1055", DetectionVerdict: "detected", DetectionAlert: &models.DetectionAlert{Provider: "Microsoft Defender"}},
+	}
+	got := ComputeAutomaticVerifications(specs, results)
+	if len(got) != 1 {
+		t.Fatalf("len(got) = %d, want 1", len(got))
+	}
+	if got[0].ExpectedID != "e1" || got[0].Status != StatusDetected {
+		t.Errorf("got[0] = %+v, want ExpectedID=e1 Status=Detected", got[0])
+	}
+}
+
+type fakeScenarioResolver struct {
+	scenarios map[string]*scenario.Scenario
+	expByStep map[string][]scenario.ExpectedDetection
+}
+
+func (f fakeScenarioResolver) Get(id string) (*scenario.Scenario, bool) {
+	sc, ok := f.scenarios[id]
+	return sc, ok
+}
+
+func (f fakeScenarioResolver) ResolveStepExpectations(step scenario.Step) ([]scenario.ExpectedDetection, []scenario.ProfileRef) {
+	return f.expByStep[step.TechniqueID], nil
+}
+
+func TestResolveStepDetectionSpecs(t *testing.T) {
+	resolver := fakeScenarioResolver{
+		scenarios: map[string]*scenario.Scenario{
+			"sc-1": {
+				ID: "sc-1",
+				Steps: []scenario.Step{
+					{TechniqueID: "T1055", Telemetry: []string{"Sysmon EID 1"}},
+					{TechniqueID: "T1003"}, // no expectations declared
+				},
+			},
+		},
+		expByStep: map[string][]scenario.ExpectedDetection{
+			"T1055": {endpointExp("e1", "microsoft_defender", scenario.ConfidenceRequired)},
+		},
+	}
+
+	specs := ResolveStepDetectionSpecs(resolver, "sc-1")
+	if len(specs) != 1 {
+		t.Fatalf("len(specs) = %d, want 1 (step with zero expectations must be excluded)", len(specs))
+	}
+	if specs[0].TechniqueID != "T1055" || len(specs[0].Expected) != 1 {
+		t.Errorf("specs[0] = %+v, want TechniqueID=T1055 with 1 expectation", specs[0])
+	}
+
+	if got := ResolveStepDetectionSpecs(resolver, "unknown-scenario"); got != nil {
+		t.Errorf("unknown scenario: got %v, want nil", got)
+	}
+}
+
 func TestBuildDetectionValidationScoring(t *testing.T) {
 	specs := []StepDetectionSpec{
 		{
