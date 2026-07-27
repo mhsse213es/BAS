@@ -434,3 +434,72 @@ func TestParseYAML_DLPExfiltrationValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestParseYAML_RansomwareScenariosDetectionProfilesWired(t *testing.T) {
+	cases := []struct {
+		file        string
+		stepName    string
+		wantProfile string
+	}{
+		{"../../../scenarios/lockbit-kill-chain.yaml", "LockBit Stage 1 — Security Software Discovery (T1518.001)", "windows_security_software_discovery"},
+		{"../../../scenarios/lockbit-kill-chain.yaml", "LockBit Stage 2 — VSS Snapshot Enumeration (T1490)", "windows_vss_inhibition"},
+		{"../../../scenarios/lockbit-kill-chain.yaml", "LockBit Stage 3 — SMB Admin Share Lateral Movement Probe (T1021.002)", "windows_smb_lateral_probe"},
+		{"../../../scenarios/lockbit-kill-chain.yaml", "LockBit Stage 4 — Ransomware Payload Simulation (T1486)", "windows_ransomware_encryption"},
+		{"../../../scenarios/lockbit-kill-chain.yaml", "LockBit Stage 5 — Event Log Clearing Attempt (T1070.001)", "windows_log_manipulation"},
+
+		{"../../../scenarios/ransomware-drill.yaml", "File Enumeration (BFSI high-value filename markers)", "windows_file_discovery"},
+		{"../../../scenarios/ransomware-drill.yaml", "Defender Exclusion Invocation (cmdline probe  -  no state change)", "windows_defender_tampering"},
+		{"../../../scenarios/ransomware-drill.yaml", "Event Log Clear Probe (nonexistent log  -  process telemetry only)", "windows_log_manipulation"},
+		{"../../../scenarios/ransomware-drill.yaml", "VSS + Backup Catalog Enumeration", "windows_vss_inhibition"},
+		{"../../../scenarios/ransomware-drill.yaml", "Benign File Rename Probe (.bas_locked extension)", "windows_ransomware_encryption"},
+		{"../../../scenarios/ransomware-drill.yaml", "XOR Encryption Simulation (lab  -  isolated temp dir, forced cleanup)", "windows_ransomware_encryption"},
+		{"../../../scenarios/ransomware-drill.yaml", "VSS Shadow Copy Deletion (lab  -  requires BAS_CONFIRM_VSS_DELETE=true)", "windows_vss_inhibition"},
+		{"../../../scenarios/ransomware-drill.yaml", "Defender RTP Disable (lab  -  mandatory restoration + health check)", "windows_defender_tampering"},
+		{"../../../scenarios/ransomware-drill.yaml", "Malicious Service Probe (lab  -  creation + lineage logging)", "windows_malicious_service"},
+
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 1A — BFSI File Target Reconnaissance", "windows_file_discovery"},
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 1B — Network Share Discovery", "windows_network_share_discovery"},
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 2A — Defender Exclusion Invocation Probe", "windows_defender_tampering"},
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 2B — Event Log Clear Probe", "windows_log_manipulation"},
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 3A — Canary File Mass Encryption Loop", "windows_ransomware_encryption"},
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 3B — Ransom Note Drop (Canary Directory)", "windows_ransomware_encryption"},
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 4A — VSS Shadow Copy Deletion Signature", "windows_vss_inhibition"},
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 4B — wbadmin Backup Catalog Delete Probe", "windows_vss_inhibition"},
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 4C — BCDEdit Bootloader Recovery Disable Probe", "windows_vss_inhibition"},
+		{"../../../scenarios/endpoint-mastery/em-07-ransomware-readiness.yaml", "Stage 5A — Backup Service Stop Attempt", "windows_backup_service_stop"},
+	}
+
+	parsed := map[string]*Scenario{}
+	for _, tc := range cases {
+		if _, ok := parsed[tc.file]; ok {
+			continue
+		}
+		data, err := os.ReadFile(tc.file)
+		if err != nil {
+			t.Fatalf("read %s: %v", tc.file, err)
+		}
+		sc, err := ParseYAML(data)
+		if err != nil {
+			t.Fatalf("ParseYAML %s: %v", tc.file, err)
+		}
+		parsed[tc.file] = sc
+	}
+
+	for _, tc := range cases {
+		sc := parsed[tc.file]
+		var step *Step
+		for i := range sc.Steps {
+			if sc.Steps[i].Name == tc.stepName {
+				step = &sc.Steps[i]
+				break
+			}
+		}
+		if step == nil {
+			t.Errorf("%s: step %q not found", tc.file, tc.stepName)
+			continue
+		}
+		if len(step.DetectionProfiles) != 1 || step.DetectionProfiles[0] != tc.wantProfile {
+			t.Errorf("%s / %q: DetectionProfiles = %v, want [%s]", tc.file, tc.stepName, step.DetectionProfiles, tc.wantProfile)
+		}
+	}
+}
