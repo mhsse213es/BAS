@@ -408,4 +408,75 @@ var BuiltinTemplates = []Template{
 			},
 		},
 	},
+
+	// ── 8. Kerberoasting & AD Credential Theft Purple Team Drill ──────────────
+	{
+		ID:          "builtin-purple-kerberoasting",
+		Name:        "Kerberoasting & AD Credential Theft Purple Team Drill",
+		Version:     1,
+		Category:    "purple-team",
+		Description: "Runs the Kerberoasting and AS-REP roasting simulation against Active Directory — service-account ticket requests, AD enumeration, GPO discovery — and measures identity-layer detection coverage independent of endpoint EDR.",
+		Author:      "Audspect",
+		BuiltIn:     true,
+		Variables: []VarDef{
+			{Name: "AgentID", Type: VarTypeEndpoint, Required: true, Description: "Target agent for the simulation"},
+			{Name: "ScenarioID", Type: VarTypeString, Required: true, Default: "kerberoasting-ad-drill", Description: "Scenario to execute"},
+			{Name: "DetectionTimeout", Type: VarTypeDuration, Default: "30m", Description: "Max time to wait for detection before timing out"},
+			{Name: "SOCNotifyEmail", Type: VarTypeEmailList, Description: "Email to notify when drill completes"},
+		},
+		Metadata: TemplateMetadata{
+			SuccessCriteria: "An identity-layer detection (Kerberos ticket requests, AD enumeration) is confirmed within the detection timeout — deliberately gated on identity-domain evidence only, not endpoint EDR, so an unrelated EDR alert can't silently satisfy this drill's real question. Microsoft Defender for Identity (and Sigma/SIEM providers generally) default to manual verification in this platform; confirming this signal today means either a SOC analyst manually attesting via the Detection Verification UI during the exercise, or a configured identity/SIEM API connector. A timeout with no manual attestation is itself the finding: identity-layer verification isn't wired up yet.",
+			LearningObjectives: []string{
+				"Validate identity/AD detection coverage independent of endpoint telemetry",
+				"Confirm Microsoft Defender for Identity (or equivalent) is actually alerting on Kerberoasting/AS-REP roasting patterns",
+				"Identify which service accounts are exposed to ticket-request-based credential theft",
+				"Surface whether identity-layer verification is automated (API connector) or still manual-only in this environment",
+			},
+			ExpectedTechniques:      []string{"T1558.003", "T1558.004", "T1087.002", "T1482", "T1069.002", "T1615", "T1552.006"},
+			ExpectedDetections:      []string{"Microsoft Defender for Identity", "Microsoft Defender"},
+			RecommendedParticipants: []string{"SOC Analyst", "Identity/AD Administrator", "IR Lead (approval)"},
+			RecommendedDuration:     "1-2 hours",
+			DiscussionPrompts: []string{
+				"Did the identity-layer control detect this before or independent of endpoint EDR?",
+				"Which service accounts used in this drill have weak/crackable passwords in production?",
+				"How quickly could an analyst distinguish this from legitimate Kerberos ticket activity?",
+				"If wait_detect timed out: was that because nothing fired, or because no one attested it during the window?",
+			},
+		},
+		Steps: []PlanStep{
+			{
+				ID: "drill_sim", Type: StepTypeAgentTask, Label: "Trigger Kerberoasting/AD simulation",
+				Config: StepConfig{AgentTask: &AgentTaskConfig{AgentID: "${AgentID}", ScenarioID: "${ScenarioID}"}},
+			},
+			{
+				ID: "wait_sim_done", Type: StepTypeWaitForAgent, Label: "Wait for simulation to complete",
+				DependsOn:   []string{"drill_sim"},
+				Config:      StepConfig{WaitForAgent: &WaitForAgentConfig{AgentTaskStepID: "drill_sim"}},
+				TimeoutSecs: 1800,
+			},
+			{
+				ID: "wait_detect", Type: StepTypeWaitForDetection, Label: "Wait for identity-layer detection",
+				DependsOn:   []string{"wait_sim_done"},
+				TimeoutSecs: 1800,
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
+					DetectionTypes:  []string{"security_control_detected"}, // identity-only, deliberately excludes edr_detected
+					ExecutionStepID: "drill_sim",
+				}},
+			},
+			{
+				ID: "approval_response", Type: StepTypeApproval, Label: "SOC: confirm incident response completed",
+				DependsOn:   []string{"wait_detect"},
+				TimeoutSecs: 7200,
+				Config: StepConfig{
+					ApprovalPrompt: "Has the SOC/identity team completed triage and confirmed which service accounts were affected?",
+					ApproverRoles:  []string{"admin", "analyst"},
+				},
+			},
+			{
+				ID: "drill_complete", Type: StepTypeNotify, Label: "Kerberoasting drill complete — check identity detection coverage",
+				DependsOn: []string{"approval_response"},
+				Config:    StepConfig{NotifyMsg: "Kerberoasting & AD Credential Theft Purple Team Drill complete. Review identity-layer detection coverage and MTTD/MTTR."},
+			},
+		},
+	},
 }
