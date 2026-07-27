@@ -402,3 +402,35 @@ func TestParseYAML_UbuntuHardeningValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestParseYAML_DLPExfiltrationValidation(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "dlp-exfiltration-validation.yaml"))
+	if err != nil {
+		t.Fatalf("read scenario file: %v", err)
+	}
+	sc, err := ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if sc.ID != "dlp-exfiltration-validation" {
+		t.Fatalf("id = %q, want dlp-exfiltration-validation", sc.ID)
+	}
+	if !sc.Executable {
+		t.Fatalf("expected executable: true")
+	}
+	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
+		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
+	}
+	if len(sc.Steps) != 5 {
+		t.Fatalf("steps = %d, want 5", len(sc.Steps))
+	}
+	wantTechniques := []string{"T1052.001", "T1115", "T1052", "T1560.001", "T1074.001"}
+	for i, want := range wantTechniques {
+		if sc.Steps[i].TechniqueID != want {
+			t.Errorf("step %d technique_id = %q, want %q", i, sc.Steps[i].TechniqueID, want)
+		}
+		if len(sc.Steps[i].DetectionProfiles) != 1 || sc.Steps[i].DetectionProfiles[0] != "windows_dlp_exfiltration" {
+			t.Errorf("step %d detection_profiles = %v, want [windows_dlp_exfiltration]", i, sc.Steps[i].DetectionProfiles)
+		}
+	}
+}

@@ -1,0 +1,87 @@
+# Detection Validation Profile — DLP exfiltration-channel behavioral family.
+# One profile, five expected_detection entries (one per channel), matching
+# windows_credential_access.yaml's precedent of grouping related expectations
+# under a single behavioral profile rather than one profile per technique.
+#
+# Every entry declares outcome_family: dlp + expected_outcome: Block — the
+# only outcome pair a local/automatic verifier can honestly distinguish (see
+# internal/reporting/dlp.go's dlpComparator). Warn/Justify/Audit/etc. remain
+# valid catalog values for a future policy profile once a DLP product
+# connector exists to verify them — this profile intentionally declares none.
+profile: windows_dlp_exfiltration
+version: 1
+expected_detection:
+  - id: dlp-usb-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP did not block USB exfiltration of regulated data"
+      remediation: >-
+        Confirm the DLP policy covers removable-media file-copy events for
+        PAN/Aadhaar/SWIFT/UPI/credit-card patterns and is set to Block, not
+        Audit-only, on this endpoint group.
+      reference: "MITRE ATT&CK T1052.001 — Exfiltration Over USB"
+  - id: dlp-clipboard-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP did not block clipboard exposure of regulated data"
+      remediation: >-
+        Confirm clipboard monitoring/DLP policy covers regulated-data
+        patterns (PAN/Aadhaar/SWIFT/UPI/credit-card) and blocks or clears the
+        clipboard rather than allowing the copy silently.
+      reference: "MITRE ATT&CK T1115 — Clipboard Data"
+  - id: dlp-print-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: Medium
+      title: "DLP did not block print exfiltration of regulated data"
+      remediation: >-
+        Confirm print-job DLP inspection covers regulated-data patterns and
+        blocks submission to the spooler rather than allowing it silently.
+      reference: "MITRE ATT&CK T1052 — Exfiltration Over Physical Medium"
+  - id: dlp-archive-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP did not block archive-based staging of regulated data"
+      remediation: >-
+        Confirm DLP content inspection runs before archive creation
+        completes (not only on already-compressed files) and blocks
+        archiving of regulated-data patterns.
+      reference: "MITRE ATT&CK T1560.001 — Archive via Utility"
+  - id: dlp-local-stage-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: Medium
+      title: "DLP did not block staging of regulated data to a shared local path"
+      remediation: >-
+        Confirm DLP endpoint policy inspects writes to shared/public local
+        paths (e.g. C:\Users\Public) for regulated-data patterns, not only
+        removable-media and network egress.
+      reference: "MITRE ATT&CK T1074.001 — Local Data Staging"

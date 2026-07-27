@@ -1,0 +1,277 @@
+id: dlp-exfiltration-validation
+name: DLP Exfiltration Validation — Regulated Data Channel Coverage
+description: >
+  Attempts to exfiltrate a single synthetic multi-type sensitive record
+  (fabricated PAN, Aadhaar, SWIFT/BIC, UPI VPA, and credit-card patterns
+  embedded together, like a realistic customer-records export) through five
+  agent-native channels: USB-mounted-drive copy, clipboard, print spool,
+  archive staging, and a shared local path. Tests whether DLP recognizes
+  regulated Indian-BFSI data types and blocks the exfiltration attempt,
+  independent of which channel carries it.
+
+  First capability of the Data Protection Validation pillar (DLP first;
+  Insider Risk, Cloud Storage, Email, and other channels follow as later,
+  separate scenarios under the same pillar).
+
+  Verification is local/agent-observed only in this version: each step's
+  script performs its own post-condition check (did the file actually land
+  on the target, does the clipboard now hold it, etc.) and reports exactly
+  one of two primitive facts — the operation succeeded, or it was blocked —
+  never a full DLP policy verdict. A Warn-and-continue policy produces the
+  same local symptom as no policy at all (the operation still succeeds), so
+  this scenario's expected outcome for every step is Block: the only outcome
+  a local observer can honestly confirm. Richer policy verdicts (Warn,
+  Justify, Audit, Quarantine, Encrypt, Redact) require a DLP product API
+  connector, not yet built — see the design spec for the roadmap.
+
+  Known scope limitation: the archive-staging step creates a standard ZIP
+  via PowerShell's built-in Compress-Archive, which has no native password
+  option in PowerShell 5.1 and no external archiver is bundled with the
+  agent. It validates archive-based staging generally (still MITRE ATT&CK
+  T1560.001), not the password-protected variant specifically.
+
+  Preconditions: the USB-copy step requires a removable drive attached to
+  the endpoint (mounted virtual media is sufficient) and the print step
+  requires a configured default printer (a virtual/PDF printer is
+  sufficient) — either step reports SKIP, not FAIL, if its precondition
+  isn't met on a given host.
+
+  Safety: all synthetic data is fabricated ([BAS-SIM-DLP] tagged), never
+  real. Every step is self-cleaning — no residual files, clipboard content,
+  print jobs, or archives are left behind. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - windows
+  - mitre-attack
+  - bfsi
+  - india
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Channel 1 — USB-mounted-drive copy (T1052.001)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — USB Exfiltration of Regulated Data (T1052.001)"
+    technique_id: T1052.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Copies a synthetic multi-type sensitive record file to a removable drive if one is attached, then deletes it immediately. No persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: file creation on removable-media drive letter"
+      - "Security EID 4663: object access on removable-media volume"
+    detection:
+      - "DLP: file-copy to removable-media volume matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $usbDrive = Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | Select-Object -First 1
+      if (-not $usbDrive) {
+        Write-Output "SKIP: no removable USB drive present on this host - DLP USB-copy validation requires physical or virtual removable media attached."
+      } else {
+        $srcFile = Join-Path $env:TEMP "bas_sim_dlp_records_$runId.csv"
+        $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+        Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
+        $dest = "$($usbDrive.DriveLetter):\bas_sim_dlp_records_$runId.csv"
+        Copy-Item -Path $srcFile -Destination $dest -ErrorAction SilentlyContinue
+        if (Test-Path $dest) {
+          Write-Output "EXEC T1052.001: multi-type sensitive record file copied to removable drive $($usbDrive.DriveLetter): unimpeded. [BAS-SIM-DLP-USB]"
+          Write-Output "FAIL: sensitive record file (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) copied to USB without being blocked."
+          Remove-Item -Path $dest -ErrorAction SilentlyContinue
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1052.001: copy to removable drive $($usbDrive.DriveLetter): was blocked or failed. [BAS-SIM-DLP-USB]"
+          Write-Output "DLP_OBSERVATION: OperationBlocked"
+        }
+        Remove-Item -Path $srcFile -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 2 — Clipboard (T1115)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Clipboard Exposure of Regulated Data (T1115)"
+    technique_id: T1115
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a synthetic multi-type sensitive record to the clipboard, checks whether it landed, then restores the original clipboard content. No persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Clipboard User Service activity (no dedicated Windows event ID; DLP clipboard-hook telemetry is vendor-specific)"
+    detection:
+      - "DLP: clipboard-monitoring hook matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $originalClip = $null
+      try { $originalClip = Get-Clipboard -Raw -ErrorAction SilentlyContinue } catch {}
+      Set-Clipboard -Value $csvContent -ErrorAction SilentlyContinue
+      Start-Sleep -Milliseconds 300
+      $nowClip = $null
+      try { $nowClip = Get-Clipboard -Raw -ErrorAction SilentlyContinue } catch {}
+      if ($nowClip -and $nowClip.Contains('ABCDE1234F')) {
+        Write-Output "EXEC T1115: multi-type sensitive record content set to clipboard unimpeded. [BAS-SIM-DLP-CLIP]"
+        Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) was placed on the clipboard without being blocked or cleared."
+        Write-Output "DLP_OBSERVATION: OperationSucceeded"
+      } else {
+        Write-Output "EXEC T1115: clipboard write of sensitive content was blocked or cleared. [BAS-SIM-DLP-CLIP]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      }
+      if ($null -ne $originalClip) { Set-Clipboard -Value $originalClip -ErrorAction SilentlyContinue } else { Set-Clipboard -Value '' -ErrorAction SilentlyContinue }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 3 — Print spool (T1052)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Print Exfiltration of Regulated Data (T1052)"
+    technique_id: T1052
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Submits a synthetic multi-type sensitive record to the default printer's spool queue if one is configured, then removes the job immediately. No persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Print spooler EID 307/347: print job submitted/completed"
+    detection:
+      - "DLP: print-job content inspection matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $printer = Get-CimInstance -ClassName Win32_Printer -ErrorAction SilentlyContinue | Where-Object { $_.Default -eq $true } | Select-Object -First 1
+      if (-not $printer) {
+        Write-Output "SKIP: no default printer configured on this host - DLP print-exfiltration validation requires a configured printer (physical or virtual/PDF)."
+      } else {
+        $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+        $srcFile = Join-Path $env:TEMP "bas_sim_dlp_print_$runId.txt"
+        Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
+        try {
+          Get-Content -Path $srcFile | Out-Printer -Name $printer.Name -ErrorAction Stop
+          Start-Sleep -Milliseconds 500
+          $job = Get-PrintJob -PrinterName $printer.Name -ErrorAction SilentlyContinue | Where-Object { $_.DocumentName -match 'bas_sim_dlp_print' -or $_.JobStatus -match 'Printing|Spooling|Normal' } | Select-Object -First 1
+          if ($job) {
+            Write-Output "EXEC T1052: sensitive record content submitted to print spooler ($($printer.Name)) unimpeded. [BAS-SIM-DLP-PRINT]"
+            Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) reached the print spooler without being blocked."
+            Remove-PrintJob -PrinterName $printer.Name -ID $job.ID -ErrorAction SilentlyContinue
+            Write-Output "DLP_OBSERVATION: OperationSucceeded"
+          } else {
+            Write-Output "EXEC T1052: print submission did not appear in the spool queue - blocked or intercepted. [BAS-SIM-DLP-PRINT]"
+            Write-Output "DLP_OBSERVATION: OperationBlocked"
+          }
+        } catch {
+          Write-Output "EXEC T1052: print submission threw an error - treated as blocked. [BAS-SIM-DLP-PRINT]"
+          Write-Output "DLP_OBSERVATION: OperationBlocked"
+        }
+        Remove-Item -Path $srcFile -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 4 — Archive staging (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Archive Staging of Regulated Data (T1560.001)"
+    technique_id: T1560.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Compresses a synthetic multi-type sensitive record into a standard ZIP archive via Compress-Archive, then deletes both files immediately. No password protection (no external archiver bundled with the agent); no persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: .zip file creation in %TEMP%"
+    detection:
+      - "DLP: archive-creation content inspection matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $srcFile = Join-Path $env:TEMP "bas_sim_dlp_archive_src_$runId.csv"
+      $zipFile = Join-Path $env:TEMP "bas_sim_dlp_archive_$runId.zip"
+      Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
+      try {
+        Compress-Archive -Path $srcFile -DestinationPath $zipFile -ErrorAction Stop
+      } catch {}
+      if (Test-Path $zipFile) {
+        Write-Output "EXEC T1560.001: sensitive record file archived to $zipFile unimpeded. [BAS-SIM-DLP-ZIP]"
+        Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) was compressed into an archive without being blocked."
+        Write-Output "DLP_OBSERVATION: OperationSucceeded"
+      } else {
+        Write-Output "EXEC T1560.001: archive creation was blocked or failed. [BAS-SIM-DLP-ZIP]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      }
+      Remove-Item -Path $srcFile,$zipFile -ErrorAction SilentlyContinue
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 5 — Local staging to a shared path (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Local Staging of Regulated Data to a Shared Path (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a synthetic multi-type sensitive record to C:\\Users\\Public (a shared/world-readable local path), then deletes it immediately. No persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: file creation under C:\\Users\\Public"
+    detection:
+      - "DLP: endpoint file-write inspection on shared/public local paths matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $stagingDir = 'C:\Users\Public\bas_sim_dlp_staging'
+      $dest = Join-Path $stagingDir "records_$runId.csv"
+      try {
+        New-Item -Path $stagingDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        Set-Content -Path $dest -Value $csvContent -Encoding utf8 -ErrorAction Stop
+      } catch {}
+      if (Test-Path $dest) {
+        Write-Output "EXEC T1074.001: sensitive record file staged to a shared local path ($stagingDir) unimpeded. [BAS-SIM-DLP-STAGE]"
+        Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) was written to a shared local staging path without being blocked."
+        Write-Output "DLP_OBSERVATION: OperationSucceeded"
+      } else {
+        Write-Output "EXEC T1074.001: staging write to shared local path was blocked or failed. [BAS-SIM-DLP-STAGE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      }
+      Remove-Item -Path $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+    cleanup: ""
