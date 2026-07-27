@@ -147,6 +147,7 @@ var BuiltinTemplates = []Template{
 				TimeoutSecs: 1800,
 				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
 					DetectionTypes: []string{"edr_detected", "siem_alerted"},
+					ExecutionStepID: "sim",
 				}},
 			},
 			{
@@ -250,6 +251,7 @@ var BuiltinTemplates = []Template{
 				TimeoutSecs: 1800,
 				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
 					DetectionTypes: []string{"edr_detected", "siem_alerted"},
+					ExecutionStepID: "drill_sim",
 				}},
 			},
 			{

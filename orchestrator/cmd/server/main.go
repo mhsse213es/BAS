@@ -323,6 +323,7 @@ func main() {
 	exRegistry := exercise.NewRegistry()
 	exScheduler := exercise.NewPollScheduler(5 * time.Second)
 	exExecutor := exercise.NewExecutor(exStore, exChain, exRegistry, exScheduler, nil)
+	exExecutor.WithVerification(verificationStore)
 	exExecutor.RegisterBuiltins(smtpInj, smsInj, slackInj, teamsInj)
 	exExecutor.RegisterBuiltinTriggers()
 	if err := exStore.SeedBuiltinTemplates(context.Background()); err != nil {
