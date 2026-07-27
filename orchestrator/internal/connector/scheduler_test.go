@@ -25,7 +25,7 @@ func TestNewScheduler_StatusFlags(t *testing.T) {
 	s := NewScheduler([]Source{
 		fakeSource{name: "misp"},
 		fakeSource{name: "bundle"},
-	}, NewGenerator(t.TempDir(), nil, nil), nil, 24, sharedDB.Pool)
+	}, NewGenerator(t.TempDir(), nil, nil, nil), nil, 24, sharedDB.Pool)
 
 	st := s.Status()
 	if !st.MISPEnabled || !st.BundleEnabled {
@@ -55,7 +55,7 @@ func TestScheduler_Sync_PopulatesBySourcePerSource(t *testing.T) {
 			err:  errors.New("opencti unreachable"),
 			stats: SourceStat{Name: "opencti", Error: "opencti unreachable", FetchedAt: time.Now()},
 		},
-	}, NewGenerator(t.TempDir(), nil, nil), scenario.NewEngine(t.TempDir()), 24, sharedDB.Pool)
+	}, NewGenerator(t.TempDir(), nil, nil, nil), scenario.NewEngine(t.TempDir()), 24, sharedDB.Pool)
 
 	s.sync()
 
@@ -89,7 +89,7 @@ func TestScheduler_Sync_ZeroActorSourceDoesNotDisruptOthers(t *testing.T) {
 			actors: nil,
 			stats:  otxStat,
 		},
-	}, NewGenerator(t.TempDir(), nil, nil), scenario.NewEngine(t.TempDir()), 24, sharedDB.Pool)
+	}, NewGenerator(t.TempDir(), nil, nil, nil), scenario.NewEngine(t.TempDir()), 24, sharedDB.Pool)
 
 	s.sync()
 
@@ -135,7 +135,7 @@ func TestScheduler_SyncUpsertsActorProfiles(t *testing.T) {
 				Source:     "bundle",
 				Techniques: []TechniqueRef{{ID: "T1059.001"}, {ID: "T1566.001"}},
 			}}},
-		}, NewGenerator(t.TempDir(), nil, nil), scenario.NewEngine(t.TempDir()), 24, pool)
+		}, NewGenerator(t.TempDir(), nil, nil, nil), scenario.NewEngine(t.TempDir()), 24, pool)
 
 		s.sync()
 

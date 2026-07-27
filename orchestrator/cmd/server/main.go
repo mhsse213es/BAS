@@ -245,7 +245,7 @@ func main() {
 		tiSources = append(tiSources, connector.NewOTXSource(cfg.OTXAPIKey))
 		log.Printf("[+] OTX connector configured (periodic sync)")
 	}
-	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
+	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions, engine.Profiles())
 	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool)
 	scheduler.Start()
 	defer scheduler.Stop()

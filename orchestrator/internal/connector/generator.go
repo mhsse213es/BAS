@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/audspect/bas/internal/scenario"
 )
 
 const minTechniques = 2 // minimum techniques before generating a scenario
@@ -24,13 +26,26 @@ type Generator struct {
 	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
 	sectors []string
 	regions []string
+
+	// techniqueIdx maps ATT&CK technique ID -> candidate detection-profile
+	// names (Detection Profile Inheritance). Built once at construction
+	// time from the profiles the caller already loaded.
+	techniqueIdx map[string][]string
 }
 
 // NewGenerator creates a Generator that writes to intelDir, tagging
 // generated scenarios as sector/region-relevant when a threat actor's own
-// Sectors/Regions overlap the given values.
-func NewGenerator(scenariosDir string, sectors, regions []string) *Generator {
-	return &Generator{intelDir: filepath.Join(scenariosDir, "intel"), sectors: sectors, regions: regions}
+// Sectors/Regions overlap the given values, and auto-attaching a
+// detection_profiles: entry for any technique that exact-matches a loaded
+// profile's TechniqueIDs (Detection Profile Inheritance). profiles may be
+// nil (no inheritance attempted, scenarios generate exactly as before).
+func NewGenerator(scenariosDir string, sectors, regions []string, profiles map[string]*scenario.DetectionProfile) *Generator {
+	return &Generator{
+		intelDir:     filepath.Join(scenariosDir, "intel"),
+		sectors:      sectors,
+		regions:      regions,
+		techniqueIdx: buildTechniqueIndex(profiles),
+	}
 }
 
 // GenerateResult summarises what was written in one sync.
@@ -147,6 +162,24 @@ func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
 	sb.WriteString("art_techniques:\n")
 	for _, t := range techIDs {
 		sb.WriteString(fmt.Sprintf("  - %s\n", t))
+	}
+
+	// Detection Profile Inheritance: attach any profile whose TechniqueIDs
+	// exactly matches one of this actor's techniques.
+	var detectionProfiles []string
+	seenProfiles := make(map[string]bool)
+	for _, id := range techIDs {
+		if name := resolveProfile(g.techniqueIdx, id); name != "" && !seenProfiles[name] {
+			seenProfiles[name] = true
+			detectionProfiles = append(detectionProfiles, name)
+		}
+	}
+	if len(detectionProfiles) > 0 {
+		sort.Strings(detectionProfiles)
+		sb.WriteString("detection_profiles:\n")
+		for _, p := range detectionProfiles {
+			sb.WriteString(fmt.Sprintf("  - %s\n", p))
+		}
 	}
 
 	return sb.String()
