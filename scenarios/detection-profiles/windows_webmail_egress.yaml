@@ -1,0 +1,32 @@
+# Detection Validation Profile — exfiltration via personal webmail (T1567).
+# Same technical category as windows_cloud_egress (reachability probe, not
+# an EDR signature) — personal webmail bypasses corporate email DLP
+# entirely since it never transits corporate mail flow.
+profile: windows_webmail_egress
+version: 1
+expected_detection:
+  - id: webmailegress-network-upload
+    provider: microsoft_sentinel
+    type: network
+    confidence: required
+    finding:
+      severity: High
+      title: "Personal webmail exfiltration path not detected"
+      remediation: >-
+        Alert on outbound connections to personal webmail domains (Gmail,
+        Outlook.com, Yahoo Mail, Proton) and large attachment/compose
+        activity from endpoints. Personal webmail bypasses corporate email
+        DLP entirely since it never transits corporate mail flow.
+      reference: "MITRE ATT&CK T1567 — Exfiltration Over Web Service"
+  - id: webmailegress-dlp-block
+    provider: microsoft_purview
+    type: dlp
+    confidence: recommended
+    finding:
+      severity: Medium
+      title: "No DLP/CASB policy on personal webmail categories"
+      remediation: >-
+        Apply a CASB/proxy policy that blocks or inspects personal webmail
+        categories; alert the SOC on attempted access from managed
+        endpoints.
+      reference: "MITRE ATT&CK T1567 — Exfiltration Over Web Service"
