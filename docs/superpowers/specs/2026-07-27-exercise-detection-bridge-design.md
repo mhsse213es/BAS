@@ -1,8 +1,19 @@
 # BAS → Exercise Detection Bridge — Design Spec
 
-**Status:** Approved for planning
+**Status:** Approved for planning — **depends on Phase A0**
 **Author:** Audspect (brainstormed 2026-07-27)
-**Scope:** Phase A of the "Purple Team packs" roadmap item ([[project_scenario_roadmap]]). Product-agnostic infrastructure fix + enrichment; no new scenario/template *content* beyond repairing two already-shipped built-in templates. Phase B (a curated library of Purple Team exercise templates) is a separate future spec.
+**Scope:** Phase A1 of the "Purple Team packs" roadmap item ([[project_scenario_roadmap]]). Product-agnostic infrastructure fix + enrichment; no new scenario/template *content* beyond repairing two already-shipped built-in templates. Phase B (a curated library of Purple Team exercise templates) is a separate future spec.
+
+**Correction (post-approval):** while writing this plan, tracing every call
+site of `verification.Store.Attest` showed automatic on-host verification
+results are never persisted to `verification_history` at all — only manual
+and SP3 API-connector attestations are. `CurrentApprovedForRun` as
+originally spec'd here would therefore return nothing for the common case
+(a BAS run with no analyst/connector involvement). This is fixed by a new
+prerequisite, `docs/superpowers/specs/2026-07-27-automatic-verdict-persistence-design.md`
+("Phase A0"), which also takes over ownership of adding `RuleIDs` (Component
+1 below is superseded by that spec — kept here struck through for the
+record, not implemented as part of this plan).
 
 ## Problem
 
@@ -52,8 +63,9 @@ future consumer) can surface the Sigma linkage.
 
 ```
 BAS run completes (agent_task step)
-  → verification.Store already has per-expectation records
-    (automatic verifier, Approved by default — "automatic verdicts are final")
+  → Phase A0's poller persists automatic verdicts into verification.Store
+    (Source=automatic, WorkflowState=Approved) — without A0 this step never
+    happens and the store stays empty for purely-automatic expectations
   → wait_for_detection's trigger (ticking, same cadence as today) resolves
     ExecutionStepID's bas_run_id
   → calls verification.Store.CurrentApprovedForRun(runID)
@@ -115,31 +127,14 @@ the type:
 
 ## Components
 
-### 1. `verification.Record` gains `RuleIDs`
+### 1. ~~`verification.Record` gains `RuleIDs`~~ — superseded, see Phase A0
 
-`orchestrator/internal/verification/store.go`:
-
-```go
-type Record struct {
-	// ...existing fields unchanged...
-	RuleIDs []string `json:"ruleIds,omitempty"`
-}
-```
-
-New nullable Postgres column `rule_ids text[]` on `verification_history`,
-selected in `recordCols` and scanned in `scanRecord` alongside the existing
-`TechniqueID`/`Domain`/`Provider` columns — same denormalization pattern
-already used for those three fields (write-time denormalization, no
-query-time join back into `internal/scenario`).
-
-`Attest`'s input struct gains the same field. The two call sites that build
-that input already have the live `scenario.ExpectedDetection` in scope:
-
-- `orchestrator/internal/reporting/detection_validation.go`,
-  `automaticVerifier.Verify` — add `RuleIDs: exp.RuleIDs` to the `Attest`
-  call's input.
-- `orchestrator/internal/reporting/dlp.go`, `dlpVerifier.Verify` — same
-  addition.
+This component (adding `RuleIDs` to `verification.Record`/`AttestInput`/the
+`rule_ids` column/`recordCols`/`scanRecord`) is now implemented by the
+Phase A0 plan instead, since A0's poller needs the field threaded through
+`VerificationResult` before it can ever reach `Attest`. This plan consumes
+`Record.RuleIDs` (already populated by the time this plan's tasks run) —
+it does not add it.
 
 ### 2. `verification.Store.CurrentApprovedForRun`
 
