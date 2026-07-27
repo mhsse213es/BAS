@@ -183,6 +183,31 @@ func (s *Store) CurrentForRun(ctx context.Context, runID string) (map[string]Rec
 	return out, rows.Err()
 }
 
+// CurrentApprovedForRun returns the active, Approved attestation for every
+// expectation in a run, as a slice (not a map — callers decide how to key
+// or group; a map would bake in "one record per expectation" as an
+// assumption this method should not own). Unlike CurrentForRun (all
+// workflow states, used by reporting's manual/API overlay), this
+// pre-filters to Approved so callers never repeat that filter.
+func (s *Store) CurrentApprovedForRun(ctx context.Context, runID string) ([]Record, error) {
+	rows, err := s.db.Query(ctx, `SELECT `+recordCols+`
+		FROM verification_history WHERE run_id=$1 AND active AND workflow_state=$2`,
+		runID, StateApproved)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Record
+	for rows.Next() {
+		r, err := scanRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // History returns the full immutable attestation chain for one expectation,
 // newest first.
 func (s *Store) History(ctx context.Context, runID, expectationID string) ([]Record, error) {

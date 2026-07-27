@@ -100,6 +100,56 @@ func TestAttest_NilRuleIDsDoesNotViolateNotNull(t *testing.T) {
 	})
 }
 
+func TestCurrentApprovedForRun_OnlyApprovedRegardlessOfResult(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+
+		if _, err := store.Attest(ctx, AttestInput{
+			RunID: "run-approved-1", ExpectationID: "exp-approved-detected",
+			Result: ResultDetected, WorkflowState: StateApproved, VerifiedBy: "analyst",
+		}); err != nil {
+			t.Fatalf("seed approved/detected: %v", err)
+		}
+		if _, err := store.Attest(ctx, AttestInput{
+			RunID: "run-approved-1", ExpectationID: "exp-approved-notdetected",
+			Result: ResultNotDetected, WorkflowState: StateApproved, VerifiedBy: "analyst",
+		}); err != nil {
+			t.Fatalf("seed approved/notdetected: %v", err)
+		}
+		if _, err := store.Attest(ctx, AttestInput{
+			RunID: "run-approved-1", ExpectationID: "exp-pending",
+			Result: ResultDetected, WorkflowState: StatePending, VerifiedBy: "analyst",
+		}); err != nil {
+			t.Fatalf("seed pending: %v", err)
+		}
+
+		got, err := store.CurrentApprovedForRun(ctx, "run-approved-1")
+		if err != nil {
+			t.Fatalf("CurrentApprovedForRun: %v", err)
+		}
+		if len(got) != 2 {
+			t.Fatalf("len(got) = %d, want 2 (both Approved rows, regardless of Result; Pending excluded)", len(got))
+		}
+		byExp := map[string]Record{}
+		for _, r := range got {
+			byExp[r.ExpectationID] = r
+		}
+		if _, ok := byExp["exp-approved-detected"]; !ok {
+			t.Error("missing exp-approved-detected")
+		}
+		if _, ok := byExp["exp-approved-notdetected"]; !ok {
+			t.Error("missing exp-approved-notdetected")
+		}
+		if _, ok := byExp["exp-pending"]; ok {
+			t.Error("exp-pending (WorkflowState=Pending) must be excluded")
+		}
+	})
+}
+
 func TestAttest_SecondAttestationSupersedesFirst(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
