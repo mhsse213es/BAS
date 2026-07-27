@@ -55,6 +55,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "LockBit Stage 1 — Security Software Discovery (T1518.001)"
     technique_id: T1518.001
+    detection_profiles:
+      - windows_security_software_discovery
     framework: custom
     executor: powershell
     requires_priv: user
@@ -90,6 +92,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "LockBit Stage 2 — VSS Snapshot Enumeration (T1490)"
     technique_id: T1490
+    detection_profiles:
+      - windows_vss_inhibition
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -122,6 +126,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "LockBit Stage 3 — SMB Admin Share Lateral Movement Probe (T1021.002)"
     technique_id: T1021.002
+    detection_profiles:
+      - windows_smb_lateral_probe
     framework: custom
     executor: powershell
     requires_priv: user
@@ -160,6 +166,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "LockBit Stage 4 — Ransomware Payload Simulation (T1486)"
     technique_id: T1486
+    detection_profiles:
+      - windows_ransomware_encryption
     framework: custom
     executor: powershell
     requires_priv: user
@@ -214,6 +222,8 @@ steps:
   # ---------------------------------------------------------------------------
   - name: "LockBit Stage 5 — Event Log Clearing Attempt (T1070.001)"
     technique_id: T1070.001
+    detection_profiles:
+      - windows_log_manipulation
     framework: custom
     executor: powershell
     requires_priv: admin
