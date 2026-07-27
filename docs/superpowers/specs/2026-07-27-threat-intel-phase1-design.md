@@ -11,7 +11,7 @@ MISP/OpenCTI/OTX threat actors already auto-generate real, runnable BAS scenario
 - **No Campaign Timeline, IOC Validation, actor relationship graph, Variant Generation, or Continuous Updates versioning UI.** All explicitly later phases.
 - **No full Threat Intelligence Center UI** (Threat Actors/Campaigns/Malware/Ransomware Families/Emerging Threats/etc.). This ships one new minimal tab as the seed, nothing more.
 - **No new persistent storage.** Both pieces compute from data that already exists at request/generation time — no new database tables.
-- **No change to existing `/api/coverage/analytics` or the existing "Coverage Analytics" UI panel.** That is run-result aggregation (pass/fail breakdown across executed runs) — a different, pre-existing feature. This deliverable adds a sibling `/api/coverage/matrix` endpoint and a differently-named "ATT&CK Coverage Matrix" tab; there is no overlap and no intent to modify or replace the existing feature.
+- **No change to existing `/api/coverage/analytics` or the existing `data-tab="coverage"` UI panel.** That is run-result aggregation (pass/fail breakdown across executed runs) — a different, pre-existing feature. **Naming correction found during plan-writing**: that existing panel's `TAB_TITLES` entry is literally `'ATT&CK Coverage'` (not "Coverage Analytics" as its code comment suggested), so this deliverable's new tab is named **"Technique Coverage"** instead — distinct wording, no collision — while the backend identifiers (`internal/coverage` package, `/api/coverage/matrix` route) keep their original names since those aren't user-facing and don't collide with `/api/coverage/analytics`.
 - **No backfill of already-generated `scenarios/intel/*.yaml` files.** Detection Profile Inheritance applies forward-only — existing intel scenarios pick it up naturally the next time their actor's technique set changes and the file regenerates (the existing fingerprint-based skip-if-unchanged mechanism is untouched).
 - **No Response Playbook per-technique linkage.** `internal/actions` (EPP isolate/kill/quarantine) has zero technique-level linkage today; that column in the Coverage Matrix is always `N/A`, not faked.
 - **No change to `DetectionProfile` resolution, scoring, or the `extends`/inheritance mechanism.** `TechniqueIDs` is purely additive metadata, consumed only by the two new pieces below.
@@ -283,7 +283,7 @@ Route registration (`orchestrator/internal/api/routes.go`, alongside the existin
 r.Get("/api/coverage/matrix", h.CoverageMatrix)
 ```
 
-**UI** — new tab "ATT&CK Coverage Matrix" in `wwwroot/index.html`, following the established tab/`activateTab()` convention: an actor `<select>` (populated from the existing threat-actor listing already used elsewhere) defaulting to "All techniques," rendering the 5-column table (`✓`/`—` for the four real columns, literal `N/A` styled distinctly for Response Playbook).
+**UI** — new tab **"Technique Coverage"** (`data-tab="attack-coverage"`, `id="tab-attack-coverage"` — distinct from the existing `data-tab="coverage"` panel) in `wwwroot/index.html`, following the established tab/`activateTab()` convention: an actor `<select>` (populated from the existing threat-actor listing already used elsewhere) defaulting to "All techniques," rendering the 5-column table (`✓`/`—` for the four real columns, literal `N/A` styled distinctly for Response Playbook).
 
 ### File and task structure
 
