@@ -43,6 +43,8 @@ steps:
 
   - name: "Stage 1A — BFSI File Target Reconnaissance"
     technique_id: T1083
+    detection_profiles:
+      - windows_file_discovery
     framework: custom
     executor: powershell
     requires_priv: user
@@ -78,6 +80,8 @@ steps:
 
   - name: "Stage 1B — Network Share Discovery"
     technique_id: T1135
+    detection_profiles:
+      - windows_network_share_discovery
     framework: custom
     executor: powershell
     requires_priv: user
@@ -104,6 +108,8 @@ steps:
 
   - name: "Stage 2A — Defender Exclusion Invocation Probe"
     technique_id: T1562.001
+    detection_profiles:
+      - windows_defender_tampering
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -127,6 +133,8 @@ steps:
 
   - name: "Stage 2B — Event Log Clear Probe"
     technique_id: T1070.001
+    detection_profiles:
+      - windows_log_manipulation
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -153,6 +161,8 @@ steps:
 
   - name: "Stage 3A — Canary File Mass Encryption Loop"
     technique_id: T1486
+    detection_profiles:
+      - windows_ransomware_encryption
     framework: custom
     executor: powershell
     requires_priv: user
@@ -199,6 +209,8 @@ steps:
 
   - name: "Stage 3B — Ransom Note Drop (Canary Directory)"
     technique_id: T1486
+    detection_profiles:
+      - windows_ransomware_encryption
     framework: custom
     executor: powershell
     requires_priv: user
@@ -236,6 +248,8 @@ steps:
 
   - name: "Stage 4A — VSS Shadow Copy Deletion Signature"
     technique_id: T1490
+    detection_profiles:
+      - windows_vss_inhibition
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -269,6 +283,8 @@ steps:
 
   - name: "Stage 4B — wbadmin Backup Catalog Delete Probe"
     technique_id: T1490
+    detection_profiles:
+      - windows_vss_inhibition
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -302,6 +318,8 @@ steps:
 
   - name: "Stage 4C — BCDEdit Bootloader Recovery Disable Probe"
     technique_id: T1490
+    detection_profiles:
+      - windows_vss_inhibition
     framework: custom
     executor: powershell
     requires_priv: admin
@@ -339,6 +357,8 @@ steps:
 
   - name: "Stage 5A — Backup Service Stop Attempt"
     technique_id: T1489
+    detection_profiles:
+      - windows_backup_service_stop
     framework: custom
     executor: powershell
     requires_priv: admin
