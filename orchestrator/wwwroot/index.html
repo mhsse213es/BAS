@@ -1300,6 +1300,12 @@ body.theme-slate {
           </svg>
           Exercises
         </div>
+        <div class="nav-item" data-tab="attack-coverage" onclick="showTab('attack-coverage')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M1 1h6v6H1zM9 1h6v6H9zM1 9h6v6H1zM9 9h6v6H9z"/>
+          </svg>
+          Technique Coverage
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Administration</div>
@@ -3067,6 +3073,34 @@ body.theme-slate {
         </div>
       </div>
 
+      <div id="tab-attack-coverage" style="display:none">
+        <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+          <div class="card-title">Technique Coverage</div>
+          <div style="margin:0.5rem 0 1rem;display:flex;gap:0.75rem;align-items:center">
+            <label class="tiny muted" for="cov-actor-select">Actor</label>
+            <select id="cov-actor-select" onchange="loadCoverageMatrix()">
+              <option value="">All techniques</option>
+            </select>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Technique</th>
+                  <th>Simulation</th>
+                  <th>Detection Profile</th>
+                  <th>Purple Exercise</th>
+                  <th>Compliance Mapping</th>
+                  <th>Response Playbook</th>
+                </tr>
+              </thead>
+              <tbody id="cov-matrix-body"></tbody>
+            </table>
+          </div>
+          <div id="cov-matrix-empty" class="empty" style="display:none">No techniques to show.</div>
+        </div>
+      </div>
+
       <!-- Compliance (reached from the Reports hub) -->
       <div id="tab-compliance" style="display:none">
         <div style="margin-bottom:0.75rem">
@@ -3871,7 +3905,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', exercises:'Exercises' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -4003,7 +4037,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','exercises'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','exercises','attack-coverage'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -4020,6 +4054,7 @@ function showTab(name) {
   if (name === 'runs') loadRuns();
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
+  if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
   if (name === 'findings') loadFindings();
   if (name === 'remediation') loadRemediations();
   if (name === 'reports') loadReports();
@@ -4584,6 +4619,58 @@ function recCoverageBadge(state) {
   if (state === 'never-tested') return '<span class="badge" style="color:var(--danger);border-color:var(--danger)">Never tested</span>';
   if (state === 'stale')        return '<span class="badge" style="color:var(--warning);border-color:var(--warning)">Stale</span>';
   return '<span class="badge" style="color:var(--muted)">Recent</span>';
+}
+
+function covStatusCell(val) {
+  if (val === null) return '<span class="tiny muted">N/A</span>';
+  return val ? '<span style="color:var(--success)">&#10003;</span>' : '<span class="tiny muted">&mdash;</span>';
+}
+
+function loadCoverageActors() {
+  var sel = document.getElementById('cov-actor-select');
+  apicall('/api/coverage/actors')
+    .then(function(data) {
+      var actors = (data && data.actors) || [];
+      actors.forEach(function(name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(function(e) { console.error('loadCoverageActors failed', e); });
+}
+
+function loadCoverageMatrix() {
+  var sel = document.getElementById('cov-actor-select');
+  var actor = sel ? sel.value : '';
+  var body = document.getElementById('cov-matrix-body');
+  var empty = document.getElementById('cov-matrix-empty');
+  body.innerHTML = '<tr><td colspan="6" class="empty">Loading&hellip;</td></tr>';
+  var url = '/api/coverage/matrix' + (actor ? '?actor=' + encodeURIComponent(actor) : '');
+  apicall(url)
+    .then(function(rows) {
+      rows = rows || [];
+      if (!rows.length) {
+        body.innerHTML = '';
+        empty.style.display = '';
+        return;
+      }
+      empty.style.display = 'none';
+      body.innerHTML = rows.map(function(r) {
+        return '<tr>' +
+          '<td style="font-weight:600">' + x(r.techniqueId) + '</td>' +
+          '<td>' + covStatusCell(r.simulationExists) + '</td>' +
+          '<td>' + covStatusCell(r.detectionProfileExists) + '</td>' +
+          '<td>' + covStatusCell(r.purpleExerciseExists) + '</td>' +
+          '<td>' + covStatusCell(r.complianceMappingExists) + '</td>' +
+          '<td>' + covStatusCell(r.responsePlaybookExists) + '</td>' +
+          '</tr>';
+      }).join('');
+    })
+    .catch(function(e) {
+      body.innerHTML = '<tr><td colspan="6" class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</td></tr>';
+    });
 }
 
 function loadRecommendations() {
