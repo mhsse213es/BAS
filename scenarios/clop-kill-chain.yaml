@@ -1,0 +1,277 @@
+id: clop-kill-chain
+name: Cl0p Kill Chain — Ransomware Emulation
+description: >
+  Five-stage telemetry-safe emulation of the Cl0p (TA505-lineage) ransomware
+  kill chain targeting Windows endpoints. Reflects documented Cl0p
+  tradecraft validated against CISA AA23-158A: mass exploitation of
+  MOVEit/GoAnywhere/Accellion managed file-transfer software. 2023+ Cl0p
+  campaigns were largely pure-exfiltration extortion with NO ransomware
+  binary deployed in most victims — this scenario is deliberately lean,
+  reflecting that reality rather than forcing a full encryption kill chain
+  onto a family that has, in its most consequential recent campaigns,
+  skipped encryption entirely.
+
+  KILL CHAIN STAGES:
+    1. Discovery         — BFSI high-value file target reconnaissance (T1083)
+    2. Defense Evasion   — security-process termination probe, taskkill /im pattern (T1562.001)
+    3. Collection        — archive staging via Compress-Archive (T1560.001)
+    4. Exfiltration      — cloud storage egress reachability (T1567.002)
+    5. Log Clearing Attempt — wevtutil cl attempt, blocked or audit (T1070.001)
+
+  NOTE: Cl0p's real initial access — mass exploitation of a specific
+  vulnerable file-transfer application (CVE-2023-34362 and siblings) — is
+  not represented as an executable step for the same reason as Play's
+  ProxyNotShell/FortiOS vector: the vulnerable app is rarely present on a
+  generic endpoint. Credential Access, Lateral Movement, Encryption, and
+  Recovery Inhibition are genuinely absent from this scenario — they are
+  not part of Cl0p's documented 2023+ MOVEit-era kill chain, per the
+  canonical taxonomy's "omit a phase the family doesn't exhibit" rule.
+
+  SAFETY: Stage 2 targets a synthetic, run-ID-suffixed process name that is
+  guaranteed never to match a real process — no real AV/EDR process is
+  ever affected. Stage 3/4 use synthetic decoy data only, no real files
+  touched, no real upload performed (connectivity probe only). All stages
+  are production-safe. Windows only. [BAS-SIM] tagged throughout.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - clop
+  - cl0p
+  - ta505
+  - ransomware
+  - bfsi
+  - kill-chain
+  - t1070
+  - t1083
+  - t1560
+  - t1562
+  - t1567
+  - mitre
+mitre_phases:
+  - discovery
+  - defense-evasion
+  - collection
+  - exfiltration
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Discovery: BFSI File Target Reconnaissance (T1083)
+  # ---------------------------------------------------------------------------
+  - name: "Cl0p Stage 1 — BFSI File Target Reconnaissance (T1083)"
+    technique_id: T1083
+    detection_profiles:
+      - windows_file_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only traversal of Desktop/Documents/Downloads (depth=2). No file opened or modified."
+    telemetry:
+      - "Security EID 4688: powershell.exe with file-enumeration command line"
+      - "DLP: enumeration of filenames matching financial/PII patterns"
+    detection:
+      - "UEBA: bulk file enumeration from a single process — pre-exfiltration staging signal"
+      - "EDR: PowerShell scanning user profile paths for BFSI-pattern filenames"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $bfsiPatterns = @('*finance*','*customer*','*swift*','*payment*','*account*','*salary*','*export*','*backup*','*password*','*.xlsx','*.csv','*.docx','*.pdf','*.db','*.bak')
+      $scanPaths = @(
+        [Environment]::GetFolderPath('Desktop'),
+        [Environment]::GetFolderPath('MyDocuments'),
+        (Join-Path $env:USERPROFILE 'Downloads')
+      )
+      $found = 0
+      foreach ($root in $scanPaths) {
+        if (-not (Test-Path $root)) { continue }
+        Get-ChildItem -Path $root -Depth 2 -File -ErrorAction SilentlyContinue | ForEach-Object {
+          foreach ($p in $bfsiPatterns) { if ($_.Name -like $p) { $found++; break } }
+        }
+      }
+      Write-Output "EXEC: BFSI file recon across Desktop/Documents/Downloads (depth=2). Found $found matching file(s). Read-only — no files opened. Cl0p's MOVEit/GoAnywhere campaigns mass-exploit file-transfer software then hunt for high-value files like these to exfiltrate. [BAS-SIM-CLOP-S1]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Defense Evasion: Security Process Termination Probe (T1562.001)
+  # ---------------------------------------------------------------------------
+  - name: "Cl0p Stage 2 — Security Process Termination Probe (T1562.001)"
+    technique_id: T1562.001
+    detection_profiles:
+      - windows_security_process_termination
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Spawns taskkill.exe /F /IM against a synthetic, run-ID-suffixed process name that is guaranteed never to match a real process. No real process is ever affected. Generates Security EID 4688 (taskkill.exe with /IM argument)."
+    reversible: true
+    telemetry:
+      - "Security EID 4688: taskkill.exe /F /IM <process-name>"
+      - "PowerShell EID 4104: taskkill invocation script block"
+    detection:
+      - "EDR: taskkill.exe /F /IM targeting AV/EDR-style process image names, independent of whether the target exists -- Cl0p's classic encryptor runs this exact command pattern against real security-product process names before encrypting"
+      - "SIEM: taskkill.exe spawned from PowerShell targeting a security-product-style process name"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $fakeTarget = "BAS-Sim-AVKill-$runId.exe"
+      try {
+        $out = & taskkill.exe /F /IM $fakeTarget 2>&1 | Out-String
+        $spawned = $true
+      } catch {
+        $spawned = $false
+      }
+      if ($spawned) {
+        Write-Output "EXEC T1562.001: taskkill.exe /F /IM spawned with a synthetic AV/EDR-style process name ($fakeTarget -- guaranteed not to match any real process, target result: $($out.Trim())). Cl0p's classic encryptor runs this identical command pattern against real security-product process names before encrypting. [BAS-SIM-CLOP-S2]"
+        Write-Output "FAIL: taskkill.exe /F /IM was allowed to spawn from PowerShell unimpeded. Alert on taskkill.exe/Stop-Process targeting known AV/EDR process image names, independent of whether the named process exists on the host."
+      } else {
+        Write-Output "PASS: taskkill.exe spawn was blocked (AppLocker/WDAC/EDR prevented process creation). [BAS-SIM-CLOP-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Collection: Archive Staging via Compress-Archive (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "Cl0p Stage 3 — Archive Staging via Compress-Archive (T1560.001)"
+    technique_id: T1560.001
+    detection_profiles:
+      - windows_archive_staging
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Compresses a BAS-owned decoy staging directory into a .zip with the built-in Compress-Archive cmdlet. Cl0p archives collected data to shrink and obscure it before exfil. Synthetic data only. Generates Sysmon EID 11 (zip file created) and PowerShell EID 4104."
+    telemetry:
+      - "Sysmon EID 11: <staging>.zip created"
+      - "PowerShell EID 4104: Compress-Archive of a sensitive directory"
+    detection:
+      - "EDR: Compress-Archive / zip creation over collected data — Sigma posh_ps_compress_archive.yml"
+      - "DLP: archive containing PAN/Aadhaar/card content — archive-inspection trigger"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_clop_$runId"
+      $staged = Join-Path $work "staged"
+      if (-not (Test-Path $staged)) { New-Item -ItemType Directory -Path $staged -Force | Out-Null; "[BAS-SIM-CLOP] decoy" | Out-File (Join-Path $staged 'decoy.txt') -Encoding utf8 }
+      $zip = Join-Path $work "clop_bundle.zip"
+      Compress-Archive -Path (Join-Path $staged '*') -DestinationPath $zip -Force -ErrorAction SilentlyContinue
+      $made = Test-Path $zip
+      $size = if ($made) { (Get-Item $zip).Length } else { 0 }
+      if ($made) {
+        Write-Output "EXEC T1560.001: Compress-Archive produced $zip ($size bytes). Cl0p's MOVEit/GoAnywhere campaigns stage and compress exfiltrated files this same way before transfer. [BAS-SIM-CLOP-S3]"
+        Write-Output "FAIL: A zip of the staged sensitive data was created unblocked. DLP should inspect INSIDE archives — verify flagged data is detected even once compressed, and that archiving of flagged data raises an alert."
+      } else {
+        Write-Output "PASS: archive creation was blocked or failed — archiving of collected data restricted. [BAS-SIM-CLOP-S3]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_clop_*') -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — Exfiltration: Cloud Storage Egress Reachability (T1567.002)
+  # ---------------------------------------------------------------------------
+  - name: "Cl0p Stage 4 — Cloud Storage Egress Reachability (T1567.002)"
+    technique_id: T1567.002
+    detection_profiles:
+      - windows_cloud_egress
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Tests whether the endpoint can reach public cloud-storage upload endpoints (a benign HEAD/connectivity probe to well-known storage hostnames) — the exfil-to-cloud path Cl0p's post-MOVEit exfiltration-only campaigns rely on. NO account, NO upload, NO data: connectivity reachability only. Generates Sysmon EID 22 (DNS) and EID 3 (outbound TLS attempt)."
+    telemetry:
+      - "Sysmon EID 22: DNS queries to public cloud-storage hostnames"
+      - "Sysmon EID 3: outbound TCP/443 to cloud-storage endpoints"
+    detection:
+      - "Proxy/CASB: uploads to unsanctioned cloud storage — DLP/CASB egress policy trigger"
+      - "SIEM: workstation reaching consumer cloud-storage APIs — shadow-IT / exfil IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $endpoints = @('storage.googleapis.com','s3.amazonaws.com','blob.core.windows.net','api.dropboxapi.com')
+      $reachable = @()
+      foreach ($e in $endpoints) {
+        try {
+          $tcp = New-Object System.Net.Sockets.TcpClient
+          $iar = $tcp.BeginConnect($e, 443, $null, $null)
+          if ($iar.AsyncWaitHandle.WaitOne(3000, $false) -and $tcp.Connected) { $reachable += $e }
+          $tcp.Close()
+        } catch {}
+      }
+      Write-Output "EXEC T1567.002: probed cloud-storage egress reachability. reachable=[$($reachable -join ', ')] (probe only, no upload). Cl0p's 2023+ campaigns were largely pure-exfiltration extortion with no encryption deployed -- this is the path the stolen BFSI data would leave through. [BAS-SIM-CLOP-S4]"
+      if ($reachable.Count -gt 0) {
+        Write-Output "FAIL: The endpoint can directly reach $($reachable.Count) public cloud-storage endpoint(s) on TCP/443 — a real data-theft path to unsanctioned storage. Route egress through a proxy/CASB that enforces a sanctioned-tenant allowlist and DLP upload inspection."
+      } else {
+        Write-Output "PASS: no direct egress to public cloud-storage endpoints — uploads are forced through a controlled path (or blocked). [BAS-SIM-CLOP-S4]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_clop_*') -Recurse -Force -ErrorAction SilentlyContinue
+
+  # ---------------------------------------------------------------------------
+  # Stage 5 — Indicator Removal: Event Log Clearing Attempt (T1070.001)
+  # ---------------------------------------------------------------------------
+  - name: "Cl0p Stage 5 — Event Log Clearing Attempt (T1070.001)"
+    technique_id: T1070.001
+    detection_profiles:
+      - windows_log_manipulation
+    framework: custom
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Creates a BAS-owned custom event log (BAS-Sim-Clop), attempts wevtutil cl on it, then removes the log. Does NOT touch System/Security/Application logs. Generates Security EID 1102 if the clear succeeds, and Sysmon EID 1 wevtutil.exe."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 1: wevtutil.exe with cl argument (log-clearing pattern)"
+      - "Security EID 1102: audit log cleared (if wevtutil cl succeeds on custom log)"
+      - "Security EID 4688: wevtutil.exe spawned by powershell.exe"
+    detection:
+      - "EDR: wevtutil.exe with 'cl' argument  -  Sigma rule proc_creation_win_wevtutil_clear_logs.yml"
+      - "SIEM: Security EID 1102 event log cleared  -  high-priority anti-forensics IOC"
+      - "SIEM: wevtutil.exe invoked from PowerShell at unusual time"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $logName = 'BAS-Sim-Clop'
+      $exists = [System.Diagnostics.EventLog]::Exists($logName)
+      if (-not $exists) {
+        try { New-EventLog -LogName $logName -Source 'BAS-Sim' -ErrorAction Stop } catch {}
+      }
+      $created = [System.Diagnostics.EventLog]::Exists($logName)
+      if ($created) {
+        $clOut = & wevtutil.exe cl $logName 2>&1 | Out-String
+        $cleared = $clOut -notmatch 'Access is denied|The specified channel could not be found|error'
+        try { Remove-EventLog -LogName $logName -ErrorAction SilentlyContinue } catch {}
+        if ($cleared) {
+          Write-Output "EXEC T1070.001: wevtutil cl on BAS custom log succeeded (exit 0). Cl0p/TA505-lineage tooling clears logs post-exfiltration. Sysmon EID 1 wevtutil.exe logged. [BAS-SIM-CLOP-S5]"
+          Write-Output "FAIL: wevtutil cl ran without EDR intervention. Ensure wevtutil.exe invocation from PowerShell triggers an alert. Security EID 1102 should generate a SIEM alert."
+        } else {
+          Write-Output "PASS: wevtutil cl was blocked or failed  -  $($clOut.Trim()). [BAS-SIM-CLOP-S5]"
+        }
+      } else {
+        Write-Output "SKIP: Could not create test event log (insufficient privilege). wevtutil cl test skipped. [BAS-SIM-CLOP-S5]"
+      }
+    cleanup: |
+      try { Remove-EventLog -LogName 'BAS-Sim-Clop' -ErrorAction SilentlyContinue } catch {}
