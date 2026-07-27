@@ -503,3 +503,88 @@ func TestParseYAML_RansomwareScenariosDetectionProfilesWired(t *testing.T) {
 		}
 	}
 }
+
+func TestParseYAML_NewRansomwareFamiliesDetectionProfilesWired(t *testing.T) {
+	cases := []struct {
+		file        string
+		stepName    string
+		wantProfile string
+	}{
+		{"../../../scenarios/blackcat-kill-chain.yaml", "BlackCat Stage 1 — AD Domain & Privileged Account Discovery (T1087.002)", "windows_ad_discovery"},
+		{"../../../scenarios/blackcat-kill-chain.yaml", "BlackCat Stage 2 — Security Software Discovery (T1518.001)", "windows_security_software_discovery"},
+		{"../../../scenarios/blackcat-kill-chain.yaml", "BlackCat Stage 3 — SAM & SYSTEM Hive Theft via reg save (T1003.002)", "windows_sam_theft"},
+		{"../../../scenarios/blackcat-kill-chain.yaml", "BlackCat Stage 4 — Defender RTP Disable (lab  -  mandatory restoration + health check) (T1562.001)", "windows_defender_tampering"},
+		{"../../../scenarios/blackcat-kill-chain.yaml", "BlackCat Stage 5 — Malicious Service Probe (lab  -  PsExec-style self-propagation) (T1543.003)", "windows_malicious_service"},
+		{"../../../scenarios/blackcat-kill-chain.yaml", "BlackCat Stage 6 — Ransomware Payload Simulation (T1486)", "windows_ransomware_encryption"},
+		{"../../../scenarios/blackcat-kill-chain.yaml", "BlackCat Stage 7 — VSS Snapshot Enumeration (T1490)", "windows_vss_inhibition"},
+		{"../../../scenarios/blackcat-kill-chain.yaml", "BlackCat Stage 8 — Event Log Clearing Attempt (T1070.001)", "windows_log_manipulation"},
+
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 1 — RDP / NLA Exposure Posture Check (T1021.001)", "windows_rdp_nla_posture"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 2 — Network Share Discovery (T1135)", "windows_network_share_discovery"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 3 — SAM & SYSTEM Hive Theft via reg save (T1003.002)", "windows_sam_theft"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 4 — Defender Exclusion Invocation (cmdline probe  -  no state change) (T1562.001)", "windows_defender_tampering"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 5 — SMB Admin Share Lateral Movement Probe (T1021.002)", "windows_smb_lateral_probe"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 6 — Ransomware Payload Simulation (T1486)", "windows_ransomware_encryption"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 7 — VSS Snapshot Enumeration (T1490)", "windows_vss_inhibition"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 8 — VSS Shadow Copy Deletion via WMI (lab  -  requires BAS_CONFIRM_VSS_DELETE=true) (T1490)", "windows_vss_inhibition"},
+		{"../../../scenarios/akira-kill-chain.yaml", "Akira Stage 9 — Event Log Clearing Attempt (T1070.001)", "windows_log_manipulation"},
+
+		{"../../../scenarios/play-kill-chain.yaml", "Play Stage 1 — AdFind-Style AD Enumeration (T1087.002)", "windows_ad_discovery"},
+		{"../../../scenarios/play-kill-chain.yaml", "Play Stage 2 — Grixba-Style Network & Share Discovery (T1135)", "windows_network_share_discovery"},
+		{"../../../scenarios/play-kill-chain.yaml", "Play Stage 3 — GPO-Style Defender RTP Disable (lab  -  mandatory restoration + health check) (T1562.001)", "windows_defender_tampering"},
+		{"../../../scenarios/play-kill-chain.yaml", "Play Stage 4 — EDR-Killer / Vulnerable-Driver Staging Probe (T1562.001)", "windows_vulnerable_driver_load"},
+		{"../../../scenarios/play-kill-chain.yaml", "Play Stage 5 — SMB Admin Share Lateral Movement Probe (T1021.002)", "windows_smb_lateral_probe"},
+		{"../../../scenarios/play-kill-chain.yaml", "Play Stage 6 — Ransomware Payload Simulation (T1486)", "windows_ransomware_encryption"},
+		{"../../../scenarios/play-kill-chain.yaml", "Play Stage 7 — VSS Snapshot Enumeration (T1490)", "windows_vss_inhibition"},
+		{"../../../scenarios/play-kill-chain.yaml", "Play Stage 8 — Event Log Clearing Attempt (T1070.001)", "windows_log_manipulation"},
+
+		{"../../../scenarios/ransomhub-kill-chain.yaml", "RansomHub Stage 1 — Security Software Discovery (T1518.001)", "windows_security_software_discovery"},
+		{"../../../scenarios/ransomhub-kill-chain.yaml", "RansomHub Stage 2 — Network Share Discovery (T1135)", "windows_network_share_discovery"},
+		{"../../../scenarios/ransomhub-kill-chain.yaml", "RansomHub Stage 3 — SAM & SYSTEM Hive Theft via reg save (T1003.002)", "windows_sam_theft"},
+		{"../../../scenarios/ransomhub-kill-chain.yaml", "RansomHub Stage 4 — Defender Exclusion Invocation (cmdline probe  -  no state change) (T1562.001)", "windows_defender_tampering"},
+		{"../../../scenarios/ransomhub-kill-chain.yaml", "RansomHub Stage 5 — EDRKillShifter-Style Vulnerable-Driver Staging Probe (T1562.001)", "windows_vulnerable_driver_load"},
+		{"../../../scenarios/ransomhub-kill-chain.yaml", "RansomHub Stage 6 — Ransomware Payload Simulation, Double-Extortion Note (T1486)", "windows_ransomware_encryption"},
+		{"../../../scenarios/ransomhub-kill-chain.yaml", "RansomHub Stage 7 — VSS Snapshot Enumeration (T1490)", "windows_vss_inhibition"},
+		{"../../../scenarios/ransomhub-kill-chain.yaml", "RansomHub Stage 8 — Event Log Clearing Attempt (T1070.001)", "windows_log_manipulation"},
+
+		{"../../../scenarios/clop-kill-chain.yaml", "Cl0p Stage 1 — BFSI File Target Reconnaissance (T1083)", "windows_file_discovery"},
+		{"../../../scenarios/clop-kill-chain.yaml", "Cl0p Stage 2 — Security Process Termination Probe (T1562.001)", "windows_security_process_termination"},
+		{"../../../scenarios/clop-kill-chain.yaml", "Cl0p Stage 3 — Archive Staging via Compress-Archive (T1560.001)", "windows_archive_staging"},
+		{"../../../scenarios/clop-kill-chain.yaml", "Cl0p Stage 4 — Cloud Storage Egress Reachability (T1567.002)", "windows_cloud_egress"},
+		{"../../../scenarios/clop-kill-chain.yaml", "Cl0p Stage 5 — Event Log Clearing Attempt (T1070.001)", "windows_log_manipulation"},
+	}
+
+	parsed := map[string]*Scenario{}
+	for _, tc := range cases {
+		if _, ok := parsed[tc.file]; ok {
+			continue
+		}
+		data, err := os.ReadFile(tc.file)
+		if err != nil {
+			t.Fatalf("read %s: %v", tc.file, err)
+		}
+		sc, err := ParseYAML(data)
+		if err != nil {
+			t.Fatalf("ParseYAML %s: %v", tc.file, err)
+		}
+		parsed[tc.file] = sc
+	}
+
+	for _, tc := range cases {
+		sc := parsed[tc.file]
+		var step *Step
+		for i := range sc.Steps {
+			if sc.Steps[i].Name == tc.stepName {
+				step = &sc.Steps[i]
+				break
+			}
+		}
+		if step == nil {
+			t.Errorf("%s: step %q not found", tc.file, tc.stepName)
+			continue
+		}
+		if len(step.DetectionProfiles) != 1 || step.DetectionProfiles[0] != tc.wantProfile {
+			t.Errorf("%s / %q: DetectionProfiles = %v, want [%s]", tc.file, tc.stepName, step.DetectionProfiles, tc.wantProfile)
+		}
+	}
+}
