@@ -479,4 +479,73 @@ var BuiltinTemplates = []Template{
 			},
 		},
 	},
+
+	// ── 9. Collection to Exfiltration Purple Team Drill ────────────────────────
+	{
+		ID:          "builtin-purple-collection-exfil",
+		Name:        "Collection to Exfiltration Purple Team Drill",
+		Version:     1,
+		Category:    "purple-team",
+		Description: "Runs the collection-staging-exfiltration simulation — file discovery, local staging, archive creation, and network egress over multiple channels — and measures whether exfil-path telemetry is captured end-to-end, not just at the initial discovery step.",
+		Author:      "Audspect",
+		BuiltIn:     true,
+		Variables: []VarDef{
+			{Name: "AgentID", Type: VarTypeEndpoint, Required: true, Description: "Target agent for the simulation"},
+			{Name: "ScenarioID", Type: VarTypeString, Required: true, Default: "collection-staging-exfil", Description: "Scenario to execute"},
+			{Name: "DetectionTimeout", Type: VarTypeDuration, Default: "30m", Description: "Max time to wait for detection before timing out"},
+			{Name: "SOCNotifyEmail", Type: VarTypeEmailList, Description: "Email to notify when drill completes"},
+		},
+		Metadata: TemplateMetadata{
+			SuccessCriteria: "The technical gate confirms at least one exfil-path signal (archive staging or network egress — the two steps in this scenario with detection profiles attached) was detected within the detection timeout; full chain-stage coverage is reviewed by the SOC at the approval step using the complete evidence chain. Only microsoft_defender (EDR-domain) evidence resolves automatically today — the microsoft_purview (DLP-domain, per this platform's provider registry) and microsoft_sentinel (SIEM) signals require either a configured API connector or a SOC analyst manually attesting via the Detection Verification UI during the exercise.",
+			LearningObjectives: []string{
+				"Validate end-to-end exfil-chain visibility, not just discovery-stage detection",
+				"Confirm DLP/CASB (Microsoft Purview) and network egress controls catch staged data leaving the host",
+				"Identify which exfil channel (local staging vs. archive vs. cloud egress) is weakest",
+			},
+			ExpectedTechniques:      []string{"T1083", "T1074.001", "T1560.001", "T1048.001", "T1048.003", "T1567.002"},
+			ExpectedDetections:      []string{"Microsoft Defender", "Microsoft Purview", "Microsoft Sentinel"},
+			RecommendedParticipants: []string{"SOC Analyst", "Detection Engineer", "IR Lead (approval)"},
+			RecommendedDuration:     "1-2 hours",
+			DiscussionPrompts: []string{
+				"Was the initial file discovery detected, or only the later staging/egress steps?",
+				"Which exfil channel in this chain would be hardest to detect in your environment?",
+				"Did DLP/CASB tooling catch the archive or cloud-upload step independent of endpoint EDR?",
+			},
+		},
+		Steps: []PlanStep{
+			{
+				ID: "drill_sim", Type: StepTypeAgentTask, Label: "Trigger collection-to-exfiltration simulation",
+				Config: StepConfig{AgentTask: &AgentTaskConfig{AgentID: "${AgentID}", ScenarioID: "${ScenarioID}"}},
+			},
+			{
+				ID: "wait_sim_done", Type: StepTypeWaitForAgent, Label: "Wait for simulation to complete",
+				DependsOn:   []string{"drill_sim"},
+				Config:      StepConfig{WaitForAgent: &WaitForAgentConfig{AgentTaskStepID: "drill_sim"}},
+				TimeoutSecs: 1800,
+			},
+			{
+				ID: "wait_detect", Type: StepTypeWaitForDetection, Label: "Wait for SOC/DLP detection",
+				DependsOn:   []string{"wait_sim_done"},
+				TimeoutSecs: 1800,
+				Config: StepConfig{WaitForDetection: &WaitForDetectionConfig{
+					DetectionTypes:  []string{"edr_detected", "siem_alerted", "security_control_detected"},
+					ExecutionStepID: "drill_sim",
+				}},
+			},
+			{
+				ID: "approval_response", Type: StepTypeApproval, Label: "SOC: confirm incident response completed",
+				DependsOn:   []string{"wait_detect"},
+				TimeoutSecs: 7200,
+				Config: StepConfig{
+					ApprovalPrompt: "Has the SOC completed triage and confirmed which stage of the exfil chain was (or wasn't) detected?",
+					ApproverRoles:  []string{"admin", "analyst"},
+				},
+			},
+			{
+				ID: "drill_complete", Type: StepTypeNotify, Label: "Exfil drill complete — check per-stage coverage",
+				DependsOn: []string{"approval_response"},
+				Config:    StepConfig{NotifyMsg: "Collection to Exfiltration Purple Team Drill complete. Review per-stage detection coverage, MTTD/MTTR."},
+			},
+		},
+	},
 }

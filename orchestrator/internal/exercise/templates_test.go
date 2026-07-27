@@ -77,6 +77,7 @@ func TestBuiltinTemplates_PurpleTeamDetectionBridgeWiring(t *testing.T) {
 		{"builtin-purple-apt29", "drill_sim"},
 		{"builtin-purple-volt-typhoon", "drill_sim"},
 		{"builtin-purple-kerberoasting", "drill_sim"},
+		{"builtin-purple-collection-exfil", "drill_sim"},
 	}
 	for _, tc := range cases {
 		tpl := findTemplate(tc.templateID)
@@ -103,7 +104,7 @@ func TestBuiltinTemplates_PurpleTeamMetadataPopulated(t *testing.T) {
 		return nil
 	}
 
-	ids := []string{"builtin-purple-apt29", "builtin-purple-volt-typhoon", "builtin-purple-kerberoasting"}
+	ids := []string{"builtin-purple-apt29", "builtin-purple-volt-typhoon", "builtin-purple-kerberoasting", "builtin-purple-collection-exfil"}
 	for _, id := range ids {
 		tpl := findTemplate(id)
 		if tpl == nil {
