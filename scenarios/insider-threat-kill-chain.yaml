@@ -1,0 +1,190 @@
+id: insider-threat-kill-chain
+name: Insider Threat Kill Chain — Data Theft & Sabotage Emulation
+description: >
+  Three-stage telemetry-safe emulation of a departing/disgruntled insider
+  threat targeting Windows endpoints: sensitive-file search outside normal
+  job scope, exfiltration via personal webmail (bypassing corporate email
+  DLP), and destructive sabotage of evidence/backups on the way out.
+
+  KILL CHAIN STAGES:
+    1. Sensitive-File Search    — BFSI-pattern file reconnaissance (T1083 / T1005)
+    2. Webmail Exfiltration     — personal webmail egress reachability (T1567)
+    3. Sabotage                 — mass file rename/delete of evidence (T1485)
+
+  SEE ALSO: for USB/clipboard/print/archive-based exfiltration validation,
+  see dlp-exfiltration-validation.yaml. For bulk file staging and
+  protocol-based exfiltration (HTTP/DNS/FTP/WebDAV/generic cloud storage),
+  see collection-staging-exfil.yaml. This scenario deliberately does not
+  re-test those channels.
+
+  SAFETY: Stage 2 is a TCP-reachability probe only — no message composed,
+  no attachment sent, no personal account touched. Stage 3 only creates
+  and destroys its own BAS-owned, freshly-created synthetic decoy files in
+  a throwaway %TEMP% directory — no real user or production data is ever
+  touched. Windows only. [BAS-SIM] tagged throughout.
+author: Audspect Research
+executable: true
+local_check: false
+supported_os: [windows]
+tags:
+  - insider-threat
+  - data-theft
+  - sabotage
+  - bfsi
+  - kill-chain
+  - t1005
+  - t1083
+  - t1485
+  - t1567
+  - mitre
+mitre_phases:
+  - discovery
+  - exfiltration
+  - impact
+
+live_policy:
+  block_on_domain_controller: false
+  require_dc_reachable: false
+  max_spray_attempts: 0
+  spray_account_allowlist: []
+  execution_window: ""
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Sensitive-File Search Outside Normal Job Scope (T1083 / T1005)
+  # ---------------------------------------------------------------------------
+  - name: "Insider Stage 1 — Sensitive-File Search Outside Normal Job Scope (T1083 / T1005)"
+    technique_id: T1083
+    detection_profiles:
+      - windows_file_discovery
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only traversal of Desktop/Documents/Downloads (depth=2). No file opened or modified."
+    telemetry:
+      - "Security EID 4688: powershell.exe with file-enumeration command line"
+      - "DLP: enumeration of filenames matching financial/PII patterns"
+    detection:
+      - "UEBA: bulk file enumeration from a single process — pre-exfiltration staging signal, especially outside an employee's normal job scope"
+      - "EDR: PowerShell scanning user profile paths for BFSI-pattern filenames"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $bfsiPatterns = @('*finance*','*customer*','*swift*','*payment*','*account*','*salary*','*export*','*backup*','*password*','*.xlsx','*.csv','*.docx','*.pdf','*.db','*.bak')
+      $scanPaths = @(
+        [Environment]::GetFolderPath('Desktop'),
+        [Environment]::GetFolderPath('MyDocuments'),
+        (Join-Path $env:USERPROFILE 'Downloads')
+      )
+      $found = 0
+      foreach ($root in $scanPaths) {
+        if (-not (Test-Path $root)) { continue }
+        Get-ChildItem -Path $root -Depth 2 -File -ErrorAction SilentlyContinue | ForEach-Object {
+          foreach ($p in $bfsiPatterns) { if ($_.Name -like $p) { $found++; break } }
+        }
+      }
+      Write-Output "EXEC: sensitive-file search across Desktop/Documents/Downloads (depth=2). Found $found matching file(s). Read-only — no files opened. A departing/malicious insider searches for high-value files outside their normal job scope this same way before exfiltrating them. [BAS-SIM-INSIDER-S1]"
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Personal Webmail Exfiltration Reachability (T1567)
+  # ---------------------------------------------------------------------------
+  - name: "Insider Stage 2 — Personal Webmail Exfiltration Reachability (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_webmail_egress
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Tests whether the endpoint can reach major personal webmail providers (a benign connectivity probe to well-known hostnames on TCP/443). NO message composed, NO attachment uploaded, NO account touched: connectivity reachability only. Generates Sysmon EID 22 (DNS) and EID 3 (outbound TLS attempt)."
+    telemetry:
+      - "Sysmon EID 22: DNS queries to personal webmail hostnames"
+      - "Sysmon EID 3: outbound TCP/443 to personal webmail endpoints"
+    detection:
+      - "Proxy/CASB: access to personal webmail categories — DLP/CASB egress policy trigger"
+      - "SIEM: workstation reaching personal webmail APIs outside corporate mail flow — insider exfiltration IOC"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $endpoints = @('mail.google.com','outlook.live.com','mail.yahoo.com','mail.proton.me')
+      $reachable = @()
+      foreach ($e in $endpoints) {
+        try {
+          $tcp = New-Object System.Net.Sockets.TcpClient
+          $iar = $tcp.BeginConnect($e, 443, $null, $null)
+          if ($iar.AsyncWaitHandle.WaitOne(3000, $false) -and $tcp.Connected) { $reachable += $e }
+          $tcp.Close()
+        } catch {}
+      }
+      Write-Output "EXEC T1567: probed personal-webmail egress reachability. reachable=[$($reachable -join ', ')] (probe only, no message sent, no attachment uploaded). A departing/malicious insider can exfiltrate sensitive files by attaching them to a personal webmail message -- this bypasses corporate email DLP entirely since it never transits the corporate mail flow. [BAS-SIM-INSIDER-S2]"
+      if ($reachable.Count -gt 0) {
+        Write-Output "FAIL: The endpoint can directly reach $($reachable.Count) personal webmail provider(s) on TCP/443 -- a real insider data-theft path outside corporate email DLP. Route egress through a proxy/CASB that blocks or inspects personal webmail categories, and alert on large uploads to these domains."
+      } else {
+        Write-Output "PASS: no direct egress to personal webmail providers -- access is blocked or forced through a controlled/inspected path. [BAS-SIM-INSIDER-S2]"
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Mass File Rename/Delete Sabotage (T1485)
+  # ---------------------------------------------------------------------------
+  - name: "Insider Stage 3 — Mass File Rename/Delete Sabotage (T1485)"
+    technique_id: T1485
+    detection_profiles:
+      - windows_data_destruction
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates ~7 BAS-owned synthetic decoy files with realistic sensitive-sounding names in a throwaway %TEMP% directory, mass-renames them, mass-deletes them, then removes the directory. Only ever touches its own just-created decoys -- no real user or production data is touched. Generates Sysmon EID 11 (file create x7), EID 23 (file delete, rename+delete pattern)."
+    telemetry:
+      - "Sysmon EID 11: 7 decoy files created in %TEMP%\\bas_insider_<id>\\"
+      - "Sysmon EID 23: rapid rename+delete of all 7 files in the same short-lived batch"
+    detection:
+      - "EDR: high-frequency file rename + delete in a short window from a single process -- Controlled Folder Access / ransomware-specific behavioral protection, applied to non-ransomware-labeled bulk destruction"
+      - "SIEM: burst of file-delete events against files with sensitive-sounding names outside a backup/cleanup job window"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $work = Join-Path $env:TEMP "bas_insider_$runId"
+      New-Item -ItemType Directory -Path $work -Force | Out-Null
+      $names = @('Customer_Export','Payroll_Q3','Board_Minutes','Client_SSNs','Source_Code_Backup','Vendor_Contracts','Audit_Findings')
+      $created = 0
+      foreach ($n in $names) {
+        $p = Join-Path $work "$n.txt"
+        "[BAS-SIM-INSIDER] synthetic decoy content" | Out-File $p -Encoding utf8
+        if (Test-Path $p) { $created++ }
+      }
+      $renamed = 0
+      Get-ChildItem -Path $work -File | ForEach-Object {
+        $newName = [guid]::NewGuid().ToString('N').Substring(0,12) + '.bas_wiped'
+        Rename-Item -Path $_.FullName -NewName $newName -ErrorAction SilentlyContinue
+        if (Test-Path (Join-Path $work $newName)) { $renamed++ }
+      }
+      $deleted = 0
+      Get-ChildItem -Path $work -File | ForEach-Object {
+        Remove-Item -Path $_.FullName -Force -ErrorAction SilentlyContinue
+        $deleted++
+      }
+      $remaining = @(Get-ChildItem -Path $work -File -ErrorAction SilentlyContinue).Count
+      Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+      if ($created -gt 0 -and $renamed -gt 0 -and $deleted -gt 0) {
+        Write-Output "EXEC T1485: $created BAS-owned decoy files created, $renamed mass-renamed, $deleted mass-deleted in a single short-lived batch (remaining=$remaining). A malicious/departing insider destroys evidence and denies recovery this same way -- rapid bulk rename+delete of many files in one process lifetime. [BAS-SIM-INSIDER-S3]"
+        Write-Output "FAIL: bulk file rename+delete completed unimpeded on $created files. This is the same behavioral signature Controlled Folder Access and ransomware-specific EDR protections are built to catch -- verify it fires for non-ransomware-labeled bulk destruction too, not only known ransomware extensions."
+      } else {
+        Write-Output "PASS: bulk file rename/delete was blocked or failed (created=$created renamed=$renamed deleted=$deleted) -- Controlled Folder Access or EDR prevented the pattern. [BAS-SIM-INSIDER-S3]"
+      }
+    cleanup: |
+      Remove-Item (Join-Path $env:TEMP 'bas_insider_*') -Recurse -Force -ErrorAction SilentlyContinue
