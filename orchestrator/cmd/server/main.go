@@ -359,6 +359,7 @@ func main() {
 		WithCompliance(complianceMapper).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
+		WithThreatPriority(priorityEngine).
 		WithTicketing(ticketingManager).
 		WithLicensePath(cfg.LicensePath).
 		WithExercise(exStore, exExecutor, exChain).

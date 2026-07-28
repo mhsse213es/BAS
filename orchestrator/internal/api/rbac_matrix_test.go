@@ -83,6 +83,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/coverage/analytics", tierAny, ""},
 	{http.MethodGet, "/api/coverage/matrix", tierAny, ""},
 	{http.MethodGet, "/api/coverage/actors", tierAny, ""},
+	{http.MethodGet, "/api/threat-priority/actors", tierAny, ""},
+	{http.MethodGet, "/api/threat-priority/actors/{name}", tierAny, ""},
 	{http.MethodGet, "/api/ti/readiness", tierAny, ""},
 	{http.MethodGet, "/api/ti/readiness/history", tierAny, ""},
 	{http.MethodGet, "/api/ti/suggest-pack", tierAny, ""},

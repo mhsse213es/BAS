@@ -174,6 +174,12 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/coverage/matrix", h.CoverageMatrix)
 		r.Get("/api/coverage/actors", h.CoverageActors)
 
+		// Threat Prioritization -- standing, fleet-wide, per-actor composite
+		// score (distinct from /api/coverage/matrix's technique-level view
+		// and /api/recommend/simulations' technique-level ranking).
+		r.Get("/api/threat-priority/actors", h.ThreatPriorityActors)
+		r.Get("/api/threat-priority/actors/{name}", h.ThreatPriorityActorDetail)
+
 		// Threat Intelligence — readiness, KEV pack suggestions, EPSS priority scoring, and trends.
 		r.Get("/api/ti/readiness", h.GetTIReadiness)
 		r.Get("/api/ti/readiness/history", h.GetTIReadinessHistory)
