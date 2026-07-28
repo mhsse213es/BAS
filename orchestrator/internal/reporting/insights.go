@@ -826,31 +826,41 @@ func SectorRegionRelevantTechniques(ctx context.Context, db *pgxpool.Pool, secto
 		profiles = append(profiles, p)
 	}
 
-	groupIdx := attackdata.GroupTechniqueIndex()
-	for groupName, techIDs := range groupIdx {
-		normGroup := normalizeActorName(groupName)
-		for _, p := range profiles {
-			if !sectorRegionOverlap(p.sectors, sectors) && !sectorRegionOverlap(p.regions, regions) {
-				continue
-			}
-			matched := normalizeActorName(p.name) == normGroup
-			if !matched {
-				for _, alias := range p.aliases {
-					if normalizeActorName(alias) == normGroup {
-						matched = true
-						break
-					}
-				}
-			}
-			if matched {
-				for _, tid := range techIDs {
-					relevant[strings.ToUpper(tid)] = true
-				}
-				break
-			}
+	for _, p := range profiles {
+		if !sectorRegionOverlap(p.sectors, sectors) && !sectorRegionOverlap(p.regions, regions) {
+			continue
+		}
+		techIDs, _, ok := ResolveActorTechniques(p.name, p.aliases)
+		if !ok {
+			continue
+		}
+		for _, tid := range techIDs {
+			relevant[strings.ToUpper(tid)] = true
 		}
 	}
 	return relevant, nil
+}
+
+// ResolveActorTechniques matches an actor's name/aliases against ATT&CK's
+// canonical STIX group names (attackdata.GroupTechniqueIndex) and returns
+// that group's technique IDs. Exact-normalized match only (see
+// normalizeActorName) -- no fuzzy matching, so a near-miss returns ok=false
+// rather than silently attributing techniques to the wrong actor.
+func ResolveActorTechniques(name string, aliases []string) (techIDs []string, canonicalGroup string, ok bool) {
+	groupIdx := attackdata.GroupTechniqueIndex()
+	normName := normalizeActorName(name)
+	for groupName, ids := range groupIdx {
+		normGroup := normalizeActorName(groupName)
+		if normName == normGroup {
+			return ids, groupName, true
+		}
+		for _, alias := range aliases {
+			if normalizeActorName(alias) == normGroup {
+				return ids, groupName, true
+			}
+		}
+	}
+	return nil, "", false
 }
 
 // normalizeActorName mirrors internal/connector's actorKey() normalization

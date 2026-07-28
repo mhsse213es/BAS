@@ -168,6 +168,62 @@ func TestComputePriorityScore_SectorRegionRelevant(t *testing.T) {
 	}
 }
 
+func TestResolveActorTechniques_ExactMatch(t *testing.T) {
+	groupIdx := attackdata.GroupTechniqueIndex()
+	if len(groupIdx) == 0 {
+		t.Skip("no embedded ATT&CK group data available")
+	}
+	var knownGroup string
+	for g := range groupIdx {
+		knownGroup = g
+		break
+	}
+
+	ids, group, ok := ResolveActorTechniques(knownGroup, nil)
+	if !ok {
+		t.Fatalf("expected a match for %q", knownGroup)
+	}
+	if group != knownGroup {
+		t.Fatalf("canonicalGroup = %q, want %q", group, knownGroup)
+	}
+	if len(ids) == 0 {
+		t.Fatal("expected at least one technique ID")
+	}
+}
+
+func TestResolveActorTechniques_AliasMatch(t *testing.T) {
+	groupIdx := attackdata.GroupTechniqueIndex()
+	if len(groupIdx) == 0 {
+		t.Skip("no embedded ATT&CK group data available")
+	}
+	var knownGroup string
+	for g := range groupIdx {
+		knownGroup = g
+		break
+	}
+
+	// Pass a name that can't match directly, with the real canonical group
+	// name as an alias -- exercises the alias branch specifically without
+	// depending on real-world alias data being present in the bundle.
+	ids, group, ok := ResolveActorTechniques("Definitely Not A Canonical Name", []string{knownGroup})
+	if !ok {
+		t.Fatalf("expected an alias match via %q", knownGroup)
+	}
+	if group != knownGroup {
+		t.Fatalf("canonicalGroup = %q, want %q", group, knownGroup)
+	}
+	if len(ids) == 0 {
+		t.Fatal("expected at least one technique ID")
+	}
+}
+
+func TestResolveActorTechniques_NoMatch(t *testing.T) {
+	_, _, ok := ResolveActorTechniques("Definitely Not A Real Group Name XYZ", nil)
+	if ok {
+		t.Fatal("expected no match")
+	}
+}
+
 func TestSectorRegionRelevantTechniques_EmptyInputsSkipQuery(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
