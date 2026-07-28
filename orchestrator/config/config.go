@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 )
 
 type Config struct {
@@ -64,6 +65,16 @@ type Config struct {
 	// after creating a bas_breakglass recovery superuser with this password.
 	// Unset = hardening inactive (default). Env: BAS_DB_BREAKGLASS_PASSWORD.
 	DBBreakGlassPassword string `json:"db_breakglass_password,omitempty"`
+
+	// API rate limiting (opt-in): a single global token-bucket limit protecting
+	// against a runaway client, not a per-tenant/commercial quota system (that
+	// belongs to the future Audspect Cloud offering, not this on-prem product).
+	// Disabled by default so existing installs are never surprise-limited on
+	// upgrade -- same discipline as DBBreakGlassPassword above.
+	// Env: API_RATE_LIMIT_ENABLED=true, API_RATE_LIMIT=1000/min, API_RATE_BURST=200.
+	RateLimitEnabled bool `json:"rate_limit_enabled,omitempty"`
+	RateLimitPerMin  int  `json:"rate_limit_per_min,omitempty"`
+	RateLimitBurst   int  `json:"rate_limit_burst,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -77,6 +88,8 @@ func Load(path string) (*Config, error) {
 		KEVFile:          "/content/cisa-kev.json",
 		PBKDF2Iterations: 310000,
 		TIBundleDir:      "/intel-bundles",
+		RateLimitPerMin:  1000,
+		RateLimitBurst:   200,
 	}
 
 	// Try file first (local dev)
@@ -199,6 +212,17 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("BAS_PBKDF2_ITERATIONS"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.PBKDF2Iterations)
+	}
+	if v := os.Getenv("API_RATE_LIMIT_ENABLED"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.RateLimitEnabled = b
+		}
+	}
+	if v := os.Getenv("API_RATE_LIMIT"); v != "" {
+		fmt.Sscanf(v, "%d/min", &cfg.RateLimitPerMin)
+	}
+	if v := os.Getenv("API_RATE_BURST"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.RateLimitBurst)
 	}
 
 	if cfg.DatabaseURL == "" {

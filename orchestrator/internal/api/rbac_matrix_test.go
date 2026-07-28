@@ -333,7 +333,7 @@ func concretePath(tpl string) string {
 func mountTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	h := New(sharedDB.Pool, ws.NewHub(), nil, testJWTSecret)
-	return Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler())
+	return Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler(), 0, 0)
 }
 
 func TestRBACMatrix_AuthorizationBoundary(t *testing.T) {

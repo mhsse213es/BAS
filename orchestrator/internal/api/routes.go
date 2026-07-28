@@ -14,13 +14,24 @@ import (
 // Mount builds the full HTTP router and returns it.
 // staticHandler serves the dashboard SPA — pass StaticHandler() in production
 // (embedded FS) or http.FileServer(http.Dir("./wwwroot")) in tests/dev.
-func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler http.Handler, tracker ...*exercisetracker.Tracker) http.Handler {
+// rateLimitPerMin <= 0 disables rate limiting entirely (the default —
+// existing installs are never surprise-limited on upgrade).
+func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler http.Handler, rateLimitPerMin, rateLimitBurst int, tracker ...*exercisetracker.Tracker) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.StripSlashes)
+
+	// API rate limiting (opt-in) — a single global token-bucket limit shared
+	// by the SCIM and JWT-authenticated groups below, protecting against a
+	// runaway client on this single-tenant-per-database product. Not a
+	// per-tenant commercial quota system (that's Audspect Cloud's concern).
+	var rateLimit func(http.Handler) http.Handler
+	if rateLimitPerMin > 0 {
+		rateLimit = RateLimitMiddleware(rateLimitPerMin, rateLimitBurst)
+	}
 
 	// ── Public endpoints (no auth) ────────────────────────────────────────
 	r.Post("/api/auth/login", h.Login)
@@ -80,6 +91,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// docs/superpowers/specs/2026-07-19-phase7-scim-provisioning-design.md.
 	r.Group(func(r chi.Router) {
 		r.Use(h.scimAuth)
+		if rateLimit != nil {
+			r.Use(rateLimit)
+		}
 		r.Get("/scim/v2/ServiceProviderConfig", h.SCIMServiceProviderConfig)
 		r.Get("/scim/v2/ResourceTypes", h.SCIMResourceTypes)
 		r.Get("/scim/v2/Schemas", h.SCIMSchemas)
@@ -110,6 +124,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// ── Authenticated endpoints (JWT required) ────────────────────────────
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(jwtSecret))
+		if rateLimit != nil {
+			r.Use(rateLimit)
+		}
 
 		// Viewer + Analyst + Admin
 		r.Get("/api/agents", h.GetAgents)

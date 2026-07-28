@@ -367,7 +367,11 @@ func main() {
 		WithRelationshipStore(relationshipStore).
 		WithRuleLibrary(rulesEngine).
 		WithIOCProvider(iocProvider)
-	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), exTracker)
+	rateLimitPerMin := 0
+	if cfg.RateLimitEnabled {
+		rateLimitPerMin = cfg.RateLimitPerMin
+	}
+	router := api.Mount(handler, hub, cfg.JWTSecret, cfg.AgentSecret, StaticHandler(), rateLimitPerMin, cfg.RateLimitBurst, exTracker)
 
 	// ── Agent Staleness Monitor ───────────────────────────────────────────
 	// Marks agents offline if no heartbeat received within 90 seconds and
