@@ -107,7 +107,9 @@ type ScoreFactor interface {
 
 `Weight` takes `Context` (not `()`) because the Coverage/Validation split needs the *tested-technique count* to pick a weight band — a constant-weight factor just ignores the parameter.
 
-### The 11 factors
+### The 9 factors
+
+Validation is intentionally **asymmetric** with Coverage (2 factors, not 4) — this was corrected during plan-grounding after checking the actual verdict data model (`internal/scenario/outcome.go`). `scenario_runs.results[].result` is a strict 3-way outcome (`pass`=control blocked it, `fail`=ran through unblocked, `error`/`skipped`=excluded) with no separate "detected but not prevented" state — `ReadinessScore`'s detection/prevention split comes from a richer per-run report-time computation, not this raw field. And `verification_history`'s `Source`/`Provider` fields distinguish *how* an attestation was entered (automatic/manual/api/migration), not *what kind* of validation it represents — there is no existing field to cleanly split "automated EDR/SIEM detection" from "manual purple-team validation." Rather than invent a split the data can't support, Validation collapses to what's real:
 
 | Factor | Group | Data source | v1 formula |
 |---|---|---|---|
@@ -115,17 +117,19 @@ type ScoreFactor interface {
 | `DetectionCoverageFactor` | Coverage | `internal/coverage.BuildProfileIndex` over `engine.Profiles()` | % with `DetectionProfileExists` |
 | `PurpleCoverageFactor` | Coverage | purple index (same construction as `coverage_handlers.go`'s `CoverageMatrix`, from `exercise.BuiltinTemplates[*].Metadata.ExpectedTechniques`) | % with `PurpleExerciseExists` |
 | `ComplianceCoverageFactor` | Coverage | `internal/coverage.BuildComplianceIndex` | % with `ComplianceMappingExists` |
-| `SimulationSuccessFactor` | Validation | fleet-wide most-recent verdict per technique (see below) | % of *tested* techniques with a non-error/skip PASS-family verdict; `Available=false` if actor has zero tested techniques |
-| `DetectionSuccessFactor` | Validation | same source, filtered to detection-capable steps | % detected among tested |
-| `PreventionSuccessFactor` | Validation | same source | % prevented (blocked) among tested |
-| `PurpleSuccessFactor` | Validation | `verification_history` table (`internal/verification.Store`), fleet-wide latest `Active && WorkflowState==StateApproved` record per `technique_id` | % of approved-attested techniques with `Result` in the pass family; `Available=false` if actor has zero approved attestations |
+| `PreventionSuccessFactor` | Validation | fleet-wide most-recent verdict per technique from `scenario_runs` (see below) | % of *tested* techniques where `result == 'pass'` (a control blocked it); `Available=false` if actor has zero tested techniques |
+| `ValidationSuccessFactor` | Validation | `verification_history` table (`internal/verification.Store`), fleet-wide latest `Active && WorkflowState==StateApproved` record per `technique_id`, regardless of `Source` | % of evidence-validated techniques with `Result` in the pass/detected family — deliberately not named "Detection" or "Purple" since the schema doesn't distinguish them; `Available=false` if actor has zero approved attestations |
 | `IntelFreshnessFactor` | Standalone | `ActorProfile.LastSeen` | <30d=100, <90d=60, else 20; `Available=false` if `LastSeen` nil |
 | `RelevanceFactor` | Standalone | `ActorProfile.Sectors/Regions` ∩ org `Sectors/Regions`, same overlap rule as `reporting.sectorRegionOverlap` | 100 if either sector or region overlaps, else 0; `Available=false` if org has no sectors/regions configured |
 | `ConfidenceFactor` | Standalone | `ActorProfile.Confidence` | high=100/medium=60/low=30/""=`Available=false` |
 
-Note: `IndustryFactor`/`RegionFactor` collapsed into one `RelevanceFactor` (sector OR region overlap) rather than two separate factors — `threat_actor_profiles` rarely has both populated for the same actor from a single connector, and scoring an absent dimension as 0 would unfairly punish actors with only sector *or* only region data. One combined factor avoids that false negative. Flagging this as a deliberate deviation from the earlier 10-factor sketch; happy to split back into two if you want sector and region weighted independently.
+`SimulationSuccessFactor` (from the original 4-factor Validation sketch) is dropped entirely, not merged — "did the BAS engine execute without error" answers a different question ("can we test this") than Actor Priority needs ("how well-defended are we"), and that capability question is already answered by `SimulationCoverageFactor`. A technique that executed cleanly but was missed by the EDR must not score as a validation success.
 
-Fleet-wide validation query (used by the three `*SuccessFactor`s), mirrors `internal/recommend.loadCoverage`'s exclusion rule intentionally rather than importing it (that function is unexported and `internal/recommend` isn't meant as a shared utility library):
+`IndustryFactor`/`RegionFactor` are similarly collapsed into one `RelevanceFactor` (sector OR region overlap) rather than two separate factors — `threat_actor_profiles` rarely has both populated for the same actor from a single connector, and scoring an absent dimension as 0 would unfairly punish actors with only sector *or* only region data.
+
+**Future extension, explicitly out of scope here:** if `verification_history` later gains a `domain` column (detection/purple/compliance), `ValidationSuccessFactor` can split into finer-grained factors without changing the engine architecture — the `ScoreFactor` registry just gains more implementations. That's a separate validation-taxonomy project, not coupled to this one.
+
+`PreventionSuccessFactor`'s query, mirrors `internal/recommend.loadCoverage`'s exclusion rule intentionally rather than importing it (that function is unexported and `internal/recommend` isn't meant as a shared utility library):
 
 ```sql
 SELECT DISTINCT ON (UPPER(r->'technique'->>'id'))
@@ -138,7 +142,7 @@ WHERE sr.status IN ('completed', 'partial')
 ORDER BY UPPER(r->'technique'->>'id'), (r->>'executedAt')::timestamptz DESC
 ```
 
-`PurpleSuccessFactor` uses a separate, real query against `verification_history` instead (Detection Validation's attestation table, not `scenario_runs` — these are genuinely different data: automated on-host verdicts vs. human/API-attested purple-exercise outcomes):
+`ValidationSuccessFactor`'s query, against `verification_history` (Detection Validation's attestation table — genuinely different data from `scenario_runs`: this is human/API-attested outcomes, not automated on-host verdicts):
 
 ```sql
 SELECT DISTINCT ON (technique_id) technique_id, result
@@ -167,7 +171,7 @@ func blendWeights(validatedCount int) (coverage, validation float64) {
 }
 ```
 
-`IntelFreshnessFactor`, `RelevanceFactor`, `ConfidenceFactor` sit outside the Coverage/Validation blend, each fixed at **5% flat weight (15% total)**. The blended `coverage`/`validation` fractions from `blendWeights` are scaled to fill the remaining **85%**: each of the 4 Coverage-group factors gets `coverage*0.85/4` weight, each of the 4 Validation-group factors gets `validation*0.85/4`. Concretely, at the `<5 validated` band (`coverage=0.90, validation=0.10`): each Coverage factor = 19.125%, each Validation factor = 2.125%, each of the 3 flat factors = 5% — sums to 100%.
+`IntelFreshnessFactor`, `RelevanceFactor`, `ConfidenceFactor` sit outside the Coverage/Validation blend, each fixed at **5% flat weight (15% total)**. The blended `coverage`/`validation` fractions from `blendWeights` are scaled to fill the remaining **85%**: each of the 4 Coverage-group factors gets `coverage*0.85/4` weight, each of the 2 Validation-group factors gets `validation*0.85/2`. Concretely, at the `<5 validated` band (`coverage=0.90, validation=0.10`): each Coverage factor = 19.125%, each Validation factor = 4.25%, each of the 3 flat factors = 5% — `4×19.125 + 2×4.25 + 3×5 = 100%`.
 
 A factor with `Available=false` is excluded from the composite entirely (its weight is redistributed proportionally across the remaining available factors, not scored as 0) — this is what makes "Not yet validated" genuinely neutral instead of a hidden penalty.
 
