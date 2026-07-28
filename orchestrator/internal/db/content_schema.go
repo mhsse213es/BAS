@@ -263,6 +263,19 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE scenario_techniques ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE threat_readiness_history ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'default'`,
+
+		// Threat Prioritization — actor-level composite score (see
+		// docs/superpowers/specs/2026-07-28-threat-prioritization-design.md).
+		`ALTER TABLE threat_actor_profiles ADD COLUMN IF NOT EXISTS confidence text NOT NULL DEFAULT ''`,
+		`CREATE TABLE IF NOT EXISTS threat_priority_history (
+			id          bigserial   PRIMARY KEY,
+			actor_name  text        NOT NULL,
+			score       int         NOT NULL,
+			tier        text        NOT NULL DEFAULT '',
+			tenant_id   text        NOT NULL DEFAULT 'default',
+			recorded_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS tph_actor_time ON threat_priority_history(actor_name, recorded_at DESC)`,
 	}
 
 	for _, s := range stmts {

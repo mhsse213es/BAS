@@ -157,3 +157,26 @@ func TestScheduler_SyncUpsertsActorProfiles(t *testing.T) {
 		}
 	})
 }
+
+func TestUpsertActorProfiles_PersistsConfidence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		s.upsertActorProfiles([]ThreatActor{{
+			Name: "APT-CONFIDENCE-TEST", Confidence: "high",
+			Aliases: []string{}, Sectors: []string{}, Regions: []string{},
+		}})
+
+		var confidence string
+		err := pool.QueryRow(t.Context(),
+			`SELECT confidence FROM threat_actor_profiles WHERE name=$1`, "APT-CONFIDENCE-TEST").Scan(&confidence)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if confidence != "high" {
+			t.Fatalf("confidence = %q, want %q", confidence, "high")
+		}
+	})
+}
