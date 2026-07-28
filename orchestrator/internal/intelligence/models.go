@@ -42,6 +42,7 @@ type Campaign struct {
 	Description    string    `json:"description"`
 	ThreatActorIDs []string  `json:"threatActorIds"` // threat_actor_profiles.name values
 	TechniqueIDs   []string  `json:"techniqueIds"`
+	Objective      string    `json:"objective,omitempty"` // OpenCTI-only; empty for MISP-sourced campaigns
 	Source         SourceRef `json:"source"`
 }
 
@@ -54,6 +55,7 @@ type Malware struct {
 	TechniqueIDs   []string  `json:"techniqueIds"`
 	ThreatActorIDs []string  `json:"threatActorIds"`
 	CampaignIDs    []string  `json:"campaignIds"`
+	MalwareTypes   []string  `json:"malwareTypes,omitempty"` // e.g. "ransomware", "trojan" -- OpenCTI-only
 	Source         SourceRef `json:"source"`
 }
 

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/audspect/bas/internal/intelligence"
 )
 
 func TestTechniqueRefsFrom_ExtractsValidATTACKIDs(t *testing.T) {
@@ -121,4 +123,88 @@ func twoTechniqueConn() octiRelationshipConnection {
 			From octiRelatedEntity `json:"from"`
 		}{To: octiRelatedEntity{XMitreID: "T1105", Name: "Ingress Tool Transfer"}}},
 	}}
+}
+
+func TestOpenCTIClient_ConvertCampaign_UsesOwnTechniquesAndObjective(t *testing.T) {
+	c := NewOpenCTIClient("http://example.invalid", "test-key", nil)
+	actor := &ThreatActor{Name: "APT29"}
+	entity := octiRelatedEntity{
+		ID: "campaign--1", Name: "SolarWinds Compromise", Description: "Supply chain compromise",
+		Objective:      "Espionage",
+		AttackPatterns: twoTechniqueConn(),
+	}
+	campaign := c.convertCampaign(entity, actor)
+	if campaign.Name != "SolarWinds Compromise" || campaign.Objective != "Espionage" {
+		t.Fatalf("convertCampaign() = %+v, want Name=SolarWinds Compromise Objective=Espionage", campaign)
+	}
+	if len(campaign.TechniqueIDs) != 2 {
+		t.Fatalf("convertCampaign().TechniqueIDs = %v, want 2 (campaign's own techniques, not actor's)", campaign.TechniqueIDs)
+	}
+	if len(campaign.ThreatActorIDs) != 1 || campaign.ThreatActorIDs[0] != "APT29" {
+		t.Fatalf("convertCampaign().ThreatActorIDs = %v, want [APT29]", campaign.ThreatActorIDs)
+	}
+	if campaign.Source.Provider != "opencti" || campaign.Source.ExternalID != "campaign--1" {
+		t.Fatalf("convertCampaign().Source = %+v, want Provider=opencti ExternalID=campaign--1", campaign.Source)
+	}
+}
+
+func TestOpenCTIClient_ConvertMalware_UsesOwnTechniquesAndTypes(t *testing.T) {
+	c := NewOpenCTIClient("http://example.invalid", "test-key", nil)
+	actor := &ThreatActor{Name: "BlackTech"}
+	entity := octiRelatedEntity{
+		ID: "malware--1", Name: "TSCookie", Aliases: []string{"PLEAD"},
+		MalwareTypes:   []string{"backdoor"},
+		AttackPatterns: twoTechniqueConn(),
+	}
+	malware := c.convertMalware(entity, actor)
+	if malware.Name != "TSCookie" || len(malware.MalwareTypes) != 1 || malware.MalwareTypes[0] != "backdoor" {
+		t.Fatalf("convertMalware() = %+v, want Name=TSCookie MalwareTypes=[backdoor]", malware)
+	}
+	if len(malware.TechniqueIDs) != 2 {
+		t.Fatalf("convertMalware().TechniqueIDs = %v, want 2 (malware's own techniques)", malware.TechniqueIDs)
+	}
+	if malware.ID != intelligence.MalwareKey("TSCookie") {
+		t.Fatalf("convertMalware().ID = %q, want %q", malware.ID, intelligence.MalwareKey("TSCookie"))
+	}
+}
+
+func TestOpenCTIClient_FetchIntelligence_PopulatedAfterFetch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := octiThreatActorsResp{}
+		resp.Data.ThreatActors.Edges = []octiActorEdge{
+			{Node: octiThreatActorNode{
+				ID: "ta-1", Name: "APT29", AttackPatterns: twoTechniqueConn(),
+				Campaigns: octiRelationshipConnection{Edges: []octiRelationshipEdge{
+					{Node: struct {
+						To   octiRelatedEntity `json:"to"`
+						From octiRelatedEntity `json:"from"`
+					}{From: octiRelatedEntity{ID: "campaign--1", Name: "SolarWinds Compromise", AttackPatterns: twoTechniqueConn()}}},
+				}},
+				Malwares: octiRelationshipConnection{Edges: []octiRelationshipEdge{
+					{Node: struct {
+						To   octiRelatedEntity `json:"to"`
+						From octiRelatedEntity `json:"from"`
+					}{To: octiRelatedEntity{ID: "malware--1", Name: "TSCookie", AttackPatterns: twoTechniqueConn()}}},
+				}},
+			}},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	c := NewOpenCTIClient(server.URL, "test-key", nil)
+	if _, err := c.Fetch(); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+
+	campaigns, malware, err := c.FetchIntelligence()
+	if err != nil {
+		t.Fatalf("FetchIntelligence: %v", err)
+	}
+	if len(campaigns) != 1 || campaigns[0].Name != "SolarWinds Compromise" {
+		t.Fatalf("FetchIntelligence() campaigns = %+v, want one named SolarWinds Compromise", campaigns)
+	}
+	if len(malware) != 1 || malware[0].Name != "TSCookie" {
+		t.Fatalf("FetchIntelligence() malware = %+v, want one named TSCookie", malware)
+	}
 }

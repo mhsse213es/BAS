@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/audspect/bas/internal/intelligence"
 )
 
 // OpenCTIClient fetches threat-actor TTP profiles from an OpenCTI instance.
@@ -25,8 +27,10 @@ type OpenCTIClient struct {
 	// supporting this needs OpenCTI's actual sector/region GraphQL schema,
 	// which can't be verified without a live instance. See
 	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
-	sectors  []string
-	lastStat SourceStat
+	sectors       []string
+	lastStat      SourceStat
+	lastCampaigns []intelligence.Campaign
+	lastMalware   []intelligence.Malware
 }
 
 // NewOpenCTIClient creates an OpenCTI GraphQL client.
@@ -52,14 +56,25 @@ func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
 	log.Printf("[connector/opencti] fetched %d threat actors", len(actorsRaw))
 
 	var actors []ThreatActor
+	var campaigns []intelligence.Campaign
+	var malware []intelligence.Malware
 	for _, raw := range actorsRaw {
 		actor := c.convertActor(raw)
 		if actor == nil || len(actor.Techniques) < 2 {
 			continue
 		}
 		actors = append(actors, *actor)
+
+		for _, entity := range campaignEntitiesFrom(raw.Campaigns) {
+			campaigns = append(campaigns, c.convertCampaign(entity, actor))
+		}
+		for _, entity := range malwareEntitiesFrom(raw.Malwares) {
+			malware = append(malware, c.convertMalware(entity, actor))
+		}
 	}
 	c.lastStat = SourceStat{Name: "opencti", RawCount: len(actorsRaw), ActorCount: len(actors), FetchedAt: time.Now()}
+	c.lastCampaigns = campaigns
+	c.lastMalware = malware
 	return actors, nil
 }
 
@@ -357,6 +372,53 @@ func (c *OpenCTIClient) convertActor(raw octiThreatActorNode) *ThreatActor {
 
 	actor.Techniques = dedupTechniques(techniqueRefsFrom(raw.AttackPatterns))
 	return actor
+}
+
+// convertCampaign builds an intelligence.Campaign from a campaign entity
+// discovered under a specific actor's "attributed-to" relationship. Uses the
+// campaign's OWN nested technique relationships (via techniqueRefsFrom), not
+// the actor's -- a campaign is often more specifically scoped than its
+// attributed actor's full profile.
+func (c *OpenCTIClient) convertCampaign(entity octiRelatedEntity, actor *ThreatActor) intelligence.Campaign {
+	return intelligence.Campaign{
+		ID:             entity.ID,
+		Name:           entity.Name,
+		Description:    entity.Description,
+		Objective:      entity.Objective,
+		ThreatActorIDs: []string{actor.Name},
+		TechniqueIDs:   techniqueIDs(techniqueRefsFrom(entity.AttackPatterns)),
+		Source: intelligence.SourceRef{
+			Provider: "opencti", ExternalID: entity.ID,
+			LastUpdated: actor.LastSeen, Confidence: actor.Confidence,
+		},
+	}
+}
+
+// convertMalware builds an intelligence.Malware from a malware entity
+// discovered under a specific actor's "uses" relationship. Uses the
+// malware's OWN nested technique relationships, same reasoning as
+// convertCampaign.
+func (c *OpenCTIClient) convertMalware(entity octiRelatedEntity, actor *ThreatActor) intelligence.Malware {
+	return intelligence.Malware{
+		ID:             intelligence.MalwareKey(entity.Name),
+		Name:           entity.Name,
+		Aliases:        entity.Aliases,
+		MalwareTypes:   entity.MalwareTypes,
+		TechniqueIDs:   techniqueIDs(techniqueRefsFrom(entity.AttackPatterns)),
+		ThreatActorIDs: []string{actor.Name},
+		Source: intelligence.SourceRef{
+			Provider: "opencti", ExternalID: entity.ID,
+			LastUpdated: actor.LastSeen, Confidence: actor.Confidence,
+		},
+	}
+}
+
+// FetchIntelligence implements connector.IntelligenceSource -- returns the
+// Campaign/Malware data gathered during the most recent Fetch() call, same
+// after-the-fact-accessor pattern Stats() and MISPClient.FetchIntelligence
+// already use.
+func (c *OpenCTIClient) FetchIntelligence() ([]intelligence.Campaign, []intelligence.Malware, error) {
+	return c.lastCampaigns, c.lastMalware, nil
 }
 
 func confidenceLabel(n int) string {
