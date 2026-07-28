@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/audspect/bas/internal/reporting"
 )
 
 // Coverage-age band boundaries. Evaluated top-down in CoverageGap so the
@@ -13,11 +15,14 @@ const (
 	recentAfter = 30 * 24 * time.Hour
 )
 
-// Composite weights — must sum to 1.0. See the spec's Scoring section.
+// Composite weights — must sum to 1.0. See the Threat Prioritization spec's
+// Recommendation Engine Integration section
+// (docs/superpowers/specs/2026-07-28-threat-prioritization-design.md).
 const (
-	wThreat      = 0.50
-	wCoverage    = 0.30
-	wEnvironment = 0.20
+	wActor       = 0.25
+	wThreat      = 0.35
+	wCoverage    = 0.25
+	wEnvironment = 0.15
 )
 
 func clamp100(v int) int {
@@ -77,9 +82,10 @@ func EnvironmentRisk(inGraph, onCriticalPath, targetsCritical bool) int {
 	return clamp100(risk)
 }
 
-// RecommendationScore is the composite: 0.50×threat + 0.30×coverage + 0.20×env.
-func RecommendationScore(threatPriority, coverageGap, environmentRisk int) int {
-	s := wThreat*float64(clamp100(threatPriority)) +
+// RecommendationScore is the composite: 0.25×actor + 0.35×threat + 0.25×coverage + 0.15×env.
+func RecommendationScore(actorPriority, threatPriority, coverageGap, environmentRisk int) int {
+	s := wActor*float64(clamp100(actorPriority)) +
+		wThreat*float64(clamp100(threatPriority)) +
 		wCoverage*float64(clamp100(coverageGap)) +
 		wEnvironment*float64(clamp100(environmentRisk))
 	return clamp100(int(math.Round(s)))
@@ -117,6 +123,9 @@ func buildReasons(t RecommendedTechnique, now time.Time) []string {
 		out = append(out, "Traverses an edge targeting a high-criticality asset in your environment")
 	case t.EnvironmentRisk > 0:
 		out = append(out, "Traverses a real edge in your collected attack-path graph")
+	}
+	if t.ActorPriority >= 70 {
+		out = append(out, fmt.Sprintf("Used by a %s-priority threat actor", reporting.PriorityTierFor(t.ActorPriority)))
 	}
 	if t.LastVerdict == "fail" {
 		out = append(out, "Previously failed — remediate before re-testing")

@@ -71,7 +71,7 @@ func rankOf(recs Recommendations, id string) int {
 
 func TestBuild_EmptyUniverse_ReturnsEmptyNotError(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -95,7 +95,7 @@ func TestBuild_OnlyARTTestableTechniquesAreRanked(t *testing.T) {
 		// Seeded technique with NO art_atomic_tests row — must not be ranked.
 		mustExec(t, pool, `INSERT INTO techniques (technique_id, name, tactic) VALUES ('T1136.001', 'Local Account', 'persistence')`)
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -116,7 +116,7 @@ func TestBuild_KEVOutranksNoSignal(t *testing.T) {
 		seedTechnique(t, pool, "T1217", "Browser Bookmark Discovery", "discovery")
 		seedKEV(t, pool, "T1003.001", "CVE-2024-0001")
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -159,7 +159,7 @@ func TestBuild_SectorRegionRelevantOutranksNonRelevant(t *testing.T) {
 			t.Fatalf("seed profile: %v", err)
 		}
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, []string{"government"}, nil)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, []string{"government"}, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -187,7 +187,7 @@ func TestBuild_NeverTestedOutranksRecentlyTested(t *testing.T) {
 			`[{"technique":{"id":"T1055","name":"Process Injection","tactic":"defense-evasion"},
 			   "result":"pass","executedAt":"2026-07-17T10:00:00Z"}]`)
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -221,7 +221,7 @@ func TestBuild_ErroredRunsCountAsNeverTested(t *testing.T) {
 			`[{"technique":{"id":"T1055","name":"Process Injection","tactic":"defense-evasion"},
 			   "result":"error","executedAt":"2026-07-17T10:00:00Z"}]`)
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 20, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -249,7 +249,7 @@ func TestBuild_EnvironmentRelevanceRaisesRank(t *testing.T) {
 		g := attackpath.New()
 		g.AddEdge(attackpath.Edge{From: "HOST-A", To: "HOST-B", Kind: attackpath.EdgeSMB})
 
-		recs, err := Build(context.Background(), pool, g, attackpath.Summary{}, 20, nil, nil)
+		recs, err := Build(context.Background(), pool, g, attackpath.Summary{}, 20, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -276,7 +276,7 @@ func TestBuild_SuggestedScenarioCarriesTopN(t *testing.T) {
 		seedTechnique(t, pool, "T1217", "Browser Bookmark Discovery", "discovery")
 		seedKEV(t, pool, "T1003.001", "CVE-2024-0001")
 
-		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 2, nil, nil)
+		recs, err := Build(context.Background(), pool, nil, attackpath.Summary{}, 2, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}

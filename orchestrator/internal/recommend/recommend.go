@@ -39,7 +39,7 @@ type coverageRow struct {
 // having relevance fabricated for it.
 //
 // Nil-safe: unseeded content returns an empty Recommendations, never an error.
-func Build(ctx context.Context, pool *pgxpool.Pool, g *attackpath.Graph, s attackpath.Summary, limit int, sectors, regions []string) (Recommendations, error) {
+func Build(ctx context.Context, pool *pgxpool.Pool, g *attackpath.Graph, s attackpath.Summary, limit int, sectors, regions []string, actorPriorityByTechnique map[string]int) (Recommendations, error) {
 	if limit <= 0 {
 		limit = defaultLimit
 	}
@@ -95,11 +95,12 @@ func Build(ctx context.Context, pool *pgxpool.Pool, g *attackpath.Graph, s attac
 			KEV:            kev[key],
 			EPSSPercentile: epss[key],
 			ThreatActors:   actors[key],
+			ActorPriority:  actorPriorityByTechnique[key],
 		}
 		t.ThreatPriority = reporting.ComputePriorityScore(t.KEV, t.EPSSPercentile, t.ThreatActors, verdict, sectorRegionRelevant[key])
 		t.CoverageGap = CoverageGap(lastTested, now)
 		t.EnvironmentRisk = EnvironmentRisk(env.inGraph[key], env.onCriticalPath[key], env.targetsCritical[key])
-		t.Score = RecommendationScore(t.ThreatPriority, t.CoverageGap, t.EnvironmentRisk)
+		t.Score = RecommendationScore(t.ActorPriority, t.ThreatPriority, t.CoverageGap, t.EnvironmentRisk)
 		t.Tier = reporting.PriorityTierFor(t.Score)
 		t.Reasons = buildReasons(t, now)
 		out = append(out, t)

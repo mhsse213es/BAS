@@ -75,28 +75,41 @@ func TestEnvironmentRisk_Tiers(t *testing.T) {
 	}
 }
 
-// TestRecommendationScore_Weights pins the 0.50/0.30/0.20 split from the spec.
+// TestRecommendationScore_Weights pins the 0.25/0.35/0.25/0.15 split (actor/
+// threat/coverage/env) from the Threat Prioritization spec.
 func TestRecommendationScore_Weights(t *testing.T) {
 	cases := []struct {
-		name                  string
-		threat, coverage, env int
-		want                  int
+		name                          string
+		actor, threat, coverage, env int
+		want                          int
 	}{
-		{"all zero", 0, 0, 0, 0},
-		{"all max", 100, 100, 100, 100},
-		{"threat only", 100, 0, 0, 50},
-		{"coverage only", 0, 100, 0, 30},
-		{"environment only", 0, 0, 100, 20},
-		{"never-tested KEV on a critical path", 70, 100, 100, 85}, // 35 + 30 + 20
-		{"rounds to nearest", 33, 33, 33, 33},
+		{"all zero", 0, 0, 0, 0, 0},
+		{"all max", 100, 100, 100, 100, 100},
+		{"actor only", 100, 0, 0, 0, 25},
+		{"threat only", 0, 100, 0, 0, 35},
+		{"coverage only", 0, 0, 100, 0, 25},
+		{"environment only", 0, 0, 0, 100, 15},
+		{"rounds to nearest", 10, 10, 10, 11, 10},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := RecommendationScore(c.threat, c.coverage, c.env); got != c.want {
-				t.Errorf("RecommendationScore(%d, %d, %d) = %d, want %d",
-					c.threat, c.coverage, c.env, got, c.want)
+			if got := RecommendationScore(c.actor, c.threat, c.coverage, c.env); got != c.want {
+				t.Errorf("RecommendationScore(%d, %d, %d, %d) = %d, want %d",
+					c.actor, c.threat, c.coverage, c.env, got, c.want)
 			}
 		})
+	}
+}
+
+// TestRecommendationScore_HigherActorPriorityIncreasesScore verifies the new
+// ActorPriority term moves the composite: a technique tied to a
+// Critical-priority actor must outrank an otherwise-identical technique tied
+// to a Low-priority actor.
+func TestRecommendationScore_HigherActorPriorityIncreasesScore(t *testing.T) {
+	high := RecommendationScore(100, 50, 50, 50)
+	low := RecommendationScore(0, 50, 50, 50)
+	if high <= low {
+		t.Fatalf("high actorPriority score (%d) should exceed low (%d)", high, low)
 	}
 }
 
@@ -108,9 +121,11 @@ func TestRecommendationScore_Weights(t *testing.T) {
 // re-tests on ticket-resolve. It is a remediation item, not a testing gap.
 func TestRecommendationScore_RecentFailingDoesNotDominate(t *testing.T) {
 	// Same underlying threat signals; the failing one even scores 10 higher on
-	// threat priority thanks to the fail bonus.
-	recentFailing := RecommendationScore(60, CoverageGap(daysAgo(5), scoreNow), 50)
-	neverTested := RecommendationScore(50, CoverageGap(nil, scoreNow), 50)
+	// threat priority thanks to the fail bonus. actorPriority held at 0 for
+	// both so this test isolates the coverage/threat relationship, unaffected
+	// by the new actor term.
+	recentFailing := RecommendationScore(0, 60, CoverageGap(daysAgo(5), scoreNow), 50)
+	neverTested := RecommendationScore(0, 50, CoverageGap(nil, scoreNow), 50)
 
 	if neverTested <= recentFailing {
 		t.Errorf("never-tested (%d) should outrank recently-tested-failing (%d)", neverTested, recentFailing)

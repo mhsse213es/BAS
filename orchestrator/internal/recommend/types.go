@@ -32,6 +32,7 @@ type RecommendedTechnique struct {
 	LastTestedAt  *time.Time `json:"lastTestedAt,omitempty"`
 	LastVerdict   string     `json:"lastVerdict,omitempty"`
 
+	ActorPriority   int `json:"actorPriority"`
 	ThreatPriority  int `json:"threatPriority"`
 	CoverageGap     int `json:"coverageGap"`
 	EnvironmentRisk int `json:"environmentRisk"`

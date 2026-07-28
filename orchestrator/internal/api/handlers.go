@@ -35,6 +35,7 @@ import (
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
 	"github.com/audspect/bas/internal/ws"
@@ -87,6 +88,7 @@ type Handler struct {
 	verification          *verification.Store  // nil when not loaded — SP2 verification store
 	relationships         *relationships.Store // nil when not loaded — CVE-ATT&CK Relationship Store
 	rules                 *rulelib.Engine      // nil when not loaded — Detection Rule Library
+	threatPriorityEngine  *threatpriority.Engine // nil when not loaded — Threat Prioritization
 }
 
 // New creates a Handler.
@@ -109,6 +111,12 @@ func (h *Handler) WithReporting(e *reporting.Engine) *Handler {
 // WithScheduler attaches the threat-intel connector scheduler.
 func (h *Handler) WithScheduler(s *connector.Scheduler) *Handler {
 	h.scheduler = s
+	return h
+}
+
+// WithThreatPriority attaches the actor-level priority engine.
+func (h *Handler) WithThreatPriority(e *threatpriority.Engine) *Handler {
+	h.threatPriorityEngine = e
 	return h
 }
 
