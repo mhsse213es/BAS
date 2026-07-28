@@ -1,12 +1,14 @@
 package connector
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/intelligence"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -177,6 +179,74 @@ func TestUpsertActorProfiles_PersistsConfidence(t *testing.T) {
 		}
 		if confidence != "high" {
 			t.Fatalf("confidence = %q, want %q", confidence, "high")
+		}
+	})
+}
+
+func TestScheduler_Sync_PersistsCampaignsAndMalwareFromIntelligenceSource(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		index := []mispEventIndex{
+			{ID: "sched-1", Info: "Scheduler Wiring Test Event", Timestamp: "1700000000", Tag: []mispTag{{Name: "mitre-attack-pattern"}}},
+		}
+		server := mispServer(t, index, map[string]mispEventDetail{
+			"sched-1": {Event: struct {
+				ID            string          `json:"id"`
+				Info          string          `json:"info"`
+				Timestamp     string          `json:"timestamp"`
+				Tag           []mispTag       `json:"Tag"`
+				GalaxyCluster []mispGalaxy    `json:"GalaxyCluster"`
+				Attribute     []mispAttribute `json:"Attribute"`
+			}{
+				ID: "sched-1", Info: "Scheduler Wiring Test Event",
+				GalaxyCluster: []mispGalaxy{
+					{Type: "mitre-attack-pattern", Value: "PowerShell", Meta: struct {
+						ExternalID []string `json:"external_id"`
+						KillChain  []string `json:"kill_chain"`
+					}{ExternalID: []string{"T1059.001"}}},
+					{Type: "mitre-attack-pattern", Value: "Phishing", Meta: struct {
+						ExternalID []string `json:"external_id"`
+						KillChain  []string `json:"kill_chain"`
+					}{ExternalID: []string{"T1566.001"}}},
+					{Type: "mitre-malware", Value: "SchedulerTestMalware"},
+				},
+			}},
+		})
+		defer server.Close()
+
+		mispClient := NewMISPClient(server.URL, "test-key", nil, nil)
+		s := NewScheduler([]Source{mispClient}, NewGenerator(t.TempDir(), nil, nil, nil), scenario.NewEngine(t.TempDir()), 24, pool, nil)
+
+		s.sync()
+
+		campaigns, err := intelligence.ListCampaigns(context.Background(), pool)
+		if err != nil {
+			t.Fatalf("ListCampaigns: %v", err)
+		}
+		found := false
+		for _, c := range campaigns {
+			if c.ID == "sched-1" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("campaigns = %+v, want one with ID=sched-1", campaigns)
+		}
+
+		malware, err := intelligence.ListMalware(context.Background(), pool)
+		if err != nil {
+			t.Fatalf("ListMalware: %v", err)
+		}
+		found = false
+		for _, m := range malware {
+			if m.Name == "SchedulerTestMalware" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("malware = %+v, want one named SchedulerTestMalware", malware)
 		}
 	})
 }

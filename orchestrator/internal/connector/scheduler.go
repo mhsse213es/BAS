@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/intelligence"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/threatpriority"
 )
@@ -135,6 +136,8 @@ func (s *Scheduler) sync() {
 	start := time.Now()
 
 	var actors []ThreatActor
+	var allCampaigns []intelligence.Campaign
+	var allMalware []intelligence.Malware
 	var bundleVersion string
 	bySource := map[string]SourceStat{}
 
@@ -156,6 +159,15 @@ func (s *Scheduler) sync() {
 		if bs, ok := src.(*BundleSource); ok {
 			bundleVersion = bs.Version()
 		}
+		if is, ok := src.(IntelligenceSource); ok {
+			campaigns, malware, ierr := is.FetchIntelligence()
+			if ierr != nil {
+				log.Printf("[connector/%s] intelligence fetch error: %v", src.Name(), ierr)
+			} else {
+				allCampaigns = append(allCampaigns, campaigns...)
+				allMalware = append(allMalware, malware...)
+			}
+		}
 	}
 
 	if len(actors) == 0 {
@@ -171,6 +183,19 @@ func (s *Scheduler) sync() {
 	// Persist actor profiles (sectors/regions) for reporting's priority-score
 	// weighting — see docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
 	s.upsertActorProfiles(actors)
+
+	if s.pool != nil {
+		for _, c := range allCampaigns {
+			if err := intelligence.UpsertCampaign(context.Background(), s.pool, c); err != nil {
+				log.Printf("[connector] upsert campaign %q: %v", c.ID, err)
+			}
+		}
+		for _, m := range allMalware {
+			if err := intelligence.UpsertMalware(context.Background(), s.pool, m); err != nil {
+				log.Printf("[connector] upsert malware %q: %v", m.ID, err)
+			}
+		}
+	}
 
 	if s.priorityEngine != nil {
 		if err := s.priorityEngine.SnapshotHistory(context.Background()); err != nil {
