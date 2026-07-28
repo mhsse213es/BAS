@@ -285,6 +285,22 @@ func actorKey(name string) string {
 // relevance. A single actor's upsert failing is logged and skipped, never
 // aborting the rest — same discipline sync() already applies to source
 // fetches. No-op when pool is nil (e.g. a test that never calls sync()).
+// nonNilStrings coalesces a nil slice to an empty one. pgx encodes a nil
+// []string as SQL NULL rather than an empty array, which violates
+// threat_actor_profiles' NOT NULL text[] columns (aliases/sectors/regions)
+// for any ThreatActor that leaves a field unset -- e.g. MISPClient's
+// extractActor never populates Aliases at all, and Sectors/Regions stay nil
+// whenever an event carries no sector:/region: tag, both common cases. This
+// previously failed silently (upsertActorProfiles only logs the error), so
+// every such actor's profile row was never written despite Fetch()
+// reporting success.
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
 func (s *Scheduler) upsertActorProfiles(actors []ThreatActor) {
 	if s.pool == nil {
 		return
@@ -303,7 +319,7 @@ func (s *Scheduler) upsertActorProfiles(actors []ThreatActor) {
 			   aliases = EXCLUDED.aliases, sectors = EXCLUDED.sectors, regions = EXCLUDED.regions,
 			   source = EXCLUDED.source, last_seen = EXCLUDED.last_seen, confidence = EXCLUDED.confidence,
 			   updated_at = NOW()`,
-			a.Name, a.Aliases, a.Sectors, a.Regions, a.Source, lastSeen, a.Confidence)
+			a.Name, nonNilStrings(a.Aliases), nonNilStrings(a.Sectors), nonNilStrings(a.Regions), a.Source, lastSeen, a.Confidence)
 		if err != nil {
 			log.Printf("[connector] upsert actor profile %q: %v", a.Name, err)
 		}

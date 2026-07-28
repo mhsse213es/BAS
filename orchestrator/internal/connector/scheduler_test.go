@@ -250,3 +250,34 @@ func TestScheduler_Sync_PersistsCampaignsAndMalwareFromIntelligenceSource(t *tes
 		}
 	})
 }
+
+// TestUpsertActorProfiles_NilAliasesSectorsRegions_StillPersists is a
+// regression test for a real pre-existing bug: pgx encodes a nil Go
+// []string as SQL NULL, which violated threat_actor_profiles' NOT NULL
+// text[] columns for any actor -- e.g. every MISP-sourced one, since
+// extractActor never sets Aliases and Sectors/Regions stay nil whenever an
+// event has no sector:/region: tag. This previously failed silently
+// (upsertActorProfiles only logs), so the row was simply never written.
+func TestUpsertActorProfiles_NilAliasesSectorsRegions_StillPersists(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		s.upsertActorProfiles([]ThreatActor{{
+			Name: "NIL-FIELDS-TEST-ACTOR", Confidence: "medium",
+			// Aliases, Sectors, Regions deliberately left nil.
+		}})
+
+		var aliases, sectors, regions []string
+		err := pool.QueryRow(context.Background(),
+			`SELECT aliases, sectors, regions FROM threat_actor_profiles WHERE name=$1`,
+			"NIL-FIELDS-TEST-ACTOR").Scan(&aliases, &sectors, &regions)
+		if err != nil {
+			t.Fatalf("expected the profile row to exist, got: %v", err)
+		}
+		if aliases == nil || sectors == nil || regions == nil {
+			t.Errorf("aliases=%v sectors=%v regions=%v, want empty slices not nil", aliases, sectors, regions)
+		}
+	})
+}
