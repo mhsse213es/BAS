@@ -73,26 +73,89 @@ type octiGQLRequest struct {
 	Variables map[string]interface{} `json:"variables,omitempty"`
 }
 
+// octiRelatedEntity is the flat, polymorphic shape of one stixCoreRelationships
+// edge's "to" (or "from") object -- a superset of AttackPattern/Campaign/
+// Malware fields. Unused fields for a given target type are simply absent in
+// that GraphQL response and stay zero-valued; this lets one Go type back
+// every relationship extraction in this file instead of one per target type.
+type octiRelatedEntity struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Aliases     []string `json:"aliases"`
+	XMitreID    string   `json:"x_mitre_id"`
+	KillChainPhases []struct {
+		PhaseName string `json:"phase_name"`
+	} `json:"killChainPhases"`
+	Objective      string                     `json:"objective"`
+	MalwareTypes   []string                   `json:"malware_types"`
+	AttackPatterns octiRelationshipConnection `json:"attackPatterns"`
+}
+
+type octiRelationshipEdge struct {
+	Node struct {
+		To   octiRelatedEntity `json:"to"`
+		From octiRelatedEntity `json:"from"`
+	} `json:"node"`
+}
+
+type octiRelationshipConnection struct {
+	Edges []octiRelationshipEdge `json:"edges"`
+}
+
 type octiThreatActorNode struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Aliases        []string `json:"aliases"`
-	Description    string   `json:"description"`
-	Confidence     int      `json:"confidence"` // 0-100
-	Modified       string   `json:"modified"`
-	AttackPatterns struct {
-		Edges []struct {
-			Node struct {
-				To struct {
-					XMitreID        string `json:"x_mitre_id"`
-					Name            string `json:"name"`
-					KillChainPhases []struct {
-						PhaseName string `json:"phase_name"`
-					} `json:"killChainPhases"`
-				} `json:"to"`
-			} `json:"node"`
-		} `json:"edges"`
-	} `json:"attackPatterns"`
+	ID             string                     `json:"id"`
+	Name           string                     `json:"name"`
+	Aliases        []string                   `json:"aliases"`
+	Description    string                     `json:"description"`
+	Confidence     int                        `json:"confidence"` // 0-100
+	Modified       string                     `json:"modified"`
+	AttackPatterns octiRelationshipConnection `json:"attackPatterns"`
+	Campaigns      octiRelationshipConnection `json:"campaigns"`
+	Malwares       octiRelationshipConnection `json:"malwares"`
+}
+
+// techniqueRefsFrom extracts TechniqueRef entries from a "uses"->Attack-Pattern
+// connection -- shared by actor, campaign, and malware conversion so the
+// ID-validation/tactic-parsing rule lives in exactly one place.
+func techniqueRefsFrom(conn octiRelationshipConnection) []TechniqueRef {
+	var out []TechniqueRef
+	for _, e := range conn.Edges {
+		id := strings.ToUpper(strings.TrimSpace(e.Node.To.XMitreID))
+		if !isATTACKID(id) {
+			continue
+		}
+		tactic := ""
+		if len(e.Node.To.KillChainPhases) > 0 {
+			tactic = e.Node.To.KillChainPhases[0].PhaseName
+		}
+		out = append(out, TechniqueRef{ID: id, Name: e.Node.To.Name, Tactic: tactic})
+	}
+	return out
+}
+
+// campaignEntitiesFrom extracts campaign identity from an "attributed-to"
+// connection queried via fromTypes: ["Campaign"] -- the actor is the "to"
+// side of this relationship, so the campaign is on "from". See the
+// relationship-direction table in
+// docs/superpowers/specs/2026-07-28-intelligence-expansion-phase2-design.md.
+func campaignEntitiesFrom(conn octiRelationshipConnection) []octiRelatedEntity {
+	out := make([]octiRelatedEntity, 0, len(conn.Edges))
+	for _, e := range conn.Edges {
+		out = append(out, e.Node.From)
+	}
+	return out
+}
+
+// malwareEntitiesFrom extracts malware identity from a "uses"->Malware
+// connection -- the actor is the "from" side, malware is "to", same
+// convention as techniqueRefsFrom's Attack-Pattern connections.
+func malwareEntitiesFrom(conn octiRelationshipConnection) []octiRelatedEntity {
+	out := make([]octiRelatedEntity, 0, len(conn.Edges))
+	for _, e := range conn.Edges {
+		out = append(out, e.Node.To)
+	}
+	return out
 }
 
 type octiThreatActorsResp struct {
@@ -203,24 +266,7 @@ func (c *OpenCTIClient) convertActor(raw octiThreatActorNode) *ThreatActor {
 		actor.LastSeen = t
 	}
 
-	for _, edge := range raw.AttackPatterns.Edges {
-		to := edge.Node.To
-		id := strings.ToUpper(strings.TrimSpace(to.XMitreID))
-		if !isATTACKID(id) {
-			continue
-		}
-		tactic := ""
-		if len(to.KillChainPhases) > 0 {
-			tactic = to.KillChainPhases[0].PhaseName
-		}
-		actor.Techniques = append(actor.Techniques, TechniqueRef{
-			ID:     id,
-			Name:   to.Name,
-			Tactic: tactic,
-		})
-	}
-
-	actor.Techniques = dedupTechniques(actor.Techniques)
+	actor.Techniques = dedupTechniques(techniqueRefsFrom(raw.AttackPatterns))
 	return actor
 }
 
