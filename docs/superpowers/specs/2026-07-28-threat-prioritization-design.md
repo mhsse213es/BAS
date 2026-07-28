@@ -147,9 +147,11 @@ ORDER BY UPPER(r->'technique'->>'id'), (r->>'executedAt')::timestamptz DESC
 ```sql
 SELECT DISTINCT ON (technique_id) technique_id, result
 FROM verification_history
-WHERE active AND workflow_state = 'Approved'
+WHERE active AND workflow_state = 'Approved' AND result IN ('Detected', 'NotDetected')
 ORDER BY technique_id, verified_at DESC
 ```
+
+(`NotApplicable` excluded from the denominator, same discipline as `scenario_runs`' error/skipped exclusion — it means the check didn't apply, not that detection failed. Success predicate: `result == verification.ResultDetected`, i.e. the exported `"Detected"` constant, not `"NotDetected"`.)
 
 ### Adaptive Coverage/Validation weighting
 
