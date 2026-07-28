@@ -158,13 +158,18 @@ func malwareEntitiesFrom(conn octiRelationshipConnection) []octiRelatedEntity {
 	return out
 }
 
+type octiActorEdge struct {
+	Node octiThreatActorNode `json:"node"`
+}
+
+type octiActorConnection struct {
+	Edges []octiActorEdge `json:"edges"`
+}
+
 type octiThreatActorsResp struct {
 	Data struct {
-		ThreatActors struct {
-			Edges []struct {
-				Node octiThreatActorNode `json:"node"`
-			} `json:"edges"`
-		} `json:"threatActors"`
+		ThreatActors  octiActorConnection `json:"threatActors"`
+		IntrusionSets octiActorConnection `json:"intrusionSets"`
 	} `json:"data"`
 	Errors []struct {
 		Message string `json:"message"`
@@ -173,11 +178,7 @@ type octiThreatActorsResp struct {
 
 // ── query ─────────────────────────────────────────────────────────────────────
 
-const threatActorsQuery = `
-query ThreatActors {
-  threatActors(first: 100) {
-    edges {
-      node {
+const actorFieldsFragment = `
         id
         name
         aliases
@@ -201,6 +202,91 @@ query ThreatActors {
             }
           }
         }
+        campaigns: stixCoreRelationships(
+          relationship_type: "attributed-to"
+          fromTypes: ["Campaign"]
+          first: 100
+        ) {
+          edges {
+            node {
+              from {
+                ... on Campaign {
+                  id
+                  name
+                  description
+                  objective
+                  attackPatterns: stixCoreRelationships(
+                    relationship_type: "uses"
+                    toTypes: ["Attack-Pattern"]
+                    first: 100
+                  ) {
+                    edges {
+                      node {
+                        to {
+                          ... on AttackPattern {
+                            x_mitre_id
+                            name
+                            killChainPhases { phase_name }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        malwares: stixCoreRelationships(
+          relationship_type: "uses"
+          toTypes: ["Malware"]
+          first: 100
+        ) {
+          edges {
+            node {
+              to {
+                ... on Malware {
+                  id
+                  name
+                  aliases
+                  malware_types
+                  attackPatterns: stixCoreRelationships(
+                    relationship_type: "uses"
+                    toTypes: ["Attack-Pattern"]
+                    first: 100
+                  ) {
+                    edges {
+                      node {
+                        to {
+                          ... on AttackPattern {
+                            x_mitre_id
+                            name
+                            killChainPhases { phase_name }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+`
+
+var threatActorsQuery = `
+query ThreatActorsAndIntrusionSets {
+  threatActors(first: 100) {
+    edges {
+      node {
+` + actorFieldsFragment + `
+      }
+    }
+  }
+  intrusionSets(first: 100) {
+    edges {
+      node {
+` + actorFieldsFragment + `
       }
     }
   }
@@ -239,8 +325,11 @@ func (c *OpenCTIClient) queryThreatActors() ([]octiThreatActorNode, error) {
 		return nil, fmt.Errorf("graphql error: %s", result.Errors[0].Message)
 	}
 
-	nodes := make([]octiThreatActorNode, 0, len(result.Data.ThreatActors.Edges))
+	nodes := make([]octiThreatActorNode, 0, len(result.Data.ThreatActors.Edges)+len(result.Data.IntrusionSets.Edges))
 	for _, e := range result.Data.ThreatActors.Edges {
+		nodes = append(nodes, e.Node)
+	}
+	for _, e := range result.Data.IntrusionSets.Edges {
 		nodes = append(nodes, e.Node)
 	}
 	return nodes, nil

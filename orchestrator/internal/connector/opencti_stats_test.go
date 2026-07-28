@@ -18,9 +18,7 @@ func TestOpenCTIClient_Stats_CountsRawNodesAndFilteredActors(t *testing.T) {
 			t.Fatalf("unexpected request path: %s", r.URL.Path)
 		}
 		resp := octiThreatActorsResp{}
-		resp.Data.ThreatActors.Edges = make([]struct {
-			Node octiThreatActorNode `json:"node"`
-		}, 2)
+		resp.Data.ThreatActors.Edges = make([]octiActorEdge, 2)
 		resp.Data.ThreatActors.Edges[0].Node = octiThreatActorNode{ID: "1", Name: "Actor One"}
 		resp.Data.ThreatActors.Edges[1].Node = octiThreatActorNode{ID: "2", Name: "Actor Two"}
 		json.NewEncoder(w).Encode(resp)

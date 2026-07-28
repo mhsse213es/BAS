@@ -1,6 +1,11 @@
 package connector
 
-import "testing"
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
 
 func TestTechniqueRefsFrom_ExtractsValidATTACKIDs(t *testing.T) {
 	conn := octiRelationshipConnection{
@@ -73,4 +78,47 @@ func TestMalwareEntitiesFrom_ReadsToSide(t *testing.T) {
 	if len(entities) != 1 || entities[0].Name != "TSCookie" || len(entities[0].MalwareTypes) != 1 || entities[0].MalwareTypes[0] != "backdoor" {
 		t.Fatalf("malwareEntitiesFrom() = %+v, want one entity Name=TSCookie MalwareTypes=[backdoor]", entities)
 	}
+}
+
+func TestOpenCTIClient_Fetch_MergesThreatActorsAndIntrusionSets(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := octiThreatActorsResp{}
+		resp.Data.ThreatActors.Edges = []octiActorEdge{
+			{Node: octiThreatActorNode{ID: "ta-1", Name: "FromThreatActors", AttackPatterns: twoTechniqueConn()}},
+		}
+		resp.Data.IntrusionSets.Edges = []octiActorEdge{
+			{Node: octiThreatActorNode{ID: "is-1", Name: "FromIntrusionSets", AttackPatterns: twoTechniqueConn()}},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	c := NewOpenCTIClient(server.URL, "test-key", nil)
+	actors, err := c.Fetch()
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if len(actors) != 2 {
+		t.Fatalf("Fetch() returned %d actors, want 2 (one from threatActors, one from intrusionSets)", len(actors))
+	}
+	names := map[string]bool{actors[0].Name: true, actors[1].Name: true}
+	if !names["FromThreatActors"] || !names["FromIntrusionSets"] {
+		t.Fatalf("Fetch() actors = %+v, want both FromThreatActors and FromIntrusionSets", actors)
+	}
+}
+
+// twoTechniqueConn builds a relationship connection with 2 valid ATT&CK
+// technique edges -- the minimum Fetch()'s "2+ techniques" filter requires
+// to keep an actor.
+func twoTechniqueConn() octiRelationshipConnection {
+	return octiRelationshipConnection{Edges: []octiRelationshipEdge{
+		{Node: struct {
+			To   octiRelatedEntity `json:"to"`
+			From octiRelatedEntity `json:"from"`
+		}{To: octiRelatedEntity{XMitreID: "T1059", Name: "Command Interpreter"}}},
+		{Node: struct {
+			To   octiRelatedEntity `json:"to"`
+			From octiRelatedEntity `json:"from"`
+		}{To: octiRelatedEntity{XMitreID: "T1105", Name: "Ingress Tool Transfer"}}},
+	}}
 }
