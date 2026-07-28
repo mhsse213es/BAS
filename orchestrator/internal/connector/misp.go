@@ -8,16 +8,20 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/audspect/bas/internal/intelligence"
 )
 
 // MISPClient fetches threat-actor TTP profiles from a MISP instance.
 type MISPClient struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
-	sectors    []string
-	regions    []string
-	lastStat   SourceStat
+	baseURL       string
+	apiKey        string
+	httpClient    *http.Client
+	sectors       []string
+	regions       []string
+	lastStat      SourceStat
+	lastCampaigns []intelligence.Campaign
+	lastMalware   []intelligence.Malware
 }
 
 // NewMISPClient creates a MISP client. Skips TLS verification for self-signed
@@ -50,11 +54,32 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 	log.Printf("[connector/misp] fetched %d events", len(events))
 
 	actorMap := make(map[string]*ThreatActor)
+	var campaigns []intelligence.Campaign
+	var malware []intelligence.Malware
+
 	for _, ev := range events {
-		actor := c.extractActor(ev)
+		hasMitre := false
+		for _, t := range ev.Tag {
+			if strings.Contains(t.Name, "mitre-attack-pattern") || strings.Contains(t.Name, "mitre-attack") {
+				hasMitre = true
+				break
+			}
+		}
+		if !hasMitre {
+			continue
+		}
+
+		detail, err := c.getEvent(ev.ID)
+		if err != nil {
+			log.Printf("[connector/misp] fetch event %s: %v", ev.ID, err)
+			continue
+		}
+
+		actor := c.extractActor(ev, detail)
 		if actor == nil || len(actor.Techniques) < 2 {
 			continue
 		}
+
 		// Merge by actor name (same actor may appear in multiple events)
 		if existing, ok := actorMap[actor.Name]; ok {
 			existing.Techniques = mergeTechniques(existing.Techniques, actor.Techniques)
@@ -65,6 +90,12 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 		} else {
 			actorMap[actor.Name] = actor
 		}
+
+		campaign, eventMalware := c.extractIntelligence(ev, detail, actor)
+		if campaign != nil {
+			campaigns = append(campaigns, *campaign)
+		}
+		malware = append(malware, eventMalware...)
 	}
 
 	out := make([]ThreatActor, 0, len(actorMap))
@@ -74,6 +105,8 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 		}
 	}
 	c.lastStat = SourceStat{Name: "misp", RawCount: len(events), ActorCount: len(out), FetchedAt: time.Now()}
+	c.lastCampaigns = campaigns
+	c.lastMalware = malware
 	return out, nil
 }
 
@@ -169,27 +202,10 @@ func (c *MISPClient) getEvent(id string) (*mispEventDetail, error) {
 	return &detail, nil
 }
 
-// extractActor builds a ThreatActor from a MISP event index entry.
-// Fetches the full event only when the index entry has ATT&CK-related tags.
-func (c *MISPClient) extractActor(ev mispEventIndex) *ThreatActor {
-	// Quick pre-filter: must have mitre tag
-	hasMitre := false
-	for _, t := range ev.Tag {
-		if strings.Contains(t.Name, "mitre-attack-pattern") || strings.Contains(t.Name, "mitre-attack") {
-			hasMitre = true
-			break
-		}
-	}
-	if !hasMitre {
-		return nil
-	}
-
-	detail, err := c.getEvent(ev.ID)
-	if err != nil {
-		log.Printf("[connector/misp] fetch event %s: %v", ev.ID, err)
-		return nil
-	}
-
+// extractActor builds a ThreatActor from a MISP event index entry and its
+// already-fetched detail. detail is fetched once by Fetch()'s loop and
+// shared with extractIntelligence to avoid a second per-event API call.
+func (c *MISPClient) extractActor(ev mispEventIndex, detail *mispEventDetail) *ThreatActor {
 	actor := &ThreatActor{
 		Source:   "misp",
 		SourceID: ev.ID,
@@ -270,6 +286,64 @@ func (c *MISPClient) extractActor(ev mispEventIndex) *ThreatActor {
 	}
 
 	return actor
+}
+
+// extractIntelligence builds Phase 1 Intelligence Expansion data (Campaign +
+// Malware) from an already-qualified, already-fetched MISP event -- reuses
+// the same event detail and actor name/techniques extractActor already
+// derived, no second fetch. One Campaign per qualifying event (the event
+// itself IS the campaign container). Zero or more Malware records, one per
+// mitre-malware GalaxyCluster entry. Malware entries inherit the SAME
+// technique/actor association as the event's actor -- MISP's flat galaxy
+// list doesn't support finer per-malware technique attribution without
+// deeper relationship parsing, which Phase 1 deliberately doesn't attempt.
+func (c *MISPClient) extractIntelligence(ev mispEventIndex, detail *mispEventDetail, actor *ThreatActor) (*intelligence.Campaign, []intelligence.Malware) {
+	src := intelligence.SourceRef{
+		Provider: "misp", ExternalID: ev.ID,
+		LastUpdated: actor.LastSeen, Confidence: actor.Confidence,
+	}
+	if src.LastUpdated.IsZero() {
+		src.LastUpdated = time.Now()
+	}
+
+	campaign := &intelligence.Campaign{
+		ID: ev.ID, Name: detail.Event.Info, Description: detail.Event.Info,
+		ThreatActorIDs: []string{actor.Name}, TechniqueIDs: techniqueIDs(actor.Techniques),
+		Source: src,
+	}
+
+	var malware []intelligence.Malware
+	for _, gc := range detail.Event.GalaxyCluster {
+		if gc.Type != "mitre-malware" {
+			continue
+		}
+		name := strings.TrimSpace(gc.Value)
+		if name == "" {
+			continue
+		}
+		malware = append(malware, intelligence.Malware{
+			ID: intelligence.MalwareKey(name), Name: name,
+			TechniqueIDs: techniqueIDs(actor.Techniques),
+			ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{ev.ID},
+			Source: src,
+		})
+	}
+	return campaign, malware
+}
+
+func techniqueIDs(techs []TechniqueRef) []string {
+	ids := make([]string, 0, len(techs))
+	for _, t := range techs {
+		ids = append(ids, t.ID)
+	}
+	return ids
+}
+
+// FetchIntelligence implements IntelligenceSource -- returns the Campaign/
+// Malware data gathered during the most recent Fetch() call, the same
+// after-the-fact-accessor pattern Stats() already uses for lastStat.
+func (c *MISPClient) FetchIntelligence() ([]intelligence.Campaign, []intelligence.Malware, error) {
+	return c.lastCampaigns, c.lastMalware, nil
 }
 
 func sanitiseEventName(info string) string {
