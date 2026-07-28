@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/threatpriority"
 )
 
 // Scheduler polls MISP and OpenCTI on a configurable interval and
@@ -23,6 +24,12 @@ type Scheduler struct {
 	// internal/reporting's priority-score weighting. See
 	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
 	pool *pgxpool.Pool
+
+	// priorityEngine recomputes and snapshots Threat Prioritization scores
+	// whenever intel changes -- connector sync IS the change-detection
+	// trigger for internal/threatpriority's "Continuous Intelligence"
+	// behavior, no separate polling needed. nil-safe: skipped if unset.
+	priorityEngine *threatpriority.Engine
 
 	mu     sync.RWMutex
 	status ConnectorStatus
@@ -38,18 +45,20 @@ func NewScheduler(
 	engine *scenario.Engine,
 	pollHours int,
 	pool *pgxpool.Pool,
+	priorityEngine *threatpriority.Engine,
 ) *Scheduler {
 	if pollHours <= 0 {
 		pollHours = 24
 	}
 	s := &Scheduler{
-		sources:   sources,
-		generator: generator,
-		engine:    engine,
-		interval:  time.Duration(pollHours) * time.Hour,
-		pool:      pool,
-		syncCh:    make(chan struct{}, 1),
-		stopCh:    make(chan struct{}),
+		sources:        sources,
+		generator:      generator,
+		engine:         engine,
+		interval:       time.Duration(pollHours) * time.Hour,
+		pool:           pool,
+		priorityEngine: priorityEngine,
+		syncCh:         make(chan struct{}, 1),
+		stopCh:         make(chan struct{}),
 	}
 	s.status = ConnectorStatus{
 		LastSyncStatus: "never",
@@ -162,6 +171,12 @@ func (s *Scheduler) sync() {
 	// Persist actor profiles (sectors/regions) for reporting's priority-score
 	// weighting — see docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
 	s.upsertActorProfiles(actors)
+
+	if s.priorityEngine != nil {
+		if err := s.priorityEngine.SnapshotHistory(context.Background()); err != nil {
+			log.Printf("[connector] threat-priority snapshot: %v", err)
+		}
+	}
 
 	// ── Generate scenarios ────────────────────────────────────────────────
 	result, err := s.generator.Write(actors)
