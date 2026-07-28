@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestUpsertCampaign_InsertThenOverwriteOnConflict(t *testing.T) {
+func TestUpsertCampaign_NameAndDescriptionOverwriteOnConflict(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
 	}
@@ -59,6 +59,55 @@ func TestUpsertCampaign_InsertThenOverwriteOnConflict(t *testing.T) {
 		}
 		if len(got[0].TechniqueIDs) != 2 {
 			t.Fatalf("TechniqueIDs = %v, want 2 entries", got[0].TechniqueIDs)
+		}
+	})
+}
+
+func TestUpsertCampaign_MergesActorAndTechniqueIDsOnConflict(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		first := Campaign{
+			ID: "evt-multi-actor", Name: "Multi-Actor Campaign", ThreatActorIDs: []string{"APT29"},
+			TechniqueIDs: []string{"T1059"},
+			Source:       SourceRef{Provider: "opencti", ExternalID: "campaign--1", LastUpdated: time.Now(), Confidence: "high"},
+		}
+		if err := UpsertCampaign(ctx, pool, first); err != nil {
+			t.Fatalf("first UpsertCampaign: %v", err)
+		}
+
+		second := Campaign{
+			ID: "evt-multi-actor", Name: "Multi-Actor Campaign", ThreatActorIDs: []string{"Cozy Bear"},
+			TechniqueIDs: []string{"T1105"},
+			Source:       SourceRef{Provider: "opencti", ExternalID: "campaign--1", LastUpdated: time.Now(), Confidence: "high"},
+		}
+		if err := UpsertCampaign(ctx, pool, second); err != nil {
+			t.Fatalf("second UpsertCampaign: %v", err)
+		}
+
+		campaigns, err := ListCampaigns(ctx, pool)
+		if err != nil {
+			t.Fatalf("ListCampaigns: %v", err)
+		}
+		var got *Campaign
+		for i := range campaigns {
+			if campaigns[i].ID == "evt-multi-actor" {
+				got = &campaigns[i]
+				break
+			}
+		}
+		if got == nil {
+			t.Fatal("campaign evt-multi-actor not found after two upserts")
+		}
+		sort.Strings(got.ThreatActorIDs)
+		if len(got.ThreatActorIDs) != 2 || got.ThreatActorIDs[0] != "APT29" || got.ThreatActorIDs[1] != "Cozy Bear" {
+			t.Fatalf("ThreatActorIDs = %v, want union [APT29 Cozy Bear], not overwritten to just the second upsert's value", got.ThreatActorIDs)
+		}
+		sort.Strings(got.TechniqueIDs)
+		if len(got.TechniqueIDs) != 2 || got.TechniqueIDs[0] != "T1059" || got.TechniqueIDs[1] != "T1105" {
+			t.Fatalf("TechniqueIDs = %v, want union [T1059 T1105], not overwritten", got.TechniqueIDs)
 		}
 	})
 }

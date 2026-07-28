@@ -18,8 +18,15 @@ func nonNil(s []string) []string {
 	return s
 }
 
-// UpsertCampaign overwrites on conflict -- each MISP event ID is already
-// unique, so re-syncing the same event is a plain refresh, no merge needed.
+// UpsertCampaign merges actor_ids/technique_ids on conflict (union,
+// deduplicated) -- OpenCTI can legitimately attribute the same campaign to
+// more than one actor, and Campaign extraction runs per-actor (see
+// connector.OpenCTIClient.Fetch), so the same campaign ID can be upserted
+// twice within one sync with different ThreatActorIDs. Overwriting would
+// silently drop the first actor's attribution. name/description/source_*
+// fields still overwrite -- those describe the same real-world campaign, no
+// merge needed. Safe for MISP too: its campaigns never collide within a
+// sync, so union-of-one-element equals the old overwrite behavior.
 func UpsertCampaign(ctx context.Context, pool *pgxpool.Pool, c Campaign) error {
 	c.ThreatActorIDs, c.TechniqueIDs = nonNil(c.ThreatActorIDs), nonNil(c.TechniqueIDs)
 	_, err := pool.Exec(ctx,
@@ -28,7 +35,8 @@ func UpsertCampaign(ctx context.Context, pool *pgxpool.Pool, c Campaign) error {
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		 ON CONFLICT (id) DO UPDATE SET
 		   name = EXCLUDED.name, description = EXCLUDED.description,
-		   actor_ids = EXCLUDED.actor_ids, technique_ids = EXCLUDED.technique_ids,
+		   actor_ids     = ARRAY(SELECT DISTINCT UNNEST(intelligence_campaigns.actor_ids || EXCLUDED.actor_ids)),
+		   technique_ids = ARRAY(SELECT DISTINCT UNNEST(intelligence_campaigns.technique_ids || EXCLUDED.technique_ids)),
 		   source_provider = EXCLUDED.source_provider, source_external_id = EXCLUDED.source_external_id,
 		   source_confidence = EXCLUDED.source_confidence, last_updated = EXCLUDED.last_updated`,
 		c.ID, c.Name, c.Description, c.ThreatActorIDs, c.TechniqueIDs,
