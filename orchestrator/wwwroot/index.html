@@ -1306,6 +1306,12 @@ body.theme-slate {
           </svg>
           Technique Coverage
         </div>
+        <div class="nav-item" data-tab="threat-priority" onclick="showTab('threat-priority')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M8 1l2 4 4.5.5-3.25 3.25L12.25 13 8 10.75 3.75 13l1-4.25L1.5 5.5 6 5z"/>
+          </svg>
+          Threat Prioritization
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Administration</div>
@@ -3101,6 +3107,60 @@ body.theme-slate {
         </div>
       </div>
 
+      <!-- Threat Prioritization -->
+      <div id="tab-threat-priority" style="display:none">
+        <div id="tp-list-view">
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">Threat Prioritization</div>
+            <div class="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Actor</th>
+                    <th>Tier</th>
+                    <th>Score</th>
+                    <th>Trend</th>
+                    <th>Coverage Gap</th>
+                  </tr>
+                </thead>
+                <tbody id="tp-list-body"></tbody>
+              </table>
+            </div>
+            <div id="tp-list-empty" class="empty" style="display:none">No threat actors tracked yet — configure a threat-intel connector to populate this view.</div>
+          </div>
+        </div>
+
+        <div id="tp-detail-view" style="display:none">
+          <div style="margin-bottom:0.75rem">
+            <a class="tiny" style="color:var(--accent);cursor:pointer;text-decoration:none" onclick="showThreatPriorityList()">&lsaquo; Threat Prioritization</a>
+          </div>
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title" id="tp-detail-title">Actor</div>
+            <div id="tp-detail-summary" class="score-grid" style="margin:0.75rem 0"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">Why this score</div>
+            <div id="tp-detail-factors"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">Uncovered Techniques</div>
+            <div id="tp-detail-uncovered" class="tiny"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">History</div>
+            <div id="tp-detail-history" class="tiny"></div>
+          </div>
+
+          <div class="card" style="padding:1rem 1.2rem">
+            <div class="card-title">Recommendations for this actor</div>
+            <div id="tp-detail-recs" class="tiny"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Compliance (reached from the Reports hub) -->
       <div id="tab-compliance" style="display:none">
         <div style="margin-bottom:0.75rem">
@@ -3905,7 +3965,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -4037,7 +4097,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','exercises','attack-coverage'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','exercises','attack-coverage','threat-priority'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -4055,6 +4115,7 @@ function showTab(name) {
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
   if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
+  if (name === 'threat-priority') { showThreatPriorityList(); loadThreatPriorityActors(); }
   if (name === 'findings') loadFindings();
   if (name === 'remediation') loadRemediations();
   if (name === 'reports') loadReports();
@@ -4671,6 +4732,105 @@ function loadCoverageMatrix() {
     .catch(function(e) {
       body.innerHTML = '<tr><td colspan="6" class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</td></tr>';
     });
+}
+
+var TP_ACTOR_CACHE = [];
+
+function showThreatPriorityList() {
+  document.getElementById('tp-list-view').style.display = '';
+  document.getElementById('tp-detail-view').style.display = 'none';
+}
+
+function tpTierBadge(tier) {
+  var color = tier === 'Critical' ? 'var(--danger)' : tier === 'High' ? 'var(--warning)' : tier === 'Medium' ? 'var(--accent)' : 'var(--muted)';
+  return '<span class="badge" style="color:' + color + ';border-color:' + color + '">' + x(tier || 'Low') + '</span>';
+}
+
+function tpTrendCell(trend, delta) {
+  if (trend === 'up') return '<span style="color:var(--success)">&#9650; +' + delta + '</span>';
+  if (trend === 'down') return '<span style="color:var(--danger)">&#9660; ' + delta + '</span>';
+  if (trend === 'stable') return '<span class="tiny muted">&mdash;</span>';
+  return '<span class="tiny muted">New</span>';
+}
+
+function loadThreatPriorityActors() {
+  var body = document.getElementById('tp-list-body');
+  var empty = document.getElementById('tp-list-empty');
+  body.innerHTML = '<tr><td colspan="5" class="empty">Loading&hellip;</td></tr>';
+  apicall('/api/threat-priority/actors')
+    .then(function(actors) {
+      TP_ACTOR_CACHE = actors || [];
+      if (!TP_ACTOR_CACHE.length) {
+        body.innerHTML = '';
+        empty.style.display = '';
+        return;
+      }
+      empty.style.display = 'none';
+      body.innerHTML = TP_ACTOR_CACHE.map(function(a) {
+        return '<tr style="cursor:pointer" onclick="showThreatPriorityDetail(' + JSON.stringify(a.actorName) + ')">' +
+          '<td style="font-weight:600">' + x(a.actorName) + '</td>' +
+          '<td>' + tpTierBadge(a.tier) + '</td>' +
+          '<td>' + x(a.score) + '</td>' +
+          '<td>' + tpTrendCell(a.trend, a.trendDelta) + '</td>' +
+          '<td>' + x(a.coverageGapCount) + ' of ' + x(a.techniqueCount) + '</td>' +
+          '</tr>';
+      }).join('');
+    })
+    .catch(function(e) {
+      body.innerHTML = '<tr><td colspan="5" class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</td></tr>';
+    });
+}
+
+function showThreatPriorityDetail(actorName) {
+  document.getElementById('tp-list-view').style.display = 'none';
+  document.getElementById('tp-detail-view').style.display = '';
+  document.getElementById('tp-detail-title').textContent = actorName;
+
+  apicall('/api/threat-priority/actors/' + encodeURIComponent(actorName))
+    .then(function(d) { renderThreatPriorityDetail(d); })
+    .catch(function(e) {
+      document.getElementById('tp-detail-factors').innerHTML = '<div class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</div>';
+    });
+}
+
+function renderThreatPriorityDetail(d) {
+  document.getElementById('tp-detail-summary').innerHTML =
+    '<div class="kpi-card"><div class="kpi-label">Score</div><div class="kpi-value">' + x(d.score) + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Tier</div><div class="kpi-value">' + tpTierBadge(d.tier) + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Techniques</div><div class="kpi-value">' + x(d.techniqueCount) + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Coverage Gap</div><div class="kpi-value">' + x(d.coverageGapCount) + '</div></div>';
+
+  var factors = (d.factors || []).map(function(f) {
+    var val = f.available ? f.rawScore.toFixed(0) + '%' : 'Not yet validated';
+    return '<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--border)">' +
+      '<div><div style="font-weight:600">' + x(f.name) + '</div><div class="tiny muted">' + x(f.explanation) + '</div></div>' +
+      '<div style="font-weight:700">' + x(val) + '</div>' +
+      '</div>';
+  }).join('');
+  document.getElementById('tp-detail-factors').innerHTML = factors || '<div class="empty">No factor data.</div>';
+
+  var uncovered = (d.uncoveredTechniques || []);
+  document.getElementById('tp-detail-uncovered').innerHTML = uncovered.length
+    ? uncovered.map(function(t) { return '<span class="tool-tag">' + x(t) + '</span>'; }).join(' ')
+    : '<span class="muted">No coverage gaps.</span>';
+
+  var hist = (d.history || []);
+  document.getElementById('tp-detail-history').innerHTML = hist.length
+    ? '<table style="width:100%"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +
+      hist.map(function(h) { return '<tr><td>' + x(new Date(h.recordedAt).toLocaleDateString()) + '</td><td>' + x(h.score) + '</td></tr>'; }).join('') +
+      '</tbody></table>'
+    : '<span class="muted">No history yet.</span>';
+
+  var techSet = {};
+  (d.techniqueIds || []).forEach(function(t) { techSet[t] = true; });
+  apicall('/api/recommend/simulations?limit=100').then(function(recData) {
+    var matches = ((recData && recData.techniques) || []).filter(function(t) { return techSet[t.techniqueId]; });
+    document.getElementById('tp-detail-recs').innerHTML = matches.length
+      ? matches.map(function(t) { return '<div style="padding:0.3rem 0">' + x(t.techniqueId) + ' — ' + x(t.name) + ' <span class="tiny muted">(score ' + x(t.score) + ')</span></div>'; }).join('')
+      : '<span class="muted">No open recommendations for this actor\'s techniques.</span>';
+  }).catch(function() {
+    document.getElementById('tp-detail-recs').innerHTML = '<span class="muted">Could not load recommendations.</span>';
+  });
 }
 
 function loadRecommendations() {
