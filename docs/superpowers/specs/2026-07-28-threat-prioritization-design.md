@@ -107,7 +107,7 @@ type ScoreFactor interface {
 
 `Weight` takes `Context` (not `()`) because the Coverage/Validation split needs the *tested-technique count* to pick a weight band — a constant-weight factor just ignores the parameter.
 
-### The 10 factors
+### The 11 factors
 
 | Factor | Group | Data source | v1 formula |
 |---|---|---|---|
