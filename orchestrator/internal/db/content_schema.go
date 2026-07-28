@@ -276,6 +276,34 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			recorded_at timestamptz NOT NULL DEFAULT NOW()
 		)`,
 		`CREATE INDEX IF NOT EXISTS tph_actor_time ON threat_priority_history(actor_name, recorded_at DESC)`,
+
+		// Intelligence Expansion Phase 1 — MISP-sourced Campaigns/Malware
+		// (see docs/superpowers/specs/2026-07-28-intelligence-expansion-design.md).
+		`CREATE TABLE IF NOT EXISTS intelligence_campaigns (
+			id                  text        PRIMARY KEY,
+			name                text        NOT NULL,
+			description         text        NOT NULL DEFAULT '',
+			actor_ids           text[]      NOT NULL DEFAULT '{}',
+			technique_ids       text[]      NOT NULL DEFAULT '{}',
+			source_provider     text        NOT NULL,
+			source_external_id  text        NOT NULL DEFAULT '',
+			source_confidence   text        NOT NULL DEFAULT '',
+			last_updated        timestamptz NOT NULL DEFAULT NOW(),
+			tenant_id           text        NOT NULL DEFAULT 'default'
+		)`,
+		`CREATE TABLE IF NOT EXISTS intelligence_malware (
+			id                  text        PRIMARY KEY,
+			name                text        NOT NULL,
+			aliases             text[]      NOT NULL DEFAULT '{}',
+			technique_ids       text[]      NOT NULL DEFAULT '{}',
+			actor_ids           text[]      NOT NULL DEFAULT '{}',
+			campaign_ids        text[]      NOT NULL DEFAULT '{}',
+			source_provider     text        NOT NULL,
+			source_external_id  text        NOT NULL DEFAULT '',
+			source_confidence   text        NOT NULL DEFAULT '',
+			last_updated        timestamptz NOT NULL DEFAULT NOW(),
+			tenant_id           text        NOT NULL DEFAULT 'default'
+		)`,
 	}
 
 	for _, s := range stmts {
