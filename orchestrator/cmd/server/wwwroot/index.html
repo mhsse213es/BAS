@@ -10241,6 +10241,28 @@ function viewRunResults(run) {
   document.getElementById('run-tab-content').style.display = '';
   document.getElementById('results-overlay').classList.add('open');
 
+  var reportsEl = document.getElementById('run-tab-reports');
+  if (reportsEl) {
+    if (hasOutput) {
+      reportsEl.innerHTML =
+        '<div class="dash-panel" style="margin-bottom:1rem"><div class="dash-panel-hdr">Run Metadata</div><div class="dash-panel-body">' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;font-size:0.78rem">' +
+            '<div><div class="kpi-label">Run ID</div><div>' + x(runId) + '</div></div>' +
+            '<div><div class="kpi-label">Agent</div><div>' + x(run.agentId || '') + '</div></div>' +
+            '<div><div class="kpi-label">Status</div><div>' + x(run.status || '') + '</div></div>' +
+          '</div>' +
+        '</div></div>' +
+        '<div class="dash-panel"><div class="dash-panel-hdr">Export</div><div class="dash-panel-body" style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
+          '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')">&#8595; JSON</button>' +
+          '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')">&#8595; HTML Report</button>' +
+          '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')">&#8595; PDF</button>' +
+          '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')">&#8595; CSV</button>' +
+        '</div></div>';
+    } else {
+      reportsEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:1rem 0">No exportable output yet — this run hasn\'t completed.</div>';
+    }
+  }
+
   // Key Findings + Prioritised Recommendations — fetched from the report engine
   // (BuildFromRun, the same source as the HTML/PDF report) so the drawer matches
   // the formal report exactly. Rendered into the placeholder above once it loads.
