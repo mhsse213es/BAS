@@ -173,6 +173,17 @@ func malwareEntitiesFrom(conn octiRelationshipConnection) []octiRelatedEntity {
 	return out
 }
 
+// toolEntitiesFrom extracts tool identity from a "uses"->Tool connection --
+// the actor is the "from" side, tool is "to", same convention as
+// malwareEntitiesFrom.
+func toolEntitiesFrom(conn octiRelationshipConnection) []octiRelatedEntity {
+	out := make([]octiRelatedEntity, 0, len(conn.Edges))
+	for _, e := range conn.Edges {
+		out = append(out, e.Node.To)
+	}
+	return out
+}
+
 type octiActorEdge struct {
 	Node octiThreatActorNode `json:"node"`
 }
@@ -404,6 +415,23 @@ func (c *OpenCTIClient) convertMalware(entity octiRelatedEntity, actor *ThreatAc
 		Name:           entity.Name,
 		Aliases:        entity.Aliases,
 		MalwareTypes:   entity.MalwareTypes,
+		TechniqueIDs:   techniqueIDs(techniqueRefsFrom(entity.AttackPatterns)),
+		ThreatActorIDs: []string{actor.Name},
+		Source: intelligence.SourceRef{
+			Provider: "opencti", ExternalID: entity.ID,
+			LastUpdated: actor.LastSeen, Confidence: actor.Confidence,
+		},
+	}
+}
+
+// convertTool builds an intelligence.Tool from a tool entity discovered
+// under a specific actor's "uses" relationship. Uses the tool's OWN nested
+// technique relationships, same reasoning as convertCampaign/convertMalware.
+func (c *OpenCTIClient) convertTool(entity octiRelatedEntity, actor *ThreatActor) intelligence.Tool {
+	return intelligence.Tool{
+		ID:             intelligence.MalwareKey(entity.Name),
+		Name:           entity.Name,
+		Aliases:        entity.Aliases,
 		TechniqueIDs:   techniqueIDs(techniqueRefsFrom(entity.AttackPatterns)),
 		ThreatActorIDs: []string{actor.Name},
 		Source: intelligence.SourceRef{

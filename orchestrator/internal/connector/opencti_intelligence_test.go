@@ -168,6 +168,46 @@ func TestOpenCTIClient_ConvertMalware_UsesOwnTechniquesAndTypes(t *testing.T) {
 	}
 }
 
+func TestToolEntitiesFrom_ReadsToSide(t *testing.T) {
+	conn := octiRelationshipConnection{
+		Edges: []octiRelationshipEdge{
+			{Node: struct {
+				To   octiRelatedEntity `json:"to"`
+				From octiRelatedEntity `json:"from"`
+			}{To: octiRelatedEntity{ID: "tool--1", Name: "PsExec", Aliases: []string{"psexec.exe"}}}},
+		},
+	}
+	entities := toolEntitiesFrom(conn)
+	if len(entities) != 1 || entities[0].Name != "PsExec" || len(entities[0].Aliases) != 1 || entities[0].Aliases[0] != "psexec.exe" {
+		t.Fatalf("toolEntitiesFrom() = %+v, want one entity Name=PsExec Aliases=[psexec.exe]", entities)
+	}
+}
+
+func TestOpenCTIClient_ConvertTool_UsesOwnTechniques(t *testing.T) {
+	c := NewOpenCTIClient("http://example.invalid", "test-key", nil)
+	actor := &ThreatActor{Name: "BlackTech"}
+	entity := octiRelatedEntity{
+		ID: "tool--1", Name: "PsExec", Aliases: []string{"psexec.exe"},
+		AttackPatterns: twoTechniqueConn(),
+	}
+	tool := c.convertTool(entity, actor)
+	if tool.Name != "PsExec" || len(tool.Aliases) != 1 || tool.Aliases[0] != "psexec.exe" {
+		t.Fatalf("convertTool() = %+v, want Name=PsExec Aliases=[psexec.exe]", tool)
+	}
+	if len(tool.TechniqueIDs) != 2 {
+		t.Fatalf("convertTool().TechniqueIDs = %v, want 2 (tool's own techniques)", tool.TechniqueIDs)
+	}
+	if tool.ID != intelligence.MalwareKey("PsExec") {
+		t.Fatalf("convertTool().ID = %q, want %q", tool.ID, intelligence.MalwareKey("PsExec"))
+	}
+	if len(tool.ThreatActorIDs) != 1 || tool.ThreatActorIDs[0] != "BlackTech" {
+		t.Fatalf("convertTool().ThreatActorIDs = %v, want [BlackTech]", tool.ThreatActorIDs)
+	}
+	if tool.Source.Provider != "opencti" || tool.Source.ExternalID != "tool--1" {
+		t.Fatalf("convertTool().Source = %+v, want Provider=opencti ExternalID=tool--1", tool.Source)
+	}
+}
+
 func TestOpenCTIClient_FetchIntelligence_PopulatedAfterFetch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := octiThreatActorsResp{}
