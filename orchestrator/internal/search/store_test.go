@@ -105,3 +105,59 @@ func TestReindexAll_PopulatesScenarioRunFindingDocuments(t *testing.T) {
 		}
 	})
 }
+
+func TestReindexAll_PopulatesActorCampaignMalwareToolTechniqueDocuments(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source) VALUES ('SearchTestActor', '{}', '{}', '{}', 'test')`); err != nil {
+			t.Fatalf("seed threat_actor_profiles: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO intelligence_campaigns (id, name, description, actor_ids, technique_ids, source_provider) VALUES ('search-campaign-1', 'Search Test Campaign', '', '{}', '{}', 'test')`); err != nil {
+			t.Fatalf("seed intelligence_campaigns: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO intelligence_malware (id, name, aliases, technique_ids, actor_ids, campaign_ids, source_provider) VALUES ('search-malware-1', 'Search Test Malware', '{}', '{}', '{}', '{}', 'test')`); err != nil {
+			t.Fatalf("seed intelligence_malware: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO intelligence_tools (id, name, aliases, technique_ids, actor_ids, campaign_ids, source_provider) VALUES ('search-tool-1', 'Search Test Tool', '{}', '{}', '{}', '{}', 'test')`); err != nil {
+			t.Fatalf("seed intelligence_tools: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO techniques (technique_id, name, tactic, description) VALUES ('T1059.001', 'PowerShell', 'execution', 'Adversaries may abuse PowerShell')`); err != nil {
+			t.Fatalf("seed techniques: %v", err)
+		}
+
+		engine := scenario.NewEngine(t.TempDir())
+		if err := ReindexAll(ctx, pool, engine); err != nil {
+			t.Fatalf("ReindexAll: %v", err)
+		}
+
+		for _, tc := range []struct {
+			docType, sourceID, wantTitle string
+		}{
+			{"actor", "SearchTestActor", "SearchTestActor"},
+			{"campaign", "search-campaign-1", "Search Test Campaign"},
+			{"malware", "search-malware-1", "Search Test Malware"},
+			{"tool", "search-tool-1", "Search Test Tool"},
+			{"technique", "T1059.001", "T1059.001 PowerShell"},
+		} {
+			var title string
+			err := pool.QueryRow(ctx,
+				`SELECT title FROM search_documents WHERE doc_type = $1 AND source_id = $2`,
+				tc.docType, tc.sourceID).Scan(&title)
+			if err != nil {
+				t.Errorf("query %s document: %v", tc.docType, err)
+				continue
+			}
+			if title != tc.wantTitle {
+				t.Errorf("%s title = %q, want %q", tc.docType, title, tc.wantTitle)
+			}
+		}
+	})
+}

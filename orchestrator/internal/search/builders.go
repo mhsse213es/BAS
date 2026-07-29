@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/intelligence"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -77,6 +78,102 @@ func findingsFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
 			DocType: "finding", SourceID: id, Title: title,
 			Description: severity + " " + exposureState,
 			Tags:        []string{controlClass, severity, status},
+		})
+	}
+	return out, rows.Err()
+}
+
+// actorsFrom maps every threat_actor_profiles row into a Document.
+func actorsFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
+	rows, err := pool.Query(ctx, `SELECT name, aliases, sectors, regions FROM threat_actor_profiles`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Document
+	for rows.Next() {
+		var name string
+		var aliases, sectors, regions []string
+		if err := rows.Scan(&name, &aliases, &sectors, &regions); err != nil {
+			return nil, err
+		}
+		tags := make([]string, 0, len(aliases)+len(sectors)+len(regions))
+		tags = append(tags, aliases...)
+		tags = append(tags, sectors...)
+		tags = append(tags, regions...)
+		out = append(out, Document{DocType: "actor", SourceID: name, Title: name, Tags: tags})
+	}
+	return out, rows.Err()
+}
+
+// campaignsFrom reuses internal/intelligence.ListCampaigns rather than
+// re-deriving its query logic.
+func campaignsFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
+	campaigns, err := intelligence.ListCampaigns(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Document, 0, len(campaigns))
+	for _, c := range campaigns {
+		out = append(out, Document{
+			DocType: "campaign", SourceID: c.ID, Title: c.Name,
+			Description: c.Description, Tags: c.Aliases,
+		})
+	}
+	return out, nil
+}
+
+// malwareFrom reuses internal/intelligence.ListMalware.
+func malwareFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
+	malware, err := intelligence.ListMalware(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Document, 0, len(malware))
+	for _, m := range malware {
+		tags := make([]string, 0, len(m.Aliases)+len(m.MalwareTypes))
+		tags = append(tags, m.Aliases...)
+		tags = append(tags, m.MalwareTypes...)
+		out = append(out, Document{DocType: "malware", SourceID: m.ID, Title: m.Name, Tags: tags})
+	}
+	return out, nil
+}
+
+// toolsFrom reuses internal/intelligence.ListTools.
+func toolsFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
+	tools, err := intelligence.ListTools(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Document, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, Document{DocType: "tool", SourceID: t.ID, Title: t.Name, Tags: t.Aliases})
+	}
+	return out, nil
+}
+
+// techniquesFrom maps every techniques row into a Document. Title includes
+// both the ID and the name (e.g. "T1059.001 PowerShell") so either
+// independently matches a search query.
+func techniquesFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
+	rows, err := pool.Query(ctx, `SELECT technique_id, name, tactic, description FROM techniques`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Document
+	for rows.Next() {
+		var id, name, tactic, description string
+		if err := rows.Scan(&id, &name, &tactic, &description); err != nil {
+			return nil, err
+		}
+		title := id
+		if name != "" {
+			title = id + " " + name
+		}
+		out = append(out, Document{
+			DocType: "technique", SourceID: id, Title: title,
+			Description: description, Tags: []string{tactic},
 		})
 	}
 	return out, rows.Err()

@@ -53,6 +53,11 @@ func ReindexAll(ctx context.Context, pool *pgxpool.Pool, engine *scenario.Engine
 		{"scenario", func() ([]Document, error) { return scenariosFrom(engine), nil }},
 		{"run", func() ([]Document, error) { return runsFrom(ctx, pool) }},
 		{"finding", func() ([]Document, error) { return findingsFrom(ctx, pool) }},
+		{"actor", func() ([]Document, error) { return actorsFrom(ctx, pool) }},
+		{"campaign", func() ([]Document, error) { return campaignsFrom(ctx, pool) }},
+		{"malware", func() ([]Document, error) { return malwareFrom(ctx, pool) }},
+		{"tool", func() ([]Document, error) { return toolsFrom(ctx, pool) }},
+		{"technique", func() ([]Document, error) { return techniquesFrom(ctx, pool) }},
 	}
 	for _, s := range steps {
 		docs, err := s.build()
