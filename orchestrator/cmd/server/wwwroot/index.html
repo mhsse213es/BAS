@@ -652,6 +652,28 @@ code {
 .drawer-body::-webkit-scrollbar { width: 3px; }
 .drawer-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
+/* Run-results investigation workspace (Sub-project A) -- only applied when
+   #results-overlay carries .run-mode, toggled by viewRunResults/closeResults.
+   findings/technique/search-fallback (the drawer's 3 other callers) never
+   set this class, so they keep the default 520px .drawer width above. */
+.drawer-overlay.run-mode .drawer { width: 90vw; max-width: 1600px; }
+.run-tabbar {
+  position: sticky; top: 0; z-index: 5; background: var(--surface);
+  display: flex; gap: 0.25rem; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); margin-bottom: 1rem;
+}
+.run-tab-btn {
+  background: transparent; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); font-size: 0.78rem; font-weight: 600;
+  padding: 0.55rem 0.85rem; cursor: pointer; font-family: inherit;
+  white-space: nowrap; transition: color .15s, border-color .15s;
+}
+.run-tab-btn:hover { color: var(--text); }
+.run-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.run-tab-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.run-tab-grid.with-side { grid-template-columns: 1fr 340px; }
+@media (max-width: 900px) { .run-tab-grid.with-side { grid-template-columns: 1fr; } }
+
 /* ── Toast ─────────────────────────────────────────────────── */
 #toast {
   position: fixed; bottom: 1.5rem; right: 1.5rem;
@@ -3700,11 +3722,15 @@ body.theme-slate {
   <div class="drawer">
     <div class="drawer-header">
       <h3 id="results-title">Run Results</h3>
+      <div id="results-header-actions" style="display:flex;gap:0.5rem;align-items:center;margin-left:auto;margin-right:0.75rem"></div>
       <button class="drawer-close" onclick="closeResults()">&#10005;</button>
     </div>
     <div class="drawer-body">
       <div id="results-summary" style="margin-bottom:0.75rem;font-size:0.8rem"></div>
       <div id="results-export"></div>
+      <div id="run-kpi-strip" style="display:none"></div>
+      <div id="run-tabbar" style="display:none"></div>
+      <div id="run-tab-content" style="display:none"></div>
       <div id="results-body" style="font-size:0.8rem"></div>
     </div>
   </div>
@@ -7596,6 +7622,7 @@ function renderCovToolbar() {
 }
 function setCovView(v) { COV_VIEW = v; renderCovToolbar(); renderCovMatrix(); }
 function openTechnique(id) {
+  document.getElementById('results-overlay').classList.remove('run-mode');
   var st = (window._covSt || {})[id] || 'none';
   var meta = { cov: ['Prevented', 'var(--success)'], part: ['Detected only', 'var(--warning)'], gap: ['Missed', 'var(--danger)'], none: ['Untested', 'var(--muted)'] }[st];
   apicall('/api/attack/technique/' + encodeURIComponent(id)).then(function(e) {
@@ -7733,6 +7760,7 @@ function quickTriageFinding(id, sel) {
   setFindingStatus(id, status);
 }
 function openFinding(id) {
+  document.getElementById('results-overlay').classList.remove('run-mode');
   apicall('/api/findings/' + encodeURIComponent(id)).then(function(f) {
     _currentFinding = f;
     var e = f.enrichment || {};
@@ -9882,6 +9910,7 @@ function scenarioToYaml(sc) {
 }
 
 function viewRunResults(run) {
+  document.getElementById('results-overlay').classList.add('run-mode');
   document.getElementById('results-title').textContent = run.name + ' — Results';
   var results = run.results || [];
   var skipped = results.filter(function(c) { return c.result === 'skipped'; }).length;
@@ -10877,7 +10906,7 @@ function renderRunReportExtra(rep) {
 
   return html;
 }
-function closeResults() { document.getElementById('results-overlay').classList.remove('open'); }
+function closeResults() { document.getElementById('results-overlay').classList.remove('open', 'run-mode'); }
 
 // ── Live Run Panel ────────────────────────────────────────────────────────────
 // Streams run-event frames over the shared browser WS and renders live progress
@@ -11754,6 +11783,7 @@ function cmdkOpenResult(r) {
 // own title/description/tags for entity types with no detail view built
 // yet. No network request -- everything shown is already in `r`.
 function cmdkResultFallback(r) {
+  document.getElementById('results-overlay').classList.remove('run-mode');
   document.getElementById('results-title').textContent = r.title + ' — ' + CMDK_SEARCH_LABELS[r.docType];
   document.getElementById('results-export').innerHTML = '';
   document.getElementById('results-summary').innerHTML = '';
