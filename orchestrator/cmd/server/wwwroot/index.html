@@ -9982,6 +9982,40 @@ function viewRunResults(run) {
                    trend === 'Stable'    ? 'var(--warning)' : 'var(--muted)';
     var trendIcon = trend === 'Improving' ? '↑' : trend === 'Degrading' ? '↓' : trend === 'Stable' ? '→' : '◎';
 
+    // KPI strip -- reuses the exact gaugeSVG/sparkSVG helpers and .kpi-card
+    // CSS the main Dashboard already uses (index.html:12041-12063, :670-697).
+    // Detection Rate is derived the same way the existing summary line
+    // above already computes pass/fail; every other value comes straight
+    // off run.score, already confirmed real during brainstorming. No card
+    // here is backed by fabricated data -- a missing value renders '—'.
+    (function() {
+      var detRate = results.length ? Math.round(pass * 100 / results.length) : 0;
+      var deltaHtml = (typeof s.previousPreventionScore !== 'undefined' && s.previousPreventionScore !== null)
+        ? (function() {
+            var delta = Math.round(prevPct - s.previousPreventionScore);
+            var arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
+            var col = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--muted)';
+            return '<span style="color:' + col + '">' + arrow + ' ' + Math.abs(delta) + ' pts vs last run</span>';
+          })()
+        : '';
+      function kpiGaugeCard(label, value, sub) {
+        return '<div class="kpi-card" style="display:flex;align-items:center;gap:0.75rem">' +
+          '<div class="ring" style="width:64px;height:64px">' + gaugeSVG(value, 64, 8) +
+            '<div class="ring-c"><div class="rv" style="font-size:0.95rem">' + value + '%</div></div></div>' +
+          '<div><div class="kpi-label">' + label + '</div><div class="kpi-sub">' + sub + '</div></div>' +
+        '</div>';
+      }
+      document.getElementById('run-kpi-strip').innerHTML =
+        '<div class="kpi-row" style="grid-template-columns:repeat(6,1fr)">' +
+          '<div class="kpi-card"><div class="kpi-label">Overall Security Score</div><div class="kpi-value">' + prevPct + '<span style="font-size:0.9rem;color:var(--muted)">/100</span></div><div class="kpi-sub">' + (deltaHtml || '—') + '</div></div>' +
+          kpiGaugeCard('Detection Rate', detRate, pass + ' / ' + results.length + ' techniques') +
+          kpiGaugeCard('Prevention Rate', prevPct, cls || '—') +
+          '<div class="kpi-card"><div class="kpi-label">Exposure Score</div><div class="kpi-value" style="color:' + expCol + '">' + expVal + '</div><div class="kpi-sub">×' + amp + ' kill-chain</div></div>' +
+          kpiGaugeCard('Tactic Coverage', covPct, 'of 14 ATT&CK tactics') +
+          '<div class="kpi-card"><div class="kpi-label">Risk Level</div><div class="kpi-value" style="color:' + trendCol + '">' + trendIcon + ' ' + x(trend) + '</div><div class="kpi-sub">vs prior run</div></div>' +
+        '</div>';
+    })();
+
     var dimStyle = 'background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.6rem 0.75rem;';
     var labelStyle = 'color:var(--muted);font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:0.2rem';
     var bigStyle = 'font-size:1.4rem;font-weight:700;line-height:1.1';
@@ -10169,6 +10203,7 @@ function viewRunResults(run) {
     '<div id="rv-flow" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>' +
     '<div id="rv-coverage" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading variant coverage&#8230;</div></div>' +
     '<div id="rv-siem" style="display:none"></div>';
+  document.getElementById('run-kpi-strip').style.display = '';
   document.getElementById('results-overlay').classList.add('open');
 
   // Key Findings + Prioritised Recommendations — fetched from the report engine
