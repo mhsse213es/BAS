@@ -225,14 +225,15 @@ func TestScheduler_Sync_PersistsCampaignsAndMalwareFromIntelligenceSource(t *tes
 		if err != nil {
 			t.Fatalf("ListCampaigns: %v", err)
 		}
+		wantID := intelligence.NormalizeKey("Scheduler Wiring Test Event")
 		found := false
 		for _, c := range campaigns {
-			if c.ID == "sched-1" {
+			if c.ID == wantID {
 				found = true
 			}
 		}
 		if !found {
-			t.Errorf("campaigns = %+v, want one with ID=sched-1", campaigns)
+			t.Errorf("campaigns = %+v, want one with ID=%q (the campaign's own normalized ID, not the raw MISP event ID)", campaigns, wantID)
 		}
 
 		malware, err := intelligence.ListMalware(context.Background(), pool)

@@ -78,8 +78,8 @@ func TestMISPClient_FetchIntelligence_OneCampaignNoMalware(t *testing.T) {
 	if len(campaigns) != 1 {
 		t.Fatalf("campaigns = %+v, want 1", campaigns)
 	}
-	if campaigns[0].ID != "1" || campaigns[0].Name != "APT36 Kill Chain" {
-		t.Errorf("campaign = %+v, want ID=1 Name=%q", campaigns[0], "APT36 Kill Chain")
+	if campaigns[0].ID != MalwareKeyForTest("APT36 Kill Chain") || campaigns[0].Name != "APT36 Kill Chain" {
+		t.Errorf("campaign = %+v, want ID=NormalizeKey(APT36 Kill Chain) Name=%q", campaigns[0], "APT36 Kill Chain")
 	}
 	if len(campaigns[0].TechniqueIDs) != 2 {
 		t.Errorf("campaign TechniqueIDs = %v, want 2 entries", campaigns[0].TechniqueIDs)
@@ -147,8 +147,8 @@ func TestMISPClient_FetchIntelligence_MultipleMalwareClusters(t *testing.T) {
 		if len(m.TechniqueIDs) != 2 {
 			t.Errorf("malware %q TechniqueIDs = %v, want the event's 2 techniques", m.Name, m.TechniqueIDs)
 		}
-		if len(m.CampaignIDs) != 1 || m.CampaignIDs[0] != "2" {
-			t.Errorf("malware %q CampaignIDs = %v, want [2]", m.Name, m.CampaignIDs)
+		if len(m.CampaignIDs) != 1 || m.CampaignIDs[0] != MalwareKeyForTest("Emotet/Trickbot Campaign") {
+			t.Errorf("malware %q CampaignIDs = %v, want [%q] (the campaign's own normalized ID, not the raw MISP event ID)", m.Name, m.CampaignIDs, MalwareKeyForTest("Emotet/Trickbot Campaign"))
 		}
 	}
 }
@@ -215,8 +215,58 @@ func TestMISPClient_FetchIntelligence_ExtractsTools(t *testing.T) {
 		if len(tl.TechniqueIDs) != 2 {
 			t.Errorf("tool %q TechniqueIDs = %v, want the event's 2 techniques", tl.Name, tl.TechniqueIDs)
 		}
-		if len(tl.CampaignIDs) != 1 || tl.CampaignIDs[0] != "3" {
-			t.Errorf("tool %q CampaignIDs = %v, want [3]", tl.Name, tl.CampaignIDs)
+		if len(tl.CampaignIDs) != 1 || tl.CampaignIDs[0] != MalwareKeyForTest("Living-off-the-Land Toolkit Event") {
+			t.Errorf("tool %q CampaignIDs = %v, want [%q] (the campaign's own normalized ID, not the raw MISP event ID)", tl.Name, tl.CampaignIDs, MalwareKeyForTest("Living-off-the-Land Toolkit Event"))
 		}
+	}
+}
+
+func TestMISPClient_FetchIntelligence_MalwareCampaignIDMatchesCampaignID(t *testing.T) {
+	index := []mispEventIndex{
+		{ID: "4", Info: "Consistency Check Event", Timestamp: "1700000000", Tag: []mispTag{{Name: "mitre-attack-pattern"}}},
+	}
+	details := map[string]mispEventDetail{
+		"4": {Event: struct {
+			ID            string          `json:"id"`
+			Info          string          `json:"info"`
+			Timestamp     string          `json:"timestamp"`
+			Tag           []mispTag       `json:"Tag"`
+			GalaxyCluster []mispGalaxy    `json:"GalaxyCluster"`
+			Attribute     []mispAttribute `json:"Attribute"`
+		}{
+			ID: "4", Info: "Consistency Check Event",
+			GalaxyCluster: []mispGalaxy{
+				{Type: "mitre-attack-pattern", Value: "PowerShell", Meta: struct {
+					ExternalID []string `json:"external_id"`
+					KillChain  []string `json:"kill_chain"`
+				}{ExternalID: []string{"T1059.001"}}},
+				{Type: "mitre-attack-pattern", Value: "Phishing", Meta: struct {
+					ExternalID []string `json:"external_id"`
+					KillChain  []string `json:"kill_chain"`
+				}{ExternalID: []string{"T1566.001"}}},
+				{Type: "mitre-malware", Value: "ConsistencyMalware"},
+			},
+		}},
+	}
+	server := mispServer(t, index, details)
+	defer server.Close()
+
+	c := NewMISPClient(server.URL, "test-key", nil, nil)
+	if _, err := c.Fetch(); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+
+	campaigns, malware, _, err := c.FetchIntelligence()
+	if err != nil {
+		t.Fatalf("FetchIntelligence: %v", err)
+	}
+	if len(campaigns) != 1 || len(malware) != 1 {
+		t.Fatalf("campaigns = %+v, malware = %+v, want 1 each", campaigns, malware)
+	}
+	if campaigns[0].ID != MalwareKeyForTest("Consistency Check Event") {
+		t.Fatalf("Campaign.ID = %q, want NormalizeKey of the event title, %q", campaigns[0].ID, MalwareKeyForTest("Consistency Check Event"))
+	}
+	if len(malware[0].CampaignIDs) != 1 || malware[0].CampaignIDs[0] != campaigns[0].ID {
+		t.Fatalf("Malware.CampaignIDs = %v, want [%q] (must match the sibling Campaign's own ID, not the raw MISP event ID)", malware[0].CampaignIDs, campaigns[0].ID)
 	}
 }

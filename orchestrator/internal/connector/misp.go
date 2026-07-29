@@ -312,7 +312,7 @@ func (c *MISPClient) extractIntelligence(ev mispEventIndex, detail *mispEventDet
 	}
 
 	campaign := &intelligence.Campaign{
-		ID: ev.ID, Name: detail.Event.Info, Description: detail.Event.Info,
+		ID: intelligence.NormalizeKey(detail.Event.Info), Name: detail.Event.Info, Description: detail.Event.Info,
 		ThreatActorIDs: []string{actor.Name}, TechniqueIDs: techniqueIDs(actor.Techniques),
 		Source: src,
 	}
@@ -329,14 +329,14 @@ func (c *MISPClient) extractIntelligence(ev mispEventIndex, detail *mispEventDet
 			malware = append(malware, intelligence.Malware{
 				ID: intelligence.NormalizeKey(name), Name: name,
 				TechniqueIDs: techniqueIDs(actor.Techniques),
-				ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{ev.ID},
+				ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{campaign.ID},
 				Source: src,
 			})
 		case "mitre-tool":
 			tools = append(tools, intelligence.Tool{
 				ID: intelligence.NormalizeKey(name), Name: name,
 				TechniqueIDs: techniqueIDs(actor.Techniques),
-				ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{ev.ID},
+				ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{campaign.ID},
 				Source: src,
 			})
 		}
