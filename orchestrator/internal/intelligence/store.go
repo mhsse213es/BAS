@@ -68,30 +68,67 @@ func loadSources(ctx context.Context, pool *pgxpool.Pool, entityType string, ids
 	return out, rows.Err()
 }
 
-// UpsertCampaign merges actor_ids/technique_ids on conflict (union,
-// deduplicated) -- OpenCTI can legitimately attribute the same campaign to
-// more than one actor, and Campaign extraction runs per-actor (see
-// connector.OpenCTIClient.Fetch), so the same campaign ID can be upserted
-// twice within one sync with different ThreatActorIDs. Overwriting would
-// silently drop the first actor's attribution. name/description/source_*
-// fields still overwrite -- those describe the same real-world campaign, no
-// merge needed. Safe for MISP too: its campaigns never collide within a
-// sync, so union-of-one-element equals the old overwrite behavior.
+// UpsertCampaign reconciles by normalized name/alias (search_key) before
+// upserting -- if an existing campaign shares any name/alias with the
+// incoming one (regardless of provider-specific ID), the incoming data
+// merges into that existing row instead of creating a duplicate. c.ID is
+// trusted as already computed by the caller (NormalizeKey(c.Name), same
+// convention connector.MISPClient/OpenCTIClient already use for
+// Malware/Tool -- see internal/connector/misp.go's extractIntelligence and
+// internal/connector/opencti.go's convertCampaign).
+//
+// actor_ids/technique_ids/aliases/search_key merge (union); name/
+// description only overwrite when the upsert lands on its own natural ID
+// (a same-identity resync, canonicalID == c.ID) -- an alias-match merge
+// into a DIFFERENT existing row (canonicalID != c.ID) must not silently
+// rewrite that row's canonical name/description. The incoming name always
+// gets folded into aliases regardless, so it's never lost.
 func UpsertCampaign(ctx context.Context, pool *pgxpool.Pool, c Campaign) error {
 	c.ThreatActorIDs, c.TechniqueIDs = nonNil(c.ThreatActorIDs), nonNil(c.TechniqueIDs)
-	_, err := pool.Exec(ctx,
+	c.Aliases = nonNil(c.Aliases)
+	searchKey := buildSearchKey(c.Name, c.Aliases)
+	aliasesToMerge := append([]string{c.Name}, c.Aliases...)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	canonicalID := c.ID
+	var existingID string
+	err = tx.QueryRow(ctx,
+		`SELECT id FROM intelligence_campaigns WHERE id = $1 OR search_key && $2 LIMIT 1`,
+		c.ID, searchKey).Scan(&existingID)
+	if err == nil {
+		canonicalID = existingID
+	} else if err != pgx.ErrNoRows {
+		return err
+	}
+
+	_, err = tx.Exec(ctx,
 		`INSERT INTO intelligence_campaigns
-		   (id, name, description, actor_ids, technique_ids, source_provider, source_external_id, source_confidence, last_updated)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		   (id, name, description, aliases, search_key, actor_ids, technique_ids, source_provider, source_external_id, source_confidence, last_updated)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		 ON CONFLICT (id) DO UPDATE SET
-		   name = EXCLUDED.name, description = EXCLUDED.description,
+		   name          = CASE WHEN intelligence_campaigns.id = $12 THEN EXCLUDED.name ELSE intelligence_campaigns.name END,
+		   description   = CASE WHEN intelligence_campaigns.id = $12 THEN EXCLUDED.description ELSE intelligence_campaigns.description END,
+		   aliases       = ARRAY(SELECT DISTINCT UNNEST(intelligence_campaigns.aliases || EXCLUDED.aliases)),
+		   search_key    = ARRAY(SELECT DISTINCT UNNEST(intelligence_campaigns.search_key || EXCLUDED.search_key)),
 		   actor_ids     = ARRAY(SELECT DISTINCT UNNEST(intelligence_campaigns.actor_ids || EXCLUDED.actor_ids)),
 		   technique_ids = ARRAY(SELECT DISTINCT UNNEST(intelligence_campaigns.technique_ids || EXCLUDED.technique_ids)),
-		   source_provider = EXCLUDED.source_provider, source_external_id = EXCLUDED.source_external_id,
-		   source_confidence = EXCLUDED.source_confidence, last_updated = EXCLUDED.last_updated`,
-		c.ID, c.Name, c.Description, c.ThreatActorIDs, c.TechniqueIDs,
-		c.Source.Provider, c.Source.ExternalID, c.Source.Confidence, c.Source.LastUpdated)
-	return err
+		   last_updated  = GREATEST(intelligence_campaigns.last_updated, EXCLUDED.last_updated)`,
+		canonicalID, c.Name, c.Description, aliasesToMerge, searchKey,
+		c.ThreatActorIDs, c.TechniqueIDs, c.Source.Provider, c.Source.ExternalID, c.Source.Confidence, c.Source.LastUpdated,
+		c.ID)
+	if err != nil {
+		return err
+	}
+
+	if err := upsertEntitySource(ctx, tx, "campaign", canonicalID, c.Source); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // UpsertMalware merges on conflict -- the same malware family is
@@ -208,22 +245,34 @@ func ListTools(ctx context.Context, pool *pgxpool.Pool) ([]Tool, error) {
 // guard -- same convention internal/recommend.Recommendations already uses.
 func ListCampaigns(ctx context.Context, pool *pgxpool.Pool) ([]Campaign, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT id, name, description, actor_ids, technique_ids, source_provider, source_external_id, source_confidence, last_updated
+		`SELECT id, name, description, aliases, actor_ids, technique_ids, source_provider, source_external_id, source_confidence, last_updated
 		 FROM intelligence_campaigns ORDER BY last_updated DESC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []Campaign{}
+	ids := []string{}
 	for rows.Next() {
 		var c Campaign
-		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.ThreatActorIDs, &c.TechniqueIDs,
+		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.Aliases, &c.ThreatActorIDs, &c.TechniqueIDs,
 			&c.Source.Provider, &c.Source.ExternalID, &c.Source.Confidence, &c.Source.LastUpdated); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
+		ids = append(ids, c.ID)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sources, err := loadSources(ctx, pool, "campaign", ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Sources = sources[out[i].ID]
+	}
+	return out, nil
 }
 
 // ListMalware returns every malware record, newest-updated first. Always

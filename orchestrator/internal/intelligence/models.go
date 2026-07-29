@@ -40,6 +40,7 @@ type Campaign struct {
 	ID             string    `json:"id"` // = Source.ExternalID for MISP (event ID, already unique)
 	Name           string    `json:"name"`
 	Description    string    `json:"description"`
+	Aliases        []string  `json:"aliases"`
 	ThreatActorIDs []string  `json:"threatActorIds"` // threat_actor_profiles.name values
 	TechniqueIDs   []string  `json:"techniqueIds"`
 	Objective      string    `json:"objective,omitempty"` // OpenCTI-only; empty for MISP-sourced campaigns
@@ -96,4 +97,27 @@ func NormalizeKey(name string) string {
 	s = strings.ReplaceAll(s, " ", "")
 	s = strings.ReplaceAll(s, "-", "")
 	return s
+}
+
+// buildSearchKey returns the deduplicated union of NormalizeKey(name) and
+// NormalizeKey(alias) for every alias -- used by UpsertCampaign to find an
+// existing row that shares any name/alias with an incoming one, even under
+// a different primary ID (e.g. "SUNBURST" reconciling into an existing
+// "SolarWinds Compromise" row via a shared alias).
+func buildSearchKey(name string, aliases []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	add := func(s string) {
+		k := NormalizeKey(s)
+		if k == "" || seen[k] {
+			return
+		}
+		seen[k] = true
+		out = append(out, k)
+	}
+	add(name)
+	for _, a := range aliases {
+		add(a)
+	}
+	return out
 }

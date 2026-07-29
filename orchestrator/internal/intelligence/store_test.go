@@ -26,24 +26,28 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestUpsertCampaign_NameAndDescriptionOverwriteOnConflict(t *testing.T) {
+func TestUpsertCampaign_SameNameResync_UpdatesDescription(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
-		c := Campaign{
-			ID: "evt-1", Name: "Original Name", Description: "first",
+		key := NormalizeKey("Operation X")
+		first := Campaign{
+			ID: key, Name: "Operation X", Description: "first description",
 			ThreatActorIDs: []string{"APT-TEST"}, TechniqueIDs: []string{"T1059"},
 			Source: SourceRef{Provider: "misp", ExternalID: "evt-1", LastUpdated: time.Now(), Confidence: "medium"},
 		}
-		if err := UpsertCampaign(ctx, pool, c); err != nil {
+		if err := UpsertCampaign(ctx, pool, first); err != nil {
 			t.Fatalf("first UpsertCampaign: %v", err)
 		}
 
-		c.Name = "Updated Name"
-		c.TechniqueIDs = []string{"T1059", "T1105"}
-		if err := UpsertCampaign(ctx, pool, c); err != nil {
+		second := Campaign{
+			ID: key, Name: "Operation X", Description: "updated description",
+			ThreatActorIDs: []string{"APT-TEST"}, TechniqueIDs: []string{"T1059", "T1105"},
+			Source: SourceRef{Provider: "misp", ExternalID: "evt-1", LastUpdated: time.Now(), Confidence: "medium"},
+		}
+		if err := UpsertCampaign(ctx, pool, second); err != nil {
 			t.Fatalf("second UpsertCampaign: %v", err)
 		}
 
@@ -52,13 +56,114 @@ func TestUpsertCampaign_NameAndDescriptionOverwriteOnConflict(t *testing.T) {
 			t.Fatalf("ListCampaigns: %v", err)
 		}
 		if len(got) != 1 {
-			t.Fatalf("got %d campaigns, want 1 (overwrite, not duplicate)", len(got))
+			t.Fatalf("got %d campaigns, want 1", len(got))
 		}
-		if got[0].Name != "Updated Name" {
-			t.Fatalf("Name = %q, want %q (overwrite must win)", got[0].Name, "Updated Name")
+		if got[0].Description != "updated description" {
+			t.Fatalf("Description = %q, want %q (same-identity resync must update description)", got[0].Description, "updated description")
 		}
 		if len(got[0].TechniqueIDs) != 2 {
 			t.Fatalf("TechniqueIDs = %v, want 2 entries", got[0].TechniqueIDs)
+		}
+	})
+}
+
+func TestUpsertCampaign_AliasMatch_PreservesCanonicalNameAndDescription(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		canonical := Campaign{
+			ID: NormalizeKey("SolarWinds Compromise"), Name: "SolarWinds Compromise", Description: "original description",
+			ThreatActorIDs: []string{"APT29"}, TechniqueIDs: []string{"T1059"},
+			Source: SourceRef{Provider: "opencti", ExternalID: "campaign--1", LastUpdated: time.Now(), Confidence: "high"},
+		}
+		if err := UpsertCampaign(ctx, pool, canonical); err != nil {
+			t.Fatalf("first UpsertCampaign: %v", err)
+		}
+
+		aliasMatch := Campaign{
+			ID: NormalizeKey("SUNBURST"), Name: "SUNBURST", Description: "a different description",
+			Aliases:        []string{"SolarWinds Compromise"},
+			ThreatActorIDs: []string{"Cozy Bear"}, TechniqueIDs: []string{"T1105"},
+			Source: SourceRef{Provider: "misp", ExternalID: "evt-9", LastUpdated: time.Now(), Confidence: "medium"},
+		}
+		if err := UpsertCampaign(ctx, pool, aliasMatch); err != nil {
+			t.Fatalf("second UpsertCampaign: %v", err)
+		}
+
+		got, err := ListCampaigns(ctx, pool)
+		if err != nil {
+			t.Fatalf("ListCampaigns: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("got %d campaigns, want 1 (SUNBURST must reconcile into SolarWinds Compromise via alias)", len(got))
+		}
+		row := got[0]
+		if row.Name != "SolarWinds Compromise" {
+			t.Errorf("Name = %q, want %q (canonical name must not be overwritten by an alias-match merge)", row.Name, "SolarWinds Compromise")
+		}
+		if row.Description != "original description" {
+			t.Errorf("Description = %q, want %q (canonical description must not be overwritten by an alias-match merge)", row.Description, "original description")
+		}
+		hasSolarWinds, hasSunburst := false, false
+		for _, a := range row.Aliases {
+			if a == "SolarWinds Compromise" {
+				hasSolarWinds = true
+			}
+			if a == "SUNBURST" {
+				hasSunburst = true
+			}
+		}
+		if !hasSolarWinds || !hasSunburst {
+			t.Errorf("Aliases = %v, want to contain both %q and %q", row.Aliases, "SolarWinds Compromise", "SUNBURST")
+		}
+		sort.Strings(row.ThreatActorIDs)
+		if len(row.ThreatActorIDs) != 2 || row.ThreatActorIDs[0] != "APT29" || row.ThreatActorIDs[1] != "Cozy Bear" {
+			t.Errorf("ThreatActorIDs = %v, want union [APT29 Cozy Bear] (alias-match must still merge relationship arrays)", row.ThreatActorIDs)
+		}
+		if len(row.Sources) != 2 {
+			t.Fatalf("Sources = %+v, want 2 entries (opencti + misp, both contributed to the same canonical row)", row.Sources)
+		}
+	})
+}
+
+func TestUpsertCampaign_DoesNotReconcileUnrelatedNames(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		first := Campaign{
+			ID: NormalizeKey("Operation Alpha"), Name: "Operation Alpha",
+			ThreatActorIDs: []string{"APT-A"}, TechniqueIDs: []string{"T1059"},
+			Source: SourceRef{Provider: "misp", ExternalID: "evt-alpha", LastUpdated: time.Now(), Confidence: "medium"},
+		}
+		if err := UpsertCampaign(ctx, pool, first); err != nil {
+			t.Fatalf("first UpsertCampaign: %v", err)
+		}
+
+		second := Campaign{
+			ID: NormalizeKey("Operation Beta"), Name: "Operation Beta",
+			ThreatActorIDs: []string{"APT-B"}, TechniqueIDs: []string{"T1105"},
+			Source: SourceRef{Provider: "opencti", ExternalID: "campaign--beta", LastUpdated: time.Now(), Confidence: "medium"},
+		}
+		if err := UpsertCampaign(ctx, pool, second); err != nil {
+			t.Fatalf("second UpsertCampaign: %v", err)
+		}
+
+		got, err := ListCampaigns(ctx, pool)
+		if err != nil {
+			t.Fatalf("ListCampaigns: %v", err)
+		}
+		count := 0
+		for _, c := range got {
+			if c.Name == "Operation Alpha" || c.Name == "Operation Beta" {
+				count++
+			}
+		}
+		if count != 2 {
+			t.Fatalf("found %d of Operation Alpha/Beta, want 2 separate rows (unrelated names/no alias overlap must not reconcile)", count)
 		}
 	})
 }

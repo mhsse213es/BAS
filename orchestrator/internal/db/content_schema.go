@@ -339,6 +339,8 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			tenant_id    text        NOT NULL DEFAULT 'default',
 			UNIQUE (entity_type, entity_id, provider)
 		)`,
+		`ALTER TABLE intelligence_campaigns ADD COLUMN IF NOT EXISTS aliases text[] NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE intelligence_campaigns ADD COLUMN IF NOT EXISTS search_key text[] NOT NULL DEFAULT '{}'`,
 	}
 
 	for _, s := range stmts {
