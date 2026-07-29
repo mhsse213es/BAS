@@ -341,6 +341,38 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`ALTER TABLE intelligence_campaigns ADD COLUMN IF NOT EXISTS aliases text[] NOT NULL DEFAULT '{}'`,
 		`ALTER TABLE intelligence_campaigns ADD COLUMN IF NOT EXISTS search_key text[] NOT NULL DEFAULT '{}'`,
+
+		// Global Search Phase 1 -- maintained multi-entity search index
+		// (see docs/superpowers/specs/2026-07-29-global-search-phase1-design.md).
+		// Rebuilt by internal/search.ReindexAll on a timer + on-demand; never
+		// written to by per-entity create/update code paths directly.
+		//
+		// search_vector is a plain column, NOT a GENERATED ALWAYS AS ...
+		// STORED column -- to_tsvector(regconfig, text) is only STABLE, not
+		// IMMUTABLE, so Postgres rejects it inside a generated-column
+		// expression. Two wrapper-function workarounds (LANGUAGE sql
+		// IMMUTABLE, then LANGUAGE plpgsql IMMUTABLE) were both tried and
+		// both still failed with the same "generation expression is not
+		// immutable" error, confirmed via a real Postgres instance during
+		// implementation -- Postgres's generated-column check evidently
+		// still detects the transitively-STABLE to_tsvector call inside
+		// even a declared-IMMUTABLE wrapper. Computing search_vector
+		// explicitly in each INSERT statement (see internal/search/store.go)
+		// sidesteps this entirely: regular DML has no immutability
+		// restriction on the values being inserted.
+		`CREATE TABLE IF NOT EXISTS search_documents (
+			id            bigserial   PRIMARY KEY,
+			doc_type      text        NOT NULL,
+			source_id     text        NOT NULL,
+			title         text        NOT NULL,
+			description   text        NOT NULL DEFAULT '',
+			tags          text[]      NOT NULL DEFAULT '{}',
+			search_vector tsvector    NOT NULL,
+			updated_at    timestamptz NOT NULL DEFAULT NOW(),
+			tenant_id     text        NOT NULL DEFAULT 'default',
+			UNIQUE (doc_type, source_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_search_documents_vector ON search_documents USING GIN (search_vector)`,
 	}
 
 	for _, s := range stmts {
