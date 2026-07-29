@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/audspect/bas/internal/auth"
@@ -135,4 +136,22 @@ func TestSearchRecents_ReturnsFavoritesBeforeRecents(t *testing.T) {
 			t.Errorf("results[1] = %+v, want h-rec not favorited", results[1])
 		}
 	})
+}
+
+func TestSearchOperators_ReturnsSupportedList(t *testing.T) {
+	h := New(nil, ws.NewHub(), nil, testJWTSecret)
+	req := httptest.NewRequest(http.MethodGet, "/api/search/operators", nil)
+	rec := httptest.NewRecorder()
+	h.SearchOperators(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var body map[string][]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	want := []string{"type"}
+	if !reflect.DeepEqual(body["operators"], want) {
+		t.Errorf("operators = %+v, want %+v", body["operators"], want)
+	}
 }

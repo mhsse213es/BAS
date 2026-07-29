@@ -123,3 +123,10 @@ func (h *Handler) SearchRecents(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, results)
 }
+
+// GET /api/search/operators — advertises every field: operator ParseQuery
+// currently validates and applies, so a future frontend never has to
+// hardcode a second copy of this list. Any authenticated user.
+func (h *Handler) SearchOperators(w http.ResponseWriter, r *http.Request) {
+	respond(w, map[string]any{"operators": search.SupportedOperators})
+}

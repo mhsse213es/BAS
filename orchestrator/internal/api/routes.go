@@ -208,6 +208,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Post("/api/search/select", h.SearchSelect)
 		r.Post("/api/search/favorite", h.SearchFavorite)
 		r.Get("/api/search/recents", h.SearchRecents)
+		r.Get("/api/search/operators", h.SearchOperators)
 
 		// Threat Intelligence — readiness, KEV pack suggestions, EPSS priority scoring, and trends.
 		r.Get("/api/ti/readiness", h.GetTIReadiness)

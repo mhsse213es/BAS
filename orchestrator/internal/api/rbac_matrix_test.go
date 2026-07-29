@@ -94,6 +94,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/search/select", tierAny, ""},
 	{http.MethodPost, "/api/search/favorite", tierAny, ""},
 	{http.MethodGet, "/api/search/recents", tierAny, ""},
+	{http.MethodGet, "/api/search/operators", tierAny, ""},
 	{http.MethodGet, "/api/ti/readiness", tierAny, ""},
 	{http.MethodGet, "/api/ti/readiness/history", tierAny, ""},
 	{http.MethodGet, "/api/ti/suggest-pack", tierAny, ""},
