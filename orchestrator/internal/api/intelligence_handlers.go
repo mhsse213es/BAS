@@ -25,3 +25,13 @@ func (h *Handler) IntelligenceMalware(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, malware)
 }
+
+// GET /api/intelligence/tools
+func (h *Handler) IntelligenceTools(w http.ResponseWriter, r *http.Request) {
+	tools, err := intelligence.ListTools(r.Context(), h.db)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, tools)
+}

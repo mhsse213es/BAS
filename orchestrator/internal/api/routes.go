@@ -197,10 +197,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/threat-priority/actors", h.ThreatPriorityActors)
 		r.Get("/api/threat-priority/actors/{name}", h.ThreatPriorityActorDetail)
 
-		// Intelligence Expansion Phase 1 -- MISP-sourced Campaigns/Malware
+		// Intelligence Expansion -- MISP/OpenCTI-sourced Campaigns/Malware/Tools
 		// (distinct from /api/threat-priority's actor-level scoring).
 		r.Get("/api/intelligence/campaigns", h.IntelligenceCampaigns)
 		r.Get("/api/intelligence/malware", h.IntelligenceMalware)
+		r.Get("/api/intelligence/tools", h.IntelligenceTools)
 
 		// Threat Intelligence — readiness, KEV pack suggestions, EPSS priority scoring, and trends.
 		r.Get("/api/ti/readiness", h.GetTIReadiness)
