@@ -176,3 +176,65 @@ func TestListCampaigns_Empty_ReturnsEmptyNotNil(t *testing.T) {
 		}
 	})
 }
+
+func TestUpsertTool_MergesArraysOnConflict(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		first := Tool{
+			ID: "psexec", Name: "PsExec", // Aliases deliberately left nil -- exercises UpsertTool's nonNil coalescing
+			TechniqueIDs: []string{"T1569.002"}, ThreatActorIDs: []string{"BlackTech"}, CampaignIDs: []string{"evt-1"},
+			Source: SourceRef{Provider: "opencti", ExternalID: "tool--1", LastUpdated: time.Now(), Confidence: "high"},
+		}
+		if err := UpsertTool(ctx, pool, first); err != nil {
+			t.Fatalf("first UpsertTool: %v", err)
+		}
+
+		second := Tool{
+			ID: "psexec", Name: "PsExec",
+			TechniqueIDs: []string{"T1569.002", "T1136.002"}, ThreatActorIDs: []string{"FIN8"}, CampaignIDs: []string{"evt-2"},
+			Source: SourceRef{Provider: "opencti", ExternalID: "tool--1", LastUpdated: time.Now(), Confidence: "high"},
+		}
+		if err := UpsertTool(ctx, pool, second); err != nil {
+			t.Fatalf("second UpsertTool: %v", err)
+		}
+
+		got, err := ListTools(ctx, pool)
+		if err != nil {
+			t.Fatalf("ListTools: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("got %d tool rows, want 1 (merged, not duplicated)", len(got))
+		}
+		tl := got[0]
+		sort.Strings(tl.TechniqueIDs)
+		if len(tl.TechniqueIDs) != 2 || tl.TechniqueIDs[0] != "T1136.002" || tl.TechniqueIDs[1] != "T1569.002" {
+			t.Errorf("TechniqueIDs = %v, want deduplicated union [T1136.002 T1569.002]", tl.TechniqueIDs)
+		}
+		sort.Strings(tl.ThreatActorIDs)
+		if len(tl.ThreatActorIDs) != 2 || tl.ThreatActorIDs[0] != "BlackTech" || tl.ThreatActorIDs[1] != "FIN8" {
+			t.Errorf("ThreatActorIDs = %v, want union [BlackTech FIN8]", tl.ThreatActorIDs)
+		}
+		sort.Strings(tl.CampaignIDs)
+		if len(tl.CampaignIDs) != 2 || tl.CampaignIDs[0] != "evt-1" || tl.CampaignIDs[1] != "evt-2" {
+			t.Errorf("CampaignIDs = %v, want union [evt-1 evt-2]", tl.CampaignIDs)
+		}
+	})
+}
+
+func TestListTools_Empty_ReturnsEmptyNotNil(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		got, err := ListTools(context.Background(), pool)
+		if err != nil {
+			t.Fatalf("ListTools: %v", err)
+		}
+		if got == nil {
+			t.Fatal("expected an empty slice, not nil -- callers/JSON encoders shouldn't need a nil guard")
+		}
+	})
+}

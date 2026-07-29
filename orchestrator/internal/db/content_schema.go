@@ -304,6 +304,22 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			last_updated        timestamptz NOT NULL DEFAULT NOW(),
 			tenant_id           text        NOT NULL DEFAULT 'default'
 		)`,
+
+		// Intelligence Expansion Phase 4 — Tools entity
+		// (see docs/superpowers/specs/2026-07-29-intelligence-expansion-phase4-design.md).
+		`CREATE TABLE IF NOT EXISTS intelligence_tools (
+			id                  text        PRIMARY KEY,
+			name                text        NOT NULL,
+			aliases             text[]      NOT NULL DEFAULT '{}',
+			technique_ids       text[]      NOT NULL DEFAULT '{}',
+			actor_ids           text[]      NOT NULL DEFAULT '{}',
+			campaign_ids        text[]      NOT NULL DEFAULT '{}',
+			source_provider     text        NOT NULL,
+			source_external_id  text        NOT NULL DEFAULT '',
+			source_confidence   text        NOT NULL DEFAULT '',
+			last_updated        timestamptz NOT NULL DEFAULT NOW(),
+			tenant_id           text        NOT NULL DEFAULT 'default'
+		)`,
 	}
 
 	for _, s := range stmts {

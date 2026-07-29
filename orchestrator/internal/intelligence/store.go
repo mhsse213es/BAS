@@ -66,6 +66,51 @@ func UpsertMalware(ctx context.Context, pool *pgxpool.Pool, m Malware) error {
 	return err
 }
 
+// UpsertTool merges on conflict -- the same tool is legitimately referenced
+// by many different actors/events, so technique/actor/campaign ID lists
+// accumulate (deduplicated union) rather than overwrite. Same reasoning as
+// UpsertMalware.
+func UpsertTool(ctx context.Context, pool *pgxpool.Pool, t Tool) error {
+	t.Aliases, t.TechniqueIDs = nonNil(t.Aliases), nonNil(t.TechniqueIDs)
+	t.ThreatActorIDs, t.CampaignIDs = nonNil(t.ThreatActorIDs), nonNil(t.CampaignIDs)
+	_, err := pool.Exec(ctx,
+		`INSERT INTO intelligence_tools
+		   (id, name, aliases, technique_ids, actor_ids, campaign_ids, source_provider, source_external_id, source_confidence, last_updated)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		 ON CONFLICT (id) DO UPDATE SET
+		   aliases       = ARRAY(SELECT DISTINCT UNNEST(intelligence_tools.aliases || EXCLUDED.aliases)),
+		   technique_ids = ARRAY(SELECT DISTINCT UNNEST(intelligence_tools.technique_ids || EXCLUDED.technique_ids)),
+		   actor_ids     = ARRAY(SELECT DISTINCT UNNEST(intelligence_tools.actor_ids || EXCLUDED.actor_ids)),
+		   campaign_ids  = ARRAY(SELECT DISTINCT UNNEST(intelligence_tools.campaign_ids || EXCLUDED.campaign_ids)),
+		   source_confidence = EXCLUDED.source_confidence,
+		   last_updated  = GREATEST(intelligence_tools.last_updated, EXCLUDED.last_updated)`,
+		t.ID, t.Name, t.Aliases, t.TechniqueIDs, t.ThreatActorIDs, t.CampaignIDs,
+		t.Source.Provider, t.Source.ExternalID, t.Source.Confidence, t.Source.LastUpdated)
+	return err
+}
+
+// ListTools returns every tool record, newest-updated first. Always
+// non-nil, same convention as ListCampaigns/ListMalware.
+func ListTools(ctx context.Context, pool *pgxpool.Pool) ([]Tool, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, name, aliases, technique_ids, actor_ids, campaign_ids, source_provider, source_external_id, source_confidence, last_updated
+		 FROM intelligence_tools ORDER BY last_updated DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Tool{}
+	for rows.Next() {
+		var t Tool
+		if err := rows.Scan(&t.ID, &t.Name, &t.Aliases, &t.TechniqueIDs, &t.ThreatActorIDs, &t.CampaignIDs,
+			&t.Source.Provider, &t.Source.ExternalID, &t.Source.Confidence, &t.Source.LastUpdated); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // ListCampaigns returns every campaign, newest-updated first. Always
 // non-nil (an empty slice, not null) so JSON callers can iterate without a
 // guard -- same convention internal/recommend.Recommendations already uses.

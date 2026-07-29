@@ -59,6 +59,22 @@ type Malware struct {
 	Source         SourceRef `json:"source"`
 }
 
+// Tool is one ATT&CK Software object typed "tool" (as opposed to
+// "malware") -- e.g. PsExec, Mimikatz, AdFind. Same shape as Malware minus
+// the OpenCTI-only MalwareTypes field, which has no Tool analog (ToolTypes
+// exists in OpenCTI's schema but was never populated on live data -- see
+// docs/superpowers/specs/2026-07-29-intelligence-expansion-phase4-design.md's
+// Non-Goals).
+type Tool struct {
+	ID             string    `json:"id"` // = MalwareKey(Name) -- same cross-provider dedup key Malware already uses
+	Name           string    `json:"name"`
+	Aliases        []string  `json:"aliases"`
+	TechniqueIDs   []string  `json:"techniqueIds"`
+	ThreatActorIDs []string  `json:"threatActorIds"`
+	CampaignIDs    []string  `json:"campaignIds"`
+	Source         SourceRef `json:"source"`
+}
+
 // MalwareKey normalizes a malware name into a stable dedup key -- the same
 // normalization connector.actorKey() already applies to actor names
 // (lowercase, strip spaces/hyphens). Duplicated here (not exported from
