@@ -89,6 +89,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/intelligence/malware", tierAny, ""},
 	{http.MethodGet, "/api/intelligence/tools", tierAny, ""},
 	{http.MethodGet, "/api/knowledge-graph/{type}/{id}", tierAny, ""},
+	{http.MethodGet, "/api/search", tierAny, ""},
+	{http.MethodPost, "/api/search/reindex", tierPermission, auth.CanReindexSearch},
 	{http.MethodGet, "/api/ti/readiness", tierAny, ""},
 	{http.MethodGet, "/api/ti/readiness/history", tierAny, ""},
 	{http.MethodGet, "/api/ti/suggest-pack", tierAny, ""},

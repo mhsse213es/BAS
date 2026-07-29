@@ -203,6 +203,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/intelligence/malware", h.IntelligenceMalware)
 		r.Get("/api/intelligence/tools", h.IntelligenceTools)
 		r.Get("/api/knowledge-graph/{type}/{id}", h.KnowledgeGraphNeighborhood)
+		r.Get("/api/search", h.Search)
+		r.With(auth.RequirePermission(auth.CanReindexSearch)).Post("/api/search/reindex", h.SearchReindex)
 
 		// Threat Intelligence — readiness, KEV pack suggestions, EPSS priority scoring, and trends.
 		r.Get("/api/ti/readiness", h.GetTIReadiness)
