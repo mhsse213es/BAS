@@ -15,4 +15,8 @@ type Document struct {
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Tags        []string `json:"tags"`
+	// Favorited is set by Personalize() and Recents() for the requesting
+	// user -- Query() never sets it (stays false), since Phase 1's plain
+	// search has no notion of a user. See personalize.go.
+	Favorited bool `json:"favorited"`
 }

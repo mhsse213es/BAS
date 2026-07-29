@@ -373,6 +373,34 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			UNIQUE (doc_type, source_id)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_search_documents_vector ON search_documents USING GIN (search_vector)`,
+
+		// search_selections is an append-only event log -- one row per time a
+		// user opens a search result. Powers both personal recency (rows
+		// filtered to one user_id) and org popularity (rows counted across all
+		// users) from the same log. See docs/superpowers/specs/2026-07-29-
+		// global-search-phase3-design.md Architecture §1.
+		`CREATE TABLE IF NOT EXISTS search_selections (
+			id         bigserial   PRIMARY KEY,
+			user_id    text        NOT NULL REFERENCES users(id),
+			doc_type   text        NOT NULL,
+			source_id  text        NOT NULL,
+			created_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_search_selections_user ON search_selections (user_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_search_selections_entity ON search_selections (doc_type, source_id, created_at DESC)`,
+
+		// search_favorites is a real toggle table (insert/delete), not an
+		// event log -- a favorite is a boolean state, not a history, and the
+		// UNIQUE constraint makes "is this favorited" a single indexed lookup.
+		`CREATE TABLE IF NOT EXISTS search_favorites (
+			id         bigserial   PRIMARY KEY,
+			user_id    text        NOT NULL REFERENCES users(id),
+			doc_type   text        NOT NULL,
+			source_id  text        NOT NULL,
+			created_at timestamptz NOT NULL DEFAULT NOW(),
+			UNIQUE (user_id, doc_type, source_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_search_favorites_user ON search_favorites (user_id)`,
 	}
 
 	for _, s := range stmts {
