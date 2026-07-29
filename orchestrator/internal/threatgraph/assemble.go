@@ -170,3 +170,97 @@ func TechniqueNeighborhood(ctx context.Context, pool *pgxpool.Pool, techniqueID 
 
 	return n, nil
 }
+
+// ActorNeighborhood assembles the 1-hop neighborhood around a threat
+// actor: its techniques (attackdata.GroupTechniqueIndex(), keyed by
+// canonical actor name), campaigns/malware/tools that list it in their
+// ThreatActorIDs, and its sectors/regions (threat_actor_profiles).
+func ActorNeighborhood(ctx context.Context, pool *pgxpool.Pool, name string) (Neighborhood, error) {
+	n := Neighborhood{Nodes: []Node{}, Edges: []Edge{}}
+
+	var sectors, regions []string
+	err := pool.QueryRow(ctx, `SELECT sectors, regions FROM threat_actor_profiles WHERE name = $1`, name).Scan(&sectors, &regions)
+	if err == pgx.ErrNoRows {
+		return n, nil
+	}
+	if err != nil {
+		return n, err
+	}
+
+	actorID := "actor:" + intelligence.NormalizeKey(name)
+	n.Nodes = append(n.Nodes, Node{ID: actorID, Type: NodeTypeActor, Label: name})
+
+	if err := addTechniques(ctx, pool, &n, actorID, attackdata.GroupTechniqueIndex()[name]); err != nil {
+		return n, err
+	}
+
+	campaignRows, err := pool.Query(ctx, `SELECT id, name FROM intelligence_campaigns WHERE $1 = ANY(actor_ids)`, name)
+	if err != nil {
+		return n, err
+	}
+	for campaignRows.Next() {
+		var id, cname string
+		if err := campaignRows.Scan(&id, &cname); err != nil {
+			campaignRows.Close()
+			return n, err
+		}
+		nodeID := "campaign:" + id
+		n.Nodes = append(n.Nodes, Node{ID: nodeID, Type: NodeTypeCampaign, Label: cname})
+		n.Edges = append(n.Edges, Edge{From: actorID, To: nodeID, Relationship: "attributed_to"})
+	}
+	campaignRows.Close()
+	if err := campaignRows.Err(); err != nil {
+		return n, err
+	}
+
+	malwareRows, err := pool.Query(ctx, `SELECT id, name FROM intelligence_malware WHERE $1 = ANY(actor_ids)`, name)
+	if err != nil {
+		return n, err
+	}
+	for malwareRows.Next() {
+		var id, mname string
+		if err := malwareRows.Scan(&id, &mname); err != nil {
+			malwareRows.Close()
+			return n, err
+		}
+		nodeID := "malware:" + id
+		n.Nodes = append(n.Nodes, Node{ID: nodeID, Type: NodeTypeMalware, Label: mname})
+		n.Edges = append(n.Edges, Edge{From: actorID, To: nodeID, Relationship: "uses"})
+	}
+	malwareRows.Close()
+	if err := malwareRows.Err(); err != nil {
+		return n, err
+	}
+
+	toolRows, err := pool.Query(ctx, `SELECT id, name FROM intelligence_tools WHERE $1 = ANY(actor_ids)`, name)
+	if err != nil {
+		return n, err
+	}
+	for toolRows.Next() {
+		var id, tname string
+		if err := toolRows.Scan(&id, &tname); err != nil {
+			toolRows.Close()
+			return n, err
+		}
+		nodeID := "tool:" + id
+		n.Nodes = append(n.Nodes, Node{ID: nodeID, Type: NodeTypeTool, Label: tname})
+		n.Edges = append(n.Edges, Edge{From: actorID, To: nodeID, Relationship: "uses"})
+	}
+	toolRows.Close()
+	if err := toolRows.Err(); err != nil {
+		return n, err
+	}
+
+	for _, s := range sectors {
+		nodeID := "sector:" + intelligence.NormalizeKey(s)
+		n.Nodes = append(n.Nodes, Node{ID: nodeID, Type: NodeTypeSector, Label: s})
+		n.Edges = append(n.Edges, Edge{From: actorID, To: nodeID, Relationship: "targets"})
+	}
+	for _, r := range regions {
+		nodeID := "region:" + intelligence.NormalizeKey(r)
+		n.Nodes = append(n.Nodes, Node{ID: nodeID, Type: NodeTypeRegion, Label: r})
+		n.Edges = append(n.Edges, Edge{From: actorID, To: nodeID, Relationship: "targets"})
+	}
+
+	return n, nil
+}
