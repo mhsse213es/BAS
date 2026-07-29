@@ -825,19 +825,19 @@ Replace with:
 		CanViewARTContentStatus: true, CanReseedARTContent: true, CanReindexSearch: true, CanViewTamperEvents: true,
 ```
 
-Second and third, at line 126 and again (identically) at line 226 (both slice-literal form — this exact line appears twice in the file, in two different permission-list assertions):
+Second, at line 126 (slice-literal form, inside `TestPermissions_Ordering` — a live check against the actual current `Permissions(RoleAdmin)` output):
 
 ```go
 		CanReseedARTContent, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,
 ```
 
-Replace **both** occurrences with:
+Replace with:
 
 ```go
 		CanReseedARTContent, CanReindexSearch, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,
 ```
 
-(Use a find-and-replace-all for this exact line, since it's byte-for-byte identical in both places — do not replace only the first match.)
+**Do NOT** touch the identical-looking line at line 226, inside `TestPermissionGrants_MatchMigrationInventory` — despite the byte-for-byte identical text, that test is explicitly documented as a regression guard locked to the *2026-07-18 RBAC permission expansion migration's own historical inventory* (34 Group-A + 51 Group-B permissions, asserted via a hardcoded `len(groupB) != 51` check right below it), not a general completeness check. Adding a permission created today to that list would defeat its stated purpose of proving nothing has silently drifted from that specific, dated migration. `CanReindexSearch` is correctly verified by `TestPermissions_Ordering` (updated above) and `TestHasPermission_FullMatrix`/`TestHasPermission_MatrixIsComplete` (already generic, no edit needed) instead.
 
 - [ ] **Step 2: Run test to verify it fails**
 
