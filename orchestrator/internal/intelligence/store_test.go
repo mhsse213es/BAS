@@ -130,7 +130,7 @@ func TestUpsertMalware_MergesArraysOnConflict(t *testing.T) {
 		second := Malware{
 			ID: "emotet", Name: "Emotet",
 			TechniqueIDs: []string{"T1059", "T1105"}, ThreatActorIDs: []string{"APT-B"}, CampaignIDs: []string{"evt-2"},
-			Source: SourceRef{Provider: "misp", ExternalID: "evt-2", LastUpdated: time.Now(), Confidence: "high"},
+			Source: SourceRef{Provider: "opencti", ExternalID: "evt-2", LastUpdated: time.Now(), Confidence: "high"},
 		}
 		if err := UpsertMalware(ctx, pool, second); err != nil {
 			t.Fatalf("second UpsertMalware: %v", err)
@@ -158,6 +158,13 @@ func TestUpsertMalware_MergesArraysOnConflict(t *testing.T) {
 		}
 		if m.Source.Confidence != "high" {
 			t.Errorf("Source.Confidence = %q, want %q (most recent upsert wins)", m.Source.Confidence, "high")
+		}
+		if len(m.Sources) != 2 {
+			t.Fatalf("Sources = %+v, want 2 entries (one per provider)", m.Sources)
+		}
+		providers := map[string]bool{m.Sources[0].Provider: true, m.Sources[1].Provider: true}
+		if !providers["misp"] || !providers["opencti"] {
+			t.Errorf("Sources providers = %v, want both misp and opencti", m.Sources)
 		}
 	})
 }

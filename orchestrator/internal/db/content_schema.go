@@ -320,6 +320,25 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			last_updated        timestamptz NOT NULL DEFAULT NOW(),
 			tenant_id           text        NOT NULL DEFAULT 'default'
 		)`,
+
+		// Intelligence Expansion Phase 5 -- multi-provider provenance
+		// (see docs/superpowers/specs/2026-07-29-intelligence-expansion-phase5-design.md).
+		// Existing intelligence_campaigns/malware/tools.source_* columns are
+		// kept unchanged (no DROP COLUMN precedent in this file) and now mean
+		// "the first provider that ever created this row" -- this table is
+		// the authoritative multi-provider record.
+		`CREATE TABLE IF NOT EXISTS intelligence_entity_sources (
+			id           bigserial   PRIMARY KEY,
+			entity_type  text        NOT NULL,
+			entity_id    text        NOT NULL,
+			provider     text        NOT NULL,
+			external_id  text        NOT NULL,
+			first_seen   timestamptz NOT NULL DEFAULT NOW(),
+			last_sync    timestamptz NOT NULL,
+			confidence   text        NOT NULL,
+			tenant_id    text        NOT NULL DEFAULT 'default',
+			UNIQUE (entity_type, entity_id, provider)
+		)`,
 	}
 
 	for _, s := range stmts {

@@ -44,6 +44,11 @@ type Campaign struct {
 	TechniqueIDs   []string  `json:"techniqueIds"`
 	Objective      string    `json:"objective,omitempty"` // OpenCTI-only; empty for MISP-sourced campaigns
 	Source         SourceRef `json:"source"`
+	// Sources lists every provider that has contributed to this campaign --
+	// Source above stays as the first-contributing provider only (see
+	// docs/superpowers/specs/2026-07-29-intelligence-expansion-phase5-design.md),
+	// populated via intelligence_entity_sources, oldest first_seen first.
+	Sources []SourceRef `json:"sources"`
 }
 
 // Malware is one mitre-malware GalaxyCluster entry, deduplicated by
@@ -57,6 +62,7 @@ type Malware struct {
 	CampaignIDs    []string  `json:"campaignIds"`
 	MalwareTypes   []string  `json:"malwareTypes,omitempty"` // e.g. "ransomware", "trojan" -- OpenCTI-only
 	Source         SourceRef `json:"source"`
+	Sources        []SourceRef `json:"sources"`
 }
 
 // Tool is one ATT&CK Software object typed "tool" (as opposed to
@@ -73,6 +79,7 @@ type Tool struct {
 	ThreatActorIDs []string  `json:"threatActorIds"`
 	CampaignIDs    []string  `json:"campaignIds"`
 	Source         SourceRef `json:"source"`
+	Sources        []SourceRef `json:"sources"`
 }
 
 // NormalizeKey normalizes a name into a stable reconciliation key -- the
