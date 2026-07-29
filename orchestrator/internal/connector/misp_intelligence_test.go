@@ -30,7 +30,7 @@ func mispServer(t *testing.T, index []mispEventIndex, details map[string]mispEve
 	}))
 }
 
-func MalwareKeyForTest(name string) string { return intelligence.MalwareKey(name) }
+func MalwareKeyForTest(name string) string { return intelligence.NormalizeKey(name) }
 
 func TestMISPClient_FetchIntelligence_OneCampaignNoMalware(t *testing.T) {
 	index := []mispEventIndex{

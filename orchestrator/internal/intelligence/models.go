@@ -47,9 +47,9 @@ type Campaign struct {
 }
 
 // Malware is one mitre-malware GalaxyCluster entry, deduplicated by
-// normalized name across every event that references it (MalwareKey).
+// normalized name across every event that references it (NormalizeKey).
 type Malware struct {
-	ID             string    `json:"id"` // = MalwareKey(Name) -- cross-event dedup key
+	ID             string    `json:"id"` // = NormalizeKey(Name) -- cross-event dedup key
 	Name           string    `json:"name"`
 	Aliases        []string  `json:"aliases"`
 	TechniqueIDs   []string  `json:"techniqueIds"`
@@ -66,7 +66,7 @@ type Malware struct {
 // docs/superpowers/specs/2026-07-29-intelligence-expansion-phase4-design.md's
 // Non-Goals).
 type Tool struct {
-	ID             string    `json:"id"` // = MalwareKey(Name) -- same cross-provider dedup key Malware already uses
+	ID             string    `json:"id"` // = NormalizeKey(Name) -- same cross-provider dedup key Malware already uses
 	Name           string    `json:"name"`
 	Aliases        []string  `json:"aliases"`
 	TechniqueIDs   []string  `json:"techniqueIds"`
@@ -75,13 +75,16 @@ type Tool struct {
 	Source         SourceRef `json:"source"`
 }
 
-// MalwareKey normalizes a malware name into a stable dedup key -- the same
-// normalization connector.actorKey() already applies to actor names
-// (lowercase, strip spaces/hyphens). Duplicated here (not exported from
+// NormalizeKey normalizes a name into a stable reconciliation key -- the
+// same normalization connector.actorKey() already applies to actor names
+// (lowercase, strip spaces/hyphens). Used as the primary ID for Malware/
+// Tool (unchanged since Phase 1/4) and, as of Phase 5, Campaign too --
+// renamed from MalwareKey since it backs reconciliation for all three
+// entity types, not just Malware. Duplicated here (not exported from
 // internal/connector) to keep the connector<->intelligence dependency
 // strictly one-way: connector imports intelligence for types, never the
 // reverse.
-func MalwareKey(name string) string {
+func NormalizeKey(name string) string {
 	s := strings.ToLower(name)
 	s = strings.ReplaceAll(s, " ", "")
 	s = strings.ReplaceAll(s, "-", "")

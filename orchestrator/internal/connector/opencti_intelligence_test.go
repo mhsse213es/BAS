@@ -163,8 +163,8 @@ func TestOpenCTIClient_ConvertMalware_UsesOwnTechniquesAndTypes(t *testing.T) {
 	if len(malware.TechniqueIDs) != 2 {
 		t.Fatalf("convertMalware().TechniqueIDs = %v, want 2 (malware's own techniques)", malware.TechniqueIDs)
 	}
-	if malware.ID != intelligence.MalwareKey("TSCookie") {
-		t.Fatalf("convertMalware().ID = %q, want %q", malware.ID, intelligence.MalwareKey("TSCookie"))
+	if malware.ID != intelligence.NormalizeKey("TSCookie") {
+		t.Fatalf("convertMalware().ID = %q, want %q", malware.ID, intelligence.NormalizeKey("TSCookie"))
 	}
 }
 
@@ -197,8 +197,8 @@ func TestOpenCTIClient_ConvertTool_UsesOwnTechniques(t *testing.T) {
 	if len(tool.TechniqueIDs) != 2 {
 		t.Fatalf("convertTool().TechniqueIDs = %v, want 2 (tool's own techniques)", tool.TechniqueIDs)
 	}
-	if tool.ID != intelligence.MalwareKey("PsExec") {
-		t.Fatalf("convertTool().ID = %q, want %q", tool.ID, intelligence.MalwareKey("PsExec"))
+	if tool.ID != intelligence.NormalizeKey("PsExec") {
+		t.Fatalf("convertTool().ID = %q, want %q", tool.ID, intelligence.NormalizeKey("PsExec"))
 	}
 	if len(tool.ThreatActorIDs) != 1 || tool.ThreatActorIDs[0] != "BlackTech" {
 		t.Fatalf("convertTool().ThreatActorIDs = %v, want [BlackTech]", tool.ThreatActorIDs)

@@ -452,7 +452,7 @@ func (c *OpenCTIClient) convertCampaign(entity octiRelatedEntity, actor *ThreatA
 // convertCampaign.
 func (c *OpenCTIClient) convertMalware(entity octiRelatedEntity, actor *ThreatActor) intelligence.Malware {
 	return intelligence.Malware{
-		ID:             intelligence.MalwareKey(entity.Name),
+		ID:             intelligence.NormalizeKey(entity.Name),
 		Name:           entity.Name,
 		Aliases:        entity.Aliases,
 		MalwareTypes:   entity.MalwareTypes,
@@ -470,7 +470,7 @@ func (c *OpenCTIClient) convertMalware(entity octiRelatedEntity, actor *ThreatAc
 // technique relationships, same reasoning as convertCampaign/convertMalware.
 func (c *OpenCTIClient) convertTool(entity octiRelatedEntity, actor *ThreatActor) intelligence.Tool {
 	return intelligence.Tool{
-		ID:             intelligence.MalwareKey(entity.Name),
+		ID:             intelligence.NormalizeKey(entity.Name),
 		Name:           entity.Name,
 		Aliases:        entity.Aliases,
 		TechniqueIDs:   techniqueIDs(techniqueRefsFrom(entity.AttackPatterns)),
