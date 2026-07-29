@@ -9935,25 +9935,34 @@ function viewRunResults(run) {
     ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +
     alertText;
 
-  // Export bar + view-toggle tabs — only when run has an ID and is completed/partial
-  var exportHtml = '';
   var runId = run.id || '';
-  if (runId && (run.status === 'completed' || run.status === 'partial')) {
-    exportHtml =
-      '<div style="display:flex;gap:0.5rem;align-items:center;padding:0.5rem 0.75rem;margin-bottom:0.5rem;' +
-                  'background:var(--surface);border:1px solid var(--border);border-radius:4px;flex-wrap:wrap">' +
-        '<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:0.25rem">Export</span>' +
-        '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8595; HTML Report</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">&#8595; PDF</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
-        '<span style="flex:1"></span>' +
-        '<button id="rvt-results" class="btn btn-sm" style="background:var(--elevated);color:var(--accent);border:1px solid var(--border);border-bottom:2px solid var(--accent);border-radius:4px 4px 0 0" onclick="switchResultsView(\'table\')">Results</button>' +
-        '<button id="rvt-flow" class="btn btn-sm" style="color:var(--muted);border:1px solid transparent;border-radius:4px 4px 0 0" onclick="switchResultsView(\'flow\')">&#9660; Attack Flow</button>' +
-        '<button id="rvt-coverage" class="btn btn-sm" style="color:var(--muted);border:1px solid transparent;border-radius:4px 4px 0 0" onclick="switchResultsView(\'coverage\')">&#9632; Variant Coverage</button>' +
-      '</div>';
+  var hasOutput = runId && (run.status === 'completed' || run.status === 'partial');
+  document.getElementById('results-export').innerHTML = '';
+
+  // Header status pill -- reuses the exact status->color mapping the Live
+  // Runs table already applies (index.html:13171), and the .sbadge pill
+  // pattern already used for license/status badges elsewhere (index.html:12905).
+  var runStatusColor = { completed: 'var(--success)', running: 'var(--accent)', partial: 'var(--warning)', failed: 'var(--danger)' }[run.status] || 'var(--muted)';
+  document.getElementById('results-title').innerHTML =
+    x(run.name) + ' — Results ' +
+    '<span class="sbadge" style="background:' + runStatusColor + '22;color:' + runStatusColor + ';border:1px solid ' + runStatusColor + '44;font-size:0.65rem;margin-left:0.4rem;vertical-align:middle">' + x(run.status || '') + '</span>';
+
+  // Header toolbar -- real export actions relocated verbatim from the old
+  // inline export bar. Compare/Re-run are NOT real features anywhere in this
+  // app today (confirmed: the only existing "Re-run" is a disabled
+  // "coming soon" button, for campaigns, not runs -- index.html:6567), so
+  // they render the same disabled way here rather than as working buttons.
+  var actionsHtml = '';
+  if (hasOutput) {
+    actionsHtml =
+      '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8595; HTML Report</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">&#8595; PDF</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
+      '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
+      '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run this execution — coming soon">Re-run</button>';
   }
-  document.getElementById('results-export').innerHTML = exportHtml;
+  document.getElementById('results-header-actions').innerHTML = actionsHtml;
 
   var scorePanel = '';
   if (run.score && typeof run.score.preventionScore !== 'undefined') {
