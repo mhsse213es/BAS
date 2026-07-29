@@ -178,3 +178,148 @@ func TestActorNeighborhood_UnknownNameReturnsEmptyNeighborhood(t *testing.T) {
 		}
 	})
 }
+
+func TestCampaignNeighborhood_IncludesActorsTechniquesMalwareTools(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		_, err := pool.Exec(ctx,
+			`INSERT INTO intelligence_campaigns (id, name, description, actor_ids, technique_ids, source_provider)
+			 VALUES ('kgcampaign2', 'KG Campaign Two', '', $1, $2, 'test')`,
+			[]string{"KGActor2"}, []string{"T1059"})
+		if err != nil {
+			t.Fatalf("seed intelligence_campaigns: %v", err)
+		}
+		_, err = pool.Exec(ctx,
+			`INSERT INTO intelligence_malware (id, name, aliases, technique_ids, actor_ids, campaign_ids, source_provider)
+			 VALUES ('kgmalware2', 'KG Malware Two', '{}', '{}', '{}', $1, 'test')`,
+			[]string{"kgcampaign2"})
+		if err != nil {
+			t.Fatalf("seed intelligence_malware: %v", err)
+		}
+		_, err = pool.Exec(ctx,
+			`INSERT INTO intelligence_tools (id, name, aliases, technique_ids, actor_ids, campaign_ids, source_provider)
+			 VALUES ('kgtool2', 'KG Tool Two', '{}', '{}', '{}', $1, 'test')`,
+			[]string{"kgcampaign2"})
+		if err != nil {
+			t.Fatalf("seed intelligence_tools: %v", err)
+		}
+
+		n, err := CampaignNeighborhood(ctx, pool, "kgcampaign2")
+		if err != nil {
+			t.Fatalf("CampaignNeighborhood: %v", err)
+		}
+		if n.Nodes[0].ID != "campaign:kgcampaign2" {
+			t.Fatalf("Nodes[0] = %+v, want the campaign itself first", n.Nodes[0])
+		}
+		wantTypes := map[string]bool{NodeTypeActor: false, NodeTypeTechnique: false, NodeTypeMalware: false, NodeTypeTool: false}
+		for _, node := range n.Nodes[1:] {
+			if _, ok := wantTypes[node.Type]; ok {
+				wantTypes[node.Type] = true
+			}
+		}
+		for nodeType, found := range wantTypes {
+			if !found {
+				t.Errorf("Nodes = %+v, missing a node of type %q", n.Nodes, nodeType)
+			}
+		}
+	})
+}
+
+func TestMalwareNeighborhood_IncludesActorsTechniquesCampaigns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		_, err := pool.Exec(ctx,
+			`INSERT INTO intelligence_campaigns (id, name, description, actor_ids, technique_ids, source_provider)
+			 VALUES ('kgcampaign3', 'KG Campaign Three', '', '{}', '{}', 'test')`)
+		if err != nil {
+			t.Fatalf("seed intelligence_campaigns: %v", err)
+		}
+		_, err = pool.Exec(ctx,
+			`INSERT INTO intelligence_malware (id, name, aliases, technique_ids, actor_ids, campaign_ids, source_provider)
+			 VALUES ('kgmalware3', 'KG Malware Three', '{}', $1, $2, $3, 'test')`,
+			[]string{"T1105"}, []string{"KGActor3"}, []string{"kgcampaign3"})
+		if err != nil {
+			t.Fatalf("seed intelligence_malware: %v", err)
+		}
+
+		n, err := MalwareNeighborhood(ctx, pool, "kgmalware3")
+		if err != nil {
+			t.Fatalf("MalwareNeighborhood: %v", err)
+		}
+		if n.Nodes[0].ID != "malware:kgmalware3" {
+			t.Fatalf("Nodes[0] = %+v, want the malware itself first", n.Nodes[0])
+		}
+		wantTypes := map[string]bool{NodeTypeActor: false, NodeTypeTechnique: false, NodeTypeCampaign: false}
+		for _, node := range n.Nodes[1:] {
+			if _, ok := wantTypes[node.Type]; ok {
+				wantTypes[node.Type] = true
+			}
+		}
+		for nodeType, found := range wantTypes {
+			if !found {
+				t.Errorf("Nodes = %+v, missing a node of type %q", n.Nodes, nodeType)
+			}
+		}
+	})
+}
+
+func TestToolNeighborhood_IncludesActorsTechniquesCampaigns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		_, err := pool.Exec(ctx,
+			`INSERT INTO intelligence_campaigns (id, name, description, actor_ids, technique_ids, source_provider)
+			 VALUES ('kgcampaign4', 'KG Campaign Four', '', '{}', '{}', 'test')`)
+		if err != nil {
+			t.Fatalf("seed intelligence_campaigns: %v", err)
+		}
+		_, err = pool.Exec(ctx,
+			`INSERT INTO intelligence_tools (id, name, aliases, technique_ids, actor_ids, campaign_ids, source_provider)
+			 VALUES ('kgtool4', 'KG Tool Four', '{}', $1, $2, $3, 'test')`,
+			[]string{"T1018"}, []string{"KGActor4"}, []string{"kgcampaign4"})
+		if err != nil {
+			t.Fatalf("seed intelligence_tools: %v", err)
+		}
+
+		n, err := ToolNeighborhood(ctx, pool, "kgtool4")
+		if err != nil {
+			t.Fatalf("ToolNeighborhood: %v", err)
+		}
+		if n.Nodes[0].ID != "tool:kgtool4" {
+			t.Fatalf("Nodes[0] = %+v, want the tool itself first", n.Nodes[0])
+		}
+		wantTypes := map[string]bool{NodeTypeActor: false, NodeTypeTechnique: false, NodeTypeCampaign: false}
+		for _, node := range n.Nodes[1:] {
+			if _, ok := wantTypes[node.Type]; ok {
+				wantTypes[node.Type] = true
+			}
+		}
+		for nodeType, found := range wantTypes {
+			if !found {
+				t.Errorf("Nodes = %+v, missing a node of type %q", n.Nodes, nodeType)
+			}
+		}
+	})
+}
+
+func TestLookup_DispatchesByType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		if _, err := Lookup(context.Background(), pool, NodeTypeActor, "NoSuchActor"); err != nil {
+			t.Errorf("Lookup(actor): %v", err)
+		}
+		if _, err := Lookup(context.Background(), pool, "bogus-type", "x"); err == nil {
+			t.Error("Lookup(bogus-type) = nil error, want an error for an unknown type")
+		}
+	})
+}

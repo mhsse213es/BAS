@@ -2,6 +2,7 @@ package threatgraph
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -263,4 +264,149 @@ func ActorNeighborhood(ctx context.Context, pool *pgxpool.Pool, name string) (Ne
 	}
 
 	return n, nil
+}
+
+// CampaignNeighborhood assembles the 1-hop neighborhood around a
+// campaign: its own ThreatActorIDs and TechniqueIDs, plus every
+// malware/tool that references it in their CampaignIDs (the reverse
+// direction -- Campaign itself stores no MalwareIDs/ToolIDs).
+func CampaignNeighborhood(ctx context.Context, pool *pgxpool.Pool, id string) (Neighborhood, error) {
+	n := Neighborhood{Nodes: []Node{}, Edges: []Edge{}}
+
+	var name string
+	var actorIDs, techIDs []string
+	err := pool.QueryRow(ctx, `SELECT name, actor_ids, technique_ids FROM intelligence_campaigns WHERE id = $1`, id).
+		Scan(&name, &actorIDs, &techIDs)
+	if err == pgx.ErrNoRows {
+		return n, nil
+	}
+	if err != nil {
+		return n, err
+	}
+
+	campaignID := "campaign:" + id
+	n.Nodes = append(n.Nodes, Node{ID: campaignID, Type: NodeTypeCampaign, Label: name})
+
+	addActors(&n, campaignID, actorIDs, "attributed_to")
+	if err := addTechniques(ctx, pool, &n, campaignID, techIDs); err != nil {
+		return n, err
+	}
+
+	malwareRows, err := pool.Query(ctx, `SELECT id, name FROM intelligence_malware WHERE $1 = ANY(campaign_ids)`, id)
+	if err != nil {
+		return n, err
+	}
+	for malwareRows.Next() {
+		var mid, mname string
+		if err := malwareRows.Scan(&mid, &mname); err != nil {
+			malwareRows.Close()
+			return n, err
+		}
+		nodeID := "malware:" + mid
+		n.Nodes = append(n.Nodes, Node{ID: nodeID, Type: NodeTypeMalware, Label: mname})
+		n.Edges = append(n.Edges, Edge{From: nodeID, To: campaignID, Relationship: "used_in"})
+	}
+	malwareRows.Close()
+	if err := malwareRows.Err(); err != nil {
+		return n, err
+	}
+
+	toolRows, err := pool.Query(ctx, `SELECT id, name FROM intelligence_tools WHERE $1 = ANY(campaign_ids)`, id)
+	if err != nil {
+		return n, err
+	}
+	for toolRows.Next() {
+		var tid, tname string
+		if err := toolRows.Scan(&tid, &tname); err != nil {
+			toolRows.Close()
+			return n, err
+		}
+		nodeID := "tool:" + tid
+		n.Nodes = append(n.Nodes, Node{ID: nodeID, Type: NodeTypeTool, Label: tname})
+		n.Edges = append(n.Edges, Edge{From: nodeID, To: campaignID, Relationship: "used_in"})
+	}
+	toolRows.Close()
+	if err := toolRows.Err(); err != nil {
+		return n, err
+	}
+
+	return n, nil
+}
+
+// MalwareNeighborhood assembles the 1-hop neighborhood around a malware
+// family: its own ThreatActorIDs, TechniqueIDs, and CampaignIDs.
+func MalwareNeighborhood(ctx context.Context, pool *pgxpool.Pool, id string) (Neighborhood, error) {
+	n := Neighborhood{Nodes: []Node{}, Edges: []Edge{}}
+
+	var name string
+	var actorIDs, techIDs, campaignIDs []string
+	err := pool.QueryRow(ctx, `SELECT name, actor_ids, technique_ids, campaign_ids FROM intelligence_malware WHERE id = $1`, id).
+		Scan(&name, &actorIDs, &techIDs, &campaignIDs)
+	if err == pgx.ErrNoRows {
+		return n, nil
+	}
+	if err != nil {
+		return n, err
+	}
+
+	malwareID := "malware:" + id
+	n.Nodes = append(n.Nodes, Node{ID: malwareID, Type: NodeTypeMalware, Label: name})
+
+	addActors(&n, malwareID, actorIDs, "uses")
+	if err := addTechniques(ctx, pool, &n, malwareID, techIDs); err != nil {
+		return n, err
+	}
+	if err := addCampaigns(ctx, pool, &n, malwareID, campaignIDs, "used_in"); err != nil {
+		return n, err
+	}
+	return n, nil
+}
+
+// ToolNeighborhood mirrors MalwareNeighborhood exactly (same field shape).
+func ToolNeighborhood(ctx context.Context, pool *pgxpool.Pool, id string) (Neighborhood, error) {
+	n := Neighborhood{Nodes: []Node{}, Edges: []Edge{}}
+
+	var name string
+	var actorIDs, techIDs, campaignIDs []string
+	err := pool.QueryRow(ctx, `SELECT name, actor_ids, technique_ids, campaign_ids FROM intelligence_tools WHERE id = $1`, id).
+		Scan(&name, &actorIDs, &techIDs, &campaignIDs)
+	if err == pgx.ErrNoRows {
+		return n, nil
+	}
+	if err != nil {
+		return n, err
+	}
+
+	toolID := "tool:" + id
+	n.Nodes = append(n.Nodes, Node{ID: toolID, Type: NodeTypeTool, Label: name})
+
+	addActors(&n, toolID, actorIDs, "uses")
+	if err := addTechniques(ctx, pool, &n, toolID, techIDs); err != nil {
+		return n, err
+	}
+	if err := addCampaigns(ctx, pool, &n, toolID, campaignIDs, "used_in"); err != nil {
+		return n, err
+	}
+	return n, nil
+}
+
+// Lookup dispatches to the right assembly function by node type -- the
+// single entry point internal/api's handler calls. Named Lookup rather
+// than Neighborhood since a package-level function can't share an
+// identifier with the Neighborhood type it returns.
+func Lookup(ctx context.Context, pool *pgxpool.Pool, nodeType, id string) (Neighborhood, error) {
+	switch nodeType {
+	case NodeTypeActor:
+		return ActorNeighborhood(ctx, pool, id)
+	case NodeTypeCampaign:
+		return CampaignNeighborhood(ctx, pool, id)
+	case NodeTypeMalware:
+		return MalwareNeighborhood(ctx, pool, id)
+	case NodeTypeTool:
+		return ToolNeighborhood(ctx, pool, id)
+	case NodeTypeTechnique:
+		return TechniqueNeighborhood(ctx, pool, id)
+	default:
+		return Neighborhood{}, fmt.Errorf("unknown node type %q", nodeType)
+	}
 }
