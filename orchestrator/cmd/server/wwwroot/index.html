@@ -10192,18 +10192,53 @@ function viewRunResults(run) {
       checks + '</div>';
   }).join('');
 
-  // scorePanel + run-report-extra (findings/recommendations/attack-flow-summary/
-  // alert-fatigue/attack-surface-age/readiness) live INSIDE rv-table so they hide
-  // and show together with the Results tab — previously they sat outside the tab
-  // toggle entirely and stayed visible under every tab, which is what made
-  // switching to Attack Flow or Variant Coverage look like it was appending that
-  // tab's data after the Results content instead of replacing it.
-  document.getElementById('results-body').innerHTML =
-    '<div id="rv-table">' + scorePanel + '<div id="run-report-extra"></div>' + checksHtml + '</div>' +
-    '<div id="rv-flow" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>' +
-    '<div id="rv-coverage" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading variant coverage&#8230;</div></div>' +
-    '<div id="rv-siem" style="display:none"></div>';
+  // Overview keeps scorePanel + run-report-extra (findings/recommendations/
+  // alert-fatigue/attack-surface-age/readiness); the per-technique checks
+  // move to their own Evidence tab -- previously both lived in one "Results"
+  // view together. rv-flow/rv-coverage/rv-siem keep their exact existing
+  // IDs and lazy-load logic (see the apicall() calls right below this
+  // block) -- only their container changed, from flat siblings behind a
+  // 3-button switcher to named panels behind the new tab bar.
+  var soonPanel = function(label) {
+    return '<div class="dash-panel dash-soon" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">' + x(label) + ' — real data not available for this run yet.</div>';
+  };
+  document.getElementById('run-tab-content').innerHTML =
+    '<div id="run-tab-overview" class="run-tab-panel">' +
+      '<div class="run-tab-grid with-side">' +
+        '<div>' + scorePanel + '</div>' +
+        '<div id="run-report-extra"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div id="run-tab-flow" class="run-tab-panel" style="display:none">' +
+      '<div id="rv-flow"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>' +
+    '</div>' +
+    '<div id="run-tab-variant" class="run-tab-panel" style="display:none">' +
+      '<div id="rv-coverage"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading variant coverage&#8230;</div></div>' +
+    '</div>' +
+    '<div id="run-tab-detection" class="run-tab-panel" style="display:none"><div id="rv-siem"></div></div>' +
+    '<div id="run-tab-evidence" class="run-tab-panel" style="display:none">' + checksHtml + '</div>' +
+    '<div id="run-tab-reports" class="run-tab-panel" style="display:none"></div>' +
+    '<div id="run-tab-timeline" class="run-tab-panel" style="display:none">' + soonPanel('Execution Timeline') + '</div>' +
+    '<div id="run-tab-mitre" class="run-tab-panel" style="display:none">' + soonPanel('MITRE ATT&CK') + '</div>' +
+    '<div id="run-tab-iocs" class="run-tab-panel" style="display:none">' + soonPanel('Indicators (IOCs)') + '</div>' +
+    '<div id="run-tab-endpoint" class="run-tab-panel" style="display:none">' + soonPanel('Endpoint Changes') + '</div>' +
+    '<div id="run-tab-recommendation" class="run-tab-panel" style="display:none">' + soonPanel('Recommendation') + '</div>';
+
+  var RUN_TABS = [
+    ['overview', 'Overview'], ['timeline', 'Execution Timeline'], ['mitre', 'MITRE ATT&CK'],
+    ['detection', 'Detection Validation'], ['flow', 'Attack Flow'], ['variant', 'Variant Analysis'],
+    ['evidence', 'Evidence'], ['iocs', 'Indicators (IOCs)'], ['endpoint', 'Endpoint Changes'],
+    ['recommendation', 'Recommendation'], ['reports', 'Reports']
+  ];
+  document.getElementById('run-tabbar').innerHTML = RUN_TABS.map(function(t, i) {
+    return '<button class="run-tab-btn' + (i === 0 ? ' active' : '') + '" id="run-tabbtn-' + t[0] + '" onclick="switchRunTab(\'' + t[0] + '\')">' + x(t[1]) + '</button>';
+  }).join('');
+
+  document.getElementById('results-summary').style.display = 'none';
+  document.getElementById('results-body').style.display = 'none';
   document.getElementById('run-kpi-strip').style.display = '';
+  document.getElementById('run-tabbar').style.display = '';
+  document.getElementById('run-tab-content').style.display = '';
   document.getElementById('results-overlay').classList.add('open');
 
   // Key Findings + Prioritised Recommendations — fetched from the report engine
@@ -10242,53 +10277,26 @@ function viewRunResults(run) {
   }
 }
 
-// Toggles the run-results drawer between the "Results" table view and the
-// "Attack Flow" visualization. Called by the tab buttons in the export bar.
-function switchResultsView(view) {
-  var tableEl    = document.getElementById('rv-table');
-  var flowEl     = document.getElementById('rv-flow');
-  var coverageEl = document.getElementById('rv-coverage');
-  var siemEl     = document.getElementById('rv-siem');
-  var btnT       = document.getElementById('rvt-results');
-  var btnF       = document.getElementById('rvt-flow');
-  var btnC       = document.getElementById('rvt-coverage');
-  var btnS       = document.getElementById('rvt-siem');
-  if (!tableEl) return;
-  tableEl.style.display    = (view === 'table'    || !view) ? '' : 'none';
-  if (flowEl)     flowEl.style.display     = (view === 'flow')     ? '' : 'none';
-  if (coverageEl) coverageEl.style.display = (view === 'coverage') ? '' : 'none';
-  if (siemEl)     siemEl.style.display     = (view === 'siem')     ? '' : 'none';
-  var activeStyle   = { background: 'var(--elevated)', color: 'var(--accent)', borderBottom: '2px solid var(--accent)' };
-  var inactiveStyle = { background: '', color: 'var(--muted)', borderBottom: '' };
-  function applyTab(btn, isActive) {
-    if (!btn) return;
-    var s = isActive ? activeStyle : inactiveStyle;
-    btn.style.background   = s.background;
-    btn.style.color        = s.color;
-    btn.style.borderBottom = s.borderBottom;
-  }
-  applyTab(btnT, view === 'table' || !view);
-  applyTab(btnF, view === 'flow');
-  applyTab(btnC, view === 'coverage');
-  applyTab(btnS, view === 'siem');
+// switchRunTab replaces switchResultsView: shows exactly one of RUN_TABS's
+// panels and updates the active tab button, matching the same
+// show/hide-by-id mechanism switchResultsView used, generalized to 11
+// tabs instead of a hardcoded 3-4.
+function switchRunTab(tabId) {
+  var content = document.getElementById('run-tab-content');
+  if (!content) return;
+  Array.prototype.forEach.call(content.querySelectorAll('.run-tab-panel'), function(panel) {
+    panel.style.display = (panel.id === 'run-tab-' + tabId) ? '' : 'none';
+  });
+  Array.prototype.forEach.call(document.getElementById('run-tabbar').querySelectorAll('.run-tab-btn'), function(btn) {
+    btn.classList.toggle('active', btn.id === 'run-tabbtn-' + tabId);
+  });
 }
 
 function loadSIEMCorrelationPanel(runId) {
   apicall('/api/siem/correlations/' + encodeURIComponent(runId)).then(function(corrs) {
     var el = document.getElementById('rv-siem');
     if (!el) return;
-    if (!corrs || corrs.length === 0) return; // no correlation yet — hide tab
-    // Inject SIEM tab button if not already there
-    var btnBar = document.getElementById('rvt-coverage');
-    if (btnBar && !document.getElementById('rvt-siem')) {
-      var siemBtn = document.createElement('button');
-      siemBtn.id = 'rvt-siem';
-      siemBtn.className = 'btn btn-sm btn-outline';
-      siemBtn.style.cssText = 'font-size:0.7rem;padding:0.22rem 0.7rem;color:var(--muted);border-bottom:2px solid transparent';
-      siemBtn.textContent = 'SIEM Correlation';
-      siemBtn.onclick = function() { switchResultsView('siem'); };
-      btnBar.parentNode.insertBefore(siemBtn, btnBar.nextSibling);
-    }
+    if (!corrs || corrs.length === 0) return; // no correlation yet — Detection Validation tab stays empty
     var c = corrs[0]; // most recent correlation
     var detRate = c.detectionRate || 0;
     var undetRate = c.undetectedRate || 0;
