@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -42,6 +43,42 @@ func reindexOneType(ctx context.Context, pool *pgxpool.Pool, docType string, doc
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// Query full-text-searches search_documents and returns a flat, ranked
+// list -- never pre-grouped by type, see the design doc's Architecture §4.
+// An empty/whitespace-only q returns an empty slice, not an error and not
+// the full table.
+func Query(ctx context.Context, pool *pgxpool.Pool, q string, limit int) ([]Document, error) {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return []Document{}, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+
+	rows, err := pool.Query(ctx,
+		`SELECT doc_type, source_id, title, description, tags
+		 FROM search_documents, plainto_tsquery('english', $1) query
+		 WHERE search_vector @@ query
+		 ORDER BY ts_rank(search_vector, query) DESC
+		 LIMIT $2`,
+		q, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []Document{}
+	for rows.Next() {
+		var d Document
+		if err := rows.Scan(&d.DocType, &d.SourceID, &d.Title, &d.Description, &d.Tags); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
 }
 
 // ReindexAll rebuilds every indexed entity type, one type at a time.

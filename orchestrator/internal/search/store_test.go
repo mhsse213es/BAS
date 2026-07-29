@@ -161,3 +161,51 @@ func TestReindexAll_PopulatesActorCampaignMalwareToolTechniqueDocuments(t *testi
 		}
 	})
 }
+
+func TestQuery_RanksTitleMatchAboveDescriptionMatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := reindexOneType(ctx, pool, "scenario", []Document{
+			{DocType: "scenario", SourceID: "title-match", Title: "Ransomware Simulation", Description: "generic description"},
+			{DocType: "scenario", SourceID: "desc-match", Title: "Unrelated Name", Description: "involves ransomware behavior"},
+		}); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+
+		results, err := Query(ctx, pool, "ransomware", 10)
+		if err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+		if len(results) != 2 {
+			t.Fatalf("Query() = %+v, want 2 results", results)
+		}
+		if results[0].SourceID != "title-match" {
+			t.Errorf("results[0].SourceID = %q, want %q (title match must rank above description-only match)", results[0].SourceID, "title-match")
+		}
+	})
+}
+
+func TestQuery_EmptyQueryReturnsEmptyNotFullTable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := reindexOneType(ctx, pool, "scenario", []Document{
+			{DocType: "scenario", SourceID: "s1", Title: "Anything"},
+		}); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+
+		results, err := Query(ctx, pool, "   ", 10)
+		if err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+		if len(results) != 0 {
+			t.Fatalf("Query(\"   \") = %+v, want empty (guard against an accidental full-table dump)", results)
+		}
+	})
+}
