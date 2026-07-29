@@ -11711,8 +11711,14 @@ var CMDK_SEARCH_LABELS = {
 
 // cmdkOpenResult dispatches a selected search result to a real navigation
 // action per docType, or the minimal fallback popup for the 3 types with
-// no detail view anywhere in this app yet (campaign/malware/tool).
+// no detail view anywhere in this app yet (campaign/malware/tool). Also
+// fires a fire-and-forget selection-tracking call (Global Search Phase 3) --
+// never blocks navigation, failures are silently swallowed.
 function cmdkOpenResult(r) {
+  apicall('/api/search/select', {
+    method: 'POST',
+    body: JSON.stringify({ docType: r.docType, sourceId: r.sourceId })
+  }).catch(function() {});
   if (r.docType === 'run') {
     openRunReport(r.sourceId);
   } else if (r.docType === 'finding') {
@@ -11759,6 +11765,22 @@ function cmdkResultFallback(r) {
   document.getElementById('results-overlay').classList.add('open');
 }
 
+// cmdkToggleFavorite calls POST /api/search/favorite for r, mutates
+// r.favorited in place on success (r is a reference into whichever array
+// it came from -- cmdkSearchResults or cmdkRecents inside openCmdk()'s
+// closure -- so that array reflects the new state on the next render),
+// then invokes onDone to trigger a repaint. Fails soft: a network error
+// leaves r.favorited untouched but still calls onDone so the UI never hangs.
+function cmdkToggleFavorite(r, onDone) {
+  apicall('/api/search/favorite', {
+    method: 'POST',
+    body: JSON.stringify({ docType: r.docType, sourceId: r.sourceId })
+  }).then(function(res) {
+    r.favorited = !!(res && res.favorited);
+    onDone();
+  }).catch(function() { onDone(); });
+}
+
 function openCmdk() {
   if (_cmdkOpen || !ROLE) return;
   _cmdkOpen = true;
@@ -11775,7 +11797,7 @@ function openCmdk() {
   document.body.appendChild(wrap);
   var input = wrap.querySelector('#cmdk-input');
   var list = wrap.querySelector('#cmdk-list');
-  var flat = [], active = 0;
+  var flat = [], active = 0, currentQ = '';
 
   // Search state: cmdkSearchResults holds the last successful response
   // (kept across in-flight requests so results don't flicker to empty
@@ -11804,6 +11826,15 @@ function openCmdk() {
     }, 150);
   }
 
+  // cmdkRecents holds the one-shot GET /api/search/recents response,
+  // fetched once when the palette opens (not on every keystroke) and only
+  // ever shown when the input is empty (Global Search Phase 3).
+  var cmdkRecents = [];
+  apicall('/api/search/recents').then(function(r) {
+    cmdkRecents = Array.isArray(r) ? r : [];
+    if (currentQ === '') render(currentQ);
+  }).catch(function() { cmdkRecents = []; });
+
   function selectable() { return flat.map(function(f, i) { return f.sec ? -1 : i; }).filter(function(i) { return i >= 0; }); }
   function paint() {
     var nodes = list.querySelectorAll('[data-ci]');
@@ -11819,6 +11850,18 @@ function openCmdk() {
     return out;
   }
 
+  // recentsFlat only contributes rows when the input is empty -- it's
+  // prepended above the static Navigate/Actions list, which keeps
+  // rendering unchanged from Phase 2 (see render()'s concat order below).
+  function recentsFlat(q) {
+    if (q !== '' || !cmdkRecents.length) return [];
+    var out = [{ sec: 'Recents' }];
+    cmdkRecents.forEach(function(r) {
+      out.push({ t: r.title, docType: r.docType, sourceId: r.sourceId, fav: r.favorited, ref: r, fn: function() { cmdkOpenResult(r); } });
+    });
+    return out;
+  }
+
   function searchFlat() {
     var out = [];
     if (cmdkSearchResults === null) { out.push({ sec: 'Search unavailable' }); return out; }
@@ -11828,28 +11871,42 @@ function openCmdk() {
       var items = byType[dt];
       if (!items || !items.length) return;
       out.push({ sec: CMDK_SEARCH_LABELS[dt] });
-      items.forEach(function(r) { out.push({ t: r.title, fn: function() { cmdkOpenResult(r); } }); });
+      items.forEach(function(r) { out.push({ t: r.title, docType: r.docType, sourceId: r.sourceId, fav: r.favorited, ref: r, fn: function() { cmdkOpenResult(r); } }); });
     });
     return out;
   }
 
   function render(q) {
-    flat = staticFlatFor(q).concat(searchFlat());
+    flat = recentsFlat(q).concat(staticFlatFor(q)).concat(searchFlat());
     var sel = selectable(); active = sel.length ? sel[0] : 0;
     if (!flat.length) { list.innerHTML = '<div class="cmdk-empty">No matches</div>'; return; }
     list.innerHTML = flat.map(function(f, i) {
-      return f.sec ? '<div class="cmdk-sec">' + x(f.sec) + '</div>'
-                   : '<div class="cmdk-item" data-ci="' + i + '">' + x(f.t) + '</div>';
+      if (f.sec) return '<div class="cmdk-sec">' + x(f.sec) + '</div>';
+      // f.docType is only set for search-result/recents rows (Phase 3) --
+      // static Navigate/Actions rows never get the star affordance.
+      var star = f.docType
+        ? '<span data-fav-ci="' + i + '" style="cursor:pointer;margin-right:0.5rem;color:' + (f.fav ? 'var(--warning)' : 'var(--muted)') + '">★</span>'
+        : '';
+      return '<div class="cmdk-item" data-ci="' + i + '">' + star + x(f.t) + '</div>';
     }).join('');
     Array.prototype.forEach.call(list.querySelectorAll('[data-ci]'), function(node) {
       node.onmousemove = function() { active = +node.dataset.ci; paint(); };
       node.onclick = function() { run(+node.dataset.ci); };
+    });
+    Array.prototype.forEach.call(list.querySelectorAll('[data-fav-ci]'), function(node) {
+      node.onclick = function(e) {
+        e.stopPropagation(); // don't also trigger the parent row's onclick (navigation)
+        var it = flat[+node.dataset.favCi];
+        if (!it || !it.ref) return;
+        cmdkToggleFavorite(it.ref, function() { render(currentQ); });
+      };
     });
     paint();
   }
 
   function draw(q) {
     q = (q || '').toLowerCase();
+    currentQ = q;
     render(q);
     cmdkSearch(input.value, function() { render(q); });
   }
