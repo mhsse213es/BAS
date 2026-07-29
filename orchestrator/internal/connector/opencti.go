@@ -247,6 +247,7 @@ const actorFieldsFragment = `
                   id
                   name
                   description
+                  aliases
                   objective
                   attackPatterns: stixCoreRelationships(
                     relationship_type: "uses"
@@ -427,15 +428,20 @@ func (c *OpenCTIClient) convertActor(raw octiThreatActorNode) *ThreatActor {
 }
 
 // convertCampaign builds an intelligence.Campaign from a campaign entity
-// discovered under a specific actor's "attributed-to" relationship. Uses the
-// campaign's OWN nested technique relationships (via techniqueRefsFrom), not
-// the actor's -- a campaign is often more specifically scoped than its
-// attributed actor's full profile.
+// discovered under a specific actor's "attributed-to" relationship. Uses
+// the campaign's OWN nested technique relationships (via techniqueRefsFrom),
+// not the actor's -- a campaign is often more specifically scoped than its
+// attributed actor's full profile. ID is NormalizeKey(entity.Name), not the
+// raw STIX id -- see intelligence.UpsertCampaign's alias/name reconciliation
+// (Intelligence Expansion Phase 5); the STIX id is preserved as
+// Source.ExternalID, same separation MISP's extractIntelligence already
+// uses (campaign.ID vs. the raw MISP event ID).
 func (c *OpenCTIClient) convertCampaign(entity octiRelatedEntity, actor *ThreatActor) intelligence.Campaign {
 	return intelligence.Campaign{
-		ID:             entity.ID,
+		ID:             intelligence.NormalizeKey(entity.Name),
 		Name:           entity.Name,
 		Description:    entity.Description,
+		Aliases:        entity.Aliases,
 		Objective:      entity.Objective,
 		ThreatActorIDs: []string{actor.Name},
 		TechniqueIDs:   techniqueIDs(techniqueRefsFrom(entity.AttackPatterns)),

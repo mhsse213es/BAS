@@ -148,6 +148,25 @@ func TestOpenCTIClient_ConvertCampaign_UsesOwnTechniquesAndObjective(t *testing.
 	}
 }
 
+func TestOpenCTIClient_ConvertCampaign_IDIsNormalizedNameNotSTIXID(t *testing.T) {
+	c := NewOpenCTIClient("http://example.invalid", "test-key", nil)
+	actor := &ThreatActor{Name: "APT29"}
+	entity := octiRelatedEntity{
+		ID: "campaign--abc123", Name: "SolarWinds Compromise", Aliases: []string{"SUNBURST"},
+		AttackPatterns: twoTechniqueConn(),
+	}
+	campaign := c.convertCampaign(entity, actor)
+	if campaign.ID != intelligence.NormalizeKey("SolarWinds Compromise") {
+		t.Fatalf("convertCampaign().ID = %q, want %q (NormalizeKey of the name, not the raw STIX id)", campaign.ID, intelligence.NormalizeKey("SolarWinds Compromise"))
+	}
+	if campaign.Source.ExternalID != "campaign--abc123" {
+		t.Fatalf("convertCampaign().Source.ExternalID = %q, want the raw STIX id %q (still preserved as provenance, just not the primary ID)", campaign.Source.ExternalID, "campaign--abc123")
+	}
+	if len(campaign.Aliases) != 1 || campaign.Aliases[0] != "SUNBURST" {
+		t.Fatalf("convertCampaign().Aliases = %v, want [SUNBURST]", campaign.Aliases)
+	}
+}
+
 func TestOpenCTIClient_ConvertMalware_UsesOwnTechniquesAndTypes(t *testing.T) {
 	c := NewOpenCTIClient("http://example.invalid", "test-key", nil)
 	actor := &ThreatActor{Name: "BlackTech"}
