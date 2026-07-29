@@ -234,6 +234,16 @@ In `orchestrator/internal/db/content_schema.go`, add to the `stmts` slice, after
 		// (see docs/superpowers/specs/2026-07-29-global-search-phase1-design.md).
 		// Rebuilt by internal/search.ReindexAll on a timer + on-demand; never
 		// written to by per-entity create/update code paths directly.
+		//
+		// search_vector is a plain column, NOT a GENERATED ALWAYS AS ...
+		// STORED column -- to_tsvector(regconfig, text) is only STABLE, not
+		// IMMUTABLE, so Postgres rejects it inside a generated-column
+		// expression. Two wrapper-function workarounds (LANGUAGE sql
+		// IMMUTABLE, then LANGUAGE plpgsql IMMUTABLE) were both tried
+		// against a real Postgres instance and both failed identically with
+		// "generation expression is not immutable" -- computing
+		// search_vector explicitly in each INSERT (see Step 5's
+		// reindexOneType) sidesteps this entirely.
 		`CREATE TABLE IF NOT EXISTS search_documents (
 			id            bigserial   PRIMARY KEY,
 			doc_type      text        NOT NULL,
@@ -241,11 +251,7 @@ In `orchestrator/internal/db/content_schema.go`, add to the `stmts` slice, after
 			title         text        NOT NULL,
 			description   text        NOT NULL DEFAULT '',
 			tags          text[]      NOT NULL DEFAULT '{}',
-			search_vector tsvector GENERATED ALWAYS AS (
-				setweight(to_tsvector('english', title), 'A') ||
-				setweight(to_tsvector('english', coalesce(description, '')), 'B') ||
-				setweight(to_tsvector('english', array_to_string(tags, ' ')), 'C')
-			) STORED,
+			search_vector tsvector    NOT NULL,
 			updated_at    timestamptz NOT NULL DEFAULT NOW(),
 			tenant_id     text        NOT NULL DEFAULT 'default',
 			UNIQUE (doc_type, source_id)
@@ -305,9 +311,19 @@ func reindexOneType(ctx context.Context, pool *pgxpool.Pool, docType string, doc
 		return err
 	}
 	for _, d := range docs {
+		// pgx encodes a nil Go []string as SQL NULL, not an empty array --
+		// violates tags' NOT NULL constraint for any Document built without
+		// explicitly setting Tags. Same recurring gotcha internal/intelligence
+		// already coalesces against.
+		if d.Tags == nil {
+			d.Tags = []string{}
+		}
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO search_documents (doc_type, source_id, title, description, tags)
-			 VALUES ($1,$2,$3,$4,$5)`,
+			`INSERT INTO search_documents (doc_type, source_id, title, description, tags, search_vector)
+			 VALUES ($1,$2,$3,$4,$5,
+			   setweight(to_tsvector('english', $3::text), 'A') ||
+			   setweight(to_tsvector('english', coalesce($4::text, '')), 'B') ||
+			   setweight(to_tsvector('english', array_to_string($5::text[], ' ')), 'C'))`,
 			docType, d.SourceID, d.Title, d.Description, d.Tags); err != nil {
 			return err
 		}

@@ -29,16 +29,14 @@ CREATE TABLE search_documents (
     title         text NOT NULL,
     description   text NOT NULL DEFAULT '',
     tags          text[] NOT NULL DEFAULT '{}',
-    search_vector tsvector GENERATED ALWAYS AS (
-        setweight(to_tsvector('english', title), 'A') ||
-        setweight(to_tsvector('english', coalesce(description, '')), 'B') ||
-        setweight(to_tsvector('english', array_to_string(tags, ' ')), 'C')
-    ) STORED,
+    search_vector tsvector NOT NULL,   -- computed explicitly at INSERT time, not a generated column -- see below
     updated_at    timestamptz NOT NULL DEFAULT NOW(),
     tenant_id     text NOT NULL DEFAULT 'default',
     UNIQUE (doc_type, source_id)
 )
 ```
+`search_vector` is a **plain column, not `GENERATED ALWAYS AS ... STORED`**. `to_tsvector(regconfig, text)` is only `STABLE`, not `IMMUTABLE` (the language config is looked up via a catalog table), so Postgres rejects it inside a generated-column expression. Two wrapper-function workarounds were tried and both failed identically, confirmed against a real Postgres instance during implementation: a `LANGUAGE sql IMMUTABLE` wrapper (the planner inlines simple SQL functions, seeing straight through to the underlying `STABLE` call) and a `LANGUAGE plpgsql IMMUTABLE` wrapper, which should not be inlined yet was rejected identically — Postgres's generated-column check evidently still detects the transitively-`STABLE` call. The reliable fix: compute `search_vector` explicitly in each `INSERT` (in `reindexOneType`, see Architecture §2) — regular DML has no immutability restriction on inserted values, only generated-column expressions do.
+
 GIN index on `search_vector`. `setweight`'s A/B/C tiers mean a title match always outranks a description-only match, which always outranks a tag-only match — combined with Postgres's `ts_rank`, this gives real exact/prefix/substring-aware relevance without any custom ranking code. No `url` column — see Non-Goals; a search result's `(doc_type, source_id)` is enough for a future UI to resolve into whatever navigation action makes sense once one exists.
 
 ### 2. Reindexing — full per-type rebuild, not incremental diffing, not per-write hooks
@@ -47,8 +45,12 @@ For each of the 8 sources, one function builds `[]search.Document` from that sou
 
 This uniformly covers both DB-backed sources (Runs, Findings, Actors, Campaigns, Malware, Tools, Techniques — queried directly) and the file-backed Scenarios (`scenario.Engine.List()`, already in memory, no query needed) with one mechanism — no per-write-path upsert hooks scattered across 8 different subsystems, which would be Phase 1's biggest source of invasiveness and risk for comparatively little benefit at this stage (search freshness lagging by up to the reindex interval is an acceptable trade-off for a search feature, unlike e.g. financial data).
 
+Each `INSERT`'s parameters are explicitly cast (`$3::text`, `$4::text`, `$5::text[]`) — without the casts, Postgres cannot resolve the type of a parameter that's used only inside a polymorphic function call (`array_to_string($5, ' ')`) even though the same parameter is also bound to a typed column elsewhere in the same statement, and rejects the query with "could not determine polymorphic type because input has type unknown" (confirmed by a real test failure during implementation).
+
+Every `Document` inserted has its `Tags` coalesced from `nil` to `[]string{}` first — pgx encodes a nil Go `[]string` as SQL `NULL`, which would violate `tags`' `NOT NULL` constraint for any `Document` a builder constructs without explicitly setting `Tags` (confirmed by a real test failure during implementation — the same recurring gotcha `internal/intelligence` already coalesces against for the same reason).
+
 Two triggers:
-- **Timer**, reusing the exact pattern `internal/connector.Scheduler` already uses (`time.NewTicker` + `for {}` loop, started via a `.Start()` method called once from `cmd/server/main.go` alongside the existing `scheduler.Start()` call). Default interval: 60 seconds — frequent enough that search feels current, infrequent enough not to matter at this data scale.
+- **Timer**, reusing `internal/exercise.PollScheduler` (a generic `time.NewTicker`-based abstraction already used by the OpenAEV connector, found during planning to be a better fit than reimplementing `internal/connector.Scheduler`'s bespoke ticker), started once from `cmd/server/main.go`. Default interval: 60 seconds — frequent enough that search feels current, infrequent enough not to matter at this data scale. A ticker only fires after its first interval elapses, so `main.go` also runs one synchronous reindex at startup before starting the timer, so search isn't empty for the first 60 seconds after every boot.
 - **On-demand**: `POST /api/search/reindex`, gated `tierAdminOnly` (this codebase's existing admin-only RBAC tier — confirmed real via `rbac_matrix_test.go`), triggers an immediate full rebuild of all 8 types. Useful right after bulk data changes and for tests.
 
 ### 3. Document builders — one function per source, each returning `[]search.Document`
