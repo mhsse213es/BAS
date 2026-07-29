@@ -209,3 +209,109 @@ func TestQuery_EmptyQueryReturnsEmptyNotFullTable(t *testing.T) {
 		}
 	})
 }
+
+func TestQuery_TypeFilterOnlyReturnsMatchingType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := reindexOneType(ctx, pool, "scenario", []Document{
+			{DocType: "scenario", SourceID: "s1", Title: "Ransomware Simulation"},
+		}); err != nil {
+			t.Fatalf("seed scenario: %v", err)
+		}
+		if err := reindexOneType(ctx, pool, "finding", []Document{
+			{DocType: "finding", SourceID: "f1", Title: "Ransomware Finding"},
+		}); err != nil {
+			t.Fatalf("seed finding: %v", err)
+		}
+
+		results, err := Query(ctx, pool, "type:scenario ransomware", 10)
+		if err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+		if len(results) != 1 || results[0].DocType != "scenario" {
+			t.Fatalf("Query(\"type:scenario ransomware\") = %+v, want only the scenario doc", results)
+		}
+	})
+}
+
+func TestQuery_TypeOnlyBrowsesAllOfThatTypeOrderedByTitle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := reindexOneType(ctx, pool, "scenario", []Document{
+			{DocType: "scenario", SourceID: "s1", Title: "Zebra Scenario"},
+			{DocType: "scenario", SourceID: "s2", Title: "Apple Scenario"},
+		}); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+
+		results, err := Query(ctx, pool, "type:scenario", 10)
+		if err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+		if len(results) != 2 {
+			t.Fatalf("Query(\"type:scenario\") = %+v, want both scenarios (browse mode, no keyword needed)", results)
+		}
+		if results[0].Title != "Apple Scenario" || results[1].Title != "Zebra Scenario" {
+			t.Errorf("order = [%s, %s], want alphabetical by title", results[0].Title, results[1].Title)
+		}
+	})
+}
+
+func TestQuery_InvalidTypeFilterIgnoredFallsBackToPlainSearch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := reindexOneType(ctx, pool, "scenario", []Document{
+			{DocType: "scenario", SourceID: "s1", Title: "Ransomware Simulation"},
+		}); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+
+		plain, err := Query(ctx, pool, "ransomware", 10)
+		if err != nil {
+			t.Fatalf("Query(plain): %v", err)
+		}
+		withBadFilter, err := Query(ctx, pool, "type:bogus ransomware", 10)
+		if err != nil {
+			t.Fatalf("Query(bad filter): %v", err)
+		}
+		if len(withBadFilter) != len(plain) || withBadFilter[0].SourceID != plain[0].SourceID {
+			t.Fatalf("Query(\"type:bogus ransomware\") = %+v, want identical to plain %+v (bad filter ignored)", withBadFilter, plain)
+		}
+	})
+}
+
+func TestQuery_DuplicateTypeFilterRejectedFallsBackToPlainSearch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if err := reindexOneType(ctx, pool, "scenario", []Document{
+			{DocType: "scenario", SourceID: "s1", Title: "Ransomware Simulation"},
+		}); err != nil {
+			t.Fatalf("seed scenario: %v", err)
+		}
+		if err := reindexOneType(ctx, pool, "actor", []Document{
+			{DocType: "actor", SourceID: "a1", Title: "Ransomware Actor"},
+		}); err != nil {
+			t.Fatalf("seed actor: %v", err)
+		}
+
+		results, err := Query(ctx, pool, "type:scenario type:actor ransomware", 10)
+		if err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+		if len(results) != 2 {
+			t.Fatalf("Query() = %+v, want both scenario and actor docs (duplicate type: filters rejected, not applied)", results)
+		}
+	})
+}

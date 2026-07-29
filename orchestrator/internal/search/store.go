@@ -3,7 +3,6 @@ package search
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -47,24 +46,39 @@ func reindexOneType(ctx context.Context, pool *pgxpool.Pool, docType string, doc
 
 // Query full-text-searches search_documents and returns a flat, ranked
 // list -- never pre-grouped by type, see the design doc's Architecture §4.
-// An empty/whitespace-only q returns an empty slice, not an error and not
-// the full table.
+// Supports the type: search operator (Global Search Phase 4, see
+// query_parse.go): a valid type: filter with no free text switches to
+// browse mode (every entity of that type, ordered by title, no ranking --
+// there's no text to rank against); an invalid/duplicate/unsupported
+// filter is ignored entirely, falling back to a plain search. An empty
+// query with no valid filter at all still returns an empty slice, not an
+// error and not the full table, exactly as Phase 1.
 func Query(ctx context.Context, pool *pgxpool.Pool, q string, limit int) ([]Document, error) {
-	q = strings.TrimSpace(q)
-	if q == "" {
-		return []Document{}, nil
-	}
+	pq := ParseQuery(q)
 	if limit <= 0 || limit > 100 {
 		limit = 25
 	}
+	if pq.FreeText == "" && pq.DocType == "" {
+		return []Document{}, nil
+	}
 
-	rows, err := pool.Query(ctx,
-		`SELECT doc_type, source_id, title, description, tags
-		 FROM search_documents, plainto_tsquery('english', $1) query
-		 WHERE search_vector @@ query
-		 ORDER BY ts_rank(search_vector, query) DESC
-		 LIMIT $2`,
-		q, limit)
+	sqlQuery := `SELECT doc_type, source_id, title, description, tags
+		FROM search_documents, plainto_tsquery('english', $1) query
+		WHERE search_vector @@ query
+		  AND ($3 = '' OR doc_type = $3)
+		ORDER BY ts_rank(search_vector, query) DESC
+		LIMIT $2`
+	args := []any{pq.FreeText, limit, pq.DocType}
+	if pq.FreeText == "" {
+		sqlQuery = `SELECT doc_type, source_id, title, description, tags
+			FROM search_documents
+			WHERE doc_type = $1
+			ORDER BY title
+			LIMIT $2`
+		args = []any{pq.DocType, limit}
+	}
+
+	rows, err := pool.Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, err
 	}
