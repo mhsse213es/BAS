@@ -22,6 +22,7 @@ type MISPClient struct {
 	lastStat      SourceStat
 	lastCampaigns []intelligence.Campaign
 	lastMalware   []intelligence.Malware
+	lastTools     []intelligence.Tool
 }
 
 // NewMISPClient creates a MISP client. Skips TLS verification for self-signed
@@ -56,6 +57,7 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 	actorMap := make(map[string]*ThreatActor)
 	var campaigns []intelligence.Campaign
 	var malware []intelligence.Malware
+	var tools []intelligence.Tool
 
 	for _, ev := range events {
 		hasMitre := false
@@ -91,11 +93,12 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 			actorMap[actor.Name] = actor
 		}
 
-		campaign, eventMalware := c.extractIntelligence(ev, detail, actor)
+		campaign, eventMalware, eventTools := c.extractIntelligence(ev, detail, actor)
 		if campaign != nil {
 			campaigns = append(campaigns, *campaign)
 		}
 		malware = append(malware, eventMalware...)
+		tools = append(tools, eventTools...)
 	}
 
 	out := make([]ThreatActor, 0, len(actorMap))
@@ -107,6 +110,7 @@ func (c *MISPClient) Fetch() ([]ThreatActor, error) {
 	c.lastStat = SourceStat{Name: "misp", RawCount: len(events), ActorCount: len(out), FetchedAt: time.Now()}
 	c.lastCampaigns = campaigns
 	c.lastMalware = malware
+	c.lastTools = tools
 	return out, nil
 }
 
@@ -288,16 +292,17 @@ func (c *MISPClient) extractActor(ev mispEventIndex, detail *mispEventDetail) *T
 	return actor
 }
 
-// extractIntelligence builds Phase 1 Intelligence Expansion data (Campaign +
-// Malware) from an already-qualified, already-fetched MISP event -- reuses
-// the same event detail and actor name/techniques extractActor already
-// derived, no second fetch. One Campaign per qualifying event (the event
-// itself IS the campaign container). Zero or more Malware records, one per
-// mitre-malware GalaxyCluster entry. Malware entries inherit the SAME
-// technique/actor association as the event's actor -- MISP's flat galaxy
-// list doesn't support finer per-malware technique attribution without
-// deeper relationship parsing, which Phase 1 deliberately doesn't attempt.
-func (c *MISPClient) extractIntelligence(ev mispEventIndex, detail *mispEventDetail, actor *ThreatActor) (*intelligence.Campaign, []intelligence.Malware) {
+// extractIntelligence builds Intelligence Expansion data (Campaign +
+// Malware + Tool) from an already-qualified, already-fetched MISP event --
+// reuses the same event detail and actor name/techniques extractActor
+// already derived, no second fetch. One Campaign per qualifying event (the
+// event itself IS the campaign container). Zero or more Malware/Tool
+// records, one per mitre-malware/mitre-tool GalaxyCluster entry
+// respectively. Both inherit the SAME technique/actor association as the
+// event's actor -- MISP's flat galaxy list doesn't support finer per-entry
+// technique attribution without deeper relationship parsing, which this
+// client deliberately doesn't attempt.
+func (c *MISPClient) extractIntelligence(ev mispEventIndex, detail *mispEventDetail, actor *ThreatActor) (*intelligence.Campaign, []intelligence.Malware, []intelligence.Tool) {
 	src := intelligence.SourceRef{
 		Provider: "misp", ExternalID: ev.ID,
 		LastUpdated: actor.LastSeen, Confidence: actor.Confidence,
@@ -313,22 +318,30 @@ func (c *MISPClient) extractIntelligence(ev mispEventIndex, detail *mispEventDet
 	}
 
 	var malware []intelligence.Malware
+	var tools []intelligence.Tool
 	for _, gc := range detail.Event.GalaxyCluster {
-		if gc.Type != "mitre-malware" {
-			continue
-		}
 		name := strings.TrimSpace(gc.Value)
 		if name == "" {
 			continue
 		}
-		malware = append(malware, intelligence.Malware{
-			ID: intelligence.MalwareKey(name), Name: name,
-			TechniqueIDs: techniqueIDs(actor.Techniques),
-			ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{ev.ID},
-			Source: src,
-		})
+		switch gc.Type {
+		case "mitre-malware":
+			malware = append(malware, intelligence.Malware{
+				ID: intelligence.MalwareKey(name), Name: name,
+				TechniqueIDs: techniqueIDs(actor.Techniques),
+				ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{ev.ID},
+				Source: src,
+			})
+		case "mitre-tool":
+			tools = append(tools, intelligence.Tool{
+				ID: intelligence.MalwareKey(name), Name: name,
+				TechniqueIDs: techniqueIDs(actor.Techniques),
+				ThreatActorIDs: []string{actor.Name}, CampaignIDs: []string{ev.ID},
+				Source: src,
+			})
+		}
 	}
-	return campaign, malware
+	return campaign, malware, tools
 }
 
 func techniqueIDs(techs []TechniqueRef) []string {

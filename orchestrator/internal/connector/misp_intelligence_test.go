@@ -152,3 +152,71 @@ func TestMISPClient_FetchIntelligence_MultipleMalwareClusters(t *testing.T) {
 		}
 	}
 }
+
+// TestMISPClient_FetchIntelligence_ExtractsTools validates extraction against
+// the "mitre-tool" galaxy cluster type -- confirmed live against a real MISP
+// instance (2026-07-29): galaxy id 75, type "mitre-tool", namespace
+// "mitre-attack" (same namespace as the already-used mitre-malware/
+// mitre-attack-pattern/mitre-intrusion-set galaxies), with 97 real ATT&CK
+// Software clusters loaded (e.g. "Windows Credential Editor - S0005",
+// "Pass-The-Hash Toolkit - S0122"). Not a guess.
+func TestMISPClient_FetchIntelligence_ExtractsTools(t *testing.T) {
+	index := []mispEventIndex{
+		{ID: "3", Info: "Living-off-the-Land Toolkit Event", Timestamp: "1700000000", Tag: []mispTag{{Name: "mitre-attack-pattern"}}},
+	}
+	details := map[string]mispEventDetail{
+		"3": {Event: struct {
+			ID            string          `json:"id"`
+			Info          string          `json:"info"`
+			Timestamp     string          `json:"timestamp"`
+			Tag           []mispTag       `json:"Tag"`
+			GalaxyCluster []mispGalaxy    `json:"GalaxyCluster"`
+			Attribute     []mispAttribute `json:"Attribute"`
+		}{
+			ID: "3", Info: "Living-off-the-Land Toolkit Event",
+			GalaxyCluster: []mispGalaxy{
+				{Type: "mitre-attack-pattern", Value: "PowerShell", Meta: struct {
+					ExternalID []string `json:"external_id"`
+					KillChain  []string `json:"kill_chain"`
+				}{ExternalID: []string{"T1059.001"}}},
+				{Type: "mitre-attack-pattern", Value: "Remote System Discovery", Meta: struct {
+					ExternalID []string `json:"external_id"`
+					KillChain  []string `json:"kill_chain"`
+				}{ExternalID: []string{"T1018"}}},
+				{Type: "mitre-tool", Value: "PsExec"},
+				{Type: "mitre-tool", Value: "AdFind"},
+				{Type: "mitre-malware", Value: "NotATool"}, // wrong type -- must not become a Tool entry
+			},
+		}},
+	}
+	server := mispServer(t, index, details)
+	defer server.Close()
+
+	c := NewMISPClient(server.URL, "test-key", nil, nil)
+	if _, err := c.Fetch(); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+
+	_, _, tools, err := c.FetchIntelligence()
+	if err != nil {
+		t.Fatalf("FetchIntelligence: %v", err)
+	}
+	if len(tools) != 2 {
+		t.Fatalf("tools = %+v, want 2 entries (PsExec, AdFind)", tools)
+	}
+	names := map[string]bool{tools[0].Name: true, tools[1].Name: true}
+	if !names["PsExec"] || !names["AdFind"] {
+		t.Errorf("tool names = %v, want PsExec and AdFind", names)
+	}
+	for _, tl := range tools {
+		if tl.ID != MalwareKeyForTest(tl.Name) {
+			t.Errorf("tool ID = %q, want normalized key of %q", tl.ID, tl.Name)
+		}
+		if len(tl.TechniqueIDs) != 2 {
+			t.Errorf("tool %q TechniqueIDs = %v, want the event's 2 techniques", tl.Name, tl.TechniqueIDs)
+		}
+		if len(tl.CampaignIDs) != 1 || tl.CampaignIDs[0] != "3" {
+			t.Errorf("tool %q CampaignIDs = %v, want [3]", tl.Name, tl.CampaignIDs)
+		}
+	}
+}
