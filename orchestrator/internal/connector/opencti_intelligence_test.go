@@ -226,6 +226,12 @@ func TestOpenCTIClient_FetchIntelligence_PopulatedAfterFetch(t *testing.T) {
 						From octiRelatedEntity `json:"from"`
 					}{To: octiRelatedEntity{ID: "malware--1", Name: "TSCookie", AttackPatterns: twoTechniqueConn()}}},
 				}},
+				Tools: octiRelationshipConnection{Edges: []octiRelationshipEdge{
+					{Node: struct {
+						To   octiRelatedEntity `json:"to"`
+						From octiRelatedEntity `json:"from"`
+					}{To: octiRelatedEntity{ID: "tool--1", Name: "PsExec", AttackPatterns: twoTechniqueConn()}}},
+				}},
 			}},
 		}
 		json.NewEncoder(w).Encode(resp)
@@ -237,7 +243,7 @@ func TestOpenCTIClient_FetchIntelligence_PopulatedAfterFetch(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 
-	campaigns, malware, err := c.FetchIntelligence()
+	campaigns, malware, tools, err := c.FetchIntelligence()
 	if err != nil {
 		t.Fatalf("FetchIntelligence: %v", err)
 	}
@@ -246,5 +252,8 @@ func TestOpenCTIClient_FetchIntelligence_PopulatedAfterFetch(t *testing.T) {
 	}
 	if len(malware) != 1 || malware[0].Name != "TSCookie" {
 		t.Fatalf("FetchIntelligence() malware = %+v, want one named TSCookie", malware)
+	}
+	if len(tools) != 1 || tools[0].Name != "PsExec" {
+		t.Fatalf("FetchIntelligence() tools = %+v, want one named PsExec", tools)
 	}
 }

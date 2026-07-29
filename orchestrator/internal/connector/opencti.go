@@ -31,6 +31,7 @@ type OpenCTIClient struct {
 	lastStat      SourceStat
 	lastCampaigns []intelligence.Campaign
 	lastMalware   []intelligence.Malware
+	lastTools     []intelligence.Tool
 }
 
 // NewOpenCTIClient creates an OpenCTI GraphQL client.
@@ -58,6 +59,7 @@ func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
 	var actors []ThreatActor
 	var campaigns []intelligence.Campaign
 	var malware []intelligence.Malware
+	var tools []intelligence.Tool
 	for _, raw := range actorsRaw {
 		actor := c.convertActor(raw)
 		if actor == nil || len(actor.Techniques) < 2 {
@@ -71,10 +73,14 @@ func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
 		for _, entity := range malwareEntitiesFrom(raw.Malwares) {
 			malware = append(malware, c.convertMalware(entity, actor))
 		}
+		for _, entity := range toolEntitiesFrom(raw.Tools) {
+			tools = append(tools, c.convertTool(entity, actor))
+		}
 	}
 	c.lastStat = SourceStat{Name: "opencti", RawCount: len(actorsRaw), ActorCount: len(actors), FetchedAt: time.Now()}
 	c.lastCampaigns = campaigns
 	c.lastMalware = malware
+	c.lastTools = tools
 	return actors, nil
 }
 
@@ -128,6 +134,7 @@ type octiThreatActorNode struct {
 	AttackPatterns octiRelationshipConnection `json:"attackPatterns"`
 	Campaigns      octiRelationshipConnection `json:"campaigns"`
 	Malwares       octiRelationshipConnection `json:"malwares"`
+	Tools          octiRelationshipConnection `json:"tools"`
 }
 
 // techniqueRefsFrom extracts TechniqueRef entries from a "uses"->Attack-Pattern
@@ -276,6 +283,40 @@ const actorFieldsFragment = `
                   name
                   aliases
                   malware_types
+                  attackPatterns: stixCoreRelationships(
+                    relationship_type: "uses"
+                    toTypes: ["Attack-Pattern"]
+                    first: 100
+                  ) {
+                    edges {
+                      node {
+                        to {
+                          ... on AttackPattern {
+                            x_mitre_id
+                            name
+                            killChainPhases { phase_name }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        tools: stixCoreRelationships(
+          relationship_type: "uses"
+          toTypes: ["Tool"]
+          first: 100
+        ) {
+          edges {
+            node {
+              to {
+                ... on Tool {
+                  id
+                  name
+                  aliases
                   attackPatterns: stixCoreRelationships(
                     relationship_type: "uses"
                     toTypes: ["Attack-Pattern"]
