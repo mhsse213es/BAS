@@ -32,6 +32,7 @@ import (
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/search"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
@@ -251,6 +252,23 @@ func main() {
 	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine)
 	scheduler.Start()
 	defer scheduler.Stop()
+
+	// Global Search Phase 1 -- maintained multi-entity search index.
+	// Reindex once synchronously at startup (a ticker-based scheduler only
+	// fires after its first interval elapses, which would otherwise leave
+	// search_documents empty for the first tick) then keep it fresh on a
+	// 60s timer, reusing the same exercise.PollScheduler abstraction the
+	// OpenAEV connector below already uses rather than a new one.
+	if err := search.ReindexAll(context.Background(), pool, engine); err != nil {
+		log.Printf("[!] search: initial reindex failed: %v", err)
+	}
+	searchScheduler := exercise.NewPollScheduler(60 * time.Second)
+	searchScheduler.Start(func(ctx context.Context) {
+		if err := search.ReindexAll(ctx, pool, engine); err != nil {
+			log.Printf("[!] search: reindex failed: %v", err)
+		}
+	})
+	defer searchScheduler.Stop()
 
 	// ── OpenAEV Connector ─────────────────────────────────────────────────
 	// connector.Scheduler above is hardcoded to MISP/OpenCTI/Generator — not
