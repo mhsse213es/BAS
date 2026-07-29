@@ -1300,6 +1300,18 @@ body.theme-slate {
           </svg>
           Exercises
         </div>
+        <div class="nav-item" data-tab="attack-coverage" onclick="showTab('attack-coverage')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M1 1h6v6H1zM9 1h6v6H9zM1 9h6v6H1zM9 9h6v6H9z"/>
+          </svg>
+          Technique Coverage
+        </div>
+        <div class="nav-item" data-tab="threat-priority" onclick="showTab('threat-priority')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M8 1l2 4 4.5.5-3.25 3.25L12.25 13 8 10.75 3.75 13l1-4.25L1.5 5.5 6 5z"/>
+          </svg>
+          Threat Prioritization
+        </div>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Administration</div>
@@ -3067,6 +3079,88 @@ body.theme-slate {
         </div>
       </div>
 
+      <div id="tab-attack-coverage" style="display:none">
+        <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+          <div class="card-title">Technique Coverage</div>
+          <div style="margin:0.5rem 0 1rem;display:flex;gap:0.75rem;align-items:center">
+            <label class="tiny muted" for="cov-actor-select">Actor</label>
+            <select id="cov-actor-select" onchange="loadCoverageMatrix()">
+              <option value="">All techniques</option>
+            </select>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Technique</th>
+                  <th>Simulation</th>
+                  <th>Detection Profile</th>
+                  <th>Purple Exercise</th>
+                  <th>Compliance Mapping</th>
+                  <th>Response Playbook</th>
+                </tr>
+              </thead>
+              <tbody id="cov-matrix-body"></tbody>
+            </table>
+          </div>
+          <div id="cov-matrix-empty" class="empty" style="display:none">No techniques to show.</div>
+        </div>
+      </div>
+
+      <!-- Threat Prioritization -->
+      <div id="tab-threat-priority" style="display:none">
+        <div id="tp-list-view">
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">Threat Prioritization</div>
+            <div class="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Actor</th>
+                    <th>Tier</th>
+                    <th>Score</th>
+                    <th>Trend</th>
+                    <th>Coverage Gap</th>
+                  </tr>
+                </thead>
+                <tbody id="tp-list-body"></tbody>
+              </table>
+            </div>
+            <div id="tp-list-empty" class="empty" style="display:none">No threat actors tracked yet — configure a threat-intel connector to populate this view.</div>
+          </div>
+        </div>
+
+        <div id="tp-detail-view" style="display:none">
+          <div style="margin-bottom:0.75rem">
+            <a class="tiny" style="color:var(--accent);cursor:pointer;text-decoration:none" onclick="showThreatPriorityList()">&lsaquo; Threat Prioritization</a>
+          </div>
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title" id="tp-detail-title">Actor</div>
+            <div id="tp-detail-summary" class="score-grid" style="margin:0.75rem 0"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">Why this score</div>
+            <div id="tp-detail-factors"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">Uncovered Techniques</div>
+            <div id="tp-detail-uncovered" class="tiny"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">History</div>
+            <div id="tp-detail-history" class="tiny"></div>
+          </div>
+
+          <div class="card" style="padding:1rem 1.2rem">
+            <div class="card-title">Recommendations for this actor</div>
+            <div id="tp-detail-recs" class="tiny"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Compliance (reached from the Reports hub) -->
       <div id="tab-compliance" style="display:none">
         <div style="margin-bottom:0.75rem">
@@ -3871,7 +3965,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', exercises:'Exercises' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -4003,7 +4097,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','exercises'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','exercises','attack-coverage','threat-priority'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -4020,6 +4114,8 @@ function showTab(name) {
   if (name === 'runs') loadRuns();
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
+  if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
+  if (name === 'threat-priority') { showThreatPriorityList(); loadThreatPriorityActors(); }
   if (name === 'findings') loadFindings();
   if (name === 'remediation') loadRemediations();
   if (name === 'reports') loadReports();
@@ -4584,6 +4680,157 @@ function recCoverageBadge(state) {
   if (state === 'never-tested') return '<span class="badge" style="color:var(--danger);border-color:var(--danger)">Never tested</span>';
   if (state === 'stale')        return '<span class="badge" style="color:var(--warning);border-color:var(--warning)">Stale</span>';
   return '<span class="badge" style="color:var(--muted)">Recent</span>';
+}
+
+function covStatusCell(val) {
+  if (val === null) return '<span class="tiny muted">N/A</span>';
+  return val ? '<span style="color:var(--success)">&#10003;</span>' : '<span class="tiny muted">&mdash;</span>';
+}
+
+function loadCoverageActors() {
+  var sel = document.getElementById('cov-actor-select');
+  apicall('/api/coverage/actors')
+    .then(function(data) {
+      var actors = (data && data.actors) || [];
+      actors.forEach(function(name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(function(e) { console.error('loadCoverageActors failed', e); });
+}
+
+function loadCoverageMatrix() {
+  var sel = document.getElementById('cov-actor-select');
+  var actor = sel ? sel.value : '';
+  var body = document.getElementById('cov-matrix-body');
+  var empty = document.getElementById('cov-matrix-empty');
+  body.innerHTML = '<tr><td colspan="6" class="empty">Loading&hellip;</td></tr>';
+  var url = '/api/coverage/matrix' + (actor ? '?actor=' + encodeURIComponent(actor) : '');
+  apicall(url)
+    .then(function(rows) {
+      rows = rows || [];
+      if (!rows.length) {
+        body.innerHTML = '';
+        empty.style.display = '';
+        return;
+      }
+      empty.style.display = 'none';
+      body.innerHTML = rows.map(function(r) {
+        return '<tr>' +
+          '<td style="font-weight:600">' + x(r.techniqueId) + '</td>' +
+          '<td>' + covStatusCell(r.simulationExists) + '</td>' +
+          '<td>' + covStatusCell(r.detectionProfileExists) + '</td>' +
+          '<td>' + covStatusCell(r.purpleExerciseExists) + '</td>' +
+          '<td>' + covStatusCell(r.complianceMappingExists) + '</td>' +
+          '<td>' + covStatusCell(r.responsePlaybookExists) + '</td>' +
+          '</tr>';
+      }).join('');
+    })
+    .catch(function(e) {
+      body.innerHTML = '<tr><td colspan="6" class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</td></tr>';
+    });
+}
+
+var TP_ACTOR_CACHE = [];
+
+function showThreatPriorityList() {
+  document.getElementById('tp-list-view').style.display = '';
+  document.getElementById('tp-detail-view').style.display = 'none';
+}
+
+function tpTierBadge(tier) {
+  var color = tier === 'Critical' ? 'var(--danger)' : tier === 'High' ? 'var(--warning)' : tier === 'Medium' ? 'var(--accent)' : 'var(--muted)';
+  return '<span class="badge" style="color:' + color + ';border-color:' + color + '">' + x(tier || 'Low') + '</span>';
+}
+
+function tpTrendCell(trend, delta) {
+  if (trend === 'up') return '<span style="color:var(--success)">&#9650; +' + delta + '</span>';
+  if (trend === 'down') return '<span style="color:var(--danger)">&#9660; ' + delta + '</span>';
+  if (trend === 'stable') return '<span class="tiny muted">&mdash;</span>';
+  return '<span class="tiny muted">New</span>';
+}
+
+function loadThreatPriorityActors() {
+  var body = document.getElementById('tp-list-body');
+  var empty = document.getElementById('tp-list-empty');
+  body.innerHTML = '<tr><td colspan="5" class="empty">Loading&hellip;</td></tr>';
+  apicall('/api/threat-priority/actors')
+    .then(function(actors) {
+      TP_ACTOR_CACHE = actors || [];
+      if (!TP_ACTOR_CACHE.length) {
+        body.innerHTML = '';
+        empty.style.display = '';
+        return;
+      }
+      empty.style.display = 'none';
+      body.innerHTML = TP_ACTOR_CACHE.map(function(a) {
+        return '<tr style="cursor:pointer" onclick="showThreatPriorityDetail(' + JSON.stringify(a.actorName) + ')">' +
+          '<td style="font-weight:600">' + x(a.actorName) + '</td>' +
+          '<td>' + tpTierBadge(a.tier) + '</td>' +
+          '<td>' + x(a.score) + '</td>' +
+          '<td>' + tpTrendCell(a.trend, a.trendDelta) + '</td>' +
+          '<td>' + x(a.coverageGapCount) + ' of ' + x(a.techniqueCount) + '</td>' +
+          '</tr>';
+      }).join('');
+    })
+    .catch(function(e) {
+      body.innerHTML = '<tr><td colspan="5" class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</td></tr>';
+    });
+}
+
+function showThreatPriorityDetail(actorName) {
+  document.getElementById('tp-list-view').style.display = 'none';
+  document.getElementById('tp-detail-view').style.display = '';
+  document.getElementById('tp-detail-title').textContent = actorName;
+
+  apicall('/api/threat-priority/actors/' + encodeURIComponent(actorName))
+    .then(function(d) { renderThreatPriorityDetail(d); })
+    .catch(function(e) {
+      document.getElementById('tp-detail-factors').innerHTML = '<div class="empty" style="color:var(--danger)">Failed to load: ' + x(e.message) + '</div>';
+    });
+}
+
+function renderThreatPriorityDetail(d) {
+  document.getElementById('tp-detail-summary').innerHTML =
+    '<div class="kpi-card"><div class="kpi-label">Score</div><div class="kpi-value">' + x(d.score) + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Tier</div><div class="kpi-value">' + tpTierBadge(d.tier) + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Techniques</div><div class="kpi-value">' + x(d.techniqueCount) + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Coverage Gap</div><div class="kpi-value">' + x(d.coverageGapCount) + '</div></div>';
+
+  var factors = (d.factors || []).map(function(f) {
+    var val = f.available ? f.rawScore.toFixed(0) + '%' : 'Not yet validated';
+    return '<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--border)">' +
+      '<div><div style="font-weight:600">' + x(f.name) + '</div><div class="tiny muted">' + x(f.explanation) + '</div></div>' +
+      '<div style="font-weight:700">' + x(val) + '</div>' +
+      '</div>';
+  }).join('');
+  document.getElementById('tp-detail-factors').innerHTML = factors || '<div class="empty">No factor data.</div>';
+
+  var uncovered = (d.uncoveredTechniques || []);
+  document.getElementById('tp-detail-uncovered').innerHTML = uncovered.length
+    ? uncovered.map(function(t) { return '<span class="tool-tag">' + x(t) + '</span>'; }).join(' ')
+    : '<span class="muted">No coverage gaps.</span>';
+
+  var hist = (d.history || []);
+  document.getElementById('tp-detail-history').innerHTML = hist.length
+    ? '<table style="width:100%"><thead><tr><th>Date</th><th>Score</th></tr></thead><tbody>' +
+      hist.map(function(h) { return '<tr><td>' + x(new Date(h.recordedAt).toLocaleDateString()) + '</td><td>' + x(h.score) + '</td></tr>'; }).join('') +
+      '</tbody></table>'
+    : '<span class="muted">No history yet.</span>';
+
+  var techSet = {};
+  (d.techniqueIds || []).forEach(function(t) { techSet[t] = true; });
+  apicall('/api/recommend/simulations?limit=100').then(function(recData) {
+    var matches = ((recData && recData.techniques) || []).filter(function(t) { return techSet[t.techniqueId]; });
+    document.getElementById('tp-detail-recs').innerHTML = matches.length
+      ? matches.map(function(t) { return '<div style="padding:0.3rem 0">' + x(t.techniqueId) + ' — ' + x(t.name) + ' <span class="tiny muted">(score ' + x(t.score) + ')</span></div>'; }).join('')
+      : '<span class="muted">No open recommendations for this actor\'s techniques.</span>';
+  }).catch(function() {
+    document.getElementById('tp-detail-recs').innerHTML = '<span class="muted">Could not load recommendations.</span>';
+  });
 }
 
 function loadRecommendations() {
@@ -11426,9 +11673,12 @@ function showToast(msg, type) {
 }
 
 /* ── Command palette (Ctrl/Cmd-K) ─────────────────────────────────────────
-   Self-contained launcher routing to existing tabs + global actions. Respects
-   role: Users/Settings (admin) and New scenario (admin/analyst) appear only when
-   permitted — same gating as the sidebar. No backend; pure navigation. */
+   Launcher routing to existing tabs + global actions, plus live search
+   (Global Search Phase 2) over GET /api/search -- results merge into the
+   same flat/selectable/run mechanism the static nav list already uses, so
+   keyboard nav and click-to-select work identically for both. Respects
+   role: Users/Settings (admin) and New scenario (admin/analyst) appear only
+   when permitted — same gating as the sidebar. */
 var _cmdkOpen = false;
 function cmdkCommands() {
   var nav = [
@@ -11448,6 +11698,67 @@ function cmdkCommands() {
   }
   return [{ sec: 'Navigate', items: nav }, { sec: 'Actions', items: actions }];
 }
+
+// CMDK_SEARCH_LABELS maps a search result's docType to its section header.
+// "campaign" -> "Threat Campaigns", deliberately not "Campaigns" -- the
+// sidebar's existing Campaigns tab is internal/campaign (BAS execution
+// rollups), a different concept from intelligence_campaigns.
+var CMDK_SEARCH_LABELS = {
+  scenario: 'Scenarios', run: 'Runs', finding: 'Findings',
+  actor: 'Threat Actors', campaign: 'Threat Campaigns',
+  malware: 'Malware', tool: 'Tools', technique: 'Techniques'
+};
+
+// cmdkOpenResult dispatches a selected search result to a real navigation
+// action per docType, or the minimal fallback popup for the 3 types with
+// no detail view anywhere in this app yet (campaign/malware/tool).
+function cmdkOpenResult(r) {
+  if (r.docType === 'run') {
+    openRunReport(r.sourceId);
+  } else if (r.docType === 'finding') {
+    showTab('findings');
+    setTimeout(function() { openFinding(r.sourceId); }, 150);
+  } else if (r.docType === 'actor') {
+    showTab('threat-priority');
+    setTimeout(function() { showThreatPriorityDetail(r.title); }, 150);
+  } else if (r.docType === 'technique') {
+    // The 150ms delay matters here, not just as a defensive habit:
+    // openTechnique() reads window._covSt[id], populated asynchronously by
+    // loadCoverageMatrix() (kicked off by showTab('attack-coverage')) --
+    // calling it too early shows a wrong "Untested" badge for a technique
+    // that may actually be covered.
+    showTab('attack-coverage');
+    setTimeout(function() { openTechnique(r.sourceId); }, 150);
+  } else if (r.docType === 'scenario') {
+    // No true "open by ID" exists for scenarios -- they expand inline
+    // within the Scenarios tab's own tile grid. Reuse the existing sc-search
+    // filter box rather than building new expand-by-ID logic.
+    showTab('scenarios');
+    setTimeout(function() {
+      document.getElementById('sc-search').value = r.title;
+      renderScenarios();
+    }, 150);
+  } else {
+    cmdkResultFallback(r);
+  }
+}
+
+// cmdkResultFallback reuses the existing #results-overlay drawer (the same
+// one openFinding/openTechnique already populate) to show a search result's
+// own title/description/tags for entity types with no detail view built
+// yet. No network request -- everything shown is already in `r`.
+function cmdkResultFallback(r) {
+  document.getElementById('results-title').textContent = r.title + ' — ' + CMDK_SEARCH_LABELS[r.docType];
+  document.getElementById('results-export').innerHTML = '';
+  document.getElementById('results-summary').innerHTML = '';
+  document.getElementById('results-body').innerHTML =
+    (r.description ? '<p style="margin-bottom:0.8rem">' + x(r.description) + '</p>' : '') +
+    ((r.tags || []).length ? '<div style="display:flex;gap:0.4rem;flex-wrap:wrap">' +
+      r.tags.map(function(t) { return '<span class="sbadge" style="background:transparent;border:1px solid var(--border)">' + x(t) + '</span>'; }).join('') +
+      '</div>' : '');
+  document.getElementById('results-overlay').classList.add('open');
+}
+
 function openCmdk() {
   if (_cmdkOpen || !ROLE) return;
   _cmdkOpen = true;
@@ -11465,17 +11776,65 @@ function openCmdk() {
   var input = wrap.querySelector('#cmdk-input');
   var list = wrap.querySelector('#cmdk-list');
   var flat = [], active = 0;
+
+  // Search state: cmdkSearchResults holds the last successful response
+  // (kept across in-flight requests so results don't flicker to empty
+  // while typing), null means the last request failed, [] means empty
+  // query or genuinely no matches. cmdkSearchToken discards responses to
+  // requests a newer keystroke has already superseded.
+  var cmdkSearchResults = [];
+  var cmdkSearchToken = 0;
+  var cmdkSearchTimer = null;
+  function cmdkSearch(q, onDone) {
+    clearTimeout(cmdkSearchTimer);
+    if (!q) { cmdkSearchResults = []; onDone(); return; }
+    cmdkSearchTimer = setTimeout(function() {
+      var token = ++cmdkSearchToken;
+      apicall('/api/search?q=' + encodeURIComponent(q) + '&limit=20')
+        .then(function(results) {
+          if (token !== cmdkSearchToken) return;
+          cmdkSearchResults = Array.isArray(results) ? results : null;
+          onDone();
+        })
+        .catch(function() {
+          if (token !== cmdkSearchToken) return;
+          cmdkSearchResults = null;
+          onDone();
+        });
+    }, 150);
+  }
+
   function selectable() { return flat.map(function(f, i) { return f.sec ? -1 : i; }).filter(function(i) { return i >= 0; }); }
   function paint() {
     var nodes = list.querySelectorAll('[data-ci]');
     Array.prototype.forEach.call(nodes, function(n) { n.classList.toggle('active', +n.dataset.ci === active); });
   }
-  function draw(q) {
-    q = (q || '').toLowerCase(); flat = [];
+
+  function staticFlatFor(q) {
+    var out = [];
     cmds.forEach(function(c) {
       var items = c.items.filter(function(i) { return i.t.toLowerCase().indexOf(q) >= 0; });
-      if (items.length) { flat.push({ sec: c.sec }); items.forEach(function(i) { flat.push(i); }); }
+      if (items.length) { out.push({ sec: c.sec }); items.forEach(function(i) { out.push(i); }); }
     });
+    return out;
+  }
+
+  function searchFlat() {
+    var out = [];
+    if (cmdkSearchResults === null) { out.push({ sec: 'Search unavailable' }); return out; }
+    var byType = {};
+    cmdkSearchResults.forEach(function(r) { (byType[r.docType] = byType[r.docType] || []).push(r); });
+    ['scenario', 'run', 'finding', 'actor', 'campaign', 'malware', 'tool', 'technique'].forEach(function(dt) {
+      var items = byType[dt];
+      if (!items || !items.length) return;
+      out.push({ sec: CMDK_SEARCH_LABELS[dt] });
+      items.forEach(function(r) { out.push({ t: r.title, fn: function() { cmdkOpenResult(r); } }); });
+    });
+    return out;
+  }
+
+  function render(q) {
+    flat = staticFlatFor(q).concat(searchFlat());
     var sel = selectable(); active = sel.length ? sel[0] : 0;
     if (!flat.length) { list.innerHTML = '<div class="cmdk-empty">No matches</div>'; return; }
     list.innerHTML = flat.map(function(f, i) {
@@ -11488,6 +11847,13 @@ function openCmdk() {
     });
     paint();
   }
+
+  function draw(q) {
+    q = (q || '').toLowerCase();
+    render(q);
+    cmdkSearch(input.value, function() { render(q); });
+  }
+
   function move(dir) {
     var sel = selectable(); if (!sel.length) return;
     var pos = sel.indexOf(active); if (pos < 0) pos = 0;
