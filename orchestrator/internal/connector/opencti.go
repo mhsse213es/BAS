@@ -483,11 +483,10 @@ func (c *OpenCTIClient) convertTool(entity octiRelatedEntity, actor *ThreatActor
 }
 
 // FetchIntelligence implements connector.IntelligenceSource -- returns the
-// Campaign/Malware data gathered during the most recent Fetch() call, same
-// after-the-fact-accessor pattern Stats() and MISPClient.FetchIntelligence
-// already use.
-func (c *OpenCTIClient) FetchIntelligence() ([]intelligence.Campaign, []intelligence.Malware, error) {
-	return c.lastCampaigns, c.lastMalware, nil
+// Campaign/Malware/Tool data gathered during the most recent Fetch() call,
+// same after-the-fact-accessor pattern Stats() already uses.
+func (c *OpenCTIClient) FetchIntelligence() ([]intelligence.Campaign, []intelligence.Malware, []intelligence.Tool, error) {
+	return c.lastCampaigns, c.lastMalware, c.lastTools, nil
 }
 
 func confidenceLabel(n int) string {

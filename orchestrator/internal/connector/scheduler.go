@@ -138,6 +138,7 @@ func (s *Scheduler) sync() {
 	var actors []ThreatActor
 	var allCampaigns []intelligence.Campaign
 	var allMalware []intelligence.Malware
+	var allTools []intelligence.Tool
 	var bundleVersion string
 	bySource := map[string]SourceStat{}
 
@@ -160,12 +161,13 @@ func (s *Scheduler) sync() {
 			bundleVersion = bs.Version()
 		}
 		if is, ok := src.(IntelligenceSource); ok {
-			campaigns, malware, ierr := is.FetchIntelligence()
+			campaigns, malware, tools, ierr := is.FetchIntelligence()
 			if ierr != nil {
 				log.Printf("[connector/%s] intelligence fetch error: %v", src.Name(), ierr)
 			} else {
 				allCampaigns = append(allCampaigns, campaigns...)
 				allMalware = append(allMalware, malware...)
+				allTools = append(allTools, tools...)
 			}
 		}
 	}
@@ -193,6 +195,11 @@ func (s *Scheduler) sync() {
 		for _, m := range allMalware {
 			if err := intelligence.UpsertMalware(context.Background(), s.pool, m); err != nil {
 				log.Printf("[connector] upsert malware %q: %v", m.ID, err)
+			}
+		}
+		for _, tl := range allTools {
+			if err := intelligence.UpsertTool(context.Background(), s.pool, tl); err != nil {
+				log.Printf("[connector] upsert tool %q: %v", tl.ID, err)
 			}
 		}
 	}

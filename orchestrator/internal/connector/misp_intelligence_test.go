@@ -71,7 +71,7 @@ func TestMISPClient_FetchIntelligence_OneCampaignNoMalware(t *testing.T) {
 		t.Fatalf("actors = %+v, want 1", actors)
 	}
 
-	campaigns, malware, err := c.FetchIntelligence()
+	campaigns, malware, _, err := c.FetchIntelligence()
 	if err != nil {
 		t.Fatalf("FetchIntelligence: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestMISPClient_FetchIntelligence_MultipleMalwareClusters(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 
-	_, malware, err := c.FetchIntelligence()
+	_, malware, _, err := c.FetchIntelligence()
 	if err != nil {
 		t.Fatalf("FetchIntelligence: %v", err)
 	}

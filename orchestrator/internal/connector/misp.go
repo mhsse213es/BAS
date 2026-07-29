@@ -352,11 +352,10 @@ func techniqueIDs(techs []TechniqueRef) []string {
 	return ids
 }
 
-// FetchIntelligence implements IntelligenceSource -- returns the Campaign/
-// Malware data gathered during the most recent Fetch() call, the same
-// after-the-fact-accessor pattern Stats() already uses for lastStat.
-func (c *MISPClient) FetchIntelligence() ([]intelligence.Campaign, []intelligence.Malware, error) {
-	return c.lastCampaigns, c.lastMalware, nil
+// FetchIntelligence implements IntelligenceSource -- returns the
+// Campaign/Malware/Tool data gathered during the most recent Fetch() call.
+func (c *MISPClient) FetchIntelligence() ([]intelligence.Campaign, []intelligence.Malware, []intelligence.Tool, error) {
+	return c.lastCampaigns, c.lastMalware, c.lastTools, nil
 }
 
 func sanitiseEventName(info string) string {

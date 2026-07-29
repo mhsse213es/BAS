@@ -13,10 +13,10 @@ type Source interface {
 }
 
 // IntelligenceSource is an optional Source capability: providers that can
-// also extract Campaign/Malware intelligence beyond actor-technique
-// profiles implement this. Only MISPClient does today -- see
-// docs/superpowers/specs/2026-07-28-intelligence-expansion-design.md.
-// OpenCTI/OTX/Bundle are unaffected until a later phase extends them.
+// also extract Campaign/Malware/Tool intelligence beyond actor-technique
+// profiles implement this. Both MISPClient and OpenCTIClient implement it
+// as of Intelligence Expansion Phase 4 -- see
+// docs/superpowers/specs/2026-07-29-intelligence-expansion-phase4-design.md.
 type IntelligenceSource interface {
-	FetchIntelligence() ([]intelligence.Campaign, []intelligence.Malware, error)
+	FetchIntelligence() ([]intelligence.Campaign, []intelligence.Malware, []intelligence.Tool, error)
 }
