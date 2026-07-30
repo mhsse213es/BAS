@@ -2,6 +2,37 @@ package compliance
 
 import "testing"
 
+func TestAllControls_FlattensEveryFrameworkSortedDeterministically(t *testing.T) {
+	m, err := NewMapper()
+	if err != nil {
+		t.Fatalf("NewMapper: %v", err)
+	}
+	all := m.AllControls()
+
+	wantTotal := 0
+	for _, fw := range m.Frameworks() {
+		wantTotal += fw.TotalControls
+	}
+	if len(all) != wantTotal {
+		t.Fatalf("AllControls() returned %d controls, want %d (sum of every framework's TotalControls)", len(all), wantTotal)
+	}
+
+	for i, cwf := range all {
+		if cwf.FrameworkID == "" || cwf.Control.ID == "" {
+			t.Fatalf("all[%d] = %+v, want non-empty FrameworkID and Control.ID", i, cwf)
+		}
+		if i > 0 {
+			prev := all[i-1]
+			if cwf.FrameworkID < prev.FrameworkID {
+				t.Fatalf("all[%d].FrameworkID = %q sorts before all[%d].FrameworkID = %q, want non-decreasing", i, cwf.FrameworkID, i-1, prev.FrameworkID)
+			}
+			if cwf.FrameworkID == prev.FrameworkID && cwf.Control.ID < prev.Control.ID {
+				t.Fatalf("within framework %q, all[%d].Control.ID = %q sorts before all[%d].Control.ID = %q, want non-decreasing", cwf.FrameworkID, i, cwf.Control.ID, i-1, prev.Control.ID)
+			}
+		}
+	}
+}
+
 func TestBuildNarrative_NoTestedControls(t *testing.T) {
 	got := buildNarrative(ComplianceSummary{}, nil, nil)
 	want := "No controls have been tested yet — run a scenario to generate compliance evidence."

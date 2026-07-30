@@ -85,6 +85,33 @@ func (m *Mapper) Frameworks() []FrameworkMeta {
 	return out
 }
 
+// ControlWithFramework pairs a control with the ID of the framework that
+// defines it -- AllControls flattens every loaded framework's controls
+// into one slice for consumers (Global Search Phase 5) that don't care
+// about per-framework grouping.
+type ControlWithFramework struct {
+	FrameworkID string
+	Control     ControlDef
+}
+
+// AllControls returns every control across every loaded framework, sorted
+// by FrameworkID then control ID for deterministic output.
+func (m *Mapper) AllControls() []ControlWithFramework {
+	out := make([]ControlWithFramework, 0)
+	for _, fw := range m.frameworks {
+		for _, ctrl := range fw.Controls {
+			out = append(out, ControlWithFramework{FrameworkID: fw.ID, Control: ctrl})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].FrameworkID != out[j].FrameworkID {
+			return out[i].FrameworkID < out[j].FrameworkID
+		}
+		return out[i].Control.ID < out[j].Control.ID
+	})
+	return out
+}
+
 // GenerateReport maps BAS simulation results onto a framework's controls.
 func (m *Mapper) GenerateReport(
 	results []models.SimulationResult,
