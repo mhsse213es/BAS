@@ -27,7 +27,7 @@
 **Interfaces:**
 - Produces: `type RiskResult struct { FleetAvgScore int }`, `func FleetRisk(ctx context.Context, pool *pgxpool.Pool) (RiskResult, error)` — consumed by Task 6 (`dashboard.Compute()`'s refactor).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `orchestrator/internal/analytics/risk_test.go`:
 
@@ -108,12 +108,12 @@ func TestFleetRisk_NoCompletedRuns_ReturnsZero(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd orchestrator && go vet ./internal/analytics/... 2>&1`
 Expected: FAIL — the package doesn't exist yet.
 
-- [ ] **Step 3: Implement `FleetRisk`**
+- [x] **Step 3: Implement `FleetRisk`**
 
 Create `orchestrator/internal/analytics/risk.go`:
 
@@ -153,12 +153,12 @@ func FleetRisk(ctx context.Context, pool *pgxpool.Pool) (RiskResult, error) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/analytics/... -run TestFleetRisk -v`
 Expected: build succeeds; both tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add orchestrator/internal/analytics/risk.go orchestrator/internal/analytics/risk_test.go
@@ -178,7 +178,7 @@ git push
 - Consumes: `db.GetFleetComplianceScores(ctx, pool) ([]db.ComplianceSnapshot, error)` and `db.GetComplianceScores(ctx, pool, agentID string) ([]db.ComplianceSnapshot, error)` (existing, `internal/db/postgres.go:1192,1221`); `db.UpsertComplianceSnapshot(ctx, pool, s db.ComplianceSnapshot) error` (existing, used only by the test to seed data).
 - Produces: `func Compliance(ctx context.Context, pool *pgxpool.Pool, agentID string) ([]db.ComplianceSnapshot, error)` — no other task consumes this directly (Sub-project B will), but it completes the category.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `orchestrator/internal/analytics/compliance_test.go`:
 
@@ -241,12 +241,12 @@ func TestCompliance_WithAgentID_ReturnsThatAgentsScores(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd orchestrator && go vet ./internal/analytics/... 2>&1`
 Expected: FAIL — `undefined: Compliance`.
 
-- [ ] **Step 3: Implement `Compliance`**
+- [x] **Step 3: Implement `Compliance`**
 
 Create `orchestrator/internal/analytics/compliance.go`:
 
@@ -276,12 +276,12 @@ func Compliance(ctx context.Context, pool *pgxpool.Pool, agentID string) ([]db.C
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/analytics/... -run TestCompliance -v`
 Expected: build succeeds; both tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add orchestrator/internal/analytics/compliance.go orchestrator/internal/analytics/compliance_test.go
@@ -301,7 +301,7 @@ git push
 - Consumes: `campaign.Aggregate(runs []ChildRun, skips []Skip) Summary` and `campaign.DeriveStatus(runs []ChildRun, skips int, stopped bool) string` (existing, `internal/campaign/campaign.go:90,39`); `campaign.ChildRun`, `campaign.Skip` (existing, `campaign.go:10-25`).
 - Produces: `type Rollup struct { ID, Name, ScenarioID, ScenarioName, Mode, CreatedBy string; StartedAt time.Time; Summary Summary }`, `func ListWithRollups(ctx context.Context, pool *pgxpool.Pool) ([]Rollup, error)` — consumed by Task 4 (`analytics.Campaigns`) and Task 7 (`ListCampaigns` handler refactor).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `orchestrator/internal/campaign/store_test.go`:
 
@@ -389,12 +389,12 @@ func TestListWithRollups_EmptyFleet_ReturnsEmptySlice(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd orchestrator && go vet ./internal/campaign/... 2>&1`
 Expected: FAIL — `undefined: ListWithRollups`.
 
-- [ ] **Step 3: Implement `ListWithRollups`**
+- [x] **Step 3: Implement `ListWithRollups`**
 
 Create `orchestrator/internal/campaign/store.go`:
 
@@ -544,18 +544,26 @@ func detectedTechsFromSummary(detRaw []byte, results []models.SimulationResult) 
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/campaign/... -run TestListWithRollups -v`
 Expected: build succeeds; both tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add orchestrator/internal/campaign/store.go orchestrator/internal/campaign/store_test.go
 git commit -m "feat(campaign): add ListWithRollups, making fleet campaign rollups callable outside internal/api"
 git push
 ```
+
+**Real bug found during implementation:** the first draft of `detectedTechsFromSummary` only
+implemented the `detRaw`-present branch of the original `campaign_handlers.go:157`
+`detectedTechs` helper, silently dropping the second, always-running loop that additionally
+classifies any FAILed result via `reporting.ClassifyDetectionStatus(res.Events)`. Caught by a
+`go vet` "unused parameter: results" diagnostic, not by blind trust — a partial read of the
+original function had missed the second loop. Fixed by copying the full original logic
+faithfully (see commit `46f2794`).
 
 ---
 
@@ -569,7 +577,7 @@ git push
 - Consumes: `campaign.ListWithRollups(ctx, pool) ([]campaign.Rollup, error)` (Task 3).
 - Produces: `func Campaigns(ctx context.Context, pool *pgxpool.Pool) ([]campaign.Rollup, error)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `orchestrator/internal/analytics/campaigns_test.go`:
 
@@ -619,12 +627,12 @@ func TestCampaigns_DelegatesToListWithRollups(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd orchestrator && go vet ./internal/analytics/... 2>&1`
 Expected: FAIL — `undefined: Campaigns`.
 
-- [ ] **Step 3: Implement `Campaigns`**
+- [x] **Step 3: Implement `Campaigns`**
 
 Create `orchestrator/internal/analytics/campaigns.go`:
 
@@ -647,12 +655,12 @@ func Campaigns(ctx context.Context, pool *pgxpool.Pool) ([]campaign.Rollup, erro
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/analytics/... -run TestCampaigns -v`
 Expected: build succeeds; both tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add orchestrator/internal/analytics/campaigns.go orchestrator/internal/analytics/campaigns_test.go
@@ -672,7 +680,7 @@ git push
 - Consumes: `attackpath.BuildGraphAndAnalyze(cols []attackpath.Collection, tags []attackpath.AssetTag) (*attackpath.Graph, attackpath.Summary)` (existing, `internal/attackpath/assets.go:93`); `pathcorrelation.DefaultPaths(g, s) []pathcorrelation.AttackPath`, `pathcorrelation.Correlate(ctx, g, s, paths, mapper, runs, rules) (pathcorrelation.AttackPathCorrelation, error)`, `pathcorrelation.DefaultEdgeTechniqueMapper{}`, `pathcorrelation.NewSQLRunLookup(pool) *pathcorrelation.SQLRunLookup` (existing, `internal/pathcorrelation/{correlate,paths,mapper,runlookup}.go`); `exposure.Build(ctx, g, s, corr, rels, enricher, findingsLookup, agents) (*exposure.AssetGraph, error)`, `exposure.NewSQLCVEEnricher(pool)`, `exposure.NewSQLFindingsLookup(pool)`, `exposure.AgentRow{AgentID, Hostname, IP, OS}`, `(*exposure.AssetGraph).Summaries() []exposure.AssetSummary` (existing, `internal/exposure/build.go`); `predict.Build(ctx, pool) (predict.Prediction, error)` returning `.Exposure predict.ExposureWindows` (existing, `internal/predict/predict.go:47`).
 - Produces: `type FleetExposure struct` (unexported fields), `func BuildFleetExposure(ctx, pool) (*FleetExposure, error)`, `func (fe *FleetExposure) Correlation() pathcorrelation.AttackPathCorrelation`, `func (fe *FleetExposure) AssetExposureSummary() ExposureSummary`, `type ExposureSummary struct { FleetAvgScore int; Assets []exposure.AssetSummary }`, `func FindingExposureWindows(ctx, pool) (predict.ExposureWindows, error)` — `BuildFleetExposure`/`Correlation`/`AssetExposureSummary` consumed by Task 6 (`dashboard.Compute()` refactor).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `orchestrator/internal/analytics/exposure_test.go`:
 
@@ -780,12 +788,12 @@ func TestFindingExposureWindows_MatchesDirectPredictBuildCall(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd orchestrator && go vet ./internal/analytics/... 2>&1`
 Expected: FAIL — `undefined: BuildFleetExposure`, `undefined: FindingExposureWindows`.
 
-- [ ] **Step 3: Implement `BuildFleetExposure` and `FindingExposureWindows`**
+- [x] **Step 3: Implement `BuildFleetExposure` and `FindingExposureWindows`**
 
 Create `orchestrator/internal/analytics/exposure.go`:
 
@@ -966,12 +974,12 @@ func loadAgents(ctx context.Context, pool *pgxpool.Pool) ([]exposure.AgentRow, e
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/analytics/... -run 'TestBuildFleetExposure|TestFindingExposureWindows' -v`
 Expected: build succeeds; all 3 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add orchestrator/internal/analytics/exposure.go orchestrator/internal/analytics/exposure_test.go
@@ -991,12 +999,12 @@ git push
 - Consumes: `analytics.FleetRisk(ctx, pool) (analytics.RiskResult, error)` (Task 1), `analytics.BuildFleetExposure(ctx, pool) (*analytics.FleetExposure, error)`, `(*analytics.FleetExposure).Correlation()`, `(*analytics.FleetExposure).AssetExposureSummary()` (Task 5).
 - Produces: `dashboard.Compute`'s external signature and `Snapshot` type are unchanged — no other package's call sites need updating.
 
-- [ ] **Step 1: Confirm the regression-guard tests currently pass**
+- [x] **Step 1: Confirm the regression-guard tests currently pass**
 
 Run: `cd orchestrator && go test ./internal/dashboard/... -v 2>&1 | tail -20`
 Expected: all 3 existing tests (`TestCompute_EmptyFleet_ReturnsZeroScores`, `TestCompute_AvgRiskScoreFromRecentRuns`, `TestCompute_ExposureAndDetectionMatchDirectCalls`) PASS — this is the baseline the refactor must not break.
 
-- [ ] **Step 2: Replace `Compute()` and delete the now-dead private loaders**
+- [x] **Step 2: Replace `Compute()` and delete the now-dead private loaders**
 
 In `orchestrator/internal/dashboard/snapshot.go`, replace the entire file's `import` block and everything from `func Compute` through the end of the file (currently lines 9-147: the `import` block, `Compute`, `avgRiskScore`, `loadCollections`, `loadAssetTags`, `loadAgents`) with:
 
@@ -1055,12 +1063,12 @@ Keep the file's package doc comment (lines 1-7, "Package dashboard is the Phase 
 package dashboard
 ```
 
-- [ ] **Step 3: Run the regression-guard tests to verify byte-identical output**
+- [x] **Step 3: Run the regression-guard tests to verify byte-identical output**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/dashboard/... -v 2>&1 | tail -20`
 Expected: build succeeds; all 3 existing tests still PASS with no changes to their assertions — proves the refactor preserved behavior exactly.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add orchestrator/internal/dashboard/snapshot.go
@@ -1080,12 +1088,12 @@ git push
 - Consumes: `campaign.ListWithRollups(ctx, pool) ([]campaign.Rollup, error)` (Task 3).
 - Produces: `ListCampaigns`'s HTTP response shape is unchanged (still a JSON array of objects with `id`/`name`/`scenarioId`/`scenarioName`/`mode`/`createdBy`/`startedAt`/`summary`) — no frontend change needed.
 
-- [ ] **Step 1: Confirm the regression-guard tests currently pass**
+- [x] **Step 1: Confirm the regression-guard tests currently pass**
 
 Run: `cd orchestrator && go test ./internal/api/... -run TestListCampaigns -v 2>&1 | tail -20`
 Expected: both existing tests PASS — this is the baseline the refactor must not break.
 
-- [ ] **Step 2: Replace `ListCampaigns`'s body**
+- [x] **Step 2: Replace `ListCampaigns`'s body**
 
 In `orchestrator/internal/api/campaign_handlers.go`, replace the `ListCampaigns` function (currently lines 260-287):
 
@@ -1144,12 +1152,12 @@ func (h *Handler) ListCampaigns(w http.ResponseWriter, r *http.Request) {
 
 Confirm `internal/api/campaign_handlers.go`'s existing imports already include `"github.com/audspect/bas/internal/campaign"` (it does — `campaign.ChildRun`/`campaign.Skip`/`campaign.Aggregate`/`campaign.DeriveStatus` are already used throughout this file) — no new import needed.
 
-- [ ] **Step 3: Run the regression-guard tests to verify identical response shape**
+- [x] **Step 3: Run the regression-guard tests to verify identical response shape**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/api/... -run TestListCampaigns -v 2>&1 | tail -20`
 Expected: build succeeds; both existing tests still PASS unchanged — proves the JSON response shape didn't change.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add orchestrator/internal/api/campaign_handlers.go
@@ -1157,18 +1165,36 @@ git commit -m "refactor(api): ListCampaigns delegates to campaign.ListWithRollup
 git push
 ```
 
+**Real regression found during Step 3:** `TestListCampaigns_ReturnsRollup` failed with
+`status = 500, want 200`. Root cause: `campaign.ListWithRollups`'s query (Task 3) selected
+`created_by` directly into a non-pointer Go `string`, and this test's `seedCampaign` fixture
+(`internal/api/report_fixtures_test.go:197-205`) never sets `created_by`, leaving it SQL
+`NULL` — pgx cannot scan `NULL` into a non-pointer `string`. The original `loadCampaign` query
+had wrapped this column in `COALESCE(created_by,'')`; the new query had omitted it. Fixed in
+`internal/campaign/store.go` by adding the same `COALESCE` wrapper, committed together with
+this task's handler refactor (commit `d036bca`) since both changes were discovered and
+verified together. Re-ran Task 3's own tests afterward to confirm the fix didn't regress them.
+
 ---
 
 ### Task 8: Full regression
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full Go test suite**
+- [x] **Step 1: Run the full Go test suite**
 
 Run: `cd orchestrator && go build ./... && go vet ./... && go test ./... -count=1 > /tmp/analytics-phase-a-full-suite.log 2>&1; echo "EXIT_CODE:$?"`
 
 Expected: `EXIT_CODE:0`, every package `ok`. If a single package fails under Docker load with a testcontainers connection error, re-run that package in isolation before concluding it's the known transient flake this session has repeatedly confirmed (this session's established distinction: one package failing under full-suite load is usually transient; many/all packages failing identically means check `docker info` first — a genuine outage, not a flake).
 
-- [ ] **Step 2: Report completion**
+- [x] **Step 2: Report completion**
 
 This sub-project executes directly on `main` (matching this session's established inline-execution convention) — no branch/worktree/PR decision needed. Confirm with the user that Sub-project A is complete, and that Sub-project B (the unified dashboard shell + view selector, consuming this analytics layer) is next.
+
+**Result:** `internal/api` failed under the full-suite run (`645.653s`, killed by Go's default
+10-minute per-package timeout) while every other package passed. Re-ran `internal/api` alone
+with `-timeout=20m`: `ok github.com/audspect/bas/internal/api 661.366s` — confirmed the known
+transient flake (this package is genuinely ~11 minutes of Docker/Postgres-backed tests;
+running the full suite concurrently starves it past the default timeout under resource
+contention, not a logic regression from this sub-project's changes). Full suite otherwise
+green. `go build ./...` and `go vet ./...` both clean.
