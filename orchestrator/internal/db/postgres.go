@@ -552,6 +552,34 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			WHERE a.id > b.id AND a.variant_run_id = b.variant_run_id AND a.task_id = b.task_id`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_variant_findings_run_task ON variant_findings (variant_run_id, task_id)`,
 
+		// vex_sweeps: server-owned Full Variant Sweep orchestration state.
+		// One row per sweep; the partial unique index below makes "one
+		// running sweep per agent" race-safe (not an app-level
+		// check-then-insert) -- two simultaneous creates for the same
+		// agent can never both succeed. See
+		// docs/superpowers/specs/2026-07-30-vex-full-sweep-server-orchestration-design.md.
+		`CREATE TABLE IF NOT EXISTS vex_sweeps (
+			id                       text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			agent_id                 text        NOT NULL,
+			mode                     text        NOT NULL DEFAULT 'sequential',
+			include_advanced         boolean     NOT NULL DEFAULT false,
+			techniques               text[]      NOT NULL,
+			technique_variant_counts int[]       NOT NULL,
+			current_index            int         NOT NULL DEFAULT 0,
+			current_variant_run_id   text        NOT NULL DEFAULT '',
+			current_scenario_run_id  text        NOT NULL DEFAULT '',
+			completed_variants       int         NOT NULL DEFAULT 0,
+			total_variants           int         NOT NULL DEFAULT 0,
+			status                   text        NOT NULL DEFAULT 'running',
+			error                    text        NOT NULL DEFAULT '',
+			created_by               text        NOT NULL DEFAULT '',
+			started_at               timestamptz NOT NULL DEFAULT NOW(),
+			completed_at             timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_vex_sweeps_agent ON vex_sweeps (agent_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_vex_sweeps_one_running_per_agent
+			ON vex_sweeps (agent_id) WHERE status = 'running'`,
+
 		// payload_families: named PS script payloads per technique.
 		// Generate() is applied to each family, so total variants scale with family count.
 		`CREATE TABLE IF NOT EXISTS payload_families (
