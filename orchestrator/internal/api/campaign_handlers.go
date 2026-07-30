@@ -258,29 +258,16 @@ func (h *Handler) summaryFor(ctx context.Context, c *campaignRow) (campaign.Summ
 
 // ListCampaigns returns every campaign with its live rollup. GET /api/campaigns
 func (h *Handler) ListCampaigns(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(r.Context(), `SELECT id FROM campaigns ORDER BY started_at DESC`)
+	rollups, err := campaign.ListWithRollups(r.Context(), h.db)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if rows.Scan(&id) == nil {
-			ids = append(ids, id)
-		}
-	}
-	rows.Close()
-	out := []map[string]any{}
-	for _, id := range ids {
-		c, err := h.loadCampaign(r.Context(), id)
-		if err != nil {
-			continue
-		}
-		s, _, _ := h.summaryFor(r.Context(), c)
+	out := make([]map[string]any, 0, len(rollups))
+	for _, c := range rollups {
 		out = append(out, map[string]any{
 			"id": c.ID, "name": c.Name, "scenarioId": c.ScenarioID, "scenarioName": c.ScenarioName,
-			"mode": c.Mode, "createdBy": c.CreatedBy, "startedAt": c.StartedAt, "summary": s,
+			"mode": c.Mode, "createdBy": c.CreatedBy, "startedAt": c.StartedAt, "summary": c.Summary,
 		})
 	}
 	respond(w, out)

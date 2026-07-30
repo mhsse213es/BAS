@@ -33,7 +33,7 @@ type Rollup struct {
 // design spec Non-Goals.
 func ListWithRollups(ctx context.Context, pool *pgxpool.Pool) ([]Rollup, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, name, scenario_id, scenario_name, mode, created_by, skips, started_at, stopped_at
+		SELECT id, name, scenario_id, scenario_name, mode, COALESCE(created_by,''), skips, started_at, stopped_at
 		  FROM campaigns ORDER BY started_at DESC`)
 	if err != nil {
 		return nil, err
