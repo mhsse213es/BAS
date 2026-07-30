@@ -382,9 +382,13 @@ function loadVariantTab() {
 
 - [ ] **Step 4: Sanity-check for leftover references to removed identifiers**
 
-Run: `grep -n "_vexSweepRunning\|_vexSweepStartedAt\|_vexSweepQueue\|_vexSweepPollAndNext" orchestrator/cmd/server/wwwroot/index.html`
+Run: `grep -n "_vexSweepRunning\|_vexSweepStartedAt\|_vexSweepQueue\|_vexSweepPollAndNext\|_vexRenderSweepTiming" orchestrator/cmd/server/wwwroot/index.html`
 
-Expected: no matches anywhere in the file. If any remain, they're either a leftover call site this step missed or a duplicate definition — find and remove it before continuing.
+Expected: no matches anywhere in the file. If any remain, find and remove them before continuing.
+
+**Real gap found during implementation, not anticipated by this plan:** `stopVex()` (the function this plan's Step 2 preamble described as "genuinely shared with the unrelated ad-hoc single-run flow... stays exactly as it is") turned out to have real sweep-specific branches baked in from the old architecture — `var wasSweeping = _vexSweepRunning`, resetting `vex-sweep-btn`/`vex-sweep-stop-btn`, and an `if (wasSweeping) {...}` block referencing `vex-sweep-status`/`vex-sweep-progress` (both removed by Task 1's HTML change) and `_vexRenderSweepTiming`. Since the sweep's Stop button now calls the fully independent `stopVexSweep(sweepId)` and never `stopVex()` at all, none of that sweep branching is reachable anymore — but it was still there, referencing deleted identifiers. Fix: strip `stopVex()` back to pure ad-hoc-run cancellation logic (remove `wasSweeping`, the `vex-sweep-btn`/`vex-sweep-stop-btn` resets, and the entire `if (wasSweeping)` block and its trailing `vex-sweep-progress` hide-call), update its comment to describe the new, fully-separated reality.
+
+Separately, `_vexRenderSweepTiming` (defined a few functions above the ones this step replaces) had zero remaining callers after this rewrite and still referenced the deleted `_vexSweepStartedAt` twice — dead *and* broken, not just unused as originally assumed. Removed entirely. `_vexFormatDuration` (a correct, generic millisecond formatter with no dependency on the deleted variable) stays, unused for now — a reasonable small follow-up if per-card elapsed-time display is wanted later.
 
 - [ ] **Step 5: Sanity-check every new function is defined exactly once and every referenced ID exists**
 
