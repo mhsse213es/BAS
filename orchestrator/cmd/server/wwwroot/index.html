@@ -11809,7 +11809,9 @@ function cmdkCommands() {
 var CMDK_SEARCH_LABELS = {
   scenario: 'Scenarios', run: 'Runs', finding: 'Findings',
   actor: 'Threat Actors', campaign: 'Threat Campaigns',
-  malware: 'Malware', tool: 'Tools', technique: 'Techniques'
+  malware: 'Malware', tool: 'Tools', technique: 'Techniques',
+  rule: 'Detection Rules', compliance_control: 'Compliance Controls',
+  detection_connector: 'Detection Connectors', action_connector: 'Response Connectors'
 };
 
 // cmdkOpenResult dispatches a selected search result to a real navigation
@@ -11971,7 +11973,8 @@ function openCmdk() {
     if (cmdkSearchResults === null) { out.push({ sec: 'Search unavailable' }); return out; }
     var byType = {};
     cmdkSearchResults.forEach(function(r) { (byType[r.docType] = byType[r.docType] || []).push(r); });
-    ['scenario', 'run', 'finding', 'actor', 'campaign', 'malware', 'tool', 'technique'].forEach(function(dt) {
+    ['scenario', 'run', 'finding', 'actor', 'campaign', 'malware', 'tool', 'technique',
+     'rule', 'compliance_control', 'detection_connector', 'action_connector'].forEach(function(dt) {
       var items = byType[dt];
       if (!items || !items.length) return;
       out.push({ sec: CMDK_SEARCH_LABELS[dt] });
