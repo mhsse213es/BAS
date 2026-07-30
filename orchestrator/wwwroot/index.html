@@ -1477,6 +1477,7 @@ body.theme-slate {
             <a class="tiny" style="color:var(--accent);cursor:pointer;font-weight:500" onclick="loadKEVPack()">&#9760; Create KEV Pack →</a>
           </div>
           <div class="kpi-row" id="dash-ti-tiles"></div>
+          <div id="dash-ti-actors"></div>
         </div>
 
         <!-- Readiness Trends — hidden until history data exists -->
@@ -6842,12 +6843,19 @@ function _selectCmpScenario(id) {
 var _kevWidgetLoaded = false;
 function loadKEVWidget() {
   if (_kevWidgetLoaded) return;
-  apicall('/api/ti/suggest-pack?type=kev').then(function(pack) {
-    if (!pack || !pack.hasData) return;
+  Promise.all([
+    apicall('/api/ti/suggest-pack?type=kev').catch(function() { return null; }),
+    apicall('/api/analytics/threat-intel-summary').catch(function() { return null; })
+  ]).then(function(res) {
+    var pack = res[0];
+    var summary = res[1];
+    var hasKev = pack && pack.hasData;
+    var actors = (summary && summary.topActors) || [];
+    if (!hasKev && !actors.length) return;
     _kevWidgetLoaded = true;
     document.getElementById('dash-ti-section').style.display = '';
     var tiles = document.getElementById('dash-ti-tiles');
-    tiles.innerHTML =
+    tiles.innerHTML = hasKev ?
       '<div class="kpi-card stat-tile" title="Techniques with CISA KEV CVEs — create a pack to validate them">' +
       '<div class="stat-top"><div><div class="kpi-label">KEV-Linked Techniques</div><div class="kpi-value" style="color:var(--danger)">' + pack.techniqueCount + '</div></div>' +
       '<div class="stat-icon" style="background:rgba(218,54,51,0.10);color:var(--danger)">&#9760;</div></div>' +
@@ -6855,8 +6863,27 @@ function loadKEVWidget() {
       '<div class="kpi-card stat-tile" title="CISA Known Exploited Vulnerabilities under active real-world exploitation">' +
       '<div class="stat-top"><div><div class="kpi-label">Total KEV CVEs</div><div class="kpi-value" style="color:var(--warning)">' + (pack.totalKevCves||0) + '</div></div>' +
       '<div class="stat-icon" style="background:rgba(210,153,34,0.10);color:var(--warning)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2l1.5 3.5H13l-2.75 2 1 3.5L8 9 4.75 11l1-3.5L3 5.5h3.5z"/></svg></div></div>' +
-      '<div class="kpi-sub">from CISA KEV catalog</div></div>';
-  }).catch(function() {});
+      '<div class="kpi-sub">from CISA KEV catalog</div></div>' : '';
+    renderTIActors(actors);
+  });
+}
+
+// renderTIActors shows the fleet's top-priority threat actors below the KEV
+// tiles, reusing tpTierBadge (index.html:4834) for the same tier coloring
+// the standalone Threat Prioritization tab already uses. Clicking an actor
+// jumps to its detail view there rather than duplicating it here.
+function renderTIActors(actors) {
+  var el = document.getElementById('dash-ti-actors');
+  if (!el) return;
+  if (!actors.length) { el.innerHTML = ''; return; }
+  el.innerHTML =
+    '<div style="font-size:0.68rem;font-weight:600;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase;margin:0.75rem 0 0.4rem">Top Threat Actors</div>' +
+    actors.map(function(a) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.35rem 0;border-bottom:1px solid var(--border)">' +
+        '<span style="font-weight:600;cursor:pointer" onclick="showTab(\'threat-priority\');setTimeout(function(){ showThreatPriorityDetail(' + JSON.stringify(a.actorName) + '); }, 150)">' + x(a.actorName) + '</span>' +
+        '<span style="display:flex;align-items:center;gap:0.5rem">' + tpTierBadge(a.tier) + '<strong>' + x(a.score) + '</strong></span>' +
+        '</div>';
+    }).join('');
 }
 
 // loadReadinessTrends fetches and renders the per-actor readiness history table

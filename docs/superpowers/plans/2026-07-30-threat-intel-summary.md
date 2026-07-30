@@ -448,8 +448,7 @@ function renderTIActors(actors) {
         '<span style="font-weight:600;cursor:pointer" onclick="showTab(\'threat-priority\');setTimeout(function(){ showThreatPriorityDetail(' + JSON.stringify(a.actorName) + '); }, 150)">' + x(a.actorName) + '</span>' +
         '<span style="display:flex;align-items:center;gap:0.5rem">' + tpTierBadge(a.tier) + '<strong>' + x(a.score) + '</strong></span>' +
         '</div>';
-    }).join('') +
-    '</div>';
+    }).join('');
 }
 ```
 
