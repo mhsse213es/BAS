@@ -1275,12 +1275,6 @@ body.theme-slate {
           </svg>
           Exposure Explorer
         </div>
-        <div class="nav-item" data-tab="exec-dashboard" onclick="showTab('exec-dashboard')">
-          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
-            <path d="M2 13.5h12M4 13.5V8M8 13.5V4M12 13.5v-6"/>
-          </svg>
-          Executive Dashboard
-        </div>
         <div class="nav-item" data-tab="recommendations" onclick="showTab('recommendations')">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M8 1.5l1.8 4.1 4.2.4-3.2 2.8 1 4.2L8 10.8 4.2 13l1-4.2L2 6l4.2-.4z"/>
@@ -1378,6 +1372,7 @@ body.theme-slate {
     <main>
       <!-- Dashboard -->
       <div id="tab-dashboard" style="display:none">
+        <div id="dash-view-operational">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">
           <div>
             <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Security Posture</h1>
@@ -1581,6 +1576,26 @@ body.theme-slate {
           <div class="dash-panel-body" id="rr-body" style="padding:1rem 1.25rem">
             <div class="empty" style="padding:0.5rem">Run the Ransomware Drill to see your readiness score.</div>
           </div>
+        </div>
+        </div>
+        <div id="dash-view-executive" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Executive Dashboard</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Fleet-wide risk, exposure, and detection-coverage trends over time — daily snapshots, not a single point-in-time report.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <select id="ed-range" onchange="loadExecDashboard()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+              <option value="30">30 days</option>
+              <option value="90" selected>90 days</option>
+              <option value="365">1 year</option>
+            </select>
+            <button class="btn btn-outline btn-sm" onclick="loadExecDashboard()">Refresh</button>
+          </div>
+        </div>
+        <div class="kpi-row" id="ed-kpi-row"><div class="empty">Loading…</div></div>
+        <div id="ed-forecast"></div>
+        <div id="ed-exposure"></div>
         </div>
       </div>
 
@@ -2783,27 +2798,6 @@ body.theme-slate {
         </div>
       </div>
 
-      <!-- Executive Dashboard -->
-      <div id="tab-exec-dashboard" style="display:none">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
-          <div>
-            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Executive Dashboard</h1>
-            <div style="font-size:0.8rem;color:var(--muted)">Fleet-wide risk, exposure, and detection-coverage trends over time — daily snapshots, not a single point-in-time report.</div>
-          </div>
-          <div style="display:flex;gap:0.5rem;align-items:center">
-            <select id="ed-range" onchange="loadExecDashboard()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
-              <option value="30">30 days</option>
-              <option value="90" selected>90 days</option>
-              <option value="365">1 year</option>
-            </select>
-            <button class="btn btn-outline btn-sm" onclick="loadExecDashboard()">Refresh</button>
-          </div>
-        </div>
-        <div class="kpi-row" id="ed-kpi-row"><div class="empty">Loading…</div></div>
-        <div id="ed-forecast"></div>
-        <div id="ed-exposure"></div>
-      </div>
-
       <!-- Recommendations -->
       <div id="tab-recommendations" style="display:none">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -3980,7 +3974,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', 'exec-dashboard':'Executive Dashboard', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -4112,7 +4106,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','exec-dashboard','recommendations','integrations','exercises','attack-coverage','threat-priority'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
