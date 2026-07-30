@@ -2088,7 +2088,7 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 		if len(scoreRaw) > 0 {
 			json.Unmarshal(scoreRaw, &run.Score)
 		}
-		if d := detectedTechs(detRaw, run.Results); len(d) > 0 {
+		if d := reporting.DetectedTechniques(detRaw, run.Results); len(d) > 0 {
 			run.DetectedTechs = d
 		}
 		// Attach the derived step breakdown only when there's something to show
@@ -3245,7 +3245,7 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 		if len(resRaw) > 0 {
 			json.Unmarshal(resRaw, &results)
 		}
-		detected := detectedTechs(detRaw, results)
+		detected := reporting.DetectedTechniques(detRaw, results)
 		runsAnalyzed++
 
 		runSumm := RunAnalyticSummary{RunID: rid, ScenarioID: scID, Name: name, AgentID: agID, StartedAt: startedAt}

@@ -110,48 +110,8 @@ func loadChildRunsForRollup(ctx context.Context, pool *pgxpool.Pool, campaignID 
 				score = &sc
 			}
 		}
-		det := detectedTechsFromSummary(detRaw, results)
+		det := reporting.DetectedTechniques(detRaw, results)
 		out = append(out, ChildRun{Status: status, Results: results, Score: score, DetectedTechs: det})
 	}
 	return out, rows.Err()
-}
-
-// detectedTechsFromSummary mirrors campaign_handlers.go's detectedTechs
-// helper (internal/api/campaign_handlers.go:157) -- same detection_summary
-// shape and same per-step event-classifier supplementary pass, reimplemented
-// here since that helper is unexported in a different package. Both read
-// the same persisted column; if the schema changes, both call sites need
-// updating regardless of which package owns this copy.
-//
-// The second loop is NOT a fallback gated on detRaw being empty -- it always
-// runs, checking every FAILed result's Events via
-// reporting.ClassifyDetectionStatus for any technique the sweep data didn't
-// already mark detected. Caught during implementation: an earlier draft of
-// this function only handled the detRaw branch, silently under-counting
-// Detected vs Missed in campaign rollups.
-func detectedTechsFromSummary(detRaw []byte, results []models.SimulationResult) map[string]bool {
-	out := map[string]bool{}
-	if len(detRaw) > 0 {
-		var ds struct {
-			Techniques []struct {
-				TechniqueID string `json:"techniqueId"`
-				Verdict     string `json:"verdict"`
-			} `json:"techniques"`
-		}
-		if json.Unmarshal(detRaw, &ds) == nil {
-			for _, t := range ds.Techniques {
-				if t.Verdict == "detected" {
-					out[t.TechniqueID] = true
-				}
-			}
-		}
-	}
-	for _, res := range results {
-		if res.Result == models.ResultFail && !out[res.Technique.ID] {
-			if reporting.ClassifyDetectionStatus(res.Events) == "Detected" {
-				out[res.Technique.ID] = true
-			}
-		}
-	}
-	return out
 }

@@ -150,37 +150,6 @@ type childRunOut struct {
 	Steps           int     `json:"steps"`
 }
 
-// detectedTechs returns the set of technique ids whose FAIL was detected, from
-// the run's persisted detection_summary.techniques (the agent's post-run alert
-// sweep), falling back to the coarse per-step event classifier when no sweep was
-// submitted. This mirrors how reporting.buildKillChain decides detected vs missed.
-func detectedTechs(detRaw []byte, results []models.SimulationResult) map[string]bool {
-	out := map[string]bool{}
-	if len(detRaw) > 0 {
-		var ds struct {
-			Techniques []struct {
-				TechniqueID string `json:"techniqueId"`
-				Verdict     string `json:"verdict"`
-			} `json:"techniques"`
-		}
-		if json.Unmarshal(detRaw, &ds) == nil {
-			for _, t := range ds.Techniques {
-				if t.Verdict == "detected" {
-					out[t.TechniqueID] = true
-				}
-			}
-		}
-	}
-	for _, res := range results {
-		if res.Result == models.ResultFail && !out[res.Technique.ID] {
-			if reporting.ClassifyDetectionStatus(res.Events) == "Detected" {
-				out[res.Technique.ID] = true
-			}
-		}
-	}
-	return out
-}
-
 // loadChildren loads a campaign's child runs as campaign.ChildRun (for the
 // rollup) plus a per-agent childRunOut slice (for the detail view), classifying
 // each FAIL step as detected/missed using the run's persisted detection_summary.
@@ -209,7 +178,7 @@ func (h *Handler) loadChildren(ctx context.Context, campaignID string) ([]campai
 				score = &s
 			}
 		}
-		det := detectedTechs(detRaw, results)
+		det := reporting.DetectedTechniques(detRaw, results)
 		cr = append(cr, campaign.ChildRun{Status: status, Results: results, Score: score, DetectedTechs: det})
 		var prevPct float64
 		if score != nil {

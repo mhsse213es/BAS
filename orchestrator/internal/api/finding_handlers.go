@@ -9,6 +9,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/findings"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/go-chi/chi/v5"
@@ -43,7 +44,7 @@ func (h *Handler) upsertFindingsForRun(ctx context.Context, runID string) {
 	if len(results) == 0 {
 		return
 	}
-	detected := detectedTechs(detRaw, results) // technique ids caught by EDR/SIEM
+	detected := reporting.DetectedTechniques(detRaw, results) // technique ids caught by EDR/SIEM
 
 	// step framework per technique → source_type
 	frameworkByTech := map[string]string{}
