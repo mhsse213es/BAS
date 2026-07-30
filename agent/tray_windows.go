@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -316,6 +317,15 @@ func openStatusWindow() {
 		return
 	}
 	cmd := exec.Command(exe, "--status-window")
+	// Same fix as launchTrayForActiveSession (usertoken_windows.go): without
+	// these flags, spawning this console-subsystem binary would flash a
+	// visible console before the WebView2 status window appears. HideWindow/
+	// CREATE_NO_WINDOW only suppress the console -- the WebView2 window
+	// itself is a real GUI window (not console output) and still shows.
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: createNoWindow,
+	}
 	if err := cmd.Start(); err != nil {
 		log.Printf("[tray] open status console: %v", err)
 	}

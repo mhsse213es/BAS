@@ -262,7 +262,19 @@ func launchTrayForActiveSession() {
 	cmd := exec.Command(exe, "--tray")
 	cmd.Dir = filepath.Dir(exe)
 	cmd.Env = env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Token: syscall.Token(tok)}
+	// HideWindow + CREATE_NO_WINDOW: bas_agent.exe is a console-subsystem
+	// binary (see packaging/windows-build.ps1 — only the separate installer
+	// is built -H windowsgui), so without these flags Windows allocates a
+	// visible console for this child. The tray icon's entire lifecycle
+	// (runTray()'s message loop) runs inside this same process, so a
+	// visible console here isn't just cosmetic — closing it kills the
+	// process, which kills the tray icon. Matches silentCmd's pattern in
+	// executor_windows.go.
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Token:         syscall.Token(tok),
+		HideWindow:    true,
+		CreationFlags: createNoWindow,
+	}
 	if err := cmd.Start(); err != nil {
 		log.Printf("[svc] launch tray: %v", err)
 		return
