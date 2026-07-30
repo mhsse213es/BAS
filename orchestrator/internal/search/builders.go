@@ -5,7 +5,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/intelligence"
+	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -174,6 +176,98 @@ func techniquesFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error)
 		out = append(out, Document{
 			DocType: "technique", SourceID: id, Title: title,
 			Description: description, Tags: []string{tactic},
+		})
+	}
+	return out, rows.Err()
+}
+
+// rulesFrom maps every embedded Sigma rule into a Document. engine may be
+// nil if the caller never attached a rule library (mirrors h.rules'
+// nil-when-unloaded convention in internal/api.Handler) -- returns no
+// documents rather than panicking.
+func rulesFrom(engine *rulelib.Engine) []Document {
+	if engine == nil {
+		return nil
+	}
+	rules := engine.Search(rulelib.SearchFilter{}) // empty filter = every rule, same call ListRules already makes
+	out := make([]Document, 0, len(rules))
+	for _, r := range rules {
+		out = append(out, Document{
+			DocType: "rule", SourceID: r.ID, Title: r.Title,
+			Description: r.Description,
+			Tags:        append([]string{r.Severity, r.Status}, r.TechniqueIDs...),
+		})
+	}
+	return out
+}
+
+// complianceControlsFrom maps every control across every loaded compliance
+// framework into a Document. mapper may be nil (WithCompliance was never
+// called, or compliance.NewMapper() failed at startup) -- returns no
+// documents rather than erroring, matching how h.complianceMapper == nil is
+// already handled throughout internal/api's compliance handlers.
+func complianceControlsFrom(mapper *compliance.Mapper) []Document {
+	if mapper == nil {
+		return nil
+	}
+	out := []Document{}
+	for _, cwf := range mapper.AllControls() {
+		tags := append([]string{cwf.FrameworkID, cwf.Control.Domain, cwf.Control.Category}, cwf.Control.Techniques...)
+		out = append(out, Document{
+			DocType:     "compliance_control",
+			SourceID:    cwf.FrameworkID + ":" + cwf.Control.ID, // namespaced -- the same control ID can recur across frameworks
+			Title:       cwf.Control.Name,
+			Description: cwf.Control.Domain + " · " + cwf.Control.Category,
+			Tags:        tags,
+		})
+	}
+	return out
+}
+
+// detectionConnectorsFrom maps every detection_connectors row into a
+// Document. Selects only id/name/provider -- never client_secret/api_token/
+// tenant_id/base_url/workspace_id, matching the same restraint
+// ListDetectionConnectors's own SELECT already exercises.
+func detectionConnectorsFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
+	rows, err := pool.Query(ctx, `SELECT id, name, provider FROM detection_connectors`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Document
+	for rows.Next() {
+		var id, name, provider string
+		if err := rows.Scan(&id, &name, &provider); err != nil {
+			return nil, err
+		}
+		out = append(out, Document{
+			DocType: "detection_connector", SourceID: id, Title: name,
+			Description: "provider: " + provider, Tags: []string{provider},
+		})
+	}
+	return out, rows.Err()
+}
+
+// actionConnectorsFrom mirrors detectionConnectorsFrom for action_connectors
+// (EPP response-action connectors) -- deliberately a separate function
+// since the two tables are gated by different RBAC permissions at the
+// Search handler layer (CanListResponseConnectors vs
+// CanListDetectionConnectors) and may diverge in columns later.
+func actionConnectorsFrom(ctx context.Context, pool *pgxpool.Pool) ([]Document, error) {
+	rows, err := pool.Query(ctx, `SELECT id, name, provider FROM action_connectors`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Document
+	for rows.Next() {
+		var id, name, provider string
+		if err := rows.Scan(&id, &name, &provider); err != nil {
+			return nil, err
+		}
+		out = append(out, Document{
+			DocType: "action_connector", SourceID: id, Title: name,
+			Description: "provider: " + provider, Tags: []string{provider},
 		})
 	}
 	return out, rows.Err()
