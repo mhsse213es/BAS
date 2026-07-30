@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/compliance"
+	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/testutil"
 )
@@ -86,7 +88,7 @@ func TestReindexAll_PopulatesScenarioRunFindingDocuments(t *testing.T) {
 		tmpDir := t.TempDir()
 		engine := scenario.NewEngine(tmpDir)
 
-		if err := ReindexAll(ctx, pool, engine); err != nil {
+		if err := ReindexAll(ctx, pool, engine, rulelib.NewEngine(), nil); err != nil {
 			t.Fatalf("ReindexAll: %v", err)
 		}
 
@@ -134,7 +136,7 @@ func TestReindexAll_PopulatesActorCampaignMalwareToolTechniqueDocuments(t *testi
 		}
 
 		engine := scenario.NewEngine(t.TempDir())
-		if err := ReindexAll(ctx, pool, engine); err != nil {
+		if err := ReindexAll(ctx, pool, engine, rulelib.NewEngine(), nil); err != nil {
 			t.Fatalf("ReindexAll: %v", err)
 		}
 
@@ -158,6 +160,85 @@ func TestReindexAll_PopulatesActorCampaignMalwareToolTechniqueDocuments(t *testi
 			if title != tc.wantTitle {
 				t.Errorf("%s title = %q, want %q", tc.docType, title, tc.wantTitle)
 			}
+		}
+	})
+}
+
+func TestReindexAll_PopulatesRuleComplianceConnectorDocuments(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO detection_connectors (id, name, provider) VALUES ('dc-reindex-1', 'Reindex Sentinel', 'microsoft_sentinel')`); err != nil {
+			t.Fatalf("seed detection_connectors: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO action_connectors (id, name, provider) VALUES ('ac-reindex-1', 'Reindex CrowdStrike', 'crowdstrike')`); err != nil {
+			t.Fatalf("seed action_connectors: %v", err)
+		}
+
+		engine := scenario.NewEngine(t.TempDir())
+		rulesEngine := rulelib.NewEngine()
+		mapper, err := compliance.NewMapper()
+		if err != nil {
+			t.Fatalf("compliance.NewMapper: %v", err)
+		}
+
+		if err := ReindexAll(ctx, pool, engine, rulesEngine, mapper); err != nil {
+			t.Fatalf("ReindexAll: %v", err)
+		}
+
+		var ruleCount, controlCount int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM search_documents WHERE doc_type = 'rule'`).Scan(&ruleCount); err != nil {
+			t.Fatalf("count rule docs: %v", err)
+		}
+		if ruleCount != rulesEngine.RuleCount() {
+			t.Errorf("rule doc count = %d, want %d", ruleCount, rulesEngine.RuleCount())
+		}
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM search_documents WHERE doc_type = 'compliance_control'`).Scan(&controlCount); err != nil {
+			t.Fatalf("count compliance_control docs: %v", err)
+		}
+		if controlCount != len(mapper.AllControls()) {
+			t.Errorf("compliance_control doc count = %d, want %d", controlCount, len(mapper.AllControls()))
+		}
+
+		var dcTitle, acTitle string
+		if err := pool.QueryRow(ctx, `SELECT title FROM search_documents WHERE doc_type = 'detection_connector' AND source_id = 'dc-reindex-1'`).Scan(&dcTitle); err != nil {
+			t.Fatalf("query detection_connector document: %v", err)
+		}
+		if dcTitle != "Reindex Sentinel" {
+			t.Errorf("detection_connector title = %q, want %q", dcTitle, "Reindex Sentinel")
+		}
+		if err := pool.QueryRow(ctx, `SELECT title FROM search_documents WHERE doc_type = 'action_connector' AND source_id = 'ac-reindex-1'`).Scan(&acTitle); err != nil {
+			t.Fatalf("query action_connector document: %v", err)
+		}
+		if acTitle != "Reindex CrowdStrike" {
+			t.Errorf("action_connector title = %q, want %q", acTitle, "Reindex CrowdStrike")
+		}
+	})
+}
+
+func TestReindexAll_NilComplianceMapperIndexesZeroControlsNotError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		engine := scenario.NewEngine(t.TempDir())
+		rulesEngine := rulelib.NewEngine()
+
+		if err := ReindexAll(ctx, pool, engine, rulesEngine, nil); err != nil {
+			t.Fatalf("ReindexAll with nil compliance mapper: %v", err)
+		}
+
+		var controlCount int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM search_documents WHERE doc_type = 'compliance_control'`).Scan(&controlCount); err != nil {
+			t.Fatalf("count compliance_control docs: %v", err)
+		}
+		if controlCount != 0 {
+			t.Errorf("compliance_control doc count = %d, want 0 (nil mapper)", controlCount)
 		}
 	})
 }

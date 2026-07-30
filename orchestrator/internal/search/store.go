@@ -6,6 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/compliance"
+	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -95,8 +97,10 @@ func Query(ctx context.Context, pool *pgxpool.Pool, q string, limit int) ([]Docu
 	return out, rows.Err()
 }
 
-// ReindexAll rebuilds every indexed entity type, one type at a time.
-func ReindexAll(ctx context.Context, pool *pgxpool.Pool, engine *scenario.Engine) error {
+// ReindexAll rebuilds every indexed entity type, one type at a time. rules
+// and mapper may be nil (see rulesFrom/complianceControlsFrom for the
+// nil-safety each provides).
+func ReindexAll(ctx context.Context, pool *pgxpool.Pool, engine *scenario.Engine, rules *rulelib.Engine, mapper *compliance.Mapper) error {
 	steps := []struct {
 		docType string
 		build   func() ([]Document, error)
@@ -109,6 +113,10 @@ func ReindexAll(ctx context.Context, pool *pgxpool.Pool, engine *scenario.Engine
 		{"malware", func() ([]Document, error) { return malwareFrom(ctx, pool) }},
 		{"tool", func() ([]Document, error) { return toolsFrom(ctx, pool) }},
 		{"technique", func() ([]Document, error) { return techniquesFrom(ctx, pool) }},
+		{"rule", func() ([]Document, error) { return rulesFrom(rules), nil }},
+		{"compliance_control", func() ([]Document, error) { return complianceControlsFrom(mapper), nil }},
+		{"detection_connector", func() ([]Document, error) { return detectionConnectorsFrom(ctx, pool) }},
+		{"action_connector", func() ([]Document, error) { return actionConnectorsFrom(ctx, pool) }},
 	}
 	for _, s := range steps {
 		docs, err := s.build()

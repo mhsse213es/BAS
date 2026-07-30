@@ -259,12 +259,12 @@ func main() {
 	// search_documents empty for the first tick) then keep it fresh on a
 	// 60s timer, reusing the same exercise.PollScheduler abstraction the
 	// OpenAEV connector below already uses rather than a new one.
-	if err := search.ReindexAll(context.Background(), pool, engine); err != nil {
+	if err := search.ReindexAll(context.Background(), pool, engine, rulesEngine, complianceMapper); err != nil {
 		log.Printf("[!] search: initial reindex failed: %v", err)
 	}
 	searchScheduler := exercise.NewPollScheduler(60 * time.Second)
 	searchScheduler.Start(func(ctx context.Context) {
-		if err := search.ReindexAll(ctx, pool, engine); err != nil {
+		if err := search.ReindexAll(ctx, pool, engine, rulesEngine, complianceMapper); err != nil {
 			log.Printf("[!] search: reindex failed: %v", err)
 		}
 	})

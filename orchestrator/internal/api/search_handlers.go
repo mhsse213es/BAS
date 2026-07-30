@@ -31,7 +31,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/search/reindex
 func (h *Handler) SearchReindex(w http.ResponseWriter, r *http.Request) {
-	if err := search.ReindexAll(r.Context(), h.db, h.engine); err != nil {
+	if err := search.ReindexAll(r.Context(), h.db, h.engine, h.rules, h.complianceMapper); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
