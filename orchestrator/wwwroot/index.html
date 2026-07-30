@@ -1117,6 +1117,31 @@ body.theme-slate {
 .theme-card.active .theme-name {
   color: var(--accent);
 }
+.dash-view-toggle {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  margin-bottom: 1rem;
+}
+.dash-view-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.dash-view-btn:hover { color: var(--text); }
+.dash-view-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
 </style>
 </head>
 <body>
@@ -1372,6 +1397,10 @@ body.theme-slate {
     <main>
       <!-- Dashboard -->
       <div id="tab-dashboard" style="display:none">
+        <div class="dash-view-toggle" role="tablist" aria-label="Dashboard view">
+          <button type="button" class="dash-view-btn active" data-view="operational" onclick="setDashView('operational')">Operational</button>
+          <button type="button" class="dash-view-btn" data-view="executive" onclick="setDashView('executive')">Executive</button>
+        </div>
         <div id="dash-view-operational">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">
           <div>
@@ -4116,6 +4145,46 @@ function activateTab(name) {
   if (titleEl) titleEl.textContent = TAB_TITLES[name] || name;
 }
 
+// Unified Dashboard shell (Sub-project B) -- one Dashboard tab, two views.
+// DASH_VIEW is the live/current view. bas_last_dash_view always tracks the
+// most recent manual switch regardless of the pinned bas_dash_pref setting
+// (added in a later task), so switching the pref to "Last used" picks up
+// wherever the user left off.
+var DASH_VIEW = 'operational';
+
+function resolveDashView() {
+  return localStorage.getItem('bas_last_dash_view') || 'operational';
+}
+
+function setDashView(view) {
+  DASH_VIEW = view;
+  document.getElementById('dash-view-operational').style.display = view === 'operational' ? '' : 'none';
+  document.getElementById('dash-view-executive').style.display = view === 'executive' ? '' : 'none';
+  document.querySelectorAll('.dash-view-btn').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-view') === view);
+  });
+  try { localStorage.setItem('bas_last_dash_view', view); } catch (e) {}
+  if (view === 'operational') { loadDashboard(); startDashCampPoll(); }
+  else { stopDashCampPoll(); loadExecDashboard(); }
+}
+
+// Reuses the existing _dashCampPoll var declared with refreshDashboardCampaigns
+// (index.html:12572) -- only the start/stop logic moves here, plus a
+// DASH_VIEW check so the poll also stops when the Executive view is showing,
+// not just when the whole Dashboard tab is hidden.
+function startDashCampPoll() {
+  clearInterval(_dashCampPoll);
+  _dashCampPoll = setInterval(function() {
+    var dash = document.getElementById('tab-dashboard');
+    if (dash && dash.style.display !== 'none' && DASH_VIEW === 'operational') {
+      refreshDashboardCampaigns();
+    } else {
+      clearInterval(_dashCampPoll);
+    }
+  }, 5000);
+}
+function stopDashCampPoll() { clearInterval(_dashCampPoll); }
+
 function showTab(name) {
   try { localStorage.setItem('bas_last_tab', name); } catch(e) {}
   activateTab(name);
@@ -4131,25 +4200,13 @@ function showTab(name) {
   if (name === 'verification') loadVerificationTab();
   if (name === 'attackpath') loadAttackPath();
   if (name === 'exposure') loadExposureAssets();
-  if (name === 'exec-dashboard') loadExecDashboard();
   if (name === 'recommendations') loadRecommendations();
   if (name === 'exercises') loadExercisesTab();
   if (name === 'variants') loadVariantTab();
   if (name === 'em') loadEmTab();
   if (name === 'scenarios') { scenarioView = 'landing'; closeScenarioOverlay(); if (scenarios.length) renderScenarios(); }
   if (name === 'dashboard') {
-    loadDashboard();
-    // Start a periodic campaign-status poll so the "Live campaigns" tiles
-    // stay current without the user manually refreshing.
-    clearInterval(_dashCampPoll);
-    _dashCampPoll = setInterval(function() {
-      var dash = document.getElementById('tab-dashboard');
-      if (dash && dash.style.display !== 'none') {
-        refreshDashboardCampaigns();
-      } else {
-        clearInterval(_dashCampPoll);
-      }
-    }, 5000);
+    setDashView(resolveDashView());
   }
   if (name === 'integrations') { loadIntegrations(); loadResponseConnectors(renderResponseConnectorList); }
   if (name === 'compliance') initComplianceTab();
