@@ -73,6 +73,27 @@ func TestParseQuery_TypeOnlyNoFreeText(t *testing.T) {
 	}
 }
 
+func TestParseQuery_NewDocTypesRecognized(t *testing.T) {
+	cases := []struct {
+		raw      string
+		wantType string
+	}{
+		{"type:rule sigma", "rule"},
+		{"type:compliance_control", "compliance_control"},
+		{"type:detection_connector", "detection_connector"},
+		{"type:action_connector", "action_connector"},
+	}
+	for _, tc := range cases {
+		got := ParseQuery(tc.raw)
+		if got.DocType != tc.wantType {
+			t.Errorf("ParseQuery(%q).DocType = %q, want %q", tc.raw, got.DocType, tc.wantType)
+		}
+		if len(got.InvalidFilters) != 0 {
+			t.Errorf("ParseQuery(%q).InvalidFilters = %+v, want none", tc.raw, got.InvalidFilters)
+		}
+	}
+}
+
 func TestParseQuery_EmptyInput(t *testing.T) {
 	pq := ParseQuery("")
 	if pq.FreeText != "" || pq.DocType != "" || len(pq.InvalidFilters) != 0 {

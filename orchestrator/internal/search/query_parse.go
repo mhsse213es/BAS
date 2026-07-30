@@ -32,10 +32,11 @@ type InvalidFilter struct {
 var SupportedOperators = []string{"type"}
 
 // knownDocTypes are the only values a type: filter can resolve to --
-// matches the 8 doc_types ReindexAll builds (internal/search/store.go).
+// matches the 12 doc_types ReindexAll builds (internal/search/store.go).
 var knownDocTypes = map[string]bool{
 	"scenario": true, "run": true, "finding": true, "actor": true,
 	"campaign": true, "malware": true, "tool": true, "technique": true,
+	"rule": true, "compliance_control": true, "detection_connector": true, "action_connector": true,
 }
 
 // ParseQuery splits raw on whitespace, treats any token shaped like
