@@ -13764,6 +13764,7 @@ function loadVariantTab() {
   loadVariantCoverage();
   populateVexAgents();
   populateVexTechniques();
+  startVexSweepPolling();
 }
 
 // _vexAvailableVariants caches the server-computed real variant total (ART
@@ -13858,9 +13859,6 @@ function _updateSweepVariantCount(availableVariants) {
   if (el && availableVariants) el.textContent = availableVariants.toLocaleString() + '+ variants';
 }
 
-var _vexSweepRunning = false;
-var _vexSweepStartedAt = null; // Date the current/last sweep started, or null if none run yet this session
-
 // _vexFormatDuration renders a millisecond duration as e.g. "2m 14s" or "1h 05m 30s".
 function _vexFormatDuration(ms) {
   var totalSec = Math.max(0, Math.round(ms / 1000));
@@ -13872,121 +13870,140 @@ function _vexFormatDuration(ms) {
   return s + 's';
 }
 
-// _vexRenderSweepTiming updates the "Started ... / Elapsed .../ Completed ..." line.
-// endLabel is null while the sweep is still running (shows a live elapsed time),
-// or 'Completed'/'Stopped' once it reaches a terminal state (freezes the duration).
-function _vexRenderSweepTiming(endLabel) {
-  var el = document.getElementById('vex-sweep-timing');
-  if (!el || !_vexSweepStartedAt) return;
-  var startTxt = _vexSweepStartedAt.toLocaleTimeString();
-  if (!endLabel) {
-    el.textContent = 'Started ' + startTxt + ' · Elapsed ' + _vexFormatDuration(Date.now() - _vexSweepStartedAt.getTime());
-    return;
-  }
-  var endedAt = new Date();
-  el.textContent = 'Started ' + startTxt + ' · ' + endLabel + ' ' + endedAt.toLocaleTimeString() +
-    ' (' + _vexFormatDuration(endedAt.getTime() - _vexSweepStartedAt.getTime()) + ')';
+
+var _vexSweepPollTimer = null;
+var _vexKnownRunningSweepIds = []; // sweep IDs seen in the previous tick, for completion-diffing
+
+// startVexSweepPolling begins the 3s poll loop against the server-owned
+// sweep API. Idempotent -- safe to call more than once (e.g. if
+// loadVariantTab() runs again after a tab re-visit).
+function startVexSweepPolling() {
+  if (_vexSweepPollTimer) return;
+  pollVexSweeps();
+  _vexSweepPollTimer = setInterval(pollVexSweeps, 3000);
 }
 
-function vexRunFullSweep() {
-  if (_vexSweepRunning) { showToast('Sweep already in progress', 'err'); return; }
-  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
-  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
-  if (!_vexAllTechniques.length) { showToast('Technique list still loading — wait a moment', 'err'); return; }
-  var n = _vexAllTechniques.length;
-  var mode = (document.getElementById('vex-sweep-mode') || {}).value || 'sequential';
-  var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
-  // Quote the same real, server-computed total shown in the "Total Variants"
-  // stat card (loadVariantStats) rather than a separate rough estimate — the
-  // two used to disagree (e.g. ~10k here vs ~27k above) because this dialog
-  // computed its own guess independently of the actual variant count.
-  var variantTotal = _vexAvailableVariants || (n * 33);
-  if (!confirm('Start Full Variant Sweep:\n\n  ' + n + ' techniques dispatched sequentially\n  ~' + variantTotal.toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
+function pollVexSweeps() {
+  apicall('/api/vex/sweeps?status=running').then(function(sweeps) {
+    sweeps = sweeps || [];
+    var currentIds = sweeps.map(function(s) { return s.id; });
 
-  var techniques = _vexAllTechniques.map(function(t) { return t.id; });
-  _vexAbortRequested = false; _vexActiveScenarioRunId = null;
-  _vexSweepRunning = true;
-  _vexSweepStartedAt = new Date();
-  var btn = document.getElementById('vex-sweep-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Sweeping…'; }
-  var prog = document.getElementById('vex-sweep-progress');
-  if (prog) prog.style.display = 'block';
-  var stopBtn = document.getElementById('vex-sweep-stop-btn');
-  if (stopBtn) stopBtn.style.display = '';
-  _vexRenderSweepTiming(null);
-  _vexSweepQueue(agentId, techniques, mode, advanced, 0);
+    // Completion detection: any previously-tracked ID missing from this
+    // tick's list just finished (completed/stopped/failed) -- fetch its
+    // final state once for the toast, since the running-list endpoint no
+    // longer includes it.
+    _vexKnownRunningSweepIds.forEach(function(id) {
+      if (currentIds.indexOf(id) === -1) reportVexSweepFinished(id);
+    });
+    _vexKnownRunningSweepIds = currentIds;
+
+    renderVexSweepList(sweeps);
+  }).catch(function() {});
 }
 
-function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
-  var n = techniques.length;
-  var btn = document.getElementById('vex-sweep-btn');
-  var statusEl = document.getElementById('vex-sweep-status');
-  var pctEl = document.getElementById('vex-sweep-pct');
-  var barEl = document.getElementById('vex-sweep-bar');
-
-  if (_vexAbortRequested || idx >= n) {
-    _vexSweepRunning = false;
-    if (btn) { btn.disabled = false; btn.textContent = '▶ Start Sweep'; }
-    var stopBtnEl = document.getElementById('vex-sweep-stop-btn');
-    if (stopBtnEl) stopBtnEl.style.display = 'none';
-    // Progress panel stays visible (not hidden) after a sweep ends, so the
-    // start/end timestamps remain on screen until the next sweep begins —
-    // previously this block hid the whole panel immediately, discarding any
-    // record of when the sweep ran the moment the toast faded.
-    if (_vexAbortRequested) {
-      if (statusEl) statusEl.textContent = 'Sweep stopped';
-      _vexRenderSweepTiming('Stopped');
-      showToast('Sweep stopped', 'warn');
-    } else {
-      if (statusEl) statusEl.textContent = 'Sweep complete — ' + n + ' techniques tested';
-      if (pctEl) pctEl.textContent = '100%';
-      if (barEl) barEl.style.width = '100%';
-      _vexRenderSweepTiming('Completed');
-      showToast('Full sweep complete — ' + n + ' techniques', 'ok');
+function reportVexSweepFinished(sweepId) {
+  apicall('/api/vex/sweeps/' + sweepId).then(function(sw) {
+    if (sw.status === 'completed') {
+      showToast('Full sweep complete — ' + sw.totalTechniques + ' techniques (' + sw.agentId + ')', 'ok');
       loadVariantStats();
       loadVariantCoverage();
+    } else if (sw.status === 'stopped') {
+      showToast('Sweep stopped (' + sw.agentId + ')', 'warn');
+    } else if (sw.status === 'failed') {
+      showToast('Sweep failed on ' + sw.agentId + ': ' + (sw.error || 'unknown error'), 'err');
     }
-    return;
-  }
+  }).catch(function() {});
+}
 
-  var pct = Math.round((idx / n) * 100);
-  var tid = techniques[idx];
-  if (statusEl) statusEl.textContent = 'Running ' + x(tid) + ' (' + (idx + 1) + ' / ' + n + ')';
-  if (pctEl) pctEl.textContent = pct + '%';
-  if (barEl) barEl.style.width = pct + '%';
-  if (btn) btn.textContent = (idx + 1) + '/' + n + ' Sweeping…';
-  _vexRenderSweepTiming(null);
+function renderVexSweepList(sweeps) {
+  var el = document.getElementById('vex-sweep-list');
+  if (!el) return;
+  if (!sweeps.length) { el.innerHTML = ''; return; }
 
-  apicall('/api/variants/run', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
-  }).then(function(resp) {
-    _vexActiveScenarioRunId = resp.scenarioRunId;
-    // Poll until this technique's variant run completes, then continue.
-    _vexSweepPollAndNext(resp.variantRunId, agentId, techniques, mode, advanced, idx);
-  }).catch(function(e) {
-    // Dispatch failed — log and continue to next technique.
-    if (statusEl) statusEl.textContent = 'Error on ' + x(tid) + ': ' + (e.message || 'failed') + ' — continuing…';
-    setTimeout(function() { _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1); }, 1500);
+  el.innerHTML = sweeps.map(function(sw) {
+    var pct = sw.totalVariants > 0 ? Math.round((sw.completedVariants / sw.totalVariants) * 100) : 0;
+    return '<div class="card" style="margin-top:0.5rem;padding:0.75rem 1rem" id="vex-sweep-card-' + x(sw.id) + '">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;margin-bottom:0.3rem">' +
+        '<span style="font-weight:600">' + x(sw.agentId) + '</span>' +
+        '<span style="display:flex;align-items:center;gap:0.6rem">' +
+          '<span style="font-weight:700;color:var(--accent)">' + pct + '%</span>' +
+          '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:0.7rem" onclick="stopVexSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>' +
+        '</span>' +
+      '</div>' +
+      '<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
+        '<div style="height:5px;background:var(--accent);border-radius:3px;width:' + pct + '%;transition:width 0.5s ease"></div>' +
+      '</div>' +
+      '<div class="tiny muted" style="margin-top:0.35rem">Technique ' + (sw.currentIndex + 1) + '/' + sw.totalTechniques + ': ' + x(sw.currentTechnique) + '</div>' +
+      '<div class="tiny muted" id="vex-sweep-variant-' + x(sw.id) + '">Loading current variant…</div>' +
+    '</div>';
+  }).join('');
+
+  sweeps.forEach(function(sw) {
+    if (sw.currentVariantRunId) loadVexSweepVariantDetail(sw.id, sw.currentVariantRunId);
   });
 }
 
-function _vexSweepPollAndNext(vrId, agentId, techniques, mode, advanced, idx) {
-  if (_vexActivePoll) clearInterval(_vexActivePoll);
-  _vexActivePoll = setInterval(function() {
-    if (_vexAbortRequested) { clearInterval(_vexActivePoll); _vexActivePoll = null; return; }
-    apicall('/api/variants/run/' + vrId).then(function(detail) {
-      var s = detail.run && detail.run.status;
-      if (s === 'completed' || s === 'failed' || s === 'partial') {
-        clearInterval(_vexActivePoll); _vexActivePoll = null;
-        _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
-      }
-    }).catch(function() {
-      clearInterval(_vexActivePoll); _vexActivePoll = null;
-      _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
-    });
-  }, 3000);
+// loadVexSweepVariantDetail fetches the current technique's own variant
+// run (the same endpoint the ad-hoc single-run view already polls) purely
+// to derive "variant N/M: <what's running>" -- the sweep-list endpoint
+// itself only tracks per-technique progress, not per-variant.
+function loadVexSweepVariantDetail(sweepId, variantRunId) {
+  apicall('/api/variants/run/' + variantRunId).then(function(detail) {
+    var el = document.getElementById('vex-sweep-variant-' + sweepId);
+    if (!el) return; // card was removed by a later tick before this resolved
+    var results = detail.results || [];
+    var doneCount = results.filter(function(r) { return r.verdict !== 'PENDING'; }).length;
+    var current = results[doneCount]; // next un-run entry, in dispatch order
+    if (current) {
+      el.textContent = 'Variant ' + (doneCount + 1) + '/' + results.length + ': ' +
+        current.encoding + ' / ' + current.execContext + ' / ' + current.evasion;
+    } else {
+      el.textContent = 'Variant ' + results.length + '/' + results.length + ' — finishing…';
+    }
+  }).catch(function() {});
+}
+
+function vexRunFullSweep() {
+  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
+  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
+  var mode = (document.getElementById('vex-sweep-mode') || {}).value || 'sequential';
+  var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
+  // n/variantTotal are a pre-flight estimate only (from the ad-hoc picker's
+  // already-loaded technique list) -- the server independently and
+  // authoritatively resolves the real technique list and count at creation
+  // time; that's what actually gets dispatched.
+  var n = _vexAllTechniques.length;
+  var variantTotal = _vexAvailableVariants || (n * 33);
+  if (!confirm('Start Full Variant Sweep:\n\n  ~' + n + ' techniques dispatched sequentially\n  ~' + variantTotal.toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
+
+  apicall('/api/vex/sweeps', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId: agentId, mode: mode, includeAdvanced: advanced })
+  }).then(function() {
+    pollVexSweeps(); // render the new sweep immediately instead of waiting up to 3s for the next tick
+  }).catch(function(e) {
+    showToast(e.message || 'Failed to start sweep', 'err');
+  });
+}
+
+function stopVexSweep(sweepId) {
+  if (!confirm('Stop this sweep? The current technique finishes or is cancelled; no further techniques will be dispatched.')) return;
+  apicall('/api/vex/sweeps/' + sweepId + '/cancel', { method: 'POST' })
+    .then(function() { pollVexSweeps(); })
+    .catch(function(e) { showToast(e.message || 'Failed to stop sweep', 'err'); });
+}
+
+function _vexCheckAgentSweepConflict() {
+  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
+  var hint = document.getElementById('vex-sweep-agent-hint');
+  if (!hint) return;
+  if (!agentId) { hint.textContent = ''; return; }
+  apicall('/api/vex/sweeps/active?agentId=' + encodeURIComponent(agentId)).then(function() {
+    hint.textContent = 'This agent already has a sweep running.';
+  }).catch(function() {
+    hint.textContent = ''; // 404 (no active sweep) is the expected non-error case here
+  });
 }
 
 function filterVexTechniques() {
@@ -14162,13 +14179,12 @@ function pollVariantRun(vrId) {
   }, 3000);
 }
 
+// stopVex() cancels the single ad-hoc variant run in progress (the
+// vex-run-btn / vex-result-panel flow). The Full Sweep panel has its own
+// independent stopVexSweep(sweepId), which calls the server-owned sweep
+// cancel endpoint directly -- the two flows no longer share any state or
+// UI, since the sweep no longer runs its own client-side polling loop.
 function stopVex() {
-  // stopVex() is shared by the single-run "Stop" button and the Full Sweep
-  // panel's Stop button — the sweep's own polling loop (_vexSweepPollAndNext)
-  // clears itself and never calls back into _vexSweepQueue once stopped, so
-  // the "sweep stopped" UI/timing update has to happen directly here, not in
-  // _vexSweepQueue's abort branch (which only fires on a narrow race window).
-  var wasSweeping = _vexSweepRunning;
   _vexAbortRequested = true;
   if (_vexActivePoll) { clearInterval(_vexActivePoll); _vexActivePoll = null; }
   clearInterval(_vexRunPoll); _vexRunPoll = null;
@@ -14177,25 +14193,7 @@ function stopVex() {
   }
   var btn = document.getElementById('vex-run-btn');
   if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
-  _vexSweepRunning = false;
-  var sweepBtn = document.getElementById('vex-sweep-btn');
-  if (sweepBtn) { sweepBtn.disabled = false; sweepBtn.textContent = '▶ Start Sweep'; }
-  var stopBtnEl = document.getElementById('vex-sweep-stop-btn');
-  if (stopBtnEl) stopBtnEl.style.display = 'none';
 
-  if (wasSweeping) {
-    // Keep the progress panel visible (with the final status/timing) instead
-    // of hiding it — matches the "sweep complete" path, so the operator can
-    // still see when the sweep started/stopped after the toast fades.
-    var statusEl = document.getElementById('vex-sweep-status');
-    if (statusEl) statusEl.textContent = 'Sweep stopped';
-    _vexRenderSweepTiming('Stopped');
-    showToast('Sweep stopped', 'warn');
-    return;
-  }
-
-  var prog = document.getElementById('vex-sweep-progress');
-  if (prog) prog.style.display = 'none';
   var panel = document.getElementById('vex-result-panel');
   if (panel) panel.innerHTML = '<div class="card" style="padding:1.25rem;color:var(--warning);text-align:center">&#9632; Variant run stopped</div>';
   showToast('Variant run stopped', 'warn');
