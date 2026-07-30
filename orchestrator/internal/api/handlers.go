@@ -2106,16 +2106,47 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 // report, so the run is marked partial here.
 func (h *Handler) CancelRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runId")
-	var agentID, status string
-	if err := h.db.QueryRow(r.Context(),
-		`SELECT agent_id, status FROM scenario_runs WHERE id = $1`, runID,
-	).Scan(&agentID, &status); err != nil {
+	agentID, status, err := h.cancelScenarioRun(r.Context(), runID)
+	if err == errRunNotFound {
 		jsonError(w, "run not found", http.StatusNotFound)
 		return
 	}
-	if status != "running" {
+	if err == errRunNotRunning {
 		jsonError(w, "run is not running (status: "+status+")", http.StatusConflict)
 		return
+	}
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if status == "partial" {
+		log.Printf("[scenario] cancel run %s — agent %s offline, marked partial", runID, agentID)
+		h.auditLog(r, "scenario.cancel", runID, map[string]any{"agentId": agentID, "outcome": "partial"}, "ok")
+		respond(w, map[string]string{"runId": runID, "status": "partial"})
+		return
+	}
+	log.Printf("[scenario] cancel requested for run %s → agent %s", runID, agentID)
+	h.auditLog(r, "scenario.cancel", runID, map[string]any{"agentId": agentID}, "ok")
+	respond(w, map[string]string{"runId": runID, "status": "cancelling"})
+}
+
+var errRunNotFound = fmt.Errorf("run not found")
+var errRunNotRunning = fmt.Errorf("run not running")
+
+// cancelScenarioRun cancels an in-flight scenario_run -- notifies the agent
+// to stop gracefully (completed steps kept, run marked partial by the
+// agent's own result submission), or marks it partial immediately if the
+// agent is offline. Returns the run's agent_id and resulting status
+// ("cancelling" or "partial"). Shared by CancelRun (direct API) and
+// CancelVexSweep (cancelling a sweep's in-flight technique run).
+func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (agentID, status string, err error) {
+	if err := h.db.QueryRow(ctx,
+		`SELECT agent_id, status FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&agentID, &status); err != nil {
+		return "", "", errRunNotFound
+	}
+	if status != "running" {
+		return agentID, status, errRunNotRunning
 	}
 
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
@@ -2125,17 +2156,12 @@ func (h *Handler) CancelRun(w http.ResponseWriter, r *http.Request) {
 	})
 	if !sent {
 		// Agent offline — it won't submit partial results, so mark it now.
-		_, _ = h.db.Exec(r.Context(),
+		_, _ = h.db.Exec(ctx,
 			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
 			  WHERE id = $1 AND status = 'running'`, runID)
-		log.Printf("[scenario] cancel run %s — agent %s offline, marked partial", runID, agentID)
-		h.auditLog(r, "scenario.cancel", runID, map[string]any{"agentId": agentID, "outcome": "partial"}, "ok")
-		respond(w, map[string]string{"runId": runID, "status": "partial"})
-		return
+		return agentID, "partial", nil
 	}
-	log.Printf("[scenario] cancel requested for run %s → agent %s", runID, agentID)
-	h.auditLog(r, "scenario.cancel", runID, map[string]any{"agentId": agentID}, "ok")
-	respond(w, map[string]string{"runId": runID, "status": "cancelling"})
+	return agentID, "cancelling", nil
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────

@@ -950,7 +950,7 @@ git push
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `orchestrator/internal/api/vexsweep_handlers_test.go`:
+Create `orchestrator/internal/api/vexsweep_handlers_test.go`. An existing `withURLParam(r *http.Request, key, val string) *http.Request` helper already exists in `internal/api/event_handlers_test.go` (same package, so already accessible from this new file) — reuse it instead of introducing a second chi-route-context helper. A real ART store is required for the conflict test (`CreateVexSweep` checks `h.artStore` before the same-agent conflict check, so a nil store would 503 first) — build one the same way `internal/api/variant_dispatch_test.go`'s `TestGenerateVariants_FromARTStoreFallback` does, via `scenario.NewARTStoreFromDB`. `scenario_runs` has an `agent_id` foreign key into `agents`, so any test seeding `scenario_runs` directly must seed a matching `agents` row first (`INSERT INTO agents (agent_id) VALUES (...)`):
 
 ```go
 package api
@@ -960,13 +960,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/vexsweep"
 	"github.com/audspect/bas/internal/ws"
-	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -999,8 +998,25 @@ func TestCreateVexSweep_RejectsWhenAgentHasRunningVariantRun(t *testing.T) {
 			 VALUES ('vr-conflict-1', 'agent-conflict', 'T1059.001', 'sr-conflict-1', 33, 'running')`); err != nil {
 			t.Fatalf("seed running variant_run: %v", err)
 		}
+		// A real ART store is required -- CreateVexSweep checks h.artStore
+		// before the conflict check, so a nil store would 503 first and the
+		// conflict path would never be exercised.
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO techniques (technique_id, name, tactic) VALUES ('T1059.001','PowerShell','execution')
+			 ON CONFLICT (technique_id) DO NOTHING`); err != nil {
+			t.Fatalf("seed technique: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO art_atomic_tests (technique_id, test_index, name, executor, command)
+			 VALUES ('T1059.001', 0, 'conflict-test-step', 'powershell', 'Get-Process')`); err != nil {
+			t.Fatalf("seed art_atomic_tests: %v", err)
+		}
+		artStore, err := scenario.NewARTStoreFromDB(ctx, pool, nil)
+		if err != nil {
+			t.Fatalf("NewARTStoreFromDB: %v", err)
+		}
 
-		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool))
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool)).WithART(artStore)
 		userID := seedUser(t, pool, "sweep-conflict-user", "password123", "admin", true)
 		body, _ := json.Marshal(map[string]string{"agentId": "agent-conflict", "mode": "sequential"})
 		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
@@ -1032,6 +1048,9 @@ func TestGetActiveVexSweep_ReturnsRunningSweepWithLiveCompletedVariants(t *testi
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-live-progress')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
 		store := vexsweep.NewStore(pool)
 		sw, err := store.Create(ctx, vexsweep.Sweep{
 			AgentID: "agent-live-progress", Mode: "sequential",
@@ -1079,6 +1098,9 @@ func TestCancelVexSweep_StopsSweepAndCancelsCurrentRun(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-cancel')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
 		store := vexsweep.NewStore(pool)
 		sw, err := store.Create(ctx, vexsweep.Sweep{
 			AgentID: "agent-cancel", Mode: "sequential",
@@ -1099,7 +1121,7 @@ func TestCancelVexSweep_StopsSweepAndCancelsCurrentRun(t *testing.T) {
 		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store)
 		userID := seedUser(t, pool, "sweep-cancel-user", "password123", "admin", true)
 		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps/"+sw.ID+"/cancel", nil, auth.RoleAdmin, userID)
-		req = mux(req, "id", sw.ID)
+		req = withURLParam(req, "id", sw.ID)
 		rec := callAuthed(h.CancelVexSweep, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
@@ -1121,18 +1143,7 @@ func TestCancelVexSweep_StopsSweepAndCancelsCurrentRun(t *testing.T) {
 		}
 	})
 }
-
-// mux injects a chi URL param into req's context the same way chi's router
-// would after matching "/api/vex/sweeps/{id}/cancel" -- needed because
-// these tests call the handler directly, bypassing the real router.
-func mux(req *http.Request, key, value string) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add(key, value)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-}
 ```
-
-Check whether a `mux`-shaped test helper already exists elsewhere in `internal/api`'s test files before adding this one (grep for `chi.NewRouteContext` in `*_test.go`) — if an equivalent helper already exists under a different name, reuse it and delete this duplicate instead of introducing a second one.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -1141,45 +1152,52 @@ Expected: FAIL — `h.CreateVexSweep undefined`, `h.GetActiveVexSweep undefined`
 
 - [ ] **Step 3: Factor `CancelRun`'s logic into a shared helper**
 
-In `orchestrator/internal/api/handlers.go`, replace the body of `CancelRun` (currently lines 2099-2130ish) with a call to a new shared helper, keeping `CancelRun`'s own HTTP-specific bits (reading the URL param, writing the response) separate from the reusable cancellation logic:
+In `orchestrator/internal/api/handlers.go`, replace the body of `CancelRun` with a call to a new shared helper, keeping `CancelRun`'s own HTTP-specific bits (reading the URL param, logging, audit log, writing the response) separate from the reusable cancellation logic. The helper returns `agentID` too (not just `status`) since `CancelRun`'s existing log lines and audit-log payload both need it:
 
 ```go
 func (h *Handler) CancelRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runId")
-	status, err := h.cancelScenarioRun(r.Context(), runID)
+	agentID, status, err := h.cancelScenarioRun(r.Context(), runID)
+	if err == errRunNotFound {
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	}
+	if err == errRunNotRunning {
+		jsonError(w, "run is not running (status: "+status+")", http.StatusConflict)
+		return
+	}
 	if err != nil {
-		if err == errRunNotFound {
-			jsonError(w, "run not found", http.StatusNotFound)
-			return
-		}
-		if err == errRunNotRunning {
-			jsonError(w, "run is not running (status: "+status+")", http.StatusConflict)
-			return
-		}
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.auditLog(r, "scenario.cancel", runID, map[string]any{"outcome": status}, "ok")
-	respond(w, map[string]string{"runId": runID, "status": status})
+	if status == "partial" {
+		log.Printf("[scenario] cancel run %s — agent %s offline, marked partial", runID, agentID)
+		h.auditLog(r, "scenario.cancel", runID, map[string]any{"agentId": agentID, "outcome": "partial"}, "ok")
+		respond(w, map[string]string{"runId": runID, "status": "partial"})
+		return
+	}
+	log.Printf("[scenario] cancel requested for run %s → agent %s", runID, agentID)
+	h.auditLog(r, "scenario.cancel", runID, map[string]any{"agentId": agentID}, "ok")
+	respond(w, map[string]string{"runId": runID, "status": "cancelling"})
 }
 
 var errRunNotFound = fmt.Errorf("run not found")
 var errRunNotRunning = fmt.Errorf("run not running")
 
 // cancelScenarioRun cancels an in-flight scenario_run -- notifies the agent
-// to stop gracefully (completed steps kept, run marked partial), or marks
-// it partial immediately if the agent is offline. Shared by CancelRun
-// (direct API) and CancelVexSweep (cancelling a sweep's in-flight
-// technique run).
-func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (status string, err error) {
-	var agentID string
+// to stop gracefully (completed steps kept, run marked partial by the
+// agent's own result submission), or marks it partial immediately if the
+// agent is offline. Returns the run's agent_id and resulting status
+// ("cancelling" or "partial"). Shared by CancelRun (direct API) and
+// CancelVexSweep (cancelling a sweep's in-flight technique run).
+func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (agentID, status string, err error) {
 	if err := h.db.QueryRow(ctx,
 		`SELECT agent_id, status FROM scenario_runs WHERE id = $1`, runID,
 	).Scan(&agentID, &status); err != nil {
-		return "", errRunNotFound
+		return "", "", errRunNotFound
 	}
 	if status != "running" {
-		return status, errRunNotRunning
+		return agentID, status, errRunNotRunning
 	}
 
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
@@ -1188,14 +1206,13 @@ func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (status s
 		Data:    map[string]string{"runId": runID},
 	})
 	if !sent {
+		// Agent offline — it won't submit partial results, so mark it now.
 		_, _ = h.db.Exec(ctx,
 			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
 			  WHERE id = $1 AND status = 'running'`, runID)
-		log.Printf("[scenario] cancel run %s — agent %s offline, marked partial", runID, agentID)
-		return "partial", nil
+		return agentID, "partial", nil
 	}
-	log.Printf("[scenario] cancel requested for run %s → agent %s", runID, agentID)
-	return "stopping", nil
+	return agentID, "cancelling", nil
 }
 ```
 
@@ -1354,7 +1371,7 @@ func (h *Handler) CancelVexSweep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sw.CurrentScenarioRunID != "" {
-		if _, err := h.cancelScenarioRun(ctx, sw.CurrentScenarioRunID); err != nil && err != errRunNotRunning {
+		if _, _, err := h.cancelScenarioRun(ctx, sw.CurrentScenarioRunID); err != nil && err != errRunNotRunning {
 			jsonError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

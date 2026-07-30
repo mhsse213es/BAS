@@ -86,6 +86,12 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "agentId and techniqueId required", http.StatusBadRequest)
 		return
 	}
+	if h.vexSweep != nil {
+		if _, found, err := h.vexSweep.GetActiveForAgent(r.Context(), req.AgentID); err == nil && found {
+			jsonError(w, "agent has an active Full Sweep — stop it before running an individual variant test", http.StatusConflict)
+			return
+		}
+	}
 
 	ctx := r.Context()
 	templates, baseID, err := h.resolveTemplates(ctx, req.TechniqueID, coalesce(req.BaseType, "art"),

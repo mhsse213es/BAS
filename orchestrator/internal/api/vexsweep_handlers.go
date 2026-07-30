@@ -1,0 +1,196 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/vexsweep"
+)
+
+// POST /api/vex/sweeps
+// Creates a new Full Variant Sweep. Techniques are resolved server-side
+// from the ART catalog -- never trusts a client-submitted list. Rejects
+// (409) if the agent already has a running sweep, or a running ad-hoc
+// variant run (the two directions of the same-agent conflict rule; see
+// design spec Architecture §3).
+func (h *Handler) CreateVexSweep(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		AgentID         string `json:"agentId"`
+		Mode            string `json:"mode"`
+		IncludeAdvanced bool   `json:"includeAdvanced"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if req.AgentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	if h.artStore == nil {
+		jsonError(w, "ART content not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	mode := coalesce(req.Mode, "sequential")
+	ctx := r.Context()
+
+	var runningVariantRunID string
+	if err := h.db.QueryRow(ctx,
+		`SELECT id FROM variant_runs WHERE agent_id = $1 AND status = 'running' LIMIT 1`, req.AgentID,
+	).Scan(&runningVariantRunID); err == nil {
+		jsonError(w, "agent has an active variant run — stop it before starting a sweep", http.StatusConflict)
+		return
+	}
+
+	metas := h.artStore.ListTechniqueMeta()
+	techniques := make([]string, 0, len(metas))
+	counts := make([]int, 0, len(metas))
+	total := 0
+	for _, m := range metas {
+		templates, _, err := h.resolveTemplates(ctx, m.ID, "art", "", "", "", req.IncludeAdvanced)
+		if err != nil || len(templates) == 0 {
+			continue // matches vexRunFullSweep's own behavior of skipping techniques with no generated variants
+		}
+		techniques = append(techniques, m.ID)
+		counts = append(counts, len(templates))
+		total += len(templates)
+	}
+	if len(techniques) == 0 {
+		jsonError(w, "no techniques with generatable variants found", http.StatusUnprocessableEntity)
+		return
+	}
+
+	c, _ := auth.ClaimsFrom(ctx)
+	createdBy := ""
+	if c != nil {
+		createdBy = c.UserID
+	}
+
+	sw, err := h.vexSweep.Create(ctx, vexsweep.Sweep{
+		AgentID: req.AgentID, Mode: mode, IncludeAdvanced: req.IncludeAdvanced,
+		Techniques: techniques, TechniqueVariantCounts: counts, TotalVariants: total, CreatedBy: createdBy,
+	})
+	if err != nil {
+		if err == vexsweep.ErrAgentAlreadySweeping {
+			jsonError(w, "agent already has a running sweep", http.StatusConflict)
+			return
+		}
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "vexsweep.create", sw.ID, map[string]any{"agentId": req.AgentID, "totalVariants": total, "techniqueCount": len(techniques)}, "ok")
+	w.WriteHeader(http.StatusCreated)
+	jsonOK(w, sweepToJSON(h.db, sw))
+}
+
+// GET /api/vex/sweeps/active?agentId=X
+func (h *Handler) GetActiveVexSweep(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agentId")
+	if agentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	sw, found, err := h.vexSweep.GetActiveForAgent(r.Context(), agentID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		jsonError(w, "no active sweep for this agent", http.StatusNotFound)
+		return
+	}
+	jsonOK(w, sweepToJSON(h.db, sw))
+}
+
+// GET /api/vex/sweeps/{id}
+func (h *Handler) GetVexSweep(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	sw, err := h.vexSweep.Get(r.Context(), id)
+	if err != nil {
+		jsonError(w, "sweep not found", http.StatusNotFound)
+		return
+	}
+	jsonOK(w, sweepToJSON(h.db, sw))
+}
+
+// GET /api/vex/sweeps?status=running
+func (h *Handler) ListVexSweeps(w http.ResponseWriter, r *http.Request) {
+	status := coalesce(strings.TrimSpace(r.URL.Query().Get("status")), "running")
+	sweeps, err := h.vexSweep.ListByStatus(r.Context(), status)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	out := make([]map[string]any, 0, len(sweeps))
+	for _, sw := range sweeps {
+		out = append(out, sweepToJSON(h.db, sw))
+	}
+	jsonOK(w, out)
+}
+
+// POST /api/vex/sweeps/{id}/cancel
+func (h *Handler) CancelVexSweep(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	ctx := r.Context()
+	sw, err := h.vexSweep.Get(ctx, id)
+	if err != nil {
+		jsonError(w, "sweep not found", http.StatusNotFound)
+		return
+	}
+	if sw.Status != "running" {
+		jsonError(w, "sweep is not running (status: "+sw.Status+")", http.StatusConflict)
+		return
+	}
+	if sw.CurrentScenarioRunID != "" {
+		if _, _, err := h.cancelScenarioRun(ctx, sw.CurrentScenarioRunID); err != nil && err != errRunNotRunning {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := h.vexSweep.MarkStopped(ctx, id); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "vexsweep.cancel", id, map[string]any{"agentId": sw.AgentID}, "ok")
+	jsonOK(w, map[string]string{"id": id, "status": "stopped"})
+}
+
+// sweepToJSON serializes a Sweep plus a live-computed completedVariants
+// that includes the in-flight technique's already-finished steps (read
+// from scenario_runs.results' array length) -- not just the last fully
+// completed technique's tally that Sweep.CompletedVariants alone holds.
+// See design spec Architecture §4.
+func sweepToJSON(db *pgxpool.Pool, sw vexsweep.Sweep) map[string]any {
+	live := sw.CompletedVariants
+	if sw.CurrentScenarioRunID != "" {
+		var n int
+		if err := db.QueryRow(context.Background(),
+			`SELECT COALESCE(jsonb_array_length(results), 0) FROM scenario_runs WHERE id = $1`,
+			sw.CurrentScenarioRunID,
+		).Scan(&n); err == nil {
+			live += n
+		}
+	}
+	return map[string]any{
+		"id": sw.ID, "agentId": sw.AgentID, "mode": sw.Mode, "includeAdvanced": sw.IncludeAdvanced,
+		"techniques": sw.Techniques, "currentIndex": sw.CurrentIndex,
+		"currentTechnique": currentTechnique(sw), "currentVariantRunId": sw.CurrentVariantRunID,
+		"currentScenarioRunId": sw.CurrentScenarioRunID, "completedVariants": live,
+		"totalVariants": sw.TotalVariants, "totalTechniques": len(sw.Techniques),
+		"status": sw.Status, "error": sw.Error, "createdBy": sw.CreatedBy,
+		"startedAt": sw.StartedAt, "completedAt": sw.CompletedAt,
+	}
+}
+
+func currentTechnique(sw vexsweep.Sweep) string {
+	if sw.CurrentIndex >= 0 && sw.CurrentIndex < len(sw.Techniques) {
+		return sw.Techniques[sw.CurrentIndex]
+	}
+	return ""
+}
