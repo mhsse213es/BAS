@@ -138,6 +138,107 @@ func TestSearchRecents_ReturnsFavoritesBeforeRecents(t *testing.T) {
 	})
 }
 
+func seedSearchDocsForRBACTest(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO search_documents (doc_type, source_id, title, description, tags, search_vector) VALUES
+		   ('scenario', 'rbac-scn-1', 'RBAC Test Scenario', '', '{}', to_tsvector('english','RBAC Test Scenario')),
+		   ('detection_connector', 'rbac-dc-1', 'RBAC Test Detection Connector', 'provider: splunk', '{splunk}', to_tsvector('english','RBAC Test Detection Connector')),
+		   ('action_connector', 'rbac-ac-1', 'RBAC Test Action Connector', 'provider: crowdstrike', '{crowdstrike}', to_tsvector('english','RBAC Test Action Connector'))`); err != nil {
+		t.Fatalf("seed search_documents: %v", err)
+	}
+}
+
+func hasDocType(docs []search.Document, docType string) bool {
+	for _, d := range docs {
+		if d.DocType == docType {
+			return true
+		}
+	}
+	return false
+}
+
+func TestSearch_NonAdminNeverSeesConnectorResults(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedSearchDocsForRBACTest(t, pool)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		userID := seedUser(t, pool, "rbac-viewer", "password123", "viewer", true)
+
+		req := authedRequest(t, http.MethodGet, "/api/search?q=RBAC+Test", nil, auth.RoleViewer, userID)
+		rec := callAuthed(h.Search, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+		var results []search.Document
+		if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if hasDocType(results, "detection_connector") {
+			t.Errorf("results %+v included a detection_connector doc for a viewer without CanListDetectionConnectors", results)
+		}
+		if hasDocType(results, "action_connector") {
+			t.Errorf("results %+v included an action_connector doc for a viewer without CanListResponseConnectors", results)
+		}
+		if !hasDocType(results, "scenario") {
+			t.Errorf("results %+v dropped the unrestricted scenario doc -- filtering must not over-filter", results)
+		}
+	})
+}
+
+func TestSearch_AdminSeesConnectorResults(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedSearchDocsForRBACTest(t, pool)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		userID := seedUser(t, pool, "rbac-admin", "password123", "admin", true)
+
+		req := authedRequest(t, http.MethodGet, "/api/search?q=RBAC+Test", nil, auth.RoleAdmin, userID)
+		rec := callAuthed(h.Search, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+		var results []search.Document
+		if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if !hasDocType(results, "detection_connector") {
+			t.Errorf("results %+v missing detection_connector doc for an admin", results)
+		}
+		if !hasDocType(results, "action_connector") {
+			t.Errorf("results %+v missing action_connector doc for an admin", results)
+		}
+	})
+}
+
+func TestSearch_BrowseModeConnectorTypeEmptyForNonAdmin(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedSearchDocsForRBACTest(t, pool)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		userID := seedUser(t, pool, "rbac-viewer-browse", "password123", "viewer", true)
+
+		req := authedRequest(t, http.MethodGet, "/api/search?q=type:detection_connector", nil, auth.RoleViewer, userID)
+		rec := callAuthed(h.Search, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+		var results []search.Document
+		if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if len(results) != 0 {
+			t.Fatalf("results = %+v, want empty (non-admin browsing type:detection_connector)", results)
+		}
+	})
+}
+
 func TestSearchOperators_ReturnsSupportedList(t *testing.T) {
 	h := New(nil, ws.NewHub(), nil, testJWTSecret)
 	req := httptest.NewRequest(http.MethodGet, "/api/search/operators", nil)

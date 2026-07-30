@@ -18,15 +18,44 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	c, hasClaims := auth.ClaimsFrom(r.Context())
+	results = filterByPermission(results, hasClaims, c)
+
 	// Personalization is best-effort: if it fails, fall back to
 	// unpersonalized relevance-only results rather than erroring the whole
 	// search -- a degraded ranking beats no results.
-	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
+	if hasClaims && c != nil {
 		if personalized, perr := search.Personalize(r.Context(), h.db, c.UserID, results); perr == nil {
 			results = personalized
 		}
 	}
 	respond(w, results)
+}
+
+// filterByPermission drops connector-type documents the caller's role
+// can't see via their own dedicated list endpoints -- the first RBAC-aware
+// filtering Search has needed (Phase 5). Every other doc type stays
+// visible to any authenticated user, unchanged from Phase 1-4. Two
+// explicit checks, not a generic per-type permission map: only 2 of 12
+// doc types need gating today.
+func filterByPermission(docs []search.Document, hasClaims bool, c *auth.Claims) []search.Document {
+	canDetection := hasClaims && c != nil && auth.HasPermission(c.Role, auth.CanListDetectionConnectors)
+	canAction := hasClaims && c != nil && auth.HasPermission(c.Role, auth.CanListResponseConnectors)
+	if canDetection && canAction {
+		return docs // fast path: nothing to filter
+	}
+	out := docs[:0]
+	for _, d := range docs {
+		if d.DocType == "detection_connector" && !canDetection {
+			continue
+		}
+		if d.DocType == "action_connector" && !canAction {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 // POST /api/search/reindex
