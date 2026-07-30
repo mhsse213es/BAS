@@ -38,6 +38,7 @@ import (
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
+	"github.com/audspect/bas/internal/vexsweep"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -89,6 +90,7 @@ type Handler struct {
 	relationships         *relationships.Store // nil when not loaded — CVE-ATT&CK Relationship Store
 	rules                 *rulelib.Engine      // nil when not loaded — Detection Rule Library
 	threatPriorityEngine  *threatpriority.Engine // nil when not loaded — Threat Prioritization
+	vexSweep              *vexsweep.Store      // nil when not loaded — Full Variant Sweep orchestration
 }
 
 // New creates a Handler.
@@ -240,6 +242,12 @@ func (h *Handler) WithExercise(store *exercise.Store, exec *exercise.Executor, c
 // WithRuleLibrary attaches the Detection Rule Library engine.
 func (h *Handler) WithRuleLibrary(e *rulelib.Engine) *Handler {
 	h.rules = e
+	return h
+}
+
+// WithVexSweep attaches the Full Variant Sweep store.
+func (h *Handler) WithVexSweep(store *vexsweep.Store) *Handler {
+	h.vexSweep = store
 	return h
 }
 

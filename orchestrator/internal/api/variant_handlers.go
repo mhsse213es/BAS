@@ -619,6 +619,25 @@ func (h *Handler) dispatchVariantRun(
 	return scenarioRunID, variantRunID, nil
 }
 
+// dispatchVariantForSweep is the vexsweep.DispatchFn implementation --
+// resolves templates and dispatches exactly like RunVariants does for a
+// single ad-hoc request, but returns the resolved variant count too so the
+// Dispatcher can credit the sweep's real (not precomputed) total.
+func (h *Handler) dispatchVariantForSweep(ctx context.Context, agentID, techniqueID, mode string, includeAdvanced bool) (scenarioRunID, variantRunID string, totalVariants int, err error) {
+	templates, baseID, err := h.resolveTemplates(ctx, techniqueID, "art", "", "", "", includeAdvanced)
+	if err != nil {
+		return "", "", 0, err
+	}
+	if len(templates) == 0 {
+		return "", "", 0, fmt.Errorf("no variants generated for %s", techniqueID)
+	}
+	scenarioRunID, variantRunID, err = h.dispatchVariantRun(ctx, agentID, techniqueID, "art", baseID, mode, templates)
+	if err != nil {
+		return "", "", 0, err
+	}
+	return scenarioRunID, variantRunID, len(templates), nil
+}
+
 func simResultToVerdict(r models.CheckResult) string {
 	switch r {
 	case models.ResultPass:
