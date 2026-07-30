@@ -197,6 +197,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/threat-priority/actors", h.ThreatPriorityActors)
 		r.Get("/api/threat-priority/actors/{name}", h.ThreatPriorityActorDetail)
 
+		// Threat Intel Summary -- fleet-wide posture combining the above
+		// per-actor scoring with KEV exposure, for dashboard consumption.
+		r.Get("/api/analytics/threat-intel-summary", h.GetThreatIntelSummary)
+
 		// Intelligence Expansion -- MISP/OpenCTI-sourced Campaigns/Malware/Tools
 		// (distinct from /api/threat-priority's actor-level scoring).
 		r.Get("/api/intelligence/campaigns", h.IntelligenceCampaigns)

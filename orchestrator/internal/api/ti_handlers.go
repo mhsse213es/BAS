@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/audspect/bas/internal/analytics"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/reporting/attackdata"
 )
@@ -533,4 +534,15 @@ func (h *Handler) GetTIReadinessHistory(w http.ResponseWriter, r *http.Request) 
 		"trends":  trends,
 		"total":   len(trends),
 	})
+}
+
+// GET /api/analytics/threat-intel-summary — fleet-wide threat-intel posture:
+// top prioritized actors plus CISA KEV exposure. Viewer+.
+func (h *Handler) GetThreatIntelSummary(w http.ResponseWriter, r *http.Request) {
+	result, err := analytics.ThreatIntelSummary(r.Context(), h.db, h.threatPriorityEngine)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, result)
 }
