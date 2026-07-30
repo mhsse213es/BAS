@@ -152,7 +152,7 @@ func TestAdvanceToNext_CreditsAndAdvancesThenCompletes(t *testing.T) {
 		}
 
 		// First technique finishes -- advance to the second.
-		if err := store.AdvanceToNext(ctx, created.ID, 33, "vr-2", "sr-2"); err != nil {
+		if err := store.AdvanceToNext(ctx, created.ID, 33, 1, "vr-2", "sr-2"); err != nil {
 			t.Fatalf("AdvanceToNext (1st): %v", err)
 		}
 		mid, err := store.Get(ctx, created.ID)
@@ -164,7 +164,7 @@ func TestAdvanceToNext_CreditsAndAdvancesThenCompletes(t *testing.T) {
 		}
 
 		// Second (last) technique finishes -- sweep completes.
-		if err := store.AdvanceToNext(ctx, created.ID, 12, "", ""); err != nil {
+		if err := store.AdvanceToNext(ctx, created.ID, 12, 2, "", ""); err != nil {
 			t.Fatalf("AdvanceToNext (2nd): %v", err)
 		}
 		final, err := store.Get(ctx, created.ID)

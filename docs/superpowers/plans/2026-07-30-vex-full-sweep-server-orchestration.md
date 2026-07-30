@@ -28,7 +28,7 @@
 - Test: `orchestrator/internal/vexsweep/store_test.go`
 
 **Interfaces:**
-- Produces: `type Sweep struct { ID, AgentID, Mode string; IncludeAdvanced bool; Techniques []string; TechniqueVariantCounts []int; CurrentIndex int; CurrentVariantRunID, CurrentScenarioRunID string; CompletedVariants, TotalVariants int; Status, Error, CreatedBy string; StartedAt time.Time; CompletedAt *time.Time }`, `type Store struct` (unexported `pool *pgxpool.Pool` field), `func NewStore(pool *pgxpool.Pool) *Store`, `func (s *Store) Create(ctx context.Context, sw Sweep) (Sweep, error)`, `func (s *Store) Get(ctx context.Context, id string) (Sweep, error)`, `func (s *Store) GetActiveForAgent(ctx context.Context, agentID string) (Sweep, bool, error)`, `func (s *Store) ListRunning(ctx context.Context) ([]Sweep, error)`, `func (s *Store) ListByStatus(ctx context.Context, status string) ([]Sweep, error)`, `func (s *Store) AdvanceToNext(ctx context.Context, id string, justCompletedVariants int, nextVariantRunID, nextScenarioRunID string) error`, `func (s *Store) MarkStopped(ctx context.Context, id string) error`, `func (s *Store) MarkFailed(ctx context.Context, id, errMsg string) error`, `var ErrAgentAlreadySweeping = errors.New("agent already has a running sweep")` — consumed by Task 2 (Dispatcher) and Task 4 (HTTP handlers).
+- Produces: `type Sweep struct { ID, AgentID, Mode string; IncludeAdvanced bool; Techniques []string; TechniqueVariantCounts []int; CurrentIndex int; CurrentVariantRunID, CurrentScenarioRunID string; CompletedVariants, TotalVariants int; Status, Error, CreatedBy string; StartedAt time.Time; CompletedAt *time.Time }`, `type Store struct` (unexported `pool *pgxpool.Pool` field), `func NewStore(pool *pgxpool.Pool) *Store`, `func (s *Store) Create(ctx context.Context, sw Sweep) (Sweep, error)`, `func (s *Store) Get(ctx context.Context, id string) (Sweep, error)`, `func (s *Store) GetActiveForAgent(ctx context.Context, agentID string) (Sweep, bool, error)`, `func (s *Store) ListRunning(ctx context.Context) ([]Sweep, error)`, `func (s *Store) ListByStatus(ctx context.Context, status string) ([]Sweep, error)`, `func (s *Store) AdvanceToNext(ctx context.Context, id string, justCompletedVariants, nextIndex int, nextVariantRunID, nextScenarioRunID string) error`, `func (s *Store) MarkStopped(ctx context.Context, id string) error`, `func (s *Store) MarkFailed(ctx context.Context, id, errMsg string) error`, `var ErrAgentAlreadySweeping = errors.New("agent already has a running sweep")` — consumed by Task 2 (Dispatcher) and Task 4 (HTTP handlers).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -187,7 +187,7 @@ func TestAdvanceToNext_CreditsAndAdvancesThenCompletes(t *testing.T) {
 		}
 
 		// First technique finishes -- advance to the second.
-		if err := store.AdvanceToNext(ctx, created.ID, 33, "vr-2", "sr-2"); err != nil {
+		if err := store.AdvanceToNext(ctx, created.ID, 33, 1, "vr-2", "sr-2"); err != nil {
 			t.Fatalf("AdvanceToNext (1st): %v", err)
 		}
 		mid, err := store.Get(ctx, created.ID)
@@ -199,7 +199,7 @@ func TestAdvanceToNext_CreditsAndAdvancesThenCompletes(t *testing.T) {
 		}
 
 		// Second (last) technique finishes -- sweep completes.
-		if err := store.AdvanceToNext(ctx, created.ID, 12, "", ""); err != nil {
+		if err := store.AdvanceToNext(ctx, created.ID, 12, 2, "", ""); err != nil {
 			t.Fatalf("AdvanceToNext (2nd): %v", err)
 		}
 		final, err := store.Get(ctx, created.ID)
@@ -416,29 +416,32 @@ func (s *Store) ListByStatus(ctx context.Context, status string) ([]Sweep, error
 	return out, rows.Err()
 }
 
-// AdvanceToNext credits justCompletedVariants to completed_variants,
-// advances current_index by one, and records the new current run IDs (both
+// AdvanceToNext credits justCompletedVariants to completed_variants, sets
+// current_index to the caller-computed nextIndex (NOT current_index+1 --
+// the caller already knows the correct next index: unchanged for a sweep's
+// very first dispatch, current+1 only when advancing past an
+// already-dispatched technique), and records the new current run IDs (both
 // empty strings mean "no next technique" -- the sweep is marked completed
 // instead). Called by the Dispatcher (Task 2) once per finished technique.
-func (s *Store) AdvanceToNext(ctx context.Context, id string, justCompletedVariants int, nextVariantRunID, nextScenarioRunID string) error {
+func (s *Store) AdvanceToNext(ctx context.Context, id string, justCompletedVariants, nextIndex int, nextVariantRunID, nextScenarioRunID string) error {
 	if nextVariantRunID == "" && nextScenarioRunID == "" {
 		_, err := s.pool.Exec(ctx,
 			`UPDATE vex_sweeps
 			    SET completed_variants = completed_variants + $2,
-			        current_index = current_index + 1,
+			        current_index = $3,
 			        current_variant_run_id = '', current_scenario_run_id = '',
 			        status = 'completed', completed_at = NOW()
 			  WHERE id = $1`,
-			id, justCompletedVariants)
+			id, justCompletedVariants, nextIndex)
 		return err
 	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE vex_sweeps
 		    SET completed_variants = completed_variants + $2,
-		        current_index = current_index + 1,
-		        current_variant_run_id = $3, current_scenario_run_id = $4
+		        current_index = $3,
+		        current_variant_run_id = $4, current_scenario_run_id = $5
 		  WHERE id = $1`,
-		id, justCompletedVariants, nextVariantRunID, nextScenarioRunID)
+		id, justCompletedVariants, nextIndex, nextVariantRunID, nextScenarioRunID)
 	return err
 }
 
@@ -552,8 +555,10 @@ func TestDispatcher_Tick_AdvancesWhenCurrentTechniqueFinishes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		if err := store.AdvanceToNext(ctx, sw.ID, 0, "vr-1", "sr-1"); err != nil {
-			// Simulate: dispatcher already dispatched technique 1 on a prior tick.
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-1", "sr-1"); err != nil {
+			// Simulate: dispatcher already dispatched technique 1 (index 0)
+			// on a prior tick -- nextIndex=0 since this was the sweep's
+			// first-ever dispatch, index unchanged from its starting value.
 			t.Fatalf("seed AdvanceToNext: %v", err)
 		}
 
@@ -596,7 +601,7 @@ func TestDispatcher_Tick_CompletesSweepAfterLastTechnique(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		if err := store.AdvanceToNext(ctx, sw.ID, 0, "vr-1", "sr-1"); err != nil {
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-1", "sr-1"); err != nil {
 			t.Fatalf("seed AdvanceToNext: %v", err)
 		}
 
@@ -763,7 +768,7 @@ func (d *Dispatcher) dispatchNext(ctx context.Context, sw Sweep, justFinishedCou
 		nextIdx = sw.CurrentIndex + 1
 	}
 	if nextIdx >= len(sw.Techniques) {
-		if err := d.store.AdvanceToNext(ctx, sw.ID, justFinishedCount, "", ""); err != nil {
+		if err := d.store.AdvanceToNext(ctx, sw.ID, justFinishedCount, nextIdx, "", ""); err != nil {
 			log.Printf("[vexsweep] complete sweep %s: %v", sw.ID, err)
 		}
 		return
@@ -780,13 +785,13 @@ func (d *Dispatcher) dispatchNext(ctx context.Context, sw Sweep, justFinishedCou
 		}
 		return
 	}
-	if err := d.store.AdvanceToNext(ctx, sw.ID, justFinishedCount, variantRunID, scenarioRunID); err != nil {
+	if err := d.store.AdvanceToNext(ctx, sw.ID, justFinishedCount, nextIdx, variantRunID, scenarioRunID); err != nil {
 		log.Printf("[vexsweep] advance sweep %s: %v", sw.ID, err)
 	}
 }
 ```
 
-Note: `AdvanceToNext`'s `nextIdx >= len(sw.Techniques)` completion branch above computes `nextIdx` the same way `dispatchNext` does for the "just dispatched" case — this is correct because `dispatchNext` is only ever called with either (a) `sw.CurrentVariantRunID == ""` (very first tick, `nextIdx == sw.CurrentIndex == 0`) or (b) a technique that just finished (`nextIdx == sw.CurrentIndex + 1`). Both cases correctly identify "is there a next technique."
+Note: `AdvanceToNext` takes `nextIdx` explicitly rather than incrementing `current_index` itself, because the correct next index depends on which case `dispatchNext` is in: unchanged (`sw.CurrentIndex`) for a sweep's very first dispatch (no technique was in flight before, so there's nothing to advance past), or `sw.CurrentIndex + 1` when a previously-dispatched technique just finished. A blind `current_index + 1` inside the Store would double-increment the first-dispatch case — this was caught as a real bug during Task 2 implementation (a real Postgres-backed test run panicked with an out-of-range index once `TestDispatcher_Tick_CompletesSweepAfterLastTechnique` exercised a single-technique sweep end to end) and fixed by moving index computation entirely into the Dispatcher, with the Store trusting whatever `nextIndex` it's given.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1025,7 +1030,7 @@ func TestGetActiveVexSweep_ReturnsRunningSweepWithLiveCompletedVariants(t *testi
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		if err := store.AdvanceToNext(ctx, sw.ID, 0, "vr-live-1", "sr-live-1"); err != nil {
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-live-1", "sr-live-1"); err != nil {
 			t.Fatalf("AdvanceToNext: %v", err)
 		}
 		// Simulate 1 of the 2 in-flight technique's variants having a
@@ -1072,7 +1077,7 @@ func TestCancelVexSweep_StopsSweepAndCancelsCurrentRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		if err := store.AdvanceToNext(ctx, sw.ID, 0, "vr-cancel-1", "sr-cancel-1"); err != nil {
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-cancel-1", "sr-cancel-1"); err != nil {
 			t.Fatalf("AdvanceToNext: %v", err)
 		}
 		if _, err := pool.Exec(ctx,

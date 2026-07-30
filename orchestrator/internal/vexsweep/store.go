@@ -89,29 +89,32 @@ func (s *Store) ListByStatus(ctx context.Context, status string) ([]Sweep, error
 	return out, rows.Err()
 }
 
-// AdvanceToNext credits justCompletedVariants to completed_variants,
-// advances current_index by one, and records the new current run IDs (both
+// AdvanceToNext credits justCompletedVariants to completed_variants, sets
+// current_index to the caller-computed nextIndex (NOT current_index+1 --
+// the caller already knows the correct next index: unchanged for a sweep's
+// very first dispatch, current+1 only when advancing past an
+// already-dispatched technique), and records the new current run IDs (both
 // empty strings mean "no next technique" -- the sweep is marked completed
 // instead). Called by the Dispatcher once per finished technique.
-func (s *Store) AdvanceToNext(ctx context.Context, id string, justCompletedVariants int, nextVariantRunID, nextScenarioRunID string) error {
+func (s *Store) AdvanceToNext(ctx context.Context, id string, justCompletedVariants, nextIndex int, nextVariantRunID, nextScenarioRunID string) error {
 	if nextVariantRunID == "" && nextScenarioRunID == "" {
 		_, err := s.pool.Exec(ctx,
 			`UPDATE vex_sweeps
 			    SET completed_variants = completed_variants + $2,
-			        current_index = current_index + 1,
+			        current_index = $3,
 			        current_variant_run_id = '', current_scenario_run_id = '',
 			        status = 'completed', completed_at = NOW()
 			  WHERE id = $1`,
-			id, justCompletedVariants)
+			id, justCompletedVariants, nextIndex)
 		return err
 	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE vex_sweeps
 		    SET completed_variants = completed_variants + $2,
-		        current_index = current_index + 1,
-		        current_variant_run_id = $3, current_scenario_run_id = $4
+		        current_index = $3,
+		        current_variant_run_id = $4, current_scenario_run_id = $5
 		  WHERE id = $1`,
-		id, justCompletedVariants, nextVariantRunID, nextScenarioRunID)
+		id, justCompletedVariants, nextIndex, nextVariantRunID, nextScenarioRunID)
 	return err
 }
 
