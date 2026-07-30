@@ -652,6 +652,28 @@ code {
 .drawer-body::-webkit-scrollbar { width: 3px; }
 .drawer-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
+/* Run-results investigation workspace (Sub-project A) -- only applied when
+   #results-overlay carries .run-mode, toggled by viewRunResults/closeResults.
+   findings/technique/search-fallback (the drawer's 3 other callers) never
+   set this class, so they keep the default 520px .drawer width above. */
+.drawer-overlay.run-mode .drawer { width: 90vw; max-width: 1600px; }
+.run-tabbar {
+  position: sticky; top: 0; z-index: 5; background: var(--surface);
+  display: flex; gap: 0.25rem; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); margin-bottom: 1rem;
+}
+.run-tab-btn {
+  background: transparent; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); font-size: 0.78rem; font-weight: 600;
+  padding: 0.55rem 0.85rem; cursor: pointer; font-family: inherit;
+  white-space: nowrap; transition: color .15s, border-color .15s;
+}
+.run-tab-btn:hover { color: var(--text); }
+.run-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.run-tab-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.run-tab-grid.with-side { grid-template-columns: 1fr 340px; }
+@media (max-width: 900px) { .run-tab-grid.with-side { grid-template-columns: 1fr; } }
+
 /* ── Toast ─────────────────────────────────────────────────── */
 #toast {
   position: fixed; bottom: 1.5rem; right: 1.5rem;
@@ -3241,9 +3263,10 @@ body.theme-slate {
               <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> ART techniques sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
             </div>
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
-              <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px">
+              <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px" onchange="_vexCheckAgentSweepConflict()">
                 <option value="">Select agent…</option>
               </select>
+              <span id="vex-sweep-agent-hint" class="tiny" style="color:var(--warning)"></span>
               <select id="vex-sweep-mode" class="btn btn-outline" style="font-size:0.8rem">
                 <option value="sequential">All variants</option>
                 <option value="adaptive">Adaptive (stop on bypass)</option>
@@ -3254,19 +3277,7 @@ body.theme-slate {
               <button id="vex-sweep-btn" class="btn btn-primary" onclick="vexRunFullSweep()" style="white-space:nowrap">▶ Start Sweep</button>
             </div>
           </div>
-          <div id="vex-sweep-progress" style="display:none;margin-top:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;font-size:0.78rem">
-              <span id="vex-sweep-status" style="color:var(--muted)"></span>
-              <span style="display:flex;align-items:center;gap:0.6rem">
-                <span id="vex-sweep-pct" style="font-weight:700;color:var(--accent)"></span>
-                <button id="vex-sweep-stop-btn" class="btn btn-outline btn-sm" style="display:none;color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:0.7rem" onclick="stopVex()">&#9632; Stop</button>
-              </span>
-            </div>
-            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-              <div id="vex-sweep-bar" style="height:5px;background:var(--accent);border-radius:3px;width:0%;transition:width 0.5s ease"></div>
-            </div>
-            <div id="vex-sweep-timing" class="tiny muted" style="margin-top:0.4rem"></div>
-          </div>
+          <div id="vex-sweep-list" style="margin-top:0.75rem"></div>
         </div>
 
         <!-- Run form + result side-by-side -->
@@ -3700,11 +3711,15 @@ body.theme-slate {
   <div class="drawer">
     <div class="drawer-header">
       <h3 id="results-title">Run Results</h3>
+      <div id="results-header-actions" style="display:flex;gap:0.5rem;align-items:center;margin-left:auto;margin-right:0.75rem"></div>
       <button class="drawer-close" onclick="closeResults()">&#10005;</button>
     </div>
     <div class="drawer-body">
       <div id="results-summary" style="margin-bottom:0.75rem;font-size:0.8rem"></div>
       <div id="results-export"></div>
+      <div id="run-kpi-strip" style="display:none"></div>
+      <div id="run-tabbar" style="display:none"></div>
+      <div id="run-tab-content" style="display:none"></div>
       <div id="results-body" style="font-size:0.8rem"></div>
     </div>
   </div>
@@ -7596,6 +7611,7 @@ function renderCovToolbar() {
 }
 function setCovView(v) { COV_VIEW = v; renderCovToolbar(); renderCovMatrix(); }
 function openTechnique(id) {
+  document.getElementById('results-overlay').classList.remove('run-mode');
   var st = (window._covSt || {})[id] || 'none';
   var meta = { cov: ['Prevented', 'var(--success)'], part: ['Detected only', 'var(--warning)'], gap: ['Missed', 'var(--danger)'], none: ['Untested', 'var(--muted)'] }[st];
   apicall('/api/attack/technique/' + encodeURIComponent(id)).then(function(e) {
@@ -7733,6 +7749,7 @@ function quickTriageFinding(id, sel) {
   setFindingStatus(id, status);
 }
 function openFinding(id) {
+  document.getElementById('results-overlay').classList.remove('run-mode');
   apicall('/api/findings/' + encodeURIComponent(id)).then(function(f) {
     _currentFinding = f;
     var e = f.enrichment || {};
@@ -9882,6 +9899,7 @@ function scenarioToYaml(sc) {
 }
 
 function viewRunResults(run) {
+  document.getElementById('results-overlay').classList.add('run-mode');
   document.getElementById('results-title').textContent = run.name + ' — Results';
   var results = run.results || [];
   var skipped = results.filter(function(c) { return c.result === 'skipped'; }).length;
@@ -9906,25 +9924,34 @@ function viewRunResults(run) {
     ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +
     alertText;
 
-  // Export bar + view-toggle tabs — only when run has an ID and is completed/partial
-  var exportHtml = '';
   var runId = run.id || '';
-  if (runId && (run.status === 'completed' || run.status === 'partial')) {
-    exportHtml =
-      '<div style="display:flex;gap:0.5rem;align-items:center;padding:0.5rem 0.75rem;margin-bottom:0.5rem;' +
-                  'background:var(--surface);border:1px solid var(--border);border-radius:4px;flex-wrap:wrap">' +
-        '<span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:0.25rem">Export</span>' +
-        '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8595; HTML Report</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">&#8595; PDF</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
-        '<span style="flex:1"></span>' +
-        '<button id="rvt-results" class="btn btn-sm" style="background:var(--elevated);color:var(--accent);border:1px solid var(--border);border-bottom:2px solid var(--accent);border-radius:4px 4px 0 0" onclick="switchResultsView(\'table\')">Results</button>' +
-        '<button id="rvt-flow" class="btn btn-sm" style="color:var(--muted);border:1px solid transparent;border-radius:4px 4px 0 0" onclick="switchResultsView(\'flow\')">&#9660; Attack Flow</button>' +
-        '<button id="rvt-coverage" class="btn btn-sm" style="color:var(--muted);border:1px solid transparent;border-radius:4px 4px 0 0" onclick="switchResultsView(\'coverage\')">&#9632; Variant Coverage</button>' +
-      '</div>';
+  var hasOutput = runId && (run.status === 'completed' || run.status === 'partial');
+  document.getElementById('results-export').innerHTML = '';
+
+  // Header status pill -- reuses the exact status->color mapping the Live
+  // Runs table already applies (index.html:13171), and the .sbadge pill
+  // pattern already used for license/status badges elsewhere (index.html:12905).
+  var runStatusColor = { completed: 'var(--success)', running: 'var(--accent)', partial: 'var(--warning)', failed: 'var(--danger)' }[run.status] || 'var(--muted)';
+  document.getElementById('results-title').innerHTML =
+    x(run.name) + ' — Results ' +
+    '<span class="sbadge" style="background:' + runStatusColor + '22;color:' + runStatusColor + ';border:1px solid ' + runStatusColor + '44;font-size:0.65rem;margin-left:0.4rem;vertical-align:middle">' + x(run.status || '') + '</span>';
+
+  // Header toolbar -- real export actions relocated verbatim from the old
+  // inline export bar. Compare/Re-run are NOT real features anywhere in this
+  // app today (confirmed: the only existing "Re-run" is a disabled
+  // "coming soon" button, for campaigns, not runs -- index.html:6567), so
+  // they render the same disabled way here rather than as working buttons.
+  var actionsHtml = '';
+  if (hasOutput) {
+    actionsHtml =
+      '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8595; HTML Report</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">&#8595; PDF</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
+      '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
+      '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run this execution — coming soon">Re-run</button>';
   }
-  document.getElementById('results-export').innerHTML = exportHtml;
+  document.getElementById('results-header-actions').innerHTML = actionsHtml;
 
   var scorePanel = '';
   if (run.score && typeof run.score.preventionScore !== 'undefined') {
@@ -9943,6 +9970,40 @@ function viewRunResults(run) {
                    trend === 'Degrading' ? 'var(--danger)' :
                    trend === 'Stable'    ? 'var(--warning)' : 'var(--muted)';
     var trendIcon = trend === 'Improving' ? '↑' : trend === 'Degrading' ? '↓' : trend === 'Stable' ? '→' : '◎';
+
+    // KPI strip -- reuses the exact gaugeSVG/sparkSVG helpers and .kpi-card
+    // CSS the main Dashboard already uses (index.html:12041-12063, :670-697).
+    // Detection Rate is derived the same way the existing summary line
+    // above already computes pass/fail; every other value comes straight
+    // off run.score, already confirmed real during brainstorming. No card
+    // here is backed by fabricated data -- a missing value renders '—'.
+    (function() {
+      var detRate = results.length ? Math.round(pass * 100 / results.length) : 0;
+      var deltaHtml = (typeof s.previousPreventionScore !== 'undefined' && s.previousPreventionScore !== null)
+        ? (function() {
+            var delta = Math.round(prevPct - s.previousPreventionScore);
+            var arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
+            var col = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--muted)';
+            return '<span style="color:' + col + '">' + arrow + ' ' + Math.abs(delta) + ' pts vs last run</span>';
+          })()
+        : '';
+      function kpiGaugeCard(label, value, sub) {
+        return '<div class="kpi-card" style="display:flex;align-items:center;gap:0.75rem">' +
+          '<div class="ring" style="width:64px;height:64px">' + gaugeSVG(value, 64, 8) +
+            '<div class="ring-c"><div class="rv" style="font-size:0.95rem">' + value + '%</div></div></div>' +
+          '<div><div class="kpi-label">' + label + '</div><div class="kpi-sub">' + sub + '</div></div>' +
+        '</div>';
+      }
+      document.getElementById('run-kpi-strip').innerHTML =
+        '<div class="kpi-row" style="grid-template-columns:repeat(6,1fr)">' +
+          '<div class="kpi-card"><div class="kpi-label">Overall Security Score</div><div class="kpi-value">' + prevPct + '<span style="font-size:0.9rem;color:var(--muted)">/100</span></div><div class="kpi-sub">' + (deltaHtml || '—') + '</div></div>' +
+          kpiGaugeCard('Detection Rate', detRate, pass + ' / ' + results.length + ' techniques') +
+          kpiGaugeCard('Prevention Rate', prevPct, cls || '—') +
+          '<div class="kpi-card"><div class="kpi-label">Exposure Score</div><div class="kpi-value" style="color:' + expCol + '">' + expVal + '</div><div class="kpi-sub">×' + amp + ' kill-chain</div></div>' +
+          kpiGaugeCard('Tactic Coverage', covPct, 'of 14 ATT&CK tactics') +
+          '<div class="kpi-card"><div class="kpi-label">Risk Level</div><div class="kpi-value" style="color:' + trendCol + '">' + trendIcon + ' ' + x(trend) + '</div><div class="kpi-sub">vs prior run</div></div>' +
+        '</div>';
+    })();
 
     var dimStyle = 'background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.6rem 0.75rem;';
     var labelStyle = 'color:var(--muted);font-size:0.6rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:0.2rem';
@@ -10120,18 +10181,76 @@ function viewRunResults(run) {
       checks + '</div>';
   }).join('');
 
-  // scorePanel + run-report-extra (findings/recommendations/attack-flow-summary/
-  // alert-fatigue/attack-surface-age/readiness) live INSIDE rv-table so they hide
-  // and show together with the Results tab — previously they sat outside the tab
-  // toggle entirely and stayed visible under every tab, which is what made
-  // switching to Attack Flow or Variant Coverage look like it was appending that
-  // tab's data after the Results content instead of replacing it.
-  document.getElementById('results-body').innerHTML =
-    '<div id="rv-table">' + scorePanel + '<div id="run-report-extra"></div>' + checksHtml + '</div>' +
-    '<div id="rv-flow" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>' +
-    '<div id="rv-coverage" style="display:none"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading variant coverage&#8230;</div></div>' +
-    '<div id="rv-siem" style="display:none"></div>';
+  // Overview keeps scorePanel + run-report-extra (findings/recommendations/
+  // alert-fatigue/attack-surface-age/readiness); the per-technique checks
+  // move to their own Evidence tab -- previously both lived in one "Results"
+  // view together. rv-flow/rv-coverage/rv-siem keep their exact existing
+  // IDs and lazy-load logic (see the apicall() calls right below this
+  // block) -- only their container changed, from flat siblings behind a
+  // 3-button switcher to named panels behind the new tab bar.
+  var soonPanel = function(label) {
+    return '<div class="dash-panel dash-soon" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">' + x(label) + ' — real data not available for this run yet.</div>';
+  };
+  document.getElementById('run-tab-content').innerHTML =
+    '<div id="run-tab-overview" class="run-tab-panel">' +
+      '<div class="run-tab-grid with-side">' +
+        '<div>' + scorePanel + '</div>' +
+        '<div id="run-report-extra"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div id="run-tab-flow" class="run-tab-panel" style="display:none">' +
+      '<div id="rv-flow"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>' +
+    '</div>' +
+    '<div id="run-tab-variant" class="run-tab-panel" style="display:none">' +
+      '<div id="rv-coverage"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading variant coverage&#8230;</div></div>' +
+    '</div>' +
+    '<div id="run-tab-detection" class="run-tab-panel" style="display:none"><div id="rv-siem"></div></div>' +
+    '<div id="run-tab-evidence" class="run-tab-panel" style="display:none">' + checksHtml + '</div>' +
+    '<div id="run-tab-reports" class="run-tab-panel" style="display:none"></div>' +
+    '<div id="run-tab-timeline" class="run-tab-panel" style="display:none">' + soonPanel('Execution Timeline') + '</div>' +
+    '<div id="run-tab-mitre" class="run-tab-panel" style="display:none">' + soonPanel('MITRE ATT&CK') + '</div>' +
+    '<div id="run-tab-iocs" class="run-tab-panel" style="display:none">' + soonPanel('Indicators (IOCs)') + '</div>' +
+    '<div id="run-tab-endpoint" class="run-tab-panel" style="display:none">' + soonPanel('Endpoint Changes') + '</div>' +
+    '<div id="run-tab-recommendation" class="run-tab-panel" style="display:none">' + soonPanel('Recommendation') + '</div>';
+
+  var RUN_TABS = [
+    ['overview', 'Overview'], ['timeline', 'Execution Timeline'], ['mitre', 'MITRE ATT&CK'],
+    ['detection', 'Detection Validation'], ['flow', 'Attack Flow'], ['variant', 'Variant Analysis'],
+    ['evidence', 'Evidence'], ['iocs', 'Indicators (IOCs)'], ['endpoint', 'Endpoint Changes'],
+    ['recommendation', 'Recommendation'], ['reports', 'Reports']
+  ];
+  document.getElementById('run-tabbar').innerHTML = RUN_TABS.map(function(t, i) {
+    return '<button class="run-tab-btn' + (i === 0 ? ' active' : '') + '" id="run-tabbtn-' + t[0] + '" onclick="switchRunTab(\'' + t[0] + '\')">' + x(t[1]) + '</button>';
+  }).join('');
+
+  document.getElementById('results-summary').style.display = 'none';
+  document.getElementById('results-body').style.display = 'none';
+  document.getElementById('run-kpi-strip').style.display = '';
+  document.getElementById('run-tabbar').style.display = '';
+  document.getElementById('run-tab-content').style.display = '';
   document.getElementById('results-overlay').classList.add('open');
+
+  var reportsEl = document.getElementById('run-tab-reports');
+  if (reportsEl) {
+    if (hasOutput) {
+      reportsEl.innerHTML =
+        '<div class="dash-panel" style="margin-bottom:1rem"><div class="dash-panel-hdr">Run Metadata</div><div class="dash-panel-body">' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;font-size:0.78rem">' +
+            '<div><div class="kpi-label">Run ID</div><div>' + x(runId) + '</div></div>' +
+            '<div><div class="kpi-label">Agent</div><div>' + x(run.agentId || '') + '</div></div>' +
+            '<div><div class="kpi-label">Status</div><div>' + x(run.status || '') + '</div></div>' +
+          '</div>' +
+        '</div></div>' +
+        '<div class="dash-panel"><div class="dash-panel-hdr">Export</div><div class="dash-panel-body" style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
+          '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')">&#8595; JSON</button>' +
+          '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')">&#8595; HTML Report</button>' +
+          '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')">&#8595; PDF</button>' +
+          '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')">&#8595; CSV</button>' +
+        '</div></div>';
+    } else {
+      reportsEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:1rem 0">No exportable output yet — this run hasn\'t completed.</div>';
+    }
+  }
 
   // Key Findings + Prioritised Recommendations — fetched from the report engine
   // (BuildFromRun, the same source as the HTML/PDF report) so the drawer matches
@@ -10169,53 +10288,26 @@ function viewRunResults(run) {
   }
 }
 
-// Toggles the run-results drawer between the "Results" table view and the
-// "Attack Flow" visualization. Called by the tab buttons in the export bar.
-function switchResultsView(view) {
-  var tableEl    = document.getElementById('rv-table');
-  var flowEl     = document.getElementById('rv-flow');
-  var coverageEl = document.getElementById('rv-coverage');
-  var siemEl     = document.getElementById('rv-siem');
-  var btnT       = document.getElementById('rvt-results');
-  var btnF       = document.getElementById('rvt-flow');
-  var btnC       = document.getElementById('rvt-coverage');
-  var btnS       = document.getElementById('rvt-siem');
-  if (!tableEl) return;
-  tableEl.style.display    = (view === 'table'    || !view) ? '' : 'none';
-  if (flowEl)     flowEl.style.display     = (view === 'flow')     ? '' : 'none';
-  if (coverageEl) coverageEl.style.display = (view === 'coverage') ? '' : 'none';
-  if (siemEl)     siemEl.style.display     = (view === 'siem')     ? '' : 'none';
-  var activeStyle   = { background: 'var(--elevated)', color: 'var(--accent)', borderBottom: '2px solid var(--accent)' };
-  var inactiveStyle = { background: '', color: 'var(--muted)', borderBottom: '' };
-  function applyTab(btn, isActive) {
-    if (!btn) return;
-    var s = isActive ? activeStyle : inactiveStyle;
-    btn.style.background   = s.background;
-    btn.style.color        = s.color;
-    btn.style.borderBottom = s.borderBottom;
-  }
-  applyTab(btnT, view === 'table' || !view);
-  applyTab(btnF, view === 'flow');
-  applyTab(btnC, view === 'coverage');
-  applyTab(btnS, view === 'siem');
+// switchRunTab replaces switchResultsView: shows exactly one of RUN_TABS's
+// panels and updates the active tab button, matching the same
+// show/hide-by-id mechanism switchResultsView used, generalized to 11
+// tabs instead of a hardcoded 3-4.
+function switchRunTab(tabId) {
+  var content = document.getElementById('run-tab-content');
+  if (!content) return;
+  Array.prototype.forEach.call(content.querySelectorAll('.run-tab-panel'), function(panel) {
+    panel.style.display = (panel.id === 'run-tab-' + tabId) ? '' : 'none';
+  });
+  Array.prototype.forEach.call(document.getElementById('run-tabbar').querySelectorAll('.run-tab-btn'), function(btn) {
+    btn.classList.toggle('active', btn.id === 'run-tabbtn-' + tabId);
+  });
 }
 
 function loadSIEMCorrelationPanel(runId) {
   apicall('/api/siem/correlations/' + encodeURIComponent(runId)).then(function(corrs) {
     var el = document.getElementById('rv-siem');
     if (!el) return;
-    if (!corrs || corrs.length === 0) return; // no correlation yet — hide tab
-    // Inject SIEM tab button if not already there
-    var btnBar = document.getElementById('rvt-coverage');
-    if (btnBar && !document.getElementById('rvt-siem')) {
-      var siemBtn = document.createElement('button');
-      siemBtn.id = 'rvt-siem';
-      siemBtn.className = 'btn btn-sm btn-outline';
-      siemBtn.style.cssText = 'font-size:0.7rem;padding:0.22rem 0.7rem;color:var(--muted);border-bottom:2px solid transparent';
-      siemBtn.textContent = 'SIEM Correlation';
-      siemBtn.onclick = function() { switchResultsView('siem'); };
-      btnBar.parentNode.insertBefore(siemBtn, btnBar.nextSibling);
-    }
+    if (!corrs || corrs.length === 0) return; // no correlation yet — Detection Validation tab stays empty
     var c = corrs[0]; // most recent correlation
     var detRate = c.detectionRate || 0;
     var undetRate = c.undetectedRate || 0;
@@ -10877,7 +10969,7 @@ function renderRunReportExtra(rep) {
 
   return html;
 }
-function closeResults() { document.getElementById('results-overlay').classList.remove('open'); }
+function closeResults() { document.getElementById('results-overlay').classList.remove('open', 'run-mode'); }
 
 // ── Live Run Panel ────────────────────────────────────────────────────────────
 // Streams run-event frames over the shared browser WS and renders live progress
@@ -11673,9 +11765,12 @@ function showToast(msg, type) {
 }
 
 /* ── Command palette (Ctrl/Cmd-K) ─────────────────────────────────────────
-   Self-contained launcher routing to existing tabs + global actions. Respects
-   role: Users/Settings (admin) and New scenario (admin/analyst) appear only when
-   permitted — same gating as the sidebar. No backend; pure navigation. */
+   Launcher routing to existing tabs + global actions, plus live search
+   (Global Search Phase 2) over GET /api/search -- results merge into the
+   same flat/selectable/run mechanism the static nav list already uses, so
+   keyboard nav and click-to-select work identically for both. Respects
+   role: Users/Settings (admin) and New scenario (admin/analyst) appear only
+   when permitted — same gating as the sidebar. */
 var _cmdkOpen = false;
 function cmdkCommands() {
   var nav = [
@@ -11695,6 +11790,92 @@ function cmdkCommands() {
   }
   return [{ sec: 'Navigate', items: nav }, { sec: 'Actions', items: actions }];
 }
+
+// CMDK_SEARCH_LABELS maps a search result's docType to its section header.
+// "campaign" -> "Threat Campaigns", deliberately not "Campaigns" -- the
+// sidebar's existing Campaigns tab is internal/campaign (BAS execution
+// rollups), a different concept from intelligence_campaigns.
+var CMDK_SEARCH_LABELS = {
+  scenario: 'Scenarios', run: 'Runs', finding: 'Findings',
+  actor: 'Threat Actors', campaign: 'Threat Campaigns',
+  malware: 'Malware', tool: 'Tools', technique: 'Techniques',
+  rule: 'Detection Rules', compliance_control: 'Compliance Controls',
+  detection_connector: 'Detection Connectors', action_connector: 'Response Connectors'
+};
+
+// cmdkOpenResult dispatches a selected search result to a real navigation
+// action per docType, or the minimal fallback popup for the 3 types with
+// no detail view anywhere in this app yet (campaign/malware/tool). Also
+// fires a fire-and-forget selection-tracking call (Global Search Phase 3) --
+// never blocks navigation, failures are silently swallowed.
+function cmdkOpenResult(r) {
+  apicall('/api/search/select', {
+    method: 'POST',
+    body: JSON.stringify({ docType: r.docType, sourceId: r.sourceId })
+  }).catch(function() {});
+  if (r.docType === 'run') {
+    openRunReport(r.sourceId);
+  } else if (r.docType === 'finding') {
+    showTab('findings');
+    setTimeout(function() { openFinding(r.sourceId); }, 150);
+  } else if (r.docType === 'actor') {
+    showTab('threat-priority');
+    setTimeout(function() { showThreatPriorityDetail(r.title); }, 150);
+  } else if (r.docType === 'technique') {
+    // The 150ms delay matters here, not just as a defensive habit:
+    // openTechnique() reads window._covSt[id], populated asynchronously by
+    // loadCoverageMatrix() (kicked off by showTab('attack-coverage')) --
+    // calling it too early shows a wrong "Untested" badge for a technique
+    // that may actually be covered.
+    showTab('attack-coverage');
+    setTimeout(function() { openTechnique(r.sourceId); }, 150);
+  } else if (r.docType === 'scenario') {
+    // No true "open by ID" exists for scenarios -- they expand inline
+    // within the Scenarios tab's own tile grid. Reuse the existing sc-search
+    // filter box rather than building new expand-by-ID logic.
+    showTab('scenarios');
+    setTimeout(function() {
+      document.getElementById('sc-search').value = r.title;
+      renderScenarios();
+    }, 150);
+  } else {
+    cmdkResultFallback(r);
+  }
+}
+
+// cmdkResultFallback reuses the existing #results-overlay drawer (the same
+// one openFinding/openTechnique already populate) to show a search result's
+// own title/description/tags for entity types with no detail view built
+// yet. No network request -- everything shown is already in `r`.
+function cmdkResultFallback(r) {
+  document.getElementById('results-overlay').classList.remove('run-mode');
+  document.getElementById('results-title').textContent = r.title + ' — ' + CMDK_SEARCH_LABELS[r.docType];
+  document.getElementById('results-export').innerHTML = '';
+  document.getElementById('results-summary').innerHTML = '';
+  document.getElementById('results-body').innerHTML =
+    (r.description ? '<p style="margin-bottom:0.8rem">' + x(r.description) + '</p>' : '') +
+    ((r.tags || []).length ? '<div style="display:flex;gap:0.4rem;flex-wrap:wrap">' +
+      r.tags.map(function(t) { return '<span class="sbadge" style="background:transparent;border:1px solid var(--border)">' + x(t) + '</span>'; }).join('') +
+      '</div>' : '');
+  document.getElementById('results-overlay').classList.add('open');
+}
+
+// cmdkToggleFavorite calls POST /api/search/favorite for r, mutates
+// r.favorited in place on success (r is a reference into whichever array
+// it came from -- cmdkSearchResults or cmdkRecents inside openCmdk()'s
+// closure -- so that array reflects the new state on the next render),
+// then invokes onDone to trigger a repaint. Fails soft: a network error
+// leaves r.favorited untouched but still calls onDone so the UI never hangs.
+function cmdkToggleFavorite(r, onDone) {
+  apicall('/api/search/favorite', {
+    method: 'POST',
+    body: JSON.stringify({ docType: r.docType, sourceId: r.sourceId })
+  }).then(function(res) {
+    r.favorited = !!(res && res.favorited);
+    onDone();
+  }).catch(function() { onDone(); });
+}
+
 function openCmdk() {
   if (_cmdkOpen || !ROLE) return;
   _cmdkOpen = true;
@@ -11711,30 +11892,121 @@ function openCmdk() {
   document.body.appendChild(wrap);
   var input = wrap.querySelector('#cmdk-input');
   var list = wrap.querySelector('#cmdk-list');
-  var flat = [], active = 0;
+  var flat = [], active = 0, currentQ = '';
+
+  // Search state: cmdkSearchResults holds the last successful response
+  // (kept across in-flight requests so results don't flicker to empty
+  // while typing), null means the last request failed, [] means empty
+  // query or genuinely no matches. cmdkSearchToken discards responses to
+  // requests a newer keystroke has already superseded.
+  var cmdkSearchResults = [];
+  var cmdkSearchToken = 0;
+  var cmdkSearchTimer = null;
+  function cmdkSearch(q, onDone) {
+    clearTimeout(cmdkSearchTimer);
+    if (!q) { cmdkSearchResults = []; onDone(); return; }
+    cmdkSearchTimer = setTimeout(function() {
+      var token = ++cmdkSearchToken;
+      apicall('/api/search?q=' + encodeURIComponent(q) + '&limit=20')
+        .then(function(results) {
+          if (token !== cmdkSearchToken) return;
+          cmdkSearchResults = Array.isArray(results) ? results : null;
+          onDone();
+        })
+        .catch(function() {
+          if (token !== cmdkSearchToken) return;
+          cmdkSearchResults = null;
+          onDone();
+        });
+    }, 150);
+  }
+
+  // cmdkRecents holds the one-shot GET /api/search/recents response,
+  // fetched once when the palette opens (not on every keystroke) and only
+  // ever shown when the input is empty (Global Search Phase 3).
+  var cmdkRecents = [];
+  apicall('/api/search/recents').then(function(r) {
+    cmdkRecents = Array.isArray(r) ? r : [];
+    if (currentQ === '') render(currentQ);
+  }).catch(function() { cmdkRecents = []; });
+
   function selectable() { return flat.map(function(f, i) { return f.sec ? -1 : i; }).filter(function(i) { return i >= 0; }); }
   function paint() {
     var nodes = list.querySelectorAll('[data-ci]');
     Array.prototype.forEach.call(nodes, function(n) { n.classList.toggle('active', +n.dataset.ci === active); });
   }
-  function draw(q) {
-    q = (q || '').toLowerCase(); flat = [];
+
+  function staticFlatFor(q) {
+    var out = [];
     cmds.forEach(function(c) {
       var items = c.items.filter(function(i) { return i.t.toLowerCase().indexOf(q) >= 0; });
-      if (items.length) { flat.push({ sec: c.sec }); items.forEach(function(i) { flat.push(i); }); }
+      if (items.length) { out.push({ sec: c.sec }); items.forEach(function(i) { out.push(i); }); }
     });
+    return out;
+  }
+
+  // recentsFlat only contributes rows when the input is empty -- it's
+  // prepended above the static Navigate/Actions list, which keeps
+  // rendering unchanged from Phase 2 (see render()'s concat order below).
+  function recentsFlat(q) {
+    if (q !== '' || !cmdkRecents.length) return [];
+    var out = [{ sec: 'Recents' }];
+    cmdkRecents.forEach(function(r) {
+      out.push({ t: r.title, docType: r.docType, sourceId: r.sourceId, fav: r.favorited, ref: r, fn: function() { cmdkOpenResult(r); } });
+    });
+    return out;
+  }
+
+  function searchFlat() {
+    var out = [];
+    if (cmdkSearchResults === null) { out.push({ sec: 'Search unavailable' }); return out; }
+    var byType = {};
+    cmdkSearchResults.forEach(function(r) { (byType[r.docType] = byType[r.docType] || []).push(r); });
+    ['scenario', 'run', 'finding', 'actor', 'campaign', 'malware', 'tool', 'technique',
+     'rule', 'compliance_control', 'detection_connector', 'action_connector'].forEach(function(dt) {
+      var items = byType[dt];
+      if (!items || !items.length) return;
+      out.push({ sec: CMDK_SEARCH_LABELS[dt] });
+      items.forEach(function(r) { out.push({ t: r.title, docType: r.docType, sourceId: r.sourceId, fav: r.favorited, ref: r, fn: function() { cmdkOpenResult(r); } }); });
+    });
+    return out;
+  }
+
+  function render(q) {
+    flat = recentsFlat(q).concat(staticFlatFor(q)).concat(searchFlat());
     var sel = selectable(); active = sel.length ? sel[0] : 0;
     if (!flat.length) { list.innerHTML = '<div class="cmdk-empty">No matches</div>'; return; }
     list.innerHTML = flat.map(function(f, i) {
-      return f.sec ? '<div class="cmdk-sec">' + x(f.sec) + '</div>'
-                   : '<div class="cmdk-item" data-ci="' + i + '">' + x(f.t) + '</div>';
+      if (f.sec) return '<div class="cmdk-sec">' + x(f.sec) + '</div>';
+      // f.docType is only set for search-result/recents rows (Phase 3) --
+      // static Navigate/Actions rows never get the star affordance.
+      var star = f.docType
+        ? '<span data-fav-ci="' + i + '" style="cursor:pointer;margin-right:0.5rem;color:' + (f.fav ? 'var(--warning)' : 'var(--muted)') + '">★</span>'
+        : '';
+      return '<div class="cmdk-item" data-ci="' + i + '">' + star + x(f.t) + '</div>';
     }).join('');
     Array.prototype.forEach.call(list.querySelectorAll('[data-ci]'), function(node) {
       node.onmousemove = function() { active = +node.dataset.ci; paint(); };
       node.onclick = function() { run(+node.dataset.ci); };
     });
+    Array.prototype.forEach.call(list.querySelectorAll('[data-fav-ci]'), function(node) {
+      node.onclick = function(e) {
+        e.stopPropagation(); // don't also trigger the parent row's onclick (navigation)
+        var it = flat[+node.dataset.favCi];
+        if (!it || !it.ref) return;
+        cmdkToggleFavorite(it.ref, function() { render(currentQ); });
+      };
+    });
     paint();
   }
+
+  function draw(q) {
+    q = (q || '').toLowerCase();
+    currentQ = q;
+    render(q);
+    cmdkSearch(input.value, function() { render(q); });
+  }
+
   function move(dir) {
     var sel = selectable(); if (!sel.length) return;
     var pos = sel.indexOf(active); if (pos < 0) pos = 0;
@@ -13492,6 +13764,7 @@ function loadVariantTab() {
   loadVariantCoverage();
   populateVexAgents();
   populateVexTechniques();
+  startVexSweepPolling();
 }
 
 // _vexAvailableVariants caches the server-computed real variant total (ART
@@ -13586,9 +13859,6 @@ function _updateSweepVariantCount(availableVariants) {
   if (el && availableVariants) el.textContent = availableVariants.toLocaleString() + '+ variants';
 }
 
-var _vexSweepRunning = false;
-var _vexSweepStartedAt = null; // Date the current/last sweep started, or null if none run yet this session
-
 // _vexFormatDuration renders a millisecond duration as e.g. "2m 14s" or "1h 05m 30s".
 function _vexFormatDuration(ms) {
   var totalSec = Math.max(0, Math.round(ms / 1000));
@@ -13600,121 +13870,140 @@ function _vexFormatDuration(ms) {
   return s + 's';
 }
 
-// _vexRenderSweepTiming updates the "Started ... / Elapsed .../ Completed ..." line.
-// endLabel is null while the sweep is still running (shows a live elapsed time),
-// or 'Completed'/'Stopped' once it reaches a terminal state (freezes the duration).
-function _vexRenderSweepTiming(endLabel) {
-  var el = document.getElementById('vex-sweep-timing');
-  if (!el || !_vexSweepStartedAt) return;
-  var startTxt = _vexSweepStartedAt.toLocaleTimeString();
-  if (!endLabel) {
-    el.textContent = 'Started ' + startTxt + ' · Elapsed ' + _vexFormatDuration(Date.now() - _vexSweepStartedAt.getTime());
-    return;
-  }
-  var endedAt = new Date();
-  el.textContent = 'Started ' + startTxt + ' · ' + endLabel + ' ' + endedAt.toLocaleTimeString() +
-    ' (' + _vexFormatDuration(endedAt.getTime() - _vexSweepStartedAt.getTime()) + ')';
+
+var _vexSweepPollTimer = null;
+var _vexKnownRunningSweepIds = []; // sweep IDs seen in the previous tick, for completion-diffing
+
+// startVexSweepPolling begins the 3s poll loop against the server-owned
+// sweep API. Idempotent -- safe to call more than once (e.g. if
+// loadVariantTab() runs again after a tab re-visit).
+function startVexSweepPolling() {
+  if (_vexSweepPollTimer) return;
+  pollVexSweeps();
+  _vexSweepPollTimer = setInterval(pollVexSweeps, 3000);
 }
 
-function vexRunFullSweep() {
-  if (_vexSweepRunning) { showToast('Sweep already in progress', 'err'); return; }
-  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
-  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
-  if (!_vexAllTechniques.length) { showToast('Technique list still loading — wait a moment', 'err'); return; }
-  var n = _vexAllTechniques.length;
-  var mode = (document.getElementById('vex-sweep-mode') || {}).value || 'sequential';
-  var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
-  // Quote the same real, server-computed total shown in the "Total Variants"
-  // stat card (loadVariantStats) rather than a separate rough estimate — the
-  // two used to disagree (e.g. ~10k here vs ~27k above) because this dialog
-  // computed its own guess independently of the actual variant count.
-  var variantTotal = _vexAvailableVariants || (n * 33);
-  if (!confirm('Start Full Variant Sweep:\n\n  ' + n + ' techniques dispatched sequentially\n  ~' + variantTotal.toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
+function pollVexSweeps() {
+  apicall('/api/vex/sweeps?status=running').then(function(sweeps) {
+    sweeps = sweeps || [];
+    var currentIds = sweeps.map(function(s) { return s.id; });
 
-  var techniques = _vexAllTechniques.map(function(t) { return t.id; });
-  _vexAbortRequested = false; _vexActiveScenarioRunId = null;
-  _vexSweepRunning = true;
-  _vexSweepStartedAt = new Date();
-  var btn = document.getElementById('vex-sweep-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Sweeping…'; }
-  var prog = document.getElementById('vex-sweep-progress');
-  if (prog) prog.style.display = 'block';
-  var stopBtn = document.getElementById('vex-sweep-stop-btn');
-  if (stopBtn) stopBtn.style.display = '';
-  _vexRenderSweepTiming(null);
-  _vexSweepQueue(agentId, techniques, mode, advanced, 0);
+    // Completion detection: any previously-tracked ID missing from this
+    // tick's list just finished (completed/stopped/failed) -- fetch its
+    // final state once for the toast, since the running-list endpoint no
+    // longer includes it.
+    _vexKnownRunningSweepIds.forEach(function(id) {
+      if (currentIds.indexOf(id) === -1) reportVexSweepFinished(id);
+    });
+    _vexKnownRunningSweepIds = currentIds;
+
+    renderVexSweepList(sweeps);
+  }).catch(function() {});
 }
 
-function _vexSweepQueue(agentId, techniques, mode, advanced, idx) {
-  var n = techniques.length;
-  var btn = document.getElementById('vex-sweep-btn');
-  var statusEl = document.getElementById('vex-sweep-status');
-  var pctEl = document.getElementById('vex-sweep-pct');
-  var barEl = document.getElementById('vex-sweep-bar');
-
-  if (_vexAbortRequested || idx >= n) {
-    _vexSweepRunning = false;
-    if (btn) { btn.disabled = false; btn.textContent = '▶ Start Sweep'; }
-    var stopBtnEl = document.getElementById('vex-sweep-stop-btn');
-    if (stopBtnEl) stopBtnEl.style.display = 'none';
-    // Progress panel stays visible (not hidden) after a sweep ends, so the
-    // start/end timestamps remain on screen until the next sweep begins —
-    // previously this block hid the whole panel immediately, discarding any
-    // record of when the sweep ran the moment the toast faded.
-    if (_vexAbortRequested) {
-      if (statusEl) statusEl.textContent = 'Sweep stopped';
-      _vexRenderSweepTiming('Stopped');
-      showToast('Sweep stopped', 'warn');
-    } else {
-      if (statusEl) statusEl.textContent = 'Sweep complete — ' + n + ' techniques tested';
-      if (pctEl) pctEl.textContent = '100%';
-      if (barEl) barEl.style.width = '100%';
-      _vexRenderSweepTiming('Completed');
-      showToast('Full sweep complete — ' + n + ' techniques', 'ok');
+function reportVexSweepFinished(sweepId) {
+  apicall('/api/vex/sweeps/' + sweepId).then(function(sw) {
+    if (sw.status === 'completed') {
+      showToast('Full sweep complete — ' + sw.totalTechniques + ' techniques (' + sw.agentId + ')', 'ok');
       loadVariantStats();
       loadVariantCoverage();
+    } else if (sw.status === 'stopped') {
+      showToast('Sweep stopped (' + sw.agentId + ')', 'warn');
+    } else if (sw.status === 'failed') {
+      showToast('Sweep failed on ' + sw.agentId + ': ' + (sw.error || 'unknown error'), 'err');
     }
-    return;
-  }
+  }).catch(function() {});
+}
 
-  var pct = Math.round((idx / n) * 100);
-  var tid = techniques[idx];
-  if (statusEl) statusEl.textContent = 'Running ' + x(tid) + ' (' + (idx + 1) + ' / ' + n + ')';
-  if (pctEl) pctEl.textContent = pct + '%';
-  if (barEl) barEl.style.width = pct + '%';
-  if (btn) btn.textContent = (idx + 1) + '/' + n + ' Sweeping…';
-  _vexRenderSweepTiming(null);
+function renderVexSweepList(sweeps) {
+  var el = document.getElementById('vex-sweep-list');
+  if (!el) return;
+  if (!sweeps.length) { el.innerHTML = ''; return; }
 
-  apicall('/api/variants/run', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
-  }).then(function(resp) {
-    _vexActiveScenarioRunId = resp.scenarioRunId;
-    // Poll until this technique's variant run completes, then continue.
-    _vexSweepPollAndNext(resp.variantRunId, agentId, techniques, mode, advanced, idx);
-  }).catch(function(e) {
-    // Dispatch failed — log and continue to next technique.
-    if (statusEl) statusEl.textContent = 'Error on ' + x(tid) + ': ' + (e.message || 'failed') + ' — continuing…';
-    setTimeout(function() { _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1); }, 1500);
+  el.innerHTML = sweeps.map(function(sw) {
+    var pct = sw.totalVariants > 0 ? Math.round((sw.completedVariants / sw.totalVariants) * 100) : 0;
+    return '<div class="card" style="margin-top:0.5rem;padding:0.75rem 1rem" id="vex-sweep-card-' + x(sw.id) + '">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;margin-bottom:0.3rem">' +
+        '<span style="font-weight:600">' + x(sw.agentId) + '</span>' +
+        '<span style="display:flex;align-items:center;gap:0.6rem">' +
+          '<span style="font-weight:700;color:var(--accent)">' + pct + '%</span>' +
+          '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:0.7rem" onclick="stopVexSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>' +
+        '</span>' +
+      '</div>' +
+      '<div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
+        '<div style="height:5px;background:var(--accent);border-radius:3px;width:' + pct + '%;transition:width 0.5s ease"></div>' +
+      '</div>' +
+      '<div class="tiny muted" style="margin-top:0.35rem">Technique ' + (sw.currentIndex + 1) + '/' + sw.totalTechniques + ': ' + x(sw.currentTechnique) + '</div>' +
+      '<div class="tiny muted" id="vex-sweep-variant-' + x(sw.id) + '">Loading current variant…</div>' +
+    '</div>';
+  }).join('');
+
+  sweeps.forEach(function(sw) {
+    if (sw.currentVariantRunId) loadVexSweepVariantDetail(sw.id, sw.currentVariantRunId);
   });
 }
 
-function _vexSweepPollAndNext(vrId, agentId, techniques, mode, advanced, idx) {
-  if (_vexActivePoll) clearInterval(_vexActivePoll);
-  _vexActivePoll = setInterval(function() {
-    if (_vexAbortRequested) { clearInterval(_vexActivePoll); _vexActivePoll = null; return; }
-    apicall('/api/variants/run/' + vrId).then(function(detail) {
-      var s = detail.run && detail.run.status;
-      if (s === 'completed' || s === 'failed' || s === 'partial') {
-        clearInterval(_vexActivePoll); _vexActivePoll = null;
-        _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
-      }
-    }).catch(function() {
-      clearInterval(_vexActivePoll); _vexActivePoll = null;
-      _vexSweepQueue(agentId, techniques, mode, advanced, idx + 1);
-    });
-  }, 3000);
+// loadVexSweepVariantDetail fetches the current technique's own variant
+// run (the same endpoint the ad-hoc single-run view already polls) purely
+// to derive "variant N/M: <what's running>" -- the sweep-list endpoint
+// itself only tracks per-technique progress, not per-variant.
+function loadVexSweepVariantDetail(sweepId, variantRunId) {
+  apicall('/api/variants/run/' + variantRunId).then(function(detail) {
+    var el = document.getElementById('vex-sweep-variant-' + sweepId);
+    if (!el) return; // card was removed by a later tick before this resolved
+    var results = detail.results || [];
+    var doneCount = results.filter(function(r) { return r.verdict !== 'PENDING'; }).length;
+    var current = results[doneCount]; // next un-run entry, in dispatch order
+    if (current) {
+      el.textContent = 'Variant ' + (doneCount + 1) + '/' + results.length + ': ' +
+        current.encoding + ' / ' + current.execContext + ' / ' + current.evasion;
+    } else {
+      el.textContent = 'Variant ' + results.length + '/' + results.length + ' — finishing…';
+    }
+  }).catch(function() {});
+}
+
+function vexRunFullSweep() {
+  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
+  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
+  var mode = (document.getElementById('vex-sweep-mode') || {}).value || 'sequential';
+  var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
+  // n/variantTotal are a pre-flight estimate only (from the ad-hoc picker's
+  // already-loaded technique list) -- the server independently and
+  // authoritatively resolves the real technique list and count at creation
+  // time; that's what actually gets dispatched.
+  var n = _vexAllTechniques.length;
+  var variantTotal = _vexAvailableVariants || (n * 33);
+  if (!confirm('Start Full Variant Sweep:\n\n  ~' + n + ' techniques dispatched sequentially\n  ~' + variantTotal.toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
+
+  apicall('/api/vex/sweeps', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId: agentId, mode: mode, includeAdvanced: advanced })
+  }).then(function() {
+    pollVexSweeps(); // render the new sweep immediately instead of waiting up to 3s for the next tick
+  }).catch(function(e) {
+    showToast(e.message || 'Failed to start sweep', 'err');
+  });
+}
+
+function stopVexSweep(sweepId) {
+  if (!confirm('Stop this sweep? The current technique finishes or is cancelled; no further techniques will be dispatched.')) return;
+  apicall('/api/vex/sweeps/' + sweepId + '/cancel', { method: 'POST' })
+    .then(function() { pollVexSweeps(); })
+    .catch(function(e) { showToast(e.message || 'Failed to stop sweep', 'err'); });
+}
+
+function _vexCheckAgentSweepConflict() {
+  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
+  var hint = document.getElementById('vex-sweep-agent-hint');
+  if (!hint) return;
+  if (!agentId) { hint.textContent = ''; return; }
+  apicall('/api/vex/sweeps/active?agentId=' + encodeURIComponent(agentId)).then(function() {
+    hint.textContent = 'This agent already has a sweep running.';
+  }).catch(function() {
+    hint.textContent = ''; // 404 (no active sweep) is the expected non-error case here
+  });
 }
 
 function filterVexTechniques() {
@@ -13890,13 +14179,12 @@ function pollVariantRun(vrId) {
   }, 3000);
 }
 
+// stopVex() cancels the single ad-hoc variant run in progress (the
+// vex-run-btn / vex-result-panel flow). The Full Sweep panel has its own
+// independent stopVexSweep(sweepId), which calls the server-owned sweep
+// cancel endpoint directly -- the two flows no longer share any state or
+// UI, since the sweep no longer runs its own client-side polling loop.
 function stopVex() {
-  // stopVex() is shared by the single-run "Stop" button and the Full Sweep
-  // panel's Stop button — the sweep's own polling loop (_vexSweepPollAndNext)
-  // clears itself and never calls back into _vexSweepQueue once stopped, so
-  // the "sweep stopped" UI/timing update has to happen directly here, not in
-  // _vexSweepQueue's abort branch (which only fires on a narrow race window).
-  var wasSweeping = _vexSweepRunning;
   _vexAbortRequested = true;
   if (_vexActivePoll) { clearInterval(_vexActivePoll); _vexActivePoll = null; }
   clearInterval(_vexRunPoll); _vexRunPoll = null;
@@ -13905,25 +14193,7 @@ function stopVex() {
   }
   var btn = document.getElementById('vex-run-btn');
   if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
-  _vexSweepRunning = false;
-  var sweepBtn = document.getElementById('vex-sweep-btn');
-  if (sweepBtn) { sweepBtn.disabled = false; sweepBtn.textContent = '▶ Start Sweep'; }
-  var stopBtnEl = document.getElementById('vex-sweep-stop-btn');
-  if (stopBtnEl) stopBtnEl.style.display = 'none';
 
-  if (wasSweeping) {
-    // Keep the progress panel visible (with the final status/timing) instead
-    // of hiding it — matches the "sweep complete" path, so the operator can
-    // still see when the sweep started/stopped after the toast fades.
-    var statusEl = document.getElementById('vex-sweep-status');
-    if (statusEl) statusEl.textContent = 'Sweep stopped';
-    _vexRenderSweepTiming('Stopped');
-    showToast('Sweep stopped', 'warn');
-    return;
-  }
-
-  var prog = document.getElementById('vex-sweep-progress');
-  if (prog) prog.style.display = 'none';
   var panel = document.getElementById('vex-result-panel');
   if (panel) panel.innerHTML = '<div class="card" style="padding:1.25rem;color:var(--warning);text-align:center">&#9632; Variant run stopped</div>';
   showToast('Variant run stopped', 'warn');
