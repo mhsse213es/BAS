@@ -37,6 +37,7 @@ import (
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
 	"github.com/audspect/bas/internal/verifysync"
+	"github.com/audspect/bas/internal/vexsweep"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -366,6 +367,18 @@ func main() {
 		}
 	}
 
+	// Full Variant Sweep — server-owned orchestration (survives reloads/
+	// browser crashes). Ticks every 5s, matching the Exercise engine's own
+	// cadence, since variant runs take real wall-clock time (agent
+	// execution + result submission) -- no need for tighter polling.
+	vexSweepStore := vexsweep.NewStore(pool)
+	vexSweepScheduler := exercise.NewPollScheduler(5 * time.Second)
+	vexSweepDispatcher := vexsweep.NewDispatcher(vexSweepStore, func(ctx context.Context, variantRunID string) (string, error) {
+		var status string
+		err := pool.QueryRow(ctx, `SELECT status FROM variant_runs WHERE id = $1`, variantRunID).Scan(&status)
+		return status, err
+	})
+
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
@@ -384,7 +397,16 @@ func main() {
 		WithVerificationStore(verificationStore).
 		WithRelationshipStore(relationshipStore).
 		WithRuleLibrary(rulesEngine).
+		WithVexSweep(vexSweepStore, vexSweepDispatcher).
 		WithIOCProvider(iocProvider)
+
+	vexSweepScheduler.Start(func(ctx context.Context) {
+		if err := vexSweepDispatcher.Tick(ctx); err != nil {
+			log.Printf("[vexsweep] tick: %v", err)
+		}
+	})
+	defer vexSweepScheduler.Stop()
+
 	rateLimitPerMin := 0
 	if cfg.RateLimitEnabled {
 		rateLimitPerMin = cfg.RateLimitPerMin

@@ -33,7 +33,7 @@ func TestDispatchVariantForSweep_NoARTStoreReturnsError(t *testing.T) {
 
 func TestHandler_WithVexSweep_StoresReference(t *testing.T) {
 	store := vexsweep.NewStore(nil)
-	h := New(nil, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store)
+	h := New(nil, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store, testVexSweepDispatcher(store))
 	if h.vexSweep != store {
 		t.Fatal("WithVexSweep did not store the given *vexsweep.Store on the Handler")
 	}
@@ -53,7 +53,7 @@ func TestRunVariants_RejectsWhenAgentHasRunningSweep(t *testing.T) {
 			t.Fatalf("Create sweep: %v", err)
 		}
 
-		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store, testVexSweepDispatcher(store))
 		userID := seedUser(t, pool, "adhoc-blocked-user", "password123", "admin", true)
 		body, _ := json.Marshal(map[string]string{"agentId": "agent-blocks-adhoc", "techniqueId": "T1059.003"})
 		req := authedRequest(t, http.MethodPost, "/api/variants/run", bytes.NewReader(body), auth.RoleAdmin, userID)

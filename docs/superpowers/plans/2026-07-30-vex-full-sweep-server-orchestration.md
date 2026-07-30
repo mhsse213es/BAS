@@ -886,12 +886,23 @@ In `orchestrator/internal/api/handlers.go`, add `"github.com/audspect/bas/intern
 Immediately after the existing `WithRuleLibrary` method (around line 244, right after its closing `}`), add:
 
 ```go
-// WithVexSweep attaches the Full Variant Sweep store.
-func (h *Handler) WithVexSweep(store *vexsweep.Store) *Handler {
+// WithVexSweep attaches the Full Variant Sweep store and wires the
+// Dispatcher's DispatchFn to dispatchVariantForSweep -- matches the same
+// wire-the-callback-inside-the-api-package pattern WithExercise already
+// uses for exercise.Executor.SetDispatch (handlers.go:216), since
+// dispatchVariantForSweep is unexported and main.go (a different package)
+// cannot reference it directly. This was caught during Task 6 implementation
+// (a real compile error: "cannot refer to unexported method") and fixed by
+// giving WithVexSweep this second parameter from the start, rather than
+// exporting dispatchVariantForSweep.
+func (h *Handler) WithVexSweep(store *vexsweep.Store, dispatcher *vexsweep.Dispatcher) *Handler {
 	h.vexSweep = store
+	dispatcher.SetDispatch(h.dispatchVariantForSweep)
 	return h
 }
 ```
+
+Every call site in this plan that constructs a `Handler` with `WithVexSweep` (Tasks 3-6's test code and `main.go`'s production wiring) takes this same second `*vexsweep.Dispatcher` argument. Test files that don't need a working dispatcher (they exercise HTTP handlers directly, never ticking it) can build a throwaway one: `vexsweep.NewDispatcher(store, func(ctx context.Context, id string) (string, error) { return "running", nil })`.
 
 - [ ] **Step 5: Add `dispatchVariantForSweep`**
 
@@ -1572,17 +1583,16 @@ In `orchestrator/cmd/server/main.go`, add `"github.com/audspect/bas/internal/vex
 Immediately after the existing `.WithRuleLibrary(rulesEngine).` line (line 386) in the `handler := api.New(...)` chain, add:
 
 ```go
-		WithVexSweep(vexSweepStore).
+		WithVexSweep(vexSweepStore, vexSweepDispatcher).
 ```
 
-(Keep it before the final `.WithIOCProvider(iocProvider)` line, which has no trailing `.` — match the existing chain's formatting exactly.)
+(Keep it before the final `.WithIOCProvider(iocProvider)` line, which has no trailing `.` — match the existing chain's formatting exactly. `WithVexSweep` takes both the store and the dispatcher now, per the Task 3 signature fix above — it wires `vexSweepDispatcher.SetDispatch(handler.dispatchVariantForSweep)` internally, so there's no separate `SetDispatch` call to make from `main.go`.)
 
-- [ ] **Step 3: Wire the dispatch callback and start the scheduler**
+- [ ] **Step 3: Start the scheduler**
 
 Immediately after the `handler := api.New(...)....WithIOCProvider(iocProvider)` chain assignment completes (right after line 387), add:
 
 ```go
-	vexSweepDispatcher.SetDispatch(handler.dispatchVariantForSweep)
 	vexSweepScheduler.Start(func(ctx context.Context) {
 		if err := vexSweepDispatcher.Tick(ctx); err != nil {
 			log.Printf("[vexsweep] tick: %v", err)

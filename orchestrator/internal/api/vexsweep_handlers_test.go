@@ -14,6 +14,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// testVexSweepDispatcher builds a throwaway Dispatcher purely to satisfy
+// WithVexSweep's constructor requirement -- these handler tests exercise
+// HTTP endpoints directly and never tick the dispatcher.
+func testVexSweepDispatcher(store *vexsweep.Store) *vexsweep.Dispatcher {
+	return vexsweep.NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+		return "running", nil
+	})
+}
+
 func TestCreateVexSweep_RejectsWhenNoARTStoreLoaded(t *testing.T) {
 	// No WithART/WithContentSeed called -- artStore is nil, so the handler
 	// cannot resolve a technique list and must fail cleanly, not panic.
@@ -21,7 +30,7 @@ func TestCreateVexSweep_RejectsWhenNoARTStoreLoaded(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool))
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool), testVexSweepDispatcher(vexsweep.NewStore(pool)))
 		userID := seedUser(t, pool, "sweep-create-user", "password123", "admin", true)
 		body, _ := json.Marshal(map[string]string{"agentId": "agent-1", "mode": "sequential"})
 		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
@@ -61,7 +70,7 @@ func TestCreateVexSweep_RejectsWhenAgentHasRunningVariantRun(t *testing.T) {
 			t.Fatalf("NewARTStoreFromDB: %v", err)
 		}
 
-		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool)).WithART(artStore)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool), testVexSweepDispatcher(vexsweep.NewStore(pool))).WithART(artStore)
 		userID := seedUser(t, pool, "sweep-conflict-user", "password123", "admin", true)
 		body, _ := json.Marshal(map[string]string{"agentId": "agent-conflict", "mode": "sequential"})
 		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
@@ -77,7 +86,7 @@ func TestGetActiveVexSweep_404WhenNoneRunning(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool))
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(vexsweep.NewStore(pool), testVexSweepDispatcher(vexsweep.NewStore(pool)))
 		userID := seedUser(t, pool, "sweep-active-user", "password123", "viewer", true)
 		req := authedRequest(t, http.MethodGet, "/api/vex/sweeps/active?agentId=agent-no-sweep", nil, auth.RoleViewer, userID)
 		rec := callAuthed(h.GetActiveVexSweep, req)
@@ -116,7 +125,7 @@ func TestGetActiveVexSweep_ReturnsRunningSweepWithLiveCompletedVariants(t *testi
 			t.Fatalf("seed scenario_runs: %v", err)
 		}
 
-		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store, testVexSweepDispatcher(store))
 		userID := seedUser(t, pool, "sweep-live-user", "password123", "viewer", true)
 		req := authedRequest(t, http.MethodGet, "/api/vex/sweeps/active?agentId=agent-live-progress", nil, auth.RoleViewer, userID)
 		rec := callAuthed(h.GetActiveVexSweep, req)
@@ -163,7 +172,7 @@ func TestCancelVexSweep_StopsSweepAndCancelsCurrentRun(t *testing.T) {
 			t.Fatalf("seed scenario_runs: %v", err)
 		}
 
-		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store, testVexSweepDispatcher(store))
 		userID := seedUser(t, pool, "sweep-cancel-user", "password123", "admin", true)
 		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps/"+sw.ID+"/cancel", nil, auth.RoleAdmin, userID)
 		req = withURLParam(req, "id", sw.ID)

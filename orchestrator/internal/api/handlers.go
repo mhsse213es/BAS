@@ -245,9 +245,14 @@ func (h *Handler) WithRuleLibrary(e *rulelib.Engine) *Handler {
 	return h
 }
 
-// WithVexSweep attaches the Full Variant Sweep store.
-func (h *Handler) WithVexSweep(store *vexsweep.Store) *Handler {
+// WithVexSweep attaches the Full Variant Sweep store and wires the
+// Dispatcher's DispatchFn to dispatchVariantForSweep -- matches the same
+// wire-the-callback-inside-the-api-package pattern WithExercise already
+// uses for exercise.Executor.SetDispatch, since dispatchVariantForSweep is
+// unexported and main.go (a different package) can't reference it directly.
+func (h *Handler) WithVexSweep(store *vexsweep.Store, dispatcher *vexsweep.Dispatcher) *Handler {
 	h.vexSweep = store
+	dispatcher.SetDispatch(h.dispatchVariantForSweep)
 	return h
 }
 
