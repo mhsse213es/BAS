@@ -1814,6 +1814,7 @@ body.theme-slate {
             <a class="sset" data-set="art" onclick="showSettingsSection('art')">ART content</a>
             <a class="sset" data-set="audit" onclick="showSettingsSection('audit')">Audit logs</a>
             <a class="sset" data-set="theme" onclick="showSettingsSection('theme')">Theme &amp; display</a>
+            <a class="sset" data-set="dashprefs" onclick="showSettingsSection('dashprefs')">Dashboard</a>
             <a class="sset" data-set="license" onclick="showSettingsSection('license')">License</a>
           </div>
           <div class="settings-body">
@@ -2130,6 +2131,28 @@ body.theme-slate {
                   </div>
                 </div>
                 <div class="theme-name">Slate Minimal</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dashboard Preferences -->
+          <div id="set-dashprefs" class="set-section" style="display:none">
+            <div class="sec-hdr">
+              <h2>Dashboard Preferences</h2>
+            </div>
+            <div style="color:var(--muted);font-size:0.8rem;margin-bottom:1.5rem">Choose which view the Dashboard tab opens to. Saved locally in your browser.</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:1rem">
+              <div class="theme-card" onclick="selectDashPref('operational')" id="dashpref-card-operational">
+                <div class="theme-name">Operational</div>
+                <div style="color:var(--muted);font-size:0.72rem;text-align:center;margin-top:0.3rem">Always land on the Operational view</div>
+              </div>
+              <div class="theme-card" onclick="selectDashPref('executive')" id="dashpref-card-executive">
+                <div class="theme-name">Executive</div>
+                <div style="color:var(--muted);font-size:0.72rem;text-align:center;margin-top:0.3rem">Always land on the Executive view</div>
+              </div>
+              <div class="theme-card" onclick="selectDashPref('last')" id="dashpref-card-last">
+                <div class="theme-name">Last used</div>
+                <div style="color:var(--muted);font-size:0.72rem;text-align:center;margin-top:0.3rem">Remember whichever view I had open last</div>
               </div>
             </div>
           </div>
@@ -4153,7 +4176,8 @@ function activateTab(name) {
 var DASH_VIEW = 'operational';
 
 function resolveDashView() {
-  return localStorage.getItem('bas_last_dash_view') || 'operational';
+  var pref = localStorage.getItem('bas_dash_pref') || 'operational';
+  return pref === 'last' ? (localStorage.getItem('bas_last_dash_view') || 'operational') : pref;
 }
 
 function setDashView(view) {
@@ -5858,7 +5882,7 @@ var SETTINGS_SECTION = 'users';
 // Settings sub-section switcher — toggles the body panels + lazily loads each.
 function showSettingsSection(name) {
   SETTINGS_SECTION = name;
-  ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'license'].forEach(function(s) {
+  ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'dashprefs', 'license'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
     if (el) el.style.display = s === name ? '' : 'none';
     var nav = document.querySelector('[data-set="' + s + '"]');
@@ -5870,6 +5894,20 @@ function showSettingsSection(name) {
   else if (name === 'art') loadARTContentStatus();
   else if (name === 'audit') loadAuditLogs();
   else if (name === 'license') loadLicenseInfo();
+  else if (name === 'dashprefs') syncDashPrefCards();
+}
+
+function selectDashPref(pref) {
+  localStorage.setItem('bas_dash_pref', pref);
+  syncDashPrefCards();
+}
+
+function syncDashPrefCards() {
+  var pref = localStorage.getItem('bas_dash_pref') || 'operational';
+  ['operational', 'executive', 'last'].forEach(function(p) {
+    var el = document.getElementById('dashpref-card-' + p);
+    if (el) el.classList.toggle('active', p === pref);
+  });
 }
 
 function selectTheme(themeName) {
