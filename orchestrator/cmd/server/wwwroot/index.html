@@ -3263,9 +3263,10 @@ body.theme-slate {
               <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> ART techniques sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
             </div>
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
-              <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px">
+              <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px" onchange="_vexCheckAgentSweepConflict()">
                 <option value="">Select agent…</option>
               </select>
+              <span id="vex-sweep-agent-hint" class="tiny" style="color:var(--warning)"></span>
               <select id="vex-sweep-mode" class="btn btn-outline" style="font-size:0.8rem">
                 <option value="sequential">All variants</option>
                 <option value="adaptive">Adaptive (stop on bypass)</option>
@@ -3276,19 +3277,7 @@ body.theme-slate {
               <button id="vex-sweep-btn" class="btn btn-primary" onclick="vexRunFullSweep()" style="white-space:nowrap">▶ Start Sweep</button>
             </div>
           </div>
-          <div id="vex-sweep-progress" style="display:none;margin-top:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;font-size:0.78rem">
-              <span id="vex-sweep-status" style="color:var(--muted)"></span>
-              <span style="display:flex;align-items:center;gap:0.6rem">
-                <span id="vex-sweep-pct" style="font-weight:700;color:var(--accent)"></span>
-                <button id="vex-sweep-stop-btn" class="btn btn-outline btn-sm" style="display:none;color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:0.7rem" onclick="stopVex()">&#9632; Stop</button>
-              </span>
-            </div>
-            <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-              <div id="vex-sweep-bar" style="height:5px;background:var(--accent);border-radius:3px;width:0%;transition:width 0.5s ease"></div>
-            </div>
-            <div id="vex-sweep-timing" class="tiny muted" style="margin-top:0.4rem"></div>
-          </div>
+          <div id="vex-sweep-list" style="margin-top:0.75rem"></div>
         </div>
 
         <!-- Run form + result side-by-side -->
