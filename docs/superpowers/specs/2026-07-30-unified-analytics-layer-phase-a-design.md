@@ -18,7 +18,7 @@ This sub-project covers 4 of the 7 categories, confirmed by investigation to be 
 - **No changes to the campaign detail endpoint** (`GET /api/campaigns/{id}/summary`, `CampaignSummary` handler) or its richer per-agent `childRunOut` response shape (`internal/api/campaign_handlers.go:145-151`). Only the fleet-*list* endpoint (`GET /api/campaigns`, `ListCampaigns`) gets refactored to call the new canonical function — the detail view's existing `loadCampaign`/`loadChildren`/`summaryFor` machinery is untouched, since it serves a different, richer purpose this sub-project doesn't need to touch.
 - **No new database tables, columns, or migrations.** Every category here reads data that's already persisted (`scenario_runs`, `compliance_snapshots`, `campaigns`, `findings`, `attackpath_collections`, `attackpath_asset_tags`, `agents`) through queries that already exist in some form.
 - **No behavior change to `dashboard.Compute()`'s output.** Refactoring it to call the new `internal/analytics` functions instead of owning the logic inline must produce byte-identical `Snapshot` values for the same DB state — this is a pure extraction, not a recalculation. Verified by keeping `dashboard`'s existing tests green (or adding one if none exist) before and after the refactor.
-- **No merging of Exposure's 3 concepts into one number.** `AssetExposureSummary`, `AssetCriticalitySummary`, and `FindingExposureWindows` stay 3 separately named, separately callable results — this sub-project's whole point for Exposure is disambiguating them, not re-collapsing them.
+- **No merging of Exposure's distinct concepts into one number.** `AssetExposureSummary` and `FindingExposureWindows` stay separately named, separately callable results — this sub-project's whole point for Exposure is disambiguating what "exposure" means, not re-collapsing it. (Investigated further while grounding the plan: `exposure.CriticalityRisk` turned out to already be fully wired into `exposure.Build()` itself — every `AssetSummary.CriticalityRisk` field is already that computation's output, already served live by Operational's `GetExposureAssets` today. So there is no separate "asset criticality" accessor to build here; it was never actually a 3rd un-unified concept, just a field inside the already-unified asset summary. Corrected below.)
 
 ## Architecture
 
@@ -104,24 +104,21 @@ func (fe *FleetExposure) Correlation() pathcorrelation.AttackPathCorrelation
 
 // AssetExposureSummary is the cheap accessor: fleet average (same
 // total/len(summaries) arithmetic dashboard.Compute already does) plus the
-// full per-asset list Operational's GetExposureAssets already serves live
-// today via the same exposure.Build call -- unified, not new.
+// full per-asset list -- exposure.AssetGraph.Summaries()'s own
+// []AssetSummary, unchanged, which Operational's GetExposureAssets already
+// serves live today via the same exposure.Build call. Each AssetSummary
+// already carries both ExposureScore and CriticalityRisk
+// (internal/exposure/types.go:124,131) -- CriticalityRisk is computed
+// inside exposure.Build itself (build.go:175-183) and stored in
+// profile.Scores.CriticalityRisk, surfaced via Summaries(). There is no
+// separate "asset criticality" accessor to add here: it was never actually
+// a distinct un-unified concept, just a field on the already-unified asset
+// summary.
 func (fe *FleetExposure) AssetExposureSummary() ExposureSummary
 
 type ExposureSummary struct {
-	FleetAvgScore int                             `json:"fleetAvgScore"`
-	Assets        []exposure.AssetExposureProfile `json:"assets"`
-}
-
-// AssetCriticalitySummary is the second cheap accessor: exposure.CriticalityRisk
-// applied per-asset, assembling each asset's AssetCriticalityInputs from its
-// AssetTag (already loaded during BuildFleetExposure) and its own
-// AssetExposureProfile.ThreatIntel (already computed, not re-derived).
-func (fe *FleetExposure) AssetCriticalitySummary() []CriticalityResult
-
-type CriticalityResult struct {
-	AssetID string `json:"assetId"`
-	Score   int    `json:"score"` // exposure.CriticalityRisk's 0-100 output
+	FleetAvgScore int                    `json:"fleetAvgScore"`
+	Assets        []exposure.AssetSummary `json:"assets"`
 }
 
 // FindingExposureWindows is unrelated to the graph/asset-based exposure
@@ -198,5 +195,5 @@ This is a net *reduction* in `internal/dashboard/snapshot.go` — `avgRiskScore`
 - `internal/analytics/risk_test.go`: `FleetRisk` against a real Postgres testcontainer — seeds `scenario_runs` with completed runs inside/outside the 30-day window and with/without a `score` JSONB value, asserts the average matches hand-computed expectation and that rows outside the window or with null `score` are excluded (mirrors the existing SQL's `WHERE` clause exactly).
 - `internal/analytics/compliance_test.go`: `Compliance("")` returns fleet-wide rows (delegates to `db.GetFleetComplianceScores`), `Compliance(agentID)` returns that agent's rows only (delegates to `db.GetComplianceScores`) — both already have their own tests in `internal/db`; this test only proves the delegation, not re-testing the SQL.
 - `internal/campaign/store_test.go`: `ListWithRollups` against real Postgres — seeds 2+ campaigns with differing child-run outcomes (some completed/passed, some failed-and-detected, some failed-and-missed), asserts each `Rollup.Summary` matches what `Aggregate`/`DeriveStatus` alone would compute for the same inputs (proving no logic drift from the existing, already-tested primitives).
-- `internal/analytics/exposure_test.go`: `BuildFleetExposure(...).AssetExposureSummary()` against seeded attack-path/asset-tag/agent data, asserting `FleetAvgScore` and `Assets` match what a direct `exposure.Build` call would produce for the same inputs. `AssetCriticalitySummary()` asserts each result's `Score` matches `exposure.CriticalityRisk` called directly with the same inputs assembled from the same tag data. `FindingExposureWindows` asserts its output equals `predict.Build(...).Exposure` for the same seeded `findings` rows.
+- `internal/analytics/exposure_test.go`: `BuildFleetExposure(...).AssetExposureSummary()` against seeded attack-path/asset-tag/agent data, asserting `FleetAvgScore` and `Assets` (including each asset's `CriticalityRisk` field) match what a direct `exposure.Build(...).Summaries()` call would produce for the same inputs. `FindingExposureWindows` asserts its output equals `predict.Build(...).Exposure` for the same seeded `findings` rows.
 - `internal/dashboard/snapshot_test.go` (existing or new): asserts `Compute()`'s output is unchanged for a fixed seeded DB state before and after the refactor — the regression guard for the Non-Goals' "byte-identical output" requirement.
