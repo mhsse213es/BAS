@@ -67,11 +67,11 @@ func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []norm
 		default:
 			continue
 		}
-		cmd := artResolveArgs(test.Executor.Command, test.InputArguments)
+		cmd := artResolveArgs(test.Executor.Command, test.InputArguments, techniqueID, test.Name)
 		if cmd == "" {
 			continue
 		}
-		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments)
+		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments, techniqueID, test.Name)
 		cmd, required := artResolvePayloads(cmd, executor)
 		cleanup, _ = artResolvePayloads(cleanup, executor)
 		name := fmt.Sprintf("%s - Test %d: %s", techniqueID, i+1, test.Name)
@@ -95,11 +95,11 @@ func normalizeAtomic(data []byte) (techniqueID, displayName string, tests []norm
 		default:
 			continue
 		}
-		cmd := artResolveArgs(test.Executor.Command, test.InputArguments)
+		cmd := artResolveArgs(test.Executor.Command, test.InputArguments, techniqueID, test.Name)
 		if cmd == "" {
 			continue
 		}
-		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments)
+		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments, techniqueID, test.Name)
 		cmd, required := artResolvePayloadsUnix(cmd)
 		cleanup, _ = artResolvePayloadsUnix(cleanup)
 		name := fmt.Sprintf("%s - Test %d: %s", techniqueID, i+1, test.Name)

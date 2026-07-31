@@ -17,6 +17,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ArtifactCuratedLookup, if set, lets a higher-level package opt specific ART
+// input arguments out of static-default substitution (their #{name} token
+// survives to dispatch time instead). nil means "nothing curated" -- today's
+// exact behavior. Not a direct import of internal/artifactgen: internal/ioc's
+// aggregate.go already imports internal/scenario, and internal/artifactgen
+// imports internal/iocregistry -- an artifactgen import here would create an
+// import cycle through iocregistry's own test build (testutil -> db -> ioc ->
+// scenario -> artifactgen -> iocregistry). Wired once at server startup by
+// internal/api (see handlers.go's New()).
+var ArtifactCuratedLookup func(techniqueID, testName, argName string) bool
+
 type artAtomicFile struct {
 	AttackTechnique string          `yaml:"attack_technique"`
 	DisplayName     string          `yaml:"display_name"`
@@ -300,11 +311,11 @@ func parseARTFile(path string) (string, []ScenarioStep, error) {
 		default:
 			continue
 		}
-		cmd := artResolveArgs(test.Executor.Command, test.InputArguments)
+		cmd := artResolveArgs(test.Executor.Command, test.InputArguments, techniqueID, test.Name)
 		if cmd == "" {
 			continue
 		}
-		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments)
+		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments, techniqueID, test.Name)
 		cmd, required := artResolvePayloads(cmd, executor)
 		cleanup, _ = artResolvePayloads(cleanup, executor)
 		name := fmt.Sprintf("%s - Test %d: %s", techniqueID, i+1, test.Name)
@@ -327,11 +338,11 @@ func parseARTFile(path string) (string, []ScenarioStep, error) {
 		default:
 			continue // skip manual/powershell on unix
 		}
-		cmd := artResolveArgs(test.Executor.Command, test.InputArguments)
+		cmd := artResolveArgs(test.Executor.Command, test.InputArguments, techniqueID, test.Name)
 		if cmd == "" {
 			continue
 		}
-		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments)
+		cleanup := artResolveArgs(test.Executor.CleanupCommand, test.InputArguments, techniqueID, test.Name)
 		cmd, required := artResolvePayloadsUnix(cmd)
 		cleanup, _ = artResolvePayloadsUnix(cleanup)
 		name := fmt.Sprintf("%s - Test %d: %s", techniqueID, i+1, test.Name)
@@ -378,11 +389,14 @@ func artUnixPlatform(platforms []string) string {
 	return ""
 }
 
-func artResolveArgs(cmd string, args map[string]artInputArg) string {
+func artResolveArgs(cmd string, args map[string]artInputArg, techniqueID, testName string) string {
 	if cmd == "" {
 		return ""
 	}
 	for name, arg := range args {
+		if ArtifactCuratedLookup != nil && ArtifactCuratedLookup(techniqueID, testName, name) {
+			continue // leave #{name} literal -- substituted per-dispatch, not at build time
+		}
 		def := arg.Default
 		if def == "" {
 			def = `$env:TEMP\bas-placeholder-` + name
