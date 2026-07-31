@@ -355,11 +355,12 @@ func buildGaps(g *attackpath.Graph, s attackpath.Summary, paths []AttackPath, ca
 		score := freq * proximity * crit * gf
 
 		gaps = append(gaps, PrioritizedGap{
-			Edge:       e,
-			Techniques: st.Techniques,
-			Priority:   priorityFor(score),
-			Reason:     gapReason(crossCount[k], totalPaths, dist, st),
-			score:      score,
+			Edge:        e,
+			Techniques:  st.Techniques,
+			Priority:    priorityFor(score),
+			Reason:      gapReason(crossCount[k], totalPaths, dist, st),
+			Remediation: RemediationFor(e.Kind),
+			score:       score,
 		})
 	}
 	sort.Slice(gaps, func(i, j int) bool { return gaps[i].score > gaps[j].score })

@@ -114,11 +114,12 @@ type AnnotatedChokePoint struct {
 // proximity to a high-value target, technique criticality, and how bad the
 // gap is.
 type PrioritizedGap struct {
-	Edge       attackpath.Edge    `json:"edge"`
-	Techniques []TechniqueMapping `json:"techniques"`
-	Priority   GapPriority        `json:"priority"`
-	Reason     string             `json:"reason"`
-	score      float64
+	Edge        attackpath.Edge    `json:"edge"`
+	Techniques  []TechniqueMapping `json:"techniques"`
+	Priority    GapPriority        `json:"priority"`
+	Reason      string             `json:"reason"`
+	Remediation string             `json:"remediation"`
+	score       float64
 }
 
 // Statistics summarizes the canonical edge set (deduplicated by
