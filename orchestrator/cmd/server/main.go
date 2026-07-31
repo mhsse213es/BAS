@@ -25,6 +25,7 @@ import (
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/ioc"
+	"github.com/audspect/bas/internal/iocregistry"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/openaev"
@@ -460,6 +461,11 @@ func main() {
 	// Prunes raw detection alert blobs older than 30 days daily (summaries are
 	// kept forever) so large BAS environments don't accumulate huge JSON blobs.
 	detect.StartRetention(context.Background(), pool)
+
+	// ── IOC Expiration ───────────────────────────────────────────────────
+	// Transitions stale iocs rows to 'expired' daily -- the first real use of
+	// that lifecycle status since Phase 0+A defined it.
+	iocregistry.StartExpiration(context.Background(), pool, iocregistry.DefaultStaleAfter)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
