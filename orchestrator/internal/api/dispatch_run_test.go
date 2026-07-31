@@ -3,9 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/artifactgen"
+	"github.com/audspect/bas/internal/iocregistry"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -450,6 +453,67 @@ func TestDispatchRun_DBInsertFailure_ClosedPool(t *testing.T) {
 		}
 		if runID != "" || skip != "" {
 			t.Fatalf("runID=%q skip=%q, want both empty when err is set", runID, skip)
+		}
+	})
+}
+
+func TestApplyGeneratedArtifacts_SubstitutesCuratedTokenAndRegisters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		key := artifactgen.ArgKey{TechniqueID: "T0000", TestName: "Example Test", ArgName: "output_file"}
+		cleanup := artifactgen.SeedForTest(key, iocregistry.TypeFilename)
+		defer cleanup()
+
+		h := &Handler{db: pool}
+		originalCommand := `Copy-Item -Destination "#{output_file}"`
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T0000", Command: originalCommand},
+		}
+
+		got := h.applyGeneratedArtifacts(context.Background(), "sc-1", "run-1", "agent-1", steps)
+
+		if strings.Contains(got[0].Command, "#{output_file}") {
+			t.Errorf("Command still contains the literal token: %q", got[0].Command)
+		}
+		if got[0].Command == originalCommand {
+			t.Error("Command unchanged -- substitution didn't happen")
+		}
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM iocs WHERE type = 'filename' AND status = 'generated'`).Scan(&count); err != nil {
+			t.Fatalf("count iocs: %v", err)
+		}
+		if count != 1 {
+			t.Errorf("generated iocs count = %d, want 1", count)
+		}
+
+		var sightingRun string
+		if err := pool.QueryRow(context.Background(), `
+			SELECT s.run_id FROM ioc_sightings s JOIN iocs i ON i.id = s.ioc_id
+			WHERE i.type = 'filename' AND i.status = 'generated'`).Scan(&sightingRun); err != nil {
+			t.Fatalf("query sighting: %v", err)
+		}
+		if sightingRun != "run-1" {
+			t.Errorf("sighting run_id = %q, want run-1", sightingRun)
+		}
+	})
+}
+
+func TestApplyGeneratedArtifacts_NoCuratedMatch_LeavesStepsUnchanged(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := &Handler{db: pool}
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T9999-no-curated-entries", Command: "whoami"},
+		}
+		got := h.applyGeneratedArtifacts(context.Background(), "sc-1", "run-1", "agent-1", steps)
+		if got[0].Command != "whoami" {
+			t.Errorf("Command = %q, want unchanged \"whoami\"", got[0].Command)
 		}
 	})
 }

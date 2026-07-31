@@ -22,6 +22,7 @@ import (
 
 	"github.com/audspect/bas/internal/actions"
 	"github.com/audspect/bas/internal/analytics"
+	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
@@ -30,6 +31,7 @@ import (
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/ioc"
+	"github.com/audspect/bas/internal/iocregistry"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/relationships"
@@ -96,6 +98,13 @@ type Handler struct {
 
 // New creates a Handler.
 func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) *Handler {
+	// Wire the Phase C artifact-curation hook once per process -- see
+	// internal/scenario/art.go's ArtifactCuratedLookup doc comment for why this
+	// is a settable hook instead of a direct import.
+	scenario.ArtifactCuratedLookup = func(techniqueID, testName, argName string) bool {
+		_, ok := artifactgen.Lookup(techniqueID, testName, argName)
+		return ok
+	}
 	return &Handler{db: db, hub: hub, engine: engine, secret: secret}
 }
 
@@ -1030,6 +1039,29 @@ func synthesizePolicySkipResult(st scenario.ScenarioStep, maxPrivilege string) m
 	return sim
 }
 
+// applyGeneratedArtifacts substitutes a fresh value for every curated artifact-identity
+// token still present in steps (artResolveArgs left them literal for exactly this
+// purpose) and registers each substitution in the IOC registry. Best-effort -- a
+// registration failure is logged, never fails the dispatch; the registry is
+// observability, not a gate. See
+// docs/superpowers/specs/2026-07-31-ioc-generation-engine-design.md.
+func (h *Handler) applyGeneratedArtifacts(ctx context.Context, scenarioID, runID, agentID string, steps []scenario.ScenarioStep) []scenario.ScenarioStep {
+	for i := range steps {
+		for key, iocType := range artifactgen.CuratedFor(steps[i].TechniqueID) {
+			token := "#{" + key.ArgName + "}"
+			if !strings.Contains(steps[i].Command, token) {
+				continue
+			}
+			value := artifactgen.Generate(iocType, "")
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, token, value)
+			if err := iocregistry.RegisterGenerated(ctx, h.db, iocType, value, scenarioID, runID, agentID, steps[i].TechniqueID); err != nil {
+				log.Printf("[artifactgen] register failed for run %s: %v", runID, err)
+			}
+		}
+	}
+	return steps
+}
+
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
 	live := o.Mode == "telemetry" || o.Mode == "lab"
 
@@ -1204,6 +1236,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
 		return "", "", fmt.Errorf("build steps: %w", err)
 	}
+	steps = h.applyGeneratedArtifacts(ctx, sc.ID, runID, agentID, steps)
 	// stepsTotalBase captures the scenario's full base-technique step count for
 	// this run's configuration (reflecting any operator-selected subset) before
 	// any runtime filtering — the "Total" side of Scenario Coverage.
