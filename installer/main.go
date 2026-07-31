@@ -525,6 +525,11 @@ func runInstall() {
 	} else {
 		appendStatus("[+] Status monitor registered to start at login.")
 	}
+	if err := createTrayShortcut(agentPath); err != nil {
+		appendStatus("[~] Could not create Start Menu shortcut: " + err.Error())
+	} else {
+		appendStatus("[+] Start Menu shortcut created: Audspect Agent - Show Tray Icon.")
+	}
 	launchTray(agentPath)
 
 	appendStatus("")
@@ -563,6 +568,35 @@ func launchTray(agentPath string) {
 	cmd.Dir = filepath.Dir(agentPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_ = cmd.Start()
+}
+
+// createTrayShortcut adds an all-users Start Menu shortcut that relaunches the
+// tray icon on demand. registerTrayStartup only fires at logon, so if a user
+// accidentally ends the tray process mid-session (Task Manager "End Task"),
+// nothing brings it back until next reboot/logon — this shortcut is the
+// manual recovery path. Uses WScript.Shell via PowerShell rather than adding
+// a COM/go-ole dependency for a single install-time step; the same
+// exec.Command + HideWindow pattern already used for "sc start" above.
+func createTrayShortcut(agentPath string) error {
+	startMenu := filepath.Join(os.Getenv("ProgramData"), `Microsoft\Windows\Start Menu\Programs`)
+	shortcutPath := filepath.Join(startMenu, "Audspect Agent - Show Tray Icon.lnk")
+	installDir := filepath.Dir(agentPath)
+
+	script := `$ws = New-Object -ComObject WScript.Shell
+$s = $ws.CreateShortcut("` + shortcutPath + `")
+$s.TargetPath = "` + agentPath + `"
+$s.Arguments = "--tray"
+$s.WorkingDirectory = "` + installDir + `"
+$s.IconLocation = "` + agentPath + `,0"
+$s.Save()`
+
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, string(out))
+	}
+	return nil
 }
 
 const webView2RuntimeClientGUID = `{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`
