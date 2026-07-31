@@ -463,6 +463,20 @@ mode_install() {
   [[ -z "$CONFIG_FILE" ]] && { err "--install requires --config <file>"; exit 1; }
   load_config "$CONFIG_FILE"
 
+  # Refuse to install over an existing installation -- same detection
+  # mode_upgrade already uses (${DATA_DIR}/docker-compose.yml presence),
+  # inverted: error here instead of there.
+  local existing_compose="${DATA_DIR}/docker-compose.yml"
+  if [[ -f "$existing_compose" ]]; then
+    local existing_ver="unknown" existing_env="${DATA_DIR}/.env"
+    if [[ -f "$existing_env" ]]; then
+      existing_ver=$(grep -oP '(?<=BAS_VERSION=).+' "$existing_env" 2>/dev/null | head -1 || echo "unknown")
+    fi
+    err "${PRODUCT} v${existing_ver} is already installed at ${DATA_DIR}."
+    info "Run 'sudo bash install.sh --uninstall' first, or --upgrade to update in place."
+    exit 1
+  fi
+
   local LOG_FILE="${DATA_DIR}/install.log"
 
   step "1/10  Prerequisite checks"

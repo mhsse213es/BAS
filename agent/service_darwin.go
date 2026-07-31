@@ -16,6 +16,10 @@ const (
 )
 
 func svcInstall(serverURL, envLabel, secret string) error {
+	if _, err := os.Stat(darwinPlistPath); err == nil {
+		return fmt.Errorf("bas-agent already installed — run --uninstall first")
+	}
+
 	if err := os.MkdirAll(darwinConfigDir, 0755); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}

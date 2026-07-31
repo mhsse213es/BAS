@@ -15,6 +15,10 @@ const (
 )
 
 func svcInstall(serverURL, envLabel, secret string) error {
+	if _, err := os.Stat(unitPath); err == nil {
+		return fmt.Errorf("bas-agent already installed — run --uninstall first")
+	}
+
 	selfPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("get executable path: %w", err)
