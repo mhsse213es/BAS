@@ -82,6 +82,33 @@ func (h *Handler) GetIOCs(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "%"+value+"%")
 		where += " AND i.value ILIKE $" + strconv.Itoa(len(args))
 	}
+	if techniqueID := q.Get("techniqueId"); techniqueID != "" {
+		if joins == "" {
+			joins = " JOIN ioc_sightings s ON s.ioc_id = i.id"
+		}
+		args = append(args, techniqueID)
+		where += " AND s.technique_id = $" + strconv.Itoa(len(args))
+	}
+	if source := q.Get("source"); source != "" {
+		args = append(args, source)
+		where += " AND i.source = $" + strconv.Itoa(len(args))
+	}
+	if origin := q.Get("origin"); origin != "" {
+		args = append(args, origin)
+		where += " AND i.origin = $" + strconv.Itoa(len(args))
+	}
+	if status := q.Get("status"); status != "" {
+		args = append(args, status)
+		where += " AND i.status = $" + strconv.Itoa(len(args))
+	}
+	if since := q.Get("since"); since != "" {
+		args = append(args, since)
+		where += " AND i.last_seen >= $" + strconv.Itoa(len(args))
+	}
+	if until := q.Get("until"); until != "" {
+		args = append(args, until)
+		where += " AND i.last_seen <= $" + strconv.Itoa(len(args))
+	}
 
 	query += joins + " WHERE true" + where + " ORDER BY i.last_seen DESC LIMIT " + strconv.Itoa(limit)
 
