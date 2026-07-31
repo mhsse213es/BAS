@@ -1480,6 +1480,14 @@ body.theme-slate {
           <div id="dash-ti-actors"></div>
         </div>
 
+        <!-- Endpoint Posture — fleet health + EPP isolation state; hidden until data is loaded -->
+        <div id="dash-endpoint-section" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
+            <span style="font-size:0.72rem;font-weight:600;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase">Endpoint Posture</span>
+          </div>
+          <div class="kpi-row" id="dash-endpoint-tiles"></div>
+        </div>
+
         <!-- Readiness Trends — hidden until history data exists -->
         <div id="dash-trends-section" style="display:none">
           <div style="display:flex;align-items:center;justify-content:space-between;margin:1.25rem 0 0.55rem">
@@ -6884,6 +6892,44 @@ function renderTIActors(actors) {
         '<span style="display:flex;align-items:center;gap:0.5rem">' + tpTierBadge(a.tier) + '<strong>' + x(a.score) + '</strong></span>' +
         '</div>';
     }).join('');
+}
+
+// loadEndpointPostureWidget fetches the fleet-wide endpoint posture summary
+// and populates the dashboard's Endpoint Posture KPI tiles. Untrusted
+// Binaries and Currently Isolated tiles only render when nonzero, matching
+// loadKEVWidget's convention of hiding tiles that have nothing to report.
+var _endpointPostureLoaded = false;
+function loadEndpointPostureWidget() {
+  if (_endpointPostureLoaded) return;
+  apicall('/api/analytics/endpoint-posture').then(function(p) {
+    if (!p || !p.totalAgents) return;
+    _endpointPostureLoaded = true;
+    document.getElementById('dash-endpoint-section').style.display = '';
+    var tiles = document.getElementById('dash-endpoint-tiles');
+    var html =
+      '<div class="kpi-card stat-tile" style="cursor:pointer" onclick="showTab(\'agents\')" title="Agents currently reachable vs. past the 90s heartbeat window">' +
+      '<div class="stat-top"><div><div class="kpi-label">Online / Offline</div><div class="kpi-value">' + p.onlineAgents + ' <span class="tiny muted">/ ' + p.offlineAgents + '</span></div></div>' +
+      '<div class="stat-icon" style="background:rgba(35,134,54,0.10);color:var(--success)">&#9679;</div></div>' +
+      '<div class="kpi-sub">' + p.totalAgents + ' total agents</div></div>' +
+      '<div class="kpi-card stat-tile" style="cursor:pointer" onclick="showTab(\'agents\')" title="Agent lifecycle state breakdown">' +
+      '<div class="stat-top"><div><div class="kpi-label">Lifecycle</div><div class="kpi-value">' + p.activeAgents + ' <span class="tiny muted">active</span></div></div></div>' +
+      '<div class="kpi-sub">' + p.restrictedAgents + ' restricted · ' + p.quarantinedAgents + ' quarantined · ' + p.retiredAgents + ' retired</div></div>';
+    if (p.untrustedBinaryCount > 0) {
+      html +=
+        '<div class="kpi-card stat-tile" style="cursor:pointer" onclick="showTab(\'agents\')" title="Agents whose binary hash failed trust verification">' +
+        '<div class="stat-top"><div><div class="kpi-label">Untrusted Binaries</div><div class="kpi-value" style="color:var(--danger)">' + p.untrustedBinaryCount + '</div></div>' +
+        '<div class="stat-icon" style="background:rgba(218,54,51,0.10);color:var(--danger)">&#9888;</div></div>' +
+        '<div class="kpi-sub">binary hash failed trust verification</div></div>';
+    }
+    if (p.currentlyIsolated > 0) {
+      html +=
+        '<div class="kpi-card stat-tile" style="cursor:pointer" onclick="showTab(\'agents\')" title="Endpoints currently isolated via an EPP response action">' +
+        '<div class="stat-top"><div><div class="kpi-label">Currently Isolated</div><div class="kpi-value" style="color:var(--warning)">' + p.currentlyIsolated + '</div></div>' +
+        '<div class="stat-icon" style="background:rgba(210,153,34,0.10);color:var(--warning)">&#128274;</div></div>' +
+        '<div class="kpi-sub">via EPP response action</div></div>';
+    }
+    tiles.innerHTML = html;
+  }).catch(function() {});
 }
 
 // loadReadinessTrends fetches and renders the per-actor readiness history table
@@ -12584,6 +12630,7 @@ function loadDashboard() {
     loadComplianceScores();
     loadDashboardITSM();
     loadKEVWidget();
+    loadEndpointPostureWidget();
     loadReadinessTrends();
   })
   .catch(function(e) { showToast('Dashboard load failed: ' + e.message, 'err'); });
