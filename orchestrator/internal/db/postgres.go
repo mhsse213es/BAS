@@ -593,6 +593,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE ioc_sightings ADD COLUMN IF NOT EXISTS detection_verdict text NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_ioc_sightings_technique ON ioc_sightings (technique_id)`,
 
+		// Phase D: suppression awareness (iochandling.txt §22) -- an operator's
+		// judgment that an IOC is a known false-positive/environment-specific
+		// exception, distinct from the lifecycle Status column. See
+		// docs/superpowers/specs/2026-07-31-ioc-intelligence-layer-design.md.
+		`ALTER TABLE iocs ADD COLUMN IF NOT EXISTS suppressed boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE iocs ADD COLUMN IF NOT EXISTS suppression_reason text NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_iocs_suppressed ON iocs (suppressed) WHERE suppressed = true`,
+
 		// vex_sweeps: server-owned Full Variant Sweep orchestration state.
 		// One row per sweep; the partial unique index below makes "one
 		// running sweep per agent" race-safe (not an app-level
