@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -179,6 +180,42 @@ func TestSetAttackPathSchedule_MalformedJSON(t *testing.T) {
 		h.SetAttackPathSchedule(rec, req)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want 400", rec.Code)
+		}
+	})
+}
+
+// TestDispatchAttackPathCollect_WritesRequestLog pins that a successful
+// dispatch persists the requested targets/runSharpHound flag for later
+// coverage reconciliation (Task 4).
+func TestDispatchAttackPathCollect_WritesRequestLog(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := attackpathHandler(t, pool)
+		agent := startFakeAgent(t, h.hub, "reqlog-agent")
+		defer agent.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		req := withURLParam(dispatchCollectReq(map[string]any{
+			"targets": []string{"10.0.0.1", "10.0.0.2"}, "runSharpHound": true,
+		}), "agentId", "reqlog-agent")
+		h.DispatchAttackPathCollect(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var targetsRaw []byte
+		var runSharpHound bool
+		if err := pool.QueryRow(context.Background(),
+			`SELECT targets, run_sharphound FROM attackpath_collection_requests WHERE agent_id=$1`,
+			"reqlog-agent").Scan(&targetsRaw, &runSharpHound); err != nil {
+			t.Fatalf("read request log: %v", err)
+		}
+		var targets []string
+		json.Unmarshal(targetsRaw, &targets)
+		if len(targets) != 2 || !runSharpHound {
+			t.Fatalf("targets=%v runSharpHound=%v, want 2 targets and runSharpHound=true", targets, runSharpHound)
 		}
 	})
 }

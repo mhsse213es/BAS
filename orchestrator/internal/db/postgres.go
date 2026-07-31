@@ -405,6 +405,22 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE attackpath_asset_tags ADD COLUMN IF NOT EXISTS production       boolean NOT NULL DEFAULT false`,
 		`ALTER TABLE attackpath_asset_tags ADD COLUMN IF NOT EXISTS compliance_scope text[]  NOT NULL DEFAULT '{}'`,
 
+		// attackpath_collection_requests: one row per dispatch, recording what was
+		// asked for -- lets the summary handler reconcile "requested" against
+		// "represented in the resulting graph" without any agent protocol change
+		// (an unreachable target already leaves no trace in the agent's own
+		// submission, so absence already means "not represented"). See
+		// docs/superpowers/specs/2026-07-31-attack-path-results-backend-design.md.
+		`CREATE TABLE IF NOT EXISTS attackpath_collection_requests (
+			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			agent_id       text        NOT NULL,
+			targets        jsonb       NOT NULL DEFAULT '[]',
+			run_sharphound boolean     NOT NULL DEFAULT false,
+			requested_at   timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_attackpath_collection_requests_agent
+			ON attackpath_collection_requests (agent_id, requested_at DESC)`,
+
 		// attackpath_jobs: lifecycle record for every operator-initiated or scheduled
 		// attack-path collection. Tracks the full state machine from queued through
 		// completed/failed so the UI can show real progress and the server can handle

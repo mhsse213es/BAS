@@ -445,6 +445,12 @@ func (h *Handler) DispatchAttackPathCollect(w http.ResponseWriter, r *http.Reque
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
 	cmd, sharpHoundLoaded := buildCollectCmd(body.Targets, body.Segment, body.RunSharpHound, body.SharpHoundArgs)
+	if targetsJSON, err := json.Marshal(body.Targets); err == nil {
+		_, _ = h.db.Exec(r.Context(),
+			`INSERT INTO attackpath_collection_requests (agent_id, targets, run_sharphound)
+			 VALUES ($1, $2, $3)`,
+			agentID, targetsJSON, body.RunSharpHound)
+	}
 
 	// Check whether a previous collection exists for this agent so the UI can
 	// inform the operator it will be replaced — not lost, just superseded.
