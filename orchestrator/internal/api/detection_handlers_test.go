@@ -47,14 +47,21 @@ func TestSubmitRunDetections_ExtractsIOCs(t *testing.T) {
 			t.Errorf("iocs extracted = %d, want 2", count)
 		}
 
-		var sightingScenario string
+		var sightingScenario, techniqueID, verdict string
 		if err := pool.QueryRow(context.Background(), `
-			SELECT s.scenario_id FROM ioc_sightings s JOIN iocs i ON i.id = s.ioc_id
-			WHERE i.value = 'whoami /all'`).Scan(&sightingScenario); err != nil {
+			SELECT s.scenario_id, s.technique_id, s.detection_verdict FROM ioc_sightings s
+			JOIN iocs i ON i.id = s.ioc_id WHERE i.value = 'whoami /all'`).
+			Scan(&sightingScenario, &techniqueID, &verdict); err != nil {
 			t.Fatalf("query sighting: %v", err)
 		}
 		if sightingScenario != "sc-1" {
 			t.Errorf("sighting scenario_id = %q, want sc-1", sightingScenario)
+		}
+		if techniqueID != "T1059" {
+			t.Errorf("sighting technique_id = %q, want T1059", techniqueID)
+		}
+		if verdict != "detected" {
+			t.Errorf("sighting detection_verdict = %q, want detected", verdict)
 		}
 	})
 }

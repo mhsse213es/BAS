@@ -134,9 +134,11 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 	h.upsertFindingsForRun(r.Context(), runID)
 
 	// Best-effort IOC extraction -- never fails the request. See
-	// docs/superpowers/specs/2026-07-31-ioc-registry-design.md.
+	// docs/superpowers/specs/2026-07-31-ioc-registry-design.md and
+	// docs/superpowers/specs/2026-07-31-ioc-relationships-analytics-design.md.
 	for i := range results {
-		if err := iocregistry.ExtractFromDetectionAlert(r.Context(), h.db, scenarioID, runID, agentID, results[i]); err != nil {
+		if err := iocregistry.ExtractFromDetectionAlert(r.Context(), h.db, scenarioID, runID, agentID,
+			results[i].Technique.ID, results[i].DetectionVerdict, results[i]); err != nil {
 			log.Printf("[ioc] extraction failed for run %s: %v", runID, err)
 		}
 	}
