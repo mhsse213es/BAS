@@ -53,7 +53,16 @@ func ExtractFromDetectionAlert(ctx context.Context, pool *pgxpool.Pool, scenario
 // applied on insert (first observation); it is not merged on repeat
 // sightings, since a later observation of the same command line carrying a
 // different threatName would otherwise silently overwrite the first.
+// Thin wrapper over upsertIOCFull with this package's original defaults --
+// unchanged behavior for every Phase 0+A/B/C caller.
 func upsertIOC(ctx context.Context, pool *pgxpool.Pool, t Type, value string, source Source, metadata map[string]any) (string, error) {
+	return upsertIOCFull(ctx, pool, t, value, source, OriginBuiltIn, StatusObserved, metadata)
+}
+
+// upsertIOCFull is the one INSERT INTO iocs statement -- upsertIOC (above),
+// RegisterGenerated (generate.go), and ImportManual (import.go) all call this
+// instead of each maintaining their own near-identical SQL.
+func upsertIOCFull(ctx context.Context, pool *pgxpool.Pool, t Type, value string, source Source, origin Origin, status Status, metadata map[string]any) (string, error) {
 	if metadata == nil {
 		metadata = map[string]any{}
 	}
@@ -63,13 +72,13 @@ func upsertIOC(ctx context.Context, pool *pgxpool.Pool, t Type, value string, so
 	}
 	var id string
 	err = pool.QueryRow(ctx, `
-		INSERT INTO iocs (type, value, source, metadata)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO iocs (type, value, source, origin, status, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (type, value) DO UPDATE SET
 			last_seen = NOW(),
 			sighting_count = iocs.sighting_count + 1
 		RETURNING id`,
-		string(t), value, string(source), metaJSON,
+		string(t), value, string(source), string(origin), string(status), metaJSON,
 	).Scan(&id)
 	return id, err
 }

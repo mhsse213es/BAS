@@ -211,6 +211,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/iocs", h.GetIOCs)
 		r.Get("/api/analytics/iocs", h.GetIOCAnalytics)
 		r.With(auth.RequirePermission(auth.CanManageIOCs)).Post("/api/iocs/{id}/suppress", h.SetIOCSuppressed)
+		r.With(auth.RequirePermission(auth.CanManageIOCs)).Post("/api/iocs/import", h.ImportIOCs)
 
 		// Intelligence Expansion -- MISP/OpenCTI-sourced Campaigns/Malware/Tools
 		// (distinct from /api/threat-priority's actor-level scoring).
