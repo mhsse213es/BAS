@@ -158,6 +158,43 @@ func (h *Handler) PingAgent(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"status": "ok"})
 }
 
+// POST /api/agents/unenroll — called by the agent itself during --uninstall,
+// best-effort. Agent-token auth (same as /api/heartbeat), not a user
+// JWT/permission — there is no admin session at uninstall time.
+//
+// Sets state='retired' rather than deleting the row: scenario_runs has
+// ON DELETE CASCADE to agents (internal/db/postgres.go), so a real delete
+// would destroy that agent's entire run/finding/report history. The Agents
+// tab hides retired agents from its default view (agentBucket in
+// wwwroot/index.html) but keeps them reachable via the Retired filter —
+// this is what actually satisfies "remove from the endpoint list" without
+// losing the audit trail.
+func (h *Handler) UnenrollAgent(w http.ResponseWriter, r *http.Request) {
+	if !h.validateAgentAuth(r) {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var body struct {
+		AgentID string `json:"agentId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.AgentID == "" {
+		jsonError(w, "agentId required", http.StatusBadRequest)
+		return
+	}
+	tag, err := h.db.Exec(r.Context(), `UPDATE agents SET state = 'retired' WHERE agent_id = $1`, body.AgentID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		jsonError(w, "agent not found", http.StatusNotFound)
+		return
+	}
+	h.auditLogAs(r, "agent:"+body.AgentID, "agent.unenroll", body.AgentID, nil, "ok")
+	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: body.AgentID})
+	respond(w, map[string]string{"agentId": body.AgentID, "state": "retired"})
+}
+
 // WithCaldera configures the optional Caldera integration.
 func (h *Handler) WithCaldera(url, key string) *Handler {
 	h.calderaURL = url

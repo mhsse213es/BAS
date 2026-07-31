@@ -264,6 +264,15 @@ func svcUninstall() error {
 	}
 	defer s.Close()
 
+	// Best-effort: tell the server this endpoint is being decommissioned so
+	// it's hidden from the live Agents list instead of just showing
+	// "offline". Read while the service (and its registry Parameters) still
+	// exist -- must happen before Delete below.
+	serverURL, _ := readServiceParams()
+	if err := notifyServerUnenroll(serverURL, ReadEncryptedSecret(), collectIdentity().AgentID); err != nil {
+		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
+	}
+
 	// Stop before deleting
 	_, _ = s.Control(svc.Stop)
 	time.Sleep(2 * time.Second)

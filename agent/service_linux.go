@@ -84,6 +84,14 @@ WantedBy=multi-user.target
 }
 
 func svcUninstall() error {
+	// Best-effort: tell the server this endpoint is being decommissioned so
+	// it's hidden from the live Agents list instead of just showing
+	// "offline". Must happen before the config file removal below.
+	serverURL, _ := readServiceParams()
+	if err := notifyServerUnenroll(serverURL, readAgentSecret(), collectIdentity().AgentID); err != nil {
+		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
+	}
+
 	_ = exec.Command("systemctl", "stop", "bas-agent.service").Run()
 	_ = exec.Command("systemctl", "disable", "bas-agent.service").Run()
 	_ = os.Remove(unitPath)
@@ -108,6 +116,23 @@ func readServiceParams() (serverURL, envLabel string) {
 		}
 	}
 	return serverURL, envLabel
+}
+
+// readAgentSecret reads BAS_AGENT_SECRET from the config file written at
+// install time (svcInstall above) — needed for notifyServerUnenroll since
+// the config isn't loaded into env vars during --uninstall.
+func readAgentSecret() string {
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "BAS_AGENT_SECRET=") {
+			return strings.TrimPrefix(line, "BAS_AGENT_SECRET=")
+		}
+	}
+	return ""
 }
 
 // platformDisableAutoStart removes bas-agent.service's boot-time enablement

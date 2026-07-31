@@ -5954,9 +5954,14 @@ function apicall(path, opts) {
 }
 
 var AGENT_FILTER = 'all';
-// agentBucket: online = reachable + active; degraded = reachable but lifecycle
-// state ≠ active (quarantined/restricted/retired); offline = no heartbeat.
+// agentBucket: retired = uninstalled (see POST /api/agents/unenroll), excluded
+// from every other bucket and from the default "All" list -- reachable only
+// via the explicit Retired filter, so audit history stays visible without
+// cluttering the live endpoint list; online = reachable + active; degraded =
+// reachable but lifecycle state != active (quarantined/restricted); offline =
+// no heartbeat.
 function agentBucket(a) {
+  if (a.state === 'retired') return 'retired';
   if (a.status === 'offline') return 'offline';
   if (a.state && a.state !== 'active') return 'degraded';
   return 'online';
@@ -5970,7 +5975,7 @@ function loadAgents() {
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function renderAgentTiles() {
-  var b = { online: 0, degraded: 0, offline: 0 };
+  var b = { online: 0, degraded: 0, offline: 0, retired: 0 };
   agents.forEach(function(a) { b[agentBucket(a)]++; });
   var tile = function(lbl, val, col) {
     return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
@@ -5978,21 +5983,28 @@ function renderAgentTiles() {
   };
   var el = document.getElementById('agent-tiles');
   if (el) el.innerHTML =
-    tile('Total agents', agents.length, 'var(--text)') +
+    tile('Total agents', agents.length - b.retired, 'var(--text)') +
     tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +
     tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +
     tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)');
 }
 function renderAgentToolbar() {
-  var c = function(k) { return k === 'all' ? agents.length : agents.filter(function(a) { return agentBucket(a) === k; }).length; };
+  var c = function(k) {
+    if (k === 'all') return agents.filter(function(a) { return agentBucket(a) !== 'retired'; }).length;
+    return agents.filter(function(a) { return agentBucket(a) === k; }).length;
+  };
   var el = document.getElementById('agent-toolbar');
   if (el) el.innerHTML = '<div class="cov-seg">' +
-    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline']]
+    [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']]
       .map(function(o) { return '<button class="' + (AGENT_FILTER === o[0] ? 'on' : '') + '" onclick="setAgentFilter(\'' + o[0] + '\')">' + o[1] + ' <span style="opacity:.6">' + c(o[0]) + '</span></button>'; }).join('') + '</div>';
 }
 function setAgentFilter(v) { AGENT_FILTER = v; renderAgentToolbar(); renderAgentRows(); }
 function renderAgentRows() {
-  var list = agents.filter(function(a) { return AGENT_FILTER === 'all' || agentBucket(a) === AGENT_FILTER; });
+  // "All" means all live endpoints -- uninstalled (retired) agents are only
+  // shown when the Retired filter is explicitly selected (see agentBucket).
+  var list = agents.filter(function(a) {
+    return AGENT_FILTER === 'all' ? agentBucket(a) !== 'retired' : agentBucket(a) === AGENT_FILTER;
+  });
   var tbody = document.getElementById('agents-body');
   if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.') + '</td></tr>'; return; }
   tbody.innerHTML = list.map(function(a) {

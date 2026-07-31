@@ -305,6 +305,7 @@ var publicRoutes = map[string]bool{
 	"DELETE /scim/v2/Users/{id}":                  true,
 	"GET /api/agents/ping":                        true,
 	"POST /api/agents/enroll":                     true,
+	"POST /api/agents/unenroll":                   true,
 	"POST /api/agents/events":                     true,
 	"POST /api/heartbeat":                         true,
 	"POST /api/scenarios/result":                  true,
