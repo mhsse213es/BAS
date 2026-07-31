@@ -323,3 +323,71 @@ func TestLookup_DispatchesByType(t *testing.T) {
 		}
 	})
 }
+
+func TestIOCNeighborhood_ReturnsScenarioRunAgentTechniqueEdges(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		var iocID string
+		if err := pool.QueryRow(context.Background(), `
+			INSERT INTO iocs (type, value, source) VALUES ('command_line', 'whoami /all', 'detection_alert')
+			RETURNING id`).Scan(&iocID); err != nil {
+			t.Fatalf("seed ioc: %v", err)
+		}
+		if _, err := pool.Exec(context.Background(), `
+			INSERT INTO ioc_sightings (ioc_id, scenario_id, run_id, agent_id, technique_id)
+			VALUES ($1, 'sc-1', 'run-1', 'agent-1', 'T1059')`, iocID); err != nil {
+			t.Fatalf("seed sighting: %v", err)
+		}
+
+		n, err := IOCNeighborhood(context.Background(), pool, iocID)
+		if err != nil {
+			t.Fatalf("IOCNeighborhood: %v", err)
+		}
+		if len(n.Nodes) != 5 { // ioc + scenario + run + agent + technique
+			t.Fatalf("Nodes = %+v, want 5", n.Nodes)
+		}
+		if n.Nodes[0].Type != NodeTypeIOC || n.Nodes[0].ID != "ioc:"+iocID {
+			t.Fatalf("Nodes[0] = %+v, want the IOC itself first", n.Nodes[0])
+		}
+		wantTypes := map[string]bool{NodeTypeScenario: false, NodeTypeRun: false, NodeTypeAgent: false, NodeTypeTechnique: false}
+		for _, node := range n.Nodes[1:] {
+			if _, ok := wantTypes[node.Type]; ok {
+				wantTypes[node.Type] = true
+			}
+		}
+		for typ, found := range wantTypes {
+			if !found {
+				t.Errorf("missing node type %q in %+v", typ, n.Nodes)
+			}
+		}
+	})
+}
+
+func TestIOCNeighborhood_UnknownID_ReturnsEmptyNeighborhood(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		n, err := IOCNeighborhood(context.Background(), pool, "does-not-exist")
+		if err != nil {
+			t.Fatalf("IOCNeighborhood: %v", err)
+		}
+		if len(n.Nodes) != 0 || len(n.Edges) != 0 {
+			t.Errorf("Nodes/Edges = %+v/%+v, want both empty for an unknown ID", n.Nodes, n.Edges)
+		}
+	})
+}
+
+func TestLookup_DispatchesIOCType(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		var iocID string
+		if err := pool.QueryRow(context.Background(), `
+			INSERT INTO iocs (type, value, source) VALUES ('process', 'powershell.exe', 'detection_alert')
+			RETURNING id`).Scan(&iocID); err != nil {
+			t.Fatalf("seed ioc: %v", err)
+		}
+		n, err := Lookup(context.Background(), pool, NodeTypeIOC, iocID)
+		if err != nil {
+			t.Fatalf("Lookup: %v", err)
+		}
+		if len(n.Nodes) != 1 || n.Nodes[0].Type != NodeTypeIOC {
+			t.Errorf("Lookup(ioc, ...) = %+v, want 1 IOC node", n.Nodes)
+		}
+	})
+}

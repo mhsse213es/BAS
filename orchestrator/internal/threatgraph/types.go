@@ -44,4 +44,8 @@ const (
 	NodeTypeTechnique = "technique"
 	NodeTypeSector    = "sector"
 	NodeTypeRegion    = "region"
+	NodeTypeIOC       = "ioc"
+	NodeTypeScenario  = "scenario"
+	NodeTypeRun       = "run"
+	NodeTypeAgent     = "agent"
 )

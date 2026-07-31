@@ -390,6 +390,63 @@ func ToolNeighborhood(ctx context.Context, pool *pgxpool.Pool, id string) (Neigh
 	return n, nil
 }
 
+// IOCNeighborhood assembles the 1-hop neighborhood around an IOC registry
+// row: one edge per distinct scenario/run/agent/technique found across its
+// ioc_sightings rows. Unlike actor/campaign/malware/tool neighborhoods,
+// scenario/run/agent have no display-name lookup table -- their raw ID is
+// used as both node key and label, same treatment ActorNeighborhood already
+// gives sector/region.
+func IOCNeighborhood(ctx context.Context, pool *pgxpool.Pool, iocID string) (Neighborhood, error) {
+	n := Neighborhood{Nodes: []Node{}, Edges: []Edge{}}
+
+	var iocType, value string
+	err := pool.QueryRow(ctx, `SELECT type, value FROM iocs WHERE id = $1`, iocID).Scan(&iocType, &value)
+	if err == pgx.ErrNoRows {
+		return n, nil
+	}
+	if err != nil {
+		return n, err
+	}
+
+	iocNodeID := "ioc:" + iocID
+	n.Nodes = append(n.Nodes, Node{ID: iocNodeID, Type: NodeTypeIOC, Label: iocType + ": " + value})
+
+	rows, err := pool.Query(ctx,
+		`SELECT DISTINCT scenario_id, run_id, agent_id, technique_id FROM ioc_sightings WHERE ioc_id = $1`, iocID)
+	if err != nil {
+		return n, err
+	}
+	defer rows.Close()
+
+	seen := map[string]bool{}
+	add := func(nodeType, key, label string) {
+		if key == "" || seen[nodeType+":"+key] {
+			return
+		}
+		seen[nodeType+":"+key] = true
+		nodeID := nodeType + ":" + key
+		n.Nodes = append(n.Nodes, Node{ID: nodeID, Type: nodeType, Label: label})
+		n.Edges = append(n.Edges, Edge{From: iocNodeID, To: nodeID, Relationship: "observed_in"})
+	}
+	for rows.Next() {
+		var scenarioID, runID, agentID, techniqueID string
+		if err := rows.Scan(&scenarioID, &runID, &agentID, &techniqueID); err != nil {
+			return n, err
+		}
+		add(NodeTypeScenario, scenarioID, scenarioID)
+		add(NodeTypeRun, runID, runID)
+		add(NodeTypeAgent, agentID, agentID)
+		if techniqueID != "" {
+			label, lerr := techniqueLabel(ctx, pool, techniqueID)
+			if lerr != nil {
+				return n, lerr
+			}
+			add(NodeTypeTechnique, techniqueID, label)
+		}
+	}
+	return n, rows.Err()
+}
+
 // Lookup dispatches to the right assembly function by node type -- the
 // single entry point internal/api's handler calls. Named Lookup rather
 // than Neighborhood since a package-level function can't share an
@@ -406,6 +463,8 @@ func Lookup(ctx context.Context, pool *pgxpool.Pool, nodeType, id string) (Neigh
 		return ToolNeighborhood(ctx, pool, id)
 	case NodeTypeTechnique:
 		return TechniqueNeighborhood(ctx, pool, id)
+	case NodeTypeIOC:
+		return IOCNeighborhood(ctx, pool, id)
 	default:
 		return Neighborhood{}, fmt.Errorf("unknown node type %q", nodeType)
 	}
