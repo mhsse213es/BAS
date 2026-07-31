@@ -90,10 +90,10 @@ Read the actual current code before writing anything:
 
 ## Architecture
 
-### 1. Canonical model — `internal/ioc/types.go` (new package)
+### 1. Canonical model — `internal/iocregistry/types.go` (new package)
 
 ```go
-package ioc
+package iocregistry
 
 import "time"
 
@@ -221,7 +221,7 @@ high-write-volume junction tables, and avoiding `ON DELETE CASCADE` risk (per th
 work earlier this session, cascading deletes on operational history is exactly the kind of thing
 this codebase has already had to be careful about).
 
-### 3. Extraction — `internal/ioc/extract.go`
+### 3. Extraction — `internal/iocregistry/extract.go`
 
 ```go
 func ExtractFromDetectionAlert(ctx context.Context, pool *pgxpool.Pool,
@@ -274,7 +274,7 @@ session.
 
 ## Testing
 
-`internal/ioc/extract_test.go`, `TestMain`/`sharedDB` pattern (matching every Postgres-backed
+`internal/iocregistry/extract_test.go`, `TestMain`/`sharedDB` pattern (matching every Postgres-backed
 package this session): seed a `SimulationResult` with a populated `DetectionAlert`
 (`CommandLine`, `ProcessName`, `ThreatName` all set), call `ExtractFromDetectionAlert`, assert two
 `iocs` rows exist (`command_line`, `process`), the `command_line` row's `metadata` contains

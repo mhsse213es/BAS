@@ -4,9 +4,9 @@
 
 **Goal:** Build the canonical IOC model and registry storage, and populate it by extracting IOC-shaped data (command lines, process names) that already flows through `SubmitRunDetections` today — no new generation capability, just making existing data queryable.
 
-**Architecture:** New `internal/ioc` package owns the canonical `IOC` type and extraction logic. Two new tables (`iocs`, one row per distinct `(type, value)`; `ioc_sightings`, one row per observation) store it, following this codebase's existing dedup-by-unique-index and loose-text-column-linkage conventions. `SubmitRunDetections` calls the extractor best-effort, right after its existing `UPDATE scenario_runs` write. A new `GET /api/iocs` exposes flat search.
+**Architecture:** New `internal/iocregistry` package owns the canonical `IOC` type and extraction logic. Two new tables (`iocs`, one row per distinct `(type, value)`; `ioc_sightings`, one row per observation) store it, following this codebase's existing dedup-by-unique-index and loose-text-column-linkage conventions. `SubmitRunDetections` calls the extractor best-effort, right after its existing `UPDATE scenario_runs` write. A new `GET /api/iocs` exposes flat search.
 
-**Tech Stack:** Go (`internal/ioc`, `internal/api`, `internal/db`), `*pgxpool.Pool`.
+**Tech Stack:** Go (`internal/iocregistry`, `internal/api`, `internal/db`), `*pgxpool.Pool`.
 
 ## Global Constraints
 
@@ -24,21 +24,21 @@
 ### Task 1: Canonical model + storage + extraction
 
 **Files:**
-- Create: `orchestrator/internal/ioc/types.go`
-- Create: `orchestrator/internal/ioc/extract.go`
-- Test: `orchestrator/internal/ioc/extract_test.go`
+- Create: `orchestrator/internal/iocregistry/types.go`
+- Create: `orchestrator/internal/iocregistry/extract.go`
+- Test: `orchestrator/internal/iocregistry/extract_test.go`
 - Modify: `orchestrator/internal/db/postgres.go` (new tables, in `EnsureSchema`)
 
 **Interfaces:**
 - Consumes: `models.SimulationResult` (`internal/models/schema.go:36`), specifically its `DetectionAlert *models.DetectionAlert` field (`schema.go:99-109`: `CommandLine`, `ProcessName`, `ThreatName`).
-- Produces: `type ioc.Type string`, `type ioc.Source string`, `type ioc.Origin string`, `type ioc.Status string`, `type ioc.IOC struct{...}` (all per the spec), `func ioc.ExtractFromDetectionAlert(ctx context.Context, pool *pgxpool.Pool, scenarioID, runID, agentID string, res models.SimulationResult) error`. Task 2 calls this function directly. Task 3's handler queries the `iocs`/`ioc_sightings` tables this task creates.
+- Produces: `type iocregistry.Type string`, `type iocregistry.Source string`, `type iocregistry.Origin string`, `type iocregistry.Status string`, `type iocregistry.IOC struct{...}` (all per the spec), `func iocregistry.ExtractFromDetectionAlert(ctx context.Context, pool *pgxpool.Pool, scenarioID, runID, agentID string, res models.SimulationResult) error`. Task 2 calls this function directly. Task 3's handler queries the `iocs`/`ioc_sightings` tables this task creates.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `orchestrator/internal/ioc/extract_test.go`:
+Create `orchestrator/internal/iocregistry/extract_test.go`:
 
 ```go
-package ioc
+package iocregistry
 
 import (
 	"context"
@@ -184,15 +184,15 @@ func TestExtractFromDetectionAlert_EmptyFields_Skipped(t *testing.T) {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd orchestrator && go test ./internal/ioc/... -run TestExtractFromDetectionAlert -v`
+Run: `cd orchestrator && go test ./internal/iocregistry/... -run TestExtractFromDetectionAlert -v`
 Expected: FAIL — build errors (`ExtractFromDetectionAlert`/`sharedDB` undefined).
 
 - [ ] **Step 3: Add the test boilerplate**
 
-Create `orchestrator/internal/ioc/testmain_test.go` (matching the exact pattern every other Postgres-backed package this session uses):
+Create `orchestrator/internal/iocregistry/testmain_test.go` (matching the exact pattern every other Postgres-backed package this session uses):
 
 ```go
-package ioc
+package iocregistry
 
 import (
 	"context"
@@ -269,10 +269,10 @@ Immediately after it, insert:
 
 - [ ] **Step 5: Implement the canonical model**
 
-Create `orchestrator/internal/ioc/types.go`:
+Create `orchestrator/internal/iocregistry/types.go`:
 
 ```go
-package ioc
+package iocregistry
 
 import "time"
 
@@ -361,10 +361,10 @@ type IOC struct {
 
 - [ ] **Step 6: Implement extraction**
 
-Create `orchestrator/internal/ioc/extract.go`:
+Create `orchestrator/internal/iocregistry/extract.go`:
 
 ```go
-package ioc
+package iocregistry
 
 import (
 	"context"
@@ -449,16 +449,16 @@ func recordSighting(ctx context.Context, pool *pgxpool.Pool, iocID, scenarioID, 
 
 - [ ] **Step 7: Run tests to verify they pass**
 
-Run: `cd orchestrator && go build ./... && go test ./internal/ioc/... -v`
+Run: `cd orchestrator && go build ./... && go test ./internal/iocregistry/... -v`
 Expected: build succeeds; all 4 tests PASS.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add orchestrator/internal/ioc/ orchestrator/internal/db/postgres.go
+git add orchestrator/internal/iocregistry/ orchestrator/internal/db/postgres.go
 git commit -m "feat(ioc): add canonical IOC model, registry tables, and extraction
 
-New internal/ioc package: the canonical IOC type every future producer
+New internal/iocregistry package: the canonical IOC type every future producer
 (Detection Validation, Variant Engine, Threat Intel imports, Purple
 Team, DLP validation, Attack Path) must emit, plus the iocs/
 ioc_sightings storage and extraction from the one real data source
@@ -480,7 +480,7 @@ git push
 - Test: `orchestrator/internal/api/detection_handlers_test.go` (existing file — add to it if present, else create)
 
 **Interfaces:**
-- Consumes: `ioc.ExtractFromDetectionAlert(ctx, pool, scenarioID, runID, agentID, res)` (Task 1).
+- Consumes: `iocregistry.ExtractFromDetectionAlert(ctx, pool, scenarioID, runID, agentID, res)` (Task 1).
 - Produces: nothing new for later tasks — Task 3's handler reads the tables Task 1 created directly.
 
 - [ ] **Step 1: Confirm current test coverage**
@@ -617,7 +617,7 @@ Replace with:
 	// Best-effort IOC extraction -- never fails the request. See
 	// docs/superpowers/specs/2026-07-31-ioc-registry-design.md.
 	for i := range results {
-		if err := ioc.ExtractFromDetectionAlert(r.Context(), h.db, scenarioID, runID, agentID, results[i]); err != nil {
+		if err := iocregistry.ExtractFromDetectionAlert(r.Context(), h.db, scenarioID, runID, agentID, results[i]); err != nil {
 			log.Printf("[ioc] extraction failed for run %s: %v", runID, err)
 		}
 	}
@@ -649,7 +649,7 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/detect"
-	"github.com/audspect/bas/internal/ioc"
+	"github.com/audspect/bas/internal/iocregistry"
 	"github.com/audspect/bas/internal/models"
 	"github.com/go-chi/chi/v5"
 )
@@ -666,7 +666,7 @@ Expected: build/vet clean; test PASSES, alongside any pre-existing `TestSubmitRu
 git add orchestrator/internal/api/detection_handlers.go orchestrator/internal/api/detection_handlers_test.go
 git commit -m "feat(api): extract IOCs during detection ingestion
 
-SubmitRunDetections now calls ioc.ExtractFromDetectionAlert for every
+SubmitRunDetections now calls iocregistry.ExtractFromDetectionAlert for every
 result carrying a DetectionAlert, right after the existing
 scenario_runs write. Best-effort -- extraction failure is logged, not
 returned to the caller, since detection ingestion must never fail
