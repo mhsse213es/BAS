@@ -32,7 +32,7 @@
 - Consumes: nothing new.
 - Produces: `const models.AgentOfflineAfter = 90 * time.Second`, `func models.EffectiveAgentStatus(stored string, lastUpdate, now time.Time) string`. Task 2 calls `models.EffectiveAgentStatus` directly.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `orchestrator/internal/models/agent_status_test.go`:
 
@@ -67,12 +67,12 @@ func TestEffectiveAgentStatus(t *testing.T) {
 
 This is the exact same test body as `internal/api/liveness_test.go`'s existing `TestEffectiveAgentStatus` (`liveness_test.go:8-26`), just targeting the new exported name — proves the relocation preserves behavior exactly.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd orchestrator && go test ./internal/models/... -run TestEffectiveAgentStatus -v`
 Expected: FAIL — `undefined: EffectiveAgentStatus` (compile error).
 
-- [ ] **Step 3: Add the relocated code to `internal/models/schema.go`**
+- [x] **Step 3: Add the relocated code to `internal/models/schema.go`**
 
 In `orchestrator/internal/models/schema.go`, find:
 
@@ -111,12 +111,12 @@ func EffectiveAgentStatus(stored string, lastUpdate, now time.Time) string {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/models/... -run TestEffectiveAgentStatus -v`
 Expected: build succeeds; test PASSES.
 
-- [ ] **Step 5: Delete the old code and delegate `internal/api` to the new location**
+- [x] **Step 5: Delete the old code and delegate `internal/api` to the new location**
 
 In `orchestrator/internal/api/liveness.go`, replace the entire file with:
 
@@ -156,7 +156,7 @@ Replace with:
 
 (`internal/api/handlers.go` already imports `github.com/audspect/bas/internal/models` for `models.Agent`/`models.AgentState` — no new import needed.)
 
-- [ ] **Step 6: Remove the now-duplicate test from `internal/api`**
+- [x] **Step 6: Remove the now-duplicate test from `internal/api`**
 
 In `orchestrator/internal/api/liveness_test.go`, delete the `TestEffectiveAgentStatus` function (lines 8-26), keeping only `TestRunIsStale`. The file should read:
 
@@ -187,12 +187,12 @@ func TestRunIsStale(t *testing.T) {
 }
 ```
 
-- [ ] **Step 7: Run the full affected-package tests to verify nothing broke**
+- [x] **Step 7: Run the full affected-package tests to verify nothing broke**
 
 Run: `cd orchestrator && go build ./... && go vet ./... && go test ./internal/models/... ./internal/api/... -run "TestEffectiveAgentStatus|TestRunIsStale|TestGetAgents" -v`
 Expected: build/vet clean; all listed tests PASS (this exercises the relocated function, the delegating `runIsStale`, and `GetAgents`'s call site together).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add orchestrator/internal/models/schema.go orchestrator/internal/models/agent_status_test.go orchestrator/internal/api/liveness.go orchestrator/internal/api/liveness_test.go orchestrator/internal/api/handlers.go
@@ -220,7 +220,7 @@ git push
 - Consumes: `models.EffectiveAgentStatus(stored string, lastUpdate, now time.Time) string` (Task 1).
 - Produces: `type EndpointPosture struct { TotalAgents, OnlineAgents, OfflineAgents, ActiveAgents, RestrictedAgents, QuarantinedAgents, RetiredAgents, UntrustedBinaryCount, CurrentlyIsolated int }`, `func EndpointPosture(ctx context.Context, pool *pgxpool.Pool) (EndpointPosture, error)`. Task 3's handler calls this directly.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `orchestrator/internal/analytics/endpoint_test.go`:
 
@@ -350,12 +350,12 @@ func TestEndpointPosture_NoAgents_ReturnsZeroSummary(t *testing.T) {
 
 `sharedDB`/`mustExec` are already declared in `internal/analytics/risk_test.go` (Sub-project A) — shared across every test file in this package. `sharedDB.RunWithPool` truncates all tables between subtests (existing convention — confirmed by every prior sub-project's test files), so these tests don't interfere with each other.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd orchestrator && go test ./internal/analytics/... -run TestEndpointPosture -v`
 Expected: FAIL — `undefined: EndpointPosture` (compile error).
 
-- [ ] **Step 3: Implement `EndpointPosture`**
+- [x] **Step 3: Implement `EndpointPosture`**
 
 Create `orchestrator/internal/analytics/endpoint.go`:
 
@@ -447,12 +447,12 @@ func EndpointPosture(ctx context.Context, pool *pgxpool.Pool) (EndpointPosture, 
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/analytics/... -run TestEndpointPosture -v`
 Expected: build succeeds; all 4 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add orchestrator/internal/analytics/endpoint.go orchestrator/internal/analytics/endpoint_test.go
@@ -480,7 +480,7 @@ git push
 - Consumes: `analytics.EndpointPosture(ctx, pool)` (Task 2), `h.db`.
 - Produces: nothing new for later tasks — Task 4 calls this route directly from JS, not any Go symbol.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `orchestrator/internal/api/endpoint_posture_handler_test.go`:
 
@@ -526,12 +526,12 @@ func TestGetEndpointPosture_EmptyFleet_ReturnsZeroSummary(t *testing.T) {
 
 `sharedDB` is already declared in `internal/api`'s existing test suite (`testmain_test.go`).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd orchestrator && go test ./internal/api/... -run TestGetEndpointPosture -v`
 Expected: FAIL — `h.GetEndpointPosture undefined` (compile error).
 
-- [ ] **Step 3: Implement the handler**
+- [x] **Step 3: Implement the handler**
 
 Create `orchestrator/internal/api/endpoint_posture_handlers.go`:
 
@@ -557,7 +557,7 @@ func (h *Handler) GetEndpointPosture(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-- [ ] **Step 4: Register the route**
+- [x] **Step 4: Register the route**
 
 In `orchestrator/internal/api/routes.go`, find:
 
@@ -575,7 +575,7 @@ Replace with:
 		r.Get("/api/analytics/endpoint-posture", h.GetEndpointPosture)
 ```
 
-- [ ] **Step 5: Add the RBAC matrix entry**
+- [x] **Step 5: Add the RBAC matrix entry**
 
 In `orchestrator/internal/api/rbac_matrix_test.go`, find:
 
@@ -592,12 +592,12 @@ Replace with:
 
 This is the exact drift-detection failure Sub-project D's Task 4 caught after the fact (`TestRBACMatrix_NoDrift`) — added here up front instead.
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `cd orchestrator && go build ./... && go vet ./... && go test ./internal/api/... -run "TestGetEndpointPosture|TestRBACMatrix_NoDrift" -v`
 Expected: build and vet clean; both tests PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add orchestrator/internal/api/endpoint_posture_handlers.go orchestrator/internal/api/routes.go orchestrator/internal/api/rbac_matrix_test.go orchestrator/internal/api/endpoint_posture_handler_test.go
@@ -616,7 +616,7 @@ git push
 - Consumes: `GET /api/analytics/endpoint-posture` (Task 3), `apicall` (existing), `showTab` (existing, for click-through to the Agents tab), `x()` (existing HTML-escaping helper).
 - Produces: `function loadEndpointPostureWidget()`, a new `#dash-endpoint-section`/`#dash-endpoint-tiles` pair.
 
-- [ ] **Step 1: Add the `#dash-endpoint-section` container**
+- [x] **Step 1: Add the `#dash-endpoint-section` container**
 
 Find (`index.html:1473-1481`):
 
@@ -654,7 +654,7 @@ Replace with (adds a new sibling section immediately after):
         </div>
 ```
 
-- [ ] **Step 2: Add `loadEndpointPostureWidget()`**
+- [x] **Step 2: Add `loadEndpointPostureWidget()`**
 
 Find (`index.html:6887-6888`, immediately after `renderTIActors`'s closing brace):
 
@@ -710,7 +710,7 @@ function loadEndpointPostureWidget() {
 // loadReadinessTrends fetches and renders the per-actor readiness history table
 ```
 
-- [ ] **Step 3: Call it from the dashboard load sequence**
+- [x] **Step 3: Call it from the dashboard load sequence**
 
 Find (`index.html:12582-12587`):
 
@@ -735,7 +735,7 @@ Replace with:
     loadReadinessTrends();
 ```
 
-- [ ] **Step 4: Verify — syntax check**
+- [x] **Step 4: Verify — syntax check**
 
 Run from the repo root:
 
@@ -751,7 +751,7 @@ console.log('All script blocks parse OK');
 
 Expected: `All script blocks parse OK`.
 
-- [ ] **Step 5: Verify — id uniqueness**
+- [x] **Step 5: Verify — id uniqueness**
 
 Run:
 
@@ -768,7 +768,7 @@ const html = fs.readFileSync('orchestrator/wwwroot/index.html', 'utf8');
 
 Expected: `dash-endpoint-section: 1` and `dash-endpoint-tiles: 1`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add orchestrator/wwwroot/index.html
@@ -789,7 +789,7 @@ git push
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Confirm Docker is running**
+- [x] **Step 1: Confirm Docker is running**
 
 Run: `docker info 2>&1 | grep -iE "server|error"`
 Expected: a `Server:` block with no error. If down, start Docker Desktop and poll until ready:
@@ -798,11 +798,27 @@ Expected: a `Server:` block with no error. If down, start Docker Desktop and pol
 timeout 180 bash -c 'until docker info >/dev/null 2>&1; do sleep 5; done' && echo "DOCKER_READY"
 ```
 
-- [ ] **Step 2: Run the full Go test suite**
+- [x] **Step 2: Run the full Go test suite**
 
 Run: `cd orchestrator && go build ./... && go vet ./... && go test ./... -count=1`
 Expected: `go build`/`go vet` clean, every package `ok`. If `internal/api` alone times out under full-suite load (a known artifact seen in every prior sub-project's Task 4/regression — Go's default 10-minute per-package timeout under Docker/DB resource contention, not a real failure), re-run it in isolation: `go test ./internal/api/... -count=1 -timeout 20m` and confirm it passes standalone before concluding the suite is clean.
 
-- [ ] **Step 3: Report completion**
+- [x] **Step 3: Report completion**
 
 Executes directly on `main`, no branch/worktree/PR decision needed. Confirm with the user that Sub-project E is complete — this closes out all 5 sub-projects of the Unified Analytics Layer initiative (A: Foundation, B: Dashboard Shell, C: Detection Reconciliation, D: Threat Intel Summary, E: Endpoint Posture).
+
+---
+
+## Execution Notes
+
+All 5 tasks completed and pushed (`043433e`, `ceb9ee3`, `2edc5a1`, `b996a99`).
+
+**A real bug the plan's own investigation missed:** the plan's grep for `AgentOfflineAfter`/`effectiveAgentStatus` only searched `internal/`, missing a third call site in `cmd/server/main.go`'s `runStalenessMonitor` (`api.AgentOfflineAfter`). Caught immediately by the compiler when Task 1's relocation removed the old symbol from `internal/api`. Fixed in the same commit — `cmd/server/main.go` already imported both `api` and `models`, so it was a one-line change.
+
+**Same type/function name collision as Sub-project D:** Task 2's `EndpointPosture` (function) and its return type were both named `EndpointPosture`, the identical illegal-Go-construct mistake D made with `ThreatIntelSummary`. This is now a confirmed pattern, not a one-off — worth remembering during any future analytics-category design: **never name the summary function and its return struct the same identifier.** Fixed by renaming the type to `EndpointPostureSummary`.
+
+**RBAC drift avoided this time:** Task 3 added the `rbac_matrix_test.go` entry proactively in the same step as the route registration (a lesson carried forward from D's Task 4, where this was only caught after the fact). `TestRBACMatrix_NoDrift` passed on the first run.
+
+**Task 5 regression — one transient, non-systemic Docker blip:** the full suite showed `internal/pathcorrelation` failing with the "rootless Docker is not supported on Windows" container-startup error, but this time isolated to a single package rather than every DB-backed package (contrast with D's Task 4, where Docker was fully down). Re-ran `internal/pathcorrelation` alone immediately afterward — passed clean (`ok 8.654s`). Confirmed a one-off container-startup timing blip, not a systemic Docker-down state. Full suite is clean.
+
+Sub-project E (Endpoint Posture) is complete. This closes out all 5 sub-projects of the Unified Analytics Layer initiative: A (Foundation), B (Dashboard Shell), C (Detection Reconciliation), D (Threat Intel Summary), E (Endpoint Posture).
