@@ -21,6 +21,16 @@ type Summary struct {
 	ChokePoints          []ChokePoint            `json:"chokePoints"`
 	ShortestDAPath       []Edge                  `json:"shortestDomainAdminPath"` // representative worst-case path to DA (nil if none)
 	ShortestDADifficulty Difficulty              `json:"shortestDomainAdminDifficulty"`
+	ScoreDrivers         []ScoreDriver           `json:"scoreDrivers"`
+	RelationshipCounts   map[string]int          `json:"relationshipCounts"` // keyed by EdgeKind string value
+}
+
+// ScoreDriver is one weighted category's contribution to the AttackPathScore
+// deficit. Deficit is the real number subtracted from 100 for this category --
+// never an invented "bonus"; the scoring model is pure-deficit (100 - sum(deficits)).
+type ScoreDriver struct {
+	Label   string  `json:"label"`
+	Deficit float64 `json:"deficit"` // points subtracted from 100; 0 = no deficit in this category
 }
 
 // score weights (deficits subtracted from 100). Tuned so a flat, fully meshed
@@ -44,6 +54,10 @@ func (g *Graph) Analyze() Summary {
 	}
 
 	hosts := g.hostIDs()
+	s.RelationshipCounts = map[string]int{}
+	for _, e := range g.Edges() {
+		s.RelationshipCounts[string(e.Kind)]++
+	}
 	s.LateralMovementBand = g.LateralMovementBand()
 	s.SegmentationViols = g.SegmentationViolations()
 	s.CrownJewels = g.CrownJewelExposures()
@@ -84,20 +98,29 @@ func (g *Graph) Analyze() Summary {
 
 	// ---- deficits ----
 	deficit := 0.0
+	var drivers []ScoreDriver
+
+	dcDeficit := 0.0
 	if s.DomainCompromise {
-		deficit += wDomainCompromise
+		dcDeficit = wDomainCompromise
 	}
+	deficit += dcDeficit
+	drivers = append(drivers, ScoreDriver{Label: "Domain Admin path reachable", Deficit: dcDeficit})
 
 	// lateral movement: fraction of the fleet an average entry can reach
+	lateralDeficit := 0.0
 	if denom := float64(maxInt(len(hosts)-1, 1)); len(hosts) > 0 {
 		frac := s.AvgBlastRadius / denom
 		if frac > 1 {
 			frac = 1
 		}
-		deficit += frac * wLateralMax
+		lateralDeficit = frac * wLateralMax
 	}
+	deficit += lateralDeficit
+	drivers = append(drivers, ScoreDriver{Label: "Lateral movement exposure", Deficit: round2(lateralDeficit)})
 
 	// crown jewels: fraction of tagged jewels reachable from any host
+	crownJewelDeficit := 0.0
 	if len(s.CrownJewels) > 0 {
 		reach := 0
 		for _, cj := range s.CrownJewels {
@@ -105,14 +128,21 @@ func (g *Graph) Analyze() Summary {
 				reach++
 			}
 		}
-		deficit += (float64(reach) / float64(len(s.CrownJewels))) * wCrownJewel
+		crownJewelDeficit = (float64(reach) / float64(len(s.CrownJewels))) * wCrownJewel
 	}
+	deficit += crownJewelDeficit
+	drivers = append(drivers, ScoreDriver{Label: "Crown jewel exposure", Deficit: round2(crownJewelDeficit)})
 
 	// segmentation: saturating penalty on cross-segment lateral edges
+	segDeficit := 0.0
 	if v := len(s.SegmentationViols); v > 0 {
 		frac := float64(v) / float64(v+3) // 1 viol→0.25, 3→0.5, 9→0.75
-		deficit += frac * wSegmentation
+		segDeficit = frac * wSegmentation
 	}
+	deficit += segDeficit
+	drivers = append(drivers, ScoreDriver{Label: "Segmentation violations", Deficit: round2(segDeficit)})
+
+	s.ScoreDrivers = drivers
 
 	score := 100 - int(deficit+0.5)
 	score = max(score, 0)

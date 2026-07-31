@@ -161,3 +161,48 @@ func TestAddEdgeAutoCreatesNodes(t *testing.T) {
 		t.Fatal("Y should exist as a bare host node")
 	}
 }
+
+func TestAnalyzeScoreDrivers_SumsToActualDeficit(t *testing.T) {
+	g := sample()
+	s := g.Analyze()
+	if len(s.ScoreDrivers) != 4 {
+		t.Fatalf("ScoreDrivers = %+v, want 4 entries", s.ScoreDrivers)
+	}
+	var total float64
+	for _, d := range s.ScoreDrivers {
+		if d.Label == "" {
+			t.Errorf("driver has empty label: %+v", d)
+		}
+		total += d.Deficit
+	}
+	wantDeficit := float64(100 - s.AttackPathScore)
+	if total < wantDeficit-1 || total > wantDeficit+1 {
+		t.Fatalf("ScoreDrivers sum to %.2f, want ~%.2f (100 - AttackPathScore, allowing rounding)", total, wantDeficit)
+	}
+}
+
+func TestAnalyzeScoreDrivers_CleanGraphAllZero(t *testing.T) {
+	g := New()
+	g.AddNode(Node{ID: "A", Kind: KindHost, Role: RoleEndpoint, Segment: "vlan1"})
+	g.AddNode(Node{ID: "B", Kind: KindHost, Role: RoleEndpoint, Segment: "vlan1"})
+	s := g.Analyze()
+	for _, d := range s.ScoreDrivers {
+		if d.Deficit != 0 {
+			t.Errorf("driver %q deficit = %v, want 0 for a clean graph", d.Label, d.Deficit)
+		}
+	}
+}
+
+func TestAnalyzeRelationshipCounts(t *testing.T) {
+	g := sample()
+	s := g.Analyze()
+	want := map[string]int{"smb": 2, "winrm": 1, "has-session": 1, "member-of": 1, "admin-to": 1}
+	if len(s.RelationshipCounts) != len(want) {
+		t.Fatalf("RelationshipCounts = %+v, want %+v", s.RelationshipCounts, want)
+	}
+	for k, v := range want {
+		if s.RelationshipCounts[k] != v {
+			t.Errorf("RelationshipCounts[%q] = %d, want %d", k, s.RelationshipCounts[k], v)
+		}
+	}
+}
