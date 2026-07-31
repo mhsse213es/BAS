@@ -12,8 +12,10 @@ import (
 // ExtractFromDetectionAlert pulls IOC-shaped values out of res.DetectionAlert
 // (if present) into the iocs/ioc_sightings tables. Best-effort by design of
 // its caller (SubmitRunDetections) -- a nil DetectionAlert or empty fields
-// are not errors, just nothing to extract.
-func ExtractFromDetectionAlert(ctx context.Context, pool *pgxpool.Pool, scenarioID, runID, agentID string, res models.SimulationResult) error {
+// are not errors, just nothing to extract. techniqueID/detectionVerdict come
+// from the same SimulationResult the alert was matched against -- passed
+// separately since they live on the result, not the alert.
+func ExtractFromDetectionAlert(ctx context.Context, pool *pgxpool.Pool, scenarioID, runID, agentID, techniqueID, detectionVerdict string, res models.SimulationResult) error {
 	if res.DetectionAlert == nil {
 		return nil
 	}
@@ -28,7 +30,7 @@ func ExtractFromDetectionAlert(ctx context.Context, pool *pgxpool.Pool, scenario
 		if err != nil {
 			return err
 		}
-		if err := recordSighting(ctx, pool, id, scenarioID, runID, agentID); err != nil {
+		if err := recordSighting(ctx, pool, id, scenarioID, runID, agentID, techniqueID, detectionVerdict); err != nil {
 			return err
 		}
 	}
@@ -38,7 +40,7 @@ func ExtractFromDetectionAlert(ctx context.Context, pool *pgxpool.Pool, scenario
 		if err != nil {
 			return err
 		}
-		if err := recordSighting(ctx, pool, id, scenarioID, runID, agentID); err != nil {
+		if err := recordSighting(ctx, pool, id, scenarioID, runID, agentID, techniqueID, detectionVerdict); err != nil {
 			return err
 		}
 	}
@@ -72,10 +74,10 @@ func upsertIOC(ctx context.Context, pool *pgxpool.Pool, t Type, value string, so
 	return id, err
 }
 
-func recordSighting(ctx context.Context, pool *pgxpool.Pool, iocID, scenarioID, runID, agentID string) error {
+func recordSighting(ctx context.Context, pool *pgxpool.Pool, iocID, scenarioID, runID, agentID, techniqueID, detectionVerdict string) error {
 	_, err := pool.Exec(ctx, `
-		INSERT INTO ioc_sightings (ioc_id, scenario_id, run_id, agent_id)
-		VALUES ($1, $2, $3, $4)`,
-		iocID, scenarioID, runID, agentID)
+		INSERT INTO ioc_sightings (ioc_id, scenario_id, run_id, agent_id, technique_id, detection_verdict)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		iocID, scenarioID, runID, agentID, techniqueID, detectionVerdict)
 	return err
 }

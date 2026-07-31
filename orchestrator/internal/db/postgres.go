@@ -584,6 +584,15 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_ioc_sightings_run   ON ioc_sightings (run_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_ioc_sightings_agent ON ioc_sightings (agent_id)`,
 
+		// Phase B: correlation/analytics need to know which technique produced
+		// a sighting and what its detection verdict was -- both already
+		// computed by SubmitRunDetections at extraction time, just not
+		// captured until now. See
+		// docs/superpowers/specs/2026-07-31-ioc-relationships-analytics-design.md.
+		`ALTER TABLE ioc_sightings ADD COLUMN IF NOT EXISTS technique_id text NOT NULL DEFAULT ''`,
+		`ALTER TABLE ioc_sightings ADD COLUMN IF NOT EXISTS detection_verdict text NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_ioc_sightings_technique ON ioc_sightings (technique_id)`,
+
 		// vex_sweeps: server-owned Full Variant Sweep orchestration state.
 		// One row per sweep; the partial unique index below makes "one
 		// running sweep per agent" race-safe (not an app-level
