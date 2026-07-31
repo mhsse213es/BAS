@@ -115,3 +115,69 @@ func TestHostInventoryIncludesCriticalityFields(t *testing.T) {
 		t.Fatalf("expected host B in inventory: %+v", inv)
 	}
 }
+
+func TestBuildGraphAndAnalyze_ConfidenceLevels(t *testing.T) {
+	agentOnly := []Collection{{AgentID: "a", Source: "agent", Nodes: []Node{{ID: "H1", Kind: KindHost}}}}
+	_, s := BuildGraphAndAnalyze(agentOnly, nil)
+	if s.Confidence.Level != "Medium" {
+		t.Errorf("agent-only Confidence.Level = %q, want Medium", s.Confidence.Level)
+	}
+	found := false
+	for _, m := range s.Confidence.Missing {
+		if m == "Active Directory relationships" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("agent-only Confidence.Missing = %+v, want it to include Active Directory relationships", s.Confidence.Missing)
+	}
+
+	both := []Collection{
+		{AgentID: "a", Source: "agent", Nodes: []Node{{ID: "H1", Kind: KindHost}}},
+		{AgentID: "a", Source: "sharphound", Nodes: []Node{{ID: "H1", Kind: KindHost}}},
+	}
+	_, s2 := BuildGraphAndAnalyze(both, nil)
+	if s2.Confidence.Level != "High" {
+		t.Errorf("agent+sharphound Confidence.Level = %q, want High", s2.Confidence.Level)
+	}
+	if len(s2.Confidence.Missing) != 0 {
+		t.Errorf("agent+sharphound Confidence.Missing = %+v, want empty", s2.Confidence.Missing)
+	}
+
+	_, s3 := BuildGraphAndAnalyze(nil, nil)
+	if s3.Confidence.Level != "Low" {
+		t.Errorf("no collections Confidence.Level = %q, want Low", s3.Confidence.Level)
+	}
+}
+
+func TestBuildGraphAndAnalyze_DomainCompromiseStatus(t *testing.T) {
+	// Reachable: DomainCompromise true regardless of Source.
+	reachableCols := []Collection{{AgentID: "a", Source: "agent",
+		Nodes: []Node{
+			{ID: "WS01", Kind: KindHost}, {ID: "alice", Kind: KindUser}, {ID: "DA", Kind: KindGroup, HighValue: true}, {ID: "DC01", Kind: KindHost},
+		},
+		Edges: []Edge{
+			{From: "WS01", To: "alice", Kind: EdgeHasSession},
+			{From: "alice", To: "DA", Kind: EdgeMemberOf},
+			{From: "DA", To: "DC01", Kind: EdgeAdminTo},
+		}}}
+	_, s := BuildGraphAndAnalyze(reachableCols, nil)
+	if s.DomainCompromiseStatus != DCStatusReachable {
+		t.Errorf("DomainCompromiseStatus = %q, want %q", s.DomainCompromiseStatus, DCStatusReachable)
+	}
+
+	// Not-observed: sharphound ran, high-value target exists, but no path found.
+	notObservedCols := []Collection{{AgentID: "a", Source: "sharphound",
+		Nodes: []Node{{ID: "WS01", Kind: KindHost}, {ID: "DA", Kind: KindGroup, HighValue: true}}}}
+	_, s2 := BuildGraphAndAnalyze(notObservedCols, nil)
+	if s2.DomainCompromiseStatus != DCStatusNotObserved {
+		t.Errorf("DomainCompromiseStatus = %q, want %q", s2.DomainCompromiseStatus, DCStatusNotObserved)
+	}
+
+	// Undetermined: no sharphound data at all, no path found.
+	undeterminedCols := []Collection{{AgentID: "a", Source: "agent", Nodes: []Node{{ID: "WS01", Kind: KindHost}}}}
+	_, s3 := BuildGraphAndAnalyze(undeterminedCols, nil)
+	if s3.DomainCompromiseStatus != DCStatusUndetermined {
+		t.Errorf("DomainCompromiseStatus = %q, want %q", s3.DomainCompromiseStatus, DCStatusUndetermined)
+	}
+}

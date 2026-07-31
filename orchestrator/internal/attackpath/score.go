@@ -21,9 +21,30 @@ type Summary struct {
 	ChokePoints          []ChokePoint            `json:"chokePoints"`
 	ShortestDAPath       []Edge                  `json:"shortestDomainAdminPath"` // representative worst-case path to DA (nil if none)
 	ShortestDADifficulty Difficulty              `json:"shortestDomainAdminDifficulty"`
-	ScoreDrivers         []ScoreDriver           `json:"scoreDrivers"`
-	RelationshipCounts   map[string]int          `json:"relationshipCounts"` // keyed by EdgeKind string value
+	ScoreDrivers           []ScoreDriver  `json:"scoreDrivers"`
+	RelationshipCounts     map[string]int `json:"relationshipCounts"` // keyed by EdgeKind string value
+	Confidence             Confidence     `json:"confidence"`
+	DomainCompromiseStatus string         `json:"domainCompromiseStatus"` // reachable | not-observed | undetermined
 }
+
+// Confidence summarizes which data sources contributed to this graph, so the
+// operator knows how much to trust it. Level is derived from which Source
+// values (see Collection.Source) are present across the collections merged
+// into this graph.
+type Confidence struct {
+	Level   string   `json:"level"`   // High | Medium | Low
+	Based   []string `json:"based"`
+	Missing []string `json:"missing"`
+}
+
+// DomainCompromiseStatus values. The plain DomainCompromise bool can't
+// distinguish "we checked and found no path" from "we never collected the
+// data needed to check" -- these three values can.
+const (
+	DCStatusReachable    = "reachable"
+	DCStatusNotObserved  = "not-observed"
+	DCStatusUndetermined = "undetermined"
+)
 
 // ScoreDriver is one weighted category's contribution to the AttackPathScore
 // deficit. Deficit is the real number subtracted from 100 for this category --

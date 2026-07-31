@@ -93,7 +93,58 @@ func BuildAndAnalyze(cols []Collection, tags []AssetTag) Summary {
 func BuildGraphAndAnalyze(cols []Collection, tags []AssetTag) (*Graph, Summary) {
 	g := BuildGraph(cols...)
 	g.applyAssetTags(tags)
-	return g, g.Analyze()
+	s := g.Analyze()
+	s.Confidence = computeConfidence(cols)
+	s.DomainCompromiseStatus = domainCompromiseStatus(s, cols)
+	return g, s
+}
+
+// computeConfidence derives a High/Medium/Low confidence level from which
+// Collection.Source values contributed to this graph.
+func computeConfidence(cols []Collection) Confidence {
+	hasAgent, hasSharpHound := false, false
+	for _, c := range cols {
+		switch c.Source {
+		case "agent":
+			hasAgent = true
+		case "sharphound":
+			hasSharpHound = true
+		}
+	}
+	c := Confidence{Based: []string{}, Missing: []string{}}
+	if hasAgent {
+		c.Based = append(c.Based, "Reachability", "Local Admins", "Sessions")
+	}
+	if hasSharpHound {
+		c.Based = append(c.Based, "Active Directory relationships")
+	} else {
+		c.Missing = append(c.Missing, "Active Directory relationships")
+	}
+	switch {
+	case hasAgent && hasSharpHound:
+		c.Level = "High"
+	case hasAgent || hasSharpHound:
+		c.Level = "Medium"
+	default:
+		c.Level = "Low"
+	}
+	return c
+}
+
+// domainCompromiseStatus disambiguates s.DomainCompromise's bare bool: a
+// reachable path is always "reachable" regardless of source; otherwise the
+// status depends on whether SharpHound (the source of AD/high-value-target
+// data) actually ran.
+func domainCompromiseStatus(s Summary, cols []Collection) string {
+	if s.DomainCompromise {
+		return DCStatusReachable
+	}
+	for _, c := range cols {
+		if c.Source == "sharphound" {
+			return DCStatusNotObserved
+		}
+	}
+	return DCStatusUndetermined
 }
 
 // HostInventory is the list of host nodes in the current graph with their
