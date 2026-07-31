@@ -3507,6 +3507,18 @@ body.theme-slate {
           </select>
           <div id="modal-variant-note" class="sub2" style="margin-top:0.35rem"></div>
         </div>
+
+        <!-- Max privilege — operator-set ceiling; any step whose technique requires
+             higher privilege than this is skipped (not dispatched), not a login choice. -->
+        <div id="modal-privilege-wrap" style="margin-top:0.75rem">
+          <label class="modal-lbl">Max privilege</label>
+          <select id="modal-max-privilege">
+            <option value="">No limit — run every step regardless of required privilege</option>
+            <option value="user">User — skip steps requiring admin or system</option>
+            <option value="admin">Admin — skip steps requiring system</option>
+          </select>
+          <div class="sub2" style="margin-top:0.35rem">Steps above this ceiling are skipped, not dispatched to the agent — simulates what an attacker could achieve capped at this privilege level.</div>
+        </div>
       </div>
 
       <!-- Step 4: Review -->
@@ -9089,6 +9101,7 @@ function openModal(scenarioId, preAgent, lockAgent) {
            x(a.agentId) + ' — ' + x(a.hostname) + osLabel + '</option>';
   }).join('');
   document.getElementById('modal-mode').value = 'posture'; // always default to safe
+  document.getElementById('modal-max-privilege').value = ''; // always default to no limit
   _addlSel = {};
   renderRunMode();
   document.getElementById('run-overlay').classList.add('open');
@@ -9354,6 +9367,9 @@ function renderWizardReview() {
     var vd = variantDepthEl2.value || 'none';
     variantLabel = { none: 'None (base only)', quick: 'Quick (~5 per PS step)', standard: 'Standard (~15 per PS step)', full: 'Full (33 per PS step)' }[vd] || vd;
   }
+  var maxPrivEl = document.getElementById('modal-max-privilege');
+  var maxPrivLabel = maxPrivEl && maxPrivEl.value ?
+    { user: 'User (skips admin/system steps)', admin: 'Admin (skips system steps)' }[maxPrivEl.value] || maxPrivEl.value : '';
   var addlIds = additionalAgentIds();
   var agentsRow;
   if (addlIds.length) {
@@ -9371,6 +9387,7 @@ function renderWizardReview() {
              row('Mode', x(modeLabel)) +
              row('Scope', x(subset)) +
              (variantLabel ? row('Variant depth', x(variantLabel)) : '') +
+             (maxPrivLabel ? row('Max privilege', x(maxPrivLabel)) : '') +
              (reason ? row('Reason', x(reason)) : '');
   var warnEl = document.getElementById('modal-mode-warn');
   if (warnEl.style.display !== 'none' && warnEl.innerHTML.trim()) {
@@ -11811,6 +11828,10 @@ function confirmRun() {
 
   var baseBody = { mode: mode, confirmLive: confirmLive, confirmLab: confirmLab,
                     reason: reason, variantDepth: variantDepth, batchId: genBatchId() };
+  var maxPrivEl2 = document.getElementById('modal-max-privilege');
+  if (maxPrivEl2 && maxPrivEl2.value) {
+    baseBody.executionPolicy = { maxPrivilege: maxPrivEl2.value };
+  }
   if (_runSelection && _runSelection.scId === scenarioId && _runSelection.ids.length) {
     if (_runSelection.fw === 'art') baseBody.techniques = _runSelection.ids;
     else if (_runSelection.fw === 'caldera') baseBody.abilities = _runSelection.ids;
