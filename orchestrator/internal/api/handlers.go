@@ -471,7 +471,7 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
 		// last_update, so surface it as offline rather than its frozen last status.
-		a.Status = effectiveAgentStatus(a.Status, a.LastUpdate, now)
+		a.Status = models.EffectiveAgentStatus(a.Status, a.LastUpdate, now)
 		a.State = models.AgentState(stateStr)
 		var p models.PolicyBundle
 		if err := json.Unmarshal([]byte(policyRaw), &p); err == nil {

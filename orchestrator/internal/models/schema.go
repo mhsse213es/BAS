@@ -221,6 +221,27 @@ const (
 	AgentStateRetired     AgentState = "retired"
 )
 
+// AgentOfflineAfter is how long after its last heartbeat an agent is considered
+// offline. A dead/rebooted endpoint stops heartbeating; once last_update is older
+// than this the agent shows "offline" and any run it was executing is reaped.
+// Single source of truth: internal/api's read paths and background staleness
+// monitor, and internal/analytics's fleet-health tallies, all use this value.
+// Comfortably exceeds the heartbeat interval to avoid flapping on one missed beat.
+const AgentOfflineAfter = 90 * time.Second
+
+// EffectiveAgentStatus overrides the stored connectivity status with "offline"
+// when the agent's last heartbeat is older than AgentOfflineAfter. Stored status
+// only changes on heartbeat, so without this a dead agent shows its last-known
+// status until the background monitor next runs. Computing it on read makes any
+// consumer correct immediately and stays right even if the monitor is delayed.
+// Independent of the security AgentState (active/quarantined/…).
+func EffectiveAgentStatus(stored string, lastUpdate, now time.Time) string {
+	if now.Sub(lastUpdate) > AgentOfflineAfter {
+		return "offline"
+	}
+	return stored
+}
+
 // PolicyBundle is sent to the agent at enroll time and refreshed on each heartbeat response.
 // It governs what the agent is allowed to do without operator intervention.
 type PolicyBundle struct {

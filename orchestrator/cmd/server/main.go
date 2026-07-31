@@ -495,8 +495,8 @@ func main() {
 // dashboard reflects the real status without a manual refresh.
 func runStalenessMonitor(pool *pgxpool.Pool, hub *ws.Hub) {
 	// Single source of truth for the offline threshold, shared with the API's
-	// read-path (effectiveAgentStatus) and dispatch-path (runIsStale) checks.
-	staleAfter := api.AgentOfflineAfter
+	// read-path (models.EffectiveAgentStatus) and dispatch-path (runIsStale) checks.
+	staleAfter := models.AgentOfflineAfter
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
