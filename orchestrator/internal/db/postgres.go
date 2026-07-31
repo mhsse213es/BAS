@@ -552,6 +552,38 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			WHERE a.id > b.id AND a.variant_run_id = b.variant_run_id AND a.task_id = b.task_id`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_variant_findings_run_task ON variant_findings (variant_run_id, task_id)`,
 
+		// iocs / ioc_sightings: canonical IOC registry (Phase 0+A of the IOC
+		// handling initiative). One iocs row per distinct (type, value);
+		// ioc_sightings is the per-observation junction, never deduped --
+		// the same value seen on 2 agents is 2 sightings, 1 IOC. See
+		// docs/superpowers/specs/2026-07-31-ioc-registry-design.md.
+		`CREATE TABLE IF NOT EXISTS iocs (
+			id             text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			type           text        NOT NULL,
+			value          text        NOT NULL,
+			source         text        NOT NULL,
+			origin         text        NOT NULL DEFAULT 'built-in',
+			status         text        NOT NULL DEFAULT 'observed',
+			first_seen     timestamptz NOT NULL DEFAULT NOW(),
+			last_seen      timestamptz NOT NULL DEFAULT NOW(),
+			sighting_count int         NOT NULL DEFAULT 1,
+			metadata       jsonb       NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_iocs_type_value ON iocs (type, value)`,
+		`CREATE INDEX IF NOT EXISTS idx_iocs_status ON iocs (status)`,
+
+		`CREATE TABLE IF NOT EXISTS ioc_sightings (
+			id          text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			ioc_id      text        NOT NULL REFERENCES iocs(id) ON DELETE CASCADE,
+			scenario_id text        NOT NULL DEFAULT '',
+			run_id      text        NOT NULL DEFAULT '',
+			agent_id    text        NOT NULL DEFAULT '',
+			observed_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_ioc_sightings_ioc   ON ioc_sightings (ioc_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_ioc_sightings_run   ON ioc_sightings (run_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_ioc_sightings_agent ON ioc_sightings (agent_id)`,
+
 		// vex_sweeps: server-owned Full Variant Sweep orchestration state.
 		// One row per sweep; the partial unique index below makes "one
 		// running sweep per agent" race-safe (not an app-level
