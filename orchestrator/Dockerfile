@@ -48,23 +48,23 @@ COPY installer/go.mod installer/go.sum ./
 RUN go mod download
 COPY installer/ .
 # Ship the WebView2 runtime as a sibling file inside a zip next to
-# installer.exe (not go:embed — that would balloon installer.exe from ~14MB
-# to ~190MB). Matched by a filename pattern, not an exact name, for the same
+# Audspect_Agent.exe (not go:embed — that would balloon Audspect_Agent.exe
+# from ~14MB to ~190MB). Matched by a filename pattern, not an exact name, for the same
 # reason as packaging/windows-build.ps1 - see installer/webview2/README.md.
 RUN apk add --no-cache zip && \
     cp /agents/bas-agent-windows-amd64.exe ./bas_agent.exe && \
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
     go build -trimpath -ldflags="-s -w -H windowsgui" \
-    -o /agents/installer.exe . && \
-    EXE_MB=$(( $(stat -c%s /agents/installer.exe) / 1024 / 1024 )) && \
-    if [ "$EXE_MB" -gt 25 ]; then echo "installer.exe is ${EXE_MB}MB, expected ~14MB - something is being embedded that shouldn't be" >&2; exit 1; fi && \
+    -o /agents/Audspect_Agent.exe . && \
+    EXE_MB=$(( $(stat -c%s /agents/Audspect_Agent.exe) / 1024 / 1024 )) && \
+    if [ "$EXE_MB" -gt 25 ]; then echo "Audspect_Agent.exe is ${EXE_MB}MB, expected ~14MB - something is being embedded that shouldn't be" >&2; exit 1; fi && \
     WV2=$(find webview2 -maxdepth 1 -iname '*WebView2*RuntimeInstaller*.exe' 2>/dev/null | head -1) && \
     if [ -n "$WV2" ]; then \
         cp "$WV2" /agents/MicrosoftEdgeWebView2RuntimeInstaller.exe && \
-        cd /agents && zip -q bas-agent-windows-amd64-setup.zip installer.exe MicrosoftEdgeWebView2RuntimeInstaller.exe && \
-        rm installer.exe MicrosoftEdgeWebView2RuntimeInstaller.exe; \
+        cd /agents && zip -q bas-agent-windows-amd64-setup.zip Audspect_Agent.exe MicrosoftEdgeWebView2RuntimeInstaller.exe && \
+        rm Audspect_Agent.exe MicrosoftEdgeWebView2RuntimeInstaller.exe; \
     else \
-        cd /agents && zip -q bas-agent-windows-amd64-setup.zip installer.exe && rm installer.exe; \
+        cd /agents && zip -q bas-agent-windows-amd64-setup.zip Audspect_Agent.exe && rm Audspect_Agent.exe; \
     fi
 
 # ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────
