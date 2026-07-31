@@ -89,6 +89,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/analytics/endpoint-posture", tierAny, ""},
 	{http.MethodGet, "/api/iocs", tierAny, ""},
 	{http.MethodGet, "/api/analytics/iocs", tierAny, ""},
+	{http.MethodPost, "/api/iocs/{id}/suppress", tierPermission, auth.CanManageIOCs},
 	{http.MethodGet, "/api/intelligence/campaigns", tierAny, ""},
 	{http.MethodGet, "/api/intelligence/malware", tierAny, ""},
 	{http.MethodGet, "/api/intelligence/tools", tierAny, ""},

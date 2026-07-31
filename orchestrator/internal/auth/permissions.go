@@ -98,6 +98,9 @@ const (
 	// Admin-only: global search reindex trigger.
 	CanReindexSearch Permission = "search:reindex"
 
+	// Admin-only: IOC registry management (suppress/unsuppress, customer import).
+	CanManageIOCs Permission = "iocs:manage"
+
 	// Admin-only: filesystem integrity tamper events, audit log.
 	CanViewTamperEvents           Permission = "tamper:events:view"
 	CanAcknowledgeTamperEvent     Permission = "tamper:events:acknowledge"
@@ -207,7 +210,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
 		CanResetUserPassword: true, CanViewCalderaStatus: true, CanViewConnectorStatus: true,
 		CanSyncConnector: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
-		CanViewARTContentStatus: true, CanReseedARTContent: true, CanReindexSearch: true, CanViewTamperEvents: true,
+		CanViewARTContentStatus: true, CanReseedARTContent: true, CanReindexSearch: true, CanManageIOCs: true, CanViewTamperEvents: true,
 		CanAcknowledgeTamperEvent: true, CanAcknowledgeAllTamperEvents: true, CanViewAuditLogs: true,
 		CanListTicketingConfigs: true, CanCreateTicketingConfig: true, CanUpdateTicketingConfig: true,
 		CanDeleteTicketingConfig: true, CanTestTicketingConfig: true, CanProbeTicketingConfig: true,
@@ -282,7 +285,7 @@ func Permissions(role Role) []Permission {
 		CanSetAgentState, CanStopAgent, CanViewLicense, CanViewConnectionConfig, CanListUsers, CanCreateUser,
 		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
 		CanSyncConnector, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
-		CanReseedARTContent, CanReindexSearch, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,
+		CanReseedARTContent, CanReindexSearch, CanManageIOCs, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,
 		CanViewAuditLogs, CanListTicketingConfigs, CanCreateTicketingConfig, CanUpdateTicketingConfig,
 		CanDeleteTicketingConfig, CanTestTicketingConfig, CanProbeTicketingConfig, CanProbeTicketingProjects,
 		CanSyncTicketing, CanCreatePayloadFamily, CanDeletePayloadFamily, CanListSIEMConfigs,
