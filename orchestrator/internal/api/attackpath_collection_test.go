@@ -300,3 +300,69 @@ func TestGetAttackPathHistory_EmptyThenPopulatedWithFilters(t *testing.T) {
 		}
 	})
 }
+
+// TestGetAttackPathSummary_CoverageReconciliation pins that Coverage compares
+// the most recent request-log row against which targets ended up represented
+// in the resulting graph -- never claiming to know *why* a target is missing.
+func TestGetAttackPathSummary_CoverageReconciliation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := attackpathHandler(t, pool)
+
+		targetsJSON, _ := json.Marshal([]string{"REPRESENTED-HOST", "MISSING-HOST"})
+		pool.Exec(context.Background(),
+			`INSERT INTO attackpath_collection_requests (agent_id, targets, run_sharphound) VALUES ($1, $2, $3)`,
+			"cov-agent", targetsJSON, false)
+
+		c := minimalCollection("cov-agent", "REPRESENTED-HOST", "agent")
+		h.SubmitAttackPathCollection(httptest.NewRecorder(), collectionReq(c))
+
+		rec := httptest.NewRecorder()
+		h.GetAttackPathSummary(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Coverage struct {
+				TargetsRequested   int    `json:"targetsRequested"`
+				TargetsRepresented int    `json:"targetsRepresented"`
+				Completeness       string `json:"completeness"`
+			} `json:"coverage"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if out.Coverage.TargetsRequested != 2 {
+			t.Errorf("TargetsRequested = %d, want 2", out.Coverage.TargetsRequested)
+		}
+		if out.Coverage.TargetsRepresented != 1 {
+			t.Errorf("TargetsRepresented = %d, want 1 (only REPRESENTED-HOST appears in the graph)", out.Coverage.TargetsRepresented)
+		}
+		if out.Coverage.Completeness != "Limited" {
+			t.Errorf("Completeness = %q, want Limited", out.Coverage.Completeness)
+		}
+	})
+}
+
+func TestGetAttackPathSummary_CoverageNoRequestLog(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := attackpathHandler(t, pool)
+		c := minimalCollection("no-reqlog-agent", "H1", "agent")
+		h.SubmitAttackPathCollection(httptest.NewRecorder(), collectionReq(c))
+
+		rec := httptest.NewRecorder()
+		h.GetAttackPathSummary(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+		var out struct {
+			Coverage struct {
+				Completeness string `json:"completeness"`
+			} `json:"coverage"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if out.Coverage.Completeness != "Unknown" {
+			t.Errorf("Completeness = %q, want Unknown when no request log exists", out.Coverage.Completeness)
+		}
+	})
+}

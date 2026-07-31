@@ -184,7 +184,7 @@ func (h *Handler) GetAttackPathSummary(w http.ResponseWriter, r *http.Request) {
 		respond(w, map[string]any{"collected": false})
 		return
 	}
-	s := attackpath.BuildAndAnalyze(cols, h.loadAssetTags(r))
+	g, s := attackpath.BuildGraphAndAnalyze(cols, h.loadAssetTags(r))
 
 	// Build per-agent metadata from the live collections table so the UI can
 	// show "Current Graph" details (hostname, counts, timestamp) without a
@@ -227,12 +227,73 @@ func (h *Handler) GetAttackPathSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	respond(w, map[string]any{
-		"collected":        true,
-		"agents":           len(cols),
-		"summary":          s,
+		"collected":         true,
+		"agents":            len(cols),
+		"summary":           s,
+		"coverage":          h.buildAttackPathCoverage(r, g, cols),
 		"latestCollectedAt": latest,
-		"agentMeta":        agentMetas,
+		"agentMeta":         agentMetas,
 	})
+}
+
+// attackPathCoverage compares what was most recently requested against what
+// actually ended up represented in the resulting graph. It never claims to
+// know *why* a target is missing (offline, firewalled, DNS failure, and
+// "never attempted" are all observationally identical from here) -- the
+// field is TargetsRepresented, not TargetsCollected, and callers must not
+// relabel it as "Collected" in the UI.
+type attackPathCoverage struct {
+	TargetsRequested    int    `json:"targetsRequested"`
+	TargetsRepresented  int    `json:"targetsRepresented"`
+	SharpHoundRequested bool   `json:"sharpHoundRequested"`
+	SharpHoundAvailable bool   `json:"sharpHoundAvailable"`
+	Completeness        string `json:"completeness"` // Full | Limited | Minimal | Unknown
+}
+
+func (h *Handler) buildAttackPathCoverage(r *http.Request, g *attackpath.Graph, cols []attackpath.Collection) attackPathCoverage {
+	var cov attackPathCoverage
+	var targetsRaw []byte
+	err := h.db.QueryRow(r.Context(), `
+		SELECT targets, run_sharphound FROM attackpath_collection_requests
+		ORDER BY requested_at DESC LIMIT 1`).Scan(&targetsRaw, &cov.SharpHoundRequested)
+	if err != nil {
+		cov.Completeness = "Unknown"
+		return cov
+	}
+	var targets []string
+	_ = json.Unmarshal(targetsRaw, &targets)
+	cov.TargetsRequested = len(targets)
+
+	represented := map[string]bool{}
+	for _, n := range g.Nodes() {
+		if n.Kind == attackpath.KindHost {
+			represented[attackpath.NormalizeHostKey(n.ID)] = true
+		}
+	}
+	for _, t := range targets {
+		if represented[attackpath.NormalizeHostKey(t)] {
+			cov.TargetsRepresented++
+		}
+	}
+
+	for _, c := range cols {
+		if c.Source == "sharphound" {
+			cov.SharpHoundAvailable = true
+			break
+		}
+	}
+
+	switch {
+	case cov.TargetsRequested == 0:
+		cov.Completeness = "Unknown"
+	case cov.TargetsRepresented == cov.TargetsRequested && (cov.SharpHoundAvailable || !cov.SharpHoundRequested):
+		cov.Completeness = "Full"
+	case cov.TargetsRepresented > 0:
+		cov.Completeness = "Limited"
+	default:
+		cov.Completeness = "Minimal"
+	}
+	return cov
 }
 
 // GetAttackPathHistory returns recent collection run metadata (no graph payloads).
