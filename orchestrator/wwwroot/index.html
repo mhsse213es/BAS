@@ -14195,10 +14195,14 @@ function _vexCheckAgentSweepConflict() {
   var hint = document.getElementById('vex-sweep-agent-hint');
   if (!hint) return;
   if (!agentId) { hint.textContent = ''; return; }
-  apicall('/api/vex/sweeps/active?agentId=' + encodeURIComponent(agentId)).then(function() {
-    hint.textContent = 'This agent already has a sweep running.';
+  // apicall() only rejects on 401 -- every other status (400/404/500) still
+  // resolves .then() with whatever JSON body came back. jsonError() always
+  // includes an "error" field and success payloads never do, so that's the
+  // real signal here, not promise rejection.
+  apicall('/api/vex/sweeps/active?agentId=' + encodeURIComponent(agentId)).then(function(res) {
+    hint.textContent = (res && !res.error) ? 'This agent already has a sweep running.' : '';
   }).catch(function() {
-    hint.textContent = ''; // 404 (no active sweep) is the expected non-error case here
+    hint.textContent = '';
   });
 }
 
