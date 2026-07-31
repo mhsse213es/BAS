@@ -29,7 +29,7 @@
 - Consumes: `threatpriority.Engine.ScoreAll(ctx) ([]ActorPriority, error)` (`internal/threatpriority/engine.go:274`, already sorted score descending), `threatpriority.NewEngine(pool, scenarioEngine, sectors, regions)` (test-only), `scenario.NewEngine(dir)` (test-only).
 - Produces: `type ThreatIntelSummary struct { TopActors []threatpriority.ActorPriority; KEVExposedTechniques int; TotalKEVCVEs int }`, `func ThreatIntelSummary(ctx context.Context, pool *pgxpool.Pool, tpEngine *threatpriority.Engine) (ThreatIntelSummary, error)`. Task 2's handler calls this directly.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `orchestrator/internal/analytics/threatintel_test.go`:
 
@@ -132,12 +132,12 @@ func TestThreatIntelSummary_KEVCounts(t *testing.T) {
 
 `sharedDB`/`mustExec` are already declared in `internal/analytics/risk_test.go` (Sub-project A) — shared across every test file in this package.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd orchestrator && go test ./internal/analytics/... -run TestThreatIntelSummary -v`
 Expected: FAIL — `undefined: ThreatIntelSummary` (compile error).
 
-- [ ] **Step 3: Implement `ThreatIntelSummary`**
+- [x] **Step 3: Implement `ThreatIntelSummary`**
 
 Create `orchestrator/internal/analytics/threatintel.go`:
 
@@ -197,12 +197,12 @@ func ThreatIntelSummary(ctx context.Context, pool *pgxpool.Pool, tpEngine *threa
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd orchestrator && go build ./... && go test ./internal/analytics/... -run TestThreatIntelSummary -v`
 Expected: build succeeds; all 4 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add orchestrator/internal/analytics/threatintel.go orchestrator/internal/analytics/threatintel_test.go
@@ -229,7 +229,7 @@ git push
 - Consumes: `analytics.ThreatIntelSummary` (Task 1), `h.db`, `h.threatPriorityEngine` (`internal/api/handlers.go:93`).
 - Produces: nothing new for later tasks — Task 3 calls this route directly from JS, not any Go symbol.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `orchestrator/internal/api/threatintel_summary_handler_test.go`:
 
@@ -278,12 +278,12 @@ func TestGetThreatIntelSummary_NoEngineConfigured_ReturnsEmptyActors(t *testing.
 
 `sharedDB` is already declared in `internal/api`'s existing test suite. This test confirms the handler doesn't panic or error when `h.threatPriorityEngine` is nil (its default state from `New()`, confirmed by reading `internal/api/handlers.go` — nothing in the existing constructor sets it).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd orchestrator && go test ./internal/api/... -run TestGetThreatIntelSummary -v`
 Expected: FAIL — `h.GetThreatIntelSummary undefined` (compile error).
 
-- [ ] **Step 3: Implement the handler**
+- [x] **Step 3: Implement the handler**
 
 In `orchestrator/internal/api/ti_handlers.go`, find:
 
@@ -317,7 +317,7 @@ func (h *Handler) GetThreatIntelSummary(w http.ResponseWriter, r *http.Request) 
 }
 ```
 
-- [ ] **Step 4: Register the route**
+- [x] **Step 4: Register the route**
 
 In `orchestrator/internal/api/routes.go`, find:
 
@@ -337,12 +337,12 @@ Replace with:
 		r.Get("/api/analytics/threat-intel-summary", h.GetThreatIntelSummary)
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `cd orchestrator && go build ./... && go vet ./... && go test ./internal/api/... -run TestGetThreatIntelSummary -v`
 Expected: build and vet clean; test PASSES.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add orchestrator/internal/api/ti_handlers.go orchestrator/internal/api/routes.go orchestrator/internal/api/threatintel_summary_handler_test.go
@@ -361,7 +361,7 @@ git push
 - Consumes: `GET /api/analytics/threat-intel-summary` (Task 2), `tpTierBadge(tier)` (`index.html:4834-4837`, existing), `showTab`/`showThreatPriorityDetail` (existing, for click-through).
 - Produces: `function renderTIActors(actors)`, a new `#dash-ti-actors` container.
 
-- [ ] **Step 1: Add the `#dash-ti-actors` container**
+- [x] **Step 1: Add the `#dash-ti-actors` container**
 
 Find:
 
@@ -378,7 +378,7 @@ Replace with:
         </div>
 ```
 
-- [ ] **Step 2: Extend `loadKEVWidget()` and add `renderTIActors()`**
+- [x] **Step 2: Extend `loadKEVWidget()` and add `renderTIActors()`**
 
 Find:
 
@@ -454,7 +454,7 @@ function renderTIActors(actors) {
 
 `x()` is the existing HTML-escaping helper used throughout this file. The `hasKev ? ... : ''` ternary means the KEV tiles disappear (rather than show stale/wrong data) on a day with zero KEV-linked techniques while actors still render — the two halves of the widget are now independent, matching the parallel `Promise.all` fetch. This is a deliberate, minor behavior change from today (previously the whole widget only ever showed with KEV data present) — call it out to the user during manual QA.
 
-- [ ] **Step 3: Verify — syntax check**
+- [x] **Step 3: Verify — syntax check**
 
 Run from the repo root:
 
@@ -470,7 +470,7 @@ console.log('All script blocks parse OK');
 
 Expected: `All script blocks parse OK`.
 
-- [ ] **Step 4: Verify — id uniqueness**
+- [x] **Step 4: Verify — id uniqueness**
 
 Run:
 
@@ -487,7 +487,7 @@ const html = fs.readFileSync('orchestrator/wwwroot/index.html', 'utf8');
 
 Expected: `dash-ti-actors: 1`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add orchestrator/wwwroot/index.html
@@ -508,7 +508,7 @@ git push
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Confirm Docker is running**
+- [x] **Step 1: Confirm Docker is running**
 
 Run: `docker info 2>&1 | grep -iE "server|error"`
 Expected: a `Server:` block with no error. If down, start Docker Desktop and poll until ready:
@@ -517,11 +517,30 @@ Expected: a `Server:` block with no error. If down, start Docker Desktop and pol
 timeout 180 bash -c 'until docker info >/dev/null 2>&1; do sleep 5; done' && echo "DOCKER_READY"
 ```
 
-- [ ] **Step 2: Run the full Go test suite**
+- [x] **Step 2: Run the full Go test suite**
 
 Run: `cd orchestrator && go build ./... && go vet ./... && go test ./... -count=1`
 Expected: `go build`/`go vet` clean, every package `ok`.
 
-- [ ] **Step 3: Report completion**
+- [x] **Step 3: Report completion**
 
 Executes directly on `main`, no branch/worktree/PR decision needed. Confirm with the user that Sub-project D is complete, and that Sub-project E (Endpoint Posture) is the last remaining sub-project.
+
+---
+
+## Execution Notes
+
+All 4 tasks completed and pushed (`09730a3`, `6259604`, `38dac37`, plus `ed1c316` — a real bug caught during Task 4 regression, see below).
+
+**Real bugs found during execution (not anticipated by the plan):**
+
+1. **Task 1 — `ThreatIntelSummary` type/function name collision.** The plan's own code sample named both the returned struct type and the computing function `ThreatIntelSummary`, which Go rejects (`ThreatIntelSummary redeclared in this block`). Fixed by renaming the type to `ThreatIntelPosture`; the function keeps the plan's name since all downstream call sites use the function, not the type, by name.
+2. **Task 3 — stray unmatched `</div>` in `renderTIActors`.** Self-caught by re-reading the just-written code before running the syntax-check step, not by a tool. Fixed in both `index.html` and this plan's Step 2 code sample.
+3. **Task 4 — missing RBAC matrix entry.** `TestRBACMatrix_NoDrift` failed: `registered route "GET /api/analytics/threat-intel-summary" has no routeMatrix entry`. The plan didn't anticipate this drift-detection test. Fixed by adding `{http.MethodGet, "/api/analytics/threat-intel-summary", tierAny, ""}` to `internal/api/rbac_matrix_test.go`, matching every other read-only analytics endpoint. Committed separately as `ed1c316`.
+
+**Task 4 regression — two interrupted/misleading runs before a clean one:**
+- First full-suite attempt was interrupted by a user "pause" mid-run (background task came back `status: stopped`, no completion record, empty output file) — re-launched from scratch rather than trusting any partial state.
+- Second attempt completed but every DB-backed package failed identically with `rootless Docker is not supported on Windows` — Docker Desktop was down when the run executed even though it had been polled ready earlier in the session. Confirmed via `docker info`, restarted, and re-ran a third time.
+- Third attempt: only `internal/api` failed, with `panic: test timed out after 10m0s` at 656s under full-suite load — the same timeout artifact documented in Sub-project A's Task 8 (not a real regression). Confirmed clean by running `internal/api` alone with `-timeout 20m`: `ok  	github.com/audspect/bas/internal/api	515.230s`. Full suite is clean.
+
+Sub-project D (Threat Intel Summary) is complete. Sub-project E (Endpoint Posture) is the last remaining sub-project of the Unified Analytics Layer initiative.
