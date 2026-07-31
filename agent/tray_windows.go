@@ -228,8 +228,11 @@ func trayCopyTip(dst *[128]uint16, s string) {
 func trayWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	defer func() {
 		if r := recover(); r != nil {
-			// never let a callback panic kill the tray
-			_ = r
+			// Never let a callback panic kill the tray, but a discarded panic
+			// here previously meant a broken click (e.g. openStatusWindow
+			// panicking) was completely invisible -- no window, no log, no
+			// error. Log it so this class of bug is diagnosable.
+			log.Printf("[tray] recovered panic in WndProc: %v", r)
 		}
 	}()
 
