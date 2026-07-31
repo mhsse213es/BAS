@@ -105,3 +105,10 @@ func mustExecAPI(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) {
 		t.Fatalf("exec %q: %v", sql, err)
 	}
 }
+
+func mustExecAPIReturning(t *testing.T, pool *pgxpool.Pool, dest *string, sql string, args ...any) {
+	t.Helper()
+	if err := pool.QueryRow(t.Context(), sql, args...).Scan(dest); err != nil {
+		t.Fatalf("query %q: %v", sql, err)
+	}
+}

@@ -206,6 +206,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// state, for dashboard consumption. Last of the 7 analytics categories.
 		r.Get("/api/analytics/endpoint-posture", h.GetEndpointPosture)
 
+		// IOC Registry -- flat search over the canonical IOC model
+		// (Phase 0+A of the IOC handling initiative).
+		r.Get("/api/iocs", h.GetIOCs)
+
 		// Intelligence Expansion -- MISP/OpenCTI-sourced Campaigns/Malware/Tools
 		// (distinct from /api/threat-priority's actor-level scoring).
 		r.Get("/api/intelligence/campaigns", h.IntelligenceCampaigns)
