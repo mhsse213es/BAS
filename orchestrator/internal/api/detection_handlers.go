@@ -2,10 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/audspect/bas/internal/detect"
+	"github.com/audspect/bas/internal/iocregistry"
 	"github.com/audspect/bas/internal/models"
 	"github.com/go-chi/chi/v5"
 )
@@ -29,10 +31,13 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Load the run's executed results to correlate against.
+	// Load the run's executed results to correlate against. scenarioID/agentID
+	// are also needed for IOC-sighting ownership below.
 	var resultsRaw []byte
+	var scenarioID, agentID string
 	if err := h.db.QueryRow(r.Context(),
-		`SELECT results FROM scenario_runs WHERE id = $1`, runID).Scan(&resultsRaw); err != nil {
+		`SELECT scenario_id, agent_id, results FROM scenario_runs WHERE id = $1`, runID).
+		Scan(&scenarioID, &agentID, &resultsRaw); err != nil {
 		jsonError(w, "run not found", http.StatusNotFound)
 		return
 	}
@@ -127,6 +132,15 @@ func (h *Handler) SubmitRunDetections(w http.ResponseWriter, r *http.Request) {
 	// Refresh findings now that detection verdicts are known — fails that were
 	// caught flip missed → detected_only (same-run refinement, idempotent).
 	h.upsertFindingsForRun(r.Context(), runID)
+
+	// Best-effort IOC extraction -- never fails the request. See
+	// docs/superpowers/specs/2026-07-31-ioc-registry-design.md.
+	for i := range results {
+		if err := iocregistry.ExtractFromDetectionAlert(r.Context(), h.db, scenarioID, runID, agentID, results[i]); err != nil {
+			log.Printf("[ioc] extraction failed for run %s: %v", runID, err)
+		}
+	}
+
 	respond(w, map[string]any{
 		"runId":              runID,
 		"detectionRate":      sum.DetectionRate,
