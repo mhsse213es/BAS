@@ -26,15 +26,17 @@ func (h *Handler) GetRunIOCs(w http.ResponseWriter, r *http.Request) {
 }
 
 type iocRow struct {
-	ID            string `json:"id"`
-	Type          string `json:"type"`
-	Value         string `json:"value"`
-	Source        string `json:"source"`
-	Origin        string `json:"origin"`
-	Status        string `json:"status"`
-	FirstSeen     time.Time `json:"firstSeen"`
-	LastSeen      time.Time `json:"lastSeen"`
-	SightingCount int       `json:"sightingCount"`
+	ID                string    `json:"id"`
+	Type              string    `json:"type"`
+	Value             string    `json:"value"`
+	Source            string    `json:"source"`
+	Origin            string    `json:"origin"`
+	Status            string    `json:"status"`
+	FirstSeen         time.Time `json:"firstSeen"`
+	LastSeen          time.Time `json:"lastSeen"`
+	SightingCount     int       `json:"sightingCount"`
+	Suppressed        bool      `json:"suppressed"`
+	SuppressionReason string    `json:"suppressionReason"`
 }
 
 // GetIOCs is the cross-run IOC registry search (Phase 0+A of the IOC handling
@@ -57,7 +59,7 @@ func (h *Handler) GetIOCs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `SELECT DISTINCT i.id, i.type, i.value, i.source, i.origin, i.status,
-	                  i.first_seen, i.last_seen, i.sighting_count
+	                  i.first_seen, i.last_seen, i.sighting_count, i.suppressed, i.suppression_reason
 	          FROM iocs i`
 	var joins, where string
 	var args []any
@@ -123,7 +125,8 @@ func (h *Handler) GetIOCs(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var row iocRow
 		if err := rows.Scan(&row.ID, &row.Type, &row.Value, &row.Source, &row.Origin,
-			&row.Status, &row.FirstSeen, &row.LastSeen, &row.SightingCount); err != nil {
+			&row.Status, &row.FirstSeen, &row.LastSeen, &row.SightingCount,
+			&row.Suppressed, &row.SuppressionReason); err != nil {
 			continue
 		}
 		out = append(out, row)

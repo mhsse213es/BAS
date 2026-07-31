@@ -39,7 +39,7 @@ func IOCAnalytics(ctx context.Context, pool *pgxpool.Pool, limit int) (IOCAnalyt
 	}
 	result.MostDetected = mostDetected
 
-	bypassed, err := iocsByVerdict(ctx, pool, limit, "undetected")
+	bypassed, err := iocsByVerdictExcludingSuppressed(ctx, pool, limit, "undetected")
 	if err != nil {
 		return result, err
 	}
@@ -70,6 +70,18 @@ func iocsByVerdict(ctx context.Context, pool *pgxpool.Pool, limit int, verdicts 
 		SELECT DISTINCT i.id, i.type, i.value, i.sighting_count
 		FROM iocs i JOIN ioc_sightings s ON s.ioc_id = i.id
 		WHERE s.detection_verdict = ANY($2)
+		ORDER BY i.sighting_count DESC LIMIT $1`, limit, verdicts)
+}
+
+// iocsByVerdictExcludingSuppressed mirrors iocsByVerdict but excludes suppressed IOCs --
+// only used for HighestBypassRate (iochandling.txt §22: an operator-accepted exception
+// must not be reported as an undetected bypass). MostDetected still uses the unfiltered
+// iocsByVerdict; a suppressed IOC that was actually detected isn't a misleading count.
+func iocsByVerdictExcludingSuppressed(ctx context.Context, pool *pgxpool.Pool, limit int, verdicts ...string) ([]IOCAnalyticsEntry, error) {
+	return scanIOCEntries(ctx, pool, `
+		SELECT DISTINCT i.id, i.type, i.value, i.sighting_count
+		FROM iocs i JOIN ioc_sightings s ON s.ioc_id = i.id
+		WHERE s.detection_verdict = ANY($2) AND NOT i.suppressed
 		ORDER BY i.sighting_count DESC LIMIT $1`, limit, verdicts)
 }
 

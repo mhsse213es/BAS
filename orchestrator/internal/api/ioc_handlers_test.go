@@ -178,3 +178,27 @@ func TestGetIOCs_FiltersBySinceUntil(t *testing.T) {
 		}
 	})
 }
+
+func TestGetIOCs_ExposesSuppressionState(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedIOC(t, pool, "command_line", "suppressed-value", "agent-1", "sc-1")
+		mustExecAPI(t, pool, `UPDATE iocs SET suppressed = true, suppression_reason = 'known lab tool' WHERE value = 'suppressed-value'`)
+
+		h := &Handler{db: pool}
+		rec := httptest.NewRecorder()
+		h.GetIOCs(rec, httptest.NewRequest(http.MethodGet, "/api/iocs?value=suppressed-value", nil))
+		var got []map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("got %+v, want exactly 1 row", got)
+		}
+		if got[0]["suppressed"] != true || got[0]["suppressionReason"] != "known lab tool" {
+			t.Errorf("row = %+v, want suppressed=true suppressionReason=\"known lab tool\"", got[0])
+		}
+	})
+}

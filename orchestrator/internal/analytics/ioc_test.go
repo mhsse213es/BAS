@@ -101,3 +101,32 @@ func TestIOCAnalytics_LongestSurviving_ExcludesArchivedAndExpired(t *testing.T) 
 		}
 	})
 }
+
+func TestIOCAnalytics_HighestBypassRate_ExcludesSuppressedButFrequentlyReusedIncludesIt(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		id := seedIOCAnalytics(t, pool, "command_line", "cmd-suppressed-bypass", 7, "undetected", "missed", "NOW()")
+		mustExec(t, pool, `UPDATE iocs SET suppressed = true, suppression_reason = 'known lab tool' WHERE id = $1`, id)
+
+		got, err := IOCAnalytics(context.Background(), pool, 10)
+		if err != nil {
+			t.Fatalf("IOCAnalytics: %v", err)
+		}
+		for _, e := range got.HighestBypassRate {
+			if e.Value == "cmd-suppressed-bypass" {
+				t.Errorf("HighestBypassRate = %+v, want the suppressed IOC excluded", got.HighestBypassRate)
+			}
+		}
+		found := false
+		for _, e := range got.FrequentlyReused {
+			if e.Value == "cmd-suppressed-bypass" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("FrequentlyReused = %+v, want the suppressed IOC still included (only bypass-rate excludes suppressed)", got.FrequentlyReused)
+		}
+	})
+}
