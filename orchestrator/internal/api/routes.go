@@ -201,6 +201,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// per-actor scoring with KEV exposure, for dashboard consumption.
 		r.Get("/api/analytics/threat-intel-summary", h.GetThreatIntelSummary)
 
+		// Endpoint Posture -- fleet-wide agent health + derived EPP isolation
+		// state, for dashboard consumption. Last of the 7 analytics categories.
+		r.Get("/api/analytics/endpoint-posture", h.GetEndpointPosture)
+
 		// Intelligence Expansion -- MISP/OpenCTI-sourced Campaigns/Malware/Tools
 		// (distinct from /api/threat-priority's actor-level scoring).
 		r.Get("/api/intelligence/campaigns", h.IntelligenceCampaigns)
