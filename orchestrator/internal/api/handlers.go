@@ -26,6 +26,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
+	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detectverify"
 	"github.com/audspect/bas/internal/exercise"
@@ -82,6 +83,7 @@ type Handler struct {
 	artContentVer         string               // recorded content-pack version
 	manifest              *integrity.Manifest  // binary hash manifest — nil means verification disabled
 	complianceMapper      *compliance.Mapper   // nil when not loaded
+	controlHealthMapper   *controlhealth.Mapper // nil when not loaded
 	reportingEngine       *reporting.Engine    // nil when not loaded
 	scheduler             *connector.Scheduler // nil when no sources configured
 	ticketing             *ticketing.Manager   // nil when no connectors configured
@@ -111,6 +113,12 @@ func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) 
 // WithCompliance attaches the compliance mapper.
 func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
 	h.complianceMapper = m
+	return h
+}
+
+// WithControlHealth attaches the control-health taxonomy mapper.
+func (h *Handler) WithControlHealth(m *controlhealth.Mapper) *Handler {
+	h.controlHealthMapper = m
 	return h
 }
 

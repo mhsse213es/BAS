@@ -19,6 +19,7 @@ import (
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
+	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/exercise"
@@ -185,6 +186,14 @@ func main() {
 		log.Printf("[!] compliance mapper: %v — compliance reports unavailable", cmErr)
 	} else {
 		log.Printf("[+] Compliance mapper loaded (%d frameworks)", len(complianceMapper.Frameworks()))
+	}
+
+	// ── Control Health Mapper ───────────────────────────────────────────────
+	controlHealthMapper, chErr := controlhealth.NewMapper()
+	if chErr != nil {
+		log.Printf("[!] control health mapper: %v — control health summary unavailable", chErr)
+	} else {
+		log.Printf("[+] Control health mapper loaded (%d categories)", len(controlHealthMapper.Categories()))
 	}
 
 	// ── Verification Store (Detection Validation SP2) ─────────────────────
@@ -389,6 +398,7 @@ func main() {
 		WithAgentSecret(cfg.AgentSecret).
 		WithManifest(manifest).
 		WithCompliance(complianceMapper).
+		WithControlHealth(controlHealthMapper).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
 		WithThreatPriority(priorityEngine).
