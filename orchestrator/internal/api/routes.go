@@ -253,6 +253,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/attackpath/jobs/{id}", h.GetAttackPathJob)
 		r.Get("/api/attackpath/correlation", h.GetAttackPathCorrelation)
 		r.Get("/api/controlhealth/summary", h.GetControlHealthSummary)
+		r.Get("/api/agents/{agentId}/risk", h.GetAgentRisk)
 		r.Get("/api/exposure/assets", h.GetExposureAssets)
 		r.Get("/api/exposure/assets/{hostKey}", h.GetExposureAsset)
 
