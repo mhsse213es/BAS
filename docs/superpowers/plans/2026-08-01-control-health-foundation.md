@@ -713,13 +713,17 @@ import (
 	"github.com/audspect/bas/internal/verification"
 )
 
+// seedVerificationRecord gives each row its own (run_id, expectation_id)
+// pair -- verification_history's idx_verif_active_one unique index allows at
+// most one active row per that pair, so distinct pairs per row let a test
+// seed multiple simultaneously-active records.
 func seedVerificationRecord(t *testing.T, pool *pgxpool.Pool, id, techID, result, workflowState string, active bool, verifiedAt time.Time) {
 	t.Helper()
 	mustExec(t, pool, `
 		INSERT INTO verification_history
-			(id, run_id, expectation_id, profile_name, profile_version, technique_id, domain, provider, result, workflow_state, source, verified_by, verified_at, active)
-		VALUES ($1, 'ch-vrun', 'ch-vexp', 'ch-profile', 1, $2, 'endpoint', 'test', $3, $4, $5, 'tester', $6, $7)`,
-		id, techID, result, workflowState, verification.SourceAPI, verifiedAt, active)
+			(id, run_id, expectation_id, profile_name, profile_version, technique_id, domain, provider, result, workflow_state, verification_source, verified_by, verified_at, active)
+		VALUES ($1, $2, $3, 'ch-profile', 1, $4, 'endpoint', 'test', $5, $6, $7, 'tester', $8, $9)`,
+		id, id+"-run", id+"-exp", techID, result, workflowState, verification.SourceAPI, verifiedAt, active)
 }
 
 func TestLoadDetectionEvidence_OnlyApprovedActiveCounts(t *testing.T) {
