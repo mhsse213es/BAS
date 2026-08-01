@@ -1,0 +1,150 @@
+categories:
+  - id: endpoint-protection
+    name: Endpoint Protection
+  - id: identity-access
+    name: Identity & Access Management
+  - id: email-security
+    name: Email Security
+  - id: network-security
+    name: Network Security
+  - id: data-protection
+    name: Data Protection
+  - id: privileged-access
+    name: Privileged Access
+  - id: cloud-security
+    name: Cloud Security
+  - id: detection-response
+    name: Detection & Response
+  - id: application-control
+    name: Application Control
+  - id: backup-recovery
+    name: Backup & Recovery
+
+techniques:
+  # Endpoint Protection
+  - id: T1055
+    primary: endpoint-protection
+    secondary: [detection-response]
+  - id: T1059
+    primary: endpoint-protection
+    secondary: [application-control, detection-response]
+  - id: T1547
+    primary: endpoint-protection
+    secondary: [privileged-access]
+  - id: T1543
+    primary: endpoint-protection
+    secondary: []
+  - id: T1036
+    primary: endpoint-protection
+    secondary: [detection-response]
+
+  # Identity & Access Management
+  - id: T1003
+    primary: identity-access
+    secondary: [privileged-access, endpoint-protection]
+  - id: T1558
+    primary: identity-access
+    secondary: [privileged-access]
+  - id: T1550
+    primary: identity-access
+    secondary: []
+  - id: T1110
+    primary: identity-access
+    secondary: []
+  - id: T1078
+    primary: identity-access
+    secondary: [privileged-access, cloud-security]
+
+  # Email Security
+  - id: T1566
+    primary: email-security
+    secondary: [detection-response]
+  - id: T1204
+    primary: email-security
+    secondary: [endpoint-protection]
+  - id: T1598
+    primary: email-security
+    secondary: []
+
+  # Network Security
+  - id: T1046
+    primary: network-security
+    secondary: []
+  - id: T1021
+    primary: network-security
+    secondary: [identity-access]
+  - id: T1071
+    primary: network-security
+    secondary: [detection-response]
+  - id: T1090
+    primary: network-security
+    secondary: []
+
+  # Data Protection
+  - id: T1041
+    primary: data-protection
+    secondary: [network-security]
+  - id: T1048
+    primary: data-protection
+    secondary: [network-security]
+  - id: T1567
+    primary: data-protection
+    secondary: [network-security, cloud-security]
+  - id: T1005
+    primary: data-protection
+    secondary: []
+
+  # Privileged Access
+  - id: T1068
+    primary: privileged-access
+    secondary: [endpoint-protection]
+  - id: T1134
+    primary: privileged-access
+    secondary: [identity-access]
+  - id: T1548
+    primary: privileged-access
+    secondary: []
+
+  # Cloud Security
+  - id: T1580
+    primary: cloud-security
+    secondary: []
+  - id: T1526
+    primary: cloud-security
+    secondary: []
+  - id: T1538
+    primary: cloud-security
+    secondary: [detection-response]
+
+  # Detection & Response
+  - id: T1070
+    primary: detection-response
+    secondary: [endpoint-protection]
+  - id: T1562
+    primary: detection-response
+    secondary: [endpoint-protection]
+  - id: T1027
+    primary: detection-response
+    secondary: [endpoint-protection]
+
+  # Application Control
+  - id: T1553
+    primary: application-control
+    secondary: [endpoint-protection]
+  - id: T1216
+    primary: application-control
+    secondary: [endpoint-protection]
+  - id: T1218
+    primary: application-control
+    secondary: [endpoint-protection, detection-response]
+
+  # Backup & Recovery
+  - id: T1486
+    primary: backup-recovery
+    secondary: [data-protection]
+  - id: T1490
+    primary: backup-recovery
+    secondary: []
+  - id: T1485
+    primary: backup-recovery
+    secondary: [data-protection]
