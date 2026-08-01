@@ -28,7 +28,7 @@
 - Consumes: existing `apicall(url)` helper (returns a Promise), existing `GET /api/attackpath/correlation` endpoint (returns `pathcorrelation.AttackPathCorrelation` JSON: `{summary, detectionCoverageScore, paths, chokePoints, gaps: [{edge:{from,to,kind}, techniques, priority, reason, remediation}], statistics}`).
 - Produces: `renderAttackPath(d, corr)` — `corr` is either the parsed correlation JSON object or `null` (when the correlation fetch fails, e.g. `h.rules` unwired). Every later task that reads `corr` must null-check it.
 
-- [ ] **Step 1: Replace `loadAttackPath()` to fetch both endpoints in parallel**
+- [x] **Step 1: Replace `loadAttackPath()` to fetch both endpoints in parallel**
 
 Find this exact function (search for `function loadAttackPath() {`):
 
@@ -108,7 +108,7 @@ function loadAttackPath() {
 }
 ```
 
-- [ ] **Step 2: Update the `renderAttackPath` signature**
+- [x] **Step 2: Update the `renderAttackPath` signature**
 
 Find (search for `function renderAttackPath(d) {` — there is exactly one match in the file):
 
@@ -124,17 +124,17 @@ function renderAttackPath(d, corr) {
 
 (The body is rewritten in Task 4 — this step only changes the signature so the file stays syntactically valid between tasks.)
 
-- [ ] **Step 3: Verify syntax**
+- [x] **Step 3: Verify syntax**
 
 ```bash
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,${END}p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 
 Expected: no output (success). If it errors, the line number reported is relative to line 4046 — add 4046 to find the real line.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add orchestrator/wwwroot/index.html
@@ -255,7 +255,7 @@ Replace with:
 
 ```bash
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,${END}p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 
@@ -464,7 +464,7 @@ function _apUpdateMetaBar(d) {
 
 ```bash
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,${END}p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 
@@ -612,7 +612,7 @@ function renderAttackPath(d, corr) {
 
 ```bash
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,${END}p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 
@@ -762,7 +762,7 @@ Replace with:
 
 ```bash
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,${END}p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 

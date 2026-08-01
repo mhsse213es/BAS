@@ -4548,7 +4548,11 @@ function vfToggleHistory(expId) {
 function loadAttackPath() {
   var body = document.getElementById('ap-body');
   if (body) body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
-  apicall('/api/attackpath/summary').then(function(d) {
+  Promise.all([
+    apicall('/api/attackpath/summary'),
+    apicall('/api/attackpath/correlation').catch(function() { return null; })
+  ]).then(function(res) {
+    var d = res[0], corr = res[1];
     // Restore in-flight job state from server after a page reload.
     var saved = _apLoadJobId();
     if (saved && saved.jobId && !_apCurrentJobId) {
@@ -4574,7 +4578,7 @@ function loadAttackPath() {
         }
       }).catch(function() { _apClearJobId(); });
     }
-    renderAttackPath(d);
+    renderAttackPath(d, corr);
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 function apColor(score) {
@@ -5377,7 +5381,7 @@ function loadAPHistory() {
   });
 }
 
-function renderAttackPath(d) {
+function renderAttackPath(d, corr) {
   _apUpdateMetaBar(d);
   var body = document.getElementById('ap-body');
   if (!body) return;
