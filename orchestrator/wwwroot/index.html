@@ -1649,6 +1649,11 @@ body.theme-slate {
             <button class="btn btn-primary btn-sm" onclick="showAgentDownload()">&#8595; Deploy agent</button>
           </div>
         </div>
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
+          <button type="button" class="dash-view-btn active" data-agents-view="operational" onclick="setAgentsView('operational')">Operational</button>
+          <button type="button" class="dash-view-btn" data-agents-view="risk" onclick="setAgentsView('risk')">Risk &amp; Remediation</button>
+        </div>
+        <div id="agents-view-operational">
         <div class="kpi-row" id="agent-tiles"></div>
         <div id="agent-toolbar" style="margin-bottom:0.9rem"></div>
         <div class="tbl-wrap" style="overflow-x:auto;">
@@ -1660,6 +1665,20 @@ body.theme-slate {
               <tr><td colspan="8" class="empty">No agents registered yet.</td></tr>
             </tbody>
           </table>
+        </div>
+        </div>
+        <div id="agents-view-risk" style="display:none">
+          <div class="kpi-row" id="agent-risk-tiles" style="margin-bottom:1rem"></div>
+          <div class="tbl-wrap" style="overflow-x:auto">
+            <table style="min-width:700px">
+              <thead><tr>
+                <th style="min-width:160px">Host</th><th>Health Score</th><th>Criticality</th><th>Trend</th><th>Top Issue</th><th>Open Findings</th><th style="min-width:110px">Actions</th>
+              </tr></thead>
+              <tbody id="agent-risk-body">
+                <tr><td colspan="7" class="empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <!-- Connection Config (admin only) -->
@@ -4228,6 +4247,50 @@ function setDashView(view) {
   try { localStorage.setItem('bas_last_dash_view', view); } catch (e) {}
   if (view === 'operational') { loadDashboard(); startDashCampPoll(); }
   else { stopDashCampPoll(); loadExecDashboard(); }
+}
+function setAgentsView(view) {
+  document.getElementById('agents-view-operational').style.display = view === 'operational' ? '' : 'none';
+  document.getElementById('agents-view-risk').style.display = view === 'risk' ? '' : 'none';
+  document.querySelectorAll('[data-agents-view]').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-agents-view') === view);
+  });
+  if (view === 'risk') loadAgentRiskSummary();
+}
+function loadAgentRiskSummary() {
+  var tb = document.getElementById('agent-risk-body');
+  if (tb) tb.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+  apicall('/api/agents/risk-summary').then(function(d) {
+    renderAgentRiskSummary((d && d.agents) || []);
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+function _riskScoreColor(score) {
+  return score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
+}
+function _riskTrendBadge(trend) {
+  if (trend === 'Improving') return '<span style="color:var(--success)">&#8593; Improving</span>';
+  if (trend === 'Declining') return '<span style="color:var(--danger)">&#8595; Declining</span>';
+  if (trend === 'Stable') return '<span style="color:var(--muted)">&#8594; Stable</span>';
+  return '<span style="color:var(--muted)">—</span>';
+}
+function renderAgentRiskSummary(rows) {
+  var tb = document.getElementById('agent-risk-body');
+  if (!tb) return;
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="7" class="empty">No agents to show.</td></tr>';
+    return;
+  }
+  rows.sort(function(a, b) { return a.healthScore - b.healthScore; });
+  tb.innerHTML = rows.map(function(a) {
+    return '<tr>' +
+      '<td>' + x(a.hostname || a.agentId) + '</td>' +
+      '<td style="color:' + _riskScoreColor(a.healthScore) + ';font-weight:700">' + a.healthScore + '</td>' +
+      '<td>' + (a.criticalityRisk || 0) + '</td>' +
+      '<td>' + _riskTrendBadge(a.trend) + '</td>' +
+      '<td>' + x(a.topDeficitCategory || '—') + '</td>' +
+      '<td>' + (a.openFindingsCount || 0) + '</td>' +
+      '<td><button class="btn btn-outline btn-sm" onclick="openAgentDetail(\'' + x(a.agentId) + '\');setTimeout(function(){showAgentTab(\'risk\')},50)">View</button></td>' +
+      '</tr>';
+  }).join('');
 }
 
 // Reuses the existing _dashCampPoll var declared with refreshDashboardCampaigns
