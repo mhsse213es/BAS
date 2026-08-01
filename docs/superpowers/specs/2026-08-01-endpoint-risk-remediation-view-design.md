@@ -98,7 +98,9 @@ Ranked by **category-level deficit** (`100 - categoryScore`, biggest gap first),
 
 ## 6. Trend
 
-`internal/endpointrisk.ComputeHealth` takes an `asOf time.Time` parameter, exactly like `controlhealth.computeCategoryHealth` — the handler calls it twice (now, and 7 days ago against the same underlying evidence) and reports Improving/Stable/Declining by comparing the two Health Scores' bands, not raw point deltas (avoiding the same "wobble inside a bad state reads as improving" trap Control Health Foundation's design already solved). No new snapshot table.
+Partial, not full-score, trend in V1 — discovered during implementation planning that this is a real constraint, not just an option. `ExposureScore`/`AttackPathScore`/`DetectionCoverageScore` come from rebuilding the whole attack-path graph (`exposure.Build`), which isn't cheaply re-computable "as of 7 days ago" without new plumbing to time-filter the underlying `attackpath` collections — unlike Control Health Foundation's flat evidence rows, which filter by timestamp directly. Compliance and BAS Readiness, by contrast, are both derived from `models.SimulationResult` lists (via the existing `h.aggregateAgentResults`) and filter by `ExecutedAt <= asOf` exactly like Control Health does.
+
+So `internal/endpointrisk.ComputeHealth` takes an `asOf time.Time` parameter that only affects the Compliance and BAS Readiness inputs; Exposure/Attack-Path/Detection Health stay at their current value in both the "now" and "7-days-ago" computation. The Trend badge reflects only the two evidence-row-based categories — it will catch a compliance or testing-cadence regression, but not an attack-path or detection-coverage regression. That fuller trend is deferred (either to a later refinement of this sub-project or absorbed into Sub-project 3's Compliance Drift Detection work, which already needs a time-aware graph story). No new snapshot table either way.
 
 ## 7. UI surfaces
 
