@@ -121,6 +121,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/attackpath/correlation", tierAny, ""},
 	{http.MethodGet, "/api/controlhealth/summary", tierAny, ""},
 	{http.MethodGet, "/api/agents/{agentId}/risk", tierAny, ""},
+	{http.MethodGet, "/api/agents/risk-summary", tierAny, ""},
 	{http.MethodGet, "/api/exposure/assets", tierAny, ""},
 	{http.MethodGet, "/api/exposure/assets/{hostKey}", tierAny, ""},
 	{http.MethodGet, "/api/dashboard/current", tierAny, ""},

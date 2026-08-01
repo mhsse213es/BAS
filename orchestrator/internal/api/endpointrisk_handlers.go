@@ -52,3 +52,58 @@ func (h *Handler) GetAgentRisk(w http.ResponseWriter, r *http.Request) {
 	health := endpointrisk.ComputeHealth(agentID, profile, compliance, bas, pastCompliance, pastBAS)
 	respond(w, health)
 }
+
+// AgentRiskRow is the fleet-list projection -- one row per managed agent,
+// enough to sort/filter by before drilling into GetAgentRisk's full detail.
+type AgentRiskRow struct {
+	AgentID            string `json:"agentId"`
+	Hostname           string `json:"hostname"`
+	HealthScore        int    `json:"healthScore"`
+	CriticalityRisk    int    `json:"criticalityRisk"`
+	Trend              string `json:"trend"`
+	TopDeficitCategory string `json:"topDeficitCategory,omitempty"`
+	OpenFindingsCount  int    `json:"openFindingsCount"`
+}
+
+// GetAgentRiskSummary returns every managed agent's Health Score for the
+// fleet-wide "Risk & Remediation" tab. Read-only (Viewer+).
+// GET /api/agents/risk-summary
+func (h *Handler) GetAgentRiskSummary(w http.ResponseWriter, r *http.Request) {
+	ag, err := h.buildAssetGraph(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	now := time.Now().UTC()
+	weekAgo := now.AddDate(0, 0, -7)
+
+	var out []AgentRiskRow
+	for _, s := range ag.Summaries() {
+		if s.Asset.AgentID == "" {
+			continue // exposure includes non-agent graph nodes too -- this tab is agent-scoped
+		}
+		profile, ok := ag.Profile(s.Asset.HostKey)
+		if !ok {
+			continue
+		}
+		allResults := h.aggregateAgentResults(r.Context(), s.Asset.AgentID)
+		compliance := h.complianceInput(r.Context(), s.Asset.AgentID, now, allResults)
+		bas := h.basReadinessInput(now, allResults)
+		pastCompliance := h.complianceInput(r.Context(), s.Asset.AgentID, weekAgo, allResults)
+		pastBAS := h.basReadinessInput(weekAgo, allResults)
+		health := endpointrisk.ComputeHealth(s.Asset.AgentID, profile, compliance, bas, pastCompliance, pastBAS)
+
+		row := AgentRiskRow{
+			AgentID: s.Asset.AgentID, Hostname: s.Asset.Label,
+			HealthScore: health.HealthScore, CriticalityRisk: health.CriticalityRisk, Trend: health.Trend,
+		}
+		if len(health.ActionPlan) > 0 {
+			row.TopDeficitCategory = health.ActionPlan[0].CategoryName
+		}
+		for _, c := range health.Categories {
+			row.OpenFindingsCount += len(c.Findings)
+		}
+		out = append(out, row)
+	}
+	respond(w, map[string]any{"agents": out})
+}

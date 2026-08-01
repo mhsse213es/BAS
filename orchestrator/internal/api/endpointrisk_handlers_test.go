@@ -56,3 +56,35 @@ func TestGetAgentRisk_KnownAgent_ReturnsAllCategories(t *testing.T) {
 		}
 	})
 }
+
+func TestGetAgentRiskSummary_IncludesKnownAgent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-h4-a1', 'ER-H4-HOST')`)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		req := httptest.NewRequest(http.MethodGet, "/api/agents/risk-summary", nil)
+		w := httptest.NewRecorder()
+		h.GetAgentRiskSummary(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var body struct {
+			Agents []AgentRiskRow `json:"agents"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		found := false
+		for _, a := range body.Agents {
+			if a.AgentID == "er-h4-a1" {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("expected er-h4-a1 in the fleet risk summary")
+		}
+	})
+}
