@@ -294,7 +294,7 @@ git commit -m "feat(attackpath-ui): meta bar freshness badge, drop raw node coun
   - `apGapsPanel(gaps)` → HTML string (via `apTable`), from `AttackPathCorrelation.gaps` (`[{edge:{from,to,kind}, priority, reason, remediation}]`). Empty string if `gaps` is falsy/empty.
   - `apCollectionLimitations(s, coverage)` → HTML string for the dynamic "This Collection's Limitations" panel. Empty string if there's nothing to report.
 
-- [ ] **Step 1: Insert the helper block**
+- [x] **Step 1: Insert the helper block**
 
 Find (search for `function _fmtDuration(ms) {` through its closing brace and the blank line after it):
 
@@ -462,7 +462,7 @@ function apCollectionLimitations(s, coverage) {
 function _apUpdateMetaBar(d) {
 ```
 
-- [ ] **Step 2: Verify syntax**
+- [x] **Step 2: Verify syntax**
 
 ```bash
 START=$(grep -n '^<script>$' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
@@ -473,7 +473,7 @@ node --check /tmp/ap_check.js
 
 Expected: no output.
 
-- [ ] **Step 3: Sanity-check every new function name is defined exactly once**
+- [x] **Step 3: Sanity-check every new function name is defined exactly once**
 
 ```bash
 grep -c "^function apFindings\|^function apFindingsHtml\|^function apScoreDriversHtml\|^function apScoreCard\|^function apLateralCard\|^function apDomainCard\|^function apGraphScopeInterp\|^function apScopeCard\|^function apCoverageConfidencePanel\|^function apRelationshipsTable\|^function apGapsPanel\|^function apCollectionLimitations" orchestrator/wwwroot/index.html
@@ -481,7 +481,7 @@ grep -c "^function apFindings\|^function apFindingsHtml\|^function apScoreDriver
 
 Expected: `12` (one match per grep alternative — since `grep -c` counts matching *lines*, and each function is on its own line, this returns the number of matching lines, which should be exactly 12).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add orchestrator/wwwroot/index.html
