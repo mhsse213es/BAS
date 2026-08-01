@@ -2711,40 +2711,58 @@ body.theme-slate {
             <!-- Prerequisites -->
             <div style="margin-bottom:1.1rem">
               <div style="font-weight:700;color:var(--text);margin-bottom:0.5rem;font-size:0.88rem">Prerequisites</div>
-              <div style="display:flex;flex-direction:column;gap:0.3rem">
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Windows agent online</strong> — agent must be enrolled and connected</span></div>
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Local enumeration permissions</strong> — the agent needs rights to enumerate local admins and active sessions on its own host</span></div>
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Firewall allows outbound probes</strong> — SMB (445), WinRM (5985), RDP (3389) from agent to each target</span></div>
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Targets explicitly listed</strong> — the agent probes only the hosts you supply; no subnet discovery</span></div>
-                <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--muted);font-size:0.9rem;flex-shrink:0">○</span><span><strong>Domain-joined host + SharpHound enabled</strong> — optional; required for AD relationship edges</span></div>
+              <div style="margin-bottom:0.5rem">
+                <div class="tiny" style="font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.3rem">Required</div>
+                <div style="display:flex;flex-direction:column;gap:0.3rem">
+                  <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Windows agent online</strong> — agent must be enrolled and connected</span></div>
+                  <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Local enumeration permissions</strong> — the agent needs rights to enumerate local admins and active sessions on its own host</span></div>
+                  <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--success);font-size:0.9rem;flex-shrink:0">&#10003;</span><span><strong>Targets explicitly listed</strong> — the agent probes only the hosts you supply; no subnet discovery</span></div>
+                </div>
+              </div>
+              <div style="margin-bottom:0.5rem">
+                <div class="tiny" style="font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.3rem">Recommended</div>
+                <div style="display:flex;flex-direction:column;gap:0.3rem">
+                  <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--warning);font-size:0.9rem;flex-shrink:0">&#9679;</span><span><strong>Firewall allows outbound probes</strong> — SMB (445), WinRM (5985), RDP (3389) from agent to each target</span></div>
+                  <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--warning);font-size:0.9rem;flex-shrink:0">&#9679;</span><span><strong>Domain-joined host + SharpHound enabled</strong> — required for Active Directory relationship edges</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="tiny" style="font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.3rem">Optional</div>
+                <div style="display:flex;flex-direction:column;gap:0.3rem">
+                  <div style="display:flex;align-items:flex-start;gap:0.5rem"><span style="color:var(--muted);font-size:0.9rem;flex-shrink:0">○</span><span><strong>Crown Jewel tags</strong> — tag high-value assets in Tag Assets to surface Crown-Jewel exposure in results</span></div>
+                </div>
               </div>
             </div>
 
             <!-- How collection works -->
             <div style="margin-bottom:1.1rem">
               <div style="font-weight:700;color:var(--text);margin-bottom:0.5rem;font-size:0.88rem">What the agent does during collection</div>
-              <div style="display:flex;flex-direction:column;gap:0.55rem">
-                <div><strong style="color:var(--text)">1 · Local identity</strong>
-                  <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
-                    <li>Enumerates all <strong>Local Administrators</strong> and emits an <code>admin-to</code> edge for each</li>
-                    <li>Enumerates <strong>Interactive Sessions</strong> and emits a <code>has-session</code> edge per logged-on user</li>
-                  </ul>
+              <div style="color:var(--muted);margin-bottom:0.5rem">The agent gathers local identity relationships (who is admin where, who is logged in), probes reachability to your explicit target list only, and — on domain-joined hosts with SharpHound enabled — collects Active Directory relationships. Nothing is exploited and no remote authentication is attempted.</div>
+              <details>
+                <summary style="cursor:pointer;color:var(--accent);font-size:0.75rem;list-style:none">Technical Details &#9660;</summary>
+                <div style="display:flex;flex-direction:column;gap:0.55rem;margin-top:0.5rem">
+                  <div><strong style="color:var(--text)">1 · Local identity</strong>
+                    <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
+                      <li>Enumerates all <strong>Local Administrators</strong> and emits an <code>admin-to</code> edge for each</li>
+                      <li>Enumerates <strong>Interactive Sessions</strong> and emits a <code>has-session</code> edge per logged-on user</li>
+                    </ul>
+                  </div>
+                  <div><strong style="color:var(--text)">2 · Reachability probes</strong> (TCP connect, 1.5 s timeout, against your explicit target list only)
+                    <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
+                      <li>SMB — TCP 445</li>
+                      <li>WinRM — TCP 5985</li>
+                      <li>RDP — TCP 3389</li>
+                    </ul>
+                  </div>
+                  <div><strong style="color:var(--text)">3 · SharpHound</strong> (domain-joined hosts only, if enabled)
+                    <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
+                      <li>Receives binary from server, executes it, uploads raw output ZIP</li>
+                      <li>Server parses and merges AD edges — agent never interprets the output</li>
+                    </ul>
+                  </div>
+                  <div><strong style="color:var(--text)">4 · Upload</strong> — all nodes and edges submitted to the server; server rebuilds and analyzes the graph</div>
                 </div>
-                <div><strong style="color:var(--text)">2 · Reachability probes</strong> (TCP connect, 1.5 s timeout, against your explicit target list only)
-                  <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
-                    <li>SMB — TCP 445</li>
-                    <li>WinRM — TCP 5985</li>
-                    <li>RDP — TCP 3389</li>
-                  </ul>
-                </div>
-                <div><strong style="color:var(--text)">3 · SharpHound</strong> (domain-joined hosts only, if enabled)
-                  <ul style="margin:0.25rem 0 0 1.1rem;padding:0;list-style:disc;color:var(--muted)">
-                    <li>Receives binary from server, executes it, uploads raw output ZIP</li>
-                    <li>Server parses and merges AD edges — agent never interprets the output</li>
-                  </ul>
-                </div>
-                <div><strong style="color:var(--text)">4 · Upload</strong> — all nodes and edges submitted to the server; server rebuilds and analyzes the graph</div>
-              </div>
+              </details>
             </div>
 
             <!-- Edge types -->

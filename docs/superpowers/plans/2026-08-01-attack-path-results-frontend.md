@@ -646,7 +646,7 @@ git commit -m "feat(attackpath-ui): render findings, coverage/confidence, relati
 **Interfaces:**
 - Consumes/produces: none — pure static HTML restructuring, no JS behavior change. `<details>`/`<summary>` is an existing pattern in this file (already used elsewhere, e.g. "View Full Command" and log panels), so no new JS toggle function is needed.
 
-- [ ] **Step 1: Regroup Prerequisites into Required / Recommended / Optional**
+- [x] **Step 1: Regroup Prerequisites into Required / Recommended / Optional**
 
 Find (search for `<!-- Prerequisites -->`):
 
@@ -694,7 +694,7 @@ Replace with:
             </div>
 ```
 
-- [ ] **Step 2: Collapse implementation detail into a "Technical Details" subsection**
+- [x] **Step 2: Collapse implementation detail into a "Technical Details" subsection**
 
 Find (search for `<!-- How collection works -->`):
 
@@ -762,7 +762,7 @@ Replace with:
             </div>
 ```
 
-- [ ] **Step 3: Verify syntax**
+- [x] **Step 3: Verify syntax**
 
 ```bash
 START=$(grep -n '^<script>$' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
@@ -773,7 +773,7 @@ node --check /tmp/ap_check.js
 
 Expected: no output (this task only touches HTML outside `<script>`, so this check should be unaffected — run it anyway as a full-file regression guard).
 
-- [ ] **Step 4: Confirm no HTML tags were left unclosed**
+- [x] **Step 4: Confirm no HTML tags were left unclosed**
 
 ```bash
 grep -c '<details' orchestrator/wwwroot/index.html
@@ -782,7 +782,7 @@ grep -c '</details>' orchestrator/wwwroot/index.html
 
 Expected: both counts equal `3` (baseline is 2 pre-existing `<details>` blocks elsewhere in the file, at the time this plan was written — this task adds exactly one more matched pair).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add orchestrator/wwwroot/index.html
