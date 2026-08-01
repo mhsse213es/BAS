@@ -2560,16 +2560,15 @@ body.theme-slate {
               <div style="font-size:0.82rem;color:var(--text)" id="ap-meta-agent">—</div>
             </div>
             <div>
-              <div class="tiny muted" style="margin-bottom:0.1rem">Nodes</div>
-              <div style="font-size:0.82rem;color:var(--text)" id="ap-meta-nodes">—</div>
-            </div>
-            <div>
-              <div class="tiny muted" style="margin-bottom:0.1rem">Edges</div>
+              <div class="tiny muted" style="margin-bottom:0.1rem">Relationships</div>
               <div style="font-size:0.82rem;color:var(--text)" id="ap-meta-edges">—</div>
             </div>
             <div>
               <div class="tiny muted" style="margin-bottom:0.1rem">Graph age</div>
-              <div style="font-size:0.82rem;color:var(--text)" id="ap-meta-age">—</div>
+              <div style="font-size:0.82rem;color:var(--text);display:flex;align-items:center;gap:0.4rem">
+                <span id="ap-meta-age">—</span>
+                <span id="ap-meta-freshness" style="font-size:0.68rem;font-weight:700;padding:0.08rem 0.4rem;border-radius:4px;border:1px solid currentColor"></span>
+              </div>
             </div>
             <div style="margin-left:auto">
               <button class="btn btn-outline btn-sm" onclick="toggleAPHistory()" id="ap-history-toggle">&#128196; History</button>
@@ -4587,6 +4586,13 @@ function apColor(score) {
 function apBandColor(band) {
   return band === 'Low' ? 'var(--success)' : band === 'Medium' ? 'var(--warning)' : band === 'High' ? '#f0883e' : 'var(--danger)';
 }
+function apFreshness(ageMs) {
+  if (ageMs == null || ageMs < 0) return { label: '—', color: 'var(--muted)' };
+  var hours = ageMs / 3600000;
+  if (hours < 24) return { label: 'Fresh', color: 'var(--success)' };
+  if (hours < 24 * 7) return { label: 'Aging', color: 'var(--warning)' };
+  return { label: 'Stale', color: 'var(--danger)' };
+}
 function apCard(label, val, col, sub) {
   return '<div class="kpi-card"><div class="kpi-label">' + label + '</div>' +
     '<div class="kpi-value" style="color:' + col + '">' + val + '</div>' +
@@ -5336,9 +5342,12 @@ function _apUpdateMetaBar(d) {
   var ageStr = ageMs > 0 ? ago(ts.toISOString()) : '—';
   document.getElementById('ap-meta-ts').textContent = tsStr;
   document.getElementById('ap-meta-agent').textContent = m.hostname || m.agentId || '—';
-  document.getElementById('ap-meta-nodes').textContent = m.nodeCount != null ? m.nodeCount : '—';
   document.getElementById('ap-meta-edges').textContent = m.edgeCount != null ? m.edgeCount : '—';
   document.getElementById('ap-meta-age').textContent = ageStr;
+  var fresh = apFreshness(ageMs);
+  var freshEl = document.getElementById('ap-meta-freshness');
+  freshEl.textContent = fresh.label;
+  freshEl.style.color = fresh.color;
   bar.style.display = '';
 }
 

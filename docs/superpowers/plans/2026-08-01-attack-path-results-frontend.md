@@ -127,8 +127,9 @@ function renderAttackPath(d, corr) {
 - [x] **Step 3: Verify syntax**
 
 ```bash
+START=$(grep -n '^<script>$' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "$((START+1)),$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 
@@ -152,7 +153,7 @@ git commit -m "feat(attackpath-ui): fetch correlation data alongside summary"
 - Consumes: nothing new (uses `d.agentMeta[0]`, already available in `_apUpdateMetaBar`).
 - Produces: `apFreshness(ageMs)` → `{label: 'Fresh'|'Aging'|'Stale'|'—', color: '<css color/var>'}`. Thresholds: `< 24h` → Fresh, `24h–7d` → Aging, `> 7d` → Stale.
 
-- [ ] **Step 1: Add the `apFreshness` helper**
+- [x] **Step 1: Add the `apFreshness` helper**
 
 Find (search for `function apBandColor(band) {`):
 
@@ -177,7 +178,7 @@ function apFreshness(ageMs) {
 }
 ```
 
-- [ ] **Step 2: Remove the "Nodes" meta-bar cell and relabel "Edges" to "Relationships"**
+- [x] **Step 2: Remove the "Nodes" meta-bar cell and relabel "Edges" to "Relationships"**
 
 Find (search for `<div class="tiny muted" style="margin-bottom:0.1rem">Nodes</div>`):
 
@@ -201,7 +202,7 @@ Replace with:
             </div>
 ```
 
-- [ ] **Step 3: Add the freshness badge next to Graph age**
+- [x] **Step 3: Add the freshness badge next to Graph age**
 
 Find (search for `<div class="tiny muted" style="margin-bottom:0.1rem">Graph age</div>`):
 
@@ -224,7 +225,7 @@ Replace with:
             </div>
 ```
 
-- [ ] **Step 4: Update `_apUpdateMetaBar` to stop writing `ap-meta-nodes` and fill the freshness badge**
+- [x] **Step 4: Update `_apUpdateMetaBar` to stop writing `ap-meta-nodes` and fill the freshness badge**
 
 Find (search for `document.getElementById('ap-meta-ts').textContent = tsStr;`):
 
@@ -251,17 +252,18 @@ Replace with:
   bar.style.display = '';
 ```
 
-- [ ] **Step 5: Verify syntax**
+- [x] **Step 5: Verify syntax**
 
 ```bash
+START=$(grep -n '^<script>$' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "$((START+1)),$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 
 Expected: no output.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add orchestrator/wwwroot/index.html
@@ -463,8 +465,9 @@ function _apUpdateMetaBar(d) {
 - [ ] **Step 2: Verify syntax**
 
 ```bash
+START=$(grep -n '^<script>$' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "$((START+1)),$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 
@@ -611,8 +614,9 @@ function renderAttackPath(d, corr) {
 - [ ] **Step 2: Verify syntax**
 
 ```bash
+START=$(grep -n '^<script>$' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "$((START+1)),$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 
@@ -761,8 +765,9 @@ Replace with:
 - [ ] **Step 3: Verify syntax**
 
 ```bash
+START=$(grep -n '^<script>$' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
 END=$(grep -n '</script>' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
-sed -n "4046,$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
+sed -n "$((START+1)),$((END-1))p" orchestrator/wwwroot/index.html > /tmp/ap_check.js
 node --check /tmp/ap_check.js
 ```
 
