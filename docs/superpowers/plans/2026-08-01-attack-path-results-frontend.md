@@ -499,7 +499,7 @@ git commit -m "feat(attackpath-ui): add render helpers for findings, score drive
 - Consumes: everything produced by Task 3 (`apFindingsHtml`, `apScoreCard`, `apLateralCard`, `apDomainCard`, `apScopeCard`, `apCoverageConfidencePanel`, `apRelationshipsTable`, `apCollectionLimitations`, `apGapsPanel`), the `corr` parameter from Task 1.
 - Produces: nothing new — this is the assembly point; no other task depends on `renderAttackPath`'s internals.
 
-- [ ] **Step 1: Replace the function body**
+- [x] **Step 1: Replace the function body**
 
 Find (search for `function renderAttackPath(d, corr) {` through its closing brace — this is the full function after Task 1's Step 2 signature change):
 
@@ -611,7 +611,7 @@ function renderAttackPath(d, corr) {
 }
 ```
 
-- [ ] **Step 2: Verify syntax**
+- [x] **Step 2: Verify syntax**
 
 ```bash
 START=$(grep -n '^<script>$' orchestrator/wwwroot/index.html | tail -1 | cut -d: -f1)
@@ -622,14 +622,14 @@ node --check /tmp/ap_check.js
 
 Expected: no output.
 
-- [ ] **Step 3: Manual review checklist**
+- [x] **Step 3: Manual review checklist**
 
 Read the new `renderAttackPath` body and confirm:
 - Every helper called (`apFindingsHtml`, `apScoreCard`, `apLateralCard`, `apDomainCard`, `apScopeCard`, `apCoverageConfidencePanel`, `apRelationshipsTable`, `apCollectionLimitations`, `apGapsPanel`) is one of the 12 functions Task 3 added (cross-check against Task 3 Step 3's grep output).
 - `apGapsPanel` is only called when `corr` is truthy (it already internally handles `gaps` being empty/undefined, but `corr` itself may be `null` per Task 1).
 - The three pre-existing conditional tables (Crown-Jewel Exposure, Attack Choke Points, Segmentation Violations) and the Representative-Path-to-Domain-Admin panel are byte-identical to before — this task must not touch them.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add orchestrator/wwwroot/index.html

@@ -5542,11 +5542,12 @@ function renderAttackPath(d, corr) {
     return;
   }
   var s = d.summary || {};
-  var h = '<div class="kpi-row" style="margin-bottom:1rem">';
-  h += apCard('Attack Path Score', (s.attackPathScore != null ? s.attackPathScore : '—') + '<span style="font-size:0.9rem;color:var(--muted)">/100</span>', apColor(s.attackPathScore), (s.band || '') + ' risk · higher is safer');
-  h += apCard('Lateral Movement', x(s.lateralMovementBand || '—'), apBandColor(s.lateralMovementBand), 'avg ' + (s.avgBlastRadius || 0).toFixed(1) + ' · max ' + (s.maxBlastRadius || 0) + ' hosts/entry');
-  h += apCard('Domain Compromise', s.domainCompromise ? 'Reachable' : 'Not Reachable', s.domainCompromise ? 'var(--danger)' : 'var(--success)', s.domainCompromise ? 'a host can reach Domain Admin' : 'no path to Domain Admin');
-  h += apCard('Graph Scope', (s.hosts || 0) + ' hosts', 'var(--text)', (s.users || 0) + ' users · ' + (s.groups || 0) + ' groups · ' + (s.edges || 0) + ' edges');
+  var h = apFindingsHtml(s);
+  h += '<div class="kpi-row" style="margin-bottom:1rem">';
+  h += apScoreCard(s);
+  h += apLateralCard(s);
+  h += apDomainCard(s);
+  h += apScopeCard(s);
   h += '</div>';
 
   if (s.domainCompromise && s.shortestDomainAdminPath && s.shortestDomainAdminPath.length) {
@@ -5558,6 +5559,11 @@ function renderAttackPath(d, corr) {
     for (var i = 0; i < p.length; i++) { h += apArrow(p[i].kind) + apNodePill(p[i].to, i === p.length - 1); }
     h += '</div></div></div>';
   }
+
+  h += apCoverageConfidencePanel(d.coverage, s.confidence);
+  h += apRelationshipsTable(s.relationshipCounts);
+  h += apCollectionLimitations(s, d.coverage);
+  if (corr) h += apGapsPanel(corr.gaps);
 
   var cj = (s.crownJewels || []).filter(function(c) { return c.reachable; });
   if (cj.length) {
