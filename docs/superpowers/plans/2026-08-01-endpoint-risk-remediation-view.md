@@ -739,8 +739,8 @@ func TestBasReadinessInput_ComputesPassRateAndTechCount(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
-		mustExec(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-a1', 'ER-HOST-1')`)
-		mustExec(t, pool, `
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-a1', 'ER-HOST-1')`)
+		mustExecAPI(t, pool, `
 			INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
 			VALUES ('er-run-1', 'er-scn-1', 'ER Test Run', 'er-a1', 'completed', $1::jsonb, NOW())`,
 			`[
@@ -957,8 +957,8 @@ func TestGetAgentRisk_KnownAgent_ReturnsAllCategories(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		mustExec(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-h2-a1', 'ER-H2-HOST')`)
-		mustExec(t, pool, `
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-h2-a1', 'ER-H2-HOST')`)
+		mustExecAPI(t, pool, `
 			INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
 			VALUES ('er-h2-run', 'er-h2-scn', 'ER H2 Run', 'er-h2-a1', 'completed', $1::jsonb, NOW())`,
 			`[{"technique":{"id":"T1566","name":"Phishing","tactic":"initial-access"},"result":"pass","executedAt":"`+time.Now().UTC().Format(time.RFC3339)+`"}]`)
@@ -1123,7 +1123,7 @@ func TestGetAgentRiskSummary_IncludesKnownAgent(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		mustExec(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-h4-a1', 'ER-H4-HOST')`)
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-h4-a1', 'ER-H4-HOST')`)
 
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		req := httptest.NewRequest(http.MethodGet, "/api/agents/risk-summary", nil)
