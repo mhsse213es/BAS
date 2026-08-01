@@ -3946,6 +3946,7 @@ body.theme-slate {
       <button class="tab-btn" onclick="showAgentTab('logs')">Logs</button>
       <button class="tab-btn" onclick="showAgentTab('health')">Health</button>
       <button class="tab-btn" onclick="showAgentTab('attackpath')">Attack Path</button>
+      <button class="tab-btn" onclick="showAgentTab('risk')">Risk</button>
     </div>
     <div class="drawer-body" style="overflow-y:auto">
       <div id="agt-tab-overview" class="tab-pane"></div>
@@ -3953,6 +3954,7 @@ body.theme-slate {
       <div id="agt-tab-logs" class="tab-pane" style="display:none"></div>
       <div id="agt-tab-health" class="tab-pane" style="display:none"></div>
       <div id="agt-tab-attackpath" class="tab-pane" style="display:none"></div>
+      <div id="agt-tab-risk" class="tab-pane" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -13595,11 +13597,11 @@ function closeAgentDetail() {
   _agtDetailId = null;
 }
 function showAgentTab(tab) {
-  ['overview','scenarios','logs','health','attackpath'].forEach(function(t) {
+  ['overview','scenarios','logs','health','attackpath','risk'].forEach(function(t) {
     document.getElementById('agt-tab-' + t).style.display = (t === tab ? '' : 'none');
   });
   document.querySelectorAll('#agt-tab-bar .tab-btn').forEach(function(btn, i) {
-    var tabs = ['overview','scenarios','logs','health','attackpath'];
+    var tabs = ['overview','scenarios','logs','health','attackpath','risk'];
     btn.classList.toggle('active', tabs[i] === tab);
   });
   if (_agtLogRefresh) { clearInterval(_agtLogRefresh); _agtLogRefresh = null; }
@@ -13610,6 +13612,7 @@ function showAgentTab(tab) {
   if (tab === 'logs')       { _agtLogTier = 'operational'; loadAgtLogs(id, _agtLogTier); _agtLogRefresh = setInterval(function(){ loadAgtLogs(_agtDetailId, _agtLogTier); }, 15000); }
   if (tab === 'health')     loadAgtHealth(id);
   if (tab === 'attackpath') loadAgtAttackPath(id);
+  if (tab === 'risk')       loadAgtRisk(id);
 }
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
@@ -13822,6 +13825,63 @@ function loadAgtHealth(agentId) {
       '<div style="margin-top:0.6rem;color:var(--muted);font-size:0.72rem">Heartbeat latency (ms) — last ' + points.length + ' samples. Red &gt;500ms, amber &gt;150ms.</div>' +
       '</div>';
   }).catch(function(e) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">' + x(e.message) + '</div>'; });
+}
+
+// ── Risk tab ──────────────────────────────────────────────────────────────────
+function loadAgtRisk(agentId) {
+  var panel = document.getElementById('agt-tab-risk');
+  if (panel) panel.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
+  apicall('/api/agents/' + encodeURIComponent(agentId) + '/risk').then(function(d) {
+    renderAgtRisk(d);
+  }).catch(function(e) { if (panel) panel.innerHTML = '<div class="empty">' + x(e.message) + '</div>'; });
+}
+function _riskCategoryCard(c) {
+  if (!c.collected) {
+    return '<div class="dash-panel" style="margin-bottom:0.75rem;opacity:0.6"><div class="dash-panel-body" style="padding:0.85rem">' +
+      '<div style="font-weight:700;color:var(--text)">' + x(c.name) + '</div>' +
+      '<div class="tiny muted">Not yet collected</div></div></div>';
+  }
+  var findingsHtml = (c.findings || []).map(function(f) {
+    return '<li><strong>' + x(f.title) + '</strong> (' + x(f.severity) + ') — ' + x(f.risk) +
+      (f.affectedStandard ? '<div class="tiny muted">Affected standard: ' + x(f.affectedStandard) + '</div>' : '') +
+      '<div class="tiny" style="color:var(--accent)">Remediation: ' + x(f.remediation) + '</div></li>';
+  }).join('');
+  return '<div class="dash-panel" style="margin-bottom:0.75rem"><div class="dash-panel-body" style="padding:0.85rem">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">' +
+    '<div style="font-weight:700;color:var(--text)">' + x(c.name) + '</div>' +
+    '<div style="color:' + _riskScoreColor(c.score) + ';font-weight:700">' + c.score + '</div></div>' +
+    (findingsHtml ? '<ul style="margin:0;padding-left:1.1rem;color:var(--muted);display:flex;flex-direction:column;gap:0.3rem">' + findingsHtml + '</ul>' : '<div class="tiny muted">No open findings.</div>') +
+    '</div></div>';
+}
+function renderAgtRisk(health) {
+  var panel = document.getElementById('agt-tab-risk');
+  if (!panel) return;
+  var h = '<div class="kpi-row" style="margin-bottom:1rem">' +
+    '<div class="kpi-card"><div class="kpi-label">Health Score</div><div class="kpi-value" style="color:' + _riskScoreColor(health.healthScore) + '">' + health.healthScore + '</div><div class="tiny muted">' + _riskTrendBadge(health.trend) + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Criticality</div><div class="kpi-value">' + health.criticalityRisk + '</div><div class="tiny muted">sort/priority signal, not part of Health Score</div></div>' +
+    '</div>';
+
+  if ((health.actionPlan || []).length) {
+    h += '<div class="dash-panel" style="margin-bottom:1rem"><div class="dash-panel-body" style="padding:0.85rem">' +
+      '<div style="font-weight:700;color:var(--text);margin-bottom:0.5rem">Recommended Action Plan</div>' +
+      '<ol style="margin:0;padding-left:1.1rem;display:flex;flex-direction:column;gap:0.4rem">' +
+      health.actionPlan.map(function(a) {
+        return '<li><strong>' + x(a.categoryName) + '</strong> (−' + a.deficit + ' pts) — ' + x(a.finding.title) + '<div class="tiny" style="color:var(--accent)">' + x(a.finding.remediation) + '</div></li>';
+      }).join('') + '</ol></div></div>';
+  }
+
+  if ((health.attackPathChain || []).length) {
+    h += '<div class="dash-panel" style="margin-bottom:1rem"><div class="dash-panel-body" style="padding:0.85rem">' +
+      '<div style="font-weight:700;color:var(--text);margin-bottom:0.5rem">Attack Path Chain</div>' +
+      '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:0.25rem">' + apNodePill(health.attackPathChain[0].from);
+    for (var i = 0; i < health.attackPathChain.length; i++) {
+      h += apArrow(health.attackPathChain[i].kind) + apNodePill(health.attackPathChain[i].to, i === health.attackPathChain.length - 1);
+    }
+    h += '</div></div></div>';
+  }
+
+  h += (health.categories || []).map(_riskCategoryCard).join('');
+  panel.innerHTML = h;
 }
 
 // ── Attack Path tab ───────────────────────────────────────────────────────────
