@@ -4,9 +4,10 @@ import (
 	"github.com/audspect/bas/internal/exposure"
 )
 
-// Category IDs -- used both for the 5 collected categories (real score) and
-// the 4 not-yet-collected placeholders, in the fixed display order the
-// design spec's category table lists.
+// Category IDs -- used both for the 7 collected categories (real score) and
+// the 2 not-yet-collected placeholders, in the fixed display order the
+// design spec's category table lists. Security Configuration and Identity
+// moved from placeholder to real in this sub-project.
 const (
 	CategoryExposureAttackPath = "exposure-attackpath"
 	CategoryDetectionHealth    = "detection-health"
@@ -20,18 +21,16 @@ const (
 )
 
 var notYetCollectedCategories = []struct{ ID, Name string }{
-	{CategorySecurityConfig, "Security Configuration"},
-	{CategoryIdentity, "Identity"},
 	{CategoryPatchManagement, "Patch Management"},
 	{CategoryApplicationRisk, "Application Risk"},
 }
 
 // ComputeHealth is pure -- no I/O -- so every combination is unit-testable
-// without a database. pastCompliance/pastBAS are the same two inputs
-// recomputed with evidence filtered to 7 days ago by the caller (Task 3);
-// exposure-derived categories have no past counterpart, per spec §6, so
-// trend only ever reflects Compliance + BAS Readiness.
-func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, compliance ComplianceInput, bas BASReadinessInput, pastCompliance ComplianceInput, pastBAS BASReadinessInput) EndpointHealth {
+// without a database. past is the same four inputs recomputed with
+// evidence filtered to 7 days ago by the caller; exposure-derived
+// categories have no past counterpart, per spec §6, so Trend.Direction
+// only ever reflects Compliance/BAS/SecurityConfig/Identity.
+func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, now, past HealthInputs) EndpointHealth {
 	exposureAttackPath := CategoryScore{
 		ID: CategoryExposureAttackPath, Name: "Exposure / Attack Path", Collected: true,
 		Score: mean2(profile.Scores.ExposureScore, profile.Scores.AttackPathScore),
@@ -53,21 +52,35 @@ func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, compli
 	vulns.Deficit = 100 - vulns.Score
 	vulns.Findings = vulnerabilityFindings(profile)
 
-	compCat := CategoryScore{ID: CategoryCompliance, Name: "Compliance", Collected: compliance.Collected}
-	if compliance.Collected {
-		compCat.Score = round(meanOf(compliance.PercentByFramework))
+	compCat := CategoryScore{ID: CategoryCompliance, Name: "Compliance", Collected: now.Compliance.Collected}
+	if now.Compliance.Collected {
+		compCat.Score = round(meanOf(now.Compliance.PercentByFramework))
 		compCat.Deficit = 100 - compCat.Score
-		compCat.Findings = compliance.FailedFindings
+		compCat.Findings = now.Compliance.FailedFindings
 	}
 
-	basCat := CategoryScore{ID: CategoryBASReadiness, Name: "BAS Readiness", Collected: bas.Collected}
-	if bas.Collected {
-		basCat.Score = round(bas.PassRate)
+	basCat := CategoryScore{ID: CategoryBASReadiness, Name: "BAS Readiness", Collected: now.BAS.Collected}
+	if now.BAS.Collected {
+		basCat.Score = round(now.BAS.PassRate)
 		basCat.Deficit = 100 - basCat.Score
-		basCat.Findings = basReadinessFindings(bas)
+		basCat.Findings = basReadinessFindings(now.BAS)
 	}
 
-	categories := []CategoryScore{exposureAttackPath, detection, vulns, compCat, basCat}
+	secCat := CategoryScore{ID: CategorySecurityConfig, Name: "Security Configuration", Collected: now.SecurityConfig.Collected}
+	if now.SecurityConfig.Collected {
+		secCat.Score = now.SecurityConfig.Score
+		secCat.Deficit = 100 - secCat.Score
+		secCat.Findings = now.SecurityConfig.Findings
+	}
+
+	idCat := CategoryScore{ID: CategoryIdentity, Name: "Identity", Collected: now.Identity.Collected}
+	if now.Identity.Collected {
+		idCat.Score = now.Identity.Score
+		idCat.Deficit = 100 - idCat.Score
+		idCat.Findings = now.Identity.Findings
+	}
+
+	categories := []CategoryScore{exposureAttackPath, detection, vulns, compCat, basCat, secCat, idCat}
 	for _, c := range notYetCollectedCategories {
 		categories = append(categories, CategoryScore{ID: c.ID, Name: c.Name, Collected: false})
 	}
@@ -86,7 +99,7 @@ func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, compli
 		Categories:      categories,
 		ActionPlan:      buildActionPlan(categories),
 		AttackPathChain: buildAttackPathChain(profile),
-		Trend:           computeTrend(compliance, pastCompliance, bas, pastBAS),
+		Trend:           computeTrend(now, past),
 	}
 }
 
@@ -277,9 +290,7 @@ func basReadinessFindings(bas BASReadinessInput) []Finding {
 }
 
 // healthBand is a coarse Good/Fair/Poor grouping used only for trend
-// comparison, the same "compare bands, not raw deltas" approach Control
-// Health Foundation's computeTrend already uses -- a 1-point wobble inside
-// "Poor" must not read as Improving.
+// comparison -- a 1-point wobble inside "Poor" must not read as Improving.
 func healthBand(score float64) int {
 	switch {
 	case score >= 80:
@@ -291,36 +302,76 @@ func healthBand(score float64) int {
 	}
 }
 
-// computeTrend reflects only Compliance + BAS Readiness (see spec §6);
-// Exposure/Attack-Path/Detection Health have no past counterpart to compare.
-func computeTrend(compliance, pastCompliance ComplianceInput, bas, pastBAS BASReadinessInput) string {
-	if !compliance.Collected && !bas.Collected {
-		return "InsufficientData"
+// computeTrend reflects Compliance + BAS Readiness + Security
+// Configuration + Identity (all four are asOf-filterable evidence rows);
+// Exposure/Attack-Path/Detection Health have no past counterpart to
+// compare, per spec §6. NewFindings/ResolvedFindings are computed only
+// from Security Configuration + Identity's Findings (ID-set diff) -- see
+// TrendDetail's doc comment for why Compliance/BAS don't get the same
+// per-finding diff.
+func computeTrend(now, past HealthInputs) TrendDetail {
+	anyNow := now.Compliance.Collected || now.BAS.Collected || now.SecurityConfig.Collected || now.Identity.Collected
+	anyPast := past.Compliance.Collected || past.BAS.Collected || past.SecurityConfig.Collected || past.Identity.Collected
+	if !anyNow || !anyPast {
+		return TrendDetail{Direction: "InsufficientData"}
 	}
-	if !pastCompliance.Collected && !pastBAS.Collected {
-		return "InsufficientData"
-	}
-	current := trendInputScore(compliance, bas)
-	past := trendInputScore(pastCompliance, pastBAS)
-	cb, pb := healthBand(current), healthBand(past)
+
+	current := trendInputScore(now)
+	prior := trendInputScore(past)
+	cb, pb := healthBand(current), healthBand(prior)
+	direction := "Stable"
 	switch {
 	case cb > pb:
-		return "Improving"
+		direction = "Improving"
 	case cb < pb:
-		return "Declining"
-	default:
-		return "Stable"
+		direction = "Declining"
+	}
+
+	nowFindings := append(append([]Finding{}, now.SecurityConfig.Findings...), now.Identity.Findings...)
+	pastFindings := append(append([]Finding{}, past.SecurityConfig.Findings...), past.Identity.Findings...)
+
+	return TrendDetail{
+		Direction:        direction,
+		NewFindings:      diffFindings(pastFindings, nowFindings),
+		ResolvedFindings: diffFindings(nowFindings, pastFindings),
 	}
 }
 
-func trendInputScore(compliance ComplianceInput, bas BASReadinessInput) float64 {
+// diffFindings returns the findings in compare whose ID doesn't appear in
+// baseline. Findings without an ID (non-posture-check categories) never
+// match here, which is correct -- they aren't part of this diff.
+func diffFindings(baseline, compare []Finding) []Finding {
+	seen := map[string]bool{}
+	for _, f := range baseline {
+		if f.ID != "" {
+			seen[f.ID] = true
+		}
+	}
+	var out []Finding
+	for _, f := range compare {
+		if f.ID != "" && !seen[f.ID] {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func trendInputScore(in HealthInputs) float64 {
 	var sum, n float64
-	if compliance.Collected {
-		sum += meanOf(compliance.PercentByFramework)
+	if in.Compliance.Collected {
+		sum += meanOf(in.Compliance.PercentByFramework)
 		n++
 	}
-	if bas.Collected {
-		sum += bas.PassRate
+	if in.BAS.Collected {
+		sum += in.BAS.PassRate
+		n++
+	}
+	if in.SecurityConfig.Collected {
+		sum += float64(in.SecurityConfig.Score)
+		n++
+	}
+	if in.Identity.Collected {
+		sum += float64(in.Identity.Score)
 		n++
 	}
 	if n == 0 {
