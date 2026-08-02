@@ -29,6 +29,7 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detectverify"
+	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/ioc"
@@ -84,6 +85,7 @@ type Handler struct {
 	manifest              *integrity.Manifest  // binary hash manifest — nil means verification disabled
 	complianceMapper      *compliance.Mapper   // nil when not loaded
 	controlHealthMapper   *controlhealth.Mapper // nil when not loaded
+	endpointRiskTaxonomy  *endpointrisk.Taxonomy // nil when not loaded
 	reportingEngine       *reporting.Engine    // nil when not loaded
 	scheduler             *connector.Scheduler // nil when no sources configured
 	ticketing             *ticketing.Manager   // nil when no connectors configured
@@ -119,6 +121,12 @@ func (h *Handler) WithCompliance(m *compliance.Mapper) *Handler {
 // WithControlHealth attaches the control-health taxonomy mapper.
 func (h *Handler) WithControlHealth(m *controlhealth.Mapper) *Handler {
 	h.controlHealthMapper = m
+	return h
+}
+
+// WithEndpointRiskTaxonomy attaches the Security Config/Identity check_id taxonomy.
+func (h *Handler) WithEndpointRiskTaxonomy(t *endpointrisk.Taxonomy) *Handler {
+	h.endpointRiskTaxonomy = t
 	return h
 }
 
