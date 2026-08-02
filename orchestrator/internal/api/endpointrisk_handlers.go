@@ -44,12 +44,20 @@ func (h *Handler) GetAgentRisk(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	weekAgo := now.AddDate(0, 0, -7)
 
-	compliance := h.complianceInput(r.Context(), agentID, now, allResults)
-	bas := h.basReadinessInput(now, allResults)
-	pastCompliance := h.complianceInput(r.Context(), agentID, weekAgo, allResults)
-	pastBAS := h.basReadinessInput(weekAgo, allResults)
+	nowInputs := endpointrisk.HealthInputs{
+		Compliance:     h.complianceInput(r.Context(), agentID, now, allResults),
+		BAS:            h.basReadinessInput(now, allResults),
+		SecurityConfig: h.securityConfigInput(r.Context(), agentID, now, allResults),
+		Identity:       h.identityInput(r.Context(), agentID, now, allResults),
+	}
+	pastInputs := endpointrisk.HealthInputs{
+		Compliance:     h.complianceInput(r.Context(), agentID, weekAgo, allResults),
+		BAS:            h.basReadinessInput(weekAgo, allResults),
+		SecurityConfig: h.securityConfigInput(r.Context(), agentID, weekAgo, allResults),
+		Identity:       h.identityInput(r.Context(), agentID, weekAgo, allResults),
+	}
 
-	health := endpointrisk.ComputeHealth(agentID, profile, compliance, bas, pastCompliance, pastBAS)
+	health := endpointrisk.ComputeHealth(agentID, profile, nowInputs, pastInputs)
 	respond(w, health)
 }
 
@@ -87,15 +95,23 @@ func (h *Handler) GetAgentRiskSummary(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		allResults := h.aggregateAgentResults(r.Context(), s.Asset.AgentID)
-		compliance := h.complianceInput(r.Context(), s.Asset.AgentID, now, allResults)
-		bas := h.basReadinessInput(now, allResults)
-		pastCompliance := h.complianceInput(r.Context(), s.Asset.AgentID, weekAgo, allResults)
-		pastBAS := h.basReadinessInput(weekAgo, allResults)
-		health := endpointrisk.ComputeHealth(s.Asset.AgentID, profile, compliance, bas, pastCompliance, pastBAS)
+		nowInputs := endpointrisk.HealthInputs{
+			Compliance:     h.complianceInput(r.Context(), s.Asset.AgentID, now, allResults),
+			BAS:            h.basReadinessInput(now, allResults),
+			SecurityConfig: h.securityConfigInput(r.Context(), s.Asset.AgentID, now, allResults),
+			Identity:       h.identityInput(r.Context(), s.Asset.AgentID, now, allResults),
+		}
+		pastInputs := endpointrisk.HealthInputs{
+			Compliance:     h.complianceInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
+			BAS:            h.basReadinessInput(weekAgo, allResults),
+			SecurityConfig: h.securityConfigInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
+			Identity:       h.identityInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
+		}
+		health := endpointrisk.ComputeHealth(s.Asset.AgentID, profile, nowInputs, pastInputs)
 
 		row := AgentRiskRow{
 			AgentID: s.Asset.AgentID, Hostname: s.Asset.Label,
-			HealthScore: health.HealthScore, CriticalityRisk: health.CriticalityRisk, Trend: health.Trend,
+			HealthScore: health.HealthScore, CriticalityRisk: health.CriticalityRisk, Trend: health.Trend.Direction,
 		}
 		if len(health.ActionPlan) > 0 {
 			row.TopDeficitCategory = health.ActionPlan[0].CategoryName

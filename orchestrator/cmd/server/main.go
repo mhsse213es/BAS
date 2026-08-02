@@ -22,6 +22,7 @@ import (
 	"github.com/audspect/bas/internal/controlhealth"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detect"
+	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/exercise"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/integrity"
@@ -194,6 +195,14 @@ func main() {
 		log.Printf("[!] control health mapper: %v — control health summary unavailable", chErr)
 	} else {
 		log.Printf("[+] Control health mapper loaded (%d categories)", len(controlHealthMapper.Categories()))
+	}
+
+	// ── Endpoint Risk Taxonomy (Security Config & Identity Posture) ───────
+	endpointRiskTaxonomy, erErr := endpointrisk.NewTaxonomy()
+	if erErr != nil {
+		log.Printf("[!] endpoint risk taxonomy: %v — Security Configuration/Identity categories unavailable", erErr)
+	} else {
+		log.Printf("[+] Endpoint risk taxonomy loaded")
 	}
 
 	// ── Verification Store (Detection Validation SP2) ─────────────────────
@@ -399,6 +408,7 @@ func main() {
 		WithManifest(manifest).
 		WithCompliance(complianceMapper).
 		WithControlHealth(controlHealthMapper).
+		WithEndpointRiskTaxonomy(endpointRiskTaxonomy).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
 		WithThreatPriority(priorityEngine).

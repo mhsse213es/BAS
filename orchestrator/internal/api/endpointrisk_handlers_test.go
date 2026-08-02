@@ -52,7 +52,38 @@ func TestGetAgentRisk_KnownAgent_ReturnsAllCategories(t *testing.T) {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		if len(got.Categories) != 9 {
-			t.Errorf("got %d categories, want 9 (5 collected + 4 not-yet-collected)", len(got.Categories))
+			t.Errorf("got %d categories, want 9 (7 real-or-uncollected + 2 not-yet-collected)", len(got.Categories))
+		}
+	})
+}
+
+func TestGetAgentRiskSummary_MixedOSFleet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('er-mix-win', 'ER-MIX-WIN', 'windows')`)
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('er-mix-lin', 'ER-MIX-LIN', 'linux')`)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		req := httptest.NewRequest(http.MethodGet, "/api/agents/risk-summary", nil)
+		w := httptest.NewRecorder()
+		h.GetAgentRiskSummary(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var body struct {
+			Agents []AgentRiskRow `json:"agents"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		seen := map[string]bool{}
+		for _, a := range body.Agents {
+			seen[a.AgentID] = true
+		}
+		if !seen["er-mix-win"] || !seen["er-mix-lin"] {
+			t.Error("expected both Windows and Linux agents in the fleet risk summary")
 		}
 	})
 }

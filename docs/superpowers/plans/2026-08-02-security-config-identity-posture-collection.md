@@ -1635,12 +1635,12 @@ And in `GetAgentRiskSummary`, replace the per-agent block inside the `for _, s :
 In `TestGetAgentRisk_KnownAgent_ReturnsAllCategories` (`orchestrator/internal/api/endpointrisk_handlers_test.go`), change the expected category count comment/assertion:
 
 ```go
-		if len(got.Categories) != 7 {
-			t.Errorf("got %d categories, want 7 (5 collected + 2 not-yet-collected)", len(got.Categories))
+		if len(got.Categories) != 9 {
+			t.Errorf("got %d categories, want 9 (7 real-or-uncollected + 2 not-yet-collected)", len(got.Categories))
 		}
 ```
 
-(Was `!= 9` / "5 collected + 4 not-yet-collected" — now 7 total: Exposure/Attack-Path, Detection Health, Vulnerabilities, Compliance, BAS Readiness, Security Configuration, Identity are all always-present-collected-or-not; only Patch Management and Application Risk remain placeholders.)
+(Total stays 9 -- composition changes from 5+4 to 7+2: Exposure/Attack-Path, Detection Health, Vulnerabilities, Compliance, BAS Readiness, Security Configuration, Identity are all always-present-collected-or-not; only Patch Management and Application Risk remain placeholders.)
 
 Add one new test confirming a mixed Windows/Linux fleet works through `GetAgentRiskSummary` without error:
 
