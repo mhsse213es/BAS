@@ -13843,7 +13843,10 @@ function _riskCategoryCard(c) {
   }
   var findingsHtml = (c.findings || []).map(function(f) {
     return '<li><strong>' + x(f.title) + '</strong> (' + x(f.severity) + ') — ' + x(f.risk) +
+      (f.expected || f.observed ? '<div class="tiny muted">Expected: ' + x(f.expected || '—') + ' · Observed: ' + x(f.observed || '—') + '</div>' : '') +
       (f.affectedStandard ? '<div class="tiny muted">Affected standard: ' + x(f.affectedStandard) + '</div>' : '') +
+      (f.reference ? '<div class="tiny muted">Reference: ' + x(f.reference) + '</div>' : '') +
+      (f.lastObserved ? '<div class="tiny muted">Last observed: ' + new Date(f.lastObserved).toLocaleString() + '</div>' : '') +
       '<div class="tiny" style="color:var(--accent)">Remediation: ' + x(f.remediation) + '</div></li>';
   }).join('');
   return '<div class="dash-panel" style="margin-bottom:0.75rem"><div class="dash-panel-body" style="padding:0.85rem">' +
@@ -13857,9 +13860,17 @@ function renderAgtRisk(health) {
   var panel = document.getElementById('agt-tab-risk');
   if (!panel) return;
   var h = '<div class="kpi-row" style="margin-bottom:1rem">' +
-    '<div class="kpi-card"><div class="kpi-label">Health Score</div><div class="kpi-value" style="color:' + _riskScoreColor(health.healthScore) + '">' + health.healthScore + '</div><div class="tiny muted">' + _riskTrendBadge(health.trend) + '</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Health Score</div><div class="kpi-value" style="color:' + _riskScoreColor(health.healthScore) + '">' + health.healthScore + '</div><div class="tiny muted">' + _riskTrendBadge(health.trend.direction) + '</div></div>' +
     '<div class="kpi-card"><div class="kpi-label">Criticality</div><div class="kpi-value">' + health.criticalityRisk + '</div><div class="tiny muted">sort/priority signal, not part of Health Score</div></div>' +
     '</div>';
+
+  if ((health.trend.newFindings || []).length || (health.trend.resolvedFindings || []).length) {
+    h += '<div class="tiny muted" style="margin-bottom:1rem">' +
+      (health.trend.newFindings.length ? '<span style="color:var(--danger)">' + health.trend.newFindings.length + ' new</span>' : '') +
+      (health.trend.newFindings.length && health.trend.resolvedFindings.length ? ', ' : '') +
+      (health.trend.resolvedFindings.length ? '<span style="color:var(--success)">' + health.trend.resolvedFindings.length + ' resolved</span>' : '') +
+      ' since 7 days ago</div>';
+  }
 
   if ((health.actionPlan || []).length) {
     h += '<div class="dash-panel" style="margin-bottom:1rem"><div class="dash-panel-body" style="padding:0.85rem">' +
