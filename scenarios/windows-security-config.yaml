@@ -1,0 +1,135 @@
+id: windows-security-config
+name: Windows Security Configuration & Identity Baseline
+local_check: true
+description: >
+  Validates core Windows security-configuration and identity posture
+  controls relevant to BFSI environments: firewall, endpoint protection,
+  disk encryption, remote access hardening, and account/password policy.
+  All checks run on the Windows agent as built-in posture assessments --
+  no external commands are sent.
+supported_os: [windows]
+tags:
+  - security-configuration
+  - identity
+  - windows
+  - hardening
+
+steps:
+  # -- Security Configuration ---------------------------------------------
+  - name: "Windows Firewall Enabled (All Profiles)"
+    check_id: windows-firewall-enabled
+    technique_id: T1562.004
+    framework: custom
+    executor: local
+    command: >-
+      $p = Get-NetFirewallProfile;
+      if (($p | Where-Object { $_.Enabled -eq $false }).Count -eq 0) { Write-Output 'PASS: All firewall profiles enabled' }
+      else { Write-Output 'FAIL: One or more firewall profiles disabled' }
+    timeout_sec: 15
+
+  - name: "Windows Defender Real-Time Protection Enabled"
+    check_id: windows-defender-realtime
+    technique_id: T1562.001
+    framework: custom
+    executor: local
+    command: >-
+      $s = Get-MpComputerStatus -ErrorAction SilentlyContinue;
+      if ($s -and $s.RealTimeProtectionEnabled) { Write-Output 'PASS: Defender real-time protection enabled' }
+      else { Write-Output 'FAIL: Defender real-time protection disabled or unavailable' }
+    timeout_sec: 15
+
+  - name: "BitLocker Enabled on System Volume"
+    check_id: windows-bitlocker-enabled
+    framework: custom
+    executor: local
+    command: >-
+      $v = Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction SilentlyContinue;
+      if ($v -and $v.ProtectionStatus -eq 'On') { Write-Output 'PASS: BitLocker enabled on system volume' }
+      else { Write-Output 'FAIL: BitLocker not enabled on system volume' }
+    timeout_sec: 15
+
+  - name: "RDP Disabled or NLA Required"
+    check_id: windows-rdp-nla-required
+    technique_id: T1021.001
+    framework: custom
+    executor: local
+    command: >-
+      $deny = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections;
+      $nla = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -ErrorAction SilentlyContinue).UserAuthentication;
+      if ($deny -eq 1) { Write-Output 'PASS: RDP disabled' }
+      elseif ($nla -eq 1) { Write-Output 'PASS: RDP enabled with NLA required' }
+      else { Write-Output 'FAIL: RDP enabled without NLA' }
+    timeout_sec: 15
+
+  - name: "SMBv1 Disabled"
+    check_id: windows-smbv1-disabled
+    technique_id: T1021.002
+    framework: custom
+    executor: local
+    command: >-
+      $f = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction SilentlyContinue;
+      if (-not $f -or $f.State -eq 'Disabled') { Write-Output 'PASS: SMBv1 disabled' }
+      else { Write-Output 'FAIL: SMBv1 enabled' }
+    timeout_sec: 20
+
+  # -- Identity -------------------------------------------------------------
+  - name: "Guest Account Disabled"
+    check_id: windows-guest-account-disabled
+    technique_id: T1078
+    framework: custom
+    executor: local
+    command: >-
+      $g = Get-LocalUser -Name Guest -ErrorAction SilentlyContinue;
+      if (-not $g -or -not $g.Enabled) { Write-Output 'PASS: Guest account disabled' }
+      else { Write-Output 'FAIL: Guest account enabled' }
+    timeout_sec: 15
+
+  - name: "Local Administrators Group Size"
+    check_id: windows-local-admin-count
+    technique_id: T1078.003
+    framework: custom
+    executor: local
+    command: >-
+      $c = (Get-LocalGroupMember -Group 'Administrators' -ErrorAction SilentlyContinue).Count;
+      if ($c -le 2) { Write-Output ('PASS: ' + $c + ' local administrators') }
+      else { Write-Output ('FAIL: ' + $c + ' local administrators (expected <= 2)') }
+    timeout_sec: 15
+
+  - name: "Minimum Password Length >= 12"
+    check_id: windows-password-min-length
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: >-
+      $o = (net accounts) -join "`n";
+      if ($o -match 'Minimum password length\s+(\d+)') {
+        if ([int]$Matches[1] -ge 12) { Write-Output 'PASS: Minimum password length >= 12' }
+        else { Write-Output 'FAIL: Minimum password length below 12' }
+      } else { Write-Output 'FAIL: Could not determine password policy' }
+    timeout_sec: 15
+
+  - name: "Maximum Password Age Within Policy"
+    check_id: windows-password-max-age
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: >-
+      $o = (net accounts) -join "`n";
+      if ($o -match 'Maximum password age.*?(\d+)') {
+        if ([int]$Matches[1] -gt 0 -and [int]$Matches[1] -le 90) { Write-Output 'PASS: Maximum password age <= 90 days' }
+        else { Write-Output 'FAIL: Maximum password age not within policy' }
+      } else { Write-Output 'FAIL: Could not determine password policy' }
+    timeout_sec: 15
+
+  - name: "Account Lockout Threshold Configured"
+    check_id: windows-account-lockout-threshold
+    technique_id: T1110
+    framework: custom
+    executor: local
+    command: >-
+      $o = (net accounts) -join "`n";
+      if ($o -match 'Lockout threshold\s+(\d+)') {
+        if ([int]$Matches[1] -ge 1 -and [int]$Matches[1] -le 10) { Write-Output 'PASS: Account lockout threshold configured' }
+        else { Write-Output 'FAIL: Account lockout threshold not within policy' }
+      } else { Write-Output 'FAIL: Could not determine lockout policy' }
+    timeout_sec: 15

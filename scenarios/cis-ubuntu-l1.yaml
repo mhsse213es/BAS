@@ -133,6 +133,7 @@ steps:
 
   # -- SSH Hardening -----------------------------------------------------------
   - name: "SSH Root Login Disabled (PermitRootLogin no)"
+    check_id: linux-ssh-root-login-disabled
     technique_id: T1078
     framework: custom
     executor: local
@@ -147,6 +148,7 @@ steps:
     timeout_sec: 10
 
   - name: "SSH Empty Passwords Forbidden (PermitEmptyPasswords no)"
+    check_id: linux-ssh-empty-passwords-forbidden
     technique_id: T1110
     framework: custom
     executor: local
@@ -248,6 +250,7 @@ steps:
 
   # -- Security Tools ----------------------------------------------------------
   - name: "UFW Firewall Enabled"
+    check_id: linux-firewall-enabled
     technique_id: T1046
     framework: custom
     executor: local
@@ -255,6 +258,7 @@ steps:
     timeout_sec: 10
 
   - name: "AppArmor Enabled and Enforcing"
+    check_id: linux-apparmor-enabled
     technique_id: T1068
     framework: custom
     executor: local
@@ -263,6 +267,7 @@ steps:
 
   # -- Password Policy ---------------------------------------------------------
   - name: "Password Minimum Length >= 12 (PASS_MIN_LEN)"
+    check_id: linux-password-min-length
     technique_id: T1110
     framework: custom
     executor: local
@@ -270,6 +275,7 @@ steps:
     timeout_sec: 10
 
   - name: "Password Maximum Age <= 365 Days (PASS_MAX_DAYS)"
+    check_id: linux-password-max-age
     technique_id: T1110
     framework: custom
     executor: local
@@ -284,6 +290,7 @@ steps:
     timeout_sec: 10
 
   - name: "No Accounts with Empty Passwords (/etc/shadow)"
+    check_id: linux-no-empty-password-accounts
     technique_id: T1110
     framework: custom
     executor: local
