@@ -48,6 +48,22 @@ func TestInterpretFromStepMetaResolvesTactic(t *testing.T) {
 	}
 }
 
+func TestInterpretCopiesCheckIDThrough(t *testing.T) {
+	step := Step{TechniqueID: "T1562.004", Name: "Firewall Enabled", Framework: "custom", CheckID: "windows-firewall-enabled"}
+	res := Interpret(step, ExecResult{ExitCode: 0, Stdout: "PASS: firewall enabled"})
+	if res.CheckID != "windows-firewall-enabled" {
+		t.Errorf("CheckID = %q, want windows-firewall-enabled", res.CheckID)
+	}
+}
+
+func TestInterpretCheckIDEmptyWhenUnset(t *testing.T) {
+	step := Step{TechniqueID: "T1055", Name: "ASLR Enabled", Framework: "custom"}
+	res := Interpret(step, ExecResult{ExitCode: 0})
+	if res.CheckID != "" {
+		t.Errorf("CheckID = %q, want empty for a step with no check_id (e.g. cis-ubuntu-l1 kernel checks)", res.CheckID)
+	}
+}
+
 func TestInterpretARTBlockDetection(t *testing.T) {
 	cases := []struct {
 		name   string

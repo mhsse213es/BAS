@@ -120,6 +120,13 @@ type YAMLPayload struct {
 type Step struct {
 	Name        string        `yaml:"name"                  json:"name"`
 	TechniqueID string        `yaml:"technique_id"          json:"techniqueId"`
+	// CheckID is a stable, ATT&CK-independent identifier for configuration/
+	// posture checks (e.g. "windows-firewall-enabled"). technique_id stays
+	// optional metadata for checks that genuinely map to a technique;
+	// CheckID is what internal/endpointrisk's taxonomy classifies on, so a
+	// check like BitLocker (no honest ATT&CK fit) doesn't need a forced
+	// technique_id at all.
+	CheckID     string        `yaml:"check_id,omitempty"    json:"checkId,omitempty"`
 	Framework   string        `yaml:"framework"             json:"framework"`
 	Command     string        `yaml:"command,omitempty"     json:"command,omitempty"`
 	AbilityID   string        `yaml:"ability_id,omitempty"  json:"abilityId,omitempty"`

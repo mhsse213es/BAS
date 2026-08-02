@@ -54,7 +54,8 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 	}
 
 	return models.SimulationResult{
-		ID: TaskID(step.TechniqueID, step.Name),
+		ID:      TaskID(step.TechniqueID, step.Name),
+		CheckID: step.CheckID,
 		Technique: models.AttackTechnique{
 			ID:     techniqueID,
 			Name:   techniqueName,

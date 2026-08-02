@@ -34,7 +34,12 @@ type AttackTechnique struct {
 // SimulationResult is the normalised output of a single technique execution.
 // Every framework (ART, Caldera, Sigma, custom) produces this format.
 type SimulationResult struct {
-	ID               string           `json:"id"`
+	ID string `json:"id"`
+	// CheckID mirrors scenario.Step.CheckID -- present only for
+	// configuration/posture-check steps (empty for ordinary ATT&CK technique
+	// steps), used by internal/endpointrisk's taxonomy to classify Security
+	// Configuration / Identity findings without overloading technique_id.
+	CheckID          string           `json:"checkId,omitempty"`
 	Technique        AttackTechnique  `json:"technique"`
 	Result           CheckResult      `json:"result"`
 	Severity         string           `json:"severity"`     // Critical | High | Medium | Low
