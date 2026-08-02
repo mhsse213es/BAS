@@ -1,0 +1,55 @@
+checks:
+  # -- Windows (scenarios/windows-security-config.yaml) --------------------
+  - check_id: windows-firewall-enabled
+    category: security-configuration
+    weight: 1.0
+  - check_id: windows-defender-realtime
+    category: security-configuration
+    weight: 1.0
+  - check_id: windows-bitlocker-enabled
+    category: security-configuration
+    weight: 1.0
+  - check_id: windows-rdp-nla-required
+    category: security-configuration
+    weight: 1.0
+  - check_id: windows-smbv1-disabled
+    category: security-configuration
+    weight: 1.0
+  - check_id: windows-guest-account-disabled
+    category: identity
+    weight: 1.0
+  - check_id: windows-local-admin-count
+    category: identity
+    weight: 1.0
+  - check_id: windows-password-min-length
+    category: identity
+    weight: 1.0
+  - check_id: windows-password-max-age
+    category: identity
+    weight: 1.0
+  - check_id: windows-account-lockout-threshold
+    category: identity
+    weight: 1.0
+
+  # -- Linux (scenarios/cis-ubuntu-l1.yaml, backfilled subset) -------------
+  - check_id: linux-firewall-enabled
+    category: security-configuration
+    weight: 1.0
+  - check_id: linux-apparmor-enabled
+    category: security-configuration
+    weight: 1.0
+  - check_id: linux-ssh-root-login-disabled
+    category: identity
+    weight: 1.0
+  - check_id: linux-ssh-empty-passwords-forbidden
+    category: identity
+    weight: 1.0
+  - check_id: linux-password-min-length
+    category: identity
+    weight: 1.0
+  - check_id: linux-password-max-age
+    category: identity
+    weight: 1.0
+  - check_id: linux-no-empty-password-accounts
+    category: identity
+    weight: 1.0
