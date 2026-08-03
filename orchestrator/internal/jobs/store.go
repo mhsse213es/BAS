@@ -145,8 +145,7 @@ func (s *Store) MarkTargetTerminal(ctx context.Context, targetID, state, errText
 // first time state moves off "requested" (COALESCE keeps any existing
 // value); CompletedAt is stamped whenever state lands in a terminal value.
 func (s *Store) SetJobState(ctx context.Context, jobID, state string) error {
-	terminal := state == JobStateCompleted || state == JobStatePartial || state == JobStateFailed || state == JobStateCancelled
-	if terminal {
+	if IsTerminalJobState(state) {
 		_, err := s.pool.Exec(ctx,
 			`UPDATE jobs SET state=$1, started_at=COALESCE(started_at, NOW()), completed_at=NOW() WHERE id=$2`,
 			state, jobID)

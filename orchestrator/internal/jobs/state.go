@@ -40,3 +40,10 @@ func AggregateState(current string, targets []JobTarget) string {
 	}
 	return JobStateRequested
 }
+
+// IsTerminalJobState reports whether state is one Tick() will never advance
+// further -- used by spawnDueSchedules to decide whether a schedule's
+// previous spawned job is still active.
+func IsTerminalJobState(state string) bool {
+	return state == JobStateCompleted || state == JobStatePartial || state == JobStateFailed || state == JobStateCancelled
+}
