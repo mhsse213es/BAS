@@ -260,6 +260,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/remediation-requests/{requestId}/verify-technique", tierPermission, auth.CanRunScenario},
 	{http.MethodGet, "/api/technique-verification-runs/{id}", tierPermission, auth.CanRunScenario},
 	{http.MethodGet, "/api/remediation-reports/summary", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodPost, "/api/jobs/batch-remediation", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/openaev/config", tierPermission, auth.CanViewOpenAEVConfig},
 	{http.MethodPut, "/api/openaev/config", tierPermission, auth.CanUpdateOpenAEVConfig},
 	{http.MethodPost, "/api/openaev/config/test", tierPermission, auth.CanTestOpenAEVConfig},
