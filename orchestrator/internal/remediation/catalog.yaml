@@ -1,0 +1,45 @@
+remediations:
+  - id: enable_windows_firewall
+    title: Enable Windows Firewall
+    category: security-configuration
+    tier: 1
+    check_id: windows-firewall-enabled
+    verification_check_id: windows-firewall-enabled
+    supported_os: [windows]
+    requires_admin: true
+    requires_reboot: false
+    supports_rollback: true
+    estimated_time_sec: 30
+    executor: local
+    command: "Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True"
+    rollback_command: "Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled False"
+    description: "Enables Windows Firewall for the Domain, Private, and Public profiles."
+
+  - id: disable_windows_smbv1
+    title: Disable SMBv1
+    category: security-configuration
+    tier: 2
+    check_id: windows-smbv1-disabled
+    verification_check_id: windows-smbv1-disabled
+    supported_os: [windows]
+    requires_admin: true
+    requires_reboot: true
+    supports_rollback: true
+    estimated_time_sec: 60
+    executor: local
+    command: "Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart"
+    rollback_command: "Enable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart"
+    description: "Disables the legacy, vulnerable SMBv1 protocol. Requires a reboot to fully take effect."
+
+  - id: enable_bitlocker
+    title: Enable BitLocker
+    category: security-configuration
+    tier: 4
+    check_id: windows-bitlocker-enabled
+    supported_os: [windows]
+    supports_rollback: false
+    manual_steps:
+      - "Back up the recovery key to Azure AD or a secure location first."
+      - "Run: Enable-BitLocker -MountPoint C: -RecoveryPasswordProtector"
+      - "Confirm encryption status: Get-BitLockerVolume"
+    description: "BitLocker requires recovery-key escrow before enabling -- not safe to automate."
