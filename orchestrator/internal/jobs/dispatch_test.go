@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -164,6 +165,136 @@ func TestTick_CancelledJobIsNeverTouched(t *testing.T) {
 
 		if err := d.Tick(ctx); err != nil {
 			t.Fatalf("Tick: %v", err)
+		}
+	})
+}
+
+func TestTick_SpawnsDueSchedule(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "weekly"})
+		// A schedule whose weekly slot is definitely in the past relative to
+		// "now" and has never been checked (LastOccurrenceAt nil) -- today's
+		// weekday at 00:00 UTC is always at or before "now" for any test run.
+		sch, err := store.CreateSchedule(ctx, Schedule{
+			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"sched-agent-1"},
+			DayOfWeek: int(time.Now().UTC().Weekday()), TimeOfDay: "00:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+
+		d := NewDispatcher(store)
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) { return "ref-" + target.AgentID, nil })
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		got, err := store.GetSchedule(ctx, sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.LastSpawnedJobID == "" {
+			t.Fatal("schedule was not spawned -- LastSpawnedJobID is empty")
+		}
+		spawned, err := store.Get(ctx, got.LastSpawnedJobID)
+		if err != nil {
+			t.Fatalf("Get(spawned job): %v", err)
+		}
+		targets, err := store.ListTargets(ctx, spawned.ID)
+		if err != nil {
+			t.Fatalf("ListTargets: %v", err)
+		}
+		if len(targets) != 1 || targets[0].AgentID != "sched-agent-1" {
+			t.Fatalf("spawned job's targets = %+v, want 1 target for sched-agent-1", targets)
+		}
+	})
+}
+
+func TestTick_SkipsScheduleWhenPreviousSpawnStillActive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "weekly"})
+		stillRunning, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"prev-run-agent"})
+		if err != nil {
+			t.Fatalf("CreateBatch (previous run): %v", err)
+		}
+		if err := store.SetJobState(ctx, stillRunning.ID, JobStateRunning); err != nil {
+			t.Fatalf("SetJobState: %v", err)
+		}
+
+		sch, err := store.CreateSchedule(ctx, Schedule{
+			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"sched-agent-2"},
+			DayOfWeek: int(time.Now().UTC().Weekday()), TimeOfDay: "00:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+		if err := store.MarkScheduleOccurrenceHandled(ctx, sch.ID, time.Now().UTC().Add(-1*time.Hour), stillRunning.ID); err != nil {
+			t.Fatalf("MarkScheduleOccurrenceHandled: %v", err)
+		}
+
+		d := NewDispatcher(store)
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) { return "ref-" + target.AgentID, nil })
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		got, err := store.GetSchedule(ctx, sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.LastSpawnedJobID != stillRunning.ID {
+			t.Errorf("LastSpawnedJobID = %q, want %q (unchanged -- previous run still active, this occurrence skipped)", got.LastSpawnedJobID, stillRunning.ID)
+		}
+	})
+}
+
+func TestTick_DisabledScheduleNeverSpawns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "weekly"})
+		sch, err := store.CreateSchedule(ctx, Schedule{
+			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"sched-agent-3"},
+			DayOfWeek: int(time.Now().UTC().Weekday()), TimeOfDay: "00:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+		if err := store.DisableSchedule(ctx, sch.ID); err != nil {
+			t.Fatalf("DisableSchedule: %v", err)
+		}
+
+		d := NewDispatcher(store)
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
+			t.Fatal("dispatch should not be called -- schedule's own target list should never have been spawned")
+			return "", nil
+		})
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		got, err := store.GetSchedule(ctx, sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.LastSpawnedJobID != "" {
+			t.Errorf("LastSpawnedJobID = %q, want empty -- disabled schedule must never spawn", got.LastSpawnedJobID)
 		}
 	})
 }

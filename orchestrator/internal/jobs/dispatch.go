@@ -1,6 +1,10 @@
 package jobs
 
-import "context"
+import (
+	"context"
+	"log"
+	"time"
+)
 
 // DispatchFn performs one target's actual execution (e.g. creating a
 // remediation_requests row and dispatching it to the agent) and returns a
@@ -37,6 +41,8 @@ func (d *Dispatcher) SetStatus(fn StatusFn)     { d.status = fn }
 // jobDispatchBatchSize still-pending targets, then (3) recomputing and
 // persisting the aggregate state of every job touched in this tick.
 func (d *Dispatcher) Tick(ctx context.Context) error {
+	d.spawnDueSchedules(ctx)
+
 	jobCache := map[string]Job{}
 	jobOf := func(jobID string) (Job, error) {
 		if j, ok := jobCache[jobID]; ok {
@@ -107,4 +113,35 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// spawnDueSchedules checks every enabled Schedule for a new weekly
+// occurrence and spawns a fresh one-shot Job for it, unless the previous
+// spawn from this schedule is still non-terminal (skip + log; the schedule
+// tries again next occurrence).
+func (d *Dispatcher) spawnDueSchedules(ctx context.Context) {
+	schedules, err := d.store.ListEnabledSchedules(ctx)
+	if err != nil {
+		return
+	}
+	for _, sch := range schedules {
+		occurrence, ok := nextOccurrenceSince(sch, time.Now().UTC())
+		if !ok {
+			continue // no new occurrence since sch.LastOccurrenceAt -- the common case
+		}
+		if sch.LastSpawnedJobID != "" {
+			if job, err := d.store.Get(ctx, sch.LastSpawnedJobID); err == nil && !IsTerminalJobState(job.State) {
+				log.Printf("[jobs] schedule %s: skipping occurrence %v -- previous spawn %s still active", sch.ID, occurrence, sch.LastSpawnedJobID)
+				d.store.MarkScheduleOccurrenceHandled(ctx, sch.ID, occurrence, "")
+				continue
+			}
+		}
+		newJob, err := d.store.CreateBatch(ctx, sch.Type, sch.Payload, sch.CreatedBy, sch.AgentIDs)
+		if err != nil {
+			log.Printf("[jobs] schedule %s: spawn failed: %v -- will retry next tick", sch.ID, err)
+			continue
+		}
+		d.store.MarkScheduleOccurrenceHandled(ctx, sch.ID, occurrence, newJob.ID)
+		log.Printf("[jobs] schedule %s: spawned job %s for occurrence %v", sch.ID, newJob.ID, occurrence)
+	}
 }
