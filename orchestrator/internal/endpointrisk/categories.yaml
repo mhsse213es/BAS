@@ -53,3 +53,16 @@ checks:
   - check_id: linux-no-empty-password-accounts
     category: identity
     weight: 1.0
+
+  # -- Windows (scenarios/windows-patch-posture.yaml) ----------------------
+  - check_id: windows-last-patch-age
+    category: patch-management
+    weight: 1.0
+
+  # -- Linux (scenarios/linux-patch-posture.yaml) ---------------------------
+  - check_id: linux-pending-security-updates
+    category: patch-management
+    weight: 1.0
+  - check_id: linux-last-patch-age
+    category: patch-management
+    weight: 1.0

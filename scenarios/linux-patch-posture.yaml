@@ -1,0 +1,38 @@
+id: linux-patch-posture
+name: Linux Patch Currency Check
+local_check: true
+description: >
+  Checks pending security updates and last-patch age. Unpatched OS
+  vulnerabilities are among the most common ransomware and worm entry
+  points; SEBI CSCRF mandates critical patches within 30 days of release.
+author: Audspect Research
+supported_os: [linux]
+tags:
+  - patch-management
+  - cscrf
+  - linux
+
+steps:
+  - name: "Pending Security Updates (apt)"
+    check_id: linux-pending-security-updates
+    technique_id: T1082
+    framework: custom
+    executor: local
+    command: >-
+      count=$(apt list --upgradable 2>/dev/null | grep -ic security || echo 0);
+      if [ "$count" -eq 0 ]; then echo "PASS: No pending security updates"; else echo "FAIL: $count pending security update(s)"; fi
+    timeout_sec: 20
+
+  - name: "Last Patch Age (apt history)"
+    check_id: linux-last-patch-age
+    technique_id: T1082
+    framework: custom
+    executor: local
+    command: >-
+      if [ -f /var/log/apt/history.log ]; then
+        age=$(( ( $(date +%s) - $(stat -c %Y /var/log/apt/history.log) ) / 86400 ));
+        if [ "$age" -le 30 ]; then echo "PASS: Last patch $age days ago"; else echo "FAIL: Last patch $age days ago (overdue)"; fi
+      else
+        echo "SKIP: apt history log not found";
+      fi
+    timeout_sec: 10

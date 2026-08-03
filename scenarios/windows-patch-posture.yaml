@@ -1,0 +1,26 @@
+id: windows-patch-posture
+name: Windows Patch Currency Check
+local_check: true
+description: >
+  Checks whether the endpoint has installed a security update within the
+  last 30 days. Unpatched OS vulnerabilities are among the most common
+  ransomware and worm entry points; SEBI CSCRF mandates critical patches
+  within 30 days of release.
+author: Audspect Research
+supported_os: [windows]
+tags:
+  - patch-management
+  - cscrf
+  - windows
+
+steps:
+  - name: "Patch Currency — Last Update Age (CSCRF-5.1)"
+    check_id: windows-last-patch-age
+    technique_id: T1082
+    framework: custom
+    executor: local
+    command: >-
+      $h = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 1;
+      if ($h -and $h.InstalledOn -and ((Get-Date) - $h.InstalledOn).Days -le 30) { Write-Output 'PASS: Last patch installed within 30 days' }
+      else { Write-Output 'FAIL: Last patch installed more than 30 days ago (or unknown)' }
+    timeout_sec: 15
