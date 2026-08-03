@@ -121,6 +121,9 @@ var postureCheckFindingText = map[string]struct {
 	"linux-password-min-length":           {"Weak minimum password length", "Minimum password length should be at least 12 characters.", ">= 12", "< 12", "Set PASS_MIN_LEN 12 in /etc/login.defs.", "CIS Ubuntu Benchmark"},
 	"linux-password-max-age":              {"Password max age out of policy", "Maximum password age should be 365 days or fewer.", "<= 365", "> 365", "Set PASS_MAX_DAYS 365 in /etc/login.defs.", "CIS Ubuntu Benchmark"},
 	"linux-no-empty-password-accounts":    {"Accounts with empty passwords found", "No account should have an empty password.", "none", "one or more found", "Set a password or lock the affected account(s).", "CIS Ubuntu Benchmark"},
+	"windows-last-patch-age":              {"Last patch overdue", "The last installed security update should be within 30 days.", "<= 30 days", "> 30 days or unknown", "Install pending Windows Updates.", "SEBI CSCRF"},
+	"linux-pending-security-updates":      {"Pending security updates", "No pending security updates should be outstanding.", "0 pending", "1 or more pending", "Run apt upgrade to install pending security updates.", "SEBI CSCRF"},
+	"linux-last-patch-age":                {"Last patch overdue", "The last installed patch should be within 30 days.", "<= 30 days", "> 30 days", "Run apt upgrade regularly to keep patches current.", "SEBI CSCRF"},
 }
 
 // postureCheckInput aggregates Security Configuration or Identity evidence
@@ -208,4 +211,8 @@ func (h *Handler) securityConfigInput(ctx context.Context, agentID string, asOf 
 
 func (h *Handler) identityInput(ctx context.Context, agentID string, asOf time.Time, allResults []models.SimulationResult) endpointrisk.PostureCheckInput {
 	return h.postureCheckInput(ctx, agentID, asOf, allResults, "identity")
+}
+
+func (h *Handler) patchManagementInput(ctx context.Context, agentID string, asOf time.Time, allResults []models.SimulationResult) endpointrisk.PostureCheckInput {
+	return h.postureCheckInput(ctx, agentID, asOf, allResults, "patch-management")
 }

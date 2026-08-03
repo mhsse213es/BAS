@@ -192,6 +192,36 @@ func TestPostureCheckInput_HistoricalAsOf_LatestPerCheckBeforeCutoff(t *testing.
 	})
 }
 
+func TestPatchManagementInput_ComputesFromWindowsAndLinuxChecks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-pm-a1', 'ER-PM-HOST')`)
+		now := time.Now().UTC()
+		mustExecAPI(t, pool, `
+			INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
+			VALUES ('er-pm-run', 'windows-patch-posture', 'Patch Run', 'er-pm-a1', 'completed', $1::jsonb, NOW())`,
+			`[{"checkId":"windows-last-patch-age","result":"fail","executedAt":"`+now.Format(time.RFC3339)+`"}]`)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		tx, err := endpointrisk.NewTaxonomy()
+		if err != nil {
+			t.Fatalf("NewTaxonomy: %v", err)
+		}
+		h.endpointRiskTaxonomy = tx
+
+		all := h.aggregateAgentResults(context.Background(), "er-pm-a1")
+		got := h.patchManagementInput(context.Background(), "er-pm-a1", now.Add(time.Hour), all)
+		if !got.Collected || got.Total != 1 || got.Failed != 1 {
+			t.Errorf("patch management input = %+v, want Collected=true Total=1 Failed=1", got)
+		}
+		if len(got.Findings) != 1 || got.Findings[0].ID != "windows-last-patch-age" {
+			t.Errorf("Findings = %+v, want exactly windows-last-patch-age", got.Findings)
+		}
+	})
+}
+
 func TestFilterByAsOf_ExcludesFutureResults(t *testing.T) {
 	now := time.Now().UTC()
 	all := []models.SimulationResult{{ExecutedAt: now}}
