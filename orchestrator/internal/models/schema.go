@@ -47,6 +47,12 @@ type SimulationResult struct {
 	Details          string           `json:"details"`
 	Remediation      string           `json:"remediation"`
 	RawOutput        string           `json:"rawOutput,omitempty"`
+	// Truncated/OriginalOutputBytes make evidence truncation visible instead
+	// of silent -- a parser (e.g. Application Risk's installed-software
+	// parser) can detect incomplete evidence rather than unknowingly working
+	// with a partial list.
+	Truncated            bool `json:"truncated,omitempty"`
+	OriginalOutputBytes  int  `json:"originalOutputBytes,omitempty"`
 	DurationMs       int64            `json:"durationMs"`
 	ExecutedAt       time.Time        `json:"executedAt"`
 	Framework        string           `json:"framework"`                  // art | caldera | sigma | custom

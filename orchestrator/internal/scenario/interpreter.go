@@ -31,6 +31,12 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 
 	combined := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
 
+	outputLimit := 3000
+	if step.MaxOutputBytes > 0 {
+		outputLimit = step.MaxOutputBytes
+	}
+	truncated := len(combined) > outputLimit
+
 	framework := step.Framework
 	if framework == "" {
 		framework = "custom"
@@ -67,7 +73,9 @@ func Interpret(step Step, result ExecResult) models.SimulationResult {
 		Details:           details,
 		SkipReason:        skipReason,
 		Remediation:       models.Remediation(checkResult, tactic, techniqueID, techniqueName),
-		RawOutput:         truncate(combined, 3000),
+		RawOutput:            truncate(combined, outputLimit),
+		Truncated:            truncated,
+		OriginalOutputBytes:  len(combined),
 		DurationMs:        result.DurationMs,
 		ExecutedAt:        execAt,
 		Framework:         framework,

@@ -257,3 +257,30 @@ func TestInterpret_SetsSkipReason(t *testing.T) {
 		t.Errorf("non-skip SkipReason = %q, want empty", passRes.SkipReason)
 	}
 }
+
+func TestInterpretUsesDefaultOutputLimitWhenUnset(t *testing.T) {
+	step := Step{TechniqueID: "T1082", Name: "test", Framework: "custom"}
+	longOutput := strings.Repeat("x", 4000)
+	res := Interpret(step, ExecResult{ExitCode: 0, Stdout: longOutput})
+	if len(res.RawOutput) > 3003 { // 3000 + the "…" truncation marker (3 UTF-8 bytes)
+		t.Errorf("RawOutput len = %d, want capped near 3000 (default limit)", len(res.RawOutput))
+	}
+	if !res.Truncated {
+		t.Error("expected Truncated=true when output exceeds the default 3000-byte limit")
+	}
+	if res.OriginalOutputBytes != len(longOutput) {
+		t.Errorf("OriginalOutputBytes = %d, want %d", res.OriginalOutputBytes, len(longOutput))
+	}
+}
+
+func TestInterpretUsesStepOverrideOutputLimit(t *testing.T) {
+	step := Step{TechniqueID: "T1082", Name: "test", Framework: "custom", MaxOutputBytes: 20000}
+	longOutput := strings.Repeat("x", 4000)
+	res := Interpret(step, ExecResult{ExitCode: 0, Stdout: longOutput})
+	if res.Truncated {
+		t.Error("expected Truncated=false -- 4000 bytes is under the step's 20000-byte override")
+	}
+	if len(res.RawOutput) != len(longOutput) {
+		t.Errorf("RawOutput len = %d, want %d (untruncated)", len(res.RawOutput), len(longOutput))
+	}
+}

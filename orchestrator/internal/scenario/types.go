@@ -127,6 +127,10 @@ type Step struct {
 	// check like BitLocker (no honest ATT&CK fit) doesn't need a forced
 	// technique_id at all.
 	CheckID     string        `yaml:"check_id,omitempty"    json:"checkId,omitempty"`
+	// MaxOutputBytes overrides the default 3000-byte RawOutput truncation
+	// limit for checks whose evidence is legitimately large (e.g. a full
+	// installed-software inventory). 0 means "use the default".
+	MaxOutputBytes int        `yaml:"max_output_bytes,omitempty" json:"maxOutputBytes,omitempty"`
 	Framework   string        `yaml:"framework"             json:"framework"`
 	Command     string        `yaml:"command,omitempty"     json:"command,omitempty"`
 	AbilityID   string        `yaml:"ability_id,omitempty"  json:"abilityId,omitempty"`

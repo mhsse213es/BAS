@@ -39,7 +39,7 @@ func TestInterpretUsesDefaultOutputLimitWhenUnset(t *testing.T) {
 	step := Step{TechniqueID: "T1082", Name: "test", Framework: "custom"}
 	longOutput := strings.Repeat("x", 4000)
 	res := Interpret(step, ExecResult{ExitCode: 0, Stdout: longOutput})
-	if len(res.RawOutput) > 3001 { // 3000 + the "…" truncation marker
+	if len(res.RawOutput) > 3003 { // 3000 + the "…" truncation marker (3 UTF-8 bytes)
 		t.Errorf("RawOutput len = %d, want capped near 3000 (default limit)", len(res.RawOutput))
 	}
 	if !res.Truncated {
