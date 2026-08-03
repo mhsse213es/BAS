@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/remediation"
 )
@@ -70,4 +72,24 @@ func (h *Handler) CreateBatchRemediationJob(w http.ResponseWriter, r *http.Reque
 	h.auditLog(r, "jobs.batch_remediation.create", job.ID,
 		map[string]any{"remediationId": entry.ID, "agentCount": len(req.AgentIDs)}, "created")
 	respond(w, map[string]any{"jobId": job.ID, "state": job.State, "targetCount": len(req.AgentIDs)})
+}
+
+// GET /api/jobs/{jobId}
+func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobId")
+	if h.jobsStore == nil {
+		jsonError(w, "job engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	job, err := h.jobsStore.Get(r.Context(), jobID)
+	if err != nil {
+		jsonError(w, "job not found", http.StatusNotFound)
+		return
+	}
+	targets, err := h.jobsStore.ListTargets(r.Context(), jobID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, map[string]any{"job": job, "targets": targets})
 }

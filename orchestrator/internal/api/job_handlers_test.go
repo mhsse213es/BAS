@@ -158,3 +158,54 @@ func TestCreateBatchRemediationJob_EmptyAgentIds_BadRequest(t *testing.T) {
 		}
 	})
 }
+
+func TestGetJob_ReturnsJobAndTargets(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('jbg-a1', 'JBG-A1')`)
+		jobsStore := jobs.NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		created, err := jobsStore.CreateBatch(context.Background(), "batch_remediation", payload, "user-1", []string{"jbg-a1"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "jobId", created.ID)
+		w := httptest.NewRecorder()
+		h.GetJob(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Job     jobs.Job         `json:"job"`
+			Targets []jobs.JobTarget `json:"targets"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if resp.Job.ID != created.ID || len(resp.Targets) != 1 {
+			t.Errorf("resp = %+v, want Job.ID=%s and 1 target", resp, created.ID)
+		}
+	})
+}
+
+func TestGetJob_NotFound_404(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "jobId", "no-such-job")
+		w := httptest.NewRecorder()
+		h.GetJob(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want 404", w.Code)
+		}
+	})
+}
