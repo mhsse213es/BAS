@@ -484,6 +484,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// stricter Admin-only gate is checked dynamically inside the handler,
 		// since it depends on the requested remediation's own tier).
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/agents/{agentId}/remediations", h.ExecuteRemediation)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/agents/{agentId}/remediations", h.ListAgentRemediations)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/remediation-requests/{requestId}", h.GetRemediation)
 
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)
