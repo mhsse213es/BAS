@@ -28,6 +28,7 @@ import (
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/ioc"
 	"github.com/audspect/bas/internal/iocregistry"
+	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/openaev"
@@ -415,6 +416,14 @@ func main() {
 		return status, err
 	})
 
+	// Fleet Job Engine -- generic Job/JobTarget infrastructure. Ticks every
+	// 5s, same cadence as vexSweepScheduler. internal/jobs knows nothing
+	// about remediation; WithJobsDispatcher (below) wires in the one V1
+	// consumer, batch remediation.
+	jobsStore := jobs.NewStore(pool)
+	jobsDispatcher := jobs.NewDispatcher(jobsStore)
+	jobsScheduler := exercise.NewPollScheduler(5 * time.Second)
+
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
@@ -428,6 +437,7 @@ func main() {
 		WithEndpointRiskTaxonomy(endpointRiskTaxonomy).
 		WithEOLCatalog(eolCatalog).
 		WithRemediationCatalog(remediationCatalog).
+		WithJobsDispatcher(jobsStore, jobsDispatcher).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
 		WithThreatPriority(priorityEngine).
@@ -446,6 +456,13 @@ func main() {
 		}
 	})
 	defer vexSweepScheduler.Stop()
+
+	jobsScheduler.Start(func(ctx context.Context) {
+		if err := jobsDispatcher.Tick(ctx); err != nil {
+			log.Printf("[jobs] tick: %v", err)
+		}
+	})
+	defer jobsScheduler.Stop()
 
 	rateLimitPerMin := 0
 	if cfg.RateLimitEnabled {
