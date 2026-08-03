@@ -44,7 +44,10 @@ func TestCreateBatchScheduled_FutureScheduledAt_TargetsNotDispatchable(t *testin
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		ctx := context.Background()
 		store := NewStore(pool)
-		future := time.Now().UTC().Add(24 * time.Hour)
+		// Truncated to microsecond precision -- Postgres timestamptz only
+		// stores microseconds, so a nanosecond-precision time.Now() value
+		// would never round-trip .Equal() otherwise.
+		future := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Microsecond)
 		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
 
 		job, err := store.CreateBatchScheduled(ctx, "batch_remediation", payload, "user-1", []string{"agent-future"}, &future)
