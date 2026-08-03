@@ -2633,6 +2633,8 @@ git commit -m "feat(api): add remediation rollback with rollback verification"
 git push
 ```
 
+**Correction found during execution:** `TestContinueRemediation_RollbackSucceeds_DispatchesRollbackVerify` needs `h.remediationCatalog` set (and, per Task 7's corrections, a registered fixture scenario + a live fake agent connection) — the initial version omitted the catalog assignment, so `handleRemediationRollbackResult`'s nil-catalog guard fired and marked `rollback_status=failed` instead of dispatching rollback-verification.
+
 ---
 
 ### Task 11: Full verification pass
