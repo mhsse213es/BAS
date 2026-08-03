@@ -115,6 +115,24 @@ type PostureCheckInput struct {
 	Collected bool
 }
 
+// InstalledApp is one parsed row from an installed-software inventory
+// check's raw "Name|Version" output.
+type InstalledApp struct {
+	Name    string
+	Version string
+}
+
+// ApplicationRiskInput is deliberately a distinct type from
+// PostureCheckInput -- Application Risk is an open-ended scan (zero or
+// more risky apps found), not a fixed pass/fail checklist, so its score is
+// a severity-weighted deduction, not a pass rate.
+type ApplicationRiskInput struct {
+	Score       int       // 0-100, 100 minus severity-weighted deductions, floored at 0
+	AppsScanned int
+	Findings    []Finding // one per unique matched catalog id
+	Collected   bool
+}
+
 // HealthInputs bundles the four evidence-row-backed category inputs so
 // ComputeHealth takes two params (now, past) instead of eight positional
 // ones -- every call site needed updating anyway to add SecurityConfig/

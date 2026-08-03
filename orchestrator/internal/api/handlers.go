@@ -86,6 +86,7 @@ type Handler struct {
 	complianceMapper      *compliance.Mapper   // nil when not loaded
 	controlHealthMapper   *controlhealth.Mapper // nil when not loaded
 	endpointRiskTaxonomy  *endpointrisk.Taxonomy // nil when not loaded
+	eolCatalog            *endpointrisk.Catalog  // nil when not loaded
 	reportingEngine       *reporting.Engine    // nil when not loaded
 	scheduler             *connector.Scheduler // nil when no sources configured
 	ticketing             *ticketing.Manager   // nil when no connectors configured
@@ -127,6 +128,12 @@ func (h *Handler) WithControlHealth(m *controlhealth.Mapper) *Handler {
 // WithEndpointRiskTaxonomy attaches the Security Config/Identity check_id taxonomy.
 func (h *Handler) WithEndpointRiskTaxonomy(t *endpointrisk.Taxonomy) *Handler {
 	h.endpointRiskTaxonomy = t
+	return h
+}
+
+// WithEOLCatalog attaches the Application Risk EOL/high-risk software catalog.
+func (h *Handler) WithEOLCatalog(c *endpointrisk.Catalog) *Handler {
+	h.eolCatalog = c
 	return h
 }
 

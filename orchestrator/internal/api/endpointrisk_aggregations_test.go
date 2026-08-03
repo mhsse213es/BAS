@@ -222,6 +222,80 @@ func TestPatchManagementInput_ComputesFromWindowsAndLinuxChecks(t *testing.T) {
 	})
 }
 
+func TestParseInstalledSoftware_ParsesValidLinesSkipsMalformed(t *testing.T) {
+	raw := "Adobe Flash Player|32.0.0.465\nmalformed line\nGoogle Chrome|120.0.0.0\n|no name\n"
+	got := parseInstalledSoftware(raw)
+	if len(got) != 2 {
+		t.Fatalf("got %d apps, want 2 (malformed lines skipped): %+v", len(got), got)
+	}
+	if got[0].Name != "Adobe Flash Player" || got[0].Version != "32.0.0.465" {
+		t.Errorf("apps[0] = %+v, want Adobe Flash Player/32.0.0.465", got[0])
+	}
+}
+
+func TestParseInstalledSoftware_EmptyInput(t *testing.T) {
+	if got := parseInstalledSoftware(""); len(got) != 0 {
+		t.Errorf("got %d apps, want 0", len(got))
+	}
+}
+
+func TestApplicationRiskInput_MatchesCatalogAndScores(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-ar-a1', 'ER-AR-HOST')`)
+		now := time.Now().UTC()
+		mustExecAPI(t, pool, `
+			INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
+			VALUES ('er-ar-run', 'windows-installed-software', 'Inventory Run', 'er-ar-a1', 'completed', $1::jsonb, NOW())`,
+			`[{"checkId":"windows-installed-software","result":"pass","rawOutput":"Adobe Flash Player|32.0.0.465\nGoogle Chrome|120.0.0.0\nJava 8 Update 451|8.0.451","executedAt":"`+now.Format(time.RFC3339)+`"}]`)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		cat, err := endpointrisk.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		h.eolCatalog = cat
+
+		all := h.aggregateAgentResults(context.Background(), "er-ar-a1")
+		got := h.applicationRiskInput(context.Background(), "er-ar-a1", now.Add(time.Hour), all)
+		if !got.Collected {
+			t.Fatal("expected Collected=true")
+		}
+		if got.AppsScanned != 3 {
+			t.Errorf("AppsScanned = %d, want 3", got.AppsScanned)
+		}
+		// Flash (critical, -25) + Java 8 (high, -15) = 2 findings, Chrome not in catalog.
+		if len(got.Findings) != 2 {
+			t.Errorf("got %d findings, want 2 (Flash + Java 8, Chrome not in catalog): %+v", len(got.Findings), got.Findings)
+		}
+		if got.Score != 60 {
+			t.Errorf("Score = %d, want 60 (100 - 25 - 15)", got.Score)
+		}
+	})
+}
+
+func TestApplicationRiskInput_NoInventoryResult_NotCollected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		cat, err := endpointrisk.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		h.eolCatalog = cat
+
+		all := h.aggregateAgentResults(context.Background(), "no-such-agent-ar")
+		got := h.applicationRiskInput(context.Background(), "no-such-agent-ar", time.Now().UTC(), all)
+		if got.Collected {
+			t.Error("expected Collected=false for an agent with no inventory result")
+		}
+	})
+}
+
 func TestFilterByAsOf_ExcludesFutureResults(t *testing.T) {
 	now := time.Now().UTC()
 	all := []models.SimulationResult{{ExecutedAt: now}}

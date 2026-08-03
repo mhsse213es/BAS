@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/audspect/bas/internal/endpointrisk"
@@ -215,4 +216,99 @@ func (h *Handler) identityInput(ctx context.Context, agentID string, asOf time.T
 
 func (h *Handler) patchManagementInput(ctx context.Context, agentID string, asOf time.Time, allResults []models.SimulationResult) endpointrisk.PostureCheckInput {
 	return h.postureCheckInput(ctx, agentID, asOf, allResults, "patch-management")
+}
+
+// parseInstalledSoftware splits an installed-software check's raw
+// "Name|Version" output into structured rows. Malformed lines are skipped
+// rather than erroring -- evidence from a real machine is messy, and a
+// handful of bad lines shouldn't lose the rest.
+func parseInstalledSoftware(raw string) []endpointrisk.InstalledApp {
+	var out []endpointrisk.InstalledApp
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
+		version := strings.TrimSpace(parts[1])
+		if name == "" {
+			continue
+		}
+		out = append(out, endpointrisk.InstalledApp{Name: name, Version: version})
+	}
+	return out
+}
+
+// eolSeverityWeight is the shared deduction table for Application Risk
+// scoring -- one weight per risk tier, not per catalog entry (see design
+// spec §2e).
+var eolSeverityWeight = map[string]int{
+	"critical": 25,
+	"high":     15,
+	"medium":   5,
+	"low":      2,
+}
+
+// applicationRiskInput finds the agent's most recent installed-software
+// inventory result (asOf-filtered, whichever OS-specific check_id is
+// present), parses it, matches every installed app against the EOL
+// catalog, deduplicates by catalog id (a product with multiple matching
+// components -- e.g. three Java 8 pieces -- deducts once, not three
+// times), and computes a severity-weighted score.
+func (h *Handler) applicationRiskInput(ctx context.Context, agentID string, asOf time.Time, allResults []models.SimulationResult) endpointrisk.ApplicationRiskInput {
+	if h.eolCatalog == nil {
+		return endpointrisk.ApplicationRiskInput{}
+	}
+	results := filterByAsOf(allResults, asOf)
+
+	var latest *models.SimulationResult
+	for i := range results {
+		r := &results[i]
+		if r.CheckID != "windows-installed-software" && r.CheckID != "linux-installed-software" {
+			continue
+		}
+		if latest == nil || r.ExecutedAt.After(latest.ExecutedAt) {
+			latest = r
+		}
+	}
+	if latest == nil {
+		return endpointrisk.ApplicationRiskInput{}
+	}
+
+	apps := parseInstalledSoftware(latest.RawOutput)
+	seen := map[string]bool{}
+	var findings []endpointrisk.Finding
+	score := 100
+	for _, app := range apps {
+		entry, ok := h.eolCatalog.Lookup(app.Name, app.Version)
+		if !ok || seen[entry.ID] {
+			continue
+		}
+		seen[entry.ID] = true
+		observedAt := latest.ExecutedAt
+		findings = append(findings, endpointrisk.Finding{
+			ID: entry.ID, Title: entry.Product, Description: entry.Reason,
+			Severity: titleCase(entry.Risk), Risk: entry.Reason,
+			Remediation: entry.Recommendation, Reference: entry.Reference,
+			Observed: strings.TrimSpace(app.Name + " " + app.Version), LastObserved: &observedAt,
+		})
+		score -= eolSeverityWeight[entry.Risk]
+	}
+	if score < 0 {
+		score = 0
+	}
+	return endpointrisk.ApplicationRiskInput{
+		Score: score, AppsScanned: len(apps), Findings: findings, Collected: true,
+	}
+}
+
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }

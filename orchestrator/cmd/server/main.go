@@ -205,6 +205,14 @@ func main() {
 		log.Printf("[+] Endpoint risk taxonomy loaded")
 	}
 
+	// ── Application Risk EOL/High-Risk Software Catalog ────────────────────
+	eolCatalog, eolErr := endpointrisk.NewCatalog()
+	if eolErr != nil {
+		log.Printf("[!] EOL software catalog: %v — Application Risk category unavailable", eolErr)
+	} else {
+		log.Printf("[+] EOL software catalog loaded")
+	}
+
 	// ── Verification Store (Detection Validation SP2) ─────────────────────
 	// Independent store for analyst/API attestations + evidence. Reporting
 	// consumes it read-only; the API writes to it.
@@ -409,6 +417,7 @@ func main() {
 		WithCompliance(complianceMapper).
 		WithControlHealth(controlHealthMapper).
 		WithEndpointRiskTaxonomy(endpointRiskTaxonomy).
+		WithEOLCatalog(eolCatalog).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
 		WithThreatPriority(priorityEngine).
