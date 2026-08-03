@@ -62,6 +62,12 @@ func (h *Handler) GetAgentRisk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	health := endpointrisk.ComputeHealth(agentID, profile, nowInputs, pastInputs)
+	techFindings := h.techniqueVerificationFindings(r.Context(), agentID, now)
+	for i := range health.Categories {
+		if health.Categories[i].ID == endpointrisk.CategorySecurityConfig && len(techFindings) > 0 {
+			health.Categories[i].Findings = append(health.Categories[i].Findings, techFindings...)
+		}
+	}
 	respond(w, health)
 }
 
@@ -116,6 +122,12 @@ func (h *Handler) GetAgentRiskSummary(w http.ResponseWriter, r *http.Request) {
 			ApplicationRisk: h.applicationRiskInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
 		}
 		health := endpointrisk.ComputeHealth(s.Asset.AgentID, profile, nowInputs, pastInputs)
+		techFindings := h.techniqueVerificationFindings(r.Context(), s.Asset.AgentID, now)
+		for i := range health.Categories {
+			if health.Categories[i].ID == endpointrisk.CategorySecurityConfig && len(techFindings) > 0 {
+				health.Categories[i].Findings = append(health.Categories[i].Findings, techFindings...)
+			}
+		}
 
 		row := AgentRiskRow{
 			AgentID: s.Asset.AgentID, Hostname: s.Asset.Label,
