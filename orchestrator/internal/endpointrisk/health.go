@@ -4,10 +4,9 @@ import (
 	"github.com/audspect/bas/internal/exposure"
 )
 
-// Category IDs -- used both for the 7 collected categories (real score) and
-// the 2 not-yet-collected placeholders, in the fixed display order the
-// design spec's category table lists. Security Configuration and Identity
-// moved from placeholder to real in this sub-project.
+// Category IDs -- every one of the 9 categories the design spec's category
+// table lists is now real-or-uncollected; there are no more permanent
+// placeholders (Patch Management and Application Risk were the last two).
 const (
 	CategoryExposureAttackPath = "exposure-attackpath"
 	CategoryDetectionHealth    = "detection-health"
@@ -20,16 +19,10 @@ const (
 	CategoryApplicationRisk    = "application-risk"
 )
 
-var notYetCollectedCategories = []struct{ ID, Name string }{
-	{CategoryPatchManagement, "Patch Management"},
-	{CategoryApplicationRisk, "Application Risk"},
-}
-
 // ComputeHealth is pure -- no I/O -- so every combination is unit-testable
-// without a database. past is the same four inputs recomputed with
-// evidence filtered to 7 days ago by the caller; exposure-derived
-// categories have no past counterpart, per spec §6, so Trend.Direction
-// only ever reflects Compliance/BAS/SecurityConfig/Identity.
+// without a database. past is the same six inputs recomputed with evidence
+// filtered to 7 days ago by the caller; exposure-derived categories have no
+// past counterpart, per spec §6, so Trend.Direction never reflects them.
 func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, now, past HealthInputs) EndpointHealth {
 	exposureAttackPath := CategoryScore{
 		ID: CategoryExposureAttackPath, Name: "Exposure / Attack Path", Collected: true,
@@ -80,10 +73,21 @@ func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, now, p
 		idCat.Findings = now.Identity.Findings
 	}
 
-	categories := []CategoryScore{exposureAttackPath, detection, vulns, compCat, basCat, secCat, idCat}
-	for _, c := range notYetCollectedCategories {
-		categories = append(categories, CategoryScore{ID: c.ID, Name: c.Name, Collected: false})
+	patchCat := CategoryScore{ID: CategoryPatchManagement, Name: "Patch Management", Collected: now.PatchManagement.Collected}
+	if now.PatchManagement.Collected {
+		patchCat.Score = now.PatchManagement.Score
+		patchCat.Deficit = 100 - patchCat.Score
+		patchCat.Findings = now.PatchManagement.Findings
 	}
+
+	appRiskCat := CategoryScore{ID: CategoryApplicationRisk, Name: "Application Risk", Collected: now.ApplicationRisk.Collected}
+	if now.ApplicationRisk.Collected {
+		appRiskCat.Score = now.ApplicationRisk.Score
+		appRiskCat.Deficit = 100 - appRiskCat.Score
+		appRiskCat.Findings = now.ApplicationRisk.Findings
+	}
+
+	categories := []CategoryScore{exposureAttackPath, detection, vulns, compCat, basCat, secCat, idCat, patchCat, appRiskCat}
 
 	collectedScores := []int{}
 	for _, c := range categories {
@@ -303,15 +307,19 @@ func healthBand(score float64) int {
 }
 
 // computeTrend reflects Compliance + BAS Readiness + Security
-// Configuration + Identity (all four are asOf-filterable evidence rows);
-// Exposure/Attack-Path/Detection Health have no past counterpart to
-// compare, per spec §6. NewFindings/ResolvedFindings are computed only
-// from Security Configuration + Identity's Findings (ID-set diff) -- see
-// TrendDetail's doc comment for why Compliance/BAS don't get the same
-// per-finding diff.
+// Configuration + Identity + Patch Management + Application Risk (all six
+// are asOf-filterable evidence rows); Exposure/Attack-Path/Detection
+// Health have no past counterpart to compare, per spec §6.
+// NewFindings/ResolvedFindings are computed from Security Configuration +
+// Identity + Patch Management + Application Risk's Findings (ID-set diff)
+// -- all four are stably keyed (check_id or catalog id). Compliance/
+// BAS-Readiness findings aren't stably keyed the same way, so they stay
+// covered by Direction only.
 func computeTrend(now, past HealthInputs) TrendDetail {
-	anyNow := now.Compliance.Collected || now.BAS.Collected || now.SecurityConfig.Collected || now.Identity.Collected
-	anyPast := past.Compliance.Collected || past.BAS.Collected || past.SecurityConfig.Collected || past.Identity.Collected
+	anyNow := now.Compliance.Collected || now.BAS.Collected || now.SecurityConfig.Collected ||
+		now.Identity.Collected || now.PatchManagement.Collected || now.ApplicationRisk.Collected
+	anyPast := past.Compliance.Collected || past.BAS.Collected || past.SecurityConfig.Collected ||
+		past.Identity.Collected || past.PatchManagement.Collected || past.ApplicationRisk.Collected
 	if !anyNow || !anyPast {
 		return TrendDetail{Direction: "InsufficientData"}
 	}
@@ -327,8 +335,8 @@ func computeTrend(now, past HealthInputs) TrendDetail {
 		direction = "Declining"
 	}
 
-	nowFindings := append(append([]Finding{}, now.SecurityConfig.Findings...), now.Identity.Findings...)
-	pastFindings := append(append([]Finding{}, past.SecurityConfig.Findings...), past.Identity.Findings...)
+	nowFindings := pooledStableFindings(now)
+	pastFindings := pooledStableFindings(past)
 
 	return TrendDetail{
 		Direction:        direction,
@@ -337,8 +345,19 @@ func computeTrend(now, past HealthInputs) TrendDetail {
 	}
 }
 
+// pooledStableFindings collects Findings from every category whose
+// Finding.ID is stable across a 7-day window (check_id or catalog id).
+func pooledStableFindings(in HealthInputs) []Finding {
+	var out []Finding
+	out = append(out, in.SecurityConfig.Findings...)
+	out = append(out, in.Identity.Findings...)
+	out = append(out, in.PatchManagement.Findings...)
+	out = append(out, in.ApplicationRisk.Findings...)
+	return out
+}
+
 // diffFindings returns the findings in compare whose ID doesn't appear in
-// baseline. Findings without an ID (non-posture-check categories) never
+// baseline. Findings without an ID (non-stably-keyed categories) never
 // match here, which is correct -- they aren't part of this diff.
 func diffFindings(baseline, compare []Finding) []Finding {
 	seen := map[string]bool{}
@@ -372,6 +391,14 @@ func trendInputScore(in HealthInputs) float64 {
 	}
 	if in.Identity.Collected {
 		sum += float64(in.Identity.Score)
+		n++
+	}
+	if in.PatchManagement.Collected {
+		sum += float64(in.PatchManagement.Score)
+		n++
+	}
+	if in.ApplicationRisk.Collected {
+		sum += float64(in.ApplicationRisk.Score)
 		n++
 	}
 	if n == 0 {

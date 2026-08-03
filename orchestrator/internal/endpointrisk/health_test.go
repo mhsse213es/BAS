@@ -21,7 +21,10 @@ func TestComputeHealth_ScoresOnlyCollectedCategories(t *testing.T) {
 	if got.CriticalityRisk != 40 {
 		t.Errorf("CriticalityRisk = %d, want 40 (not folded into HealthScore)", got.CriticalityRisk)
 	}
-	want := map[string]bool{CategoryCompliance: false, CategoryBASReadiness: false, CategorySecurityConfig: false, CategoryIdentity: false}
+	want := map[string]bool{
+		CategoryCompliance: false, CategoryBASReadiness: false, CategorySecurityConfig: false,
+		CategoryIdentity: false, CategoryPatchManagement: false, CategoryApplicationRisk: false,
+	}
 	for _, c := range got.Categories {
 		if _, ok := want[c.ID]; ok {
 			if c.Collected {
@@ -35,19 +38,10 @@ func TestComputeHealth_ScoresOnlyCollectedCategories(t *testing.T) {
 	}
 }
 
-func TestComputeHealth_NotYetCollectedCategoriesAlwaysPresent(t *testing.T) {
+func TestComputeHealth_AllNineCategoriesAlwaysPresent(t *testing.T) {
 	got := ComputeHealth("agent-1", exposure.AssetExposureProfile{}, HealthInputs{}, HealthInputs{})
-	want := map[string]bool{CategoryPatchManagement: false, CategoryApplicationRisk: false}
-	for _, c := range got.Categories {
-		if _, ok := want[c.ID]; ok {
-			if c.Collected {
-				t.Errorf("category %s should be Collected=false", c.ID)
-			}
-			delete(want, c.ID)
-		}
-	}
-	if len(want) != 0 {
-		t.Errorf("missing not-yet-collected categories: %v", want)
+	if len(got.Categories) != 9 {
+		t.Errorf("got %d categories, want 9 (every category is now real-or-uncollected)", len(got.Categories))
 	}
 }
 
@@ -71,6 +65,29 @@ func TestComputeHealth_SecurityConfigAndIdentity_CollectedWhenPresent(t *testing
 	}
 	if idCat == nil || !idCat.Collected || idCat.Score != 100 || idCat.Deficit != 0 {
 		t.Errorf("Identity category = %+v, want Collected=true Score=100 Deficit=0", idCat)
+	}
+}
+
+func TestComputeHealth_PatchManagementAndApplicationRisk_CollectedWhenPresent(t *testing.T) {
+	now := HealthInputs{
+		PatchManagement: PostureCheckInput{Collected: true, Score: 100, Passed: 1, Total: 1},
+		ApplicationRisk: ApplicationRiskInput{Collected: true, Score: 60, AppsScanned: 3, Findings: []Finding{{ID: "flash", Title: "Flash Player"}, {ID: "java8", Title: "Java 8"}}},
+	}
+	got := ComputeHealth("agent-1", exposure.AssetExposureProfile{}, now, HealthInputs{})
+	var patchCat, appRiskCat *CategoryScore
+	for i := range got.Categories {
+		switch got.Categories[i].ID {
+		case CategoryPatchManagement:
+			patchCat = &got.Categories[i]
+		case CategoryApplicationRisk:
+			appRiskCat = &got.Categories[i]
+		}
+	}
+	if patchCat == nil || !patchCat.Collected || patchCat.Score != 100 || patchCat.Deficit != 0 {
+		t.Errorf("Patch Management category = %+v, want Collected=true Score=100 Deficit=0", patchCat)
+	}
+	if appRiskCat == nil || !appRiskCat.Collected || appRiskCat.Score != 60 || appRiskCat.Deficit != 40 || len(appRiskCat.Findings) != 2 {
+		t.Errorf("Application Risk category = %+v, want Collected=true Score=60 Deficit=40 2 findings", appRiskCat)
 	}
 }
 
@@ -125,19 +142,29 @@ func TestComputeTrend_NeitherCollected_InsufficientData(t *testing.T) {
 	}
 }
 
-func TestComputeTrend_NewAndResolvedFindings(t *testing.T) {
+func TestComputeTrend_NewAndResolvedFindings_AcrossFourStableCategories(t *testing.T) {
 	now := HealthInputs{
-		SecurityConfig: PostureCheckInput{Collected: true, Score: 80, Findings: []Finding{{ID: "windows-bitlocker-enabled", Title: "BitLocker disabled"}}},
+		SecurityConfig:  PostureCheckInput{Collected: true, Score: 80, Findings: []Finding{{ID: "windows-bitlocker-enabled", Title: "BitLocker disabled"}}},
+		PatchManagement: PostureCheckInput{Collected: true, Score: 100, Findings: []Finding{{ID: "windows-last-patch-age", Title: "Patch overdue"}}},
 	}
 	past := HealthInputs{
-		SecurityConfig: PostureCheckInput{Collected: true, Score: 80, Findings: []Finding{{ID: "windows-firewall-enabled", Title: "Firewall disabled"}}},
+		SecurityConfig:  PostureCheckInput{Collected: true, Score: 80, Findings: []Finding{{ID: "windows-firewall-enabled", Title: "Firewall disabled"}}},
+		ApplicationRisk: ApplicationRiskInput{Collected: true, Score: 75, Findings: []Finding{{ID: "flash", Title: "Flash Player"}}},
 	}
 	got := computeTrend(now, past)
-	if len(got.NewFindings) != 1 || got.NewFindings[0].ID != "windows-bitlocker-enabled" {
-		t.Errorf("NewFindings = %+v, want exactly windows-bitlocker-enabled", got.NewFindings)
+	newIDs := map[string]bool{}
+	for _, f := range got.NewFindings {
+		newIDs[f.ID] = true
 	}
-	if len(got.ResolvedFindings) != 1 || got.ResolvedFindings[0].ID != "windows-firewall-enabled" {
-		t.Errorf("ResolvedFindings = %+v, want exactly windows-firewall-enabled", got.ResolvedFindings)
+	if !newIDs["windows-bitlocker-enabled"] || !newIDs["windows-last-patch-age"] || len(got.NewFindings) != 2 {
+		t.Errorf("NewFindings = %+v, want exactly windows-bitlocker-enabled + windows-last-patch-age", got.NewFindings)
+	}
+	resolvedIDs := map[string]bool{}
+	for _, f := range got.ResolvedFindings {
+		resolvedIDs[f.ID] = true
+	}
+	if !resolvedIDs["windows-firewall-enabled"] || !resolvedIDs["flash"] || len(got.ResolvedFindings) != 2 {
+		t.Errorf("ResolvedFindings = %+v, want exactly windows-firewall-enabled + flash", got.ResolvedFindings)
 	}
 }
 

@@ -133,13 +133,14 @@ type ApplicationRiskInput struct {
 	Collected   bool
 }
 
-// HealthInputs bundles the four evidence-row-backed category inputs so
-// ComputeHealth takes two params (now, past) instead of eight positional
-// ones -- every call site needed updating anyway to add SecurityConfig/
-// Identity, so this is the natural point to fix the signature's ergonomics.
+// HealthInputs bundles the six evidence-row-backed category inputs so
+// ComputeHealth takes two params (now, past) instead of many positional
+// ones.
 type HealthInputs struct {
-	Compliance     ComplianceInput
-	BAS            BASReadinessInput
-	SecurityConfig PostureCheckInput
-	Identity       PostureCheckInput
+	Compliance      ComplianceInput
+	BAS             BASReadinessInput
+	SecurityConfig  PostureCheckInput
+	Identity        PostureCheckInput
+	PatchManagement PostureCheckInput
+	ApplicationRisk ApplicationRiskInput
 }
