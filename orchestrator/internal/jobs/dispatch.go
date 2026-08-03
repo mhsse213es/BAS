@@ -76,6 +76,21 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 		touchedJobs[t.JobID] = true
 	}
 
+	deferred, err := d.store.ListDeferredTargets(ctx)
+	if err != nil {
+		return err
+	}
+	for _, t := range deferred {
+		frozen, _, ferr := d.store.IsAgentFrozen(ctx, t.AgentID)
+		if ferr != nil || frozen {
+			continue
+		}
+		if err := d.store.MarkTargetPending(ctx, t.ID); err != nil {
+			continue
+		}
+		touchedJobs[t.JobID] = true
+	}
+
 	pending, err := d.store.ListPendingTargetsAcrossActiveJobs(ctx, jobDispatchBatchSize)
 	if err != nil {
 		return err
@@ -83,6 +98,11 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 	for _, t := range pending {
 		job, err := jobOf(t.JobID)
 		if err != nil {
+			continue
+		}
+		if frozen, reason, ferr := d.store.IsAgentFrozen(ctx, t.AgentID); ferr == nil && frozen {
+			d.store.MarkTargetDeferred(ctx, t.ID, reason)
+			touchedJobs[t.JobID] = true
 			continue
 		}
 		refID, dispatchErr := d.dispatch(ctx, job, t)

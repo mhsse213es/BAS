@@ -316,3 +316,54 @@ func TestCreateBatch_NilScheduledAt_UnchangedBehavior(t *testing.T) {
 		}
 	})
 }
+
+func TestMarkTargetDeferredThenPending_UpdatesState(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"agent-defer"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		targets, _ := store.ListTargets(ctx, job.ID)
+		target := targets[0]
+
+		if err := store.MarkTargetDeferred(ctx, target.ID, "frozen: Q3 audit"); err != nil {
+			t.Fatalf("MarkTargetDeferred: %v", err)
+		}
+		deferred, err := store.ListDeferredTargets(ctx)
+		if err != nil {
+			t.Fatalf("ListDeferredTargets: %v", err)
+		}
+		found := false
+		for _, tg := range deferred {
+			if tg.ID == target.ID && tg.Error == "frozen: Q3 audit" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("ListDeferredTargets() = %+v, want target %s with Error='frozen: Q3 audit'", deferred, target.ID)
+		}
+
+		if err := store.MarkTargetPending(ctx, target.ID); err != nil {
+			t.Fatalf("MarkTargetPending: %v", err)
+		}
+		pending, err := store.ListPendingTargetsAcrossActiveJobs(ctx, 20)
+		if err != nil {
+			t.Fatalf("ListPendingTargetsAcrossActiveJobs: %v", err)
+		}
+		found = false
+		for _, tg := range pending {
+			if tg.ID == target.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("target did not return to the pending list after MarkTargetPending")
+		}
+	})
+}

@@ -60,3 +60,19 @@ func TestAggregateState_StillInFlightNotYetTerminal(t *testing.T) {
 		t.Errorf("AggregateState() = %q, want %q (one target still dispatched)", got, JobStateRunning)
 	}
 }
+
+func TestAggregateState_DeferredTargetKeepsJobRunning(t *testing.T) {
+	targets := []JobTarget{{State: TargetStateCompleted}, {State: TargetStateDeferred}}
+	got := AggregateState(JobStateRunning, targets)
+	if got != JobStateRunning {
+		t.Errorf("AggregateState() = %q, want %q (a deferred target is never terminal)", got, JobStateRunning)
+	}
+}
+
+func TestAggregateState_AllDeferredIsRunningNotRequested(t *testing.T) {
+	targets := []JobTarget{{State: TargetStateDeferred}, {State: TargetStateDeferred}}
+	got := AggregateState(JobStateRequested, targets)
+	if got != JobStateRunning {
+		t.Errorf("AggregateState() = %q, want %q", got, JobStateRunning)
+	}
+}

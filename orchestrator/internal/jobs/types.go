@@ -25,6 +25,7 @@ const (
 	TargetStateCompleted  = "completed"
 	TargetStateFailed     = "failed"
 	TargetStateCancelled  = "cancelled"
+	TargetStateDeferred   = "deferred" // frozen at dispatch time; non-terminal, auto-resumes when the freeze lifts
 )
 
 // Job is one logical fleet-wide operation -- e.g. "apply remediation X to

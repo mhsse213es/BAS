@@ -141,6 +141,32 @@ func (s *Store) MarkTargetTerminal(ctx context.Context, targetID, state, errText
 	return err
 }
 
+func (s *Store) ListDeferredTargets(ctx context.Context) ([]JobTarget, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+jobTargetColumnsQualified()+`
+		   FROM job_targets jt JOIN jobs j ON j.id = jt.job_id
+		  WHERE jt.state = $1 AND j.state IN ($2,$3)`,
+		TargetStateDeferred, JobStateRequested, JobStateRunning)
+	if err != nil {
+		return nil, err
+	}
+	return scanJobTargets(rows)
+}
+
+func (s *Store) MarkTargetDeferred(ctx context.Context, targetID, reason string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE job_targets SET state=$1, error=$2 WHERE id=$3`,
+		TargetStateDeferred, reason, targetID)
+	return err
+}
+
+func (s *Store) MarkTargetPending(ctx context.Context, targetID string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE job_targets SET state=$1, error='' WHERE id=$2`,
+		TargetStatePending, targetID)
+	return err
+}
+
 // SetJobState persists a Job's aggregate state. StartedAt is stamped the
 // first time state moves off "requested" (COALESCE keeps any existing
 // value); CompletedAt is stamped whenever state lands in a terminal value.

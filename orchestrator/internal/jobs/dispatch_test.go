@@ -298,3 +298,87 @@ func TestTick_DisabledScheduleNeverSpawns(t *testing.T) {
 		}
 	})
 }
+
+func TestTick_FrozenTargetDeferredInsteadOfDispatched(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		if _, err := store.CreateFreeze(ctx, AgentFreeze{
+			AgentID: "frozen-agent-1", FromAt: time.Now().UTC().Add(-1 * time.Hour), ToAt: time.Now().UTC().Add(1 * time.Hour), Reason: "change freeze",
+		}); err != nil {
+			t.Fatalf("CreateFreeze: %v", err)
+		}
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"frozen-agent-1"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+
+		d := NewDispatcher(store)
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
+			t.Fatal("dispatch should not be called for a frozen agent")
+			return "", nil
+		})
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		targets, err := store.ListTargets(ctx, job.ID)
+		if err != nil {
+			t.Fatalf("ListTargets: %v", err)
+		}
+		if targets[0].State != TargetStateDeferred || targets[0].Error != "change freeze" {
+			t.Fatalf("target = %+v, want State=deferred Error='change freeze'", targets[0])
+		}
+		gotJob, err := store.Get(ctx, job.ID)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if gotJob.State != JobStateRunning {
+			t.Errorf("job State = %q, want running (deferred target keeps it open)", gotJob.State)
+		}
+	})
+}
+
+func TestTick_DeferredTargetResumesOnceFreezeExpires(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		if _, err := store.CreateFreeze(ctx, AgentFreeze{
+			AgentID: "frozen-agent-2", FromAt: time.Now().UTC().Add(-2 * time.Hour), ToAt: time.Now().UTC().Add(-1 * time.Hour), Reason: "already expired",
+		}); err != nil {
+			t.Fatalf("CreateFreeze: %v", err)
+		}
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"frozen-agent-2"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		targets, _ := store.ListTargets(ctx, job.ID)
+		if err := store.MarkTargetDeferred(ctx, targets[0].ID, "was frozen"); err != nil {
+			t.Fatalf("MarkTargetDeferred: %v", err)
+		}
+
+		var dispatched bool
+		d := NewDispatcher(store)
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
+			dispatched = true
+			return "ref-resumed", nil
+		})
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateDispatched, "", false })
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if !dispatched {
+			t.Fatal("target was not dispatched after its freeze expired")
+		}
+	})
+}

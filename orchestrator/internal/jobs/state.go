@@ -22,6 +22,8 @@ func AggregateState(current string, targets []JobTarget) string {
 			dispatchedOrTerminal++
 		case TargetStateDispatched:
 			dispatchedOrTerminal++
+		case TargetStateDeferred:
+			dispatchedOrTerminal++
 		}
 	}
 
