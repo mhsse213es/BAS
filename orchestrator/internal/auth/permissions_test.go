@@ -93,6 +93,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanCreateExerciseTemplate: true, CanInstantiateExerciseTemplate: true,
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
+		CanExecuteRemediation: true, CanApproveRemediation: true,
 	}
 	for _, p := range Permissions(RoleAdmin) {
 		if !tested[p] {
@@ -140,6 +141,8 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanViewSSOConfig, CanManageSSOConfig,
 
 		CanViewSCIMConfig, CanManageSCIMConfig,
+
+		CanExecuteRemediation, CanApproveRemediation,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Permissions(RoleAdmin) len = %d, want %d", len(got), len(want))
@@ -259,5 +262,26 @@ func TestPermissionGrants_MatchMigrationInventory(t *testing.T) {
 		if HasPermission(RoleViewer, p) {
 			t.Errorf("RoleViewer unexpectedly holds group-B permission %q", p)
 		}
+	}
+}
+
+func TestCanApproveRemediation_AdminOnly(t *testing.T) {
+	if !HasPermission(RoleAdmin, CanApproveRemediation) {
+		t.Error("expected RoleAdmin to hold CanApproveRemediation")
+	}
+	if HasPermission(RoleAnalyst, CanApproveRemediation) {
+		t.Error("expected RoleAnalyst NOT to hold CanApproveRemediation")
+	}
+}
+
+func TestCanExecuteRemediation_AnalystAndAdmin(t *testing.T) {
+	if !HasPermission(RoleAdmin, CanExecuteRemediation) {
+		t.Error("expected RoleAdmin to hold CanExecuteRemediation")
+	}
+	if !HasPermission(RoleAnalyst, CanExecuteRemediation) {
+		t.Error("expected RoleAnalyst to hold CanExecuteRemediation")
+	}
+	if HasPermission(RoleViewer, CanExecuteRemediation) {
+		t.Error("expected RoleViewer NOT to hold CanExecuteRemediation")
 	}
 }

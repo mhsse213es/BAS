@@ -177,6 +177,15 @@ const (
 	// configure an IdP issuer).
 	CanViewSCIMConfig   Permission = "scim:config:view"
 	CanManageSCIMConfig Permission = "scim:config:manage"
+
+	// Endpoint Remediation Execution — CanExecuteRemediation is Analyst+Admin
+	// (Tier 1 fixes); CanApproveRemediation is Admin-only, deliberately
+	// stricter (Tier 2 fixes and every rollback -- reversing a security
+	// control is inherently risk-increasing, mirroring how
+	// CanExecuteResponseAction is stricter than every other "run"
+	// permission in this file).
+	CanExecuteRemediation Permission = "remediation:execute"
+	CanApproveRemediation Permission = "remediation:approve"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -229,6 +238,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanCreateExerciseTemplate: true, CanInstantiateExerciseTemplate: true,
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
+		CanExecuteRemediation: true, CanApproveRemediation: true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -254,6 +264,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
 		CanViewResponseActions: true,
+		CanExecuteRemediation:  true,
 	},
 	RoleViewer: {},
 }
@@ -302,6 +313,8 @@ func Permissions(role Role) []Permission {
 		CanViewSSOConfig, CanManageSSOConfig,
 
 		CanViewSCIMConfig, CanManageSCIMConfig,
+
+		CanExecuteRemediation, CanApproveRemediation,
 	} {
 		if set[p] {
 			out = append(out, p)
