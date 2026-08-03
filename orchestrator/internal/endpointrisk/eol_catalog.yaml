@@ -1,0 +1,147 @@
+software:
+  - id: flash
+    vendor: Adobe
+    product: Flash Player
+    match: ["Adobe Flash Player"]
+    risk: critical
+    reason: End of life -- no longer receives security updates.
+    recommendation: Remove Adobe Flash Player immediately.
+    reference: "https://www.adobe.com/products/flashplayer/end-of-life.html"
+
+  - id: ie
+    vendor: Microsoft
+    product: Internet Explorer
+    match: ["Internet Explorer"]
+    risk: critical
+    reason: Retired -- no longer receives security updates.
+    recommendation: Remove Internet Explorer; use Microsoft Edge instead.
+
+  - id: java6
+    vendor: Oracle
+    product: Java 6
+    match: ["Java 6", "JRE 6", "JDK 6", "Java(TM) 6"]
+    risk: critical
+    reason: End of public support.
+    recommendation: Upgrade to a supported Java LTS release (17 or newer).
+
+  - id: java7
+    vendor: Oracle
+    product: Java 7
+    match: ["Java 7", "JRE 7", "JDK 7", "Java(TM) 7"]
+    risk: high
+    reason: End of public support.
+    recommendation: Upgrade to a supported Java LTS release (17 or newer).
+
+  - id: java8
+    vendor: Oracle
+    product: Java 8
+    match: ["Java 8", "JRE 8", "JDK 8", "Java(TM) 8"]
+    version_max: "8"
+    risk: high
+    reason: End of public support for Java 8.
+    recommendation: Upgrade to a supported Java LTS release (17 or newer).
+
+  - id: python2
+    vendor: Python Software Foundation
+    product: Python 2
+    match: ["Python 2"]
+    version_max: "2"
+    risk: high
+    reason: End of life -- Python 2 no longer receives security updates.
+    recommendation: Upgrade to Python 3.
+
+  - id: office2007
+    vendor: Microsoft
+    product: Office 2007
+    match: ["Microsoft Office 2007", "Office 2007"]
+    risk: high
+    reason: End of extended support.
+    recommendation: Upgrade to a supported Microsoft Office / Microsoft 365 release.
+
+  - id: office2010
+    vendor: Microsoft
+    product: Office 2010
+    match: ["Microsoft Office 2010", "Office 2010"]
+    risk: high
+    reason: End of extended support.
+    recommendation: Upgrade to a supported Microsoft Office / Microsoft 365 release.
+
+  - id: office2013
+    vendor: Microsoft
+    product: Office 2013
+    match: ["Microsoft Office 2013", "Office 2013"]
+    risk: medium
+    reason: End of extended support.
+    recommendation: Upgrade to a supported Microsoft Office / Microsoft 365 release.
+
+  - id: silverlight
+    vendor: Microsoft
+    product: Silverlight
+    match: ["Microsoft Silverlight", "Silverlight"]
+    risk: critical
+    reason: End of life -- no longer receives security updates.
+    recommendation: Remove Microsoft Silverlight.
+
+  - id: dotnet35
+    vendor: Microsoft
+    product: .NET Framework 3.5
+    match: [".NET Framework 3.5", "Microsoft .NET Framework 3.5"]
+    risk: medium
+    reason: Legacy runtime -- superseded by current .NET releases.
+    recommendation: Migrate applications to a currently supported .NET runtime.
+
+  - id: dotnet40
+    vendor: Microsoft
+    product: .NET Framework 4.0
+    match: [".NET Framework 4.0", "Microsoft .NET Framework 4.0"]
+    risk: medium
+    reason: Legacy runtime -- superseded by current .NET releases.
+    recommendation: Migrate applications to a currently supported .NET runtime.
+
+  - id: quicktime
+    vendor: Apple
+    product: QuickTime
+    match: ["QuickTime", "Apple QuickTime"]
+    risk: critical
+    reason: End of life on Windows -- Apple no longer issues security patches.
+    recommendation: Remove Apple QuickTime for Windows.
+
+  - id: shockwave
+    vendor: Adobe
+    product: Shockwave Player
+    match: ["Adobe Shockwave Player", "Shockwave Player"]
+    risk: critical
+    reason: End of life -- no longer receives security updates.
+    recommendation: Remove Adobe Shockwave Player.
+
+  - id: sqlserver2008
+    vendor: Microsoft
+    product: SQL Server 2008
+    match: ["Microsoft SQL Server 2008", "SQL Server 2008"]
+    risk: high
+    reason: End of extended support.
+    recommendation: Upgrade to a currently supported SQL Server release.
+
+  - id: sqlserver2012
+    vendor: Microsoft
+    product: SQL Server 2012
+    match: ["Microsoft SQL Server 2012", "SQL Server 2012"]
+    risk: medium
+    reason: End of extended support.
+    recommendation: Upgrade to a currently supported SQL Server release.
+
+  - id: realplayer
+    vendor: RealNetworks
+    product: RealPlayer
+    match: ["RealPlayer"]
+    risk: medium
+    reason: Historically vulnerable, infrequently updated media player.
+    recommendation: Remove RealPlayer or replace with a maintained alternative.
+
+  - id: acrobat9
+    vendor: Adobe
+    product: Acrobat/Reader 9
+    match: ["Adobe Acrobat 9", "Adobe Reader 9"]
+    risk: high
+    reason: End of life -- no longer receives security updates.
+    recommendation: Upgrade to a currently supported Adobe Acrobat/Reader release.
