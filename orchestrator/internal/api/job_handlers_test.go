@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -255,6 +256,82 @@ func TestCancelJob_NotFound_404(t *testing.T) {
 		h.CancelJob(w, req)
 		if w.Code != http.StatusNotFound {
 			t.Errorf("status = %d, want 404", w.Code)
+		}
+	})
+}
+
+func TestCreateBatchRemediationJob_ScheduledAt_SetsJobScheduledAt(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('jbs-a1', 'JBS-A1')`)
+		cat, err := remediation.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithRemediationCatalog(cat).
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		future := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+		body, _ := json.Marshal(map[string]any{
+			"remediationId": "enable_windows_firewall",
+			"reason":        "scheduled batch",
+			"agentIds":      []string{"jbs-a1"},
+			"scheduledAt":   future,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "user-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateBatchRemediationJob(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			JobID string `json:"jobId"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		got, err := jobsStore.Get(context.Background(), resp.JobID)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if got.ScheduledAt == nil {
+			t.Fatal("job.ScheduledAt is nil, want the requested future time")
+		}
+	})
+}
+
+func TestCreateBatchRemediationJob_InvalidScheduledAt_BadRequest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('jbs-a2', 'JBS-A2')`)
+		cat, err := remediation.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithRemediationCatalog(cat).
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		body, _ := json.Marshal(map[string]any{
+			"remediationId": "enable_windows_firewall",
+			"reason":        "test",
+			"agentIds":      []string{"jbs-a2"},
+			"scheduledAt":   "not-a-timestamp",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "user-1", Role: auth.RoleAnalyst}))
+		w := httptest.NewRecorder()
+		h.CreateBatchRemediationJob(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("status = %d, want 400 for an unparseable scheduledAt", w.Code)
 		}
 	})
 }

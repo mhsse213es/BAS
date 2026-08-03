@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -20,6 +21,7 @@ func (h *Handler) CreateBatchRemediationJob(w http.ResponseWriter, r *http.Reque
 		RemediationID string   `json:"remediationId"`
 		Reason        string   `json:"reason"`
 		AgentIDs      []string `json:"agentIds"`
+		ScheduledAt   string   `json:"scheduledAt"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil || req.RemediationID == "" {
 		jsonError(w, "remediationId is required", http.StatusBadRequest)
@@ -32,6 +34,15 @@ func (h *Handler) CreateBatchRemediationJob(w http.ResponseWriter, r *http.Reque
 	if len(req.AgentIDs) == 0 {
 		jsonError(w, "agentIds must contain at least one agent", http.StatusBadRequest)
 		return
+	}
+	var scheduledAt *time.Time
+	if req.ScheduledAt != "" {
+		t, err := time.Parse(time.RFC3339, req.ScheduledAt)
+		if err != nil {
+			jsonError(w, "scheduledAt must be RFC3339", http.StatusBadRequest)
+			return
+		}
+		scheduledAt = &t
 	}
 	if h.remediationCatalog == nil {
 		jsonError(w, "remediation catalog not loaded", http.StatusServiceUnavailable)
@@ -65,7 +76,7 @@ func (h *Handler) CreateBatchRemediationJob(w http.ResponseWriter, r *http.Reque
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	job, err := h.jobsStore.CreateBatch(r.Context(), "batch_remediation", payload, actorID, req.AgentIDs)
+	job, err := h.jobsStore.CreateBatchScheduled(r.Context(), "batch_remediation", payload, actorID, req.AgentIDs, scheduledAt)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
