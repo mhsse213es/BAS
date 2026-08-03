@@ -1719,6 +1719,12 @@ git commit -m "feat(api): wire fix-to-verify remediation continuation into Submi
 git push
 ```
 
+**Corrections found during execution:**
+- `TestSubmitScenarioResult_AdvancesRemediationFromFixToVerifying` originally loaded real scenarios from `../../../scenarios`, which failed builtin RSA-signature verification (unsigned/stale `.sig` files, the same expected behavior noted in Sub-project 2). Fixed by registering an in-memory fixture scenario directly via `scenario.Engine.Save()` (bypasses file/signature loading entirely) instead of `Load()`.
+- The same test also needs a real connected agent for `dispatchRemediationStep`'s `SendToAgent` call to succeed during the verify-dispatch — added via the existing `startFakeAgent(t, h.hub, agentID)` test helper (`run_dispatch_helpers_test.go`), matching the pattern `dispatch_run_test.go` already uses.
+- The seeded fix `scenario_runs` row must have `status='completed'`, not `'running'` — `scenario_runs` has a unique partial index allowing only one `'running'` row per agent at a time, and in the real flow `SubmitScenarioResult` already transitions the fix's own run to `'completed'`/`'partial'` before the continuation hook runs.
+- `handleRemediationFixResult`'s dispatch-failure branch now includes the real underlying error text (`err.Error()` or `"sent=false"`) in `remediation_requests.error` instead of a bare generic string — genuinely more useful for diagnosing a real failure, not just a test artifact.
+
 ---
 
 ### Task 8: Status polling and history — `GetRemediation` (lazy timeout) + `ListAgentRemediations`

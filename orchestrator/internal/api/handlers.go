@@ -2141,6 +2141,11 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
+	// Remediation lifecycle continuation -- if this run corresponds to an
+	// open remediation_requests row, advance its state machine. Purely
+	// additive: a no-op for the vast majority of runs with no matching row.
+	h.continueRemediationFromResult(r, raw.RunID, simResults)
+
 	w.WriteHeader(http.StatusOK)
 }
 
