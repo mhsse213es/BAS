@@ -88,6 +88,53 @@ func (h *Handler) dispatchRemediationStep(ctx context.Context, agentID, scenario
 	return runID, sent, nil
 }
 
+// dispatchTechniqueVerification builds an ephemeral, never-persisted
+// Scenario containing exactly one Framework:"art" step named for
+// techniqueID -- deliberately no Command set, so scenario.BuildSteps'
+// existing ART-resolution path (internal/scenario/builder.go's
+// buildStep, case "art") supplies the real atomic-test command from
+// h.artStore, exactly like every other ART-framework scenario in this
+// codebase. Mirrors dispatchRemediationStep's dispatch mechanics
+// (ephemeral Scenario, scenario_runs tracking row, SendToAgent) but for a
+// real technique instead of a config-check command.
+func (h *Handler) dispatchTechniqueVerification(ctx context.Context, agentID, techniqueID string) (runID string, sent bool, err error) {
+	scenarioID := "technique-verify:" + techniqueID
+
+	var agentOS string
+	h.db.QueryRow(ctx, `SELECT COALESCE(os_version,'windows') FROM agents WHERE agent_id=$1`, agentID).Scan(&agentOS)
+
+	sc := &scenario.Scenario{
+		ID:   scenarioID,
+		Name: "technique-verify",
+		Steps: []scenario.Step{{
+			Name:        scenarioID,
+			TechniqueID: techniqueID,
+			Framework:   "art",
+		}},
+	}
+	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
+	if err != nil {
+		return "", false, err
+	}
+
+	runID = newID()
+	if _, err = h.db.Exec(ctx,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at)
+		 VALUES ($1, $2, $3, $4, 'running', NOW())`,
+		runID, sc.ID, agentID, sc.Name,
+	); err != nil {
+		return "", false, err
+	}
+	h.persistStepMeta(ctx, runID, steps)
+
+	cmd := scenario.ScenarioCommand{RunID: runID, ScenarioID: sc.ID, Name: sc.Name, Steps: steps}
+	sent = h.hub.SendToAgent(agentID, models.WSMessage{Type: models.MsgCommandScenario, AgentID: agentID, Data: cmd})
+	if !sent {
+		h.db.Exec(context.Background(), `UPDATE scenario_runs SET status='failed', completed_at=NOW() WHERE id=$1`, runID)
+	}
+	return runID, sent, nil
+}
+
 // latestCheckIsPassing reports whether the most recent result for checkID
 // in allResults is a PASS -- used as the "already compliant" pre-flight
 // check before dispatching a fix.
