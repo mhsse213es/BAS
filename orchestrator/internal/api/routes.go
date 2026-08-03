@@ -497,6 +497,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/job-schedules", h.CreateJobSchedule)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/job-schedules", h.ListJobSchedules)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/job-schedules/{scheduleId}/cancel", h.CancelJobSchedule)
+		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Post("/api/agents/{agentId}/maintenance-freezes", h.CreateAgentFreeze)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/agents/{agentId}/maintenance-freezes", h.ListAgentFreezes)
+		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Delete("/api/maintenance-freezes/{freezeId}", h.DeleteAgentFreeze)
 
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)
