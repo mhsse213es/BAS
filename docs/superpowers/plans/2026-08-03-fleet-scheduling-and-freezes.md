@@ -2187,27 +2187,12 @@ func TestCreateAgentFreeze_AdminCreates(t *testing.T) {
 	})
 }
 
-func TestCreateAgentFreeze_AnalystForbidden(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping container-backed test in -short mode")
-	}
-	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
-		jobsStore := jobs.NewStore(pool)
-		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
-			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
-
-		from := time.Now().UTC()
-		to := from.Add(1 * time.Hour)
-		body, _ := json.Marshal(map[string]any{"fromAt": from.Format(time.RFC3339), "toAt": to.Format(time.RFC3339), "reason": "test"})
-		req := withURLParam(httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body)), "agentId", "freeze-h-a2")
-		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "user-1", Role: auth.RoleAnalyst}))
-		w := httptest.NewRecorder()
-		h.CreateAgentFreeze(w, req)
-		if w.Code != http.StatusForbidden {
-			t.Errorf("status = %d, want 403 (freeze creation is Admin-only)", w.Code)
-		}
-	})
-}
+// Note: no TestCreateAgentFreeze_AnalystForbidden here. CreateAgentFreeze
+// has no internal role check -- like RollbackRemediation (Sub-project 4),
+// it relies entirely on router-level auth.RequirePermission(CanApproveRemediation)
+// middleware, which a direct handler call bypasses. That enforcement is
+// covered by TestRBACMatrix_AuthorizationBoundary against the routes
+// registered in Step 4, not by a handler-level unit test.
 
 func TestCreateAgentFreeze_ToBeforeFrom_BadRequest(t *testing.T) {
 	if testing.Short() {
