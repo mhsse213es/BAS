@@ -583,7 +583,7 @@ func TestPostureCheckInput_NoCatalogEntry_NotFixable(t *testing.T) {
 		mustExecAPI(t, pool, `
 			INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
 			VALUES ('er-rem-run-2', 'windows-security-config', 'Posture Run 2', 'er-rem-a2', 'completed', $1::jsonb, NOW())`,
-			`[{"checkId":"windows-guest-account-disabled","result":"fail","executedAt":"`+now.Format(time.RFC3339)+`"}]`)
+			`[{"checkId":"windows-defender-realtime","result":"fail","executedAt":"`+now.Format(time.RFC3339)+`"}]`)
 
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
 		tx, err := endpointrisk.NewTaxonomy()
@@ -603,7 +603,7 @@ func TestPostureCheckInput_NoCatalogEntry_NotFixable(t *testing.T) {
 			t.Fatalf("got %d findings, want 1", len(got.Findings))
 		}
 		if got.Findings[0].CanFix {
-			t.Error("expected CanFix=false -- windows-guest-account-disabled has no catalog entry")
+			t.Error("expected CanFix=false -- windows-defender-realtime has no catalog entry")
 		}
 	})
 }

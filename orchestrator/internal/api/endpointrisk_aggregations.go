@@ -7,6 +7,7 @@ import (
 
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/remediation"
 )
 
 // filterByAsOf returns only the results executed at or before asOf --
@@ -194,6 +195,7 @@ func (h *Handler) postureCheckInput(ctx context.Context, agentID string, asOf ti
 			Expected: text.Expected, Observed: text.Observed,
 			Passed: false, LastObserved: &observedAt, LastPassed: l.lastPassed,
 		})
+		h.enrichFindingWithRemediation(&findings[len(findings)-1], checkID)
 	}
 
 	score := 0
@@ -204,6 +206,27 @@ func (h *Handler) postureCheckInput(ctx context.Context, agentID string, asOf ti
 		Score: score, Passed: passed, Failed: failed, Total: passed + failed,
 		Findings: findings, Collected: true,
 	}
+}
+
+// enrichFindingWithRemediation attaches fixability fields to f by looking
+// up checkID in the remediation catalog. A no-op (f stays zero-valued,
+// CanFix=false) when the catalog isn't loaded or has no entry for this
+// check -- exactly the same "absent means not yet available" pattern
+// every other optional Handler dependency in this file already follows.
+func (h *Handler) enrichFindingWithRemediation(f *endpointrisk.Finding, checkID string) {
+	if h.remediationCatalog == nil {
+		return
+	}
+	entry, ok := h.remediationCatalog.Lookup(checkID)
+	if !ok {
+		return
+	}
+	f.RemediationID = entry.ID
+	f.Tier = int(entry.Tier)
+	f.EstimatedTimeSec = entry.EstimatedTimeSec
+	f.RequiresReboot = entry.RequiresReboot
+	f.RollbackAvailable = entry.SupportsRollback
+	f.CanFix = entry.Tier != remediation.TierManualGuidance
 }
 
 func (h *Handler) securityConfigInput(ctx context.Context, agentID string, asOf time.Time, allResults []models.SimulationResult) endpointrisk.PostureCheckInput {

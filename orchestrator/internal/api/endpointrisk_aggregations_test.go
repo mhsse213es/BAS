@@ -9,6 +9,7 @@ import (
 
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -188,6 +189,77 @@ func TestPostureCheckInput_HistoricalAsOf_LatestPerCheckBeforeCutoff(t *testing.
 		}
 		if gotLate.Findings[0].LastPassed == nil {
 			t.Error("LastPassed should be set to the early pass's timestamp, not nil")
+		}
+	})
+}
+
+func TestPostureCheckInput_EnrichesFindingWithRemediation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-rem-a1', 'ER-REM-HOST')`)
+		now := time.Now().UTC()
+		mustExecAPI(t, pool, `
+			INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
+			VALUES ('er-rem-run', 'windows-security-config', 'Posture Run', 'er-rem-a1', 'completed', $1::jsonb, NOW())`,
+			`[{"checkId":"windows-firewall-enabled","result":"fail","executedAt":"`+now.Format(time.RFC3339)+`"}]`)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		tx, err := endpointrisk.NewTaxonomy()
+		if err != nil {
+			t.Fatalf("NewTaxonomy: %v", err)
+		}
+		h.endpointRiskTaxonomy = tx
+		cat, err := remediation.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		h.remediationCatalog = cat
+
+		all := h.aggregateAgentResults(context.Background(), "er-rem-a1")
+		got := h.securityConfigInput(context.Background(), "er-rem-a1", now.Add(time.Hour), all)
+		if len(got.Findings) != 1 {
+			t.Fatalf("got %d findings, want 1", len(got.Findings))
+		}
+		f := got.Findings[0]
+		if !f.CanFix || f.RemediationID != "enable_windows_firewall" || f.Tier != 1 || !f.RollbackAvailable {
+			t.Errorf("finding = %+v, want CanFix=true RemediationID=enable_windows_firewall Tier=1 RollbackAvailable=true", f)
+		}
+	})
+}
+
+func TestPostureCheckInput_NoCatalogEntry_NotFixable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-rem-a2', 'ER-REM-HOST-2')`)
+		now := time.Now().UTC()
+		mustExecAPI(t, pool, `
+			INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
+			VALUES ('er-rem-run-2', 'windows-security-config', 'Posture Run 2', 'er-rem-a2', 'completed', $1::jsonb, NOW())`,
+			`[{"checkId":"windows-defender-realtime","result":"fail","executedAt":"`+now.Format(time.RFC3339)+`"}]`)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		tx, err := endpointrisk.NewTaxonomy()
+		if err != nil {
+			t.Fatalf("NewTaxonomy: %v", err)
+		}
+		h.endpointRiskTaxonomy = tx
+		cat, err := remediation.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		h.remediationCatalog = cat
+
+		all := h.aggregateAgentResults(context.Background(), "er-rem-a2")
+		got := h.securityConfigInput(context.Background(), "er-rem-a2", now.Add(time.Hour), all)
+		if len(got.Findings) != 1 {
+			t.Fatalf("got %d findings, want 1", len(got.Findings))
+		}
+		if got.Findings[0].CanFix {
+			t.Error("expected CanFix=false -- windows-defender-realtime has no catalog entry")
 		}
 	})
 }

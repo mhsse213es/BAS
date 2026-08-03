@@ -25,6 +25,18 @@ type Finding struct {
 	Passed           bool       `json:"passed"`
 	LastObserved     *time.Time `json:"lastObserved,omitempty"`
 	LastPassed       *time.Time `json:"lastPassed,omitempty"`
+	// RemediationID/Tier/EstimatedTimeSec/RequiresReboot/RollbackAvailable/CanFix
+	// are populated by internal/api's postureCheckInput via a remediation
+	// catalog lookup keyed on this Finding's ID (its check_id) -- see
+	// Sub-project 4's design spec §3.4. Zero-valued (CanFix=false) for any
+	// finding with no catalog entry, including every Application Risk
+	// finding (a different ID namespace -- see that sub-project's plan).
+	RemediationID     string `json:"remediationId,omitempty"`
+	Tier              int    `json:"tier,omitempty"`
+	EstimatedTimeSec  int    `json:"estimatedTimeSec,omitempty"`
+	RequiresReboot    bool   `json:"requiresReboot,omitempty"`
+	RollbackAvailable bool   `json:"rollbackAvailable,omitempty"`
+	CanFix            bool   `json:"canFix"`
 }
 
 // CategoryScore is one category's contribution to the Health Score.

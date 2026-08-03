@@ -37,6 +37,7 @@ import (
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/relationships"
+	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
@@ -87,6 +88,7 @@ type Handler struct {
 	controlHealthMapper   *controlhealth.Mapper // nil when not loaded
 	endpointRiskTaxonomy  *endpointrisk.Taxonomy // nil when not loaded
 	eolCatalog            *endpointrisk.Catalog  // nil when not loaded
+	remediationCatalog    *remediation.Catalog   // nil when not loaded
 	reportingEngine       *reporting.Engine    // nil when not loaded
 	scheduler             *connector.Scheduler // nil when no sources configured
 	ticketing             *ticketing.Manager   // nil when no connectors configured
@@ -134,6 +136,12 @@ func (h *Handler) WithEndpointRiskTaxonomy(t *endpointrisk.Taxonomy) *Handler {
 // WithEOLCatalog attaches the Application Risk EOL/high-risk software catalog.
 func (h *Handler) WithEOLCatalog(c *endpointrisk.Catalog) *Handler {
 	h.eolCatalog = c
+	return h
+}
+
+// WithRemediationCatalog attaches the endpoint remediation catalog.
+func (h *Handler) WithRemediationCatalog(c *remediation.Catalog) *Handler {
+	h.remediationCatalog = c
 	return h
 }
 

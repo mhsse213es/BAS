@@ -32,6 +32,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/openaev"
 	"github.com/audspect/bas/internal/relationships"
+	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
@@ -211,6 +212,14 @@ func main() {
 		log.Printf("[!] EOL software catalog: %v — Application Risk category unavailable", eolErr)
 	} else {
 		log.Printf("[+] EOL software catalog loaded")
+	}
+
+	// ── Endpoint Remediation Catalog ────────────────────────────────────────
+	remediationCatalog, remErr := remediation.NewCatalog()
+	if remErr != nil {
+		log.Printf("[!] remediation catalog: %v — one-click remediation unavailable", remErr)
+	} else {
+		log.Printf("[+] Remediation catalog loaded")
 	}
 
 	// ── Verification Store (Detection Validation SP2) ─────────────────────
@@ -418,6 +427,7 @@ func main() {
 		WithControlHealth(controlHealthMapper).
 		WithEndpointRiskTaxonomy(endpointRiskTaxonomy).
 		WithEOLCatalog(eolCatalog).
+		WithRemediationCatalog(remediationCatalog).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
 		WithThreatPriority(priorityEngine).
