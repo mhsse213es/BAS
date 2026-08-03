@@ -88,6 +88,7 @@ type JobTarget struct {
 	Error       string
 	RetryCount  int // column exists for forward-compat; no auto-retry logic built this cycle
 	MaxRetries  int
+	CreatedAt   time.Time // dispatch order for the pending queue in §5
 	StartedAt   *time.Time
 	CompletedAt *time.Time
 }
@@ -117,6 +118,7 @@ CREATE TABLE IF NOT EXISTS job_targets (
 	error        text        NOT NULL DEFAULT '',
 	retry_count  int         NOT NULL DEFAULT 0,
 	max_retries  int         NOT NULL DEFAULT 0,
+	created_at   timestamptz NOT NULL DEFAULT NOW(),
 	started_at   timestamptz,
 	completed_at timestamptz
 );
