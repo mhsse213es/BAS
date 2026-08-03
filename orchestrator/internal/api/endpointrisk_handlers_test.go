@@ -57,6 +57,61 @@ func TestGetAgentRisk_KnownAgent_ReturnsAllCategories(t *testing.T) {
 	})
 }
 
+func TestGetAgentRisk_PatchAndApplicationRisk_CollectedFromRealChecks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('er-h3-a1', 'ER-H3-HOST')`)
+		now := time.Now().UTC()
+		mustExecAPI(t, pool, `
+			INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
+			VALUES ('er-h3-run', 'windows-patch-posture', 'H3 Run', 'er-h3-a1', 'completed', $1::jsonb, NOW())`,
+			`[
+				{"checkId":"windows-last-patch-age","result":"pass","executedAt":"`+now.Format(time.RFC3339)+`"},
+				{"checkId":"windows-installed-software","result":"pass","rawOutput":"Adobe Flash Player|32.0.0.465","executedAt":"`+now.Format(time.RFC3339)+`"}
+			]`)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		tx, err := endpointrisk.NewTaxonomy()
+		if err != nil {
+			t.Fatalf("NewTaxonomy: %v", err)
+		}
+		h.endpointRiskTaxonomy = tx
+		cat, err := endpointrisk.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		h.eolCatalog = cat
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "agentId", "er-h3-a1")
+		w := httptest.NewRecorder()
+		h.GetAgentRisk(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var got endpointrisk.EndpointHealth
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		var patchCat, appRiskCat *endpointrisk.CategoryScore
+		for i := range got.Categories {
+			switch got.Categories[i].ID {
+			case endpointrisk.CategoryPatchManagement:
+				patchCat = &got.Categories[i]
+			case endpointrisk.CategoryApplicationRisk:
+				appRiskCat = &got.Categories[i]
+			}
+		}
+		if patchCat == nil || !patchCat.Collected {
+			t.Errorf("Patch Management = %+v, want Collected=true", patchCat)
+		}
+		if appRiskCat == nil || !appRiskCat.Collected || len(appRiskCat.Findings) != 1 {
+			t.Errorf("Application Risk = %+v, want Collected=true with 1 finding (Flash)", appRiskCat)
+		}
+	})
+}
+
 func TestGetAgentRiskSummary_MixedOSFleet(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

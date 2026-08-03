@@ -45,16 +45,20 @@ func (h *Handler) GetAgentRisk(w http.ResponseWriter, r *http.Request) {
 	weekAgo := now.AddDate(0, 0, -7)
 
 	nowInputs := endpointrisk.HealthInputs{
-		Compliance:     h.complianceInput(r.Context(), agentID, now, allResults),
-		BAS:            h.basReadinessInput(now, allResults),
-		SecurityConfig: h.securityConfigInput(r.Context(), agentID, now, allResults),
-		Identity:       h.identityInput(r.Context(), agentID, now, allResults),
+		Compliance:      h.complianceInput(r.Context(), agentID, now, allResults),
+		BAS:             h.basReadinessInput(now, allResults),
+		SecurityConfig:  h.securityConfigInput(r.Context(), agentID, now, allResults),
+		Identity:        h.identityInput(r.Context(), agentID, now, allResults),
+		PatchManagement: h.patchManagementInput(r.Context(), agentID, now, allResults),
+		ApplicationRisk: h.applicationRiskInput(r.Context(), agentID, now, allResults),
 	}
 	pastInputs := endpointrisk.HealthInputs{
-		Compliance:     h.complianceInput(r.Context(), agentID, weekAgo, allResults),
-		BAS:            h.basReadinessInput(weekAgo, allResults),
-		SecurityConfig: h.securityConfigInput(r.Context(), agentID, weekAgo, allResults),
-		Identity:       h.identityInput(r.Context(), agentID, weekAgo, allResults),
+		Compliance:      h.complianceInput(r.Context(), agentID, weekAgo, allResults),
+		BAS:             h.basReadinessInput(weekAgo, allResults),
+		SecurityConfig:  h.securityConfigInput(r.Context(), agentID, weekAgo, allResults),
+		Identity:        h.identityInput(r.Context(), agentID, weekAgo, allResults),
+		PatchManagement: h.patchManagementInput(r.Context(), agentID, weekAgo, allResults),
+		ApplicationRisk: h.applicationRiskInput(r.Context(), agentID, weekAgo, allResults),
 	}
 
 	health := endpointrisk.ComputeHealth(agentID, profile, nowInputs, pastInputs)
@@ -96,16 +100,20 @@ func (h *Handler) GetAgentRiskSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		allResults := h.aggregateAgentResults(r.Context(), s.Asset.AgentID)
 		nowInputs := endpointrisk.HealthInputs{
-			Compliance:     h.complianceInput(r.Context(), s.Asset.AgentID, now, allResults),
-			BAS:            h.basReadinessInput(now, allResults),
-			SecurityConfig: h.securityConfigInput(r.Context(), s.Asset.AgentID, now, allResults),
-			Identity:       h.identityInput(r.Context(), s.Asset.AgentID, now, allResults),
+			Compliance:      h.complianceInput(r.Context(), s.Asset.AgentID, now, allResults),
+			BAS:             h.basReadinessInput(now, allResults),
+			SecurityConfig:  h.securityConfigInput(r.Context(), s.Asset.AgentID, now, allResults),
+			Identity:        h.identityInput(r.Context(), s.Asset.AgentID, now, allResults),
+			PatchManagement: h.patchManagementInput(r.Context(), s.Asset.AgentID, now, allResults),
+			ApplicationRisk: h.applicationRiskInput(r.Context(), s.Asset.AgentID, now, allResults),
 		}
 		pastInputs := endpointrisk.HealthInputs{
-			Compliance:     h.complianceInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
-			BAS:            h.basReadinessInput(weekAgo, allResults),
-			SecurityConfig: h.securityConfigInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
-			Identity:       h.identityInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
+			Compliance:      h.complianceInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
+			BAS:             h.basReadinessInput(weekAgo, allResults),
+			SecurityConfig:  h.securityConfigInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
+			Identity:        h.identityInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
+			PatchManagement: h.patchManagementInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
+			ApplicationRisk: h.applicationRiskInput(r.Context(), s.Asset.AgentID, weekAgo, allResults),
 		}
 		health := endpointrisk.ComputeHealth(s.Asset.AgentID, profile, nowInputs, pastInputs)
 
