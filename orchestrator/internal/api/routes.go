@@ -480,6 +480,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanExecuteResponseAction)).Post("/api/actions/run", h.ExecuteResponseAction)
 		r.With(auth.RequirePermission(auth.CanViewResponseActions)).Get("/api/actions", h.ListResponseActions)
 
+		// Endpoint Remediation Execution — execute is Analyst+Admin (Tier 2's
+		// stricter Admin-only gate is checked dynamically inside the handler,
+		// since it depends on the requested remediation's own tier).
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/agents/{agentId}/remediations", h.ExecuteRemediation)
+
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)
 		r.With(auth.RequirePermission(auth.CanUpdateOpenAEVConfig)).Put("/api/openaev/config", h.PutOpenAEVConfig)
