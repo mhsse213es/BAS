@@ -1195,6 +1195,36 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			last_seen  timestamptz,
 			updated_at timestamptz NOT NULL DEFAULT NOW()
 		)`,
+
+		// remediation_requests: full audit trail + state machine for one
+		// endpoint's attempt to run one remediation catalog entry. See
+		// docs/superpowers/specs/2026-08-03-remediation-execution-design.md.
+		`CREATE TABLE IF NOT EXISTS remediation_requests (
+			id                          text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			remediation_id              text        NOT NULL,
+			agent_id                    text        NOT NULL,
+			check_id                    text        NOT NULL,
+			tier                        int         NOT NULL,
+			status                      text        NOT NULL,
+			fix_run_id                  text        NOT NULL DEFAULT '',
+			verify_run_id               text        NOT NULL DEFAULT '',
+			error                       text        NOT NULL DEFAULT '',
+			requested_by                text        NOT NULL DEFAULT '',
+			approved_by                 text        NOT NULL DEFAULT '',
+			reason                      text        NOT NULL DEFAULT '',
+			rollback_available          boolean     NOT NULL DEFAULT false,
+			rollback_status             text        NOT NULL DEFAULT '',
+			rollback_run_id             text        NOT NULL DEFAULT '',
+			rollback_verify_run_id      text        NOT NULL DEFAULT '',
+			requested_at                timestamptz NOT NULL DEFAULT NOW(),
+			dispatched_at               timestamptz,
+			execution_completed_at      timestamptz,
+			verification_completed_at   timestamptz,
+			completed_at                timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_remediation_requests_agent_id ON remediation_requests (agent_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_remediation_requests_fix_run_id ON remediation_requests (fix_run_id) WHERE fix_run_id != ''`,
+		`CREATE INDEX IF NOT EXISTS idx_remediation_requests_verify_run_id ON remediation_requests (verify_run_id) WHERE verify_run_id != ''`,
 	}
 
 	for _, s := range stmts {
