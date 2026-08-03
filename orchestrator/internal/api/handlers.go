@@ -44,6 +44,7 @@ import (
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
+	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/vexsweep"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -101,6 +102,7 @@ type Handler struct {
 	rules                 *rulelib.Engine      // nil when not loaded — Detection Rule Library
 	threatPriorityEngine  *threatpriority.Engine // nil when not loaded — Threat Prioritization
 	vexSweep              *vexsweep.Store      // nil when not loaded — Full Variant Sweep orchestration
+	jobsStore             *jobs.Store          // nil when not loaded — Fleet Job Engine (batch remediation)
 }
 
 // New creates a Handler.

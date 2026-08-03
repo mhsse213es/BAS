@@ -1,0 +1,108 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+
+	"github.com/audspect/bas/internal/jobs"
+	"github.com/audspect/bas/internal/remediation"
+)
+
+// batchRemediationPayload is the Job.Payload shape for Type="batch_remediation".
+type batchRemediationPayload struct {
+	RemediationID string `json:"remediationId"`
+	Reason        string `json:"reason"`
+}
+
+// dispatchBatchRemediationTarget is injected into jobs.Dispatcher via
+// SetDispatch (see WithJobsDispatcher below). It performs the exact same
+// pre-flight + dispatch steps as Sub-project 4's ExecuteRemediation -- the
+// permission/Tier-4/catalog-existence checks already happened once, at
+// job-creation time (CreateBatchRemediationJob), not per-target here.
+func (h *Handler) dispatchBatchRemediationTarget(ctx context.Context, job jobs.Job, target jobs.JobTarget) (refID string, err error) {
+	var payload batchRemediationPayload
+	if err := json.Unmarshal(job.Payload, &payload); err != nil {
+		return "", err
+	}
+	if h.remediationCatalog == nil {
+		return "", errors.New("remediation catalog not loaded")
+	}
+	entry, ok := h.remediationCatalog.ByID(payload.RemediationID)
+	if !ok {
+		return "", errors.New("unknown remediationId")
+	}
+
+	var agentOS string
+	h.db.QueryRow(ctx, `SELECT COALESCE(os_version,'') FROM agents WHERE agent_id=$1`, target.AgentID).Scan(&agentOS)
+	if !remediation.OSSupported(agentOS, entry) {
+		return "", errors.New("remediation not supported on this endpoint's OS")
+	}
+
+	requestID := newID()
+	allResults := h.aggregateAgentResults(ctx, target.AgentID)
+	if latestCheckIsPassing(allResults, entry.CheckID) {
+		if _, err := h.db.Exec(ctx,
+			`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, rollback_available, completed_at)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
+			requestID, entry.ID, target.AgentID, entry.CheckID, int(entry.Tier), remediation.StatusCompleted, job.CreatedBy, payload.Reason, entry.SupportsRollback,
+		); err != nil {
+			return "", err
+		}
+		return requestID, nil
+	}
+
+	if _, err := h.db.Exec(ctx,
+		`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, rollback_available)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		requestID, entry.ID, target.AgentID, entry.CheckID, int(entry.Tier), remediation.StatusRequested, job.CreatedBy, payload.Reason, entry.SupportsRollback,
+	); err != nil {
+		return "", err
+	}
+
+	timeoutSec := entry.EstimatedTimeSec * 2
+	if timeoutSec == 0 {
+		timeoutSec = 60
+	}
+	runID, sent, dispatchErr := h.dispatchRemediationStep(ctx, target.AgentID, "remediation-fix", entry.ID, entry.Command, entry.Executor, timeoutSec)
+	if dispatchErr != nil {
+		h.db.Exec(ctx, `UPDATE remediation_requests SET status=$1, error=$2 WHERE id=$3`, remediation.StatusFailed, dispatchErr.Error(), requestID)
+		return "", dispatchErr
+	}
+	if !sent {
+		h.db.Exec(ctx, `UPDATE remediation_requests SET status=$1, error='agent not connected' WHERE id=$2`, remediation.StatusFailed, requestID)
+		return "", errors.New("agent not connected")
+	}
+	h.db.Exec(ctx,
+		`UPDATE remediation_requests SET status=$1, fix_run_id=$2, dispatched_at=NOW() WHERE id=$3`,
+		remediation.StatusDispatched, runID, requestID)
+	return requestID, nil
+}
+
+// batchRemediationTargetStatus is injected into jobs.Dispatcher via
+// SetStatus. It polls the remediation_requests row created for this target
+// (refID) and reports whether that row has reached a terminal state.
+func (h *Handler) batchRemediationTargetStatus(ctx context.Context, jobType, refID string) (state string, errText string, terminal bool) {
+	var status, errCol string
+	if err := h.db.QueryRow(ctx, `SELECT status, error FROM remediation_requests WHERE id=$1`, refID).Scan(&status, &errCol); err != nil {
+		return jobs.TargetStateFailed, "remediation request not found: " + err.Error(), true
+	}
+	switch status {
+	case remediation.StatusCompleted:
+		return jobs.TargetStateCompleted, "", true
+	case remediation.StatusFailed, remediation.StatusVerificationFailed, remediation.StatusTimedOut, remediation.StatusCancelled:
+		return jobs.TargetStateFailed, errCol, true
+	default: // requested, dispatched, running, verifying
+		return jobs.TargetStateDispatched, "", false
+	}
+}
+
+// WithJobsDispatcher wires the Fleet Job Engine's one V1 consumer (batch
+// remediation) into dispatcher, and stores store for the HTTP handlers in
+// job_handlers.go. Mirrors WithVexSweep's exact shape.
+func (h *Handler) WithJobsDispatcher(store *jobs.Store, dispatcher *jobs.Dispatcher) *Handler {
+	h.jobsStore = store
+	dispatcher.SetDispatch(h.dispatchBatchRemediationTarget)
+	dispatcher.SetStatus(h.batchRemediationTargetStatus)
+	return h
+}
