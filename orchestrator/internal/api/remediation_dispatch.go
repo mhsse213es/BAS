@@ -23,6 +23,16 @@ func (h *Handler) findStepByCheckID(checkID string) (scenario.Step, bool) {
 	return scenario.Step{}, false
 }
 
+// EligibleForBASVerification reports whether checkID's own scenario step
+// carries a real ATT&CK technique_id -- the only signal used to decide
+// eligibility. Never invents a mapping: a check with no technique_id (e.g.
+// windows-bitlocker-enabled, which has no honest ATT&CK fit) is simply not
+// eligible, full stop.
+func (h *Handler) EligibleForBASVerification(checkID string) bool {
+	step, found := h.findStepByCheckID(checkID)
+	return found && step.TechniqueID != ""
+}
+
 // dispatchRemediationStep builds an ephemeral, never-persisted Scenario
 // containing exactly one local/custom step, builds it into agent-ready
 // ScenarioSteps via the existing scenario.BuildSteps pipeline, inserts a

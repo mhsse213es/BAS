@@ -309,6 +309,8 @@ git commit -m "feat(api): add EligibleForBASVerification technique-eligibility c
 git push
 ```
 
+**Correction found during execution:** `TestEligibleForBASVerification_NoTechniqueID`'s original version called `eng.Save(sc)` on a Scenario whose step deliberately has no `TechniqueID` -- `Save()` calls `Scenario.Validate()`, which rejects any step missing a `technique_id` ("step 1 is missing a technique_id"). `Validate()` is a `Save()`-only guard for user-authored custom scenarios; `Load()` never calls it, and real built-in scenarios (e.g. `windows-bitlocker-enabled` in `windows-security-config.yaml`) rely on that gap to ship a check with no honest technique mapping. Fixed by writing the fixture YAML directly under `<tempDir>/custom/` and loading it via `Engine.Load()` instead -- `sourceForPath` classifies anything under a `custom/` subdirectory as `Source: "custom"`, which also skips signature verification. **Task 3's `TestVerifyTechnique_NotEligible_Rejected` test (below) must use this same file+Load() pattern, not `Save()`, for the same reason** -- the version drafted before this correction was found will fail identically.
+
 ---
 
 ### Task 3: `dispatchTechniqueVerification` + `POST .../verify-technique` handler + route
