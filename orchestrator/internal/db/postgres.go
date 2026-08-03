@@ -1225,6 +1225,29 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_remediation_requests_agent_id ON remediation_requests (agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_remediation_requests_fix_run_id ON remediation_requests (fix_run_id) WHERE fix_run_id != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_remediation_requests_verify_run_id ON remediation_requests (verify_run_id) WHERE verify_run_id != ''`,
+
+		// technique_verification_runs: a second, independent verification layer
+		// on top of remediation_requests -- proves the control stops the real
+		// ATT&CK technique, not just that its configuration is correct. See
+		// docs/superpowers/specs/2026-08-03-bas-verified-remediation-design.md.
+		`CREATE TABLE IF NOT EXISTS technique_verification_runs (
+			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			request_id    text        NOT NULL REFERENCES remediation_requests(id),
+			agent_id      text        NOT NULL,
+			check_id      text        NOT NULL,
+			technique_id  text        NOT NULL,
+			engine        text        NOT NULL DEFAULT 'art',
+			run_id        text        NOT NULL DEFAULT '',
+			status        text        NOT NULL DEFAULT 'requested',
+			reason        text        NOT NULL DEFAULT '',
+			requested_by  text        NOT NULL DEFAULT '',
+			requested_at  timestamptz NOT NULL DEFAULT NOW(),
+			dispatched_at timestamptz,
+			completed_at  timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_request_id ON technique_verification_runs (request_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_agent_id ON technique_verification_runs (agent_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_run_id ON technique_verification_runs (run_id) WHERE run_id != ''`,
 	}
 
 	for _, s := range stmts {
