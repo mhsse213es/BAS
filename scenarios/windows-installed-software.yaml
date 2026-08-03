@@ -1,0 +1,27 @@
+id: windows-installed-software
+name: Windows Installed Software Inventory
+local_check: true
+description: >
+  Enumerates installed applications (both 64-bit and 32-bit-on-64-bit
+  Uninstall registry hives) as Name|Version pairs, consumed server-side by
+  the Application Risk category to flag known EOL/high-risk software.
+supported_os: [windows]
+tags:
+  - application-risk
+  - windows
+  - inventory
+
+steps:
+  - name: "Installed Software Inventory"
+    check_id: windows-installed-software
+    technique_id: T1082
+    framework: custom
+    executor: local
+    max_output_bytes: 20000
+    command: >-
+      $apps = @();
+      $apps += Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue;
+      $apps += Get-ItemProperty 'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue;
+      $apps | Where-Object { $_.DisplayName } | Sort-Object DisplayName -Unique |
+        ForEach-Object { "$($_.DisplayName)|$($_.DisplayVersion)" }
+    timeout_sec: 30

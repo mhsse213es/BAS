@@ -1,0 +1,22 @@
+id: linux-installed-software
+name: Linux Installed Software Inventory
+local_check: true
+description: >
+  Enumerates installed Debian packages as Name|Version pairs, consumed
+  server-side by the Application Risk category to flag known EOL/high-risk
+  software.
+supported_os: [linux]
+tags:
+  - application-risk
+  - linux
+  - inventory
+
+steps:
+  - name: "Installed Software Inventory"
+    check_id: linux-installed-software
+    technique_id: T1082
+    framework: custom
+    executor: local
+    max_output_bytes: 20000
+    command: "dpkg-query -W -f='${Package}|${Version}\\n' 2>/dev/null"
+    timeout_sec: 30
