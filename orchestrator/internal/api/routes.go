@@ -489,6 +489,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/remediation-requests/{requestId}/cancel", h.CancelRemediation)
 		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Post("/api/remediation-requests/{requestId}/rollback", h.RollbackRemediation)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/remediation-requests/{requestId}/verify-technique", h.VerifyTechnique)
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Get("/api/technique-verification-runs/{id}", h.GetTechniqueVerification)
 
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)
