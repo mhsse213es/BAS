@@ -1248,6 +1248,38 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_request_id ON technique_verification_runs (request_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_agent_id ON technique_verification_runs (agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_technique_verification_runs_run_id ON technique_verification_runs (run_id) WHERE run_id != ''`,
+
+		// jobs / job_targets: generic fleet-job infrastructure. internal/jobs
+		// knows nothing about what a given Job.Type actually does -- that's
+		// supplied by internal/api at wiring time. See
+		// docs/superpowers/specs/2026-08-03-fleet-job-engine-design.md.
+		`CREATE TABLE IF NOT EXISTS jobs (
+			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			type         text        NOT NULL,
+			state        text        NOT NULL,
+			payload      jsonb       NOT NULL DEFAULT '{}',
+			created_by   text        NOT NULL DEFAULT '',
+			created_at   timestamptz NOT NULL DEFAULT NOW(),
+			started_at   timestamptz,
+			completed_at timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs (state)`,
+
+		`CREATE TABLE IF NOT EXISTS job_targets (
+			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			job_id       text        NOT NULL REFERENCES jobs(id),
+			agent_id     text        NOT NULL,
+			state        text        NOT NULL,
+			ref_id       text        NOT NULL DEFAULT '',
+			error        text        NOT NULL DEFAULT '',
+			retry_count  int         NOT NULL DEFAULT 0,
+			max_retries  int         NOT NULL DEFAULT 0,
+			created_at   timestamptz NOT NULL DEFAULT NOW(),
+			started_at   timestamptz,
+			completed_at timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_job_targets_job_id ON job_targets (job_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_job_targets_state ON job_targets (state) WHERE state = 'pending'`,
 	}
 
 	for _, s := range stmts {

@@ -1,0 +1,170 @@
+package jobs
+
+import (
+	"context"
+	"encoding/json"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Store struct {
+	pool *pgxpool.Pool
+}
+
+func NewStore(pool *pgxpool.Pool) *Store {
+	return &Store{pool: pool}
+}
+
+// CreateBatch creates a Job plus one JobTarget per agentID, in a single
+// transaction so a job never exists with a partial target list.
+func (s *Store) CreateBatch(ctx context.Context, jobType string, payload json.RawMessage, createdBy string, agentIDs []string) (Job, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Job{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var jobID string
+	if err := tx.QueryRow(ctx,
+		`INSERT INTO jobs (type, state, payload, created_by) VALUES ($1,$2,$3,$4) RETURNING id`,
+		jobType, JobStateRequested, []byte(payload), createdBy,
+	).Scan(&jobID); err != nil {
+		return Job{}, err
+	}
+	for _, agentID := range agentIDs {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO job_targets (job_id, agent_id, state) VALUES ($1,$2,$3)`,
+			jobID, agentID, TargetStatePending,
+		); err != nil {
+			return Job{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Job{}, err
+	}
+	return s.Get(ctx, jobID)
+}
+
+func (s *Store) Get(ctx context.Context, id string) (Job, error) {
+	var j Job
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, type, state, payload, created_by, created_at, started_at, completed_at FROM jobs WHERE id=$1`, id,
+	).Scan(&j.ID, &j.Type, &j.State, &j.Payload, &j.CreatedBy, &j.CreatedAt, &j.StartedAt, &j.CompletedAt)
+	return j, err
+}
+
+func scanJobTargets(rows pgx.Rows) ([]JobTarget, error) {
+	defer rows.Close()
+	var out []JobTarget
+	for rows.Next() {
+		var t JobTarget
+		if err := rows.Scan(&t.ID, &t.JobID, &t.AgentID, &t.State, &t.RefID, &t.Error,
+			&t.RetryCount, &t.MaxRetries, &t.CreatedAt, &t.StartedAt, &t.CompletedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+const jobTargetColumns = `id, job_id, agent_id, state, ref_id, error, retry_count, max_retries, created_at, started_at, completed_at`
+
+func (s *Store) ListTargets(ctx context.Context, jobID string) ([]JobTarget, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+jobTargetColumns+` FROM job_targets WHERE job_id=$1 ORDER BY created_at`, jobID)
+	if err != nil {
+		return nil, err
+	}
+	return scanJobTargets(rows)
+}
+
+// ListActiveDispatchedTargets returns every in-flight target across every
+// job that is not yet in a terminal or cancelled state.
+func (s *Store) ListActiveDispatchedTargets(ctx context.Context) ([]JobTarget, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+jobTargetColumnsQualified()+`
+		   FROM job_targets jt JOIN jobs j ON j.id = jt.job_id
+		  WHERE jt.state = $1 AND j.state IN ($2,$3)`,
+		TargetStateDispatched, JobStateRequested, JobStateRunning)
+	if err != nil {
+		return nil, err
+	}
+	return scanJobTargets(rows)
+}
+
+// ListPendingTargetsAcrossActiveJobs returns up to limit still-pending
+// targets across every active job, oldest first -- the set Tick() dispatches
+// on a given tick.
+func (s *Store) ListPendingTargetsAcrossActiveJobs(ctx context.Context, limit int) ([]JobTarget, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+jobTargetColumnsQualified()+`
+		   FROM job_targets jt JOIN jobs j ON j.id = jt.job_id
+		  WHERE jt.state = $1 AND j.state IN ($2,$3)
+		  ORDER BY jt.created_at, jt.id
+		  LIMIT $4`,
+		TargetStatePending, JobStateRequested, JobStateRunning, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanJobTargets(rows)
+}
+
+// jobTargetColumnsQualified is jobTargetColumns with every column prefixed
+// "jt." for use in the JOINed queries above -- jobs (aliased "j") has its
+// own id/state/created_at/started_at/completed_at columns, so an unqualified
+// SELECT against the join would fail with "column reference is ambiguous".
+func jobTargetColumnsQualified() string {
+	return `jt.id, jt.job_id, jt.agent_id, jt.state, jt.ref_id, jt.error, jt.retry_count, jt.max_retries, jt.created_at, jt.started_at, jt.completed_at`
+}
+
+func (s *Store) MarkTargetDispatched(ctx context.Context, targetID, refID string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE job_targets SET state=$1, ref_id=$2, started_at=NOW() WHERE id=$3`,
+		TargetStateDispatched, refID, targetID)
+	return err
+}
+
+func (s *Store) MarkTargetTerminal(ctx context.Context, targetID, state, errText string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE job_targets SET state=$1, error=$2, completed_at=NOW() WHERE id=$3`,
+		state, errText, targetID)
+	return err
+}
+
+// SetJobState persists a Job's aggregate state. StartedAt is stamped the
+// first time state moves off "requested" (COALESCE keeps any existing
+// value); CompletedAt is stamped whenever state lands in a terminal value.
+func (s *Store) SetJobState(ctx context.Context, jobID, state string) error {
+	terminal := state == JobStateCompleted || state == JobStatePartial || state == JobStateFailed || state == JobStateCancelled
+	if terminal {
+		_, err := s.pool.Exec(ctx,
+			`UPDATE jobs SET state=$1, started_at=COALESCE(started_at, NOW()), completed_at=NOW() WHERE id=$2`,
+			state, jobID)
+		return err
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE jobs SET state=$1, started_at=COALESCE(started_at, NOW()) WHERE id=$2`,
+		state, jobID)
+	return err
+}
+
+// CancelJob cancels every still-pending target for jobID and marks the job
+// itself cancelled. Targets already dispatched are left untouched -- that
+// WS message already went out; an operator cancels an in-flight target
+// individually via Sub-project 4's existing per-remediation cancel endpoint.
+func (s *Store) CancelJob(ctx context.Context, jobID string) (int, error) {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE job_targets SET state=$1, completed_at=NOW() WHERE job_id=$2 AND state=$3`,
+		TargetStateCancelled, jobID, TargetStatePending)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE jobs SET state=$1, completed_at=NOW() WHERE id=$2`,
+		JobStateCancelled, jobID,
+	); err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
