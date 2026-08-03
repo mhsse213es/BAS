@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -71,4 +72,93 @@ func nextOccurrenceSince(sch Schedule, now time.Time) (occurrence time.Time, ok 
 		return candidate.UTC(), true
 	}
 	return time.Time{}, false
+}
+
+const scheduleColumns = `id, type, payload, agent_ids, day_of_week, time_of_day, timezone, enabled, created_by, created_at, last_occurrence_at, last_spawned_job_id`
+
+func scanSchedule(row interface {
+	Scan(dest ...any) error
+}) (Schedule, error) {
+	var sch Schedule
+	var agentIDsRaw []byte
+	err := row.Scan(&sch.ID, &sch.Type, &sch.Payload, &agentIDsRaw, &sch.DayOfWeek, &sch.TimeOfDay,
+		&sch.Timezone, &sch.Enabled, &sch.CreatedBy, &sch.CreatedAt, &sch.LastOccurrenceAt, &sch.LastSpawnedJobID)
+	if err != nil {
+		return Schedule{}, err
+	}
+	if err := json.Unmarshal(agentIDsRaw, &sch.AgentIDs); err != nil {
+		return Schedule{}, err
+	}
+	return sch, nil
+}
+
+func (s *Store) CreateSchedule(ctx context.Context, sch Schedule) (Schedule, error) {
+	agentIDsJSON, err := json.Marshal(sch.AgentIDs)
+	if err != nil {
+		return Schedule{}, err
+	}
+	var id string
+	if err := s.pool.QueryRow(ctx,
+		`INSERT INTO job_schedules (type, payload, agent_ids, day_of_week, time_of_day, timezone, enabled, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+		sch.Type, []byte(sch.Payload), agentIDsJSON, sch.DayOfWeek, sch.TimeOfDay, sch.Timezone, sch.Enabled, sch.CreatedBy,
+	).Scan(&id); err != nil {
+		return Schedule{}, err
+	}
+	return s.GetSchedule(ctx, id)
+}
+
+func (s *Store) GetSchedule(ctx context.Context, id string) (Schedule, error) {
+	row := s.pool.QueryRow(ctx, `SELECT `+scheduleColumns+` FROM job_schedules WHERE id=$1`, id)
+	return scanSchedule(row)
+}
+
+func (s *Store) ListEnabledSchedules(ctx context.Context) ([]Schedule, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+scheduleColumns+` FROM job_schedules WHERE enabled = true`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Schedule
+	for rows.Next() {
+		sch, err := scanSchedule(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sch)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ListSchedules(ctx context.Context) ([]Schedule, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+scheduleColumns+` FROM job_schedules ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Schedule
+	for rows.Next() {
+		sch, err := scanSchedule(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sch)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DisableSchedule(ctx context.Context, id string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE job_schedules SET enabled=false WHERE id=$1`, id)
+	return err
+}
+
+func (s *Store) MarkScheduleOccurrenceHandled(ctx context.Context, id string, occurrence time.Time, spawnedJobID string) error {
+	if spawnedJobID == "" {
+		_, err := s.pool.Exec(ctx, `UPDATE job_schedules SET last_occurrence_at=$1 WHERE id=$2`, occurrence, id)
+		return err
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE job_schedules SET last_occurrence_at=$1, last_spawned_job_id=$2 WHERE id=$3`,
+		occurrence, spawnedJobID, id)
+	return err
 }

@@ -1284,6 +1284,24 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// Sub-project 7: Fleet Scheduling & Maintenance Freezes. See
 		// docs/superpowers/specs/2026-08-03-fleet-scheduling-and-freezes-design.md.
 		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS scheduled_at timestamptz`,
+
+		// job_schedules: recurring template that spawns a fresh one-shot Job
+		// each occurrence.
+		`CREATE TABLE IF NOT EXISTS job_schedules (
+			id                  text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			type                text        NOT NULL,
+			payload             jsonb       NOT NULL DEFAULT '{}',
+			agent_ids           jsonb       NOT NULL,
+			day_of_week         int         NOT NULL,
+			time_of_day         text        NOT NULL,
+			timezone            text        NOT NULL DEFAULT 'UTC',
+			enabled             boolean     NOT NULL DEFAULT true,
+			created_by          text        NOT NULL DEFAULT '',
+			created_at          timestamptz NOT NULL DEFAULT NOW(),
+			last_occurrence_at  timestamptz,
+			last_spawned_job_id text        NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_job_schedules_enabled ON job_schedules (enabled) WHERE enabled = true`,
 	}
 
 	for _, s := range stmts {

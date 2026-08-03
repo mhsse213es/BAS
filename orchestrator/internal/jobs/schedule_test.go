@@ -1,8 +1,12 @@
 package jobs
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestIsTerminalJobState(t *testing.T) {
@@ -85,4 +89,110 @@ func TestNextOccurrenceSince_InvalidTimeOfDay_ReturnsNotOK(t *testing.T) {
 	if ok {
 		t.Error("nextOccurrenceSince() ok = true, want false for an invalid time-of-day")
 	}
+}
+
+func TestCreateSchedule_PersistsAndRoundTrips(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "weekly hardening"})
+
+		created, err := store.CreateSchedule(ctx, Schedule{
+			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"a1", "a2"},
+			DayOfWeek: 5, TimeOfDay: "23:00", Timezone: "Asia/Kolkata", Enabled: true, CreatedBy: "user-1",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+		if created.ID == "" || !created.Enabled || created.LastSpawnedJobID != "" {
+			t.Fatalf("created = %+v, want non-empty ID, Enabled=true, LastSpawnedJobID=''", created)
+		}
+
+		got, err := store.GetSchedule(ctx, created.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if len(got.AgentIDs) != 2 || got.AgentIDs[0] != "a1" || got.DayOfWeek != 5 || got.TimeOfDay != "23:00" || got.Timezone != "Asia/Kolkata" {
+			t.Errorf("got = %+v, want AgentIDs=[a1 a2] DayOfWeek=5 TimeOfDay=23:00 Timezone=Asia/Kolkata", got)
+		}
+	})
+}
+
+func TestListEnabledSchedules_ExcludesDisabled(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+
+		enabled, err := store.CreateSchedule(ctx, Schedule{
+			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"a1"},
+			DayOfWeek: 5, TimeOfDay: "23:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule (enabled): %v", err)
+		}
+		disabled, err := store.CreateSchedule(ctx, Schedule{
+			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"a2"},
+			DayOfWeek: 5, TimeOfDay: "23:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule (to-be-disabled): %v", err)
+		}
+		if err := store.DisableSchedule(ctx, disabled.ID); err != nil {
+			t.Fatalf("DisableSchedule: %v", err)
+		}
+
+		got, err := store.ListEnabledSchedules(ctx)
+		if err != nil {
+			t.Fatalf("ListEnabledSchedules: %v", err)
+		}
+		var sawEnabled, sawDisabled bool
+		for _, sch := range got {
+			if sch.ID == enabled.ID {
+				sawEnabled = true
+			}
+			if sch.ID == disabled.ID {
+				sawDisabled = true
+			}
+		}
+		if !sawEnabled || sawDisabled {
+			t.Errorf("ListEnabledSchedules() sawEnabled=%v sawDisabled=%v, want true/false", sawEnabled, sawDisabled)
+		}
+	})
+}
+
+func TestMarkScheduleOccurrenceHandled_UpdatesBothFields(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		sch, err := store.CreateSchedule(ctx, Schedule{
+			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"a1"},
+			DayOfWeek: 5, TimeOfDay: "23:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+		occurrence := time.Date(2026, 8, 7, 23, 0, 0, 0, time.UTC)
+
+		if err := store.MarkScheduleOccurrenceHandled(ctx, sch.ID, occurrence, "spawned-job-1"); err != nil {
+			t.Fatalf("MarkScheduleOccurrenceHandled: %v", err)
+		}
+		got, err := store.GetSchedule(ctx, sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.LastOccurrenceAt == nil || !got.LastOccurrenceAt.Equal(occurrence) || got.LastSpawnedJobID != "spawned-job-1" {
+			t.Fatalf("got = %+v, want LastOccurrenceAt=%v LastSpawnedJobID=spawned-job-1", got, occurrence)
+		}
+	})
 }
