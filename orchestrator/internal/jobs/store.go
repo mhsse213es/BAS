@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,9 +17,16 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-// CreateBatch creates a Job plus one JobTarget per agentID, in a single
-// transaction so a job never exists with a partial target list.
+// CreateBatch creates a Job plus one JobTarget per agentID, dispatching
+// immediately (ScheduledAt=nil). Delegates to CreateBatchScheduled so
+// every existing call site's behavior is unchanged.
 func (s *Store) CreateBatch(ctx context.Context, jobType string, payload json.RawMessage, createdBy string, agentIDs []string) (Job, error) {
+	return s.CreateBatchScheduled(ctx, jobType, payload, createdBy, agentIDs, nil)
+}
+
+// CreateBatchScheduled is CreateBatch with an optional future dispatch time.
+// A single transaction so a job never exists with a partial target list.
+func (s *Store) CreateBatchScheduled(ctx context.Context, jobType string, payload json.RawMessage, createdBy string, agentIDs []string, scheduledAt *time.Time) (Job, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Job{}, err
@@ -27,8 +35,8 @@ func (s *Store) CreateBatch(ctx context.Context, jobType string, payload json.Ra
 
 	var jobID string
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO jobs (type, state, payload, created_by) VALUES ($1,$2,$3,$4) RETURNING id`,
-		jobType, JobStateRequested, []byte(payload), createdBy,
+		`INSERT INTO jobs (type, state, payload, created_by, scheduled_at) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+		jobType, JobStateRequested, []byte(payload), createdBy, scheduledAt,
 	).Scan(&jobID); err != nil {
 		return Job{}, err
 	}
@@ -49,8 +57,8 @@ func (s *Store) CreateBatch(ctx context.Context, jobType string, payload json.Ra
 func (s *Store) Get(ctx context.Context, id string) (Job, error) {
 	var j Job
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, type, state, payload, created_by, created_at, started_at, completed_at FROM jobs WHERE id=$1`, id,
-	).Scan(&j.ID, &j.Type, &j.State, &j.Payload, &j.CreatedBy, &j.CreatedAt, &j.StartedAt, &j.CompletedAt)
+		`SELECT id, type, state, payload, created_by, created_at, started_at, completed_at, scheduled_at FROM jobs WHERE id=$1`, id,
+	).Scan(&j.ID, &j.Type, &j.State, &j.Payload, &j.CreatedBy, &j.CreatedAt, &j.StartedAt, &j.CompletedAt, &j.ScheduledAt)
 	return j, err
 }
 
@@ -101,6 +109,7 @@ func (s *Store) ListPendingTargetsAcrossActiveJobs(ctx context.Context, limit in
 		`SELECT `+jobTargetColumnsQualified()+`
 		   FROM job_targets jt JOIN jobs j ON j.id = jt.job_id
 		  WHERE jt.state = $1 AND j.state IN ($2,$3)
+		    AND (j.scheduled_at IS NULL OR j.scheduled_at <= NOW())
 		  ORDER BY jt.created_at, jt.id
 		  LIMIT $4`,
 		TargetStatePending, JobStateRequested, JobStateRunning, limit)

@@ -38,6 +38,7 @@ type Job struct {
 	CreatedAt   time.Time
 	StartedAt   *time.Time
 	CompletedAt *time.Time
+	ScheduledAt *time.Time // nil = dispatch immediately; non-nil = don't dispatch before this
 }
 
 // JobTarget is one agent's independently tracked execution within a Job.

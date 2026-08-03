@@ -1280,6 +1280,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_job_targets_job_id ON job_targets (job_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_job_targets_state ON job_targets (state) WHERE state = 'pending'`,
+
+		// Sub-project 7: Fleet Scheduling & Maintenance Freezes. See
+		// docs/superpowers/specs/2026-08-03-fleet-scheduling-and-freezes-design.md.
+		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS scheduled_at timestamptz`,
 	}
 
 	for _, s := range stmts {

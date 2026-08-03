@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -229,6 +230,89 @@ func TestCancelJob_CancelsPendingLeavesDispatchedAlone(t *testing.T) {
 		}
 		if gotJob.State != JobStateCancelled {
 			t.Errorf("job State = %q, want cancelled", gotJob.State)
+		}
+	})
+}
+
+func TestCreateBatchScheduled_FutureScheduledAt_TargetsNotDispatchable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		// Truncated to microsecond precision -- Postgres timestamptz only
+		// stores microseconds, so a nanosecond-precision time.Now() value
+		// would never round-trip .Equal() otherwise.
+		future := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Microsecond)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+
+		job, err := store.CreateBatchScheduled(ctx, "batch_remediation", payload, "user-1", []string{"agent-future"}, &future)
+		if err != nil {
+			t.Fatalf("CreateBatchScheduled: %v", err)
+		}
+		if job.ScheduledAt == nil || !job.ScheduledAt.Equal(future) {
+			t.Fatalf("job.ScheduledAt = %v, want %v", job.ScheduledAt, future)
+		}
+
+		pending, err := store.ListPendingTargetsAcrossActiveJobs(ctx, 20)
+		if err != nil {
+			t.Fatalf("ListPendingTargetsAcrossActiveJobs: %v", err)
+		}
+		for _, tg := range pending {
+			if tg.JobID == job.ID {
+				t.Fatalf("target for future-scheduled job %s appeared in the dispatchable pending list", job.ID)
+			}
+		}
+	})
+}
+
+func TestCreateBatchScheduled_PastScheduledAt_TargetsDispatchable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		past := time.Now().UTC().Add(-1 * time.Hour)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+
+		job, err := store.CreateBatchScheduled(ctx, "batch_remediation", payload, "user-1", []string{"agent-past"}, &past)
+		if err != nil {
+			t.Fatalf("CreateBatchScheduled: %v", err)
+		}
+
+		pending, err := store.ListPendingTargetsAcrossActiveJobs(ctx, 20)
+		if err != nil {
+			t.Fatalf("ListPendingTargetsAcrossActiveJobs: %v", err)
+		}
+		found := false
+		for _, tg := range pending {
+			if tg.JobID == job.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("target for past-scheduled job %s did not appear in the dispatchable pending list", job.ID)
+		}
+	})
+}
+
+func TestCreateBatch_NilScheduledAt_UnchangedBehavior(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+
+		job, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"agent-now"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		if job.ScheduledAt != nil {
+			t.Fatalf("job.ScheduledAt = %v, want nil (CreateBatch's existing immediate-dispatch behavior)", job.ScheduledAt)
 		}
 	})
 }
