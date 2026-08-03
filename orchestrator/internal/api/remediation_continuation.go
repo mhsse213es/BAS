@@ -28,7 +28,88 @@ func (h *Handler) continueRemediationFromResult(r *http.Request, runID string, s
 		`SELECT id FROM remediation_requests WHERE verify_run_id = $1 AND status = 'verifying'`, runID,
 	).Scan(&id); err == nil {
 		h.handleRemediationVerifyResult(r, id, passed)
+		return
 	}
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT id FROM remediation_requests WHERE rollback_run_id = $1 AND rollback_status = 'requested'`, runID,
+	).Scan(&id); err == nil {
+		h.handleRemediationRollbackResult(r, id, passed)
+		return
+	}
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT id FROM remediation_requests WHERE rollback_verify_run_id = $1 AND rollback_status = 'requested'`, runID,
+	).Scan(&id); err == nil {
+		h.handleRemediationRollbackVerifyResult(r, id, passed)
+	}
+}
+
+// handleRemediationRollbackResult mirrors handleRemediationFixResult for
+// the rollback path: on success, re-runs verification to confirm the
+// control is actually back in its pre-fix state; on failure, the rollback
+// stops here.
+func (h *Handler) handleRemediationRollbackResult(r *http.Request, requestID string, passed bool) {
+	ctx := r.Context()
+	var remediationID, agentID, requestedBy string
+	h.db.QueryRow(ctx, `SELECT remediation_id, agent_id, requested_by FROM remediation_requests WHERE id=$1`, requestID).
+		Scan(&remediationID, &agentID, &requestedBy)
+
+	if !passed {
+		h.db.Exec(ctx, `UPDATE remediation_requests SET rollback_status='failed' WHERE id=$1`, requestID)
+		h.auditLogAs(r, requestedBy, "remediation.rollback_failed", requestID,
+			map[string]any{"remediationId": remediationID, "agentId": agentID}, "failed")
+		return
+	}
+
+	if h.remediationCatalog == nil {
+		h.db.Exec(ctx, `UPDATE remediation_requests SET rollback_status='failed' WHERE id=$1`, requestID)
+		return
+	}
+	entry, ok := h.remediationCatalog.ByID(remediationID)
+	if !ok {
+		h.db.Exec(ctx, `UPDATE remediation_requests SET rollback_status='failed' WHERE id=$1`, requestID)
+		return
+	}
+	verificationCheckID := entry.VerificationCheckID
+	if verificationCheckID == "" {
+		verificationCheckID = entry.CheckID
+	}
+	step, found := h.findStepByCheckID(verificationCheckID)
+	if !found {
+		h.db.Exec(ctx, `UPDATE remediation_requests SET rollback_status='failed' WHERE id=$1`, requestID)
+		return
+	}
+	timeoutSec := step.TimeoutSec
+	if timeoutSec == 0 {
+		timeoutSec = 30
+	}
+	verifyRunID, sent, err := h.dispatchRemediationStep(ctx, agentID, "remediation-rollback-verify", remediationID, step.Command, step.Executor, timeoutSec)
+	if err != nil || !sent {
+		h.db.Exec(ctx, `UPDATE remediation_requests SET rollback_status='failed' WHERE id=$1`, requestID)
+		return
+	}
+	h.db.Exec(ctx, `UPDATE remediation_requests SET rollback_verify_run_id=$1 WHERE id=$2`, verifyRunID, requestID)
+}
+
+// handleRemediationRollbackVerifyResult: passed==true means the finding's
+// check STILL PASSES after the rollback command ran -- the rollback did
+// NOT take effect. passed==false means the check now fails again,
+// confirming the rollback worked (the control reverted to its pre-fix
+// state).
+func (h *Handler) handleRemediationRollbackVerifyResult(r *http.Request, requestID string, passed bool) {
+	ctx := r.Context()
+	var remediationID, agentID, requestedBy string
+	h.db.QueryRow(ctx, `SELECT remediation_id, agent_id, requested_by FROM remediation_requests WHERE id=$1`, requestID).
+		Scan(&remediationID, &agentID, &requestedBy)
+
+	status := "completed"
+	outcome := "ok"
+	if passed {
+		status = "failed"
+		outcome = "rollback ran but the control is still active -- verify manually"
+	}
+	h.db.Exec(ctx, `UPDATE remediation_requests SET rollback_status=$1 WHERE id=$2`, status, requestID)
+	h.auditLogAs(r, requestedBy, "remediation.rollback_"+status, requestID,
+		map[string]any{"remediationId": remediationID, "agentId": agentID}, outcome)
 }
 
 // handleRemediationFixResult advances a remediation from "dispatched" once
