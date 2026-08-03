@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/remediation"
 )
 
@@ -92,4 +93,29 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, map[string]any{"job": job, "targets": targets})
+}
+
+// POST /api/jobs/{jobId}/cancel
+// Cancels every still-pending target and the job itself. Targets already
+// dispatched are untouched -- that WS message already went out; an
+// operator cancels an in-flight target individually via Sub-project 4's
+// existing POST /api/remediation-requests/{requestId}/cancel using the
+// target's RefID.
+func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobId")
+	if h.jobsStore == nil {
+		jsonError(w, "job engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	if _, err := h.jobsStore.Get(r.Context(), jobID); err != nil {
+		jsonError(w, "job not found", http.StatusNotFound)
+		return
+	}
+	cancelledCount, err := h.jobsStore.CancelJob(r.Context(), jobID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "jobs.cancel", jobID, map[string]any{"cancelledTargets": cancelledCount}, "cancelled")
+	respond(w, map[string]any{"jobId": jobID, "state": jobs.JobStateCancelled, "cancelledTargets": cancelledCount})
 }

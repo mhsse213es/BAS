@@ -262,6 +262,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/remediation-reports/summary", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodPost, "/api/jobs/batch-remediation", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/jobs/{jobId}", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodPost, "/api/jobs/{jobId}/cancel", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/openaev/config", tierPermission, auth.CanViewOpenAEVConfig},
 	{http.MethodPut, "/api/openaev/config", tierPermission, auth.CanUpdateOpenAEVConfig},
 	{http.MethodPost, "/api/openaev/config/test", tierPermission, auth.CanTestOpenAEVConfig},

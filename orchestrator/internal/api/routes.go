@@ -493,6 +493,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/remediation-reports/summary", h.RemediationReportSummary)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/jobs/batch-remediation", h.CreateBatchRemediationJob)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/jobs/{jobId}", h.GetJob)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/jobs/{jobId}/cancel", h.CancelJob)
 
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)

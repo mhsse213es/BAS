@@ -209,3 +209,52 @@ func TestGetJob_NotFound_404(t *testing.T) {
 		}
 	})
 }
+
+func TestCancelJob_CancelsPendingTargetsAndJob(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('jbc-a1', 'JBC-A1')`)
+		jobsStore := jobs.NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		created, err := jobsStore.CreateBatch(context.Background(), "batch_remediation", payload, "user-1", []string{"jbc-a1"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		req := withURLParam(httptest.NewRequest(http.MethodPost, "/x", nil), "jobId", created.ID)
+		w := httptest.NewRecorder()
+		h.CancelJob(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+
+		got, err := jobsStore.Get(context.Background(), created.ID)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if got.State != jobs.JobStateCancelled {
+			t.Errorf("job State = %q, want cancelled", got.State)
+		}
+	})
+}
+
+func TestCancelJob_NotFound_404(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		req := withURLParam(httptest.NewRequest(http.MethodPost, "/x", nil), "jobId", "no-such-job")
+		w := httptest.NewRecorder()
+		h.CancelJob(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want 404", w.Code)
+		}
+	})
+}
