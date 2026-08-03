@@ -40,7 +40,36 @@ func (h *Handler) continueRemediationFromResult(r *http.Request, runID string, s
 		`SELECT id FROM remediation_requests WHERE rollback_verify_run_id = $1 AND rollback_status = 'requested'`, runID,
 	).Scan(&id); err == nil {
 		h.handleRemediationRollbackVerifyResult(r, id, passed)
+		return
 	}
+	if err := h.db.QueryRow(r.Context(),
+		`SELECT id FROM technique_verification_runs WHERE run_id = $1 AND status = 'dispatched'`, runID,
+	).Scan(&id); err == nil {
+		h.handleTechniqueVerificationResult(r, id, simResults)
+	}
+}
+
+// handleTechniqueVerificationResult writes the technique run's result
+// directly onto technique_verification_runs.status -- models.CheckResult's
+// own value (pass/fail/blocked/error/skipped), no new taxonomy. reason is
+// copied verbatim from the result's Details field.
+func (h *Handler) handleTechniqueVerificationResult(r *http.Request, techVerifyID string, simResults []models.SimulationResult) {
+	ctx := r.Context()
+	status := string(models.ResultError)
+	reason := "agent reported no result"
+	if len(simResults) > 0 {
+		status = string(simResults[0].Result)
+		reason = simResults[0].Details
+	}
+	h.db.Exec(ctx,
+		`UPDATE technique_verification_runs SET status=$1, reason=$2, completed_at=NOW() WHERE id=$3`,
+		status, reason, techVerifyID)
+
+	var requestID, checkID, techniqueID, requestedBy string
+	h.db.QueryRow(ctx, `SELECT request_id, check_id, technique_id, requested_by FROM technique_verification_runs WHERE id=$1`, techVerifyID).
+		Scan(&requestID, &checkID, &techniqueID, &requestedBy)
+	h.auditLogAs(r, requestedBy, "remediation.technique_verification_"+status, techVerifyID,
+		map[string]any{"requestId": requestID, "checkId": checkID, "techniqueId": techniqueID}, status)
 }
 
 // handleRemediationRollbackResult mirrors handleRemediationFixResult for
