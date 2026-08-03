@@ -1302,6 +1302,19 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			last_spawned_job_id text        NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_job_schedules_enabled ON job_schedules (enabled) WHERE enabled = true`,
+
+		// agent_maintenance_freezes: one-shot absolute freeze window per
+		// agent, checked at dispatch time by Dispatcher.Tick.
+		`CREATE TABLE IF NOT EXISTS agent_maintenance_freezes (
+			id         text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			agent_id   text        NOT NULL,
+			from_at    timestamptz NOT NULL,
+			to_at      timestamptz NOT NULL,
+			reason     text        NOT NULL DEFAULT '',
+			created_by text        NOT NULL DEFAULT '',
+			created_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_maintenance_freezes_agent_id ON agent_maintenance_freezes (agent_id)`,
 	}
 
 	for _, s := range stmts {
