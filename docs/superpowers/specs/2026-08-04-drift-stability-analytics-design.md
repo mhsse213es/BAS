@@ -69,6 +69,7 @@ type DriftStats struct {
 	CurrentStreakLength    int
 	CurrentStreakStartedAt *time.Time // when the current (still-open) streak began
 	AverageDaysUntilDrift  float64    // mean duration (days) of every PASS-streak that ended in a drift; 0 if DriftCount == 0
+	DriftEvents            []time.Time // the timestamp of the FAIL that caused each drift, one per DriftCount, in order
 	FirstVerifiedAt        *time.Time
 	LastVerifiedAt         *time.Time
 }
@@ -124,6 +125,7 @@ func ComputeDriftStats(runs []VerificationOutcome) DriftStats {
 			if runs[i-1].Result == "pass" && r.Result == "fail" {
 				s.DriftCount++
 				driftDurationsDays = append(driftDurationsDays, r.At.Sub(streakStart).Hours()/24)
+				s.DriftEvents = append(s.DriftEvents, r.At)
 			}
 			flushStreak()
 			streakResult = r.Result
@@ -149,13 +151,13 @@ func ComputeDriftStats(runs []VerificationOutcome) DriftStats {
 }
 ```
 
-Walking through the spec's own canonical example, `FAIL, PASS, PASS, PASS, FAIL` (5 runs, indices 0-4): `PassCount=3, FailCount=2`, the FAIL→PASS transition at i=1 is not a drift (wrong direction), the PASS→FAIL transition at i=4 is 1 drift with duration = `runs[4].At - runs[1].At` (the streak that started at the first PASS), `LongestPassStreak=3`, `LongestFailStreak=1`, `CurrentStreakResult="fail"`, `CurrentStreakLength=1`, `StabilityPercent=60`.
+Walking through the spec's own canonical example, `FAIL, PASS, PASS, PASS, FAIL` (5 runs, indices 0-4): `PassCount=3, FailCount=2`, the FAIL→PASS transition at i=1 is not a drift (wrong direction), the PASS→FAIL transition at i=4 is 1 drift with duration = `runs[4].At - runs[1].At` (the streak that started at the first PASS), `LongestPassStreak=3`, `LongestFailStreak=1`, `CurrentStreakResult="fail"`, `CurrentStreakLength=1`, `StabilityPercent=60`, `DriftEvents=[runs[4].At]`.
 
 ## 6. API surface
 
 - **`GET /api/agents/{agentId}/checks/{checkId}/drift`** — runs the source query for this one `(agentId, checkId)` pair, calls `ComputeDriftStats`, returns the `DriftStats` directly. The core per-control view.
 - **`GET /api/agents/{agentId}/drift-summary`** — enumerates every distinct `check_id` this agent has any `technique_verification_runs` row for, computes `DriftStats` per check, returns them sorted by `StabilityPercent` ascending (most-unstable first) plus an endpoint-level `overallStabilityPercent` (mean `StabilityPercent` across all this agent's controls).
-- **`GET /api/drift-reports/summary`** — fleet-wide: enumerates every distinct `(agent_id, check_id)` pair with any row, computes `DriftStats` for each, and returns: top-drifting controls (sorted by `DriftCount` descending), controls that never drifted (`DriftCount == 0 && TotalRuns > 1`), controls currently drifting within the last 7 days (`CurrentStreakResult == "fail" && time.Since(*CurrentStreakStartedAt) <= 7*24*time.Hour` — directly from the new `CurrentStreakStartedAt` field, no re-walk of the raw sequence needed), and a monthly drift trend (count of drift-transition events bucketed by the month of the FAIL that caused each one). Naming matches Sub-project 5's existing `GET /api/remediation-reports/summary` precedent.
+- **`GET /api/drift-reports/summary`** — fleet-wide: enumerates every distinct `(agent_id, check_id)` pair with any row, computes `DriftStats` for each, and returns: top-drifting controls (sorted by `DriftCount` descending), controls that never drifted (`DriftCount == 0 && TotalRuns > 1`), controls currently drifting within the last 7 days (`CurrentStreakResult == "fail" && time.Since(*CurrentStreakStartedAt) <= 7*24*time.Hour` — directly from the new `CurrentStreakStartedAt` field, no re-walk of the raw sequence needed), and a monthly drift trend (every `DriftStats.DriftEvents` timestamp across all pairs, bucketed by calendar month). Naming matches Sub-project 5's existing `GET /api/remediation-reports/summary` precedent.
 
 All three reuse `auth.CanExecuteRemediation` (read-level) — matches every other read endpoint across this initiative, no new permission.
 
