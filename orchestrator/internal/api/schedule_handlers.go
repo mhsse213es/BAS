@@ -18,12 +18,13 @@ import (
 // schedule is "create this batch job, but recurring."
 func (h *Handler) CreateJobSchedule(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RemediationID string   `json:"remediationId"`
-		Reason        string   `json:"reason"`
-		AgentIDs      []string `json:"agentIds"`
-		DayOfWeek     int      `json:"dayOfWeek"`
-		TimeOfDay     string   `json:"timeOfDay"`
-		Timezone      string   `json:"timezone"`
+		RemediationID        string   `json:"remediationId"`
+		Reason               string   `json:"reason"`
+		AgentIDs             []string `json:"agentIds"`
+		DayOfWeek            int      `json:"dayOfWeek"`
+		TimeOfDay            string   `json:"timeOfDay"`
+		Timezone             string   `json:"timezone"`
+		ContinuousValidation bool     `json:"continuousValidation"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil || req.RemediationID == "" {
 		jsonError(w, "remediationId is required", http.StatusBadRequest)
@@ -80,7 +81,7 @@ func (h *Handler) CreateJobSchedule(w http.ResponseWriter, r *http.Request) {
 	if claims != nil {
 		actorID = claims.UserID
 	}
-	payload, err := json.Marshal(map[string]string{"remediationId": entry.ID, "reason": req.Reason})
+	payload, err := json.Marshal(batchRemediationPayload{RemediationID: entry.ID, Reason: req.Reason, ContinuousValidation: req.ContinuousValidation})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return

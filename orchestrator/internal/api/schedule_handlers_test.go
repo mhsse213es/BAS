@@ -17,6 +17,54 @@ import (
 	"github.com/audspect/bas/internal/ws"
 )
 
+func TestCreateJobSchedule_ContinuousValidation_ThreadsIntoPayload(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		cat, err := remediation.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithRemediationCatalog(cat).
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		body, _ := json.Marshal(map[string]any{
+			"remediationId":        "enable_windows_firewall",
+			"reason":               "test",
+			"agentIds":             []string{"sh-cv1"},
+			"dayOfWeek":            1,
+			"timeOfDay":            "09:00",
+			"continuousValidation": true,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "admin-1", Role: auth.RoleAdmin}))
+		w := httptest.NewRecorder()
+		h.CreateJobSchedule(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			ScheduleID string `json:"scheduleId"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+
+		var raw []byte
+		if err := pool.QueryRow(context.Background(), `SELECT payload FROM job_schedules WHERE id=$1`, resp.ScheduleID).Scan(&raw); err != nil {
+			t.Fatalf("query schedule: %v", err)
+		}
+		var payload batchRemediationPayload
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			t.Fatalf("unmarshal payload: %v", err)
+		}
+		if !payload.ContinuousValidation {
+			t.Error("payload.ContinuousValidation = false, want true")
+		}
+	})
+}
+
 func TestCreateJobSchedule_CreatesEnabledSchedule(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
