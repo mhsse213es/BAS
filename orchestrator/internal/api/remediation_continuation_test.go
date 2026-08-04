@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -182,6 +183,40 @@ func TestSubmitScenarioResult_UnrelatedRunID_NoOp(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/x", nil)
 		// Must not panic or error for a run_id that matches nothing.
 		h.continueRemediationFromResult(req, "no-such-run-id", nil)
+	})
+}
+
+func TestHandleRemediationRollbackVerifyResult_Confirmed_CancelsPendingRevalidations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('rb-cv1', 'RB-CV1', 'windows')`)
+		mustExecAPI(t, pool, `
+			INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, continuous_validation)
+			VALUES ('rr-rb-cv1', 'enable_windows_firewall', 'rb-cv1', 'windows-firewall-enabled', 1, 'completed', 'user-1', 'test', true)`)
+
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		payload, _ := json.Marshal(basRevalidationPayload{RequestID: "rr-rb-cv1", AgentID: "rb-cv1", CheckID: "windows-firewall-enabled", TechniqueID: "T1082"})
+		future := time.Now().UTC().Add(24 * time.Hour)
+		job, err := jobsStore.CreateBatchScheduled(context.Background(), "bas_revalidation", payload, "user-1", []string{"rb-cv1"}, &future)
+		if err != nil {
+			t.Fatalf("CreateBatchScheduled: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodPost, "/x", nil)
+		// passed=false: the check fails again, confirming the rollback took effect.
+		h.handleRemediationRollbackVerifyResult(req, "rr-rb-cv1", false)
+
+		got, err := jobsStore.Get(context.Background(), job.ID)
+		if err != nil {
+			t.Fatalf("Get job: %v", err)
+		}
+		if got.State != jobs.JobStateCancelled {
+			t.Errorf("job.State = %q, want cancelled", got.State)
+		}
 	})
 }
 

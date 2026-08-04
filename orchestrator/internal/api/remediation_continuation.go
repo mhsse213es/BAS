@@ -142,6 +142,33 @@ func (h *Handler) handleRemediationRollbackVerifyResult(r *http.Request, request
 	h.db.Exec(ctx, `UPDATE remediation_requests SET rollback_status=$1 WHERE id=$2`, status, requestID)
 	h.auditLogAs(r, requestedBy, "remediation.rollback_"+status, requestID,
 		map[string]any{"remediationId": remediationID, "agentId": agentID}, outcome)
+
+	if status == "completed" && h.jobsStore != nil {
+		h.cancelPendingRevalidations(ctx, requestID)
+	}
+}
+
+// cancelPendingRevalidations cancels every still-pending bas_revalidation
+// job for requestID -- revalidating a control that was just deliberately
+// reverted would be actively misleading, not merely wasteful.
+func (h *Handler) cancelPendingRevalidations(ctx context.Context, requestID string) {
+	rows, err := h.db.Query(ctx,
+		`SELECT id FROM jobs WHERE type='bas_revalidation' AND payload->>'requestId'=$1
+		 AND state NOT IN ('completed','partial','failed','cancelled')`, requestID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	var jobIDs []string
+	for rows.Next() {
+		var jobID string
+		if rows.Scan(&jobID) == nil {
+			jobIDs = append(jobIDs, jobID)
+		}
+	}
+	for _, jobID := range jobIDs {
+		h.jobsStore.CancelJob(ctx, jobID)
+	}
 }
 
 // handleRemediationFixResult advances a remediation from "dispatched" once
