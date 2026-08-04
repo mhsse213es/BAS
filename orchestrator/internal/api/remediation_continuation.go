@@ -1,7 +1,10 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/remediation"
@@ -213,9 +216,10 @@ func (h *Handler) handleRemediationFixResult(r *http.Request, requestID string, 
 // evidence-based, not exit-code-based.
 func (h *Handler) handleRemediationVerifyResult(r *http.Request, requestID string, passed bool) {
 	ctx := r.Context()
-	var remediationID, agentID, requestedBy string
-	h.db.QueryRow(ctx, `SELECT remediation_id, agent_id, requested_by FROM remediation_requests WHERE id=$1`, requestID).
-		Scan(&remediationID, &agentID, &requestedBy)
+	var remediationID, agentID, requestedBy, checkID string
+	var continuousValidation bool
+	h.db.QueryRow(ctx, `SELECT remediation_id, agent_id, requested_by, check_id, continuous_validation FROM remediation_requests WHERE id=$1`, requestID).
+		Scan(&remediationID, &agentID, &requestedBy, &checkID, &continuousValidation)
 
 	status := remediation.StatusCompleted
 	outcome := "completed"
@@ -228,4 +232,30 @@ func (h *Handler) handleRemediationVerifyResult(r *http.Request, requestID strin
 		status, requestID)
 	h.auditLogAs(r, requestedBy, "remediation."+status, requestID,
 		map[string]any{"remediationId": remediationID, "agentId": agentID}, outcome)
+
+	if passed && continuousValidation && h.jobsStore != nil && h.EligibleForBASVerification(checkID) {
+		h.scheduleRevalidationChain(ctx, requestID, agentID, checkID, requestedBy)
+	}
+}
+
+// scheduleRevalidationChain creates the three bas_revalidation Jobs
+// (T+24h/T+7d/T+30d) for one just-verified remediation. Each is a
+// singleton-target Job -- a revalidation is inherently one endpoint
+// re-checking one control, not a fleet-wide batch.
+func (h *Handler) scheduleRevalidationChain(ctx context.Context, requestID, agentID, checkID, requestedBy string) {
+	step, found := h.findStepByCheckID(checkID)
+	if !found {
+		return
+	}
+	payload, err := json.Marshal(basRevalidationPayload{
+		RequestID: requestID, AgentID: agentID, CheckID: checkID, TechniqueID: step.TechniqueID,
+	})
+	if err != nil {
+		return
+	}
+	now := time.Now().UTC()
+	for _, delay := range []time.Duration{24 * time.Hour, 7 * 24 * time.Hour, 30 * 24 * time.Hour} {
+		at := now.Add(delay)
+		h.jobsStore.CreateBatchScheduled(ctx, "bas_revalidation", payload, requestedBy, []string{agentID}, &at)
+	}
 }

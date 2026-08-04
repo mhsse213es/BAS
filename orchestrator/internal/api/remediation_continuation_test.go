@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/scenario"
@@ -181,5 +182,109 @@ func TestSubmitScenarioResult_UnrelatedRunID_NoOp(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/x", nil)
 		// Must not panic or error for a run_id that matches nothing.
 		h.continueRemediationFromResult(req, "no-such-run-id", nil)
+	})
+}
+
+func TestHandleRemediationVerifyResult_ContinuousValidationEnabled_CreatesThreeRevalidationJobs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('cv-tr1', 'CV-TR1', 'windows')`)
+		mustExecAPI(t, pool, `
+			INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, verify_run_id, requested_by, reason, continuous_validation)
+			VALUES ('rr-cv-tr1', 'enable_windows_firewall', 'cv-tr1', 'windows-firewall-enabled', 1, 'verifying', 'run-cv-tr1', 'user-1', 'test', true)`)
+
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "windows-firewall-enabled")
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		req := httptest.NewRequest(http.MethodPost, "/x", nil)
+		h.handleRemediationVerifyResult(req, "rr-cv-tr1", true)
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM jobs WHERE type='bas_revalidation' AND payload->>'requestId'='rr-cv-tr1'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("query jobs: %v", err)
+		}
+		if count != 3 {
+			t.Errorf("bas_revalidation job count = %d, want 3", count)
+		}
+
+		rows, err := pool.Query(context.Background(),
+			`SELECT scheduled_at FROM jobs WHERE type='bas_revalidation' AND payload->>'requestId'='rr-cv-tr1' ORDER BY scheduled_at`)
+		if err != nil {
+			t.Fatalf("query scheduled_at: %v", err)
+		}
+		defer rows.Close()
+		var scheduledAts []time.Time
+		for rows.Next() {
+			var at time.Time
+			rows.Scan(&at)
+			scheduledAts = append(scheduledAts, at)
+		}
+		if len(scheduledAts) != 3 {
+			t.Fatalf("got %d scheduled_at values, want 3", len(scheduledAts))
+		}
+		gap1 := scheduledAts[1].Sub(scheduledAts[0])
+		gap2 := scheduledAts[2].Sub(scheduledAts[1])
+		if gap1 < 6*24*time.Hour || gap2 < 22*24*time.Hour {
+			t.Errorf("gaps between scheduled_at values = %v, %v, want roughly 6d and 23d (24h -> 7d -> 30d)", gap1, gap2)
+		}
+	})
+}
+
+func TestHandleRemediationVerifyResult_ContinuousValidationDisabled_NoRevalidationJobs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('cv-tr2', 'CV-TR2', 'windows')`)
+		mustExecAPI(t, pool, `
+			INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, verify_run_id, requested_by, reason, continuous_validation)
+			VALUES ('rr-cv-tr2', 'enable_windows_firewall', 'cv-tr2', 'windows-firewall-enabled', 1, 'verifying', 'run-cv-tr2', 'user-1', 'test', false)`)
+
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "windows-firewall-enabled")
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		req := httptest.NewRequest(http.MethodPost, "/x", nil)
+		h.handleRemediationVerifyResult(req, "rr-cv-tr2", true)
+
+		var count int
+		pool.QueryRow(context.Background(), `SELECT count(*) FROM jobs WHERE type='bas_revalidation' AND payload->>'requestId'='rr-cv-tr2'`).Scan(&count)
+		if count != 0 {
+			t.Errorf("bas_revalidation job count = %d, want 0 (continuous_validation is false)", count)
+		}
+	})
+}
+
+func TestHandleRemediationVerifyResult_ContinuousValidationEnabled_IneligibleCheck_NoRevalidationJobs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('cv-tr3', 'CV-TR3', 'windows')`)
+		mustExecAPI(t, pool, `
+			INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, verify_run_id, requested_by, reason, continuous_validation)
+			VALUES ('rr-cv-tr3', 'enable_bitlocker', 'cv-tr3', 'windows-bitlocker-enabled', 4, 'verifying', 'run-cv-tr3', 'user-1', 'test', true)`)
+
+		// engine has no scenario registered at all -- findStepByCheckID finds
+		// nothing, EligibleForBASVerification returns false.
+		eng := scenario.NewEngine(t.TempDir())
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		req := httptest.NewRequest(http.MethodPost, "/x", nil)
+		h.handleRemediationVerifyResult(req, "rr-cv-tr3", true)
+
+		var count int
+		pool.QueryRow(context.Background(), `SELECT count(*) FROM jobs WHERE type='bas_revalidation' AND payload->>'requestId'='rr-cv-tr3'`).Scan(&count)
+		if count != 0 {
+			t.Errorf("bas_revalidation job count = %d, want 0 (check has no mapped technique_id)", count)
+		}
 	})
 }
