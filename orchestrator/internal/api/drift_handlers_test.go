@@ -44,6 +44,44 @@ func TestGetControlDrift_ComputesFromPooledHistory(t *testing.T) {
 	})
 }
 
+func TestGetAgentDriftSummary_SortsByStabilityAscending(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('ds-a1', 'DS-A1', 'windows')`)
+		// windows-firewall-enabled: 100% stable (1 pass)
+		seedVerificationRun(t, pool, "ds-rr-1", "ds-a1", "windows-firewall-enabled", "pass", "2026-01-01T00:00:00Z")
+		// windows-defender-enabled: 50% stable (1 pass, 1 fail)
+		seedVerificationRun(t, pool, "ds-rr-2", "ds-a1", "windows-defender-enabled", "pass", "2026-01-01T00:00:00Z")
+		seedVerificationRun(t, pool, "ds-rr-3", "ds-a1", "windows-defender-enabled", "fail", "2026-01-02T00:00:00Z")
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "agentId", "ds-a1")
+		w := httptest.NewRecorder()
+		h.GetAgentDriftSummary(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			OverallStabilityPercent float64           `json:"overallStabilityPercent"`
+			Checks                  []checkDriftEntry `json:"checks"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(resp.Checks) != 2 {
+			t.Fatalf("got %d checks, want 2", len(resp.Checks))
+		}
+		if resp.Checks[0].CheckID != "windows-defender-enabled" {
+			t.Errorf("Checks[0].CheckID = %q, want windows-defender-enabled (least stable first)", resp.Checks[0].CheckID)
+		}
+		if resp.OverallStabilityPercent != 75 { // (100 + 50) / 2
+			t.Errorf("OverallStabilityPercent = %v, want 75", resp.OverallStabilityPercent)
+		}
+	})
+}
+
 func TestGetControlDrift_NoHistory_ReturnsZeroValueStats(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

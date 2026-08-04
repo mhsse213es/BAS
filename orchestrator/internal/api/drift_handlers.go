@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"sort"
 
 	"github.com/go-chi/chi/v5"
 
@@ -25,4 +26,37 @@ func (h *Handler) GetControlDrift(w http.ResponseWriter, r *http.Request) {
 	}
 	stats := driftanalytics.ComputeDriftStats(outcomes)
 	respond(w, map[string]any{"driftStats": stats})
+}
+
+// checkDriftEntry is one control's drift stats within a per-agent summary.
+type checkDriftEntry struct {
+	CheckID string
+	Stats   driftanalytics.DriftStats
+}
+
+// GET /api/agents/{agentId}/drift-summary
+// Every control this agent has any verification history for, sorted
+// least-stable first, plus an endpoint-level overall stability score
+// (mean StabilityPercent across its controls).
+func (h *Handler) GetAgentDriftSummary(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	grouped, err := h.verificationOutcomesByCheckForAgent(r.Context(), agentID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	entries := make([]checkDriftEntry, 0, len(grouped))
+	var stabilitySum float64
+	for checkID, outcomes := range grouped {
+		stats := driftanalytics.ComputeDriftStats(outcomes)
+		entries = append(entries, checkDriftEntry{CheckID: checkID, Stats: stats})
+		stabilitySum += stats.StabilityPercent
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Stats.StabilityPercent < entries[j].Stats.StabilityPercent })
+
+	overall := 0.0
+	if len(entries) > 0 {
+		overall = stabilitySum / float64(len(entries))
+	}
+	respond(w, map[string]any{"overallStabilityPercent": overall, "checks": entries})
 }
