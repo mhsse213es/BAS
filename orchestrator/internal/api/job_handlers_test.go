@@ -65,6 +65,52 @@ func TestCreateBatchRemediationJob_ContinuousValidation_ThreadsIntoPayload(t *te
 	})
 }
 
+func TestGetJob_IncludesProgress(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('gj-a1', 'GJ-A1')`)
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('gj-a2', 'GJ-A2')`)
+
+		jobsStore := jobs.NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := jobsStore.CreateBatch(context.Background(), "batch_remediation", payload, "user-1", []string{"gj-a1", "gj-a2"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		targets, err := jobsStore.ListTargets(context.Background(), job.ID)
+		if err != nil {
+			t.Fatalf("ListTargets: %v", err)
+		}
+		if err := jobsStore.MarkTargetTerminal(context.Background(), targets[0].ID, jobs.TargetStateCompleted, ""); err != nil {
+			t.Fatalf("MarkTargetTerminal: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "jobId", job.ID)
+		w := httptest.NewRecorder()
+		h.GetJob(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+
+		var resp struct {
+			Progress jobs.JobProgress `json:"progress"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if resp.Progress.Total != 2 || resp.Progress.Completed != 1 || resp.Progress.Pending != 1 {
+			t.Errorf("progress = %+v, want Total=2 Completed=1 Pending=1", resp.Progress)
+		}
+		if resp.Progress.PercentComplete != 50 {
+			t.Errorf("PercentComplete = %v, want 50", resp.Progress.PercentComplete)
+		}
+	})
+}
+
 func TestCreateBatchRemediationJob_CreatesJobWithOneTargetPerAgent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

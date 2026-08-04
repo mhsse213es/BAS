@@ -104,7 +104,12 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	respond(w, map[string]any{"job": job, "targets": targets})
+	progress, err := h.jobsStore.ComputeProgress(r.Context(), jobID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, map[string]any{"job": job, "targets": targets, "progress": progress})
 }
 
 // POST /api/jobs/{jobId}/cancel
