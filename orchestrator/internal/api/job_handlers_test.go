@@ -18,6 +18,53 @@ import (
 	"github.com/audspect/bas/internal/ws"
 )
 
+func TestCreateBatchRemediationJob_ContinuousValidation_ThreadsIntoPayload(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('jh-cv1', 'JH-CV1', 'windows')`)
+		cat, err := remediation.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithRemediationCatalog(cat).
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		body, _ := json.Marshal(map[string]any{
+			"remediationId":        "enable_windows_firewall",
+			"reason":               "test",
+			"agentIds":             []string{"jh-cv1"},
+			"continuousValidation": true,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "admin-1", Role: auth.RoleAdmin}))
+		w := httptest.NewRecorder()
+		h.CreateBatchRemediationJob(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			JobID string `json:"jobId"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+
+		var raw []byte
+		if err := pool.QueryRow(context.Background(), `SELECT payload FROM jobs WHERE id=$1`, resp.JobID).Scan(&raw); err != nil {
+			t.Fatalf("query job: %v", err)
+		}
+		var payload batchRemediationPayload
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			t.Fatalf("unmarshal payload: %v", err)
+		}
+		if !payload.ContinuousValidation {
+			t.Error("payload.ContinuousValidation = false, want true")
+		}
+	})
+}
+
 func TestCreateBatchRemediationJob_CreatesJobWithOneTargetPerAgent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

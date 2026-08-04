@@ -11,8 +11,9 @@ import (
 
 // batchRemediationPayload is the Job.Payload shape for Type="batch_remediation".
 type batchRemediationPayload struct {
-	RemediationID string `json:"remediationId"`
-	Reason        string `json:"reason"`
+	RemediationID        string `json:"remediationId"`
+	Reason               string `json:"reason"`
+	ContinuousValidation bool   `json:"continuousValidation"`
 }
 
 // dispatchBatchRemediationTarget is injected into jobs.Dispatcher via
@@ -43,9 +44,9 @@ func (h *Handler) dispatchBatchRemediationTarget(ctx context.Context, job jobs.J
 	allResults := h.aggregateAgentResults(ctx, target.AgentID)
 	if latestCheckIsPassing(allResults, entry.CheckID) {
 		if _, err := h.db.Exec(ctx,
-			`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, rollback_available, completed_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
-			requestID, entry.ID, target.AgentID, entry.CheckID, int(entry.Tier), remediation.StatusCompleted, job.CreatedBy, payload.Reason, entry.SupportsRollback,
+			`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, rollback_available, continuous_validation, completed_at)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())`,
+			requestID, entry.ID, target.AgentID, entry.CheckID, int(entry.Tier), remediation.StatusCompleted, job.CreatedBy, payload.Reason, entry.SupportsRollback, payload.ContinuousValidation,
 		); err != nil {
 			return "", err
 		}
@@ -53,9 +54,9 @@ func (h *Handler) dispatchBatchRemediationTarget(ctx context.Context, job jobs.J
 	}
 
 	if _, err := h.db.Exec(ctx,
-		`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, rollback_available)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		requestID, entry.ID, target.AgentID, entry.CheckID, int(entry.Tier), remediation.StatusRequested, job.CreatedBy, payload.Reason, entry.SupportsRollback,
+		`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, rollback_available, continuous_validation)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		requestID, entry.ID, target.AgentID, entry.CheckID, int(entry.Tier), remediation.StatusRequested, job.CreatedBy, payload.Reason, entry.SupportsRollback, payload.ContinuousValidation,
 	); err != nil {
 		return "", err
 	}

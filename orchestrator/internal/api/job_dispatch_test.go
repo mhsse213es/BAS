@@ -88,6 +88,41 @@ func TestDispatchBatchRemediationTarget_AlreadyCompliant_MarksCompletedWithoutDi
 	})
 }
 
+func TestDispatchBatchRemediationTarget_ContinuousValidation_PersistsFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('jb-cv1', 'JB-CV1', 'windows')`)
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "windows-firewall-enabled")
+		hub := ws.NewHub()
+		startFakeAgent(t, hub, "jb-cv1")
+
+		cat, err := remediation.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		h := New(pool, hub, eng, "").WithRemediationCatalog(cat)
+
+		payload, _ := json.Marshal(batchRemediationPayload{RemediationID: "enable_windows_firewall", Reason: "test", ContinuousValidation: true})
+		job := jobs.Job{ID: "job-cv1", Type: "batch_remediation", Payload: payload, CreatedBy: "user-1"}
+		target := jobs.JobTarget{ID: "target-cv1", JobID: "job-cv1", AgentID: "jb-cv1"}
+
+		refID, err := h.dispatchBatchRemediationTarget(context.Background(), job, target)
+		if err != nil {
+			t.Fatalf("dispatchBatchRemediationTarget: %v", err)
+		}
+		var flag bool
+		if err := pool.QueryRow(context.Background(), `SELECT continuous_validation FROM remediation_requests WHERE id=$1`, refID).Scan(&flag); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if !flag {
+			t.Error("continuous_validation = false, want true")
+		}
+	})
+}
+
 func TestDispatchBatchRemediationTarget_UnknownRemediationID_Errors(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

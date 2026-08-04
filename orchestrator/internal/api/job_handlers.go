@@ -18,10 +18,11 @@ import (
 // action than dispatching it to one, so it gets no separate, weaker policy.
 func (h *Handler) CreateBatchRemediationJob(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RemediationID string   `json:"remediationId"`
-		Reason        string   `json:"reason"`
-		AgentIDs      []string `json:"agentIds"`
-		ScheduledAt   string   `json:"scheduledAt"`
+		RemediationID        string   `json:"remediationId"`
+		Reason               string   `json:"reason"`
+		AgentIDs             []string `json:"agentIds"`
+		ScheduledAt          string   `json:"scheduledAt"`
+		ContinuousValidation bool     `json:"continuousValidation"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil || req.RemediationID == "" {
 		jsonError(w, "remediationId is required", http.StatusBadRequest)
@@ -71,7 +72,7 @@ func (h *Handler) CreateBatchRemediationJob(w http.ResponseWriter, r *http.Reque
 	if claims != nil {
 		actorID = claims.UserID
 	}
-	payload, err := json.Marshal(map[string]string{"remediationId": entry.ID, "reason": req.Reason})
+	payload, err := json.Marshal(batchRemediationPayload{RemediationID: entry.ID, Reason: req.Reason, ContinuousValidation: req.ContinuousValidation})
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
