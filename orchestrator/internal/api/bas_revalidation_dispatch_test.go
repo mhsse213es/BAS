@@ -104,9 +104,9 @@ func TestBasRevalidationTargetStatus_MapsCheckResultToTargetState(t *testing.T) 
 			wantTerminal bool
 		}{
 			{"pass", jobs.TargetStateCompleted, true},
+			{"blocked", jobs.TargetStateCompleted, true},
 			{"fail", jobs.TargetStateFailed, true},
 			{"error", jobs.TargetStateFailed, true},
-			{"blocked", jobs.TargetStateFailed, true},
 			{"skipped", jobs.TargetStateFailed, true},
 			{"requested", jobs.TargetStateDispatched, false},
 			{"dispatched", jobs.TargetStateDispatched, false},

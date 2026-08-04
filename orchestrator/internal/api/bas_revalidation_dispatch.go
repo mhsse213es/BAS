@@ -62,18 +62,21 @@ func (h *Handler) dispatchBasRevalidationTarget(ctx context.Context, job jobs.Jo
 
 // basRevalidationTargetStatus polls the technique_verification_runs row
 // (refID = its own id, the value dispatchBasRevalidationTarget returned as
-// refID -- not run_id). Only models.ResultPass counts as job-target
-// success; fail/error/blocked/skipped are all terminal-but-failed, reusing
-// Sub-project 5's existing 5-value taxonomy without adding a 6th.
+// refID -- not run_id). models.ResultBlocked counts as job-target success
+// alongside models.ResultPass -- it means the security control prevented
+// the technique from running, matching the "pass, blocked" success bucket
+// used consistently everywhere else in this codebase (models/score.go,
+// campaign, compliance, detecteffectiveness, reporting). error/skipped are
+// the only terminal-but-failed outcomes.
 func (h *Handler) basRevalidationTargetStatus(ctx context.Context, jobType, refID string) (state string, errText string, terminal bool) {
 	var status, reason string
 	if err := h.db.QueryRow(ctx, `SELECT status, reason FROM technique_verification_runs WHERE id=$1`, refID).Scan(&status, &reason); err != nil {
 		return jobs.TargetStateFailed, "technique verification run not found: " + err.Error(), true
 	}
 	switch status {
-	case string(models.ResultPass):
+	case string(models.ResultPass), string(models.ResultBlocked):
 		return jobs.TargetStateCompleted, "", true
-	case string(models.ResultFail), string(models.ResultError), string(models.ResultBlocked), string(models.ResultSkipped):
+	case string(models.ResultFail), string(models.ResultError), string(models.ResultSkipped):
 		return jobs.TargetStateFailed, reason, true
 	default: // "requested", "dispatched"
 		return jobs.TargetStateDispatched, "", false
