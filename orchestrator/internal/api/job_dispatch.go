@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/remediation"
@@ -98,12 +99,38 @@ func (h *Handler) batchRemediationTargetStatus(ctx context.Context, jobType, ref
 	}
 }
 
-// WithJobsDispatcher wires the Fleet Job Engine's one V1 consumer (batch
-// remediation) into dispatcher, and stores store for the HTTP handlers in
+// dispatchJobTarget routes to the correct dispatch function for job.Type.
+// internal/jobs.Dispatcher knows nothing about what any job type actually
+// does -- this switch is the one place that knowledge lives.
+func (h *Handler) dispatchJobTarget(ctx context.Context, job jobs.Job, target jobs.JobTarget) (refID string, err error) {
+	switch job.Type {
+	case "batch_remediation":
+		return h.dispatchBatchRemediationTarget(ctx, job, target)
+	case "bas_revalidation":
+		return h.dispatchBasRevalidationTarget(ctx, job, target)
+	default:
+		return "", fmt.Errorf("unknown job type %q", job.Type)
+	}
+}
+
+// statusForJobTarget mirrors dispatchJobTarget's routing for status polling.
+func (h *Handler) statusForJobTarget(ctx context.Context, jobType, refID string) (state string, errText string, terminal bool) {
+	switch jobType {
+	case "batch_remediation":
+		return h.batchRemediationTargetStatus(ctx, jobType, refID)
+	case "bas_revalidation":
+		return h.basRevalidationTargetStatus(ctx, jobType, refID)
+	default:
+		return jobs.TargetStateFailed, "unknown job type", true
+	}
+}
+
+// WithJobsDispatcher wires the Fleet Job Engine's dispatch/status routing
+// into dispatcher, and stores store for the HTTP handlers in
 // job_handlers.go. Mirrors WithVexSweep's exact shape.
 func (h *Handler) WithJobsDispatcher(store *jobs.Store, dispatcher *jobs.Dispatcher) *Handler {
 	h.jobsStore = store
-	dispatcher.SetDispatch(h.dispatchBatchRemediationTarget)
-	dispatcher.SetStatus(h.batchRemediationTargetStatus)
+	dispatcher.SetDispatch(h.dispatchJobTarget)
+	dispatcher.SetStatus(h.statusForJobTarget)
 	return h
 }
