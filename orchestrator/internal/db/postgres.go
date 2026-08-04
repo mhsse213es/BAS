@@ -1225,6 +1225,7 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_remediation_requests_agent_id ON remediation_requests (agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_remediation_requests_fix_run_id ON remediation_requests (fix_run_id) WHERE fix_run_id != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_remediation_requests_verify_run_id ON remediation_requests (verify_run_id) WHERE verify_run_id != ''`,
+		`ALTER TABLE remediation_requests ADD COLUMN IF NOT EXISTS continuous_validation boolean NOT NULL DEFAULT false`,
 
 		// technique_verification_runs: a second, independent verification layer
 		// on top of remediation_requests -- proves the control stops the real
