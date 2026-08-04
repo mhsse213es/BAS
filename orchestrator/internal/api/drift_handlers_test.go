@@ -82,6 +82,49 @@ func TestGetAgentDriftSummary_SortsByStabilityAscending(t *testing.T) {
 	})
 }
 
+func TestGetFleetDriftReport_BucketsControlsCorrectly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('fr-a1', 'FR-A1', 'windows')`)
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('fr-a2', 'FR-A2', 'windows')`)
+
+		// fr-a1/windows-firewall-enabled: drifts (PASS, FAIL) -- currently failing, drifted "now"
+		seedVerificationRun(t, pool, "fr-rr-1", "fr-a1", "windows-firewall-enabled", "pass", "2026-01-01T00:00:00Z")
+		seedVerificationRun(t, pool, "fr-rr-2", "fr-a1", "windows-firewall-enabled", "fail", "2026-01-02T00:00:00Z")
+
+		// fr-a2/windows-defender-enabled: never drifts (PASS, PASS)
+		seedVerificationRun(t, pool, "fr-rr-3", "fr-a2", "windows-defender-enabled", "pass", "2026-01-01T00:00:00Z")
+		seedVerificationRun(t, pool, "fr-rr-4", "fr-a2", "windows-defender-enabled", "pass", "2026-01-02T00:00:00Z")
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		req := httptest.NewRequest(http.MethodGet, "/x", nil)
+		w := httptest.NewRecorder()
+		h.GetFleetDriftReport(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			TopDrifting  []controlDriftEntry  `json:"topDrifting"`
+			NeverDrifted []controlDriftEntry  `json:"neverDrifted"`
+			MonthlyTrend []monthlyDriftBucket `json:"monthlyTrend"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(resp.TopDrifting) != 1 || resp.TopDrifting[0].CheckID != "windows-firewall-enabled" {
+			t.Errorf("TopDrifting = %+v, want 1 entry for windows-firewall-enabled", resp.TopDrifting)
+		}
+		if len(resp.NeverDrifted) != 1 || resp.NeverDrifted[0].CheckID != "windows-defender-enabled" {
+			t.Errorf("NeverDrifted = %+v, want 1 entry for windows-defender-enabled", resp.NeverDrifted)
+		}
+		if len(resp.MonthlyTrend) != 1 || resp.MonthlyTrend[0].Month != "2026-01" || resp.MonthlyTrend[0].DriftCount != 1 {
+			t.Errorf("MonthlyTrend = %+v, want 1 bucket for 2026-01 with count 1", resp.MonthlyTrend)
+		}
+	})
+}
+
 func TestGetControlDrift_NoHistory_ReturnsZeroValueStats(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

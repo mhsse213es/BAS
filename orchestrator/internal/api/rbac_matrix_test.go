@@ -258,6 +258,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/remediation-requests/{requestId}/revalidations", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/agents/{agentId}/checks/{checkId}/drift", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/agents/{agentId}/drift-summary", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodGet, "/api/drift-reports/summary", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodPost, "/api/remediation-requests/{requestId}/cancel", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodPost, "/api/remediation-requests/{requestId}/rollback", tierPermission, auth.CanApproveRemediation},
 	{http.MethodPost, "/api/remediation-requests/{requestId}/verify-technique", tierPermission, auth.CanRunScenario},

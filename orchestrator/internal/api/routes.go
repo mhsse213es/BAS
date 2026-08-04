@@ -489,6 +489,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/remediation-requests/{requestId}/revalidations", h.GetRemediationRevalidations)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/agents/{agentId}/checks/{checkId}/drift", h.GetControlDrift)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/agents/{agentId}/drift-summary", h.GetAgentDriftSummary)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/drift-reports/summary", h.GetFleetDriftReport)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/remediation-requests/{requestId}/cancel", h.CancelRemediation)
 		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Post("/api/remediation-requests/{requestId}/rollback", h.RollbackRemediation)
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/remediation-requests/{requestId}/verify-technique", h.VerifyTechnique)
