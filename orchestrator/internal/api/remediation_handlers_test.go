@@ -61,6 +61,36 @@ func TestExecuteRemediation_Tier1_DispatchesFix(t *testing.T) {
 	})
 }
 
+func TestExecuteRemediation_ContinuousValidation_PersistsFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname, os_version) VALUES ('cv-h1', 'CV-H1', 'windows')`)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		cat, err := remediation.NewCatalog()
+		if err != nil {
+			t.Fatalf("NewCatalog: %v", err)
+		}
+		h.remediationCatalog = cat
+
+		body := strings.NewReader(`{"remediationId":"enable_windows_firewall","reason":"test","continuousValidation":true}`)
+		req := withURLParam(httptest.NewRequest(http.MethodPost, "/x", body), "agentId", "cv-h1")
+		w := httptest.NewRecorder()
+		h.ExecuteRemediation(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var flag bool
+		if err := pool.QueryRow(context.Background(), `SELECT continuous_validation FROM remediation_requests WHERE agent_id='cv-h1'`).Scan(&flag); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if !flag {
+			t.Error("continuous_validation = false, want true")
+		}
+	})
+}
+
 func TestExecuteRemediation_UnknownRemediationID_404(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

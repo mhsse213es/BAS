@@ -14,8 +14,9 @@ import (
 func (h *Handler) ExecuteRemediation(w http.ResponseWriter, r *http.Request) {
 	agentID := chi.URLParam(r, "agentId")
 	var req struct {
-		RemediationID string `json:"remediationId"`
-		Reason        string `json:"reason"`
+		RemediationID        string `json:"remediationId"`
+		Reason               string `json:"reason"`
+		ContinuousValidation bool   `json:"continuousValidation"`
 	}
 	if json.NewDecoder(r.Body).Decode(&req) != nil || req.RemediationID == "" {
 		jsonError(w, "remediationId is required", http.StatusBadRequest)
@@ -73,9 +74,9 @@ func (h *Handler) ExecuteRemediation(w http.ResponseWriter, r *http.Request) {
 	}
 	requestID := newID()
 	if _, err := h.db.Exec(r.Context(),
-		`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, approved_by, reason, rollback_available)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-		requestID, entry.ID, agentID, entry.CheckID, int(entry.Tier), remediation.StatusRequested, actorID, approvedBy, req.Reason, entry.SupportsRollback,
+		`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, approved_by, reason, rollback_available, continuous_validation)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		requestID, entry.ID, agentID, entry.CheckID, int(entry.Tier), remediation.StatusRequested, actorID, approvedBy, req.Reason, entry.SupportsRollback, req.ContinuousValidation,
 	); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
