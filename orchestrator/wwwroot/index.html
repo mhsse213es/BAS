@@ -1293,6 +1293,12 @@ body.theme-slate {
           </svg>
           Findings
         </div>
+        <div class="nav-item" data-tab="iocs" onclick="showTab('iocs')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.6"/><path d="M8 1v2.2M8 12.8V15M1 8h2.2M12.8 8H15"/>
+          </svg>
+          IOC Registry
+        </div>
         <div class="nav-item" data-tab="remediation" onclick="showTab('remediation')">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M6.5 2.5l3 3-4.5 4.5-3-3z"/><path d="M9 6l3.5-3.5a2 2 0 0 0-2.8-2.8L6 3"/><path d="M4.5 11.5l-2.5 2.5"/>
@@ -2972,6 +2978,99 @@ body.theme-slate {
         </div>
       </div>
 
+      <!-- IOC Registry -->
+      <div id="tab-iocs" style="display:none">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div>
+            <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">IOC Registry</h1>
+            <div style="font-size:0.8rem;color:var(--muted)">Indicators observed across every run, deduplicated and cross-referenced against scenarios, agents, and ATT&amp;CK techniques.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0">
+            <button class="btn btn-outline btn-sm" id="ioc-import-btn" style="display:none" onclick="openIOCImportModal()">Import</button>
+            <button class="btn btn-outline btn-sm" onclick="loadIOCRegistry()">Refresh</button>
+          </div>
+        </div>
+
+        <div class="kpi-row" id="ioc-analytics-tiles" style="margin-bottom:1rem"></div>
+
+        <div id="ioc-toolbar" style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.9rem;flex-wrap:wrap">
+          <select id="ioc-filter-type" onchange="loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+            <option value="">All types</option>
+            <option value="file_hash">File hash</option>
+            <option value="domain">Domain</option>
+            <option value="url">URL</option>
+            <option value="ip">IP</option>
+            <option value="registry_key">Registry key</option>
+            <option value="mutex">Mutex</option>
+            <option value="service">Service</option>
+            <option value="process">Process</option>
+            <option value="command_line">Command line</option>
+            <option value="ja3">JA3</option>
+            <option value="user_agent">User agent</option>
+            <option value="email">Email</option>
+            <option value="dns_record">DNS record</option>
+            <option value="certificate">Certificate</option>
+          </select>
+          <select id="ioc-filter-source" onchange="loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+            <option value="">All sources</option>
+            <option value="detection_alert">Detection alert</option>
+            <option value="scenario">Scenario</option>
+            <option value="variant">Variant</option>
+            <option value="manual">Manual</option>
+          </select>
+          <select id="ioc-filter-origin" onchange="loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+            <option value="">All origins</option>
+            <option value="built-in">Built-in</option>
+            <option value="generated">Generated</option>
+            <option value="openaev">OpenAEV</option>
+            <option value="misp">MISP</option>
+            <option value="opencti">OpenCTI</option>
+            <option value="manual">Manual</option>
+            <option value="threat-feed">Threat feed</option>
+            <option value="customer">Customer</option>
+          </select>
+          <select id="ioc-filter-status" onchange="loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem">
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="generated">Generated</option>
+            <option value="assigned">Assigned</option>
+            <option value="executed">Executed</option>
+            <option value="observed">Observed</option>
+            <option value="detected">Detected</option>
+            <option value="missed">Missed</option>
+            <option value="expired">Expired</option>
+            <option value="archived">Archived</option>
+          </select>
+          <input type="text" id="ioc-filter-search" placeholder="Search value…" onkeydown="if(event.key==='Enter')loadIOCRegistry()" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:200px">
+          <button class="btn btn-outline btn-sm" onclick="loadIOCRegistry()">Search</button>
+          <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="ioc-filter-suppressed" onchange="loadIOCRegistry()"> Show suppressed
+          </label>
+        </div>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Type</th><th>Value</th><th>Source</th><th>Origin</th><th>Status</th><th>Sightings</th><th>First Seen</th><th>Last Seen</th><th></th></tr></thead>
+            <tbody id="ioc-registry-body"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- IOC Import Modal -->
+      <div id="ioc-import-overlay" class="overlay">
+        <div class="modal" style="width:520px">
+          <h3>Import Indicators</h3>
+          <p class="sub2">One per line: <code>type,value</code> — e.g. <code>domain,evil.example.com</code>. Written as customer-provided, draft status.</p>
+          <textarea id="ioc-import-text" rows="8" placeholder="domain,evil.example.com&#10;ip,203.0.113.9" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.8rem;font-family:var(--font-mono);resize:vertical"></textarea>
+          <div id="ioc-import-err" style="display:none;margin-top:0.5rem;font-size:0.75rem;color:var(--danger)"></div>
+          <div class="modal-actions">
+            <button class="btn btn-outline btn-sm" onclick="closeIOCImportModal()">Cancel</button>
+            <span style="flex:1"></span>
+            <button id="ioc-import-submit-btn" class="btn btn-primary btn-sm" onclick="submitIOCImport()">Import</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Remediation -->
       <div id="tab-remediation" style="display:none">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -4132,7 +4231,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -4264,7 +4363,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -4369,6 +4468,7 @@ function showTab(name) {
   if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
   if (name === 'threat-priority') { showThreatPriorityList(); loadThreatPriorityActors(); }
   if (name === 'findings') loadFindings();
+  if (name === 'iocs') loadIOCRegistry();
   if (name === 'remediation') loadRemediations();
   if (name === 'reports') loadReports();
   if (name === 'verification') loadVerificationTab();
@@ -11685,6 +11785,207 @@ function renderRunIOCList() {
 }
 
 function closeResults() { document.getElementById('results-overlay').classList.remove('open', 'run-mode'); }
+
+// ── IOC Registry ─────────────────────────────────────────────────────────────
+// Cross-run indicator search (GET /api/iocs), distinct from the per-run
+// Indicators (IOCs) tab in the run drawer: this reads the deduplicated
+// iocs/ioc_sightings tables (populated today from DetectionAlert.CommandLine/
+// ProcessName via SubmitRunDetections), not the per-run run_iocs extraction.
+// One IOC row here can span many runs/agents/scenarios via its sightings.
+var _iocRegistryRows = [];
+
+function loadIOCRegistry() {
+  var importBtn = document.getElementById('ioc-import-btn');
+  if (importBtn) importBtn.style.display = ROLE === 'admin' ? '' : 'none';
+
+  apicall('/api/analytics/iocs?limit=5').then(renderIOCAnalyticsTiles).catch(function() {
+    var el = document.getElementById('ioc-analytics-tiles');
+    if (el) el.innerHTML = '';
+  });
+
+  var params = [];
+  var type = document.getElementById('ioc-filter-type').value;
+  var source = document.getElementById('ioc-filter-source').value;
+  var origin = document.getElementById('ioc-filter-origin').value;
+  var status = document.getElementById('ioc-filter-status').value;
+  var search = document.getElementById('ioc-filter-search').value.trim();
+  var showSuppressed = document.getElementById('ioc-filter-suppressed').checked;
+  if (type) params.push('type=' + encodeURIComponent(type));
+  if (source) params.push('source=' + encodeURIComponent(source));
+  if (origin) params.push('origin=' + encodeURIComponent(origin));
+  if (status) params.push('status=' + encodeURIComponent(status));
+  if (search) params.push('value=' + encodeURIComponent(search));
+  params.push('limit=200');
+
+  var tbody = document.getElementById('ioc-registry-body');
+  tbody.innerHTML = '<tr><td colspan="9" class="empty">Loading…</td></tr>';
+  apicall('/api/iocs?' + params.join('&')).then(function(rows) {
+    rows = rows || [];
+    // suppressed filtering happens client-side -- GetIOCs has no suppressed
+    // param, and hiding suppressed-by-default (unless the box is checked)
+    // is a display preference, not a query the backend needs to know about.
+    _iocRegistryRows = showSuppressed ? rows : rows.filter(function(r) { return !r.suppressed; });
+    renderIOCRegistryTable();
+  }).catch(function(e) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>';
+  });
+}
+
+var IOC_TYPE_LABEL_REGISTRY = {
+  file_hash: 'File hash', domain: 'Domain', url: 'URL', ip: 'IP', registry_key: 'Registry key',
+  mutex: 'Mutex', service: 'Service', process: 'Process', command_line: 'Command line',
+  ja3: 'JA3', user_agent: 'User agent', email: 'Email', dns_record: 'DNS record', certificate: 'Certificate'
+};
+
+function renderIOCAnalyticsTiles(result) {
+  var el = document.getElementById('ioc-analytics-tiles');
+  if (!el) return;
+  result = result || {};
+  function tile(label, entries, valueSuffix) {
+    var top = (entries || [])[0];
+    var body = top
+      ? '<div class="tiny" style="font-family:var(--font-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px" title="' + x(top.value) + '">' + x(top.value) + '</div><div class="tiny muted">' + top.sightingCount + valueSuffix + '</div>'
+      : '<div class="tiny muted">No data yet</div>';
+    return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + label + '</div><div style="margin-top:0.3rem">' + body + '</div></div></div></div>';
+  }
+  el.innerHTML =
+    tile('Most Detected', result.mostDetected, ' detections') +
+    tile('Highest Bypass Rate', result.highestBypassRate, ' bypasses') +
+    tile('Frequently Reused', result.frequentlyReused, ' sightings') +
+    tile('Longest Surviving', result.longestSurviving, ' sightings');
+}
+
+function renderIOCRegistryTable() {
+  var tbody = document.getElementById('ioc-registry-body');
+  if (!_iocRegistryRows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">No indicators match this filter.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _iocRegistryRows.map(function(row, idx) {
+    var suppressedBadge = row.suppressed ? ' <span class="sbadge" style="background:rgba(154,169,188,.12);color:var(--muted)" title="' + x(row.suppressionReason || '') + '">suppressed</span>' : '';
+    return '<tr style="cursor:pointer" onclick="openIOCDetail(' + idx + ')">' +
+      '<td><span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:1px 7px">' + x(IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + '</span></td>' +
+      '<td><code style="font-size:0.8rem">' + x(row.value) + '</code>' + suppressedBadge + '</td>' +
+      '<td class="tiny muted">' + x(row.source || '—') + '</td>' +
+      '<td class="tiny muted">' + x(row.origin || '—') + '</td>' +
+      '<td class="tiny">' + x(row.status || '—') + '</td>' +
+      '<td class="tiny" style="font-family:var(--font-mono)">' + (row.sightingCount || 0) + '</td>' +
+      '<td class="tiny muted">' + (row.firstSeen ? ago(row.firstSeen) : '—') + '</td>' +
+      '<td class="tiny muted">' + (row.lastSeen ? ago(row.lastSeen) : '—') + '</td>' +
+      '<td onclick="event.stopPropagation()">' +
+        (ROLE === 'admin' ?
+          '<button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:0.7rem" onclick="toggleIOCSuppressed(' + idx + ')">' + (row.suppressed ? 'Unsuppress' : 'Suppress') + '</button>'
+          : '') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function toggleIOCSuppressed(idx) {
+  var row = _iocRegistryRows[idx];
+  if (!row) return;
+  var next = !row.suppressed;
+  var reason = '';
+  if (next) {
+    reason = prompt('Reason for suppressing this indicator (e.g. known lab tool):') || '';
+    if (!reason) return; // cancelled or empty -- don't suppress without a reason
+  }
+  apicall('/api/iocs/' + encodeURIComponent(row.id) + '/suppress', {
+    method: 'POST',
+    body: JSON.stringify({ suppressed: next, reason: reason })
+  }).then(function() {
+    showToast(next ? 'Indicator suppressed' : 'Indicator unsuppressed', 'ok');
+    loadIOCRegistry();
+  }).catch(function(e) { showToast(e.message || 'Failed to update', 'err'); });
+}
+
+// openIOCDetail reuses the shared results-overlay drawer (the same one
+// run-results/technique/finding detail views use) rather than a new
+// component -- populates from the already-loaded row (no re-fetch needed
+// for the IOC's own fields) plus a fetch of its 1-hop relationship
+// neighborhood (scenarios/runs/agents/techniques it was observed in).
+function openIOCDetail(idx) {
+  var row = _iocRegistryRows[idx];
+  if (!row) return;
+  document.getElementById('results-overlay').classList.remove('run-mode');
+  document.getElementById('results-title').textContent = (IOC_TYPE_LABEL_REGISTRY[row.type] || row.type) + ': ' + row.value;
+  document.getElementById('results-export').innerHTML = '';
+
+  var rowHtml = function(k, v) {
+    return v ? '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span style="flex:1">' + v + '</span></div>' : '';
+  };
+  var body =
+    rowHtml('Source', x(row.source || '—')) +
+    rowHtml('Origin', x(row.origin || '—')) +
+    rowHtml('Status', x(row.status || '—')) +
+    rowHtml('Sightings', String(row.sightingCount || 0)) +
+    rowHtml('First seen', row.firstSeen ? new Date(row.firstSeen).toLocaleString() : '—') +
+    rowHtml('Last seen', row.lastSeen ? new Date(row.lastSeen).toLocaleString() : '—') +
+    (row.suppressed ? rowHtml('Suppressed', x(row.suppressionReason || 'yes')) : '') +
+    '<div id="ioc-detail-relationships" style="margin-top:1rem"><div class="tiny muted">Loading relationships…</div></div>';
+  document.getElementById('results-body').innerHTML = body;
+  document.getElementById('results-overlay').classList.add('open');
+
+  apicall('/api/knowledge-graph/ioc/' + encodeURIComponent(row.id)).then(function(nbh) {
+    var el = document.getElementById('ioc-detail-relationships');
+    if (!el) return;
+    var nodes = (nbh && nbh.nodes) || [];
+    var byType = { scenario: [], run: [], agent: [], technique: [] };
+    nodes.forEach(function(n) {
+      if (n.type !== 'ioc' && byType[n.type]) byType[n.type].push(n.label);
+    });
+    var groupLabels = { scenario: 'Seen in scenarios', run: 'Seen in runs', agent: 'Seen on agents', technique: 'Seen with techniques' };
+    var sections = Object.keys(groupLabels).map(function(t) {
+      if (!byType[t].length) return '';
+      return '<div style="margin-top:0.7rem"><div class="kpi-label" style="margin-bottom:0.3rem">' + groupLabels[t] + ' (' + byType[t].length + ')</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:5px">' +
+        byType[t].map(function(l) { return '<span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:9px;padding:2px 8px">' + x(l) + '</span>'; }).join('') +
+        '</div></div>';
+    }).join('');
+    el.innerHTML = sections || '<div class="tiny muted">No relationships recorded.</div>';
+  }).catch(function() {
+    var el = document.getElementById('ioc-detail-relationships');
+    if (el) el.innerHTML = '<div class="tiny muted">Relationships unavailable.</div>';
+  });
+}
+
+function openIOCImportModal() {
+  document.getElementById('ioc-import-text').value = '';
+  document.getElementById('ioc-import-err').style.display = 'none';
+  document.getElementById('ioc-import-overlay').classList.add('open');
+}
+function closeIOCImportModal() { document.getElementById('ioc-import-overlay').classList.remove('open'); }
+
+function submitIOCImport() {
+  var raw = document.getElementById('ioc-import-text').value;
+  var errEl = document.getElementById('ioc-import-err');
+  errEl.style.display = 'none';
+
+  var lines = raw.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
+  if (!lines.length) { errEl.textContent = 'Enter at least one type,value line.'; errEl.style.display = ''; return; }
+
+  var entries = [];
+  for (var i = 0; i < lines.length; i++) {
+    var parts = lines[i].split(',');
+    if (parts.length < 2 || !parts[0].trim() || !parts.slice(1).join(',').trim()) {
+      errEl.textContent = 'Line ' + (i + 1) + ' is not "type,value": ' + lines[i];
+      errEl.style.display = '';
+      return;
+    }
+    entries.push({ type: parts[0].trim(), value: parts.slice(1).join(',').trim() });
+  }
+
+  var btn = document.getElementById('ioc-import-submit-btn');
+  btn.disabled = true;
+  apicall('/api/iocs/import', { method: 'POST', body: JSON.stringify({ entries: entries }) })
+    .then(function(res) {
+      btn.disabled = false;
+      showToast((res.written || 0) + ' of ' + entries.length + ' indicator(s) imported', 'ok');
+      closeIOCImportModal();
+      loadIOCRegistry();
+    })
+    .catch(function(e) { btn.disabled = false; errEl.textContent = e.message || 'Import failed'; errEl.style.display = ''; });
+}
 
 // ── Live Run Panel ────────────────────────────────────────────────────────────
 // Streams run-event frames over the shared browser WS and renders live progress
