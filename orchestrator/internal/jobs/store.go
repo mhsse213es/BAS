@@ -168,6 +168,43 @@ func (s *Store) MarkTargetPending(ctx context.Context, targetID string) error {
 	return err
 }
 
+// SetTargetOwner assigns or clears a JobTarget's owner. ownerID == ""
+// clears ownership and nulls assigned_at back out. Returns pgx.ErrNoRows
+// if targetID doesn't exist.
+func (s *Store) SetTargetOwner(ctx context.Context, targetID, ownerID string) (JobTarget, error) {
+	var t JobTarget
+	err := s.pool.QueryRow(ctx,
+		`UPDATE job_targets SET owner_id=$1, assigned_at = CASE WHEN $1 = '' THEN NULL ELSE NOW() END
+		 WHERE id=$2
+		 RETURNING `+jobTargetColumns,
+		ownerID, targetID,
+	).Scan(&t.ID, &t.JobID, &t.AgentID, &t.State, &t.RefID, &t.Error, &t.RetryCount, &t.MaxRetries,
+		&t.CreatedAt, &t.StartedAt, &t.CompletedAt, &t.OwnerID, &t.AssignedAt)
+	return t, err
+}
+
+// ListTargetsByOwner returns every JobTarget currently assigned to
+// ownerID, across every job, most-recently-assigned first. state, if
+// non-empty, narrows to that TargetState value -- the first query in this
+// codebase that lists JobTarget rows across every job rather than one.
+func (s *Store) ListTargetsByOwner(ctx context.Context, ownerID, state string) ([]JobTarget, error) {
+	if state == "" {
+		rows, err := s.pool.Query(ctx,
+			`SELECT `+jobTargetColumns+` FROM job_targets WHERE owner_id=$1 ORDER BY assigned_at DESC`, ownerID)
+		if err != nil {
+			return nil, err
+		}
+		return scanJobTargets(rows)
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+jobTargetColumns+` FROM job_targets WHERE owner_id=$1 AND state=$2 ORDER BY assigned_at DESC`,
+		ownerID, state)
+	if err != nil {
+		return nil, err
+	}
+	return scanJobTargets(rows)
+}
+
 // SetJobState persists a Job's aggregate state. StartedAt is stamped the
 // first time state moves off "requested" (COALESCE keeps any existing
 // value); CompletedAt is stamped whenever state lands in a terminal value.

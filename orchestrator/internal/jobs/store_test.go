@@ -3,11 +3,13 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/testutil"
@@ -396,6 +398,135 @@ func TestJobTarget_OwnershipColumnsScanCorrectly(t *testing.T) {
 		}
 		if got[0].OwnerID != "user-42" || got[0].AssignedAt == nil {
 			t.Fatalf("got = %+v, want OwnerID=user-42 AssignedAt set", got[0])
+		}
+	})
+}
+
+func TestSetTargetOwner_AssignsThenClears(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"agent-so-1"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		targets, err := store.ListTargets(ctx, job.ID)
+		if err != nil {
+			t.Fatalf("ListTargets: %v", err)
+		}
+
+		assigned, err := store.SetTargetOwner(ctx, targets[0].ID, "user-7")
+		if err != nil {
+			t.Fatalf("SetTargetOwner (assign): %v", err)
+		}
+		if assigned.OwnerID != "user-7" || assigned.AssignedAt == nil {
+			t.Fatalf("assigned = %+v, want OwnerID=user-7 AssignedAt set", assigned)
+		}
+
+		cleared, err := store.SetTargetOwner(ctx, targets[0].ID, "")
+		if err != nil {
+			t.Fatalf("SetTargetOwner (clear): %v", err)
+		}
+		if cleared.OwnerID != "" || cleared.AssignedAt != nil {
+			t.Fatalf("cleared = %+v, want OwnerID=\"\" AssignedAt=nil", cleared)
+		}
+	})
+}
+
+func TestSetTargetOwner_NoSuchTarget_ReturnsErrNoRows(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		_, err := store.SetTargetOwner(context.Background(), "no-such-target-id", "user-1")
+		if !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatalf("err = %v, want pgx.ErrNoRows", err)
+		}
+	})
+}
+
+func TestListTargetsByOwner_ReturnsOnlyThatOwnerAcrossJobs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		jobA, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"agent-lto-a"})
+		if err != nil {
+			t.Fatalf("CreateBatch A: %v", err)
+		}
+		jobB, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"agent-lto-b"})
+		if err != nil {
+			t.Fatalf("CreateBatch B: %v", err)
+		}
+		targetsA, _ := store.ListTargets(ctx, jobA.ID)
+		targetsB, _ := store.ListTargets(ctx, jobB.ID)
+
+		if _, err := store.SetTargetOwner(ctx, targetsA[0].ID, "owner-x"); err != nil {
+			t.Fatalf("SetTargetOwner A: %v", err)
+		}
+		if _, err := store.SetTargetOwner(ctx, targetsB[0].ID, "owner-x"); err != nil {
+			t.Fatalf("SetTargetOwner B: %v", err)
+		}
+
+		got, err := store.ListTargetsByOwner(ctx, "owner-x", "")
+		if err != nil {
+			t.Fatalf("ListTargetsByOwner: %v", err)
+		}
+		if len(got) != 2 {
+			t.Fatalf("got %d targets, want 2 (one from each job)", len(got))
+		}
+	})
+}
+
+func TestListTargetsByOwner_StateFilterNarrows(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"agent-sfn-1", "agent-sfn-2"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		targets, _ := store.ListTargets(ctx, job.ID)
+		store.SetTargetOwner(ctx, targets[0].ID, "owner-y")
+		store.SetTargetOwner(ctx, targets[1].ID, "owner-y")
+		if err := store.MarkTargetTerminal(ctx, targets[1].ID, TargetStateFailed, "boom"); err != nil {
+			t.Fatalf("MarkTargetTerminal: %v", err)
+		}
+
+		got, err := store.ListTargetsByOwner(ctx, "owner-y", TargetStateFailed)
+		if err != nil {
+			t.Fatalf("ListTargetsByOwner: %v", err)
+		}
+		if len(got) != 1 || got[0].ID != targets[1].ID {
+			t.Fatalf("got %+v, want exactly the failed target", got)
+		}
+	})
+}
+
+func TestListTargetsByOwner_NoAssignments_ReturnsEmptySlice(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		got, err := store.ListTargetsByOwner(context.Background(), "nobody-owns-anything", "")
+		if err != nil {
+			t.Fatalf("ListTargetsByOwner: %v", err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("got %+v, want empty", got)
 		}
 	})
 }
