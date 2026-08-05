@@ -249,7 +249,16 @@ if (Test-Path $rsrcBin) {
 
 Push-Location $AgentDir
 $env:GOOS = "windows"; $env:GOARCH = "amd64"
-go build -ldflags="-s -w" -o "$InstallerDir\bas_agent.exe" . 2>&1
+# -H windowsgui: without this the agent is a console-subsystem binary, and
+# Windows auto-allocates a visible console for it whenever something launches
+# it without an inherited console (e.g. the tray's Run-key entry firing at
+# logon) -- that console shows raw log output and, since the tray icon lives
+# in the same process, closing it kills the tray too. platformPreStart's
+# ensureConsole()/AllocConsole() already exists specifically to open a
+# console on demand for genuine interactive use (--install/--uninstall/plain
+# console mode); this flag just lets that mechanism do its job everywhere
+# instead of the OS pre-empting it.
+go build -ldflags="-s -w -H windowsgui" -o "$InstallerDir\bas_agent.exe" . 2>&1
 if ($LASTEXITCODE -ne 0) { Err "Agent build failed." }
 $env:GOOS = ""; $env:GOARCH = ""
 Pop-Location
@@ -303,7 +312,9 @@ if ($WebView2Match) {
 Log "Building standalone Windows agent binary..."
 Push-Location $AgentDir
 $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
-go build -ldflags="-s -w" -o "$OutDir\bas-agent-windows-amd64.exe" . 2>&1
+# -H windowsgui: see the comment on the installer-embedded agent build
+# above -- same binary, same reason.
+go build -ldflags="-s -w -H windowsgui" -o "$OutDir\bas-agent-windows-amd64.exe" . 2>&1
 if ($LASTEXITCODE -ne 0) { Warn "Standalone Windows agent build failed." }
 else {
     $wSizeMB = [math]::Round((Get-Item "$OutDir\bas-agent-windows-amd64.exe").Length / 1MB, 1)

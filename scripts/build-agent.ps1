@@ -17,7 +17,10 @@ $env:GOARCH = "amd64"
 $outPath = "..\$OutDir\bas_agent.exe"
 
 Write-Host "[*] Compiling..."
-go build -ldflags="-s -w" -o $outPath .
+# -H windowsgui: without this the agent is a console-subsystem binary and
+# Windows auto-shows a console whenever it's launched without an inherited
+# one (e.g. the tray's Run-key entry at logon) -- see packaging/windows-build.ps1.
+go build -ldflags="-s -w -H windowsgui" -o $outPath .
 if ($LASTEXITCODE -ne 0) { Write-Host "[!] Build failed"; Pop-Location; exit 1 }
 
 Pop-Location
