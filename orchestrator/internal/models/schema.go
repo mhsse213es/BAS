@@ -366,6 +366,9 @@ const (
 	// MsgRevalidationStarted is broadcast when the auto-revalidation loop
 	// dispatches a targeted re-run after an ITSM ticket is resolved.
 	MsgRevalidationStarted = "revalidation_started"
+	// MsgNotification is broadcast to all browser sessions for every
+	// Job-Event Notification emitted by notifications.Service.Emit.
+	MsgNotification = "notification"
 	// MsgCommandStopAgent tells a connected agent to durably stop itself —
 	// finalize any in-flight run, disable its platform service so it does not
 	// restart on its own, then exit. Payload: {"reason": string}.
