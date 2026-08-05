@@ -111,7 +111,7 @@ Trimmed from `ticketing_configs`' shape (`internal/db/postgres.go:793`) — no `
 
 ## Emission Hooks
 
-`Dispatcher` (`internal/jobs/dispatch.go`) gains a third injected callback, mirroring the existing `DispatchFn`/`StatusFn` pattern used specifically to keep `internal/jobs` free of any `internal/api` import:
+`Dispatcher` (`internal/jobs/dispatch.go`) gains a third injected callback, mirroring the existing `DispatchFn`/`StatusFn` pattern used specifically to keep `internal/jobs` free of any `internal/api` import. Unlike `DispatchFn`/`StatusFn` — which every real call site always sets before calling `Tick()` — `NotifyFn` is optional: every existing test in `dispatch_test.go`, and every existing `Handler` constructed in `job_handlers_test.go` without `.WithNotifications(...)`, never sets it. Every call to `d.notify` must therefore be guarded with `if d.notify != nil`, and `internal/api`'s equivalent call to `h.notifications.Emit` must be guarded with `if h.notifications != nil` — the same "nil when not loaded" convention already used for every other optional `Handler` field (`remediationCatalog`, `jobsStore`, etc.). Skipping either guard would panic every pre-existing test that doesn't wire notifications.
 
 ```go
 // NotifyEvent is internal/jobs's own copy of the event shape -- internal/jobs
@@ -158,8 +158,11 @@ const (
 
 Called from the 3 existing mutation points in `Tick()`, with zero change to their surrounding logic:
 
-1. **`internal/jobs/dispatch.go:73`** — `MarkTargetTerminal(ctx, t.ID, state, errText)` inside the in-flight-resolution loop. If `state == TargetStateFailed`, call `d.notify(ctx, NotifyEvent{Type: notifyTypeTargetFailed, JobID: t.JobID, TargetID: t.ID, AgentID: t.AgentID, Severity: notifySeverityError, Message: errText})`. No event for `TargetStateCompleted`.
-2. **`internal/jobs/dispatch.go:104`** — `MarkTargetDeferred(ctx, t.ID, reason)` inside the deferred-targets loop. Always emits `notifyTypeTargetDeferred`, `notifySeverityWarning`, `Message: reason`.
+`TargetStateFailed` is set from **two** distinct call sites in `Tick()`, both need the same emission:
+
+1. **`internal/jobs/dispatch.go:73`** — `MarkTargetTerminal(ctx, t.ID, state, errText)` inside the in-flight-resolution loop (a dispatched target's `StatusFn` polling resolves to failed). If `state == TargetStateFailed`, call `d.notify(ctx, NotifyEvent{Type: notifyTypeTargetFailed, JobID: t.JobID, TargetID: t.ID, AgentID: t.AgentID, Severity: notifySeverityError, Message: errText})`. No event for `TargetStateCompleted`.
+1b. **`internal/jobs/dispatch.go:110`** — `MarkTargetTerminal(ctx, t.ID, TargetStateFailed, dispatchErr.Error())` inside the pending-targets loop, when `d.dispatch(...)` itself returns an error (e.g. agent offline — the exact scenario `TestTick_DispatchErrorMarksTargetFailedWithoutAborting` already covers). Same `EventTargetFailed` emission, `Message: dispatchErr.Error()`.
+2. **`internal/jobs/dispatch.go:104`** — `MarkTargetDeferred(ctx, t.ID, reason)` inside the same pending-targets loop, when a pending target discovers its agent is now frozen. Always emits `notifyTypeTargetDeferred`, `notifySeverityWarning`, `Message: reason`. (The separate un-freeze loop at lines 83-92, which moves a target back from Deferred to Pending, emits nothing — resuming normal dispatch isn't an exception.)
 3. **`internal/jobs/dispatch.go:128`** — `SetJobState(ctx, jobID, newState)` inside the touched-jobs loop, guarded by the existing `if newState != job.State`. Classify via a new pure function:
 
 ```go
