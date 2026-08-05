@@ -31,6 +31,7 @@ import (
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/openaev"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/remediation"
@@ -424,6 +425,11 @@ func main() {
 	jobsDispatcher := jobs.NewDispatcher(jobsStore)
 	jobsScheduler := exercise.NewPollScheduler(5 * time.Second)
 
+	// Phase 7 -- Job-Event Notifications. No separate ticker: events are
+	// emitted synchronously from jobsDispatcher.Tick() and CancelJob via
+	// the NotifyFn hook wired in WithJobsDispatcher/WithNotifications below.
+	notificationsStore := notifications.NewStore(pool)
+
 	hub := ws.NewHub()
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
@@ -438,6 +444,7 @@ func main() {
 		WithEOLCatalog(eolCatalog).
 		WithRemediationCatalog(remediationCatalog).
 		WithJobsDispatcher(jobsStore, jobsDispatcher).
+		WithNotifications(notificationsStore).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
 		WithThreatPriority(priorityEngine).
