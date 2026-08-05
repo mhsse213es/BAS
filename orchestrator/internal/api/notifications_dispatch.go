@@ -10,6 +10,7 @@ import (
 // WithNotifications attaches the Phase 7 notification service, backed by
 // store and pushing live over the Handler's existing WebSocket hub.
 func (h *Handler) WithNotifications(store *notifications.Store) *Handler {
+	h.notificationsStore = store
 	h.notifications = notifications.NewService(store, h.hub)
 	return h
 }

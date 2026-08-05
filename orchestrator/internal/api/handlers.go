@@ -105,6 +105,7 @@ type Handler struct {
 	vexSweep              *vexsweep.Store      // nil when not loaded — Full Variant Sweep orchestration
 	jobsStore             *jobs.Store          // nil when not loaded — Fleet Job Engine (batch remediation)
 	notifications         *notifications.Service // nil when not loaded — Phase 7 job-event notifications
+	notificationsStore    *notifications.Store    // nil when not loaded — direct read/config access for handlers
 }
 
 // New creates a Handler.

@@ -504,6 +504,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Post("/api/agents/{agentId}/maintenance-freezes", h.CreateAgentFreeze)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/agents/{agentId}/maintenance-freezes", h.ListAgentFreezes)
 		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Delete("/api/maintenance-freezes/{freezeId}", h.DeleteAgentFreeze)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/notifications", h.GetNotifications)
+		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Post("/api/notification-webhooks", h.CreateNotificationWebhook)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/notification-webhooks", h.ListNotificationWebhooks)
+		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Delete("/api/notification-webhooks/{id}", h.DeleteNotificationWebhook)
 
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)
