@@ -10683,10 +10683,16 @@ function viewRunResults(run) {
   };
   document.getElementById('run-tab-content').innerHTML =
     '<div id="run-tab-overview" class="run-tab-panel">' +
-      '<div class="run-tab-grid with-side">' +
+      '<div class="run-tab-grid">' +
         '<div>' + scorePanel + '</div>' +
         '<div id="run-report-extra"></div>' +
       '</div>' +
+    '</div>' +
+    '<div id="run-tab-findings" class="run-tab-panel" style="display:none">' +
+      '<div id="run-report-findings"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading findings&#8230;</div></div>' +
+    '</div>' +
+    '<div id="run-tab-recommendation" class="run-tab-panel" style="display:none">' +
+      '<div id="run-report-recommendation"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading recommendations&#8230;</div></div>' +
     '</div>' +
     '<div id="run-tab-flow" class="run-tab-panel" style="display:none">' +
       '<div id="rv-flow"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading attack flow…</div></div>' +
@@ -10700,14 +10706,14 @@ function viewRunResults(run) {
     '<div id="run-tab-timeline" class="run-tab-panel" style="display:none">' + soonPanel('Execution Timeline') + '</div>' +
     '<div id="run-tab-mitre" class="run-tab-panel" style="display:none">' + soonPanel('MITRE ATT&CK') + '</div>' +
     '<div id="run-tab-iocs" class="run-tab-panel" style="display:none">' + soonPanel('Indicators (IOCs)') + '</div>' +
-    '<div id="run-tab-endpoint" class="run-tab-panel" style="display:none">' + soonPanel('Endpoint Changes') + '</div>' +
-    '<div id="run-tab-recommendation" class="run-tab-panel" style="display:none">' + soonPanel('Recommendation') + '</div>';
+    '<div id="run-tab-endpoint" class="run-tab-panel" style="display:none">' + soonPanel('Endpoint Changes') + '</div>';
 
   var RUN_TABS = [
-    ['overview', 'Overview'], ['timeline', 'Execution Timeline'], ['mitre', 'MITRE ATT&CK'],
+    ['overview', 'Overview'], ['findings', 'Key Findings'], ['recommendation', 'Recommendation'],
+    ['timeline', 'Execution Timeline'], ['mitre', 'MITRE ATT&CK'],
     ['detection', 'Detection Validation'], ['flow', 'Attack Flow'], ['variant', 'Variant Analysis'],
     ['evidence', 'Evidence'], ['iocs', 'Indicators (IOCs)'], ['endpoint', 'Endpoint Changes'],
-    ['recommendation', 'Recommendation'], ['reports', 'Reports']
+    ['reports', 'Reports']
   ];
   document.getElementById('run-tabbar').innerHTML = RUN_TABS.map(function(t, i) {
     return '<button class="run-tab-btn' + (i === 0 ? ' active' : '') + '" id="run-tabbtn-' + t[0] + '" onclick="switchRunTab(\'' + t[0] + '\')">' + x(t[1]) + '</button>';
@@ -10742,18 +10748,29 @@ function viewRunResults(run) {
     }
   }
 
-  // Key Findings + Prioritised Recommendations — fetched from the report engine
-  // (BuildFromRun, the same source as the HTML/PDF report) so the drawer matches
-  // the formal report exactly. Rendered into the placeholder above once it loads.
+  // Overview dashboard panels + Key Findings + Prioritised Recommendations —
+  // all fetched from the report engine (BuildFromRun, the same source as the
+  // HTML/PDF report) so the drawer matches the formal report exactly. Each
+  // renders into its own tab's placeholder once the single shared fetch loads.
   if (runId && (run.status === 'completed' || run.status === 'partial')) {
     var extraEl = document.getElementById('run-report-extra');
-    extraEl.innerHTML = '<div style="color:var(--muted);font-size:0.72rem;padding:0.4rem 0">Loading findings &amp; recommendations…</div>';
+    extraEl.innerHTML = '<div style="color:var(--muted);font-size:0.72rem;padding:0.4rem 0">Loading&#8230;</div>';
     apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/report.json').then(function(rep) {
       // Guard: a different run may have been opened while this was in flight.
       if (document.getElementById('run-report-extra') === extraEl) {
         extraEl.innerHTML = renderRunReportExtra(rep);
+        var findingsEl = document.getElementById('run-report-findings');
+        if (findingsEl) findingsEl.innerHTML = renderRunFindings(rep);
+        var recEl = document.getElementById('run-report-recommendation');
+        if (recEl) recEl.innerHTML = renderRunRecommendations(rep);
       }
-    }).catch(function() { extraEl.innerHTML = ''; });
+    }).catch(function() {
+      extraEl.innerHTML = '';
+      var findingsEl = document.getElementById('run-report-findings');
+      if (findingsEl) findingsEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center">Findings unavailable.</div>';
+      var recEl = document.getElementById('run-report-recommendation');
+      if (recEl) recEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center">Recommendations unavailable.</div>';
+    });
 
     // Preload attack flow into rv-flow so the tab is ready when clicked.
     apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/attackflow').then(function(af) {
@@ -10775,6 +10792,15 @@ function viewRunResults(run) {
 
     // SIEM Correlation panel — load if a correlation result exists for this run.
     loadSIEMCorrelationPanel(runId);
+  } else {
+    // Run hasn't completed -- nothing to fetch, so replace the "Loading…"
+    // skeleton with an explicit not-yet-available state instead of leaving
+    // it looking permanently stuck.
+    var notReady = '<div style="color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center">Available once this run completes.</div>';
+    var findingsElEarly = document.getElementById('run-report-findings');
+    if (findingsElEarly) findingsElEarly.innerHTML = notReady;
+    var recElEarly = document.getElementById('run-report-recommendation');
+    if (recElEarly) recElEarly.innerHTML = notReady;
   }
 }
 
@@ -11175,12 +11201,13 @@ function killChainNodes(kc) {
   }).join('');
 }
 
-// Builds the Key Findings + Prioritised Recommendations blocks for the run drawer
-// from the report-engine payload. Each block renders only when non-empty.
+// Builds the Overview tab's report-engine dashboard panels (attack flow kill
+// chain, alert fatigue, attack surface age, endpoint stability, environment
+// restoration, detection coverage) from the report-engine payload. Key
+// Findings and Prioritised Recommendations moved to their own tabs — see
+// renderRunFindings / renderRunRecommendations below.
 function renderRunReportExtra(rep) {
   rep = rep || {};
-  var findings = rep.topFindings || [];
-  var recs = rep.recommendations || [];
   var panel = 'background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.6rem 0.75rem;margin-bottom:0.75rem';
   var hdr = 'font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.45rem';
   var html = '';
@@ -11430,34 +11457,53 @@ function renderRunReportExtra(rep) {
     html += detHtml;
   }
 
-  if (findings.length > 0) {
-    var rows = findings.map(function(f, i) {
-      var sc = f.severity === 'Critical' ? 'var(--danger)' : f.severity === 'High' ? '#e5534b' : 'var(--warning)';
-      var num = 'F-' + ('0' + (i + 1)).slice(-2);
-      return '<div style="border-left:2px solid ' + sc + ';padding:0.4rem 0 0.4rem 0.6rem;margin-bottom:0.5rem">' +
-        '<div style="display:flex;align-items:baseline;gap:0.45rem;flex-wrap:wrap">' +
-          '<span style="color:' + sc + ';font-weight:700;font-size:0.62rem;text-transform:uppercase">' + x(f.severity || '') + '</span>' +
-          '<span style="font-size:0.6rem;color:var(--muted)">' + num + '</span>' +
-          (f.techniqueId ? '<code style="font-size:0.66rem;color:var(--muted)">' + x(f.techniqueId) + '</code>' : '') +
-          '<span style="font-size:0.8rem;font-weight:600">' + x(f.techniqueName || '') + '</span>' +
-          '<span style="font-size:0.66rem;color:var(--muted);margin-left:auto;text-transform:capitalize">' + x((f.tactic || '').replace(/-/g, ' ')) + '</span>' +
-        '</div>' +
-        (f.details ? '<div style="color:var(--muted);font-size:0.72rem;margin-top:0.2rem">' + x(f.details) + '</div>' : '') +
-        (f.remediation ? '<div style="color:var(--warning);font-size:0.72rem;margin-top:0.15rem;white-space:pre-wrap">' + x(f.remediation) + '</div>' : '') +
-      '</div>';
-    }).join('');
-    html += '<div style="' + panel + '"><div style="' + hdr + '">Key Findings</div>' + rows + '</div>';
-  }
-
-  if (recs.length > 0) {
-    var items = recs.map(function(rc) {
-      return '<li style="font-size:0.74rem;margin-bottom:0.35rem;line-height:1.45">' + x(rc) + '</li>';
-    }).join('');
-    html += '<div style="' + panel + '"><div style="' + hdr + '">Prioritised Recommendations</div>' +
-            '<ol style="margin:0;padding-left:1.1rem;color:var(--text)">' + items + '</ol></div>';
-  }
-
   return html;
+}
+
+// Key Findings — its own full-width tab (run-tab-findings). Previously this
+// list lived inside the 340px Overview side rail alongside scorePanel; a run
+// with many findings made that rail scroll far past the short left column,
+// leaving it blank. A dedicated tab with a card grid gives it room to breathe.
+function renderRunFindings(rep) {
+  rep = rep || {};
+  var findings = rep.topFindings || [];
+  if (!findings.length) {
+    return '<div style="color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center">No findings recorded for this run.</div>';
+  }
+  var cards = findings.map(function(f, i) {
+    var sc = f.severity === 'Critical' ? 'var(--danger)' : f.severity === 'High' ? '#e5534b' : 'var(--warning)';
+    var num = 'F-' + ('0' + (i + 1)).slice(-2);
+    return '<div class="dash-panel" style="border-left:3px solid ' + sc + ';padding:0.9rem 1rem">' +
+      '<div style="display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.4rem">' +
+        '<span style="color:' + sc + ';font-weight:700;font-size:0.66rem;text-transform:uppercase;letter-spacing:.04em">' + x(f.severity || '') + '</span>' +
+        '<span style="font-size:0.62rem;color:var(--muted)">' + num + '</span>' +
+        (f.techniqueId ? '<code style="font-size:0.7rem;color:var(--muted)">' + x(f.techniqueId) + '</code>' : '') +
+        '<span style="font-size:0.68rem;color:var(--muted);margin-left:auto;text-transform:capitalize">' + x((f.tactic || '').replace(/-/g, ' ')) + '</span>' +
+      '</div>' +
+      '<div style="font-size:0.92rem;font-weight:600;margin-bottom:0.35rem">' + x(f.techniqueName || '') + '</div>' +
+      (f.details ? '<div style="color:var(--muted);font-size:0.8rem;line-height:1.55">' + x(f.details) + '</div>' : '') +
+      (f.remediation ? '<div style="color:var(--warning);font-size:0.78rem;margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border);white-space:pre-wrap"><strong>Remediation:</strong> ' + x(f.remediation) + '</div>' : '') +
+    '</div>';
+  }).join('');
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:0.85rem">' + cards + '</div>';
+}
+
+// Prioritised Recommendations — its own full-width tab (run-tab-recommendation),
+// replacing what used to be a permanent "coming soon" placeholder even though
+// this data has been available all along (it just lived in the Overview rail).
+function renderRunRecommendations(rep) {
+  rep = rep || {};
+  var recs = rep.recommendations || [];
+  if (!recs.length) {
+    return '<div style="color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center">No recommendations for this run.</div>';
+  }
+  var items = recs.map(function(rc, i) {
+    return '<div class="dash-panel" style="display:flex;gap:0.9rem;align-items:flex-start;padding:0.85rem 1rem">' +
+      '<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700">' + (i + 1) + '</div>' +
+      '<div style="font-size:0.86rem;line-height:1.6;padding-top:0.2rem">' + x(rc) + '</div>' +
+    '</div>';
+  }).join('');
+  return '<div style="display:flex;flex-direction:column;gap:0.6rem;max-width:900px">' + items + '</div>';
 }
 function closeResults() { document.getElementById('results-overlay').classList.remove('open', 'run-mode'); }
 
