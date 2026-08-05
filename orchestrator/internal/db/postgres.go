@@ -1316,6 +1316,32 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			created_at timestamptz NOT NULL DEFAULT NOW()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_maintenance_freezes_agent_id ON agent_maintenance_freezes (agent_id)`,
+
+		// Sub-project 11 (Phase 7): Job-Event Notifications. See
+		// docs/superpowers/specs/2026-08-05-job-event-notifications-design.md.
+		`CREATE TABLE IF NOT EXISTS notifications (
+			id         text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			type       text        NOT NULL,
+			job_id     text        NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+			target_id  text        NOT NULL DEFAULT '',
+			agent_id   text        NOT NULL DEFAULT '',
+			severity   text        NOT NULL,
+			message    text        NOT NULL,
+			metadata   jsonb       NOT NULL DEFAULT '{}',
+			created_at timestamptz NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_job_id ON notifications (job_id)`,
+
+		`CREATE TABLE IF NOT EXISTS notification_webhooks (
+			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name         text        NOT NULL,
+			url          text        NOT NULL,
+			secret       text        NOT NULL DEFAULT '',
+			min_severity text        NOT NULL DEFAULT 'warning',
+			enabled      boolean     NOT NULL DEFAULT true,
+			created_at   timestamptz NOT NULL DEFAULT NOW()
+		)`,
 	}
 
 	for _, s := range stmts {
