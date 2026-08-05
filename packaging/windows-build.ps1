@@ -430,7 +430,16 @@ Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf.template"
 # run 'nano setup.conf' immediately without a manual cp step first.
 Copy-Item "$ComposeDir\setup.conf.template"     "$OutDir\setup.conf"
 Copy-Item "$ComposeDir\docker-compose.yml"      "$OutDir\docker-compose.yml"
-Copy-Item "$ComposeDir\.env.example"            "$OutDir\.env.example"
+# Stamp the real release version into the shipped .env.example so it never
+# shows a stale placeholder inside a versioned bundle (was hardcoded 1.7.1
+# regardless of $Version -- confused customers diffing it against the real
+# generated .env, which correctly shows the actual build version). Read
+# -Raw + WriteAllText (not Get-Content|Set-Content) for the same reason the
+# VERSION/verify.sh writes below do it this way: avoids the BOM Out-File/
+# Set-Content add on PS 5.1, which would corrupt the file for install.sh.
+$envExampleText = (Get-Content "$ComposeDir\.env.example" -Raw) -replace "`r`n", "`n" `
+    -replace '(?m)^BAS_VERSION=.*$', "BAS_VERSION=$Version"
+[System.IO.File]::WriteAllText("$OutDir\.env.example", $envExampleText)
 Copy-Item "$ComposeDir\systemd\bas-compose.service" "$OutDir\systemd\bas-compose.service"
 
 # Generate a ready-to-use .env with random secrets so that a bare
