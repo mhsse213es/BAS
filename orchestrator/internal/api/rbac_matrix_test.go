@@ -277,6 +277,8 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/notification-webhooks", tierPermission, auth.CanApproveRemediation},
 	{http.MethodGet, "/api/notification-webhooks", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodDelete, "/api/notification-webhooks/{id}", tierPermission, auth.CanApproveRemediation},
+	{http.MethodPost, "/api/job-targets/{targetId}/assign", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodGet, "/api/job-targets", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/openaev/config", tierPermission, auth.CanViewOpenAEVConfig},
 	{http.MethodPut, "/api/openaev/config", tierPermission, auth.CanUpdateOpenAEVConfig},
 	{http.MethodPost, "/api/openaev/config/test", tierPermission, auth.CanTestOpenAEVConfig},
