@@ -10,14 +10,21 @@ import (
 	"github.com/audspect/bas/internal/db"
 )
 
-// GetRunIOCs returns the indicators extracted from a run's results.
+// GetRunIOCs returns the indicators extracted from a run's results, each
+// joined with its cached threat-intel enrichment (Tier/PulseCount/etc.) when
+// a provider (OTX) is configured. Tier/enrichment fields are left zero-valued
+// when no provider is configured, matching db.GetRunIOCsEnriched's contract.
 // GET /api/scenarios/runs/{runId}/iocs?type={ip|domain|url|hash|cve}&search={substring}
 func (h *Handler) GetRunIOCs(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runId")
 	typeFilter := r.URL.Query().Get("type")
 	search := r.URL.Query().Get("search")
 
-	indicators, err := db.GetRunIOCs(r.Context(), h.db, runID, typeFilter, search)
+	var providerName string
+	if h.iocProvider != nil {
+		providerName = h.iocProvider.Name()
+	}
+	indicators, err := db.GetRunIOCsEnriched(r.Context(), h.db, runID, providerName, typeFilter, search)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return

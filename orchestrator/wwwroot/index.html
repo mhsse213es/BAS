@@ -10765,7 +10765,10 @@ function viewRunResults(run) {
     '<div id="run-tab-reports" class="run-tab-panel" style="display:none"></div>' +
     '<div id="run-tab-timeline" class="run-tab-panel" style="display:none">' + soonPanel('Execution Timeline') + '</div>' +
     '<div id="run-tab-mitre" class="run-tab-panel" style="display:none">' + soonPanel('MITRE ATT&CK') + '</div>' +
-    '<div id="run-tab-iocs" class="run-tab-panel" style="display:none">' + soonPanel('Indicators (IOCs)') + '</div>' +
+    '<div id="run-tab-iocs" class="run-tab-panel" style="display:none">' +
+      '<div id="run-ioc-toolbar" style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap"></div>' +
+      '<div id="run-ioc-list"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading indicators&#8230;</div></div>' +
+    '</div>' +
     '<div id="run-tab-endpoint" class="run-tab-panel" style="display:none">' + soonPanel('Endpoint Changes') + '</div>';
 
   var RUN_TABS = [
@@ -10852,6 +10855,19 @@ function viewRunResults(run) {
 
     // SIEM Correlation panel — load if a correlation result exists for this run.
     loadSIEMCorrelationPanel(runId);
+
+    // Indicators (IOCs) — extraction runs for every completed run regardless
+    // of whether a threat-intel provider is configured (see GetRunIOCsEnriched);
+    // fetch once, unfiltered, and filter/group client-side from then on.
+    apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/iocs').then(function(iocs) {
+      _runIOCsAll = iocs || [];
+      renderRunIOCToolbar();
+      renderRunIOCList();
+    }).catch(function() {
+      _runIOCsAll = [];
+      var el = document.getElementById('run-ioc-list');
+      if (el) el.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center">Indicators unavailable.</div>';
+    });
   } else {
     // Run hasn't completed -- nothing to fetch, so replace the "Loading…"
     // skeleton with an explicit not-yet-available state instead of leaving
@@ -10861,6 +10877,8 @@ function viewRunResults(run) {
     if (findingsElEarly) findingsElEarly.innerHTML = notReady;
     var recElEarly = document.getElementById('run-report-recommendation');
     if (recElEarly) recElEarly.innerHTML = notReady;
+    var iocElEarly = document.getElementById('run-ioc-list');
+    if (iocElEarly) iocElEarly.innerHTML = notReady;
   }
 }
 
@@ -11565,6 +11583,107 @@ function renderRunRecommendations(rep) {
   }).join('');
   return '<div style="display:flex;flex-direction:column;gap:0.6rem;max-width:900px">' + items + '</div>';
 }
+
+// ── Indicators (IOCs) tab ────────────────────────────────────────────────────
+// Fetched once (unfiltered) when the run drawer opens; type/search filtering
+// happens client-side from _runIOCsAll rather than round-tripping to the
+// server per keystroke (GetRunIOCs does support ?type=&search=, but the
+// per-run dataset is small enough that this is simpler and more responsive).
+var _runIOCsAll = [];
+var _runIOCTypeFilter = 'all';
+var _runIOCSearch = '';
+var _runIOCExpandedIdx = -1; // index into the current filtered list, not _runIOCsAll -- reset on any filter change
+
+var IOC_TYPE_LABEL = { ip: 'IP', domain: 'Domain', url: 'URL', hash: 'Hash', cve: 'CVE' };
+
+function renderRunIOCToolbar() {
+  var el = document.getElementById('run-ioc-toolbar');
+  if (!el) return;
+  var counts = { all: _runIOCsAll.length };
+  _runIOCsAll.forEach(function(i) { counts[i.type] = (counts[i.type] || 0) + 1; });
+  var types = [['all', 'All'], ['ip', 'IP'], ['domain', 'Domain'], ['url', 'URL'], ['hash', 'Hash'], ['cve', 'CVE']];
+  el.innerHTML =
+    '<div class="cov-seg">' + types.map(function(t) {
+      return '<button class="' + (_runIOCTypeFilter === t[0] ? 'on' : '') + '" onclick="setRunIOCTypeFilter(\'' + t[0] + '\')">' + t[1] + ' <span style="opacity:.6">' + (counts[t[0]] || 0) + '</span></button>';
+    }).join('') + '</div>' +
+    '<input type="text" id="run-ioc-search" placeholder="Search indicators…" value="' + x(_runIOCSearch) + '" oninput="setRunIOCSearch(this.value)" style="padding:0.35rem 0.6rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.78rem;font-family:inherit;min-width:220px">';
+}
+function setRunIOCTypeFilter(t) {
+  _runIOCTypeFilter = t;
+  _runIOCExpandedIdx = -1;
+  renderRunIOCToolbar();
+  renderRunIOCList();
+}
+// Only re-renders the list (not the toolbar) so the search input never loses
+// focus/cursor position while the user is still typing.
+function setRunIOCSearch(v) {
+  _runIOCSearch = v;
+  _runIOCExpandedIdx = -1;
+  renderRunIOCList();
+}
+function toggleRunIOCRow(idx) {
+  _runIOCExpandedIdx = (_runIOCExpandedIdx === idx) ? -1 : idx;
+  renderRunIOCList();
+}
+function _iocTierBadge(ind) {
+  if (!ind.tier) return '<span class="tiny muted">No enrichment</span>';
+  if (ind.tier === 'pending') return '<span class="tiny muted">Checking&#8230;</span>';
+  var map = {
+    'malicious-associated': ['Malicious', 'var(--danger)'],
+    'suspicious': ['Suspicious', 'var(--warning)'],
+    'unknown': ['Unknown', 'var(--muted)']
+  };
+  var m = map[ind.tier] || [ind.tier, 'var(--muted)'];
+  var pulses = ind.pulseCount ? ' &middot; ' + ind.pulseCount + ' pulse' + (ind.pulseCount === 1 ? '' : 's') : '';
+  return '<span style="font-size:0.68rem;font-weight:700;color:' + m[1] + '">' + x(m[0]) + pulses + '</span>';
+}
+function renderRunIOCList() {
+  var el = document.getElementById('run-ioc-list');
+  if (!el) return;
+  var list = _runIOCsAll.filter(function(i) {
+    if (_runIOCTypeFilter !== 'all' && i.type !== _runIOCTypeFilter) return false;
+    if (_runIOCSearch && i.value.toLowerCase().indexOf(_runIOCSearch.toLowerCase()) === -1) return false;
+    return true;
+  });
+  if (!list.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:2.5rem 0;text-align:center">' +
+      (_runIOCsAll.length ? 'No indicators match this filter.' : 'No indicators extracted from this run.') + '</div>';
+    return;
+  }
+
+  el.innerHTML = list.map(function(ind, idx) {
+    var expanded = _runIOCExpandedIdx === idx;
+    var techs = (ind.techniqueIds || []).map(function(t) {
+      return '<code style="font-size:0.66rem;color:var(--muted);margin-right:3px">' + x(t) + '</code>';
+    }).join('');
+    var tags = (ind.tags || []).map(function(t) {
+      return '<span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:9px;padding:1px 7px;margin-right:4px;display:inline-block;margin-bottom:3px">' + x(t) + '</span>';
+    }).join('');
+    var detail = !expanded ? '' :
+      '<div style="padding:0.7rem 1rem 0.9rem;background:var(--elevated);border-top:1px solid var(--border);font-size:0.78rem">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.6rem">' +
+          '<div><div class="kpi-label">Source</div><div>' + x(ind.source || '—') + '</div></div>' +
+          '<div><div class="kpi-label">Confidence</div><div>' + (ind.confidence || 0) + '%</div></div>' +
+          '<div><div class="kpi-label">Extracted</div><div>' + (ind.extractedAt ? ago(ind.extractedAt) : '—') + '</div></div>' +
+          '<div><div class="kpi-label">Seen in techniques</div><div>' + (techs || '<span class="muted">—</span>') + '</div></div>' +
+        '</div>' +
+        (tags ? '<div style="margin-top:0.6rem"><div class="kpi-label" style="margin-bottom:0.3rem">Threat tags</div>' + tags + '</div>' : '') +
+        ((ind.malwareFamilies || []).length ? '<div style="margin-top:0.6rem"><div class="kpi-label" style="margin-bottom:0.2rem">Malware families</div>' + x(ind.malwareFamilies.join(', ')) + '</div>' : '') +
+        ((ind.adversaryNames || []).length ? '<div style="margin-top:0.6rem"><div class="kpi-label" style="margin-bottom:0.2rem">Associated actors</div>' + x(ind.adversaryNames.join(', ')) + '</div>' : '') +
+      '</div>';
+    return '<div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.5rem;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 1rem;cursor:pointer" onclick="toggleRunIOCRow(' + idx + ')">' +
+        '<span class="tiny" style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:1px 7px;text-transform:uppercase;flex-shrink:0">' + x(IOC_TYPE_LABEL[ind.type] || ind.type) + '</span>' +
+        '<code style="font-size:0.82rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(ind.value) + '</code>' +
+        '<span class="tiny muted" style="flex-shrink:0">' + x(ind.source || '') + '</span>' +
+        '<span style="flex-shrink:0">' + _iocTierBadge(ind) + '</span>' +
+        '<span class="tiny muted" style="flex-shrink:0">' + (expanded ? '&#9650;' : '&#9660;') + '</span>' +
+      '</div>' +
+      detail +
+    '</div>';
+  }).join('');
+}
+
 function closeResults() { document.getElementById('results-overlay').classList.remove('open', 'run-mode'); }
 
 // ── Live Run Panel ────────────────────────────────────────────────────────────

@@ -2,7 +2,10 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/audspect/bas/internal/db"
@@ -112,5 +115,72 @@ func TestEnrichRunIOCs_FailedLookup_CachesFailureNotSuccess(t *testing.T) {
 	}
 	if got.LastSuccessAt != nil {
 		t.Error("LastSuccessAt should be nil -- this lookup only ever failed")
+	}
+}
+
+// TestGetRunIOCs_HTTP_ReturnsEnrichedFieldsWhenProviderConfigured pins the
+// GetRunIOCs HTTP handler (GET /api/scenarios/runs/{runId}/iocs) end-to-end:
+// after enrichRunIOCs populates the cache, the endpoint's response must
+// include the enrichment (tier/pulseCount), not just the raw indicator --
+// this is what the run drawer's Indicators (IOCs) tab consumes.
+func TestGetRunIOCs_HTTP_ReturnsEnrichedFieldsWhenProviderConfigured(t *testing.T) {
+	const runID = "test-get-run-iocs-http-enriched"
+	t.Cleanup(func() {
+		_, _ = sharedDB.Pool.Exec(context.Background(), `DELETE FROM ioc_enrichment WHERE indicator_value = $1`, "198.51.100.40")
+	})
+	seedRunIOC(t, runID, []ioc.RunIndicator{{Type: "ip", Value: "198.51.100.40", Confidence: 90, Source: "stdout"}})
+
+	stub := &stubIOCProvider{name: "otx", failValues: map[string]bool{}}
+	h := New(sharedDB.Pool, nil, nil, "secret").WithIOCProvider(stub)
+	h.enrichRunIOCs(context.Background(), runID) // populates ioc_enrichment (stub returns PulseCount: 3)
+
+	req := withURLParam(httptest.NewRequest(http.MethodGet, "/api/scenarios/runs/"+runID+"/iocs", nil), "runId", runID)
+	rec := httptest.NewRecorder()
+	h.GetRunIOCs(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	var got []struct {
+		Value      string `json:"value"`
+		Tier       string `json:"tier"`
+		PulseCount int    `json:"pulseCount"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d indicators, want 1: %+v", len(got), got)
+	}
+	if got[0].Tier != "malicious-associated" || got[0].PulseCount != 3 {
+		t.Errorf("got %+v, want tier=malicious-associated pulseCount=3 (stub returns PulseCount:3, tier threshold is >=3)", got[0])
+	}
+}
+
+// TestGetRunIOCs_HTTP_NoProviderConfigured_OmitsTier confirms the endpoint
+// still works (and never errors) with no threat-intel provider wired up --
+// the common case for an air-gapped deployment.
+func TestGetRunIOCs_HTTP_NoProviderConfigured_OmitsTier(t *testing.T) {
+	const runID = "test-get-run-iocs-http-noprovider"
+	seedRunIOC(t, runID, []ioc.RunIndicator{{Type: "domain", Value: "example.test", Confidence: 80, Source: "stdout"}})
+
+	h := New(sharedDB.Pool, nil, nil, "secret") // iocProvider left nil
+
+	req := withURLParam(httptest.NewRequest(http.MethodGet, "/api/scenarios/runs/"+runID+"/iocs", nil), "runId", runID)
+	rec := httptest.NewRecorder()
+	h.GetRunIOCs(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	var got []struct {
+		Value string `json:"value"`
+		Tier  string `json:"tier"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].Tier != "" {
+		t.Errorf("got %+v, want 1 indicator with empty tier (no provider configured)", got)
 	}
 }
