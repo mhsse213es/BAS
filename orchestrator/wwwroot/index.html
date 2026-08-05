@@ -223,6 +223,31 @@ body {
 .btn-outline       { background: transparent; color: var(--muted); border-color: var(--border); }
 .btn-sm { padding: 0.28rem 0.65rem; font-size: 0.78rem; }
 
+/* ── Row action menu (three-dot dropdown for table row actions) ──────── */
+.row-menu-wrap { position: relative; display: inline-block; }
+.row-menu-btn { padding: 0.28rem 0.5rem; line-height: 1; font-size: 1rem; }
+.row-menu-panel {
+  /* position:fixed (not absolute) is deliberate -- the Agents table wrapper
+     (.tbl-wrap) sets overflow-y:hidden for its horizontal-scroll behavior,
+     which clips any absolutely-positioned descendant to the row's height.
+     Fixed positioning escapes that clip; exact coordinates are set in JS
+     (toggleRowMenu) from the trigger button's rect when the menu opens. */
+  display: none; position: fixed; z-index: 40;
+  min-width: 190px; background: var(--elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  padding: 0.3rem; flex-direction: column; gap: 1px;
+}
+.row-menu-panel.open { display: flex; }
+.row-menu-item {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%;
+  padding: 0.45rem 0.6rem; background: transparent; border: none; border-radius: 5px;
+  color: var(--text); font-size: 0.8rem; font-family: inherit; text-align: left;
+  cursor: pointer; white-space: nowrap;
+}
+.row-menu-item:hover { background: var(--surface); }
+.row-menu-item-danger { color: #e07070; }
+.row-menu-item-danger:hover { background: rgba(218,54,51,0.1); }
+
 /* ── App shell ─────────────────────────────────────────────── */
 #app { display: flex; width: 100vw;
     min-width: 100vw;
@@ -1659,7 +1684,7 @@ body.theme-slate {
         <div class="tbl-wrap" style="overflow-x:auto;">
           <table style="min-width:700px">
             <thead><tr>
-              <th style="min-width:160px">Host</th><th style="min-width:90px">OS</th><th style="min-width:110px">IP address</th><th>Group</th><th>Status</th><th style="min-width:80px">Last seen</th><th>Sims</th><th style="min-width:210px">Actions</th>
+              <th style="min-width:160px">Host</th><th style="min-width:90px">OS</th><th style="min-width:110px">IP address</th><th>Group</th><th>Status</th><th style="min-width:80px">Last seen</th><th>Sims</th><th style="min-width:60px">Actions</th>
             </tr></thead>
             <tbody id="agents-body">
               <tr><td colspan="8" class="empty">No agents registered yet.</td></tr>
@@ -6249,8 +6274,9 @@ function renderAgentRows() {
   });
   var tbody = document.getElementById('agents-body');
   if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.') + '</td></tr>'; return; }
-  tbody.innerHTML = list.map(function(a) {
+  tbody.innerHTML = list.map(function(a, idx) {
     var dot = agentDotColor(agentBucket(a));
+    var menuId = 'agent-menu-' + idx;
     return '<tr>' +
       '<td style="max-width:180px"><div style="display:flex;align-items:center;gap:0.5rem"><span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' + dot + '"></span>' +
         '<div style="min-width:0"><div class="cell-main" style="font-family:var(--font-mono);font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px" title="' + x(a.hostname || a.agentId) + '">' + x(a.hostname || a.agentId) + '</div>' +
@@ -6266,18 +6292,49 @@ function renderAgentRows() {
       '<td style="color:var(--muted);font-size:0.78rem;white-space:nowrap">' + ago(a.lastUpdate) + '</td>' +
       '<td class="tiny" style="font-family:var(--font-mono)">' + (a.sims || 0) + '</td>' +
       '<td>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:3px">' +
-        '<button class="btn btn-outline btn-sm" onclick="openAgentDetail(\'' + x(a.agentId) + '\')" title="View detail">&#128269; Detail</button>' +
-        '<button class="btn btn-outline-green btn-sm" onclick="openModal(null,\'' + x(a.agentId) + '\')" title="Run simulation">&#9654; Run</button>' +
-        '<button class="btn btn-outline btn-sm" onclick="safeScan(\'' + x(a.agentId) + '\')" title="Read-only simulation">&#128737; Safe Scan</button>' +
-        '<button class="btn btn-outline btn-sm" onclick="openFullReport(\'' + x(a.agentId) + '\')" title="Open HTML report">&#128196; Report</button>' +
-        '<button class="btn btn-outline btn-sm" onclick="downloadAuditPack(\'' + x(a.agentId) + '\')" title="Download audit pack">&#8659; Pack</button>' +
-        (ROLE === 'admin' && a.status !== 'offline' ?
-          '<button class="btn btn-sm" style="color:var(--danger);background:rgba(218,54,51,0.08);border:1px solid rgba(218,54,51,0.25)" onclick="openStopAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')" title="Stop agent permanently">&#9209; Stop</button>' : '') +
+        '<div class="row-menu-wrap">' +
+        '<button class="btn btn-outline btn-sm row-menu-btn" onclick="toggleRowMenu(event,\'' + menuId + '\')" title="Actions" aria-haspopup="true">&#8942;</button>' +
+        '<div class="row-menu-panel" id="' + menuId + '">' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();openAgentDetail(\'' + x(a.agentId) + '\')">&#128269; Detail</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();openModal(null,\'' + x(a.agentId) + '\')">&#9654; Run simulation</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();safeScan(\'' + x(a.agentId) + '\')">&#128737; Safe Scan</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();openFullReport(\'' + x(a.agentId) + '\')">&#128196; Report</button>' +
+          '<button class="row-menu-item" onclick="closeAllRowMenus();downloadAuditPack(\'' + x(a.agentId) + '\')">&#8659; Download audit pack</button>' +
+          (ROLE === 'admin' && a.status !== 'offline' ?
+            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openStopAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#9209; Stop agent</button>' : '') +
+        '</div>' +
         '</div>' +
       '</td></tr>';
   }).join('');
 }
+// Row action menus (the "⋮" dropdown in the Agents table Actions column).
+// Only one panel is ever open at a time; toggling re-closes any other open
+// panel first so stale menus never linger behind a newly opened one.
+function toggleRowMenu(ev, id) {
+  ev.stopPropagation();
+  var panel = document.getElementById(id);
+  if (!panel) return;
+  var wasOpen = panel.classList.contains('open');
+  closeAllRowMenus();
+  if (wasOpen) return;
+  // Position as fixed viewport coordinates from the trigger button's own
+  // rect (see the .row-menu-panel CSS comment for why fixed instead of
+  // absolute), right-aligned under the button like a standard menu.
+  var btnRect = ev.currentTarget.getBoundingClientRect();
+  panel.style.top = (btnRect.bottom + 4) + 'px';
+  panel.style.right = (window.innerWidth - btnRect.right) + 'px';
+  panel.style.left = 'auto';
+  panel.classList.add('open');
+}
+function closeAllRowMenus() {
+  document.querySelectorAll('.row-menu-panel.open').forEach(function(p) { p.classList.remove('open'); });
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.row-menu-wrap')) closeAllRowMenus();
+});
+// A fixed-position panel doesn't track its trigger button on scroll -- close
+// it instead of letting it visually drift away from the row it belongs to.
+window.addEventListener('scroll', closeAllRowMenus, true);
 // Deploy agent → reveal the in-page Connection Config / download section.
 function showAgentDownload() {
   var w = document.getElementById('conn-cfg-wrap');
