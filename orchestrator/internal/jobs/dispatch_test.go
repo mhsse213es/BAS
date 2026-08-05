@@ -169,6 +169,106 @@ func TestTick_CancelledJobIsNeverTouched(t *testing.T) {
 	})
 }
 
+func TestTick_NotifiesTargetFailedAndJobFailed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"agent-notif-fail"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+
+		var events []NotifyEvent
+		d := NewDispatcher(store)
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
+			return "", errors.New("agent not connected")
+		})
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) {
+			t.Fatal("status should not be called -- nothing was dispatched")
+			return "", "", false
+		})
+		d.SetNotify(func(ctx context.Context, evt NotifyEvent) {
+			events = append(events, evt)
+		})
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+
+		if len(events) != 2 {
+			t.Fatalf("got %d notify events, want 2 (target_failed + job_failed): %+v", len(events), events)
+		}
+		if events[0].Type != notifyTypeTargetFailed || events[0].JobID != job.ID || events[0].Message != "agent not connected" {
+			t.Errorf("events[0] = %+v, want target_failed for job %s", events[0], job.ID)
+		}
+		if events[1].Type != notifyTypeJobFailed || events[1].JobID != job.ID {
+			t.Errorf("events[1] = %+v, want job_failed for job %s", events[1], job.ID)
+		}
+	})
+}
+
+func TestTick_NotifiesTargetDeferred(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		mustExecJobsNotif(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('agent-notif-freeze', 'AGENT-NOTIF-FREEZE')`)
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"agent-notif-freeze"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		_, err = store.CreateFreeze(ctx, AgentFreeze{
+			AgentID: "agent-notif-freeze", FromAt: time.Now().UTC().Add(-time.Hour), ToAt: time.Now().UTC().Add(time.Hour),
+			Reason: "maintenance", CreatedBy: "admin-1",
+		})
+		if err != nil {
+			t.Fatalf("CreateFreeze: %v", err)
+		}
+
+		var events []NotifyEvent
+		d := NewDispatcher(store)
+		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
+			t.Fatal("dispatch should not be called -- the agent is frozen")
+			return "", nil
+		})
+		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return "", "", false })
+		d.SetNotify(func(ctx context.Context, evt NotifyEvent) {
+			events = append(events, evt)
+		})
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		// The job's only target going Deferred also flips the job's aggregate
+		// state from Requested to Running (Deferred counts as
+		// dispatchedOrTerminal in AggregateState -- see internal/jobs/state.go),
+		// so both target_deferred and job_started fire in the same tick.
+		if len(events) != 2 {
+			t.Fatalf("got %d notify events, want 2 (target_deferred + job_started): %+v", len(events), events)
+		}
+		if events[0].Type != notifyTypeTargetDeferred || events[0].JobID != job.ID {
+			t.Errorf("events[0] = %+v, want target_deferred for job %s", events[0], job.ID)
+		}
+		if events[1].Type != notifyTypeJobStarted || events[1].JobID != job.ID {
+			t.Errorf("events[1] = %+v, want job_started for job %s", events[1], job.ID)
+		}
+	})
+}
+
+func mustExecJobsNotif(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), sql, args...); err != nil {
+		t.Fatalf("mustExecJobsNotif: %v\nsql: %s", err, sql)
+	}
+}
+
 func TestTick_SpawnsDueSchedule(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

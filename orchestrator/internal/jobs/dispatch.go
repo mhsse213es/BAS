@@ -27,6 +27,7 @@ type Dispatcher struct {
 	store    *Store
 	dispatch DispatchFn
 	status   StatusFn
+	notify   NotifyFn
 }
 
 func NewDispatcher(store *Store) *Dispatcher {
@@ -73,6 +74,12 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 		if err := d.store.MarkTargetTerminal(ctx, t.ID, state, errText); err != nil {
 			continue
 		}
+		if state == TargetStateFailed && d.notify != nil {
+			d.notify(ctx, NotifyEvent{
+				Type: notifyTypeTargetFailed, JobID: t.JobID, TargetID: t.ID, AgentID: t.AgentID,
+				Severity: notifySeverityError, Message: errText,
+			})
+		}
 		touchedJobs[t.JobID] = true
 	}
 
@@ -102,12 +109,24 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 		}
 		if frozen, reason, ferr := d.store.IsAgentFrozen(ctx, t.AgentID); ferr == nil && frozen {
 			d.store.MarkTargetDeferred(ctx, t.ID, reason)
+			if d.notify != nil {
+				d.notify(ctx, NotifyEvent{
+					Type: notifyTypeTargetDeferred, JobID: t.JobID, TargetID: t.ID, AgentID: t.AgentID,
+					Severity: notifySeverityWarning, Message: reason,
+				})
+			}
 			touchedJobs[t.JobID] = true
 			continue
 		}
 		refID, dispatchErr := d.dispatch(ctx, job, t)
 		if dispatchErr != nil {
 			d.store.MarkTargetTerminal(ctx, t.ID, TargetStateFailed, dispatchErr.Error())
+			if d.notify != nil {
+				d.notify(ctx, NotifyEvent{
+					Type: notifyTypeTargetFailed, JobID: t.JobID, TargetID: t.ID, AgentID: t.AgentID,
+					Severity: notifySeverityError, Message: dispatchErr.Error(),
+				})
+			}
 		} else {
 			d.store.MarkTargetDispatched(ctx, t.ID, refID)
 		}
@@ -129,6 +148,11 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 				updated := job
 				updated.State = newState
 				jobCache[jobID] = updated
+				if d.notify != nil {
+					if evtType, sev, ok := classifyJobTransition(newState); ok {
+						d.notify(ctx, NotifyEvent{Type: evtType, JobID: jobID, Severity: sev})
+					}
+				}
 			}
 		}
 	}
