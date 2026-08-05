@@ -38,6 +38,7 @@ var (
 	trayGetCursorPos     = trayUser32.NewProc("GetCursorPos")
 	trayRegisterWinMsg   = trayUser32.NewProc("RegisterWindowMessageW")
 	trayPostMessage      = trayUser32.NewProc("PostMessageW")
+	trayFindWindow       = trayUser32.NewProc("FindWindowW")
 	trayGetModuleHandle  = trayKernel32.NewProc("GetModuleHandleW")
 	trayShellNotifyIcon  = trayShell32.NewProc("Shell_NotifyIconW")
 )

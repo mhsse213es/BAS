@@ -273,14 +273,44 @@ func svcUninstall() error {
 		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
 	}
 
-	// Stop before deleting
-	_, _ = s.Control(svc.Stop)
-	time.Sleep(2 * time.Second)
+	// Capture the installed binary path before Delete() removes the service
+	// registration -- needed below to schedule the exe for delayed deletion.
+	var binaryPath string
+	if cfg, cfgErr := s.Config(); cfgErr == nil {
+		binaryPath = cfg.BinaryPathName
+	}
+
+	// Stop, confirming via poll like svcUpdate does; if the service is still
+	// wedged after the poll window, terminate its process directly so
+	// uninstall never hangs.
+	fmt.Printf("[*] Stopping %s...\n", svcName)
+	if err := stopServiceAndWait(s, 15*time.Second, 500*time.Millisecond, terminateProcessByPID); err != nil {
+		return fmt.Errorf("stop service: %w", err)
+	}
 
 	if err := s.Delete(); err != nil {
 		return err
 	}
 	_ = eventlog.Remove(svcName)
+
+	// Everything below is best-effort cleanup: a running process cannot
+	// delete its own executing binary, and the tray autostart entry/window/
+	// shortcut are all independently idempotent -- a missing key, window, or
+	// file is already the desired end state. Only the service stop/delete
+	// above can fail the uninstall.
+	if binaryPath != "" {
+		if err := scheduleBinaryDeleteOnReboot(binaryPath); err != nil {
+			fmt.Printf("[~] Could not schedule binary for delayed deletion: %v\n", err)
+		}
+	}
+	if err := removeTrayRunKey(); err != nil {
+		fmt.Printf("[~] Could not remove tray autostart entry: %v\n", err)
+	}
+	closeTrayWindow()
+	if err := removeTrayShortcut(); err != nil {
+		fmt.Printf("[~] Could not remove tray shortcut: %v\n", err)
+	}
+
 	fmt.Printf("[+] Service %q uninstalled\n", svcName)
 	return nil
 }
