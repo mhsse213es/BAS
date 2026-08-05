@@ -3659,6 +3659,28 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- Remove Agent Modal -->
+<div id="remove-agent-overlay" class="overlay">
+  <div class="modal" style="width:440px">
+    <h3>Remove Agent</h3>
+    <p class="sub2" id="remove-agent-target-sub"></p>
+
+    <div style="background:rgba(218,54,51,.1);border:1px solid var(--danger-border, var(--danger));border-radius:var(--radius);padding:0.65rem 0.8rem;font-size:0.78rem;color:var(--danger);margin:0.6rem 0">
+      &#9888; This removes the agent from the dashboard — it moves to the Retired filter and drops out of the default list. It does <strong>not</strong> touch the endpoint: the agent software keeps running there until someone uninstalls it locally or you separately push a Stop.
+    </div>
+
+    <label class="modal-lbl">Reason <span class="tiny muted">(required)</span></label>
+    <input type="text" id="remove-agent-reason" placeholder="e.g. duplicate enrollment"
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeRemoveAgentModal()">Cancel</button>
+      <span style="flex:1"></span>
+      <button id="remove-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitRemoveAgent()">&#128465; Remove Agent</button>
+    </div>
+  </div>
+</div>
+
 <!-- Technique / Ability Picker -->
 <div id="picker-overlay" class="overlay">
   <div class="modal" style="width:580px;display:flex;flex-direction:column;max-height:88vh">
@@ -6302,6 +6324,8 @@ function renderAgentRows() {
           '<button class="row-menu-item" onclick="closeAllRowMenus();downloadAuditPack(\'' + x(a.agentId) + '\')">&#8659; Download audit pack</button>' +
           (ROLE === 'admin' && a.status !== 'offline' ?
             '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openStopAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#9209; Stop agent</button>' : '') +
+          (ROLE === 'admin' ?
+            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openRemoveAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#128465; Remove agent</button>' : '') +
         '</div>' +
         '</div>' +
       '</td></tr>';
@@ -9044,6 +9068,42 @@ function submitStopAgent() {
     btn.disabled = false;
     showToast('Stop dispatched', 'ok');
     closeStopAgentModal();
+    loadAgents();
+  }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
+}
+
+// ── Remove Agent ─────────────────────────────────────────────────────────────
+// Removes the dashboard record only (sets state=retired) -- unlike Stop
+// Agent, this never talks to the endpoint and works regardless of whether
+// the agent is currently connected.
+var _removeAgentTargetId = null;
+
+function openRemoveAgentModal(agentId, hostname) {
+  _removeAgentTargetId = agentId;
+  document.getElementById('remove-agent-target-sub').textContent = 'Target: ' + hostname;
+  document.getElementById('remove-agent-reason').value = '';
+  document.getElementById('remove-agent-overlay').classList.add('open');
+}
+
+function closeRemoveAgentModal() {
+  document.getElementById('remove-agent-overlay').classList.remove('open');
+}
+
+function submitRemoveAgent() {
+  if (!_removeAgentTargetId) return;
+  var reason = document.getElementById('remove-agent-reason').value.trim();
+  if (!reason) { showToast('Reason is required', 'err'); return; }
+  if (!confirm('Remove this agent from the dashboard?\n\nReason: ' + reason + '\n\nThe agent software on the endpoint keeps running -- this only removes the record here. Proceed?')) return;
+
+  var btn = document.getElementById('remove-agent-submit-btn');
+  btn.disabled = true;
+  apicall('/api/agents/' + encodeURIComponent(_removeAgentTargetId) + '/remove', {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason })
+  }).then(function() {
+    btn.disabled = false;
+    showToast('Agent removed', 'ok');
+    closeRemoveAgentModal();
     loadAgents();
   }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
 }

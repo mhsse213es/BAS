@@ -571,3 +571,70 @@ func TestStopAgent_Success(t *testing.T) {
 		}
 	})
 }
+
+func TestRemoveAgent_RequiresReason(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		body, _ := json.Marshal(map[string]string{"reason": ""})
+		req := withURLParam(httptest.NewRequest(http.MethodPost, "/api/agents/agent-x/remove", bytes.NewReader(body)), "agentId", "agent-x")
+		rec := httptest.NewRecorder()
+		h.RemoveAgent(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("empty reason: status = %d, want 400", rec.Code)
+		}
+	})
+}
+
+func TestRemoveAgent_UnknownAgent_Returns404(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		body, _ := json.Marshal(map[string]string{"reason": "cleanup"})
+		req := withURLParam(httptest.NewRequest(http.MethodPost, "/api/agents/no-such-agent/remove", bytes.NewReader(body)), "agentId", "no-such-agent")
+		rec := httptest.NewRecorder()
+		h.RemoveAgent(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("unknown agent: status = %d, want 404", rec.Code)
+		}
+	})
+}
+
+// TestRemoveAgent_SetsStateToRetired_WithoutRequiringConnection is the key
+// behavioral difference from StopAgent: it must succeed for an agent with
+// no live WS connection at all -- the common case for something an admin
+// wants removed from the dashboard (e.g. a decommissioned or already-dead
+// endpoint), unlike StopAgent which requires reaching the live agent.
+func TestRemoveAgent_SetsStateToRetired_WithoutRequiringConnection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		agentID := "agent-remove-offline"
+		h.EnrollAgent(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/agents/enroll", bytes.NewReader(enrollBody(agentID, nil))))
+		// Deliberately no startFakeAgent(...) -- the agent is not connected.
+
+		body, _ := json.Marshal(map[string]string{"reason": "decommissioned host"})
+		req := authedRequest(t, http.MethodPost, "/api/agents/"+agentID+"/remove", bytes.NewReader(body), auth.RoleAdmin, "admin-1")
+		req = withURLParam(req, "agentId", agentID)
+		rec := callAuthed(h.RemoveAgent, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("remove: status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var state string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT state FROM agents WHERE agent_id=$1`, agentID,
+		).Scan(&state); err != nil {
+			t.Fatalf("read state: %v", err)
+		}
+		if state != "retired" {
+			t.Fatalf("state = %q, want retired", state)
+		}
+	})
+}

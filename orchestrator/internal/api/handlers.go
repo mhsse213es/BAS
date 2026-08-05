@@ -240,6 +240,37 @@ func (h *Handler) UnenrollAgent(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"agentId": body.AgentID, "state": "retired"})
 }
 
+// POST /api/agents/{agentId}/remove — admin-triggered equivalent of
+// UnenrollAgent above: same state='retired' update (see that handler's
+// comment for why this is a state change, not a row delete), but reachable
+// from the dashboard regardless of whether the agent is currently connected
+// -- unlike StopAgent, this never talks to the endpoint over WS. The agent
+// software itself keeps running until someone uninstalls it locally or an
+// admin separately pushes a Stop; this only removes the dashboard record.
+// Admin-only; the route group enforces the permission check.
+func (h *Handler) RemoveAgent(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Reason) == "" {
+		jsonError(w, "reason is required", http.StatusBadRequest)
+		return
+	}
+	tag, err := h.db.Exec(r.Context(), `UPDATE agents SET state = 'retired' WHERE agent_id = $1`, agentID)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		jsonError(w, "agent not found", http.StatusNotFound)
+		return
+	}
+	h.auditLog(r, "agent.remove", agentID, map[string]any{"reason": body.Reason}, "ok")
+	h.hub.BroadcastBrowsers(models.WSMessage{Type: models.MsgAgentUpdate, AgentID: agentID})
+	respond(w, map[string]string{"agentId": agentID, "state": "retired"})
+}
+
 // WithCaldera configures the optional Caldera integration.
 func (h *Handler) WithCaldera(url, key string) *Handler {
 	h.calderaURL = url
