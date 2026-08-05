@@ -132,5 +132,6 @@ func (h *Handler) WithJobsDispatcher(store *jobs.Store, dispatcher *jobs.Dispatc
 	h.jobsStore = store
 	dispatcher.SetDispatch(h.dispatchJobTarget)
 	dispatcher.SetStatus(h.statusForJobTarget)
+	dispatcher.SetNotify(h.dispatchJobNotify)
 	return h
 }

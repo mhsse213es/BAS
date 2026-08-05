@@ -13,6 +13,7 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/jobs"
+	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
@@ -332,6 +333,44 @@ func TestCancelJob_CancelsPendingTargetsAndJob(t *testing.T) {
 		}
 		if got.State != jobs.JobStateCancelled {
 			t.Errorf("job State = %q, want cancelled", got.State)
+		}
+	})
+}
+
+func TestCancelJob_EmitsJobCancelledNotification(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('jcn-a1', 'JCN-A1')`)
+		jobsStore := jobs.NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		created, err := jobsStore.CreateBatch(context.Background(), "batch_remediation", payload, "user-1", []string{"jcn-a1"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+
+		notifStore := notifications.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore)).
+			WithNotifications(notifStore)
+
+		req := withURLParam(httptest.NewRequest(http.MethodPost, "/x", nil), "jobId", created.ID)
+		w := httptest.NewRecorder()
+		h.CancelJob(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+
+		events, err := notifStore.List(context.Background(), notifications.ListFilter{JobID: created.ID, Limit: 10})
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if len(events) != 1 || events[0].Type != notifications.EventJobCancelled {
+			t.Fatalf("events = %+v, want exactly one job_cancelled event", events)
+		}
+		if events[0].Metadata["cancelledCount"] != float64(1) {
+			t.Errorf("Metadata[cancelledCount] = %v, want 1 (json.Unmarshal decodes numbers as float64)", events[0].Metadata["cancelledCount"])
 		}
 	})
 }

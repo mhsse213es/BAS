@@ -9,6 +9,7 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/jobs"
+	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/remediation"
 )
 
@@ -132,6 +133,12 @@ func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if h.notifications != nil {
+		h.notifications.Emit(r.Context(), notifications.Event{
+			Type: notifications.EventJobCancelled, JobID: jobID, Severity: notifications.SeverityWarning,
+			Message: "job cancelled", Metadata: map[string]any{"cancelledCount": cancelledCount},
+		})
 	}
 	h.auditLog(r, "jobs.cancel", jobID, map[string]any{"cancelledTargets": cancelledCount}, "cancelled")
 	respond(w, map[string]any{"jobId": jobID, "state": jobs.JobStateCancelled, "cancelledTargets": cancelledCount})
