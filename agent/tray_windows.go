@@ -321,13 +321,16 @@ func openStatusWindow() {
 		return
 	}
 	cmd := exec.Command(exe, "--status-window")
-	// Same fix as launchTrayForActiveSession (usertoken_windows.go): without
-	// these flags, spawning this console-subsystem binary would flash a
-	// visible console before the WebView2 status window appears. HideWindow/
-	// CREATE_NO_WINDOW only suppress the console -- the WebView2 window
-	// itself is a real GUI window (not console output) and still shows.
+	// CREATE_NO_WINDOW only affects console-window auto-allocation for a
+	// console-subsystem child (redundant now the agent builds -H windowsgui,
+	// but harmless to keep as a defensive fallback). HideWindow is
+	// deliberately NOT set here: on Windows it sets STARTUPINFO.wShowWindow
+	// = SW_HIDE, which the WebView2 window inherits as its initial show
+	// state -- confirmed via live window enumeration that setting it left
+	// the spawned window created but permanently invisible (IsWindowVisible
+	// == false), which is exactly the "nothing happens on click" bug this
+	// was meant to prevent, not fix.
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
 		CreationFlags: createNoWindow,
 	}
 	if err := cmd.Start(); err != nil {
