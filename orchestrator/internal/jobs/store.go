@@ -68,7 +68,8 @@ func scanJobTargets(rows pgx.Rows) ([]JobTarget, error) {
 	for rows.Next() {
 		var t JobTarget
 		if err := rows.Scan(&t.ID, &t.JobID, &t.AgentID, &t.State, &t.RefID, &t.Error,
-			&t.RetryCount, &t.MaxRetries, &t.CreatedAt, &t.StartedAt, &t.CompletedAt); err != nil {
+			&t.RetryCount, &t.MaxRetries, &t.CreatedAt, &t.StartedAt, &t.CompletedAt,
+			&t.OwnerID, &t.AssignedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -76,7 +77,7 @@ func scanJobTargets(rows pgx.Rows) ([]JobTarget, error) {
 	return out, rows.Err()
 }
 
-const jobTargetColumns = `id, job_id, agent_id, state, ref_id, error, retry_count, max_retries, created_at, started_at, completed_at`
+const jobTargetColumns = `id, job_id, agent_id, state, ref_id, error, retry_count, max_retries, created_at, started_at, completed_at, owner_id, assigned_at`
 
 func (s *Store) ListTargets(ctx context.Context, jobID string) ([]JobTarget, error) {
 	rows, err := s.pool.Query(ctx,
@@ -124,7 +125,7 @@ func (s *Store) ListPendingTargetsAcrossActiveJobs(ctx context.Context, limit in
 // own id/state/created_at/started_at/completed_at columns, so an unqualified
 // SELECT against the join would fail with "column reference is ambiguous".
 func jobTargetColumnsQualified() string {
-	return `jt.id, jt.job_id, jt.agent_id, jt.state, jt.ref_id, jt.error, jt.retry_count, jt.max_retries, jt.created_at, jt.started_at, jt.completed_at`
+	return `jt.id, jt.job_id, jt.agent_id, jt.state, jt.ref_id, jt.error, jt.retry_count, jt.max_retries, jt.created_at, jt.started_at, jt.completed_at, jt.owner_id, jt.assigned_at`
 }
 
 func (s *Store) MarkTargetDispatched(ctx context.Context, targetID, refID string) error {

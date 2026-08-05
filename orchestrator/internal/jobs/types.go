@@ -55,4 +55,6 @@ type JobTarget struct {
 	CreatedAt   time.Time
 	StartedAt   *time.Time
 	CompletedAt *time.Time
+	OwnerID     string     // "" = unassigned, matches this codebase's requested_by/approved_by convention
+	AssignedAt  *time.Time // nil when OwnerID == ""
 }

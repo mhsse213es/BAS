@@ -1342,6 +1342,12 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			enabled      boolean     NOT NULL DEFAULT true,
 			created_at   timestamptz NOT NULL DEFAULT NOW()
 		)`,
+
+		// Sub-project 12 (Phase 8): Job-Target Ownership. See
+		// docs/superpowers/specs/2026-08-05-job-target-ownership-design.md.
+		`ALTER TABLE job_targets ADD COLUMN IF NOT EXISTS owner_id    text NOT NULL DEFAULT ''`,
+		`ALTER TABLE job_targets ADD COLUMN IF NOT EXISTS assigned_at timestamptz`,
+		`CREATE INDEX IF NOT EXISTS idx_job_targets_owner_id ON job_targets (owner_id) WHERE owner_id != ''`,
 	}
 
 	for _, s := range stmts {

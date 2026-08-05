@@ -367,3 +367,35 @@ func TestMarkTargetDeferredThenPending_UpdatesState(t *testing.T) {
 		}
 	})
 }
+
+func TestJobTarget_OwnershipColumnsScanCorrectly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := store.CreateBatch(ctx, "batch_remediation", payload, "user-1", []string{"agent-own-1"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		targets, err := store.ListTargets(ctx, job.ID)
+		if err != nil {
+			t.Fatalf("ListTargets: %v", err)
+		}
+		if targets[0].OwnerID != "" || targets[0].AssignedAt != nil {
+			t.Fatalf("new target = %+v, want unassigned by default (OwnerID=\"\", AssignedAt=nil)", targets[0])
+		}
+
+		mustExecJobsNotif(t, pool, `UPDATE job_targets SET owner_id=$1, assigned_at=NOW() WHERE id=$2`, "user-42", targets[0].ID)
+
+		got, err := store.ListTargets(ctx, job.ID)
+		if err != nil {
+			t.Fatalf("ListTargets after raw update: %v", err)
+		}
+		if got[0].OwnerID != "user-42" || got[0].AssignedAt == nil {
+			t.Fatalf("got = %+v, want OwnerID=user-42 AssignedAt set", got[0])
+		}
+	})
+}
