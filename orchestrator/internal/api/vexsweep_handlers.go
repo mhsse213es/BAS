@@ -163,15 +163,20 @@ func (h *Handler) CancelVexSweep(w http.ResponseWriter, r *http.Request) {
 
 // sweepToJSON serializes a Sweep plus a live-computed completedVariants
 // that includes the in-flight technique's already-finished steps (read
-// from scenario_runs.results' array length) -- not just the last fully
-// completed technique's tally that Sweep.CompletedVariants alone holds.
-// See design spec Architecture §4.
+// from scenario_runs.steps_done) -- not just the last fully completed
+// technique's tally that Sweep.CompletedVariants alone holds. steps_done
+// is what SubmitRunEvents increments per completed step as an agent
+// executes, in real time; scenario_runs.results is not usable for this --
+// the agent only ever writes it once, atomically, with the run's complete
+// final snapshot (see submitScenarioResult's "REPLACE, never append"),
+// so it stays empty for the run's entire in-flight duration. See design
+// spec Architecture §4.
 func sweepToJSON(db *pgxpool.Pool, sw vexsweep.Sweep) map[string]any {
 	live := sw.CompletedVariants
 	if sw.CurrentScenarioRunID != "" {
 		var n int
 		if err := db.QueryRow(context.Background(),
-			`SELECT COALESCE(jsonb_array_length(results), 0) FROM scenario_runs WHERE id = $1`,
+			`SELECT COALESCE(steps_done, 0) FROM scenario_runs WHERE id = $1`,
 			sw.CurrentScenarioRunID,
 		).Scan(&n); err == nil {
 			live += n

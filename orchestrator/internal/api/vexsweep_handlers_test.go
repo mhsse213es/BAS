@@ -116,12 +116,16 @@ func TestGetActiveVexSweep_ReturnsRunningSweepWithLiveCompletedVariants(t *testi
 		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-live-1", "sr-live-1"); err != nil {
 			t.Fatalf("AdvanceToNext: %v", err)
 		}
-		// Simulate 1 of the 2 in-flight technique's variants having a
-		// recorded result already -- results is a jsonb array on
-		// scenario_runs, one entry per completed step.
+		// Simulate 1 of the 2 in-flight technique's variants having finished
+		// -- steps_done is the column run_events ingestion (SubmitRunEvents)
+		// increments live, per completed step, as an agent executes. Unlike
+		// results (a jsonb blob the agent only ever writes once, atomically,
+		// with the run's COMPLETE final snapshot -- see submitScenarioResult's
+		// "REPLACE, never append" comment), steps_done is the only column
+		// that actually reflects in-flight progress before the run finishes.
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, steps_total)
-			 VALUES ('sr-live-1', '__variant__t1059.001', 'agent-live-progress', 'test', 'running', '[{"id":"step1"}]', 2)`); err != nil {
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, steps_total, steps_done)
+			 VALUES ('sr-live-1', '__variant__t1059.001', 'agent-live-progress', 'test', 'running', 2, 1)`); err != nil {
 			t.Fatalf("seed scenario_runs: %v", err)
 		}
 

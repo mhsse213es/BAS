@@ -14531,7 +14531,11 @@ function renderVexSweepList(sweeps) {
   if (!sweeps.length) { el.innerHTML = ''; return; }
 
   el.innerHTML = sweeps.map(function(sw) {
-    var pct = sw.totalVariants > 0 ? Math.round((sw.completedVariants / sw.totalVariants) * 100) : 0;
+    // A full sweep can have thousands of total variants, so a handful of
+    // real completions can round down to a misleading "0%" -- floor any
+    // nonzero progress at 1% so the bar never looks stuck when it isn't.
+    var rawPct = sw.totalVariants > 0 ? (sw.completedVariants / sw.totalVariants) * 100 : 0;
+    var pct = rawPct > 0 && rawPct < 1 ? 1 : Math.round(rawPct);
     return '<div class="card" style="margin-top:0.5rem;padding:0.75rem 1rem" id="vex-sweep-card-' + x(sw.id) + '">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;margin-bottom:0.3rem">' +
         '<span style="font-weight:600">' + x(sw.agentId) + '</span>' +
