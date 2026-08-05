@@ -468,3 +468,64 @@ func TestGetVariantRun_JoinsResultsIntoVerdicts(t *testing.T) {
 		}
 	})
 }
+
+// TestGetVariantRun_ReturnsLiveStepsDoneWhileRunning pins that GetVariantRun
+// surfaces scenario_runs.steps_done -- the column run_events ingestion
+// (SubmitRunEvents) increments live, per completed step -- instead of only
+// resolving progress once results (the run's complete final snapshot,
+// written exactly once) arrives at the very end.
+func TestGetVariantRun_ReturnsLiveStepsDoneWhileRunning(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		agentID := "gvr-live-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		h := variantHandler(t, pool)
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		runRec := httptest.NewRecorder()
+		h.RunVariants(runRec, variantsRunReq(map[string]any{
+			"agentId": agentID, "techniqueId": "T1059.001", "command": "whoami", "executor": "powershell",
+		}))
+		var runOut struct {
+			VariantRunID  string `json:"variantRunId"`
+			ScenarioRunID string `json:"scenarioRunId"`
+		}
+		json.Unmarshal(runRec.Body.Bytes(), &runOut)
+		fake.WaitForMessage(t, 2*time.Second)
+
+		// Simulate run_events ingestion having credited 1 completed step so
+		// far, with the run still in flight -- no results written yet, since
+		// the agent only submits that once, atomically, at the very end.
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE scenario_runs SET steps_done = 1 WHERE id = $1`, runOut.ScenarioRunID,
+		); err != nil {
+			t.Fatalf("seed steps_done: %v", err)
+		}
+
+		rec := httptest.NewRecorder()
+		h.GetVariantRun(rec, withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", runOut.VariantRunID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			StepsDone int `json:"stepsDone"`
+			Results   []struct {
+				Verdict string `json:"verdict"`
+			} `json:"results"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if out.StepsDone != 1 {
+			t.Fatalf("stepsDone = %d, want 1 (live, from scenario_runs.steps_done)", out.StepsDone)
+		}
+		for _, res := range out.Results {
+			if res.Verdict != "PENDING" {
+				t.Errorf("verdict = %q, want PENDING -- results only resolve once the run submits its final snapshot", res.Verdict)
+			}
+		}
+	})
+}

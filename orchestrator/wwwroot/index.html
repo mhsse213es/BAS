@@ -14566,7 +14566,11 @@ function loadVexSweepVariantDetail(sweepId, variantRunId) {
     var el = document.getElementById('vex-sweep-variant-' + sweepId);
     if (!el) return; // card was removed by a later tick before this resolved
     var results = detail.results || [];
-    var doneCount = results.filter(function(r) { return r.verdict !== 'PENDING'; }).length;
+    // stepsDone is live (incremented per completed step as the agent
+    // executes) -- per-item verdicts only resolve once the whole run submits
+    // its complete final results snapshot, so counting non-PENDING verdicts
+    // stays at 0 for the run's entire in-flight duration.
+    var doneCount = Math.min(detail.stepsDone || 0, results.length);
     var current = results[doneCount]; // next un-run entry, in dispatch order
     if (current) {
       el.textContent = 'Variant ' + (doneCount + 1) + '/' + results.length + ': ' +

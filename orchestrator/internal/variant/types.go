@@ -163,6 +163,11 @@ type RunDetail struct {
 	Run     Run      `json:"run"`
 	Results []Result `json:"results"`
 	Summary Summary  `json:"summary"`
+	// StepsDone mirrors scenario_runs.steps_done, incremented live per
+	// completed step as the agent executes. Unlike Results[].Verdict --
+	// which only resolves once the whole run submits its complete final
+	// snapshot -- this reflects real in-flight progress before completion.
+	StepsDone int `json:"stepsDone"`
 }
 
 // Summary is the aggregate outcome across all variants in a run.

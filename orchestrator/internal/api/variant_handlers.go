@@ -151,13 +151,19 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 	}
 	vr.CompletedAt = completedAt
 
-	// Load scenario_run status + results JSONB.
+	// Load scenario_run status + results JSONB + live steps_done. results is
+	// only ever written once, atomically, with the run's complete final
+	// snapshot (see submitScenarioResult's "REPLACE, never append"), so it
+	// stays empty for the run's entire in-flight duration -- steps_done is
+	// what SubmitRunEvents increments live, per completed step, and is the
+	// only column that actually reflects progress before completion.
 	var resultsRaw []byte
 	var runStatus string
+	var stepsDone int
 	if err := h.db.QueryRow(ctx,
-		`SELECT status, COALESCE(results::text,'[]') FROM scenario_runs WHERE id = $1`,
+		`SELECT status, COALESCE(results::text,'[]'), COALESCE(steps_done, 0) FROM scenario_runs WHERE id = $1`,
 		vr.ScenarioRunID,
-	).Scan(&runStatus, &resultsRaw); err != nil {
+	).Scan(&runStatus, &resultsRaw, &stepsDone); err != nil {
 		resultsRaw = []byte("[]")
 	}
 
@@ -242,7 +248,7 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 		results = append(results, res)
 	}
 
-	jsonOK(w, variant.RunDetail{Run: vr, Results: results, Summary: summary})
+	jsonOK(w, variant.RunDetail{Run: vr, Results: results, Summary: summary, StepsDone: stepsDone})
 }
 
 // GET /api/variants/coverage
