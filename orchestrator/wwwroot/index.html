@@ -10831,6 +10831,87 @@ function viewRunResults(run) {
       checks + '</div>';
   }).join('');
 
+  // Execution Timeline — chronological view of results[], sourced entirely
+  // from data already fetched for this run (startedAt/executedAt/durationMs
+  // already exist on every SimulationResult, models/schema.go:56-88). Steps
+  // synthesized server-side without ever dispatching to the agent (e.g.
+  // SkipReasonPolicyPrivilege) carry a zero-value time and are excluded --
+  // an execution timeline for something that never executed is meaningless.
+  var timelineHtml = (function() {
+    var events = results.filter(function(c) {
+      var d = new Date(c.startedAt || c.executedAt);
+      return !isNaN(d.getTime()) && d.getFullYear() > 1970;
+    }).slice().sort(function(a, b) {
+      return new Date(a.startedAt || a.executedAt) - new Date(b.startedAt || b.executedAt);
+    });
+    if (!events.length) {
+      return '<div class="dash-panel dash-soon" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">No timed execution data available for this run.</div>';
+    }
+    var rows = events.map(function(c) {
+      var t = new Date(c.startedAt || c.executedAt);
+      var col = c.result === 'pass' ? 'var(--success)' : c.result === 'skipped' ? 'var(--muted)' : 'var(--danger)';
+      var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.68rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
+      var detBadge = c.detectionVerdict
+        ? '<span style="font-size:0.6rem;font-weight:600;text-transform:uppercase;background:rgba(255,255,255,0.04);color:var(--accent);border-radius:2px;padding:1px 5px;margin-left:0.35rem">' + x(c.detectionVerdict) + '</span>'
+        : '';
+      var dur = c.durationMs ? (c.durationMs >= 1000 ? (c.durationMs / 1000).toFixed(1) + 's' : c.durationMs + 'ms') : '—';
+      return '<div style="display:flex;align-items:baseline;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid rgba(34,50,74,0.45)">' +
+        '<span style="min-width:78px;font-size:0.68rem;color:var(--muted);font-variant-numeric:tabular-nums">' + x(t.toLocaleTimeString()) + '</span>' +
+        '<span style="min-width:56px;text-align:right;font-size:0.65rem;color:var(--muted);font-variant-numeric:tabular-nums">' + x(dur) + '</span>' +
+        '<span style="color:' + col + ';font-size:0.7rem;font-weight:600;min-width:46px">' + x(c.result) + '</span>' +
+        techId + '<span style="font-size:0.8rem;flex:1">' + x((c.technique && c.technique.name) || c.name || c.command || '') + '</span>' +
+        detBadge +
+      '</div>';
+    }).join('');
+    return '<div style="padding:0.5rem 0">' + rows + '</div>';
+  })();
+
+  // MITRE ATT&CK tab — the full-tab version of the Overview's compact
+  // "ATT&CK Tactic Breakdown" mini-panel (run.score.tacticBreakdown, already
+  // computed per-run by models.ComputeScore), enriched with each tactic's
+  // technique roll-up from byTactic (already grouped above for the Evidence
+  // tab) so a tactic's aggregate bar and its individual techniques sit
+  // together. No new backend call — both inputs already exist in this scope.
+  var mitreHtml = (function() {
+    var tb = (run.score && run.score.tacticBreakdown) || {};
+    var tbKeys = Object.keys(tb);
+    if (!tbKeys.length) {
+      return '<div class="dash-panel dash-soon" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">No ATT&CK tactic data available for this run.</div>';
+    }
+    var tacticOrder = ['initial-access','execution','persistence','privilege-escalation',
+      'defense-evasion','credential-access','discovery','lateral-movement','collection',
+      'exfiltration','command-and-control','impact'];
+    var ordered = tacticOrder.filter(function(t) { return tb[t]; })
+      .concat(tbKeys.filter(function(t) { return tacticOrder.indexOf(t) < 0; }));
+    return ordered.map(function(t) {
+      var e = tb[t];
+      var pct = e.passPct || 0;
+      var barCol = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+      var techs = (byTactic[t] || []).map(function(c) {
+        var col = c.result === 'pass' ? 'var(--success)' : c.result === 'skipped' ? 'var(--muted)' : 'var(--danger)';
+        var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.65rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
+        var detBadge = c.detectionVerdict
+          ? '<span style="font-size:0.58rem;font-weight:600;text-transform:uppercase;color:var(--accent);margin-left:0.4rem">' + x(c.detectionVerdict) + '</span>'
+          : '';
+        return '<div style="display:flex;align-items:center;gap:0.4rem;padding:0.22rem 0;font-size:0.74rem">' +
+          '<span style="color:' + col + ';font-weight:600;min-width:44px;font-size:0.65rem">' + x(c.result) + '</span>' +
+          techId + '<span>' + x((c.technique && c.technique.name) || c.name || '') + '</span>' + detBadge +
+        '</div>';
+      }).join('');
+      return '<div class="dash-panel" style="margin-bottom:0.85rem"><div class="dash-panel-body" style="padding:0.75rem 0.9rem">' +
+        '<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem">' +
+          '<span style="font-size:0.8rem;font-weight:600;text-transform:capitalize;flex:1">' + x(t.replace(/-/g, ' ')) + '</span>' +
+          '<span style="font-size:0.72rem;font-weight:700;color:' + barCol + '">' + pct + '%</span>' +
+          '<span style="font-size:0.66rem;color:var(--muted)">' + (e.passed || 0) + ' pass &middot; ' + (e.failed || 0) + ' fail</span>' +
+        '</div>' +
+        '<div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin-bottom:0.5rem">' +
+          '<div style="height:100%;width:' + pct + '%;background:' + barCol + '"></div>' +
+        '</div>' +
+        (techs ? '<div style="border-top:1px solid var(--border);padding-top:0.4rem">' + techs + '</div>' : '') +
+      '</div></div>';
+    }).join('');
+  })();
+
   // Overview keeps scorePanel + run-report-extra (findings/recommendations/
   // alert-fatigue/attack-surface-age/readiness); the per-technique checks
   // move to their own Evidence tab -- previously both lived in one "Results"
@@ -10863,8 +10944,8 @@ function viewRunResults(run) {
     '<div id="run-tab-detection" class="run-tab-panel" style="display:none"><div id="rv-siem"></div></div>' +
     '<div id="run-tab-evidence" class="run-tab-panel" style="display:none">' + checksHtml + '</div>' +
     '<div id="run-tab-reports" class="run-tab-panel" style="display:none"></div>' +
-    '<div id="run-tab-timeline" class="run-tab-panel" style="display:none">' + soonPanel('Execution Timeline') + '</div>' +
-    '<div id="run-tab-mitre" class="run-tab-panel" style="display:none">' + soonPanel('MITRE ATT&CK') + '</div>' +
+    '<div id="run-tab-timeline" class="run-tab-panel" style="display:none">' + timelineHtml + '</div>' +
+    '<div id="run-tab-mitre" class="run-tab-panel" style="display:none">' + mitreHtml + '</div>' +
     '<div id="run-tab-iocs" class="run-tab-panel" style="display:none">' +
       '<div id="run-ioc-toolbar" style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap"></div>' +
       '<div id="run-ioc-list"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading indicators&#8230;</div></div>' +
