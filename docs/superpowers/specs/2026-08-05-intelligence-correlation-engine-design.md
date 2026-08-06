@@ -38,6 +38,23 @@ Registry spec made a similar correction to its own assumed model — this isn't 
   `scenario_runs`, `DISTINCT ON` latest `executedAt`) and `loadValidationVerdicts` (from
   `verification_history`, latest `verified_at` among `active AND workflow_state='Approved'`
   rows). Both are currently **unexported methods**, not reusable from outside the package.
+- **`attackdata.Lookup(id string) *Enrichment`** (`attackdata.go:218-230`) is the codebase's
+  existing, single canonical source for a technique's authoritative name/description/platforms/
+  tactics/URL — embedded from the MITRE ATT&CK Enterprise STIX bundle at build time (fully
+  offline, no DB round trip), and it's exactly "your local ATT&CK bundle": it's already what
+  `GET /api/attack/technique/{id}` (`attack_handlers.go:47-54`, the frontend's `openTechnique(id)`
+  data source) and `AttackMatrix`/`coverage` return for technique display. It already
+  sub-technique-falls-back (`T1003.099` → `T1003`'s data) when a sub-technique has no enrichment
+  of its own (`attackdata.go:224-228`). This is the exact mechanism the Canonical Resolution
+  layer below reuses — no new metadata source, no new SQL query.
+
+**Checked and confirmed absent — a real gap, not built speculatively:** ATT&CK ID
+canonicalization (deprecated/renamed/merged IDs, e.g. a hypothetical old ID resolving forward to
+its replacement). `attackdata`'s generator (`gen/main.go:164-166`) reads STIX `revoked`/
+`x_mitre_deprecated` flags but only uses them to **skip** revoked/deprecated technique objects
+entirely at bundle-build time (`continue`) — it never parses STIX `revoked-by` relationship
+objects to record what a deprecated ID's replacement is. So a deprecated ID simply isn't in the
+bundle at all; there is no old-ID → new-ID map anywhere in this codebase today. See Non-goals.
 
 **Two real gaps — genuinely new code:**
 
@@ -86,6 +103,42 @@ resolution rather than calling `ActorNeighborhood` for the actor→technique hop
    behavior, confirmed by reading every call site, not assumed.
 
 ## Architecture
+
+### 0. Three layers, and where each existing/new piece falls
+
+The engine separates cleanly into three layers, matched to a real distinction in the data:
+relationships (who uses what) are discovered by walking edges and are inherently partial;
+identity (what a technique *is*) is a lookup against one authoritative source and must never be
+partial or absent. Collapsing these into one step is exactly what produced self-review catch #1
+below (a technique's display name silently blank because *relationships* happened to be sparse
+for it) — so the layers are kept structurally separate, not just conceptually separate.
+
+| Layer | Question it answers | Normalizes/invents identity? | Existing code reused | New code |
+|---|---|---|---|---|
+| **1. Relationship Discovery** | "Who uses this? What relates to it?" | No — raw facts, whatever IDs/names the source used | `threatgraph.TechniqueNeighborhood`/`ActorNeighborhood`/`IOCNeighborhood`, `reporting.ResolveActorTechniques`, `scenariosForTechnique` (new), `threatpriority.LoadPreventionVerdicts`/`LoadValidationVerdicts` | `scenariosForTechnique` only |
+| **2. Canonical Resolution** | "What is this, exactly?" | Yes — the only layer allowed to | `attackdata.Lookup` (existing, reused as-is) | `resolveCanonicalTechnique` (new, thin wrapper) |
+| **3. Correlation Output** | "Build the object the UI/API consumes" | No — assembles layers 1+2, adds the one judgment call (`Recommendation`) | — | `CorrelateTechnique`/`CorrelateActor`/`CorrelateIOC`, `TechniqueCorrelation` et al. |
+
+**The invariant this buys**: every `TechniqueCorrelation` the engine emits carries a fully
+populated `CanonicalTechnique` (name, description, platforms, tactics — never blank, never
+inferred from which relationships happened to exist), because layer 3 cannot construct a
+`TechniqueCorrelation` without first calling layer 2. Concretely, `resolveCanonicalTechnique` is
+the *only* place `TechniqueCorrelation.Technique` is ever set, and every one of
+`CorrelateTechnique`/`CorrelateActor`/`CorrelateIOC`'s code paths that produces a
+`TechniqueCorrelation` goes through it — there is no code path in `internal/correlation` that
+builds one from a bare technique ID string without resolving it first. Downstream consumers
+(coverage analysis, recommendations, dashboards, IOC correlation, reports — none built in this
+phase, but all future consumers of this package's output) therefore never re-ask "what's the
+display name," "is this an alias," "has ATT&CK renamed this" — those questions are answered once,
+here, not by every future caller.
+
+**What layer 2 explicitly does *not* do** (see the "Checked and confirmed absent" investigation
+finding above): resolve a deprecated/renamed ID forward to its replacement. No relationship in
+this codebase's data (STIX-derived or otherwise) records that mapping today. `resolveCanonicalTechnique`
+canonicalizes *metadata for a given ID* (name/description/platforms/tactics), not *the ID itself*.
+Every caller into this package is expected to already pass current-form ATT&CK IDs — matching
+every existing caller of `attackdata`/`threatgraph`/`threatpriority`/`coverage` in this codebase,
+none of which do ID-forwarding either. Flagged explicitly as a Non-goal, not silently assumed away.
 
 ### 1. `internal/threatpriority`: export + widen verdict loaders
 
@@ -144,10 +197,35 @@ type Recommendation struct {
 	Reason string `json:"reason"` // human-readable, e.g. "Never validated" / "Last run 132 days ago, undetected"
 }
 
+// CanonicalTechnique is the Canonical Resolution layer's output -- the one
+// place technique identity (name/description/platforms/tactics) is resolved.
+// Every TechniqueCorrelation embeds one; nothing downstream re-derives these
+// fields from relationship data. Sourced exclusively from attackdata.Lookup
+// (the same authoritative ATT&CK bundle GET /api/attack/technique/{id}
+// already serves) -- never inferred from threatgraph neighborhoods.
+type CanonicalTechnique struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Platforms   []string `json:"platforms,omitempty"`
+	Tactics     []string `json:"tactics,omitempty"`
+	URL         string   `json:"url,omitempty"`
+}
+
+// resolveCanonicalTechnique is the package's single Canonical Resolution
+// entry point -- the only function permitted to set a TechniqueCorrelation's
+// Technique field. attackdata.Lookup already sub-technique-falls-back
+// (attackdata.go:224-228); when even that misses (an ID with relationship or
+// scenario data but no bundle entry -- e.g. a malformed or truly unknown ID),
+// this still returns a non-empty CanonicalTechnique{ID: id, Name: id}, so the
+// invariant "every technique leaving the engine is canonicalized" holds even
+// in the miss case -- Name is never blank.
+func resolveCanonicalTechnique(id string) CanonicalTechnique
+
 // TechniqueCorrelation is the full correlated view of one ATT&CK technique.
+// Technique is always fully populated -- see resolveCanonicalTechnique.
 type TechniqueCorrelation struct {
-	TechniqueID    string            `json:"techniqueId"`
-	TechniqueName  string            `json:"techniqueName"`
+	Technique      CanonicalTechnique `json:"technique"`
 	Actors         []threatgraph.Node `json:"actors"`
 	Campaigns      []threatgraph.Node `json:"campaigns"`
 	Malware        []threatgraph.Node `json:"malware"`
@@ -193,20 +271,22 @@ func (e *Engine) CorrelateIOC(ctx context.Context, iocID string) (IOCCorrelation
 **`CorrelateTechnique`** (the core building block; `CorrelateActor`/`CorrelateIOC` both call it
 per-technique):
 
-0. **Self-review correction**: `TechniqueNeighborhood` returns a **completely empty**
-   `Neighborhood` (no self-node, `assemble.go:160-162`) whenever a technique has zero
-   actor/campaign/malware/tool relationships — which is most techniques, since
+0. **Canonical Resolution first, always.** Call `resolveCanonicalTechnique(techniqueID)` and set
+   the result as `TechniqueCorrelation.Technique` before touching any relationship data.
+   **Self-review correction** (why this is step 0, not an afterthought): `TechniqueNeighborhood`
+   returns a **completely empty** `Neighborhood` (no self-node, `assemble.go:160-162`) whenever a
+   technique has zero actor/campaign/malware/tool relationships — which is most techniques, since
    `intelligence_campaigns`/`malware`/`tools` and `GroupTechniqueIndex` coverage is inherently
-   partial. Relying on `Neighborhood.Nodes[0].Label` for `TechniqueName` (the original draft of
-   this section) would leave it blank for any technique without a recorded relationship, even
-   though the technique itself is perfectly real and may well have a scenario and a validation
-   history. `techniqueLabel` (`assemble.go:19-32`, the function `TechniqueNeighborhood` uses
-   internally for its self-node) is unexported and just a one-line
-   `SELECT name FROM techniques WHERE technique_id = $1` with an ID fallback if unseeded —
-   `internal/correlation` runs the same tiny query itself rather than depending on
-   `TechniqueNeighborhood`'s self-node, matching this session's established tolerance for this
-   scale of duplication between independent read paths (`internal/db.GetRunIOCsEnriched` vs.
-   `GetRunIOCs` is the precedent).
+   partial. The original draft of this section derived `TechniqueName` from
+   `Neighborhood.Nodes[0].Label`, which would leave it blank for any technique without a recorded
+   relationship, even though the technique itself is perfectly real and may well have a scenario
+   and a validation history — relationships (layer 1) answering an identity question (layer 2)
+   is exactly the coupling the three-layer architecture (§0 above) exists to prevent.
+   `resolveCanonicalTechnique` fixes this at the root by never touching `Neighborhood` at all —
+   it goes straight to `attackdata.Lookup(techniqueID)`, the same authoritative, always-populated
+   (embedded, offline, not query-dependent) source `GET /api/attack/technique/{id}` already uses,
+   so `TechniqueName`/description/platforms/tactics are correct and present regardless of how
+   sparse this specific technique's relationship data happens to be.
 1. `threatgraph.TechniqueNeighborhood(ctx, pool, techniqueID)` → split `Neighborhood.Nodes` by
    `Type` into `Actors`/`Campaigns`/`Malware`/`Tools` (skip the technique's own self-node, when
    present).
@@ -259,10 +339,12 @@ r.Get("/api/correlation/ioc/{id}", h.CorrelateIOC)
 `tierAny` (Viewer+), matching every other read-only endpoint in this codebase (`GetIOCs`,
 `GetIOCAnalytics`, `KnowledgeGraphNeighborhood` are all `tierAny`). Each handler is 5 lines,
 mirroring `GetIOCAnalytics`'s shape exactly: parse the URL param, call the engine method, `200`
-+ `respond(w, result)` on success, `500` on error (technique/IOC-not-found returns an empty
-correlation, not a 404 — matches `threatgraph.Lookup`'s existing "unknown ID → empty
-Neighborhood, not an error" convention, so a client doesn't need two different empty-vs-error
-code paths).
++ `respond(w, result)` on success, `500` on error (an unknown technique/IOC ID returns a
+correlation with empty relationships/scenarios/validation, not a 404 — matches
+`threatgraph.Lookup`'s existing "unknown ID → empty Neighborhood, not an error" convention, so a
+client doesn't need two different empty-vs-error code paths. Per the canonicalization invariant
+in §0, `Technique` is still populated even here — via `resolveCanonicalTechnique`'s fallback —
+so "empty correlation" means empty relationships, never a blank technique identity).
 
 `Handler` gains a `correlationEngine *correlation.Engine` field and
 `WithCorrelation(e *correlation.Engine) *Handler`, mirroring `WithThreatPriority` exactly
@@ -286,6 +368,16 @@ code paths).
   callers (the knowledge-graph UI-facing endpoint) are unaffected.
 - **No changes to `ioc_sightings`, `iocs`, or any IOC Registry code** — this phase only reads
   `ioc_sightings.technique_id`, already populated.
+- **No ATT&CK ID canonicalization** (deprecated/renamed/merged technique IDs resolved forward to
+  their replacement, e.g. an old ID → its current successor) — checked during investigation, no
+  data source for this exists anywhere in the codebase today (`attackdata`'s generator drops
+  revoked/deprecated STIX objects entirely rather than recording their replacement; see
+  investigation section). `resolveCanonicalTechnique` canonicalizes *metadata for a given ID*,
+  not *the ID itself*; callers are expected to already pass current-form IDs, matching every
+  other consumer of `attackdata`/`threatgraph`/`threatpriority`/`coverage` in this codebase. If
+  MISP/OTX/OpenCTI feeds start surfacing deprecated IDs and this becomes a real problem, it needs
+  its own investigation (parsing STIX `revoked-by` relationships into a real ID map) — not solved
+  speculatively here.
 - **No OTX/MISP/OpenCTI `adversary_names` → `threat_actor_profiles` name-matching** — flagged
   during investigation as a real gap (OTX-reported adversary names on `ioc_enrichment` don't
   currently join back to `threat_actor_profiles`), but the IOC→technique→actor path above
@@ -304,6 +396,15 @@ code paths).
   string itself).
 - `internal/correlation/engine_test.go` (new), `TestMain`/`sharedDB` pattern (matching every
   Postgres-backed package this session):
+  - `resolveCanonicalTechnique` for a real bundled technique ID (e.g. `T1059.001`) asserts
+    `Name`/`Platforms`/`Tactics` match `attackdata.Lookup`'s own return directly — the two must
+    never drift.
+  - `resolveCanonicalTechnique` for an ID with no bundle entry asserts a non-empty fallback
+    (`Name == id`, not blank) — proves the "never blank" invariant holds even on a miss.
+  - `CorrelateTechnique` for a technique with **zero** actor/campaign/malware/tool relationships
+    (the exact self-review scenario) asserts `Technique.Name` is still populated and correct —
+    this is the regression test for self-review catch #1; it must fail against the original
+    `Neighborhood.Nodes[0].Label` approach and pass against `resolveCanonicalTechnique`.
   - `CorrelateTechnique` for a technique with a known actor (seed `threat_actor_profiles` +
     rely on `attackdata.GroupTechniqueIndex()`'s real bundled data for a real technique ID),
     asserts `Actors` populated.
