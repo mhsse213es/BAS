@@ -97,10 +97,19 @@ resolution rather than calling `ActorNeighborhood` for the actor→technique hop
    `LoadValidationVerdicts`, replacing the current unexported methods (`loadPreventionVerdicts`/
    `loadValidationVerdicts`), with a widened return type carrying the timestamp
    (`map[string]VerdictEntry{Verdict string, At time.Time}` instead of `map[string]string`).
-   Both existing call sites in `engine.go` (`buildSharedIndexes`, `scoreActor`) only ever check
-   *existence* in these maps (`if _, ok := shared.preventionVerdict[upper]; ok`), never read the
-   string value itself for scoring — so widening the value type doesn't change scoring
-   behavior, confirmed by reading every call site, not assumed.
+   **Correction (caught while grounding the implementation plan, not assumed away)**: the two
+   `scoreActor` call sites in `engine.go` (`engine.go:190,194`) only ever check *existence*
+   (`if _, ok := shared.preventionVerdict[upper]; ok`) — but a third call site,
+   `validation_factors.go`'s `validationPct` (called from both `PreventionSuccessFactor.Score`
+   and `ValidationSuccessFactor.Score`), takes the map as a parameter and explicitly reads and
+   branches on the string value (`v, ok := idx[...]; if isSuccess(v)`). Widening the value type
+   is not scoring-neutral for this call site — `validationPct`'s signature changes from
+   `idx map[string]string` to `idx map[string]VerdictEntry`, and its `isSuccess(v)` call becomes
+   `isSuccess(v.Verdict)`. This is a one-line change (extract `.Verdict` before the existing
+   comparison), but it's a real code change this phase must make, not a side effect that "just
+   compiles" — see Task 2 in the implementation plan. Both `PreventionSuccessFactor`'s and
+   `ValidationSuccessFactor`'s exported behavior (their `Score` method's raw/explanation/available
+   outputs) is unchanged; only the internal map value type and one field access are.
 
 ## Architecture
 
@@ -387,6 +396,14 @@ so "empty correlation" means empty relationships, never a blank technique identi
 
 ## Testing
 
+- `internal/threatpriority/validation_factors_test.go`: all 4 existing tests
+  (`TestPreventionSuccessFactor_Score`, `TestPreventionSuccessFactor_NoneTested_Unavailable`,
+  `TestValidationSuccessFactor_Score`, `TestValidationFactors_WeightScalesWithBlend`) construct
+  `sharedIndexes{preventionVerdict: map[string]string{...}}`/`validationVerdict` literals directly
+  — these updated to `map[string]VerdictEntry{"T1059": {Verdict: "pass"}, ...}` (zero-value `At`
+  is fine; these tests don't assert on it). New test: `validationPct` reads `.Verdict`, not the
+  whole struct — assert a `VerdictEntry` with the "wrong" `Verdict` string is correctly excluded
+  from `success` regardless of its `At` value, proving the extraction is correct.
 - `internal/threatpriority/engine_test.go`: existing tests referencing
   `loadPreventionVerdicts`/`loadValidationVerdicts` (or `sharedIndexes` built from them) updated
   for the renamed/exported functions and widened `VerdictEntry` return type. New test: a
