@@ -204,6 +204,30 @@ body {
 }
 .bld-mode-help { font-size: 0.76rem; color: var(--muted); margin: 0.25rem 0 0.75rem; line-height: 1.5; }
 
+.st-tech-wrap { position: relative; }
+.st-tech-panel {
+  display: none; position: absolute; left: 0; top: 100%; width: 100%; z-index: 30;
+  background: var(--elevated); border: 1px solid rgba(47,129,247,0.4); border-radius: var(--radius-lg);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.45); margin-top: 4px; max-height: 320px; overflow-y: auto;
+}
+.st-tech-panel.show { display: block; }
+.st-tech-row { padding: 0.5rem 0.7rem; cursor: pointer; border-bottom: 1px solid var(--border); }
+.st-tech-row:last-child { border-bottom: none; }
+.st-tech-row.active, .st-tech-row:hover { background: var(--surface); }
+.st-tech-row-id { font-weight: 700; color: var(--accent); font-size: 0.78rem; }
+.st-tech-row-name { font-size: 0.8rem; margin-left: 0.4rem; }
+.st-tech-row-meta { font-size: 0.68rem; color: var(--muted); margin-top: 0.15rem; }
+.st-tech-selected {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem;
+  padding: 0.5rem 0.7rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+}
+.st-tech-selected.unresolved { border-color: rgba(210,153,34,0.5); }
+.st-tech-sel-id { font-weight: 700; color: var(--accent); font-size: 0.8rem; }
+.st-tech-sel-name { font-size: 0.82rem; margin-left: 0.4rem; }
+.st-tech-sel-actions { font-size: 0.72rem; white-space: nowrap; display: flex; gap: 0.5rem; }
+.st-tech-sel-actions a { color: var(--accent); cursor: pointer; text-decoration: none; }
+.st-tech-sel-actions a:hover { text-decoration: underline; }
+
 /* ── Buttons ───────────────────────────────────────────────── */
 .btn {
   display: inline-flex; align-items: center; gap: 0.3rem;
@@ -4135,35 +4159,6 @@ body.theme-slate {
   </div>
 </div>
 
-<!-- common ATT&CK techniques for autocomplete -->
-<datalist id="att-techniques">
-  <option value="T1059.001">PowerShell</option>
-  <option value="T1059.003">Windows Command Shell</option>
-  <option value="T1059.004">Unix Shell</option>
-  <option value="T1003.001">LSASS Memory</option>
-  <option value="T1003.008">/etc/passwd and /etc/shadow</option>
-  <option value="T1055">Process Injection</option>
-  <option value="T1547.001">Registry Run Keys / Startup Folder</option>
-  <option value="T1053.005">Scheduled Task</option>
-  <option value="T1053.003">Cron</option>
-  <option value="T1078">Valid Accounts</option>
-  <option value="T1021.001">Remote Desktop Protocol</option>
-  <option value="T1021.004">SSH</option>
-  <option value="T1486">Data Encrypted for Impact</option>
-  <option value="T1490">Inhibit System Recovery</option>
-  <option value="T1562.001">Disable or Modify Tools</option>
-  <option value="T1070.004">File Deletion</option>
-  <option value="T1112">Modify Registry</option>
-  <option value="T1082">System Information Discovery</option>
-  <option value="T1083">File and Directory Discovery</option>
-  <option value="T1057">Process Discovery</option>
-  <option value="T1016">System Network Configuration Discovery</option>
-  <option value="T1567.002">Exfiltration to Cloud Storage</option>
-  <option value="T1105">Ingress Tool Transfer</option>
-  <option value="T1218.011">Rundll32</option>
-  <option value="T1136.001">Create Local Account</option>
-</datalist>
-
 <!-- Create User Modal -->
 <div id="create-user-overlay" class="overlay" onclick="if(event.target===this)closeCreateUser()">
   <div class="modal">
@@ -6545,7 +6540,6 @@ function loadCatalogs() {
   // guard with Array.isArray — an error body must not be mistaken for a catalog.
   apicall('/api/art/techniques').then(function(d) {
     artCatalog = Array.isArray(d) ? d : [];
-    if (artCatalog.length) _fillDatalistFromCatalog(artCatalog);
     if (scenarios.length) renderScenarios();
   }).catch(function() {});
   apicall('/api/caldera/abilities').then(function(d) {
@@ -6579,7 +6573,6 @@ function loadScenarios() {
         supportedOs:        s.supportedOs         || []
       };
     });
-    _enrichDatalistFromScenarios();
     renderScenarios();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -10176,52 +10169,7 @@ function renderModalSelection() {
 
 /* ── Scenario Builder ──────────────────────────────────────── */
 var _bldEditId = null;
-var _artTechniquesCached = false;
 var _pickerBuilderMode = false;
-
-function _fillDatalistFromCatalog(list) {
-  var dl = document.getElementById('att-techniques');
-  if (!dl || !list.length) return;
-  dl.innerHTML = '';
-  list.forEach(function(t) {
-    var opt = document.createElement('option');
-    opt.value = t.id;
-    opt.textContent = t.name ? t.id + ' — ' + t.name : t.id;
-    dl.appendChild(opt);
-  });
-  _artTechniquesCached = true;
-}
-
-function _enrichDatalistFromScenarios() {
-  var dl = document.getElementById('att-techniques');
-  if (!dl) return;
-  var existing = {};
-  dl.querySelectorAll('option').forEach(function(o) { existing[o.value] = true; });
-  var toAdd = {};
-  scenarios.forEach(function(s) {
-    (s.steps || []).forEach(function(st) {
-      var tid = st.techniqueId || st.technique_id || '';
-      if (tid && !existing[tid]) toAdd[tid] = true;
-    });
-  });
-  Object.keys(toAdd).sort().forEach(function(tid) {
-    var opt = document.createElement('option');
-    opt.value = tid;
-    dl.appendChild(opt);
-  });
-}
-
-function _populateARTDatalist() {
-  if (_artTechniquesCached) return;
-  // Reuse artCatalog if loadCatalogs() already fetched it.
-  if (artCatalog.length) { _fillDatalistFromCatalog(artCatalog); return; }
-  apicall('/api/art/techniques').then(function(list) {
-    if (Array.isArray(list) && list.length) {
-      artCatalog = list;
-      _fillDatalistFromCatalog(list);
-    }
-  }).catch(function() { /* keep static fallback on error */ });
-}
 
 function openBuilderARTPicker() {
   var existing = (document.getElementById('bld-art-list').value || '')
@@ -10246,7 +10194,7 @@ function openBuilderARTPicker() {
   }
   if (artCatalog.length) { doOpen(artCatalog); return; }
   apicall('/api/art/techniques').then(function(d) {
-    if (Array.isArray(d) && d.length) { artCatalog = d; _fillDatalistFromCatalog(d); }
+    if (Array.isArray(d) && d.length) { artCatalog = d; }
     doOpen(artCatalog);
   }).catch(function(e) { showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
 }
@@ -10296,7 +10244,6 @@ function openBuilderCalderaPicker() {
 
 function openBuilder(id) {
   _bldEditId = id;
-  _populateARTDatalist();
   document.getElementById('bld-err').textContent = '';
   document.getElementById('builder-title').textContent = id ? 'Edit Scenario' : 'New Scenario';
   if (id) {
@@ -10335,6 +10282,7 @@ function fillBuilder(s) {
   steps.innerHTML = '';
   ((s.steps) || []).forEach(function(st) { addStep(st); });
   if (mode === 'custom' && !steps.children.length) addStep(null);
+  ensureTechniqueCatalog(techRefreshAllTechCards);
 
   renderBuilderMode();
 }
@@ -10440,6 +10388,189 @@ function techSearch(index, query) {
 
 /* ── /Technique Selector: matching engine ────────────────────────────── */
 
+/* ── Technique Selector: combobox UI ─────────────────────────────────── */
+
+var techniqueCatalog = null; // null = not yet fetched; [] = fetched but empty/failed
+var techniqueIndex = null;
+var _techSearchTimer = null;
+
+function ensureTechniqueCatalog(cb) {
+  if (techniqueCatalog !== null) { cb(); return; }
+  apicall('/api/techniques/catalog').then(function(list) {
+    techniqueCatalog = Array.isArray(list) ? list : [];
+    techniqueIndex = techBuildIndex(techniqueCatalog);
+    cb();
+  }).catch(function() {
+    techniqueCatalog = [];
+    techniqueIndex = [];
+    cb();
+  });
+}
+
+function techFindById(id) {
+  if (!techniqueCatalog) return null;
+  var norm = techNormalize(id);
+  for (var i = 0; i < techniqueCatalog.length; i++) {
+    if (techNormalize(techniqueCatalog[i].id) === norm) return techniqueCatalog[i];
+  }
+  return null;
+}
+
+function techFieldHTML(st) {
+  var techId = (st && st.techniqueId) || '';
+  var hasSelection = !!techId;
+  return '<div class="bld-field full st-tech-wrap">' +
+      '<label>Technique</label>' +
+      '<input class="st-tech" type="hidden" value="' + x(techId) + '">' +
+      '<div class="st-tech-selected" style="display:' + (hasSelection ? '' : 'none') + '"></div>' +
+      '<input class="st-tech-search" type="text" placeholder="Search ATT&amp;CK technique (ID, name, keyword...)" autocomplete="off" ' +
+        'style="display:' + (hasSelection ? 'none' : '') + '" ' +
+        'oninput="techOnInput(this)" onkeydown="techOnKeydown(event,this)" onblur="techOnBlur(this)">' +
+      '<div class="bld-mode-help" style="margin:0.3rem 0 0">Examples: T1055 &middot; credential dumping &middot; lsass &middot; powershell &middot; registry run</div>' +
+      '<div class="st-tech-panel"></div>' +
+    '</div>';
+}
+
+// techInitField renders the initial selected-card state for a freshly-added
+// step row that already has a techniqueId (edit mode). Called right after
+// the row is appended to the DOM.
+function techInitField(wrap, techId) {
+  if (!techId) return;
+  techRenderSelected(wrap, techId);
+}
+
+function techRenderSelected(wrap, id) {
+  var box = wrap.querySelector('.st-tech-selected');
+  var search = wrap.querySelector('.st-tech-search');
+  var hidden = wrap.querySelector('.st-tech');
+  hidden.value = id;
+  search.style.display = 'none';
+  box.style.display = '';
+  var t = techFindById(id);
+  if (!t) {
+    box.className = 'st-tech-selected unresolved';
+    box.innerHTML =
+      '<div><span class="st-tech-sel-id">' + x(id) + '</span>' +
+        '<span class="tiny muted" style="margin-left:0.4rem">' +
+        (techniqueCatalog === null ? 'resolving…' : 'not recognized') + '</span></div>' +
+      '<span class="st-tech-sel-actions"><a href="javascript:void(0)" onclick="techChangeSelection(this)">&#10005; change</a></span>';
+    return;
+  }
+  box.className = 'st-tech-selected';
+  var tactics = (t.tactics || []).join(', ');
+  var subText = t.subCount ? (t.subCount + (t.subCount === 1 ? ' sub-technique' : ' sub-techniques')) : '';
+  box.innerHTML =
+    '<div><span class="st-tech-sel-id">' + x(t.id) + '</span> <span class="st-tech-sel-name">' + x(t.name) + '</span>' +
+      (tactics ? '<div class="st-tech-row-meta">' + x(tactics) + '</div>' : '') +
+      (subText ? '<div class="st-tech-row-meta">' + x(subText) + '</div>' : '') +
+    '</div>' +
+    '<span class="st-tech-sel-actions">' +
+      (t.url ? '<a href="' + x(t.url) + '" target="_blank" rel="noopener">View ATT&amp;CK</a> ' : '') +
+      '<a href="javascript:void(0)" onclick="techCopyId(this)" data-id="' + x(t.id) + '">Copy ID</a> ' +
+      '<a href="javascript:void(0)" onclick="techChangeSelection(this)">&#10005; change</a>' +
+    '</span>';
+}
+
+function techRefreshAllTechCards() {
+  document.querySelectorAll('.st-tech-wrap').forEach(function(wrap) {
+    var hidden = wrap.querySelector('.st-tech');
+    if (hidden.value) techRenderSelected(wrap, hidden.value);
+  });
+}
+
+function techChangeSelection(el) {
+  var wrap = el.closest('.st-tech-wrap');
+  wrap.querySelector('.st-tech').value = '';
+  wrap.querySelector('.st-tech-selected').style.display = 'none';
+  var search = wrap.querySelector('.st-tech-search');
+  search.style.display = '';
+  search.value = '';
+  search.focus();
+}
+
+function techCopyId(el) {
+  var id = el.getAttribute('data-id');
+  if (navigator.clipboard && id) {
+    navigator.clipboard.writeText(id).then(function() { showToast('Copied ' + id, 'ok'); });
+  }
+}
+
+function techOnInput(input) {
+  var wrap = input.closest('.st-tech-wrap');
+  var panel = wrap.querySelector('.st-tech-panel');
+  if (_techSearchTimer) clearTimeout(_techSearchTimer);
+  if (!input.value) { panel.classList.remove('show'); panel.innerHTML = ''; return; }
+  _techSearchTimer = setTimeout(function() {
+    ensureTechniqueCatalog(function() { techRenderResults(wrap, input.value); });
+  }, 150);
+}
+
+function techRenderResults(wrap, query) {
+  var panel = wrap.querySelector('.st-tech-panel');
+  var results = techSearch(techniqueIndex || [], query);
+  if (!results.length) {
+    panel.innerHTML = '<div class="st-tech-row" style="cursor:default;color:var(--muted)">No matching technique.</div>';
+    panel.classList.add('show');
+    return;
+  }
+  panel.innerHTML = results.map(function(t, i) {
+    var tactics = (t.tactics || []).join(', ');
+    var platforms = (t.platforms || []).join(', ');
+    return '<div class="st-tech-row' + (i === 0 ? ' active' : '') + '" data-id="' + x(t.id) + '" onmousedown="techSelectRow(this)">' +
+      '<span class="st-tech-row-id">' + x(t.id) + '</span><span class="st-tech-row-name">' + x(t.name) + '</span>' +
+      (tactics ? '<div class="st-tech-row-meta">' + x(tactics) + '</div>' : '') +
+      (platforms ? '<div class="st-tech-row-meta">' + x(platforms) + '</div>' : '') +
+    '</div>';
+  }).join('');
+  panel.classList.add('show');
+}
+
+function techSelectRow(row) {
+  var wrap = row.closest('.st-tech-wrap');
+  techRenderSelected(wrap, row.getAttribute('data-id'));
+  var panel = wrap.querySelector('.st-tech-panel');
+  panel.classList.remove('show');
+  panel.innerHTML = '';
+}
+
+function techOnKeydown(ev, input) {
+  var wrap = input.closest('.st-tech-wrap');
+  var panel = wrap.querySelector('.st-tech-panel');
+  if (!panel.classList.contains('show')) return;
+  var rows = panel.querySelectorAll('.st-tech-row[data-id]');
+  if (!rows.length) return;
+  var activeIdx = -1;
+  rows.forEach(function(r, i) { if (r.classList.contains('active')) activeIdx = i; });
+  if (ev.key === 'ArrowDown') {
+    ev.preventDefault();
+    activeIdx = (activeIdx + 1) % rows.length;
+    rows.forEach(function(r, i) { r.classList.toggle('active', i === activeIdx); });
+  } else if (ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    activeIdx = (activeIdx - 1 + rows.length) % rows.length;
+    rows.forEach(function(r, i) { r.classList.toggle('active', i === activeIdx); });
+  } else if (ev.key === 'Enter') {
+    ev.preventDefault();
+    techSelectRow(activeIdx >= 0 ? rows[activeIdx] : rows[0]);
+  } else if (ev.key === 'Escape') {
+    panel.classList.remove('show');
+    panel.innerHTML = '';
+  } else if (ev.key === 'Tab') {
+    techSelectRow(rows[0]); // selection completes; default Tab behavior still advances focus
+  }
+}
+
+function techOnBlur(input) {
+  var wrap = input.closest('.st-tech-wrap');
+  setTimeout(function() {
+    var panel = wrap.querySelector('.st-tech-panel');
+    panel.classList.remove('show');
+    panel.innerHTML = '';
+  }, 150); // delay so a row's onmousedown fires before the panel is cleared
+}
+
+/* ── /Technique Selector: combobox UI ────────────────────────────────── */
+
 function addStep(st) {
   st = st || {};
   var execs = ['powershell','cmd','bash','sh','wmi','mshta','rundll32','cscript','wscript','regsvr32','schtasks'];
@@ -10462,8 +10593,8 @@ function addStep(st) {
         '<button type="button" onclick="removeStep(this)" title="Remove">&#10005;</button>' +
       '</span></div>' +
     '<div class="bld-grid">' +
+      techFieldHTML(st) +
       '<div class="bld-field"><label>Name</label><input class="st-name" type="text" value="' + x(st.name || '') + '" placeholder="e.g. Dump LSASS"></div>' +
-      '<div class="bld-field"><label>Technique ID</label><input class="st-tech" list="att-techniques" type="text" value="' + x(st.techniqueId || '') + '" placeholder="T1003.001"></div>' +
       '<div class="bld-field"><label>Executor</label><select class="st-exec">' + execOpts + '</select></div>' +
       '<div class="bld-field"><label>Timeout (sec)</label><input class="st-timeout" type="number" min="0" value="' + (st.timeoutSec || 60) + '"></div>' +
       '<div class="bld-field"><label>Requires privilege</label><select class="st-priv">' + privOpts + '</select></div>' +
@@ -10472,6 +10603,7 @@ function addStep(st) {
     '</div>' +
     '<div class="bld-mode-help">Steps requiring higher privilege than a run\'s Max Privilege ceiling are skipped, not dispatched.</div>';
   document.getElementById('bld-steps').appendChild(div);
+  techInitField(div, st.techniqueId);
   renumberSteps();
 }
 
@@ -10527,7 +10659,12 @@ function collectBuilder() {
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
       var tech = r.querySelector('.st-tech').value.trim();
-      if (!tech) { err.textContent = 'Step ' + (i + 1) + ': technique ID is required.'; return null; }
+      if (!tech) {
+        var searchVal = (r.querySelector('.st-tech-search').value || '').trim();
+        err.textContent = 'Step ' + (i + 1) + ': ' +
+          (searchVal ? 'select a technique from the search results.' : 'a technique is required.');
+        return null;
+      }
       var newStep = {
         name: r.querySelector('.st-name').value.trim() || ('Step ' + (i + 1)),
         techniqueId: tech,
