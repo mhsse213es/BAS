@@ -20,6 +20,7 @@ import (
 	"github.com/audspect/bas/internal/compliance"
 	"github.com/audspect/bas/internal/connector"
 	"github.com/audspect/bas/internal/controlhealth"
+	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detect"
 	"github.com/audspect/bas/internal/endpointrisk"
@@ -288,6 +289,7 @@ func main() {
 	}
 	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions, engine.Profiles())
 	priorityEngine := threatpriority.NewEngine(pool, engine, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
+	correlationEngine := correlation.NewEngine(pool, engine)
 	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -448,6 +450,7 @@ func main() {
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
 		WithThreatPriority(priorityEngine).
+		WithCorrelation(correlationEngine).
 		WithTicketing(ticketingManager).
 		WithLicensePath(cfg.LicensePath).
 		WithExercise(exStore, exExecutor, exChain).
