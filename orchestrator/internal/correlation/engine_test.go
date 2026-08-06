@@ -208,3 +208,101 @@ func TestCorrelateTechnique_PreventionVerdict_SetsValidationAndRecommendation(t 
 		}
 	})
 }
+
+func TestCorrelateActor_TwoTechniques_EachIndependentlyCorrelated(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	wantTechs := attackdata.GroupTechniqueIndex()["Wizard Spider"]
+	if len(wantTechs) < 2 {
+		t.Fatal("test fixture assumption broken: \"Wizard Spider\" needs at least 2 techniques")
+	}
+
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExec(t, pool, `INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source)
+			VALUES ('Wizard Spider', '{}', '{}', '{}', 'test')`)
+		mustExec(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('corr-actor-a1', 'CORR-ACTOR-HOST')`)
+		mustExec(t, pool, `INSERT INTO scenario_runs (id, scenario_id, name, agent_id, status, results, started_at)
+			VALUES ('corr-actor-run', 'corr-actor-scn', 'Corr Actor Run', 'corr-actor-a1', 'completed', $1::jsonb, NOW())`,
+			`[{"technique":{"id":"`+wantTechs[0]+`"},"result":"pass","executedAt":"2026-01-01T00:00:00Z"}]`)
+		mustExec(t, pool, `INSERT INTO intelligence_campaigns (id, name, description, actor_ids, technique_ids, source_provider)
+			VALUES ('corr-actor-campaign', 'Corr Actor Campaign', '', $1, '{}', 'test')`, []string{"Wizard Spider"})
+
+		eng := NewEngine(pool, scenario.NewEngine(t.TempDir()))
+		ac, err := eng.CorrelateActor(context.Background(), "Wizard Spider")
+		if err != nil {
+			t.Fatalf("CorrelateActor: %v", err)
+		}
+		if len(ac.Techniques) != len(wantTechs) {
+			t.Fatalf("Techniques = %d, want %d (full ResolveActorTechniques roster)", len(ac.Techniques), len(wantTechs))
+		}
+		var sawValidated, sawUnvalidated bool
+		for _, tc := range ac.Techniques {
+			if tc.Technique.ID == strings.ToUpper(wantTechs[0]) {
+				if tc.Validation == nil || tc.Validation.Verdict != "pass" {
+					t.Errorf("technique %s: Validation = %+v, want {pass, prevention}", wantTechs[0], tc.Validation)
+				}
+				sawValidated = true
+			} else if tc.Validation == nil {
+				sawUnvalidated = true
+			}
+		}
+		if !sawValidated || !sawUnvalidated {
+			t.Errorf("expected a mix of validated/unvalidated techniques, got sawValidated=%v sawUnvalidated=%v", sawValidated, sawUnvalidated)
+		}
+		foundCampaign := false
+		for _, c := range ac.Campaigns {
+			if c.Label == "Corr Actor Campaign" {
+				foundCampaign = true
+			}
+		}
+		if !foundCampaign {
+			t.Errorf("Campaigns = %+v, want to include Corr Actor Campaign", ac.Campaigns)
+		}
+	})
+}
+
+func TestCorrelateActor_DiscardsActorNeighborhoodTechniqueNodes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	// Disambiguation regression test: ActorNeighborhood internally resolves
+	// its own (unaliased) technique nodes via GroupTechniqueIndex()[name] --
+	// CorrelateActor's technique roster must come exclusively from
+	// ResolveActorTechniques, so ac.Techniques' length must equal the
+	// alias-aware roster length even though ActorNeighborhood also returns
+	// technique-type nodes internally.
+	wantTechs := attackdata.GroupTechniqueIndex()["Wizard Spider"]
+	if len(wantTechs) == 0 {
+		t.Fatal("test fixture assumption broken")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExec(t, pool, `INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source)
+			VALUES ('Wizard Spider', '{}', '{}', '{}', 'test')`)
+
+		eng := NewEngine(pool, scenario.NewEngine(t.TempDir()))
+		ac, err := eng.CorrelateActor(context.Background(), "Wizard Spider")
+		if err != nil {
+			t.Fatalf("CorrelateActor: %v", err)
+		}
+		if len(ac.Techniques) != len(wantTechs) {
+			t.Fatalf("Techniques = %d, want exactly %d (ResolveActorTechniques' roster, not ActorNeighborhood's)", len(ac.Techniques), len(wantTechs))
+		}
+	})
+}
+
+func TestCorrelateActor_UnknownActor_ReturnsEmptyNotError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := NewEngine(pool, scenario.NewEngine(t.TempDir()))
+		ac, err := eng.CorrelateActor(context.Background(), "NoSuchActor")
+		if err != nil {
+			t.Fatalf("CorrelateActor: %v", err)
+		}
+		if len(ac.Techniques) != 0 || len(ac.Campaigns) != 0 {
+			t.Errorf("got %+v, want empty (no profile row, no known aliases)", ac)
+		}
+	})
+}
