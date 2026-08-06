@@ -72,11 +72,11 @@ type TechniqueCorrelation struct {
 // (Threat Coverage Analysis) is a later phase's job, reading this data, not
 // this phase's.
 type ActorCorrelation struct {
-	ActorName  string                  `json:"actorName"`
-	Campaigns  []threatgraph.Node      `json:"campaigns"`
-	Malware    []threatgraph.Node      `json:"malware"`
-	Tools      []threatgraph.Node      `json:"tools"`
-	Techniques []TechniqueCorrelation  `json:"techniques"`
+	ActorName  string                 `json:"actorName"`
+	Campaigns  []threatgraph.Node     `json:"campaigns"`
+	Malware    []threatgraph.Node     `json:"malware"`
+	Tools      []threatgraph.Node     `json:"tools"`
+	Techniques []TechniqueCorrelation `json:"techniques"`
 }
 
 // IOCCorrelation walks IOC -> technique(s) (via ioc_sightings, already
