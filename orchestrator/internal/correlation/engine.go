@@ -2,6 +2,7 @@ package correlation
 
 import (
 	"context"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -143,4 +144,49 @@ func (e *Engine) loadActorAliases(ctx context.Context, name string) ([]string, e
 		return nil, nil
 	}
 	return aliases, err
+}
+
+// CorrelateIOC reads the IOC's own type/value directly (a small,
+// independent query, same duplication tolerance as loadActorAliases --
+// avoids parsing threatgraph.IOCNeighborhood's combined "type: value"
+// Label back apart), then walks IOCNeighborhood for its technique(s) (via
+// ioc_sightings.technique_id, already real) and correlates each with shared
+// verdict maps built once.
+func (e *Engine) CorrelateIOC(ctx context.Context, iocID string) (IOCCorrelation, error) {
+	ic := IOCCorrelation{IOCID: iocID}
+	err := e.pool.QueryRow(ctx, `SELECT type, value FROM iocs WHERE id = $1`, iocID).Scan(&ic.Type, &ic.Value)
+	if err != nil && err != pgx.ErrNoRows {
+		return IOCCorrelation{}, err
+	}
+
+	nb, err := threatgraph.IOCNeighborhood(ctx, e.pool, iocID)
+	if err != nil {
+		return IOCCorrelation{}, err
+	}
+	var techIDs []string
+	for _, node := range nb.Nodes {
+		if node.Type == threatgraph.NodeTypeTechnique {
+			techIDs = append(techIDs, strings.TrimPrefix(node.ID, "technique:"))
+		}
+	}
+	if len(techIDs) == 0 {
+		return ic, nil
+	}
+
+	prevention, err := threatpriority.LoadPreventionVerdicts(ctx, e.pool)
+	if err != nil {
+		return IOCCorrelation{}, err
+	}
+	validation, err := threatpriority.LoadValidationVerdicts(ctx, e.pool)
+	if err != nil {
+		return IOCCorrelation{}, err
+	}
+	for _, id := range techIDs {
+		tc, err := e.correlateTechnique(ctx, id, prevention, validation)
+		if err != nil {
+			return IOCCorrelation{}, err
+		}
+		ic.Techniques = append(ic.Techniques, tc)
+	}
+	return ic, nil
 }

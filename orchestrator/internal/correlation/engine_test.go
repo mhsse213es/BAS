@@ -306,3 +306,70 @@ func TestCorrelateActor_UnknownActor_ReturnsEmptyNotError(t *testing.T) {
 		}
 	})
 }
+
+func TestCorrelateIOC_SeededSighting_CorrelatesItsTechnique(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		var iocID string
+		if err := pool.QueryRow(context.Background(), `
+			INSERT INTO iocs (type, value, source) VALUES ('command_line', 'whoami /all', 'detection_alert')
+			RETURNING id`).Scan(&iocID); err != nil {
+			t.Fatalf("seed ioc: %v", err)
+		}
+		mustExec(t, pool, `INSERT INTO ioc_sightings (ioc_id, scenario_id, run_id, agent_id, technique_id)
+			VALUES ($1, 'corr-ioc-scn', 'corr-ioc-run', 'corr-ioc-agent', 'T1059')`, iocID)
+
+		eng := NewEngine(pool, scenario.NewEngine(t.TempDir()))
+		ic, err := eng.CorrelateIOC(context.Background(), iocID)
+		if err != nil {
+			t.Fatalf("CorrelateIOC: %v", err)
+		}
+		if ic.Type != "command_line" || ic.Value != "whoami /all" {
+			t.Errorf("Type/Value = %q/%q, want command_line/whoami /all", ic.Type, ic.Value)
+		}
+		if len(ic.Techniques) != 1 || ic.Techniques[0].Technique.ID != "T1059" {
+			t.Fatalf("Techniques = %+v, want exactly [T1059]", ic.Techniques)
+		}
+	})
+}
+
+func TestCorrelateIOC_NoSightings_ReturnsIOCIdentityNoTechniques(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		var iocID string
+		if err := pool.QueryRow(context.Background(), `
+			INSERT INTO iocs (type, value, source) VALUES ('process', 'powershell.exe', 'detection_alert')
+			RETURNING id`).Scan(&iocID); err != nil {
+			t.Fatalf("seed ioc: %v", err)
+		}
+
+		eng := NewEngine(pool, scenario.NewEngine(t.TempDir()))
+		ic, err := eng.CorrelateIOC(context.Background(), iocID)
+		if err != nil {
+			t.Fatalf("CorrelateIOC: %v", err)
+		}
+		if ic.Type != "process" || len(ic.Techniques) != 0 {
+			t.Errorf("got %+v, want Type=process, zero Techniques", ic)
+		}
+	})
+}
+
+func TestCorrelateIOC_UnknownID_ReturnsEmptyNotError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := NewEngine(pool, scenario.NewEngine(t.TempDir()))
+		ic, err := eng.CorrelateIOC(context.Background(), "does-not-exist")
+		if err != nil {
+			t.Fatalf("CorrelateIOC: %v", err)
+		}
+		if ic.Type != "" || len(ic.Techniques) != 0 {
+			t.Errorf("got %+v, want empty", ic)
+		}
+	})
+}
