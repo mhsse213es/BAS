@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -528,7 +529,13 @@ func GenerateHTML(w io.Writer, r *FullReport, compliance []ComplianceSummaryRow)
 	_logoLoadOnce.Do(_loadLogos)
 	data["logoLightUri"] = _logoLight
 	data["logoDarkUri"] = _logoDark
-	return reportTmpl.Execute(w, data)
+
+	var buf bytes.Buffer
+	if err := reportTmpl.Execute(&buf, data); err != nil {
+		return err
+	}
+	_, err = w.Write(injectTableOfContents(buf.Bytes()))
+	return err
 }
 
 // ComplianceSummaryRow is one framework row in the compliance table. The json

@@ -166,3 +166,59 @@ func TestGenerateHTMLRendersAllSections(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateHTML_IncludesTableOfContents(t *testing.T) {
+	now := time.Date(2026, 6, 9, 10, 30, 0, 0, time.UTC)
+	rep := &FullReport{
+		GeneratedAt: now,
+		Agent: models.Agent{
+			AgentID: "agent-123", Hostname: "BANK-WS-01", IPAddress: "10.0.0.5",
+			OSVersion: "Windows 11 Pro 23H2", Username: "svc-bas", EnvLabel: "Production",
+		},
+		Summary: ExecutiveSummary{
+			RiskScore: 72, Classification: "High Risk",
+			PreventionScore: 41, ExposureScore: 63, CoverageScore: 0,
+			KillChainCoverage: 21, KillChainAmplifier: 1.8, Trend: "Baseline",
+			TotalRuns: 1, TotalTechniques: 12, PassedTechniques: 5, FailedTechniques: 7,
+			LastRunAt: now, LastScenarioName: "RBI Ransomware Resilience Sweep",
+			ExposureLevel: "High", DetectionScore: 50, DetectionMeasured: true,
+			PenetrationTested: 12, PenetrationFailed: 7, PenetrationPct: 58,
+			MTTDMs: 192000,
+		},
+		ExecutiveConclusion: "This assessment executed 12 techniques against the endpoint, of which 7 were not prevented.",
+		TopRiskDrivers: []RiskDriver{
+			{TechniqueID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access",
+				Severity: "Critical", Failures: 3, ScorePoints: 30},
+		},
+		Reliability:   Reliability{Attempted: 12, Valid: 12, Confidence: "High"},
+		SkipBreakdown: SkipBreakdown{Policy: 4, Content: 1, Platform: 2},
+		Coverage: CoverageSummary{
+			ScenarioTotal: 40, Eligible: 26, Executed: 26,
+			ScenarioCoveragePct: 65, EligibleCoveragePct: 100,
+		},
+		Runs: []RunSummary{
+			{ID: "run-1", ScenarioName: "RBI Ransomware Resilience Sweep", Status: "completed",
+				StartedAt: now, RiskScore: 72, Classification: "High Risk",
+				PreventionScore: 41, ExposureScore: 63, TotalTechniques: 12, FailedTechniques: 7},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, "Table of Contents") {
+		t.Fatal("output missing TOC page")
+	}
+	if !strings.Contains(out, `id="sec-1"`) {
+		t.Error("Executive Summary section missing id=\"sec-1\"")
+	}
+	if !strings.Contains(out, `href="#sec-1"`) {
+		t.Error("TOC missing a link to Executive Summary (href=\"#sec-1\")")
+	}
+	if !strings.Contains(out, "Executive Summary") {
+		t.Error("expected Executive Summary section title to still render")
+	}
+}
