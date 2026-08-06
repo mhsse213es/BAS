@@ -41,3 +41,6 @@ api/__pycache__/
 
 # Node
 node_modules/
+
+# Superpowers visual-companion brainstorming sessions (local scratch only)
+.superpowers/
