@@ -1,0 +1,7 @@
+{
+  "_README": "ANALYST-MAINTAINED SEARCH-SYNONYM DICTIONARY — used only by the Technique Selector's search matching, not authoritative ATT&CK data. Add/edit entries keyed by ATT&CK technique ID; each value is a list of alternate search terms. Keys starting with '_' are ignored.",
+  "T1055": ["dll injection"],
+  "T1547": ["startup", "autorun"],
+  "T1003": ["mimikatz", "lsass dump"],
+  "T1053": ["schtasks"]
+}

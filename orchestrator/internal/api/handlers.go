@@ -40,6 +40,7 @@ import (
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/reporting"
+	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/threatpriority"
@@ -3222,6 +3223,48 @@ func (h *Handler) GetUnifiedTechniques(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TechniqueID < out[j].TechniqueID })
+	respond(w, out)
+}
+
+// TechniqueCatalogEntry is one row in the full ATT&CK technique search
+// catalog served to the Scenario Builder's Technique Selector. Built
+// entirely from the embedded attackdata dataset — read-only, no DB access.
+type TechniqueCatalogEntry struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Tactics     []string `json:"tactics,omitempty"`
+	Platforms   []string `json:"platforms,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Detection   string   `json:"detection,omitempty"`
+	DataSources []string `json:"dataSources,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
+	SubCount    int      `json:"subCount,omitempty"`
+	Aliases     []string `json:"aliases,omitempty"`
+	URL         string   `json:"url,omitempty"`
+}
+
+// GET /api/techniques/catalog — the full ATT&CK technique catalog (every
+// loaded technique, not just ones with ART/Caldera/BAS coverage) for the
+// Scenario Builder's client-side Technique Selector search. Read-only,
+// Viewer+, no DB access — built entirely from the embedded attackdata
+// dataset, so it's safe to compute fresh on every request.
+func (h *Handler) GetTechniqueCatalog(w http.ResponseWriter, r *http.Request) {
+	refs := attackdata.All()
+	subCounts := attackdata.SubtechniqueCounts()
+	out := make([]TechniqueCatalogEntry, 0, len(refs))
+	for _, ref := range refs {
+		entry := TechniqueCatalogEntry{ID: ref.ID, Name: ref.Name, Tactics: ref.Tactics, SubCount: subCounts[ref.ID]}
+		if e := attackdata.Lookup(ref.ID); e != nil {
+			entry.Platforms = e.Platforms
+			entry.Description = e.Description
+			entry.Detection = e.Detection
+			entry.DataSources = e.DataSources
+			entry.Permissions = e.PermissionsRequired
+			entry.Aliases = e.Aliases
+			entry.URL = e.URL
+		}
+		out = append(out, entry)
+	}
 	respond(w, out)
 }
 

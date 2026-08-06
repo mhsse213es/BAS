@@ -158,3 +158,42 @@ func TestGroupTechniqueIndex_NoEmptyGroupsOrTechniqueLists(t *testing.T) {
 		}
 	}
 }
+
+// The synonym dictionary must merge into Lookup() results the same way the
+// curated overlay does.
+func TestLookupAliasesMerge(t *testing.T) {
+	e := Lookup("T1055")
+	if e == nil {
+		t.Fatal("T1055 not found in embedded dataset")
+	}
+	if !slices.Contains(e.Aliases, "dll injection") {
+		t.Errorf("T1055 should carry alias %q, got %v", "dll injection", e.Aliases)
+	}
+	// Authoritative data must survive the merge.
+	if e.Name == "" {
+		t.Error("authoritative name lost after alias merge")
+	}
+}
+
+func TestLookupNoAliases(t *testing.T) {
+	// T1078 (Valid Accounts) has no entry in technique_synonyms.json.
+	e := Lookup("T1078")
+	if e == nil {
+		t.Fatal("T1078 not found in embedded dataset")
+	}
+	if len(e.Aliases) != 0 {
+		t.Errorf("T1078 should have no aliases, got %v", e.Aliases)
+	}
+}
+
+// SubtechniqueCounts must count sub-techniques under their parent and never
+// count a technique under itself.
+func TestSubtechniqueCounts(t *testing.T) {
+	counts := SubtechniqueCounts()
+	if counts["T1055"] == 0 {
+		t.Error("T1055 (Process Injection) should have a nonzero sub-technique count")
+	}
+	if _, exists := counts["T1055.001"]; exists {
+		t.Error("a sub-technique ID must not itself appear as a parent key")
+	}
+}

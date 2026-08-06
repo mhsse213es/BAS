@@ -27,6 +27,9 @@ var rawEnrichment []byte
 //go:embed curated_overlay.json
 var rawOverlay []byte
 
+//go:embed technique_synonyms.json
+var rawSynonyms []byte
+
 // Attribution is the MITRE ATT&CK attribution the report must display wherever
 // ATT&CK-derived enrichment appears (MITRE's terms of use).
 const Attribution = "Threat-intelligence context derived from MITRE ATT&CK®. © The MITRE Corporation. ATT&CK® is a registered trademark of The MITRE Corporation."
@@ -78,6 +81,11 @@ type Enrichment struct {
 	KEV          bool     `json:"kev,omitempty"`
 	AnalystNotes string   `json:"notes,omitempty"`
 	Curated      bool     `json:"-"` // any curated field is set
+
+	// Search-only synonym dictionary (technique_synonyms.json). Not ATT&CK
+	// authoritative, not part of report enrichment — used solely by the
+	// Scenario Builder's Technique Selector search matching.
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 // HasAuthoritative reports whether MITRE-derived enrichment exists.
@@ -210,6 +218,25 @@ func load() {
 			e.Curated = len(o.OWASP)+len(o.CWE)+len(o.CVEs) > 0 || o.KEV || o.Notes != ""
 		}
 	}
+	var syn map[string]json.RawMessage
+	if json.Unmarshal(rawSynonyms, &syn) == nil {
+		for k, raw := range syn {
+			if strings.HasPrefix(k, "_") { // documentation keys (e.g. _README)
+				continue
+			}
+			var aliases []string
+			if json.Unmarshal(raw, &aliases) != nil {
+				continue // malformed entry — skip rather than fail the whole load
+			}
+			key := normalize(k)
+			e := data[key]
+			if e == nil {
+				e = &Enrichment{TechniqueID: key}
+				data[key] = e
+			}
+			e.Aliases = aliases
+		}
+	}
 }
 
 // Lookup returns the enrichment for a technique ID (e.g. "T1059.001"), or nil.
@@ -274,6 +301,22 @@ func GroupTechniqueIndex() map[string][]string {
 		groupIdx = idx
 	})
 	return groupIdx
+}
+
+// SubtechniqueCounts returns, for every parent technique ID present in the
+// loaded set, the number of its loaded sub-techniques (IDs carrying it as a
+// dot-prefix, e.g. "T1055" → count of "T1055.001", "T1055.012", ...). A
+// technique with no sub-techniques is simply absent from the map — callers
+// should treat a missing key as zero.
+func SubtechniqueCounts() map[string]int {
+	once.Do(load)
+	counts := make(map[string]int)
+	for id := range data {
+		if i := strings.IndexByte(id, '.'); i > 0 {
+			counts[id[:i]]++
+		}
+	}
+	return counts
 }
 
 func normalize(id string) string {
