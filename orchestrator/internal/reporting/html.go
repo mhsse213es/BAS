@@ -1000,7 +1000,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 1</div>
-<div class="stitle">Executive Summary</div>
+<div class="stitle" role="heading" aria-level="1">Executive Summary</div>
 
 
 <div class="risk-hero">
@@ -1143,7 +1143,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 2</div>
-<div class="stitle">Assessment Summary</div>
+<div class="stitle" role="heading" aria-level="1">Assessment Summary</div>
 
 
 <div class="score-row">
@@ -1345,7 +1345,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 3</div>
-<div class="stitle">Top Risk Drivers</div>
+<div class="stitle" role="heading" aria-level="1">Top Risk Drivers</div>
 
 <p style="color:#6e7681;margin-bottom:14px">The techniques whose failures account for the most lost prevention points (severity-weighted, the same weighting as the headline score). "Score points" is how much of the 100-point scale each technique's failures <em>account for</em> — not a guaranteed gain from any single fix.</p>
 {{if .topRiskDrivers}}
@@ -1390,7 +1390,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 4</div>
-<div class="stitle">Risk Summary</div>
+<div class="stitle" role="heading" aria-level="1">Risk Summary</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Business-objective risk derived from the per-tactic outcome: <strong>High</strong> when most tested techniques in the objective went unprevented, <strong>Medium</strong> when some did, <strong>Low</strong> when all were blocked. Objectives with no executed techniques are omitted.</p>
 {{if .objectiveRisks}}
@@ -1434,7 +1434,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 5</div>
-<div class="stitle">Asset Context</div>
+<div class="stitle" role="heading" aria-level="1">Asset Context</div>
 
 {{if .scope}}
 <table>
@@ -1507,7 +1507,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 6</div>
-<div class="stitle">Kill-Chain Path</div>
+<div class="stitle" role="heading" aria-level="1">Kill-Chain Path</div>
 
 <p style="color:#6e7681;margin-bottom:14px">The chain of kill-chain phases this endpoint's gaps actually permit — built strictly from observed unprevented techniques, ordered by ATT&amp;CK phase. No hypothetical or inferred steps.</p>
 
@@ -1575,7 +1575,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 7</div>
-<div class="stitle">Attack Flow</div>
+<div class="stitle" role="heading" aria-level="1">Attack Flow</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Per-technique execution outcome ordered by ATT&amp;CK kill-chain phase. Each row shows which security control acted (or failed to act) on the technique and the resulting verdict: <strong style="color:#238636">Blocked</strong> (control prevented execution), <strong style="color:#d29922">Detected</strong> (logged and alerted but not stopped), <strong style="color:#b58800">Logged</strong> (telemetry captured, no alert), or <strong style="color:#da3633">Bypassed</strong> (no control observed the technique).</p>
 
@@ -1669,7 +1669,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 8</div>
-<div class="stitle">Attack Path Validation</div>
+<div class="stitle" role="heading" aria-level="1">Attack Path Validation</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Lateral-movement reachability mapped as a graph of hosts, users and groups. Recon/relationship analysis only — no exploitation, no propagation. It answers what ART and Caldera cannot: if a host is compromised, how far can an attacker move and can they reach Domain Admin or a crown jewel?</p>
 {{with .attackPathValidation}}
@@ -1818,7 +1818,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 9</div>
-<div class="stitle">MITRE ATT&amp;CK Tactic Summary</div>
+<div class="stitle" role="heading" aria-level="1">MITRE ATT&amp;CK Tactic Summary</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Per-tactic coverage (techniques tested), prevention rate, detection rate, and mean time-to-detect. MTTD shows "—" when detection latency was not measured. Tactics with no tested techniques are omitted.</p>
 {{if .tacticHeatmap}}
@@ -1874,7 +1874,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 10</div>
-<div class="stitle">Threat Actor Readiness</div>
+<div class="stitle" role="heading" aria-level="1">Threat Actor Readiness</div>
 
 <p style="color:#6e7681;margin-bottom:6px">For each ATT&amp;CK threat group whose techniques overlap this assessment, how well are your controls positioned? Derived from the MITRE ATT&amp;CK knowledge base — no external feed required. Worst prevention readiness shown first.</p>
 <p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">
@@ -1967,7 +1967,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 10a</div>
-<div class="stitle">Ransomware Readiness</div>
+<div class="stitle" role="heading" aria-level="1">Ransomware Readiness</div>
 
 <p style="color:#6e7681;margin-bottom:6px">Prevention and detection readiness against known ransomware threat actors, derived from MITRE ATT&amp;CK technique attribution. Worst performers shown first — these represent the highest breach risk from currently active ransomware groups.</p>
 <p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">Only groups with ≥3 tested techniques are included. Confidence reflects sample size: <strong>High</strong> ≥10 tested, <strong>Medium</strong> ≥5, <strong>Low</strong> 3–4.</p>
@@ -2054,7 +2054,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 10b</div>
-<div class="stitle">EPSS Priority Index</div>
+<div class="stitle" role="heading" aria-level="1">EPSS Priority Index</div>
 
 <p style="color:#6e7681;margin-bottom:6px">Composite prioritisation combining CISA KEV active-exploitation status, FIRST EPSS exploitation probability, and ATT&amp;CK threat-actor usage frequency. Techniques with higher scores represent the greatest unremediated risk.</p>
 <p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">
@@ -2138,7 +2138,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 11</div>
-<div class="stitle">Variant Coverage Analysis</div>
+<div class="stitle" role="heading" aria-level="1">Variant Coverage Analysis</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Multi-variant evasion testing: encoding obfuscation, execution-context, and privilege-tier combinations per technique. Shows which control gaps allowed bypasses and provides targeted remediation guidance.</p>
 
@@ -2293,7 +2293,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 11</div>
-<div class="stitle">Variant Coverage Trends</div>
+<div class="stitle" role="heading" aria-level="1">Variant Coverage Trends</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Aggregated multi-variant evasion results across {{.campaignVariantCoverage.runCount}} campaign run(s). Identifies recurring control gaps, tactic-level weaknesses, and improvement vs the previous campaign.</p>
 
@@ -2428,7 +2428,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 12</div>
-<div class="stitle">Assessment Insights</div>
+<div class="stitle" role="heading" aria-level="1">Assessment Insights</div>
 
 {{if .insights.hasData}}
 <div class="score-row">
@@ -2474,7 +2474,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 13</div>
-<div class="stitle">Action Plan</div>
+<div class="stitle" role="heading" aria-level="1">Action Plan</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Remediations ordered by the prevention-score points their failures account for. The points quantify current exposure attributable to each tactic — they are not a promised score gain, since a single control may not resolve every underlying finding.</p>
 {{if .actionPlan}}
@@ -2518,7 +2518,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 14</div>
-<div class="stitle">Regulatory Compliance Status</div>
+<div class="stitle" role="heading" aria-level="1">Regulatory Compliance Status</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
 {{if .compliance}}
@@ -2568,7 +2568,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 15</div>
-<div class="stitle">Scenario Run History</div>
+<div class="stitle" role="heading" aria-level="1">Scenario Run History</div>
 
 {{if .runs}}
 <table>
@@ -2617,7 +2617,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 16</div>
-<div class="stitle">Technical Findings</div>
+<div class="stitle" role="heading" aria-level="1">Technical Findings</div>
 
 {{$hasFindings := false}}
 {{range .techniqueMatrix}}{{if and (eq .execVerdict "fail") (or (eq .severity "Critical") (eq .severity "High"))}}{{$hasFindings = true}}{{end}}{{end}}
@@ -2796,7 +2796,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 17</div>
-<div class="stitle">Environment Restoration</div>
+<div class="stitle" role="heading" aria-level="1">Environment Restoration</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Documents whether all simulation-induced environment changes were successfully reverted. Answers the key enterprise question: <em>"Did the BAS restore everything it touched?"</em></p>
 
@@ -2935,7 +2935,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 18</div>
-<div class="stitle">Detection Validation</div>
+<div class="stitle" role="heading" aria-level="1">Detection Validation</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
 
@@ -3178,7 +3178,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 19</div>
-<div class="stitle">Coverage Analytics</div>
+<div class="stitle" role="heading" aria-level="1">Coverage Analytics</div>
 
 <p style="color:#6e7681;margin-bottom:14px">
   3-bucket breakdown of every technique executed in this assessment.
@@ -3325,7 +3325,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 20</div>
-<div class="stitle">Technical Appendix — ATT&amp;CK Glossary</div>
+<div class="stitle" role="heading" aria-level="1">Technical Appendix — ATT&amp;CK Glossary</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
 {{if .glossary}}
@@ -3366,7 +3366,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   </div>
 </div>
 <div class="stag">Section 21</div>
-<div class="stitle">Threat Intelligence</div>
+<div class="stitle" role="heading" aria-level="1">Threat Intelligence</div>
 
 <p style="color:#6e7681;margin-bottom:14px">Indicators of compromise (IPs, domains, URLs, file hashes, CVEs) observed in this run's execution evidence, checked against {{.threatIntel.provider}} threat intelligence. Answers: did this execution produce artifacts already known to the security community?</p>
 

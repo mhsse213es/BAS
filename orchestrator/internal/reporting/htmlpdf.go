@@ -133,13 +133,7 @@ func doRenderPDF(ctx context.Context, ws string, html []byte) ([]byte, error) {
 		}),
 		chromedp.Sleep(350*time.Millisecond), // let layout + web fonts settle
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			// A4 portrait, zero device margins — the report's own CSS owns the
-			// page padding and the cover's full-bleed band.
-			buf, _, err := page.PrintToPDF().
-				WithPrintBackground(true).
-				WithPaperWidth(8.27).WithPaperHeight(11.69).
-				WithMarginTop(0).WithMarginBottom(0).WithMarginLeft(0).WithMarginRight(0).
-				Do(ctx)
+			buf, _, err := printToPDFParams().Do(ctx)
 			if err != nil {
 				return err
 			}
@@ -151,4 +145,18 @@ func doRenderPDF(ctx context.Context, ws string, html []byte) ([]byte, error) {
 		return nil, err
 	}
 	return pdf, nil
+}
+
+// printToPDFParams builds the CDP print-to-PDF request: A4 portrait, zero
+// device margins (the report's own CSS owns the page padding and the
+// cover's full-bleed band), and a native PDF outline/bookmark sidebar
+// generated from the report's role="heading" section titles. Factored out
+// of doRenderPDF as a plain function (no Chrome dependency) so the params
+// themselves are unit-testable without a live sidecar.
+func printToPDFParams() *page.PrintToPDFParams {
+	return page.PrintToPDF().
+		WithPrintBackground(true).
+		WithPaperWidth(8.27).WithPaperHeight(11.69).
+		WithMarginTop(0).WithMarginBottom(0).WithMarginLeft(0).WithMarginRight(0).
+		WithGenerateDocumentOutline(true)
 }

@@ -25,3 +25,16 @@ func TestPDFFromReportFallsBackWithoutChrome(t *testing.T) {
 		t.Errorf("fallback PDF suspiciously small: %d bytes", buf.Len())
 	}
 }
+
+func TestPrintToPDFParams_GeneratesDocumentOutline(t *testing.T) {
+	p := printToPDFParams()
+	if !p.GenerateDocumentOutline {
+		t.Error("GenerateDocumentOutline = false, want true")
+	}
+	if !p.PrintBackground {
+		t.Error("PrintBackground = false, want true (unchanged from before this refactor)")
+	}
+	if p.PaperWidth != 8.27 || p.PaperHeight != 11.69 {
+		t.Errorf("paper size = %v x %v, want 8.27 x 11.69 (A4, unchanged from before this refactor)", p.PaperWidth, p.PaperHeight)
+	}
+}

@@ -9,9 +9,10 @@ import (
 // sectionMarker matches one section's stag/stitle pair in fully-rendered
 // report HTML -- after every {{if}} in reportHTML has already resolved, so
 // this only ever sees sections that actually appear in this specific
-// report. Every section in reportHTML uses this exact, attribute-free
-// shape with zero deviation (verified by grep across the whole template).
-var sectionMarker = regexp.MustCompile(`<div class="stag">Section ([^<]+)</div>\s*<div class="stitle">([^<]+)</div>`)
+// report. The [^>]* tolerates the role="heading" aria-level="1" attributes
+// reportHTML's .stitle divs carry (added for native PDF outline support --
+// see printToPDFParams), and any other attributes either div gains later.
+var sectionMarker = regexp.MustCompile(`<div class="stag"[^>]*>Section ([^<]+)</div>\s*<div class="stitle"[^>]*>([^<]+)</div>`)
 
 // coverBoundary is the literal comment that immediately precedes the first
 // content section in reportHTML (html.go), used to find where the cover
