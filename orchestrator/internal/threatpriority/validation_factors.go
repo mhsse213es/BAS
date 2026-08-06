@@ -36,7 +36,7 @@ func (ValidationSuccessFactor) Score(_ context.Context, tctx Context) (float64, 
 // actor's TESTED techniques (present in idx at all) where isSuccess(verdict)
 // holds. A technique never tested is excluded from the denominator, not
 // counted as a failure. Unavailable only when zero techniques were tested.
-func validationPct(tctx Context, idx map[string]string, isSuccess func(string) bool, label string) (float64, string, bool, error) {
+func validationPct(tctx Context, idx map[string]VerdictEntry, isSuccess func(string) bool, label string) (float64, string, bool, error) {
 	tested, success := 0, 0
 	for _, id := range tctx.TechniqueIDs {
 		v, ok := idx[strings.ToUpper(id)]
@@ -44,7 +44,7 @@ func validationPct(tctx Context, idx map[string]string, isSuccess func(string) b
 			continue
 		}
 		tested++
-		if isSuccess(v) {
+		if isSuccess(v.Verdict) {
 			success++
 		}
 	}

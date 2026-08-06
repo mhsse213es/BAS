@@ -19,6 +19,15 @@ type FactorResult struct {
 	Available   bool    `json:"available"`
 }
 
+// VerdictEntry is one technique's latest fleet-wide verdict plus when it was
+// recorded -- exported so internal/correlation (and any future consumer) can
+// reuse the exact same "what does fleet-wide validation status mean" logic
+// instead of re-deriving it.
+type VerdictEntry struct {
+	Verdict string
+	At      time.Time
+}
+
 // ActorProfile mirrors a threat_actor_profiles row.
 type ActorProfile struct {
 	Name       string
@@ -38,8 +47,8 @@ type ActorProfile struct {
 // looking them up in preventionVerdict/validationVerdict.
 type sharedIndexes struct {
 	simulation, detection, purple, compliance map[string]bool
-	preventionVerdict                         map[string]string // technique ID (upper) -> scenario_runs verdict
-	validationVerdict                         map[string]string // technique ID (upper) -> verification.Result*
+	preventionVerdict                         map[string]VerdictEntry // technique ID (upper) -> latest scenario_runs verdict+timestamp
+	validationVerdict                         map[string]VerdictEntry // technique ID (upper) -> latest verification.Result*+timestamp
 }
 
 // Context is what every factor needs to score one actor. shared carries

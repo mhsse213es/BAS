@@ -59,13 +59,13 @@ func (e *Engine) buildSharedIndexes(ctx context.Context) (*sharedIndexes, error)
 		compliance: coverage.BuildComplianceIndex(scenarios),
 	}
 
-	prevention, err := e.loadPreventionVerdicts(ctx)
+	prevention, err := LoadPreventionVerdicts(ctx, e.pool)
 	if err != nil {
 		return nil, fmt.Errorf("load prevention verdicts: %w", err)
 	}
 	idx.preventionVerdict = prevention
 
-	validation, err := e.loadValidationVerdicts(ctx)
+	validation, err := LoadValidationVerdicts(ctx, e.pool)
 	if err != nil {
 		return nil, fmt.Errorf("load validation verdicts: %w", err)
 	}
@@ -74,14 +74,20 @@ func (e *Engine) buildSharedIndexes(ctx context.Context) (*sharedIndexes, error)
 	return idx, nil
 }
 
-func (e *Engine) loadPreventionVerdicts(ctx context.Context) (map[string]string, error) {
-	if e.pool == nil {
-		return map[string]string{}, nil
+// LoadPreventionVerdicts returns, per technique ID (uppercase), the verdict
+// of its most recent scenario_runs result (completed/partial runs only,
+// error/skipped excluded) and when that run executed. Exported for
+// internal/correlation (see
+// docs/superpowers/specs/2026-08-05-intelligence-correlation-engine-design.md).
+func LoadPreventionVerdicts(ctx context.Context, pool *pgxpool.Pool) (map[string]VerdictEntry, error) {
+	if pool == nil {
+		return map[string]VerdictEntry{}, nil
 	}
-	rows, err := e.pool.Query(ctx, `
+	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT ON (UPPER(r->'technique'->>'id'))
 		       UPPER(r->'technique'->>'id') AS tid,
-		       r->>'result'                 AS verdict
+		       r->>'result'                 AS verdict,
+		       (r->>'executedAt')::timestamptz AS at
 		FROM scenario_runs sr, jsonb_array_elements(sr.results) r
 		WHERE sr.status IN ('completed', 'partial')
 		  AND r->'technique'->>'id' IS NOT NULL AND r->'technique'->>'id' <> ''
@@ -91,23 +97,27 @@ func (e *Engine) loadPreventionVerdicts(ctx context.Context) (map[string]string,
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]string{}
+	out := map[string]VerdictEntry{}
 	for rows.Next() {
-		var tid, verdict string
-		if err := rows.Scan(&tid, &verdict); err != nil {
+		var tid string
+		var v VerdictEntry
+		if err := rows.Scan(&tid, &v.Verdict, &v.At); err != nil {
 			return nil, err
 		}
-		out[tid] = verdict
+		out[tid] = v
 	}
 	return out, rows.Err()
 }
 
-func (e *Engine) loadValidationVerdicts(ctx context.Context) (map[string]string, error) {
-	if e.pool == nil {
-		return map[string]string{}, nil
+// LoadValidationVerdicts returns, per technique ID (uppercase), the most
+// recent active+Approved verification_history verdict (Detected/NotDetected
+// only) and when it was verified. Exported for internal/correlation.
+func LoadValidationVerdicts(ctx context.Context, pool *pgxpool.Pool) (map[string]VerdictEntry, error) {
+	if pool == nil {
+		return map[string]VerdictEntry{}, nil
 	}
-	rows, err := e.pool.Query(ctx, `
-		SELECT DISTINCT ON (technique_id) technique_id, result
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT ON (technique_id) technique_id, result, verified_at
 		FROM verification_history
 		WHERE active AND workflow_state = $1 AND result IN ($2, $3)
 		ORDER BY technique_id, verified_at DESC`,
@@ -116,13 +126,14 @@ func (e *Engine) loadValidationVerdicts(ctx context.Context) (map[string]string,
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]string{}
+	out := map[string]VerdictEntry{}
 	for rows.Next() {
-		var tid, result string
-		if err := rows.Scan(&tid, &result); err != nil {
+		var tid string
+		var v VerdictEntry
+		if err := rows.Scan(&tid, &v.Verdict, &v.At); err != nil {
 			return nil, err
 		}
-		out[strings.ToUpper(tid)] = result
+		out[strings.ToUpper(tid)] = v
 	}
 	return out, rows.Err()
 }

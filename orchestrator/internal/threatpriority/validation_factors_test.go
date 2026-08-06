@@ -3,15 +3,16 @@ package threatpriority
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestPreventionSuccessFactor_Score(t *testing.T) {
 	f := PreventionSuccessFactor{}
 	tctx := Context{
 		TechniqueIDs: []string{"T1059", "T1105", "T1566"},
-		shared: &sharedIndexes{preventionVerdict: map[string]string{
-			"T1059": "pass", // control blocked it
-			"T1105": "fail", // ran through unblocked
+		shared: &sharedIndexes{preventionVerdict: map[string]VerdictEntry{
+			"T1059": {Verdict: "pass"}, // control blocked it
+			"T1105": {Verdict: "fail"}, // ran through unblocked
 			// T1566 never tested -- excluded from the denominator
 		}},
 	}
@@ -34,7 +35,7 @@ func TestPreventionSuccessFactor_NoneTested_Unavailable(t *testing.T) {
 	f := PreventionSuccessFactor{}
 	_, _, available, _ := f.Score(context.Background(), Context{
 		TechniqueIDs: []string{"T1059"},
-		shared:       &sharedIndexes{preventionVerdict: map[string]string{}},
+		shared:       &sharedIndexes{preventionVerdict: map[string]VerdictEntry{}},
 	})
 	if available {
 		t.Fatal("expected available=false when nothing tested")
@@ -45,9 +46,9 @@ func TestValidationSuccessFactor_Score(t *testing.T) {
 	f := ValidationSuccessFactor{}
 	tctx := Context{
 		TechniqueIDs: []string{"T1059", "T1105"},
-		shared: &sharedIndexes{validationVerdict: map[string]string{
-			"T1059": "Detected",
-			"T1105": "NotDetected",
+		shared: &sharedIndexes{validationVerdict: map[string]VerdictEntry{
+			"T1059": {Verdict: "Detected"},
+			"T1105": {Verdict: "NotDetected"},
 		}},
 	}
 	raw, explanation, available, err := f.Score(context.Background(), tctx)
@@ -59,6 +60,21 @@ func TestValidationSuccessFactor_Score(t *testing.T) {
 	}
 	if explanation != "1 of 2 validated techniques validated" {
 		t.Fatalf("explanation = %q", explanation)
+	}
+}
+
+func TestValidationPct_IgnoresAtWhenComparingVerdict(t *testing.T) {
+	f := PreventionSuccessFactor{}
+	oldTime := time.Now().Add(-999 * time.Hour)
+	tctx := Context{
+		TechniqueIDs: []string{"T1059"},
+		shared: &sharedIndexes{preventionVerdict: map[string]VerdictEntry{
+			"T1059": {Verdict: "fail", At: oldTime}, // stale timestamp, but Verdict is what's compared
+		}},
+	}
+	raw, _, available, _ := f.Score(context.Background(), tctx)
+	if !available || raw != 0 {
+		t.Fatalf("raw=%.2f available=%v, want 0/true (fail is not success regardless of At)", raw, available)
 	}
 }
 
