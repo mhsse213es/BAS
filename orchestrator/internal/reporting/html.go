@@ -666,6 +666,12 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
   line-height:1.15;margin-bottom:16px;padding-left:13px;border-left:4px solid #0d9488}
 h1{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-0.025em;
   line-height:1.15;margin:0 0 16px;padding-left:13px;border-left:4px solid #0d9488}
+.toc-list{display:flex;flex-direction:column;margin-top:8px}
+.toc-item{display:flex;align-items:baseline;gap:14px;padding:9px 0;
+  border-bottom:1px solid var(--line2);text-decoration:none;color:var(--ink)}
+.toc-item:hover{color:var(--accent)}
+.toc-num{font-size:0.7rem;font-weight:700;color:var(--muted);min-width:28px;flex-shrink:0}
+.toc-title{font-size:0.86rem;font-weight:600}
 h2{font-size:0.88rem;font-weight:800;color:#0b1420;margin:18px 0 10px;letter-spacing:-0.01em}
 h3{font-size:0.63rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin:14px 0 7px}
 p{margin-bottom:9px;font-size:0.82rem}
