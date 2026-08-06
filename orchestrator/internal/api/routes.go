@@ -219,6 +219,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Get("/api/intelligence/malware", h.IntelligenceMalware)
 		r.Get("/api/intelligence/tools", h.IntelligenceTools)
 		r.Get("/api/knowledge-graph/{type}/{id}", h.KnowledgeGraphNeighborhood)
+
+		// Intelligence Correlation Engine -- Phase 1 (backend). One queryable
+		// layer over Threat Intel + IOC Pipeline + Scenario Engine + Detection
+		// Validation. See docs/superpowers/specs/2026-08-05-intelligence-correlation-engine-design.md.
+		r.Get("/api/correlation/technique/{id}", h.CorrelateTechnique)
+		r.Get("/api/correlation/actor/{name}", h.CorrelateActor)
+		r.Get("/api/correlation/ioc/{id}", h.CorrelateIOC)
+
 		r.Get("/api/search", h.Search)
 		r.With(auth.RequirePermission(auth.CanReindexSearch)).Post("/api/search/reindex", h.SearchReindex)
 		r.Post("/api/search/select", h.SearchSelect)
