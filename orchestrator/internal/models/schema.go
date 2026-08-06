@@ -141,6 +141,14 @@ type ScenarioRun struct {
 	StartedAt   time.Time          `json:"startedAt"`
 	CompletedAt *time.Time         `json:"completedAt,omitempty"`
 
+	// Reverted is one human-readable line per endpoint change the agent
+	// detected and successfully rolled back after the run (registry keys,
+	// services, scheduled tasks, temp files, hosts file, startup entries --
+	// see agent/snapshot_windows.go's captureSnapshot/revertFromSnapshot).
+	// Changes that were detected but failed to revert are NOT included here
+	// -- see docs/superpowers/specs/2026-08-06-endpoint-changes-tab-design.md.
+	Reverted []string `json:"reverted,omitempty"`
+
 	AlertsTotal        int     `json:"alertsTotal"`
 	AlertsHighFidelity int     `json:"alertsHighFidelity"`
 	NoiseScore         float64 `json:"noiseScore"`

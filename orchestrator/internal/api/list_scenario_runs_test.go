@@ -300,6 +300,57 @@ func TestListScenarioRuns_ScoreProjection(t *testing.T) {
 	})
 }
 
+func TestListScenarioRuns_RevertedProjection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		if _, err := pool.Exec(context.Background(), `INSERT INTO agents (agent_id, hostname, state) VALUES ('agent-reverted-proj','h','active')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		revertedJSON, _ := json.Marshal([]string{
+			`registry removed: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Evil`,
+			"schtask deleted: EvilTask",
+		})
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, started_at, reverted)
+			 VALUES ('reverted-proj-run','sc-reverted-proj','agent-reverted-proj','x','completed',NOW(),$1)`, revertedJSON); err != nil {
+			t.Fatalf("seed run with reverted: %v", err)
+		}
+		seedRunRow(t, pool, "null-reverted-run", "sc-reverted-proj", "agent-reverted-proj", "completed")
+
+		rec := httptest.NewRecorder()
+		h.ListScenarioRuns(rec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?agentId=agent-reverted-proj", nil))
+		var runs []map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &runs); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		var withReverted, withoutReverted map[string]any
+		for _, r := range runs {
+			if r["id"] == "reverted-proj-run" {
+				withReverted = r
+			}
+			if r["id"] == "null-reverted-run" {
+				withoutReverted = r
+			}
+		}
+		if withReverted == nil || withoutReverted == nil {
+			t.Fatalf("expected both seeded runs, got %+v", runs)
+		}
+		rv, ok := withReverted["reverted"].([]any)
+		if !ok || len(rv) != 2 {
+			t.Fatalf("reverted-proj-run reverted = %v, want 2 items", withReverted["reverted"])
+		}
+		if rv[0] != `registry removed: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Evil` {
+			t.Fatalf("reverted[0] = %v, want the registry-removal string", rv[0])
+		}
+		if _, present := withoutReverted["reverted"]; present {
+			t.Fatalf("null-reverted-run: expected omitted reverted field, got %v", withoutReverted["reverted"])
+		}
+	})
+}
+
 func TestListScenarioRuns_MalformedResultsJSON_DegradesGracefully(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
