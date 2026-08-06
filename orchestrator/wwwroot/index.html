@@ -1697,20 +1697,6 @@ body.theme-slate {
             </tbody>
           </table>
         </div>
-        </div>
-        <div id="agents-view-risk" style="display:none">
-          <div class="kpi-row" id="agent-risk-tiles" style="margin-bottom:1rem"></div>
-          <div class="tbl-wrap" style="overflow-x:auto">
-            <table style="min-width:700px">
-              <thead><tr>
-                <th style="min-width:160px">Host</th><th>Health Score</th><th>Criticality</th><th>Trend</th><th>Top Issue</th><th>Open Findings</th><th style="min-width:110px">Actions</th>
-              </tr></thead>
-              <tbody id="agent-risk-body">
-                <tr><td colspan="7" class="empty">Loading…</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
 
         <!-- Connection Config (admin only) -->
         <div id="conn-cfg-wrap" style="display:none; margin-top:2rem">
@@ -1810,6 +1796,20 @@ body.theme-slate {
               <strong>Install:</strong>
               <code id="mac-cmd">chmod +x bas-agent-darwin-* &amp;&amp; sudo ./bas-agent-darwin-* --install --server &lt;URL&gt; --env Production</code>
             </div>
+          </div>
+        </div>
+        </div>
+        <div id="agents-view-risk" style="display:none">
+          <div class="kpi-row" id="agent-risk-tiles" style="margin-bottom:1rem"></div>
+          <div class="tbl-wrap" style="overflow-x:auto">
+            <table style="min-width:700px">
+              <thead><tr>
+                <th style="min-width:160px">Host</th><th>Health Score</th><th>Criticality</th><th>Trend</th><th>Top Issue</th><th>Open Findings</th><th style="min-width:110px">Actions</th>
+              </tr></thead>
+              <tbody id="agent-risk-body">
+                <tr><td colspan="7" class="empty">Loading…</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
