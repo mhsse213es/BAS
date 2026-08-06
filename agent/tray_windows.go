@@ -284,8 +284,11 @@ func trayShowMenu() {
 	trayMenuSep(menu)
 	trayMenuItem(menu, tIDM_EXPORT, "Export Diagnostic Bundle")
 	trayMenuItem(menu, tIDM_LOGS, "Open Logs Folder")
-	trayMenuSep(menu)
-	trayMenuItem(menu, tIDM_EXIT, "Exit")
+	// No user-facing "Exit" entry -- the client must not be able to quit the
+	// tray from its own menu. tIDM_EXIT / trayWndProc's handler for it still
+	// exist and are still reachable, but only programmatically, via
+	// closeTrayWindow() (uninstall_windows.go) posting the WM_COMMAND
+	// directly -- that's the only remaining way the tray now exits.
 
 	var pt trayPoint
 	trayGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
@@ -304,32 +307,16 @@ func trayMenuItem(menu, id uintptr, label string) {
 }
 func trayMenuSep(menu uintptr) { trayAppendMenu.Call(menu, tMF_SEPARATOR, 0, 0) }
 
-// openStatusWindow spawns the WebView2 console as a separate process so it has
-// its own message loop independent of the tray.
-//
-// The console is a singleton: if one is already open, surface it instead of
-// spawning another bas_agent.exe --status-window. The spawned process also
-// self-guards (statusWindowGuard), so this focus-before-spawn check is
-// belt-and-suspenders that additionally avoids creating a short-lived duplicate
-// process on every tray click.
+// openStatusWindow spawns the status console (opens in the user's default
+// browser -- see runStatusWindow's doc comment in statuswindow_windows.go
+// for why this isn't an embedded WebView2 window) as a separate process so
+// a slow browser launch never blocks the tray's own message loop.
 func openStatusWindow() {
-	if focusStatusWindow() {
-		return
-	}
 	exe, err := os.Executable()
 	if err != nil {
 		return
 	}
 	cmd := exec.Command(exe, "--status-window")
-	// CREATE_NO_WINDOW only affects console-window auto-allocation for a
-	// console-subsystem child (redundant now the agent builds -H windowsgui,
-	// but harmless to keep as a defensive fallback). HideWindow is
-	// deliberately NOT set here: on Windows it sets STARTUPINFO.wShowWindow
-	// = SW_HIDE, which the WebView2 window inherits as its initial show
-	// state -- confirmed via live window enumeration that setting it left
-	// the spawned window created but permanently invisible (IsWindowVisible
-	// == false), which is exactly the "nothing happens on click" bug this
-	// was meant to prevent, not fix.
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: createNoWindow,
 	}

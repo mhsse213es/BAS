@@ -122,9 +122,11 @@ func removeTrayRunKey() error {
 
 // closeTrayWindow best-effort closes any running tray process by finding its
 // window (class "BASAgentTrayWnd", title "BAS Agent" — see tray_windows.go)
-// and posting the same WM_COMMAND/tIDM_EXIT the tray's own "Exit" menu item
-// sends, which trayWndProc handles by removing the icon and calling
-// PostQuitMessage so the process actually ends. Plain WM_CLOSE was
+// and posting WM_COMMAND/tIDM_EXIT, which trayWndProc handles by removing
+// the icon and calling PostQuitMessage so the process actually ends. This is
+// the only way the tray exits now — its right-click menu has no user-facing
+// "Exit" entry by design (the client must not be able to quit it), so
+// tIDM_EXIT is reachable only programmatically, from here. Plain WM_CLOSE was
 // considered and rejected: trayWndProc has no WM_DESTROY handler, so
 // DefWindowProc's default WM_CLOSE handling (DestroyWindow) would tear down
 // the window but leave GetMessage blocking forever — the icon might vanish
