@@ -10912,6 +10912,32 @@ function viewRunResults(run) {
     }).join('');
   })();
 
+  // Endpoint Changes tab -- the agent already runs a whole-run before/after
+  // snapshot (agent/snapshot_windows.go's captureSnapshot/revertFromSnapshot,
+  // called once per run) and reverts anything new it finds (registry keys,
+  // services, scheduled tasks, temp files, hosts file, startup entries),
+  // returning one human-readable line per successfully-reverted item. That
+  // list is already stored on every run (scenario_runs.reverted) and already
+  // rendered in the PDF report (internal/reporting/pdf.go) -- this mirrors
+  // the exact same framing text so the two surfaces agree. Changes that were
+  // detected but FAILED to revert are not included here -- see
+  // docs/superpowers/specs/2026-08-06-endpoint-changes-tab-design.md.
+  var endpointHtml = (function() {
+    var items = run.reverted || [];
+    if (!items.length) {
+      return '<div class="dash-panel dash-soon" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">No endpoint changes were captured for reversal during this run.</div>';
+    }
+    var rows = items.map(function(item) {
+      return '<div style="display:flex;align-items:baseline;gap:0.5rem;padding:0.3rem 0;border-bottom:1px solid rgba(34,50,74,0.45);font-size:0.78rem">' +
+        '<span style="color:var(--muted)">&bull;</span><span>' + x(item) + '</span>' +
+      '</div>';
+    }).join('');
+    return '<div style="padding:0.5rem 0">' +
+      '<div style="color:var(--muted);font-size:0.78rem;margin-bottom:0.6rem">The agent reverted ' + items.length + ' endpoint change(s) made during the run.</div>' +
+      rows +
+    '</div>';
+  })();
+
   // Overview keeps scorePanel + run-report-extra (findings/recommendations/
   // alert-fatigue/attack-surface-age/readiness); the per-technique checks
   // move to their own Evidence tab -- previously both lived in one "Results"
@@ -10950,7 +10976,7 @@ function viewRunResults(run) {
       '<div id="run-ioc-toolbar" style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap"></div>' +
       '<div id="run-ioc-list"><div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Loading indicators&#8230;</div></div>' +
     '</div>' +
-    '<div id="run-tab-endpoint" class="run-tab-panel" style="display:none">' + soonPanel('Endpoint Changes') + '</div>';
+    '<div id="run-tab-endpoint" class="run-tab-panel" style="display:none">' + endpointHtml + '</div>';
 
   var RUN_TABS = [
     ['overview', 'Overview'], ['findings', 'Key Findings'], ['recommendation', 'Recommendation'],
