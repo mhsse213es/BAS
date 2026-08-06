@@ -10360,6 +10360,11 @@ function addStep(st) {
   var execOpts = execs.map(function(e) {
     return '<option value="' + e + '"' + (e === cur ? ' selected' : '') + '>' + e + '</option>';
   }).join('');
+  var privTiers = [['', 'No requirement'], ['user', 'User'], ['admin', 'Admin'], ['system', 'System']];
+  var curPriv = (st.requiresPriv && st.requiresPriv.minimum) || '';
+  var privOpts = privTiers.map(function(t) {
+    return '<option value="' + t[0] + '"' + (t[0] === curPriv ? ' selected' : '') + '>' + t[1] + '</option>';
+  }).join('');
   var div = document.createElement('div');
   div.className = 'bld-step';
   div.innerHTML =
@@ -10374,9 +10379,11 @@ function addStep(st) {
       '<div class="bld-field"><label>Technique ID</label><input class="st-tech" list="att-techniques" type="text" value="' + x(st.techniqueId || '') + '" placeholder="T1003.001"></div>' +
       '<div class="bld-field"><label>Executor</label><select class="st-exec">' + execOpts + '</select></div>' +
       '<div class="bld-field"><label>Timeout (sec)</label><input class="st-timeout" type="number" min="0" value="' + (st.timeoutSec || 60) + '"></div>' +
+      '<div class="bld-field"><label>Requires privilege</label><select class="st-priv">' + privOpts + '</select></div>' +
       '<div class="bld-field full"><label>Command</label><textarea class="st-cmd" rows="2" placeholder="command to run on the endpoint">' + x(st.command || '') + '</textarea></div>' +
       '<div class="bld-field full"><label>Cleanup (optional)</label><textarea class="st-cleanup" rows="1" placeholder="command run after the step">' + x(st.cleanup || '') + '</textarea></div>' +
-    '</div>';
+    '</div>' +
+    '<div class="bld-mode-help">Steps requiring higher privilege than a run\'s Max Privilege ceiling are skipped, not dispatched.</div>';
   document.getElementById('bld-steps').appendChild(div);
   renumberSteps();
 }
@@ -10434,7 +10441,7 @@ function collectBuilder() {
       var r = rows[i];
       var tech = r.querySelector('.st-tech').value.trim();
       if (!tech) { err.textContent = 'Step ' + (i + 1) + ': technique ID is required.'; return null; }
-      sc.steps.push({
+      var newStep = {
         name: r.querySelector('.st-name').value.trim() || ('Step ' + (i + 1)),
         techniqueId: tech,
         framework: 'custom',
@@ -10442,7 +10449,10 @@ function collectBuilder() {
         command: r.querySelector('.st-cmd').value,
         timeoutSec: parseInt(r.querySelector('.st-timeout').value, 10) || 60,
         cleanup: r.querySelector('.st-cleanup').value.trim()
-      });
+      };
+      var privVal = r.querySelector('.st-priv').value;
+      if (privVal) newStep.requiresPriv = privVal;
+      sc.steps.push(newStep);
     }
     if (!sc.steps.length) { err.textContent = 'Add at least one step.'; return null; }
   }
@@ -10541,6 +10551,7 @@ function scenarioToYaml(sc) {
       out += '    framework: ' + q(st.framework || 'custom') + '\n';
       out += '    executor: ' + q(st.executor) + '\n';
       out += '    timeout_sec: ' + (st.timeoutSec || 60) + '\n';
+      if (st.requiresPriv) out += '    requires_priv: ' + q(st.requiresPriv) + '\n';
       if (st.command) out += '    command: ' + block(st.command, 6) + '\n';
       if (st.cleanup) out += '    cleanup: ' + block(st.cleanup, 6) + '\n';
     });
