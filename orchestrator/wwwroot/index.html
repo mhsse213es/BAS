@@ -6453,6 +6453,7 @@ document.addEventListener('click', function(e) {
 window.addEventListener('scroll', closeAllRowMenus, true);
 // Deploy agent → reveal the in-page Connection Config / download section.
 function showAgentDownload() {
+  setAgentsView('operational');
   var w = document.getElementById('conn-cfg-wrap');
   if (!w) return;
   w.style.display = '';
