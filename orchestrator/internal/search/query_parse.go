@@ -1,6 +1,9 @@
 package search
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // ParsedQuery is the result of parsing a raw search-box string into free
 // text plus recognized operator filters. Returning a struct (not multiple
@@ -38,6 +41,18 @@ var knownDocTypes = map[string]bool{
 	"campaign": true, "malware": true, "tool": true, "technique": true,
 	"rule": true, "compliance_control": true, "detection_connector": true, "action_connector": true,
 }
+
+// KnownDocTypes lists every value a type: filter can resolve to, sorted for
+// stable output. Built once from knownDocTypes so GET /api/search/operators
+// and ParseQuery's validation can never drift from each other.
+var KnownDocTypes = func() []string {
+	out := make([]string, 0, len(knownDocTypes))
+	for dt := range knownDocTypes {
+		out = append(out, dt)
+	}
+	sort.Strings(out)
+	return out
+}()
 
 // ParseQuery splits raw on whitespace, treats any token shaped like
 // field:value as an operator, and validates only the fields in

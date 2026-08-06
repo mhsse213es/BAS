@@ -153,9 +153,25 @@ func (h *Handler) SearchRecents(w http.ResponseWriter, r *http.Request) {
 	respond(w, results)
 }
 
+// searchOperatorInfo describes one supported search-box operator and the
+// values it accepts, for the ⌘K palette's discoverability hint.
+type searchOperatorInfo struct {
+	Name   string   `json:"name"`
+	Values []string `json:"values,omitempty"`
+}
+
 // GET /api/search/operators — advertises every field: operator ParseQuery
-// currently validates and applies, so a future frontend never has to
-// hardcode a second copy of this list. Any authenticated user.
+// currently validates and applies, plus their valid values, so a future
+// frontend never has to hardcode a second copy of this list. Any
+// authenticated user.
 func (h *Handler) SearchOperators(w http.ResponseWriter, r *http.Request) {
-	respond(w, map[string]any{"operators": search.SupportedOperators})
+	ops := make([]searchOperatorInfo, 0, len(search.SupportedOperators))
+	for _, name := range search.SupportedOperators {
+		info := searchOperatorInfo{Name: name}
+		if name == "type" {
+			info.Values = search.KnownDocTypes
+		}
+		ops = append(ops, info)
+	}
+	respond(w, map[string]any{"operators": ops})
 }

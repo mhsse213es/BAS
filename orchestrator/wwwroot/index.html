@@ -13250,7 +13250,9 @@ function openCmdk() {
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>' +
         '<input id="cmdk-input" placeholder="Type a command or search…" autocomplete="off">' +
         '<span class="cmdk-esc">esc</span>' +
-      '</div><div class="cmdk-list" id="cmdk-list"></div></div>';
+      '</div><div class="cmdk-list" id="cmdk-list"></div>' +
+      '<div class="bld-mode-help" id="cmdk-ops-hint" style="display:none;margin:0;padding:8px 15px;border-top:1px solid var(--border)"></div>' +
+    '</div>';
   document.body.appendChild(wrap);
   var input = wrap.querySelector('#cmdk-input');
   var list = wrap.querySelector('#cmdk-list');
@@ -13291,6 +13293,18 @@ function openCmdk() {
     cmdkRecents = Array.isArray(r) ? r : [];
     if (currentQ === '') render(currentQ);
   }).catch(function() { cmdkRecents = []; });
+
+  // One-shot fetch of the supported search-box operators, rendered as a
+  // persistent footer hint below the results list. Fails soft -- the hint
+  // just stays hidden if the request errors, never blocks the palette.
+  apicall('/api/search/operators').then(function(r) {
+    var ops = (r && Array.isArray(r.operators)) ? r.operators : [];
+    var typeOp = ops.filter(function(o) { return o.name === 'type' && Array.isArray(o.values) && o.values.length; })[0];
+    if (!typeOp) return;
+    var hint = wrap.querySelector('#cmdk-ops-hint');
+    hint.textContent = 'Tip: ' + typeOp.values.map(function(v) { return 'type:' + v; }).join(', ') + ' to filter by type.';
+    hint.style.display = '';
+  }).catch(function() { /* fails soft -- footer just stays hidden */ });
 
   function selectable() { return flat.map(function(f, i) { return f.sec ? -1 : i; }).filter(function(i) { return i >= 0; }); }
   function paint() {

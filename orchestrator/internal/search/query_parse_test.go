@@ -2,6 +2,7 @@ package search
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -98,5 +99,22 @@ func TestParseQuery_EmptyInput(t *testing.T) {
 	pq := ParseQuery("")
 	if pq.FreeText != "" || pq.DocType != "" || len(pq.InvalidFilters) != 0 {
 		t.Errorf("ParseQuery(\"\") = %+v, want all zero values", pq)
+	}
+}
+
+// KnownDocTypes must expose exactly the same set ParseQuery validates
+// type: values against, and must be sorted (the /api/search/operators
+// response depends on stable ordering).
+func TestKnownDocTypesMatchesInternalSet(t *testing.T) {
+	if len(KnownDocTypes) != len(knownDocTypes) {
+		t.Fatalf("KnownDocTypes has %d entries, knownDocTypes has %d", len(KnownDocTypes), len(knownDocTypes))
+	}
+	for _, dt := range KnownDocTypes {
+		if !knownDocTypes[dt] {
+			t.Errorf("KnownDocTypes contains %q, not present in knownDocTypes", dt)
+		}
+	}
+	if !sort.StringsAreSorted(KnownDocTypes) {
+		t.Error("KnownDocTypes must be sorted")
 	}
 }
