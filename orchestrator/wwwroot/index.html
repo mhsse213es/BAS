@@ -10353,6 +10353,93 @@ function renderBuilderMode() {
   if (mode === 'custom' && !document.getElementById('bld-steps').children.length) addStep(null);
 }
 
+/* ── Technique Selector: matching engine ─────────────────────────────────
+   Pure functions, no DOM access — kept together so they can be verified
+   standalone before being wired into the combobox UI. */
+
+function techNormalize(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function techTokenize(s) {
+  return String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+function techBuildIndex(catalog) {
+  return (catalog || []).map(function(t) {
+    return {
+      raw: t,
+      idNorm: techNormalize(t.id),
+      nameNorm: techNormalize(t.name),
+      nameTokens: techTokenize(t.name),
+      tacticNorms: (t.tactics || []).map(techNormalize),
+      aliasTokens: (t.aliases || []).reduce(function(acc, a) {
+        return acc.concat(techTokenize(a));
+      }, []),
+      descNorm: techNormalize(t.description)
+    };
+  });
+}
+
+// techEditDistance computes Levenshtein edit distance. Only ever called on
+// short tokens (technique-name words), so the O(m*n) DP table is cheap.
+function techEditDistance(a, b) {
+  var m = a.length, n = b.length;
+  if (Math.abs(m - n) > 2) return 99; // cheap short-circuit for the fuzzy threshold
+  var dp = [], i, j;
+  for (i = 0; i <= m; i++) dp[i] = [i];
+  for (j = 0; j <= n; j++) dp[0][j] = j;
+  for (i = 1; i <= m; i++) {
+    for (j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+// techScore ranks one index entry against a query. Higher is better; 0 means
+// no match. Tiers match the design spec's priority order exactly.
+function techScore(entry, queryNorm, queryTokens) {
+  if (!queryNorm) return 0;
+  if (entry.idNorm === queryNorm) return 1000;                              // exact ID
+  if (entry.nameNorm === queryNorm) return 900;                             // exact name
+  if (entry.idNorm.indexOf(queryNorm) === 0) return 800;                    // ID prefix
+  if (entry.idNorm.indexOf(queryNorm) !== -1) return 750;                   // ID substring
+  if (entry.nameNorm.indexOf(queryNorm) === 0) return 700;                  // name prefix
+  if (queryTokens.length && queryTokens.every(function(qt) {
+    return entry.nameTokens.some(function(nt) { return nt.indexOf(qt) === 0 || nt.indexOf(qt) !== -1; });
+  })) return 650;                                                           // broken-word name match
+  if (entry.tacticNorms.some(function(tn) { return tn === queryNorm || tn.indexOf(queryNorm) === 0; })) return 550; // tactic
+  if (queryTokens.length && entry.aliasTokens.length && queryTokens.every(function(qt) {
+    return entry.aliasTokens.some(function(at) { return at.indexOf(qt) === 0 || at.indexOf(qt) !== -1; });
+  })) return 500;                                                           // synonym
+  if (queryTokens.length && queryTokens.every(function(qt) { return entry.descNorm.indexOf(qt) !== -1; })) return 400; // description keyword
+  var fuzzyHit = queryTokens.some(function(qt) {
+    return entry.nameTokens.some(function(nt) {
+      var threshold = qt.length <= 5 ? 1 : 2;
+      return Math.abs(nt.length - qt.length) <= threshold && techEditDistance(qt, nt) <= threshold;
+    });
+  });
+  return fuzzyHit ? 200 : 0;                                                // fuzzy fallback
+}
+
+// techSearch runs a query against a prebuilt index and returns up to 20
+// matching catalog entries (the original `raw` objects), best match first.
+function techSearch(index, query) {
+  var queryNorm = techNormalize(query);
+  var queryTokens = techTokenize(query);
+  if (!queryNorm) return [];
+  return index
+    .map(function(e) { return { entry: e, score: techScore(e, queryNorm, queryTokens) }; })
+    .filter(function(s) { return s.score > 0; })
+    .sort(function(a, b) { return b.score - a.score || (a.entry.idNorm < b.entry.idNorm ? -1 : 1); })
+    .slice(0, 20)
+    .map(function(s) { return s.entry.raw; });
+}
+
+/* ── /Technique Selector: matching engine ────────────────────────────── */
+
 function addStep(st) {
   st = st || {};
   var execs = ['powershell','cmd','bash','sh','wmi','mshta','rundll32','cscript','wscript','regsvr32','schtasks'];
