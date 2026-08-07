@@ -130,7 +130,7 @@ type windigoWindow struct {
 func newWindigoWindow() *windigoWindow {
 	sw := &windigoWindow{}
 
-	cx, cy := ui.Dpi(720, 640)
+	cx, cy := ui.Dpi(920, 640)
 	sw.wnd = ui.NewMain(
 		ui.OptsMain().
 			Title("Audspect BAS Agent").
