@@ -193,6 +193,8 @@ func (sw *windigoWindow) Refresh(snap StatusSnapshot) {
 // Later tasks extend this method section by section; this task only
 // establishes the empty dark canvas.
 func (sw *windigoWindow) paint(hdc win.HDC) []buttonHitRect {
+	sw.res.drawHeader(hdc, sw.latest)
+	sw.res.drawHero(hdc, sw.latest)
 	return nil
 }
 

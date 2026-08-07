@@ -5,6 +5,8 @@ package main
 import (
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
+
+	"audspect/agent/statusclient"
 )
 
 var (
@@ -107,5 +109,124 @@ func (r *resources) drawText(hdc win.HDC, text string, rc win.RECT, font win.HFO
 	hdc.SelectObjectFont(font)
 	hdc.SetTextColor(color)
 	hdc.SetBkMode(co.BKMODE_TRANSPARENT)
-	hdc.DrawText(text, &rc, align|co.DT_SINGLELINE|co.DT_VCENTER|co.DT_END_ELLIPSIS)
+	hdc.DrawText(text, &rc, align|co.DT_SINGLELINE|co.DT_VCENTER|co.DT_END_ELLIPSIS|co.DT_NOPREFIX)
+}
+
+func (r *resources) drawDot(hdc win.HDC, x, y, diameter int, color win.COLORREF) {
+	x2, y2 := dpiPos(x, y)
+	d, _ := dpiPos(diameter, 0)
+	brush := solidBrush(color)
+	defer brush.DeleteObject()
+	hdc.SelectObjectBrush(brush)
+	hdc.SelectObjectPen(r.penBorder)
+	hdc.Ellipse(win.RECT{Left: int32(x2), Top: int32(y2), Right: int32(x2 + d), Bottom: int32(y2 + d)})
+}
+
+// drawIconShield draws a simple pentagon shield outline, used for the
+// header badge and (reused, colored per-status) the Endpoint Security
+// Controls card header.
+func (r *resources) drawIconShield(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	defer pen.DeleteObject()
+	hdc.SelectObjectPen(pen)
+	hdc.SelectObjectBrush(r.brushCard) // unfilled look: fill matches card bg
+	pts := []win.POINT{
+		{X: int32(x + size/2), Y: int32(y)},
+		{X: int32(x + size), Y: int32(y + size/4)},
+		{X: int32(x + size), Y: int32(y + size/2)},
+		{X: int32(x + size/2), Y: int32(y + size)},
+		{X: int32(x), Y: int32(y + size/2)},
+		{X: int32(x), Y: int32(y + size/4)},
+	}
+	hdc.Polygon(pts)
+}
+
+// stateColor maps the same connection/lifecycle state logic used
+// throughout the dashboard (ServerConnected/Paused/State) to one of the
+// three semantic accent colors, so the hero card's left bar, the header
+// status pill, and later cards' badges all agree on what "healthy" means.
+func stateColor(s statusclient.StatusResponse) win.COLORREF {
+	switch {
+	case !s.ServerConnected && s.Paused:
+		return colWarning
+	case !s.ServerConnected:
+		return colDanger
+	case s.State == "quarantined" || s.State == "restricted":
+		return colDanger
+	default:
+		return colSuccess
+	}
+}
+
+func stateLabel(s statusclient.StatusResponse) string {
+	switch {
+	case !s.ServerConnected && s.Paused:
+		return "Paused"
+	case !s.ServerConnected:
+		return "Disconnected"
+	case s.State == "quarantined":
+		return "Quarantined"
+	case s.State == "restricted":
+		return "Restricted"
+	case s.State == "active":
+		return "Active"
+	default:
+		return "Idle"
+	}
+}
+
+func (r *resources) drawHeader(hdc win.HDC, snap StatusSnapshot) {
+	badgeRc := dpiRect(24, 16, 40, 40)
+	hdc.SelectObjectBrush(r.brushAccent)
+	hdc.SelectObjectPen(r.penBorder)
+	cx, cy := dpiPos(10, 10)
+	hdc.RoundRect(badgeRc, win.SIZE{Cx: int32(cx), Cy: int32(cy)})
+	r.drawIconShield(hdc, int(badgeRc.Left)+dpiXOnly(10), int(badgeRc.Top)+dpiXOnly(10), dpiXOnly(20), colText)
+
+	r.drawText(hdc, "Audspect BAS Agent", dpiRect(76, 18, 400, 22), r.fontHeading, colText, co.DT_LEFT)
+	r.drawText(hdc, "Breach & Attack Simulation · Endpoint Defense Validation", dpiRect(76, 40, 500, 18), r.fontBody, colMuted, co.DT_LEFT)
+
+	if !snap.Online {
+		r.drawText(hdc, "Agent Unreachable", dpiRect(700, 26, 196, 20), r.fontBody, colDanger, co.DT_RIGHT)
+		return
+	}
+	s := snap.Status
+	r.drawDot(hdc, 700, 30, 10, stateColor(s))
+	r.drawText(hdc, stateLabel(s), dpiRect(716, 26, 180, 20), r.fontBody, colText, co.DT_LEFT)
+}
+
+func (r *resources) drawHero(hdc win.HDC, snap StatusSnapshot) {
+	rc := dpiRect(24, 88, 872, 100)
+	r.drawCard(hdc, rc)
+
+	if !snap.Online {
+		barRc := dpiRect(24, 88, 4, 100)
+		barBrush := solidBrush(colDanger)
+		defer barBrush.DeleteObject()
+		hdc.SelectObjectBrush(barBrush)
+		hdc.Rectangle(barRc)
+		r.drawText(hdc, "ENDPOINT PROTECTION STATUS", dpiRect(56, 104, 400, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
+		r.drawText(hdc, "Agent Unreachable", dpiRect(56, 122, 400, 36), r.fontHero, colDanger, co.DT_LEFT)
+		r.drawText(hdc, "The local agent service is not responding.", dpiRect(56, 160, 500, 18), r.fontBody, colMuted, co.DT_LEFT)
+		return
+	}
+	s := snap.Status
+	accent := stateColor(s)
+	barBrush := solidBrush(accent)
+	defer barBrush.DeleteObject()
+	hdc.SelectObjectBrush(barBrush)
+	hdc.Rectangle(dpiRect(24, 88, 4, 100))
+
+	r.drawText(hdc, "ENDPOINT PROTECTION STATUS", dpiRect(56, 104, 400, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
+	r.drawText(hdc, stateLabel(s), dpiRect(56, 122, 400, 36), r.fontHero, colText, co.DT_LEFT)
+	desc := "Agent healthy and connected. No simulation is running."
+	if s.State == "quarantined" || s.State == "restricted" {
+		desc = "Agent integrity check failed — server has been notified."
+	} else if s.Paused {
+		desc = "Server link lost — run continues locally if one is active."
+	}
+	r.drawText(hdc, desc, dpiRect(56, 160, 500, 18), r.fontBody, colMuted, co.DT_LEFT)
+
+	r.drawText(hdc, s.Hostname, dpiRect(696, 104, 176, 20), r.fontBody, colText, co.DT_RIGHT)
+	r.drawText(hdc, "HOSTNAME", dpiRect(696, 124, 176, 16), r.fontEyebrow, colMuted, co.DT_RIGHT)
 }
