@@ -197,6 +197,7 @@ func (sw *windigoWindow) paint(hdc win.HDC) []buttonHitRect {
 	sw.res.drawHero(hdc, sw.latest)
 	sw.res.drawConnectionCard(hdc, sw.latest)
 	sw.res.drawOperationCard(hdc, sw.latest.Activity)
+	sw.res.drawControlsCard(hdc, sw.latest.Controls)
 	return nil
 }
 

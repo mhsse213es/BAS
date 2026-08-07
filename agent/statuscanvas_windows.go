@@ -359,3 +359,64 @@ func (r *resources) drawOperationCard(hdc win.HDC, a statusclient.ActivityRespon
 		r.drawText(hdc, result, dpiRect(484, 316, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
 	}
 }
+
+// drawStatusBadge paints a small pill: elevated-colored fill, 1px border
+// and centered text both in the given status color (a GDI-native
+// approximation of the browser dashboard's soft-tinted badges -- true
+// alpha-tinted fills would need GDI+, explicitly out of scope).
+func (r *resources) drawStatusBadge(hdc win.HDC, rc win.RECT, label string, color win.COLORREF) {
+	hdc.SelectObjectBrush(r.brushElevated)
+	pen, _ := win.CreatePen(co.PS_SOLID, 1, color)
+	defer pen.DeleteObject()
+	hdc.SelectObjectPen(pen)
+	cx, cy := dpiPos(4, 4)
+	hdc.RoundRect(rc, win.SIZE{Cx: int32(cx), Cy: int32(cy)})
+	r.drawText(hdc, label, rc, r.fontEyebrow, color, co.DT_CENTER)
+}
+
+type controlRow struct {
+	name, badge string
+	color       win.COLORREF
+}
+
+func defenderRow(d statusclient.DefenderCtrl) controlRow {
+	switch {
+	case d.Present && d.RTPEnabled:
+		return controlRow{"Defender RTP", "ACTIVE", colSuccess}
+	case d.Present:
+		return controlRow{"Defender RTP", "DEGRADED", colWarning}
+	default:
+		return controlRow{"Defender RTP", "ABSENT", colDanger}
+	}
+}
+
+func boolRow(name string, on bool) controlRow {
+	if on {
+		return controlRow{name, "ACTIVE", colSuccess}
+	}
+	return controlRow{name, "ABSENT", colDanger}
+}
+
+func (r *resources) drawControlsCard(hdc win.HDC, c statusclient.ControlsResponse) {
+	rc := dpiRect(24, 410, 872, 190)
+	r.drawCard(hdc, rc)
+	r.drawIconShield(hdc, dpiXOnly(40), dpiXOnly(430), dpiXOnly(16), colMuted)
+	r.drawText(hdc, "ENDPOINT SECURITY CONTROLS", dpiRect(60, 426, 400, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
+
+	rows := []controlRow{
+		defenderRow(c.Defender),
+		boolRow("Sysmon", c.Sysmon.Present),
+		boolRow("Firewall", c.Firewall.Enabled),
+		boolRow("AppLocker", c.AppLocker.Enabled),
+		boolRow("WDAC", c.WDAC.Enabled),
+		boolRow("AMSI", c.AMSI.Enabled),
+	}
+	colX := []int{40, 468}
+	for i, row := range rows {
+		col := colX[i%2]
+		y := 454 + (i/2)*44
+		r.drawDot(hdc, col, y+2, 8, row.color)
+		r.drawText(hdc, row.name, dpiRect(col+16, y, 200, 20), r.fontBody, colText, co.DT_LEFT)
+		r.drawStatusBadge(hdc, dpiRect(col+240, y, 100, 24), row.badge, row.color)
+	}
+}
