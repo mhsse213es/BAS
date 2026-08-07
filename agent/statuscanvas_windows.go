@@ -3,6 +3,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/rodrigocfd/windigo/co"
 	"github.com/rodrigocfd/windigo/win"
 
@@ -229,4 +231,131 @@ func (r *resources) drawHero(hdc win.HDC, snap StatusSnapshot) {
 
 	r.drawText(hdc, s.Hostname, dpiRect(696, 104, 176, 20), r.fontBody, colText, co.DT_RIGHT)
 	r.drawText(hdc, "HOSTNAME", dpiRect(696, 124, 176, 16), r.fontEyebrow, colMuted, co.DT_RIGHT)
+}
+
+func (r *resources) drawIconSignal(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	brush := solidBrush(color)
+	defer brush.DeleteObject()
+	hdc.SelectObjectBrush(brush)
+	hdc.SelectObjectPen(r.penBorder)
+	barW := size / 4
+	heights := []int{size / 3, size * 2 / 3, size}
+	for i, h := range heights {
+		bx := x + i*(barW+2)
+		by := y + size - h
+		hdc.Rectangle(win.RECT{Left: int32(bx), Top: int32(by), Right: int32(bx + barW), Bottom: int32(y + size)})
+	}
+}
+
+func (r *resources) drawIconClock(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	defer pen.DeleteObject()
+	hdc.SelectObjectPen(pen)
+	hdc.SelectObjectBrush(r.brushCard)
+	hdc.Ellipse(win.RECT{Left: int32(x), Top: int32(y), Right: int32(x + size), Bottom: int32(y + size)})
+	cx, cy := x+size/2, y+size/2
+	hdc.MoveToEx(cx, cy)
+	hdc.LineTo(cx, y+size/4)
+	hdc.MoveToEx(cx, cy)
+	hdc.LineTo(cx+size/4, cy)
+}
+
+func (r *resources) drawProgressBar(hdc win.HDC, rc win.RECT, pct int) {
+	hdc.SelectObjectBrush(r.brushElevated)
+	hdc.SelectObjectPen(r.penBorder)
+	cx, cy := dpiPos(4, 4)
+	hdc.RoundRect(rc, win.SIZE{Cx: int32(cx), Cy: int32(cy)})
+	if pct <= 0 {
+		return
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	filled := rc
+	filled.Right = rc.Left + (rc.Right-rc.Left)*int32(pct)/100
+	fillBrush := solidBrush(colAccent)
+	defer fillBrush.DeleteObject()
+	hdc.SelectObjectBrush(fillBrush)
+	hdc.RoundRect(filled, win.SIZE{Cx: int32(cx), Cy: int32(cy)})
+}
+
+func (r *resources) drawConnectionCard(hdc win.HDC, snap StatusSnapshot) {
+	rc := dpiRect(24, 204, 428, 190)
+	r.drawCard(hdc, rc)
+	r.drawIconSignal(hdc, dpiXOnly(40), dpiXOnly(224), dpiXOnly(16), colMuted)
+	r.drawText(hdc, "CONNECTION", dpiRect(60, 220, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
+
+	if !snap.Online {
+		r.drawText(hdc, "Server: —", dpiRect(40, 248, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
+		return
+	}
+	s := snap.Status
+	rows := []struct{ label, value string }{
+		{"Server", orDash(s.ServerURL)},
+		{"Link", connLinkText(s)},
+		{"Lifecycle State", orDash(s.State)},
+		{"Uptime", formatUptime(s.UptimeSec)},
+		{"Last Heartbeat", heartbeatText(s)},
+	}
+	y := 248
+	for _, row := range rows {
+		r.drawText(hdc, row.label, dpiRect(40, y, 160, 18), r.fontBody, colMuted, co.DT_LEFT)
+		r.drawText(hdc, row.value, dpiRect(200, y, 236, 18), r.fontBody, colText, co.DT_RIGHT)
+		y += 26
+	}
+}
+
+func connLinkText(s statusclient.StatusResponse) string {
+	switch {
+	case s.ServerConnected:
+		return "Connected"
+	case s.Paused:
+		return "Paused"
+	default:
+		return "Disconnected"
+	}
+}
+
+func heartbeatText(s statusclient.StatusResponse) string {
+	if s.LastHeartbeat == nil {
+		return "—"
+	}
+	return s.LastHeartbeat.Format("15:04:05")
+}
+
+func (r *resources) drawOperationCard(hdc win.HDC, a statusclient.ActivityResponse) {
+	rc := dpiRect(468, 204, 428, 190)
+	r.drawCard(hdc, rc)
+	r.drawIconClock(hdc, dpiXOnly(488), dpiXOnly(224), dpiXOnly(16), colMuted)
+	r.drawText(hdc, "CURRENT OPERATION", dpiRect(504, 220, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
+
+	title, meta, result := "No active simulation", "Awaiting tasking from the BAS console", ""
+	progress := 0
+	switch {
+	case a.CurrentOperation != nil && a.CurrentOperation.Running:
+		op := a.CurrentOperation
+		title = op.ScenarioName
+		if op.TechniqueID != "" {
+			title = op.TechniqueID + "  " + op.ScenarioName
+		}
+		meta = fmt.Sprintf("%d steps · phase: %s", op.TotalSteps, orDash(op.Phase))
+		progress = op.Progress
+	case a.LastOperation != nil:
+		op := a.LastOperation
+		title = op.ScenarioName
+		if op.TechniqueID != "" {
+			title = op.TechniqueID + "  " + op.ScenarioName
+		}
+		meta = fmt.Sprintf("Completed · %ds", op.DurationSec)
+		progress = 100
+		if op.Result != "" {
+			result = "Result: " + op.Result
+		}
+	}
+	r.drawText(hdc, title, dpiRect(484, 248, 380, 22), r.fontBody, colText, co.DT_LEFT)
+	r.drawText(hdc, meta, dpiRect(484, 272, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
+	r.drawProgressBar(hdc, dpiRect(484, 300, 380, 8), progress)
+	if result != "" {
+		r.drawText(hdc, result, dpiRect(484, 316, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
+	}
 }

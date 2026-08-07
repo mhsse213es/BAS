@@ -195,6 +195,8 @@ func (sw *windigoWindow) Refresh(snap StatusSnapshot) {
 func (sw *windigoWindow) paint(hdc win.HDC) []buttonHitRect {
 	sw.res.drawHeader(hdc, sw.latest)
 	sw.res.drawHero(hdc, sw.latest)
+	sw.res.drawConnectionCard(hdc, sw.latest)
+	sw.res.drawOperationCard(hdc, sw.latest.Activity)
 	return nil
 }
 
