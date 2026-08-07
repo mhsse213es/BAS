@@ -319,14 +319,15 @@ func (a *Agent) shutdownFinalize(grace time.Duration) {
 	}
 }
 
-// platformDisableAutoStartFn and platformExitAfterStopFn are indirections
-// over the real platform-specific functions (defined per-OS in
-// service.go/service_linux.go/service_darwin.go) so tests can substitute
-// no-op stand-ins instead of actually disabling a service or exiting the
-// test process.
+// platformDisableAutoStartFn, platformExitAfterStopFn, and
+// platformSelfUninstallFn are indirections over the real platform-specific
+// functions (defined per-OS in service.go/service_linux.go/service_darwin.go)
+// so tests can substitute no-op stand-ins instead of actually touching
+// service state or exiting the test process.
 var (
 	platformDisableAutoStartFn = platformDisableAutoStart
 	platformExitAfterStopFn    = platformExitAfterStop
+	platformSelfUninstallFn    = platformSelfUninstall
 )
 
 // stopSelf performs a durable, operator-requested shutdown: finalize any
@@ -340,6 +341,37 @@ func (a *Agent) stopSelf(reason string) {
 	a.shutdownFinalize(shutdownGrace)
 	a.sendHeartbeat("offline")
 	platformRestoreOnShutdown()
+	if err := platformDisableAutoStartFn(); err != nil {
+		log.Printf("[!] disable auto-start: %v — agent may restart at next boot", err)
+	}
+	platformExitAfterStopFn()
+}
+
+// uninstallSelf performs a durable, operator-requested full uninstall:
+// finalize any in-flight run, remove the artifacts that make the agent come
+// back (service/unit/daemon registration, tray autostart -- see
+// platformSelfUninstall per platform), report the real outcome to the
+// server BEFORE the process might exit, then disable+exit exactly like
+// stopSelf does. Reporting before disable/exit matters because on some
+// platforms disabling has the documented side effect of ending this very
+// process (see platformDisableAutoStart's macOS implementation) -- if the
+// report happened after, a failure could go unreported. See
+// docs/superpowers/specs/2026-08-07-verified-agent-uninstall-design.md for
+// why this never asks the OS service manager to stop the process from
+// within itself.
+func (a *Agent) uninstallSelf(reason string) {
+	log.Printf("[*] Uninstall requested by operator: %s", reason)
+	a.logger.Op("warn", "lifecycle", "agent uninstall requested by operator: "+reason)
+	a.shutdownFinalize(shutdownGrace)
+	a.sendHeartbeat("offline")
+	platformRestoreOnShutdown()
+
+	uninstallErr := platformSelfUninstallFn()
+	if uninstallErr != nil {
+		log.Printf("[!] self-uninstall cleanup failed: %v", uninstallErr)
+	}
+	reportUninstallResultFn(a, uninstallErr)
+
 	if err := platformDisableAutoStartFn(); err != nil {
 		log.Printf("[!] disable auto-start: %v — agent may restart at next boot", err)
 	}
@@ -967,6 +999,16 @@ func (a *Agent) connectWS() {
 					continue
 				}
 				go a.stopSelf(body.Reason)
+
+			case "command_uninstall_agent":
+				var body struct {
+					Reason string `json:"reason"`
+				}
+				if err := json.Unmarshal(msg.Data, &body); err != nil {
+					log.Printf("[!] WS: bad uninstall command: %v", err)
+					continue
+				}
+				go a.uninstallSelf(body.Reason)
 
 			default:
 				log.Printf("[~] WS: unhandled message type %q", msg.Type)

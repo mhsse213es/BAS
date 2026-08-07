@@ -144,6 +144,28 @@ func platformDisableAutoStart() error {
 	return exec.Command("systemctl", "disable", "bas-agent.service").Run()
 }
 
+// platformSelfUninstall removes the systemd unit's boot-time enablement and
+// deletes its unit file, then reloads systemd's unit cache. It deliberately
+// does NOT call `systemctl stop` on the unit the calling process belongs to
+// -- that would send SIGTERM to this very process before it can report the
+// result and exit cleanly. The process's own exit (via
+// platformExitAfterStopFn -- os.Exit(0) on Linux, called right after this
+// by uninstallSelf) is what actually stops it; Restart=on-failure does not
+// fire on a clean exit. Matches svcUninstall's existing choice to leave the
+// binary/config in place -- only the unit definition is removed here.
+func platformSelfUninstall() error {
+	if err := exec.Command("systemctl", "disable", "bas-agent.service").Run(); err != nil {
+		fmt.Printf("[~] systemctl disable: %v\n", err)
+	}
+	if err := os.Remove(unitPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove unit file: %w", err)
+	}
+	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
+		fmt.Printf("[~] systemctl daemon-reload: %v\n", err)
+	}
+	return nil
+}
+
 // platformExitAfterStop ends this process. The systemd unit's
 // Restart=on-failure policy does not fire on a clean exit (code 0), so no
 // SCM-style handshake is needed here unlike Windows.

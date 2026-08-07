@@ -382,6 +382,58 @@ func platformDisableAutoStart() error {
 	return nil
 }
 
+// platformSelfUninstall performs the parts of an uninstall that are safe to
+// run from within the live, running service process itself: cleaning up
+// tray/registry artifacts, scheduling the binary for delete-on-reboot, and
+// marking the service registration for deletion via Delete() -- a legal,
+// non-blocking call while running. Windows completes the actual removal
+// once the service later reaches the Stopped state, which
+// platformDisableAutoStartFn/platformExitAfterStopFn (called by
+// uninstallSelf right after this returns) already bring about via the same
+// stopRequested-channel signaling used by Stop Agent. This deliberately
+// does NOT call Control(svc.Stop) or wait for Stopped itself -- doing so
+// from within the very process being stopped would race this function's
+// own return and the HTTP result report that follows it.
+func platformSelfUninstall() error {
+	m, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("connect SCM: %w", err)
+	}
+	defer m.Disconnect()
+	s, err := m.OpenService(svcName)
+	if err != nil {
+		return fmt.Errorf("open service: %w", err)
+	}
+	defer s.Close()
+
+	var binaryPath string
+	if cfg, cfgErr := s.Config(); cfgErr == nil {
+		binaryPath = cfg.BinaryPathName
+	}
+
+	if err := s.Delete(); err != nil {
+		return fmt.Errorf("mark service for deletion: %w", err)
+	}
+	_ = eventlog.Remove(svcName)
+
+	// Everything below is best-effort cleanup, matching svcUninstall's own
+	// philosophy: a missing key/window/file is already the desired end
+	// state, not an error worth failing the whole uninstall over.
+	if binaryPath != "" {
+		if err := scheduleBinaryDeleteOnReboot(binaryPath); err != nil {
+			log.Printf("[~] Could not schedule binary for delayed deletion: %v", err)
+		}
+	}
+	if err := removeTrayRunKey(); err != nil {
+		log.Printf("[~] Could not remove tray autostart entry: %v", err)
+	}
+	closeTrayWindow()
+	if err := removeTrayShortcut(); err != nil {
+		log.Printf("[~] Could not remove tray shortcut: %v", err)
+	}
+	return nil
+}
+
 // platformExitAfterStop ends this process. When running as a Windows
 // service, it hands off to agentSvc.Execute()'s own select loop (via
 // stopRequested) instead of exiting directly, so SCM sees a clean stop

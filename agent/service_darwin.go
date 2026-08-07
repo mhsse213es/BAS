@@ -116,16 +116,37 @@ func readAgentSecret() string {
 	return ""
 }
 
-// platformDisableAutoStart unloads the launchd job with the persistent
-// "-w" (disabled) flag, so it does not start at the endpoint's next boot.
-// Unlike Linux/Windows, this must run BEFORE the process exits, not after:
-// the launchd plist's KeepAlive=true restarts the job unconditionally on
-// ANY exit (clean or not), so exiting first would just be relaunched before
-// this had a chance to disable it. Note this call itself typically
-// terminates the process as a side effect of unloading — that's expected;
-// platformExitAfterStop below becomes a no-op in that case.
+// darwinLaunchdLabel matches the <key>Label</key> written into the plist by
+// svcInstall above.
+const darwinLaunchdLabel = "com.audspect.bas-agent"
+
+// platformDisableAutoStart unloads the launchd job so it does not start at
+// the endpoint's next boot. Unlike Linux/Windows, this must run BEFORE the
+// process exits, not after: the launchd plist's KeepAlive=true restarts the
+// job unconditionally on ANY exit (clean or not), so exiting first would
+// just be relaunched before this had a chance to disable it. Note this call
+// itself typically terminates the process as a side effect of unloading —
+// that's expected; platformExitAfterStop below becomes a no-op in that case.
+//
+// Unloads by label (via `bootout`) rather than by plist path (the legacy
+// `unload <path>` form) so this still works when the plist file has already
+// been removed -- the case for the remote self-uninstall flow, where
+// platformSelfUninstall (below) deletes the plist before this runs.
 func platformDisableAutoStart() error {
-	return exec.Command("launchctl", "unload", "-w", darwinPlistPath).Run()
+	return exec.Command("launchctl", "bootout", "system/"+darwinLaunchdLabel).Run()
+}
+
+// platformSelfUninstall removes the plist so the daemon does not reload at
+// the endpoint's next boot. Safe to call while running -- deleting the file
+// has no effect on the currently-loaded job; platformDisableAutoStartFn
+// (called by uninstallSelf right after this returns, and after the result
+// is reported) is what actually unloads the running job, and now does so by
+// label so it no longer depends on this file still existing at that point.
+func platformSelfUninstall() error {
+	if err := os.Remove(darwinPlistPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove plist: %w", err)
+	}
+	return nil
 }
 
 // platformExitAfterStop ends this process. On macOS the disable step above
