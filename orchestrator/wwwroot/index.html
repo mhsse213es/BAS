@@ -676,6 +676,8 @@ code {
 .sbadge.s-restricted  { background:var(--warning-dim);  color:#fbbf24;  border-color:var(--warning-border); }
 .sbadge.s-quarantined { background:var(--danger-dim);   color:#f87171;  border-color:var(--danger-border); }
 .sbadge.s-retired     { background:rgba(100,116,139,.12); color:#94a3b8; border-color:rgba(100,116,139,.25); }
+.sbadge.s-uninstalling { background:rgba(47,129,247,.12); color:var(--accent); border-color:rgba(47,129,247,.3); }
+.sbadge.s-uninstalled  { background:rgba(100,116,139,.12); color:#94a3b8; border-color:rgba(100,116,139,.25); }
 /* ── Agent detail tabs ─────────────────────────────────────── */
 .tab-bar { display:flex; gap:0; border-bottom:1px solid var(--border); flex-shrink:0; padding:0 1.25rem; background:var(--surface); }
 .tab-btn { background:transparent; border:none; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; padding:0.6rem 1rem; font-size:0.8rem; font-weight:500; transition:color 0.15s,border-color 0.15s; }
@@ -3805,24 +3807,46 @@ body.theme-slate {
   </div>
 </div>
 
-<!-- Remove Agent Modal -->
-<div id="remove-agent-overlay" class="overlay">
+<!-- Uninstall Agent Modal -->
+<div id="uninstall-agent-overlay" class="overlay">
   <div class="modal" style="width:440px">
-    <h3>Remove Agent</h3>
-    <p class="sub2" id="remove-agent-target-sub"></p>
+    <h3>Uninstall Agent</h3>
+    <p class="sub2" id="uninstall-agent-target-sub"></p>
 
     <div style="background:rgba(218,54,51,.1);border:1px solid var(--danger-border, var(--danger));border-radius:var(--radius);padding:0.65rem 0.8rem;font-size:0.78rem;color:var(--danger);margin:0.6rem 0">
-      &#9888; This removes the agent from the dashboard — it moves to the Retired filter and drops out of the default list. It does <strong>not</strong> touch the endpoint: the agent software keeps running there until someone uninstalls it locally or you separately push a Stop.
+      &#9888; This sends a real uninstall order to the endpoint. The agent stays visible as "Uninstalling…" until it confirms — it is only removed once the endpoint proves the uninstall succeeded. Requires the agent to be online right now.
     </div>
 
     <label class="modal-lbl">Reason <span class="tiny muted">(required)</span></label>
-    <input type="text" id="remove-agent-reason" placeholder="e.g. duplicate enrollment"
+    <input type="text" id="uninstall-agent-reason" placeholder="e.g. decommissioning this host"
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeUninstallAgentModal()">Cancel</button>
+      <span style="flex:1"></span>
+      <button id="uninstall-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitUninstallAgent()">&#128465; Uninstall Agent</button>
+    </div>
+  </div>
+</div>
+
+<!-- Force Remove Agent Modal -->
+<div id="remove-agent-overlay" class="overlay">
+  <div class="modal" style="width:440px">
+    <h3>Force Remove Agent</h3>
+    <p class="sub2" id="remove-agent-target-sub"></p>
+
+    <div style="background:rgba(218,54,51,.1);border:1px solid var(--danger-border, var(--danger));border-radius:var(--radius);padding:0.65rem 0.8rem;font-size:0.78rem;color:var(--danger);margin:0.6rem 0">
+      &#9888; This removes the agent record from Audspect. The endpoint will <strong>not</strong> receive an uninstall command. The agent software may still be installed on the device if it ever reconnects. This action should only be used for permanently unavailable or decommissioned devices.
+    </div>
+
+    <label class="modal-lbl">Reason <span class="tiny muted">(required)</span></label>
+    <input type="text" id="remove-agent-reason" placeholder="e.g. device destroyed / permanently offline"
            style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
 
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeRemoveAgentModal()">Cancel</button>
       <span style="flex:1"></span>
-      <button id="remove-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitRemoveAgent()">&#128465; Remove Agent</button>
+      <button id="remove-agent-submit-btn" class="btn btn-sm" style="color:#fff;background:var(--danger)" onclick="submitRemoveAgent()">&#128465; Force Remove</button>
     </div>
   </div>
 </div>
@@ -6369,7 +6393,7 @@ var AGENT_FILTER = 'all';
 // reachable but lifecycle state != active (quarantined/restricted); offline =
 // no heartbeat.
 function agentBucket(a) {
-  if (a.state === 'retired') return 'retired';
+  if (a.state === 'retired' || a.state === 'uninstalled') return 'retired';
   if (a.status === 'offline') return 'offline';
   if (a.state && a.state !== 'active') return 'degraded';
   return 'online';
@@ -6538,7 +6562,9 @@ function renderAgentRows() {
           (ROLE === 'admin' && a.status !== 'offline' ?
             '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openStopAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#9209; Stop agent</button>' : '') +
           (ROLE === 'admin' ?
-            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openRemoveAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#128465; Remove agent</button>' : '') +
+            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openUninstallAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#128465; Uninstall Agent</button>' : '') +
+          (ROLE === 'admin' ?
+            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openRemoveAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#9888; Force Remove…</button>' : '') +
         '</div>' +
         '</div>' +
       '</td></tr>';
@@ -9284,7 +9310,44 @@ function submitStopAgent() {
   }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
 }
 
-// ── Remove Agent ─────────────────────────────────────────────────────────────
+// ── Uninstall Agent ──────────────────────────────────────────────────────
+// Verified uninstall: requires a live connection, waits for the endpoint to
+// confirm before the record changes -- unlike Force Remove below, this
+// never silently claims an unreachable endpoint is gone.
+var _uninstallAgentTargetId = null;
+
+function openUninstallAgentModal(agentId, hostname) {
+  _uninstallAgentTargetId = agentId;
+  document.getElementById('uninstall-agent-target-sub').textContent = 'Target: ' + hostname;
+  document.getElementById('uninstall-agent-reason').value = '';
+  document.getElementById('uninstall-agent-overlay').classList.add('open');
+}
+
+function closeUninstallAgentModal() {
+  document.getElementById('uninstall-agent-overlay').classList.remove('open');
+}
+
+function submitUninstallAgent() {
+  if (!_uninstallAgentTargetId) return;
+  var reason = document.getElementById('uninstall-agent-reason').value.trim();
+  if (!reason) { showToast('Reason is required', 'err'); return; }
+  if (!confirm('Uninstall this agent from the endpoint?\n\nReason: ' + reason + '\n\nThe agent must be online to confirm. Proceed?')) return;
+
+  var btn = document.getElementById('uninstall-agent-submit-btn');
+  btn.disabled = true;
+  apicall('/api/agents/' + encodeURIComponent(_uninstallAgentTargetId) + '/uninstall', {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason })
+  }).then(function(res) {
+    btn.disabled = false;
+    if (res && res.error) { showToast(res.error, 'err'); return; }
+    showToast('Uninstall dispatched', 'ok');
+    closeUninstallAgentModal();
+    loadAgents();
+  }).catch(function(e) { btn.disabled = false; showToast(e.message, 'err'); });
+}
+
+// ── Remove Agent (Force Remove) ─────────────────────────────────────────────
 // Removes the dashboard record only (sets state=retired) -- unlike Stop
 // Agent, this never talks to the endpoint and works regardless of whether
 // the agent is currently connected.
@@ -14681,7 +14744,7 @@ function loadAgtOverview(agentId) {
     var a = (data || []).find(function(ag) { return ag.agentId === agentId; });
     if (!a) { pane.innerHTML = '<div style="padding:1rem;color:var(--danger)">Agent not found</div>'; return; }
     document.getElementById('agt-detail-title').textContent = 'Agent: ' + x(a.hostname || agentId);
-    var stateColor = {active:'var(--success)',enrolling:'var(--accent)',restricted:'var(--warning)',quarantined:'var(--danger)',retired:'var(--muted)'}[a.state] || 'var(--muted)';
+    var stateColor = {active:'var(--success)',enrolling:'var(--accent)',restricted:'var(--warning)',quarantined:'var(--danger)',retired:'var(--muted)',uninstalling:'var(--accent)',uninstalled:'var(--muted)'}[a.state] || 'var(--muted)';
     var policy = a.policy || {};
     pane.innerHTML =
       '<div style="padding:1rem 1.25rem">' +
@@ -14697,6 +14760,9 @@ function loadAgtOverview(agentId) {
       (a.state === 'quarantined' ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is QUARANTINED — binary hash mismatch detected. Scenario dispatch is blocked. Restore to Active once the issue is resolved.</div>' : '') +
       (a.state === 'restricted'  ? '<div style="background:rgba(210,153,34,.12);border:1px solid var(--warning);border-radius:4px;padding:0.6rem 0.85rem;color:var(--warning);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Agent is RESTRICTED — scenario dispatch is blocked by policy. Restore to Active to re-enable.</div>' : '') +
       (a.state === 'retired'     ? '<div style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.4);border-radius:4px;padding:0.6rem 0.85rem;color:#94a3b8;font-size:0.78rem;margin-bottom:0.75rem">&#128683; Agent is RETIRED — decommissioned and blocked from running scenarios. Restore to Active to re-enable.</div>' : '') +
+      (a.state === 'uninstalling' ? '<div style="background:rgba(47,129,247,.12);border:1px solid rgba(47,129,247,.4);border-radius:4px;padding:0.6rem 0.85rem;color:var(--accent);font-size:0.78rem;margin-bottom:0.75rem">&#8987; Uninstall in progress — waiting for the endpoint to confirm.</div>' : '') +
+      (a.state === 'uninstalled'  ? '<div style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.4);border-radius:4px;padding:0.6rem 0.85rem;color:#94a3b8;font-size:0.78rem;margin-bottom:0.75rem">&#10003; Agent confirmed it uninstalled itself.</div>' : '') +
+      (a.uninstallError ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9888; Uninstall failed: ' + x(a.uninstallError) + (a.uninstallErrorAt ? ' (' + x(new Date(a.uninstallErrorAt).toLocaleString()) + ')' : '') + '</div>' : '') +
       (a.stoppedBy ? '<div style="background:rgba(218,54,51,.12);border:1px solid var(--danger);border-radius:4px;padding:0.6rem 0.85rem;color:var(--danger);font-size:0.78rem;margin-bottom:0.75rem">&#9209; Agent was stopped by ' + x(a.stoppedByName || a.stoppedBy) + ' on ' + x(new Date(a.stoppedAt).toLocaleString()) + ': ' + x(a.stopReason || '') + '. It will not restart automatically. Physical/console access to the endpoint is required to bring it back.</div>' : '') +
       (Object.keys(policy).length ? '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:4px;padding:0.7rem 0.9rem;margin-bottom:0.75rem">' +
         '<div style="font-weight:600;font-size:0.78rem;margin-bottom:0.4rem;color:var(--muted)">POLICY BUNDLE</div>' +
