@@ -143,7 +143,7 @@ var (
 )
 
 // runTray shows the persistent system-tray icon. Left-click / double-click opens
-// the WebView2 status console (spawned as a separate --status-window process).
+// the native status console (spawned as a separate --status-window process).
 func runTray() {
 	runtime.LockOSThread()
 
