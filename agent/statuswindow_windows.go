@@ -109,6 +109,7 @@ func newWindigoWindow() *windigoWindow {
 
 	sw.wnd.On().WmCreate(func(p ui.WmCreate) int {
 		sw.wnd.Hwnd().DwmSetWindowAttribute(win.DwmAttrUseImmersiveDarkMode(true))
+		sw.clampToWorkArea()
 		return 0
 	})
 
@@ -160,6 +161,32 @@ func newWindigoWindow() *windigoWindow {
 	})
 
 	return sw
+}
+
+// clampToWorkArea repositions the window so its top edge never lands above
+// the visible work area. windigo centers new windows purely from screen
+// dimensions (SM_CXSCREEN/CYSCREEN) with no clamping, so on any display
+// whose usable height is shorter than our fixed content height, the window
+// ends up with a negative Top -- part of it (including the header and hero
+// card) renders entirely off-screen with no way for the user to scroll or
+// drag it into view (found live: a real window on this session's build VM
+// centered to Top=-330). Top-aligning instead of vertically centering means
+// the most important content is always visible even when the whole window
+// can't fit on a shorter screen.
+func (sw *windigoWindow) clampToWorkArea() {
+	var workRect win.RECT
+	if err := win.SystemParametersInfo(co.SPI_GETWORKAREA, 0, unsafe.Pointer(&workRect), 0); err != nil {
+		return
+	}
+	rc, err := sw.wnd.Hwnd().GetWindowRect()
+	if err != nil {
+		return
+	}
+	if rc.Top >= workRect.Top {
+		return // already fully on-screen (or at least not clipped above)
+	}
+	sw.wnd.Hwnd().SetWindowPos(win.HWND(0), win.POINT{X: rc.Left, Y: workRect.Top},
+		win.SIZE{}, co.SWP_NOSIZE|co.SWP_NOZORDER|co.SWP_NOACTIVATE)
 }
 
 // dpiPos is a small local wrapper around ui.Dpi so every coordinate call
