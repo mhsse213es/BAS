@@ -276,20 +276,6 @@ if (Test-Path $rsrcBin) {
 } else {
     Warn "    rsrc not available - installer will use runtime self-elevation"
 }
-# Ship the WebView2 runtime as a sibling file next to the installer, not
-# embedded (embedding would balloon the installer from ~14MB to ~190MB).
-# Matched by a filename pattern, not an exact name — Microsoft has changed
-# this filename before, and a pattern means a future rename doesn't require
-# a BAS code change, just re-dropping the renamed file in installer\webview2\.
-# See installer\webview2\README.md.
-$WebView2Match = Get-ChildItem -Path (Join-Path $InstallerDir "webview2") -Filter "*WebView2*RuntimeInstaller*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($WebView2Match) {
-    $wv2MB = [math]::Round($WebView2Match.Length / 1MB)
-    Log "  Bundling WebView2 runtime (${wv2MB}MB) as a sibling file - clients without it get the native window automatically"
-} else {
-    Warn "  WebView2 runtime not found in installer\webview2\ - drop the Evergreen Standalone Installer there to enable auto-install (clients without it use browser fallback)"
-}
-
 Push-Location $InstallerDir
 $env:GOOS = "windows"; $env:GOARCH = "amd64"
 go build -ldflags="-s -w -H windowsgui" -o "$OutDir\BASAgent-Setup-$Version.exe" . 2>&1
@@ -302,11 +288,6 @@ Log "  Installer EXE: BASAgent-Setup-$Version.exe (${exeSizeMB}MB)"
 # that means something is being embedded again (e.g. a reverted fix), not a
 # one-off fluctuation worth silently allowing through.
 if ($exeSizeMB -gt 25) { Err "BASAgent-Setup-$Version.exe is ${exeSizeMB}MB, expected ~14MB - something is being embedded that shouldn't be (check for a go:embed regression)." }
-
-if ($WebView2Match) {
-    Copy-Item $WebView2Match.FullName -Destination (Join-Path $OutDir $WebView2Match.Name)
-    Log "  WebView2 runtime copied alongside installer: $($WebView2Match.Name)"
-}
 
 # Also build standalone Windows agent (for manual / side-by-side deploy)
 Log "Building standalone Windows agent binary..."

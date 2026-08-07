@@ -556,15 +556,11 @@
       .catch(function(){ goOffline(); });
   }
 
-  // Action buttons — bound to native host functions by the tray (WebView2).
-  // Fall back to no-op-with-hint if bindings are unavailable.
   $("btnExport").addEventListener("click",function(){
-    if(window.basExport){ window.basExport(); flash($("btnExport"),"Exporting…"); }
-    else alert("Export is available from the system tray menu.");
+    alert("Export is available from the system tray menu.");
   });
   $("btnDashboard").addEventListener("click",function(){
-    if(window.basOpenDashboard){ window.basOpenDashboard(lastServerUrl||""); }
-    else if(lastServerUrl){ window.open(lastServerUrl,"_blank"); }
+    if(lastServerUrl){ window.open(lastServerUrl,"_blank"); }
     else alert("Server URL not available yet.");
   });
   function flash(btn,txt){ var o=btn.innerHTML; btn.disabled=true; btn.style.opacity=.7; setTimeout(function(){btn.disabled=false;btn.style.opacity=1;},1500); }

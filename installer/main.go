@@ -518,8 +518,6 @@ func runInstall() {
 		appendStatus("[~] sc start: " + string(scOut))
 	}
 
-	nativeConsole := ensureWebView2Runtime()
-
 	if err := registerTrayStartup(agentPath); err != nil {
 		appendStatus("[~] Could not register status monitor for startup: " + err.Error())
 	} else {
@@ -538,14 +536,8 @@ func runInstall() {
 	appendStatus("  The agent will enroll in the dashboard")
 	appendStatus("  within 30 seconds.")
 	appendStatus("  Status monitor icon will appear in tray.")
-	if nativeConsole {
-		appendStatus("  Native status console: enabled.")
-	} else {
-		appendStatus("  ⚠ Native status console: NOT available — the tray icon")
-		appendStatus("    will open the dashboard in your browser instead of a")
-		appendStatus("    native window. Drop the WebView2 runtime installer next")
-		appendStatus("    to this installer and re-run it to enable the native console.")
-	}
+	appendStatus("  Status console opens as a native window from the tray icon")
+	appendStatus("  (falls back to your browser if the native window can't be created).")
 	appendStatus("──────────────────────────────────────────")
 
 	setWindowText(hInstBtn, "Installed")
@@ -597,90 +589,6 @@ $s.Save()`
 		return fmt.Errorf("%w: %s", err, string(out))
 	}
 	return nil
-}
-
-const webView2RuntimeClientGUID = `{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`
-
-func webView2Installed() bool {
-	checks := []struct {
-		root registry.Key
-		sub  string
-	}{
-		{registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\` + webView2RuntimeClientGUID},
-		{registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\EdgeUpdate\Clients\` + webView2RuntimeClientGUID},
-		{registry.CURRENT_USER, `SOFTWARE\Microsoft\EdgeUpdate\Clients\` + webView2RuntimeClientGUID},
-	}
-	for _, c := range checks {
-		k, err := registry.OpenKey(c.root, c.sub, registry.QUERY_VALUE)
-		if err != nil {
-			continue
-		}
-		pv, _, err := k.GetStringValue("pv")
-		k.Close()
-		if err == nil && pv != "" && pv != "0.0.0.0" {
-			return true
-		}
-	}
-	return false
-}
-
-// webView2InstallerGlob matches the Microsoft Edge WebView2 Runtime "Evergreen
-// Standalone Installer" filename. A glob (not an exact name) because Microsoft
-// has changed this filename before and may again — matching a pattern means a
-// future rename doesn't require a BAS code change or rebuild, just re-dropping
-// the renamed file in the same spot.
-const webView2InstallerGlob = "*WebView2*RuntimeInstaller*.exe"
-
-// findWebView2InstallerIn globs dir for the runtime installer. Returns "" if
-// none or more than one match is found — an ambiguous match is treated as
-// "not found" rather than guessing which file to run.
-func findWebView2InstallerIn(dir string) string {
-	matches, err := filepath.Glob(filepath.Join(dir, webView2InstallerGlob))
-	if err != nil || len(matches) != 1 {
-		return ""
-	}
-	return matches[0]
-}
-
-// findWebView2Installer looks for the runtime installer next to the running
-// installer.exe — nowhere else (never Downloads, %TEMP%, the current working
-// directory, or %ProgramData%), so behavior is deterministic and this never
-// risks executing an unexpected binary from a writable/shared location.
-func findWebView2Installer() string {
-	exePath, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	return findWebView2InstallerIn(filepath.Dir(exePath))
-}
-
-// ensureWebView2Runtime installs the WebView2 runtime if it's missing and a
-// sibling installer is present. Returns whether the runtime ends up available
-// (already present, or just installed) — the caller surfaces this explicitly
-// in the final install summary so the operator isn't left to infer it from an
-// early progress line that may have scrolled past.
-func ensureWebView2Runtime() bool {
-	if webView2Installed() {
-		appendStatus("[+] WebView2 runtime present.")
-		return true
-	}
-	installerPath := findWebView2Installer()
-	if installerPath == "" {
-		appendStatus("[~] WebView2 runtime missing (no runtime installer found next to this installer) — status console will open in browser.")
-		return false
-	}
-	appendStatus("[*] Installing Microsoft Edge WebView2 runtime...")
-	cmd := exec.Command(installerPath, "/silent", "/install")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	if out, err := cmd.CombinedOutput(); err != nil {
-		appendStatus("[~] WebView2 runtime install failed: " + err.Error())
-		if len(out) > 0 {
-			appendStatus("        " + string(out))
-		}
-		return false
-	}
-	appendStatus("[+] WebView2 runtime installed.")
-	return true
 }
 
 func validateEnrollment(serverURL, secret string) error {
