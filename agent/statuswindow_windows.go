@@ -88,6 +88,11 @@ type windigoWindow struct {
 	lblConnState     *ui.Static
 	lblConnUptime    *ui.Static
 	lblConnHeartbeat *ui.Static
+
+	lblOpTitle  *ui.Static
+	lblOpMeta   *ui.Static
+	progOp      *ui.ProgressBar
+	lblOpResult *ui.Static
 }
 
 func newWindigoWindow() *windigoWindow {
@@ -113,6 +118,18 @@ func newWindigoWindow() *windigoWindow {
 		Text("Uptime: —").Position(dpiPos(16, 128)).Size(dpiPos(360, 20)))
 	sw.lblConnHeartbeat = ui.NewStatic(sw.wnd, ui.OptsStatic().
 		Text("Last Heartbeat: —").Position(dpiPos(16, 152)).Size(dpiPos(360, 20)))
+
+	sw.lblOpTitle = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("No active simulation").Position(dpiPos(400, 56)).Size(dpiPos(300, 20)))
+	sw.lblOpMeta = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Awaiting tasking from the BAS console").Position(dpiPos(400, 80)).Size(dpiPos(300, 20)))
+	progX, progY := dpiPos(400, 104)
+	progCx, progCy := dpiPos(300, 16)
+	sw.progOp = ui.NewProgressBar(sw.wnd, ui.OptsProgressBar().
+		Position(progX, progY).Size(progCx, progCy))
+	sw.progOp.SetRange(0, 100)
+	sw.lblOpResult = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("").Position(dpiPos(400, 128)).Size(dpiPos(300, 20)))
 
 	return sw
 }
@@ -184,6 +201,41 @@ func (sw *windigoWindow) render(snap StatusSnapshot) {
 		title += "  [OK]  v" + s.AgentVersion
 	}
 	sw.lblHeroTitle.SetTextAndResize(title)
+	sw.renderOperation(snap.Activity)
+}
+
+// renderOperation updates the Current Operation panel.
+func (sw *windigoWindow) renderOperation(a statusclient.ActivityResponse) {
+	if a.CurrentOperation != nil && a.CurrentOperation.Running {
+		op := a.CurrentOperation
+		title := op.ScenarioName
+		if op.TechniqueID != "" {
+			title = op.TechniqueID + "  " + op.ScenarioName
+		}
+		sw.lblOpTitle.SetTextAndResize(title)
+		sw.lblOpMeta.SetTextAndResize(fmt.Sprintf("%d steps · phase: %s", op.TotalSteps, orDash(op.Phase)))
+		sw.progOp.SetPos(op.Progress)
+		sw.lblOpResult.SetTextAndResize("")
+		return
+	}
+	if a.LastOperation != nil {
+		op := a.LastOperation
+		title := op.ScenarioName
+		if op.TechniqueID != "" {
+			title = op.TechniqueID + "  " + op.ScenarioName
+		}
+		sw.lblOpTitle.SetTextAndResize(title)
+		sw.lblOpMeta.SetTextAndResize(fmt.Sprintf("Completed · %ds", op.DurationSec))
+		sw.progOp.SetPos(100)
+		if op.Result != "" {
+			sw.lblOpResult.SetTextAndResize("Result: " + op.Result)
+		}
+		return
+	}
+	sw.lblOpTitle.SetTextAndResize("No active simulation")
+	sw.lblOpMeta.SetTextAndResize("Awaiting tasking from the BAS console")
+	sw.progOp.SetPos(0)
+	sw.lblOpResult.SetTextAndResize("")
 }
 
 func orDash(s string) string {
