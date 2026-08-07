@@ -570,7 +570,7 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	        COALESCE(a.state, 'active'), COALESCE(a.policy_json::text, '{}'), a.enrolled_at,
 	        (SELECT COUNT(*) FROM scenario_runs sr WHERE sr.agent_id = a.agent_id) AS sims,
 	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
-	        a.group_id, g.name
+	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at
 	 FROM agents a LEFT JOIN users u ON u.id = a.stopped_by LEFT JOIN agent_groups g ON g.id = a.group_id`
 	var args []any
 	if groupIDParam := r.URL.Query().Get("groupId"); groupIDParam != "" {
@@ -605,18 +605,20 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var a models.Agent
 		var stateStr, policyRaw string
+		var uninstallRequestedAt *time.Time
 		if err := rows.Scan(&a.AgentID, &a.Hostname, &a.IPAddress, &a.OSVersion,
 			&a.Username, &a.Status, &a.EnvLabel, &a.HasReport,
 			&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate,
 			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims,
 			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason,
-			&a.GroupID, &a.GroupName); err != nil {
+			&a.GroupID, &a.GroupName, &a.UninstallError, &a.UninstallErrorAt, &uninstallRequestedAt); err != nil {
 			continue
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating
 		// last_update, so surface it as offline rather than its frozen last status.
 		a.Status = models.EffectiveAgentStatus(a.Status, a.LastUpdate, now)
 		a.State = models.AgentState(stateStr)
+		a.UninstallError = models.EffectiveUninstallError(a.State, a.UninstallError, uninstallRequestedAt, now)
 		var p models.PolicyBundle
 		if err := json.Unmarshal([]byte(policyRaw), &p); err == nil {
 			a.Policy = &p
