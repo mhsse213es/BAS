@@ -228,6 +228,21 @@ body {
 .st-tech-sel-actions a { color: var(--accent); cursor: pointer; text-decoration: none; }
 .st-tech-sel-actions a:hover { text-decoration: underline; }
 
+/* ── Agent group tree panel ───────────────────────────────────── */
+.agent-tree-layout { display: flex; gap: 1rem; align-items: flex-start; }
+.agent-tree-panel { width: 240px; flex-shrink: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem; }
+.agent-tree-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.agent-tree-hdr h4 { margin: 0; font-size: 0.8rem; color: var(--text); }
+.at-node { display: flex; align-items: center; gap: 4px; padding: 4px 5px; border-radius: 5px; font-size: 0.8rem; color: var(--text); cursor: pointer; }
+.at-node:hover { background: var(--elevated); }
+.at-node.active { background: rgba(47,129,247,0.15); color: var(--accent); }
+.at-caret { width: 12px; font-size: 0.65rem; color: var(--muted); flex-shrink: 0; }
+.at-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.at-count { font-size: 0.66rem; color: var(--muted); background: var(--elevated); border: 1px solid var(--border); border-radius: 8px; padding: 0 5px; flex-shrink: 0; }
+.at-menu { color: var(--muted); font-size: 0.85rem; padding: 0 3px; flex-shrink: 0; }
+.at-children { margin-left: 16px; border-left: 1px solid var(--border); padding-left: 4px; }
+.agent-tree-content { flex: 1; min-width: 0; }
+
 /* ── Buttons ───────────────────────────────────────────────── */
 .btn {
   display: inline-flex; align-items: center; gap: 0.3rem;
@@ -1706,6 +1721,15 @@ body.theme-slate {
           <button type="button" class="dash-view-btn" data-agents-view="risk" onclick="setAgentsView('risk')">Risk &amp; Remediation</button>
         </div>
         <div id="agents-view-operational">
+        <div class="agent-tree-layout">
+          <div class="agent-tree-panel">
+            <div class="agent-tree-hdr">
+              <h4>Groups</h4>
+              <button class="btn btn-outline btn-sm" onclick="createAgentGroupPrompt(null)" title="New root group">+</button>
+            </div>
+            <div id="agent-tree-root"></div>
+          </div>
+          <div class="agent-tree-content">
         <div class="kpi-row" id="agent-tiles"></div>
         <div id="agent-toolbar" style="margin-bottom:0.9rem"></div>
         <div class="tbl-wrap" style="overflow-x:auto;">
@@ -1717,6 +1741,8 @@ body.theme-slate {
               <tr><td colspan="8" class="empty">No agents registered yet.</td></tr>
             </tbody>
           </table>
+        </div>
+          </div>
         </div>
 
         <!-- Connection Config (admin only) -->
@@ -4326,6 +4352,7 @@ function bootApp() {
   if (remTicketActions) remTicketActions.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? 'flex' : 'none';
   connectWS();
   loadAgents();
+  loadAgentGroupTree();
   loadCatalogs();
   loadScenarios();
   loadAdversaries();
@@ -4453,7 +4480,7 @@ function stopDashCampPoll() { clearInterval(_dashCampPoll); }
 function showTab(name) {
   try { localStorage.setItem('bas_last_tab', name); } catch(e) {}
   activateTab(name);
-  if (name === 'agents') loadAgents();
+  if (name === 'agents') { loadAgents(); loadAgentGroupTree(); }
   if (name === 'runs') loadRuns();
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
@@ -6348,8 +6375,100 @@ function agentBucket(a) {
   return 'online';
 }
 function agentDotColor(b) { return b === 'online' ? 'var(--success)' : b === 'degraded' ? 'var(--warning)' : 'var(--muted)'; }
+
+var agentGroupTree = [];
+var activeAgentGroupId = null; // null = "All" (no filter), otherwise a group id
+
+function loadAgentGroupTree() {
+  apicall('/api/agent-groups').then(function(tree) {
+    agentGroupTree = Array.isArray(tree) ? tree : [];
+    renderAgentGroupTree();
+  }).catch(function() { agentGroupTree = []; renderAgentGroupTree(); });
+}
+
+function renderAgentGroupTree() {
+  var root = document.getElementById('agent-tree-root');
+  if (!root) return;
+  var allRow = '<div class="at-node' + (activeAgentGroupId === null ? ' active' : '') + '" onclick="selectAgentGroup(null)">' +
+    '<span class="at-caret"></span><span class="at-name">All</span></div>';
+  root.innerHTML = allRow + agentGroupTree.map(renderAgentGroupNode).join('');
+}
+
+function renderAgentGroupNode(node) {
+  var hasChildren = node.children && node.children.length;
+  var caret = hasChildren ? '&#9662;' : '';
+  var active = activeAgentGroupId === node.id ? ' active' : '';
+  var html = '<div class="at-node' + active + '" onclick="selectAgentGroup(' + node.id + ')">' +
+    '<span class="at-caret">' + caret + '</span>' +
+    '<span class="at-name">' + x(node.name) + '</span>' +
+    '<span class="at-count">' + node.totalAgentCount + '</span>' +
+    '<span class="at-menu" onclick="event.stopPropagation();openAgentGroupMenu(event,' + node.id + ')">&#8942;</span>' +
+    '</div>';
+  if (hasChildren) {
+    html += '<div class="at-children">' + node.children.map(renderAgentGroupNode).join('') + '</div>';
+  }
+  return html;
+}
+
+function selectAgentGroup(groupId) {
+  activeAgentGroupId = groupId;
+  renderAgentGroupTree();
+  loadAgents();
+}
+
+function openAgentGroupMenu(ev, groupId) {
+  var action = prompt('Type: rename / new / move / delete');
+  if (action === 'rename') renameAgentGroupPrompt(groupId);
+  else if (action === 'new') createAgentGroupPrompt(groupId);
+  else if (action === 'move') moveAgentGroupPrompt(groupId);
+  else if (action === 'delete') deleteAgentGroupConfirm(groupId);
+}
+
+function createAgentGroupPrompt(parentId) {
+  var name = prompt('New group name:');
+  if (!name) return;
+  apicall('/api/agent-groups', { method: 'POST', body: JSON.stringify({ name: name, parentId: parentId }) })
+    .then(function(res) { if (res && res.error) { showToast(res.error, 'err'); return; } loadAgentGroupTree(); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function renameAgentGroupPrompt(groupId) {
+  var name = prompt('New name:');
+  if (!name) return;
+  apicall('/api/agent-groups/' + groupId, { method: 'PATCH', body: JSON.stringify({ name: name }) })
+    .then(function(res) { if (res && res.error) { showToast(res.error, 'err'); return; } loadAgentGroupTree(); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function moveAgentGroupPrompt(groupId) {
+  var newParent = prompt('Move to parent group ID (blank for root):');
+  if (newParent === null) return;
+  var parentId = newParent.trim() === '' ? null : parseInt(newParent, 10);
+  apicall('/api/agent-groups/' + groupId, { method: 'PATCH', body: JSON.stringify({ parentId: parentId }) })
+    .then(function(res) { if (res && res.error) { showToast(res.error, 'err'); return; } loadAgentGroupTree(); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function deleteAgentGroupConfirm(groupId) {
+  if (!confirm('Delete this group?')) return;
+  fetch('/api/agent-groups/' + groupId, { method: 'DELETE', credentials: 'same-origin' })
+    .then(function(r) {
+      if (r.status === 204) { showToast('Group deleted', 'ok'); loadAgentGroupTree(); return; }
+      r.json().then(function(j) { showToast(j.error || 'Delete failed', 'err'); });
+    }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function moveAgentToGroupPrompt(agentId) {
+  var newGroup = prompt('Move to group ID (blank for Ungrouped):');
+  if (newGroup === null) return;
+  var groupId = newGroup.trim() === '' ? null : parseInt(newGroup, 10);
+  apicall('/api/agents/' + encodeURIComponent(agentId) + '/group', { method: 'PATCH', body: JSON.stringify({ groupId: groupId }) })
+    .then(function(res) { if (res && res.error) { showToast(res.error, 'err'); return; } loadAgents(); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
 function loadAgents() {
-  apicall('/api/agents').then(function(data) {
+  apicall('/api/agents' + (activeAgentGroupId !== null ? '?groupId=' + activeAgentGroupId : '')).then(function(data) {
     agents = data || [];
     document.getElementById('agent-cnt').textContent = agents.length;
     renderAgentTiles(); renderAgentToolbar(); renderAgentRows();
@@ -6397,7 +6516,7 @@ function renderAgentRows() {
         '<div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px" title="' + x(a.agentId) + '">' + x(a.agentId) + '</div></div></div></td>' +
       '<td style="color:var(--muted);font-size:0.78rem;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + x(a.osVersion || '') + '">' + x(a.osVersion || '—') + '</td>' +
       '<td class="tiny muted" style="font-family:var(--font-mono);white-space:nowrap">' + x(a.ipAddress || '—') + '</td>' +
-      '<td><span class="tag">' + x(a.envLabel || '—') + '</span></td>' +
+      '<td><span class="tag">' + x(a.groupName || 'Ungrouped') + '</span></td>' +
       '<td>' +
         '<span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span>' +
         (a.state && a.state !== 'active' ? ' <span class="sbadge s-' + x(a.state) + '" title="Lifecycle state">' + x(a.state) + '</span>' : '') +
@@ -6414,6 +6533,8 @@ function renderAgentRows() {
           '<button class="row-menu-item" onclick="closeAllRowMenus();safeScan(\'' + x(a.agentId) + '\')">&#128737; Safe Scan</button>' +
           '<button class="row-menu-item" onclick="closeAllRowMenus();openFullReport(\'' + x(a.agentId) + '\')">&#128196; Report</button>' +
           '<button class="row-menu-item" onclick="closeAllRowMenus();downloadAuditPack(\'' + x(a.agentId) + '\')">&#8659; Download audit pack</button>' +
+          (ROLE === 'admin' ?
+            '<button class="row-menu-item" onclick="closeAllRowMenus();moveAgentToGroupPrompt(\'' + x(a.agentId) + '\')">&#128193; Move to group…</button>' : '') +
           (ROLE === 'admin' && a.status !== 'offline' ?
             '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();openStopAgentModal(\'' + x(a.agentId) + '\',\'' + x(a.hostname || a.agentId) + '\')">&#9209; Stop agent</button>' : '') +
           (ROLE === 'admin' ?
