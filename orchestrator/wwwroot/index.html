@@ -11010,13 +11010,16 @@ function viewRunResults(run) {
   // they render the same disabled way here rather than as working buttons.
   var actionsHtml = '';
   if (hasOutput) {
+    var canRerun = ROLE === 'admin' || ROLE === 'analyst';
     actionsHtml =
       '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
       '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8595; HTML Report</button>' +
       '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">&#8595; PDF</button>' +
       '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
       '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
-      '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run this execution — coming soon">Re-run</button>';
+      (canRerun
+        ? '<button class="btn btn-outline btn-sm" onclick="openModal(' + JSON.stringify(run.scenarioId) + ', ' + JSON.stringify(run.agentId) + ')" title="Open the run wizard pre-filled with this scenario and agent">Re-run</button>'
+        : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run requires the Analyst or Admin role">Re-run</button>');
   }
   document.getElementById('results-header-actions').innerHTML = actionsHtml;
 
