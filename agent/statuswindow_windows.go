@@ -201,6 +201,11 @@ func (sw *windigoWindow) paint(hdc win.HDC) []buttonHitRect {
 	sw.res.drawEvidenceCard(hdc, sw.latest.Evidence)
 	sw.res.drawSelfProtectionCard(hdc, sw.latest.Status, sw.latest.Evidence)
 	sw.res.drawResourcesCard(hdc, sw.latest.Status)
+	sw.res.drawActivityCard(hdc, sw.latest.Activity.RecentActivity)
+	return sw.drawActionRow(hdc)
+}
+
+func (sw *windigoWindow) drawActionRow(hdc win.HDC) []buttonHitRect {
 	return nil
 }
 

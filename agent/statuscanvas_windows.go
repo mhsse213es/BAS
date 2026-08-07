@@ -544,3 +544,42 @@ func (r *resources) drawResourcesCard(hdc win.HDC, s statusclient.StatusResponse
 		r.drawStatTile(hdc, dpiRect(x, 886, tileW, tileH), t.value, t.label)
 	}
 }
+
+func (r *resources) drawIconPulse(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	defer pen.DeleteObject()
+	hdc.SelectObjectPen(pen)
+	pts := []win.POINT{
+		{X: int32(x), Y: int32(y + size/2)},
+		{X: int32(x + size/3), Y: int32(y + size/2)},
+		{X: int32(x + size/2), Y: int32(y)},
+		{X: int32(x + size*2/3), Y: int32(y + size)},
+		{X: int32(x + size), Y: int32(y + size/2)},
+	}
+	hdc.Polyline(pts)
+}
+
+// drawActivityCard shows the most recent 8 entries, newest first (no
+// scrolling, per design) -- same data source and ordering as before.
+func (r *resources) drawActivityCard(hdc win.HDC, items []statusclient.Activity) {
+	rc := dpiRect(24, 988, 872, 240)
+	r.drawCard(hdc, rc)
+	r.drawIconPulse(hdc, dpiXOnly(40), dpiXOnly(1008), dpiXOnly(16), colMuted)
+	r.drawText(hdc, "RECENT ACTIVITY", dpiRect(60, 1004, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
+
+	if len(items) == 0 {
+		r.drawText(hdc, "No recent activity recorded.", dpiRect(40, 1032, 800, 18), r.fontBody, colMuted, co.DT_LEFT)
+		return
+	}
+	max := len(items)
+	if max > 8 {
+		max = 8
+	}
+	y := 1032
+	for _, item := range items[:max] {
+		r.drawDot(hdc, 40, y+5, 6, colAccent)
+		r.drawText(hdc, item.Time.Format("15:04:05"), dpiRect(56, y, 80, 18), r.fontBody, colMuted, co.DT_LEFT)
+		r.drawText(hdc, item.Event, dpiRect(148, y, 720, 18), r.fontBody, colText, co.DT_LEFT)
+		y += 22
+	}
+}
