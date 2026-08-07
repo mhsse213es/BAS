@@ -420,3 +420,95 @@ func (r *resources) drawControlsCard(hdc win.HDC, c statusclient.ControlsRespons
 		r.drawStatusBadge(hdc, dpiRect(col+240, y, 100, 24), row.badge, row.color)
 	}
 }
+
+func (r *resources) drawIconCheckBadge(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	defer pen.DeleteObject()
+	hdc.SelectObjectPen(pen)
+	hdc.SelectObjectBrush(r.brushCard)
+	hdc.Ellipse(win.RECT{Left: int32(x), Top: int32(y), Right: int32(x + size), Bottom: int32(y + size)})
+	hdc.MoveToEx(x+size/4, y+size/2)
+	hdc.LineTo(x+size*2/5, y+size*3/4)
+	hdc.LineTo(x+size*3/4, y+size/4)
+}
+
+func (r *resources) drawIconPin(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	defer pen.DeleteObject()
+	hdc.SelectObjectPen(pen)
+	hdc.SelectObjectBrush(r.brushCard)
+	pts := []win.POINT{
+		{X: int32(x + size/2), Y: int32(y + size)},
+		{X: int32(x), Y: int32(y + size/3)},
+		{X: int32(x + size/4), Y: int32(y)},
+		{X: int32(x + size*3/4), Y: int32(y)},
+		{X: int32(x + size), Y: int32(y + size/3)},
+	}
+	hdc.Polygon(pts)
+}
+
+// drawStatTile paints an elevated-surface tile with a large value and a
+// small muted caption below it -- used by Evidence, Resources, and any
+// future numeric-summary card.
+func (r *resources) drawStatTile(hdc win.HDC, rc win.RECT, value, label string) {
+	hdc.SelectObjectBrush(r.brushElevated)
+	hdc.SelectObjectPen(r.penBorder)
+	cx, cy := dpiPos(6, 6)
+	hdc.RoundRect(rc, win.SIZE{Cx: int32(cx), Cy: int32(cy)})
+	valueRc := rc
+	valueRc.Bottom -= (rc.Bottom - rc.Top) / 3
+	r.drawText(hdc, value, valueRc, r.fontHeading, colText, co.DT_LEFT)
+	labelRc := rc
+	labelRc.Top = valueRc.Bottom
+	r.drawText(hdc, label, labelRc, r.fontEyebrow, colMuted, co.DT_LEFT)
+}
+
+func (r *resources) drawEvidenceCard(hdc win.HDC, ev statusclient.EvidenceResponse) {
+	rc := dpiRect(24, 616, 428, 210)
+	r.drawCard(hdc, rc)
+	r.drawIconCheckBadge(hdc, dpiXOnly(40), dpiXOnly(636), dpiXOnly(16), colMuted)
+	r.drawText(hdc, "EVIDENCE · LAST RUN", dpiRect(60, 632, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
+
+	tiles := []struct{ value, label string }{
+		{fmt.Sprintf("%d", ev.EventsCollected), "EVENTS COLLECTED"},
+		{fmt.Sprintf("%d", ev.DefenderAlerts), "DEFENDER ALERTS"},
+		{fmt.Sprintf("%d", ev.SysmonDetections), "SYSMON DETECTIONS"},
+		{fmt.Sprintf("%d", ev.QueueSize), "UPLOAD QUEUE"},
+	}
+	tileW, tileH, gap := 186, 64, 12
+	for i, t := range tiles {
+		col, row := i%2, i/2
+		x := 40 + col*(tileW+gap)
+		y := 660 + row*(tileH+gap)
+		r.drawStatTile(hdc, dpiRect(x, y, tileW, tileH), t.value, t.label)
+	}
+}
+
+func (r *resources) drawSelfProtectionCard(hdc win.HDC, s statusclient.StatusResponse, ev statusclient.EvidenceResponse) {
+	rc := dpiRect(468, 616, 428, 210)
+	r.drawCard(hdc, rc)
+	r.drawIconPin(hdc, dpiXOnly(488), dpiXOnly(636), dpiXOnly(16), colMuted)
+	r.drawText(hdc, "SELF-PROTECTION", dpiRect(504, 632, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
+
+	rows := []controlRow{
+		healthRow("Service Running", s.ServiceRunning),
+		healthRow("Policy Sync", s.State == "active" || s.State == "restricted"),
+		healthRow("Evidence Queue", ev.QueueSize < 100),
+		healthRow("Last Upload OK", s.LastUploadOk),
+		healthRow("Server Contact", s.ServerConnected),
+	}
+	y := 660
+	for _, row := range rows {
+		r.drawDot(hdc, 484, y+2, 8, row.color)
+		r.drawText(hdc, row.name, dpiRect(500, y, 220, 20), r.fontBody, colText, co.DT_LEFT)
+		r.drawStatusBadge(hdc, dpiRect(756, y, 100, 24), row.badge, row.color)
+		y += 28
+	}
+}
+
+func healthRow(name string, healthy bool) controlRow {
+	if healthy {
+		return controlRow{name, "HEALTHY", colSuccess}
+	}
+	return controlRow{name, "CHECK", colWarning}
+}
