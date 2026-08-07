@@ -87,6 +87,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(ctx)
 		return nil, fmt.Errorf("testutil: EnsureAgentGroupSchema: %w", err)
 	}
+	if err := db.EnsureAgentUninstallSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(ctx)
+		return nil, fmt.Errorf("testutil: EnsureAgentUninstallSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,

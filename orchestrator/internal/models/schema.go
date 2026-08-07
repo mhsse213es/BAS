@@ -238,7 +238,41 @@ const (
 	AgentStateRestricted  AgentState = "restricted"
 	AgentStateQuarantined AgentState = "quarantined"
 	AgentStateRetired     AgentState = "retired"
+	// AgentStateUninstalling means an Uninstall Agent command has been
+	// dispatched and the endpoint hasn't reported a result yet. Unlike
+	// Retired/Uninstalled, this state stays in the default agent list (not
+	// filtered out) so the admin can see it in progress.
+	AgentStateUninstalling AgentState = "uninstalling"
+	// AgentStateUninstalled means the endpoint confirmed a successful
+	// uninstall. Distinct from Retired on purpose: Retired means "an admin
+	// marked this gone without proof" (Force Remove); Uninstalled means "the
+	// endpoint proved it removed itself."
+	AgentStateUninstalled AgentState = "uninstalled"
 )
+
+// UninstallResultTimeout is how long GetAgents waits for an uninstall
+// result before displaying an agent stuck in AgentStateUninstalling as
+// timed out (see EffectiveUninstallError). Comfortably longer than the
+// agent's own internal service-stop timeout (15s on Windows) plus normal
+// network latency.
+const UninstallResultTimeout = 2 * time.Minute
+
+// EffectiveUninstallError overrides a nil stored error with a timeout
+// message when an agent has been stuck in AgentStateUninstalling longer
+// than UninstallResultTimeout with no result received. Computed on read,
+// same pattern as EffectiveAgentStatus -- nothing is written to the
+// database, and a result arriving late is still applied normally by
+// whatever wrote it.
+func EffectiveUninstallError(state AgentState, storedError *string, requestedAt *time.Time, now time.Time) *string {
+	if state != AgentStateUninstalling || storedError != nil || requestedAt == nil {
+		return storedError
+	}
+	if now.Sub(*requestedAt) > UninstallResultTimeout {
+		msg := "No response from the endpoint — it may have gone offline mid-uninstall. Retry or use Force Remove."
+		return &msg
+	}
+	return storedError
+}
 
 // AgentOfflineAfter is how long after its last heartbeat an agent is considered
 // offline. A dead/rebooted endpoint stops heartbeating; once last_update is older
@@ -301,6 +335,12 @@ type Agent struct {
 	// as StoppedByName above.
 	GroupID   *int64  `json:"groupId,omitempty"`
 	GroupName *string `json:"groupName,omitempty"`
+	// UninstallError/UninstallErrorAt are set by the agent's own
+	// uninstall-result report on failure, or computed live as a timeout
+	// message if the agent never reports back (see EffectiveUninstallError).
+	// Cleared on a successful uninstall.
+	UninstallError   *string    `json:"uninstallError,omitempty"`
+	UninstallErrorAt *time.Time `json:"uninstallErrorAt,omitempty"`
 }
 
 // Heartbeat is sent by agents periodically.
@@ -386,6 +426,11 @@ const (
 	// finalize any in-flight run, disable its platform service so it does not
 	// restart on its own, then exit. Payload: {"reason": string}.
 	MsgCommandStopAgent = "command_stop_agent"
+	// MsgCommandUninstallAgent tells a connected agent to fully uninstall
+	// itself (not just stop) -- remove its service/unit/daemon registration
+	// and autostart artifacts, report the real outcome to the server, then
+	// exit. Payload: {"reason": string}.
+	MsgCommandUninstallAgent = "command_uninstall_agent"
 )
 
 // ── ATT&CK Normalisation ──────────────────────────────────────────────────────
