@@ -465,7 +465,7 @@ git push
 ### Task 3: `StatusController` — adaptive polling and action mediation
 
 **Files:**
-- Create: `agent/statuscontroller.go` (portable, no build tag)
+- Create: `agent/statuscontroller.go` (`//go:build windows` — despite otherwise having no platform-specific code, it calls `exportDiagnosticBundle`/`revealInExplorer`/`openInBrowser`, which today only exist on Windows; caught by the cross-compile check during implementation and corrected there)
 - Create: `agent/statuscontroller_test.go`
 
 **Interfaces:**
@@ -1506,7 +1506,7 @@ GOOS=linux GOARCH=amd64 go build ./...
 GOOS=darwin GOARCH=amd64 go build ./...
 ```
 
-Expected: native build/vet/test all succeed against the real `windigo` dependency, `statusclient`'s tests pass, `StatusController`'s tests pass. Both cross-compiles succeed — `windigoWindow`/`browserWindow`/`statuswindow_windows.go` are all behind `//go:build windows`, and `statusclient`/`statuswindow.go`/`statuscontroller.go` are portable Go with no platform-specific imports, so this confirms the interface/controller/client layers really are platform-agnostic, not just in comment.
+Expected: native build/vet/test all succeed against the real `windigo` dependency, `statusclient`'s tests pass, `StatusController`'s tests pass. Both cross-compiles succeed — `windigoWindow`/`browserWindow`/`statuswindow_windows.go`/`statuscontroller.go` are all behind `//go:build windows` (the last one only because of its `exportDiagnosticBundle`/`revealInExplorer`/`openInBrowser` calls, corrected during Task 3), and `statusclient`/`statuswindow.go` are portable Go with no platform-specific imports, so this confirms the client and interface layers really are platform-agnostic, not just in comment.
 
 - [ ] **Step 4: Commit**
 
