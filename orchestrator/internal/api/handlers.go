@@ -565,14 +565,35 @@ func secureCookies() bool {
 
 // GET /api/agents
 func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(r.Context(),
-		`SELECT a.agent_id, a.hostname, a.ip_address, a.os_version, a.username, a.status, a.env_label,
-		        a.has_report, a.binary_hash, a.binary_trusted, a.last_update,
-		        COALESCE(a.state, 'active'), COALESCE(a.policy_json::text, '{}'), a.enrolled_at,
-		        (SELECT COUNT(*) FROM scenario_runs sr WHERE sr.agent_id = a.agent_id) AS sims,
-		        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason
-		 FROM agents a LEFT JOIN users u ON u.id = a.stopped_by
-		 ORDER BY a.last_update DESC`)
+	query := `SELECT a.agent_id, a.hostname, a.ip_address, a.os_version, a.username, a.status, a.env_label,
+	        a.has_report, a.binary_hash, a.binary_trusted, a.last_update,
+	        COALESCE(a.state, 'active'), COALESCE(a.policy_json::text, '{}'), a.enrolled_at,
+	        (SELECT COUNT(*) FROM scenario_runs sr WHERE sr.agent_id = a.agent_id) AS sims,
+	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
+	        a.group_id, g.name
+	 FROM agents a LEFT JOIN users u ON u.id = a.stopped_by LEFT JOIN agent_groups g ON g.id = a.group_id`
+	var args []any
+	if groupIDParam := r.URL.Query().Get("groupId"); groupIDParam != "" {
+		groupID, err := strconv.ParseInt(groupIDParam, 10, 64)
+		if err != nil {
+			jsonError(w, "invalid groupId", http.StatusBadRequest)
+			return
+		}
+		args = append(args, groupID)
+		// Recursive CTE: the target group plus every descendant group, so
+		// selecting "Finance" also surfaces agents in "Servers"/"Workstations".
+		query += ` WHERE a.group_id IN (
+			WITH RECURSIVE descendants(id) AS (
+				SELECT id FROM agent_groups WHERE id = $` + strconv.Itoa(len(args)) + `
+				UNION ALL
+				SELECT gr.id FROM agent_groups gr JOIN descendants d ON gr.parent_id = d.id
+			)
+			SELECT id FROM descendants
+		)`
+	}
+	query += ` ORDER BY a.last_update DESC`
+
+	rows, err := h.db.Query(r.Context(), query, args...)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -588,7 +609,8 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 			&a.Username, &a.Status, &a.EnvLabel, &a.HasReport,
 			&a.BinaryHash, &a.BinaryTrusted, &a.LastUpdate,
 			&stateStr, &policyRaw, &a.EnrolledAt, &a.Sims,
-			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason); err != nil {
+			&a.StoppedBy, &a.StoppedByName, &a.StoppedAt, &a.StopReason,
+			&a.GroupID, &a.GroupName); err != nil {
 			continue
 		}
 		// Connectivity is heartbeat-driven: a dead/rebooted agent stops updating

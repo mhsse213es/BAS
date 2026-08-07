@@ -82,6 +82,11 @@ func newTestDB(ctx context.Context) (*TestDB, error) {
 		_ = container.Terminate(ctx)
 		return nil, fmt.Errorf("testutil: EnsureIOCEnrichmentSchema: %w", err)
 	}
+	if err := db.EnsureAgentGroupSchema(ctx, pool); err != nil {
+		pool.Close()
+		_ = container.Terminate(ctx)
+		return nil, fmt.Errorf("testutil: EnsureAgentGroupSchema: %w", err)
+	}
 
 	return &TestDB{
 		Pool:      pool,

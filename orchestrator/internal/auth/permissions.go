@@ -77,6 +77,7 @@ const (
 	CanRemoveAgent          Permission = "agents:remove"
 	CanViewLicense          Permission = "license:view"
 	CanViewConnectionConfig Permission = "config:view-connection"
+	CanManageAgentGroups    Permission = "agent-groups:manage"
 
 	// Admin-only: user management.
 	CanListUsers         Permission = "users:list"
@@ -216,7 +217,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
 
-		CanSetAgentState: true, CanStopAgent: true, CanRemoveAgent: true, CanViewLicense: true, CanViewConnectionConfig: true,
+		CanSetAgentState: true, CanStopAgent: true, CanRemoveAgent: true, CanViewLicense: true, CanViewConnectionConfig: true, CanManageAgentGroups: true,
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
 		CanResetUserPassword: true, CanViewCalderaStatus: true, CanViewConnectorStatus: true,
 		CanSyncConnector: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
@@ -294,7 +295,7 @@ func Permissions(role Role) []Permission {
 		CanLaunchExerciseExecution, CanAbortExerciseExecution, CanApproveExerciseStep,
 		CanInjectExerciseEvidence, CanLookupIOC,
 
-		CanSetAgentState, CanStopAgent, CanRemoveAgent, CanViewLicense, CanViewConnectionConfig, CanListUsers, CanCreateUser,
+		CanSetAgentState, CanStopAgent, CanRemoveAgent, CanViewLicense, CanViewConnectionConfig, CanManageAgentGroups, CanListUsers, CanCreateUser,
 		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
 		CanSyncConnector, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
 		CanReseedARTContent, CanReindexSearch, CanManageIOCs, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,

@@ -296,6 +296,11 @@ type Agent struct {
 	StoppedByName *string    `json:"stoppedByName,omitempty"`
 	StoppedAt     *time.Time `json:"stoppedAt,omitempty"`
 	StopReason    *string    `json:"stopReason,omitempty"`
+	// GroupID/GroupName are the agent's hierarchical group assignment (nil =
+	// Ungrouped). GroupName is resolved read-time via a join, same pattern
+	// as StoppedByName above.
+	GroupID   *int64  `json:"groupId,omitempty"`
+	GroupName *string `json:"groupName,omitempty"`
 }
 
 // Heartbeat is sent by agents periodically.
