@@ -512,3 +512,35 @@ func healthRow(name string, healthy bool) controlRow {
 	}
 	return controlRow{name, "CHECK", colWarning}
 }
+
+func (r *resources) drawIconMonitor(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	defer pen.DeleteObject()
+	hdc.SelectObjectPen(pen)
+	hdc.SelectObjectBrush(r.brushCard)
+	screenH := size * 2 / 3
+	hdc.RoundRect(win.RECT{Left: int32(x), Top: int32(y), Right: int32(x + size), Bottom: int32(y + screenH)}, win.SIZE{Cx: 3, Cy: 3})
+	standX := x + size/2
+	hdc.MoveToEx(standX, y+screenH)
+	hdc.LineTo(standX, y+size)
+	hdc.MoveToEx(x+size/4, y+size)
+	hdc.LineTo(x+size*3/4, y+size)
+}
+
+func (r *resources) drawResourcesCard(hdc win.HDC, s statusclient.StatusResponse) {
+	rc := dpiRect(24, 842, 872, 130)
+	r.drawCard(hdc, rc)
+	r.drawIconMonitor(hdc, dpiXOnly(40), dpiXOnly(862), dpiXOnly(16), colMuted)
+	r.drawText(hdc, "RESOURCES", dpiRect(60, 858, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
+
+	tiles := []struct{ value, label string }{
+		{fmt.Sprintf("%d MB", s.RamMB), "MEMORY (WORKING SET)"},
+		{"v" + s.AgentVersion, "AGENT VERSION"},
+		{orDash(s.AgentID), "AGENT ID"},
+	}
+	tileW, tileH, gap := 272, 64, 16
+	for i, t := range tiles {
+		x := 40 + i*(tileW+gap)
+		r.drawStatTile(hdc, dpiRect(x, 886, tileW, tileH), t.value, t.label)
+	}
+}
