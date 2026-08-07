@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/rodrigocfd/windigo/ui"
@@ -119,6 +120,11 @@ type windigoWindow struct {
 	lblResRam     *ui.Static
 	lblResVersion *ui.Static
 	lblResId      *ui.Static
+
+	listActivity            *ui.ListView
+	btnExport               *ui.Button
+	btnDashboard            *ui.Button
+	lastActivityFingerprint string
 }
 
 func newWindigoWindow() *windigoWindow {
@@ -201,6 +207,34 @@ func newWindigoWindow() *windigoWindow {
 	sw.lblResId = ui.NewStatic(sw.wnd, ui.OptsStatic().
 		Text("Agent ID: —").Position(dpiPos(16, 384)).Size(dpiPos(340, 20)))
 
+	listX, listY := dpiPos(16, 416)
+	listCx, listCy := dpiPos(684, 140)
+	colTimeW, _ := dpiPos(100, 0)
+	colEventW, _ := dpiPos(560, 0)
+	sw.listActivity = ui.NewListView(sw.wnd, ui.OptsListView().
+		Position(listX, listY).Size(listCx, listCy).
+		Column("Time", colTimeW).Column("Event", colEventW))
+
+	btnExportX, btnExportY := dpiPos(16, 568)
+	btnExportW, btnExportH := dpiPos(200, 28)
+	sw.btnExport = ui.NewButton(sw.wnd, ui.OptsButton().
+		Text("Export Diagnostic Bundle").Position(btnExportX, btnExportY).Width(btnExportW).Height(btnExportH))
+	btnDashX, btnDashY := dpiPos(232, 568)
+	btnDashW, btnDashH := dpiPos(160, 28)
+	sw.btnDashboard = ui.NewButton(sw.wnd, ui.OptsButton().
+		Text("Open BAS Console").Position(btnDashX, btnDashY).Width(btnDashW).Height(btnDashH))
+
+	sw.btnExport.On().BnClicked(func() {
+		if sw.controller != nil {
+			sw.controller.ExportDiagnostics()
+		}
+	})
+	sw.btnDashboard.On().BnClicked(func() {
+		if sw.controller != nil {
+			sw.controller.OpenDashboard(sw.lastServerURL)
+		}
+	})
+
 	return sw
 }
 
@@ -278,6 +312,38 @@ func (sw *windigoWindow) render(snap StatusSnapshot) {
 	sw.lblResRam.SetTextAndResize(fmt.Sprintf("Memory: %d MB", s.RamMB))
 	sw.lblResVersion.SetTextAndResize("Agent Version: v" + s.AgentVersion)
 	sw.lblResId.SetTextAndResize("Agent ID: " + s.AgentID)
+	sw.renderActivity(snap.Activity.RecentActivity)
+}
+
+// renderActivity rebuilds the activity ListView only when its content has
+// actually changed since the last render, using a cheap fingerprint (item
+// count + newest entry) instead of comparing every row -- most 5s (or 1s,
+// mid-assessment) polls see no new activity at all, so this avoids the
+// ListView churn a full delete+rebuild on every single tick would
+// otherwise cost.
+func (sw *windigoWindow) renderActivity(items []statusclient.Activity) {
+	fp := activityFingerprint(items)
+	if fp == sw.lastActivityFingerprint {
+		return
+	}
+	sw.lastActivityFingerprint = fp
+
+	sw.listActivity.DeleteAllItems()
+	if len(items) == 0 {
+		sw.listActivity.AddItem("—", "No recent activity recorded.")
+		return
+	}
+	for _, item := range items {
+		sw.listActivity.AddItem(item.Time.Format("15:04:05"), item.Event)
+	}
+}
+
+func activityFingerprint(items []statusclient.Activity) string {
+	if len(items) == 0 {
+		return "empty"
+	}
+	newest := items[0]
+	return fmt.Sprintf("%d|%s|%s", len(items), newest.Time.Format(time.RFC3339), newest.Event)
 }
 
 // renderControls updates the Security Controls panel.
