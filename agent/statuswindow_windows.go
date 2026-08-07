@@ -93,6 +93,32 @@ type windigoWindow struct {
 	lblOpMeta   *ui.Static
 	progOp      *ui.ProgressBar
 	lblOpResult *ui.Static
+
+	// Security Controls
+	lblCtrlDefender  *ui.Static
+	lblCtrlSysmon    *ui.Static
+	lblCtrlFirewall  *ui.Static
+	lblCtrlAppLocker *ui.Static
+	lblCtrlWDAC      *ui.Static
+	lblCtrlAMSI      *ui.Static
+
+	// Evidence tiles
+	lblEvEvents   *ui.Static
+	lblEvDefender *ui.Static
+	lblEvSysmon   *ui.Static
+	lblEvQueue    *ui.Static
+
+	// Self-Protection rows
+	lblSpService *ui.Static
+	lblSpPolicy  *ui.Static
+	lblSpQueue   *ui.Static
+	lblSpUpload  *ui.Static
+	lblSpContact *ui.Static
+
+	// Resources
+	lblResRam     *ui.Static
+	lblResVersion *ui.Static
+	lblResId      *ui.Static
 }
 
 func newWindigoWindow() *windigoWindow {
@@ -130,6 +156,50 @@ func newWindigoWindow() *windigoWindow {
 	sw.progOp.SetRange(0, 100)
 	sw.lblOpResult = ui.NewStatic(sw.wnd, ui.OptsStatic().
 		Text("").Position(dpiPos(400, 128)).Size(dpiPos(300, 20)))
+
+	// Security Controls
+	sw.lblCtrlDefender = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Defender RTP: —").Position(dpiPos(16, 184)).Size(dpiPos(340, 20)))
+	sw.lblCtrlSysmon = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Sysmon: —").Position(dpiPos(16, 208)).Size(dpiPos(340, 20)))
+	sw.lblCtrlFirewall = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Firewall: —").Position(dpiPos(16, 232)).Size(dpiPos(340, 20)))
+	sw.lblCtrlAppLocker = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("AppLocker: —").Position(dpiPos(16, 256)).Size(dpiPos(340, 20)))
+	sw.lblCtrlWDAC = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("WDAC: —").Position(dpiPos(16, 280)).Size(dpiPos(340, 20)))
+	sw.lblCtrlAMSI = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("AMSI: —").Position(dpiPos(16, 304)).Size(dpiPos(340, 20)))
+
+	// Evidence
+	sw.lblEvEvents = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Events Collected: —").Position(dpiPos(400, 184)).Size(dpiPos(300, 20)))
+	sw.lblEvDefender = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Defender Alerts: —").Position(dpiPos(400, 208)).Size(dpiPos(300, 20)))
+	sw.lblEvSysmon = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Sysmon Detections: —").Position(dpiPos(400, 232)).Size(dpiPos(300, 20)))
+	sw.lblEvQueue = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Upload Queue: —").Position(dpiPos(400, 256)).Size(dpiPos(300, 20)))
+
+	// Self-Protection
+	sw.lblSpService = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Service Running: —").Position(dpiPos(400, 288)).Size(dpiPos(300, 20)))
+	sw.lblSpPolicy = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Policy Sync: —").Position(dpiPos(400, 312)).Size(dpiPos(300, 20)))
+	sw.lblSpQueue = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Evidence Queue: —").Position(dpiPos(400, 336)).Size(dpiPos(300, 20)))
+	sw.lblSpUpload = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Last Upload OK: —").Position(dpiPos(400, 360)).Size(dpiPos(300, 20)))
+	sw.lblSpContact = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Server Contact: —").Position(dpiPos(400, 384)).Size(dpiPos(300, 20)))
+
+	// Resources
+	sw.lblResRam = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Memory: —").Position(dpiPos(16, 336)).Size(dpiPos(340, 20)))
+	sw.lblResVersion = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Agent Version: —").Position(dpiPos(16, 360)).Size(dpiPos(340, 20)))
+	sw.lblResId = ui.NewStatic(sw.wnd, ui.OptsStatic().
+		Text("Agent ID: —").Position(dpiPos(16, 384)).Size(dpiPos(340, 20)))
 
 	return sw
 }
@@ -202,6 +272,66 @@ func (sw *windigoWindow) render(snap StatusSnapshot) {
 	}
 	sw.lblHeroTitle.SetTextAndResize(title)
 	sw.renderOperation(snap.Activity)
+	sw.renderControls(snap.Controls)
+	sw.renderEvidence(snap.Evidence)
+	sw.renderSelfProtection(s, snap.Evidence)
+	sw.lblResRam.SetTextAndResize(fmt.Sprintf("Memory: %d MB", s.RamMB))
+	sw.lblResVersion.SetTextAndResize("Agent Version: v" + s.AgentVersion)
+	sw.lblResId.SetTextAndResize("Agent ID: " + s.AgentID)
+}
+
+// renderControls updates the Security Controls panel.
+func (sw *windigoWindow) renderControls(c statusclient.ControlsResponse) {
+	status := "ABSENT"
+	if c.Defender.Present {
+		if c.Defender.RTPEnabled {
+			status = "ACTIVE"
+		} else {
+			status = "DEGRADED"
+		}
+	}
+	extra := ""
+	if c.Defender.TamperProtected {
+		extra = " +Tamper"
+	}
+	sw.lblCtrlDefender.SetTextAndResize(fmt.Sprintf("Defender RTP: [%s]%s", status, extra))
+
+	setBool := func(lbl *ui.Static, name string, on bool) {
+		s := "ABSENT"
+		if on {
+			s = "ACTIVE"
+		}
+		lbl.SetTextAndResize(fmt.Sprintf("%s: [%s]", name, s))
+	}
+	setBool(sw.lblCtrlSysmon, "Sysmon", c.Sysmon.Present)
+	setBool(sw.lblCtrlFirewall, "Firewall", c.Firewall.Enabled)
+	setBool(sw.lblCtrlAppLocker, "AppLocker", c.AppLocker.Enabled)
+	setBool(sw.lblCtrlWDAC, "WDAC", c.WDAC.Enabled)
+	setBool(sw.lblCtrlAMSI, "AMSI", c.AMSI.Enabled)
+}
+
+// renderEvidence updates the Evidence tiles.
+func (sw *windigoWindow) renderEvidence(ev statusclient.EvidenceResponse) {
+	sw.lblEvEvents.SetTextAndResize(fmt.Sprintf("Events Collected: %d", ev.EventsCollected))
+	sw.lblEvDefender.SetTextAndResize(fmt.Sprintf("Defender Alerts: %d", ev.DefenderAlerts))
+	sw.lblEvSysmon.SetTextAndResize(fmt.Sprintf("Sysmon Detections: %d", ev.SysmonDetections))
+	sw.lblEvQueue.SetTextAndResize(fmt.Sprintf("Upload Queue: %d", ev.QueueSize))
+}
+
+// renderSelfProtection updates the Self-Protection rows.
+func (sw *windigoWindow) renderSelfProtection(s statusclient.StatusResponse, ev statusclient.EvidenceResponse) {
+	setRow := func(lbl *ui.Static, name string, on bool) {
+		status := "CHECK"
+		if on {
+			status = "HEALTHY"
+		}
+		lbl.SetTextAndResize(fmt.Sprintf("%s: %s", name, status))
+	}
+	setRow(sw.lblSpService, "Service Running", s.ServiceRunning)
+	setRow(sw.lblSpPolicy, "Policy Sync", s.State == "active" || s.State == "restricted")
+	setRow(sw.lblSpQueue, "Evidence Queue", ev.QueueSize < 100)
+	setRow(sw.lblSpUpload, "Last Upload OK", s.LastUploadOk)
+	setRow(sw.lblSpContact, "Server Contact", s.ServerConnected)
 }
 
 // renderOperation updates the Current Operation panel.
