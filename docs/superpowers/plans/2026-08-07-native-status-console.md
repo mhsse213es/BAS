@@ -743,6 +743,13 @@ go doc github.com/rodrigocfd/windigo/ui OptsListView
 
 Confirm `SetTextAndResize`, `SetPos`, `SetRange`, `AddItem`, `DeleteAllItems`, and the options-builder methods (`.Position(x,y)`, `.Size(cx,cy)`, `.Text(s)`) match every later step in this plan. If any name differs, note the real name now — every subsequent step in Tasks 4-7 assumes these exact names.
 
+**Corrections found when this step was actually run against the downloaded module** (the plan's original code sketches below predate this verification and are wrong in these specific ways — the real, committed `statuswindow_windows.go` uses the corrected forms):
+- `ListView` columns are set via `.Column(title, width)` chained on `VarOptsListView` *at construction*, not via a post-construction `.Cols().Add(...)` accessor (no such accessor exists).
+- `Button` sizing is two separate methods, `.Width(w)` and `.Height(h)` on `VarOptsButton` — there is no `.Size(cx, cy)` for buttons (unlike `Static`/`ProgressBar`/`ListView`, which do have `.Size`).
+- `HWND.DestroyWindow() error` is the real close mechanism — not a raw `SendMessage(WM_CLOSE, ...)` syscall.
+- `HWND.SetTimer(timerId, msTimeout int) error` and `.KillTimer(timerId int) error` are real, verified methods — no need for a raw `user32.dll` `SetTimer` syscall. In the end this plan's window doesn't use either: `StatusController` already owns the poll cadence via its own goroutine timer (Task 3), so a second, window-level `WM_TIMER` would have been redundant. It was cut entirely during Task 4.
+- **Threading, not just naming:** `StatusController.Run()` calls `window.Refresh()` from its own polling goroutine (by design, per Task 3), but Win32 controls may only be touched from the thread that owns the message loop. `Main.UiThread(fun func())` (confirmed in `go doc ... Main`) is windigo's marshaling primitive for exactly this. `windigoWindow.Refresh` wraps the real rendering (renamed `render` in the committed code) in `sw.wnd.UiThread(func() { sw.render(snap) })` rather than calling control setters directly — every code sketch in Tasks 4-7 below that shows `Refresh` calling setters inline should be read as running inside that `render` method, not `Refresh` itself.
+
 - [ ] **Step 2: Replace `statuswindow_windows.go`'s `runStatusWindow` and add `windigoWindow`**
 
 Replace (currently the full file):
