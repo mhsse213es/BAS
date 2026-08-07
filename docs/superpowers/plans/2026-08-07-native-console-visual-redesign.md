@@ -737,7 +737,7 @@ func boolRow(name string, on bool) controlRow {
 func (r *resources) drawControlsCard(hdc win.HDC, c statusclient.ControlsResponse) {
 	rc := dpiRect(24, 410, 872, 190)
 	r.drawCard(hdc, rc)
-	r.drawIconShield(hdc, dpiXOnly(20)+24, dpiXOnly(20)+410, dpiXOnly(16), colMuted)
+	r.drawIconShield(hdc, dpiXOnly(44), dpiXOnly(430), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "ENDPOINT SECURITY CONTROLS", dpiRect(60, 426, 400, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	rows := []controlRow{
@@ -842,7 +842,7 @@ func (r *resources) drawStatTile(hdc win.HDC, rc win.RECT, value, label string) 
 func (r *resources) drawEvidenceCard(hdc win.HDC, ev statusclient.EvidenceResponse) {
 	rc := dpiRect(24, 616, 428, 210)
 	r.drawCard(hdc, rc)
-	r.drawIconCheckBadge(hdc, dpiXOnly(20)+24, dpiXOnly(20)+616, dpiXOnly(16), colMuted)
+	r.drawIconCheckBadge(hdc, dpiXOnly(44), dpiXOnly(636), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "EVIDENCE · LAST RUN", dpiRect(60, 632, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	tiles := []struct{ value, label string }{
@@ -863,7 +863,7 @@ func (r *resources) drawEvidenceCard(hdc win.HDC, ev statusclient.EvidenceRespon
 func (r *resources) drawSelfProtectionCard(hdc win.HDC, s statusclient.StatusResponse, ev statusclient.EvidenceResponse) {
 	rc := dpiRect(468, 616, 428, 210)
 	r.drawCard(hdc, rc)
-	r.drawIconPin(hdc, dpiXOnly(20)+468, dpiXOnly(20)+616, dpiXOnly(16), colMuted)
+	r.drawIconPin(hdc, dpiXOnly(488), dpiXOnly(636), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "SELF-PROTECTION", dpiRect(504, 632, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	rows := []controlRow{
@@ -946,7 +946,7 @@ func (r *resources) drawIconMonitor(hdc win.HDC, x, y, size int, color win.COLOR
 func (r *resources) drawResourcesCard(hdc win.HDC, s statusclient.StatusResponse) {
 	rc := dpiRect(24, 842, 872, 130)
 	r.drawCard(hdc, rc)
-	r.drawIconMonitor(hdc, dpiXOnly(20)+24, dpiXOnly(20)+842, dpiXOnly(16), colMuted)
+	r.drawIconMonitor(hdc, dpiXOnly(44), dpiXOnly(862), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "RESOURCES", dpiRect(60, 858, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	tiles := []struct{ value, label string }{
@@ -1017,7 +1017,7 @@ Fixed 8 visible rows (no scrolling, per spec's approved "tall fixed window" deci
 func (r *resources) drawActivityCard(hdc win.HDC, items []statusclient.Activity) {
 	rc := dpiRect(24, 988, 872, 240)
 	r.drawCard(hdc, rc)
-	r.drawIconPulse(hdc, dpiXOnly(20)+24, dpiXOnly(20)+988, dpiXOnly(16), colMuted)
+	r.drawIconPulse(hdc, dpiXOnly(44), dpiXOnly(1008), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "RECENT ACTIVITY", dpiRect(60, 1004, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	if len(items) == 0 {
