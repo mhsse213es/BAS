@@ -84,13 +84,12 @@ WantedBy=multi-user.target
 }
 
 func svcUninstall() error {
-	// Best-effort: tell the server this endpoint is being decommissioned so
-	// it's hidden from the live Agents list instead of just showing
-	// "offline". Must happen before the config file removal below.
+	// serverURL/secret must be read while the config file still exists --
+	// capture them now, but notify only after the unit is actually removed
+	// below, so the server never learns "uninstalled" before it's true.
 	serverURL, _ := readServiceParams()
-	if err := notifyServerUnenroll(serverURL, readAgentSecret(), collectIdentity().AgentID); err != nil {
-		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
-	}
+	secret := readAgentSecret()
+	agentID := collectIdentity().AgentID
 
 	_ = exec.Command("systemctl", "stop", "bas-agent.service").Run()
 	_ = exec.Command("systemctl", "disable", "bas-agent.service").Run()
@@ -98,6 +97,13 @@ func svcUninstall() error {
 	_ = exec.Command("systemctl", "daemon-reload").Run()
 	fmt.Println("[+] bas-agent.service removed.")
 	fmt.Printf("[!] Binary and config (%s) left in place — remove manually if no longer needed.\n", configDir)
+
+	// Best-effort: tell the server this endpoint is being decommissioned so
+	// it's hidden from the live Agents list instead of just showing
+	// "offline" -- now sent only after the unit is actually removed above.
+	if err := notifyServerUnenroll(serverURL, secret, agentID); err != nil {
+		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
+	}
 	return nil
 }
 

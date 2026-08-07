@@ -68,17 +68,24 @@ func svcInstall(serverURL, envLabel, secret string) error {
 }
 
 func svcUninstall() error {
-	// Best-effort: tell the server this endpoint is being decommissioned so
-	// it's hidden from the live Agents list instead of just showing
-	// "offline". Must happen before the plist unload/removal below.
+	// serverURL/secret must be read while the config file still exists --
+	// capture them now, but notify only after the plist is actually
+	// unloaded/removed below, so the server never learns "uninstalled"
+	// before it's true.
 	serverURL, _ := readServiceParams()
-	if err := notifyServerUnenroll(serverURL, readAgentSecret(), collectIdentity().AgentID); err != nil {
-		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
-	}
+	secret := readAgentSecret()
+	agentID := collectIdentity().AgentID
 
 	_ = exec.Command("launchctl", "unload", darwinPlistPath).Run()
 	_ = os.Remove(darwinPlistPath)
 	fmt.Println("[+] bas-agent launchd daemon removed.")
+
+	// Best-effort: tell the server this endpoint is being decommissioned so
+	// it's hidden from the live Agents list instead of just showing
+	// "offline" -- now sent only after the plist is actually removed above.
+	if err := notifyServerUnenroll(serverURL, secret, agentID); err != nil {
+		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
+	}
 	return nil
 }
 

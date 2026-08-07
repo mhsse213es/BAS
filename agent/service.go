@@ -264,14 +264,15 @@ func svcUninstall() error {
 	}
 	defer s.Close()
 
-	// Best-effort: tell the server this endpoint is being decommissioned so
-	// it's hidden from the live Agents list instead of just showing
-	// "offline". Read while the service (and its registry Parameters) still
-	// exist -- must happen before Delete below.
+	// serverURL/secret must be read while the service (and its registry
+	// Parameters) still exist -- capture them now, but notify only after
+	// the stop/delete below actually succeeds, so the server never learns
+	// "uninstalled" before it's true (a partial failure below used to leave
+	// the server thinking the endpoint was gone while the service was still
+	// registered).
 	serverURL, _ := readServiceParams()
-	if err := notifyServerUnenroll(serverURL, ReadEncryptedSecret(), collectIdentity().AgentID); err != nil {
-		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
-	}
+	secret := ReadEncryptedSecret()
+	agentID := collectIdentity().AgentID
 
 	// Capture the installed binary path before Delete() removes the service
 	// registration -- needed below to schedule the exe for delayed deletion.
@@ -292,6 +293,13 @@ func svcUninstall() error {
 		return err
 	}
 	_ = eventlog.Remove(svcName)
+
+	// Best-effort: tell the server this endpoint is being decommissioned so
+	// it's hidden from the live Agents list instead of just showing
+	// "offline" -- now sent only after Delete above actually succeeded.
+	if err := notifyServerUnenroll(serverURL, secret, agentID); err != nil {
+		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
+	}
 
 	// Everything below is best-effort cleanup: a running process cannot
 	// delete its own executing binary, and the tray autostart entry/window/
