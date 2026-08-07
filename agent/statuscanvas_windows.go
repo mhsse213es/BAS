@@ -583,3 +583,19 @@ func (r *resources) drawActivityCard(hdc win.HDC, items []statusclient.Activity)
 		y += 22
 	}
 }
+
+// drawButton paints a rounded rect button: accent-filled for primary,
+// elevated-filled with a border for secondary. Returns rc unchanged so
+// callers can pass it straight into a buttonHitRect.
+func (r *resources) drawButton(hdc win.HDC, rc win.RECT, label string, primary bool) win.RECT {
+	if primary {
+		hdc.SelectObjectBrush(r.brushAccent)
+	} else {
+		hdc.SelectObjectBrush(r.brushElevated)
+	}
+	hdc.SelectObjectPen(r.penBorder)
+	cx, cy := dpiPos(6, 6)
+	hdc.RoundRect(rc, win.SIZE{Cx: int32(cx), Cy: int32(cy)})
+	r.drawText(hdc, label, rc, r.fontBody, colText, co.DT_CENTER)
+	return rc
+}

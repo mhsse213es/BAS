@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/rodrigocfd/windigo/co"
@@ -206,7 +207,28 @@ func (sw *windigoWindow) paint(hdc win.HDC) []buttonHitRect {
 }
 
 func (sw *windigoWindow) drawActionRow(hdc win.HDC) []buttonHitRect {
-	return nil
+	exportRc := dpiRect(24, 1244, 220, 36)
+	dashRc := dpiRect(260, 1244, 180, 36)
+
+	sw.res.drawButton(hdc, exportRc, "Export Diagnostic Bundle", false)
+	sw.res.drawButton(hdc, dashRc, "Open BAS Console", true)
+
+	updated := "Updated " + time.Now().Format("15:04:05")
+	sw.res.drawText(hdc, updated, dpiRect(696, 1250, 176, 20), sw.res.fontBody, colMuted, co.DT_RIGHT)
+
+	serverURL := sw.latest.Status.ServerURL
+	return []buttonHitRect{
+		{rc: exportRc, onClick: func() {
+			if sw.controller != nil {
+				sw.controller.ExportDiagnostics()
+			}
+		}},
+		{rc: dashRc, onClick: func() {
+			if sw.controller != nil {
+				sw.controller.OpenDashboard(serverURL)
+			}
+		}},
+	}
 }
 
 func orDash(s string) string {
