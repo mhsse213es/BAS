@@ -31,15 +31,16 @@ const (
 // Job is one logical fleet-wide operation -- e.g. "apply remediation X to
 // these N agents".
 type Job struct {
-	ID          string
-	Type        string
-	State       string
-	Payload     json.RawMessage // type-specific, e.g. {"remediationId":"...","reason":"..."}
-	CreatedBy   string
-	CreatedAt   time.Time
-	StartedAt   *time.Time
-	CompletedAt *time.Time
-	ScheduledAt *time.Time // nil = dispatch immediately; non-nil = don't dispatch before this
+	ID               string
+	Type             string
+	State            string
+	Payload          json.RawMessage // type-specific, e.g. {"remediationId":"...","reason":"..."}
+	CreatedBy        string
+	CreatedAt        time.Time
+	StartedAt        *time.Time
+	CompletedAt      *time.Time
+	ScheduledAt      *time.Time // nil = dispatch immediately; non-nil = don't dispatch before this
+	ConcurrencyLimit int        // 0 = unlimited; caps how many of this job's targets Tick() dispatches simultaneously
 }
 
 // JobTarget is one agent's independently tracked execution within a Job.

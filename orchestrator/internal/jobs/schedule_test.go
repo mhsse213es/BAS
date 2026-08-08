@@ -196,3 +196,34 @@ func TestMarkScheduleOccurrenceHandled_UpdatesBothFields(t *testing.T) {
 		}
 	})
 }
+
+func TestCreateSchedule_RoundTripsScheduledAssessmentFields(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		runAt := time.Now().Add(48 * time.Hour).UTC().Truncate(time.Microsecond)
+		created, err := store.CreateSchedule(context.Background(), Schedule{
+			Type: "scheduled_assessment", Payload: json.RawMessage(`{}`), AgentIDs: []string{"sa-1"},
+			GroupIDs: []int64{7, 8}, RecurrenceType: "once", RunAt: &runAt, Enabled: true,
+			ConcurrencyLimit: 5, Mode: "telemetry", ApprovedBy: "admin-1", ApprovalVersion: 1, Reason: "test",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+		got, err := store.GetSchedule(context.Background(), created.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.RecurrenceType != "once" || got.RunAt == nil || !got.RunAt.Equal(runAt) {
+			t.Errorf("recurrence fields: got RecurrenceType=%q RunAt=%v, want once/%v", got.RecurrenceType, got.RunAt, runAt)
+		}
+		if len(got.GroupIDs) != 2 || got.GroupIDs[0] != 7 || got.GroupIDs[1] != 8 {
+			t.Errorf("GroupIDs = %v, want [7 8]", got.GroupIDs)
+		}
+		if got.ConcurrencyLimit != 5 || got.Mode != "telemetry" || got.ApprovedBy != "admin-1" || got.ApprovalVersion != 1 || got.Reason != "test" {
+			t.Errorf("got = %+v, want ConcurrencyLimit=5 Mode=telemetry ApprovedBy=admin-1 ApprovalVersion=1 Reason=test", got)
+		}
+	})
+}

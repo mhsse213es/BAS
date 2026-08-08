@@ -25,8 +25,16 @@ func (s *Store) CreateBatch(ctx context.Context, jobType string, payload json.Ra
 }
 
 // CreateBatchScheduled is CreateBatch with an optional future dispatch time.
-// A single transaction so a job never exists with a partial target list.
 func (s *Store) CreateBatchScheduled(ctx context.Context, jobType string, payload json.RawMessage, createdBy string, agentIDs []string, scheduledAt *time.Time) (Job, error) {
+	return s.CreateBatchWithConcurrency(ctx, jobType, payload, createdBy, agentIDs, scheduledAt, 0)
+}
+
+// CreateBatchWithConcurrency is CreateBatchScheduled plus an optional
+// per-job concurrency limit (0 = unlimited), read by Dispatcher.Tick's
+// pending-dispatch loop to throttle how many of this job's targets run
+// simultaneously. A single transaction so a job never exists with a
+// partial target list.
+func (s *Store) CreateBatchWithConcurrency(ctx context.Context, jobType string, payload json.RawMessage, createdBy string, agentIDs []string, scheduledAt *time.Time, concurrencyLimit int) (Job, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Job{}, err
@@ -35,8 +43,8 @@ func (s *Store) CreateBatchScheduled(ctx context.Context, jobType string, payloa
 
 	var jobID string
 	if err := tx.QueryRow(ctx,
-		`INSERT INTO jobs (type, state, payload, created_by, scheduled_at) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-		jobType, JobStateRequested, []byte(payload), createdBy, scheduledAt,
+		`INSERT INTO jobs (type, state, payload, created_by, scheduled_at, concurrency_limit) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+		jobType, JobStateRequested, []byte(payload), createdBy, scheduledAt, concurrencyLimit,
 	).Scan(&jobID); err != nil {
 		return Job{}, err
 	}
@@ -57,8 +65,8 @@ func (s *Store) CreateBatchScheduled(ctx context.Context, jobType string, payloa
 func (s *Store) Get(ctx context.Context, id string) (Job, error) {
 	var j Job
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, type, state, payload, created_by, created_at, started_at, completed_at, scheduled_at FROM jobs WHERE id=$1`, id,
-	).Scan(&j.ID, &j.Type, &j.State, &j.Payload, &j.CreatedBy, &j.CreatedAt, &j.StartedAt, &j.CompletedAt, &j.ScheduledAt)
+		`SELECT id, type, state, payload, created_by, created_at, started_at, completed_at, scheduled_at, concurrency_limit FROM jobs WHERE id=$1`, id,
+	).Scan(&j.ID, &j.Type, &j.State, &j.Payload, &j.CreatedBy, &j.CreatedAt, &j.StartedAt, &j.CompletedAt, &j.ScheduledAt, &j.ConcurrencyLimit)
 	return j, err
 }
 

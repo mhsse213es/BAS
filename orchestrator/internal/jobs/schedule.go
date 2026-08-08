@@ -10,21 +10,48 @@ import (
 )
 
 // Schedule is a recurring template that spawns a fresh one-shot Job each
-// weekly occurrence. It is not itself a Job -- it outlives any single
-// spawned run.
+// occurrence. It is not itself a Job -- it outlives any single spawned run.
 type Schedule struct {
 	ID               string
 	Type             string
 	Payload          json.RawMessage
 	AgentIDs         []string
-	DayOfWeek        int    // 0=Sunday .. 6=Saturday
-	TimeOfDay        string // "23:00", 24h HH:MM
+	DayOfWeek        int    // 0=Sunday .. 6=Saturday -- used when RecurrenceType is "" (alias for "weekly") or "weekly"
+	TimeOfDay        string // "23:00", 24h HH:MM -- used by every RecurrenceType except "once"
 	Timezone         string // IANA name, e.g. "Asia/Kolkata"
 	Enabled          bool
 	CreatedBy        string
 	CreatedAt        time.Time
 	LastOccurrenceAt *time.Time
 	LastSpawnedJobID string
+
+	// RecurrenceType is "" (alias for "weekly", the original behavior) |
+	// "once" | "daily" | "weekly" | "monthly". See nextOccurrenceSince.
+	RecurrenceType string
+	RunAt          *time.Time // for RecurrenceType=="once": the single absolute fire time
+	DayOfMonth     int        // for RecurrenceType=="monthly": 1-28
+	EndDate        *time.Time // nil = no end; no spawns once now is after this
+
+	// ConcurrencyLimit is copied onto every Job this schedule spawns (see
+	// Store.CreateBatchWithConcurrency).
+	ConcurrencyLimit int
+
+	// GroupIDs are agent_groups.id values -- resolved recursively (a group
+	// and all its descendants) fresh at every spawn, unioned with AgentIDs.
+	// See Store.ResolveGroupAgentIDs.
+	GroupIDs []int64
+
+	// Mode/ApprovedBy/ApprovedAt/ApprovalVersion/Reason are the Scheduled
+	// Execution Authorization for scheduled_assessment schedules ("" for
+	// other schedule types like batch_remediation). Mode is "posture" (no
+	// authorization needed) or "telemetry" (requires the four fields below,
+	// captured once at creation -- schedules are immutable, so this can
+	// never go stale).
+	Mode            string
+	ApprovedBy      string
+	ApprovedAt      *time.Time
+	ApprovalVersion int
+	Reason          string
 }
 
 var errInvalidTimeOfDay = errors.New("invalid time-of-day, want HH:MM")
@@ -74,19 +101,24 @@ func nextOccurrenceSince(sch Schedule, now time.Time) (occurrence time.Time, ok 
 	return time.Time{}, false
 }
 
-const scheduleColumns = `id, type, payload, agent_ids, day_of_week, time_of_day, timezone, enabled, created_by, created_at, last_occurrence_at, last_spawned_job_id`
+const scheduleColumns = `id, type, payload, agent_ids, day_of_week, time_of_day, timezone, enabled, created_by, created_at, last_occurrence_at, last_spawned_job_id, recurrence_type, run_at, day_of_month, end_date, concurrency_limit, group_ids, mode, approved_by, approved_at, approval_version, reason`
 
 func scanSchedule(row interface {
 	Scan(dest ...any) error
 }) (Schedule, error) {
 	var sch Schedule
-	var agentIDsRaw []byte
+	var agentIDsRaw, groupIDsRaw []byte
 	err := row.Scan(&sch.ID, &sch.Type, &sch.Payload, &agentIDsRaw, &sch.DayOfWeek, &sch.TimeOfDay,
-		&sch.Timezone, &sch.Enabled, &sch.CreatedBy, &sch.CreatedAt, &sch.LastOccurrenceAt, &sch.LastSpawnedJobID)
+		&sch.Timezone, &sch.Enabled, &sch.CreatedBy, &sch.CreatedAt, &sch.LastOccurrenceAt, &sch.LastSpawnedJobID,
+		&sch.RecurrenceType, &sch.RunAt, &sch.DayOfMonth, &sch.EndDate, &sch.ConcurrencyLimit, &groupIDsRaw,
+		&sch.Mode, &sch.ApprovedBy, &sch.ApprovedAt, &sch.ApprovalVersion, &sch.Reason)
 	if err != nil {
 		return Schedule{}, err
 	}
 	if err := json.Unmarshal(agentIDsRaw, &sch.AgentIDs); err != nil {
+		return Schedule{}, err
+	}
+	if err := json.Unmarshal(groupIDsRaw, &sch.GroupIDs); err != nil {
 		return Schedule{}, err
 	}
 	return sch, nil
@@ -97,11 +129,18 @@ func (s *Store) CreateSchedule(ctx context.Context, sch Schedule) (Schedule, err
 	if err != nil {
 		return Schedule{}, err
 	}
+	groupIDsJSON, err := json.Marshal(sch.GroupIDs)
+	if err != nil {
+		return Schedule{}, err
+	}
 	var id string
 	if err := s.pool.QueryRow(ctx,
-		`INSERT INTO job_schedules (type, payload, agent_ids, day_of_week, time_of_day, timezone, enabled, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+		`INSERT INTO job_schedules (type, payload, agent_ids, day_of_week, time_of_day, timezone, enabled, created_by,
+		    recurrence_type, run_at, day_of_month, end_date, concurrency_limit, group_ids, mode, approved_by, approved_at, approval_version, reason)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
 		sch.Type, []byte(sch.Payload), agentIDsJSON, sch.DayOfWeek, sch.TimeOfDay, sch.Timezone, sch.Enabled, sch.CreatedBy,
+		sch.RecurrenceType, sch.RunAt, sch.DayOfMonth, sch.EndDate, sch.ConcurrencyLimit, groupIDsJSON,
+		sch.Mode, sch.ApprovedBy, sch.ApprovedAt, sch.ApprovalVersion, sch.Reason,
 	).Scan(&id); err != nil {
 		return Schedule{}, err
 	}

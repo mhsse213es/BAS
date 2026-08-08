@@ -1304,6 +1304,24 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_job_schedules_enabled ON job_schedules (enabled) WHERE enabled = true`,
 
+		// Scheduled Assessments extensions to job_schedules/jobs -- all additive,
+		// existing batch_remediation schedule rows are unaffected (new columns
+		// default to their zero value; recurrence_type='' aliases to the existing
+		// weekly behavior, see nextOccurrenceSince). See
+		// docs/superpowers/specs/2026-08-08-scheduled-assessments-design.md.
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS recurrence_type text NOT NULL DEFAULT ''`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS run_at timestamptz`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS day_of_month int NOT NULL DEFAULT 0`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS end_date timestamptz`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS concurrency_limit int NOT NULL DEFAULT 0`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS group_ids jsonb NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT ''`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS approved_by text NOT NULL DEFAULT ''`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS approved_at timestamptz`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS approval_version int NOT NULL DEFAULT 0`,
+		`ALTER TABLE job_schedules ADD COLUMN IF NOT EXISTS reason text NOT NULL DEFAULT ''`,
+		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS concurrency_limit int NOT NULL DEFAULT 0`,
+
 		// agent_maintenance_freezes: one-shot absolute freeze window per
 		// agent, checked at dispatch time by Dispatcher.Tick.
 		`CREATE TABLE IF NOT EXISTS agent_maintenance_freezes (
