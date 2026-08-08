@@ -176,7 +176,17 @@ func newWindigoWindow() *windigoWindow {
 			Title("Audspect BAS Agent").
 			Size(cx, cy).
 			ClassBrush(sw.res.brushBg).
-			ClassStyle(co.CS_HREDRAW | co.CS_VREDRAW),
+			ClassStyle(co.CS_HREDRAW | co.CS_VREDRAW).
+			// WS_EX_COMPOSITED hands double-buffering to DWM instead of this
+			// app managing an off-screen GDI bitmap itself -- a prior
+			// hand-rolled attempt (create/BitBlt/destroy a compatible bitmap
+			// every WM_PAINT) reliably deadlocked under rapid repeated
+			// WM_MOUSEWHEEL messages, and a second attempt using a cached,
+			// reused back buffer (avoiding the per-frame alloc churn) still
+			// produced a reproducible hang. This flag needs zero custom GDI
+			// resource lifecycle in application code, so it can't reintroduce
+			// that class of bug.
+			ExStyle(co.WS_EX_COMPOSITED),
 	)
 
 	sw.wnd.On().WmCreate(func(p ui.WmCreate) int {
