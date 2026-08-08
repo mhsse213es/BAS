@@ -62,6 +62,10 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	inFlightByJob := map[string]int{}
+	for _, t := range inFlight {
+		inFlightByJob[t.JobID]++
+	}
 	for _, t := range inFlight {
 		job, err := jobOf(t.JobID)
 		if err != nil {
@@ -74,6 +78,7 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 		if err := d.store.MarkTargetTerminal(ctx, t.ID, state, errText); err != nil {
 			continue
 		}
+		inFlightByJob[t.JobID]-- // resolved -- frees a concurrency slot
 		if state == TargetStateFailed && d.notify != nil {
 			d.notify(ctx, NotifyEvent{
 				Type: notifyTypeTargetFailed, JobID: t.JobID, TargetID: t.ID, AgentID: t.AgentID,
@@ -107,6 +112,9 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
+		if job.ConcurrencyLimit > 0 && inFlightByJob[job.ID] >= job.ConcurrencyLimit {
+			continue // at this job's concurrency cap this tick -- stays pending, retried next tick
+		}
 		if frozen, reason, ferr := d.store.IsAgentFrozen(ctx, t.AgentID); ferr == nil && frozen {
 			d.store.MarkTargetDeferred(ctx, t.ID, reason)
 			if d.notify != nil {
@@ -129,6 +137,7 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 			}
 		} else {
 			d.store.MarkTargetDispatched(ctx, t.ID, refID)
+			inFlightByJob[job.ID]++ // just went in flight -- counts against this same job's later targets this tick
 		}
 		touchedJobs[t.JobID] = true
 	}

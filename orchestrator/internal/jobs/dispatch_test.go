@@ -529,3 +529,52 @@ func TestSpawnDueSchedules_ResolvesGroupMembershipLive(t *testing.T) {
 		}
 	})
 }
+
+func TestTick_RespectsPerJobConcurrencyLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		dispatcher := NewDispatcher(store)
+
+		var dispatchCount int
+		dispatcher.SetDispatch(func(ctx context.Context, job Job, target JobTarget) (string, error) {
+			dispatchCount++
+			return "ref-" + target.ID, nil
+		})
+		// Every dispatched target stays non-terminal ("dispatched") for the
+		// whole test -- this is what makes the concurrency limit observable:
+		// if it weren't enforced, all 5 targets would dispatch on tick 1.
+		dispatcher.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) {
+			return TargetStateDispatched, "", false
+		})
+
+		agentIDs := []string{"cc-a1", "cc-a2", "cc-a3", "cc-a4", "cc-a5"}
+		for _, id := range agentIDs {
+			mustExecJobsNotif(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ($1, $1) ON CONFLICT (agent_id) DO NOTHING`, id)
+		}
+		job, err := store.CreateBatchWithConcurrency(context.Background(), "scheduled_assessment", json.RawMessage(`{}`), "tester", agentIDs, nil, 2)
+		if err != nil {
+			t.Fatalf("CreateBatchWithConcurrency: %v", err)
+		}
+
+		if err := dispatcher.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if dispatchCount != 2 {
+			t.Fatalf("after 1 tick: dispatchCount = %d, want 2 (concurrency limit)", dispatchCount)
+		}
+
+		// A second tick must NOT dispatch more -- the 2 already in flight
+		// never resolve (status always returns terminal=false), so the
+		// limit should still be hit.
+		if err := dispatcher.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick 2: %v", err)
+		}
+		if dispatchCount != 2 {
+			t.Fatalf("after 2 ticks: dispatchCount = %d, want still 2", dispatchCount)
+		}
+		_ = job
+	})
+}
