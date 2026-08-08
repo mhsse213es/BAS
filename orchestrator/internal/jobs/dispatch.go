@@ -180,7 +180,22 @@ func (d *Dispatcher) spawnDueSchedules(ctx context.Context) {
 				continue
 			}
 		}
-		newJob, err := d.store.CreateBatch(ctx, sch.Type, sch.Payload, sch.CreatedBy, sch.AgentIDs)
+		agentIDs := sch.AgentIDs
+		if len(sch.GroupIDs) > 0 {
+			groupAgentIDs, gerr := d.store.ResolveGroupAgentIDs(ctx, sch.GroupIDs)
+			if gerr != nil {
+				log.Printf("[jobs] schedule %s: group resolution failed: %v -- will retry next tick", sch.ID, gerr)
+				continue
+			}
+			agentIDs = unionAgentIDs(sch.AgentIDs, groupAgentIDs)
+		}
+		if len(agentIDs) == 0 {
+			log.Printf("[jobs] schedule %s: resolved to zero targets -- skipping occurrence %v", sch.ID, occurrence)
+			d.store.MarkScheduleOccurrenceHandled(ctx, sch.ID, occurrence, "")
+			continue
+		}
+
+		newJob, err := d.store.CreateBatchWithConcurrency(ctx, sch.Type, sch.Payload, sch.CreatedBy, agentIDs, nil, sch.ConcurrencyLimit)
 		if err != nil {
 			log.Printf("[jobs] schedule %s: spawn failed: %v -- will retry next tick", sch.ID, err)
 			continue
@@ -188,4 +203,24 @@ func (d *Dispatcher) spawnDueSchedules(ctx context.Context) {
 		d.store.MarkScheduleOccurrenceHandled(ctx, sch.ID, occurrence, newJob.ID)
 		log.Printf("[jobs] schedule %s: spawned job %s for occurrence %v", sch.ID, newJob.ID, occurrence)
 	}
+}
+
+// unionAgentIDs merges two agent-ID lists, deduping (an agent could be both
+// explicitly listed and a member of a targeted group).
+func unionAgentIDs(a, b []string) []string {
+	seen := make(map[string]bool, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, id := range a {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	for _, id := range b {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }

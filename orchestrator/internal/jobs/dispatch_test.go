@@ -482,3 +482,50 @@ func TestTick_DeferredTargetResumesOnceFreezeExpires(t *testing.T) {
 		}
 	})
 }
+
+func TestSpawnDueSchedules_ResolvesGroupMembershipLive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		var groupID int64
+		if err := pool.QueryRow(context.Background(),
+			`INSERT INTO agent_groups (name) VALUES ('Live-Res-Group') RETURNING id`).Scan(&groupID); err != nil {
+			t.Fatalf("insert group: %v", err)
+		}
+		mustExecJobsNotif(t, pool, `INSERT INTO agents (agent_id, hostname, group_id) VALUES ('live-res-a1', 'A1', $1)`, groupID)
+
+		store := NewStore(pool)
+		dispatcher := NewDispatcher(store)
+		dispatcher.SetDispatch(func(ctx context.Context, job Job, target JobTarget) (string, error) { return "ref-" + target.ID, nil })
+		dispatcher.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return TargetStateCompleted, "", true })
+
+		past := time.Now().Add(-time.Hour).UTC()
+		sch, err := store.CreateSchedule(context.Background(), Schedule{
+			Type: "scheduled_assessment", Payload: json.RawMessage(`{}`), GroupIDs: []int64{groupID},
+			RecurrenceType: "once", RunAt: &past, Enabled: true,
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+
+		if err := dispatcher.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+
+		got, err := store.GetSchedule(context.Background(), sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.LastSpawnedJobID == "" {
+			t.Fatal("schedule did not spawn a job")
+		}
+		targets, err := store.ListTargets(context.Background(), got.LastSpawnedJobID)
+		if err != nil {
+			t.Fatalf("ListTargets: %v", err)
+		}
+		if len(targets) != 1 || targets[0].AgentID != "live-res-a1" {
+			t.Errorf("targets = %v, want exactly [live-res-a1]", targets)
+		}
+	})
+}
