@@ -154,6 +154,20 @@ func (r *resources) drawIconShield(hdc win.HDC, x, y, size int, color win.COLORR
 	hdc.Polygon(pts)
 }
 
+// drawIconShieldCheck draws the shield outline with a checkmark inside --
+// specifically "protection verified," a closer match for a controls
+// summary than a bare shield, which only implies "security-related"
+// without saying whether anything was actually confirmed active.
+func (r *resources) drawIconShieldCheck(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	r.drawIconShield(hdc, x, y, size, color)
+	pen := iconPen(color, dpiXOnly(2))
+	defer pen.DeleteObject()
+	hdc.SelectObjectPen(pen)
+	hdc.MoveToEx(x+size*3/10, y+size/2)
+	hdc.LineTo(x+size*9/20, y+size*13/20)
+	hdc.LineTo(x+size*3/4, y+size*3/10)
+}
+
 // stateColor maps the same connection/lifecycle state logic used
 // throughout the dashboard (ServerConnected/Paused/State) to one of the
 // three semantic accent colors, so the hero card's left bar, the header
@@ -189,15 +203,26 @@ func stateLabel(s statusclient.StatusResponse) string {
 }
 
 func (r *resources) drawHeader(hdc win.HDC, snap StatusSnapshot) {
-	badgeRc := dpiRect(24, 16, 40, 40)
-	hdc.SelectObjectBrush(r.brushAccent)
+	// Real Audspect wordmark (logo_name.png) replaces the old hand-drawn
+	// badge + separately-typed "Audspect BAS Agent" title -- the logo
+	// already carries the brand name, so only the descriptive subtitle
+	// stays as separate text. The source PNG is a flat opaque rectangle
+	// (no transparency), so a white backing chip behind it isn't strictly
+	// necessary for correctness, but the rounded chip keeps it visually
+	// consistent with every other rounded card on this page instead of a
+	// hard-cornered rectangle sitting directly on the dark background.
+	logoChipRc := dpiRect(24, 14, 148, 48)
+	whiteBrush := solidBrush(win.RGB(0xff, 0xff, 0xff))
+	defer whiteBrush.DeleteObject()
+	hdc.SelectObjectBrush(whiteBrush)
 	hdc.SelectObjectPen(r.penBorder)
-	cx, cy := dpiPos(10, 10)
-	hdc.RoundRect(badgeRc, win.SIZE{Cx: int32(cx), Cy: int32(cy)})
-	r.drawIconShield(hdc, int(badgeRc.Left)+dpiXOnly(10), int(badgeRc.Top)+dpiXOnly(10), dpiXOnly(20), colText)
+	chipCx, chipCy := dpiPos(8, 8)
+	hdc.RoundRect(logoChipRc, win.SIZE{Cx: int32(chipCx), Cy: int32(chipCy)})
+	pad := dpiXOnly(6)
+	drawLogo(hdc, win.RECT{Left: logoChipRc.Left + int32(pad), Top: logoChipRc.Top + int32(pad),
+		Right: logoChipRc.Right - int32(pad), Bottom: logoChipRc.Bottom - int32(pad)})
 
-	r.drawText(hdc, "Audspect BAS Agent", dpiRect(76, 18, 400, 22), r.fontHeading, colText, co.DT_LEFT)
-	r.drawText(hdc, "Breach & Attack Simulation · Endpoint Defense Validation", dpiRect(76, 40, 500, 18), r.fontBody, colMuted, co.DT_LEFT)
+	r.drawText(hdc, "Breach & Attack Simulation · Endpoint Defense Validation", dpiRect(184, 32, 500, 18), r.fontBody, colMuted, co.DT_LEFT)
 
 	if !snap.Online {
 		r.drawText(hdc, "Agent Unreachable", dpiRect(700, 26, 196, 20), r.fontBody, colDanger, co.DT_RIGHT)
@@ -247,43 +272,61 @@ func (r *resources) drawHero(hdc win.HDC, snap StatusSnapshot) {
 // drawIconSignal draws three ascending signal-strength bars with rounded
 // tops -- softer and more deliberate-looking than plain rectangles at this
 // small a size.
-func (r *resources) drawIconSignal(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	brush := solidBrush(color)
-	defer brush.DeleteObject()
-	hdc.SelectObjectBrush(brush)
-	hdc.SelectObjectPen(r.penBorder)
-	barW := size / 4
-	round := barW / 2
-	heights := []int{size / 3, size * 2 / 3, size}
-	for i, h := range heights {
-		bx := x + i*(barW+3)
-		by := y + size - h
-		hdc.RoundRect(win.RECT{Left: int32(bx), Top: int32(by), Right: int32(bx + barW), Bottom: int32(y + size)},
-			win.SIZE{Cx: int32(round), Cy: int32(round)})
+// drawIconNetwork draws three connected nodes -- clearer shorthand for
+// "agent <-> server connectivity" than the previous bare signal-strength
+// bars, which read more like a wifi/cellular indicator than a link status.
+func (r *resources) drawIconNetwork(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	pen := iconPen(color, dpiXOnly(2))
+	defer pen.DeleteObject()
+	hdc.SelectObjectPen(pen)
+
+	top := win.POINT{X: int32(x + size/2), Y: int32(y)}
+	bl := win.POINT{X: int32(x), Y: int32(y + size)}
+	br := win.POINT{X: int32(x + size), Y: int32(y + size)}
+	hdc.MoveToEx(int(top.X), int(top.Y))
+	hdc.LineTo(int(bl.X), int(bl.Y))
+	hdc.MoveToEx(int(top.X), int(top.Y))
+	hdc.LineTo(int(br.X), int(br.Y))
+	hdc.MoveToEx(int(bl.X), int(bl.Y))
+	hdc.LineTo(int(br.X), int(br.Y))
+
+	fill := solidBrush(color)
+	defer fill.DeleteObject()
+	hdc.SelectObjectBrush(fill)
+	// size/6 (≈2px at this icon's 16px size) reads as a stray dot, not a
+	// node -- large enough to register as a distinct shape read alongside
+	// the connecting lines.
+	nodeR := int32(size / 4)
+	for _, n := range []win.POINT{top, bl, br} {
+		hdc.Ellipse(win.RECT{Left: n.X - nodeR, Top: n.Y - nodeR, Right: n.X + nodeR, Bottom: n.Y + nodeR})
 	}
 }
 
-func (r *resources) drawIconClock(hdc win.HDC, x, y, size int, color win.COLORREF) {
+// drawIconPlayCircle draws a circled play triangle -- reads unambiguously
+// as "a task/simulation is actively executing," which a clock face (this
+// icon's previous design) doesn't convey on its own; a clock reads as
+// "time" or "schedule," not "running now."
+func (r *resources) drawIconPlayCircle(hdc win.HDC, x, y, size int, color win.COLORREF) {
 	pen := iconPen(color, dpiXOnly(2))
 	defer pen.DeleteObject()
 	hdc.SelectObjectPen(pen)
 	hdc.SelectObjectBrush(r.brushCard)
 	hdc.Ellipse(win.RECT{Left: int32(x), Top: int32(y), Right: int32(x + size), Bottom: int32(y + size)})
+
+	fill := solidBrush(color)
+	defer fill.DeleteObject()
+	hdc.SelectObjectBrush(fill)
 	cx, cy := x+size/2, y+size/2
-	hdc.MoveToEx(cx, cy)
-	hdc.LineTo(cx, y+size/4)
-	hdc.MoveToEx(cx, cy)
-	hdc.LineTo(cx+size/4, cy)
-	// A small filled center dot (the hands' axle) is a standard clock-icon
-	// detail that keeps the hands from reading as two stray floating lines.
-	axle := solidBrush(color)
-	defer axle.DeleteObject()
-	hdc.SelectObjectBrush(axle)
-	r2 := size / 10
-	if r2 < 1 {
-		r2 = 1
-	}
-	hdc.Ellipse(win.RECT{Left: int32(cx - r2), Top: int32(cy - r2), Right: int32(cx + r2), Bottom: int32(cy + r2)})
+	tw := size * 3 / 8
+	// Optically centering a triangle inside a circle needs a slight right
+	// shift -- a triangle's own centroid sits left of its bounding box's
+	// visual center, so a geometrically-centered triangle looks off-center.
+	shift := tw / 6
+	hdc.Polygon([]win.POINT{
+		{X: int32(cx - tw/2 + shift), Y: int32(cy - tw/2)},
+		{X: int32(cx - tw/2 + shift), Y: int32(cy + tw/2)},
+		{X: int32(cx + tw/2 + shift), Y: int32(cy)},
+	})
 }
 
 func (r *resources) drawProgressBar(hdc win.HDC, rc win.RECT, pct int) {
@@ -308,7 +351,7 @@ func (r *resources) drawProgressBar(hdc win.HDC, rc win.RECT, pct int) {
 func (r *resources) drawConnectionCard(hdc win.HDC, snap StatusSnapshot) {
 	rc := dpiRect(24, 204, 428, 190)
 	r.drawCard(hdc, rc)
-	r.drawIconSignal(hdc, dpiXOnly(40), dpiXOnly(224), dpiXOnly(16), colMuted)
+	r.drawIconNetwork(hdc, dpiXOnly(40), dpiXOnly(224), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "CONNECTION", dpiRect(60, 220, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	if !snap.Online {
@@ -352,7 +395,7 @@ func heartbeatText(s statusclient.StatusResponse) string {
 func (r *resources) drawOperationCard(hdc win.HDC, a statusclient.ActivityResponse) {
 	rc := dpiRect(468, 204, 428, 190)
 	r.drawCard(hdc, rc)
-	r.drawIconClock(hdc, dpiXOnly(484), dpiXOnly(224), dpiXOnly(16), colMuted)
+	r.drawIconPlayCircle(hdc, dpiXOnly(484), dpiXOnly(224), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "CURRENT OPERATION", dpiRect(504, 220, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	title, meta, result := "No active simulation", "Awaiting tasking from the BAS console", ""
@@ -426,7 +469,7 @@ func boolRow(name string, on bool) controlRow {
 func (r *resources) drawControlsCard(hdc win.HDC, c statusclient.ControlsResponse) {
 	rc := dpiRect(24, 410, 872, 190)
 	r.drawCard(hdc, rc)
-	r.drawIconShield(hdc, dpiXOnly(40), dpiXOnly(430), dpiXOnly(16), colMuted)
+	r.drawIconShieldCheck(hdc, dpiXOnly(40), dpiXOnly(430), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "ENDPOINT SECURITY CONTROLS", dpiRect(60, 426, 400, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	rows := []controlRow{
@@ -447,45 +490,60 @@ func (r *resources) drawControlsCard(hdc win.HDC, c statusclient.ControlsRespons
 	}
 }
 
-func (r *resources) drawIconCheckBadge(hdc win.HDC, x, y, size int, color win.COLORREF) {
+// drawIconClipboardCheck draws a clipboard (body + top clip tab) with a
+// checkmark -- reads specifically as "a record of collected results," a
+// closer match for an evidence/last-run panel than a bare checkmark
+// circle, which could mean any generic "OK" status.
+func (r *resources) drawIconClipboardCheck(hdc win.HDC, x, y, size int, color win.COLORREF) {
 	pen := iconPen(color, dpiXOnly(2))
 	defer pen.DeleteObject()
 	hdc.SelectObjectPen(pen)
 	hdc.SelectObjectBrush(r.brushCard)
-	hdc.Ellipse(win.RECT{Left: int32(x), Top: int32(y), Right: int32(x + size), Bottom: int32(y + size)})
-	hdc.MoveToEx(x+size/4, y+size/2)
-	hdc.LineTo(x+size*2/5, y+size*3/4)
-	hdc.LineTo(x+size*3/4, y+size/4)
+
+	cxy, cyy := dpiPos(2, 2)
+	hdc.RoundRect(win.RECT{Left: int32(x), Top: int32(y + size/6), Right: int32(x + size), Bottom: int32(y + size)},
+		win.SIZE{Cx: int32(cxy), Cy: int32(cyy)})
+	tabW := size * 2 / 5
+	hdc.RoundRect(win.RECT{Left: int32(x + size/2 - tabW/2), Top: int32(y), Right: int32(x + size/2 + tabW/2), Bottom: int32(y + size/4)},
+		win.SIZE{Cx: int32(cxy), Cy: int32(cyy)})
+
+	hdc.MoveToEx(x+size*3/10, y+size*11/20)
+	hdc.LineTo(x+size*9/20, y+size*7/10)
+	hdc.LineTo(x+size*7/10, y+size*2/5)
 }
 
-// drawIconPin draws a classic map-pin/teardrop: a round head with a
-// tapered point and a hollow center. The original 5-point angular polygon
-// read as a rough triangle rather than a recognizable pin; this builds the
-// same silhouette out of a circle (the head) plus a triangle (the point),
-// drawn triangle-first so the circle's clean edge covers the seam between
-// them.
-func (r *resources) drawIconPin(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen := iconPen(color, dpiXOnly(1))
-	defer pen.DeleteObject()
+// drawIconShieldLock draws the same shield outline as
+// ENDPOINT SECURITY CONTROLS with a small padlock centered inside --
+// "tamper resistance / policy enforcement" is what Self-Protection
+// actually reports on, which a location pin (the original icon here)
+// didn't represent at all.
+func (r *resources) drawIconShieldLock(hdc win.HDC, x, y, size int, color win.COLORREF) {
+	r.drawIconShield(hdc, x, y, size, color)
+
+	lockW := size / 2
+	lockH := size * 5 / 16
+	lx := x + size/2 - lockW/2
+	ly := y + size*9/16
+
+	// The shackle needs a thin pen relative to its own radius to read as a
+	// ring rather than a disk -- the previous 2px-pen/2px-radius version
+	// had stroke width equal to the radius, so the "hole" in the middle
+	// vanished and it just looked like a solid blob.
+	shacklePen := iconPen(color, dpiXOnly(1))
+	defer shacklePen.DeleteObject()
+	hdc.SelectObjectPen(shacklePen)
+	hdc.SelectObjectBrush(r.brushCard)
+	shackleR := lockW * 3 / 8
+	scx, scy := x+size/2, ly
+	hdc.Ellipse(win.RECT{Left: int32(scx - shackleR), Top: int32(scy - shackleR), Right: int32(scx + shackleR), Bottom: int32(scy + shackleR)})
+
 	fill := solidBrush(color)
 	defer fill.DeleteObject()
-
-	cx := x + size/2
-	headCy := y + size*3/10
-	headR := size * 7 / 20
-
-	hdc.SelectObjectPen(pen)
 	hdc.SelectObjectBrush(fill)
-	hdc.Polygon([]win.POINT{
-		{X: int32(cx), Y: int32(y + size)},
-		{X: int32(cx - headR*7/10), Y: int32(headCy + headR*7/10)},
-		{X: int32(cx + headR*7/10), Y: int32(headCy + headR*7/10)},
-	})
-	hdc.Ellipse(win.RECT{Left: int32(cx - headR), Top: int32(headCy - headR), Right: int32(cx + headR), Bottom: int32(headCy + headR)})
-
-	holeR := headR * 2 / 5
-	hdc.SelectObjectBrush(r.brushCard)
-	hdc.Ellipse(win.RECT{Left: int32(cx - holeR), Top: int32(headCy - holeR), Right: int32(cx + holeR), Bottom: int32(headCy + holeR)})
+	hdc.SelectObjectPen(shacklePen)
+	bodyCx, bodyCy := dpiPos(1, 1)
+	hdc.RoundRect(win.RECT{Left: int32(lx), Top: int32(ly), Right: int32(lx + lockW), Bottom: int32(ly + lockH)},
+		win.SIZE{Cx: int32(bodyCx), Cy: int32(bodyCy)})
 }
 
 // drawStatTile paints an elevated-surface tile with a large value and a
@@ -507,7 +565,7 @@ func (r *resources) drawStatTile(hdc win.HDC, rc win.RECT, value, label string) 
 func (r *resources) drawEvidenceCard(hdc win.HDC, ev statusclient.EvidenceResponse) {
 	rc := dpiRect(24, 616, 428, 210)
 	r.drawCard(hdc, rc)
-	r.drawIconCheckBadge(hdc, dpiXOnly(40), dpiXOnly(636), dpiXOnly(16), colMuted)
+	r.drawIconClipboardCheck(hdc, dpiXOnly(40), dpiXOnly(636), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "EVIDENCE · LAST RUN", dpiRect(60, 632, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	tiles := []struct{ value, label string }{
@@ -528,7 +586,7 @@ func (r *resources) drawEvidenceCard(hdc win.HDC, ev statusclient.EvidenceRespon
 func (r *resources) drawSelfProtectionCard(hdc win.HDC, s statusclient.StatusResponse, ev statusclient.EvidenceResponse) {
 	rc := dpiRect(468, 616, 428, 210)
 	r.drawCard(hdc, rc)
-	r.drawIconPin(hdc, dpiXOnly(484), dpiXOnly(636), dpiXOnly(16), colMuted)
+	r.drawIconShieldLock(hdc, dpiXOnly(484), dpiXOnly(636), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "SELF-PROTECTION", dpiRect(504, 632, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	rows := []controlRow{
