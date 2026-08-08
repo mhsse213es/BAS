@@ -998,7 +998,7 @@ code {
 .cmp-note { font-size:0.75rem; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--purple); border-radius:6px; padding:0.6rem 0.8rem; margin-bottom:1rem; line-height:1.45; }
 /* Print */
 @media print {
-  #sidebar, header, .sec-hdr button, #cmp-export-json, #cmp-export-csv, #cmp-export-pdf,
+  #sidebar, header, .sec-hdr button, #cmp-export-json, #cmp-export-csv,
   .cmp-filter-tabs, .cmp-expand-btn { display:none !important; }
   .main-wrapper { margin-left:0 !important; width:100% !important; }
   body { background:#fff !important; color:#111 !important; }
@@ -3163,9 +3163,9 @@ body.theme-slate {
           <div style="font-size:0.8rem;color:var(--muted)">Generate evidence reports from your validated results. History re-generates on download — no stale copies.</div>
         </div>
         <div class="dash-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:1.25rem">
-          <div class="dash-panel" style="cursor:pointer" onclick="openReportGen('posture')"><div class="dash-panel-body"><div class="kpi-label">Posture report</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Full per-agent posture</div><div class="tiny muted">Prevention, detection, kill-chain — HTML or PDF</div></div></div>
+          <div class="dash-panel" style="cursor:pointer" onclick="openReportGen('posture')"><div class="dash-panel-body"><div class="kpi-label">Posture report</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Full per-agent posture</div><div class="tiny muted">Prevention, detection, kill-chain — HTML report</div></div></div>
           <div class="dash-panel" style="cursor:pointer" onclick="openReportGen('audit')"><div class="dash-panel-body"><div class="kpi-label">Audit pack</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Evidence bundle</div><div class="tiny muted">Per-agent audit-ready package</div></div></div>
-          <div class="dash-panel" style="cursor:pointer" onclick="showTab('compliance')"><div class="dash-panel-body"><div class="kpi-label">Compliance evidence</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Framework mapping</div><div class="tiny muted">SEBI/RBI/IRDAI/CERT-In/ISO/NIST — view on-screen, export JSON/CSV/PDF</div></div></div>
+          <div class="dash-panel" style="cursor:pointer" onclick="showTab('compliance')"><div class="dash-panel-body"><div class="kpi-label">Compliance evidence</div><div style="font-weight:600;color:var(--text);margin:0.3rem 0">Framework mapping</div><div class="tiny muted">SEBI/RBI/IRDAI/CERT-In/ISO/NIST — view on-screen, export JSON/CSV</div></div></div>
         </div>
         <div class="rep-shdr">Available reports — by agent</div>
         <div id="rep-available"><div class="empty" style="padding:1.25rem">Loading…</div></div>
@@ -3460,7 +3460,6 @@ body.theme-slate {
             <button class="btn btn-primary btn-sm" onclick="loadComplianceReport()">Generate</button>
             <button class="btn btn-outline btn-sm" onclick="exportCompliance('json')" id="cmp-export-json" style="display:none">↓ JSON</button>
             <button class="btn btn-outline btn-sm" onclick="exportCompliance('csv')" id="cmp-export-csv" style="display:none">↓ CSV</button>
-            <button class="btn btn-outline btn-sm" onclick="window.print()" id="cmp-export-pdf" style="display:none">↓ PDF</button>
           </div>
         </div>
 
@@ -7259,8 +7258,7 @@ function openCampaignDetail(id) {
     // ── actions ──
     var actions = (s.status === 'running')
       ? '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>'
-      : '<button class="btn btn-outline btn-sm" onclick="openCampaignReport(\'' + x(c.id) + '\')" title="Open the fleet-wide HTML report">&#8595; HTML</button>' +
-        ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignPDF(\'' + x(c.id) + '\')" title="Download the fleet-wide PDF report">&#8595; PDF</button>' +
+      : '<button class="btn btn-outline btn-sm" onclick="openCampaignReport(\'' + x(c.id) + '\')" title="Open the fleet-wide HTML report">&#8595; HTML Report</button>' +
         ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignCSV(\'' + x(c.id) + '\')" title="Download the fleet forensic CSV (one row per technique across all agents)">&#8595; CSV</button>' +
         ' <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run campaign — coming soon">Re-run · soon</button>';
 
@@ -9551,8 +9549,7 @@ function loadReports() {
         '<div class="rep-main"><div class="rep-host">' + x(host) + '</div>' +
           '<div class="rep-sub">' + n + ' run' + (n === 1 ? '' : 's') + ' · last ' + ago(byAgent[id].last) + '</div></div>' +
         '<div class="rep-acts">' +
-          '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'html\')">HTML</button>' +
-          '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'pdf\')">PDF</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'html\')">HTML Report</button>' +
           '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'csv\')">CSV</button>' +
           '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'audit\',\'\')">Audit pack</button>' +
         '</div></div>';
@@ -9615,7 +9612,7 @@ function openReportGen(type) {
   document.getElementById('rep-agent').innerHTML = agents.map(function(a) {
     return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
   }).join('');
-  var fmts = type === 'compliance' ? ['html', 'pdf', 'csv'] : type === 'audit' ? [''] : ['pdf', 'html', 'csv'];
+  var fmts = type === 'compliance' ? ['html', 'csv'] : type === 'audit' ? [''] : ['html', 'csv'];
   document.getElementById('rep-format').innerHTML = fmts.map(function(f) {
     var lbl = f ? f.toUpperCase() : 'Package';
     if (type === 'posture' && f === 'csv') lbl = 'CSV (forensic)';
@@ -11014,7 +11011,6 @@ function viewRunResults(run) {
     actionsHtml =
       '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
       '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8595; HTML Report</button>' +
-      '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')" title="Download PDF report">&#8595; PDF</button>' +
       '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
       '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
       (canRerun
@@ -11430,7 +11426,6 @@ function viewRunResults(run) {
         '<div class="dash-panel"><div class="dash-panel-hdr">Export</div><div class="dash-panel-body" style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
           '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')">&#8595; JSON</button>' +
           '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')">&#8595; HTML Report</button>' +
-          '<button class="btn btn-sm btn-outline" onclick="downloadRunPDF(\'' + runId + '\')">&#8595; PDF</button>' +
           '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')">&#8595; CSV</button>' +
         '</div></div>';
     } else {
@@ -13088,16 +13083,6 @@ function openCampaignReport(id) {
     window.open('/api/campaigns/' + encodeURIComponent(id) + '/report' + query, '_blank');
   });
 }
-function downloadCampaignPDF(id) {
-  showDownloadOptions('Campaign PDF Report', function(filter) {
-    var a = document.createElement('a');
-    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
-    a.href = '/api/campaigns/' + encodeURIComponent(id) + '/pdf' + query;
-    var suffix = (filter && filter !== 'all') ? '-' + filter : '';
-    a.download = 'bas-campaign-' + id.substring(0, 8) + suffix + '.pdf';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  });
-}
 function downloadCampaignCSV(id) {
   showDownloadOptions('Campaign Forensic CSV', function(filter) {
     var a = document.createElement('a');
@@ -13120,19 +13105,6 @@ function downloadRunCSV(runId) {
     document.body.removeChild(a);
   });
 }
-function downloadRunPDF(runId) {
-  showDownloadOptions('Simulation PDF Report', function(filter) {
-    var a = document.createElement('a');
-    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
-    a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/pdf' + query;
-    var suffix = (filter && filter !== 'all') ? '-' + filter : '';
-    a.download = 'bas-report-' + runId.substring(0, 8) + suffix + '.pdf';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  });
-}
-
 function frameworkDisplayName(fw) {
   return { art: 'Atomic Red Team', caldera: 'Caldera', posture: 'Posture Checks', steps: 'Custom Steps' }[fw] || fw || 'Unknown';
 }
@@ -15090,19 +15062,6 @@ function openFullReport(agentId) {
   });
 }
 
-function downloadFullReportPDF(agentId) {
-  showDownloadOptions('Agent Posture PDF Report', function(filter) {
-    var a = document.createElement('a');
-    var query = filter ? '&filter=' + encodeURIComponent(filter) : '';
-    a.href = '/api/report/full/pdf?agentId=' + encodeURIComponent(agentId) + query;
-    var suffix = (filter && filter !== 'all') ? '-' + filter : '';
-    a.download = 'bas-report-' + agentId + suffix + '.pdf';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  });
-}
-
 function downloadAuditPack(agentId) {
   showToast('Preparing audit pack…', 'ok');
   fetch('/api/report/audit-pack?agentId=' + encodeURIComponent(agentId), {
@@ -15167,7 +15126,7 @@ function loadComplianceReport() {
   document.getElementById('cmp-placeholder').textContent = 'Generating report…';
   document.getElementById('cmp-placeholder').style.display = '';
   document.getElementById('cmp-report').style.display = 'none';
-  ['cmp-export-json','cmp-export-csv','cmp-export-pdf'].forEach(function(id) {
+  ['cmp-export-json','cmp-export-csv'].forEach(function(id) {
     document.getElementById(id).style.display = 'none';
   });
 
@@ -15178,7 +15137,7 @@ function loadComplianceReport() {
       renderComplianceReport(report);
       document.getElementById('cmp-placeholder').style.display = 'none';
       document.getElementById('cmp-report').style.display = '';
-      ['cmp-export-json','cmp-export-csv','cmp-export-pdf'].forEach(function(id) {
+      ['cmp-export-json','cmp-export-csv'].forEach(function(id) {
         document.getElementById(id).style.display = '';
       });
     })
