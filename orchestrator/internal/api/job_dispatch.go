@@ -108,6 +108,8 @@ func (h *Handler) dispatchJobTarget(ctx context.Context, job jobs.Job, target jo
 		return h.dispatchBatchRemediationTarget(ctx, job, target)
 	case "bas_revalidation":
 		return h.dispatchBasRevalidationTarget(ctx, job, target)
+	case "scheduled_assessment":
+		return h.dispatchScheduledAssessmentTarget(ctx, job, target)
 	default:
 		return "", fmt.Errorf("unknown job type %q", job.Type)
 	}
@@ -120,6 +122,8 @@ func (h *Handler) statusForJobTarget(ctx context.Context, jobType, refID string)
 		return h.batchRemediationTargetStatus(ctx, jobType, refID)
 	case "bas_revalidation":
 		return h.basRevalidationTargetStatus(ctx, jobType, refID)
+	case "scheduled_assessment":
+		return h.scheduledAssessmentTargetStatus(ctx, jobType, refID)
 	default:
 		return jobs.TargetStateFailed, "unknown job type", true
 	}
