@@ -67,6 +67,69 @@ func openInBrowser(url string) {
 		uintptr(unsafe.Pointer(verb)), uintptr(unsafe.Pointer(target)), 0, 0, 5 /*SW_SHOW*/)
 }
 
+// Raw syscalls for the handful of Win32 calls windigo doesn't wrap:
+// SetWindowOrgEx (owner-drawn scrolling, statuscanvas has no scrollbar
+// control to delegate to), ExtractIconExW + WM_SETICON (the window's own
+// taskbar/title-bar icon -- windigo's ClassIconId needs a numeric resource
+// ID we don't reliably know since rsrc.exe assigns it, so we extract by
+// position from the running exe instead, same technique Explorer itself
+// uses to show a file's icon).
+var (
+	modGdi32   = windows.NewLazySystemDLL("gdi32.dll")
+	modUser32  = windows.NewLazySystemDLL("user32.dll")
+	modShell32 = windows.NewLazySystemDLL("shell32.dll")
+
+	procSetWindowOrgEx = modGdi32.NewProc("SetWindowOrgEx")
+	procSendMessageW   = modUser32.NewProc("SendMessageW")
+	procExtractIconExW = modShell32.NewProc("ExtractIconExW")
+)
+
+func setWindowOrgEx(hdc win.HDC, x, y int32) {
+	procSetWindowOrgEx.Call(uintptr(hdc), uintptr(x), uintptr(y), 0)
+}
+
+const (
+	wmSetIcon = 0x0080
+	iconSmall = 0
+	iconBig   = 1
+)
+
+func setWindowIcon(hwnd win.HWND, hIconBig, hIconSmall uintptr) {
+	if hIconBig != 0 {
+		procSendMessageW.Call(uintptr(hwnd), wmSetIcon, iconBig, hIconBig)
+	}
+	if hIconSmall != 0 {
+		procSendMessageW.Call(uintptr(hwnd), wmSetIcon, iconSmall, hIconSmall)
+	}
+}
+
+// loadAppIcons extracts the running executable's own icon (index 0 --
+// whatever icon rsrc.exe embedded at build time, by position rather than
+// by a specific resource ID/name we'd otherwise have to guess) at both
+// large and small sizes, for the title bar and taskbar respectively.
+func loadAppIcons() (large, small uintptr) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return 0, 0
+	}
+	pathPtr, err := windows.UTF16PtrFromString(exePath)
+	if err != nil {
+		return 0, 0
+	}
+	var hLarge, hSmall uintptr
+	ret, _, _ := procExtractIconExW.Call(
+		uintptr(unsafe.Pointer(pathPtr)),
+		0, // icon index -- first icon in the exe
+		uintptr(unsafe.Pointer(&hLarge)),
+		uintptr(unsafe.Pointer(&hSmall)),
+		1,
+	)
+	if ret == 0 {
+		return 0, 0
+	}
+	return hLarge, hSmall
+}
+
 func revealInExplorer(path string) {
 	cmd := exec.Command("explorer.exe", "/select,"+path)
 	_ = cmd.Start()
@@ -93,12 +156,21 @@ type windigoWindow struct {
 
 	latest  StatusSnapshot
 	buttons []buttonHitRect
+
+	// scrollY is the vertical scroll offset in device pixels (0 = top of
+	// content). contentHeight is the full design content height, scaled --
+	// on any display shorter than that, the window can't show everything
+	// at once (see clampToWorkArea's doc comment), so mouse-wheel scrolling
+	// is the only way to reach content below the fold.
+	scrollY       int32
+	contentHeight int32
 }
 
 func newWindigoWindow() *windigoWindow {
 	sw := &windigoWindow{res: newResources()}
 
 	cx, cy := ui.Dpi(920, 1320)
+	sw.contentHeight = int32(cy)
 	sw.wnd = ui.NewMain(
 		ui.OptsMain().
 			Title("Audspect BAS Agent").
@@ -110,6 +182,33 @@ func newWindigoWindow() *windigoWindow {
 	sw.wnd.On().WmCreate(func(p ui.WmCreate) int {
 		sw.wnd.Hwnd().DwmSetWindowAttribute(win.DwmAttrUseImmersiveDarkMode(true))
 		sw.clampToWorkArea()
+		if big, small := loadAppIcons(); big != 0 || small != 0 {
+			setWindowIcon(sw.wnd.Hwnd(), big, small)
+		}
+		return 0
+	})
+
+	// WM_MOUSEWHEEL (0x020A) has no typed windigo wrapper, so it's
+	// registered via the generic Wm() escape hatch. Only reachable when the
+	// window can't show all its content at once (see clampToWorkArea and
+	// contentHeight above) -- on a tall enough screen maxScroll is 0 and
+	// every wheel notch is a no-op.
+	sw.wnd.On().Wm(co.WM(0x020A), func(p ui.Wm) uintptr {
+		delta := int32(int16(uint16(uint32(p.WParam) >> 16)))
+		clientRc, _ := sw.wnd.Hwnd().GetClientRect()
+		maxScroll := sw.contentHeight - (clientRc.Bottom - clientRc.Top)
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		step := dpiXOnly(60)
+		sw.scrollY -= (delta / 120) * int32(step)
+		if sw.scrollY < 0 {
+			sw.scrollY = 0
+		}
+		if sw.scrollY > maxScroll {
+			sw.scrollY = maxScroll
+		}
+		sw.wnd.Hwnd().InvalidateRect(nil, false)
 		return 0
 	})
 
@@ -142,14 +241,24 @@ func newWindigoWindow() *windigoWindow {
 		clientRc, _ := sw.wnd.Hwnd().GetClientRect()
 		hdc.FillRect(&clientRc, sw.res.brushBg)
 
+		// Shift the DC's logical origin down by the scroll offset so every
+		// existing drawXxx call (all written in fixed content-space
+		// coordinates) renders shifted without needing to thread scrollY
+		// through each one individually. windigo doesn't wrap
+		// SetWindowOrgEx, hence the raw syscall above.
+		setWindowOrgEx(hdc, 0, sw.scrollY)
 		sw.buttons = sw.paint(hdc)
 	})
 
 	sw.wnd.On().WmLButtonUp(func(p ui.WmMouse) {
 		pt := p.Pos()
+		// Click coordinates arrive in client (device) space; button rects
+		// were recorded in content (logical/scrolled) space during paint,
+		// so translate the click the same way WM_PAINT translates drawing.
+		contentY := int32(pt.Y) + sw.scrollY
 		for _, b := range sw.buttons {
 			if int32(pt.X) >= b.rc.Left && int32(pt.X) <= b.rc.Right &&
-				int32(pt.Y) >= b.rc.Top && int32(pt.Y) <= b.rc.Bottom {
+				contentY >= b.rc.Top && contentY <= b.rc.Bottom {
 				b.onClick()
 				return
 			}

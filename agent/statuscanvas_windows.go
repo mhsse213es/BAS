@@ -47,6 +47,17 @@ func solidBrush(color win.COLORREF) win.HBRUSH {
 	return b
 }
 
+// iconPen creates a geometric pen with rounded end caps -- plain
+// CreatePen always draws flat/square caps, which reads as blocky and cheap
+// at the small sizes these hand-drawn icon glyphs render at. Rounded caps
+// alone (no anti-aliasing available without GDI+, out of scope) noticeably
+// soften every icon's stroke ends.
+func iconPen(color win.COLORREF, width int) win.HPEN {
+	p, _ := win.ExtCreatePen(co.PS_TYPE_GEOMETRIC, co.PS_STYLE_SOLID, co.PS_ENDCAP_ROUND, width,
+		&win.LOGBRUSH{Style: co.BRS_SOLID, Color: color}, nil)
+	return p
+}
+
 func segoeFont(height int, weight co.FW) win.HFONT {
 	_, h := dpiPos(0, height)
 	f, _ := win.CreateFont(
@@ -128,7 +139,7 @@ func (r *resources) drawDot(hdc win.HDC, x, y, diameter int, color win.COLORREF)
 // header badge and (reused, colored per-status) the Endpoint Security
 // Controls card header.
 func (r *resources) drawIconShield(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	pen := iconPen(color, dpiXOnly(2))
 	defer pen.DeleteObject()
 	hdc.SelectObjectPen(pen)
 	hdc.SelectObjectBrush(r.brushCard) // unfilled look: fill matches card bg
@@ -233,22 +244,27 @@ func (r *resources) drawHero(hdc win.HDC, snap StatusSnapshot) {
 	r.drawText(hdc, "HOSTNAME", dpiRect(696, 124, 176, 16), r.fontEyebrow, colMuted, co.DT_RIGHT)
 }
 
+// drawIconSignal draws three ascending signal-strength bars with rounded
+// tops -- softer and more deliberate-looking than plain rectangles at this
+// small a size.
 func (r *resources) drawIconSignal(hdc win.HDC, x, y, size int, color win.COLORREF) {
 	brush := solidBrush(color)
 	defer brush.DeleteObject()
 	hdc.SelectObjectBrush(brush)
 	hdc.SelectObjectPen(r.penBorder)
 	barW := size / 4
+	round := barW / 2
 	heights := []int{size / 3, size * 2 / 3, size}
 	for i, h := range heights {
-		bx := x + i*(barW+2)
+		bx := x + i*(barW+3)
 		by := y + size - h
-		hdc.Rectangle(win.RECT{Left: int32(bx), Top: int32(by), Right: int32(bx + barW), Bottom: int32(y + size)})
+		hdc.RoundRect(win.RECT{Left: int32(bx), Top: int32(by), Right: int32(bx + barW), Bottom: int32(y + size)},
+			win.SIZE{Cx: int32(round), Cy: int32(round)})
 	}
 }
 
 func (r *resources) drawIconClock(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	pen := iconPen(color, dpiXOnly(2))
 	defer pen.DeleteObject()
 	hdc.SelectObjectPen(pen)
 	hdc.SelectObjectBrush(r.brushCard)
@@ -258,6 +274,16 @@ func (r *resources) drawIconClock(hdc win.HDC, x, y, size int, color win.COLORRE
 	hdc.LineTo(cx, y+size/4)
 	hdc.MoveToEx(cx, cy)
 	hdc.LineTo(cx+size/4, cy)
+	// A small filled center dot (the hands' axle) is a standard clock-icon
+	// detail that keeps the hands from reading as two stray floating lines.
+	axle := solidBrush(color)
+	defer axle.DeleteObject()
+	hdc.SelectObjectBrush(axle)
+	r2 := size / 10
+	if r2 < 1 {
+		r2 = 1
+	}
+	hdc.Ellipse(win.RECT{Left: int32(cx - r2), Top: int32(cy - r2), Right: int32(cx + r2), Bottom: int32(cy + r2)})
 }
 
 func (r *resources) drawProgressBar(hdc win.HDC, rc win.RECT, pct int) {
@@ -326,7 +352,7 @@ func heartbeatText(s statusclient.StatusResponse) string {
 func (r *resources) drawOperationCard(hdc win.HDC, a statusclient.ActivityResponse) {
 	rc := dpiRect(468, 204, 428, 190)
 	r.drawCard(hdc, rc)
-	r.drawIconClock(hdc, dpiXOnly(488), dpiXOnly(224), dpiXOnly(16), colMuted)
+	r.drawIconClock(hdc, dpiXOnly(484), dpiXOnly(224), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "CURRENT OPERATION", dpiRect(504, 220, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	title, meta, result := "No active simulation", "Awaiting tasking from the BAS console", ""
@@ -422,7 +448,7 @@ func (r *resources) drawControlsCard(hdc win.HDC, c statusclient.ControlsRespons
 }
 
 func (r *resources) drawIconCheckBadge(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	pen := iconPen(color, dpiXOnly(2))
 	defer pen.DeleteObject()
 	hdc.SelectObjectPen(pen)
 	hdc.SelectObjectBrush(r.brushCard)
@@ -432,19 +458,34 @@ func (r *resources) drawIconCheckBadge(hdc win.HDC, x, y, size int, color win.CO
 	hdc.LineTo(x+size*3/4, y+size/4)
 }
 
+// drawIconPin draws a classic map-pin/teardrop: a round head with a
+// tapered point and a hollow center. The original 5-point angular polygon
+// read as a rough triangle rather than a recognizable pin; this builds the
+// same silhouette out of a circle (the head) plus a triangle (the point),
+// drawn triangle-first so the circle's clean edge covers the seam between
+// them.
 func (r *resources) drawIconPin(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	pen := iconPen(color, dpiXOnly(1))
 	defer pen.DeleteObject()
+	fill := solidBrush(color)
+	defer fill.DeleteObject()
+
+	cx := x + size/2
+	headCy := y + size*3/10
+	headR := size * 7 / 20
+
 	hdc.SelectObjectPen(pen)
+	hdc.SelectObjectBrush(fill)
+	hdc.Polygon([]win.POINT{
+		{X: int32(cx), Y: int32(y + size)},
+		{X: int32(cx - headR*7/10), Y: int32(headCy + headR*7/10)},
+		{X: int32(cx + headR*7/10), Y: int32(headCy + headR*7/10)},
+	})
+	hdc.Ellipse(win.RECT{Left: int32(cx - headR), Top: int32(headCy - headR), Right: int32(cx + headR), Bottom: int32(headCy + headR)})
+
+	holeR := headR * 2 / 5
 	hdc.SelectObjectBrush(r.brushCard)
-	pts := []win.POINT{
-		{X: int32(x + size/2), Y: int32(y + size)},
-		{X: int32(x), Y: int32(y + size/3)},
-		{X: int32(x + size/4), Y: int32(y)},
-		{X: int32(x + size*3/4), Y: int32(y)},
-		{X: int32(x + size), Y: int32(y + size/3)},
-	}
-	hdc.Polygon(pts)
+	hdc.Ellipse(win.RECT{Left: int32(cx - holeR), Top: int32(headCy - holeR), Right: int32(cx + holeR), Bottom: int32(headCy + holeR)})
 }
 
 // drawStatTile paints an elevated-surface tile with a large value and a
@@ -487,7 +528,7 @@ func (r *resources) drawEvidenceCard(hdc win.HDC, ev statusclient.EvidenceRespon
 func (r *resources) drawSelfProtectionCard(hdc win.HDC, s statusclient.StatusResponse, ev statusclient.EvidenceResponse) {
 	rc := dpiRect(468, 616, 428, 210)
 	r.drawCard(hdc, rc)
-	r.drawIconPin(hdc, dpiXOnly(488), dpiXOnly(636), dpiXOnly(16), colMuted)
+	r.drawIconPin(hdc, dpiXOnly(484), dpiXOnly(636), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "SELF-PROTECTION", dpiRect(504, 632, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
 	rows := []controlRow{
@@ -514,7 +555,7 @@ func healthRow(name string, healthy bool) controlRow {
 }
 
 func (r *resources) drawIconMonitor(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	pen := iconPen(color, dpiXOnly(2))
 	defer pen.DeleteObject()
 	hdc.SelectObjectPen(pen)
 	hdc.SelectObjectBrush(r.brushCard)
@@ -546,7 +587,7 @@ func (r *resources) drawResourcesCard(hdc win.HDC, s statusclient.StatusResponse
 }
 
 func (r *resources) drawIconPulse(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen, _ := win.CreatePen(co.PS_SOLID, 2, color)
+	pen := iconPen(color, dpiXOnly(2))
 	defer pen.DeleteObject()
 	hdc.SelectObjectPen(pen)
 	pts := []win.POINT{
