@@ -227,3 +227,81 @@ func TestCreateSchedule_RoundTripsScheduledAssessmentFields(t *testing.T) {
 		}
 	})
 }
+
+func TestNextOccurrenceSince_Once(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	runAt := time.Date(2026, 8, 10, 2, 0, 0, 0, loc)
+	sch := Schedule{RecurrenceType: "once", RunAt: &runAt, Timezone: "UTC", TimeOfDay: "00:00"}
+
+	before := time.Date(2026, 8, 9, 0, 0, 0, 0, loc)
+	if _, ok := nextOccurrenceSince(sch, before); ok {
+		t.Error("before RunAt: got ok=true, want false")
+	}
+
+	after := time.Date(2026, 8, 11, 0, 0, 0, 0, loc)
+	occ, ok := nextOccurrenceSince(sch, after)
+	if !ok || !occ.Equal(runAt) {
+		t.Errorf("first check after RunAt: got occ=%v ok=%v, want %v/true", occ, ok, runAt)
+	}
+
+	spawned := runAt
+	sch.LastOccurrenceAt = &spawned
+	if _, ok := nextOccurrenceSince(sch, after.Add(24*time.Hour)); ok {
+		t.Error("after already spawned: got ok=true, want false (once-only)")
+	}
+}
+
+func TestNextOccurrenceSince_Daily(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	sch := Schedule{RecurrenceType: "daily", TimeOfDay: "14:00", Timezone: "UTC"}
+
+	now := time.Date(2026, 8, 10, 14, 5, 0, 0, loc)
+	occ, ok := nextOccurrenceSince(sch, now)
+	want := time.Date(2026, 8, 10, 14, 0, 0, 0, loc)
+	if !ok || !occ.Equal(want) {
+		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
+	}
+
+	sch.LastOccurrenceAt = &occ
+	if _, ok := nextOccurrenceSince(sch, now); ok {
+		t.Error("same-day recheck after spawn: got ok=true, want false")
+	}
+	tomorrow := now.Add(24 * time.Hour)
+	occ2, ok := nextOccurrenceSince(sch, tomorrow)
+	wantTomorrow := time.Date(2026, 8, 11, 14, 0, 0, 0, loc)
+	if !ok || !occ2.Equal(wantTomorrow) {
+		t.Errorf("next day: got occ=%v ok=%v, want %v/true", occ2, ok, wantTomorrow)
+	}
+}
+
+func TestNextOccurrenceSince_Weekly_EmptyRecurrenceTypeAliasesToWeekly(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	sch := Schedule{RecurrenceType: "", DayOfWeek: 1, TimeOfDay: "09:00", Timezone: "UTC"} // Monday
+	now := time.Date(2026, 8, 11, 9, 30, 0, 0, loc)                                        // a Tuesday, 9:30
+	occ, ok := nextOccurrenceSince(sch, now)
+	want := time.Date(2026, 8, 10, 9, 0, 0, 0, loc) // the Monday before
+	if !ok || !occ.Equal(want) {
+		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
+	}
+}
+
+func TestNextOccurrenceSince_Monthly(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	sch := Schedule{RecurrenceType: "monthly", DayOfMonth: 1, TimeOfDay: "03:00", Timezone: "UTC"}
+	now := time.Date(2026, 8, 5, 0, 0, 0, 0, loc) // Aug 5, after Aug 1's slot
+	occ, ok := nextOccurrenceSince(sch, now)
+	want := time.Date(2026, 8, 1, 3, 0, 0, 0, loc)
+	if !ok || !occ.Equal(want) {
+		t.Errorf("got occ=%v ok=%v, want %v/true", occ, ok, want)
+	}
+}
+
+func TestNextOccurrenceSince_EndDate_StopsSpawning(t *testing.T) {
+	loc, _ := time.LoadLocation("UTC")
+	ended := time.Date(2026, 8, 1, 0, 0, 0, 0, loc)
+	sch := Schedule{RecurrenceType: "daily", TimeOfDay: "09:00", Timezone: "UTC", EndDate: &ended}
+	now := time.Date(2026, 8, 10, 9, 30, 0, 0, loc) // well after EndDate
+	if _, ok := nextOccurrenceSince(sch, now); ok {
+		t.Error("after EndDate: got ok=true, want false")
+	}
+}

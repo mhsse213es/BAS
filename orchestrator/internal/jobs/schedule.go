@@ -74,15 +74,70 @@ func parseTimeOfDay(s string) (hour, minute int, err error) {
 	return hour, minute, nil
 }
 
-// nextOccurrenceSince finds the most recent past occurrence of sch's weekly
-// (DayOfWeek, TimeOfDay) slot in sch.Timezone, and reports whether it is
-// newer than sch.LastOccurrenceAt. ok=false is the common case (nothing new
-// since the last check).
+// nextOccurrenceSince finds the most recent past occurrence of sch's
+// recurrence slot in sch.Timezone, and reports whether it is newer than
+// sch.LastOccurrenceAt. ok=false is the common case (nothing new since the
+// last check). RecurrenceType=="" aliases to "weekly" so every schedule row
+// created before this field existed keeps behaving identically.
 func nextOccurrenceSince(sch Schedule, now time.Time) (occurrence time.Time, ok bool) {
+	if sch.EndDate != nil && now.After(*sch.EndDate) {
+		return time.Time{}, false
+	}
 	loc, err := time.LoadLocation(sch.Timezone)
 	if err != nil {
 		return time.Time{}, false
 	}
+
+	recType := sch.RecurrenceType
+	if recType == "" {
+		recType = "weekly"
+	}
+
+	switch recType {
+	case "once":
+		return nextOccurrenceOnce(sch, now, loc)
+	case "daily":
+		return nextOccurrenceDaily(sch, now, loc)
+	case "weekly":
+		return nextOccurrenceWeekly(sch, now, loc)
+	case "monthly":
+		return nextOccurrenceMonthly(sch, now, loc)
+	default:
+		return time.Time{}, false
+	}
+}
+
+func nextOccurrenceOnce(sch Schedule, now time.Time, loc *time.Location) (time.Time, bool) {
+	if sch.RunAt == nil || sch.LastOccurrenceAt != nil {
+		return time.Time{}, false // no target time, or already spawned its one occurrence ever
+	}
+	candidate := sch.RunAt.In(loc)
+	if candidate.After(now) {
+		return time.Time{}, false
+	}
+	return candidate.UTC(), true
+}
+
+func nextOccurrenceDaily(sch Schedule, now time.Time, loc *time.Location) (time.Time, bool) {
+	hh, mm, err := parseTimeOfDay(sch.TimeOfDay)
+	if err != nil {
+		return time.Time{}, false
+	}
+	nowLocal := now.In(loc)
+	for daysBack := 0; daysBack < 2; daysBack++ {
+		candidate := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day()-daysBack, hh, mm, 0, 0, loc)
+		if candidate.After(now) {
+			continue
+		}
+		if sch.LastOccurrenceAt != nil && !candidate.After(*sch.LastOccurrenceAt) {
+			return time.Time{}, false
+		}
+		return candidate.UTC(), true
+	}
+	return time.Time{}, false
+}
+
+func nextOccurrenceWeekly(sch Schedule, now time.Time, loc *time.Location) (time.Time, bool) {
 	hh, mm, err := parseTimeOfDay(sch.TimeOfDay)
 	if err != nil {
 		return time.Time{}, false
@@ -91,6 +146,29 @@ func nextOccurrenceSince(sch Schedule, now time.Time) (occurrence time.Time, ok 
 	for daysBack := 0; daysBack < 7; daysBack++ {
 		candidate := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day()-daysBack, hh, mm, 0, 0, loc)
 		if int(candidate.Weekday()) != sch.DayOfWeek || candidate.After(now) {
+			continue
+		}
+		if sch.LastOccurrenceAt != nil && !candidate.After(*sch.LastOccurrenceAt) {
+			return time.Time{}, false
+		}
+		return candidate.UTC(), true
+	}
+	return time.Time{}, false
+}
+
+func nextOccurrenceMonthly(sch Schedule, now time.Time, loc *time.Location) (time.Time, bool) {
+	hh, mm, err := parseTimeOfDay(sch.TimeOfDay)
+	if err != nil {
+		return time.Time{}, false
+	}
+	nowLocal := now.In(loc)
+	for monthsBack := 0; monthsBack < 2; monthsBack++ {
+		// time.Date normalizes an out-of-range day (e.g. day 31 in a
+		// 30-day month) by rolling into the next month -- the Day() check
+		// below rejects that roll-over instead of misfiring in the wrong
+		// month.
+		candidate := time.Date(nowLocal.Year(), nowLocal.Month()-time.Month(monthsBack), sch.DayOfMonth, hh, mm, 0, 0, loc)
+		if candidate.Day() != sch.DayOfMonth || candidate.After(now) {
 			continue
 		}
 		if sch.LastOccurrenceAt != nil && !candidate.After(*sch.LastOccurrenceAt) {
