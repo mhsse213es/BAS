@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 	"unsafe"
@@ -31,6 +32,20 @@ import (
 // created the host window but left it permanently invisible, a documented
 // Microsoft limitation: https://github.com/MicrosoftEdge/WebView2Feedback/issues/4850).
 func runStatusWindow() {
+	// A Win32 window's message queue is bound to the specific OS thread
+	// that created it -- GetMessage must keep being called from that same
+	// thread for the window's entire lifetime. Without this, Go's
+	// scheduler is free to migrate this goroutine to a different OS thread
+	// at any preemption point; if that ever happens mid-message-loop, every
+	// later GetMessage call polls the wrong thread's (empty) queue and the
+	// window silently stops responding to everything -- clicks, scroll,
+	// close -- while the process itself stays alive. This was missing here
+	// (present only for the tray window, runTray in tray_windows.go) and is
+	// the most likely explanation for AppHang reports on this window that
+	// predate this fix and were reproducible under real interactive use
+	// but never under short synthetic input tests.
+	runtime.LockOSThread()
+
 	token := readAPIToken()
 	client := statusclient.New(statusclient.DefaultAddr, token)
 
@@ -164,6 +179,72 @@ type windigoWindow struct {
 	// is the only way to reach content below the fold.
 	scrollY       int32
 	contentHeight int32
+
+	// targetScrollY is where an in-progress wheel-driven scroll animation
+	// is easing toward; scrollY is the current, already-rendered position.
+	// A raw per-notch jump (the previous behavior: scrollY set directly,
+	// one repaint per notch) is not what "smooth scrolling" means -- real
+	// smoothness needs animated interpolation across several frames, which
+	// is what the WM_TIMER handler below does.
+	targetScrollY int32
+	scrollAnim    bool
+
+	// Off-screen back buffer for double-buffered painting -- reused across
+	// paints and only recreated when the client size actually changes, so
+	// repeated WM_PAINT calls (e.g. one per mouse-wheel notch while
+	// scrolling) don't allocate/free a GDI bitmap every frame.
+	bufDC     win.HDC
+	bufBmp    win.HBITMAP
+	bufOldBmp win.HBITMAP
+	bufW      int32
+	bufH      int32
+}
+
+// ensureBackBuffer (re)creates the cached off-screen buffer only when the
+// client size differs from what's cached -- a no-op on every paint except
+// the first and after a real resize.
+func (sw *windigoWindow) ensureBackBuffer(hdc win.HDC, w, h int32) {
+	if sw.bufDC != 0 && sw.bufW == w && sw.bufH == h {
+		return
+	}
+	sw.releaseBackBuffer()
+	if w <= 0 || h <= 0 {
+		return
+	}
+	memDC, err := hdc.CreateCompatibleDC()
+	if err != nil {
+		return
+	}
+	bmp, err := hdc.CreateCompatibleBitmap(int(w), int(h))
+	if err != nil {
+		memDC.DeleteDC()
+		return
+	}
+	oldBmp, _ := memDC.SelectObjectBmp(bmp)
+	sw.bufDC = memDC
+	sw.bufBmp = bmp
+	sw.bufOldBmp = oldBmp
+	sw.bufW, sw.bufH = w, h
+}
+
+// releaseBackBuffer deselects the buffer bitmap before deleting it (so we
+// never delete a GDI object while it's still selected into a DC) and tears
+// the whole thing down -- called before recreating at a new size and once
+// more at WM_DESTROY.
+func (sw *windigoWindow) releaseBackBuffer() {
+	if sw.bufDC != 0 && sw.bufOldBmp != 0 {
+		sw.bufDC.SelectObjectBmp(sw.bufOldBmp)
+	}
+	if sw.bufBmp != 0 {
+		sw.bufBmp.DeleteObject()
+		sw.bufBmp = 0
+	}
+	if sw.bufDC != 0 {
+		sw.bufDC.DeleteDC()
+		sw.bufDC = 0
+	}
+	sw.bufOldBmp = 0
+	sw.bufW, sw.bufH = 0, 0
 }
 
 func newWindigoWindow() *windigoWindow {
@@ -176,7 +257,22 @@ func newWindigoWindow() *windigoWindow {
 			Title("Audspect BAS Agent").
 			Size(cx, cy).
 			ClassBrush(sw.res.brushBg).
-			ClassStyle(co.CS_HREDRAW | co.CS_VREDRAW),
+			ClassStyle(co.CS_HREDRAW | co.CS_VREDRAW).
+			// A real scrollbar (thumb drag/click handled largely by USER32
+			// itself via WM_VSCROLL, not a custom per-notch handler) is the
+			// industry-standard technique for this scenario, including over
+			// RDP. Explicit style list because setting Style() replaces
+			// windigo's whole default
+			// (WS_CAPTION|WS_SYSMENU|WS_CLIPCHILDREN|WS_BORDER|WS_VISIBLE|
+			// WS_MINIMIZEBOX), not just adds to it.
+			Style(co.WS_CAPTION|co.WS_SYSMENU|co.WS_CLIPCHILDREN|co.WS_BORDER|co.WS_VISIBLE|co.WS_MINIMIZEBOX|co.WS_VSCROLL),
+			// WS_EX_COMPOSITED was tried here and made no real difference --
+			// it mainly eliminates flicker between *child windows/controls*
+			// compositing together, and this console has none: everything
+			// is owner-drawn directly onto this one window's client area in
+			// a single WM_PAINT. That's a true double-buffering scenario
+			// (draw off-screen, one BitBlt to screen), handled below via
+			// the cached back buffer instead.
 	)
 
 	sw.wnd.On().WmCreate(func(p ui.WmCreate) int {
@@ -185,31 +281,53 @@ func newWindigoWindow() *windigoWindow {
 		if big, small := loadAppIcons(); big != 0 || small != 0 {
 			setWindowIcon(sw.wnd.Hwnd(), big, small)
 		}
+		sw.updateScrollInfo()
 		return 0
 	})
 
+	sw.wnd.On().WmVScroll(func(p ui.WmScroll) {
+		clientRc, _ := sw.wnd.Hwnd().GetClientRect()
+		clientH := clientRc.Bottom - clientRc.Top
+		step := int32(dpiXOnly(60))
+		switch p.Request() {
+		case co.SB_REQ_LINEUP:
+			sw.setScrollY(sw.scrollY - step)
+		case co.SB_REQ_LINEDOWN:
+			sw.setScrollY(sw.scrollY + step)
+		case co.SB_REQ_PAGEUP:
+			sw.setScrollY(sw.scrollY - clientH)
+		case co.SB_REQ_PAGEDOWN:
+			sw.setScrollY(sw.scrollY + clientH)
+		case co.SB_REQ_THUMBTRACK, co.SB_REQ_THUMBPOSITION:
+			sw.setScrollY(int32(p.ScrollBoxPos()))
+		case co.SB_REQ_TOP:
+			sw.setScrollY(0)
+		case co.SB_REQ_BOTTOM:
+			sw.setScrollY(sw.contentHeight)
+		}
+	})
+
 	// WM_MOUSEWHEEL (0x020A) has no typed windigo wrapper, so it's
-	// registered via the generic Wm() escape hatch. Only reachable when the
-	// window can't show all its content at once (see clampToWorkArea and
-	// contentHeight above) -- on a tall enough screen maxScroll is 0 and
-	// every wheel notch is a no-op.
+	// registered via the generic Wm() escape hatch. Kept alongside the
+	// scrollbar (not removed) since a build with this handler entirely
+	// absent still hung under real use -- this was never proven to be the
+	// actual cause, just the most recent thing changed before each hang
+	// report.
+	//
+	// Eased via scrollAnimTimer instead of jumping scrollY directly: a
+	// direct jump-and-repaint per notch is flicker-free (thanks to the back
+	// buffer) but still reads as "not smooth" -- real smooth scrolling is
+	// animated motion across several frames, not an artifact-free instant
+	// jump.
 	sw.wnd.On().Wm(co.WM(0x020A), func(p ui.Wm) uintptr {
 		delta := int32(int16(uint16(uint32(p.WParam) >> 16)))
-		clientRc, _ := sw.wnd.Hwnd().GetClientRect()
-		maxScroll := sw.contentHeight - (clientRc.Bottom - clientRc.Top)
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
-		step := dpiXOnly(60)
-		sw.scrollY -= (delta / 120) * int32(step)
-		if sw.scrollY < 0 {
-			sw.scrollY = 0
-		}
-		if sw.scrollY > maxScroll {
-			sw.scrollY = maxScroll
-		}
-		sw.wnd.Hwnd().InvalidateRect(nil, false)
+		step := int32(dpiXOnly(60))
+		sw.startScrollAnim(sw.targetScrollY - (delta/120)*step)
 		return 0
+	})
+
+	sw.wnd.On().WmTimer(scrollAnimTimerID, func() {
+		sw.stepScrollAnim()
 	})
 
 	// Windows' default WM_GETMINMAXINFO handling can cap a top-level
@@ -239,15 +357,32 @@ func newWindigoWindow() *windigoWindow {
 		defer sw.wnd.Hwnd().EndPaint(&ps)
 
 		clientRc, _ := sw.wnd.Hwnd().GetClientRect()
-		hdc.FillRect(&clientRc, sw.res.brushBg)
+		w, h := clientRc.Right-clientRc.Left, clientRc.Bottom-clientRc.Top
+		sw.ensureBackBuffer(hdc, w, h)
+
+		// Draw the full frame off-screen first, then blit it to the screen
+		// in one copy -- painting ~10 cards' worth of GDI calls directly
+		// onto the visible surface (the previous approach) is what produced
+		// the visible flicker during scrolling.
+		target := sw.bufDC
+		if target == 0 {
+			target = hdc // back buffer alloc failed -- fall back to direct paint
+		}
+
+		target.FillRect(&win.RECT{Left: 0, Top: 0, Right: w, Bottom: h}, sw.res.brushBg)
 
 		// Shift the DC's logical origin down by the scroll offset so every
 		// existing drawXxx call (all written in fixed content-space
 		// coordinates) renders shifted without needing to thread scrollY
 		// through each one individually. windigo doesn't wrap
 		// SetWindowOrgEx, hence the raw syscall above.
-		setWindowOrgEx(hdc, 0, sw.scrollY)
-		sw.buttons = sw.paint(hdc)
+		setWindowOrgEx(target, 0, sw.scrollY)
+		sw.buttons = sw.paint(target)
+
+		if target != hdc {
+			setWindowOrgEx(target, 0, 0) // back to device coords for the blit below
+			hdc.BitBlt(win.POINT{X: 0, Y: 0}, win.SIZE{Cx: w, Cy: h}, target, win.POINT{X: 0, Y: 0}, co.ROP_SRCCOPY)
+		}
 	})
 
 	sw.wnd.On().WmLButtonUp(func(p ui.WmMouse) {
@@ -266,10 +401,112 @@ func newWindigoWindow() *windigoWindow {
 	})
 
 	sw.wnd.On().WmDestroy(func() {
+		if sw.scrollAnim {
+			sw.wnd.Hwnd().KillTimer(scrollAnimTimerID)
+		}
+		sw.releaseBackBuffer()
 		sw.res.release()
 	})
 
 	return sw
+}
+
+// maxScroll returns how far scrollY can go before the bottom of the content
+// lines up with the bottom of the client area.
+func (sw *windigoWindow) maxScroll() int32 {
+	clientRc, _ := sw.wnd.Hwnd().GetClientRect()
+	m := sw.contentHeight - (clientRc.Bottom - clientRc.Top)
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// scrollAnimTimerID is the WM_TIMER id used for the eased wheel-scroll
+// animation (see startScrollAnim/stepScrollAnim). Only one timer is ever
+// active on this window, so a fixed id is fine.
+const scrollAnimTimerID = 1
+
+// startScrollAnim sets a new target for the eased wheel-scroll animation
+// and starts the timer if it isn't already running. A wheel notch that
+// arrives while an animation is already in flight accumulates onto the
+// current target -- targetScrollY tracks scrollY exactly whenever no
+// animation is running (stepScrollAnim snaps them equal on completion), so
+// reading it as the base here is always the right starting point, whether
+// or not an animation happens to be active.
+func (sw *windigoWindow) startScrollAnim(target int32) {
+	max := sw.maxScroll()
+	if target < 0 {
+		target = 0
+	}
+	if target > max {
+		target = max
+	}
+	sw.targetScrollY = target
+	if !sw.scrollAnim {
+		sw.scrollAnim = true
+		sw.wnd.Hwnd().SetTimer(scrollAnimTimerID, 16) // ~60fps
+	}
+}
+
+// stepScrollAnim eases scrollY a fraction of the remaining distance toward
+// targetScrollY on every timer tick, producing a decelerating glide instead
+// of an instant per-notch jump. Stops itself once close enough that the
+// remainder would never visibly settle (integer division of a distance
+// under 3 truncates to 0, which would tick forever without converging).
+func (sw *windigoWindow) stepScrollAnim() {
+	diff := sw.targetScrollY - sw.scrollY
+	if diff > -3 && diff < 3 {
+		sw.scrollY = sw.targetScrollY
+		sw.wnd.Hwnd().KillTimer(scrollAnimTimerID)
+		sw.scrollAnim = false
+	} else {
+		sw.scrollY += diff / 3
+	}
+	sw.updateScrollInfo()
+	sw.wnd.Hwnd().InvalidateRect(nil, false)
+}
+
+// setScrollY clamps y to [0, maxScroll], applies it immediately (no
+// easing -- used by direct scrollbar interaction, where the thumb should
+// track the mouse 1:1), updates the real scrollbar thumb/range to match
+// (SetScrollInfo, not just cosmetic -- without this the thumb would
+// silently drift out of sync with what's actually drawn), and repaints.
+// Also cancels any in-flight wheel-scroll animation so the two mechanisms
+// can't fight over scrollY (e.g. wheel-scroll then immediately grab the
+// scrollbar thumb).
+func (sw *windigoWindow) setScrollY(y int32) {
+	if sw.scrollAnim {
+		sw.wnd.Hwnd().KillTimer(scrollAnimTimerID)
+		sw.scrollAnim = false
+	}
+	max := sw.maxScroll()
+	if y < 0 {
+		y = 0
+	}
+	if y > max {
+		y = max
+	}
+	sw.scrollY = y
+	sw.targetScrollY = y
+	sw.updateScrollInfo()
+	sw.wnd.Hwnd().InvalidateRect(nil, false)
+}
+
+// updateScrollInfo pushes contentHeight/client-height/scrollY into the
+// window's real scrollbar (range, page size, thumb position) via
+// SetScrollInfo. Called at creation and after every scrollY change so the
+// scrollbar always reflects what's actually drawn.
+func (sw *windigoWindow) updateScrollInfo() {
+	clientRc, _ := sw.wnd.Hwnd().GetClientRect()
+	var si win.SCROLLINFO
+	si.SetCbSize()
+	si.Mask = co.SIF_RANGE | co.SIF_PAGE | co.SIF_POS | co.SIF_DISABLENOSCROLL
+	si.Min = 0
+	si.Max = sw.contentHeight
+	si.Page = uint32(clientRc.Bottom - clientRc.Top)
+	si.Pos = sw.scrollY
+	sw.wnd.Hwnd().SetScrollInfo(co.SBB_VERT, &si, true)
 }
 
 // clampToWorkArea repositions the window so its top edge never lands above
