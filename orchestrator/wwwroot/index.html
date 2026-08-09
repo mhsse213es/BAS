@@ -16318,6 +16318,7 @@ var SCHED = {
   agentsAll: [],   // flat agent list, fetched fresh when the wizard opens
   selGroups: {},   // groupId -> true for wizard checkbox state
   selAgents: {},   // agentId -> true for wizard checkbox state
+  groupsAccessDenied: false, // true when /api/agent-groups 403'd (Analyst), not just empty
   step: 1
 };
 
@@ -16326,6 +16327,7 @@ function loadScheduledAssessments() {
     apicall('/api/scheduled-assessments'),
     apicall('/api/agent-groups')
   ]).then(function(res) {
+    if (res[0] && res[0].error) { showToast(res[0].error, 'err'); return; }
     SCHED.schedules = (res[0] && res[0].schedules) || [];
     var groups = Array.isArray(res[1]) ? res[1] : [];
     SCHED.groupsById = schedFlattenGroupNames(groups, {});
@@ -16412,9 +16414,19 @@ function cancelScheduledAssessment(id) {
 function openSchedWizard() {
   SCHED.selGroups = {}; SCHED.selAgents = {};
   SCHED.modeInitialized = false;
+  SCHED.groupsAccessDenied = false;
+  document.getElementById('sched-reason').value = '';
+  document.getElementById('sched-recurrence-type').value = 'weekly';
+  document.getElementById('sched-runat').value = '';
+  document.getElementById('sched-dow').value = '0';
+  document.getElementById('sched-dom').value = '1';
+  document.getElementById('sched-timeofday').value = '02:00';
+  document.getElementById('sched-enddate').value = '';
+  document.getElementById('sched-concurrency').value = '';
   var sel = document.getElementById('sched-scenario');
   sel.innerHTML = scenarios.map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
   Promise.all([apicall('/api/agent-groups'), apicall('/api/agents')]).then(function(res) {
+    SCHED.groupsAccessDenied = !!(res[0] && res[0].error);
     SCHED.groups = Array.isArray(res[0]) ? res[0] : [];
     SCHED.groupsById = schedFlattenGroupNames(SCHED.groups, {});
     SCHED.agentsAll = Array.isArray(res[1]) ? res[1] : [];
@@ -16461,7 +16473,12 @@ function schedToggleAgent(id, checked) {
 function renderSchedGroupTree() {
   var root = document.getElementById('sched-group-tree');
   if (!root) return;
-  if (!SCHED.groups.length) { root.innerHTML = '<div class="empty">No agent groups defined.</div>'; return; }
+  if (!SCHED.groups.length) {
+    root.innerHTML = SCHED.groupsAccessDenied
+      ? '<div class="empty">Group targeting requires Administrator access — select individual agents instead.</div>'
+      : '<div class="empty">No agent groups defined.</div>';
+    return;
+  }
   root.innerHTML = SCHED.groups.map(renderSchedGroupNode).join('');
 }
 
@@ -16495,13 +16512,18 @@ function renderSchedAgentList() {
 function renderSchedModeRecurrencePane() {
   var modeSel = document.getElementById('sched-mode');
   var prevMode = modeSel.value;
+  var sc = scenarios.find(function(s) { return s.id === document.getElementById('sched-scenario').value; });
   var opts = '<option value="posture">Posture — read-only, safe on any host</option>';
-  if (ROLE === 'admin') {
+  if (ROLE === 'admin' && sc && sc.executable) {
     opts += '<option value="telemetry">Telemetry — real identity-safe techniques (requires authorization)</option>';
   }
   modeSel.innerHTML = opts;
   if (SCHED.modeInitialized) {
     modeSel.value = prevMode;
+    // If the previously-selected mode's option no longer exists (e.g. Back-navigated
+    // to step 1 and picked a non-executable scenario while Telemetry was selected),
+    // the assignment above silently fails to select anything -- fall back to Posture.
+    if (modeSel.value !== prevMode) modeSel.value = 'posture';
   } else {
     modeSel.value = 'posture';
     document.getElementById('sched-timezone').value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
