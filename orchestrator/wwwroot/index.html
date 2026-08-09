@@ -16411,6 +16411,7 @@ function cancelScheduledAssessment(id) {
 
 function openSchedWizard() {
   SCHED.selGroups = {}; SCHED.selAgents = {};
+  SCHED.modeInitialized = false;
   var sel = document.getElementById('sched-scenario');
   sel.innerHTML = scenarios.map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
   Promise.all([apicall('/api/agent-groups'), apicall('/api/agents')]).then(function(res) {
@@ -16492,13 +16493,19 @@ function renderSchedAgentList() {
 
 function renderSchedModeRecurrencePane() {
   var modeSel = document.getElementById('sched-mode');
+  var prevMode = modeSel.value;
   var opts = '<option value="posture">Posture — read-only, safe on any host</option>';
   if (ROLE === 'admin') {
     opts += '<option value="telemetry">Telemetry — real identity-safe techniques (requires authorization)</option>';
   }
   modeSel.innerHTML = opts;
-  modeSel.value = 'posture';
-  document.getElementById('sched-timezone').value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  if (SCHED.modeInitialized) {
+    modeSel.value = prevMode;
+  } else {
+    modeSel.value = 'posture';
+    document.getElementById('sched-timezone').value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    SCHED.modeInitialized = true;
+  }
   schedOnModeChange();
   schedOnRecurrenceChange();
 }
