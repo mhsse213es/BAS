@@ -3792,9 +3792,15 @@ body.theme-slate {
         <p class="sub2" style="margin-top:0.55rem">The full scenario runs on every occurrence — there is no per-run technique subset in a schedule.</p>
       </div>
 
-      <!-- Step 2: Targets (Task 4) -->
+      <!-- Step 2: Targets -->
       <div class="wz-pane" data-sched-pane="2" style="display:none">
-        <div id="sched-targets-pane"></div>
+        <label class="modal-lbl">Target groups <span class="tiny muted" id="sched-group-cnt">(0 selected)</span></label>
+        <div id="sched-group-tree" style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
+        <p class="sub2" style="margin-top:0.4rem">Groups are resolved live at execution time — agents added to a selected group later are automatically included in future runs.</p>
+
+        <label class="modal-lbl" style="margin-top:0.9rem;display:block">Individual agents <span class="tiny muted" id="sched-agent-cnt">(0 selected)</span></label>
+        <div id="sched-agent-list" style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
+        <p class="sub2" style="margin-top:0.4rem">Individual agents are explicitly included in this schedule regardless of group membership.</p>
       </div>
 
       <!-- Step 3: Mode & Recurrence (Task 5) -->
@@ -16348,6 +16354,13 @@ function openSchedWizard() {
   SCHED.selGroups = {}; SCHED.selAgents = {};
   var sel = document.getElementById('sched-scenario');
   sel.innerHTML = scenarios.map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
+  Promise.all([apicall('/api/agent-groups'), apicall('/api/agents')]).then(function(res) {
+    SCHED.groups = Array.isArray(res[0]) ? res[0] : [];
+    SCHED.groupsById = schedFlattenGroupNames(SCHED.groups, {});
+    SCHED.agentsAll = Array.isArray(res[1]) ? res[1] : [];
+    renderSchedGroupTree();
+    renderSchedAgentList();
+  }).catch(function(e) { showToast(e.message, 'err'); });
   document.getElementById('sched-overlay').classList.add('open');
   schedWizardSet(1);
 }
@@ -16372,6 +16385,50 @@ function schedWizardSet(step) {
 }
 
 function schedWizardNav(dir) { schedWizardSet(SCHED.step + dir); }
+
+function schedToggleGroup(id, checked) {
+  if (checked) SCHED.selGroups[id] = true; else delete SCHED.selGroups[id];
+  document.getElementById('sched-group-cnt').textContent = '(' + Object.keys(SCHED.selGroups).length + ' selected)';
+}
+
+function schedToggleAgent(id, checked) {
+  if (checked) SCHED.selAgents[id] = true; else delete SCHED.selAgents[id];
+  document.getElementById('sched-agent-cnt').textContent = '(' + Object.keys(SCHED.selAgents).length + ' selected)';
+}
+
+function renderSchedGroupTree() {
+  var root = document.getElementById('sched-group-tree');
+  if (!root) return;
+  if (!SCHED.groups.length) { root.innerHTML = '<div class="empty">No agent groups defined.</div>'; return; }
+  root.innerHTML = SCHED.groups.map(renderSchedGroupNode).join('');
+}
+
+function renderSchedGroupNode(node) {
+  var hasChildren = node.children && node.children.length;
+  var checked = SCHED.selGroups[node.id] ? ' checked' : '';
+  var html = '<div class="at-node">' +
+    '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;width:100%">' +
+    '<input type="checkbox"' + checked + ' onchange="schedToggleGroup(' + node.id + ',this.checked)">' +
+    '<span class="at-name">' + x(node.name) + '</span>' +
+    '<span class="at-count">' + node.totalAgentCount + '</span>' +
+    '</label></div>';
+  if (hasChildren) {
+    html += '<div class="at-children">' + node.children.map(renderSchedGroupNode).join('') + '</div>';
+  }
+  return html;
+}
+
+function renderSchedAgentList() {
+  var root = document.getElementById('sched-agent-list');
+  if (!root) return;
+  if (!SCHED.agentsAll.length) { root.innerHTML = '<div class="empty">No agents registered.</div>'; return; }
+  root.innerHTML = SCHED.agentsAll.map(function(a) {
+    var checked = SCHED.selAgents[a.agentId] ? ' checked' : '';
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+      '<input type="checkbox"' + checked + ' onchange="schedToggleAgent(\'' + x(a.agentId) + '\',this.checked)">' +
+      '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + '</span></label>';
+  }).join('');
+}
 </script>
 </body>
 </html>
