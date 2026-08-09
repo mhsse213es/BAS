@@ -2458,7 +2458,10 @@ body.theme-slate {
       <div id="tab-scheduled-assessments" style="display:none">
         <div class="sec-hdr">
           <h2>Scheduled Assessments <span id="sched-cnt" class="cnt">0</span></h2>
-          <button class="btn btn-outline btn-sm" onclick="loadScheduledAssessments()">Refresh</button>
+          <div style="display:flex;gap:0.5rem">
+            <button class="btn btn-outline btn-sm" onclick="loadScheduledAssessments()">Refresh</button>
+            <button class="btn btn-primary btn-sm" onclick="openSchedWizard()">+ New Schedule</button>
+          </div>
         </div>
         <div class="tbl-wrap">
           <table>
@@ -3766,6 +3769,51 @@ body.theme-slate {
       <button id="wz-back" class="btn btn-outline btn-sm" onclick="wizardNav(-1)" style="display:none">&#8592; Back</button>
       <button id="wz-next" class="btn btn-primary btn-sm" onclick="wizardNav(1)">Next &#8594;</button>
       <button id="modal-run-btn" class="btn btn-outline-green btn-sm" onclick="confirmRun()" style="display:none">&#9654; Run</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scheduled Assessment Wizard -->
+<div id="sched-overlay" class="overlay">
+  <div class="modal wz-modal">
+    <h3>New Scheduled Assessment</h3>
+    <div class="wz-steps">
+      <div class="wz-pip" data-sched-pip="1"><span class="wz-pip-n">1</span><span>Scenario</span></div>
+      <div class="wz-pip" data-sched-pip="2"><span class="wz-pip-n">2</span><span>Targets</span></div>
+      <div class="wz-pip" data-sched-pip="3"><span class="wz-pip-n">3</span><span>Mode &amp; Recurrence</span></div>
+      <div class="wz-pip" data-sched-pip="4"><span class="wz-pip-n">4</span><span>Review</span></div>
+    </div>
+
+    <div class="wz-body">
+      <!-- Step 1: Scenario -->
+      <div class="wz-pane" data-sched-pane="1">
+        <label class="modal-lbl">Scenario</label>
+        <select id="sched-scenario"></select>
+        <p class="sub2" style="margin-top:0.55rem">The full scenario runs on every occurrence — there is no per-run technique subset in a schedule.</p>
+      </div>
+
+      <!-- Step 2: Targets (Task 4) -->
+      <div class="wz-pane" data-sched-pane="2" style="display:none">
+        <div id="sched-targets-pane"></div>
+      </div>
+
+      <!-- Step 3: Mode & Recurrence (Task 5) -->
+      <div class="wz-pane" data-sched-pane="3" style="display:none">
+        <div id="sched-mode-recurrence-pane"></div>
+      </div>
+
+      <!-- Step 4: Review & Authorize (Task 6) -->
+      <div class="wz-pane" data-sched-pane="4" style="display:none">
+        <div id="sched-review"></div>
+      </div>
+    </div>
+
+    <div class="modal-actions wz-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeSchedWizard()">Cancel</button>
+      <span style="flex:1"></span>
+      <button id="sched-wz-back" class="btn btn-outline btn-sm" onclick="schedWizardNav(-1)" style="display:none">&#8592; Back</button>
+      <button id="sched-wz-next" class="btn btn-primary btn-sm" onclick="schedWizardNav(1)">Next &#8594;</button>
+      <button id="sched-create-btn" class="btn btn-outline-green btn-sm" onclick="submitScheduledAssessment()" style="display:none">Create Schedule</button>
     </div>
   </div>
 </div>
@@ -16296,6 +16344,34 @@ function cancelScheduledAssessment(id) {
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
+function openSchedWizard() {
+  SCHED.selGroups = {}; SCHED.selAgents = {};
+  var sel = document.getElementById('sched-scenario');
+  sel.innerHTML = scenarios.map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
+  document.getElementById('sched-overlay').classList.add('open');
+  schedWizardSet(1);
+}
+
+function closeSchedWizard() {
+  document.getElementById('sched-overlay').classList.remove('open');
+}
+
+function schedWizardSet(step) {
+  if (step < 1) step = 1;
+  if (step > 4) step = 4;
+  SCHED.step = step;
+  [1, 2, 3, 4].forEach(function(n) {
+    var pane = document.querySelector('[data-sched-pane="' + n + '"]');
+    if (pane) pane.style.display = (n === step) ? 'block' : 'none';
+    var pip = document.querySelector('[data-sched-pip="' + n + '"]');
+    if (pip) { pip.classList.toggle('active', n === step); pip.classList.toggle('done', n < step); }
+  });
+  document.getElementById('sched-wz-back').style.display = (step > 1) ? '' : 'none';
+  document.getElementById('sched-wz-next').style.display = (step < 4) ? '' : 'none';
+  document.getElementById('sched-create-btn').style.display = (step === 4) ? '' : 'none';
+}
+
+function schedWizardNav(dir) { schedWizardSet(SCHED.step + dir); }
 </script>
 </body>
 </html>
