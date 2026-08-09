@@ -16209,8 +16209,13 @@ var SCHED = {
 };
 
 function loadScheduledAssessments() {
-  apicall('/api/scheduled-assessments').then(function(res) {
-    SCHED.schedules = (res && res.schedules) || [];
+  Promise.all([
+    apicall('/api/scheduled-assessments'),
+    apicall('/api/agent-groups')
+  ]).then(function(res) {
+    SCHED.schedules = (res[0] && res[0].schedules) || [];
+    var groups = Array.isArray(res[1]) ? res[1] : [];
+    SCHED.groupsById = schedFlattenGroupNames(groups, {});
     renderScheduledAssessmentsList();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
