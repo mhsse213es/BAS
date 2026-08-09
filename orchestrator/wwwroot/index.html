@@ -16282,9 +16282,18 @@ function renderScheduledAssessmentsList() {
       '<td>' + x(schedRecurrenceText(sch)) + '</td>' +
       '<td>' + x(lastRun) + '</td>' +
       '<td><span class="badge" style="color:' + statusColor + ';border-color:' + statusColor + '">' + statusLabel + '</span></td>' +
-      '<td></td>' +
+      '<td>' + (sch.Enabled ? '<button class="btn btn-outline btn-sm" onclick="cancelScheduledAssessment(\'' + x(sch.ID) + '\')">Cancel</button>' : '') + '</td>' +
     '</tr>';
   }).join('');
+}
+
+function cancelScheduledAssessment(id) {
+  if (!confirm('Cancel this scheduled assessment? It will stop firing future runs; the schedule stays visible in this list as Cancelled.')) return;
+  apicall('/api/scheduled-assessments/' + encodeURIComponent(id) + '/cancel', { method: 'POST' }).then(function(res) {
+    if (res && res.error) { showToast(res.error, 'err'); return; }
+    showToast('Schedule cancelled', 'ok');
+    loadScheduledAssessments();
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
 </script>
