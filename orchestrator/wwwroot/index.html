@@ -1299,6 +1299,12 @@ body.theme-slate {
           </svg>
           Live Runs
         </div>
+        <div class="nav-item" id="nav-scheduled-assessments" data-tab="scheduled-assessments" onclick="showTab('scheduled-assessments')" style="display:none">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/>
+          </svg>
+          Scheduled Assessments
+        </div>
         <div class="nav-item" data-tab="campaigns" onclick="showTab('campaigns')">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M2 13V3M2 13h12M5 11V7M8.5 11V5M12 11V8"/>
@@ -2443,6 +2449,25 @@ body.theme-slate {
             </tr></thead>
             <tbody id="runs-body">
               <tr><td colspan="9" class="empty">No runs yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Scheduled Assessments -->
+      <div id="tab-scheduled-assessments" style="display:none">
+        <div class="sec-hdr">
+          <h2>Scheduled Assessments <span id="sched-cnt" class="cnt">0</span></h2>
+          <button class="btn btn-outline btn-sm" onclick="loadScheduledAssessments()">Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Assessment</th><th>Mode</th><th>Targets</th><th>Recurrence</th>
+              <th>Last run</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody id="sched-body">
+              <tr><td colspan="7" class="empty">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -4272,7 +4297,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -4349,6 +4374,9 @@ function bootApp() {
   // Integrations nav — admin only
   var navInt = document.getElementById('nav-integrations');
   if (navInt) navInt.style.display = ROLE === 'admin' ? '' : 'none';
+  // Scheduled Assessments nav — Analyst+Admin (same tier the API itself requires)
+  var navSched = document.getElementById('nav-scheduled-assessments');
+  if (navSched) navSched.style.display = (ROLE === 'admin' || ROLE === 'analyst') ? '' : 'none';
   if (ROLE === 'admin') {
     document.querySelectorAll('.settings-nav a').forEach(function(el) {
       if (el.getAttribute('data-set') !== 'theme') el.style.display = '';
@@ -4405,7 +4433,7 @@ function bootApp() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','scheduled-assessments','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -4506,6 +4534,7 @@ function showTab(name) {
   if (name === 'agents') { loadAgents(); loadAgentGroupTree(); }
   if (name === 'runs') loadRuns();
   if (name === 'campaigns') closeCampaignDetail();
+  if (name === 'scheduled-assessments') loadScheduledAssessments();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
   if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
   if (name === 'threat-priority') { showThreatPriorityList(); loadThreatPriorityActors(); }
@@ -16162,6 +16191,95 @@ function runEmSweep() {
     };
     next(0);
   }).catch(function(e) { showToast('Failed to fetch scenarios: ' + e.message, 'err'); });
+}
+
+// ── Scheduled Assessments ──────────────────────────────────────────────────
+// List + create + cancel for POST/GET /api/scheduled-assessments and
+// POST /api/scheduled-assessments/{id}/cancel. jobs.Schedule has no JSON
+// struct tags server-side, so every field read off a schedule object below
+// uses the exact Go field name (PascalCase), not camelCase.
+var SCHED = {
+  schedules: [],   // raw list from GET /api/scheduled-assessments
+  groups: [],      // nested group tree, fetched fresh when the wizard opens
+  groupsById: {},  // flat id -> name, built from `groups`
+  agentsAll: [],   // flat agent list, fetched fresh when the wizard opens
+  selGroups: {},   // groupId -> true for wizard checkbox state
+  selAgents: {},   // agentId -> true for wizard checkbox state
+  step: 1
+};
+
+function loadScheduledAssessments() {
+  apicall('/api/scheduled-assessments').then(function(res) {
+    SCHED.schedules = (res && res.schedules) || [];
+    renderScheduledAssessmentsList();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function schedFlattenGroupNames(nodes, map) {
+  (nodes || []).forEach(function(n) {
+    map[n.id] = n.name;
+    if (n.children && n.children.length) schedFlattenGroupNames(n.children, map);
+  });
+  return map;
+}
+
+var SCHED_DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+function schedRecurrenceText(sch) {
+  var tz = sch.Timezone || 'UTC';
+  var type = sch.RecurrenceType || 'weekly';
+  if (type === 'once') {
+    return 'Once · ' + (sch.RunAt ? new Date(sch.RunAt).toLocaleString() : '—') + ' · ' + tz;
+  }
+  if (type === 'daily') {
+    return 'Daily · ' + (sch.TimeOfDay || '—') + ' · ' + tz;
+  }
+  if (type === 'monthly') {
+    return 'Monthly · Day ' + sch.DayOfMonth + ' · ' + (sch.TimeOfDay || '—') + ' · ' + tz;
+  }
+  // '' aliases to weekly, matching the backend's nextOccurrenceSince aliasing.
+  return 'Weekly · ' + (SCHED_DOW[sch.DayOfWeek] || '—') + ' · ' + (sch.TimeOfDay || '—') + ' · ' + tz;
+}
+
+function schedTargetsText(sch) {
+  var parts = [];
+  var groupIds = sch.GroupIDs || [];
+  if (groupIds.length) {
+    var names = groupIds.map(function(id) { return SCHED.groupsById[id] || ('#' + id); });
+    parts.push(names.join(', '));
+  }
+  var agentCount = (sch.AgentIDs || []).length;
+  if (agentCount) parts.push(agentCount + ' agent' + (agentCount === 1 ? '' : 's'));
+  return parts.length ? parts.join(' + ') : '—';
+}
+
+function renderScheduledAssessmentsList() {
+  document.getElementById('sched-cnt').textContent = SCHED.schedules.length;
+  var tbody = document.getElementById('sched-body');
+  if (!SCHED.schedules.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No scheduled assessments yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = SCHED.schedules.map(function(sch) {
+    var payload = {};
+    try { payload = JSON.parse(sch.Payload || '{}'); } catch (e) { payload = {}; }
+    var sc = scenarios.find(function(s) { return s.id === payload.scenarioId; });
+    var name = sc ? sc.name : (payload.scenarioId || '—');
+    var modeColor = sch.Mode === 'telemetry' ? 'var(--warning)' : 'var(--muted)';
+    var modeLabel = sch.Mode === 'telemetry' ? 'Telemetry' : 'Posture';
+    var statusColor = sch.Enabled ? 'var(--success)' : 'var(--muted)';
+    var statusLabel = sch.Enabled ? 'Enabled' : 'Cancelled';
+    var lastRun = sch.LastOccurrenceAt ? fmtDate(sch.LastOccurrenceAt) : 'Never';
+    return '<tr>' +
+      '<td>' + x(name) + '</td>' +
+      '<td><span class="badge" style="color:' + modeColor + ';border-color:' + modeColor + '">' + modeLabel + '</span></td>' +
+      '<td>' + x(schedTargetsText(sch)) + '</td>' +
+      '<td>' + x(schedRecurrenceText(sch)) + '</td>' +
+      '<td>' + x(lastRun) + '</td>' +
+      '<td><span class="badge" style="color:' + statusColor + ';border-color:' + statusColor + '">' + statusLabel + '</span></td>' +
+      '<td></td>' +
+    '</tr>';
+  }).join('');
 }
 
 </script>
