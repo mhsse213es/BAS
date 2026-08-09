@@ -3803,9 +3803,68 @@ body.theme-slate {
         <p class="sub2" style="margin-top:0.4rem">Individual agents are explicitly included in this schedule regardless of group membership.</p>
       </div>
 
-      <!-- Step 3: Mode & Recurrence (Task 5) -->
+      <!-- Step 3: Mode & Recurrence -->
       <div class="wz-pane" data-sched-pane="3" style="display:none">
-        <div id="sched-mode-recurrence-pane"></div>
+        <label class="modal-lbl">Execution mode</label>
+        <select id="sched-mode" onchange="schedOnModeChange()"></select>
+        <div id="sched-mode-warn" style="display:none;margin-top:0.6rem;padding:0.6rem 0.75rem;border-radius:var(--radius);font-size:0.78rem;line-height:1.45;border:1px solid rgba(210,153,34,0.5);background:rgba(210,153,34,0.08);color:var(--warning)">This assessment executes real, alert-generating techniques against the selected targets and will run unattended.</div>
+        <div id="sched-reason-wrap" style="display:none;margin-top:0.6rem">
+          <label class="modal-lbl">Reason / authorization basis (required, audited)</label>
+          <input type="text" id="sched-reason" placeholder="e.g. Approved recurring detection validation — CR-1234" autocomplete="off"
+                 style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+        </div>
+
+        <label class="modal-lbl" style="margin-top:0.9rem;display:block">Recurrence</label>
+        <select id="sched-recurrence-type" onchange="schedOnRecurrenceChange()">
+          <option value="once">Once</option>
+          <option value="daily">Daily</option>
+          <option value="weekly" selected>Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+
+        <div id="sched-once-wrap" style="display:none;margin-top:0.6rem">
+          <label class="modal-lbl">Date &amp; time</label>
+          <input type="datetime-local" id="sched-runat" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+        </div>
+
+        <div id="sched-dow-wrap" style="margin-top:0.6rem">
+          <label class="modal-lbl">Day of week</label>
+          <select id="sched-dow">
+            <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+            <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option>
+            <option value="6">Saturday</option>
+          </select>
+        </div>
+
+        <div id="sched-dom-wrap" style="display:none;margin-top:0.6rem">
+          <label class="modal-lbl">Day of month (1–28)</label>
+          <input type="number" id="sched-dom" min="1" max="28" value="1"
+                 style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+        </div>
+
+        <div id="sched-time-wrap" style="margin-top:0.6rem">
+          <label class="modal-lbl">Time</label>
+          <input type="time" id="sched-timeofday" value="02:00"
+                 style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+        </div>
+
+        <div style="margin-top:0.6rem">
+          <label class="modal-lbl">Timezone (IANA)</label>
+          <input type="text" id="sched-timezone" placeholder="e.g. Asia/Kolkata"
+                 style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+        </div>
+
+        <div style="margin-top:0.6rem">
+          <label class="modal-lbl">End date (optional)</label>
+          <input type="date" id="sched-enddate"
+                 style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+        </div>
+
+        <div style="margin-top:0.6rem">
+          <label class="modal-lbl">Concurrency limit (optional — blank means unlimited)</label>
+          <input type="number" id="sched-concurrency" min="1"
+                 style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+        </div>
       </div>
 
       <!-- Step 4: Review & Authorize (Task 6) -->
@@ -16382,6 +16441,7 @@ function schedWizardSet(step) {
   document.getElementById('sched-wz-back').style.display = (step > 1) ? '' : 'none';
   document.getElementById('sched-wz-next').style.display = (step < 4) ? '' : 'none';
   document.getElementById('sched-create-btn').style.display = (step === 4) ? '' : 'none';
+  if (step === 3) renderSchedModeRecurrencePane();
 }
 
 function schedWizardNav(dir) { schedWizardSet(SCHED.step + dir); }
@@ -16428,6 +16488,34 @@ function renderSchedAgentList() {
       '<input type="checkbox"' + checked + ' onchange="schedToggleAgent(\'' + x(a.agentId) + '\',this.checked)">' +
       '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + '</span></label>';
   }).join('');
+}
+
+function renderSchedModeRecurrencePane() {
+  var modeSel = document.getElementById('sched-mode');
+  var opts = '<option value="posture">Posture — read-only, safe on any host</option>';
+  if (ROLE === 'admin') {
+    opts += '<option value="telemetry">Telemetry — real identity-safe techniques (requires authorization)</option>';
+  }
+  modeSel.innerHTML = opts;
+  modeSel.value = 'posture';
+  document.getElementById('sched-timezone').value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  schedOnModeChange();
+  schedOnRecurrenceChange();
+}
+
+function schedOnModeChange() {
+  var mode = document.getElementById('sched-mode').value;
+  var isTelemetry = mode === 'telemetry';
+  document.getElementById('sched-mode-warn').style.display = isTelemetry ? 'block' : 'none';
+  document.getElementById('sched-reason-wrap').style.display = isTelemetry ? 'block' : 'none';
+}
+
+function schedOnRecurrenceChange() {
+  var type = document.getElementById('sched-recurrence-type').value;
+  document.getElementById('sched-once-wrap').style.display = (type === 'once') ? 'block' : 'none';
+  document.getElementById('sched-dow-wrap').style.display = (type === 'weekly') ? 'block' : 'none';
+  document.getElementById('sched-dom-wrap').style.display = (type === 'monthly') ? 'block' : 'none';
+  document.getElementById('sched-time-wrap').style.display = (type === 'once') ? 'none' : 'block';
 }
 </script>
 </body>
