@@ -16443,6 +16443,7 @@ function schedWizardSet(step) {
   document.getElementById('sched-wz-next').style.display = (step < 4) ? '' : 'none';
   document.getElementById('sched-create-btn').style.display = (step === 4) ? '' : 'none';
   if (step === 3) renderSchedModeRecurrencePane();
+  if (step === 4) renderSchedReview();
 }
 
 function schedWizardNav(dir) { schedWizardSet(SCHED.step + dir); }
@@ -16523,6 +16524,91 @@ function schedOnRecurrenceChange() {
   document.getElementById('sched-dow-wrap').style.display = (type === 'weekly') ? 'block' : 'none';
   document.getElementById('sched-dom-wrap').style.display = (type === 'monthly') ? 'block' : 'none';
   document.getElementById('sched-time-wrap').style.display = (type === 'once') ? 'none' : 'block';
+}
+
+// schedBuildPayload assembles the exact POST body scheduled_assessment_handlers.go
+// expects. Techniques/steps are intentionally omitted -- V1 always schedules the
+// full scenario. runAt/endDate are sent as ISO 8601 (RFC3339), matching Go's
+// *time.Time JSON unmarshalling.
+function schedBuildPayload() {
+  var mode = document.getElementById('sched-mode').value;
+  var type = document.getElementById('sched-recurrence-type').value;
+  var body = {
+    scenarioId: document.getElementById('sched-scenario').value,
+    mode: mode,
+    agentIds: Object.keys(SCHED.selAgents),
+    groupIds: Object.keys(SCHED.selGroups).map(Number),
+    recurrenceType: type,
+    timezone: document.getElementById('sched-timezone').value
+  };
+  if (mode === 'telemetry') body.reason = document.getElementById('sched-reason').value.trim();
+  if (type === 'once') {
+    var runAt = document.getElementById('sched-runat').value;
+    body.runAt = runAt ? new Date(runAt).toISOString() : null;
+  } else {
+    body.timeOfDay = document.getElementById('sched-timeofday').value;
+    if (type === 'weekly') body.dayOfWeek = Number(document.getElementById('sched-dow').value);
+    if (type === 'monthly') body.dayOfMonth = Number(document.getElementById('sched-dom').value);
+  }
+  var endDate = document.getElementById('sched-enddate').value;
+  if (endDate) body.endDate = new Date(endDate).toISOString();
+  var conc = document.getElementById('sched-concurrency').value;
+  if (conc) body.concurrencyLimit = Number(conc);
+  return body;
+}
+
+function renderSchedReview() {
+  var payload = schedBuildPayload();
+  var sc = scenarios.find(function(s) { return s.id === payload.scenarioId; });
+  var groupNames = (payload.groupIds || []).map(function(id) { return SCHED.groupsById[id] || ('#' + id); });
+  var targetsLine = [groupNames.join(', '), payload.agentIds.length ? (payload.agentIds.length + ' agent(s)') : '']
+    .filter(function(s) { return s; }).join(' + ') || '—';
+  var recurrenceLine = payload.recurrenceType === 'once'
+    ? 'Once · ' + (payload.runAt ? new Date(payload.runAt).toLocaleString() : '—')
+    : payload.recurrenceType === 'daily' ? 'Daily · ' + payload.timeOfDay
+    : payload.recurrenceType === 'monthly' ? 'Monthly · Day ' + payload.dayOfMonth + ' · ' + payload.timeOfDay
+    : 'Weekly · ' + SCHED_DOW[payload.dayOfWeek] + ' · ' + payload.timeOfDay;
+
+  var html = '<div style="font-size:0.82rem;line-height:1.9">' +
+    '<div><strong>Scenario:</strong> ' + x(sc ? sc.name : payload.scenarioId) + '</div>' +
+    '<div><strong>Mode:</strong> ' + x(payload.mode === 'telemetry' ? 'Telemetry' : 'Posture') + '</div>' +
+    '<div><strong>Targets:</strong> ' + x(targetsLine) + '</div>' +
+    '<div><strong>Recurrence:</strong> ' + x(recurrenceLine) + ' · ' + x(payload.timezone) + '</div>' +
+    '<div><strong>Concurrency:</strong> ' + x(payload.concurrencyLimit || 'Unlimited') + '</div>' +
+    '<div><strong>End date:</strong> ' + x(payload.endDate ? new Date(payload.endDate).toLocaleDateString() : 'None') + '</div>' +
+    '</div>';
+
+  var authWrap = '';
+  if (payload.mode === 'telemetry') {
+    authWrap = '<div style="margin-top:0.9rem;padding:0.75rem;border-radius:var(--radius);border:1px solid rgba(210,153,34,0.5);background:rgba(210,153,34,0.08)">' +
+      '<div style="font-weight:600;color:var(--warning);margin-bottom:0.4rem">&#9888; Unattended Telemetry Authorization</div>' +
+      '<div style="font-size:0.78rem;line-height:1.5;margin-bottom:0.5rem">This schedule will execute real techniques that may generate security alerts on the selected targets, on every future occurrence, with no further confirmation.</div>' +
+      '<div style="font-size:0.78rem;margin-bottom:0.5rem"><strong>Reason:</strong> ' + x(payload.reason || '(none entered)') + '</div>' +
+      '<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.8rem">' +
+      '<input type="checkbox" id="sched-auth-check" onchange="document.getElementById(\'sched-create-btn\').disabled=!this.checked">' +
+      'I authorize this recurring unattended execution</label>' +
+      '</div>';
+  }
+
+  document.getElementById('sched-review').innerHTML = html + authWrap;
+  var createBtn = document.getElementById('sched-create-btn');
+  createBtn.disabled = (payload.mode === 'telemetry'); // re-enabled by the checkbox above once checked
+}
+
+function submitScheduledAssessment() {
+  var payload = schedBuildPayload();
+  if (!payload.scenarioId) { showToast('Select a scenario', 'err'); return; }
+  if (!payload.agentIds.length && !payload.groupIds.length) { showToast('Select at least one target group or agent', 'err'); return; }
+  if (payload.mode === 'telemetry' && !payload.reason) { showToast('Reason is required for a telemetry-mode schedule', 'err'); return; }
+
+  var btn = document.getElementById('sched-create-btn');
+  btn.disabled = true;
+  apicall('/api/scheduled-assessments', { method: 'POST', body: JSON.stringify(payload) }).then(function(res) {
+    if (res && res.error) { showToast(res.error, 'err'); btn.disabled = false; return; }
+    showToast('Scheduled assessment created', 'ok');
+    closeSchedWizard();
+    loadScheduledAssessments();
+  }).catch(function(e) { showToast(e.message, 'err'); btn.disabled = false; });
 }
 </script>
 </body>
