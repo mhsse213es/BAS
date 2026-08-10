@@ -14058,8 +14058,9 @@ function loadDashboard() {
         (lastStr ? ' Last assessment ' + lastStr + '.' : ' No runs yet.');
     }
 
-    // KPI — Prevention score (latest scored run) + trend chip + sparkline of the
-    // last ~8 scored runs (oldest→newest).
+    // KPI — Prevention score: weighted aggregate across the last ~8 scored runs
+    // (weighted by technique count, not a flat average of percentages) + trend
+    // chip + sparkline of the same window (oldest→newest).
     // Only include runs with at least one scoreable result (pass OR fail).
     // A run where everything errored/skipped has preventionScore=0 but that 0
     // means "no data", not "0% prevention" — exclude it from the gauge.
@@ -14069,24 +14070,60 @@ function loadDashboard() {
       return (r.score.passedTechniques || 0) + (r.score.failedTechniques || 0) > 0;
     });
     var prevPctOf = function(r) { return Math.round(r.score.preventionScore != null ? r.score.preventionScore : r.score.preventionEffectiveness || 0); };
+    // techWeightOf: how many scored techniques (pass+fail) a run contributes —
+    // used to weight the aggregate below so a 50-technique run counts more
+    // than a 1-technique run, same principle as the server-side weighted score.
+    var techWeightOf = function(r) { return (r.score.passedTechniques || 0) + (r.score.failedTechniques || 0); };
     if (scored.length) {
-      var s = scored[0].score;
-      var prevPct = prevPctOf(scored[0]);
+      // Aggregate Prevention Score across a recent window of runs (weighted by
+      // technique count), not just the single most-recently-completed run --
+      // a full-sweep dispatches one scenario_runs row per variant, so "latest
+      // run" during a sweep is often a single low-N sample (e.g. one variant
+      // that happened to bypass) rather than the fleet's real recent posture.
+      // See project_docs_freshness_audit / the Variant Sweep dashboard report
+      // this fixed 2026-08-10.
+      var windowRuns = scored.slice(0, 8);
+      var totalWeight = 0, weightedSum = 0;
+      windowRuns.forEach(function(r) {
+        var w = techWeightOf(r);
+        totalWeight += w;
+        weightedSum += prevPctOf(r) * w;
+      });
+      var prevPct = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : prevPctOf(scored[0]);
       var prevCol = prevPct >= 80 ? 'var(--teal)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
       document.getElementById('kpi-score-val').textContent = prevPct + '%';
       document.getElementById('kpi-score-val').style.color = prevCol;
-      document.getElementById('kpi-score-sub').textContent = s.classification || 'latest run';
+      document.getElementById('kpi-score-sub').textContent = 'across last ' + windowRuns.length +
+        ' run' + (windowRuns.length === 1 ? '' : 's');
+
+      // Trend: compare the newer half of the window against the older half
+      // (both weighted the same way) rather than reusing a single run's
+      // server-computed trend, which only ever compared that one run to its
+      // immediate predecessor.
       var tEl = document.getElementById('kpi-score-trend');
-      if (s.trend === 'Improving')      tEl.innerHTML = '<span class="trend up">▲</span> ';
-      else if (s.trend === 'Degrading') tEl.innerHTML = '<span class="trend down">▼</span> ';
-      else                              tEl.innerHTML = '<span class="trend flat">—</span> ';
-      var prevSeries = scored.slice(0, 8).map(prevPctOf).reverse();
+      var mid = Math.ceil(windowRuns.length / 2);
+      var newerHalf = windowRuns.slice(0, mid), olderHalf = windowRuns.slice(mid);
+      var aggOf = function(list) {
+        var tw = 0, ws = 0;
+        list.forEach(function(r) { var w = techWeightOf(r); tw += w; ws += prevPctOf(r) * w; });
+        return tw > 0 ? ws / tw : null;
+      };
+      var newerAgg = aggOf(newerHalf), olderAgg = aggOf(olderHalf);
+      var trend = 'Stable';
+      if (newerAgg != null && olderAgg != null) {
+        if (newerAgg - olderAgg >= 3) trend = 'Improving';
+        else if (olderAgg - newerAgg >= 3) trend = 'Degrading';
+      }
+      if (trend === 'Improving')      tEl.innerHTML = '<span class="trend up">▲</span> ';
+      else if (trend === 'Degrading') tEl.innerHTML = '<span class="trend down">▼</span> ';
+      else                            tEl.innerHTML = '<span class="trend flat">—</span> ';
+      var prevSeries = windowRuns.map(prevPctOf).reverse();
       document.getElementById('kpi-score-spark').innerHTML = sparkSVG(prevSeries, 110, 30, 'var(--teal)');
 
       // Posture card — ring gauge + trend + run-history mini-bars.
       document.getElementById('dash-gauge').innerHTML = gaugeSVG(prevPct, 124, 14) +
         '<div class="ring-c"><span class="rv" style="color:' + prevCol + '">' + prevPct + '</span><span class="rl">of 100</span></div>';
-      document.getElementById('dash-posture-trend').textContent = s.trend || 'Stable';
+      document.getElementById('dash-posture-trend').textContent = trend;
       var barRuns = scored.slice(0, 6).reverse();
       var barData = barRuns.map(function(r) {
         var d = new Date(r.completedAt || r.startedAt);
@@ -14402,6 +14439,15 @@ function complianceTile(fw) {
     ? passing + ' pass &middot; ' + failing + ' fail &middot; ' + untested + ' untested'
     : 'No runs yet';
 
+  // A control needs every mapped test to pass to count as compliant — one
+  // bypass found among many blocked attempts still fails the whole control.
+  // Without this note, a low % here (especially mid variant-sweep, where
+  // finding bypasses is the point) reads as "everything is broken" rather
+  // than "gating is strict — see the Controls table for the real pass rate."
+  var gatingNote = (hasData && failing > 0)
+    ? '<div style="font-size:0.6rem;color:var(--muted);margin-top:0.2rem;font-style:italic">Any 1 failed test fails the control — see breakdown</div>'
+    : '';
+
   var covBar = hasData
     ? '<div style="margin-top:0.5rem">' +
         '<div style="background:var(--border);border-radius:2px;height:3px;overflow:hidden">' +
@@ -14428,6 +14474,7 @@ function complianceTile(fw) {
     '</div>' +
     covBar +
     '<div class="kpi-sub" style="font-size:0.66rem;margin-top:0.3rem;line-height:1.4">' + subLine + '</div>' +
+    gatingNote +
     '</div>';
 }
 
