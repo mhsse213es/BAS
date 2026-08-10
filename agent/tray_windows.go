@@ -39,6 +39,8 @@ var (
 	trayRegisterWinMsg   = trayUser32.NewProc("RegisterWindowMessageW")
 	trayPostMessage      = trayUser32.NewProc("PostMessageW")
 	trayFindWindow       = trayUser32.NewProc("FindWindowW")
+	trayIsIconic         = trayUser32.NewProc("IsIconic")
+	trayShowWindow       = trayUser32.NewProc("ShowWindow")
 	trayGetModuleHandle  = trayKernel32.NewProc("GetModuleHandleW")
 	trayShellNotifyIcon  = trayShell32.NewProc("Shell_NotifyIconW")
 )
@@ -72,6 +74,7 @@ const (
 	tTPM_NONOTIFY = 0x0080
 
 	tWS_OVERLAPPED = 0x00000000
+	tSW_RESTORE    = 9
 
 	tIDM_OPEN    = 0x2001
 	tIDM_EXPORT  = 0x2002
@@ -140,6 +143,13 @@ var (
 	// persistent UTF16 pointers (avoid GC of buffers Win32 still references)
 	trayClsName  = windows.StringToUTF16Ptr("BASAgentTrayWnd")
 	trayWndTitle = windows.StringToUTF16Ptr("BAS Agent")
+
+	// statusWndTitle matches the native status console's own window title,
+	// set via .Title("Audspect BAS Agent") in newWindigoWindow()
+	// (statuswindow_windows.go). FindWindowW's className arg is 0 (any
+	// class) since this file has no reference to that window's real
+	// windigo-generated class name -- title alone is enough to identify it.
+	statusWndTitle = windows.StringToUTF16Ptr("Audspect BAS Agent")
 )
 
 // runTray shows the persistent system-tray icon. Left-click / double-click opens
@@ -307,11 +317,24 @@ func trayMenuItem(menu, id uintptr, label string) {
 }
 func trayMenuSep(menu uintptr) { trayAppendMenu.Call(menu, tMF_SEPARATOR, 0, 0) }
 
-// openStatusWindow spawns the status console (opens in the user's default
-// browser -- see runStatusWindow's doc comment in statuswindow_windows.go
-// for why this isn't an embedded WebView2 window) as a separate process so
-// a slow browser launch never blocks the tray's own message loop.
+// openStatusWindow spawns the status console (a native Win32 window --
+// see runStatusWindow's doc comment in statuswindow_windows.go for why
+// this isn't an embedded WebView2 window) as a separate process so a slow
+// window launch never blocks the tray's own message loop.
+//
+// If a status console is already open, this brings it to the front instead
+// of spawning a duplicate -- without this check, repeated clicks each
+// launched their own `bas_agent.exe --status-window` process, stacking up
+// one native window per click.
 func openStatusWindow() {
+	if hwnd, _, _ := trayFindWindow.Call(0, uintptr(unsafe.Pointer(statusWndTitle))); hwnd != 0 {
+		if iconic, _, _ := trayIsIconic.Call(hwnd); iconic != 0 {
+			trayShowWindow.Call(hwnd, tSW_RESTORE)
+		}
+		traySetForeground.Call(hwnd)
+		return
+	}
+
 	exe, err := os.Executable()
 	if err != nil {
 		return
