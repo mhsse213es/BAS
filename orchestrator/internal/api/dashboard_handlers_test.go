@@ -29,16 +29,20 @@ func TestGetDashboardCurrent_EmptyFleet(t *testing.T) {
 			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
 		}
 		var snap struct {
-			AvgRiskScore      int `json:"avgRiskScore"`
-			ExposureScore     int `json:"exposureScore"`
-			DetectionCoverage int `json:"detectionCoverage"`
-			AssetCount        int `json:"assetCount"`
+			AvgRiskScore      int  `json:"avgRiskScore"`
+			ExposureScore     int  `json:"exposureScore"`
+			DetectionCoverage int  `json:"detectionCoverage"`
+			AssetCount        int  `json:"assetCount"`
+			HasAttackPathData bool `json:"hasAttackPathData"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &snap); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		if snap.AssetCount != 0 || snap.AvgRiskScore != 0 {
 			t.Errorf("snap = %+v, want AssetCount=0 and AvgRiskScore=0 on an empty fleet", snap)
+		}
+		if snap.HasAttackPathData {
+			t.Errorf("snap.HasAttackPathData = true on an empty fleet with zero attackpath_collections, want false")
 		}
 	})
 }

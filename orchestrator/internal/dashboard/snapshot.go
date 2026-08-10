@@ -18,6 +18,15 @@ type Snapshot struct {
 	ExposureScore     int `json:"exposureScore"`
 	DetectionCoverage int `json:"detectionCoverage"`
 	AssetCount        int `json:"assetCount"`
+	// HasAttackPathData is false when no attack-path collection has ever
+	// been ingested (attackpath_collections is empty). In that state,
+	// ExposureScore/DetectionCoverage read a "vacuous 100" (see
+	// pathcorrelation.Correlate's computeScore and exposure.Build's
+	// exposureRisk -- both are 0 with nothing to compute a risk from, not
+	// because the fleet is well-defended) -- this flag is how the frontend
+	// tells the two states apart instead of presenting an empty-data 100 as
+	// a real score.
+	HasAttackPathData bool `json:"hasAttackPathData"`
 }
 
 // Compute builds today's fleet-wide snapshot. Nil-safe: an empty fleet (no
@@ -39,10 +48,16 @@ func Compute(ctx context.Context, pool *pgxpool.Pool) (Snapshot, error) {
 	expSummary := fe.AssetExposureSummary()
 	corr := fe.Correlation()
 
+	var hasAttackPathData bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attackpath_collections)`).Scan(&hasAttackPathData); err != nil {
+		return Snapshot{}, err
+	}
+
 	return Snapshot{
 		AvgRiskScore:      risk.FleetAvgScore,
 		ExposureScore:     expSummary.FleetAvgScore,
 		DetectionCoverage: corr.Score,
 		AssetCount:        len(expSummary.Assets),
+		HasAttackPathData: hasAttackPathData,
 	}, nil
 }

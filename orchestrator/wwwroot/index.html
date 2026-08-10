@@ -5119,14 +5119,22 @@ function edTrendChip(values) {
   return '<span class="tiny" style="color:' + col + '">' + (up ? '▲' : '▼') + ' ' + Math.abs(delta) + '</span>';
 }
 
-function edKpiCard(label, current, trendSeries) {
+// noDataYet suppresses the number/trend/sparkline in favor of a "No data
+// yet" note -- used for Exposure Score/Detection Coverage when
+// !hasAttackPathData, where the underlying computation reads a vacuous 100
+// (see dashboard.Snapshot.HasAttackPathData's doc comment) rather than a
+// real score, so showing that 100 as-is would misrepresent an unscanned
+// fleet as a perfectly-defended one.
+function edKpiCard(label, current, trendSeries, noDataYet) {
+  var valueBlock = noDataYet
+    ? '<div class="kpi-value" style="color:var(--muted)">—</div><span class="tiny muted">No data yet</span>'
+    : '<div class="kpi-value">' + current + '</div>' + edTrendChip(trendSeries);
   return '<div class="kpi-card stat-tile">' +
     '<div class="stat-top"><div>' +
       '<div class="kpi-label">' + label + '</div>' +
-      '<div class="kpi-value">' + current + '</div>' +
-      edTrendChip(trendSeries) +
+      valueBlock +
     '</div></div>' +
-    edSparkline(trendSeries) +
+    (noDataYet ? '' : edSparkline(trendSeries)) +
   '</div>';
 }
 
@@ -5137,10 +5145,11 @@ function renderExecDashboard(current, trends) {
   var exp = trends.map(function(p) { return p.exposureScore; });
   var det = trends.map(function(p) { return p.detectionCoverage; });
   var cnt = trends.map(function(p) { return p.assetCount; });
+  var noAttackPathData = !current.hasAttackPathData;
   el.innerHTML =
     edKpiCard('Risk Score', current.avgRiskScore, risk) +
-    edKpiCard('Exposure Score', current.exposureScore, exp) +
-    edKpiCard('Detection Coverage', current.detectionCoverage, det) +
+    edKpiCard('Exposure Score', current.exposureScore, exp, noAttackPathData) +
+    edKpiCard('Detection Coverage', current.detectionCoverage, det, noAttackPathData) +
     edKpiCard('Fleet Assets', current.assetCount, cnt);
 }
 

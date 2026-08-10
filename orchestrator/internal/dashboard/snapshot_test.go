@@ -47,6 +47,38 @@ func TestCompute_EmptyFleet_ReturnsZeroScores(t *testing.T) {
 	})
 }
 
+// TestCompute_HasAttackPathData_FalseWhenNoCollections pins that the
+// "no data yet" flag correctly reads false on a fleet with no attack-path
+// collections at all -- the exact state that makes ExposureScore and
+// DetectionCoverage read a misleadingly-perfect 100 (see
+// TestCompute_EmptyFleet_ReturnsZeroScores's doc comment on that
+// "vacuous 100" convention).
+func TestCompute_HasAttackPathData_FalseWhenNoCollections(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		snap, err := Compute(context.Background(), pool)
+		if err != nil {
+			t.Fatalf("Compute: %v", err)
+		}
+		if snap.HasAttackPathData {
+			t.Error("HasAttackPathData = true on a fleet with zero attackpath_collections rows, want false")
+		}
+	})
+}
+
+func TestCompute_HasAttackPathData_TrueWhenCollectionsExist(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExec(t, pool, `INSERT INTO attackpath_collections (agent_id, hostname) VALUES ('a1', 'HOST-1')`)
+
+		snap, err := Compute(context.Background(), pool)
+		if err != nil {
+			t.Fatalf("Compute: %v", err)
+		}
+		if !snap.HasAttackPathData {
+			t.Error("HasAttackPathData = false with a seeded attackpath_collections row, want true")
+		}
+	})
+}
+
 func TestCompute_AvgRiskScoreFromRecentRuns(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		mustExec(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('a1', 'HOST-1')`)
