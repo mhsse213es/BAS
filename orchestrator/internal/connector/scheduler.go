@@ -32,10 +32,17 @@ type Scheduler struct {
 	// behavior, no separate polling needed. nil-safe: skipped if unset.
 	priorityEngine *threatpriority.Engine
 
-	mu     sync.RWMutex
-	status ConnectorStatus
-	syncCh chan struct{} // manual trigger
-	stopCh chan struct{}
+	// mu now also guards sources (not just status) -- Reconfigure (added for
+	// live, restart-free config changes; see
+	// docs/superpowers/specs/2026-08-10-threat-intel-connector-config-design.md)
+	// mutates sources concurrently with sync()'s background-goroutine read of
+	// it, which was previously unprotected since sources never changed after
+	// construction.
+	mu      sync.RWMutex
+	status  ConnectorStatus
+	started bool // true once run() has actually been launched (by Start or Reconfigure)
+	syncCh  chan struct{} // manual trigger
+	stopCh  chan struct{}
 }
 
 // NewScheduler creates a Scheduler over the given threat-intel sources (any of
@@ -84,11 +91,49 @@ func (s *Scheduler) Start() {
 		log.Println("[connector] no sources configured — connector idle")
 		return
 	}
+	s.mu.Lock()
+	s.started = true
+	s.mu.Unlock()
 	go s.run()
 	log.Printf("[connector] scheduler started (interval: %s)", s.interval)
 
 	// Run immediately on startup
 	s.TriggerSync()
+}
+
+// Reconfigure replaces the source list live -- no restart needed. If the
+// scheduler was constructed with zero sources (Start saw len(sources)==0
+// and never launched the background goroutine, e.g. a fresh install with
+// nothing configured yet), Reconfigure launches it now, exactly as if those
+// sources had been present at boot. Safe to call repeatedly; only the first
+// call that transitions from idle to non-idle actually starts the goroutine.
+func (s *Scheduler) Reconfigure(sources []Source) {
+	s.mu.Lock()
+	s.sources = sources
+	s.status.MISPEnabled = false
+	s.status.OpenCTIEnabled = false
+	s.status.BundleEnabled = false
+	for _, src := range sources {
+		switch src.Name() {
+		case "misp":
+			s.status.MISPEnabled = true
+		case "opencti":
+			s.status.OpenCTIEnabled = true
+		case "bundle":
+			s.status.BundleEnabled = true
+		}
+	}
+	shouldStart := !s.started && len(sources) > 0
+	if shouldStart {
+		s.started = true
+	}
+	s.mu.Unlock()
+
+	if shouldStart {
+		go s.run()
+		log.Printf("[connector] scheduler started via Reconfigure (interval: %s)", s.interval)
+		s.TriggerSync()
+	}
 }
 
 // Stop shuts down the scheduler gracefully.
@@ -145,7 +190,12 @@ func (s *Scheduler) sync() {
 	// Fetch every configured source. The bundle (air-gapped floor) and live
 	// providers (MISP/OpenCTI overlay) are treated uniformly; a single source
 	// failing is logged and skipped, never aborting the others.
-	for _, src := range s.sources {
+	// Take a local copy under lock -- Reconfigure can replace s.sources
+	// concurrently with this background goroutine's read of it.
+	s.mu.RLock()
+	sources := s.sources
+	s.mu.RUnlock()
+	for _, src := range sources {
 		got, err := src.Fetch()
 		if ss, ok := src.(StatsSource); ok {
 			bySource[src.Name()] = ss.Stats()

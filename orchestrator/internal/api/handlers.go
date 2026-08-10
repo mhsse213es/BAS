@@ -80,7 +80,8 @@ type Handler struct {
 	agentSecret           string // optional shared secret for agent-facing endpoints
 	calderaURL            string
 	calderaKey            string
-	iocProvider           ioc.Provider // nil when OTX_API_KEY is unset
+	iocProvider           ioc.Provider // nil when no OTX connector is configured
+	iocProviderMu         sync.RWMutex // guards iocProvider -- can be swapped live by a config save
 	artStore              *scenario.ARTStore
 	artContentDir         string               // seed source for ART atomics (ART_DIR)
 	artPayloadDir         string               // seed source for ART payload binaries (ART_PAYLOAD_DIR)
@@ -287,12 +288,28 @@ func (h *Handler) WithCaldera(url, key string) *Handler {
 	return h
 }
 
-// WithIOCProvider attaches the threat-intel lookup provider (nil when
-// OTX_API_KEY is unset -- LookupIOC degrades to a clear 503, same pattern
-// as GetCalderaAdversaries when CALDERA_URL is empty).
+// WithIOCProvider attaches the threat-intel lookup provider (nil when no
+// OTX connector is configured -- LookupIOC degrades to a clear 503, same
+// pattern as GetCalderaAdversaries when CALDERA_URL is empty).
 func (h *Handler) WithIOCProvider(provider ioc.Provider) *Handler {
-	h.iocProvider = provider
+	h.setIOCProvider(provider)
 	return h
+}
+
+// getIOCProvider and setIOCProvider are the only allowed access points for
+// h.iocProvider -- it can be swapped live by a threat-intel config save
+// (see PutThreatIntelConfig), concurrently with in-flight LookupIOC
+// requests reading it.
+func (h *Handler) getIOCProvider() ioc.Provider {
+	h.iocProviderMu.RLock()
+	defer h.iocProviderMu.RUnlock()
+	return h.iocProvider
+}
+
+func (h *Handler) setIOCProvider(provider ioc.Provider) {
+	h.iocProviderMu.Lock()
+	defer h.iocProviderMu.Unlock()
+	h.iocProvider = provider
 }
 
 // WithART attaches the pre-loaded ART store (may be nil if ART_DIR is unavailable).
@@ -3508,8 +3525,9 @@ var calderaAdversaryCache struct {
 
 // GET /api/threatintel/lookup?type={ip|domain|url|hash|cve}&value={value}
 func (h *Handler) LookupIOC(w http.ResponseWriter, r *http.Request) {
-	if h.iocProvider == nil {
-		jsonError(w, "threat intel not configured — set OTX_API_KEY and restart", http.StatusServiceUnavailable)
+	provider := h.getIOCProvider()
+	if provider == nil {
+		jsonError(w, "threat intel not configured — enable OTX in Settings", http.StatusServiceUnavailable)
 		return
 	}
 	iocType := r.URL.Query().Get("type")
@@ -3525,7 +3543,7 @@ func (h *Handler) LookupIOC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := ioc.Lookup(r.Context(), h.iocProvider, iocType, value)
+	result, err := ioc.Lookup(r.Context(), provider, iocType, value)
 	if err != nil {
 		jsonError(w, "lookup failed: "+err.Error(), http.StatusBadGateway)
 		return
@@ -3800,13 +3818,13 @@ func (h *Handler) GetConnectorStatus(w http.ResponseWriter, r *http.Request) {
 				LastSyncStatus: "never",
 				LastError:      "No threat-intel sources configured. Set MISP_URL/MISP_API_KEY or OPENCTI_URL/OPENCTI_API_KEY.",
 			},
-			OTXEnabled: h.iocProvider != nil,
+			OTXEnabled: h.getIOCProvider() != nil,
 		})
 		return
 	}
 	respond(w, connectorStatusResponse{
 		ConnectorStatus: h.scheduler.Status(),
-		OTXEnabled:      h.iocProvider != nil,
+		OTXEnabled:      h.getIOCProvider() != nil,
 	})
 }
 
@@ -3975,7 +3993,8 @@ const iocEnrichmentTTL = 24 * time.Hour
 // about it -- unless a fresh cache row already exists. Never blocks the HTTP
 // response (always called via `go`). No-op when no provider is configured.
 func (h *Handler) enrichRunIOCs(ctx context.Context, runID string) {
-	if h.iocProvider == nil {
+	provider := h.getIOCProvider()
+	if provider == nil {
 		return
 	}
 	indicators, err := db.GetRunIOCs(ctx, h.db, runID, "", "")
@@ -3983,7 +4002,7 @@ func (h *Handler) enrichRunIOCs(ctx context.Context, runID string) {
 		log.Printf("[!] ioc enrichment: failed to load indicators for run %s: %v", runID, err)
 		return
 	}
-	providerName := h.iocProvider.Name()
+	providerName := provider.Name()
 	for _, ind := range indicators {
 		cached, err := db.GetIOCEnrichment(ctx, h.db, ind.Type, ind.Value, providerName)
 		if err != nil {
@@ -3995,7 +4014,7 @@ func (h *Handler) enrichRunIOCs(ctx context.Context, runID string) {
 		}
 
 		start := time.Now()
-		result, lookupErr := ioc.Lookup(ctx, h.iocProvider, ind.Type, ind.Value)
+		result, lookupErr := ioc.Lookup(ctx, provider, ind.Type, ind.Value)
 		durationMs := int(time.Since(start).Milliseconds())
 		ttlExpiresAt := time.Now().Add(iocEnrichmentTTL)
 

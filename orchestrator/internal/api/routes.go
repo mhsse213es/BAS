@@ -441,6 +441,9 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Threat-intel connector
 		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/connector/status", h.GetConnectorStatus)
 		r.With(auth.RequirePermission(auth.CanSyncConnector)).Post("/api/connector/sync", h.TriggerConnectorSync)
+		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/threat-intel/{connector}/config", h.GetThreatIntelConfig)
+		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/threat-intel/{connector}/config", h.PutThreatIntelConfig)
+		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Post("/api/threat-intel/{connector}/config/test", h.TestThreatIntelConfig)
 		r.With(auth.RequirePermission(auth.CanDeleteConnectorScenario)).Delete("/api/connector/scenarios/{id}", h.DeleteIntelScenario)
 
 		// Attack-path schedule config — enables periodic fleet collection.
