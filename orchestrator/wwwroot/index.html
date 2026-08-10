@@ -7356,9 +7356,12 @@ function renderCampaignRows() {
       status += '<div class="prog" style="width:90px;margin-top:5px"><i style="width:' + (s.progress || 0) + '%"></i></div>' +
         '<span class="tiny muted">' + (s.progress || 0) + '%</span>';
     }
+    var targetLabel = c.targetType === 'group'
+      ? (CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId))
+      : c.targetType === 'all' ? 'All Agents' : 'Agents';
     return '<tr style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
       '<td><div class="cell-main">' + x(c.name) + '</div><div class="tiny muted" style="font-family:var(--font-mono);font-size:0.6rem">' + x(c.id) + (c.createdBy ? ' · ' + x(c.createdBy) : '') + '</div></td>' +
-      '<td class="tiny muted">' + x(c.scenarioName) + '</td>' +
+      '<td class="tiny muted">' + x(c.scenarioName) + '<div class="tiny muted" style="opacity:0.75">' + x(targetLabel) + '</div></td>' +
       '<td class="tiny">' + (s.dispatched || 0) + '/' + (s.targets || 0) + (s.skipped ? ' <span class="tiny muted">(' + s.skipped + ' skipped)</span>' : '') + '</td>' +
       '<td>' + status + '</td>' +
       '<td>' + campaignMixBar(s) + '</td>' +
@@ -7416,8 +7419,12 @@ function openCampaignDetail(id) {
       : '';
     // ── run summary ──
     var kv = function(k, v) { return '<div style="display:flex;gap:0.6rem;padding:0.35rem 0;border-bottom:1px solid var(--border);font-size:0.8rem"><span style="color:var(--muted);min-width:120px">' + k + '</span><span style="flex:1">' + v + '</span></div>'; };
+    var targetKv = c.targetType === 'group'
+      ? 'Agent Group — ' + x(CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId))
+      : c.targetType === 'all' ? 'All Agents' : (s.targets || 0) + ' agents selected';
     var summary = '<div class="dash-panel"><div class="dash-panel-hdr">Run summary</div><div class="dash-panel-body">' +
       kv('Campaign ID', '<code>' + x(c.id) + '</code>') + kv('Scenario', x(c.scenarioName)) +
+      kv('Target', targetKv) +
       kv('Targets', (s.dispatched || 0) + ' dispatched · ' + (s.skipped || 0) + ' skipped of ' + (s.targets || 0)) +
       kv('Mode', x(c.mode || '—')) + kv('Initiated by', x(c.createdBy || '—')) +
       kv('Result mix', campaignMixBar(s)) + '</div></div>';
