@@ -4081,18 +4081,42 @@ body.theme-slate {
       <option value="telemetry">Telemetry — identity-safe (approved windows)</option>
       <option value="lab">Lab — full-fidelity (isolated range only)</option>
     </select>
-    <label class="modal-lbl">Targets <span class="tiny muted" id="cmp-target-cnt">(0 selected)</span></label>
-    <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem">
-      <select id="cmp-filter-os" onchange="renderCampaignTargets()" style="flex:1"><option value="">All OS</option><option value="windows">Windows</option><option value="linux">Linux</option><option value="darwin">macOS</option></select>
-      <select id="cmp-filter-env" onchange="renderCampaignTargets()" style="flex:1"><option value="">All environments</option></select>
-      <button class="btn btn-outline btn-sm" onclick="cmpSelectAllFiltered()">Select all</button>
+    <label class="modal-lbl" style="margin-top:0.9rem;display:block">Campaign Targets</label>
+    <select id="cmp-target-type" onchange="cmpOnTargetTypeChange()">
+      <option value="agents">Agents</option>
+      <option value="group">Agent Group</option>
+    </select>
+
+    <div id="cmp-target-agents-wrap">
+      <label class="modal-lbl" style="margin-top:0.6rem;display:block">Agents <span class="tiny muted" id="cmp-target-cnt">(0 selected)</span></label>
+      <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem">
+        <select id="cmp-filter-os" onchange="renderCampaignTargets()" style="flex:1"><option value="">All OS</option><option value="windows">Windows</option><option value="linux">Linux</option><option value="darwin">macOS</option></select>
+        <select id="cmp-filter-env" onchange="renderCampaignTargets()" style="flex:1"><option value="">All environments</option></select>
+        <button class="btn btn-outline btn-sm" onclick="cmpSelectAllFiltered()">Select all</button>
+      </div>
+      <div id="cmp-targets" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
     </div>
-    <div id="cmp-targets" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
+
+    <div id="cmp-target-group-wrap" style="display:none;margin-top:0.6rem">
+      <label class="modal-lbl">Agent Group</label>
+      <select id="cmp-group" onchange="cmpOnGroupChange()"></select>
+      <div id="cmp-group-preview" style="margin-top:0.5rem;font-size:0.78rem;color:var(--muted)"></div>
+      <label class="modal-lbl" style="margin-top:0.7rem;display:block">Exclude agents <span class="tiny muted" id="cmp-excl-cnt">(0 excluded)</span></label>
+      <div id="cmp-exclusions" style="max-height:150px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
+    </div>
+
     <label class="modal-lbl">Notes (optional)</label>
     <input id="cmp-notes" type="text" placeholder="optional" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:inherit">
+    <div id="cmp-target-all-wrap" style="display:none;margin-top:0.6rem;padding:0.6rem 0.75rem;border-radius:var(--radius);border:1px solid rgba(218,54,51,0.5);background:rgba(218,54,51,0.08)">
+      <div id="cmp-all-count" style="font-size:0.8rem;font-weight:600;color:var(--danger);margin-bottom:0.4rem"></div>
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.8rem">
+        <input type="checkbox" id="cmp-all-confirm" onchange="document.getElementById('cmp-launch-btn').disabled=!this.checked">
+        I understand this will execute against all eligible agents.
+      </label>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-outline btn-sm" onclick="closeCampaignLaunch()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="submitCampaign()">&#9654; Launch</button>
+      <button class="btn btn-primary btn-sm" id="cmp-launch-btn" onclick="submitCampaign()">&#9654; Launch</button>
     </div>
   </div>
 </div>
@@ -7460,6 +7484,16 @@ function stopCampaign(id) {
 }
 
 var _cmpSel = {};
+var CMP = { groups: [], groupsById: {}, exclusions: {} };
+
+function cmpFlattenGroupNames(nodes, map) {
+  (nodes || []).forEach(function(n) {
+    map[n.id] = n.name;
+    if (n.children && n.children.length) cmpFlattenGroupNames(n.children, map);
+  });
+  return map;
+}
+
 function openCampaignLaunch() {
   if (!scenarios.length) { showToast('Scenarios not loaded yet', 'err'); return; }
   if (!agents.length) { showToast('No agents registered yet', 'err'); return; }
@@ -7474,9 +7508,80 @@ function openCampaignLaunch() {
   document.getElementById('cmp-filter-env').innerHTML = '<option value="">All environments</option>' +
     Object.keys(envs).map(function(e) { return '<option value="' + x(e) + '">' + x(e) + '</option>'; }).join('');
   _cmpSel = {};
+  CMP.exclusions = {};
+  var typeSel = document.getElementById('cmp-target-type');
+  var opts = '<option value="agents">Agents</option><option value="group">Agent Group</option>';
+  if (ROLE === 'admin') opts += '<option value="all">All Agents</option>';
+  typeSel.innerHTML = opts;
+  typeSel.value = 'agents';
+  document.getElementById('cmp-all-confirm').checked = false;
+  document.getElementById('cmp-launch-btn').disabled = false;
+  apicall('/api/agent-groups').then(function(res) {
+    CMP.groups = Array.isArray(res) ? res : [];
+    CMP.groupsById = cmpFlattenGroupNames(CMP.groups, {});
+    var groupSel = document.getElementById('cmp-group');
+    groupSel.innerHTML = Object.keys(CMP.groupsById).map(function(id) {
+      return '<option value="' + x(id) + '">' + x(CMP.groupsById[id]) + '</option>';
+    }).join('');
+  }).catch(function() { CMP.groups = []; CMP.groupsById = {}; });
   renderCampaignTargets();
+  cmpOnTargetTypeChange();
   document.getElementById('campaign-overlay').classList.add('open');
 }
+function cmpOnTargetTypeChange() {
+  var type = document.getElementById('cmp-target-type').value;
+  document.getElementById('cmp-target-agents-wrap').style.display = (type === 'agents') ? 'block' : 'none';
+  document.getElementById('cmp-target-group-wrap').style.display = (type === 'group') ? 'block' : 'none';
+  document.getElementById('cmp-target-all-wrap').style.display = (type === 'all') ? 'block' : 'none';
+  var launchBtn = document.getElementById('cmp-launch-btn');
+  if (type === 'all') {
+    launchBtn.disabled = !document.getElementById('cmp-all-confirm').checked;
+    var count = agents.filter(function(a) { return a.state !== 'retired'; }).length;
+    document.getElementById('cmp-all-count').textContent = '⚠ This campaign will execute against ' + count + ' agents.';
+  } else {
+    launchBtn.disabled = false;
+  }
+  if (type === 'group') cmpOnGroupChange();
+}
+
+function cmpOnGroupChange() {
+  var groupId = document.getElementById('cmp-group').value;
+  CMP.exclusions = {};
+  if (!groupId) { document.getElementById('cmp-group-preview').innerHTML = ''; document.getElementById('cmp-exclusions').innerHTML = ''; return; }
+  apicall('/api/agents?groupId=' + encodeURIComponent(groupId)).then(function(list) {
+    renderCampaignGroupPreview(Array.isArray(list) ? list : []);
+  }).catch(function() { renderCampaignGroupPreview([]); });
+}
+
+function renderCampaignGroupPreview(list) {
+  var osCounts = {};
+  var online = 0, offline = 0;
+  list.forEach(function(a) {
+    var os = cmpAgentOS(a);
+    osCounts[os] = (osCounts[os] || 0) + 1;
+    if (a.status === 'offline') offline++; else online++;
+  });
+  var osLine = Object.keys(osCounts).map(function(os) { return osCounts[os] + ' ' + os; }).join(' · ');
+  document.getElementById('cmp-group-preview').innerHTML =
+    '<div>' + list.length + ' agents — ' + osLine + '</div>' +
+    '<div>' + online + ' online · ' + offline + ' offline</div>';
+  document.getElementById('cmp-exclusions').innerHTML = list.map(function(a) {
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+      '<input type="checkbox" onchange="cmpToggleExclusion(\'' + x(a.agentId) + '\',this.checked)">' +
+      '<code style="font-size:0.72rem">' + x(a.agentId) + '</code><span class="tiny muted">' + x(a.hostname) + '</span></label>';
+  }).join('');
+  cmpUpdateExclusionCount();
+}
+
+function cmpToggleExclusion(agentId, checked) {
+  if (checked) CMP.exclusions[agentId] = true; else delete CMP.exclusions[agentId];
+  cmpUpdateExclusionCount();
+}
+
+function cmpUpdateExclusionCount() {
+  document.getElementById('cmp-excl-cnt').textContent = '(' + Object.keys(CMP.exclusions).length + ' excluded)';
+}
+
 function closeCampaignLaunch() { document.getElementById('campaign-overlay').classList.remove('open'); }
 
 // ── Threat-Informed Campaign Builder ─────────────────────────────────────────
@@ -7725,16 +7830,28 @@ function cmpUpdateCount() {
 }
 function submitCampaign() {
   var name = document.getElementById('cmp-name').value.trim();
-  var agentIds = Object.keys(_cmpSel).filter(function(k) { return _cmpSel[k]; });
+  var targetType = document.getElementById('cmp-target-type').value;
   if (!name) { showToast('Campaign name required', 'err'); return; }
-  if (!agentIds.length) { showToast('Select at least one target agent', 'err'); return; }
   var mode = document.getElementById('cmp-mode').value;
   if (mode !== 'posture' && !confirm(mode.toUpperCase() + ' mode runs real techniques and will generate alerts. Continue?')) return;
   var body = {
-    name: name, scenarioId: document.getElementById('cmp-scenario').value, agentIds: agentIds,
+    name: name, scenarioId: document.getElementById('cmp-scenario').value, targetType: targetType,
     mode: mode, confirmLive: mode !== 'posture', confirmLab: mode === 'lab',
     notes: document.getElementById('cmp-notes').value.trim()
   };
+  if (targetType === 'agents') {
+    var agentIds = Object.keys(_cmpSel).filter(function(k) { return _cmpSel[k]; });
+    if (!agentIds.length) { showToast('Select at least one target agent', 'err'); return; }
+    body.agentIds = agentIds;
+  } else if (targetType === 'group') {
+    var groupId = document.getElementById('cmp-group').value;
+    if (!groupId) { showToast('Select an agent group', 'err'); return; }
+    body.groupId = Number(groupId);
+    var excl = Object.keys(CMP.exclusions);
+    if (excl.length) body.excludeAgentIds = excl;
+  } else if (targetType === 'all') {
+    if (!document.getElementById('cmp-all-confirm').checked) { showToast('Confirm targeting all agents first', 'err'); return; }
+  }
   apicall('/api/campaigns', { method: 'POST', body: JSON.stringify(body) }).then(function(res) {
     if (res && res.error) { showToast('Launch failed: ' + res.error, 'err'); return; }
     closeCampaignLaunch();
