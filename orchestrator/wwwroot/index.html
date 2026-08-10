@@ -1497,6 +1497,7 @@ body.theme-slate {
             </div>
             <div class="kpi-sub"><span id="kpi-score-trend"></span><span id="kpi-score-sub">no runs yet</span></div>
             <div class="stat-spark" id="kpi-score-spark"></div>
+            <div id="kpi-score-coverage" style="font-size:0.6rem;color:var(--muted);margin-top:0.3rem;font-style:italic"></div>
           </div>
           <div class="kpi-card stat-tile" onclick="showTab('runs')" title="ATT&CK coverage">
             <div class="stat-top">
@@ -14068,11 +14069,16 @@ function loadDashboard() {
     var ag = res[0] || [], runs = res[1] || [];
 
     // Hero subtitle — agents, distinct techniques exercised, and last assessment.
-    var techSet = {};
+    // tacticSet is the cumulative union of ATT&CK tactics ever exercised across
+    // every run (not just the recent scored window below) -- used for the
+    // Prevention Score tile's kill-chain-breadth caveat.
+    var techSet = {}, tacticSet = {};
     runs.forEach(function(r) {
       (r.results || []).forEach(function(c) {
         var id = c.technique && c.technique.id;
         if (id) techSet[id] = true;
+        var tac = c.technique && c.technique.tactic;
+        if (tac) tacticSet[tac] = true;
       });
     });
     var techCount = Object.keys(techSet).length;
@@ -14122,6 +14128,26 @@ function loadDashboard() {
       document.getElementById('kpi-score-val').style.color = prevCol;
       document.getElementById('kpi-score-sub').textContent = 'across last ' + windowRuns.length +
         ' run' + (windowRuns.length === 1 ? '' : 's');
+
+      // Coverage caveat: this score only speaks for tactics you've actually
+      // exercised (cumulatively, across every run -- not just this window).
+      // A high Prevention Score from a handful of tested scenarios does not
+      // mean the fleet is broadly prepared; it means those specific controls
+      // are effective. ENTERPRISE_TACTICS mirrors the same 14-tactic MITRE
+      // ATT&CK Enterprise set internal/models/score.go's enterpriseTacticCount
+      // is defined against, so this is directly comparable to a single run's
+      // own killChainCoverage figure, just accumulated across run history.
+      var ENTERPRISE_TACTICS = ['reconnaissance', 'resource-development', 'initial-access', 'execution',
+        'persistence', 'privilege-escalation', 'defense-evasion', 'credential-access', 'discovery',
+        'lateral-movement', 'collection', 'command-and-control', 'exfiltration', 'impact'];
+      var testedTacticCount = Object.keys(tacticSet).filter(function(t) { return ENTERPRISE_TACTICS.indexOf(t) !== -1; }).length;
+      var killChainPct = Math.round(testedTacticCount / ENTERPRISE_TACTICS.length * 100);
+      var covEl = document.getElementById('kpi-score-coverage');
+      if (covEl) {
+        covEl.textContent = killChainPct < 50
+          ? 'Based on ' + testedTacticCount + '/' + ENTERPRISE_TACTICS.length + ' ATT&CK tactics tested — see Technique Coverage for gaps'
+          : '';
+      }
 
       // Trend: compare the newer half of the window against the older half
       // (both weighted the same way) rather than reusing a single run's
@@ -14475,6 +14501,15 @@ function complianceTile(fw) {
     ? '<div style="font-size:0.6rem;color:var(--muted);margin-top:0.2rem;font-style:italic">Any 1 failed test fails the control — see breakdown</div>'
     : '';
 
+  // Compliance % is only computed over TESTED controls (passing/tested) --
+  // untested controls are excluded from the denominator entirely, not
+  // counted against you. A high % from a narrow slice of testable controls
+  // doesn't mean the framework is broadly satisfied; it means the controls
+  // you've actually run are passing. Flag it when coverage itself is thin.
+  var lowCoverageNote = (hasData && cov < 50)
+    ? '<div style="font-size:0.6rem;color:var(--muted);margin-top:0.2rem;font-style:italic">Only ' + Math.round(cov) + '% of testable controls covered — untested controls aren\'t reflected in this %</div>'
+    : '';
+
   var covBar = hasData
     ? '<div style="margin-top:0.5rem">' +
         '<div style="background:var(--border);border-radius:2px;height:3px;overflow:hidden">' +
@@ -14502,6 +14537,7 @@ function complianceTile(fw) {
     covBar +
     '<div class="kpi-sub" style="font-size:0.66rem;margin-top:0.3rem;line-height:1.4">' + subLine + '</div>' +
     gatingNote +
+    lowCoverageNote +
     '</div>';
 }
 
