@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -103,6 +104,60 @@ func TestPutThreatIntelConfig_MispReconfiguresScheduler(t *testing.T) {
 		if !st.MISPEnabled {
 			t.Error("scheduler status shows MISPEnabled=false after enabling MISP via config save — Reconfigure was not called correctly")
 		}
+	})
+}
+
+// TestPutThreatIntelConfig_SecondConnectorAlsoTriggersImmediateSync guards
+// against Reconfigure's own auto-sync only firing the very first time it
+// starts the scheduler from cold. Without the explicit TriggerSync call in
+// PutThreatIntelConfig, saving a second connector after the scheduler is
+// already running (from the first save) would silently update the source
+// list without ever fetching it until the next periodic poll.
+func TestPutThreatIntelConfig_SecondConnectorAlsoTriggersImmediateSync(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sched := connector.NewScheduler(nil, nil, nil, 24, nil, nil)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").WithScheduler(sched)
+
+		// First save: cold start, MISP pointed at an unreachable host --
+		// Reconfigure's own internal shouldStart path handles this one.
+		h.PutThreatIntelConfig(httptest.NewRecorder(), threatIntelConfigReq(http.MethodPut, "misp", map[string]any{
+			"baseUrl": "https://misp.example.com", "apiKey": "misp-key", "enabled": true,
+		}))
+
+		deadline := time.Now().Add(5 * time.Second)
+		var firstSyncAt time.Time
+		for time.Now().Before(deadline) {
+			firstSyncAt = sched.Status().LastSyncAt
+			if !firstSyncAt.IsZero() {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		if firstSyncAt.IsZero() {
+			t.Fatal("first save never triggered a sync (LastSyncAt still zero) -- test setup broken")
+		}
+
+		// Second save: scheduler is already running -- this is the case
+		// Reconfigure's own auto-sync does NOT cover.
+		rec := httptest.NewRecorder()
+		h.PutThreatIntelConfig(rec, threatIntelConfigReq(http.MethodPut, "opencti", map[string]any{
+			"baseUrl": "https://opencti.example.com", "apiKey": "opencti-key", "enabled": true,
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		deadline = time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if sched.Status().LastSyncAt.After(firstSyncAt) {
+				return // pass -- a second sync ran after the second save
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatal("saving a second connector after the scheduler was already running did not trigger an immediate sync")
 	})
 }
 

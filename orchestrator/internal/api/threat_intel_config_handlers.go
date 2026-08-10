@@ -77,6 +77,15 @@ func (h *Handler) PutThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 		sources, lerr := connector.LoadSourcesFromDB(r.Context(), h.db, nil, nil)
 		if lerr == nil {
 			h.scheduler.Reconfigure(sources)
+			// Reconfigure only auto-syncs the very first time it starts the
+			// scheduler from cold (0 -> N sources); every later save just
+			// updates the source list silently otherwise. Without this, a
+			// second/third connector saved after the first one is already
+			// running would never get its first fetch until the next
+			// periodic poll (default 24h) or a manual Sync Now click --
+			// TriggerSync is idempotent/non-blocking, so this is always
+			// safe to call.
+			h.scheduler.TriggerSync()
 		}
 	}
 	if conn == "otx" {
