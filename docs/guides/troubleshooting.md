@@ -1,6 +1,6 @@
 # Audspect BAS — Troubleshooting Guide
 
-**Platform Version:** v1.7.3
+**Platform Version:** v1.7.5
 
 ---
 
@@ -8,7 +8,7 @@
 
 ```bash
 # Platform health
-curl http://localhost:9000/health
+curl http://localhost:9443/health
 
 # Container status
 docker compose ps
@@ -17,10 +17,10 @@ docker compose ps
 docker compose logs orchestrator --tail=100
 
 # PostgreSQL connectivity
-docker compose exec postgres psql -U bas -d bas -c "SELECT COUNT(*) FROM users;"
+docker compose exec postgres psql -U bas_user -d bas_platform -c "SELECT COUNT(*) FROM users;"
 
 # Agent count in database
-docker compose exec postgres psql -U bas -d bas -c "SELECT state, COUNT(*) FROM agents GROUP BY state;"
+docker compose exec postgres psql -U bas_user -d bas_platform -c "SELECT state, COUNT(*) FROM agents GROUP BY state;"
 ```
 
 ---
@@ -48,33 +48,32 @@ docker compose logs orchestrator 2>&1 | tail -30
 
 ---
 
-### 1.2 Setup wizard never shows "Deployment successful"
+### 1.2 `install.sh --install` hangs or reports failure before completing
 
-**Symptom:** Web wizard at port 9001 hangs on "Deploying…" indefinitely.
+**Symptom:** `sudo bash install.sh --install --config setup.conf` doesn't reach "Installation Complete."
+
+There is no separate web-based setup wizard to troubleshoot — `install.sh` does the whole install in one run (image load → bundle files → systemd unit → start stack → health-check wait → admin user creation). If it's stuck or fails partway:
 
 **Checks:**
-1. `docker compose logs orchestrator | tail -20` — look for startup errors (see 1.1)
-2. `curl localhost:9000/health` — if timeout, orchestrator not bound to port 9000
-3. `docker ps | grep orchestrator` — check container is running
+1. Which numbered step (`1/10`–`10/10`) did it stop at? The step label tells you which phase failed.
+2. `docker logs audspect-orchestrator --tail=30` — look for startup errors (see 1.1)
+3. `curl http://localhost:9443/health` — if this times out, the orchestrator isn't bound to the configured port yet, or isn't up
+4. `docker ps | grep audspect-orchestrator` — confirm the container is actually running
 
-If `docker ps` shows the container running but `/health` times out: check that `HTTP_PORT=9000` is correct in `.env` and the port is not already in use (`ss -tlnp | grep 9000`).
+If the container is running but `/health` times out: confirm `BAS_PORT` in `setup.conf` matches what you're checking, and that the port isn't already in use (`ss -tlnp | grep 9443`).
 
 ---
 
-### 1.3 Admin password is unknown after fresh install
+### 1.3 Can't log in after fresh install
 
-**Symptom:** Can't log in after first install; `BAS_ADMIN_PASSWORD` was not set.
+**Symptom:** The admin credentials from `setup.conf` don't work.
 
-**Fix:** The auto-generated password is printed once to the orchestrator log:
-```bash
-docker compose logs orchestrator | grep -i "admin password\|initial password"
-```
+Unlike an older `.env`-based flow, the admin account is **not** auto-generated — `install.sh` creates it directly from `ADMIN_EMAIL`/`ADMIN_PASSWORD` in your `setup.conf` (via one internal POST to `/api/auth/setup`, step 10/10 of the install), so there's no printed-to-logs password to search for. If login fails:
 
-If not found: reset via direct database update:
-```bash
-# Generate a PBKDF2 hash for the new password using the orchestrator's built-in tool
-docker compose exec orchestrator /bas-server set-password admin@company.com "NewPassword1!"
-```
+1. Double-check `setup.conf`'s `ADMIN_EMAIL`/`ADMIN_PASSWORD` were actually what you typed (typos, especially in `ADMIN_PASSWORD`, are the most common cause)
+2. Confirm step 10/10 actually ran and succeeded — check the install output/log for a `_create_admin`-related error; if the health check never passed, admin creation is skipped entirely
+3. If you have another working admin account, use **Settings → Users → Reset Password** to fix the locked-out account instead of fighting with the original credentials
+4. If this is the *only* admin account and it's genuinely lost with no way to recreate it from `setup.conf`, that requires either a direct database update using the same PBKDF2-HMAC-SHA256 scheme the platform uses (non-trivial to do safely by hand) or contacting Audspect support — don't attempt an ad-hoc SQL password reset without matching the exact hash format (`$pbkdf2-sha256$<iterations>$<salt>$<dk>`), a mismatched format just locks the account out differently.
 
 ---
 
@@ -87,29 +86,29 @@ docker compose exec orchestrator /bas-server set-password admin@company.com "New
 **Checks:**
 
 1. **Verify agent service is running:**
-   - Windows: `Get-Service "BAS Agent"`
+   - Windows: `Get-Service "BASAgent"` (no space in the service name)
    - Linux: `sudo systemctl status bas-agent`
 
 2. **Verify server URL in agent config:**
-   - Windows: `Get-Content "C:\ProgramData\BAS Agent\config"`
+   - Windows: config is stored in the registry, not a file — `Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\BASAgent\Parameters"` and check `BAS_SERVER_URL`
    - Linux: `cat /etc/bas-agent/config`
    - The URL must be reachable from the endpoint (not `localhost`)
 
 3. **Test TCP connectivity from endpoint:**
-   - Windows: `Test-NetConnection <server-ip> -Port 9000`
-   - Linux: `nc -zv <server-ip> 9000`
+   - Windows: `Test-NetConnection <server-ip> -Port 9443`
+   - Linux: `nc -zv <server-ip> 9443`
 
 4. **Check agent logs:**
-   - Windows: Event Viewer → Windows Logs → Application → Source: "BAS Agent"
+   - Windows: `C:\ProgramData\BASAgent\logs` (or Event Viewer → Windows Logs → Application → Source: "BASAgent")
    - Linux: `journalctl -u bas-agent -n 50`
 
 **Common error messages:**
 
 | Agent log | Cause | Fix |
 |---|---|---|
-| `connection refused` | Wrong IP or port | Correct `url` in agent config |
-| `401 Unauthorized` | Wrong agent secret | Copy secret from Admin → Connection Config |
-| `dial tcp: i/o timeout` | Firewall blocking | Open port 9000 on server firewall |
+| `connection refused` | Wrong IP or port | Correct the server URL (Windows: registry `BAS_SERVER_URL`; Linux: `/etc/bas-agent/config`) |
+| `401 Unauthorized` | Wrong agent secret | Copy secret from Settings → Connection Config |
+| `dial tcp: i/o timeout` | Firewall blocking | Open the configured port (default 9443) on server firewall |
 | `certificate verify failed` | Self-signed cert, agent doesn't trust CA | Install CA cert on endpoint or use HTTP for agents |
 
 ---
@@ -148,7 +147,7 @@ docker compose exec orchestrator /bas-server set-password admin@company.com "New
 
 **Checks:**
 1. Confirm the agent binary matches the platform version: agent reports its version on heartbeat
-2. `GET /api/config` → check what manifest the server is using
+2. Confirm the orchestrator's `BINARIES.sha256`/`.sig` were actually refreshed for the current release — a `windows-build.ps1` run with `-SkipBuild` doesn't re-extract or re-sign the manifest, only a full build does (see [Build Guide](../internal/build-guide.md))
 
 This is expected if agents are running a version not included in the current manifest. Update agents to the version included in the delivery package to clear the warning.
 
@@ -167,7 +166,7 @@ This is expected if agents are running a version not included in the current man
 
 **Behavior:** The staleness monitor marks a run as `Partial` if no result is received for 90 seconds after the last reported step. Check the run status in the Runs list.
 
-**Fix:** If the agent is offline, wait for it to reconnect (run resumes from the last successful step on reconnect). If the agent is online but the run is stuck, cancel via `DELETE /api/scenarios/runs/{runId}`.
+**Fix:** If the agent is offline, wait for it to reconnect (run resumes from the last successful step on reconnect). If the agent is online but the run is stuck, cancel via `POST /api/scenarios/runs/{runId}/cancel`.
 
 ---
 
@@ -207,10 +206,11 @@ This is expected if agents are running a version not included in the current man
 
 **Cause:** Scenario YAML was modified after signing, or the signature file is missing.
 
+**This only affects builtin scenarios** — RSA-4096 signature verification applies exclusively to `.yaml` files loaded from disk at startup. Custom scenarios created/edited via the dashboard are never signed at all and can't hit this error; they're trusted via authenticated dashboard access instead (see [Scenario SDK](../internal/scenario-sdk.md) → Signing).
+
 **Fix:**
-- If using a built-in scenario that was unintentionally modified: restore from the delivery ZIP
-- If using a custom scenario: re-sign via the scenario upload process (dashboard signing occurs automatically on upload)
-- For externally placed YAML: run the signing step from `windows-build.ps1` or use the standalone signing tool
+- If a built-in scenario was unintentionally modified on disk: restore the original `.yaml`+`.yaml.sig` pair from the delivery ZIP
+- For a new hand-authored file placed directly in `SCENARIOS_DIR` (bypassing the dashboard): it must be signed on the build host with `orchestrator/scripts/signer.go sign private_key.pem <file>.yaml` before it will load
 
 ---
 
@@ -240,36 +240,38 @@ Alternatively, deploy the agent as a user with an appropriate policy applied.
 
 **Fix:**
 ```bash
-docker compose ps | grep chromium
-docker compose logs chromium --tail=30
+docker compose ps | grep chrome
+docker compose logs chrome --tail=30
 ```
 
 If the container is not running:
 ```bash
-docker compose up -d chromium
+docker compose up -d chrome
 ```
 
-If Chromium is running but PDFs are still blank: check that the Chromium container has at least 512 MB memory. Increase memory limit in `docker-compose.yml`:
+If Chromium is running but PDFs are still blank: check that the container has at least 512 MB memory. Increase memory limit in `docker-compose.yml`:
 ```yaml
 services:
-  chromium:
+  chrome:
     mem_limit: 1g
 ```
 
+If the sidecar is unreachable, the orchestrator degrades to a built-in fallback PDF renderer (`fpdf`, lower fidelity) rather than failing the download outright — a blank-page PDF is more likely a hung/unhealthy Chromium container than a total failure. Check the orchestrator log for `chrome sidecar not configured` or `HTML→PDF via chrome unavailable` — if present, `CHROME_WS_URL` isn't reaching a healthy sidecar.
+
 ---
 
-### 4.2 PDF report uses old design (pre-v1.7.3 style)
+### 4.2 PDF report uses the older report design
 
-**Symptom:** PDF looks like the old report format; plain text tables without the new design.
+**Symptom:** PDF looks like an older report format; plain text tables without the current design.
 
-**Cause:** Old orchestrator image still running; not upgraded to v1.7.3.
+**Cause:** An old orchestrator image is still running.
 
 **Fix:** Verify orchestrator version:
 ```bash
-curl -s http://localhost:9000/health | python3 -m json.tool
+curl -s http://localhost:9443/health | python3 -m json.tool
 ```
 
-If version is not `1.7.3`, follow the [Upgrade Guide](upgrade-guide.md).
+If the reported version is older than expected, follow the [Upgrade Guide](upgrade-guide.md).
 
 ---
 
@@ -386,7 +388,7 @@ proxy_set_header Connection "upgrade";
 
 **Cause:** JWT expired (24-hour TTL). Refresh the page to re-authenticate.
 
-**Longer TTL:** The JWT TTL is hardcoded to 24 hours and cannot be configured in v1.7.3.
+**Longer TTL:** The JWT TTL is hardcoded to 24 hours and is not configurable.
 
 ---
 
@@ -406,39 +408,45 @@ To restrict this, only share access with users who should see all run activity.
 
 **Symptom:** Orchestrator returns 500 errors; PostgreSQL logs show disk full.
 
-**Immediate fix:**
-1. Stop non-essential containers: `docker compose stop chromium caldera`
-2. Delete old PDF blobs from the database (with care):
-```sql
--- Preview what would be deleted (runs older than 90 days)
-SELECT COUNT(*), pg_size_pretty(SUM(pg_column_size(pdf_data)))
-FROM run_reports
-WHERE created_at < NOW() - INTERVAL '90 days';
+Reports render on-demand from HTML at request time — there's no growing PDF/HTML blob table to prune. The table most likely to grow large is `scenario_runs.results` (a JSONB column holding step-level output).
 
--- Delete (run after reviewing the preview)
-DELETE FROM run_reports
-WHERE created_at < NOW() - INTERVAL '90 days'
-AND format = 'pdf';
+**Immediate fix:**
+1. Stop non-essential containers: `docker compose stop chrome caldera`
+2. Archive old run results (with care — see [Performance Tuning Guide](../internal/performance-tuning.md) → Run History Retention for the full procedure and its caveats):
+```sql
+-- Preview what would be archived (runs older than 1 year)
+SELECT COUNT(*) FROM scenario_runs
+WHERE completed_at < NOW() - INTERVAL '1 year' AND results != '[]';
+
+-- Archive (clears only the raw results payload, not scores/status)
+UPDATE scenario_runs SET results = '[]'
+WHERE completed_at < NOW() - INTERVAL '1 year' AND results != '[]';
+VACUUM ANALYZE scenario_runs;
 ```
 
-**Long-term:** Schedule regular backups and prune old data. Resize the volume.
+**Long-term:** Schedule regular backups and prune old data (see [Backup and Restore Guide](backup-restore.md)). Resize the volume.
 
 ---
 
-### 8.2 Migration fails on upgrade
+### 8.2 Orchestrator fails to start after upgrade with a database-related error
 
-**Symptom:** After upgrade, orchestrator logs show `migration failed` and the service exits.
+**Symptom:** After running `install.sh --upgrade`, the orchestrator container restarts in a loop with a database connection or authentication error.
+
+**Most likely cause:** `POSTGRES_PASSWORD` mismatch between a freshly-generated `.env` and the still-persisted Postgres volume's actual password — this is exactly the scenario `install.sh --upgrade` is designed to prevent by preserving existing secrets, so this should only happen if `.env` was hand-edited or restored from the wrong source outside of `install.sh`.
 
 **Immediate action:**
 ```bash
-docker compose logs orchestrator | grep -i "migration\|migrate"
+docker logs audspect-orchestrator --tail=50
+docker logs audspect-postgres --tail=50
 ```
 
-Do not run the old orchestrator — this may result in partial state.
-
 **Recovery:**
-1. Restore from pre-upgrade backup (see [Backup and Restore Guide](backup-restore.md))
-2. Contact Audspect support with the full migration error message
+```bash
+sudo bash install.sh --rollback
+```
+This restores the previous working `docker-compose.yml`/`.env` from the automatic pre-upgrade backup. If that doesn't resolve it, restore from a pre-upgrade database backup instead — see [Backup and Restore Guide](backup-restore.md) — and contact Audspect support with the full error message.
+
+There are no numbered schema migrations that can "fail" in the traditional sense — schema application is a single idempotent pass (`CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`) that runs on every startup; a startup failure here is virtually always a connectivity/credential problem, not a migration ordering problem.
 
 ---
 
@@ -458,15 +466,21 @@ If Caldera is running: verify `CALDERA_URL` and `CALDERA_API_KEY` in `.env`.
 
 ---
 
-### 9.2 Threat intel sync shows 0 new indicators
+### 9.2 Threat intel sync shows 0 new indicators / connectors show no data in Threat Prioritization
 
-**Symptom:** Manual sync of MISP or OpenCTI returns immediately with 0 indicators.
+**Symptom:** MISP/OpenCTI/OTX are configured, but sync returns 0 actors, or Threat Prioritization stays empty.
 
-**Checks:**
-1. Verify connector URL reachable from orchestrator: `docker compose exec orchestrator wget -q -O - <MISP_URL>/health`
-2. Check sector and region filters — they may be filtering out all events
-3. MISP: verify the API key has `read` permission on the feed
-4. OpenCTI: verify the API key has `read` on the Indicators and Reports entities
+MISP, OpenCTI, and OTX are configured entirely from **Settings → Threat Intel Connector** now — enter the URL/API key, click **Test Connection** (a real one-off connectivity check that reports back an actor count), then **Save**. There's no `.env` editing and no restart involved; a save takes effect immediately.
+
+**Checks, in order:**
+1. Did **Test Connection** report a non-zero actor count *before* saving? If it reported 0, the credentials/URL are the problem, not the platform — check with the connector's own admin console that the feed actually has data.
+2. Was the connector actually **saved with Enabled checked** — Test Connection alone never persists anything or triggers a sync.
+3. Check the connector status card on the same Settings page for `lastSyncStatus`/`lastError` — every save triggers an immediate sync, so this should update within seconds of saving.
+4. Sector/region filters may be filtering out everything — try broadening them.
+5. MISP: verify the API key has `read` permission on the feed. OpenCTI: verify `read` on the Indicators and Reports entities.
+6. If Threat Prioritization specifically is empty despite a successful sync with actors found: it reads from `threat_actor_profiles`, populated only after actors are actually returned by a sync — confirm the connector status card shows a recent successful sync, not just a saved config.
+
+The orchestrator image is distroless (no shell), so `docker exec`-ing a `wget`/`curl` check into the container doesn't work — test connectivity from Test Connection in the UI instead, or from another host on the same network as the orchestrator.
 
 ---
 
@@ -474,12 +488,11 @@ If Caldera is running: verify `CALDERA_URL` and `CALDERA_API_KEY` in `.env`.
 
 **Symptom:** Exercise completion emails configured but not received.
 
-**SMTP test:**
+There is no built-in SMTP test CLI command. Check `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in `.env` are all set correctly, and check the orchestrator logs around the time an exercise completed for an SMTP send error:
 ```bash
-docker compose exec orchestrator /bas-server smtp-test --to test@company.com
+docker logs audspect-orchestrator | grep -i smtp
 ```
-
-If this fails: check `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in `.env`. Many SMTP servers require explicit auth even for internal servers.
+Many SMTP servers require explicit auth even for internal servers — verify credentials directly against the mail server if the orchestrator log shows an auth failure.
 
 ---
 

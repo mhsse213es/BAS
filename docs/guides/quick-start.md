@@ -1,17 +1,17 @@
 # Audspect BAS — Quick Start Guide
 
-**Platform Version:** v1.7.3  
+**Platform Version:** v1.7.5  
 **Time to first simulation:** ~30 minutes
 
 ---
 
 ## Prerequisites
 
-- Ubuntu 20.04 LTS or later (22.04/24.04 recommended)
-- Docker 24.0+, Docker Compose v2.20+
+- Ubuntu 20.04/22.04/24.04 LTS, or Rocky Linux / RHEL 9
+- Docker 24.0+, Docker Compose v2.20+ (the installer can install Docker itself if missing, with confirmation)
 - 4 GB RAM minimum, 40 GB disk
 - At least one Windows or Linux endpoint to test on
-- Delivery ZIP from Audspect
+- Delivery ZIP from Audspect (`bas-install-<version>.zip`)
 
 ---
 
@@ -20,55 +20,55 @@
 **Transfer the delivery ZIP to the server and extract it:**
 
 ```bash
-scp audspect-bas-v1.7.3.zip admin@<server-ip>:/opt/
+scp bas-install-<version>.zip admin@<server-ip>:/opt/
 ssh admin@<server-ip>
-cd /opt && unzip audspect-bas-v1.7.3.zip && cd audspect-bas-v1.7.3
+cd /opt && sudo unzip bas-install-<version>.zip && cd bas-install-<version>
 ```
 
-**Run the setup wizard:**
+**Prepare a config file and run the installer:**
 
 ```bash
-sudo ./setup.sh --web
+cp setup.conf.template setup.conf
+nano setup.conf   # fill in DB_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD, LIC_PATH at minimum
+sudo bash install.sh --install --config setup.conf --yes
 ```
 
-Open `http://<server-ip>:9001/setup` in a browser to complete initial configuration. The wizard asks for:
-
-| Field | Description |
+| `setup.conf` field | Description |
 |---|---|
-| Server URL | The public URL agents will connect to, e.g., `http://192.168.1.50:9000` |
-| Admin email | Initial admin username (an email address) |
-| Admin password | Initial password (you will be forced to change it on first login) |
-| Agent secret | Random passphrase — copy it; you'll need it when enrolling agents |
-| JWT secret | Auto-generated if left blank |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Initial admin login (you will be forced to change the password on first login) |
+| `DB_PASSWORD` | Postgres password |
+| `LIC_PATH` | Path to the customer license file |
+| `BAS_PORT` | Listening port (defaults to `9443` if omitted) |
 
-Click **Deploy**. The wizard starts Docker Compose and waits for the orchestrator to become healthy (typically under 60 seconds).
+This one command loads the Docker images, writes secrets, creates and starts the systemd service, waits for the health check, and creates the admin user — typically well under a couple of minutes.
 
-When the wizard shows **Deployment successful**, open the dashboard at `http://<server-ip>:9000` and complete the first-login password change.
+When it reports success, open the dashboard at `http://<server-ip>:9443` and complete the first-login password change.
 
 ---
 
 ## Step 2 — Enroll an Agent (5 minutes)
 
-### Download the agent binary
+### Download the agent installer
 
-Log in to the dashboard. Navigate to **Agents** → **Download Agent** → select the OS matching your test endpoint → download.
+Log in to the dashboard. Navigate to **Agents** → **Download Installer** → select the OS matching your test endpoint → download.
 
-### Deploy and enroll (Windows example)
+### Deploy and enroll (Windows)
 
-Transfer `bas-agent.exe` to the target machine. Open a terminal **as Administrator**:
+Run the downloaded `BASAgent-Setup-<version>.exe` on the target machine as Administrator and follow its prompts for the server URL and agent secret (found under **Settings → Connection Config** in the dashboard). It installs the agent as a Windows service and enrolls automatically.
 
+For a manual/scripted install instead of the GUI installer, use the standalone agent binary directly:
 ```powershell
-# Replace <server-url> and <secret> with values from Admin → Connection Config
-.\bas-agent.exe -url http://192.168.1.50:9000 -secret <agent-secret> -install
+# Replace <server-url> and <secret> with values from Settings -> Connection Config
+.\bas-agent-windows-amd64.exe -server http://192.168.1.50:9443 -secret <agent-secret> -install
 ```
 
-The agent installs as a Windows service and enrolls automatically. Refresh the dashboard — the agent appears in the **Agents** list within 30 seconds.
+Refresh the dashboard — the agent appears in the **Agents** list within 30 seconds.
 
 ### Deploy and enroll (Linux example)
 
 ```bash
-chmod +x bas-agent
-sudo ./bas-agent -url http://192.168.1.50:9000 -secret <agent-secret> -install
+chmod +x bas-agent-linux-amd64
+sudo ./bas-agent-linux-amd64 -server http://192.168.1.50:9443 -secret <agent-secret> -install
 sudo systemctl status bas-agent
 ```
 
@@ -108,11 +108,14 @@ After fixing the control, click **Re-validate** to dispatch a targeted single-te
 | Task | Where to go |
 |---|---|
 | Run a full endpoint assessment | Scenarios → ART Full Windows |
-| Schedule a recurring campaign | Campaigns → New Campaign |
+| Create a Campaign (multi-agent, or target an Agent Group / all agents) | Campaigns → New Campaign |
+| Set up a recurring assessment | Scheduled Assessments → New Schedule |
 | Run attack path collection | Attack Path → Run Collection |
 | Invite another analyst | Settings → Users → Add User |
+| Organize endpoints into groups | Agents → Group tree panel |
 | Download an audit pack | Agents → [agent] → Reports → Audit Pack |
-| Configure MISP / OpenCTI | Settings → Integrations |
+| Configure MISP / OpenCTI / OTX | Settings → Threat Intel Connector — enter URL/API key, Test Connection, Save (no restart needed) |
+| Check fleet-wide posture at a glance | Dashboard (Executive Dashboard KPI row) |
 
 ---
 
