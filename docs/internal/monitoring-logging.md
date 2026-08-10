@@ -1,7 +1,7 @@
 # Audspect BAS — Monitoring and Logging Guide
 
 **Classification:** Internal — Audspect Engineering / Confidential  
-**Platform Version:** v1.7.3
+**Platform Version:** v1.7.5
 
 ---
 
@@ -21,9 +21,7 @@ The orchestrator logs to stdout (structured log lines):
 2026-07-01T09:02:00Z [ERROR] run dispatch failed run_id=run-xyz error="agent offline"
 ```
 
-**Log levels:** DEBUG / INFO / WARN / ERROR
-
-**Default level:** INFO. To enable debug logging, set `BAS_LOG_LEVEL=debug` in `.env`.
+**There is no configurable log level.** The orchestrator uses Go's standard `log` package throughout with ad-hoc bracketed prefixes (`[+]`, `[!]`, `[connector]`, `[svc]`, etc., varying by subsystem) rather than a strict `LEVEL key=value` convention — the log lines below are illustrative of the kind of information logged, not a literal contract on exact wording or format. There is no `BAS_LOG_LEVEL` env var; everything logs unconditionally.
 
 ---
 
@@ -114,10 +112,10 @@ docker compose logs orchestrator | grep "binary trust"
 
 ```bash
 # Check platform health
-curl -s http://localhost:9000/health
+curl -s http://localhost:9443/health
 
-# Expected response
-{"status":"ok","db":"ok","version":"1.7.3"}
+# Expected response shape
+{"status":"ok","db":"ok","version":"<current version>"}
 ```
 
 Responses:
@@ -136,15 +134,15 @@ Watch for containers in `Exit` or `Restarting` state.
 
 ```bash
 # Active connections
-docker compose exec postgres psql -U bas -d bas \
+docker compose exec postgres psql -U bas_user -d bas_platform \
   -c "SELECT count(*) FROM pg_stat_activity WHERE state='active';"
 
 # Table sizes
-docker compose exec postgres psql -U bas -d bas \
+docker compose exec postgres psql -U bas_user -d bas_platform \
   -c "SELECT schemaname, tablename, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size FROM pg_tables WHERE schemaname='public' ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC LIMIT 10;"
 
 # Long-running queries
-docker compose exec postgres psql -U bas -d bas \
+docker compose exec postgres psql -U bas_user -d bas_platform \
   -c "SELECT pid, now() - pg_stat_activity.query_start AS duration, query FROM pg_stat_activity WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';"
 ```
 
@@ -156,12 +154,11 @@ docker compose exec postgres psql -U bas -d bas \
 # Docker volume usage
 docker system df -v
 
-# bas_pgdata volume specifically
-docker run --rm -v bas_pgdata:/data alpine du -sh /data
-
-# Orchestrator container disk (should be minimal — read-only filesystem)
-docker compose exec orchestrator df -h /
+# audspect-postgres-data volume specifically
+docker run --rm -v audspect-postgres-data:/data alpine du -sh /data
 ```
+
+There's no equivalent command for the orchestrator container's own disk usage — it runs on a `distroless` base image with no shell, so `docker exec`/`docker compose exec` into it doesn't work at all (`OCI runtime exec failed: exec: "df": executable file not found`). Its filesystem is effectively read-only application code plus bundled content anyway; there's nothing meaningful to grow there between releases. Check the host's own disk usage under Docker's data root instead if orchestrator-image size is a concern.
 
 Alert thresholds:
 - PostgreSQL data directory > 80% full: schedule maintenance
@@ -171,16 +168,18 @@ Alert thresholds:
 
 ## Audit Log API
 
-The platform's audit log (user-facing) is accessible via API for security teams:
+The platform's audit log (user-facing, `CanViewAuditLogs`) is accessible via:
 
 ```
-GET /api/events?category=auth&from=2026-07-01T00:00:00Z&limit=100
-GET /api/events?category=agent&from=2026-07-01T00:00:00Z
-GET /api/events?category=integrity
-GET /api/events/export?format=csv&from=2026-07-01&to=2026-07-31
+GET /api/audit-logs?limit=100&offset=0&action=<exact action string>&actor=<username substring>
 ```
 
-Event categories: `auth`, `user`, `agent`, `scenario`, `run`, `finding`, `integrity`, `config`
+- `limit` — max rows, capped at 500 (default 100)
+- `offset` — pagination offset
+- `action` — exact match against the recorded action string (e.g. `connector.config.update`, `openaev.sync`, `user.create` — dotted-name strings scoped per feature, not a fixed enum of categories; grep `h.auditLog(` / `h.auditLogAs(` calls across `internal/api/` for the current full list)
+- `actor` — case-insensitive substring match against the acting username
+
+There is no separate CSV export endpoint or `category`/`from`/`to` date-range filter — date filtering isn't supported server-side today; page through `limit`/`offset` and filter client-side if a date range is needed.
 
 ---
 
@@ -223,7 +222,7 @@ Default Docker logging writes JSON to `/var/lib/docker/containers/<id>/<id>-json
 | Failed logins per hour | `grep "login failed" | count` | >10/hour |
 | Agent binary trust failures | `grep "binary trust failed"` | Any |
 | Scenario signature failures | `grep "signature verification failed"` | Any |
-| Agent offline count | `GET /api/agents?state=offline` | >20% of fleet |
+| Agent offline count | `GET /api/agents` (no server-side state filter — online/offline/degraded bucketing is computed client-side from `status`/`state`, count locally or via a direct SQL query) | >20% of fleet |
 | Database connection errors | `grep "db.*error"` | Any |
 | AP job delivery failures | `grep "ap job delivery failed"` | >3/day |
 

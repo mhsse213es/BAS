@@ -1,7 +1,7 @@
 # Audspect BAS — Developer Guide
 
 **Classification:** Internal — Audspect Engineering / Confidential  
-**Platform Version:** v1.7.3
+**Platform Version:** v1.7.5
 
 ---
 
@@ -13,25 +13,36 @@ Audspect_Cloud/
 │   ├── cmd/server/             # Main entrypoint + wwwroot (static files)
 │   │   └── wwwroot/            # Windows Junction → orchestrator/wwwroot
 │   ├── wwwroot/                # Actual static files: index.html, og/index.html
-│   ├── internal/
-│   │   ├── api/                # HTTP handler functions
-│   │   ├── auth/               # Password hashing, JWT, RBAC
-│   │   ├── integrity/          # Scenario signing, binary trust, tamper watch
-│   │   ├── models/             # Database schema, WS message types
-│   │   ├── scoring/            # Score calculation engine
-│   │   └── reporting/          # HTML/PDF/CSV/JSON report generation
-│   └── config/                 # Config loading (env vars override JSON)
-├── agent/                      # Go agent binary
+│   ├── internal/                # ~50 packages, organized by domain -- see below
+│   │   ├── api/                 # HTTP handler functions + route registration (routes.go)
+│   │   ├── auth/                # Password hashing, JWT, RBAC (permissions.go)
+│   │   ├── db/                  # Schema (EnsureSchema) + shared pool setup
+│   │   ├── integrity/            # Scenario signing, binary trust, tamper watch
+│   │   ├── models/              # DB row structs, WS message types, score.go
+│   │   ├── connector/            # MISP/OpenCTI/OTX threat-intel polling + Reconfigure
+│   │   ├── dashboard/             # Executive dashboard snapshot aggregation
+│   │   ├── threatpriority/        # Per-actor threat prioritization engine
+│   │   ├── jobs/                  # Fleet job engine (scheduling, targets, progress)
+│   │   ├── campaign/              # Campaign fan-out (agents/group/all targeting)
+│   │   └── reporting/             # HTML/PDF/CSV/JSON report generation
+│   └── config/                  # Config loading (env vars override JSON)
+├── agent/                      # Go agent binary (Windows/Linux; macOS source exists, not built)
 ├── scenarios/                  # Signed scenario YAML files
 ├── docs/                       # Documentation
 │   ├── guides/                 # Customer sub-guides
 │   └── internal/               # This set of internal docs
-└── windows-build.ps1           # Build pipeline (Windows)
+└── packaging/
+    ├── windows-build.ps1       # Build pipeline (Windows) -- NOT at repo root
+    └── compose/install.sh      # Customer-facing installer/upgrader (--install/--upgrade/--rollback)
 ```
+
+`internal/` has grown to roughly 50 packages as the platform expanded — the table above is a representative subset, not exhaustive. When looking for where something lives, `grep -rl` for the feature name across `internal/` is usually faster than guessing from this list.
 
 **Important:** `orchestrator/cmd/server/wwwroot` is a Windows Junction pointing to `orchestrator/wwwroot`. Only edit files in `orchestrator/wwwroot/`. The two source files are:
 - `orchestrator/wwwroot/index.html` — primary dashboard
 - `orchestrator/wwwroot/og/index.html` — legacy dashboard (kept for backward compat)
+
+**The build script is `packaging/windows-build.ps1`, not `windows-build.ps1` at the repo root** — that path doesn't exist. Easy to get wrong from memory/habit; always check the actual path.
 
 ---
 
@@ -119,15 +130,18 @@ Config is loaded from `/etc/bas/config.json` first, then env vars override indiv
 
 ## Adding a New API Endpoint
 
-1. **Define handler** in the appropriate `internal/api/` file (or create a new file for a new resource)
+1. **Define handler** in the appropriate `internal/api/` file (or create a new file for a new resource, e.g. `internal/api/threat_intel_config_handlers.go`)
 
-2. **Register route** in `orchestrator/cmd/server/main.go` (or wherever routes are registered)
+2. **Register route** in `orchestrator/internal/api/routes.go` — **not** `main.go`. Routes are registered with `auth.RequirePermission(...)` middleware inline, e.g.:
+   ```go
+   r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/threat-intel/{connector}/config", h.PutThreatIntelConfig)
+   ```
 
-3. **Auth check:** Use the `requireAuth(role)` middleware for role-gating
+3. **Auth check:** Add a `Permission` constant in `internal/auth/permissions.go` if an existing one doesn't fit (const block, `rolePermissions[Role...]` map, `Permissions()` enumeration, and the corresponding rows in `permissions_test.go`'s `TestHasPermission_FullMatrix`/`TestHasPermission_MatrixIsComplete`/`TestPermissions_Ordering` — **never** touch `TestPermissionGrants_MatchMigrationInventory`, which is a frozen historical snapshot of the original RBAC migration and must not grow for permissions added after it).
 
-4. **Input validation:** Validate IDs with regex; validate JSON with `json.Decoder`. Return `400` with `{"error": "..."}` on invalid input
+4. **Input validation:** Validate IDs with regex; validate JSON with `json.Decoder`. Return `400` via `jsonError(w, "...", http.StatusBadRequest)` on invalid input.
 
-5. **Response format:** Always return `application/json`. Use `httpError(w, code, message)` for error responses
+5. **Response format:** Always return `application/json` via `respond(w, ...)`. Use `jsonError(w, message, code)` for error responses.
 
 6. **Document** in `docs/guides/api-reference.md`
 
@@ -167,25 +181,16 @@ Config is loaded from `/etc/bas/config.json` first, then env vars override indiv
 
 ---
 
-## Database Schema Migrations
+## Database Schema Changes
 
-Migrations are plain SQL files in `orchestrator/internal/models/migrations/`:
+There is no numbered-migration-file system. Schema is defined as a single ordered `[]string` of idempotent raw SQL statements inside `EnsureSchema` in `orchestrator/internal/db/postgres.go` (plus a few sibling functions — `EnsureContentSchema`, `EnsureExerciseSchema` — for schema that loads separately). This runs in full on every orchestrator startup.
 
-```
-001_initial.sql
-002_add_findings.sql
-...
-042_add_ap_jobs.sql
-```
-
-Migrations run in order on orchestrator startup. The `schema_migrations` table tracks which have been applied.
-
-**Writing a migration:**
-- One migration = one `.sql` file
-- Number sequentially
-- Migrations must be idempotent (`CREATE TABLE IF NOT EXISTS`, etc.)
-- Never modify a previously-released migration — always add a new one
-- Test on a fresh database before release
+**Writing a schema change:**
+- Add a new `CREATE TABLE IF NOT EXISTS ...` (or `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` for an existing table) entry to the `[]string` slice inside `EnsureSchema` — near a related existing table for locality, exact position within the slice doesn't matter
+- Every statement must be idempotent — `IF NOT EXISTS` on every `CREATE`/`ADD COLUMN`, since this runs unconditionally on every boot, not just once
+- Never rewrite a previously-shipped statement in a way that would fail against a database that already has that column/table (e.g. don't change a `CREATE TABLE`'s column list after it's shipped — add a new `ALTER TABLE ADD COLUMN IF NOT EXISTS` instead)
+- **Also add it to `orchestrator/internal/testutil/testdb.go`** if it's a new `EnsureXSchema` function (not needed if you're adding to the existing `EnsureSchema`/`EnsureContentSchema`/`EnsureExerciseSchema` calls, since the test harness already calls those) — otherwise every handler test against the shared test DB hits "relation X does not exist". This is a real, easy-to-miss gotcha; it silently doesn't affect production, only tests.
+- Test against the real container-backed test DB (`go test ./...` — see Testing below) before release; there's no separate "fresh database" migration-order concern to worry about since there's no ordering, just one full idempotent pass every boot
 
 ---
 
@@ -198,7 +203,7 @@ go test ./... -race           # Race detector
 go test -cover ./...          # Coverage
 ```
 
-Handler tests use `httptest.NewRecorder()` and `httptest.NewRequest()`. Database-dependent tests require a real PostgreSQL instance (set `DATABASE_URL` env var). No mock database — see `feedback_agent_architecture` memory.
+Handler tests use `httptest.NewRecorder()` and `httptest.NewRequest()`. Database-dependent tests spin up a real, throwaway PostgreSQL instance automatically via `testcontainers-go` (Docker must be running) — no `DATABASE_URL` to set, no mock database. Pass `-short` to skip container-backed tests when Docker isn't available. Most packages share one container per test binary (`sharedDB`/`MustSharedTestDB()`, truncated between tests) rather than spinning up a fresh container per test.
 
 ---
 
@@ -208,8 +213,10 @@ Handler tests use `httptest.NewRecorder()` and `httptest.NewRequest()`. Database
 |---|---|---|
 | Template field not found at runtime | Struct field obfuscated by garble | Use JSON-tag map pattern (see above) |
 | WebSocket message not received in browser | JS string literal doesn't match Go constant | Verify both sides use the same string |
-| Score returns 0 | All steps ERROR or SKIPPED; denominator is 0 | Division-by-zero guard in scoring engine returns 0 |
-| Agent binary trust all yellow | BINARIES.sha256 not updated after agent binary change | Re-run Step 0b / Step 5 of windows-build.ps1 |
+| Score returns 0 | All steps ERROR or SKIPPED; denominator is 0 | Division-by-zero guard in `internal/models/score.go` returns 0 |
+| Agent binary trust all yellow | `BINARIES.sha256` not updated after agent binary change | Re-run the full `packaging\windows-build.ps1` pipeline (not `-SkipBuild`) so it re-extracts and re-signs the manifest |
+| New table/`EnsureXSchema` not visible in tests | `internal/testutil/testdb.go`'s test harness has its own hand-maintained list of `db.Ensure*Schema` calls, separate from production startup | Add the new `EnsureXSchema` call to `testdb.go` too, or every handler test against it hits "relation X does not exist" (not needed if you added to an existing `EnsureSchema`/`EnsureContentSchema`/`EnsureExerciseSchema` call) |
+| New permission missing from RBAC tests | `permissions_test.go` has 3 test sites to update (`TestHasPermission_FullMatrix`, `TestHasPermission_MatrixIsComplete`, `TestPermissions_Ordering`) plus one to **never** touch (`TestPermissionGrants_MatchMigrationInventory`, a frozen historical snapshot) | Add rows to the 3 live tests; leave the frozen one alone regardless of how similar the new permission looks |
 | `jwt_secret required` on startup | `.env` file not loaded by Docker Compose | Verify `.env` path and `env_file:` in compose |
 | Config file secrets in logs | `jwt_secret`/`agent_secret` loaded from JSON file | Move to env vars; remove from config.json |
 
@@ -217,15 +224,15 @@ Handler tests use `httptest.NewRecorder()` and `httptest.NewRequest()`. Database
 
 ## Release Checklist
 
-- [ ] Update version string in `orchestrator/cmd/server/version.go`, `docker-compose.yml`, `windows-build.ps1`
+- [ ] There is no `version.go` to edit — the version string is passed as `-Version` to `packaging\windows-build.ps1` and flows from there into the Docker build-arg, `dist\bas-install-<version>\`, and the ZIP name. Nothing to hand-edit beforehand.
 - [ ] Run `go mod tidy`
 - [ ] Run `go test ./...` — all green
-- [ ] Run `windows-build.ps1` — full pipeline
-- [ ] Verify scenario signatures: `gpg --verify scenarios/*.yaml.sig`
-- [ ] Verify `BINARIES.sha256.sig`: `gpg --verify BINARIES.sha256.sig BINARIES.sha256`
-- [ ] Smoke-test the delivery ZIP on a clean Ubuntu VM
+- [ ] Run `packaging\windows-build.ps1 -Version <x.y.z> -Customer ... -CustomerID ... -Days ...` — full pipeline
+- [ ] Scenario/manifest signature verification is automatic at orchestrator startup (RSA-4096, public key compiled into the binary) — there's no separate pre-release CLI verify step; a build that produced unsigned or mismatched `.sig` files will fail to load those scenarios when the new image starts, which is itself the check
+- [ ] If GPG bundle-signing is configured, confirm the build's summary output reports the ZIP as signed (`.zip.asc` present), not skipped with a warning
+- [ ] Smoke-test the delivery ZIP on a clean Ubuntu VM via `install.sh --install`
 - [ ] Update `docs/guides/release-notes.md`
-- [ ] Git tag: `git tag v1.7.3 && git push --tags`
+- [ ] Git tag: `git tag v1.7.5 && git push --tags`
 
 ---
 

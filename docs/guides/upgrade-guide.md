@@ -1,38 +1,47 @@
 # Audspect BAS — Upgrade Guide
 
-**Platform Version:** v1.7.3
+**Platform Version:** v1.7.5
 
 ---
 
 ## Overview
 
-Audspect BAS upgrades are delivered as a new versioned delivery ZIP. The upgrade process replaces the Docker images and restarts services. Database migrations run automatically on orchestrator startup.
+Audspect BAS upgrades are delivered as a new versioned delivery ZIP (`bas-install-<version>.zip`). The supported upgrade path is the bundled installer, `install.sh --upgrade`, which:
+
+1. Backs up your current `docker-compose.yml`, `.env`, and version marker to a timestamped folder
+2. Loads the new Docker images
+3. Refreshes the bundle files (scenarios, dashboard static files, ART payloads, license) and `docker-compose.yml`
+4. Rewrites `.env` with the new `BAS_VERSION` — **existing secrets (`DB_PASSWORD`, `JWT_SECRET`, `AGENT_SECRET`) are preserved, never regenerated**
+5. Restarts the stack and waits for the health check to pass
+
+**Always use `install.sh --upgrade` — never `docker compose down` / `docker compose up` directly, and never hand-copy `.env` between versions.** Each fresh build generates a *new* `POSTGRES_PASSWORD` in its own bundle, but the Postgres data volume from your existing install keeps the *old* password. Swapping images without going through `install.sh` (which preserves your existing secrets automatically) silently breaks database authentication and puts the orchestrator into a crash-loop that looks unrelated to the upgrade.
 
 **Upgrade path supported:**
-- v1.6.x → v1.7.3 (supported, data preserved)
-- v1.7.x → v1.7.3 (supported, data preserved)
+- v1.6.x → v1.7.5 (supported, data preserved)
+- v1.7.x → v1.7.5 (supported, data preserved)
 - Versions below v1.6.0: contact Audspect support before upgrading
 
 ---
 
 ## Before You Upgrade
 
-- [ ] Take a full database backup (see step 1 below)
-- [ ] Note the current version: `docker inspect audspect-orchestrator:latest | grep -i version`
-- [ ] Read the [Release Notes](release-notes.md) for v1.7.3 — specifically the **Breaking Changes** and **Migration Notes** sections
-- [ ] Confirm you have the new delivery ZIP: `audspect-bas-v1.7.3.zip`
-- [ ] Schedule during a low-activity window — the orchestrator is offline for approximately 2–3 minutes during image swap
-- [ ] Agents will reconnect automatically after the orchestrator restarts
+- [ ] Locate your original `setup.conf` (the config file used for `--install`, or reconstruct one — see [setup.conf reference](#setupconf-reference) below). `--upgrade` requires it.
+- [ ] Take an extra full database dump as a second safety net on top of `install.sh`'s own automatic config backup (see Step 1 below) — `install.sh`'s backup covers `docker-compose.yml`/`.env`/version, not the database contents itself (those live in the persistent Postgres volume, which the upgrade never touches directly, but a standalone dump is cheap insurance)
+- [ ] Note the current version: `sudo bash install.sh --status`
+- [ ] Read the [Release Notes](release-notes.md) for the target version — specifically **Breaking Changes** and **Migration Notes**
+- [ ] Confirm you have the new delivery ZIP: `bas-install-<version>.zip`
+- [ ] Schedule during a low-activity window — the orchestrator is offline for a few minutes during the rolling restart
+- [ ] Agents will reconnect automatically once the orchestrator is back up
 
 ---
 
-## Step 1 — Back Up the Database
+## Step 1 — Back Up the Database (extra safety net)
 
 ```bash
-# Run from the current deployment directory
+# Run from the current deployment directory (DATA_DIR, default /opt/audspect)
 BACKUP_FILE="/opt/backups/bas-pre-upgrade-$(date +%Y%m%d-%H%M%S).sql"
 mkdir -p /opt/backups
-docker compose exec postgres pg_dump -U bas bas > "$BACKUP_FILE"
+docker exec audspect-postgres pg_dump -U bas_user bas_platform > "$BACKUP_FILE"
 gzip "$BACKUP_FILE"
 echo "Backup saved: ${BACKUP_FILE}.gz"
 ```
@@ -42,111 +51,60 @@ Verify the backup is non-empty:
 ls -lh "${BACKUP_FILE}.gz"
 ```
 
+This is in addition to, not a replacement for, the automatic backup `install.sh --upgrade` takes of your config files in Step 3 below.
+
 ---
 
 ## Step 2 — Extract the New Package
 
 ```bash
 cd /opt
-sudo unzip audspect-bas-v1.7.3.zip
-cd audspect-bas-v1.7.3
+sudo unzip bas-install-<version>.zip
+cd bas-install-<version>
 ```
+
+If the bundle was GPG-signed, verify it first — see the `VERIFY.md` staged alongside the ZIP, or `dist/VERIFY.md` in the build output.
 
 ---
 
-## Step 3 — Copy Your Existing Configuration
-
-Your current `.env` file contains all secrets and configuration. Copy it to the new directory:
+## Step 3 — Run the Upgrade
 
 ```bash
-cp /opt/audspect-bas-<previous-version>/.env /opt/audspect-bas-v1.7.3/.env
+sudo bash install.sh --upgrade --config setup.conf
 ```
 
-Review the new `config.template.env` for any new variables introduced in v1.7.3. Add new required variables to your `.env` if needed. Release notes list all new environment variables.
+This single command performs all 5 steps described in the Overview above — image load, bundle refresh, secret-preserving `.env` rewrite, systemd unit refresh, and a rolling restart with a health-check wait — and prints a status summary when done.
+
+If you don't have your original `setup.conf` handy, see [setup.conf reference](#setupconf-reference) below to reconstruct one with the same `DATA_DIR`/`ADMIN_EMAIL`/`LIC_PATH` your existing install used — `DB_PASSWORD`/`JWT_SECRET`/`AGENT_SECRET` in this file are only used if no existing `.env` is found, so it's safe to leave those blank/placeholder for an upgrade.
 
 ---
 
-## Step 4 — Load the New Docker Images
+## Step 4 — Verify the Upgrade
 
 ```bash
-cd /opt/audspect-bas-v1.7.3/images
-for f in *.tar; do sudo docker load < "$f"; echo "Loaded $f"; done
+sudo bash install.sh --status
 ```
 
----
-
-## Step 5 — Stop the Current Deployment
+Expected output shows all containers running (`audspect-orchestrator`, `audspect-caldera`, `audspect-postgres`, `audspect-chrome`), the new version number, and the listening port (default `9443`).
 
 ```bash
-cd /opt/audspect-bas-<previous-version>
-docker compose down
-```
-
-Agents will begin accumulating heartbeat retries while the server is offline. They will reconnect automatically when the new orchestrator starts.
-
----
-
-## Step 6 — Start the New Deployment
-
-```bash
-cd /opt/audspect-bas-v1.7.3
-docker compose up -d
-```
-
-The orchestrator:
-1. Runs database migrations automatically
-2. Seeds any new built-in scenario content
-3. Starts serving on port 9000
-
-Wait for the health check to pass:
-```bash
-until curl -sf http://localhost:9000/health > /dev/null; do
-  echo "Waiting for orchestrator..."
-  sleep 5
-done
-echo "Orchestrator healthy"
-```
-
----
-
-## Step 7 — Verify the Upgrade
-
-```bash
-# Check version
-curl -s http://localhost:9000/health | python3 -m json.tool
+# Health check directly (add -k and use https:// if you enabled BAS_TLS in setup.conf)
+curl -sf http://localhost:9443/health
 
 # Check logs for errors
-docker compose logs orchestrator --tail=50
+docker logs audspect-orchestrator --tail=50
 
-# Check agents reconnecting
-# (watch the Agents page in the dashboard — agents should return to Active within 60s)
-```
-
-Expected health response:
-```json
-{"status": "ok", "db": "ok", "version": "1.7.3"}
+# Check agents reconnecting — watch the Agents page in the dashboard;
+# agents should return to Active within 60s.
 ```
 
 ---
 
-## Step 8 — Update systemd (if configured)
-
-If you installed the systemd service pointing to the old directory, update it:
-
-```bash
-sudo sed -i 's|audspect-bas-v1\.[0-9.]*|audspect-bas-v1.7.3|g' \
-  /etc/systemd/system/audspect.service
-sudo systemctl daemon-reload
-sudo systemctl enable audspect
-```
-
----
-
-## Step 9 — Update Agent Binaries (if required)
+## Step 5 — Update Agent Binaries (if required)
 
 Check the release notes for whether the agent binary has changed. If a new agent binary is included in the delivery ZIP:
 
-1. Download the new binary from the dashboard: **Agents → Download Agent**
+1. Download the new binary from the dashboard: **Agents → Download Installer**
 2. Deploy to each endpoint using your standard deployment method
 3. The old agent continues to function but may lack new collection capabilities
 
@@ -162,42 +120,39 @@ After confirming the new deployment is healthy, clean up old images to reclaim d
 docker image prune -f
 ```
 
-Keep the old deployment directory for at least 48 hours in case rollback is needed. You can remove it after the window:
-
-```bash
-rm -rf /opt/audspect-bas-<previous-version>
-```
+`install.sh --upgrade` keeps a timestamped backup under `<DATA_DIR>/backups/` automatically — no manual old-directory cleanup is needed the way a hand-rolled `docker compose` upgrade would require. Old backups can be pruned manually once you're confident you won't need to roll back.
 
 ---
 
 ## Rollback Procedure
 
-If the upgrade causes critical issues:
-
 ```bash
-# Stop new deployment
-cd /opt/audspect-bas-v1.7.3
-docker compose down
-
-# Restore previous version
-cd /opt/audspect-bas-<previous-version>
-docker compose up -d
+sudo bash install.sh --rollback
 ```
 
-If schema migrations introduced structural changes that the old binary cannot read, restore from the pre-upgrade database backup:
+This restores the most recent timestamped backup under `<DATA_DIR>/backups/` (the `docker-compose.yml`, `.env`, and version marker `install.sh --upgrade` saved in Step 3) and restarts the stack on the previous version. It prompts for confirmation unless run with `--yes`.
+
+If the target Docker images for the previous version are no longer present locally (e.g. pruned after upgrade), reload them first:
 
 ```bash
-# Stop orchestrator before restore
-docker compose down
+cd /path/to/previous/bas-install-<previous-version>/images
+for f in *.tar; do sudo docker load < "$f"; done
+sudo bash install.sh --rollback
+```
+
+If a schema change means the old binary can no longer read the current database, restore from the pre-upgrade database dump instead:
+
+```bash
+# Stop the stack first
+sudo systemctl stop audspect 2>/dev/null || (cd /opt/audspect && docker compose down)
 
 # Restore database (destructive — all data after the backup is lost)
-docker compose up -d postgres
+docker start audspect-postgres
 gunzip < /opt/backups/bas-pre-upgrade-<timestamp>.sql.gz | \
-  docker compose exec -T postgres psql -U bas -d bas
+  docker exec -i audspect-postgres psql -U bas_user -d bas_platform
 
-# Restart on previous version
-cd /opt/audspect-bas-<previous-version>
-docker compose up -d
+# Then roll back the images/config too
+sudo bash install.sh --rollback
 ```
 
 ---
@@ -210,6 +165,37 @@ docker compose up -d
 | Older agent, no new agent capabilities needed | Agents continue working; no upgrade required |
 | New agent binary released | Download from dashboard, deploy via your standard method |
 | `BINARIES.sha256` manifest updated | Dashboard shows binary trust warning on outdated agents |
+
+---
+
+## setup.conf Reference
+
+`setup.conf` is a plain `key=value` file (no shell syntax). Fields recognized by `install.sh`:
+
+| Key | Required | Default | Description |
+|---|---|---|---|
+| `DATA_DIR` | | `/opt/audspect` | Installation directory |
+| `BAS_PORT` | | `9443` | Dashboard/API listening port |
+| `BAS_TLS` | | `false` | Enable TLS termination |
+| `TLS_CERT` / `TLS_KEY` | if `BAS_TLS=true` | | Certificate/key paths |
+| `DB_PASSWORD` | yes | | Postgres password (only used if no existing `.env` is found) |
+| `ADMIN_EMAIL` | yes | | Initial admin account email |
+| `ADMIN_PASSWORD` | yes | | Initial admin account password |
+| `LOG_RETENTION_DAYS` | | `90` | Log retention window |
+| `JWT_SECRET` | | auto-generated | JWT signing key (only used if no existing `.env` is found) |
+| `AGENT_SECRET` | | auto-generated | Agent MAC secret (only used if no existing `.env` is found) |
+| `LIC_PATH` | yes | | Path to the customer license file |
+
+---
+
+## Other install.sh Commands
+
+```bash
+sudo bash install.sh --check                            # prereq report
+sudo bash install.sh --install --config setup.conf       # first-time install
+sudo bash install.sh --status                            # current state
+sudo bash install.sh --uninstall [--purge-images] [--yes]
+```
 
 ---
 

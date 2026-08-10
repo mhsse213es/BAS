@@ -1,20 +1,21 @@
 # Audspect BAS — Build Guide
 
 **Classification:** Internal — Audspect Engineering / Confidential  
-**Platform Version:** v1.7.3
+**Platform Version:** v1.7.5
 
 ---
 
 ## Overview
 
-The Audspect BAS build pipeline runs on Windows (build host) and produces:
-- A garble-obfuscated Go orchestrator binary
-- A Docker image containing the orchestrator and all bundled content
-- A Docker Compose deployment package
-- Signed scenario YAML files with RSA-4096 detached signatures
-- BINARIES.sha256 manifest with signatures
+The Audspect BAS build pipeline runs on Windows (build host) via `packaging/windows-build.ps1` and produces:
+- A garble-obfuscated Go orchestrator Docker image (garble runs *inside* the Docker build, not as a separate host-side step)
+- A custom Caldera image with the CTID adversary-emulation library baked in
+- RSA-4096-signed scenario YAML files, signed with an in-house signing tool (`orchestrator/scripts/signer.go`) — **not** GPG
+- An RSA-4096-signed `BINARIES.sha256` agent-binary trust manifest, extracted from the built Docker image
+- A versioned delivery folder/ZIP (`dist/bas-install-<version>.zip`) containing everything needed for an air-gapped install
+- Optionally, a GPG-signed bundle checksum (`.zip.asc`) for transport integrity — a completely separate signing key from the RSA scenario/manifest signing above
 
-The build host is the Windows machine where `windows-build.ps1` lives. The final Docker images are pushed to the delivery registry and packaged as tarballs in the delivery ZIP.
+The build host is the Windows machine where `packaging/windows-build.ps1` lives.
 
 ---
 
@@ -22,19 +23,24 @@ The build host is the Windows machine where `windows-build.ps1` lives. The final
 
 ### Windows Build Host
 
-| Tool | Version | Install |
-|---|---|---|
-| Go | 1.22+ | https://go.dev/dl/ |
-| Garble | latest | `go install mvdan.cc/garble@latest` |
-| Docker Desktop | latest | https://www.docker.com/products/docker-desktop |
-| PowerShell | 5.1+ | Built into Windows |
-| GnuPG (GPG) | 2.x | Winget: `winget install GnuPG.Gpg4win` |
+| Tool | Version | Install | Required? |
+|---|---|---|---|
+| Go | 1.22+ | https://go.dev/dl/ | Yes — runs `signer.go`, `licensegen`, and native agent builds |
+| Docker Desktop | latest | https://www.docker.com/products/docker-desktop | Yes |
+| PowerShell | 5.1+ | Built into Windows | Yes |
+| GnuPG (GPG) | 2.x (Gpg4win preferred over Git-for-Windows' bundled MSYS gpg) | Winget: `winget install Gpg4win.Gpg4win` | Optional — bundle ships unsigned with a warning if missing |
 
-### GPG Key
+**Garble is not a host-side prerequisite.** It's installed and run entirely inside `orchestrator/Dockerfile`'s build stage (`GOGARBLE`-scoped to the orchestrator module) — nothing to install on the Windows host for it.
 
-The signing key must be available in the Windows GPG keyring before running the build. See [Signing Infrastructure](signing-infrastructure.md) for key management.
+### RSA Scenario/Manifest Signing Key
 
-The key is identified by its fingerprint in `windows-build.ps1`. Do not hardcode the passphrase in the script — the build prompts for it or reads from `$env:GPG_PASSPHRASE`.
+The RSA-4096 keypair used to sign scenario YAML files and `BINARIES.sha256` is generated automatically on first run of `windows-build.ps1` (`orchestrator/private_key.pem`), via `go run orchestrator/scripts/signer.go keygen`. The matching public key is compiled directly into the orchestrator binary (`orchestrator/internal/integrity/signing.go`) for runtime verification. Subsequent builds reuse the existing key.
+
+**Back up `orchestrator/private_key.pem`** — losing it means scenarios and the binary manifest can never be validly re-signed for that install lineage.
+
+### GPG Bundle-Signing Key
+
+A separate key from the RSA one above — used only to sign the final delivery ZIP's checksum for transport integrity (`releases@audspect.com`). See [Signing Infrastructure](signing-infrastructure.md) for key management. If GPG or the key isn't available, the build continues and warns that the bundle ships unsigned — it does not fail the build.
 
 ---
 
@@ -42,150 +48,126 @@ The key is identified by its fingerprint in `windows-build.ps1`. Do not hardcode
 
 ```powershell
 cd C:\path\to\Audspect_Cloud
-.\windows-build.ps1
+.\packaging\windows-build.ps1 -Version 1.7.5 -Customer "Client Name" -CustomerID "client-prod-001" -Days 365
 ```
+
+Pass `-SkipBuild` to repackage the delivery bundle without rebuilding the Docker image (e.g. re-cutting a license or ZIP after a fix that didn't touch the image).
 
 The script runs in numbered steps:
 
-### Step 0a — Content Preparation
+### Step 0 — Verify Prerequisites
 
-Ensures required content directories exist and are populated:
-- `art-atomics/` — ART YAML library
-- `art-payloads/` — Operator-supplied ART payload binaries
-- `content/cisa-kev.json` — CISA KEV catalog
+Confirms Docker is installed and the daemon is running, and that Go is installed.
 
-If these directories are missing, the build fails with an error.
+### Step 0b — Content Signing (Pre-Build)
 
-### Step 0b — Scenario Signing
+Runs **before** the Docker build so signed artifacts travel into the image via the build context:
+1. Generates the RSA-4096 keypair if `orchestrator/private_key.pem` doesn't exist yet (idempotent — skipped on later runs)
+2. Signs every scenario YAML under `scenarios/` with `signer.go sign`, producing `.yaml.sig` files
+3. Computes the SHA-256 hash of `orchestrator/wwwroot/index.html` — injected into the image via `--build-arg BAS_WWWROOT_HASH` so `StaticHandler()` halts at startup if the shipped dashboard doesn't match what was signed (UI tamper detection). Missing `index.html` disables this check with a warning, it does not fail the build.
+4. `BINARIES.sha256` itself is signed later, in Step 5c — it's generated inside the Docker image, so it can't be signed until the image exists.
 
-Signs all scenario YAML files in `scenarios/` with the RSA-4096 GPG key:
-
-```powershell
-foreach ($yamlFile in Get-ChildItem scenarios/*.yaml) {
-    gpg --detach-sign --armor --output "$($yamlFile.FullName).sig" $yamlFile.FullName
-}
-```
-
-Produces `.yaml.sig` files alongside each YAML. The orchestrator loads and verifies these at startup.
-
-After signing scenarios, updates `BINARIES.sha256`:
-- Computes SHA-256 of the Windows agent binary (`agent/agent.exe`) and Linux agent binary (`agent/bas-agent`)
-- Writes hashes to `orchestrator/agents/BINARIES.sha256`
-- Signs the manifest: `gpg --detach-sign --armor --output BINARIES.sha256.sig BINARIES.sha256`
-
-### Step 1 — Go Dependency Check
+### Step 1 — Build Docker Image (Orchestrator)
 
 ```powershell
-cd orchestrator
-go mod tidy
-go mod verify
+docker build -t "bas-orchestrator:$Version" --build-arg BAS_VERSION=$Version --build-arg BAS_WWWROOT_HASH=$WWWRootHash -f orchestrator\Dockerfile .
 ```
 
-Ensures all Go module dependencies are correct and the module cache is clean.
+Garble (`-literals -tiny`, GOGARBLE-scoped to the orchestrator module) runs inside this Docker build's build stage — see `orchestrator/Dockerfile` for the exact invocation. **Garble breaks Go's `html/template` field-name reflection.** The orchestrator uses JSON-tag-based map rendering for all report templates — never pass structs with field names directly to a template.
 
-### Step 2 — Garble Build (Orchestrator)
+### Step 2 — Pull/Build Dependency Images
 
 ```powershell
-garble -literals -tiny build -o cmd/server/bas-server ./cmd/server/...
+docker pull postgres:16-alpine
+docker pull ghcr.io/mitre/caldera:latest
+docker pull chromedp/headless-shell:latest   # HTML→PDF report renderer
+docker build -t "bas-caldera:$Version" packaging\caldera
 ```
 
-Garble applies:
-- `-literals` — obfuscates string literals (symbol names, package names, const strings)
-- `-tiny` — strips debug info and reduces binary size
+`bas-caldera:$Version` is a custom image with the CTID adversary-emulation library baked in (the only place that library is cloned — this build host needs internet access for it). If any of these fail, the build warns and continues with a reduced bundle (e.g. stock Caldera, or PDF reports falling back to the built-in renderer) rather than aborting.
 
-**Important:** Garble breaks Go's `html/template` field-name reflection. The orchestrator uses JSON-tag-based map rendering for all report templates. Do not use structs with field names in templates.
+### Step 3-4 — Stage Delivery Folder and Save Images
 
-The output binary `cmd/server/bas-server` is placed in the server root. The Docker image COPY step picks it up from there.
+Creates `dist\bas-install-<version>\` and saves every image as a `.tar` under `dist\bas-install-<version>\images\` (`docker load` accepts both `.tar` and `.tar.gz`).
 
-### Step 3 — Docker Image Build
+### Step 5a-5c — Build Agent Binaries
 
 ```powershell
-docker build -t audspect-orchestrator:1.7.3 -f orchestrator/Dockerfile orchestrator/
-docker build -t audspect-caldera:1.7.3 -f caldera/Dockerfile caldera/
+# 1. Agent binary embedded in the installer (-H windowsgui: without it,
+#    Windows auto-allocates a visible console whenever something launches
+#    the agent without an inherited console, e.g. the tray's Run-key entry
+#    at logon -- see the comment at this build line for the full history)
+go build -ldflags="-s -w -H windowsgui" -o installer\bas_agent.exe .   # from agent/, GOOS=windows GOARCH=amd64
+
+# 2. The installer EXE itself (embeds the agent binary above via go:embed) --
+#    this is the actual customer-facing deliverable, downloaded from the
+#    dashboard's Agents -> Download Installer button
+go build -ldflags="-s -w -H windowsgui" -o "$OutDir\BASAgent-Setup-$Version.exe" .   # from installer/
+
+# 3. Standalone Windows agent (manual / side-by-side deploy, not the installer path)
+go build -ldflags="-s -w -H windowsgui" -o "$OutDir\bas-agent-windows-amd64.exe" .   # from agent/, CGO_ENABLED=0
+
+# 4. Linux agent (amd64 + arm64)
+$env:GOOS = "linux"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+go build -o agent\bas-agent-linux-amd64 .\agent\...
+$env:GOOS = "linux"; $env:GOARCH = "arm64"; $env:CGO_ENABLED = "0"
+go build -o agent\bas-agent-linux-arm64 .\agent\...
 ```
 
-The orchestrator Dockerfile:
-1. Uses `golang:1.22` for the build stage (garble runs inside Docker for Linux binary)
-2. Copies the binary and static assets into a `gcr.io/distroless/static:nonroot` final image
-3. Copies `scenarios/` and `content/` into the image
+The installer EXE's UAC manifest (`requireAdministrator`) and icon are embedded via `rsrc` (`github.com/akavel/rsrc`) before each Windows build, so elevation happens before the process starts rather than via a self-elevation dance. The build enforces a size guardrail on the installer EXE (errors above 25MB, expected ~14MB) to catch an accidental `go:embed` regression pulling in something that shouldn't be bundled.
 
-### Step 4 — Image Export
+There is currently no macOS agent build step in the pipeline, despite macOS-specific agent source files existing in the repo (`service_darwin.go`, `sysinfo_darwin.go`, etc.) — macOS is not cross-compiled or shipped in the delivery bundle today.
+
+`BINARIES.sha256` is **not** computed by hashing local binaries — it's generated inside the Dockerfile's agent-builder stage (from the same binaries endpoints actually download) and extracted from the built image via `docker create` + `docker cp` (distroless has no shell, so this filesystem-level extraction is the only option). It's then RSA-signed with the same `private_key.pem` from Step 0b, staged into `orchestrator/agents/`, and copied into the delivery bundle.
+
+### Step 6-7 — Copy Bundle Files, Write VERSION
+
+Copies scenarios (with `.yaml.sig` files), the dashboard `wwwroot`, and ART external payloads into the delivery folder, and writes a plain `VERSION` file containing the version string.
+
+### Step 7b — Air-Gap Integrity Manifest
+
+Generates `verify.sh` and a per-file SHA-256 manifest so the bundle's own contents are independently verifiable after transfer, before install.
+
+### Step 8 — Generate License
 
 ```powershell
-docker save audspect-orchestrator:1.7.3 | gzip > release/images/orchestrator.tar.gz
-docker save audspect-caldera:1.7.3 | gzip > release/images/caldera.tar.gz
-docker save postgres:16 | gzip > release/images/postgres.tar.gz
-docker save chromium:latest | gzip > release/images/chromium.tar.gz
+go run packaging\licensing\licensegen\main.go -customer $Customer -id $CustomerID -days $Days -key packaging\licensing\keys\private.pem -out "$CustomerID.lic"
 ```
 
-### Step 5 — Agent Binary Build
+Copies the license into the delivery folder both as `<CustomerID>.lic` and as `bas.lic` (the `docker-compose.yml` volume mount name — without this exact filename, Docker creates an empty directory at that mount path and the license check fails). Skipped with a warning if `-Customer`/`-CustomerID` weren't passed, or if the licensing private key is missing.
 
-Agent binaries are built for each target platform:
+### Step 9 — Create Delivery ZIP
 
 ```powershell
-# Windows AMD64
-$env:GOOS="windows"; $env:GOARCH="amd64"
-go build -o agent/bas-agent.exe ./agent/...
-
-# Linux AMD64
-$env:GOOS="linux"; $env:GOARCH="amd64"
-go build -o agent/bas-agent-linux-amd64 ./agent/...
-
-# Linux ARM64
-$env:GOOS="linux"; $env:GOARCH="arm64"
-go build -o agent/bas-agent-linux-arm64 ./agent/...
-
-# macOS AMD64
-$env:GOOS="darwin"; $env:GOARCH="amd64"
-go build -o agent/bas-agent-darwin-amd64 ./agent/...
+Compress-Archive -Path $OutDir -DestinationPath "dist\bas-install-$Version.zip"
 ```
 
-After building all binaries, BINARIES.sha256 is updated and re-signed (see Step 0b).
+Also writes a `.zip.sha256` bundle-level checksum file so the transfer itself is verifiable before unzip.
 
-### Step 6 — Delivery ZIP Assembly
+### Step 9b — GPG-Sign the Bundle
 
-```powershell
-$zipPath = "release/audspect-bas-v1.7.3.zip"
-Compress-Archive -Path @(
-    "release/images",
-    "docker-compose.yml",
-    "setup.sh",
-    "config.template.env",
-    "scenarios",    # includes .yaml.sig files
-    "orchestrator/agents/BINARIES.sha256",
-    "orchestrator/agents/BINARIES.sha256.sig"
-) -DestinationPath $zipPath
-```
-
----
-
-## Versioning
-
-The platform version string is set in:
-- `orchestrator/cmd/server/version.go`: `const Version = "1.7.3"`
-- `docker-compose.yml`: image tags
-- `windows-build.ps1`: `$Version = "1.7.3"`
-
-Update all three when cutting a new release.
+Signs the ZIP with the separate GPG bundle-signing key (`releases@audspect.com`), producing `bas-install-<version>.zip.asc`, and stages a self-contained verify kit (`pubkey.asc` + `verify-sig.sh`) in `dist\` so the client can authenticate the ZIP before unzipping. Skipped gracefully (with a warning, not a build failure) if GPG or the key isn't available on this host.
 
 ---
 
 ## Build Artifacts
 
-After a successful build:
+After a successful build, under `dist\bas-install-<version>\`:
 
 | File | Description |
 |---|---|
-| `orchestrator/cmd/server/bas-server` | Garble-obfuscated orchestrator binary (Linux) |
-| `agent/bas-agent.exe` | Windows agent binary |
-| `agent/bas-agent-linux-amd64` | Linux AMD64 agent binary |
-| `agent/bas-agent-linux-arm64` | Linux ARM64 agent binary |
-| `agent/bas-agent-darwin-amd64` | macOS AMD64 agent binary |
-| `orchestrator/agents/BINARIES.sha256` | Agent binary trust manifest |
-| `orchestrator/agents/BINARIES.sha256.sig` | GPG signature of the manifest |
-| `scenarios/*.yaml.sig` | Scenario RSA-4096 signatures |
-| `release/images/*.tar.gz` | Docker image tarballs |
-| `release/audspect-bas-v1.7.3.zip` | Final delivery ZIP |
+| `images/*.tar` | Docker image tarballs (orchestrator, Caldera, Postgres, headless-shell) |
+| `BASAgent-Setup-<version>.exe` | Windows installer EXE — the customer-facing deliverable |
+| `bas-agent-windows-amd64.exe` | Standalone Windows agent (manual/side-by-side deploy) |
+| `agent/bas-agent-linux-amd64` / `-arm64` | Linux agent binaries |
+| `agents/BINARIES.sha256` + `.sig` | RSA-signed agent binary trust manifest |
+| `scenarios/*.yaml.sig` | RSA-4096 scenario signatures |
+| `wwwroot/` | Dashboard static files (hash-checked at startup) |
+| `<CustomerID>.lic` / `bas.lic` | Customer license |
+| `VERSION` | Plain version string |
+| `install.sh`, `docker-compose.yml`, `setup.sh` | Deployment scripts |
+
+At `dist\` root: `bas-install-<version>.zip`, `.zip.sha256`, and (if GPG signing succeeded) `.zip.asc` + a verify kit.
 
 ---
 
@@ -193,11 +175,12 @@ After a successful build:
 
 | Error | Cause | Fix |
 |---|---|---|
-| `garble: command not found` | Garble not in PATH | `go install mvdan.cc/garble@latest`; ensure `$GOPATH/bin` is in PATH |
-| `gpg: no suitable key found` | Signing key not imported | Import key: `gpg --import audspect-signing-key.asc` |
+| `RSA keygen failed` | Go not installed, or `orchestrator/scripts/signer.go` missing | Verify Go install; verify the repo checkout is complete |
+| `gpg: no suitable key found` / bundle ships unsigned | Signing key not imported, or GPG not installed | Import key: `gpg --import audspect-signing-key.asc`; see [Signing Infrastructure](signing-infrastructure.md) |
 | `html/template: field not found` | Struct used in template after garble | Use JSON-tag map rendering; never template struct fields |
-| `docker: no space left on device` | Old images filling disk | `docker image prune -f` |
-| `go: module mismatch` | Stale go.sum | `go mod tidy && go mod download` |
+| `docker: no space left on device` | Old images/build cache filling disk | `docker builder prune -a -f && docker image prune -f` |
+| `error running keyboxd` (GPG) | Git-for-Windows' MSYS gpg's keyboxd not launchable from PowerShell | Prefer a full Gpg4win install over Git-for-Windows' bundled gpg; or remove `use-keyboxd` from `%USERPROFILE%\.gnupg\common.conf` |
+| Agent binary trust all yellow after upgrade | `BINARIES.sha256` not refreshed for the new agent build | Re-run the full pipeline (not `-SkipBuild`) so Step 5c re-extracts and re-signs it |
 
 ---
 
@@ -206,9 +189,11 @@ After a successful build:
 ```powershell
 cd orchestrator
 go test ./...
+go test ./... -race           # Race detector
+go test -cover ./...          # Coverage
 ```
 
-Tests do not require a running database. Database-dependent tests use a test PostgreSQL instance or mock.
+Handler tests use `httptest.NewRecorder()`/`httptest.NewRequest()`. Database-dependent tests spin up a real PostgreSQL instance via `testcontainers-go` (Docker must be running) — there is no mock database. Pass `-short` to skip container-backed tests when Docker isn't available.
 
 ---
 

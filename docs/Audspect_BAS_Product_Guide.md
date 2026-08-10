@@ -1,14 +1,14 @@
 # Audspect BAS Platform
-## Product Guide — v1.7.3
+## Product Guide — v1.7.5
 
 ---
 
 **Classification:** Confidential — Customer Distribution  
-**Document Version:** 2.0  
-**Platform Version:** 1.7.3  
+**Document Version:** 2.1  
+**Platform Version:** 1.7.5  
 **Prepared by:** Audspect  
 **Contact:** support@audspect.com  
-**Last Updated:** 2026-07-03
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -26,6 +26,10 @@
    - 5.5 Threat Intelligence
    - 5.6 Attack Path Validation
    - 5.7 Integrity System
+   - 5.8 Fleet Operations at Scale
+   - 5.9 Executive Dashboard and Threat Prioritization
+   - 5.10 Detection Validation and Automated Response
+   - 5.11 Global Search
 6. [Deployment Models](#6-deployment-models)
 7. [Security Model](#7-security-model)
 8. [Operations Overview](#8-operations-overview)
@@ -49,7 +53,20 @@
 
 Audspect BAS tests whether your security controls (EDR, AV, SIEM, DLP, firewall policies, hardening baselines) actually stop known attack patterns. Every simulation step is mapped to the MITRE ATT&CK framework and scored across four risk dimensions. Results surface in a real-time dashboard designed for security operations teams and feed directly into a structured Findings and Remediation workflow.
 
-**Platform version 1.7.3 introduces:**
+**Platform version 1.7.5 introduces (on top of the 1.7.3 feature set below):**
+
+- Executive Dashboard: fleet-wide Risk Score, Exposure Score, Detection Coverage, and Asset Count trended over time, with an honest "No data yet" state instead of a misleading perfect score before any Attack Path collection has run
+- Threat Prioritization: standing per-actor risk scoring across 9 factors, ranking which threat actors matter most to your environment right now
+- Agent Groups: hierarchical, admin-managed organizational structure for endpoints, replacing flat environment labels
+- Scheduled Assessments: recurring scenario runs (daily/weekly/monthly) with an immutable execution-authorization audit trail for Telemetry-mode runs
+- Campaigns can now target an Agent Group or all enrolled agents directly, not just an explicit agent list
+- Threat Intelligence connectors (MISP, OpenCTI, OTX/AlienVault) are now configured entirely from the console — enter the API key and URL, Test Connection, Save — with changes taking effect immediately and no `.env` editing or container restart required
+- Detection Validation: expected-vs-actual gap analysis against live SIEM/EDR connectors (Microsoft Sentinel, Defender XDR, IBM QRadar, Splunk, CrowdStrike)
+- EPP Response Actions: isolate, kill process, or quarantine a file directly from a finding, via CrowdStrike or Microsoft Defender
+- Global Search across agents, scenarios, findings, and more, with a `type:` filter operator
+- Multi-Tenancy foundation, SSO/SCIM identity integration, and API rate limiting
+
+**Platform version 1.7.3 introduced:**
 
 - Cymulate-style reporting suite: per-run, per-agent, campaign, audit-pack, and compliance reports in HTML, PDF, and CSV
 - Structured Findings and Remediation workflow with severity triage and re-validate
@@ -133,10 +150,10 @@ Failed controls surface as structured Findings with severity, technique, tactic,
 │  │                                                                     │ │
 │  │  ┌───────────────┐  ┌────────────┐  ┌──────────┐  ┌─────────────┐ │ │
 │  │  │  Orchestrator  │  │ PostgreSQL  │  │ Chromium │  │ Caldera     │ │ │
-│  │  │  :9000         │  │ :5432       │  │ (PDF)    │  │ :8888 (opt) │ │ │
+│  │  │  :9443         │  │ :5432       │  │ (PDF)    │  │ :8888 (opt) │ │ │
 │  │  └───────┬────────┘  └────────────┘  └──────────┘  └─────────────┘ │ │
 │  └──────────┼──────────────────────────────────────────────────────────┘ │
-│             │  HTTP / WebSocket (port 9000)                              │
+│             │  HTTP / WebSocket (port 9443)                              │
 │             │                                                            │
 │   ┌─────────┴──────────┐        ┌──────────────────────────────────┐    │
 │   │  BROWSER            │        │  TARGET ENDPOINTS                │    │
@@ -146,8 +163,8 @@ Failed controls surface as structured Findings with severity, technique, tactic,
 │                                  └──────────────────────────────────┘    │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │  OPTIONAL INTEGRATIONS (all on-prem)                                │ │
-│  │  MISP  │  OpenCTI  │  Ticketing System  │  SIEM                    │ │
+│  │  OPTIONAL INTEGRATIONS (all on-prem or vendor-hosted)                │ │
+│  │  MISP  │  OpenCTI  │  OTX  │  Ticketing System  │  SIEM  │  EPP     │ │
 │  └─────────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -160,10 +177,10 @@ Failed controls surface as structured Findings with severity, technique, tactic,
 | Agent → Orchestrator WebSocket | `ws://` or `wss://` | Agent secret in URL param |
 | Orchestrator → Agent command | WebSocket (server push) | Established WS session |
 | Agent → Orchestrator result | HTTP POST | HMAC-SHA256 MAC over body |
-| Browser → Orchestrator API | HTTPS REST | JWT (HttpOnly cookie or Bearer) |
+| Browser → Orchestrator API | HTTP(S) REST | JWT (HttpOnly cookie or Bearer) |
 | Browser ↔ Orchestrator live events | WebSocket | JWT |
 
-No agent port is opened inbound. Agents initiate all connections outbound to port 9000.
+The default listening port is **9443**. TLS is opt-in (`BAS_TLS=true` in `setup.conf`) — plain HTTP is the out-of-the-box default; a reverse proxy or `BAS_TLS` is expected for anything internet-adjacent. No agent port is opened inbound. Agents initiate all connections outbound to the orchestrator's listening port.
 
 ### 4.3 Data Residency
 
@@ -188,7 +205,7 @@ The scenario engine is the core of the platform. It resolves scenario YAML defin
 | Caldera | Adversary emulation abilities fetched via Caldera REST API |
 | Hybrid | Combined posture + live execution modes (Posture / Telemetry / Lab) |
 
-**Platform ships with 14+ built-in scenarios** covering the full MITRE ATT&CK kill chain plus BFSI-specific coverage including APT36 spear-phishing, UPI fraud kill chain, and RBI/CSCRF compliance drills.
+**Platform ships with 50+ built-in scenarios** covering the full MITRE ATT&CK kill chain plus BFSI-specific coverage including APT36 spear-phishing, UPI fraud kill chain, RBI/CSCRF compliance drills, DLP validation, ransomware readiness (including current families such as BlackCat, Akira, Play, RansomHub, and Cl0p), and insider threat behaviors.
 
 Analysts can author custom scenarios visually from the dashboard or by uploading YAML, without SSH access or service restarts.
 
@@ -246,13 +263,15 @@ Analysts can:
 
 ### 5.5 Threat Intelligence
 
-The Threat Intelligence module connects to on-prem MISP and OpenCTI instances to pull structured intelligence and automatically generate test scenarios from it.
+The Threat Intelligence module connects to MISP, OpenCTI, and OTX (AlienVault) to pull structured intelligence and automatically generate test scenarios from it.
 
-- **Sources:** MISP events and indicators; OpenCTI bundles (STIX 2.1)
-- **Polling:** Configurable interval (default: 24 hours)
+- **Sources:** MISP events and indicators; OpenCTI bundles (STIX 2.1); OTX (AlienVault) pulses
+- **Configuration:** Entirely from the console (Settings → Threat Intel Connector) — enter the base URL and API key for MISP/OpenCTI, or just the API key for OTX, click **Test Connection** to validate before saving, then **Save**. Changes take effect immediately; there is no `.env` file to edit and no container restart required.
+- **Polling:** Configurable interval (default: 24 hours), plus a manual **Sync Now**
 - **Filters:** Sector (e.g., financial-services, banking) and region (e.g., Asia, India)
 - **Output:** Auto-generated custom scenarios mapped to techniques in the intelligence
 - **ATT&CK enrichment:** Bundled ATT&CK STIX authoritative data + curated overlay
+- **Threat Prioritization:** every actor pulled in from a connector is scored and ranked — see 5.9 below
 
 CVE/KEV/OWASP enrichment uses the CISA Known Exploited Vulnerabilities catalog (bundled in image) and FIRST EPSS scores (optional). These are **curated mappings only** — the platform never auto-maps or fabricates CVE-to-technique relationships.
 
@@ -289,6 +308,32 @@ The platform enforces multi-layer integrity validation across scenario content, 
 
 → See **[Security Hardening Guide](guides/security-hardening.md)** for the full integrity pipeline, certificate rotation, and FIPS considerations.
 
+### 5.8 Fleet Operations at Scale
+
+Three capabilities that reduce day-to-day operational overhead for larger fleets:
+
+**Agent Groups** — a real, admin-managed hierarchical group tree for organizing endpoints (e.g., by business unit, region, or environment), replacing the earlier flat environment-label column. Groups appear as a tree panel on the Agents page; any view or run target that accepts an agent list can also accept a group.
+
+**Scheduled Assessments** — recurring scenario runs (once, daily, weekly, or monthly) that reuse the same execution engine as an on-demand run — not a second, separate scheduler. A Telemetry-mode schedule requires Admin approval and a recorded reason at creation time, captured as an immutable audit record (who approved it, when, under which policy version) — schedules cannot be silently edited afterward; changing one means cancelling and recreating it.
+
+**Campaigns** can target an explicit agent list (as before), a single Agent Group, or all enrolled agents — selectable directly in the New Campaign wizard, with a live preview of which agents are actually in scope before you launch.
+
+### 5.9 Executive Dashboard and Threat Prioritization
+
+The **Executive Dashboard** gives a fleet-wide, at-a-glance view: Risk Score, Exposure Score, Detection Coverage, and Asset Count, each with a trend sparkline over the selected time window. Exposure Score and Detection Coverage are computed from the Attack Path graph (5.6) — before any Attack Path collection has run, the dashboard shows an explicit **"No data yet"** state on those two tiles instead of a misleadingly perfect score, so an unscanned fleet is never mistaken for a well-defended one.
+
+**Threat Prioritization** maintains a standing, per-actor risk score across every threat actor your MISP/OpenCTI/OTX connectors have surfaced, blending 9 factors (technique coverage gaps, sector/region relevance, recency, and others) into a ranked list — answering "which threat actor matters most to us right now," not just "which actors exist in our intel feed." Scores recompute automatically whenever new intelligence arrives.
+
+### 5.10 Detection Validation and Automated Response
+
+**Detection Validation** runs an expected-vs-actual gap analysis: for a technique the platform executed, did your SIEM/EDR actually generate the alert you'd expect? Live connectors are available for Microsoft Sentinel, Microsoft Defender XDR, IBM QRadar, Splunk, and CrowdStrike.
+
+**EPP Response Actions** let an analyst isolate a host, kill a process, or quarantine a file directly from a finding — via CrowdStrike or Microsoft Defender — closing the loop from "we found a gap" to "we contained it" without leaving the platform.
+
+### 5.11 Global Search
+
+A single search bar (accessible fleet-wide, not per-tab) across agents, scenarios, findings, and other long-tail entities, with a `type:` operator to scope results (e.g. `type:agent hostname`) and results filtered to what the current user's role can actually see.
+
 ---
 
 ## 6. Deployment Models
@@ -298,7 +343,7 @@ The platform enforces multi-layer integrity validation across scenario content, 
 Single server deployment using Docker Compose. All components run as Docker containers on a dedicated Ubuntu server inside the customer's network. No internet access required after initial setup.
 
 **Components on one server:**
-- Orchestrator container (port 9000)
+- Orchestrator container (port 9443)
 - PostgreSQL container (internal port 5432)
 - Headless Chromium PDF sidecar
 - Caldera container (optional, port 8888)
@@ -347,8 +392,8 @@ Two-server active-passive setup with a shared PostgreSQL instance and a load bal
 
 ### 7.5 Platform Hardening Recommendations
 
-1. Enable TLS via nginx/Caddy reverse proxy in front of port 9000
-2. Restrict port 9000 to analyst workstations and endpoint subnets only
+1. Enable TLS — either directly via `BAS_TLS=true` in `setup.conf` (installer-managed) or via an nginx/Caddy reverse proxy in front of port 9443
+2. Restrict port 9443 to analyst workstations and endpoint subnets only
 3. Isolate the orchestrator on a dedicated management VLAN
 4. Rotate `AGENT_SECRET` and `JWT_SECRET` on a defined schedule
 5. Enable scenario signature verification (enabled by default)
@@ -371,11 +416,13 @@ A typical security operations workflow on Audspect BAS follows this sequence:
 
 **5. Re-validate** — Use the Remediation view's **Re-validate** action to dispatch a targeted single-technique run. The finding updates automatically when the re-run passes.
 
-**6. Schedule campaigns** — Group multiple scenarios across multiple agents into a Campaign for simultaneous execution and a unified campaign report.
+**6. Schedule campaigns** — Group multiple scenarios across multiple agents (or a whole Agent Group, or all enrolled agents) into a Campaign for simultaneous execution and a unified campaign report.
 
-**7. Track trends** — Prevention Score trend (Improving / Degrading / Stable) appears on each run and agent summary. Historical comparison is available in the full agent report.
+**7. Track trends** — Prevention Score trend (Improving / Degrading / Stable) appears on each run and agent summary. Historical comparison is available in the full agent report and the Executive Dashboard.
 
 **8. Validate attack paths** — Run Attack Path collection from the Attack Path section to map lateral movement opportunities between enrolled agents and nearby hosts.
+
+**9. Automate recurring assessments** — Create a Scheduled Assessment for a scenario that should run on a standing cadence (daily/weekly/monthly) rather than being triggered manually each time.
 
 ---
 
@@ -394,7 +441,10 @@ The platform enforces role-based access control (RBAC) with three roles.
 | Dispatch attack path collection | | ✓ | ✓ |
 | Set finding status | | ✓ | ✓ |
 | Create and run campaigns | | ✓ | ✓ |
+| Target a Campaign at an Agent Group | | ✓ | ✓ |
 | Create and run exercises | | ✓ | ✓ |
+| Create scheduled assessments | | ✓ | ✓ |
+| View and target agent groups | ✓ | ✓ | ✓ |
 | Trigger threat intel sync | | ✓ | ✓ |
 | View connection config (agent secret) | | | ✓ |
 | Manage users | | | ✓ |
@@ -402,6 +452,9 @@ The platform enforces role-based access control (RBAC) with three roles.
 | Platform configuration | | | ✓ |
 | Set agent lifecycle state (quarantine/restrict/retire) | | | ✓ |
 | Configure AP schedule | | | ✓ |
+| Create/rename/move/delete agent groups | | | ✓ |
+| Target a Campaign at all enrolled agents | | | ✓ |
+| Update Threat Intel connector config (URL/API key) | | | ✓ |
 
 → See **[User Management Guide](guides/user-management.md)** for user creation, password policy details, and the must-change-pw flow.
 
@@ -485,23 +538,28 @@ From the **Agents** view, click an agent → **Reports** → select format. For 
 
 ## 13. REST API Overview
 
-All API endpoints are served at `http://<server>:9000`. Authentication uses JWT tokens issued by `POST /api/auth/login`, sent as an HttpOnly cookie or `Authorization: Bearer <token>` header.
+All API endpoints are served at `http://<server>:9443` (or `https://` if TLS is enabled). Authentication uses JWT tokens issued by `POST /api/auth/login`, sent as an HttpOnly cookie or `Authorization: Bearer <token>` header.
 
-**Endpoint families:**
+**Endpoint families** (71 route groups exist today — this is a representative subset; see the API Reference for the complete list):
 
 | Family | Base Path | Description |
 |---|---|---|
 | Authentication | `/api/auth/*` | Login, logout, password change, first-run setup |
 | Agents | `/api/agents/*` | List, download, state management, enrollment |
+| Agent Groups | `/api/agent-groups/*` | Hierarchical group tree: create, rename, move, delete, assign |
 | Scenarios | `/api/scenarios/*` | CRUD, run dispatch, upload/download YAML |
 | Runs | `/api/scenarios/runs/*` | Run history, cancel, per-run reports |
+| Scheduled Assessments | `/api/scheduled-assessments/*` | Recurring scenario run schedules |
 | Findings | `/api/findings/*` | List, get, set status |
 | Remediation | `/api/remediations/*` | Grouped findings by technique |
 | Reports | `/api/report/*` | Full-agent HTML/PDF/CSV, audit pack, compliance |
-| Campaigns | `/api/campaigns/*` | Create, list, summary, campaign reports |
+| Campaigns | `/api/campaigns/*` | Create, list, summary, campaign reports (agent / group / all-agents targeting) |
 | Exercises | `/api/exercises/*` | Purple Team exercise plans and executions |
 | Attack Path | `/api/attackpath/*` | Jobs, collect, schedule, assets, summary, history |
-| Threat Intel | `/api/connectors/*` | Connector status, sync trigger, scenario management |
+| Threat Intel Connector Status | `/api/connector/*` | Fleet-wide MISP/OpenCTI/OTX/bundle sync status and manual trigger |
+| Threat Intel Connector Config | `/api/threat-intel/{connector}/config[/test]` | Per-connector URL/API-key config: get, save, test connection |
+| Threat Prioritization | `/api/threat-priority/*` | Per-actor ranked scores and detail |
+| Dashboard | `/api/dashboard/*` | Executive dashboard current snapshot and trends |
 | Users | `/api/users/*` | CRUD, password reset |
 | Config | `/api/config/*` | Connection config, crypto info, license |
 | Health | `/health` | Liveness check |
@@ -537,7 +595,7 @@ Configuration is loaded from `/etc/bas/config.json` (optional) and overridden by
 | Variable | Default | Description |
 |---|---|---|
 | `AGENT_SECRET` | — | Shared secret for agent MAC verification |
-| `HTTP_PORT` | `9000` | Listening port |
+| `HTTP_PORT` | `9000` (binary default; the shipped Docker Compose/installer sets `9443`) | Listening port |
 | `BAS_ADMIN_EMAIL` | `admin` | Admin username on first-run seed |
 | `BAS_ADMIN_PASSWORD` | — | Admin initial password |
 | `BAS_PBKDF2_ITERATIONS` | `310000` | Password hash iteration count |
@@ -593,7 +651,7 @@ The compliance dashboard at `GET /api/compliance/scores` shows a per-framework c
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
-| Agent not appearing in dashboard | Wrong `BAS_SERVER_URL` or port blocked | Verify URL in config; test with `telnet <server> 9000` |
+| Agent not appearing in dashboard | Wrong `BAS_SERVER_URL` or port blocked | Verify URL in config; test with `telnet <server> 9443` |
 | Agent shows Offline immediately | Wrong `AGENT_SECRET` | Copy secret from Admin → Connection Config |
 | 401 on agent heartbeat | Secret mismatch | Verify `AGENT_SECRET` matches between server and agent |
 | Scenario run stuck at "Running" | Agent went offline mid-run | Staleness monitor marks it Partial after 90 seconds |
@@ -718,3 +776,4 @@ The compliance dashboard at `GET /api/compliance/scores` shows a per-framework c
 |---|---|---|---|
 | 1.0 | 2026-06-01 | v1.6.0 | Initial release |
 | 2.0 | 2026-07-03 | v1.7.3 | Complete rewrite: v1.7.3 feature set, corrected crypto, new modules |
+| 2.1 | 2026-08-10 | v1.7.5 | Refresh: Fleet Operations at Scale (Agent Groups, Scheduled Assessments, Campaign group/all-agents targeting), Executive Dashboard + Threat Prioritization, DB-backed Threat Intel connector config (OTX added, no-restart config), Detection Validation + EPP Response Actions, Global Search; corrected default port (9443, not 9000) and scenario count (50+) |

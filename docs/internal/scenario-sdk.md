@@ -1,9 +1,15 @@
 # Audspect BAS — Scenario SDK
 
 **Classification:** Internal — Audspect Engineering / Confidential  
-**Platform Version:** v1.7.3
+**Platform Version:** v1.7.5
 
 ---
+
+## ⚠ Known Significantly Stale — Schema Reference Below Does Not Match Current Code
+
+Checked against `orchestrator/internal/scenario/types.go` on 2026-08-10: the `Step`/`Scenario` field names, required fields, and even the overall execution model documented below have diverged substantially from the real structs — this is not a handful of renamed fields, it's a different mental model in places (e.g. the real `Scenario` type has no top-level `framework: custom/art/caldera/hybrid` field at all; execution mode is instead selected by a priority-ordered set of flags — `local_check`, `caldera_all_windows`, `caldera_abilities`, `caldera_adversary_id`, `art_all_windows`, `art_techniques`, falling through to `steps`). `tactic`, `severity`, and the `expected_exit_*` fields documented below do not exist on the real `Step` struct at all; `art_technique`/`art_test_index`/`caldera_ability_id`/`caldera_executor` are actually `ability_id`/`test_index` (shared, not framework-specific).
+
+**Do not treat the schema below as authoritative until this document gets a full rewrite against `types.go`** — that's a larger, dedicated pass (verifying every field, the verdict-computation logic per framework, prerequisites, and deferred-execution semantics against source) than this update round covered. Everything else in this document (signing section below) has been checked and corrected.
 
 ## Overview
 
@@ -211,11 +217,13 @@ Cleanup runs after the step regardless of verdict (PASS, FAIL, ERROR). Cleanup f
 
 ---
 
-## Signing Custom Scenarios
+## Signing — Builtin vs. Custom Scenarios
 
-Custom scenarios uploaded via the dashboard are signed automatically by the orchestrator at upload time. The orchestrator's signing key (loaded from the embedded public key) is used.
+RSA-4096 signature verification (see [Signing Infrastructure](signing-infrastructure.md)) applies only to **builtin** scenarios loaded from `.yaml` files in `SCENARIOS_DIR` at startup — these must have a valid adjacent `.yaml.sig`, signed at build time with `orchestrator/scripts/signer.go`, or they're rejected as unsigned/tampered.
 
-Scenarios created on the filesystem (bypassing the dashboard) must be signed manually using the signing tool before placement in `SCENARIOS_DIR`. See [Signing Infrastructure](signing-infrastructure.md).
+**Custom scenarios created or edited via the dashboard (`POST /api/scenarios`, `PUT /api/scenarios/{id}`) are not signed at all.** They never touch the filesystem `.yaml`/`.yaml.sig` mechanism in the first place — `CreateScenario`/`UpdateScenario` decode the request body directly into a `scenario.Scenario` and persist it via the engine, with no call into the signing path anywhere in that flow. This is intentional, not a gap: the orchestrator binary only ever has the *public* verification key compiled in, never the private signing key (that lives solely in `orchestrator/private_key.pem` on the build host) — so live signing at request time was never architecturally possible even if it had been desired. Custom scenarios are trusted instead via authenticated dashboard access (`source == "custom"`, Analyst+Admin only) rather than a cryptographic signature.
+
+If you need to place a hand-authored scenario directly into `SCENARIOS_DIR` on disk (bypassing the dashboard, e.g. for a new builtin), it must be signed manually on the build host with `orchestrator/scripts/signer.go sign private_key.pem <file>.yaml` before it will load.
 
 ---
 

@@ -1,7 +1,7 @@
 # Audspect BAS — Performance Tuning Guide
 
 **Classification:** Internal — Audspect Engineering / Confidential  
-**Platform Version:** v1.7.3
+**Platform Version:** v1.7.5
 
 ---
 
@@ -18,7 +18,7 @@ This guide covers performance optimization for medium-to-large deployments (50+ 
 | Database connection saturation | Many concurrent runs returning results | Run result ingestion delays |
 | PDF generation slow | Chromium memory limit | Report download latency |
 | WebSocket fan-out | Many browser sessions + frequent broadcasts | Dashboard lag |
-| Disk I/O | PostgreSQL BYTEA blobs (PDF/HTML reports) | Slow report generation |
+| Disk I/O | Large `scenario_runs.results` JSONB payloads on wide-scan runs | Slow run detail loads |
 | Agent heartbeat storm | All agents reconnecting simultaneously after outage | Temporary CPU spike |
 
 ---
@@ -114,20 +114,16 @@ function scheduleRenderAgentRows() {
 
 ## Chromium PDF Tuning
 
-Default Chromium container memory: 512 MB. For large fleet reports (100+ agents):
+The compose service is named `chrome` (image `chromedp/headless-shell`), not `chromium`. Reports render on-demand from HTML at request time via this sidecar — there is no pre-generated PDF cache or blob store to manage; if the sidecar is unavailable, PDF generation falls back to a built-in (lower-fidelity) renderer rather than failing outright.
 
 ```yaml
 services:
-  chromium:
+  chrome:
     mem_limit: 2g
     cpus: '2'
-    environment:
-      - CHROMIUM_FLAGS=--max_old_space_size=1024
 ```
 
-PDF generation is synchronous (one PDF at a time per Chromium instance). For concurrent PDF generation:
-- Scale the Chromium sidecar horizontally (run 2–3 instances)
-- Add a round-robin URL list in the orchestrator: `BAS_CHROMIUM_URLS=http://chromium-1:9222,http://chromium-2:9222`
+PDF generation is synchronous (one PDF at a time per Chromium instance). `BAS_CHROMIUM_URLS`/multi-instance round-robin is not implemented today — this would need to be added if concurrent PDF generation at scale becomes a real bottleneck; don't assume it exists.
 
 ---
 
@@ -146,54 +142,26 @@ agent config: reconnect_jitter_seconds = 60
 
 ## Disk Management
 
-### PostgreSQL BYTEA cleanup (report blobs)
-
-Reports (HTML/PDF) are stored as BYTEA in PostgreSQL. For 200 agents with daily reports, this grows quickly.
-
-Archival policy: delete PDF blobs older than 90 days, keep HTML (smaller) for 180 days:
-
-```sql
--- Review before deletion
-SELECT COUNT(*), pg_size_pretty(SUM(pg_column_size(pdf_data)))
-FROM run_reports
-WHERE created_at < NOW() - INTERVAL '90 days'
-AND format = 'pdf';
-
--- Execute deletion
-BEGIN;
-DELETE FROM run_reports
-WHERE created_at < NOW() - INTERVAL '90 days'
-AND format = 'pdf';
-COMMIT;
-
--- Reclaim space
-VACUUM ANALYZE run_reports;
-```
-
-Schedule this as a weekly cron:
-```bash
-# Weekly report blob cleanup (Sunday at 03:00)
-0 3 * * 0 docker compose exec -T postgres psql -U bas -d bas -c "DELETE FROM run_reports WHERE created_at < NOW() - INTERVAL '90 days' AND format = 'pdf';"
-```
-
----
+Reports render on-demand from HTML at request time (see Chromium PDF Tuning above) — there is no growing PDF/HTML blob table to archive or clean up. `report_log` records only lightweight generation metadata (type, format, scope, timestamp), not file content, and doesn't need retention management.
 
 ## Run History Retention
 
-For deployments with many agents running daily, the `run_steps` table grows fastest:
+Per-step results live in `scenario_runs.results`, a JSONB column directly on the run row — there is no separate `run_steps` child table. For deployments with many agents running daily, this is the table that grows fastest:
 
 ```sql
 -- Check size
-SELECT pg_size_pretty(pg_total_relation_size('run_steps')) AS size;
+SELECT pg_size_pretty(pg_total_relation_size('scenario_runs')) AS size;
 
--- Archive runs older than 1 year (keep metadata, delete raw step output)
-UPDATE run_steps
-SET output = '[archived]'
-WHERE run_id IN (
-  SELECT id FROM scenario_runs
-  WHERE completed_at < NOW() - INTERVAL '1 year'
-);
+-- Archive runs older than 1 year (keep metadata, drop the raw JSONB results payload)
+UPDATE scenario_runs
+SET results = '[]'
+WHERE completed_at < NOW() - INTERVAL '1 year'
+  AND results != '[]';
+
+VACUUM ANALYZE scenario_runs;
 ```
+
+This is destructive to the per-step detail (raw output, evidence) of archived runs — the run's score, status, and summary fields are untouched, only `results` is cleared. Confirm nothing still needs that raw detail (e.g. an open finding's evidence trail) before running this in production.
 
 ---
 
