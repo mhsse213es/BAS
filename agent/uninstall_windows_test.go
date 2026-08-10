@@ -255,6 +255,55 @@ func TestCloseTrayWindow_ClosesRunningTrayWindow(t *testing.T) {
 	}
 }
 
+// TestHelperProcessSleep is not a real test -- it's spawned as a subprocess
+// by TestTerminateOtherAgentProcesses_KillsMatchingProcessButNotSelf to
+// stand in for a tray/status-window process sharing the same exe (matching
+// terminateOtherAgentProcesses' basename-based lookup requires an actual
+// second process running this same test binary, not a mock). Guarded by an
+// env var so `go test` running it directly, as part of the normal suite, is
+// an instant no-op rather than an actual multi-second sleep.
+func TestHelperProcessSleep(t *testing.T) {
+	if os.Getenv("BAS_TEST_HELPER_SLEEP") != "1" {
+		return
+	}
+	time.Sleep(30 * time.Second)
+}
+
+func TestTerminateOtherAgentProcesses_KillsMatchingProcessButNotSelf(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+
+	cmd := exec.Command(exe, "-test.run", "^TestHelperProcessSleep$")
+	cmd.Env = append(os.Environ(), "BAS_TEST_HELPER_SLEEP=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start decoy process: %v", err)
+	}
+	decoyPID := uint32(cmd.Process.Pid)
+	defer cmd.Process.Kill() // safety net if the test fails before termination
+
+	// Give the decoy a moment to actually be running before terminating --
+	// terminateOtherAgentProcesses only sees processes present in the
+	// snapshot at the moment it's called.
+	time.Sleep(200 * time.Millisecond)
+
+	terminateOtherAgentProcesses()
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case <-done:
+		// decoy exited -- expected
+	case <-time.After(5 * time.Second):
+		t.Fatal("decoy process did not exit after terminateOtherAgentProcesses")
+	}
+
+	if uint32(os.Getpid()) == decoyPID {
+		t.Fatal("test process PID unexpectedly matches decoy PID -- test setup is broken")
+	}
+}
+
 func TestRemoveShortcutAt_RemovesExistingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "Audspect Agent - Show Tray Icon.lnk")
 	if err := os.WriteFile(path, []byte("not a real shortcut, just test bytes"), 0644); err != nil {

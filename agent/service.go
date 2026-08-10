@@ -315,6 +315,7 @@ func svcUninstall() error {
 		fmt.Printf("[~] Could not remove tray autostart entry: %v\n", err)
 	}
 	closeTrayWindow()
+	terminateOtherAgentProcesses()
 	if err := removeTrayShortcut(); err != nil {
 		fmt.Printf("[~] Could not remove tray shortcut: %v\n", err)
 	}
@@ -436,6 +437,7 @@ func platformSelfUninstall() error {
 		log.Printf("[~] Could not remove tray autostart entry: %v", err)
 	}
 	closeTrayWindow()
+	terminateOtherAgentProcesses()
 	if err := removeTrayShortcut(); err != nil {
 		log.Printf("[~] Could not remove tray shortcut: %v", err)
 	}

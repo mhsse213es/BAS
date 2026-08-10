@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -133,6 +134,16 @@ func removeTrayRunKey() error {
 // but the process would never exit, which is the opposite of what uninstall
 // needs. A missing window means no tray is running, which is already the
 // desired end state, so there is nothing to report as a failure.
+//
+// FindWindowW only sees windows on the caller's own window station, so this
+// is a no-op whenever the caller and the tray are in different Windows
+// sessions -- exactly the normal case for both svcUninstall (may run
+// elevated in a different session than the logged-in user) and
+// platformSelfUninstall (runs as SYSTEM in the service's non-interactive
+// Session 0, while the tray runs in the interactive user's session -- see
+// launchTrayForActiveSession in usertoken_windows.go). Both callers pair
+// this with terminateOtherAgentProcesses below, which works regardless of
+// session.
 func closeTrayWindow() {
 	hwnd, _, _ := trayFindWindow.Call(
 		uintptr(unsafe.Pointer(trayClsName)),
@@ -142,6 +153,49 @@ func closeTrayWindow() {
 		return
 	}
 	trayPostMessage.Call(hwnd, tWM_COMMAND, uintptr(tIDM_EXIT), 0)
+}
+
+// terminateOtherAgentProcesses hard-kills every other running process that
+// shares this executable's name (the tray, an open status console, or any
+// stray copy), skipping the caller's own PID. This is the actual backstop
+// that makes uninstall reliably end the tray/status-window "task" even
+// when closeTrayWindow's cross-session FindWindowW lookup can't see it (the
+// normal case -- see closeTrayWindow's doc comment). Process enumeration
+// via Toolhelp32Snapshot and TerminateProcess both work across sessions,
+// unlike window-handle-based APIs. Best-effort: a process that's already
+// gone, or one this caller lacks rights to open, is silently skipped --
+// uninstall must never fail over tray cleanup.
+func terminateOtherAgentProcesses() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	selfName := filepath.Base(exe)
+	selfPID := uint32(os.Getpid())
+
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return
+	}
+	defer windows.CloseHandle(snap)
+
+	var entry windows.ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+	if err := windows.Process32First(snap, &entry); err != nil {
+		return
+	}
+	for {
+		name := windows.UTF16ToString(entry.ExeFile[:])
+		if strings.EqualFold(name, selfName) && entry.ProcessID != selfPID {
+			if h, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, entry.ProcessID); err == nil {
+				windows.TerminateProcess(h, 1)
+				windows.CloseHandle(h)
+			}
+		}
+		if err := windows.Process32Next(snap, &entry); err != nil {
+			break
+		}
+	}
 }
 
 // removeShortcutAt deletes the file at path. A missing file is treated as
