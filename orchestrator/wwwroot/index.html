@@ -3988,6 +3988,20 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- Group Picker (Move Agent to Group / Move Group to New Parent) -->
+<div id="group-picker-overlay" class="overlay">
+  <div class="modal" style="width:400px">
+    <h3 id="gp-title">Move to Group</h3>
+    <label class="modal-lbl">Group</label>
+    <select id="gp-select" style="width:100%"></select>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeGroupPicker()">Cancel</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary btn-sm" onclick="submitGroupPicker()">Move</button>
+    </div>
+  </div>
+</div>
+
 <!-- Technique / Ability Picker -->
 <div id="picker-overlay" class="overlay">
   <div class="modal" style="width:580px;display:flex;flex-direction:column;max-height:88vh">
@@ -6629,13 +6643,67 @@ function renameAgentGroupPrompt(groupId) {
     .catch(function(e) { showToast(e.message, 'err'); });
 }
 
+// gpFlattenGroups walks the nested group tree depth-first into a flat list
+// of {id, label} entries for the picker's <select>, indenting each label by
+// its depth so the hierarchy stays legible in a flat list. excludeId (used
+// only for the group-reparent flow) skips that one node's own entry -- its
+// children are still included, since the backend's existing cycle check
+// (agent_groups_handlers.go's UpdateAgentGroup) is the real guard against
+// picking a deeper invalid target, not this client-side list.
+function gpFlattenGroups(nodes, depth, excludeId, out) {
+  (nodes || []).forEach(function(n) {
+    if (n.id !== excludeId) {
+      out.push({ id: n.id, label: (depth > 0 ? '— '.repeat(depth) : '') + n.name });
+    }
+    if (n.children && n.children.length) gpFlattenGroups(n.children, depth + 1, excludeId, out);
+  });
+  return out;
+}
+
+var _gpMode = null, _gpContextId = null;
+
+function openGroupPicker(mode, contextId) {
+  _gpMode = mode;
+  _gpContextId = contextId;
+  document.getElementById('gp-title').textContent = mode === 'agent' ? 'Move Agent to Group' : 'Move Group to New Parent';
+  var excludeId = mode === 'group' ? contextId : null;
+  var options = gpFlattenGroups(agentGroupTree, 0, excludeId, []);
+  var topLabel = mode === 'agent' ? '— Ungrouped —' : '— Root (no parent) —';
+  document.getElementById('gp-select').innerHTML = '<option value="">' + topLabel + '</option>' +
+    options.map(function(o) { return '<option value="' + x(o.id) + '">' + x(o.label) + '</option>'; }).join('');
+  document.getElementById('group-picker-overlay').classList.add('open');
+}
+
+function closeGroupPicker() {
+  document.getElementById('group-picker-overlay').classList.remove('open');
+  _gpMode = null;
+  _gpContextId = null;
+}
+
+function submitGroupPicker() {
+  var selected = document.getElementById('gp-select').value;
+  var groupId = selected === '' ? null : parseInt(selected, 10);
+  var mode = _gpMode, contextId = _gpContextId;
+  var url, body, onSuccess;
+  if (mode === 'agent') {
+    url = '/api/agents/' + encodeURIComponent(contextId) + '/group';
+    body = { groupId: groupId };
+    onSuccess = function() { loadAgents(); };
+  } else {
+    url = '/api/agent-groups/' + contextId;
+    body = { parentId: groupId };
+    onSuccess = function() { loadAgentGroupTree(); };
+  }
+  apicall(url, { method: 'PATCH', body: JSON.stringify(body) }).then(function(res) {
+    if (res && res.error) { showToast(res.error, 'err'); return; }
+    closeGroupPicker();
+    showToast('Moved', 'ok');
+    onSuccess();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
 function moveAgentGroupPrompt(groupId) {
-  var newParent = prompt('Move to parent group ID (blank for root):');
-  if (newParent === null) return;
-  var parentId = newParent.trim() === '' ? null : parseInt(newParent, 10);
-  apicall('/api/agent-groups/' + groupId, { method: 'PATCH', body: JSON.stringify({ parentId: parentId }) })
-    .then(function(res) { if (res && res.error) { showToast(res.error, 'err'); return; } loadAgentGroupTree(); })
-    .catch(function(e) { showToast(e.message, 'err'); });
+  openGroupPicker('group', groupId);
 }
 
 function deleteAgentGroupConfirm(groupId) {
@@ -6648,12 +6716,7 @@ function deleteAgentGroupConfirm(groupId) {
 }
 
 function moveAgentToGroupPrompt(agentId) {
-  var newGroup = prompt('Move to group ID (blank for Ungrouped):');
-  if (newGroup === null) return;
-  var groupId = newGroup.trim() === '' ? null : parseInt(newGroup, 10);
-  apicall('/api/agents/' + encodeURIComponent(agentId) + '/group', { method: 'PATCH', body: JSON.stringify({ groupId: groupId }) })
-    .then(function(res) { if (res && res.error) { showToast(res.error, 'err'); return; } loadAgents(); })
-    .catch(function(e) { showToast(e.message, 'err'); });
+  openGroupPicker('agent', agentId);
 }
 
 function loadAgents() {
