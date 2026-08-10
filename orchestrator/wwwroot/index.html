@@ -1999,6 +1999,7 @@ body.theme-slate {
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0.75rem;margin-bottom:0.75rem">
             <div class="conn-cfg-card" id="cs-misp-card">
               <div style="font-weight:600;font-size:0.82rem;color:var(--text);margin-bottom:0.5rem">MISP</div>
+              <div id="ti-misp-config-panel"></div>
               <div class="conn-cfg-row">
                 <span class="conn-cfg-label">Status</span>
                 <span id="cs-misp-status" class="conn-cfg-val">—</span>
@@ -2019,6 +2020,7 @@ body.theme-slate {
             </div>
             <div class="conn-cfg-card" id="cs-opencti-card">
               <div style="font-weight:600;font-size:0.82rem;color:var(--text);margin-bottom:0.5rem">OpenCTI</div>
+              <div id="ti-opencti-config-panel"></div>
               <div class="conn-cfg-row">
                 <span class="conn-cfg-label">Status</span>
                 <span id="cs-opencti-status" class="conn-cfg-val">—</span>
@@ -2047,6 +2049,8 @@ body.theme-slate {
           </div>
 
           <div class="conn-cfg-card" id="connector-status-card">
+            <div style="font-weight:600;font-size:0.82rem;color:var(--text);margin-bottom:0.5rem">OTX (AlienVault)</div>
+            <div id="ti-otx-config-panel"></div>
             <div class="conn-cfg-row">
               <span class="conn-cfg-label">OTX (AlienVault)</span>
               <span id="cs-otx" class="conn-cfg-val">—</span>
@@ -4560,7 +4564,7 @@ function bootApp() {
   loadAdversaries();
   loadAdversaryTemplates();
   loadRuns();
-  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadARTContentStatus(); }
+  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadARTContentStatus(); }
   injectServerURL();
   // Restore the last active tab so a reload returns the user to where they were.
   // If there's a pending attack-path job in localStorage, go straight to that tab
@@ -6522,7 +6526,7 @@ function showSettingsSection(name) {
   });
   if (name === 'users') loadUsers();
   else if (name === 'engine') loadCalderaStatus();
-  else if (name === 'intel') { loadConnectorStatus(); loadOpenAEVConfig(); }
+  else if (name === 'intel') { loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadOpenAEVConfig(); }
   else if (name === 'art') loadARTContentStatus();
   else if (name === 'audit') loadAuditLogs();
   else if (name === 'license') loadLicenseInfo();
@@ -14576,6 +14580,66 @@ function _renderConnectorCard(prefix, enabled, stat, rawCountElId) {
   var errEl = document.getElementById('cs-' + prefix + '-error');
   if (stat && stat.error) { errEl.textContent = stat.error; errEl.style.display = ''; }
   else { errEl.style.display = 'none'; }
+}
+
+// ── Threat Intel connector config (MISP/OpenCTI/OTX) — editable, matching
+// loadOpenAEVConfig's pattern. 'otx' has no URL field (single hosted
+// service, unlike self-hosted MISP/OpenCTI).
+var TI_CONNECTOR_LABELS = { misp: 'MISP', opencti: 'OpenCTI', otx: 'OTX' };
+
+function loadThreatIntelConfig(name) {
+  var panel = document.getElementById('ti-' + name + '-config-panel');
+  if (!panel || ROLE !== 'admin') { if (panel) panel.innerHTML = ''; return; }
+  apicall('/api/threat-intel/' + name + '/config').then(function(cfg) {
+    var urlField = name === 'otx' ? '' :
+      '<input id="ti-' + name + '-url" type="text" placeholder="Base URL" value="' + x(cfg.baseUrl || '') + '" class="inp-sm" style="flex:1">';
+    panel.innerHTML =
+      '<div class="kpi-row">' +
+        urlField +
+        '<input id="ti-' + name + '-key" type="password" placeholder="API key (leave blank to keep current)" class="inp-sm" style="flex:1">' +
+        '<label class="tiny muted" style="display:flex;align-items:center;gap:0.3rem"><input type="checkbox" id="ti-' + name + '-enabled" ' + (cfg.enabled ? 'checked' : '') + '> Enabled</label>' +
+      '</div>' +
+      '<div class="kpi-row" style="margin-top:0.5rem">' +
+        '<button class="btn btn-outline btn-sm" onclick="testConnectorConfig(\'' + name + '\')">Test Connection</button>' +
+        '<button class="btn btn-primary btn-sm" onclick="saveConnectorConfig(\'' + name + '\')">Save</button>' +
+        '<span id="ti-' + name + '-test-result" class="tiny muted"></span>' +
+      '</div>';
+  }).catch(function() {});
+}
+
+function testConnectorConfig(name) {
+  var resultEl = document.getElementById('ti-' + name + '-test-result');
+  resultEl.textContent = 'Testing…';
+  var urlEl = document.getElementById('ti-' + name + '-url');
+  apicall('/api/threat-intel/' + name + '/config/test', {
+    method: 'POST',
+    body: JSON.stringify({
+      baseUrl: urlEl ? urlEl.value : '',
+      apiKey: document.getElementById('ti-' + name + '-key').value
+    })
+  }).then(function(res) {
+    resultEl.textContent = res.ok ? ('OK — ' + res.actorCount + ' actors visible') : ('Failed: ' + res.error);
+    resultEl.style.color = res.ok ? 'var(--success)' : 'var(--danger)';
+  }).catch(function(e) {
+    resultEl.textContent = 'Failed: ' + (e.message || 'error');
+    resultEl.style.color = 'var(--danger)';
+  });
+}
+
+function saveConnectorConfig(name) {
+  var urlEl = document.getElementById('ti-' + name + '-url');
+  apicall('/api/threat-intel/' + name + '/config', {
+    method: 'PUT',
+    body: JSON.stringify({
+      baseUrl: urlEl ? urlEl.value : '',
+      apiKey: document.getElementById('ti-' + name + '-key').value,
+      enabled: document.getElementById('ti-' + name + '-enabled').checked
+    })
+  }).then(function() {
+    showToast(TI_CONNECTOR_LABELS[name] + ' config saved', 'ok');
+    loadThreatIntelConfig(name);
+    loadConnectorStatus();
+  }).catch(function(e) { showToast('Save failed: ' + (e.message || 'error'), 'err'); });
 }
 
 function loadConnectorStatus() {
