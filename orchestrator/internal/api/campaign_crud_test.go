@@ -800,6 +800,92 @@ func TestCreateCampaign_Exclusions_SubtractedFromResolvedSet(t *testing.T) {
 	})
 }
 
+func TestGetCampaign_ReturnsTargetTypeAndGroupID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalPostureScenario(t, "gc-target-sc")
+		seedActiveAgent(t, pool, "gc-target-a1", "Windows")
+		groupID := seedAgentGroup(t, pool, "gc-target-group", "gc-target-a1")
+
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), engine, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		fake := startFakeAgent(t, h.hub, "gc-target-a1")
+		defer fake.Disconnect(t)
+		createRec := httptest.NewRecorder()
+		h.CreateCampaign(createRec, createCampaignReq(map[string]any{
+			"name": "x", "scenarioId": sc.ID, "targetType": "group", "groupId": groupID,
+		}))
+		var createResp struct {
+			CampaignID string `json:"campaignId"`
+		}
+		json.Unmarshal(createRec.Body.Bytes(), &createResp)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/campaigns/"+createResp.CampaignID, nil)
+		req = withURLParam(req, "id", createResp.CampaignID)
+		rec := httptest.NewRecorder()
+		h.GetCampaign(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			TargetType    string `json:"targetType"`
+			TargetGroupID *int64 `json:"targetGroupId"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &resp)
+		if resp.TargetType != "group" {
+			t.Errorf("targetType = %q, want %q", resp.TargetType, "group")
+		}
+		if resp.TargetGroupID == nil || *resp.TargetGroupID != groupID {
+			t.Errorf("targetGroupId = %v, want %d", resp.TargetGroupID, groupID)
+		}
+	})
+}
+
+func TestListCampaigns_ReturnsTargetType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalPostureScenario(t, "lc-target-sc")
+		seedActiveAgent(t, pool, "lc-target-a1", "Windows")
+		h := New(pool, ws.NewHub(), engine, "")
+		fake := startFakeAgent(t, h.hub, "lc-target-a1")
+		defer fake.Disconnect(t)
+		createRec := httptest.NewRecorder()
+		h.CreateCampaign(createRec, createCampaignReq(map[string]any{
+			"name": "x", "scenarioId": sc.ID, "agentIds": []string{"lc-target-a1"},
+		}))
+		if createRec.Code != http.StatusOK {
+			t.Fatalf("create status = %d, body = %s", createRec.Code, createRec.Body.String())
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/campaigns", nil)
+		rec := httptest.NewRecorder()
+		h.ListCampaigns(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp []struct {
+			TargetType string `json:"targetType"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &resp)
+		if len(resp) == 0 {
+			t.Fatal("expected at least one campaign in the list")
+		}
+		found := false
+		for _, c := range resp {
+			if c.TargetType == "agents" {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("expected at least one campaign with targetType 'agents'")
+		}
+	})
+}
+
 func TestCreateCampaign_LegacyRequest_DefaultsToAgentsMode(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

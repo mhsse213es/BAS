@@ -14,14 +14,16 @@ import (
 // Rollup is one campaign with its live-computed Summary -- the analytics
 // layer's canonical Campaigns result.
 type Rollup struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	ScenarioID   string    `json:"scenarioId"`
-	ScenarioName string    `json:"scenarioName"`
-	Mode         string    `json:"mode"`
-	CreatedBy    string    `json:"createdBy"`
-	StartedAt    time.Time `json:"startedAt"`
-	Summary      Summary   `json:"summary"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	ScenarioID    string    `json:"scenarioId"`
+	ScenarioName  string    `json:"scenarioName"`
+	Mode          string    `json:"mode"`
+	CreatedBy     string    `json:"createdBy"`
+	StartedAt     time.Time `json:"startedAt"`
+	Summary       Summary   `json:"summary"`
+	TargetType    string    `json:"targetType"`
+	TargetGroupID *int64    `json:"targetGroupId"`
 }
 
 // ListWithRollups queries every campaign and its child runs, computing each
@@ -33,7 +35,8 @@ type Rollup struct {
 // design spec Non-Goals.
 func ListWithRollups(ctx context.Context, pool *pgxpool.Pool) ([]Rollup, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, name, scenario_id, scenario_name, mode, COALESCE(created_by,''), skips, started_at, stopped_at
+		SELECT id, name, scenario_id, scenario_name, mode, COALESCE(created_by,''), skips, started_at, stopped_at,
+		       target_type, target_group_id
 		  FROM campaigns ORDER BY started_at DESC`)
 	if err != nil {
 		return nil, err
@@ -43,12 +46,15 @@ func ListWithRollups(ctx context.Context, pool *pgxpool.Pool) ([]Rollup, error) 
 		skipsRaw                                            []byte
 		startedAt                                           time.Time
 		stoppedAt                                           *time.Time
+		targetType                                          string
+		targetGroupID                                       *int64
 	}
 	var camps []campRow
 	for rows.Next() {
 		var c campRow
 		if err := rows.Scan(&c.id, &c.name, &c.scenarioID, &c.scenarioName, &c.mode,
-			&c.createdBy, &c.skipsRaw, &c.startedAt, &c.stoppedAt); err != nil {
+			&c.createdBy, &c.skipsRaw, &c.startedAt, &c.stoppedAt,
+			&c.targetType, &c.targetGroupID); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -75,6 +81,7 @@ func ListWithRollups(ctx context.Context, pool *pgxpool.Pool) ([]Rollup, error) 
 		out = append(out, Rollup{
 			ID: c.id, Name: c.name, ScenarioID: c.scenarioID, ScenarioName: c.scenarioName,
 			Mode: c.mode, CreatedBy: c.createdBy, StartedAt: c.startedAt, Summary: s,
+			TargetType: c.targetType, TargetGroupID: c.targetGroupID,
 		})
 	}
 	return out, nil

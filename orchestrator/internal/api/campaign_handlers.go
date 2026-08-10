@@ -228,6 +228,8 @@ type campaignRow struct {
 	CreatedAt                                                          time.Time
 	StartedAt                                                          time.Time
 	Stopped                                                            bool
+	TargetType                                                         string
+	TargetGroupID                                                      *int64
 }
 
 // childRunOut is the per-agent breakdown row returned in a campaign's detail.
@@ -285,10 +287,12 @@ func (h *Handler) loadCampaign(ctx context.Context, id string) (*campaignRow, er
 	var stoppedAt *time.Time
 	err := h.db.QueryRow(ctx,
 		`SELECT id, name, scenario_id, scenario_name, mode, reason, notes,
-		        COALESCE(created_by,''), targets, skips, tags, created_at, started_at, stopped_at
+		        COALESCE(created_by,''), targets, skips, tags, created_at, started_at, stopped_at,
+		        target_type, target_group_id
 		   FROM campaigns WHERE id=$1`, id,
 	).Scan(&c.ID, &c.Name, &c.ScenarioID, &c.ScenarioName, &c.Mode, &c.Reason, &c.Notes,
-		&c.CreatedBy, &targetsRaw, &skipsRaw, &tagsRaw, &c.CreatedAt, &c.StartedAt, &stoppedAt)
+		&c.CreatedBy, &targetsRaw, &skipsRaw, &tagsRaw, &c.CreatedAt, &c.StartedAt, &stoppedAt,
+		&c.TargetType, &c.TargetGroupID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +330,7 @@ func (h *Handler) ListCampaigns(w http.ResponseWriter, r *http.Request) {
 		out = append(out, map[string]any{
 			"id": c.ID, "name": c.Name, "scenarioId": c.ScenarioID, "scenarioName": c.ScenarioName,
 			"mode": c.Mode, "createdBy": c.CreatedBy, "startedAt": c.StartedAt, "summary": c.Summary,
+			"targetType": c.TargetType, "targetGroupId": c.TargetGroupID,
 		})
 	}
 	respond(w, out)
@@ -457,6 +462,7 @@ func (h *Handler) GetCampaign(w http.ResponseWriter, r *http.Request) {
 		"mode": c.Mode, "reason": c.Reason, "notes": c.Notes, "tags": c.Tags,
 		"targets": c.Targets, "skips": c.Skips, "createdBy": c.CreatedBy,
 		"startedAt": c.StartedAt, "summary": s, "runs": children,
+		"targetType": c.TargetType, "targetGroupId": c.TargetGroupID,
 	})
 }
 
