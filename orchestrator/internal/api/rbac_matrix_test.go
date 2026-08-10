@@ -213,7 +213,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/agents/{agentId}/stop", tierPermission, auth.CanStopAgent},
 	{http.MethodPost, "/api/agents/{agentId}/remove", tierPermission, auth.CanRemoveAgent},
 	{http.MethodPost, "/api/agents/{agentId}/uninstall", tierPermission, auth.CanRemoveAgent},
-	{http.MethodGet, "/api/agent-groups", tierPermission, auth.CanManageAgentGroups},
+	{http.MethodGet, "/api/agent-groups", tierPermission, auth.CanViewAgentGroups},
 	{http.MethodPost, "/api/agent-groups", tierPermission, auth.CanManageAgentGroups},
 	{http.MethodPatch, "/api/agent-groups/{id}", tierPermission, auth.CanManageAgentGroups},
 	{http.MethodDelete, "/api/agent-groups/{id}", tierPermission, auth.CanManageAgentGroups},

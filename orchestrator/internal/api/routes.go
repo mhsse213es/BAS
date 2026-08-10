@@ -422,7 +422,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanStopAgent)).Post("/api/agents/{agentId}/stop", h.StopAgent)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/remove", h.RemoveAgent)
 		r.With(auth.RequirePermission(auth.CanRemoveAgent)).Post("/api/agents/{agentId}/uninstall", h.UninstallAgent)
-		r.With(auth.RequirePermission(auth.CanManageAgentGroups)).Get("/api/agent-groups", h.GetAgentGroups)
+		r.With(auth.RequirePermission(auth.CanViewAgentGroups)).Get("/api/agent-groups", h.GetAgentGroups)
 		r.With(auth.RequirePermission(auth.CanManageAgentGroups)).Post("/api/agent-groups", h.CreateAgentGroup)
 		r.With(auth.RequirePermission(auth.CanManageAgentGroups)).Patch("/api/agent-groups/{id}", h.UpdateAgentGroup)
 		r.With(auth.RequirePermission(auth.CanManageAgentGroups)).Delete("/api/agent-groups/{id}", h.DeleteAgentGroup)

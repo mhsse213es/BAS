@@ -78,6 +78,10 @@ const (
 	CanViewLicense          Permission = "license:view"
 	CanViewConnectionConfig Permission = "config:view-connection"
 	CanManageAgentGroups    Permission = "agent-groups:manage"
+	// CanViewAgentGroups is read-only and, unlike every other permission in
+	// this block, is granted to Analyst as well as Admin -- reading the
+	// group hierarchy is not a management action.
+	CanViewAgentGroups      Permission = "agent-groups:view"
 
 	// Admin-only: user management.
 	CanListUsers         Permission = "users:list"
@@ -217,7 +221,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
 
-		CanSetAgentState: true, CanStopAgent: true, CanRemoveAgent: true, CanViewLicense: true, CanViewConnectionConfig: true, CanManageAgentGroups: true,
+		CanSetAgentState: true, CanStopAgent: true, CanRemoveAgent: true, CanViewLicense: true, CanViewConnectionConfig: true, CanManageAgentGroups: true, CanViewAgentGroups: true,
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
 		CanResetUserPassword: true, CanViewCalderaStatus: true, CanViewConnectorStatus: true,
 		CanSyncConnector: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
@@ -266,7 +270,11 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
 		CanViewResponseActions: true,
-		CanExecuteRemediation:  true,
+		// Read-only counterpart to the admin-only CanManageAgentGroups --
+		// analysts can see and target agent groups, not create/rename/
+		// move/delete them.
+		CanViewAgentGroups: true,
+		CanExecuteRemediation: true,
 	},
 	RoleViewer: {},
 }
@@ -295,7 +303,7 @@ func Permissions(role Role) []Permission {
 		CanLaunchExerciseExecution, CanAbortExerciseExecution, CanApproveExerciseStep,
 		CanInjectExerciseEvidence, CanLookupIOC,
 
-		CanSetAgentState, CanStopAgent, CanRemoveAgent, CanViewLicense, CanViewConnectionConfig, CanManageAgentGroups, CanListUsers, CanCreateUser,
+		CanSetAgentState, CanStopAgent, CanRemoveAgent, CanViewLicense, CanViewConnectionConfig, CanManageAgentGroups, CanViewAgentGroups, CanListUsers, CanCreateUser,
 		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
 		CanSyncConnector, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
 		CanReseedARTContent, CanReindexSearch, CanManageIOCs, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,

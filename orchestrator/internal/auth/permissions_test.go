@@ -36,6 +36,10 @@ func TestHasPermission_FullMatrix(t *testing.T) {
 		{RoleViewer, CanExport, false},
 		{RoleViewer, CanCurateThreatIntel, false},
 		{RoleViewer, CanReviewThreatIntel, false},
+
+		{RoleAdmin, CanViewAgentGroups, true},
+		{RoleAnalyst, CanViewAgentGroups, true},
+		{RoleViewer, CanViewAgentGroups, false},
 	}
 	for _, tc := range cases {
 		if got := HasPermission(tc.role, tc.perm); got != tc.want {
@@ -69,7 +73,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanLaunchExerciseExecution: true, CanAbortExerciseExecution: true,
 		CanApproveExerciseStep: true, CanInjectExerciseEvidence: true, CanLookupIOC: true,
 
-		CanSetAgentState: true, CanStopAgent: true, CanRemoveAgent: true, CanViewLicense: true, CanViewConnectionConfig: true, CanManageAgentGroups: true,
+		CanSetAgentState: true, CanStopAgent: true, CanRemoveAgent: true, CanViewLicense: true, CanViewConnectionConfig: true, CanManageAgentGroups: true, CanViewAgentGroups: true,
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
 		CanResetUserPassword: true, CanViewCalderaStatus: true, CanViewConnectorStatus: true,
 		CanSyncConnector: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
@@ -121,7 +125,7 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanLaunchExerciseExecution, CanAbortExerciseExecution, CanApproveExerciseStep,
 		CanInjectExerciseEvidence, CanLookupIOC,
 
-		CanSetAgentState, CanStopAgent, CanRemoveAgent, CanViewLicense, CanViewConnectionConfig, CanManageAgentGroups, CanListUsers, CanCreateUser,
+		CanSetAgentState, CanStopAgent, CanRemoveAgent, CanViewLicense, CanViewConnectionConfig, CanManageAgentGroups, CanViewAgentGroups, CanListUsers, CanCreateUser,
 		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
 		CanSyncConnector, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
 		CanReseedARTContent, CanReindexSearch, CanManageIOCs, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,
