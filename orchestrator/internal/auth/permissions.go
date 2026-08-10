@@ -43,6 +43,12 @@ const (
 	// Campaigns, findings, ITSM push — Analyst+Admin.
 	CanCreateCampaign   Permission = "campaigns:create"
 	CanStopCampaign     Permission = "campaigns:stop"
+	// CanTargetAllAgents is Admin-only, unlike every other campaign
+	// permission in this block -- targeting the entire fleet in one launch
+	// is a materially bigger blast radius than targeting a group or an
+	// explicit list, so it gets its own stricter gate rather than riding
+	// on CanCreateCampaign.
+	CanTargetAllAgents Permission = "campaigns:target-all-agents"
 	CanSetFindingStatus Permission = "findings:set-status"
 	CanPushToITSM       Permission = "ticketing:push"
 	CanBulkPushToITSM   Permission = "ticketing:push-bulk"
@@ -212,7 +218,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanCancelAttackPathJob: true, CanRetryAttackPathJob: true, CanSetAttackPathAsset: true,
 		CanRunScenario: true, CanRunCalderaAdversary: true, CanRunAdversaryTemplate: true,
 		CanCancelScenarioRun: true, CanCorrelateSIEM: true, CanViewSIEMCorrelations: true,
-		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true,
+		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true, CanTargetAllAgents: true,
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
 		CanCreateScenario: true, CanUploadScenario: true, CanCloneScenario: true,
 		CanUpdateScenario: true, CanDeleteScenario: true, CanGenerateVariants: true,
@@ -296,7 +302,7 @@ func Permissions(role Role) []Permission {
 		CanTriggerScan, CanCollectAttackPath, CanCreateAttackPathJob, CanCancelAttackPathJob,
 		CanRetryAttackPathJob, CanSetAttackPathAsset, CanRunScenario, CanRunCalderaAdversary,
 		CanRunAdversaryTemplate, CanCancelScenarioRun, CanCorrelateSIEM, CanViewSIEMCorrelations,
-		CanRunDetectionVerification, CanCreateCampaign, CanStopCampaign, CanSetFindingStatus,
+		CanRunDetectionVerification, CanCreateCampaign, CanStopCampaign, CanTargetAllAgents, CanSetFindingStatus,
 		CanPushToITSM, CanBulkPushToITSM, CanCreateScenario, CanUploadScenario, CanCloneScenario,
 		CanUpdateScenario, CanDeleteScenario, CanGenerateVariants, CanRunVariants, CanViewVariantRun,
 		CanViewVariantCoverage, CanViewVariantStats, CanListPayloadFamilies, CanViewPayloadFamily,

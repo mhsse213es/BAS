@@ -40,6 +40,10 @@ func TestHasPermission_FullMatrix(t *testing.T) {
 		{RoleAdmin, CanViewAgentGroups, true},
 		{RoleAnalyst, CanViewAgentGroups, true},
 		{RoleViewer, CanViewAgentGroups, false},
+
+		{RoleAdmin, CanTargetAllAgents, true},
+		{RoleAnalyst, CanTargetAllAgents, false},
+		{RoleViewer, CanTargetAllAgents, false},
 	}
 	for _, tc := range cases {
 		if got := HasPermission(tc.role, tc.perm); got != tc.want {
@@ -64,7 +68,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanCancelAttackPathJob: true, CanRetryAttackPathJob: true, CanSetAttackPathAsset: true,
 		CanRunScenario: true, CanRunCalderaAdversary: true, CanRunAdversaryTemplate: true,
 		CanCancelScenarioRun: true, CanCorrelateSIEM: true, CanViewSIEMCorrelations: true,
-		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true,
+		CanRunDetectionVerification: true, CanCreateCampaign: true, CanStopCampaign: true, CanTargetAllAgents: true,
 		CanSetFindingStatus: true, CanPushToITSM: true, CanBulkPushToITSM: true,
 		CanCreateScenario: true, CanUploadScenario: true, CanCloneScenario: true,
 		CanUpdateScenario: true, CanDeleteScenario: true, CanGenerateVariants: true,
@@ -118,7 +122,7 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanTriggerScan, CanCollectAttackPath, CanCreateAttackPathJob, CanCancelAttackPathJob,
 		CanRetryAttackPathJob, CanSetAttackPathAsset, CanRunScenario, CanRunCalderaAdversary,
 		CanRunAdversaryTemplate, CanCancelScenarioRun, CanCorrelateSIEM, CanViewSIEMCorrelations,
-		CanRunDetectionVerification, CanCreateCampaign, CanStopCampaign, CanSetFindingStatus,
+		CanRunDetectionVerification, CanCreateCampaign, CanStopCampaign, CanTargetAllAgents, CanSetFindingStatus,
 		CanPushToITSM, CanBulkPushToITSM, CanCreateScenario, CanUploadScenario, CanCloneScenario,
 		CanUpdateScenario, CanDeleteScenario, CanGenerateVariants, CanRunVariants, CanViewVariantRun,
 		CanViewVariantCoverage, CanViewVariantStats, CanListPayloadFamilies, CanViewPayloadFamily,

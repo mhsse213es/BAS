@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
@@ -19,6 +20,26 @@ import (
 func createCampaignReq(body map[string]any) *http.Request {
 	b, _ := json.Marshal(body)
 	return httptest.NewRequest(http.MethodPost, "/api/campaigns", bytes.NewReader(b))
+}
+
+// seedAgentGroup inserts a group and returns its id. If agentIDs is non-empty,
+// each of those agents is assigned to the group (they must already exist —
+// call seedActiveAgent first).
+func seedAgentGroup(t *testing.T, pool *pgxpool.Pool, name string, agentIDs ...string) int64 {
+	t.Helper()
+	var groupID int64
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO agent_groups (name) VALUES ($1) RETURNING id`, name,
+	).Scan(&groupID); err != nil {
+		t.Fatalf("seed agent group: %v", err)
+	}
+	for _, agentID := range agentIDs {
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE agents SET group_id = $1 WHERE agent_id = $2`, groupID, agentID); err != nil {
+			t.Fatalf("assign agent %s to group: %v", agentID, err)
+		}
+	}
+	return groupID
 }
 
 func TestCreateCampaign_ValidationErrors(t *testing.T) {
@@ -647,6 +668,153 @@ func TestCampaignSummary_LazyStampsCompletedAt(t *testing.T) {
 		pool.QueryRow(context.Background(), `SELECT completed_at FROM campaigns WHERE id='lazy-camp'`).Scan(&after)
 		if after == nil {
 			t.Error("completed_at should be stamped once every child reads terminal")
+		}
+	})
+}
+
+func TestCreateCampaign_GroupTargeting_ResolvesLiveMembership(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalPostureScenario(t, "cc-group-sc")
+		seedActiveAgent(t, pool, "cc-group-a1", "Windows")
+		seedActiveAgent(t, pool, "cc-group-a2", "Windows")
+		seedActiveAgent(t, pool, "cc-group-outside", "Windows")
+		groupID := seedAgentGroup(t, pool, "cc-group-finance", "cc-group-a1", "cc-group-a2")
+
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), engine, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		fake1 := startFakeAgent(t, h.hub, "cc-group-a1")
+		defer fake1.Disconnect(t)
+		fake2 := startFakeAgent(t, h.hub, "cc-group-a2")
+		defer fake2.Disconnect(t)
+		rec := httptest.NewRecorder()
+		h.CreateCampaign(rec, createCampaignReq(map[string]any{
+			"name": "x", "scenarioId": sc.ID, "targetType": "group", "groupId": groupID,
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Dispatched int `json:"dispatched"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &resp)
+		if resp.Dispatched != 2 {
+			t.Errorf("dispatched = %d, want 2 (cc-group-a1, cc-group-a2 — not cc-group-outside)", resp.Dispatched)
+		}
+	})
+}
+
+func TestCreateCampaign_GroupTargeting_MissingGroupID_BadRequest(t *testing.T) {
+	sc, engine := minimalPostureScenario(t, "cc-group-missing-sc")
+	h := New(nil, ws.NewHub(), engine, "")
+	rec := httptest.NewRecorder()
+	h.CreateCampaign(rec, createCampaignReq(map[string]any{
+		"name": "x", "scenarioId": sc.ID, "targetType": "group",
+	}))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (groupId required for group targeting)", rec.Code)
+	}
+}
+
+func TestCreateCampaign_AllAgents_AnalystForbidden(t *testing.T) {
+	sc, engine := minimalPostureScenario(t, "cc-all-forbidden-sc")
+	h := New(nil, ws.NewHub(), engine, "")
+	req := createCampaignReq(map[string]any{
+		"name": "x", "scenarioId": sc.ID, "targetType": "all",
+	})
+	req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+	rec := httptest.NewRecorder()
+	h.CreateCampaign(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (all-agents targeting is Admin-only), body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreateCampaign_AllAgents_AdminSucceeds_ExcludesRetired(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalPostureScenario(t, "cc-all-sc")
+		seedActiveAgent(t, pool, "cc-all-a1", "Windows")
+		seedActiveAgent(t, pool, "cc-all-a2", "Windows")
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO agents (agent_id, hostname, os_version, state) VALUES ('cc-all-retired','h','Windows','retired')`); err != nil {
+			t.Fatalf("seed retired agent: %v", err)
+		}
+		h := New(pool, ws.NewHub(), engine, "")
+		fake1 := startFakeAgent(t, h.hub, "cc-all-a1")
+		defer fake1.Disconnect(t)
+		fake2 := startFakeAgent(t, h.hub, "cc-all-a2")
+		defer fake2.Disconnect(t)
+		req := createCampaignReq(map[string]any{
+			"name": "x", "scenarioId": sc.ID, "targetType": "all",
+		})
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "admin-1", Role: auth.RoleAdmin}))
+		rec := httptest.NewRecorder()
+		h.CreateCampaign(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Dispatched int `json:"dispatched"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &resp)
+		if resp.Dispatched != 2 {
+			t.Errorf("dispatched = %d, want 2 (cc-all-a1, cc-all-a2 — cc-all-retired excluded)", resp.Dispatched)
+		}
+	})
+}
+
+func TestCreateCampaign_Exclusions_SubtractedFromResolvedSet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalPostureScenario(t, "cc-excl-sc")
+		seedActiveAgent(t, pool, "cc-excl-a1", "Windows")
+		seedActiveAgent(t, pool, "cc-excl-a2", "Windows")
+		groupID := seedAgentGroup(t, pool, "cc-excl-group", "cc-excl-a1", "cc-excl-a2")
+
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), engine, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+		fake1 := startFakeAgent(t, h.hub, "cc-excl-a1")
+		defer fake1.Disconnect(t)
+		rec := httptest.NewRecorder()
+		h.CreateCampaign(rec, createCampaignReq(map[string]any{
+			"name": "x", "scenarioId": sc.ID, "targetType": "group", "groupId": groupID,
+			"excludeAgentIds": []string{"cc-excl-a2"},
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Dispatched int `json:"dispatched"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &resp)
+		if resp.Dispatched != 1 {
+			t.Errorf("dispatched = %d, want 1 (cc-excl-a1 only — cc-excl-a2 excluded)", resp.Dispatched)
+		}
+	})
+}
+
+func TestCreateCampaign_LegacyRequest_DefaultsToAgentsMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalPostureScenario(t, "cc-legacy-sc")
+		seedActiveAgent(t, pool, "cc-legacy-a1", "Windows")
+		h := New(pool, ws.NewHub(), engine, "")
+		rec := httptest.NewRecorder()
+		// No targetType field at all — must behave exactly as before this change.
+		h.CreateCampaign(rec, createCampaignReq(map[string]any{
+			"name": "x", "scenarioId": sc.ID, "agentIds": []string{"cc-legacy-a1"},
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
 	})
 }

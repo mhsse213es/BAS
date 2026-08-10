@@ -36,9 +36,44 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 		Notes           string                   `json:"notes"`
 		Tags            []string                 `json:"tags"`
 		ExecutionPolicy scenario.ExecutionPolicy `json:"executionPolicy,omitempty"`
+		TargetType      string                   `json:"targetType"`
+		GroupID         *int64                   `json:"groupId"`
+		ExcludeAgentIDs []string                 `json:"excludeAgentIds"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" || req.ScenarioID == "" || len(req.AgentIDs) == 0 {
-		jsonError(w, "name, scenarioId and at least one agentId are required", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" || req.ScenarioID == "" {
+		jsonError(w, "name and scenarioId are required", http.StatusBadRequest)
+		return
+	}
+	// targetType defaults to "agents" -- every campaign created before this
+	// field existed was, in fact, an explicit agent list, so an absent
+	// targetType must behave exactly as it always has.
+	targetType := req.TargetType
+	if targetType == "" {
+		targetType = "agents"
+	}
+	switch targetType {
+	case "agents":
+		if len(req.AgentIDs) == 0 {
+			jsonError(w, "at least one agentId is required for agents targeting", http.StatusBadRequest)
+			return
+		}
+	case "group":
+		if req.GroupID == nil {
+			jsonError(w, "groupId is required for group targeting", http.StatusBadRequest)
+			return
+		}
+	case "all":
+		// Admin-only: targeting the entire fleet is a materially bigger blast
+		// radius than a group or an explicit list. The frontend hides this
+		// option for non-Admins as a UX simplification -- this check is the
+		// actual security boundary.
+		claims, ok := auth.ClaimsFrom(r.Context())
+		if !ok || !auth.HasPermission(claims.Role, auth.CanTargetAllAgents) {
+			jsonError(w, "targeting all agents requires Administrator access", http.StatusForbidden)
+			return
+		}
+	default:
+		jsonError(w, "targetType must be agents, group, or all", http.StatusBadRequest)
 		return
 	}
 	sc, ok := h.engine.Get(req.ScenarioID)
@@ -84,6 +119,60 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Resolve the target set for this targetType. "agents" uses the request's
+	// explicit list unchanged; "group" resolves live membership right now
+	// (reusing the Fleet Job Engine's already-tested recursive resolver, not
+	// a second copy of the query); "all" is every non-retired agent. The
+	// result becomes the frozen `targets` snapshot below -- from this point
+	// on, later changes to group membership never retroactively affect this
+	// campaign.
+	var targetAgentIDs []string
+	switch targetType {
+	case "group":
+		if h.jobsStore == nil {
+			jsonError(w, "job engine not loaded", http.StatusServiceUnavailable)
+			return
+		}
+		resolved, rerr := h.jobsStore.ResolveGroupAgentIDs(r.Context(), []int64{*req.GroupID})
+		if rerr != nil {
+			jsonError(w, rerr.Error(), http.StatusInternalServerError)
+			return
+		}
+		targetAgentIDs = resolved
+	case "all":
+		rows, qerr := h.db.Query(r.Context(), `SELECT agent_id FROM agents WHERE COALESCE(state, 'active') != 'retired'`)
+		if qerr != nil {
+			jsonError(w, qerr.Error(), http.StatusInternalServerError)
+			return
+		}
+		for rows.Next() {
+			var aid string
+			if rows.Scan(&aid) == nil {
+				targetAgentIDs = append(targetAgentIDs, aid)
+			}
+		}
+		rows.Close()
+	default:
+		targetAgentIDs = req.AgentIDs
+	}
+	if len(req.ExcludeAgentIDs) > 0 {
+		excl := make(map[string]bool, len(req.ExcludeAgentIDs))
+		for _, aid := range req.ExcludeAgentIDs {
+			excl[aid] = true
+		}
+		filtered := make([]string, 0, len(targetAgentIDs))
+		for _, aid := range targetAgentIDs {
+			if !excl[aid] {
+				filtered = append(filtered, aid)
+			}
+		}
+		targetAgentIDs = filtered
+	}
+	if len(targetAgentIDs) == 0 {
+		jsonError(w, "no targets resolved for this campaign", http.StatusBadRequest)
+		return
+	}
+
 	var initiatedBy *string
 	if c, ok := auth.ClaimsFrom(r.Context()); ok && c != nil {
 		initiatedBy = &c.UserID
@@ -94,12 +183,12 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 		"techniques": req.Techniques, "abilities": req.Abilities, "steps": req.Steps, "checks": req.Checks,
 		"executionPolicy": req.ExecutionPolicy,
 	})
-	targets, _ := json.Marshal(req.AgentIDs)
+	targets, _ := json.Marshal(targetAgentIDs)
 	tags, _ := json.Marshal(req.Tags)
 	if _, err := h.db.Exec(r.Context(),
-		`INSERT INTO campaigns (id, name, scenario_id, scenario_name, mode, subset, reason, targets, notes, tags, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-		id, req.Name, sc.ID, sc.Name, mode, subset, req.Reason, targets, req.Notes, tags, initiatedBy); err != nil {
+		`INSERT INTO campaigns (id, name, scenario_id, scenario_name, mode, subset, reason, targets, notes, tags, created_by, target_type, target_group_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		id, req.Name, sc.ID, sc.Name, mode, subset, req.Reason, targets, req.Notes, tags, initiatedBy, targetType, req.GroupID); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -111,7 +200,7 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 	skips := []map[string]string{}
 	dispatched := 0
-	for _, agentID := range req.AgentIDs {
+	for _, agentID := range targetAgentIDs {
 		_, skip, err := h.dispatchRun(r.Context(), sc, agentID, opts)
 		if err != nil {
 			jsonError(w, err.Error(), http.StatusInternalServerError)

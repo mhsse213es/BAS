@@ -248,6 +248,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS campaign_id text`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_campaign ON scenario_runs (campaign_id)`,
+		// target_type/target_group_id record how a campaign's frozen `targets`
+		// snapshot was produced (explicit list / a resolved group / the whole
+		// fleet) -- for display and audit, not re-resolution. Every existing
+		// campaign row reads as target_type='agents', which is simply true:
+		// every campaign created before this column existed was an explicit
+		// agent list.
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS target_type text NOT NULL DEFAULT 'agents'`,
+		`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS target_group_id bigint`,
 		// leaked_steps: count of steps whose cleanup command exited non-zero or timed out.
 		// hygiene_score: stepsCleaned/(stepsCleaned+leaked)*100; 100.0 when no cleanup steps.
 		// Written at SubmitScenarioResult; used for the Environment Restoration badge in UI.
