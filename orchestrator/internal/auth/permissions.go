@@ -100,6 +100,11 @@ const (
 	CanViewCalderaStatus       Permission = "caldera:status:view"
 	CanViewConnectorStatus     Permission = "connector:status:view"
 	CanSyncConnector           Permission = "connector:sync"
+	// CanUpdateConnectorConfig is Admin-only, matching CanViewConnectorStatus
+	// and CanSyncConnector's existing tier -- it gates writing MISP/OpenCTI/
+	// OTX connection settings (URL, API key), not just viewing or triggering
+	// a sync of whatever's already configured.
+	CanUpdateConnectorConfig Permission = "connector:config:update"
 	CanDeleteConnectorScenario Permission = "connector:scenarios:delete"
 
 	// Admin-only: attack-path schedule, ART content management.
@@ -230,7 +235,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanSetAgentState: true, CanStopAgent: true, CanRemoveAgent: true, CanViewLicense: true, CanViewConnectionConfig: true, CanManageAgentGroups: true, CanViewAgentGroups: true,
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
 		CanResetUserPassword: true, CanViewCalderaStatus: true, CanViewConnectorStatus: true,
-		CanSyncConnector: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
+		CanSyncConnector: true, CanUpdateConnectorConfig: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
 		CanViewARTContentStatus: true, CanReseedARTContent: true, CanReindexSearch: true, CanManageIOCs: true, CanViewTamperEvents: true,
 		CanAcknowledgeTamperEvent: true, CanAcknowledgeAllTamperEvents: true, CanViewAuditLogs: true,
 		CanListTicketingConfigs: true, CanCreateTicketingConfig: true, CanUpdateTicketingConfig: true,
@@ -311,7 +316,7 @@ func Permissions(role Role) []Permission {
 
 		CanSetAgentState, CanStopAgent, CanRemoveAgent, CanViewLicense, CanViewConnectionConfig, CanManageAgentGroups, CanViewAgentGroups, CanListUsers, CanCreateUser,
 		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
-		CanSyncConnector, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
+		CanSyncConnector, CanUpdateConnectorConfig, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
 		CanReseedARTContent, CanReindexSearch, CanManageIOCs, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,
 		CanViewAuditLogs, CanListTicketingConfigs, CanCreateTicketingConfig, CanUpdateTicketingConfig,
 		CanDeleteTicketingConfig, CanTestTicketingConfig, CanProbeTicketingConfig, CanProbeTicketingProjects,

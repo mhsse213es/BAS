@@ -272,14 +272,25 @@ func main() {
 	log.Println("[+] Ticketing manager ready")
 
 	// ── Threat-Intel Connector (layered: air-gapped bundle floor + live overlay) ─
-	var tiSources []connector.Source
-	if cfg.MISPUrl != "" && cfg.MISPApiKey != "" {
-		tiSources = append(tiSources, connector.NewMISPClient(cfg.MISPUrl, cfg.MISPApiKey, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions))
-		log.Printf("[+] MISP connector configured: %s", cfg.MISPUrl)
+	// threat_intel_config is now the authoritative source for MISP/OpenCTI/OTX
+	// (DB-backed, UI-editable -- see docs/superpowers/specs/2026-08-10-threat-intel-connector-config-design.md).
+	// SeedFromEnv migrates any already-set .env values into the DB exactly
+	// once, on the first boot after this change ships, so an existing
+	// deployment (e.g. one already running with MISP_URL/MISP_API_KEY set)
+	// keeps working with zero manual action.
+	if err := connector.SeedFromEnv(context.Background(), pool, connector.SeedConfig{
+		MISPUrl: cfg.MISPUrl, MISPApiKey: cfg.MISPApiKey,
+		OpenCTIUrl: cfg.OpenCTIUrl, OpenCTIApiKey: cfg.OpenCTIApiKey,
+		OTXAPIKey: cfg.OTXAPIKey,
+	}); err != nil {
+		log.Printf("[!] threat-intel config seed warning: %v", err)
 	}
-	if cfg.OpenCTIUrl != "" && cfg.OpenCTIApiKey != "" {
-		tiSources = append(tiSources, connector.NewOpenCTIClient(cfg.OpenCTIUrl, cfg.OpenCTIApiKey, cfg.ThreatIntelSectors))
-		log.Printf("[+] OpenCTI connector configured: %s", cfg.OpenCTIUrl)
+	tiSources, err := connector.LoadSourcesFromDB(context.Background(), pool, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
+	if err != nil {
+		log.Printf("[!] threat-intel config load warning: %v", err)
+	}
+	for _, src := range tiSources {
+		log.Printf("[+] %s connector configured", src.Name())
 	}
 	// Air-gapped floor: only add the bundle source when a signed ti-bundle.json is
 	// actually present. Verified with the release key via integrity.VerifyScenarioFile.
@@ -288,10 +299,6 @@ func main() {
 			tiSources = append(tiSources, connector.NewBundleSource(cfg.TIBundleDir, integrity.VerifyScenarioFile))
 			log.Printf("[+] Threat-intel bundle found in %s (air-gapped source)", cfg.TIBundleDir)
 		}
-	}
-	if cfg.OTXAPIKey != "" {
-		tiSources = append(tiSources, connector.NewOTXSource(cfg.OTXAPIKey))
-		log.Printf("[+] OTX connector configured (periodic sync)")
 	}
 	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions, engine.Profiles())
 	priorityEngine := threatpriority.NewEngine(pool, engine, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
@@ -402,9 +409,15 @@ func main() {
 
 	// ── WebSocket Hub + HTTP Router ───────────────────────────────────────
 	var iocProvider ioc.Provider
-	if cfg.OTXAPIKey != "" {
+	var otxAPIKey string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT api_key FROM threat_intel_config WHERE connector='otx' AND enabled=true`,
+	).Scan(&otxAPIKey); err != nil {
+		otxAPIKey = "" // no row, or not enabled -- same as OTX_API_KEY unset before this change
+	}
+	if otxAPIKey != "" {
 		var err error
-		iocProvider, err = ioc.NewProvider(ioc.Config{Provider: "otx", APIKey: cfg.OTXAPIKey})
+		iocProvider, err = ioc.NewProvider(ioc.Config{Provider: "otx", APIKey: otxAPIKey})
 		if err != nil {
 			log.Printf("[!] ioc provider init warning: %v", err)
 		} else {

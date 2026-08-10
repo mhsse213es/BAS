@@ -44,6 +44,10 @@ func TestHasPermission_FullMatrix(t *testing.T) {
 		{RoleAdmin, CanTargetAllAgents, true},
 		{RoleAnalyst, CanTargetAllAgents, false},
 		{RoleViewer, CanTargetAllAgents, false},
+
+		{RoleAdmin, CanUpdateConnectorConfig, true},
+		{RoleAnalyst, CanUpdateConnectorConfig, false},
+		{RoleViewer, CanUpdateConnectorConfig, false},
 	}
 	for _, tc := range cases {
 		if got := HasPermission(tc.role, tc.perm); got != tc.want {
@@ -80,7 +84,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanSetAgentState: true, CanStopAgent: true, CanRemoveAgent: true, CanViewLicense: true, CanViewConnectionConfig: true, CanManageAgentGroups: true, CanViewAgentGroups: true,
 		CanListUsers: true, CanCreateUser: true, CanUpdateUser: true, CanDeleteUser: true,
 		CanResetUserPassword: true, CanViewCalderaStatus: true, CanViewConnectorStatus: true,
-		CanSyncConnector: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
+		CanSyncConnector: true, CanUpdateConnectorConfig: true, CanDeleteConnectorScenario: true, CanSetAttackPathSchedule: true,
 		CanViewARTContentStatus: true, CanReseedARTContent: true, CanReindexSearch: true, CanManageIOCs: true, CanViewTamperEvents: true,
 		CanAcknowledgeTamperEvent: true, CanAcknowledgeAllTamperEvents: true, CanViewAuditLogs: true,
 		CanListTicketingConfigs: true, CanCreateTicketingConfig: true, CanUpdateTicketingConfig: true,
@@ -131,7 +135,7 @@ func TestPermissions_Ordering(t *testing.T) {
 
 		CanSetAgentState, CanStopAgent, CanRemoveAgent, CanViewLicense, CanViewConnectionConfig, CanManageAgentGroups, CanViewAgentGroups, CanListUsers, CanCreateUser,
 		CanUpdateUser, CanDeleteUser, CanResetUserPassword, CanViewCalderaStatus, CanViewConnectorStatus,
-		CanSyncConnector, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
+		CanSyncConnector, CanUpdateConnectorConfig, CanDeleteConnectorScenario, CanSetAttackPathSchedule, CanViewARTContentStatus,
 		CanReseedARTContent, CanReindexSearch, CanManageIOCs, CanViewTamperEvents, CanAcknowledgeTamperEvent, CanAcknowledgeAllTamperEvents,
 		CanViewAuditLogs, CanListTicketingConfigs, CanCreateTicketingConfig, CanUpdateTicketingConfig,
 		CanDeleteTicketingConfig, CanTestTicketingConfig, CanProbeTicketingConfig, CanProbeTicketingProjects,

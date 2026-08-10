@@ -1035,6 +1035,22 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at          timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
+		// threat_intel_config: one row per MISP/OpenCTI/OTX connector, DB-backed
+		// replacement for the .env-only config those three used before this.
+		// base_url is unused (stays '') for the 'otx' row -- it's a single
+		// hosted service, not self-hosted like MISP/OpenCTI. See
+		// docs/superpowers/specs/2026-08-10-threat-intel-connector-config-design.md.
+		`CREATE TABLE IF NOT EXISTS threat_intel_config (
+			connector         text        PRIMARY KEY,
+			base_url          text        NOT NULL DEFAULT '',
+			api_key           text        NOT NULL DEFAULT '',
+			enabled           boolean     NOT NULL DEFAULT false,
+			last_sync_at      timestamptz,
+			last_sync_status  text        NOT NULL DEFAULT 'never',
+			last_error        text        NOT NULL DEFAULT '',
+			updated_at        timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
 		// dashboard_snapshots: Phase 6 executive dashboard. One row per day
 		// (UNIQUE(snapshot_date) makes the daily scheduler's upsert idempotent).
 		// See docs/superpowers/specs/2026-07-17-phase6-executive-dashboards-design.md.
