@@ -192,25 +192,25 @@ type findingScanner interface {
 
 const findingCols = `id, agent_id, technique_id, control_class, technique_name, tactic,
 	severity, exposure_state, status, source_type, occurrence_count, reopened_count,
-	last_campaign_id, first_seen, last_seen, resolved_reason, resolved_at`
+	last_campaign_id, first_seen, last_seen, resolved_reason, resolved_at, COALESCE(last_run_id,'')`
 
 func scanFindings(rows findingScanner) []map[string]any {
 	out := []map[string]any{}
 	for rows.Next() {
-		var id, agentID, techID, control, name, tactic, severity, exposure, status, source string
+		var id, agentID, techID, control, name, tactic, severity, exposure, status, source, lastRunID string
 		var occ, reopened int
 		var firstSeen, lastSeen time.Time
 		var lastCampaign, resolvedReason *string
 		var resolvedAt *time.Time
 		if rows.Scan(&id, &agentID, &techID, &control, &name, &tactic, &severity, &exposure, &status, &source,
-			&occ, &reopened, &lastCampaign, &firstSeen, &lastSeen, &resolvedReason, &resolvedAt) != nil {
+			&occ, &reopened, &lastCampaign, &firstSeen, &lastSeen, &resolvedReason, &resolvedAt, &lastRunID) != nil {
 			continue
 		}
 		m := map[string]any{
 			"id": id, "agentId": agentID, "techniqueId": techID, "controlClass": control,
 			"techniqueName": name, "tactic": tactic, "severity": severity, "exposureState": exposure,
 			"status": status, "sourceType": source, "occurrenceCount": occ, "reopenedCount": reopened,
-			"firstSeen": firstSeen, "lastSeen": lastSeen,
+			"firstSeen": firstSeen, "lastSeen": lastSeen, "lastRunId": lastRunID,
 		}
 		if lastCampaign != nil {
 			m["lastCampaignId"] = *lastCampaign
@@ -270,7 +270,93 @@ func (h *Handler) GetFinding(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(dsRaw, &ds)
 	f["productSnapshot"] = prod
 	f["dataSources"] = ds
+	if runID, _ := f["lastRunId"].(string); runID != "" {
+		if bd := h.variantBreakdownForFinding(r.Context(), runID, f["techniqueId"].(string), f["controlClass"].(string)); bd != nil {
+			f["variantBreakdown"] = bd
+		}
+	}
 	respond(w, f)
+}
+
+// variantOutcome is one result's contribution to a variantBreakdown.
+type variantOutcome struct {
+	Name    string `json:"name"`
+	Outcome string `json:"outcome"` // prevented | detected_only | missed
+	Details string `json:"details"`
+}
+
+// variantBreakdown is the per-variant pass/fail detail behind one finding's
+// worst-case-aggregated state. upsertFindingsForRun deliberately collapses
+// every result mapping to a (technique, control) key down to the single
+// worst outcome across them (security-correct — a technique isn't truly
+// mitigated while any variant still gets through) before it ever reaches
+// the finding state machine; that aggregation is NOT changed here. This is
+// purely additive read-side detail, re-derived independently from the same
+// already-persisted scenario_runs.results the aggregation itself read, so a
+// finding showing "missed" after partial remediation doesn't look like a
+// total no-op when e.g. 48 of 50 variants are now actually blocked.
+// See project_revalidation_visibility_gap memory.
+type variantBreakdown struct {
+	Total        int              `json:"total"`
+	Prevented    int              `json:"prevented"`
+	DetectedOnly int              `json:"detectedOnly"`
+	Missed       int              `json:"missed"`
+	Results      []variantOutcome `json:"results"`
+}
+
+// variantBreakdownForFinding re-reads the finding's last observed run and
+// recomputes the same per-result outcome classification upsertFindingsForRun
+// uses, filtered to this specific (technique, control) key, without touching
+// or depending on any finding/aggregation state. Returns nil (not an error)
+// when there's nothing to show — a missing run, unparseable results, or zero
+// matching results are all treated as "no breakdown available" rather than
+// failing the whole GetFinding response.
+func (h *Handler) variantBreakdownForFinding(ctx context.Context, runID, techID, control string) *variantBreakdown {
+	var resultsRaw, detRaw []byte
+	if err := h.db.QueryRow(ctx, `SELECT results, detection_summary FROM scenario_runs WHERE id=$1`, runID).
+		Scan(&resultsRaw, &detRaw); err != nil {
+		return nil
+	}
+	var results []models.SimulationResult
+	_ = json.Unmarshal(resultsRaw, &results)
+	if len(results) == 0 {
+		return nil
+	}
+	detected := reporting.DetectedTechniques(detRaw, results)
+
+	var ds []string
+	if e := attackdata.Lookup(techID); e != nil {
+		ds = e.DataSources
+	}
+
+	bd := &variantBreakdown{}
+	for _, res := range results {
+		if res.Technique.ID != techID || findings.ControlClass(ds) != control {
+			continue
+		}
+		var outcome string
+		switch res.Result {
+		case models.ResultPass, models.ResultBlocked:
+			outcome = "prevented"
+			bd.Prevented++
+		case models.ResultFail:
+			if detected[techID] {
+				outcome = "detected_only"
+				bd.DetectedOnly++
+			} else {
+				outcome = "missed"
+				bd.Missed++
+			}
+		default:
+			continue // error | skipped -- excluded from the security aggregation, same as upsertFindingsForRun
+		}
+		bd.Total++
+		bd.Results = append(bd.Results, variantOutcome{Name: res.Technique.Name, Outcome: outcome, Details: res.Details})
+	}
+	if bd.Total == 0 {
+		return nil
+	}
+	return bd
 }
 
 // SetFindingStatus sets an analyst-chosen status. POST /api/findings/{id}/status

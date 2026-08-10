@@ -8840,6 +8840,32 @@ function openFinding(id) {
       : '');
     document.getElementById('results-export').innerHTML = (actions ? actions + ' ' : '') + pushBtn + (pushBtn && respondBtn ? ' ' : '') + respondBtn;
     var ticketSectionId = 'finding-tickets-' + f.id;
+    // Variant breakdown: a finding's own status is the worst outcome across
+    // every result mapped to this (technique, control) -- one bypass keeps it
+    // open even if most variants are now blocked. This shows the real split
+    // instead of leaving a fully-open-looking finding after partial fixes.
+    var vb = f.variantBreakdown;
+    var vbHtml = '';
+    if (vb && vb.total > 0) {
+      var vbPct = Math.round(vb.prevented / vb.total * 100);
+      var vbRows = (vb.results || []).map(function(r) {
+        var cls = r.outcome === 'prevented' ? 'pass' : 'fail';
+        var label = r.outcome === 'prevented' ? 'BLOCKED' : r.outcome === 'detected_only' ? 'DETECTED ONLY' : 'MISSED';
+        return '<div class="cmp-ev-row"><span class="cmp-ev-badge ' + cls + '">' + label + '</span>' +
+          '<span class="cmp-ev-detail">' + x((r.details || '').substring(0, 140)) + '</span></div>';
+      }).join('');
+      vbHtml = '<div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border)">' +
+        '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.4rem">Variant Breakdown</div>' +
+        '<div style="font-size:0.8rem;margin-bottom:0.5rem">' + vb.prevented + ' of ' + vb.total + ' variants blocked (' + vbPct + '%)' +
+          (vb.detectedOnly ? ', ' + vb.detectedOnly + ' detected only' : '') +
+          (vb.missed ? ', ' + vb.missed + ' still missed entirely' : '') + '.' +
+          ((vb.missed > 0 || vb.detectedOnly > 0)
+            ? ' This finding stays open until every variant is blocked — even one bypass keeps the control marked ineffective.'
+            : '') +
+        '</div>' +
+        '<div class="cmp-evidence open">' + vbRows + '</div>' +
+      '</div>';
+    }
     document.getElementById('results-body').innerHTML =
       '<div style="margin-bottom:0.9rem">' + findingSevBadge(f.severity, f.exposureState) +
         ' <span class="sbadge s-' + findingStatusClass(f.status) + '">' + x((f.status || '').replace('_', ' ')) + '</span></div>' +
@@ -8850,6 +8876,7 @@ function openFinding(id) {
       row('Occurrences', String(f.occurrenceCount) + (f.reopenedCount > 0 ? ' · reopened ' + f.reopenedCount + '×' : '')) +
       row('First seen', fmtDate(f.firstSeen)) + row('Last seen', fmtDate(f.lastSeen)) +
       row('Exposure age', formatFindingAge(f)) +
+      vbHtml +
       (e.description ? '<div style="margin-top:0.8rem;font-size:0.8rem;color:var(--text-dim);line-height:1.5">' + x(e.description) + '</div>' : '') +
       (e.url ? '<div style="margin-top:0.6rem"><a href="' + x(e.url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">View on attack.mitre.org →</a></div>' : '') +
       (canPush

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -154,6 +155,70 @@ func TestGetFinding_Success(t *testing.T) {
 		}
 		if _, ok := out["dataSources"]; !ok {
 			t.Error("expected dataSources key")
+		}
+	})
+}
+
+// TestGetFinding_IncludesVariantBreakdown_MixedOutcomes pins the actual fix
+// for project_revalidation_visibility_gap: upsertFindingsForRun aggregates
+// multiple results for one (technique, control) down to the single worst
+// outcome (any FAIL -> exposure_state=missed) before the finding state
+// machine ever sees them -- that aggregation must NOT change. This proves
+// GetFinding separately re-derives and surfaces the real per-variant split
+// (3 prevented, 2 missed) alongside the still-worst-case finding state, so
+// a mostly-remediated technique doesn't read as a total no-op.
+func TestGetFinding_IncludesVariantBreakdown_MixedOutcomes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		at := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+		results := []models.SimulationResult{
+			{ID: "r1", Technique: models.AttackTechnique{ID: "T1059.001", Name: "Test Technique", Tactic: "execution"}, Result: models.ResultPass, Severity: "Critical", ExecutedAt: at, StartedAt: at},
+			{ID: "r2", Technique: models.AttackTechnique{ID: "T1059.001", Name: "Test Technique", Tactic: "execution"}, Result: models.ResultPass, Severity: "Critical", ExecutedAt: at, StartedAt: at},
+			{ID: "r3", Technique: models.AttackTechnique{ID: "T1059.001", Name: "Test Technique", Tactic: "execution"}, Result: models.ResultPass, Severity: "Critical", ExecutedAt: at, StartedAt: at},
+			{ID: "r4", Technique: models.AttackTechnique{ID: "T1059.001", Name: "Test Technique", Tactic: "execution"}, Result: models.ResultFail, Severity: "Critical", Details: "bypass via encoded command", ExecutedAt: at, StartedAt: at},
+			{ID: "r5", Technique: models.AttackTechnique{ID: "T1059.001", Name: "Test Technique", Tactic: "execution"}, Result: models.ResultFail, Severity: "Critical", Details: "bypass via alternate shell", ExecutedAt: at, StartedAt: at},
+		}
+		seedReportableRun(t, pool, "gf-mixed-run", "agent-gf-mixed", reportRunOpts{Results: results})
+		h := newReportingHandler(t, pool, nil)
+		h.upsertFindingsForRun(context.Background(), "gf-mixed-run")
+
+		var id, exposure string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT id, exposure_state FROM findings WHERE agent_id='agent-gf-mixed' AND technique_id='T1059.001'`,
+		).Scan(&id, &exposure); err != nil {
+			t.Fatalf("lookup seeded finding: %v", err)
+		}
+		if exposure != "missed" {
+			t.Fatalf("exposure_state = %q, want %q — worst-case aggregation must be unchanged by this fix", exposure, "missed")
+		}
+
+		rec := httptest.NewRecorder()
+		h.GetFinding(rec, withURLParam(findingsReq("/api/findings/"+id, ""), "id", id))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		bd, ok := out["variantBreakdown"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected variantBreakdown object in response, got %v", out["variantBreakdown"])
+		}
+		if bd["total"] != float64(5) {
+			t.Errorf("variantBreakdown.total = %v, want 5", bd["total"])
+		}
+		if bd["prevented"] != float64(3) {
+			t.Errorf("variantBreakdown.prevented = %v, want 3", bd["prevented"])
+		}
+		if bd["missed"] != float64(2) {
+			t.Errorf("variantBreakdown.missed = %v, want 2", bd["missed"])
+		}
+		results2, ok := bd["results"].([]any)
+		if !ok || len(results2) != 5 {
+			t.Errorf("variantBreakdown.results length = %v, want 5 entries", bd["results"])
 		}
 	})
 }
