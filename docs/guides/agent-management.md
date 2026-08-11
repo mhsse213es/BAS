@@ -1,6 +1,6 @@
 # Audspect BAS — Agent Management Guide
 
-**Platform Version:** v1.7.3
+**Platform Version:** v1.7.5
 
 ---
 
@@ -12,35 +12,24 @@ An Audspect BAS agent is a lightweight Go binary deployed on a target endpoint. 
 
 ## Agent Lifecycle States
 
+`state` is a persisted field on the agent record, set explicitly by an Admin action (or by the agent itself for the uninstall states below). It is separate from the *connectivity* status shown in the dashboard (Active/Offline), which is derived live from heartbeat timing — an agent in state `active` still shows as **Offline** in the UI the moment its heartbeat lapses, without any state change.
+
 | State | Meaning | Who Sets It |
 |---|---|---|
-| **Enrolling** | Agent first connected; awaiting initial heartbeat confirmation | Automatic |
-| **Active** | Agent connected and healthy, last heartbeat within 90 seconds | Automatic |
-| **Restricted** | Agent can connect and report results, but cannot receive new scenario dispatches | Admin |
-| **Quarantined** | Agent fully isolated; no dispatches, no result submission, connection rejected | Admin |
-| **Retired** | Agent decommissioned; kept for historical data; no new connections | Admin |
-| **Offline** | Automatic status when no heartbeat received for >90 seconds | Automatic |
-
-### State transitions
-
-```
-Enrolling → Active (first healthy heartbeat)
-Active → Offline (heartbeat timeout)
-Offline → Active (agent reconnects and heartbeat succeeds)
-Active/Offline → Restricted (admin action)
-Active/Offline → Quarantined (admin action)
-Active/Offline/Restricted → Retired (admin action)
-Quarantined → Active (admin lifts quarantine)
-```
+| **enrolling** | Agent first connected; awaiting initial heartbeat confirmation | Automatic |
+| **active** | Normal operating state | Automatic (on first healthy heartbeat) |
+| **restricted** | Agent can connect and report results, but cannot receive new scenario dispatches | Admin |
+| **quarantined** | Agent fully isolated; no dispatches accepted | Admin |
+| **retired** | Agent decommissioned; historical data preserved; no new connections | Admin |
+| **uninstalling** | Remote uninstall in progress; agent has been told to remove itself | Automatic (set by the Uninstall action below) |
+| **uninstalled** | Agent confirmed it removed itself, via its own callback | Automatic (agent-reported) |
 
 ### Setting agent state (Admin only)
 
-In the dashboard: **Agents** → click the three-dot menu on an agent row → select state.
-
 Via API:
 ```
-POST /api/agents/{id}/state
-Body: { "state": "quarantined", "reason": "Suspicious process detected" }
+PUT /api/agents/{agentId}/state
+Body: { "state": "quarantined" }
 ```
 
 ---
@@ -49,13 +38,19 @@ Body: { "state": "quarantined", "reason": "Suspicious process detected" }
 
 ### Download the binary
 
-**Dashboard:** Agents → Download Agent → select OS → download
+**Dashboard:** Agents → Download Agent → select platform → download
 
-**Direct URL:**
+**Direct URL** — `{platform}` is one exact value, not separate os/arch query params:
 ```
-GET /api/agents/download?os=windows&arch=amd64
-GET /api/agents/download?os=linux&arch=amd64
-GET /api/agents/download?os=darwin&arch=arm64
+GET /api/agents/download/linux-amd64
+GET /api/agents/download/linux-arm64
+GET /api/agents/download/linux-amd64-deb
+GET /api/agents/download/linux-arm64-deb
+GET /api/agents/download/linux-amd64-rpm
+GET /api/agents/download/windows-amd64-setup
+GET /api/agents/download/windows-amd64
+GET /api/agents/download/darwin-amd64
+GET /api/agents/download/darwin-arm64
 ```
 
 ### Install on Windows
@@ -63,18 +58,18 @@ GET /api/agents/download?os=darwin&arch=arm64
 Open PowerShell **as Administrator**:
 ```powershell
 .\bas-agent.exe `
-  -url http://<server-ip>:9000 `
+  -server https://<server-ip>:9443 `
   -secret <agent-secret> `
-  -label "DESKTOP-FINANCE-01" `
   -install
 ```
 
-The agent installs as `BAS Agent` Windows service (auto-start). Event logs go to Windows Event Log under `BAS Agent`.
+The agent installs as the `BASAgent` Windows service (auto-start). The tray icon and status console display "BAS Agent" as a friendly title, but the actual service name (for `Get-Service`, `sc.exe`, etc.) is `BASAgent`, no space.
 
-**Uninstall:**
+**Uninstall (locally, on the endpoint):**
 ```powershell
 .\bas-agent.exe -uninstall
 ```
+To uninstall remotely instead, from the dashboard, see **Retiring and Removing Agents** below.
 
 ### Install on Linux
 
@@ -83,22 +78,22 @@ chmod +x bas-agent
 
 # Install as systemd service
 sudo ./bas-agent \
-  -url http://<server-ip>:9000 \
+  -server https://<server-ip>:9443 \
   -secret <agent-secret> \
-  -label "UBUNTU-WEB-01" \
   -install
 
 sudo systemctl status bas-agent
 ```
 
-Config is written to `/etc/bas-agent/config` on install. Edit this file to change the server URL or secret after installation:
-```ini
-url = http://192.168.1.50:9000
-secret = your-agent-secret
-label = UBUNTU-WEB-01
+Config is written to `/etc/bas-agent/config` on install (shell-style `KEY=value`, one per line — not INI):
 ```
+BAS_SERVER_URL=https://192.168.1.50:9443
+BAS_ENV_LABEL=Production
+BAS_AGENT_SECRET=your-agent-secret
+```
+`BAS_ENV_LABEL` is a free-text environment tag shown next to the agent in the dashboard (e.g. "Production", "Staging") — it is not a per-agent display name; the agent's hostname is used for that.
 
-Restart after editing:
+Edit the config file directly to change any of these values, then restart:
 ```bash
 sudo systemctl restart bas-agent
 ```
@@ -108,21 +103,20 @@ sudo systemctl restart bas-agent
 ```bash
 chmod +x bas-agent
 sudo ./bas-agent \
-  -url http://<server-ip>:9000 \
+  -server https://<server-ip>:9443 \
   -secret <agent-secret> \
-  -label "MAC-ANALYST-01" \
   -install
 ```
 
-The agent installs as a launchd service (StartAtLoad=true).
+Config is written to `/etc/bas-agent/config`, same format as Linux. The agent installs as a launchd service.
 
 ### Verify enrollment
 
-Within 30–60 seconds, the agent appears in the dashboard under **Agents** with state **Active**. The agent table shows:
-- Hostname and label
+Within 30–60 seconds, the agent appears in the dashboard under **Agents** with state **enrolling**, moving to **active** on its first healthy heartbeat. The agent table shows:
+- Hostname
 - OS version
 - Last heartbeat timestamp
-- Current state (Active/Offline/etc.)
+- Current state
 - Binary trust status
 - Active run count
 
@@ -130,69 +124,46 @@ Within 30–60 seconds, the agent appears in the dashboard under **Agents** with
 
 ## Agent Detail Drawer
 
-Click **Detail** next to any agent row to open the detail drawer. The drawer has five tabs:
+Click an agent row to open the detail drawer. The drawer has **six** tabs:
 
 ### Overview Tab
 
-Displays:
-- Hostname, IP address, OS version, architecture
-- Agent binary version and binary trust verification result
-- Enrollment timestamp, last heartbeat
-- Run statistics: total runs, pass rate, last Prevention Score
-- Current state badge
+Displays hostname, IP, OS version, environment label, current state, binary trust status, and enrollment/heartbeat timestamps.
 
 ### Scenarios Tab
 
-Shows the last 20 scenario runs for this agent:
-- Scenario name, start time, duration
-- Prevention Score and verdict breakdown
-- Status (Completed, Running, Failed, Partial)
-
-Click any run row to open the run detail (step-by-step output).
+Shows recent scenario runs for this agent: name, start time, status, and score. Click any run row to open the run detail.
 
 ### Logs Tab
 
-Real-time log stream from the agent (forwarded via WebSocket). Useful for troubleshooting dispatch failures, connectivity issues, and step execution problems.
+Real-time operational log stream from the agent (auto-refreshes every 15 seconds while this tab is open). Useful for troubleshooting dispatch failures and step execution problems.
 
 ### Health Tab
 
-Agent environment diagnostics:
-- OS version, free disk, memory
-- AV product detection results
-- Pending OS patches (if posture check ran)
-- Agent process uptime
+Agent environment diagnostics: OS version, resource usage, and posture-check-derived signals when a posture run has executed on this agent.
 
 ### Attack Path Tab
 
-Lists the last 10 Attack Path collection jobs for this agent:
-- Job ID, status, start time, duration
-- Collection stage (Initializing / Probing / Running SharpHound / etc.)
-- Progress percentage during active runs
-- Node count and edge count for completed runs
-- Error message for failed runs
+Lists recent Attack Path collection jobs for this agent, with status, stage, and node/edge counts for completed runs.
 
-When an AP collection is running, this tab refreshes automatically via WebSocket. You can also trigger a new collection from here or from the dedicated **Attack Path** section.
+### Risk Tab
+
+Per-agent risk scoring, derived from posture/patch/config findings and their severity — a separate signal from the BAS Prevention Score, focused on standing exposure rather than simulated-attack outcomes.
 
 ---
 
 ## Binary Trust Verification
 
-On every heartbeat, the agent submits the SHA-256 hash of its own binary. The orchestrator compares this against the `BINARIES.sha256` manifest shipped with the delivery package.
+On every heartbeat, the agent submits the SHA-256 hash of its own binary. The orchestrator checks whether that hash is present in the `BINARIES.sha256` manifest shipped with the delivery package.
 
-**Verification outcomes:**
+**This is a two-state check, not a tiered trust system:**
 
 | Dashboard indicator | Meaning |
 |---|---|
-| Green shield icon | Binary hash matches manifest |
-| Yellow shield icon | Hash not in manifest (agent binary not recognized) |
-| Red shield icon | Hash explicitly marked as revoked in manifest |
+| ✓ Verified (green) | Binary hash is present in the shipped manifest |
+| ⚠ Unverified (yellow) | Binary hash is not present in the manifest |
 
-A yellow shield indicates the agent binary was not part of the delivery package — this can mean:
-- Agent binary was replaced on the endpoint
-- Agent is an older version not in the current manifest
-- Legitimate upgrade not yet reflected in the manifest
-
-A red shield indicates the binary was explicitly revoked (e.g., a leaked or compromised build). In this case, the orchestrator refuses to dispatch scenarios to the agent.
+An Unverified result can mean the agent binary was replaced on the endpoint, or it's simply an older/newer build not covered by the currently-loaded manifest. There is no separate "revoked hash" list or automatic dispatch-blocking based on this flag alone — it is a visibility signal for the operator to investigate, not an enforcement gate.
 
 ---
 
@@ -200,18 +171,16 @@ A red shield indicates the binary was explicitly revoked (e.g., a leaked or comp
 
 ### Windows — Group Policy / SCCM
 
-Deploy `bas-agent.exe` via software distribution. Use a startup script that runs the install command:
-
 ```powershell
-if (-not (Get-Service "BAS Agent" -ErrorAction SilentlyContinue)) {
+if (-not (Get-Service "BASAgent" -ErrorAction SilentlyContinue)) {
     & "\\fileserver\bas\bas-agent.exe" `
-      -url http://192.168.1.50:9000 `
+      -server https://192.168.1.50:9443 `
       -secret "your-secret" `
       -install
 }
 ```
 
-The agent is idempotent on install — running install a second time on an already-installed agent is safe.
+Install is idempotent — running it a second time on an already-installed agent is safe.
 
 ### Linux — Ansible
 
@@ -229,9 +198,8 @@ The agent is idempotent on install — running install a second time on an alrea
     - name: Install agent service
       command: >
         /usr/local/bin/bas-agent
-        -url http://192.168.1.50:9000
+        -server https://192.168.1.50:9443
         -secret {{ agent_secret }}
-        -label {{ inventory_hostname }}
         -install
       args:
         creates: /etc/bas-agent/config
@@ -249,27 +217,36 @@ The agent is idempotent on install — running install a second time on an alrea
 
 | Symptom | Check | Fix |
 |---|---|---|
-| Agent not appearing in dashboard | Server URL reachable from endpoint? | `Test-NetConnection <server-ip> -Port 9000` (Windows) or `nc -zv <server-ip> 9000` (Linux) |
-| Agent shows Offline immediately | Agent secret mismatch | Copy secret from **Admin → Connection Config** |
-| Agent enrolls then immediately goes Offline | Clock skew >5 minutes between server and endpoint | Sync NTP on both machines |
-| Agent runs scenarios but results never arrive | Firewall blocking result POST (same port 9000) | Verify agent → server firewall rule |
-| Binary trust shows yellow shield | Outdated agent binary | Download and deploy the new binary from the dashboard |
+| Agent not appearing in dashboard | Server URL reachable from endpoint? | `Test-NetConnection <server-ip> -Port 9443` (Windows) or `nc -zv <server-ip> 9443` (Linux) |
+| Agent shows Offline immediately | Agent secret mismatch | Reissue the secret from the dashboard's agent enrollment flow |
+| Agent enrolls then immediately goes Offline | Clock skew between server and endpoint | Sync NTP on both machines |
+| Agent runs scenarios but results never arrive | Firewall blocking the same port 9443 in both directions | Verify agent ↔ server firewall rules |
+| Binary trust shows Unverified | Agent binary predates or postdates the loaded manifest | Confirm the deployed binary matches the current release |
 
 ---
 
 ## Retiring and Removing Agents
 
-**Retire** — sets agent to Retired state; historical data preserved; no new connections accepted:
+There are three distinct decommission actions, each doing something meaningfully different:
+
+**Stop** — sends the agent a live command to disable its own service so it never auto-restarts. The agent must currently be connected. Requires a reason (audited):
 ```
-POST /api/agents/{id}/state   Body: {"state": "retired"}
+POST /api/agents/{agentId}/stop
+Body: { "reason": "Suspicious activity — isolating pending investigation" }
 ```
 
-**Delete** — permanently removes the agent record and all associated run data. This cannot be undone.
+**Remove (Retire)** — sets the agent's state to `retired` server-side. No action on the endpoint itself; historical run data is preserved; the agent no longer accepts new dispatches. Requires a reason (audited):
 ```
-DELETE /api/agents/{id}
+POST /api/agents/{agentId}/remove
+Body: { "reason": "Endpoint decommissioned" }
 ```
 
-Delete is only available in the API. The dashboard uses Retire for non-destructive decommission.
+**Uninstall** — the fully verified remote-uninstall flow: the orchestrator tells the agent to remove itself (state moves to `uninstalling`), and the agent confirms completion via its own callback (state moves to `uninstalled`):
+```
+POST /api/agents/{agentId}/uninstall
+```
+
+All three are Admin-only actions, available from the dashboard's agent row menu.
 
 ---
 
