@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -53,5 +54,41 @@ func TestLoadD3fend(t *testing.T) {
 	cms := m["T1548.002"]
 	if len(cms) != 1 || cms[0].ID != "D3-EAL" || cms[0].Name != "Executable Allowlisting" {
 		t.Errorf("loadD3fend returned %+v", m)
+	}
+}
+
+func TestParseGroups(t *testing.T) {
+	raw := `[
+		{"type":"intrusion-set","name":"Wizard Spider","x_mitre_aliases":["Sangria Tempest","UNC1878"],
+		 "external_references":[{"source_name":"mitre-attack","external_id":"G0102"}]},
+		{"type":"intrusion-set","name":"Revoked Group","revoked":true,
+		 "external_references":[{"source_name":"mitre-attack","external_id":"G9998"}]},
+		{"type":"intrusion-set","name":"Deprecated Group","x_mitre_deprecated":true,
+		 "external_references":[{"source_name":"mitre-attack","external_id":"G9997"}]},
+		{"type":"intrusion-set","name":"No External ID Group"},
+		{"type":"malware","name":"Some Malware",
+		 "external_references":[{"source_name":"mitre-attack","external_id":"S0001"}]}
+	]`
+	var objects []stixObj
+	if err := json.Unmarshal([]byte(raw), &objects); err != nil {
+		t.Fatalf("unmarshal fixture: %v", err)
+	}
+
+	groups := parseGroups(objects)
+	if len(groups) != 1 {
+		t.Fatalf("want 1 group (revoked/deprecated/no-external-id/non-intrusion-set excluded), got %d: %+v", len(groups), groups)
+	}
+	g := groups[0]
+	if g.ID != "G0102" || g.Name != "Wizard Spider" {
+		t.Fatalf("got %+v, want ID=G0102 Name=Wizard Spider", g)
+	}
+	want := []string{"Sangria Tempest", "UNC1878"}
+	if len(g.Aliases) != len(want) {
+		t.Fatalf("Aliases = %v, want %v", g.Aliases, want)
+	}
+	for i, a := range want {
+		if g.Aliases[i] != a {
+			t.Errorf("Aliases[%d] = %q, want %q", i, g.Aliases[i], a)
+		}
 	}
 }

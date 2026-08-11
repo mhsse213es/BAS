@@ -99,6 +99,7 @@ type stixObj struct {
 	Platforms           []string `json:"x_mitre_platforms"`
 	PermissionsRequired []string `json:"x_mitre_permissions_required"`
 	DataSources         []string `json:"x_mitre_data_sources"`
+	Aliases             []string `json:"x_mitre_aliases"`
 	ExternalRefs        []struct {
 		SourceName string `json:"source_name"`
 		ExternalID string `json:"external_id"`
@@ -115,6 +116,15 @@ type stixObj struct {
 
 type bundle struct {
 	Objects []stixObj `json:"objects"`
+}
+
+// Group is one MITRE ATT&CK intrusion-set (threat-actor group), keyed by
+// its canonical external ID (G####). Output schema -- must match
+// attackdata.Group's json tags.
+type Group struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 const (
@@ -277,6 +287,42 @@ func main() {
 	must(err)
 	must(os.WriteFile(outPath, out, 0o644))
 	fmt.Printf("wrote %d techniques to %s (%d bytes)\n", len(techs), outPath, len(out))
+
+	groups := parseGroups(b.Objects)
+	groupsOut, err := json.MarshalIndent(groups, "", " ")
+	must(err)
+	groupsPath := filepath.Join(filepath.Dir(outPath), "attack_groups.json")
+	must(os.WriteFile(groupsPath, groupsOut, 0o644))
+	fmt.Printf("wrote %d groups to %s (%d bytes)\n", len(groups), groupsPath, len(groupsOut))
+}
+
+// parseGroups extracts canonical MITRE Group-ID + alias data from every
+// intrusion-set object in a STIX bundle. Revoked/deprecated groups are
+// excluded, mirroring the existing attack-pattern (technique) filter.
+// Groups with no mitre-attack external_references entry (no G#### id) are
+// also excluded -- they can never be used as a canonical merge key.
+func parseGroups(objects []stixObj) []Group {
+	var out []Group
+	for _, o := range objects {
+		if o.Type != "intrusion-set" {
+			continue
+		}
+		if o.Revoked || o.Deprecated {
+			continue
+		}
+		id := ""
+		for _, r := range o.ExternalRefs {
+			if r.SourceName == "mitre-attack" && r.ExternalID != "" {
+				id = r.ExternalID
+			}
+		}
+		if id == "" {
+			continue
+		}
+		out = append(out, Group{ID: id, Name: o.Name, Aliases: dedupeSort(o.Aliases)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
 // isoDate reduces a STIX timestamp ("2017-12-14T16:46:06.044Z") to its date
