@@ -216,6 +216,86 @@ func TestCancelRun_Running_AgentRespondsBeforeGracePeriod_NoForcedOverride(t *te
 	})
 }
 
+// TestCancelRun_Running_AgentOffline_SyncsVariantRunStatus is the
+// regression test for a distinct bug from the grace-period one above: a
+// Full Variant Sweep tracks per-technique progress in a SEPARATE table,
+// variant_runs, keyed by scenario_run_id. vexsweep.Dispatcher polls
+// variant_runs.status (not scenario_runs.status) to decide whether to
+// advance the sweep -- so cancelling the underlying scenario_run must also
+// mirror the terminal status onto its variant_runs row, or the Dispatcher
+// polls forever and the sweep never advances, even though the individual
+// run correctly shows Partial.
+func TestCancelRun_Running_AgentOffline_SyncsVariantRunStatus(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		agentID := "agent-cancel-offline-variant"
+		runID := "cancel-offline-variant-run"
+		seedRunRow(t, pool, runID, "sc-cancel-offline-variant", agentID, "running")
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO variant_runs (id, agent_id, technique_id, scenario_run_id, total_variants, status)
+			 VALUES ('vr-cancel-offline', $1, 'T1059.001', $2, 10, 'running')`, agentID, runID); err != nil {
+			t.Fatalf("seed variant_run: %v", err)
+		}
+
+		rec := httptest.NewRecorder()
+		h.CancelRun(rec, cancelRunReq(runID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var vrStatus string
+		if err := pool.QueryRow(context.Background(), `SELECT status FROM variant_runs WHERE id = 'vr-cancel-offline'`).Scan(&vrStatus); err != nil {
+			t.Fatalf("read variant_run: %v", err)
+		}
+		if vrStatus != "partial" {
+			t.Fatalf("variant_run status = %q, want partial (must sync so vexsweep.Dispatcher notices the technique is no longer in flight)", vrStatus)
+		}
+	})
+}
+
+// TestCancelRun_Running_AgentOnline_ForcesPartialAfterGracePeriod_SyncsVariantRunStatus
+// is the same regression, via the grace-period force-cancel path instead of
+// the agent-offline immediate path.
+func TestCancelRun_Running_AgentOnline_ForcesPartialAfterGracePeriod_SyncsVariantRunStatus(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		h.cancelGracePeriod = 10 * time.Millisecond
+		agentID := "agent-cancel-grace-variant"
+		runID := "cancel-grace-variant-run"
+		seedRunRow(t, pool, runID, "sc-cancel-grace-variant", agentID, "running")
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO variant_runs (id, agent_id, technique_id, scenario_run_id, total_variants, status)
+			 VALUES ('vr-cancel-grace', $1, 'T1059.001', $2, 10, 'running')`, agentID, runID); err != nil {
+			t.Fatalf("seed variant_run: %v", err)
+		}
+		fakeAgent := startFakeAgent(t, h.hub, agentID)
+		defer fakeAgent.Disconnect(t)
+		browser := startFakeBrowser(t, h.hub)
+		defer browser.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.CancelRun(rec, cancelRunReq(runID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		browser.WaitForMessage(t, 2*time.Second) // the scenario_result broadcast
+
+		var vrStatus string
+		if err := pool.QueryRow(context.Background(), `SELECT status FROM variant_runs WHERE id = 'vr-cancel-grace'`).Scan(&vrStatus); err != nil {
+			t.Fatalf("read variant_run: %v", err)
+		}
+		if vrStatus != "partial" {
+			t.Fatalf("variant_run status = %q, want partial (must sync so vexsweep.Dispatcher notices the technique is no longer in flight)", vrStatus)
+		}
+	})
+}
+
 func TestCancelRun_Running_AgentOffline(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

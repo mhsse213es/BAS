@@ -167,8 +167,12 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 		resultsRaw = []byte("[]")
 	}
 
-	// Sync variant_run status from underlying scenario_run.
-	if (runStatus == "completed" || runStatus == "failed") && vr.Status == "running" {
+	// Sync variant_run status from underlying scenario_run. Includes
+	// "partial" (a cancelled run) as well as normal terminal outcomes --
+	// this is a defense-in-depth backstop for cancelScenarioRun's own
+	// markVariantRunPartial, in case that write was ever missed (e.g. a
+	// server restart between the two updates).
+	if (runStatus == "completed" || runStatus == "failed" || runStatus == "partial") && vr.Status == "running" {
 		vr.Status = runStatus
 		now := time.Now().UTC()
 		vr.CompletedAt = &now

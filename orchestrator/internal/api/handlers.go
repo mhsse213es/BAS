@@ -2385,6 +2385,7 @@ func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (agentID,
 		_, _ = h.db.Exec(ctx,
 			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
 			  WHERE id = $1 AND status = 'running'`, runID)
+		h.markVariantRunPartial(ctx, runID)
 		return agentID, "partial", nil
 	}
 
@@ -2412,7 +2413,8 @@ func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (agentID,
 // change without needing a manual reload.
 func (h *Handler) forceCancelAfterGracePeriod(runID, agentID string) {
 	time.Sleep(h.cancelGracePeriod)
-	tag, err := h.db.Exec(context.Background(),
+	ctx := context.Background()
+	tag, err := h.db.Exec(ctx,
 		`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
 		  WHERE id = $1 AND status = 'running'`, runID)
 	if err != nil {
@@ -2422,6 +2424,7 @@ func (h *Handler) forceCancelAfterGracePeriod(runID, agentID string) {
 	if tag.RowsAffected() == 0 {
 		return // already left 'running' on its own -- the agent did respond in time
 	}
+	h.markVariantRunPartial(ctx, runID)
 	log.Printf("[scenario] run %s did not confirm cancel within %s — force-marked partial", runID, h.cancelGracePeriod)
 	h.hub.BroadcastBrowsers(models.WSMessage{
 		Type:    models.MsgScenarioResult,
@@ -2433,6 +2436,24 @@ func (h *Handler) forceCancelAfterGracePeriod(runID, agentID string) {
 			"reason":  "cancel-timeout",
 		},
 	})
+}
+
+// markVariantRunPartial mirrors a cancelled scenario_run's terminal status
+// onto its variant_runs row, if any -- most scenario_runs aren't
+// variant-backed, so this is a no-op for those. vexsweep.Dispatcher's
+// polling loop reads variant_runs.status (not scenario_runs.status, a
+// separate table keyed by scenario_run_id) to decide whether a Full
+// Variant Sweep's current technique is still in flight; without this, a
+// cancelled technique's variant_runs row would stay 'running' forever, the
+// Dispatcher would never notice the technique finished, and the sweep
+// itself would never advance -- even though the individual scenario_run
+// correctly shows Partial.
+func (h *Handler) markVariantRunPartial(ctx context.Context, runID string) {
+	if _, err := h.db.Exec(ctx,
+		`UPDATE variant_runs SET status = 'partial', completed_at = NOW()
+		  WHERE scenario_run_id = $1 AND status = 'running'`, runID); err != nil {
+		log.Printf("[scenario] sync variant_run status for cancelled run %s: %v", runID, err)
+	}
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────
