@@ -16486,8 +16486,6 @@ function renderVexGroupSummary() {
 }
 
 function vexRunFullSweep() {
-  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
-  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
   var mode = (document.getElementById('vex-sweep-mode') || {}).value || 'sequential';
   var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
   // n/variantTotal are a pre-flight estimate only (from the ad-hoc picker's
@@ -16496,6 +16494,54 @@ function vexRunFullSweep() {
   // time; that's what actually gets dispatched.
   var n = _vexAllTechniques.length;
   var variantTotal = _vexAvailableVariants || (n * 33);
+
+  if (_vexTargetMode === 'group') {
+    var resolved = vexResolvedGroupAgents();
+    if (!resolved.length) { showToast('Select at least one group with agents', 'err'); return; }
+    var groupCount = Object.keys(_vexGroupSel).filter(function(k) { return _vexGroupSel[k]; }).length;
+    var msg = 'Start Full Variant Sweep on ' + resolved.length + ' agent(s) across ' + groupCount + ' group(s):\n\n' +
+      '  ~' + n + ' techniques dispatched sequentially PER AGENT\n' +
+      '  ~' + variantTotal.toLocaleString() + '+ individual variants PER AGENT\n\n' +
+      'This starts ' + resolved.length + ' independent sweeps. Each runs every technique to completion before the next and may take hours per agent.\n\nContinue?';
+    if (!confirm(msg)) return;
+
+    // Each dispatch is independent: a rejected promise or a {error:...}
+    // response body is normalized into a resolved {ok:false} result so one
+    // agent's failure (already sweeping, offline, etc.) can never abort or
+    // block the others -- same isolation pattern confirmRun() already uses
+    // for the Run Scenario wizard's multi-agent dispatch.
+    var dispatches = resolved.map(function(a) {
+      return apicall('/api/vex/sweeps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: a.agentId, mode: mode, includeAdvanced: advanced })
+      }).then(function(res) {
+        if (res && res.error) return { agentId: a.agentId, ok: false, error: res.error };
+        return { agentId: a.agentId, ok: true };
+      }).catch(function(e) {
+        return { agentId: a.agentId, ok: false, error: e.message };
+      });
+    });
+
+    Promise.all(dispatches).then(function(results) {
+      var ok = results.filter(function(r) { return r.ok; });
+      var failed = results.filter(function(r) { return !r.ok; });
+      if (!failed.length) {
+        showToast('Started ' + ok.length + ' sweep(s).', 'ok');
+      } else if (ok.length) {
+        showToast('Started ' + ok.length + '/' + results.length + ' sweeps. Failed: ' +
+          failed.map(function(f) { return f.agentId + ' (' + f.error + ')'; }).join(', '), 'err');
+      } else {
+        showToast('All ' + results.length + ' sweep dispatches failed. ' +
+          failed.map(function(f) { return f.agentId + ' (' + f.error + ')'; }).join(', '), 'err');
+      }
+      pollVexSweeps();
+    });
+    return;
+  }
+
+  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
+  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
   if (!confirm('Start Full Variant Sweep:\n\n  ~' + n + ' techniques dispatched sequentially\n  ~' + variantTotal.toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
 
   apicall('/api/vex/sweeps', {
