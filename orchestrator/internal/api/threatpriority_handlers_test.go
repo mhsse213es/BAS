@@ -54,7 +54,90 @@ func TestThreatPriorityActorDetail_UnknownActor_ReturnsEmptyButOK(t *testing.T) 
 		if w.Code != 200 {
 			t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
 		}
+		if !strings.Contains(w.Body.String(), `"techniqueCoverage":[]`) {
+			t.Errorf("body should contain an empty techniqueCoverage array, got: %s", w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"uncoveredTechniques":[]`) {
+			t.Errorf("body should still contain an empty uncoveredTechniques array (unchanged), got: %s", w.Body.String())
+		}
 	})
+}
+
+func TestBuildTechniqueCoverage_NoContentIsGap(t *testing.T) {
+	out := buildTechniqueCoverage(
+		[]string{"T1059.001"},
+		map[string]bool{}, map[string]bool{}, map[string]bool{},
+		map[string]threatpriority.VerdictEntry{}, map[string]threatpriority.VerdictEntry{},
+	)
+	if len(out) != 1 {
+		t.Fatalf("want 1 row, got %d", len(out))
+	}
+	if out[0].Status != "gap-no-content" {
+		t.Errorf("Status = %q, want gap-no-content", out[0].Status)
+	}
+}
+
+func TestBuildTechniqueCoverage_ContentNoVerdictsIsUntested(t *testing.T) {
+	out := buildTechniqueCoverage(
+		[]string{"T1059.001"},
+		map[string]bool{"T1059.001": true}, map[string]bool{}, map[string]bool{},
+		map[string]threatpriority.VerdictEntry{}, map[string]threatpriority.VerdictEntry{},
+	)
+	if out[0].Status != "untested" {
+		t.Errorf("Status = %q, want untested", out[0].Status)
+	}
+	if !out[0].HasSimulation {
+		t.Error("HasSimulation = false, want true")
+	}
+}
+
+func TestBuildTechniqueCoverage_PreventionVerdictOnly(t *testing.T) {
+	out := buildTechniqueCoverage(
+		[]string{"T1059.001"},
+		map[string]bool{"T1059.001": true}, map[string]bool{}, map[string]bool{},
+		map[string]threatpriority.VerdictEntry{"T1059.001": {Verdict: "pass"}}, map[string]threatpriority.VerdictEntry{},
+	)
+	if out[0].Status != "has-outcomes" {
+		t.Errorf("Status = %q, want has-outcomes", out[0].Status)
+	}
+	if out[0].PreventionVerdict != "pass" {
+		t.Errorf("PreventionVerdict = %q, want pass", out[0].PreventionVerdict)
+	}
+	if out[0].DetectionVerdict != "" {
+		t.Errorf("DetectionVerdict = %q, want empty", out[0].DetectionVerdict)
+	}
+}
+
+func TestBuildTechniqueCoverage_DetectionVerdictOnly(t *testing.T) {
+	out := buildTechniqueCoverage(
+		[]string{"T1059.001"},
+		map[string]bool{"T1059.001": true}, map[string]bool{}, map[string]bool{},
+		map[string]threatpriority.VerdictEntry{}, map[string]threatpriority.VerdictEntry{"T1059.001": {Verdict: "Detected"}},
+	)
+	if out[0].Status != "has-outcomes" {
+		t.Errorf("Status = %q, want has-outcomes", out[0].Status)
+	}
+	if out[0].DetectionVerdict != "Detected" {
+		t.Errorf("DetectionVerdict = %q, want Detected", out[0].DetectionVerdict)
+	}
+	if out[0].PreventionVerdict != "" {
+		t.Errorf("PreventionVerdict = %q, want empty", out[0].PreventionVerdict)
+	}
+}
+
+func TestBuildTechniqueCoverage_BothVerdicts(t *testing.T) {
+	out := buildTechniqueCoverage(
+		[]string{"T1059.001"},
+		map[string]bool{"T1059.001": true}, map[string]bool{}, map[string]bool{},
+		map[string]threatpriority.VerdictEntry{"T1059.001": {Verdict: "fail"}},
+		map[string]threatpriority.VerdictEntry{"T1059.001": {Verdict: "NotDetected"}},
+	)
+	if out[0].Status != "has-outcomes" {
+		t.Errorf("Status = %q, want has-outcomes", out[0].Status)
+	}
+	if out[0].PreventionVerdict != "fail" || out[0].DetectionVerdict != "NotDetected" {
+		t.Errorf("got Prevention=%q Detection=%q, want fail/NotDetected", out[0].PreventionVerdict, out[0].DetectionVerdict)
+	}
 }
 
 func TestThreatPriorityActors_NoEngineAttached_ReturnsEmptyArray(t *testing.T) {
