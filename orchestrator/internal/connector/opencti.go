@@ -32,6 +32,7 @@ type OpenCTIClient struct {
 	lastCampaigns []intelligence.Campaign
 	lastMalware   []intelligence.Malware
 	lastTools     []intelligence.Tool
+	retryDelay    time.Duration
 }
 
 // NewOpenCTIClient creates an OpenCTI GraphQL client.
@@ -41,6 +42,7 @@ func NewOpenCTIClient(baseURL, apiKey string, sectors []string) *OpenCTIClient {
 		apiKey:     apiKey,
 		sectors:    sectors,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
+		retryDelay: 2 * time.Second,
 	}
 }
 
@@ -49,7 +51,7 @@ func (c *OpenCTIClient) Name() string { return "opencti" }
 
 // Fetch returns threat actors with their MITRE ATT&CK technique mappings.
 func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
-	actorsRaw, err := c.queryThreatActors()
+	actorsRaw, err := c.queryThreatActorsWithRetry()
 	if err != nil {
 		c.lastStat = SourceStat{Name: "opencti", Error: err.Error(), FetchedAt: time.Now()}
 		return nil, fmt.Errorf("opencti query actors: %w", err)
@@ -360,6 +362,30 @@ query ThreatActorsAndIntrusionSets {
   }
 }
 `
+
+// queryThreatActorsWithRetry retries the single GraphQL round trip once on
+// failure. threatActorsQuery is a large, deeply-nested request (up to 100
+// actors, each with up to 100 nested campaigns/malware/tools) under a fixed
+// 30s client timeout, and Fetch has no partial-success path -- one transient
+// timeout or connection error drops every actor for this sync cycle even
+// though the server has data. A single retry absorbs that class of blip
+// without changing Fetch's all-or-nothing contract.
+func (c *OpenCTIClient) queryThreatActorsWithRetry() ([]octiThreatActorNode, error) {
+	const maxAttempts = 2
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		nodes, err := c.queryThreatActors()
+		if err == nil {
+			return nodes, nil
+		}
+		lastErr = err
+		if attempt < maxAttempts {
+			log.Printf("[connector/opencti] fetch attempt %d/%d failed, retrying in %s: %v", attempt, maxAttempts, c.retryDelay, err)
+			time.Sleep(c.retryDelay)
+		}
+	}
+	return nil, lastErr
+}
 
 func (c *OpenCTIClient) queryThreatActors() ([]octiThreatActorNode, error) {
 	body, err := json.Marshal(octiGQLRequest{Query: threatActorsQuery})

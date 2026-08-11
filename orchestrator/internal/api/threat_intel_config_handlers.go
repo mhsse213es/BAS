@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -73,6 +74,7 @@ func (h *Handler) PutThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resp := map[string]any{"status": "ok"}
 	if h.scheduler != nil {
 		sources, lerr := connector.LoadSourcesFromDB(r.Context(), h.db, nil, nil)
 		if lerr == nil {
@@ -86,6 +88,14 @@ func (h *Handler) PutThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 			// TriggerSync is idempotent/non-blocking, so this is always
 			// safe to call.
 			h.scheduler.TriggerSync()
+		} else {
+			// Previously silent: the config save above still succeeded, but
+			// the live scheduler never picked up the change, with no signal
+			// to the operator that anything was wrong. Log it and surface a
+			// warning so a config save that "succeeds" but doesn't actually
+			// take effect isn't invisible.
+			log.Printf("[threat-intel] reconfigure %s: load sources from db failed: %v", conn, lerr)
+			resp["warning"] = "config saved, but the live connector could not be reloaded — it may not take effect until the next scheduled sync or a server restart"
 		}
 	}
 	if conn == "otx" {
@@ -103,7 +113,7 @@ func (h *Handler) PutThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.auditLog(r, "connector.config.update", conn, map[string]any{"baseUrl": body.BaseURL, "enabled": body.Enabled}, "ok")
-	respond(w, map[string]string{"status": "ok"})
+	respond(w, resp)
 }
 
 // POST /api/threat-intel/{connector}/config/test — Admin. Validates
