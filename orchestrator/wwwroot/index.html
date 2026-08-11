@@ -3585,8 +3585,28 @@ body.theme-slate {
             <div class="card-title" style="margin-bottom:0.75rem">Run Variants</div>
             <div style="display:flex;flex-direction:column;gap:0.6rem">
               <div>
-                <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Agent</label>
-                <select id="vex-agent" class="btn btn-outline" style="width:100%;text-align:left"></select>
+                <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Target</label>
+                <div style="display:flex;gap:0.9rem;flex-wrap:wrap;margin-bottom:0.4rem">
+                  <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
+                    <input type="radio" name="vex-run-target-mode" value="individual" checked onchange="setVexRunTargetMode('individual')"> Individual
+                  </label>
+                  <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
+                    <input type="radio" name="vex-run-target-mode" value="group" onchange="setVexRunTargetMode('group')"> Group(s)
+                  </label>
+                  <label id="vex-run-all-label" style="display:none;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted)">
+                    <input type="radio" name="vex-run-target-mode" value="all" onchange="setVexRunTargetMode('all')"> All Agents
+                  </label>
+                </div>
+                <div id="vex-run-individual-wrap">
+                  <select id="vex-agent" class="btn btn-outline" style="width:100%;text-align:left"></select>
+                </div>
+                <div id="vex-run-group-wrap" style="display:none">
+                  <div id="vex-run-group-list" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:0.35rem;background:var(--surface)"></div>
+                  <p class="tiny muted" id="vex-run-group-summary" style="margin-top:0.3rem"></p>
+                </div>
+                <div id="vex-run-all-wrap" style="display:none">
+                  <p class="tiny muted" style="margin:0">Every agent will be targeted (Admin only).</p>
+                </div>
               </div>
               <div>
                 <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Tactic</label>
