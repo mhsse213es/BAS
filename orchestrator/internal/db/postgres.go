@@ -1390,6 +1390,11 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE job_targets ADD COLUMN IF NOT EXISTS owner_id    text NOT NULL DEFAULT ''`,
 		`ALTER TABLE job_targets ADD COLUMN IF NOT EXISTS assigned_at timestamptz`,
 		`CREATE INDEX IF NOT EXISTS idx_job_targets_owner_id ON job_targets (owner_id) WHERE owner_id != ''`,
+
+		// Live Runs: collapse Full Variant Sweep technique runs into one row.
+		// See docs/superpowers/specs/2026-08-11-sweep-run-grouping-design.md.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS sweep_id text REFERENCES vex_sweeps(id)`,
+		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_sweep_id ON scenario_runs (sweep_id)`,
 	}
 
 	for _, s := range stmts {

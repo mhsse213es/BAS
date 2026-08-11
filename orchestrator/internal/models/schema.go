@@ -134,6 +134,9 @@ type ScenarioRun struct {
 	ScenarioID  string             `json:"scenarioId"`
 	Name        string             `json:"name"`
 	AgentID     string             `json:"agentId"`
+	// SweepID is non-nil only for a scenario_run dispatched by a Full Variant
+	// Sweep (internal/vexsweep) -- see docs/superpowers/specs/2026-08-11-sweep-run-grouping-design.md.
+	SweepID     *string            `json:"sweepId,omitempty"`
 	Status      string             `json:"status"` // running | completed | partial | failed
 	Results     []SimulationResult `json:"results"`
 	Score       *Score             `json:"score,omitempty"`
