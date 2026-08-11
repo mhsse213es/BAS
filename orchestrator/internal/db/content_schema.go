@@ -402,6 +402,13 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			UNIQUE (user_id, doc_type, source_id)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_search_favorites_user ON search_favorites (user_id)`,
+
+		// vex_sweeps.current_technique_started_at -- lets vexsweep.Dispatcher
+		// detect a technique whose underlying execution has genuinely hung
+		// (e.g. an ART atomic test that launches a GUI executable with no
+		// auto-exit) and force-cancel it instead of waiting forever. See
+		// dispatcher.go's stuckThreshold.
+		`ALTER TABLE vex_sweeps ADD COLUMN IF NOT EXISTS current_technique_started_at timestamptz`,
 	}
 
 	for _, s := range stmts {

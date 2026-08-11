@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -23,6 +24,49 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	sharedDB.Cleanup()
 	os.Exit(code)
+}
+
+// TestAdvanceToNext_StampsAndClearsCurrentTechniqueStartedAt proves the
+// column Dispatcher's stuck-technique detection relies on is actually
+// written: set to ~now when a technique is dispatched, cleared to NULL once
+// the sweep completes (no "current technique" left to time out).
+func TestAdvanceToNext_StampsAndClearsCurrentTechniqueStartedAt(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-started-at", Mode: "sequential",
+			Techniques: []string{"T1072"}, TechniqueVariantCounts: []int{10}, TotalVariants: 10,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if got, _ := store.Get(ctx, sw.ID); got.CurrentTechniqueStartedAt != nil {
+			t.Fatalf("newly-created sweep should have no current technique yet, got CurrentTechniqueStartedAt=%v", got.CurrentTechniqueStartedAt)
+		}
+
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-started-at", "sr-started-at"); err != nil {
+			t.Fatalf("AdvanceToNext (dispatch): %v", err)
+		}
+		mid, _ := store.Get(ctx, sw.ID)
+		if mid.CurrentTechniqueStartedAt == nil {
+			t.Fatal("CurrentTechniqueStartedAt should be set once a technique is dispatched")
+		}
+		if time.Since(*mid.CurrentTechniqueStartedAt) > 5*time.Second {
+			t.Fatalf("CurrentTechniqueStartedAt = %v, want ~now", *mid.CurrentTechniqueStartedAt)
+		}
+
+		if err := store.AdvanceToNext(ctx, sw.ID, 10, 1, "", ""); err != nil {
+			t.Fatalf("AdvanceToNext (complete): %v", err)
+		}
+		final, _ := store.Get(ctx, sw.ID)
+		if final.CurrentTechniqueStartedAt != nil {
+			t.Fatalf("CurrentTechniqueStartedAt should be cleared once the sweep completes, got %v", final.CurrentTechniqueStartedAt)
+		}
+	})
 }
 
 func TestCreate_PersistsAndGetRoundTrips(t *testing.T) {

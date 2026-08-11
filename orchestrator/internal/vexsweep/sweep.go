@@ -17,6 +17,11 @@ type Sweep struct {
 	CurrentIndex           int
 	CurrentVariantRunID    string
 	CurrentScenarioRunID   string
+	// CurrentTechniqueStartedAt is when the current technique was dispatched
+	// (nil when no technique is in flight). Dispatcher uses it to detect a
+	// technique that has genuinely hung and force-cancel it -- see
+	// dispatcher.go's stuckThreshold.
+	CurrentTechniqueStartedAt *time.Time
 	CompletedVariants      int
 	TotalVariants          int
 	Status                 string

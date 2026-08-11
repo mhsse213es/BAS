@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -155,6 +156,147 @@ func TestDispatcher_Tick_MarksFailedOnDispatchError(t *testing.T) {
 		got, _ := store.Get(ctx, sw.ID)
 		if got.Status != "failed" || got.Error != "agent not connected" {
 			t.Fatalf("after dispatch error: %+v, want Status=failed Error=%q", got, "agent not connected")
+		}
+	})
+}
+
+// TestDispatcher_Tick_ForceCancelsStuckTechniqueAfterThreshold is the
+// regression test for a real, repeatedly-observed bug: some ART atomic
+// tests (e.g. T1072's Radmin/PDQ Deploy tests, which launch a bare GUI
+// executable with nothing to auto-exit) never complete on an unattended
+// agent. Nothing in this pipeline had any ceiling on how long it waits for
+// such a technique -- the sweep just sat "Running" forever until a human
+// noticed and manually stopped it. Once a technique exceeds stuckThreshold
+// with no progress, the Dispatcher must trigger the injected CancelFn.
+func TestDispatcher_Tick_ForceCancelsStuckTechniqueAfterThreshold(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-stuck-1", Mode: "sequential",
+			Techniques: []string{"T1072"}, TechniqueVariantCounts: []int{10}, TotalVariants: 10,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-stuck-1", "sr-stuck-1"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		var cancelledRunIDs []string
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			return "running", nil // never finishes -- simulates a truly hung technique
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+			t.Fatal("dispatch should not be called -- the current technique never leaves running in this test")
+			return "", "", 0, nil
+		})
+		d.stuckThreshold = time.Millisecond
+		d.SetCancel(func(ctx context.Context, scenarioRunID string) (string, string, error) {
+			cancelledRunIDs = append(cancelledRunIDs, scenarioRunID)
+			return "agent-stuck-1", "cancelling", nil
+		})
+
+		time.Sleep(5 * time.Millisecond) // let current_technique_started_at fall behind stuckThreshold
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if len(cancelledRunIDs) != 1 || cancelledRunIDs[0] != "sr-stuck-1" {
+			t.Fatalf("cancelledRunIDs = %v, want exactly [sr-stuck-1]", cancelledRunIDs)
+		}
+	})
+}
+
+func TestDispatcher_Tick_DoesNotForceCancelBeforeThreshold(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-stuck-2", Mode: "sequential",
+			Techniques: []string{"T1072"}, TechniqueVariantCounts: []int{10}, TotalVariants: 10,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-stuck-2", "sr-stuck-2"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		cancelCalled := false
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			return "running", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+			t.Fatal("dispatch should not be called")
+			return "", "", 0, nil
+		})
+		d.stuckThreshold = time.Hour // technique just started -- nowhere near stuck yet
+		d.SetCancel(func(ctx context.Context, scenarioRunID string) (string, string, error) {
+			cancelCalled = true
+			return "", "", nil
+		})
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if cancelCalled {
+			t.Fatal("cancel should not be triggered before stuckThreshold elapses")
+		}
+	})
+}
+
+// TestDispatcher_Tick_DoesNotReTriggerCancelOnSubsequentTicks proves the
+// dedup guard: cancelling is itself asynchronous (the injected CancelFn's
+// own grace period), so re-triggering it every 5s tick while waiting for
+// that to resolve would spam redundant cancel messages and goroutines.
+func TestDispatcher_Tick_DoesNotReTriggerCancelOnSubsequentTicks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-stuck-3", Mode: "sequential",
+			Techniques: []string{"T1072"}, TechniqueVariantCounts: []int{10}, TotalVariants: 10,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-stuck-3", "sr-stuck-3"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		cancelCount := 0
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			return "running", nil // still stuck across every tick in this test
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+			t.Fatal("dispatch should not be called")
+			return "", "", 0, nil
+		})
+		d.stuckThreshold = time.Millisecond
+		d.SetCancel(func(ctx context.Context, scenarioRunID string) (string, string, error) {
+			cancelCount++
+			return "agent-stuck-3", "cancelling", nil
+		})
+
+		time.Sleep(5 * time.Millisecond)
+
+		for i := 0; i < 3; i++ {
+			if err := d.Tick(ctx); err != nil {
+				t.Fatalf("Tick %d: %v", i, err)
+			}
+		}
+		if cancelCount != 1 {
+			t.Fatalf("cancel triggered %d times across 3 ticks, want exactly 1 (must not spam re-trigger while the cancel's own grace period resolves)", cancelCount)
 		}
 	})
 }

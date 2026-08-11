@@ -641,6 +641,7 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			current_index            int         NOT NULL DEFAULT 0,
 			current_variant_run_id   text        NOT NULL DEFAULT '',
 			current_scenario_run_id  text        NOT NULL DEFAULT '',
+			current_technique_started_at timestamptz,
 			completed_variants       int         NOT NULL DEFAULT 0,
 			total_variants           int         NOT NULL DEFAULT 0,
 			status                   text        NOT NULL DEFAULT 'running',

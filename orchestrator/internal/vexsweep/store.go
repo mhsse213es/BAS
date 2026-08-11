@@ -21,7 +21,7 @@ func NewStore(pool *pgxpool.Pool) *Store {
 }
 
 const sweepCols = `id, agent_id, mode, include_advanced, techniques, technique_variant_counts,
-	current_index, current_variant_run_id, current_scenario_run_id,
+	current_index, current_variant_run_id, current_scenario_run_id, current_technique_started_at,
 	completed_variants, total_variants, status, error, created_by, started_at, completed_at`
 
 func scanSweep(row interface {
@@ -29,7 +29,7 @@ func scanSweep(row interface {
 }) (Sweep, error) {
 	var sw Sweep
 	err := row.Scan(&sw.ID, &sw.AgentID, &sw.Mode, &sw.IncludeAdvanced, &sw.Techniques, &sw.TechniqueVariantCounts,
-		&sw.CurrentIndex, &sw.CurrentVariantRunID, &sw.CurrentScenarioRunID,
+		&sw.CurrentIndex, &sw.CurrentVariantRunID, &sw.CurrentScenarioRunID, &sw.CurrentTechniqueStartedAt,
 		&sw.CompletedVariants, &sw.TotalVariants, &sw.Status, &sw.Error, &sw.CreatedBy, &sw.StartedAt, &sw.CompletedAt)
 	return sw, err
 }
@@ -102,7 +102,7 @@ func (s *Store) AdvanceToNext(ctx context.Context, id string, justCompletedVaria
 			`UPDATE vex_sweeps
 			    SET completed_variants = completed_variants + $2,
 			        current_index = $3,
-			        current_variant_run_id = '', current_scenario_run_id = '',
+			        current_variant_run_id = '', current_scenario_run_id = '', current_technique_started_at = NULL,
 			        status = 'completed', completed_at = NOW()
 			  WHERE id = $1`,
 			id, justCompletedVariants, nextIndex)
@@ -112,7 +112,7 @@ func (s *Store) AdvanceToNext(ctx context.Context, id string, justCompletedVaria
 		`UPDATE vex_sweeps
 		    SET completed_variants = completed_variants + $2,
 		        current_index = $3,
-		        current_variant_run_id = $4, current_scenario_run_id = $5
+		        current_variant_run_id = $4, current_scenario_run_id = $5, current_technique_started_at = NOW()
 		  WHERE id = $1`,
 		id, justCompletedVariants, nextIndex, nextVariantRunID, nextScenarioRunID)
 	return err

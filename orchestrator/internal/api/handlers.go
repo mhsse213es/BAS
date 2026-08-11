@@ -398,6 +398,10 @@ func (h *Handler) WithRuleLibrary(e *rulelib.Engine) *Handler {
 func (h *Handler) WithVexSweep(store *vexsweep.Store, dispatcher *vexsweep.Dispatcher) *Handler {
 	h.vexSweep = store
 	dispatcher.SetDispatch(h.dispatchVariantForSweep)
+	// Reuses cancelScenarioRun's existing agent-notify + grace-period +
+	// variant_runs-sync behavior for the Dispatcher's stuck-technique
+	// backstop, rather than duplicating any of that inside vexsweep.
+	dispatcher.SetCancel(h.cancelScenarioRun)
 	return h
 }
 
