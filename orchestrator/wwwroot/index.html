@@ -16425,6 +16425,66 @@ function loadVexSweepVariantDetail(sweepId, variantRunId) {
   }).catch(function() {});
 }
 
+var _vexTargetMode = 'individual'; // 'individual' | 'group'
+var _vexGroupSel = {}; // { [groupId]: true } for checked groups in the Full Sweep card's Group(s) mode
+
+// setVexTargetMode switches the Full Sweep card between its single-agent
+// select and the group checkbox list, clearing the OTHER mode's selection
+// state so a stale pick can't silently leak into a dispatch.
+function setVexTargetMode(mode) {
+  _vexTargetMode = mode;
+  if (mode !== 'group') _vexGroupSel = {};
+  var indWrap = document.getElementById('vex-sweep-individual-wrap');
+  var grpWrap = document.getElementById('vex-sweep-group-wrap');
+  if (indWrap) indWrap.style.display = mode === 'individual' ? 'flex' : 'none';
+  if (grpWrap) grpWrap.style.display = mode === 'group' ? 'block' : 'none';
+  if (mode === 'group') renderVexGroupList();
+}
+
+// renderVexGroupList renders the checkbox list of every group, flattened by
+// gpFlattenGroups (the same helper the Run Scenario wizard's own Group(s)
+// mode already uses), each row showing that group's own totalAgentCount.
+function renderVexGroupList() {
+  var list = document.getElementById('vex-sweep-group-list');
+  if (!list) return;
+  var options = gpFlattenGroups(agentGroupTree, 0, null, []);
+  if (!options.length) {
+    list.innerHTML = '<p class="tiny muted" style="margin:0">No agent groups have been created yet.</p>';
+    renderVexGroupSummary();
+    return;
+  }
+  var countMap = {};
+  (function walk(nodes) {
+    (nodes || []).forEach(function(n) { countMap[n.id] = n.totalAgentCount; walk(n.children); });
+  })(agentGroupTree);
+  list.innerHTML = options.map(function(o) {
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+      '<input type="checkbox" ' + (_vexGroupSel[o.id] ? 'checked' : '') +
+      ' onchange="_vexGroupSel[' + o.id + ']=this.checked;renderVexGroupSummary()">' +
+      '<span style="font-size:0.8rem">' + x(o.label) + '</span>' +
+      '<span class="tiny muted">(' + (countMap[o.id] || 0) + ' agents)</span></label>';
+  }).join('');
+  renderVexGroupSummary();
+}
+
+// vexResolvedGroupAgents resolves the currently-checked groups to their
+// member agents via the pre-existing resolveGroupTargetAgents helper.
+// Deliberately NOT run through osEligibleAgents -- Full Sweep has no
+// scenario/supportedOs concept, so every resolved agent is targeted as-is.
+function vexResolvedGroupAgents() {
+  var selectedGroupIds = Object.keys(_vexGroupSel).filter(function(k) { return _vexGroupSel[k]; }).map(Number);
+  return resolveGroupTargetAgents(selectedGroupIds);
+}
+
+function renderVexGroupSummary() {
+  var el = document.getElementById('vex-sweep-group-summary');
+  if (!el) return;
+  var selectedCount = Object.keys(_vexGroupSel).filter(function(k) { return _vexGroupSel[k]; }).length;
+  if (!selectedCount) { el.textContent = 'No groups selected.'; return; }
+  var resolved = vexResolvedGroupAgents();
+  el.textContent = resolved.length + ' agent(s) across ' + selectedCount + ' group(s).';
+}
+
 function vexRunFullSweep() {
   var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
   if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
