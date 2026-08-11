@@ -121,6 +121,42 @@ func TestCreateSchedule_PersistsAndRoundTrips(t *testing.T) {
 	})
 }
 
+func TestUpdateSchedule_PersistsEditableFieldsAndPreservesIdentity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall"})
+		created, err := store.CreateSchedule(ctx, Schedule{
+			Type: "batch_remediation", Payload: payload, AgentIDs: []string{"a1"},
+			DayOfWeek: 1, TimeOfDay: "02:00", Timezone: "UTC", Enabled: true, CreatedBy: "user-1",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+
+		// Deliberately leave Type/CreatedBy unset on the update struct to prove
+		// UpdateSchedule's SQL never references those columns at all -- not just
+		// that this test happened to pass matching values.
+		newPayload, _ := json.Marshal(map[string]string{"remediationId": "disable_smbv1"})
+		updated, err := store.UpdateSchedule(ctx, created.ID, Schedule{
+			Payload: newPayload, AgentIDs: []string{"a2", "a3"}, DayOfWeek: 5, TimeOfDay: "23:00",
+			Timezone: "Asia/Kolkata", Enabled: true, RecurrenceType: "weekly", ConcurrencyLimit: 3,
+		})
+		if err != nil {
+			t.Fatalf("UpdateSchedule: %v", err)
+		}
+		if updated.ID != created.ID || updated.Type != "batch_remediation" || updated.CreatedBy != "user-1" || !updated.CreatedAt.Equal(created.CreatedAt) {
+			t.Errorf("identity fields changed: got %+v, want ID/Type/CreatedBy/CreatedAt unchanged from %+v", updated, created)
+		}
+		if len(updated.AgentIDs) != 2 || updated.AgentIDs[0] != "a2" || updated.DayOfWeek != 5 || updated.TimeOfDay != "23:00" || updated.Timezone != "Asia/Kolkata" || updated.ConcurrencyLimit != 3 {
+			t.Errorf("got = %+v, want AgentIDs=[a2 a3] DayOfWeek=5 TimeOfDay=23:00 Timezone=Asia/Kolkata ConcurrencyLimit=3", updated)
+		}
+	})
+}
+
 func TestListEnabledSchedules_ExcludesDisabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

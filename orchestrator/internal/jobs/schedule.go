@@ -225,6 +225,35 @@ func (s *Store) CreateSchedule(ctx context.Context, sch Schedule) (Schedule, err
 	return s.GetSchedule(ctx, id)
 }
 
+// UpdateSchedule replaces every editable field on schedule id. Identity
+// fields (id, type, created_by, created_at) and spawner-owned bookkeeping
+// (last_occurrence_at, last_spawned_job_id) are never touched here -- only
+// Store.MarkScheduleOccurrenceHandled writes those. See
+// docs/superpowers/specs/2026-08-11-scheduled-assessment-edit-design.md.
+func (s *Store) UpdateSchedule(ctx context.Context, id string, sch Schedule) (Schedule, error) {
+	agentIDsJSON, err := json.Marshal(sch.AgentIDs)
+	if err != nil {
+		return Schedule{}, err
+	}
+	groupIDsJSON, err := json.Marshal(sch.GroupIDs)
+	if err != nil {
+		return Schedule{}, err
+	}
+	if _, err := s.pool.Exec(ctx,
+		`UPDATE job_schedules SET
+		    payload=$1, agent_ids=$2, group_ids=$3, day_of_week=$4, time_of_day=$5, timezone=$6, enabled=$7,
+		    recurrence_type=$8, run_at=$9, day_of_month=$10, end_date=$11, concurrency_limit=$12,
+		    mode=$13, approved_by=$14, approved_at=$15, approval_version=$16, reason=$17
+		 WHERE id=$18`,
+		[]byte(sch.Payload), agentIDsJSON, groupIDsJSON, sch.DayOfWeek, sch.TimeOfDay, sch.Timezone, sch.Enabled,
+		sch.RecurrenceType, sch.RunAt, sch.DayOfMonth, sch.EndDate, sch.ConcurrencyLimit,
+		sch.Mode, sch.ApprovedBy, sch.ApprovedAt, sch.ApprovalVersion, sch.Reason, id,
+	); err != nil {
+		return Schedule{}, err
+	}
+	return s.GetSchedule(ctx, id)
+}
+
 func (s *Store) GetSchedule(ctx context.Context, id string) (Schedule, error) {
 	row := s.pool.QueryRow(ctx, `SELECT `+scheduleColumns+` FROM job_schedules WHERE id=$1`, id)
 	return scanSchedule(row)
