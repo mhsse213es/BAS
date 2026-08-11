@@ -3547,10 +3547,20 @@ body.theme-slate {
               <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> ART techniques sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
             </div>
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
-              <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px" onchange="_vexCheckAgentSweepConflict()">
-                <option value="">Select agent…</option>
-              </select>
-              <span id="vex-sweep-agent-hint" class="tiny" style="color:var(--warning)"></span>
+              <div style="display:flex;gap:0.6rem;margin-right:0.4rem">
+                <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted);white-space:nowrap">
+                  <input type="radio" name="vex-target-mode" value="individual" checked onchange="setVexTargetMode('individual')"> Individual
+                </label>
+                <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.78rem;color:var(--muted);white-space:nowrap">
+                  <input type="radio" name="vex-target-mode" value="group" onchange="setVexTargetMode('group')"> Group(s)
+                </label>
+              </div>
+              <div id="vex-sweep-individual-wrap" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                <select id="vex-sweep-agent" class="btn btn-outline" style="font-size:0.8rem;min-width:140px" onchange="_vexCheckAgentSweepConflict()">
+                  <option value="">Select agent…</option>
+                </select>
+                <span id="vex-sweep-agent-hint" class="tiny" style="color:var(--warning)"></span>
+              </div>
               <select id="vex-sweep-mode" class="btn btn-outline" style="font-size:0.8rem">
                 <option value="sequential">All variants</option>
                 <option value="adaptive">Adaptive (stop on bypass)</option>
@@ -3560,6 +3570,10 @@ body.theme-slate {
               </label>
               <button id="vex-sweep-btn" class="btn btn-primary" onclick="vexRunFullSweep()" style="white-space:nowrap">▶ Start Sweep</button>
             </div>
+          </div>
+          <div id="vex-sweep-group-wrap" style="display:none;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border)">
+            <div id="vex-sweep-group-list" style="max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
+            <p class="tiny muted" id="vex-sweep-group-summary" style="margin-top:0.4rem"></p>
           </div>
           <div id="vex-sweep-list" style="margin-top:0.75rem"></div>
         </div>
