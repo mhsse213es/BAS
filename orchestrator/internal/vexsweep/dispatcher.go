@@ -28,13 +28,15 @@ type CancelFn func(ctx context.Context, scenarioRunID string) (agentID, status s
 
 // defaultStuckThreshold is how long a technique can sit with no progress
 // (variant_runs.status still "running") before the Dispatcher treats it as
-// genuinely hung and force-cancels it, freeing the sweep to move on.
-// Generous on purpose -- a technique with many variants and evasion delays
-// can legitimately take a while. This is a backstop against real ART
-// content that never completes unattended (e.g. an atomic test that
-// launches a bare GUI executable with nothing to auto-exit), not a
-// throughput ceiling.
-const defaultStuckThreshold = 30 * time.Minute
+// genuinely hung and force-cancels it, freeing the sweep to move on. This
+// is a backstop against real ART content that never completes unattended
+// (e.g. an atomic test that launches a bare GUI executable with nothing to
+// auto-exit) -- kept short deliberately, per user preference, at the cost
+// of some risk: a technique with many variants and evasion delays
+// (sleep_jitter/delay add real seconds per variant) can legitimately take
+// a few minutes, so a long-but-genuinely-progressing technique could be
+// force-cancelled too. Tune here if that starts happening in practice.
+const defaultStuckThreshold = 3 * time.Minute
 
 type Dispatcher struct {
 	store    *Store
