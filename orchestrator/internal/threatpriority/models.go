@@ -35,7 +35,10 @@ type ActorProfile struct {
 	Sectors    []string
 	Regions    []string
 	Confidence string
-	LastSeen   *time.Time
+	// CanonicalGroupID is the resolved MITRE ATT&CK Group-ID (G####), or ""
+	// if internal/connector.MergeActors couldn't confidently resolve one.
+	CanonicalGroupID string
+	LastSeen         *time.Time
 }
 
 // sharedIndexes holds engine-level, fleet-wide lookups computed once per
@@ -77,6 +80,11 @@ type ActorPriority struct {
 	CoverageGapCount int            `json:"coverageGapCount"`
 	Trend            string         `json:"trend"`
 	TrendDelta       int            `json:"trendDelta,omitempty"`
+
+	// CanonicalGroupID surfaces the actor's resolved MITRE ATT&CK Group-ID
+	// (G####), when one was resolved, so the UI can show provenance beyond
+	// whatever name a connector happened to report it under.
+	CanonicalGroupID string `json:"canonicalGroupId,omitempty"`
 
 	// TechniqueIDs is this actor's resolved ATT&CK technique roster. Used by
 	// the Recommendations rollup (internal/api's buildActorPriorityByTechnique)

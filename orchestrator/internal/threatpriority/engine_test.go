@@ -56,6 +56,46 @@ func TestScoreActor_ComputesCompositeFromRealFactors(t *testing.T) {
 	}
 }
 
+// scoreActor must copy CanonicalGroupID straight through from the profile
+// -- no DB involved (mirrors TestScoreActor_ComputesCompositeFromRealFactors's
+// pattern of calling scoreActor directly with a hand-built profile).
+func TestScoreActor_CopiesCanonicalGroupIDFromProfile(t *testing.T) {
+	e := &Engine{factors: DefaultFactors()}
+	shared := &sharedIndexes{
+		simulation: map[string]bool{}, detection: map[string]bool{},
+		purple: map[string]bool{}, compliance: map[string]bool{},
+	}
+	profile := &ActorProfile{Name: "TEST-ACTOR-CANON", CanonicalGroupID: "G0016"}
+	ap, err := e.scoreActor(context.Background(), profile, shared)
+	if err != nil {
+		t.Fatalf("scoreActor: %v", err)
+	}
+	if ap.CanonicalGroupID != "G0016" {
+		t.Errorf("CanonicalGroupID = %q, want G0016", ap.CanonicalGroupID)
+	}
+}
+
+func TestLoadProfile_ReadsCanonicalGroupID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExec(t, pool, `INSERT INTO threat_actor_profiles (name, canonical_group_id) VALUES ('TP-CANON-TEST', 'G0016')
+			ON CONFLICT (name) DO UPDATE SET canonical_group_id = EXCLUDED.canonical_group_id`)
+		e := &Engine{pool: pool}
+		p, err := e.loadProfile(context.Background(), "TP-CANON-TEST")
+		if err != nil {
+			t.Fatalf("loadProfile: %v", err)
+		}
+		if p == nil {
+			t.Fatal("expected a profile row")
+		}
+		if p.CanonicalGroupID != "G0016" {
+			t.Errorf("CanonicalGroupID = %q, want G0016", p.CanonicalGroupID)
+		}
+	})
+}
+
 func TestLoadPreventionVerdicts_LatestWinsAndCarriesTimestamp(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
