@@ -1,6 +1,10 @@
 package connector
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/audspect/bas/internal/reporting/attackdata"
+)
 
 // TestMergeActors_UnionsTechniques is the original, pure-name-match
 // regression case (moved from scheduler_test.go, unchanged) -- proves
@@ -139,5 +143,118 @@ func TestMergeActors_SimilarButDistinctNamesDoNotMerge(t *testing.T) {
 	})
 	if len(merged) != 2 {
 		t.Fatalf("want 2 distinct actors (no fuzzy matching), got %d: %+v", len(merged), merged)
+	}
+}
+
+// TestMergeActors_BridgesViaCanonicalMITREGroupID_ZeroDirectOverlap is the
+// core scenario this project exists for: two actors with NO shared
+// name/alias token at all still merge, because MITRE's own data
+// independently resolves both to the same canonical group.
+func TestMergeActors_BridgesViaCanonicalMITREGroupID_ZeroDirectOverlap(t *testing.T) {
+	canonicalIndex := map[string]string{
+		"apt29":    "G0016",
+		"cozybear": "G0016",
+	}
+	noGroups := func(string) *attackdata.Group { return nil }
+	merged := mergeActorsWithCanonicalData([]ThreatActor{
+		{Name: "APT29", Source: "misp", Techniques: []TechniqueRef{{ID: "T1078"}}},
+		{Name: "Cozy Bear", Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
+	}, canonicalIndex, noGroups)
+	if len(merged) != 1 {
+		t.Fatalf("want 1 merged actor (bridged via canonical MITRE group ID, zero direct token overlap), got %d: %+v", len(merged), merged)
+	}
+	if merged[0].CanonicalGroupID != "G0016" {
+		t.Errorf("CanonicalGroupID = %q, want G0016", merged[0].CanonicalGroupID)
+	}
+	if len(merged[0].Techniques) != 2 {
+		t.Fatalf("want 2 unioned techniques, got %d", len(merged[0].Techniques))
+	}
+}
+
+// TestMergeActors_ActorTokensSpanTwoDistinctMITREGroupsStaysUnresolved
+// guards the per-actor ambiguity case: an actor's own name resolves to one
+// MITRE group and its own alias resolves to a DIFFERENT one. Never force a
+// pick.
+func TestMergeActors_ActorTokensSpanTwoDistinctMITREGroupsStaysUnresolved(t *testing.T) {
+	canonicalIndex := map[string]string{
+		"apt29":  "G0016",
+		"sofacy": "G0007",
+	}
+	noGroups := func(string) *attackdata.Group { return nil }
+	merged := mergeActorsWithCanonicalData([]ThreatActor{
+		{Name: "APT29", Aliases: []string{"Sofacy"}, Source: "misp", Techniques: []TechniqueRef{{ID: "T1078"}}},
+	}, canonicalIndex, noGroups)
+	if len(merged) != 1 {
+		t.Fatalf("want 1 actor (nothing else to merge with), got %d", len(merged))
+	}
+	if merged[0].CanonicalGroupID != "" {
+		t.Errorf("CanonicalGroupID = %q, want empty -- actor's own tokens span two distinct MITRE groups, must not force one", merged[0].CanonicalGroupID)
+	}
+}
+
+// TestMergeActors_MergedGroupWithConflictingCanonicalIDsStaysUnresolved
+// guards the merged-group ambiguity case: two actors merge via a direct
+// alias-token match, but MITRE's own data disagrees about which group they
+// belong to. The survivor must not arbitrarily pick one.
+func TestMergeActors_MergedGroupWithConflictingCanonicalIDsStaysUnresolved(t *testing.T) {
+	canonicalIndex := map[string]string{
+		"actora": "G0001",
+		"actorb": "G0002",
+	}
+	noGroups := func(string) *attackdata.Group { return nil }
+	merged := mergeActorsWithCanonicalData([]ThreatActor{
+		{Name: "Actor A", Aliases: []string{"Shared Alias"}, Source: "misp", Techniques: []TechniqueRef{{ID: "T1001"}}},
+		{Name: "Actor B", Aliases: []string{"Shared Alias"}, Source: "opencti", Techniques: []TechniqueRef{{ID: "T1002"}}},
+	}, canonicalIndex, noGroups)
+	if len(merged) != 1 {
+		t.Fatalf("want 1 merged actor (direct alias-token overlap on 'Shared Alias'), got %d: %+v", len(merged), merged)
+	}
+	if merged[0].CanonicalGroupID != "" {
+		t.Errorf("CanonicalGroupID = %q, want empty -- members resolved to conflicting MITRE groups, must not force one", merged[0].CanonicalGroupID)
+	}
+}
+
+// TestMergeActors_ActiveEnrichmentFoldsMITREAliasesIntoSurvivor proves that
+// once an actor is canonically resolved, MITRE's own authoritative
+// Name+Aliases for that group are folded into the survivor's Aliases too.
+func TestMergeActors_ActiveEnrichmentFoldsMITREAliasesIntoSurvivor(t *testing.T) {
+	canonicalIndex := map[string]string{"apt29": "G0016"}
+	groupsByID := map[string]*attackdata.Group{
+		"G0016": {ID: "G0016", Name: "APT29", Aliases: []string{"Cozy Bear", "The Dukes"}},
+	}
+	lookup := func(id string) *attackdata.Group { return groupsByID[id] }
+	merged := mergeActorsWithCanonicalData([]ThreatActor{
+		{Name: "APT29", Source: "misp", Techniques: []TechniqueRef{{ID: "T1078"}}},
+	}, canonicalIndex, lookup)
+	if len(merged) != 1 {
+		t.Fatalf("want 1 actor, got %d", len(merged))
+	}
+	want := map[string]bool{"Cozy Bear": true, "The Dukes": true}
+	if len(merged[0].Aliases) != len(want) {
+		t.Fatalf("Aliases = %v, want exactly %v (MITRE's authoritative alias set folded in)", merged[0].Aliases, want)
+	}
+	for _, a := range merged[0].Aliases {
+		if !want[a] {
+			t.Errorf("unexpected alias %q", a)
+		}
+	}
+}
+
+// TestMergeActors_NoMITREDataLeavesCanonicalGroupIDEmpty uses the real,
+// public MergeActors -- exercising the actual
+// attackdata.GroupCanonicalTokenIndex(), which is empty in this repo until
+// someone regenerates attack_groups.json from a real MITRE bundle.
+// Confirms Project 1's alias-token matching is completely unaffected by
+// this project's wiring when no MITRE data resolves.
+func TestMergeActors_NoMITREDataLeavesCanonicalGroupIDEmpty(t *testing.T) {
+	merged := MergeActors([]ThreatActor{
+		{Name: "Wizard Spider", Source: "misp", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
+		{Name: "Sangria Tempest", Aliases: []string{"Wizard Spider"}, Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
+	})
+	if len(merged) != 1 {
+		t.Fatalf("want 1 merged actor (Project 1 alias-token matching unaffected), got %d", len(merged))
+	}
+	if merged[0].CanonicalGroupID != "" {
+		t.Errorf("CanonicalGroupID = %q, want empty (no real MITRE group data shipped yet)", merged[0].CanonicalGroupID)
 	}
 }
