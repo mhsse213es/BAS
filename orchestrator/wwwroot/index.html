@@ -3830,7 +3830,7 @@ body.theme-slate {
 <!-- Scheduled Assessment Wizard -->
 <div id="sched-overlay" class="overlay">
   <div class="modal wz-modal">
-    <h3>New Scheduled Assessment</h3>
+    <h3 id="sched-wz-title">New Scheduled Assessment</h3>
     <div class="wz-steps">
       <div class="wz-pip" data-sched-pip="1"><span class="wz-pip-n">1</span><span>Scenario</span></div>
       <div class="wz-pip" data-sched-pip="2"><span class="wz-pip-n">2</span><span>Targets</span></div>
@@ -17280,7 +17280,10 @@ var SCHED = {
   selGroups: {},   // groupId -> true for wizard checkbox state
   selAgents: {},   // agentId -> true for wizard checkbox state
   groupsAccessDenied: false, // true when /api/agent-groups 403'd (Analyst), not just empty
-  step: 1
+  step: 1,
+  editingId: null,        // null when creating; the schedule's ID when editing
+  editPrefillMode: '',    // consumed once by renderSchedModeRecurrencePane's first render --
+  editPrefillTimezone: '' // see that function for why Mode/Timezone need this indirection
 };
 
 function loadScheduledAssessments() {
@@ -17358,7 +17361,10 @@ function renderScheduledAssessmentsList() {
       '<td>' + x(schedRecurrenceText(sch)) + '</td>' +
       '<td>' + x(lastRun) + '</td>' +
       '<td><span class="badge" style="color:' + statusColor + ';border-color:' + statusColor + '">' + statusLabel + '</span></td>' +
-      '<td>' + (sch.Enabled ? '<button class="btn btn-outline btn-sm" onclick="cancelScheduledAssessment(\'' + x(sch.ID) + '\')">Cancel</button>' : '') + '</td>' +
+      '<td>' +
+        '<button class="btn btn-outline btn-sm" onclick="openSchedWizardForEdit(\'' + x(sch.ID) + '\')">Edit</button>' +
+        (sch.Enabled ? ' <button class="btn btn-outline btn-sm" onclick="cancelScheduledAssessment(\'' + x(sch.ID) + '\')">Cancel</button>' : '') +
+      '</td>' +
     '</tr>';
   }).join('');
 }
@@ -17376,6 +17382,13 @@ function openSchedWizard() {
   SCHED.selGroups = {}; SCHED.selAgents = {};
   SCHED.modeInitialized = false;
   SCHED.groupsAccessDenied = false;
+  SCHED.editingId = null;
+  SCHED.editPrefillMode = '';
+  SCHED.editPrefillTimezone = '';
+  document.getElementById('sched-wz-title').textContent = 'New Scheduled Assessment';
+  document.getElementById('sched-create-btn').textContent = 'Create Schedule';
+  document.getElementById('sched-group-cnt').textContent = '(0 selected)';
+  document.getElementById('sched-agent-cnt').textContent = '(0 selected)';
   document.getElementById('sched-reason').value = '';
   document.getElementById('sched-recurrence-type').value = 'weekly';
   document.getElementById('sched-runat').value = '';
@@ -17386,6 +17399,60 @@ function openSchedWizard() {
   document.getElementById('sched-concurrency').value = '';
   var sel = document.getElementById('sched-scenario');
   sel.innerHTML = scenarios.map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
+  Promise.all([apicall('/api/agent-groups'), apicall('/api/agents')]).then(function(res) {
+    SCHED.groupsAccessDenied = !!(res[0] && res[0].error);
+    SCHED.groups = Array.isArray(res[0]) ? res[0] : [];
+    SCHED.groupsById = schedFlattenGroupNames(SCHED.groups, {});
+    SCHED.agentsAll = Array.isArray(res[1]) ? res[1] : [];
+    renderSchedGroupTree();
+    renderSchedAgentList();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+  document.getElementById('sched-overlay').classList.add('open');
+  schedWizardSet(1);
+}
+
+// openSchedWizardForEdit prefills the same wizard openSchedWizard() uses,
+// from an existing schedule's current values. Every field can be set with a
+// direct .value assignment at this point EXCEPT Mode and Timezone -- #sched-mode
+// starts with zero <option> elements (entirely built by
+// renderSchedModeRecurrencePane() the first time step 3 renders) and that
+// same function's first-render branch unconditionally resets Timezone to the
+// browser's local zone. SCHED.editPrefillMode/editPrefillTimezone route
+// around that -- see renderSchedModeRecurrencePane's updated first-render
+// branch below.
+function openSchedWizardForEdit(id) {
+  var sch = SCHED.schedules.find(function(s) { return s.ID === id; });
+  if (!sch) { showToast('Schedule not found', 'err'); return; }
+  var payload = {};
+  try { payload = JSON.parse(sch.Payload || '{}'); } catch (e) { payload = {}; }
+
+  SCHED.selGroups = {};
+  (sch.GroupIDs || []).forEach(function(gid) { SCHED.selGroups[gid] = true; });
+  SCHED.selAgents = {};
+  (sch.AgentIDs || []).forEach(function(aid) { SCHED.selAgents[aid] = true; });
+  SCHED.modeInitialized = false;
+  SCHED.groupsAccessDenied = false;
+  SCHED.editingId = sch.ID;
+  SCHED.editPrefillMode = sch.Mode || 'posture';
+  SCHED.editPrefillTimezone = sch.Timezone || '';
+
+  document.getElementById('sched-wz-title').textContent = 'Edit Scheduled Assessment';
+  document.getElementById('sched-create-btn').textContent = 'Save Changes';
+  document.getElementById('sched-group-cnt').textContent = '(' + Object.keys(SCHED.selGroups).length + ' selected)';
+  document.getElementById('sched-agent-cnt').textContent = '(' + Object.keys(SCHED.selAgents).length + ' selected)';
+  document.getElementById('sched-reason').value = sch.Reason || '';
+  document.getElementById('sched-recurrence-type').value = sch.RecurrenceType || 'weekly';
+  document.getElementById('sched-runat').value = sch.RunAt ? new Date(sch.RunAt).toISOString().slice(0, 16) : '';
+  document.getElementById('sched-dow').value = String(sch.DayOfWeek || 0);
+  document.getElementById('sched-dom').value = String(sch.DayOfMonth || 1);
+  document.getElementById('sched-timeofday').value = sch.TimeOfDay || '02:00';
+  document.getElementById('sched-enddate').value = sch.EndDate ? new Date(sch.EndDate).toISOString().slice(0, 10) : '';
+  document.getElementById('sched-concurrency').value = sch.ConcurrencyLimit || '';
+
+  var sel = document.getElementById('sched-scenario');
+  sel.innerHTML = scenarios.map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
+  sel.value = payload.scenarioId || '';
+
   Promise.all([apicall('/api/agent-groups'), apicall('/api/agents')]).then(function(res) {
     SCHED.groupsAccessDenied = !!(res[0] && res[0].error);
     SCHED.groups = Array.isArray(res[0]) ? res[0] : [];
@@ -17486,8 +17553,15 @@ function renderSchedModeRecurrencePane() {
     // the assignment above silently fails to select anything -- fall back to Posture.
     if (modeSel.value !== prevMode) modeSel.value = 'posture';
   } else {
-    modeSel.value = 'posture';
-    document.getElementById('sched-timezone').value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    // First render: default to Posture + the browser's local timezone, UNLESS
+    // openSchedWizardForEdit() stashed a prefill (SCHED.editPrefillMode/
+    // editPrefillTimezone) -- #sched-mode has no <option> elements until this
+    // function builds them above, so an earlier direct .value= assignment at
+    // wizard-open time would have been a no-op; this indirection is required.
+    var wantMode = SCHED.editPrefillMode || 'posture';
+    modeSel.value = wantMode;
+    if (modeSel.value !== wantMode) modeSel.value = 'posture';
+    document.getElementById('sched-timezone').value = SCHED.editPrefillTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     SCHED.modeInitialized = true;
   }
   schedOnModeChange();
@@ -17586,9 +17660,12 @@ function submitScheduledAssessment() {
 
   var btn = document.getElementById('sched-create-btn');
   btn.disabled = true;
-  apicall('/api/scheduled-assessments', { method: 'POST', body: JSON.stringify(payload) }).then(function(res) {
+  var isEdit = !!SCHED.editingId;
+  var url = isEdit ? '/api/scheduled-assessments/' + encodeURIComponent(SCHED.editingId) : '/api/scheduled-assessments';
+  var method = isEdit ? 'PUT' : 'POST';
+  apicall(url, { method: method, body: JSON.stringify(payload) }).then(function(res) {
     if (res && res.error) { showToast(res.error, 'err'); btn.disabled = false; return; }
-    showToast('Scheduled assessment created', 'ok');
+    showToast(isEdit ? 'Scheduled assessment updated' : 'Scheduled assessment created', 'ok');
     closeSchedWizard();
     loadScheduledAssessments();
   }).catch(function(e) { showToast(e.message, 'err'); btn.disabled = false; });
