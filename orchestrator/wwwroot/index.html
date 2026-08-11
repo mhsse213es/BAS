@@ -5446,6 +5446,9 @@ function showThreatPriorityDetail(actorName) {
 }
 
 function renderThreatPriorityDetail(d) {
+  document.getElementById('tp-detail-title').innerHTML = x(d.actorName) +
+    (d.canonicalGroupId ? '  <span class="tiny muted" style="font-weight:400">&middot; MITRE ' + x(d.canonicalGroupId) + '</span>' : '');
+
   document.getElementById('tp-detail-summary').innerHTML =
     '<div class="kpi-card"><div class="kpi-label">Score</div><div class="kpi-value">' + x(d.score) + '</div></div>' +
     '<div class="kpi-card"><div class="kpi-label">Tier</div><div class="kpi-value">' + tpTierBadge(d.tier) + '</div></div>' +
