@@ -168,6 +168,29 @@ func TestUpsertActorProfiles_PersistsConfidence(t *testing.T) {
 	})
 }
 
+func TestUpsertActorProfiles_PersistsCanonicalGroupID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		s.upsertActorProfiles([]ThreatActor{{
+			Name: "APT-CANONICAL-TEST", CanonicalGroupID: "G0016",
+			Aliases: []string{}, Sectors: []string{}, Regions: []string{},
+		}})
+
+		var canonicalGroupID string
+		err := pool.QueryRow(t.Context(),
+			`SELECT canonical_group_id FROM threat_actor_profiles WHERE name=$1`, "APT-CANONICAL-TEST").Scan(&canonicalGroupID)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if canonicalGroupID != "G0016" {
+			t.Fatalf("canonical_group_id = %q, want %q", canonicalGroupID, "G0016")
+		}
+	})
+}
+
 func TestScheduler_Sync_PersistsCampaignsAndMalwareFromIntelligenceSource(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

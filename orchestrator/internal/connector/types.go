@@ -18,6 +18,11 @@ type ThreatActor struct {
 	SourceID    string         `json:"source_id,omitempty"` // MISP event ID or OpenCTI object ID
 	LastSeen    time.Time      `json:"last_seen,omitempty"`
 	Confidence  string         `json:"confidence,omitempty"` // "high" | "medium" | "low"
+	// CanonicalGroupID is the resolved MITRE ATT&CK Group-ID (G####, via
+	// attackdata.GroupByID), or "" if MergeActors couldn't confidently
+	// resolve one. See
+	// docs/superpowers/specs/2026-08-11-canonical-mitre-actor-identity-design.md.
+	CanonicalGroupID string `json:"canonical_group_id,omitempty"`
 }
 
 // TechniqueRef is one MITRE ATT&CK technique from a threat-actor profile.

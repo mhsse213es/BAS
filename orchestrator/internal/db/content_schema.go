@@ -267,6 +267,7 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// Threat Prioritization — actor-level composite score (see
 		// docs/superpowers/specs/2026-07-28-threat-prioritization-design.md).
 		`ALTER TABLE threat_actor_profiles ADD COLUMN IF NOT EXISTS confidence text NOT NULL DEFAULT ''`,
+		`ALTER TABLE threat_actor_profiles ADD COLUMN IF NOT EXISTS canonical_group_id text NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS threat_priority_history (
 			id          bigserial   PRIMARY KEY,
 			actor_name  text        NOT NULL,
