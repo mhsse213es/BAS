@@ -9,7 +9,7 @@ import (
 // after construction (SetDispatch) to avoid an internal/vexsweep ->
 // internal/api import cycle -- the same pattern internal/exercise.Executor
 // already uses for its AgentDispatchFn.
-type DispatchFn func(ctx context.Context, agentID, techniqueID, mode string, includeAdvanced bool) (scenarioRunID, variantRunID string, totalVariants int, err error)
+type DispatchFn func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (scenarioRunID, variantRunID string, totalVariants int, err error)
 
 // VariantRunStatusFn reports a variant run's current status
 // ("running"/"completed"/"failed"/"partial"), read directly from
@@ -73,7 +73,7 @@ func (d *Dispatcher) dispatchNext(ctx context.Context, sw Sweep, justFinishedCou
 		return
 	}
 
-	scenarioRunID, variantRunID, _, err := d.dispatch(ctx, sw.AgentID, sw.Techniques[nextIdx], sw.Mode, sw.IncludeAdvanced)
+	scenarioRunID, variantRunID, _, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Techniques[nextIdx], sw.Mode, sw.IncludeAdvanced)
 	if err != nil {
 		// Deliberately does not fall through to the next technique -- a
 		// silently-skipped technique in a security-validation sweep is

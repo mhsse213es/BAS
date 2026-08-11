@@ -106,7 +106,7 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mode := coalesce(req.ExecutionMode, variant.ExecutionSequential)
-	runID, vrID, err := h.dispatchVariantRun(ctx, req.AgentID, req.TechniqueID,
+	runID, vrID, err := h.dispatchVariantRun(ctx, "", req.AgentID, req.TechniqueID,
 		coalesce(req.BaseType, "art"), baseID, mode, templates)
 	if err != nil {
 		log.Printf("[variant] dispatch failed for %s on %s: %v", req.TechniqueID, req.AgentID, err)
@@ -547,7 +547,7 @@ func (h *Handler) resolveBaseCommand(techniqueID, baseID, cmdOverride, execOverr
 // dispatchVariantRun creates DB records and dispatches via the WebSocket pipeline.
 func (h *Handler) dispatchVariantRun(
 	ctx context.Context,
-	agentID, techniqueID, baseType, baseID, executionMode string,
+	sweepID, agentID, techniqueID, baseType, baseID, executionMode string,
 	templates []variant.Template,
 ) (scenarioRunID, variantRunID string, err error) {
 
@@ -555,12 +555,20 @@ func (h *Handler) dispatchVariantRun(
 	runName := "Variant: " + techniqueID + " (" + baseID + ")"
 	genVersion := variant.GeneratorVersion
 
+	// sweep_id has a REFERENCES vex_sweeps(id) constraint -- an empty string
+	// would violate it for every non-sweep dispatch, so "" must become a true
+	// SQL NULL, not the literal empty string, via a nil *string.
+	var sweepIDArg *string
+	if sweepID != "" {
+		sweepIDArg = &sweepID
+	}
+
 	err = h.db.QueryRow(ctx,
 		`INSERT INTO scenario_runs
-			(scenario_id, agent_id, name, status, results, steps_total, initiated_by)
-		 VALUES ($1, $2, $3, 'running', '[]', $4, 'variant-executor')
+			(scenario_id, agent_id, name, status, results, steps_total, initiated_by, sweep_id)
+		 VALUES ($1, $2, $3, 'running', '[]', $4, 'variant-executor', $5)
 		 RETURNING id`,
-		syntheticScenarioID, agentID, runName, len(templates),
+		syntheticScenarioID, agentID, runName, len(templates), sweepIDArg,
 	).Scan(&scenarioRunID)
 	if err != nil {
 		return "", "", fmt.Errorf("create scenario_run: %w", err)
@@ -635,7 +643,7 @@ func (h *Handler) dispatchVariantRun(
 // resolves templates and dispatches exactly like RunVariants does for a
 // single ad-hoc request, but returns the resolved variant count too so the
 // Dispatcher can credit the sweep's real (not precomputed) total.
-func (h *Handler) dispatchVariantForSweep(ctx context.Context, agentID, techniqueID, mode string, includeAdvanced bool) (scenarioRunID, variantRunID string, totalVariants int, err error) {
+func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (scenarioRunID, variantRunID string, totalVariants int, err error) {
 	templates, baseID, err := h.resolveTemplates(ctx, techniqueID, "art", "", "", "", includeAdvanced)
 	if err != nil {
 		return "", "", 0, err
@@ -643,7 +651,7 @@ func (h *Handler) dispatchVariantForSweep(ctx context.Context, agentID, techniqu
 	if len(templates) == 0 {
 		return "", "", 0, fmt.Errorf("no variants generated for %s", techniqueID)
 	}
-	scenarioRunID, variantRunID, err = h.dispatchVariantRun(ctx, agentID, techniqueID, "art", baseID, mode, templates)
+	scenarioRunID, variantRunID, err = h.dispatchVariantRun(ctx, sweepID, agentID, techniqueID, "art", baseID, mode, templates)
 	if err != nil {
 		return "", "", 0, err
 	}

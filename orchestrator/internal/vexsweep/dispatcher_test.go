@@ -27,7 +27,7 @@ func TestDispatcher_Tick_DispatchesFirstTechniqueForNewSweep(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil // nothing has "completed" yet in this test
 		})
-		d.SetDispatch(func(ctx context.Context, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
 			dispatchedTechniques = append(dispatchedTechniques, techniqueID)
 			return "sr-1", "vr-1", 33, nil
 		})
@@ -73,7 +73,7 @@ func TestDispatcher_Tick_AdvancesWhenCurrentTechniqueFinishes(t *testing.T) {
 			}
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
 			dispatchedTechniques = append(dispatchedTechniques, techniqueID)
 			return "sr-2", "vr-2", 12, nil
 		})
@@ -112,7 +112,7 @@ func TestDispatcher_Tick_CompletesSweepAfterLastTechnique(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "completed", nil
 		})
-		d.SetDispatch(func(ctx context.Context, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
 			t.Fatal("dispatch should not be called -- no techniques remain after the last one")
 			return "", "", 0, nil
 		})
@@ -145,7 +145,7 @@ func TestDispatcher_Tick_MarksFailedOnDispatchError(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
 			return "", "", 0, errors.New("agent not connected")
 		})
 
@@ -181,7 +181,7 @@ func TestDispatcher_Tick_IgnoresStoppedAndFailedSweeps(t *testing.T) {
 			t.Fatal("status check should not be called for a stopped sweep")
 			return "", nil
 		})
-		d.SetDispatch(func(ctx context.Context, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
 			t.Fatal("dispatch should not be called for a stopped sweep")
 			return "", "", 0, nil
 		})

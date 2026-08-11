@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/variant"
 	"github.com/audspect/bas/internal/vexsweep"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,7 +25,7 @@ func TestDispatchVariantForSweep_NoARTStoreReturnsError(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), nil, testJWTSecret)
-		_, _, _, err := h.dispatchVariantForSweep(context.Background(), "agent-1", "T1059.001", "sequential", false)
+		_, _, _, err := h.dispatchVariantForSweep(context.Background(), "", "agent-1", "T1059.001", "sequential", false)
 		if err == nil {
 			t.Fatal("dispatchVariantForSweep() with no ART store loaded, want an error, got nil")
 		}
@@ -60,6 +61,79 @@ func TestRunVariants_RejectsWhenAgentHasRunningSweep(t *testing.T) {
 		rec := callAuthed(h.RunVariants, req)
 		if rec.Code != http.StatusConflict {
 			t.Fatalf("status = %d, want 409, body: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestDispatchVariantRun_PersistsSweepID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-sweep-tag')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		store := vexsweep.NewStore(pool)
+		sw, err := store.Create(ctx, vexsweep.Sweep{
+			AgentID: "agent-sweep-tag", Mode: "sequential",
+			Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{1}, TotalVariants: 1,
+		})
+		if err != nil {
+			t.Fatalf("Create sweep: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		templates := []variant.Template{{
+			ID: "tpl-1", TechniqueID: "T1059.001", Encoding: "none", ExecContext: "user",
+			Evasion: "none", Executor: "powershell", Command: "Get-Process",
+		}}
+		// dispatchVariantRun's final SendToAgent step always fails here (no real
+		// agent connection in this bare test hub) -- expected and irrelevant: the
+		// scenario_runs row (with sweep_id) is already committed by the time that
+		// happens, which is what this test verifies, so the returned error is
+		// deliberately discarded.
+		_, _, _ = h.dispatchVariantRun(ctx, sw.ID, "agent-sweep-tag", "T1059.001", "art", "tpl-1", "sequential", templates)
+
+		var gotSweepID *string
+		if err := pool.QueryRow(ctx,
+			`SELECT sweep_id FROM scenario_runs WHERE agent_id = $1 ORDER BY started_at DESC LIMIT 1`,
+			"agent-sweep-tag",
+		).Scan(&gotSweepID); err != nil {
+			t.Fatalf("query scenario_runs: %v", err)
+		}
+		if gotSweepID == nil || *gotSweepID != sw.ID {
+			t.Fatalf("sweep_id = %v, want %q", gotSweepID, sw.ID)
+		}
+	})
+}
+
+func TestDispatchVariantRun_NoSweepID_PersistsNull(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-no-sweep-tag')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		templates := []variant.Template{{
+			ID: "tpl-1", TechniqueID: "T1059.001", Encoding: "none", ExecContext: "user",
+			Evasion: "none", Executor: "powershell", Command: "Get-Process",
+		}}
+		_, _, _ = h.dispatchVariantRun(ctx, "", "agent-no-sweep-tag", "T1059.001", "art", "tpl-1", "sequential", templates)
+
+		var gotSweepID *string
+		if err := pool.QueryRow(ctx,
+			`SELECT sweep_id FROM scenario_runs WHERE agent_id = $1 ORDER BY started_at DESC LIMIT 1`,
+			"agent-no-sweep-tag",
+		).Scan(&gotSweepID); err != nil {
+			t.Fatalf("query scenario_runs: %v", err)
+		}
+		if gotSweepID != nil {
+			t.Fatalf("sweep_id = %q, want NULL (not sweep-dispatched)", *gotSweepID)
 		}
 	})
 }
