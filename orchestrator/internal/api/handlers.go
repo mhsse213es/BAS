@@ -2236,45 +2236,37 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /api/scenarios/runs?agentId=&scenarioId=
-func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
-	agentID := r.URL.Query().Get("agentId")
-	scenarioID := r.URL.Query().Get("scenarioId")
+// runRow is the shared scenario_runs row shape returned by both
+// ListScenarioRuns and GetVexSweepRuns (internal/api/vexsweep_handlers.go).
+type runRow struct {
+	models.ScenarioRun
+	InitiatedBy *string `json:"initiatedBy"`
+	// DetectedTechs is the set of technique ids whose FAIL the blue team still
+	// caught (from the run's detection_summary, with the coarse event-token
+	// fallback) — same classification the campaign rollup and kill-chain use.
+	// Lets the dashboard split fails into "detected" vs "missed" honestly.
+	DetectedTechs map[string]bool `json:"detectedTechs,omitempty"`
+}
 
-	rows, err := h.db.Query(r.Context(),
-		`SELECT id, scenario_id, agent_id, name, status, results, score, initiated_by, started_at, completed_at,
-		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout, detection_summary,
-		        alerts_total, alerts_high_fidelity, noise_score, reverted
-		 FROM scenario_runs
-		 WHERE ($1 = '' OR agent_id = $1)
-		   AND ($2 = '' OR scenario_id = $2)
-		 ORDER BY started_at DESC LIMIT 100`,
-		agentID, scenarioID,
-	)
-	if err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	type runRow struct {
-		models.ScenarioRun
-		InitiatedBy *string `json:"initiatedBy"`
-		// DetectedTechs is the set of technique ids whose FAIL the blue team still
-		// caught (from the run's detection_summary, with the coarse event-token
-		// fallback) — same classification the campaign rollup and kill-chain use.
-		// Lets the dashboard split fails into "detected" vs "missed" honestly.
-		DetectedTechs map[string]bool `json:"detectedTechs,omitempty"`
-	}
+// scanRunRows scans a scenario_runs query's rows, decoding the JSON blob
+// columns and deriving DetectedTechs/Progress the same way for every caller.
+// Every caller's SELECT must list columns in exactly this order: id,
+// scenario_id, agent_id, sweep_id, name, status, results, score,
+// initiated_by, started_at, completed_at, steps_total, steps_done,
+// steps_running, steps_passed, steps_failed, steps_timeout,
+// detection_summary, alerts_total, alerts_high_fidelity, noise_score,
+// reverted.
+func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 	var runs []runRow
 	for rows.Next() {
 		var run runRow
 		var resultsJSON, scoreRaw, detRaw, revertedRaw []byte
 		var p models.RunProgress
-		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.Name,
+		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.SweepID, &run.Name,
 			&run.Status, &resultsJSON, &scoreRaw, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt,
 			&p.StepsTotal, &p.StepsDone, &p.StepsRunning, &p.StepsPassed, &p.StepsFailed, &p.StepsTimeout, &detRaw,
 			&run.AlertsTotal, &run.AlertsHighFidelity, &run.NoiseScore, &revertedRaw); err != nil {
-			log.Printf("[api] list runs scan: %v", err)
+			log.Printf("[api] scan run row: %v", err)
 			continue
 		}
 		json.Unmarshal(resultsJSON, &run.Results)
@@ -2294,6 +2286,34 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 			run.Progress = &p
 		}
 		runs = append(runs, run)
+	}
+	return runs, rows.Err()
+}
+
+func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agentId")
+	scenarioID := r.URL.Query().Get("scenarioId")
+
+	rows, err := h.db.Query(r.Context(),
+		`SELECT id, scenario_id, agent_id, sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
+		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout, detection_summary,
+		        alerts_total, alerts_high_fidelity, noise_score, reverted
+		 FROM scenario_runs
+		 WHERE ($1 = '' OR agent_id = $1)
+		   AND ($2 = '' OR scenario_id = $2)
+		 ORDER BY started_at DESC LIMIT 100`,
+		agentID, scenarioID,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	runs, err := scanRunRows(rows)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	if runs == nil {
 		runs = []runRow{}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/vexsweep"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -398,6 +399,62 @@ func TestListScenarioRuns_DBError(t *testing.T) {
 		h.ListScenarioRuns(rec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs", nil))
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want 500, body = %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestListScenarioRuns_ExposesSweepIdOnlyForTaggedRows(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-list-sweep')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		store := vexsweep.NewStore(pool)
+		sw, err := store.Create(ctx, vexsweep.Sweep{
+			AgentID: "agent-list-sweep", Mode: "sequential",
+			Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{1}, TotalVariants: 1,
+		})
+		if err != nil {
+			t.Fatalf("Create sweep: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, steps_total, sweep_id)
+			 VALUES ('sr-tagged', 'sc-x', 'agent-list-sweep', 'tagged run', 'completed', '[]', 1, $1)`,
+			sw.ID); err != nil {
+			t.Fatalf("seed tagged run: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, steps_total)
+			 VALUES ('sr-untagged', 'sc-x', 'agent-list-sweep', 'untagged run', 'completed', '[]', 1)`); err != nil {
+			t.Fatalf("seed untagged run: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.ListScenarioRuns(rec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?agentId=agent-list-sweep", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+
+		var got []struct {
+			ID      string  `json:"id"`
+			SweepID *string `json:"sweepId"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		byID := map[string]*string{}
+		for _, r := range got {
+			byID[r.ID] = r.SweepID
+		}
+		if byID["sr-tagged"] == nil || *byID["sr-tagged"] != sw.ID {
+			t.Errorf("sr-tagged sweepId = %v, want %q", byID["sr-tagged"], sw.ID)
+		}
+		if byID["sr-untagged"] != nil {
+			t.Errorf("sr-untagged sweepId = %q, want nil (not sweep-dispatched)", *byID["sr-untagged"])
 		}
 	})
 }
