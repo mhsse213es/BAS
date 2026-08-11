@@ -6662,6 +6662,42 @@ function gpFlattenGroups(nodes, depth, excludeId, out) {
   return out;
 }
 
+// buildGroupDescendantMap walks the group tree once and returns, for every
+// group id, the list of that group's own id plus every descendant group's id
+// (post-order: children are resolved before their parent so parents can just
+// concatenate their already-computed children's lists). Mirrors the same
+// "selecting a parent surfaces its children's agents too" rule the backend
+// applies in GET /api/agents?groupId= and jobs.Store.ResolveGroupAgentIDs.
+function buildGroupDescendantMap(nodes) {
+  var map = {};
+  function walk(list) {
+    (list || []).forEach(function(n) {
+      var ids = [n.id];
+      if (n.children && n.children.length) {
+        walk(n.children);
+        n.children.forEach(function(c) { ids = ids.concat(map[c.id]); });
+      }
+      map[n.id] = ids;
+    });
+  }
+  walk(nodes);
+  return map;
+}
+
+// resolveGroupTargetAgents returns every agent (from the global `agents` array)
+// belonging to any of selectedGroupIds or their descendant groups. Pure client-side
+// set math over already-loaded data -- no API call. Does not apply OS filtering;
+// callers run the result through osEligibleAgents separately.
+function resolveGroupTargetAgents(selectedGroupIds) {
+  if (!selectedGroupIds.length) return [];
+  var map = buildGroupDescendantMap(agentGroupTree);
+  var idSet = {};
+  selectedGroupIds.forEach(function(gid) {
+    (map[gid] || [gid]).forEach(function(id) { idSet[id] = true; });
+  });
+  return agents.filter(function(a) { return a.groupId != null && idSet[a.groupId]; });
+}
+
 var _gpMode = null, _gpContextId = null;
 
 function openGroupPicker(mode, contextId) {
@@ -10236,16 +10272,21 @@ function additionalAgentIds() {
                .map(function(a) { return a.agentId; });
 }
 
+// osEligibleAgents filters `list` down to agents whose OS matches sc.supportedOs
+// (case-insensitive). An empty/absent supportedOs means "any OS" — used by every
+// agent-targeting path in the Run Scenario wizard (individual, group, all) so OS
+// compatibility is defined in exactly one place.
+function osEligibleAgents(list, sc) {
+  var supported = ((sc && sc.supportedOs) || []).map(function(o) { return o.toLowerCase(); });
+  if (!supported.length) return list;
+  return list.filter(function(a) { return supported.indexOf(cmpAgentOS(a)) !== -1; });
+}
+
 function eligibleAdditionalAgents() {
   var primaryId = document.getElementById('modal-agent').value;
   var scId = _modalScId || document.getElementById('modal-sc').value;
   var sc = scenarios.find(function(s) { return s.id === scId; });
-  var supported = ((sc && sc.supportedOs) || []).map(function(o) { return o.toLowerCase(); });
-  return agents.filter(function(a) {
-    if (a.agentId === primaryId) return false;
-    if (supported.length && supported.indexOf(cmpAgentOS(a)) === -1) return false;
-    return true;
-  });
+  return osEligibleAgents(agents.filter(function(a) { return a.agentId !== primaryId; }), sc);
 }
 
 function renderAdditionalAgents() {
