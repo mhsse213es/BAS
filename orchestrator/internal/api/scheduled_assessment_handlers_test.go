@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -232,6 +233,236 @@ func TestCancelScheduledAssessment_Disables(t *testing.T) {
 		}
 		if got.Enabled {
 			t.Error("schedule still enabled after cancel")
+		}
+	})
+}
+
+func TestUpdateScheduledAssessment_Posture_Success(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		sch, err := jobsStore.CreateSchedule(context.Background(), jobs.Schedule{
+			Type: "scheduled_assessment", Payload: json.RawMessage(`{"scenarioId":"fixture-scenario","mode":"posture"}`),
+			AgentIDs: []string{"sa-u1"}, RecurrenceType: "weekly", DayOfWeek: 1, TimeOfDay: "02:00",
+			Timezone: "UTC", Enabled: true, Mode: "posture",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "posture", "agentIds": []string{"sa-u1", "sa-u2"},
+			"recurrenceType": "daily", "timeOfDay": "03:00", "timezone": "UTC",
+		})
+		req := httptest.NewRequest(http.MethodPut, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		req = withURLParam(req, "id", sch.ID)
+		w := httptest.NewRecorder()
+		h.UpdateScheduledAssessment(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		got, err := jobsStore.GetSchedule(context.Background(), sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if len(got.AgentIDs) != 2 || got.RecurrenceType != "daily" || got.TimeOfDay != "03:00" {
+			t.Errorf("got = %+v, want AgentIDs len 2, RecurrenceType=daily, TimeOfDay=03:00", got)
+		}
+	})
+}
+
+func TestUpdateScheduledAssessment_Telemetry_AnalystForbidden(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		sch, err := jobsStore.CreateSchedule(context.Background(), jobs.Schedule{
+			Type: "scheduled_assessment", Payload: json.RawMessage(`{}`), AgentIDs: []string{"sa-u3"},
+			RecurrenceType: "daily", TimeOfDay: "02:00", Timezone: "UTC", Enabled: true, Mode: "posture",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "telemetry", "agentIds": []string{"sa-u3"},
+			"recurrenceType": "daily", "timeOfDay": "02:00", "timezone": "UTC", "reason": "test",
+		})
+		req := httptest.NewRequest(http.MethodPut, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		req = withURLParam(req, "id", sch.ID)
+		w := httptest.NewRecorder()
+		h.UpdateScheduledAssessment(w, req)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403, body = %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestUpdateScheduledAssessment_Telemetry_AdminWithReason_ReapprovesAndIncrementsVersion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		approvedAt := time.Now().Add(-24 * time.Hour)
+		sch, err := jobsStore.CreateSchedule(context.Background(), jobs.Schedule{
+			Type: "scheduled_assessment", Payload: json.RawMessage(`{}`), AgentIDs: []string{"sa-u4"},
+			RecurrenceType: "daily", TimeOfDay: "02:00", Timezone: "UTC", Enabled: true, Mode: "telemetry",
+			ApprovedBy: "admin-0", ApprovedAt: &approvedAt, ApprovalVersion: 1, Reason: "original reason",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "telemetry", "agentIds": []string{"sa-u4"},
+			"recurrenceType": "daily", "timeOfDay": "02:00", "timezone": "UTC",
+			"reason": "re-approved after target change",
+		})
+		req := httptest.NewRequest(http.MethodPut, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "admin-1", Role: auth.RoleAdmin}))
+		req = withURLParam(req, "id", sch.ID)
+		w := httptest.NewRecorder()
+		h.UpdateScheduledAssessment(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		got, err := jobsStore.GetSchedule(context.Background(), sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.ApprovedBy != "admin-1" || got.ApprovalVersion != 2 || got.Reason != "re-approved after target change" {
+			t.Errorf("got = %+v, want ApprovedBy=admin-1 ApprovalVersion=2 Reason='re-approved after target change'", got)
+		}
+		if got.ApprovedAt == nil || !got.ApprovedAt.After(approvedAt) {
+			t.Errorf("ApprovedAt = %v, want non-nil and after the original %v", got.ApprovedAt, approvedAt)
+		}
+	})
+}
+
+func TestUpdateScheduledAssessment_ModeChangeToPosture_ClearsApproval(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		approvedAt := time.Now()
+		sch, err := jobsStore.CreateSchedule(context.Background(), jobs.Schedule{
+			Type: "scheduled_assessment", Payload: json.RawMessage(`{}`), AgentIDs: []string{"sa-u5"},
+			RecurrenceType: "daily", TimeOfDay: "02:00", Timezone: "UTC", Enabled: true, Mode: "telemetry",
+			ApprovedBy: "admin-0", ApprovedAt: &approvedAt, ApprovalVersion: 1, Reason: "original reason",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "posture", "agentIds": []string{"sa-u5"},
+			"recurrenceType": "daily", "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		req := httptest.NewRequest(http.MethodPut, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		req = withURLParam(req, "id", sch.ID)
+		w := httptest.NewRecorder()
+		h.UpdateScheduledAssessment(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		got, err := jobsStore.GetSchedule(context.Background(), sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if got.ApprovedBy != "" || got.ApprovedAt != nil || got.ApprovalVersion != 0 || got.Reason != "" {
+			t.Errorf("got = %+v, want approval fields cleared after mode change to posture", got)
+		}
+	})
+}
+
+func TestUpdateScheduledAssessment_RevivesCancelledSchedule(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		sch, err := jobsStore.CreateSchedule(context.Background(), jobs.Schedule{
+			Type: "scheduled_assessment", Payload: json.RawMessage(`{}`), AgentIDs: []string{"sa-u6"},
+			RecurrenceType: "daily", TimeOfDay: "02:00", Timezone: "UTC", Enabled: true, Mode: "posture",
+		})
+		if err != nil {
+			t.Fatalf("CreateSchedule: %v", err)
+		}
+		if err := jobsStore.DisableSchedule(context.Background(), sch.ID); err != nil {
+			t.Fatalf("DisableSchedule: %v", err)
+		}
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "posture", "agentIds": []string{"sa-u6"},
+			"recurrenceType": "daily", "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		req := httptest.NewRequest(http.MethodPut, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		req = withURLParam(req, "id", sch.ID)
+		w := httptest.NewRecorder()
+		h.UpdateScheduledAssessment(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		got, err := jobsStore.GetSchedule(context.Background(), sch.ID)
+		if err != nil {
+			t.Fatalf("GetSchedule: %v", err)
+		}
+		if !got.Enabled {
+			t.Error("schedule should be re-enabled after edit, still disabled")
+		}
+	})
+}
+
+func TestUpdateScheduledAssessment_UnknownID_404(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		eng := scenario.NewEngine(t.TempDir())
+		registerFixtureScenario(t, eng, "fixture-check")
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), eng, "").WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		body, _ := json.Marshal(map[string]any{
+			"scenarioId": "fixture-scenario", "mode": "posture", "agentIds": []string{"sa-u7"},
+			"recurrenceType": "daily", "timeOfDay": "02:00", "timezone": "UTC",
+		})
+		req := httptest.NewRequest(http.MethodPut, "/x", bytes.NewReader(body))
+		req = req.WithContext(auth.ContextWithClaims(req.Context(), &auth.Claims{UserID: "analyst-1", Role: auth.RoleAnalyst}))
+		req = withURLParam(req, "id", "does-not-exist")
+		w := httptest.NewRecorder()
+		h.UpdateScheduledAssessment(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404, body = %s", w.Code, w.Body.String())
 		}
 	})
 }

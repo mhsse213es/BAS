@@ -287,6 +287,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/job-schedules/{scheduleId}/cancel", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodPost, "/api/scheduled-assessments", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/scheduled-assessments", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodPut, "/api/scheduled-assessments/{id}", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodPost, "/api/scheduled-assessments/{id}/cancel", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodPost, "/api/agents/{agentId}/maintenance-freezes", tierPermission, auth.CanApproveRemediation},
 	{http.MethodGet, "/api/agents/{agentId}/maintenance-freezes", tierPermission, auth.CanExecuteRemediation},
