@@ -108,21 +108,6 @@ func TestScheduler_Sync_ZeroActorSourceDoesNotDisruptOthers(t *testing.T) {
 	}
 }
 
-func TestMergeActors_UnionsTechniques(t *testing.T) {
-	// Layering: same actor from the bundle floor and a live overlay → the
-	// techniques are unioned, which is what makes bundle+live compose for free.
-	merged := MergeActors([]ThreatActor{
-		{Name: "APT36", Source: "bundle", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
-		{Name: "APT36", Source: "misp", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
-	})
-	if len(merged) != 1 {
-		t.Fatalf("want 1 merged actor, got %d", len(merged))
-	}
-	if len(merged[0].Techniques) != 2 {
-		t.Fatalf("want 2 unioned techniques, got %d: %+v", len(merged[0].Techniques), merged[0].Techniques)
-	}
-}
-
 func TestScheduler_SyncUpsertsActorProfiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

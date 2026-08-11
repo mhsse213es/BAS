@@ -3,7 +3,6 @@ package connector
 import (
 	"context"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -312,31 +311,6 @@ func (s *Scheduler) setError(msg string, bySource map[string]SourceStat) {
 
 // MergeActors combines actors with the same name (case-insensitive) from
 // different sources into one actor with the union of their techniques.
-func MergeActors(actors []ThreatActor) []ThreatActor {
-	byName := make(map[string]*ThreatActor)
-	for _, a := range actors {
-		key := actorKey(a.Name)
-		if existing, ok := byName[key]; ok {
-			existing.Techniques = mergeTechniques(existing.Techniques, a.Techniques)
-			if a.LastSeen.After(existing.LastSeen) {
-				existing.LastSeen = a.LastSeen
-			}
-		} else {
-			cp := a
-			byName[key] = &cp
-		}
-	}
-	out := make([]ThreatActor, 0, len(byName))
-	for _, a := range byName {
-		out = append(out, *a)
-	}
-	return out
-}
-
-func actorKey(name string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(name, " ", ""), "-", ""))
-}
-
 // upsertActorProfiles persists each actor's sectors/regions/aliases so
 // internal/reporting can weight technique priority scores by sector/region
 // relevance. A single actor's upsert failing is logged and skipped, never
