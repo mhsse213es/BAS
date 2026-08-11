@@ -16739,12 +16739,62 @@ function renderVexRunGroupSummary() {
 }
 
 function runVariants() {
-  var agentId = document.getElementById('vex-agent') ? document.getElementById('vex-agent').value : '';
   var techniques = vexSelectedTechniques();
   var mode = document.getElementById('vex-mode') ? document.getElementById('vex-mode').value : 'sequential';
   var advanced = document.getElementById('vex-advanced') ? document.getElementById('vex-advanced').checked : false;
-  if (!agentId) { showToast('Select an agent first', 'err'); return; }
   if (!techniques.length) { showToast('Check at least one technique', 'err'); return; }
+
+  if (_vexRunTargetMode === 'group' || _vexRunTargetMode === 'all') {
+    if (techniques.length > 1) {
+      showToast('Group/All-Agent targeting requires exactly one technique — uncheck the rest, or switch to Individual for a multi-technique run.', 'err');
+      return;
+    }
+    var resolved = _vexRunTargetMode === 'group' ? vexRunResolvedGroupAgents() : agents.slice();
+    if (!resolved.length) { showToast('Select at least one group with agents', 'err'); return; }
+    var techId = techniques[0];
+
+    if (resolved.length > 1) {
+      if (!confirm('Run ' + techId + ' on ' + resolved.length + ' agent(s)?')) return;
+    }
+
+    // Each dispatch is independent: a rejected promise or a {error:...}
+    // response body is normalized into a resolved {ok:false} result so one
+    // agent's failure (offline, conflict, etc.) can never abort or block
+    // the others -- same isolation pattern used for Full Sweep's group
+    // targeting and the Run Scenario wizard's multi-agent dispatch.
+    var dispatches = resolved.map(function(a) {
+      return apicall('/api/variants/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: a.agentId, techniqueId: techId, executionMode: mode, includeAdvanced: advanced })
+      }).then(function(res) {
+        if (res && res.error) return { agentId: a.agentId, ok: false, error: res.error };
+        return { agentId: a.agentId, ok: true };
+      }).catch(function(e) {
+        return { agentId: a.agentId, ok: false, error: e.message };
+      });
+    });
+
+    Promise.all(dispatches).then(function(results) {
+      var ok = results.filter(function(r) { return r.ok; });
+      var failed = results.filter(function(r) { return !r.ok; });
+      if (!failed.length) {
+        showToast('Dispatched to ' + ok.length + ' agent(s).', 'ok');
+      } else if (ok.length) {
+        showToast('Dispatched to ' + ok.length + '/' + results.length + ' agents. Failed: ' +
+          failed.map(function(f) { return f.agentId + ' (' + f.error + ')'; }).join(', '), 'err');
+      } else {
+        showToast('All ' + results.length + ' dispatches failed. ' +
+          failed.map(function(f) { return f.agentId + ' (' + f.error + ')'; }).join(', '), 'err');
+      }
+      loadVariantCoverage();
+      loadVariantStats();
+    });
+    return;
+  }
+
+  var agentId = document.getElementById('vex-agent') ? document.getElementById('vex-agent').value : '';
+  if (!agentId) { showToast('Select an agent first', 'err'); return; }
   _vexAbortRequested = false; _vexActiveScenarioRunId = null;
   var btn = document.getElementById('vex-run-btn');
   if (btn) { btn.disabled = true; }
