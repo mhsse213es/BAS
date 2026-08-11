@@ -779,6 +779,7 @@ var TacticMap = map[string]string{
 	// Persistence
 	"T1037": "persistence", "T1546": "persistence", "T1574": "persistence",
 	"T1137": "persistence", "T1176": "persistence", "T1554": "persistence",
+	"T1525": "persistence", "T1653": "persistence",
 
 	// Privilege Escalation
 	"T1484": "privilege-escalation", "T1611": "privilege-escalation",
@@ -789,17 +790,26 @@ var TacticMap = map[string]string{
 	"T1014": "defense-evasion", "T1202": "defense-evasion", "T1222": "defense-evasion",
 	"T1564": "defense-evasion", "T1553": "defense-evasion", "T1006": "defense-evasion",
 	"T1211": "defense-evasion",
+	"T1205": "defense-evasion", "T1207": "defense-evasion", "T1216": "defense-evasion",
+	"T1220": "defense-evasion", "T1535": "defense-evasion", "T1542": "defense-evasion",
+	"T1578": "defense-evasion", "T1599": "defense-evasion", "T1600": "defense-evasion",
+	"T1601": "defense-evasion", "T1612": "defense-evasion", "T1622": "defense-evasion",
+	"T1647": "defense-evasion", "T1656": "defense-evasion", "T1666": "defense-evasion",
 
 	// Credential Access
 	"T1552": "credential-access", "T1557": "credential-access", "T1040": "credential-access",
 	"T1539": "credential-access", "T1606": "credential-access", "T1528": "credential-access",
 	"T1621": "credential-access", "T1649": "credential-access", "T1111": "credential-access",
+	"T1556": "credential-access",
 
 	// Discovery
 	"T1046": "discovery", "T1135": "discovery", "T1057": "discovery",
 	"T1012": "discovery", "T1010": "discovery", "T1124": "discovery",
 	"T1201": "discovery", "T1120": "discovery", "T1217": "discovery",
 	"T1482": "discovery", "T1614": "discovery",
+	"T1526": "discovery", "T1538": "discovery", "T1580": "discovery",
+	"T1613": "discovery", "T1615": "discovery", "T1619": "discovery",
+	"T1652": "discovery", "T1654": "discovery",
 
 	// Lateral Movement
 	"T1210": "lateral-movement", "T1080": "lateral-movement", "T1534": "lateral-movement",
@@ -809,6 +819,7 @@ var TacticMap = map[string]string{
 	"T1115": "collection", "T1119": "collection", "T1074": "collection",
 	"T1123": "collection", "T1125": "collection", "T1185": "collection",
 	"T1213": "collection", "T1530": "collection",
+	"T1602": "collection",
 
 	// Exfiltration
 	"T1011": "exfiltration", "T1052": "exfiltration", "T1029": "exfiltration",
@@ -819,6 +830,7 @@ var TacticMap = map[string]string{
 	"T1132": "command-and-control", "T1001": "command-and-control", "T1102": "command-and-control",
 	"T1008": "command-and-control", "T1104": "command-and-control", "T1571": "command-and-control",
 	"T1092": "command-and-control",
+	"T1659": "command-and-control", "T1665": "command-and-control",
 
 	// Impact
 	"T1499": "impact", "T1498": "impact", "T1496": "impact",
