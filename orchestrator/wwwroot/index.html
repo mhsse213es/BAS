@@ -4254,6 +4254,20 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- Full Variant Sweep drill-down: every technique a sweep dispatched -->
+<div id="sweep-drilldown-overlay" class="drawer-overlay" onclick="if(event.target===this)closeSweepDrilldown()">
+  <div class="drawer" style="width:540px;max-width:94vw">
+    <div class="drawer-header">
+      <h3 id="sweep-drilldown-title">Full Variant Sweep</h3>
+      <button class="drawer-close" onclick="closeSweepDrilldown()">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <div id="sweep-drilldown-summary" class="sub2" style="margin-bottom:0.75rem"></div>
+      <ul id="sweep-drilldown-list" style="list-style:none;margin:0;padding:0"></ul>
+    </div>
+  </div>
+</div>
+
 <!-- Evidence Panel Overlay -->
 <div id="evidence-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:220;overflow-y:auto;padding:2rem 1rem" onclick="if(event.target===this)closeEvidence()">
   <div style="max-width:640px;width:95vw;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.4rem">
@@ -13347,6 +13361,39 @@ function submitIOCImport() {
 })();
 
 function closeRunLive() { document.getElementById('run-live-overlay').classList.remove('open'); }
+
+// openSweepDrilldown lists every technique a Full Variant Sweep dispatched --
+// each list item reuses the EXISTING, unmodified openRunPanel/viewRunResults
+// for that specific run, matching how loadRuns() already opens them for a
+// normal individual run.
+function openSweepDrilldown(sweepId) {
+  document.getElementById('sweep-drilldown-title').textContent = 'Full Variant Sweep';
+  document.getElementById('sweep-drilldown-summary').textContent = 'Loading…';
+  document.getElementById('sweep-drilldown-list').innerHTML = '';
+  document.getElementById('sweep-drilldown-overlay').classList.add('open');
+  apicall('/api/vex/sweeps/' + sweepId + '/runs').then(function(payload) {
+    var sw = payload.sweep, childRuns = payload.runs || [];
+    document.getElementById('sweep-drilldown-title').textContent = 'Full Variant Sweep — ' + (sw.agentId || '');
+    document.getElementById('sweep-drilldown-summary').textContent =
+      sw.status + ' · ' + childRuns.length + ' technique(s) dispatched';
+    document.getElementById('sweep-drilldown-list').innerHTML = childRuns.map(function(r) {
+      var cnt = (r.results || []).length;
+      var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
+      var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : r.status;
+      var liveBtn = (r.id && (r.status === 'running' || r.progress))
+        ? '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')">&#9673; Live</button> '
+        : '';
+      var resultBtn = cnt
+        ? '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>'
+        : '<span class="tiny muted">' + x(badge) + '</span>';
+      return '<li style="padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">' +
+        '<span>' + x(r.name) + '</span>' +
+        '<span style="white-space:nowrap">' + liveBtn + resultBtn + '</span></li>';
+    }).join('');
+  }).catch(function(e) { showToast(e.message, 'err'); closeSweepDrilldown(); });
+}
+
+function closeSweepDrilldown() { document.getElementById('sweep-drilldown-overlay').classList.remove('open'); }
 
 // ── Evidence Panel ────────────────────────────────────────────────────────────
 
