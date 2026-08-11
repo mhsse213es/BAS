@@ -10078,65 +10078,152 @@ function submitReport() {
   }).catch(function(e) { showToast('Generate failed: ' + e.message, 'err'); });
 }
 
+// runRowHtml renders one individual (non-sweep-collapsed) run's <tr> --
+// extracted unchanged from loadRuns() so it can also be reused for a sweep
+// row's per-sweep fetch-failure fallback (see loadRuns() below).
+function runRowHtml(r) {
+  var cnt = (r.results || []).length;
+  var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
+  var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : '—';
+  var scoreHtml = '—';
+  if (r.score && typeof r.score.preventionScore !== 'undefined') {
+    var prevPct = Math.round(r.score.preventionScore || 0);
+    var expVal  = Math.round(r.score.exposureScore || 0);
+    var cls     = r.score.classification || '';
+    var prevCol = prevPct >= 80 ? 'var(--teal)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    var expCol  = expVal  <= 20 ? 'var(--success)' : expVal  <= 50 ? 'var(--warning)' : 'var(--danger)';
+    var trend   = r.score.trend || '';
+    var trendBadge = trend === 'Improving' ? '<span style="color:var(--success);font-size:0.65rem;margin-left:0.3rem">↑</span>' :
+                     trend === 'Degrading' ? '<span style="color:var(--danger);font-size:0.65rem;margin-left:0.3rem">↓</span>' : '';
+    scoreHtml = '<span style="font-weight:600;color:' + prevCol + '">' + prevPct + '%</span>' +
+                '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.2rem">prev</span>' +
+                '<span style="color:' + expCol + ';font-size:0.72rem;margin-left:0.45rem">exp:' + expVal + '</span>' +
+                trendBadge;
+  } else if (r.score && typeof r.score.riskScore !== 'undefined') {
+    var cls2 = r.score.classification || '';
+    var col2 = cls2 === 'Protected' ? 'var(--success)' : cls2 === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
+    scoreHtml = '<span style="font-weight:600;color:' + col2 + '">' + r.score.riskScore + '</span>' +
+                '<span style="color:var(--muted);font-size:0.72rem;margin-left:0.3rem">' + x(cls2) + '</span>';
+  } else if (r.progress && r.progress.stepsDone > 0) {
+    var pr = r.progress;
+    scoreHtml = '<span style="color:var(--success);font-weight:600">' + pr.stepsPassed + '</span>' +
+                '<span style="color:var(--muted);font-size:0.6rem">pass</span> / ' +
+                '<span style="color:var(--danger);font-weight:600">' + pr.stepsFailed + '</span>' +
+                '<span style="color:var(--muted);font-size:0.6rem">fail</span>' +
+                (pr.stepsTimeout ? ' / <span style="color:var(--warning);font-weight:600">' + pr.stepsTimeout + '</span><span style="color:var(--muted);font-size:0.6rem">to</span>' : '') +
+                '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.35rem">' + pr.stepsDone + '/' + pr.stepsTotal + ' partial</span>';
+  }
+  return '<tr>' +
+    '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
+    '<td style="font-weight:500">' + x(r.name) + '</td>' +
+    '<td><code>' + x(r.agentId) + '</code></td>' +
+    '<td><span class="sbadge s-' + x(r.status) + '">' + x(r.status) + '</span></td>' +
+    '<td style="color:var(--muted);font-size:0.78rem">' + x(r.initiatedBy || '—') + '</td>' +
+    '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(r.startedAt) + '</td>' +
+    '<td style="color:var(--muted);font-size:0.78rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
+    '<td>' + (function() {
+      var acts = '';
+      // Live is only meaningful for runs that stream events (ART/Caldera live
+      // runs) — running, or finished with a progress summary. Posture/local-check
+      // runs never emit events, so don't offer an empty Live panel for them.
+      if (r.id && (r.status === 'running' || r.progress)) acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
+      if (r.id && r.status === 'running') acts += '<button class="btn btn-outline-red btn-sm" onclick="stopRun(\'' + x(r.id) + '\')" title="Stop this run — keeps completed steps, marks the run partial">&#9632; Stop</button> ';
+      if (cnt) acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
+      return acts || '—';
+    })() + '</td>' +
+    '<td>' + scoreHtml + '</td></tr>';
+}
+
+function renderRunRows(list) {
+  return list.map(runRowHtml).join('');
+}
+
+// renderSweepRow builds one collapsed "Full Variant Sweep" <tr> from a
+// GET /api/vex/sweeps/{id}/runs response ({sweep, runs}). The badge sums
+// each child run's own fail/pass counts (same per-run counting runRowHtml
+// already uses) across the WHOLE sweep, not a per-technique pass/fail --
+// i.e. total variants failed vs. passed across every technique dispatched.
+function renderSweepRow(payload) {
+  var sw = payload.sweep, childRuns = payload.runs || [];
+  var totalCnt = 0, totalFail = 0;
+  childRuns.forEach(function(r) {
+    var cnt = (r.results || []).length;
+    var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
+    totalCnt += cnt; totalFail += fail;
+  });
+  var badge = totalCnt ? (totalFail + ' fail / ' + (totalCnt - totalFail) + ' pass') : '—';
+  var progressLabel = sw.status === 'running'
+    ? sw.completedVariants + '/' + sw.totalVariants + ' variants'
+    : sw.totalTechniques + ' technique(s)';
+  var agent = agents.find(function(a) { return a.agentId === sw.agentId; });
+  var agentLabel = agent ? agent.hostname : sw.agentId;
+  return '<tr>' +
+    '<td><code>' + x(sw.id.substring(0,14)) + '</code></td>' +
+    '<td style="font-weight:500">Full Variant Sweep — ' + x(agentLabel) + '</td>' +
+    '<td><code>' + x(sw.agentId) + '</code></td>' +
+    '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sw.status) + '</span></td>' +
+    '<td style="color:var(--muted);font-size:0.78rem">' + x(sw.createdBy || '—') + '</td>' +
+    '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
+    '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
+    '<td><button class="btn btn-outline btn-sm" onclick="openSweepDrilldown(\'' + x(sw.id) + '\')" title="View every technique this sweep dispatched">' +
+        x(progressLabel) + ' — ' + badge + '</button></td>' +
+    '<td>—</td></tr>';
+}
+
 function loadRuns() {
   apicall('/api/scenarios/runs').then(function(runs) {
-    document.getElementById('runs-cnt').textContent = runs.length;
-    var tbody = document.getElementById('runs-body');
-    if (!runs.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty">No runs yet. Go to Scenarios and run one.</td></tr>'; return; }
-    tbody.innerHTML = runs.map(function(r) {
-      var cnt = (r.results || []).length;
-      var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
-      var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : '—';
-      var scoreHtml = '—';
-      if (r.score && typeof r.score.preventionScore !== 'undefined') {
-        var prevPct = Math.round(r.score.preventionScore || 0);
-        var expVal  = Math.round(r.score.exposureScore || 0);
-        var cls     = r.score.classification || '';
-        var prevCol = prevPct >= 80 ? 'var(--teal)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
-        var expCol  = expVal  <= 20 ? 'var(--success)' : expVal  <= 50 ? 'var(--warning)' : 'var(--danger)';
-        var trend   = r.score.trend || '';
-        var trendBadge = trend === 'Improving' ? '<span style="color:var(--success);font-size:0.65rem;margin-left:0.3rem">↑</span>' :
-                         trend === 'Degrading' ? '<span style="color:var(--danger);font-size:0.65rem;margin-left:0.3rem">↓</span>' : '';
-        scoreHtml = '<span style="font-weight:600;color:' + prevCol + '">' + prevPct + '%</span>' +
-                    '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.2rem">prev</span>' +
-                    '<span style="color:' + expCol + ';font-size:0.72rem;margin-left:0.45rem">exp:' + expVal + '</span>' +
-                    trendBadge;
-      } else if (r.score && typeof r.score.riskScore !== 'undefined') {
-        var cls2 = r.score.classification || '';
-        var col2 = cls2 === 'Protected' ? 'var(--success)' : cls2 === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
-        scoreHtml = '<span style="font-weight:600;color:' + col2 + '">' + r.score.riskScore + '</span>' +
-                    '<span style="color:var(--muted);font-size:0.72rem;margin-left:0.3rem">' + x(cls2) + '</span>';
-      } else if (r.progress && r.progress.stepsDone > 0) {
-        // No authoritative score (in-flight, or partial because the agent died
-        // before submitting results) — show the breakdown derived from events.
-        var pr = r.progress;
-        scoreHtml = '<span style="color:var(--success);font-weight:600">' + pr.stepsPassed + '</span>' +
-                    '<span style="color:var(--muted);font-size:0.6rem">pass</span> / ' +
-                    '<span style="color:var(--danger);font-weight:600">' + pr.stepsFailed + '</span>' +
-                    '<span style="color:var(--muted);font-size:0.6rem">fail</span>' +
-                    (pr.stepsTimeout ? ' / <span style="color:var(--warning);font-weight:600">' + pr.stepsTimeout + '</span><span style="color:var(--muted);font-size:0.6rem">to</span>' : '') +
-                    '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.35rem">' + pr.stepsDone + '/' + pr.stepsTotal + ' partial</span>';
+    // Group sweep-dispatched rows (non-null sweepId) so Live Runs shows one
+    // row per sweep instead of one row per technique it dispatched. Every
+    // OTHER consumer of this same endpoint (Dashboard, Coverage matrix, etc.)
+    // ignores sweepId entirely and is completely unaffected.
+    var sweepIds = [];
+    var seenSweepIds = {};
+    var individualRuns = [];
+    runs.forEach(function(r) {
+      if (r.sweepId) {
+        if (!seenSweepIds[r.sweepId]) { seenSweepIds[r.sweepId] = true; sweepIds.push(r.sweepId); }
+      } else {
+        individualRuns.push(r);
       }
-      return '<tr>' +
-        '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
-        '<td style="font-weight:500">' + x(r.name) + '</td>' +
-        '<td><code>' + x(r.agentId) + '</code></td>' +
-        '<td><span class="sbadge s-' + x(r.status) + '">' + x(r.status) + '</span></td>' +
-        '<td style="color:var(--muted);font-size:0.78rem">' + x(r.initiatedBy || '—') + '</td>' +
-        '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(r.startedAt) + '</td>' +
-        '<td style="color:var(--muted);font-size:0.78rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
-        '<td>' + (function() {
-          var acts = '';
-          // Live is only meaningful for runs that stream events (ART/Caldera live
-          // runs) — running, or finished with a progress summary. Posture/local-check
-          // runs never emit events, so don't offer an empty Live panel for them.
-          if (r.id && (r.status === 'running' || r.progress)) acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
-          if (r.id && r.status === 'running') acts += '<button class="btn btn-outline-red btn-sm" onclick="stopRun(\'' + x(r.id) + '\')" title="Stop this run — keeps completed steps, marks the run partial">&#9632; Stop</button> ';
-          if (cnt) acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
-          return acts || '—';
-        })() + '</td>' +
-        '<td>' + scoreHtml + '</td></tr>';
-    }).join('');
+    });
+
+    var tbody = document.getElementById('runs-body');
+    if (!runs.length) {
+      document.getElementById('runs-cnt').textContent = '0';
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">No runs yet. Go to Scenarios and run one.</td></tr>';
+      return;
+    }
+
+    if (!sweepIds.length) {
+      document.getElementById('runs-cnt').textContent = individualRuns.length;
+      tbody.innerHTML = renderRunRows(individualRuns);
+      return;
+    }
+
+    Promise.all(sweepIds.map(function(id) {
+      return apicall('/api/vex/sweeps/' + id + '/runs').then(function(res) {
+        return { id: id, ok: true, data: res };
+      }).catch(function() {
+        return { id: id, ok: false };
+      });
+    })).then(function(sweepResults) {
+      var rowsToRenderIndividually = individualRuns.slice();
+      var sweepRowsHtml = [];
+      sweepResults.forEach(function(sr) {
+        if (!sr.ok) {
+          // The per-sweep fetch failed -- fall back to rendering this sweep's
+          // rows individually rather than silently hiding runs that genuinely
+          // exist. Never show fewer runs than actually exist.
+          rowsToRenderIndividually = rowsToRenderIndividually.concat(
+            runs.filter(function(r) { return r.sweepId === sr.id; })
+          );
+          return;
+        }
+        sweepRowsHtml.push(renderSweepRow(sr.data));
+      });
+      document.getElementById('runs-cnt').textContent = rowsToRenderIndividually.length + sweepRowsHtml.length;
+      tbody.innerHTML = renderRunRows(rowsToRenderIndividually) + sweepRowsHtml.join('');
+    });
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
