@@ -199,6 +199,7 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/vex/sweeps", tierPermission, auth.CanRunVariants},
 	{http.MethodGet, "/api/vex/sweeps/active", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/vex/sweeps/{id}", tierPermission, auth.CanViewVariantRun},
+	{http.MethodGet, "/api/vex/sweeps/{id}/runs", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/vex/sweeps", tierPermission, auth.CanViewVariantRun},
 	{http.MethodPost, "/api/vex/sweeps/{id}/cancel", tierPermission, auth.CanCancelScenarioRun},
 	{http.MethodGet, "/api/payload-families", tierPermission, auth.CanListPayloadFamilies},
