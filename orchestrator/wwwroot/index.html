@@ -3686,17 +3686,44 @@ body.theme-slate {
 
       <!-- Step 2: Target -->
       <div class="wz-pane" data-pane="2" style="display:none">
-        <label class="modal-lbl">Primary Agent</label>
-        <select id="modal-agent" onchange="renderRunMode()"></select>
-        <p class="sub2" style="margin-top:0.55rem">The endpoint that will execute this run.</p>
-
-        <div id="modal-addl-wrap" style="display:none;margin-top:0.9rem">
-          <label class="modal-lbl">Run on Additional Agents <span class="tiny muted" id="modal-addl-cnt">(0 selected)</span></label>
-          <div style="display:flex;justify-content:flex-end;margin-bottom:0.4rem">
-            <button class="btn btn-outline btn-sm" onclick="selectAllAdditionalAgents()">Select all</button>
+        <div style="margin-bottom:0.9rem">
+          <label class="modal-lbl">Target</label>
+          <div style="display:flex;gap:1.1rem;margin-top:0.35rem;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
+              <input type="radio" name="modal-target-mode" value="individual" checked onchange="setTargetMode('individual')"> Individual Agent(s)
+            </label>
+            <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
+              <input type="radio" name="modal-target-mode" value="group" onchange="setTargetMode('group')"> Agent Group(s)
+            </label>
+            <label id="modal-target-all-label" style="display:none;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
+              <input type="radio" name="modal-target-mode" value="all" onchange="setTargetMode('all')"> All Agents
+            </label>
           </div>
-          <div id="modal-addl-list" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
-          <p class="sub2" style="margin-top:0.4rem">Same scenario, mode, and options will be dispatched to each checked agent.</p>
+        </div>
+
+        <div id="modal-individual-wrap">
+          <label class="modal-lbl">Primary Agent</label>
+          <select id="modal-agent" onchange="renderRunMode()"></select>
+          <p class="sub2" style="margin-top:0.55rem">The endpoint that will execute this run.</p>
+
+          <div id="modal-addl-wrap" style="display:none;margin-top:0.9rem">
+            <label class="modal-lbl">Run on Additional Agents <span class="tiny muted" id="modal-addl-cnt">(0 selected)</span></label>
+            <div style="display:flex;justify-content:flex-end;margin-bottom:0.4rem">
+              <button class="btn btn-outline btn-sm" onclick="selectAllAdditionalAgents()">Select all</button>
+            </div>
+            <div id="modal-addl-list" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
+            <p class="sub2" style="margin-top:0.4rem">Same scenario, mode, and options will be dispatched to each checked agent.</p>
+          </div>
+        </div>
+
+        <div id="modal-group-wrap" style="display:none">
+          <label class="modal-lbl">Agent Group(s)</label>
+          <div id="modal-group-list" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
+          <p class="sub2" id="modal-group-summary" style="margin-top:0.4rem"></p>
+        </div>
+
+        <div id="modal-all-wrap" style="display:none">
+          <p class="sub2" id="modal-all-summary"></p>
         </div>
       </div>
 
@@ -4458,6 +4485,8 @@ var _toast;
 var _modalScId = null;
 var _runSelection = null;  // {scId, fw:'art'|'caldera', ids:[]} — operator-chosen subset for the next run
 var _addlSel = {};  // {agentId: true} — checked "Run on Additional Agents" state for the next run
+var _targetMode = 'individual'; // 'individual' | 'group' | 'all'
+var _groupSel = {}; // { [groupId]: true } for checked groups in Group(s) mode
 var _editUserId = null;
 var _pwForced = false;
 
@@ -10140,6 +10169,15 @@ function openModal(scenarioId, preAgent, lockAgent) {
   document.getElementById('modal-mode').value = 'posture'; // always default to safe
   document.getElementById('modal-max-privilege').value = ''; // always default to no limit
   _addlSel = {};
+  _groupSel = {};
+  _targetMode = 'individual';
+  var indRadio = document.querySelector('input[name="modal-target-mode"][value="individual"]');
+  if (indRadio) indRadio.checked = true;
+  document.getElementById('modal-individual-wrap').style.display = 'block';
+  document.getElementById('modal-group-wrap').style.display = 'none';
+  document.getElementById('modal-all-wrap').style.display = 'none';
+  var allLabel = document.getElementById('modal-target-all-label');
+  if (allLabel) allLabel.style.display = (ROLE === 'admin') ? 'flex' : 'none';
   renderRunMode();
   document.getElementById('run-overlay').classList.add('open');
   // Wizard: skip Scenario step when scenarioId fixed; skip Target step when agent is
@@ -10161,6 +10199,8 @@ function openModal(scenarioId, preAgent, lockAgent) {
 function renderRunMode() {
   renderModalSelection();
   renderAdditionalAgents();
+  if (_targetMode === 'group') renderGroupTargetSummary();
+  if (_targetMode === 'all') renderAllTargetSummary();
   var id = _modalScId || document.getElementById('modal-sc').value;
   var sc = scenarios.find(function(s) { return s.id === id; });
   var wrap = document.getElementById('modal-mode-wrap');
@@ -10168,28 +10208,48 @@ function renderRunMode() {
   var warn = document.getElementById('modal-mode-warn');
   var btn = document.getElementById('modal-run-btn');
 
-  // OS compatibility check
-  var agentId = document.getElementById('modal-agent').value;
-  var agent = agents.find(function(a) { return a.agentId === agentId; });
-  var agentOSClass = '';
-  if (agent && agent.osVersion) {
-    var ov = agent.osVersion.toLowerCase();
-    if (ov.indexOf('windows') !== -1) agentOSClass = 'windows';
-    else if (ov.indexOf('darwin') !== -1 || ov.indexOf('macos') !== -1) agentOSClass = 'darwin';
-    else agentOSClass = 'linux';
-  }
-  var osMismatch = false;
-  var osMismatchMsg = '';
-  if (sc && (sc.supportedOs || []).length > 0 && agentOSClass) {
-    var supported = (sc.supportedOs || []).some(function(o) { return o.toLowerCase() === agentOSClass; });
-    if (!supported) {
-      osMismatch = true;
-      var targetOS = (sc.supportedOs || []).join(' / ');
-      osMismatchMsg = '&#9888; <strong>OS mismatch:</strong> this scenario targets <strong>' + x(targetOS) +
-        '</strong> but the selected agent is <strong>' + x(agent.osVersion) + '</strong>. ' +
-        'Posture checks will return "not applicable". Live execution will be blocked by the server.';
+  // Group/All targeting: eligibility is evaluated across the whole resolved set,
+  // not one primary agent's OS, so it takes a simpler path than the per-agent
+  // mismatch check below (which only applies in Individual mode). Agents were
+  // already OS-filtered when the set was resolved, so the only remaining
+  // question here is whether ANY eligible agent survived that filter.
+  if (_targetMode === 'group' || _targetMode === 'all') {
+    var resolved = _targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
+    if (!resolved.eligible.length) {
+      wrap.style.display = 'none';
+      warn.style.display = 'none';
+      btn.disabled = true;
+      btn.innerHTML = '&#9888; No Eligible Agents';
+      return;
     }
   }
+
+  // OS compatibility check (Individual mode's primary agent only — Group/All
+  // targeting has no single "the selected agent", eligibility is handled above).
+  var osMismatch = false;
+  var osMismatchMsg = '';
+  if (_targetMode === 'individual') {
+    var agentId = document.getElementById('modal-agent').value;
+    var agent = agents.find(function(a) { return a.agentId === agentId; });
+    var agentOSClass = '';
+    if (agent && agent.osVersion) {
+      var ov = agent.osVersion.toLowerCase();
+      if (ov.indexOf('windows') !== -1) agentOSClass = 'windows';
+      else if (ov.indexOf('darwin') !== -1 || ov.indexOf('macos') !== -1) agentOSClass = 'darwin';
+      else agentOSClass = 'linux';
+    }
+    if (sc && (sc.supportedOs || []).length > 0 && agentOSClass) {
+      var supported = (sc.supportedOs || []).some(function(o) { return o.toLowerCase() === agentOSClass; });
+      if (!supported) {
+        osMismatch = true;
+        var targetOS = (sc.supportedOs || []).join(' / ');
+        osMismatchMsg = '&#9888; <strong>OS mismatch:</strong> this scenario targets <strong>' + x(targetOS) +
+          '</strong> but the selected agent is <strong>' + x(agent.osVersion) + '</strong>. ' +
+          'Posture checks will return "not applicable". Live execution will be blocked by the server.';
+      }
+    }
+  }
+  btn.disabled = false;
 
   if (!sc || !sc.executable) {
     wrap.style.display = 'none';
@@ -10319,6 +10379,92 @@ function renderAdditionalAgentsCount() {
 function selectAllAdditionalAgents() {
   eligibleAdditionalAgents().forEach(function(a) { _addlSel[a.agentId] = true; });
   renderAdditionalAgents();
+}
+
+// setTargetMode switches which Target-step sub-panel is visible and clears the
+// OTHER modes' selection state so a stale pick from a previous mode can never
+// silently leak into a dispatch (e.g. switching from Group back to Individual
+// must not leave old group checkboxes still "selected" underneath).
+function setTargetMode(mode) {
+  _targetMode = mode;
+  if (mode !== 'group') _groupSel = {};
+  if (mode !== 'individual') _addlSel = {};
+  document.getElementById('modal-individual-wrap').style.display = mode === 'individual' ? 'block' : 'none';
+  document.getElementById('modal-group-wrap').style.display = mode === 'group' ? 'block' : 'none';
+  document.getElementById('modal-all-wrap').style.display = mode === 'all' ? 'block' : 'none';
+  if (mode === 'group') renderGroupTargetList();
+  renderRunMode();
+}
+
+// resolvedGroupTargetIds/resolvedAllTargetIds both return {eligible, total} so
+// callers can show "X of Y eligible" without a second pass over the data.
+function resolvedGroupTargetIds() {
+  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var sc = scenarios.find(function(s) { return s.id === scId; });
+  var selectedGroupIds = Object.keys(_groupSel).filter(function(k) { return _groupSel[k]; }).map(Number);
+  var candidates = resolveGroupTargetAgents(selectedGroupIds);
+  return { eligible: osEligibleAgents(candidates, sc), total: candidates.length };
+}
+
+function resolvedAllTargetIds() {
+  var scId = _modalScId || document.getElementById('modal-sc').value;
+  var sc = scenarios.find(function(s) { return s.id === scId; });
+  return { eligible: osEligibleAgents(agents, sc), total: agents.length };
+}
+
+// renderGroupTargetList renders the checkbox list of every group, flattened by
+// gpFlattenGroups (same helper the Move-to-Group picker uses), each row also
+// showing that group's own totalAgentCount as a quick-glance hint before any
+// OS filtering is applied.
+function renderGroupTargetList() {
+  var list = document.getElementById('modal-group-list');
+  if (!list) return;
+  var options = gpFlattenGroups(agentGroupTree, 0, null, []);
+  if (!options.length) {
+    list.innerHTML = '<p class="sub2" style="margin:0">No agent groups have been created yet.</p>';
+    renderGroupTargetSummary();
+    return;
+  }
+  var countMap = {};
+  (function walk(nodes) {
+    (nodes || []).forEach(function(n) { countMap[n.id] = n.totalAgentCount; walk(n.children); });
+  })(agentGroupTree);
+  list.innerHTML = options.map(function(o) {
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+      '<input type="checkbox" ' + (_groupSel[o.id] ? 'checked' : '') +
+      ' onchange="_groupSel[' + o.id + ']=this.checked;renderRunMode()">' +
+      '<span style="font-size:0.8rem">' + x(o.label) + '</span>' +
+      '<span class="tiny muted">(' + (countMap[o.id] || 0) + ' agents)</span></label>';
+  }).join('');
+  renderGroupTargetSummary();
+}
+
+// renderGroupTargetSummary/renderAllTargetSummary only update their own summary
+// text -- they do NOT call renderRunMode() themselves. renderRunMode() is the
+// single top-level orchestrator that calls these (see renderRunMode below): if
+// these called renderRunMode() too, a checkbox's onchange -> renderRunMode() ->
+// (mode === 'group') -> renderGroupTargetSummary() -> renderRunMode() chain
+// would recurse forever. renderGroupTargetList() (which runs once per mode
+// switch, not per render) is the one place that calls renderGroupTargetSummary()
+// directly for its initial paint, and that call site does not sit inside
+// renderRunMode().
+function renderGroupTargetSummary() {
+  var el = document.getElementById('modal-group-summary');
+  if (!el) return;
+  var r = resolvedGroupTargetIds();
+  if (r.total === 0) { el.textContent = 'No groups selected.'; return; }
+  var skipped = r.total - r.eligible.length;
+  el.textContent = r.eligible.length + ' of ' + r.total + ' group agent(s) eligible' +
+    (skipped ? ' (' + skipped + ' skipped: OS mismatch)' : '') + '.';
+}
+
+function renderAllTargetSummary() {
+  var el = document.getElementById('modal-all-summary');
+  if (!el) return;
+  var r = resolvedAllTargetIds();
+  var skipped = r.total - r.eligible.length;
+  el.textContent = r.eligible.length + ' of ' + r.total + ' agent(s) eligible' +
+    (skipped ? ' (' + skipped + ' skipped: OS mismatch)' : '') + '.';
 }
 
 // updateVariantDepthNote updates the helper text below the variant depth selector
