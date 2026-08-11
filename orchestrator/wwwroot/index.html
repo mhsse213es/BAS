@@ -13661,9 +13661,17 @@ function genBatchId() {
 
 function confirmRun() {
   var scenarioId = _modalScId || document.getElementById('modal-sc').value;
-  var primaryId  = document.getElementById('modal-agent').value;
-  if (!scenarioId || !primaryId) { showToast('Select scenario and agent', 'err'); return; }
-  var agentIds = [primaryId].concat(additionalAgentIds());
+  var groupTargeted = (_targetMode === 'group' || _targetMode === 'all');
+  var agentIds;
+  if (groupTargeted) {
+    var resolved = _targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
+    agentIds = resolved.eligible.map(function(a) { return a.agentId; });
+    if (!scenarioId || !agentIds.length) { showToast('Select scenario and at least one eligible agent', 'err'); return; }
+  } else {
+    var primaryId = document.getElementById('modal-agent').value;
+    if (!scenarioId || !primaryId) { showToast('Select scenario and agent', 'err'); return; }
+    agentIds = [primaryId].concat(additionalAgentIds());
+  }
   var multi = agentIds.length > 1;
 
   var sc = scenarios.find(function(s) { return s.id === scenarioId; });
@@ -13676,6 +13684,21 @@ function confirmRun() {
     return '• ' + (a ? a.agentId + ' — ' + a.hostname : id);
   }).join('\n');
   var header = 'Scenario: ' + (sc ? sc.name : scenarioId) + '\nFramework: ' + frameworkDisplayName(scenarioFramework(sc));
+
+  // Group/All targeting can silently resolve to far more agents than a user
+  // manually checking boxes would ever pick, so it always gets its own explicit
+  // confirm regardless of run mode. In posture mode this REPLACES the existing
+  // manual-multi-agent confirm below (same purpose, group-aware wording) rather
+  // than showing two confirms back to back. In telemetry/lab mode it is
+  // additional to — shown before — those modes' own existing confirms.
+  if (groupTargeted) {
+    var groupCount = _targetMode === 'group'
+      ? Object.keys(_groupSel).filter(function(k) { return _groupSel[k]; }).length : 0;
+    var blastMsg = _targetMode === 'all'
+      ? 'This will run on all ' + agentIds.length + ' eligible agent(s).\n\nProceed?'
+      : 'This will run on ' + agentIds.length + ' agent(s) across ' + groupCount + ' group(s).\n\nProceed?';
+    if (!confirm(blastMsg)) return;
+  }
 
   if (mode === 'telemetry') {
     var telemetryMsg = multi
@@ -13694,9 +13717,12 @@ function confirmRun() {
     if (!confirm(labMsg)) return;
     if (!confirm('Second confirmation required for LAB mode.\n\nConfirm the target is an isolated lab/range with a snapshot?')) return;
     confirmLive = true; confirmLab = true;
-  } else if (multi) {
+  } else if (multi && !groupTargeted) {
     // Posture mode has zero confirmation for a single agent today; a batch of 2+
-    // targets is a bigger blast radius, so gate it with one lightweight confirm.
+    // manually-picked targets is a bigger blast radius, so gate it with one
+    // lightweight confirm. Group/All targeting already showed its own
+    // group-aware blast-radius confirm above, so it's excluded here to avoid
+    // asking the operator to confirm the same dispatch twice.
     var postureMsg = 'Run scenario?\n\n' + header + '\n\nAgents (' + agentIds.length + '):\n' + agentListText + '\n\nProceed?';
     if (!confirm(postureMsg)) return;
   }
