@@ -16295,6 +16295,8 @@ function populateVexAgents() {
     if (sel) sel.innerHTML = opts;
     var sweepSel = document.getElementById('vex-sweep-agent');
     if (sweepSel) sweepSel.innerHTML = opts;
+    var allLabel = document.getElementById('vex-run-all-label');
+    if (allLabel) allLabel.style.display = (ROLE === 'admin') ? 'flex' : 'none';
   }).catch(function() {});
 }
 
@@ -16670,6 +16672,70 @@ function loadVariantCoverage() {
   }).catch(function(e) {
     el.innerHTML = '<div class="empty" style="color:var(--danger);padding:1rem">' + x(e.message || 'Error loading coverage') + '</div>';
   });
+}
+
+var _vexRunTargetMode = 'individual'; // 'individual' | 'group' | 'all'
+var _vexRunGroupSel = {}; // { [groupId]: true } for checked groups in the Run Variants card's Group(s) mode
+
+// setVexRunTargetMode switches the Run Variants card between its
+// single-agent select, the group checkbox list, and the All Agents notice,
+// clearing the OTHER modes' selection state so a stale pick can't silently
+// leak into a dispatch.
+function setVexRunTargetMode(mode) {
+  _vexRunTargetMode = mode;
+  if (mode !== 'group') _vexRunGroupSel = {};
+  var indWrap = document.getElementById('vex-run-individual-wrap');
+  var grpWrap = document.getElementById('vex-run-group-wrap');
+  var allWrap = document.getElementById('vex-run-all-wrap');
+  if (indWrap) indWrap.style.display = mode === 'individual' ? 'block' : 'none';
+  if (grpWrap) grpWrap.style.display = mode === 'group' ? 'block' : 'none';
+  if (allWrap) allWrap.style.display = mode === 'all' ? 'block' : 'none';
+  if (mode === 'group') renderVexRunGroupList();
+}
+
+// renderVexRunGroupList renders the checkbox list of every group, flattened
+// by gpFlattenGroups (the same helper both the Run Scenario wizard's and
+// Full Sweep's own Group(s) modes already use), each row showing that
+// group's own totalAgentCount.
+function renderVexRunGroupList() {
+  var list = document.getElementById('vex-run-group-list');
+  if (!list) return;
+  var options = gpFlattenGroups(agentGroupTree, 0, null, []);
+  if (!options.length) {
+    list.innerHTML = '<p class="tiny muted" style="margin:0">No agent groups have been created yet.</p>';
+    renderVexRunGroupSummary();
+    return;
+  }
+  var countMap = {};
+  (function walk(nodes) {
+    (nodes || []).forEach(function(n) { countMap[n.id] = n.totalAgentCount; walk(n.children); });
+  })(agentGroupTree);
+  list.innerHTML = options.map(function(o) {
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+      '<input type="checkbox" ' + (_vexRunGroupSel[o.id] ? 'checked' : '') +
+      ' onchange="_vexRunGroupSel[' + o.id + ']=this.checked;renderVexRunGroupSummary()">' +
+      '<span style="font-size:0.8rem">' + x(o.label) + '</span>' +
+      '<span class="tiny muted">(' + (countMap[o.id] || 0) + ' agents)</span></label>';
+  }).join('');
+  renderVexRunGroupSummary();
+}
+
+// vexRunResolvedGroupAgents resolves the currently-checked groups to their
+// member agents via the pre-existing resolveGroupTargetAgents helper.
+// Deliberately NOT run through osEligibleAgents -- this flow has no
+// scenario/supportedOs concept, so every resolved agent is targeted as-is.
+function vexRunResolvedGroupAgents() {
+  var selectedGroupIds = Object.keys(_vexRunGroupSel).filter(function(k) { return _vexRunGroupSel[k]; }).map(Number);
+  return resolveGroupTargetAgents(selectedGroupIds);
+}
+
+function renderVexRunGroupSummary() {
+  var el = document.getElementById('vex-run-group-summary');
+  if (!el) return;
+  var selectedCount = Object.keys(_vexRunGroupSel).filter(function(k) { return _vexRunGroupSel[k]; }).length;
+  if (!selectedCount) { el.textContent = 'No groups selected.'; return; }
+  var resolved = vexRunResolvedGroupAgents();
+  el.textContent = resolved.length + ' agent(s) across ' + selectedCount + ' group(s).';
 }
 
 function runVariants() {
