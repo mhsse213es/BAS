@@ -30,6 +30,9 @@ var rawOverlay []byte
 //go:embed technique_synonyms.json
 var rawSynonyms []byte
 
+//go:embed attack_groups.json
+var rawGroups []byte
+
 // Attribution is the MITRE ATT&CK attribution the report must display wherever
 // ATT&CK-derived enrichment appears (MITRE's terms of use).
 const Attribution = "Threat-intelligence context derived from MITRE ATT&CK®. © The MITRE Corporation. ATT&CK® is a registered trademark of The MITRE Corporation."
@@ -46,6 +49,16 @@ type Mitigation struct {
 type D3fendCM struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+// Group is one MITRE ATT&CK intrusion-set (threat-actor group), keyed by
+// its canonical external ID (G####). Authoritative -- distilled from the
+// same STIX bundle as technique enrichment, by the same gen tool. See
+// docs/superpowers/specs/2026-08-11-canonical-mitre-actor-identity-design.md.
+type Group struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 // Enrichment is the threat-intelligence context for one ATT&CK technique.
@@ -321,4 +334,87 @@ func SubtechniqueCounts() map[string]int {
 
 func normalize(id string) string {
 	return strings.ToUpper(strings.TrimSpace(id))
+}
+
+var (
+	groupsOnce sync.Once
+	groups     []Group
+)
+
+func loadGroups() {
+	_ = json.Unmarshal(rawGroups, &groups) // malformed/missing -> groups stays nil, callers see an empty dataset
+}
+
+// GroupByID returns the canonical MITRE group for an ATT&CK G#### id, or
+// nil if unknown. Linear scan -- the embedded dataset is on the order of a
+// few hundred groups at most, not a hot path.
+func GroupByID(id string) *Group {
+	groupsOnce.Do(loadGroups)
+	for i := range groups {
+		if groups[i].ID == id {
+			return &groups[i]
+		}
+	}
+	return nil
+}
+
+var (
+	groupTokenIdxOnce sync.Once
+	groupTokenIdx     map[string]string
+)
+
+// GroupCanonicalTokenIndex returns normalized-token -> G#### for every
+// group name and alias in the embedded MITRE dataset. A token that maps to
+// more than one distinct G#### in MITRE's own data is deliberately
+// excluded (mapped to nothing) -- an ambiguous token must never resolve.
+// Computed once (sync.Once) and cached; safe for concurrent reads.
+func GroupCanonicalTokenIndex() map[string]string {
+	groupsOnce.Do(loadGroups)
+	groupTokenIdxOnce.Do(func() {
+		groupTokenIdx = buildGroupCanonicalTokenIndex(groups)
+	})
+	return groupTokenIdx
+}
+
+// buildGroupCanonicalTokenIndex is the pure core of GroupCanonicalTokenIndex,
+// kept separate so tests can exercise the ambiguous-token-exclusion logic
+// against small fixture data without depending on the embedded dataset.
+func buildGroupCanonicalTokenIndex(gs []Group) map[string]string {
+	tokenToIDs := map[string]map[string]bool{}
+	add := func(token, id string) {
+		if token == "" {
+			return
+		}
+		if tokenToIDs[token] == nil {
+			tokenToIDs[token] = map[string]bool{}
+		}
+		tokenToIDs[token][id] = true
+	}
+	for _, g := range gs {
+		if g.ID == "" {
+			continue
+		}
+		add(normalizeGroupToken(g.Name), g.ID)
+		for _, alias := range g.Aliases {
+			add(normalizeGroupToken(alias), g.ID)
+		}
+	}
+	idx := make(map[string]string, len(tokenToIDs))
+	for token, ids := range tokenToIDs {
+		if len(ids) != 1 {
+			continue
+		}
+		for id := range ids {
+			idx[token] = id
+		}
+	}
+	return idx
+}
+
+// normalizeGroupToken applies the same normalization internal/connector's
+// actorKey uses (lowercase, strip spaces and hyphens) so tokens compare
+// equal across packages. Duplicated rather than shared because attackdata
+// must not import connector (connector already imports attackdata).
+func normalizeGroupToken(s string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(s, " ", ""), "-", ""))
 }

@@ -186,6 +186,48 @@ func TestLookupNoAliases(t *testing.T) {
 	}
 }
 
+func TestBuildGroupCanonicalTokenIndex_ResolvesNameAndAliases(t *testing.T) {
+	idx := buildGroupCanonicalTokenIndex([]Group{
+		{ID: "G0016", Name: "APT29", Aliases: []string{"Cozy Bear", "The Dukes"}},
+	})
+	for _, tok := range []string{"apt29", "cozybear", "thedukes"} {
+		if idx[tok] != "G0016" {
+			t.Errorf("idx[%q] = %q, want G0016", tok, idx[tok])
+		}
+	}
+}
+
+// A token MITRE's own data lists under two different groups must resolve
+// to nothing -- picking either arbitrarily would risk a false merge.
+func TestBuildGroupCanonicalTokenIndex_AmbiguousTokenExcluded(t *testing.T) {
+	idx := buildGroupCanonicalTokenIndex([]Group{
+		{ID: "G0001", Name: "Group One", Aliases: []string{"Shared"}},
+		{ID: "G0002", Name: "Group Two", Aliases: []string{"Shared"}},
+	})
+	if _, ok := idx["shared"]; ok {
+		t.Errorf("ambiguous token %q should be excluded, got %q", "shared", idx["shared"])
+	}
+	if idx["groupone"] != "G0001" || idx["grouptwo"] != "G0002" {
+		t.Errorf("unambiguous tokens should still resolve: %+v", idx)
+	}
+}
+
+func TestGroupByID_UnknownReturnsNil(t *testing.T) {
+	if g := GroupByID("G9999999"); g != nil {
+		t.Errorf("GroupByID(unknown) = %+v, want nil", g)
+	}
+}
+
+// The index is built once (sync.Once) and cached -- repeated calls must
+// return consistent data, not silently recompute or drift.
+func TestGroupCanonicalTokenIndex_Idempotent(t *testing.T) {
+	first := GroupCanonicalTokenIndex()
+	second := GroupCanonicalTokenIndex()
+	if len(first) != len(second) {
+		t.Fatalf("token counts differ across calls: %d vs %d", len(first), len(second))
+	}
+}
+
 // SubtechniqueCounts must count sub-techniques under their parent and never
 // count a technique under itself.
 func TestSubtechniqueCounts(t *testing.T) {
