@@ -714,8 +714,8 @@ code {
   transition: background 0.15s, color 0.15s;
 }
 .drawer-close:hover { background: var(--elevated); color: var(--text); }
-.drawer-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 1.25rem; }
-.drawer-body::-webkit-scrollbar { width: 3px; }
+.drawer-body { flex: 1; overflow-y: auto; overflow-x: auto; padding: 1.25rem; }
+.drawer-body::-webkit-scrollbar { width: 3px; height: 3px; }
 .drawer-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* Run-results investigation workspace (Sub-project A) -- only applied when
