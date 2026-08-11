@@ -3457,6 +3457,11 @@ body.theme-slate {
           </div>
 
           <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">Technique Coverage Breakdown</div>
+            <div id="tp-detail-coverage" class="tiny"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
             <div class="card-title">History</div>
             <div id="tp-detail-history" class="tiny"></div>
           </div>
@@ -5468,6 +5473,23 @@ function renderThreatPriorityDetail(d) {
   document.getElementById('tp-detail-uncovered').innerHTML = uncovered.length
     ? uncovered.map(function(t) { return '<span class="tool-tag">' + x(t) + '</span>'; }).join(' ')
     : '<span class="muted">No coverage gaps.</span>';
+
+  var techCoverage = (d.techniqueCoverage || []);
+  document.getElementById('tp-detail-coverage').innerHTML = techCoverage.length
+    ? '<table style="width:100%"><thead><tr><th>Technique</th><th>Content</th><th>Prevention</th><th>Detection</th></tr></thead><tbody>' +
+      techCoverage.map(function(tc) {
+        var content = [
+          tc.hasSimulation ? '<span class="tool-tag">Sim</span>' : '',
+          tc.hasDetection ? '<span class="tool-tag">Detect</span>' : '',
+          tc.hasCompliance ? '<span class="tool-tag">Compliance</span>' : ''
+        ].filter(Boolean).join(' ') || '<span class="muted">&mdash;</span>';
+        var label = tc.techniqueName ? tc.techniqueName + ' (' + tc.techniqueId + ')' : tc.techniqueId;
+        var prevention = tc.preventionVerdict ? x(tc.preventionVerdict) : '<span class="muted">&mdash;</span>';
+        var detection = tc.detectionVerdict ? x(tc.detectionVerdict) : '<span class="muted">&mdash;</span>';
+        return '<tr><td>' + x(label) + '</td><td>' + content + '</td><td>' + prevention + '</td><td>' + detection + '</td></tr>';
+      }).join('') +
+      '</tbody></table>'
+    : '<span class="muted">No technique data.</span>';
 
   var hist = (d.history || []);
   document.getElementById('tp-detail-history').innerHTML = hist.length
