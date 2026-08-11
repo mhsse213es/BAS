@@ -119,6 +119,46 @@ func (h *Handler) GetVexSweep(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, sweepToJSON(h.db, sw))
 }
 
+// GET /api/vex/sweeps/{id}/runs
+// Returns the sweep's summary plus EVERY scenario_runs row it dispatched,
+// unbounded (not subject to ListScenarioRuns' 100-row cap) -- a sweep can
+// dispatch far more than 100 techniques over its lifetime, so an aggregate
+// or drill-down built only from the paginated main list would be silently
+// wrong for large or older sweeps. See
+// docs/superpowers/specs/2026-08-11-sweep-run-grouping-design.md.
+func (h *Handler) GetVexSweepRuns(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	sw, err := h.vexSweep.Get(r.Context(), id)
+	if err != nil {
+		jsonError(w, "sweep not found", http.StatusNotFound)
+		return
+	}
+
+	rows, err := h.db.Query(r.Context(),
+		`SELECT id, scenario_id, agent_id, sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
+		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout, detection_summary,
+		        alerts_total, alerts_high_fidelity, noise_score, reverted
+		 FROM scenario_runs WHERE sweep_id = $1 ORDER BY started_at`,
+		id,
+	)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	runs, err := scanRunRows(rows)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if runs == nil {
+		runs = []runRow{}
+	}
+
+	jsonOK(w, map[string]any{"sweep": sweepToJSON(h.db, sw), "runs": runs})
+}
+
 // GET /api/vex/sweeps?status=running
 func (h *Handler) ListVexSweeps(w http.ResponseWriter, r *http.Request) {
 	status := coalesce(strings.TrimSpace(r.URL.Query().Get("status")), "running")

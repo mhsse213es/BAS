@@ -330,6 +330,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRunVariants)).Post("/api/vex/sweeps", h.CreateVexSweep)
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/vex/sweeps/active", h.GetActiveVexSweep)
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/vex/sweeps/{id}", h.GetVexSweep)
+		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/vex/sweeps/{id}/runs", h.GetVexSweepRuns)
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/vex/sweeps", h.ListVexSweeps)
 		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/vex/sweeps/{id}/cancel", h.CancelVexSweep)
 

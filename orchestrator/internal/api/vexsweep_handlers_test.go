@@ -201,3 +201,86 @@ func TestCancelVexSweep_StopsSweepAndCancelsCurrentRun(t *testing.T) {
 		}
 	})
 }
+
+func TestGetVexSweepRuns_ReturnsOnlyTaggedRunsPlusSweepSummary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-sweep-runs')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		store := vexsweep.NewStore(pool)
+		sw, err := store.Create(ctx, vexsweep.Sweep{
+			AgentID: "agent-sweep-runs", Mode: "sequential",
+			Techniques: []string{"T1059.001", "T1059.003"}, TechniqueVariantCounts: []int{1, 1}, TotalVariants: 2,
+		})
+		if err != nil {
+			t.Fatalf("Create sweep: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, steps_total, sweep_id)
+			 VALUES ('sr-a', 'sc-x', 'agent-sweep-runs', 'technique A', 'completed', '[]', 1, $1)`, sw.ID); err != nil {
+			t.Fatalf("seed sr-a: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, steps_total, sweep_id)
+			 VALUES ('sr-b', 'sc-x', 'agent-sweep-runs', 'technique B', 'completed', '[]', 1, $1)`, sw.ID); err != nil {
+			t.Fatalf("seed sr-b: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, steps_total)
+			 VALUES ('sr-unrelated', 'sc-x', 'agent-sweep-runs', 'unrelated run', 'completed', '[]', 1)`); err != nil {
+			t.Fatalf("seed sr-unrelated: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store, testVexSweepDispatcher(store))
+		userID := seedUser(t, pool, "sweep-runs-user", "password123", "viewer", true)
+		req := authedRequest(t, http.MethodGet, "/api/vex/sweeps/"+sw.ID+"/runs", nil, auth.RoleViewer, userID)
+		req = withURLParam(req, "id", sw.ID)
+		rec := callAuthed(h.GetVexSweepRuns, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+
+		var got struct {
+			Sweep struct {
+				ID string `json:"id"`
+			} `json:"sweep"`
+			Runs []struct {
+				ID string `json:"id"`
+			} `json:"runs"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if got.Sweep.ID != sw.ID {
+			t.Errorf("sweep.id = %q, want %q", got.Sweep.ID, sw.ID)
+		}
+		if len(got.Runs) != 2 {
+			t.Fatalf("len(runs) = %d, want 2 (sr-unrelated must be excluded)", len(got.Runs))
+		}
+		gotIDs := map[string]bool{got.Runs[0].ID: true, got.Runs[1].ID: true}
+		if !gotIDs["sr-a"] || !gotIDs["sr-b"] {
+			t.Errorf("runs = %v, want [sr-a, sr-b]", gotIDs)
+		}
+	})
+}
+
+func TestGetVexSweepRuns_404ForUnknownSweep(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := vexsweep.NewStore(pool)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store, testVexSweepDispatcher(store))
+		userID := seedUser(t, pool, "sweep-runs-404-user", "password123", "viewer", true)
+		req := authedRequest(t, http.MethodGet, "/api/vex/sweeps/does-not-exist/runs", nil, auth.RoleViewer, userID)
+		req = withURLParam(req, "id", "does-not-exist")
+		rec := callAuthed(h.GetVexSweepRuns, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404, body: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
