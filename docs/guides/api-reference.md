@@ -1,13 +1,13 @@
 # Audspect BAS — API Reference
 
-**Platform Version:** v1.7.3  
-**Base URL:** `http://<server>:9000`
+**Platform Version:** v1.7.5
+**Base URL:** `https://<server>:9443`
 
 ---
 
 ## Authentication
 
-All API endpoints (except `/health`, `POST /api/auth/login`, and the agent WebSocket endpoint) require a valid JWT.
+All API endpoints (except `/health`, `POST /api/auth/login`, `POST /api/auth/setup`, and SSO callback) require a valid JWT.
 
 **Obtaining a token:**
 ```
@@ -17,9 +17,7 @@ Content-Type: application/json
 {"username": "analyst@company.com", "password": "..."}
 ```
 
-The token is returned in the response body AND set as an HttpOnly cookie (`bas_token`). Browser clients use the cookie automatically. API clients should use the `Authorization: Bearer <token>` header.
-
-**Token TTL:** 24 hours.
+The token is returned in the response body AND set as an HttpOnly cookie. Browser clients use the cookie automatically. API clients should use the `Authorization: Bearer <token>` header.
 
 ---
 
@@ -29,34 +27,25 @@ The token is returned in the response body AND set as an HttpOnly cookie (`bas_t
 
 ```
 Request:  { "username": "string", "password": "string" }
-Response: { "token": "string", "role": "string", "username": "string", "mustChangePw": bool }
-Status:   200 OK | 400 Bad Request | 401 Unauthorized | 429 Too Many Requests
 ```
 
 ### POST /api/auth/logout
 
 Clears the session cookie.
-```
-Request:  (no body)
-Response: { "ok": true }
-Status:   200 OK | 401 Unauthorized
-```
 
 ### POST /api/auth/change-password
 
 ```
 Request:  { "currentPassword": "string", "newPassword": "string" }
-Response: { "ok": true }
-Status:   200 OK | 400 Bad Request | 401 Unauthorized
 ```
 
-### GET /api/auth/me
+### POST /api/auth/setup
 
-Returns the current user's profile.
-```
-Response: { "id": "string", "username": "string", "role": "string", "mustChangePw": bool }
-Status:   200 OK | 401 Unauthorized
-```
+First-run Administrator provisioning, used by the installer on a fresh deployment.
+
+### GET /api/auth/sso/callback
+
+SSO (OIDC) callback endpoint, used when Single Sign-On is configured. There is no `GET /api/auth/me` endpoint — the current user's role/identity is read from the JWT the client already holds, not fetched separately.
 
 ---
 
@@ -64,63 +53,35 @@ Status:   200 OK | 401 Unauthorized
 
 ### GET /api/agents
 
-List all agents.
+List all agents. There is no `GET /api/agents/{id}` single-agent-detail endpoint — clients fetch the full list and find the agent client-side.
 
-**Query params:** `state` (filter: active/offline/restricted/quarantined/retired), `limit`, `offset`
+### PUT /api/agents/{agentId}/state
 
+Set agent lifecycle state. Admin only (`CanSetAgentState`).
 ```
-Response:
-[
-  {
-    "id": "agt-abc123",
-    "hostname": "WIN-FINANCE-01",
-    "label": "Finance Workstation",
-    "ip": "192.168.1.100",
-    "os": "windows",
-    "osVersion": "Windows 11 23H2",
-    "arch": "amd64",
-    "state": "active",
-    "agentVersion": "1.7.3",
-    "binaryTrustStatus": "trusted",
-    "lastHeartbeat": "2026-07-01T09:30:00Z",
-    "enrolledAt": "2026-06-01T08:00:00Z"
-  }
-]
-Status: 200 OK | 401 Unauthorized
+Request: { "state": "quarantined" }
 ```
+Valid `state` values: `enrolling`, `active`, `restricted`, `quarantined`, `retired`, `uninstalling`, `uninstalled`. See `agent-management.md` for the full lifecycle model — there is no generic `DELETE /api/agents/{id}`; decommissioning an agent is one of three distinct actions:
 
-### GET /api/agents/{id}
+### POST /api/agents/{agentId}/stop
 
-Get single agent detail.
+Remotely disables the agent's own service so it never auto-restarts. Requires `{ "reason": "string" }`.
 
-### POST /api/agents/{id}/state
+### POST /api/agents/{agentId}/remove
 
-Set agent lifecycle state. Admin only.
+Sets the agent to `retired` server-side; historical data preserved. Requires `{ "reason": "string" }`.
 
-```
-Request:  { "state": "quarantined", "reason": "Suspicious activity" }
-Response: { "id": "agt-abc123", "state": "quarantined" }
-Status:   200 OK | 400 Bad Request | 403 Forbidden | 404 Not Found
-```
+### POST /api/agents/{agentId}/uninstall
 
-### DELETE /api/agents/{id}
+Full remote uninstall — the agent removes itself and confirms via its own callback.
 
-Permanently delete agent and all associated data.
-```
-Status: 204 No Content | 403 Forbidden | 404 Not Found
-```
+### PATCH /api/agents/{agentId}/group
 
-### GET /api/agents/download
+Assign the agent to an Agent Group (or clear its group).
 
-Download agent binary.
+### GET /api/agents/download/{platform}
 
-**Query params:** `os` (windows/linux/darwin), `arch` (amd64/arm64)
-
-```
-Response: binary stream
-Content-Disposition: attachment; filename="bas-agent.exe"
-Status:   200 OK | 400 Bad Request
-```
+Download the agent binary or installer package. `{platform}` is one exact value, not separate query params — one of: `linux-amd64`, `linux-arm64`, `linux-amd64-deb`, `linux-arm64-deb`, `linux-amd64-rpm`, `windows-amd64-setup`, `windows-amd64`, `darwin-amd64`, `darwin-arm64`.
 
 ---
 
@@ -130,72 +91,37 @@ Status:   200 OK | 400 Bad Request
 
 List all scenarios.
 
-**Query params:** `framework` (art/caldera/custom), `tag`, `search`, `limit`, `offset`
-
-```
-Response:
-[
-  {
-    "id": "safe-simulation",
-    "name": "Safe Simulation",
-    "version": "1.0.0",
-    "description": "Read-only OS queries",
-    "framework": "custom",
-    "tags": ["safe", "windows", "linux"],
-    "stepCount": 5,
-    "signatureValid": true,
-    "builtin": true
-  }
-]
-Status: 200 OK
-```
-
 ### GET /api/scenarios/{id}
 
-Get scenario detail including step definitions.
+Get scenario detail including step definitions. There is no separate `GET /api/scenarios/{id}/yaml` endpoint.
 
 ### POST /api/scenarios
 
-Create a custom scenario.
+Create a custom scenario (`CanCreateScenario`).
 
-```
-Request:
-{
-  "id": "my-custom-check",
-  "name": "My Custom Check",
-  "description": "...",
-  "tags": ["custom", "windows"],
-  "steps": [...]
-}
-Response: { "id": "my-custom-check", "signatureValid": true }
-Status:   201 Created | 400 Bad Request | 409 Conflict (ID already exists)
-```
+### PUT /api/scenarios/{id}
+
+Update an existing custom scenario (`CanUpdateScenario`).
+
+### DELETE /api/scenarios/{id}
+
+Delete a custom scenario (`CanDeleteScenario`).
+
+### POST /api/scenarios/{id}/clone
+
+Clone a scenario, including a builtin one, into a new custom scenario (`CanCloneScenario`).
 
 ### POST /api/scenarios/{id}/run
 
-Dispatch a scenario run to an agent.
-
+Dispatch a scenario run to an agent (`CanRunScenario`).
 ```
-Request:  { "agentId": "agt-abc123", "label": "Optional run label" }
-Response: { "runId": "run-xyz", "status": "dispatched" }
-Status:   200 OK | 400 Bad Request | 404 Not Found (scenario or agent)
-```
-
-### GET /api/scenarios/{id}/yaml
-
-Download scenario YAML.
-```
-Response: text/yaml
-Status:   200 OK | 404 Not Found
+Request:  { "agentId": "agt-abc123", "mode": "posture" }
+Response: { "runId": "run-xyz", "mode": "posture" }
 ```
 
 ### POST /api/scenarios/upload
 
-Upload a scenario YAML file (multipart/form-data, field: `file`).
-```
-Response: { "id": "string", "signatureValid": true }
-Status:   201 Created | 400 Bad Request (invalid YAML or signature)
-```
+Upload a scenario YAML file (multipart/form-data) (`CanUploadScenario`).
 
 ---
 
@@ -205,75 +131,41 @@ Status:   201 Created | 400 Bad Request (invalid YAML or signature)
 
 List runs.
 
-**Query params:** `agentId`, `scenarioId`, `status`, `from`, `to`, `limit`, `offset`
+### POST /api/scenarios/runs/{runId}/cancel
 
-```
-Response:
-[
-  {
-    "id": "run-xyz",
-    "scenarioId": "safe-simulation",
-    "agentId": "agt-abc123",
-    "status": "completed",
-    "startedAt": "2026-07-01T09:00:00Z",
-    "completedAt": "2026-07-01T09:02:30Z",
-    "preventionScore": 82,
-    "exposureScore": 18,
-    "coverageScore": 75,
-    "riskBand": "low",
-    "trend": "improving",
-    "stepCount": 5,
-    "passCount": 4,
-    "failCount": 1
-  }
-]
-Status: 200 OK
-```
+Cancel an in-flight run (`CanCancelScenarioRun`). There is no `DELETE /api/scenarios/runs/{id}` — cancellation is always this dedicated POST endpoint, never a DELETE.
 
-### GET /api/scenarios/runs/{id}
+### GET /api/scenarios/runs/{runId}/report
 
-Get run detail including step results.
+Run report as rendered HTML.
 
-```
-Response:
-{
-  "id": "run-xyz",
-  ...run fields...,
-  "steps": [
-    {
-      "stepId": "step-001",
-      "technique": "T1082",
-      "tactic": "discovery",
-      "severity": "low",
-      "verdict": "pass",
-      "output": "System info: ...",
-      "durationMs": 1250
-    }
-  ]
-}
-```
+### GET /api/scenarios/runs/{runId}/report.json
 
-### DELETE /api/scenarios/runs/{id}
+Run report data as JSON.
 
-Cancel a running run.
-```
-Status: 204 No Content | 400 Bad Request (run already completed)
-```
+### GET /api/scenarios/runs/{runId}/pdf
 
-### GET /api/scenarios/runs/{id}/report
+Run report as PDF. Each output format is its own dedicated endpoint — there is no single report endpoint with a `?format=` switch for scenario runs (Compliance reports work differently; see below).
 
-Download run report.
+### GET /api/scenarios/runs/{runId}/forensic.csv
 
-**Query params:** `format` (html/pdf/csv/json)
+Forensic evidence export as CSV.
 
-```
-Response: binary or text stream
-Status:   200 OK | 404 Not Found
-```
+### GET /api/scenarios/runs/{runId}/attackflow
 
-### GET /api/scenarios/runs/{id}/attackflow
+ATT&CK Navigator JSON for this run.
 
-Download ATT&CK Navigator JSON for this run.
+### GET /api/scenarios/runs/{runId}/variant-coverage
+
+Variant Sweep coverage summary for this run.
+
+### GET /api/scenarios/runs/{runId}/events
+
+Live/historical run events (used by the dashboard's real-time run timeline).
+
+### GET /api/scenarios/runs/{runId}/iocs
+
+IOCs generated by this run.
 
 ---
 
@@ -283,82 +175,53 @@ Download ATT&CK Navigator JSON for this run.
 
 List findings.
 
-**Query params:** `status`, `severity`, `agentId`, `tactic`, `techniqueId`, `limit`, `offset`
-
-```
-Response:
-[
-  {
-    "id": "find-abc",
-    "techniqueId": "T1003.001",
-    "tactic": "credential-access",
-    "severity": "critical",
-    "agentId": "agt-xyz",
-    "agentHostname": "WIN-DC-01",
-    "status": "open",
-    "controlClass": "edr",
-    "firstSeen": "2026-06-28T10:00:00Z",
-    "lastSeen": "2026-07-01T09:00:00Z",
-    "recurrenceCount": 2,
-    "remediationGuidance": "Enable Credential Guard..."
-  }
-]
-Status: 200 OK
-```
-
 ### GET /api/findings/{id}
 
-Get single finding detail including evidence.
+Get single finding detail, including per-variant breakdown.
 
 ### POST /api/findings/{id}/status
 
-Update finding status.
-
-```
-Request:  { "status": "in_progress", "note": "Assigned to EDR team" }
-Response: { "id": "find-abc", "status": "in_progress" }
-Status:   200 OK | 400 Bad Request | 404 Not Found
-```
+Update finding status (`CanSetFindingStatus`).
 
 ### GET /api/remediations
 
-List grouped remediations (by technique across all agents).
-
-### POST /api/remediations/{techniqueId}/revalidate
-
-Dispatch re-validate run for a technique on all affected agents (or a specific agent).
-
-```
-Request:  { "agentId": "agt-xyz" }  // optional — omit to re-validate on all affected agents
-Response: [{ "runId": "run-abc", "agentId": "agt-xyz", "status": "dispatched" }]
-Status:   200 OK | 404 Not Found
-```
+List grouped remediations (by technique, across agents). There is no dedicated `POST /api/remediations/{techniqueId}/revalidate` endpoint — re-validating a technique dispatches through the same Run Scenario path (`POST /api/scenarios/{id}/run`) with a locked technique selection, from the Remediation tab's "Re-validate" action.
 
 ---
 
 ## Report Endpoints
 
-### GET /api/report/agent/{agentId}
+### GET /api/report/full/html
 
-Full agent report.
+Full agent/fleet report as HTML.
 
-**Query params:** `format` (html/pdf/csv)
+### GET /api/report/full/pdf
 
-### GET /api/report/agent/{agentId}/auditpack
+Full report as PDF.
 
-Download audit pack ZIP.
+### GET /api/report/full/csv
+
+Full report as CSV. Each format is a separate endpoint, not a `?format=` switch on one `/api/report/agent/{agentId}` path.
+
+### GET /api/report/audit-pack
+
+Download the audit pack ZIP.
+
+### GET /api/compliance/frameworks
+
+List available compliance frameworks.
+
+### GET /api/compliance/report
+
+Compliance report. Framework, target, and format are **query parameters**, not path segments:
+```
+GET /api/compliance/report?framework=SEBI_CSCRF&agentId=<id>&format=csv
+```
+`framework` values are uppercase-with-underscores (e.g. `SEBI_CSCRF`) — confirm the exact supported set via `GET /api/compliance/frameworks` rather than assuming a fixed list. Either `agentId` (aggregates that agent's runs) or `runId` (single run) scopes the report; `format` is `csv`/`json`, defaulting to HTML; `filter` narrows by control status (e.g. `prevented`).
 
 ### GET /api/compliance/scores
 
-Compliance scores for all configured frameworks.
-
-### GET /api/compliance/report/{framework}
-
-Compliance report for a specific framework.
-
-**Supported framework values:** `mitre-attack`, `rbi-csf`, `sebi`, `cis-l1`, `nist-800-53`, `iso-27001`
-
-**Query params:** `format` (html/pdf)
+Compliance scores for all configured frameworks (dashboard tile data).
 
 ---
 
@@ -366,20 +229,7 @@ Compliance report for a specific framework.
 
 ### POST /api/campaigns
 
-Create a campaign.
-
-```
-Request:
-{
-  "name": "July 2026 Full Assessment",
-  "description": "...",
-  "scenarioIds": ["safe-simulation", "art-selective"],
-  "agentIds": ["agt-abc", "agt-xyz"],
-  "schedule": { "cronExpression": "0 6 * * 1" }
-}
-Response: { "id": "camp-abc", "status": "created" }
-Status:   201 Created
-```
+Create a campaign (`CanCreateCampaign`). Creating a campaign is what dispatches it — there is no separate "trigger execution" endpoint.
 
 ### GET /api/campaigns
 
@@ -395,17 +245,19 @@ Campaign summary with aggregate scores.
 
 ### GET /api/campaigns/{id}/report
 
-Campaign report.
+Campaign report (HTML).
 
-**Query params:** `format` (html/pdf/csv)
+### GET /api/campaigns/{id}/pdf
 
-### POST /api/campaigns/{id}/run
+Campaign report as PDF.
 
-Trigger campaign execution immediately.
+### GET /api/campaigns/{id}/forensic.csv
 
-### DELETE /api/campaigns/{id}/run
+Campaign forensic export.
 
-Stop an in-progress campaign.
+### POST /api/campaigns/{id}/stop
+
+Stop an in-progress campaign (`CanStopCampaign`). There is no `DELETE /api/campaigns/{id}/run`.
 
 ---
 
@@ -413,62 +265,47 @@ Stop an in-progress campaign.
 
 ### POST /api/attackpath/jobs
 
-Create and dispatch an AP collection job.
-
-```
-Request:
-{
-  "agentId": "agt-abc123",
-  "targets": ["192.168.1.0/24", "10.0.0.50"],
-  "enableSharpHound": false,
-  "label": "Weekly scan"
-}
-Response: { "jobId": "ap-job-xyz", "status": "queued" }
-Status:   201 Created | 400 Bad Request | 404 Not Found (agent)
-```
+Create and dispatch an Attack Path collection job (`CanCreateAttackPathJob`).
 
 ### GET /api/attackpath/jobs
 
 List AP jobs.
 
-**Query params:** `agentId`, `status`, `limit`, `offset`
-
-### GET /api/attackpath/jobs/{jobId}
+### GET /api/attackpath/jobs/{id}
 
 Get job detail including progress and metrics.
 
-```
-Response:
-{
-  "jobId": "ap-job-xyz",
-  "agentId": "agt-abc123",
-  "status": "completed",
-  "createdAt": "2026-07-01T02:00:00Z",
-  "completedAt": "2026-07-01T02:18:30Z",
-  "progress": { "stage": "uploading", "progressPercent": 95, "targetsCompleted": 48, "targetsTotal": 50 },
-  "metrics": { "nodeCount": 52, "edgeCount": 120, "pathCount": 340 }
-}
-```
+### POST /api/attackpath/jobs/{id}/cancel
 
-### GET /api/attackpath/summary/{agentId}
+Cancel a running job (`CanCancelAttackPathJob`).
 
-Latest attack path summary for an agent: score, blast radius, choke points, crown jewel exposure.
+### POST /api/attackpath/jobs/{id}/retry
 
-### GET /api/attackpath/history/{agentId}
+Retry a failed job (`CanRetryAttackPathJob`).
 
-Collection history for an agent.
+### GET /api/attackpath/summary
+
+Fleet-wide attack path summary, aggregated from every stored collection. **Not** scoped by an `{agentId}` path segment.
+
+### GET /api/attackpath/history
+
+Collection history. Filter by agent with `?agentId=<id>` (query param, not a path segment).
+
+### GET /api/attackpath/correlation
+
+Attack path findings correlated with detection coverage.
 
 ### POST /api/attackpath/schedule
 
-Create a recurring AP collection schedule.
+Create a recurring AP collection schedule (`CanSetAttackPathSchedule`).
 
 ### GET /api/attackpath/assets
 
 List tagged assets.
 
-### POST /api/attackpath/assets/{hostId}/tag
+### POST /api/attackpath/assets
 
-Set asset criticality tier.
+Set asset criticality tier (`CanSetAttackPathAsset`) — the asset identifier goes in the request body, not the URL path.
 
 ---
 
@@ -481,11 +318,8 @@ List users.
 ### POST /api/users
 
 Create user.
-
 ```
-Request:  { "email": "string", "password": "string", "role": "viewer|analyst|admin" }
-Response: { "id": "string", "email": "string", "role": "string" }
-Status:   201 Created | 400 Bad Request | 409 Conflict
+Request: { "email": "string", "password": "string", "role": "viewer|analyst|admin" }
 ```
 
 ### PUT /api/users/{id}
@@ -494,7 +328,7 @@ Update user role.
 
 ### POST /api/users/{id}/reset-password
 
-Reset user password (admin sets new password directly).
+Reset user password.
 
 ### DELETE /api/users/{id}
 
@@ -502,19 +336,15 @@ Delete user.
 
 ---
 
-## Configuration Endpoints
-
-### GET /api/config
-
-Runtime configuration summary (non-sensitive fields only).
+## Configuration & License Endpoints
 
 ### GET /api/config/connection
 
-Returns the agent connection config (server URL, agent secret). Admin only.
+Returns the agent connection config (server URL, agent secret). Admin only (`CanViewConnectionConfig`). There is no generic `GET /api/config` runtime-config-summary endpoint.
 
 ### GET /api/license
 
-License status: validity, expiry date, licensed feature set.
+License status. Admin only (`CanViewLicense`).
 
 ---
 
@@ -524,40 +354,15 @@ License status: validity, expiry date, licensed feature set.
 
 Platform health check. No authentication required.
 
-```
-Response: { "status": "ok", "db": "ok", "version": "1.7.3" }
-Status:   200 OK (healthy) | 503 Service Unavailable (degraded)
-```
-
----
-
-## Common Status Codes
-
-| Code | Meaning |
-|---|---|
-| 200 | OK |
-| 201 | Created |
-| 204 | No Content (successful delete) |
-| 400 | Bad Request — invalid input, see `error` field |
-| 401 | Unauthorized — missing or expired JWT |
-| 403 | Forbidden — insufficient role |
-| 404 | Not Found |
-| 409 | Conflict — duplicate ID or resource state conflict |
-| 429 | Too Many Requests — rate limited |
-| 500 | Internal Server Error |
-| 503 | Service Unavailable — database or dependency unavailable |
-
 ---
 
 ## Error Response Format
 
-All error responses follow:
+Error responses carry a human-readable `error` field:
 ```json
-{
-  "error": "human-readable error message",
-  "code": "machine-readable-error-code"
-}
+{ "error": "human-readable error message" }
 ```
+There is no separate machine-readable `code` field in the standard error shape.
 
 ---
 
