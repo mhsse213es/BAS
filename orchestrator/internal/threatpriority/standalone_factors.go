@@ -38,6 +38,14 @@ func (RelevanceFactor) Score(_ context.Context, tctx Context) (float64, string, 
 	if tctx.Profile == nil {
 		return 0, "No sector/region data for this actor", false, nil
 	}
+	// Empty here means "no source ever told us" (every OpenCTI-only actor,
+	// for example -- OpenCTI's GraphQL query never fetches sector/region
+	// relationships), not "checked and confirmed no overlap". Treating it
+	// as a confirmed non-match would let a connector's missing data
+	// silently count as real evidence against an actor's relevance.
+	if len(tctx.Profile.Sectors) == 0 && len(tctx.Profile.Regions) == 0 {
+		return 0, "No sector/region data for this actor", false, nil
+	}
 	if overlapFold(tctx.Profile.Sectors, tctx.Sectors) {
 		return 100, "Matches a configured industry sector", true, nil
 	}

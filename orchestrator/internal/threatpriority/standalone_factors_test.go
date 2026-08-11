@@ -38,6 +38,42 @@ func TestRelevanceFactor_SectorMatch(t *testing.T) {
 	}
 }
 
+// TestRelevanceFactor_ActorHasNoSectorRegionData_Unavailable is the
+// regression test for a real scoring bug: an actor profile with empty
+// Sectors AND empty Regions (e.g. every OpenCTI-only actor -- OpenCTI's
+// GraphQL query never fetches sector/region relationships at all, see
+// opencti.go) was being scored as a CONFIRMED "no overlap" (raw=0,
+// available=true), which the composite counts as real evidence against
+// relevance. That's wrong: an empty profile here means "no source ever
+// told us," not "we checked and it doesn't match." Unknown must stay
+// unavailable, the same as the Profile==nil case just above it.
+func TestRelevanceFactor_ActorHasNoSectorRegionData_Unavailable(t *testing.T) {
+	f := RelevanceFactor{}
+	_, _, available, _ := f.Score(context.Background(), Context{
+		Sectors: []string{"Financial Services"},
+		Profile: &ActorProfile{}, // e.g. an OpenCTI-only actor -- Sectors/Regions never populated
+	})
+	if available {
+		t.Fatal("expected available=false when the actor profile has no sector/region data at all -- unknown, not a confirmed non-match")
+	}
+}
+
+// TestRelevanceFactor_ActorHasDataButNoOverlap locks in the other side of
+// the same fix: an actor that DOES carry real sector/region data (e.g. a
+// MISP-sourced actor with sector: tags) that simply doesn't match the
+// org's configured sectors/regions is still a genuine, confirmed
+// non-match -- available=true, raw=0 -- not "unknown".
+func TestRelevanceFactor_ActorHasDataButNoOverlap(t *testing.T) {
+	f := RelevanceFactor{}
+	raw, _, available, _ := f.Score(context.Background(), Context{
+		Sectors: []string{"Financial Services"},
+		Profile: &ActorProfile{Sectors: []string{"Healthcare"}},
+	})
+	if !available || raw != 0 {
+		t.Fatalf("raw=%.2f available=%v, want 0/true (actor has real sector data, just doesn't overlap -- a confirmed non-match)", raw, available)
+	}
+}
+
 func TestRelevanceFactor_NoOrgConfig_Unavailable(t *testing.T) {
 	f := RelevanceFactor{}
 	_, _, available, _ := f.Score(context.Background(), Context{Profile: &ActorProfile{Sectors: []string{"government"}}})
