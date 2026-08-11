@@ -115,6 +115,107 @@ func TestCancelRun_Running_AgentOnline(t *testing.T) {
 	})
 }
 
+// TestCancelRun_Running_AgentOnline_ForcesPartialAfterGracePeriod is the
+// regression test for the "Stop click confirmed, run stays Running forever"
+// bug: an agent that's reachable but never calls SubmitScenarioResult back
+// (stuck, or doesn't honor command_cancel promptly) left the run stuck in
+// 'running' with no ceiling tighter than the 2-hour staleRunGuard. The
+// force-cancel goroutine must flip it to 'partial' once cancelGracePeriod
+// elapses, and broadcast the same scenario_result event a normal completion
+// sends so the frontend's existing live-refresh path picks it up.
+func TestCancelRun_Running_AgentOnline_ForcesPartialAfterGracePeriod(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		h.cancelGracePeriod = 10 * time.Millisecond
+		agentID := "agent-cancel-grace"
+		runID := "cancel-grace-run"
+		seedRunRow(t, pool, runID, "sc-cancel-grace", agentID, "running")
+		fakeAgent := startFakeAgent(t, h.hub, agentID)
+		defer fakeAgent.Disconnect(t)
+		browser := startFakeBrowser(t, h.hub)
+		defer browser.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.CancelRun(rec, cancelRunReq(runID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+
+		// The agent is online and receives the cancel command, but (simulating
+		// a stuck/unresponsive agent) never calls SubmitScenarioResult back.
+		env := browser.WaitForMessage(t, 2*time.Second)
+		if env.Type != models.MsgScenarioResult {
+			t.Fatalf("message type = %q, want %q", env.Type, models.MsgScenarioResult)
+		}
+		var data map[string]string
+		if err := json.Unmarshal(env.Data, &data); err != nil {
+			t.Fatalf("decode broadcast data: %v", err)
+		}
+		if data["runId"] != runID || data["status"] != "partial" {
+			t.Fatalf("broadcast data = %+v, want runId=%s status=partial", data, runID)
+		}
+
+		var status string
+		var completedAt *time.Time
+		if err := pool.QueryRow(context.Background(), `SELECT status, completed_at FROM scenario_runs WHERE id=$1`, runID).Scan(&status, &completedAt); err != nil {
+			t.Fatalf("read run: %v", err)
+		}
+		if status != "partial" {
+			t.Fatalf("run status = %q, want partial (force-cancelled after grace period)", status)
+		}
+		if completedAt == nil {
+			t.Fatal("completed_at = nil, want set")
+		}
+	})
+}
+
+// TestCancelRun_Running_AgentRespondsBeforeGracePeriod_NoForcedOverride
+// proves the force-cancel goroutine is safe when the agent DOES respond in
+// time: its UPDATE carries "WHERE status = 'running'", so once the agent's
+// own completion has already moved the row to a terminal status, the
+// grace-period goroutine's later check simply affects zero rows and does
+// nothing -- it must never clobber a run that finished normally.
+func TestCancelRun_Running_AgentRespondsBeforeGracePeriod_NoForcedOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		h.cancelGracePeriod = 50 * time.Millisecond
+		agentID := "agent-cancel-fast"
+		runID := "cancel-fast-run"
+		seedRunRow(t, pool, runID, "sc-cancel-fast", agentID, "running")
+		fakeAgent := startFakeAgent(t, h.hub, agentID)
+		defer fakeAgent.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.CancelRun(rec, cancelRunReq(runID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		fakeAgent.WaitForMessage(t, 2*time.Second) // the command_cancel itself
+
+		// Agent responds on its own, before the grace period elapses.
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE scenario_runs SET status='completed', completed_at=NOW() WHERE id=$1`, runID); err != nil {
+			t.Fatalf("simulate agent completion: %v", err)
+		}
+
+		time.Sleep(h.cancelGracePeriod + 100*time.Millisecond)
+
+		var status string
+		if err := pool.QueryRow(context.Background(), `SELECT status FROM scenario_runs WHERE id=$1`, runID).Scan(&status); err != nil {
+			t.Fatalf("read run: %v", err)
+		}
+		if status != "completed" {
+			t.Fatalf("run status = %q, want completed (grace-period goroutine must not override a run the agent already finished)", status)
+		}
+	})
+}
+
 func TestCancelRun_Running_AgentOffline(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

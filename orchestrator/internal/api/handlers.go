@@ -110,6 +110,11 @@ type Handler struct {
 	notifications         *notifications.Service // nil when not loaded — Phase 7 job-event notifications
 	notificationsStore    *notifications.Store    // nil when not loaded — direct read/config access for handlers
 	correlationEngine     *correlation.Engine     // nil when not loaded — Intelligence Correlation Engine
+	// cancelGracePeriod is how long cancelScenarioRun waits for an agent to
+	// confirm a cancel (via SubmitScenarioResult) before force-marking the run
+	// 'partial' itself. Defaults to 60s in New(); tests override it directly
+	// (same pattern as OpenCTIClient.retryDelay) to keep grace-period tests fast.
+	cancelGracePeriod time.Duration
 }
 
 // New creates a Handler.
@@ -121,7 +126,7 @@ func New(db *pgxpool.Pool, hub *ws.Hub, engine *scenario.Engine, secret string) 
 		_, ok := artifactgen.Lookup(techniqueID, testName, argName)
 		return ok
 	}
-	return &Handler{db: db, hub: hub, engine: engine, secret: secret}
+	return &Handler{db: db, hub: hub, engine: engine, secret: secret, cancelGracePeriod: 60 * time.Second}
 }
 
 // WithCompliance attaches the compliance mapper.
@@ -2382,7 +2387,52 @@ func (h *Handler) cancelScenarioRun(ctx context.Context, runID string) (agentID,
 			  WHERE id = $1 AND status = 'running'`, runID)
 		return agentID, "partial", nil
 	}
+
+	// The agent was reachable, but reachability isn't the same as it actually
+	// honoring the cancel promptly -- it may be blocked mid-step, or never
+	// check for cancellation on this execution path at all. Without this, a
+	// run only ever leaves 'running' when the agent calls SubmitScenarioResult
+	// on its own initiative, with no ceiling tighter than the 2-hour
+	// staleRunGuard (see runIsStale) -- so a stuck run looks permanently
+	// "Running" to the user even after its live progress has finished
+	// streaming in. Force it to 'partial' if the agent hasn't confirmed within
+	// cancelGracePeriod. Safe even if the agent's real results land
+	// afterward: SubmitScenarioResult has no status guard (see its own
+	// comment) and will happily reconcile a late submission.
+	go h.forceCancelAfterGracePeriod(runID, agentID)
+
 	return agentID, "cancelling", nil
+}
+
+// forceCancelAfterGracePeriod waits cancelGracePeriod after a cancel request,
+// then force-marks the run 'partial' if it is still 'running' -- the agent
+// was asked to stop gracefully but never confirmed. Broadcasts the same
+// MsgScenarioResult event a normal completion sends, so the frontend's
+// existing live-refresh handling (loadRuns() on that message) picks up the
+// change without needing a manual reload.
+func (h *Handler) forceCancelAfterGracePeriod(runID, agentID string) {
+	time.Sleep(h.cancelGracePeriod)
+	tag, err := h.db.Exec(context.Background(),
+		`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
+		  WHERE id = $1 AND status = 'running'`, runID)
+	if err != nil {
+		log.Printf("[scenario] force-cancel run %s after grace period: %v", runID, err)
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		return // already left 'running' on its own -- the agent did respond in time
+	}
+	log.Printf("[scenario] run %s did not confirm cancel within %s — force-marked partial", runID, h.cancelGracePeriod)
+	h.hub.BroadcastBrowsers(models.WSMessage{
+		Type:    models.MsgScenarioResult,
+		AgentID: agentID,
+		Data: map[string]interface{}{
+			"runId":   runID,
+			"agentId": agentID,
+			"status":  "partial",
+			"reason":  "cancel-timeout",
+		},
+	})
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────
