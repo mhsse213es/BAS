@@ -13,13 +13,18 @@ func (h *Handler) GetOpenAEVConfig(w http.ResponseWriter, r *http.Request) {
 	var baseURL, status, lastError string
 	var pollHours int
 	var enabled bool
+	var created, updated, skipped, errored int
 	err := h.db.QueryRow(r.Context(),
-		`SELECT base_url, poll_interval_hours, enabled, last_sync_status, last_error
+		`SELECT base_url, poll_interval_hours, enabled, last_sync_status, last_error,
+		        last_sync_created, last_sync_updated, last_sync_skipped, last_sync_errored
 		   FROM openaev_config WHERE id = 1`,
-	).Scan(&baseURL, &pollHours, &enabled, &status, &lastError)
+	).Scan(&baseURL, &pollHours, &enabled, &status, &lastError, &created, &updated, &skipped, &errored)
 	if err != nil {
 		// No row yet — defaults.
-		respond(w, map[string]any{"baseUrl": "", "pollIntervalHours": 24, "enabled": false, "lastSyncStatus": "never", "lastError": ""})
+		respond(w, map[string]any{
+			"baseUrl": "", "pollIntervalHours": 24, "enabled": false, "lastSyncStatus": "never", "lastError": "",
+			"lastSyncCreated": 0, "lastSyncUpdated": 0, "lastSyncSkipped": 0, "lastSyncErrored": 0,
+		})
 		return
 	}
 	respond(w, map[string]any{
@@ -28,6 +33,10 @@ func (h *Handler) GetOpenAEVConfig(w http.ResponseWriter, r *http.Request) {
 		"enabled":           enabled,
 		"lastSyncStatus":    status,
 		"lastError":         lastError,
+		"lastSyncCreated":   created,
+		"lastSyncUpdated":   updated,
+		"lastSyncSkipped":   skipped,
+		"lastSyncErrored":   errored,
 	})
 }
 
@@ -95,18 +104,26 @@ func (h *Handler) SyncOpenAEV(w http.ResponseWriter, r *http.Request) {
 
 	store := openaev.NewSQLStore(h.db)
 	importer := openaev.NewImporter(store)
-	provider := openaev.NewRESTProvider(baseURL, token)
+	provider := openaev.NewCompositeProvider(
+		openaev.NewRESTProvider(baseURL, token),
+		openaev.NewExerciseRESTProvider(baseURL, token),
+	)
 
 	result, syncErr := importer.SyncAll(r.Context(), provider)
 	status := "ok"
 	lastErr := ""
+	created, updated, skipped, errored := 0, 0, 0, 0
 	if syncErr != nil {
 		status = "error"
 		lastErr = syncErr.Error()
+	} else {
+		created, updated, skipped, errored = result.Created, result.Updated, result.Skipped, result.Errored
 	}
 	h.db.Exec(r.Context(),
-		`UPDATE openaev_config SET last_sync_at = NOW(), last_sync_status = $1, last_error = $2 WHERE id = 1`,
-		status, lastErr)
+		`UPDATE openaev_config SET last_sync_at = NOW(), last_sync_status = $1, last_error = $2,
+		   last_sync_created = $3, last_sync_updated = $4, last_sync_skipped = $5, last_sync_errored = $6
+		 WHERE id = 1`,
+		status, lastErr, created, updated, skipped, errored)
 
 	h.auditLog(r, "openaev.sync", "", map[string]any{"result": result}, "ok")
 	if syncErr != nil {
@@ -120,18 +137,25 @@ func (h *Handler) SyncOpenAEV(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetOpenAEVStatus(w http.ResponseWriter, r *http.Request) {
 	var lastSyncAt any
 	var status, lastError string
+	var created, updated, skipped, errored int
 	h.db.QueryRow(r.Context(),
-		`SELECT last_sync_at, last_sync_status, last_error FROM openaev_config WHERE id = 1`,
-	).Scan(&lastSyncAt, &status, &lastError)
+		`SELECT last_sync_at, last_sync_status, last_error,
+		        last_sync_created, last_sync_updated, last_sync_skipped, last_sync_errored
+		   FROM openaev_config WHERE id = 1`,
+	).Scan(&lastSyncAt, &status, &lastError, &created, &updated, &skipped, &errored)
 
 	var scenarioCount int
 	h.db.QueryRow(r.Context(), `SELECT count(*) FROM openaev_scenarios`).Scan(&scenarioCount)
 
 	respond(w, map[string]any{
-		"lastSyncAt":     lastSyncAt,
-		"lastSyncStatus": status,
-		"lastError":      lastError,
-		"scenarioCount":  scenarioCount,
+		"lastSyncAt":      lastSyncAt,
+		"lastSyncStatus":  status,
+		"lastError":       lastError,
+		"scenarioCount":   scenarioCount,
+		"lastSyncCreated": created,
+		"lastSyncUpdated": updated,
+		"lastSyncSkipped": skipped,
+		"lastSyncErrored": errored,
 	})
 }
 

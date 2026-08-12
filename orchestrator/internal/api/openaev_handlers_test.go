@@ -59,6 +59,55 @@ func TestGetOpenAEVConfig_RedactsToken(t *testing.T) {
 	})
 }
 
+func TestGetOpenAEVStatus_ReturnsSyncCounts(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureSchema(context.Background(), pool)
+		pool.Exec(context.Background(),
+			`INSERT INTO openaev_config (id, enabled, last_sync_status, last_sync_created, last_sync_updated, last_sync_skipped, last_sync_errored)
+			 VALUES (1, true, 'ok', 3, 2, 5, 1)
+			 ON CONFLICT (id) DO UPDATE SET last_sync_status = EXCLUDED.last_sync_status,
+			   last_sync_created = EXCLUDED.last_sync_created, last_sync_updated = EXCLUDED.last_sync_updated,
+			   last_sync_skipped = EXCLUDED.last_sync_skipped, last_sync_errored = EXCLUDED.last_sync_errored`)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.GetOpenAEVStatus(rec, httptest.NewRequest(http.MethodGet, "/api/openaev/status", nil))
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if int(out["lastSyncCreated"].(float64)) != 3 {
+			t.Errorf("lastSyncCreated = %v, want 3", out["lastSyncCreated"])
+		}
+		if int(out["lastSyncSkipped"].(float64)) != 5 {
+			t.Errorf("lastSyncSkipped = %v, want 5", out["lastSyncSkipped"])
+		}
+	})
+}
+
+func TestGetOpenAEVConfig_ReturnsSyncCountsDefaultZero(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureSchema(context.Background(), pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.GetOpenAEVConfig(rec, httptest.NewRequest(http.MethodGet, "/api/openaev/config", nil))
+
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if out["lastSyncCreated"] != float64(0) {
+			t.Errorf("lastSyncCreated = %v, want 0 (never synced)", out["lastSyncCreated"])
+		}
+	})
+}
+
 func TestListOpenAEVScenarios_EmptyByDefault(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

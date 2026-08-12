@@ -352,16 +352,26 @@ func main() {
 		}
 		store := openaev.NewSQLStore(pool)
 		importer := openaev.NewImporter(store)
-		provider := openaev.NewRESTProvider(baseURL, token)
+		provider := openaev.NewCompositeProvider(
+			openaev.NewRESTProvider(baseURL, token),
+			openaev.NewExerciseRESTProvider(baseURL, token),
+		)
 		result, syncErr := importer.SyncAll(ctx, provider)
 		status := "ok"
 		lastErr := ""
+		created, updated, skipped, errored := 0, 0, 0, 0
 		if syncErr != nil {
 			status = "error"
 			lastErr = syncErr.Error()
+		} else {
+			created, updated, skipped, errored = result.Created, result.Updated, result.Skipped, result.Errored
 		}
-		pool.Exec(ctx, `UPDATE openaev_config SET last_sync_at = NOW(), last_sync_status = $1, last_error = $2 WHERE id = 1`, status, lastErr)
-		log.Printf("[openaev] sync: created=%d updated=%d skipped=%d errored=%d", result.Created, result.Updated, result.Skipped, result.Errored)
+		pool.Exec(ctx,
+			`UPDATE openaev_config SET last_sync_at = NOW(), last_sync_status = $1, last_error = $2,
+			   last_sync_created = $3, last_sync_updated = $4, last_sync_skipped = $5, last_sync_errored = $6
+			 WHERE id = 1`,
+			status, lastErr, created, updated, skipped, errored)
+		log.Printf("[openaev] sync: created=%d updated=%d skipped=%d errored=%d", created, updated, skipped, errored)
 	})
 	defer openaevScheduler.Stop()
 

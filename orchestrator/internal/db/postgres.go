@@ -1396,6 +1396,15 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// See docs/superpowers/specs/2026-08-11-sweep-run-grouping-design.md.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS sweep_id text REFERENCES vex_sweeps(id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_sweep_id ON scenario_runs (sweep_id)`,
+
+		// OpenAEV sync-result visibility: last_sync_status alone can't
+		// distinguish "genuinely imported nothing" from "imported real
+		// content" -- both showed as a bare "ok". See
+		// docs/superpowers/specs/2026-08-12-openaev-exercise-sync-design.md.
+		`ALTER TABLE openaev_config ADD COLUMN IF NOT EXISTS last_sync_created int NOT NULL DEFAULT 0`,
+		`ALTER TABLE openaev_config ADD COLUMN IF NOT EXISTS last_sync_updated int NOT NULL DEFAULT 0`,
+		`ALTER TABLE openaev_config ADD COLUMN IF NOT EXISTS last_sync_skipped int NOT NULL DEFAULT 0`,
+		`ALTER TABLE openaev_config ADD COLUMN IF NOT EXISTS last_sync_errored int NOT NULL DEFAULT 0`,
 	}
 
 	for _, s := range stmts {
