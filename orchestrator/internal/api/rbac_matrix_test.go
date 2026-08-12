@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -402,7 +403,11 @@ func concretePath(tpl string) string {
 
 func mountTestRouter(t *testing.T) http.Handler {
 	t.Helper()
-	h := New(sharedDB.Pool, ws.NewHub(), nil, testJWTSecret)
+	// A nil engine here panics (nil-pointer dereference in
+	// scenario.Engine.List) the moment the route matrix hits any
+	// scenario-listing route -- a real, empty Engine is just as cheap to
+	// construct and lets every route in the matrix actually execute.
+	h := New(sharedDB.Pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
 	return Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler(), 0, 0)
 }
 

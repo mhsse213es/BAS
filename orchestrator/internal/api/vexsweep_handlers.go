@@ -20,6 +20,10 @@ import (
 // variant run (the two directions of the same-agent conflict rule; see
 // design spec Architecture §3).
 func (h *Handler) CreateVexSweep(w http.ResponseWriter, r *http.Request) {
+	if h.vexSweep == nil {
+		jsonError(w, "vex sweep engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	var req struct {
 		AgentID         string `json:"agentId"`
 		Mode            string `json:"mode"`
@@ -91,6 +95,10 @@ func (h *Handler) CreateVexSweep(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/vex/sweeps/active?agentId=X
 func (h *Handler) GetActiveVexSweep(w http.ResponseWriter, r *http.Request) {
+	if h.vexSweep == nil {
+		jsonError(w, "vex sweep engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	agentID := r.URL.Query().Get("agentId")
 	if agentID == "" {
 		jsonError(w, "agentId required", http.StatusBadRequest)
@@ -110,6 +118,10 @@ func (h *Handler) GetActiveVexSweep(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/vex/sweeps/{id}
 func (h *Handler) GetVexSweep(w http.ResponseWriter, r *http.Request) {
+	if h.vexSweep == nil {
+		jsonError(w, "vex sweep engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	sw, err := h.vexSweep.Get(r.Context(), id)
 	if err != nil {
@@ -127,6 +139,10 @@ func (h *Handler) GetVexSweep(w http.ResponseWriter, r *http.Request) {
 // wrong for large or older sweeps. See
 // docs/superpowers/specs/2026-08-11-sweep-run-grouping-design.md.
 func (h *Handler) GetVexSweepRuns(w http.ResponseWriter, r *http.Request) {
+	if h.vexSweep == nil {
+		jsonError(w, "vex sweep engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	sw, err := h.vexSweep.Get(r.Context(), id)
 	if err != nil {
@@ -161,6 +177,10 @@ func (h *Handler) GetVexSweepRuns(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/vex/sweeps?status=running
 func (h *Handler) ListVexSweeps(w http.ResponseWriter, r *http.Request) {
+	if h.vexSweep == nil {
+		jsonOK(w, []map[string]any{})
+		return
+	}
 	status := coalesce(strings.TrimSpace(r.URL.Query().Get("status")), "running")
 	sweeps, err := h.vexSweep.ListByStatus(r.Context(), status)
 	if err != nil {
@@ -176,6 +196,10 @@ func (h *Handler) ListVexSweeps(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/vex/sweeps/{id}/cancel
 func (h *Handler) CancelVexSweep(w http.ResponseWriter, r *http.Request) {
+	if h.vexSweep == nil {
+		jsonError(w, "vex sweep engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	ctx := r.Context()
 	sw, err := h.vexSweep.Get(ctx, id)

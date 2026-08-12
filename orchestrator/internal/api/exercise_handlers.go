@@ -24,6 +24,10 @@ func actorID(r *http.Request) string {
 // ── Exercise Plan CRUD ────────────────────────────────────────────────────────
 
 func (h *Handler) ListExercisePlans(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		respond(w, []exercise.Plan{})
+		return
+	}
 	plans, err := h.exerciseStore.ListPlans(r.Context())
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -36,6 +40,10 @@ func (h *Handler) ListExercisePlans(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetExercisePlan(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	p, err := h.exerciseStore.GetPlan(r.Context(), id)
 	if err != nil {
@@ -46,6 +54,10 @@ func (h *Handler) GetExercisePlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateExercisePlan(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	var p exercise.Plan
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		jsonError(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -81,6 +93,10 @@ func (h *Handler) ValidateExercisePlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateExercisePlan(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var p exercise.Plan
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
@@ -97,6 +113,10 @@ func (h *Handler) UpdateExercisePlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteExercisePlan(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	if err := h.exerciseStore.DeletePlan(r.Context(), id); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -109,6 +129,10 @@ func (h *Handler) DeleteExercisePlan(w http.ResponseWriter, r *http.Request) {
 // ── Exercise Executions ───────────────────────────────────────────────────────
 
 func (h *Handler) ListExerciseExecutions(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		respond(w, []exercise.Execution{})
+		return
+	}
 	execs, err := h.exerciseStore.ListExecutions(r.Context(), 50)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -121,6 +145,10 @@ func (h *Handler) ListExerciseExecutions(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) GetExerciseExecution(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	ex, err := h.exerciseStore.GetExecution(r.Context(), id)
 	if err != nil {
@@ -132,6 +160,10 @@ func (h *Handler) GetExerciseExecution(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateExerciseExecution(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	var req struct {
 		PlanID          string                   `json:"plan_id"`
 		Name            string                   `json:"name"`
@@ -177,6 +209,10 @@ func (h *Handler) CreateExerciseExecution(w http.ResponseWriter, r *http.Request
 
 // POST /api/exercises/executions/{id}/launch
 func (h *Handler) LaunchExerciseExecution(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseExecutor == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	if err := h.exerciseExecutor.LaunchExecution(r.Context(), id); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -188,6 +224,10 @@ func (h *Handler) LaunchExerciseExecution(w http.ResponseWriter, r *http.Request
 
 // POST /api/exercises/executions/{id}/abort
 func (h *Handler) AbortExerciseExecution(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseExecutor == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	if err := h.exerciseExecutor.AbortExecution(r.Context(), id); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -199,6 +239,10 @@ func (h *Handler) AbortExerciseExecution(w http.ResponseWriter, r *http.Request)
 
 // POST /api/exercises/executions/{id}/steps/{stepId}/approve
 func (h *Handler) ApproveExerciseStep(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseExecutor == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	execID := chi.URLParam(r, "id")
 	stepID := chi.URLParam(r, "stepId")
 	approver := actorID(r)
@@ -214,6 +258,10 @@ func (h *Handler) ApproveExerciseStep(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/exercises/executions/{id}/evidence
 func (h *Handler) GetExerciseEvidence(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		respond(w, []exercise.Evidence{})
+		return
+	}
 	id := chi.URLParam(r, "id")
 	evs, err := h.exerciseStore.ListEvidence(r.Context(), id)
 	if err != nil {
@@ -228,6 +276,10 @@ func (h *Handler) GetExerciseEvidence(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/exercises/executions/{id}/evidence/verify
 func (h *Handler) VerifyExerciseChain(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseChain == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	if err := h.exerciseChain.Verify(r.Context(), id); err != nil {
 		jsonError(w, "chain verification failed: "+err.Error(), http.StatusConflict)
@@ -238,6 +290,10 @@ func (h *Handler) VerifyExerciseChain(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/exercises/executions/{id}/events
 func (h *Handler) GetExerciseEvents(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		respond(w, []map[string]interface{}{})
+		return
+	}
 	id := chi.URLParam(r, "id")
 	evs, err := h.exerciseStore.ListEvents(r.Context(), id)
 	if err != nil {
@@ -254,6 +310,10 @@ func (h *Handler) GetExerciseEvents(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/exercises/templates
 func (h *Handler) ListExerciseTemplates(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		respond(w, []exercise.Template{})
+		return
+	}
 	tmps, err := h.exerciseStore.ListTemplates(r.Context())
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -267,6 +327,10 @@ func (h *Handler) ListExerciseTemplates(w http.ResponseWriter, r *http.Request) 
 
 // GET /api/exercises/templates/{id}
 func (h *Handler) GetExerciseTemplate(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	t, err := h.exerciseStore.GetTemplate(r.Context(), id)
 	if err != nil {
@@ -278,6 +342,10 @@ func (h *Handler) GetExerciseTemplate(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/exercises/templates (Admin)
 func (h *Handler) CreateExerciseTemplate(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	var t exercise.Template
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		jsonError(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -309,6 +377,10 @@ func (h *Handler) CreateExerciseTemplate(w http.ResponseWriter, r *http.Request)
 // POST /api/exercises/templates/{id}/instantiate
 // Creates a Plan + Execution from a template with operator-provided variables.
 func (h *Handler) InstantiateExerciseTemplate(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseStore == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var req struct {
 		Name      string            `json:"name"`
@@ -369,6 +441,9 @@ func (h *Handler) InstantiateExerciseTemplate(w http.ResponseWriter, r *http.Req
 
 // buildExerciseReport assembles all data for one execution into a report struct.
 func (h *Handler) buildExerciseReport(r *http.Request, id string) (*reporting.ExerciseReport, error) {
+	if h.exerciseStore == nil || h.exerciseChain == nil {
+		return nil, fmt.Errorf("exercise engine not loaded")
+	}
 	ctx := r.Context()
 	ex, err := h.exerciseStore.GetExecution(ctx, id)
 	if err != nil {
@@ -463,6 +538,10 @@ func (h *Handler) GetExerciseReportCSV(w http.ResponseWriter, r *http.Request) {
 // POST /api/exercises/executions/{id}/evidence
 // Operator-injected evidence: SOC acknowledged, ticket created, exec notified, etc.
 func (h *Handler) InjectEvidence(w http.ResponseWriter, r *http.Request) {
+	if h.exerciseChain == nil {
+		jsonError(w, "exercise engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
 	execID := chi.URLParam(r, "id")
 	var req struct {
 		EvidenceType string         `json:"evidence_type"`
