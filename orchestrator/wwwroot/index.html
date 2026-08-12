@@ -3460,6 +3460,11 @@ body.theme-slate {
             <div id="tp-detail-sources" class="tiny"></div>
           </div>
 
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem" id="tp-detail-evidence-card">
+            <div class="card-title">Technique Evidence</div>
+            <div id="tp-detail-evidence" class="tiny"></div>
+          </div>
+
           <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
             <div class="card-title">History</div>
             <div id="tp-detail-history" class="tiny"></div>
@@ -5527,6 +5532,22 @@ function renderThreatPriorityDetail(d) {
           '</div>';
       }).join('') + '</div>'
     : '<span class="muted">No per-source records yet — populated by the next threat-intel sync.</span>';
+
+  var techEvidence = (d.techniqueEvidence || []);
+  var evidenceCard = document.getElementById('tp-detail-evidence-card');
+  if (techEvidence.length) {
+    evidenceCard.style.display = '';
+    document.getElementById('tp-detail-evidence').innerHTML =
+      '<table style="width:100%"><thead><tr><th>Technique</th><th>Via</th><th>Confidence</th><th>Since</th></tr></thead><tbody>' +
+      techEvidence.map(function(e) {
+        var via = e.via ? (e.via + (e.viaName ? ' (' + x(e.viaName) + ')' : '')) : '<span class="muted">direct</span>';
+        var since = e.startTime ? x(fmtDate(e.startTime)) : '<span class="muted">&mdash;</span>';
+        return '<tr><td>' + x(e.techniqueId) + '</td><td>' + via + '</td><td>' + x(e.confidence) + '%</td><td>' + since + '</td></tr>';
+      }).join('') +
+      '</tbody></table>';
+  } else {
+    evidenceCard.style.display = 'none';
+  }
 
   var hist = (d.history || []);
   document.getElementById('tp-detail-history').innerHTML = hist.length
