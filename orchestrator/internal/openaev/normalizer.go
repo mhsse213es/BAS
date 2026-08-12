@@ -60,6 +60,10 @@ func Normalize(parsed *ParsedBundle) (Scenario, Detail) {
 		ObjectivesCount:   len(parsed.Objectives),
 		InjectsCount:      len(parsed.Injects),
 		SourceUpdatedAt:   parsed.Scenario.UpdatedAt,
+		SourceType:        parsed.SourceType,
+	}
+	if scenario.SourceType == "" {
+		scenario.SourceType = "scenario"
 	}
 	detail := Detail{
 		Description: parsed.Scenario.Description,

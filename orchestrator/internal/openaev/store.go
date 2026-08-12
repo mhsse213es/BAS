@@ -58,6 +58,10 @@ func (s *SQLStore) Upsert(ctx context.Context, scenario Scenario, detail Detail,
 	if tags == nil {
 		tags = []string{}
 	}
+	sourceType := scenario.SourceType
+	if sourceType == "" {
+		sourceType = "scenario"
+	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -78,8 +82,8 @@ func (s *SQLStore) Upsert(ctx context.Context, scenario Scenario, detail Detail,
 		`INSERT INTO openaev_scenarios
 		   (openaev_scenario_id, name, category, severity, platforms, technique_ids, tags,
 		    objectives_count, injects_count, source_updated_at, content_hash, bundle_id,
-		    sync_revision, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, 1, NOW())
+		    sync_revision, updated_at, source_type)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, 1, NOW(), $12)
 		 ON CONFLICT (openaev_scenario_id) DO UPDATE SET
 		   name = EXCLUDED.name,
 		   category = EXCLUDED.category,
@@ -97,10 +101,12 @@ func (s *SQLStore) Upsert(ctx context.Context, scenario Scenario, detail Detail,
 		     ELSE openaev_scenarios.sync_revision
 		   END,
 		   content_hash = EXCLUDED.content_hash,
+		   source_type = EXCLUDED.source_type,
 		   updated_at = NOW()`,
 		scenario.OpenAEVScenarioID, scenario.Name, scenario.Category, scenario.Severity,
 		platforms, techniqueIDs, tags,
 		scenario.ObjectivesCount, scenario.InjectsCount, scenario.SourceUpdatedAt, contentHash,
+		sourceType,
 	); err != nil {
 		return err
 	}
@@ -108,11 +114,16 @@ func (s *SQLStore) Upsert(ctx context.Context, scenario Scenario, detail Detail,
 	return tx.Commit(ctx)
 }
 
-func (s *SQLStore) List(ctx context.Context) ([]Scenario, error) {
+// List returns synced scenarios/exercises, optionally filtered by
+// sourceType ("scenario" | "exercise"). An empty sourceType returns every
+// row regardless of source.
+func (s *SQLStore) List(ctx context.Context, sourceType string) ([]Scenario, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT openaev_scenario_id, name, category, severity, platforms, technique_ids, tags,
-		        objectives_count, injects_count, source_updated_at
-		   FROM openaev_scenarios ORDER BY name`)
+		        objectives_count, injects_count, source_updated_at, source_type
+		   FROM openaev_scenarios
+		  WHERE ($1 = '' OR source_type = $1)
+		  ORDER BY name`, sourceType)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +134,7 @@ func (s *SQLStore) List(ctx context.Context) ([]Scenario, error) {
 		var sc Scenario
 		if err := rows.Scan(&sc.OpenAEVScenarioID, &sc.Name, &sc.Category, &sc.Severity,
 			&sc.Platforms, &sc.TechniqueIDs, &sc.Tags, &sc.ObjectivesCount, &sc.InjectsCount,
-			&sc.SourceUpdatedAt); err != nil {
+			&sc.SourceUpdatedAt, &sc.SourceType); err != nil {
 			continue
 		}
 		out = append(out, sc)
@@ -136,13 +147,13 @@ func (s *SQLStore) Get(ctx context.Context, openaevScenarioID string) (Scenario,
 	var bundleJSON []byte
 	err := s.pool.QueryRow(ctx,
 		`SELECT s.openaev_scenario_id, s.name, s.category, s.severity, s.platforms, s.technique_ids,
-		        s.tags, s.objectives_count, s.injects_count, s.source_updated_at, COALESCE(b.bundle::text, '{}')::jsonb
+		        s.tags, s.objectives_count, s.injects_count, s.source_updated_at, s.source_type, COALESCE(b.bundle::text, '{}')::jsonb
 		   FROM openaev_scenarios s
 		   LEFT JOIN openaev_bundles b ON b.id = s.bundle_id
 		  WHERE s.openaev_scenario_id = $1`,
 		openaevScenarioID,
 	).Scan(&sc.OpenAEVScenarioID, &sc.Name, &sc.Category, &sc.Severity, &sc.Platforms, &sc.TechniqueIDs,
-		&sc.Tags, &sc.ObjectivesCount, &sc.InjectsCount, &sc.SourceUpdatedAt, &bundleJSON)
+		&sc.Tags, &sc.ObjectivesCount, &sc.InjectsCount, &sc.SourceUpdatedAt, &sc.SourceType, &bundleJSON)
 	if err != nil {
 		return Scenario{}, Detail{}, false, nil
 	}

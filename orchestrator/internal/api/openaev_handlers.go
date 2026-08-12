@@ -138,7 +138,7 @@ func (h *Handler) GetOpenAEVStatus(w http.ResponseWriter, r *http.Request) {
 // GET /api/openaev/scenarios — Viewer+.
 func (h *Handler) ListOpenAEVScenarios(w http.ResponseWriter, r *http.Request) {
 	store := openaev.NewSQLStore(h.db)
-	scenarios, err := store.List(r.Context())
+	scenarios, err := store.List(r.Context(), "scenario")
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return

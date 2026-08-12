@@ -35,6 +35,13 @@ type ParsedBundle struct {
 	Injects       []ParsedInject    `json:"scenario_injects"`
 	Tags          []ParsedTag       `json:"scenario_tags"`
 	Variables     []ParsedVariable  `json:"scenario_variables"`
+
+	// SourceType is not part of OpenAEV's wire format -- it is stamped by
+	// ParseExerciseBundle ("exercise") and left as the zero value by
+	// ParseBundle ("" -- Normalize treats this as "scenario"). Included with
+	// a JSON tag (not json:"-") so it survives the exercise provider's
+	// round-trip through marshalAsScenarioZip -> ParseBundle.
+	SourceType string `json:"source_type,omitempty"`
 }
 
 type ParsedScenario struct {
@@ -87,6 +94,7 @@ type Scenario struct {
 	ObjectivesCount   int
 	InjectsCount      int
 	SourceUpdatedAt   time.Time
+	SourceType        string // "scenario" or "exercise" -- see ParsedBundle.SourceType
 }
 
 // Detail is the richer normalized content stored in openaev_bundles.bundle —

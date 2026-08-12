@@ -124,3 +124,92 @@ func TestStore_SyncState_NotFound(t *testing.T) {
 		}
 	})
 }
+
+func TestStore_UpsertPersistsSourceType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureSchema(context.Background(), pool)
+		db.EnsureContentSchema(context.Background(), pool)
+		store := NewSQLStore(pool)
+
+		scenario := Scenario{OpenAEVScenarioID: "sc-sourcetype-001", Name: "A", SourceType: "exercise"}
+		if err := store.Upsert(context.Background(), scenario, Detail{}, "hash-a", 10, 1); err != nil {
+			t.Fatalf("Upsert: %v", err)
+		}
+
+		got, _, found, err := store.Get(context.Background(), "sc-sourcetype-001")
+		if err != nil || !found {
+			t.Fatalf("Get: found=%v err=%v", found, err)
+		}
+		if got.SourceType != "exercise" {
+			t.Errorf("SourceType = %q, want exercise", got.SourceType)
+		}
+	})
+}
+
+func TestStore_UpsertDefaultsEmptySourceTypeToScenario(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureSchema(context.Background(), pool)
+		db.EnsureContentSchema(context.Background(), pool)
+		store := NewSQLStore(pool)
+
+		scenario := Scenario{OpenAEVScenarioID: "sc-sourcetype-002", Name: "A"} // SourceType left unset
+		store.Upsert(context.Background(), scenario, Detail{}, "hash-b", 10, 1)
+
+		got, _, _, _ := store.Get(context.Background(), "sc-sourcetype-002")
+		if got.SourceType != "scenario" {
+			t.Errorf("SourceType = %q, want scenario (default)", got.SourceType)
+		}
+	})
+}
+
+func TestStore_ListFiltersBySourceType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureSchema(context.Background(), pool)
+		db.EnsureContentSchema(context.Background(), pool)
+		store := NewSQLStore(pool)
+
+		store.Upsert(context.Background(), Scenario{OpenAEVScenarioID: "sc-list-scn", Name: "Scn", SourceType: "scenario"}, Detail{}, "h1", 10, 1)
+		store.Upsert(context.Background(), Scenario{OpenAEVScenarioID: "sc-list-exc", Name: "Exc", SourceType: "exercise"}, Detail{}, "h2", 10, 1)
+
+		scenarios, err := store.List(context.Background(), "scenario")
+		if err != nil {
+			t.Fatalf("List(scenario): %v", err)
+		}
+		for _, s := range scenarios {
+			if s.OpenAEVScenarioID == "sc-list-exc" {
+				t.Error("List(\"scenario\") must not include an exercise-sourced row")
+			}
+		}
+
+		exercises, err := store.List(context.Background(), "exercise")
+		if err != nil {
+			t.Fatalf("List(exercise): %v", err)
+		}
+		found := false
+		for _, s := range exercises {
+			if s.OpenAEVScenarioID == "sc-list-exc" {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("List(\"exercise\") must include the exercise-sourced row")
+		}
+
+		all, err := store.List(context.Background(), "")
+		if err != nil {
+			t.Fatalf("List(\"\"): %v", err)
+		}
+		if len(all) < 2 {
+			t.Errorf("List(\"\") = %d rows, want >= 2 (unfiltered)", len(all))
+		}
+	})
+}

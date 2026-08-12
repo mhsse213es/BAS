@@ -483,6 +483,12 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at   timestamptz NOT NULL DEFAULT NOW(),
 			PRIMARY KEY (actor_name, technique_id, via, via_name, source)
 		)`,
+
+		// source_type distinguishes an OpenAEV Scenario (reusable template)
+		// from an OpenAEV Exercise (standalone simulation, does not require
+		// a parent Scenario) synced into the same table. See
+		// docs/superpowers/specs/2026-08-12-openaev-exercise-sync-design.md.
+		`ALTER TABLE openaev_scenarios ADD COLUMN IF NOT EXISTS source_type text NOT NULL DEFAULT 'scenario'`,
 	}
 
 	for _, s := range stmts {
