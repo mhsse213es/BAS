@@ -3455,6 +3455,11 @@ body.theme-slate {
           </div>
 
           <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+            <div class="card-title">Sources</div>
+            <div id="tp-detail-sources" class="tiny"></div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
             <div class="card-title">History</div>
             <div id="tp-detail-history" class="tiny"></div>
           </div>
@@ -5483,6 +5488,38 @@ function renderThreatPriorityDetail(d) {
       }).join('') +
       '</tbody></table>'
     : '<span class="muted">No technique data.</span>';
+
+  var sources = (d.sources || []);
+  document.getElementById('tp-detail-sources').innerHTML = sources.length
+    ? '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.75rem">' +
+      sources.map(function(s) {
+        // "Unknown" (never "None"): an empty field here means this source
+        // never supplied it -- e.g. OpenCTI never reports sectors/regions,
+        // MISP never reports aliases. Rendering it as "None" would read as
+        // a positive assertion the source never made.
+        var unknown = '<span class="muted">Unknown</span>';
+        function list(arr) {
+          return (arr && arr.length)
+            ? arr.map(function(v) { return '<span class="tool-tag">' + x(v) + '</span>'; }).join(' ')
+            : unknown;
+        }
+        function row(label, val) {
+          return '<div style="display:flex;gap:0.5rem;padding:0.14rem 0">' +
+            '<span style="min-width:5.5rem;color:var(--muted);flex-shrink:0">' + label + '</span>' +
+            '<span style="flex:1">' + val + '</span></div>';
+        }
+        return '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem 0.75rem">' +
+          '<div style="font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:0.4rem">' + x(s.source) + '</div>' +
+          row('Name', x(s.name)) +
+          row('Aliases', list(s.aliases)) +
+          row('Sectors', list(s.sectors)) +
+          row('Regions', list(s.regions)) +
+          row('Confidence', s.confidence ? x(s.confidence) : unknown) +
+          row('Techniques', x(s.techniqueCount)) +
+          row('Last seen', s.lastSeen ? x(fmtDate(s.lastSeen)) : unknown) +
+          '</div>';
+      }).join('') + '</div>'
+    : '<span class="muted">No per-source records yet — populated by the next threat-intel sync.</span>';
 
   var hist = (d.history || []);
   document.getElementById('tp-detail-history').innerHTML = hist.length
