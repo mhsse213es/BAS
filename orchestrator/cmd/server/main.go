@@ -304,6 +304,11 @@ func main() {
 	priorityEngine := threatpriority.NewEngine(pool, engine, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
 	correlationEngine := correlation.NewEngine(pool, engine)
 	scheduler := connector.NewScheduler(tiSources, gen, engine, cfg.ThreatIntelPollHours, pool, priorityEngine)
+	tiActivitySources, err := connector.LoadActivitySourcesFromDB(context.Background(), pool)
+	if err != nil {
+		log.Printf("[!] threat-intel activity source load warning: %v", err)
+	}
+	scheduler.WithActivitySources(tiActivitySources)
 	scheduler.Start()
 	defer scheduler.Stop()
 

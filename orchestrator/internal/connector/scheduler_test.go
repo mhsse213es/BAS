@@ -424,3 +424,193 @@ func TestScheduler_SyncPersistsPerSourceProvenance(t *testing.T) {
 		}
 	})
 }
+
+type fakeActivitySource struct {
+	name    string
+	signals []ActivitySignal
+	err     error
+}
+
+func (f fakeActivitySource) Name() string                             { return f.name }
+func (f fakeActivitySource) FetchActivity() ([]ActivitySignal, error) { return f.signals, f.err }
+
+// TestUpsertActivitySignals_MatchesExistingActor_LeavesCuratedFieldsUntouched
+// is the core regression guard for the bug this whole sub-project exists to
+// fix: an activity signal for an actor that already has curated
+// intelligence must NOT touch that actor's Confidence or LastSeen.
+func TestUpsertActivitySignals_MatchesExistingActor_LeavesCuratedFieldsUntouched(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		curatedSeen := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		s.upsertActorProfiles([]ThreatActor{{
+			Name: "ACT-Wizard Spider", Confidence: "high", LastSeen: curatedSeen,
+			Aliases: []string{}, Sectors: []string{}, Regions: []string{},
+		}})
+
+		first := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+		last := time.Date(2026, 1, 20, 0, 0, 0, 0, time.UTC)
+		s.upsertActivitySignals("otx", []ActivitySignal{
+			{ActorName: "ACT-Wizard Spider", PulseCount: 3, FirstObserved: first, LastObserved: last},
+		}, []ThreatActor{{Name: "ACT-Wizard Spider"}})
+
+		var confidence string
+		var lastSeen time.Time
+		if err := pool.QueryRow(t.Context(),
+			`SELECT confidence, last_seen FROM threat_actor_profiles WHERE name = $1`, "ACT-Wizard Spider",
+		).Scan(&confidence, &lastSeen); err != nil {
+			t.Fatalf("query profile: %v", err)
+		}
+		if confidence != "high" || !lastSeen.Equal(curatedSeen) {
+			t.Fatalf("profile confidence/lastSeen = %q/%v, want untouched (high/%v)", confidence, lastSeen, curatedSeen)
+		}
+
+		var pulseCount int
+		var gotFirst, gotLast time.Time
+		if err := pool.QueryRow(t.Context(),
+			`SELECT pulse_count, first_observed, last_observed FROM threat_actor_activity WHERE actor_name = $1 AND source = 'otx'`,
+			"ACT-Wizard Spider",
+		).Scan(&pulseCount, &gotFirst, &gotLast); err != nil {
+			t.Fatalf("query activity: %v", err)
+		}
+		if pulseCount != 3 || !gotFirst.Equal(first) || !gotLast.Equal(last) {
+			t.Fatalf("activity row = pulseCount=%d first=%v last=%v, want 3/%v/%v", pulseCount, gotFirst, gotLast, first, last)
+		}
+	})
+}
+
+// TestUpsertActivitySignals_NoMatch_CreatesMinimalStub covers the
+// user-approved orphan path: a MITRE-named actor no curated source has
+// ever reported gets a bare threat_actor_profiles row so its activity has
+// somewhere to attach.
+func TestUpsertActivitySignals_NoMatch_CreatesMinimalStub(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		ts := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+		s.upsertActivitySignals("otx", []ActivitySignal{
+			{ActorName: "ACT-Orphan Group", PulseCount: 1, FirstObserved: ts, LastObserved: ts},
+		}, nil) // no curated actors at all
+
+		var confidence string
+		var lastSeen *time.Time
+		if err := pool.QueryRow(t.Context(),
+			`SELECT confidence, last_seen FROM threat_actor_profiles WHERE name = $1`, "ACT-Orphan Group",
+		).Scan(&confidence, &lastSeen); err != nil {
+			t.Fatalf("expected a minimal stub profile row: %v", err)
+		}
+		if confidence != "" || lastSeen != nil {
+			t.Fatalf("stub confidence/lastSeen = %q/%v, want empty/nil (nothing curated ever said this)", confidence, lastSeen)
+		}
+
+		var pulseCount int
+		if err := pool.QueryRow(t.Context(),
+			`SELECT pulse_count FROM threat_actor_activity WHERE actor_name = $1 AND source = 'otx'`, "ACT-Orphan Group",
+		).Scan(&pulseCount); err != nil {
+			t.Fatalf("expected an activity row attached to the stub: %v", err)
+		}
+		if pulseCount != 1 {
+			t.Fatalf("pulseCount = %d, want 1", pulseCount)
+		}
+	})
+}
+
+// TestUpsertActivitySignals_LeastGreatestAcrossTwoSyncs proves
+// first_observed/last_observed never regress due to OTX subscription
+// churn -- a pulse rolling off the feed must not make an actor's earliest
+// or latest recorded activity look narrower than it really is.
+func TestUpsertActivitySignals_LeastGreatestAcrossTwoSyncs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		s.upsertActorProfiles([]ThreatActor{{
+			Name: "ACT-Churn Actor", Aliases: []string{}, Sectors: []string{}, Regions: []string{},
+		}})
+		merged := []ThreatActor{{Name: "ACT-Churn Actor"}}
+
+		aug10 := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+		s.upsertActivitySignals("otx", []ActivitySignal{
+			{ActorName: "ACT-Churn Actor", PulseCount: 1, FirstObserved: aug10, LastObserved: aug10},
+		}, merged)
+
+		aug5 := time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)
+		aug15 := time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)
+		s.upsertActivitySignals("otx", []ActivitySignal{
+			{ActorName: "ACT-Churn Actor", PulseCount: 2, FirstObserved: aug5, LastObserved: aug15},
+		}, merged)
+
+		var pulseCount int
+		var gotFirst, gotLast time.Time
+		if err := pool.QueryRow(t.Context(),
+			`SELECT pulse_count, first_observed, last_observed FROM threat_actor_activity WHERE actor_name = $1 AND source = 'otx'`,
+			"ACT-Churn Actor",
+		).Scan(&pulseCount, &gotFirst, &gotLast); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if pulseCount != 2 {
+			t.Errorf("pulseCount = %d, want 2 (plain overwrite, a snapshot of the latest sync)", pulseCount)
+		}
+		if !gotFirst.Equal(aug5) {
+			t.Errorf("first_observed = %v, want %v (LEAST of aug10 and aug5)", gotFirst, aug5)
+		}
+		if !gotLast.Equal(aug15) {
+			t.Errorf("last_observed = %v, want %v (GREATEST of aug10 and aug15)", gotLast, aug15)
+		}
+	})
+}
+
+// TestScheduler_Sync_ProcessesActivitySignalsEvenWithZeroCuratedActors
+// proves an OTX-only deployment (no MISP/OpenCTI/Bundle configured, or all
+// three returned nothing this sync) still gets its activity signals
+// processed -- the pre-existing "no actors returned from any source" early
+// return must not swallow activity-only syncs.
+func TestScheduler_Sync_ProcessesActivitySignalsEvenWithZeroCuratedActors(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := NewScheduler(nil, NewGenerator(t.TempDir(), nil, nil, nil), scenario.NewEngine(t.TempDir()), 24, pool, nil)
+		ts := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+		s.WithActivitySources([]ActivitySource{fakeActivitySource{
+			name: "otx",
+			signals: []ActivitySignal{
+				{ActorName: "SYNC-ACT-ONLY", PulseCount: 5, FirstObserved: ts, LastObserved: ts},
+			},
+		}})
+
+		s.sync()
+
+		var pulseCount int
+		if err := pool.QueryRow(t.Context(),
+			`SELECT pulse_count FROM threat_actor_activity WHERE actor_name = $1 AND source = 'otx'`, "SYNC-ACT-ONLY",
+		).Scan(&pulseCount); err != nil {
+			t.Fatalf("expected an activity row even with zero curated sources: %v", err)
+		}
+		if pulseCount != 5 {
+			t.Fatalf("pulseCount = %d, want 5", pulseCount)
+		}
+	})
+}
+
+func TestWithActivitySources_SetsOTXEnabledStatus(t *testing.T) {
+	s := NewScheduler(nil, nil, nil, 24, nil, nil)
+	s.WithActivitySources([]ActivitySource{fakeActivitySource{name: "otx"}})
+	if !s.Status().OTXEnabled {
+		t.Error("OTXEnabled should be true after WithActivitySources with an otx source")
+	}
+}
+
+func TestReconfigureActivitySources_UpdatesOTXEnabledStatus(t *testing.T) {
+	s := NewScheduler(nil, nil, nil, 24, nil, nil)
+	s.WithActivitySources([]ActivitySource{fakeActivitySource{name: "otx"}})
+	s.ReconfigureActivitySources(nil)
+	if s.Status().OTXEnabled {
+		t.Error("OTXEnabled should be false after reconfiguring OTX out")
+	}
+}

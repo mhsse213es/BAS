@@ -433,6 +433,24 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at      timestamptz NOT NULL DEFAULT NOW(),
 			PRIMARY KEY (actor_name, source)
 		)`,
+
+		// threat_actor_activity: one row per (actor, activity source) --
+		// pulse-mention evidence (OTX today), deliberately separate from
+		// threat_actor_sources' curated intelligence. first_observed/
+		// last_observed use LEAST/GREATEST on upsert so subscription churn
+		// (a pulse rolling off OTX's feed) never narrows the recorded range.
+		// pulse_count is a plain overwrite -- a snapshot of the latest
+		// sync, not a cross-sync cumulative count. See
+		// docs/superpowers/specs/2026-08-12-otx-activity-signal-design.md.
+		`CREATE TABLE IF NOT EXISTS threat_actor_activity (
+			actor_name     text        NOT NULL REFERENCES threat_actor_profiles(name) ON DELETE CASCADE,
+			source         text        NOT NULL,
+			pulse_count    int         NOT NULL DEFAULT 0,
+			first_observed timestamptz,
+			last_observed  timestamptz,
+			updated_at     timestamptz NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (actor_name, source)
+		)`,
 	}
 
 	for _, s := range stmts {

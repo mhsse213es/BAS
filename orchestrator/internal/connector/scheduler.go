@@ -16,8 +16,9 @@ import (
 // Scheduler polls MISP and OpenCTI on a configurable interval and
 // regenerates intel scenarios into the scenarios/intel/ directory.
 type Scheduler struct {
-	sources   []Source
-	generator *Generator
+	sources         []Source
+	activitySources []ActivitySource // OTX today -- see WithActivitySources
+	generator       *Generator
 	engine    *scenario.Engine
 	interval  time.Duration
 	// pool persists fetched actor profiles (sectors/regions) for
@@ -135,6 +136,42 @@ func (s *Scheduler) Reconfigure(sources []Source) {
 	}
 }
 
+// WithActivitySources attaches activity-evidence sources (currently just
+// OTX) -- kept structurally separate from sources/Reconfigure because
+// ActivitySource is a different interface (FetchActivity, not Fetch): it
+// contributes activity evidence about already-known actors, never curated
+// attribution. Safe to call once after NewScheduler, before Start. Chainable.
+func (s *Scheduler) WithActivitySources(sources []ActivitySource) *Scheduler {
+	s.mu.Lock()
+	s.activitySources = sources
+	s.status.OTXEnabled = false
+	for _, src := range sources {
+		if src.Name() == "otx" {
+			s.status.OTXEnabled = true
+		}
+	}
+	s.mu.Unlock()
+	return s
+}
+
+// ReconfigureActivitySources live-updates the activity-source list,
+// mirroring Reconfigure's live-update semantics for curated sources but
+// kept as a separate method since ActivitySource is a distinct interface.
+// Does not itself trigger a sync -- callers that want one call TriggerSync
+// explicitly, same as internal/api/threat_intel_config_handlers.go already
+// does after Reconfigure.
+func (s *Scheduler) ReconfigureActivitySources(sources []ActivitySource) {
+	s.mu.Lock()
+	s.activitySources = sources
+	s.status.OTXEnabled = false
+	for _, src := range sources {
+		if src.Name() == "otx" {
+			s.status.OTXEnabled = true
+		}
+	}
+	s.mu.Unlock()
+}
+
 // Stop shuts down the scheduler gracefully.
 func (s *Scheduler) Stop() {
 	close(s.stopCh)
@@ -193,6 +230,7 @@ func (s *Scheduler) sync() {
 	// concurrently with this background goroutine's read of it.
 	s.mu.RLock()
 	sources := s.sources
+	activitySources := s.activitySources
 	s.mu.RUnlock()
 	for _, src := range sources {
 		got, err := src.Fetch()
@@ -221,7 +259,30 @@ func (s *Scheduler) sync() {
 		}
 	}
 
-	if len(actors) == 0 {
+	// Fetch activity sources (OTX) independently of curated sources' outcome
+	// -- a signal must still be processed, and can still create an orphan
+	// stub, even when zero curated sources returned anything (e.g. an
+	// OTX-only deployment). See
+	// docs/superpowers/specs/2026-08-12-otx-activity-signal-design.md.
+	type activityFetch struct {
+		source  string
+		signals []ActivitySignal
+	}
+	var activityResults []activityFetch
+	for _, asrc := range activitySources {
+		signals, err := asrc.FetchActivity()
+		if ss, ok := asrc.(StatsSource); ok {
+			bySource[asrc.Name()] = ss.Stats()
+		}
+		if err != nil {
+			log.Printf("[connector/%s] fetch error: %v", asrc.Name(), err)
+			continue
+		}
+		log.Printf("[connector/%s] %d activity signals fetched", asrc.Name(), len(signals))
+		activityResults = append(activityResults, activityFetch{source: asrc.Name(), signals: signals})
+	}
+
+	if len(actors) == 0 && len(activityResults) == 0 {
 		log.Println("[connector] no actors returned from any source")
 		s.setOK(0, 0, 0, bundleVersion, bySource)
 		return
@@ -242,6 +303,12 @@ func (s *Scheduler) sync() {
 	// Per-source provenance. MUST run after upsertActorProfiles -- these rows
 	// carry a foreign key to threat_actor_profiles(name).
 	s.upsertActorSources(rawActors, actors, groups)
+	// Activity evidence -- resolved against the now-merged curated roster,
+	// or given a minimal stub if nothing curated matches. MUST also run
+	// after upsertActorProfiles for the same FK reason.
+	for _, r := range activityResults {
+		s.upsertActivitySignals(r.source, r.signals, actors)
+	}
 
 	if s.pool != nil {
 		for _, c := range allCampaigns {
@@ -419,6 +486,69 @@ func (s *Scheduler) upsertActorSources(rawActors, merged []ThreatActor, groups [
 			if err != nil {
 				log.Printf("[connector] upsert actor source %q/%q: %v", actorName, raw.Source, err)
 			}
+		}
+	}
+}
+
+// resolveActivitySignalActor looks up an activity signal's actor name
+// against the already-merged curated roster, reusing actorKey's exact-match
+// normalization (actor_merge.go) -- no fuzzy/similarity matching,
+// consistent with MergeActors' own matching discipline. Returns the merged
+// actor's own Name (its canonical casing) on a match.
+func resolveActivitySignalActor(signalName string, merged []ThreatActor) (string, bool) {
+	key := actorKey(signalName)
+	for _, m := range merged {
+		if actorKey(m.Name) == key {
+			return m.Name, true
+		}
+		for _, alias := range m.Aliases {
+			if actorKey(alias) == key {
+				return m.Name, true
+			}
+		}
+	}
+	return "", false
+}
+
+// upsertActivitySignals resolves each signal against the merged curated
+// roster and persists to threat_actor_activity. A signal matching nothing
+// curated gets a minimal threat_actor_profiles stub (bare name; every
+// other column keeps the table's own default -- '' confidence, NULL
+// last_seen) so the activity has somewhere to attach.
+// internal/reporting/insights.go's ResolveActorTechniques independently
+// re-derives the actor's MITRE technique list from its Name at scoring
+// time, so the stub needs nothing else. A single signal failing is logged
+// and skipped, never aborting the rest -- same discipline
+// upsertActorProfiles/upsertActorSources already apply. No-op when pool is
+// nil.
+func (s *Scheduler) upsertActivitySignals(source string, signals []ActivitySignal, merged []ThreatActor) {
+	if s.pool == nil {
+		return
+	}
+	ctx := context.Background()
+	for _, sig := range signals {
+		actorName, found := resolveActivitySignalActor(sig.ActorName, merged)
+		if !found {
+			actorName = sig.ActorName
+			if _, err := s.pool.Exec(ctx,
+				`INSERT INTO threat_actor_profiles (name, updated_at) VALUES ($1, NOW())
+				 ON CONFLICT (name) DO NOTHING`,
+				actorName); err != nil {
+				log.Printf("[connector] create activity stub profile %q: %v", actorName, err)
+				continue
+			}
+		}
+		_, err := s.pool.Exec(ctx,
+			`INSERT INTO threat_actor_activity (actor_name, source, pulse_count, first_observed, last_observed, updated_at)
+			 VALUES ($1,$2,$3,$4,$5,NOW())
+			 ON CONFLICT (actor_name, source) DO UPDATE SET
+			   pulse_count = EXCLUDED.pulse_count,
+			   first_observed = LEAST(threat_actor_activity.first_observed, EXCLUDED.first_observed),
+			   last_observed = GREATEST(threat_actor_activity.last_observed, EXCLUDED.last_observed),
+			   updated_at = NOW()`,
+			actorName, source, sig.PulseCount, sig.FirstObserved, sig.LastObserved)
+		if err != nil {
+			log.Printf("[connector] upsert activity signal %q/%q: %v", actorName, source, err)
 		}
 	}
 }

@@ -49,12 +49,14 @@ func SeedFromEnv(ctx context.Context, pool *pgxpool.Pool, cfg SeedConfig) error 
 	return nil
 }
 
-// LoadSourcesFromDB builds the misp/opencti/otx Sources from whatever is
-// currently enabled in threat_intel_config. Called once at startup (after
-// SeedFromEnv has had a chance to populate the table) and again, indirectly,
-// every time a config save triggers Scheduler.Reconfigure (Task 2) -- this
-// is the one place that turns DB rows into live Source objects, so both
-// callers stay in sync by construction.
+// LoadSourcesFromDB builds the misp/opencti curated Sources from whatever
+// is currently enabled in threat_intel_config. Called once at startup
+// (after SeedFromEnv has had a chance to populate the table) and again,
+// indirectly, every time a config save triggers Scheduler.Reconfigure --
+// this is the one place that turns curated DB rows into live Source
+// objects, so both callers stay in sync by construction. OTX is loaded
+// separately by LoadActivitySourcesFromDB -- it's an ActivitySource, not a
+// Source.
 func LoadSourcesFromDB(ctx context.Context, pool *pgxpool.Pool, sectors, regions []string) ([]Source, error) {
 	rows, err := pool.Query(ctx, `SELECT connector, base_url, api_key FROM threat_intel_config WHERE enabled = true`)
 	if err != nil {
@@ -76,6 +78,30 @@ func LoadSourcesFromDB(ctx context.Context, pool *pgxpool.Pool, sectors, regions
 			if baseURL != "" && apiKey != "" {
 				sources = append(sources, NewOpenCTIClient(baseURL, apiKey, sectors))
 			}
+		}
+	}
+	return sources, rows.Err()
+}
+
+// LoadActivitySourcesFromDB builds the otx ActivitySource from whatever is
+// currently enabled in threat_intel_config, mirroring LoadSourcesFromDB's
+// pattern for the curated sources but querying only the otx row and
+// returning the distinct ActivitySource type.
+func LoadActivitySourcesFromDB(ctx context.Context, pool *pgxpool.Pool) ([]ActivitySource, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT api_key FROM threat_intel_config WHERE enabled = true AND connector = 'otx'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var sources []ActivitySource
+	for rows.Next() {
+		var apiKey string
+		if err := rows.Scan(&apiKey); err != nil {
+			return nil, err
+		}
+		if apiKey != "" {
+			sources = append(sources, NewOTXSource(apiKey))
 		}
 	}
 	return sources, rows.Err()

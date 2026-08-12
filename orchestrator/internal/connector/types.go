@@ -59,6 +59,14 @@ type ConnectorStatus struct {
 	MISPEnabled      bool                  `json:"mispEnabled"`
 	OpenCTIEnabled   bool                  `json:"openctiEnabled"`
 	BundleEnabled    bool                  `json:"bundleEnabled"`
+	// OTXEnabled reflects Scheduler.activitySources, set by
+	// WithActivitySources/ReconfigureActivitySources -- tracked separately
+	// from the other three because OTX is not in the sources/Reconfigure
+	// list at all (it's an ActivitySource, not a Source). Previously this
+	// field didn't exist, so the frontend's `s.otxEnabled` check
+	// (index.html:15196) always read undefined/false regardless of actual
+	// OTX config.
+	OTXEnabled       bool                  `json:"otxEnabled"`
 	BundleVersion    string                `json:"bundleVersion,omitempty"`
 	LastSyncAt       time.Time             `json:"lastSyncAt"`
 	LastSyncStatus   string                `json:"lastSyncStatus"` // "ok" | "error" | "never"

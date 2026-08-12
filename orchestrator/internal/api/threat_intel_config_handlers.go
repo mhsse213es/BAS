@@ -97,6 +97,11 @@ func (h *Handler) PutThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[threat-intel] reconfigure %s: load sources from db failed: %v", conn, lerr)
 			resp["warning"] = "config saved, but the live connector could not be reloaded — it may not take effect until the next scheduled sync or a server restart"
 		}
+		if activitySources, aerr := connector.LoadActivitySourcesFromDB(r.Context(), h.db); aerr == nil {
+			h.scheduler.ReconfigureActivitySources(activitySources)
+		} else {
+			log.Printf("[threat-intel] reconfigure %s: load activity sources from db failed: %v", conn, aerr)
+		}
 	}
 	if conn == "otx" {
 		var otxKey string
