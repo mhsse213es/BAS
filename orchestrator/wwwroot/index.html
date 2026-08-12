@@ -3587,12 +3587,14 @@ body.theme-slate {
               <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.78rem;color:var(--muted);cursor:pointer;white-space:nowrap">
                 <input type="checkbox" id="vex-sweep-advanced" style="accent-color:var(--accent)"> Advanced Pack
               </label>
-              <button id="vex-sweep-btn" class="btn btn-primary" onclick="vexRunFullSweep()" style="white-space:nowrap">▶ Start Sweep</button>
             </div>
           </div>
           <div id="vex-sweep-group-wrap" style="display:none;margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border)">
             <div id="vex-sweep-group-list" style="max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem"></div>
             <p class="tiny muted" id="vex-sweep-group-summary" style="margin-top:0.4rem"></p>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:0.75rem">
+            <button id="vex-sweep-btn" class="btn btn-primary" onclick="vexRunFullSweep()" style="white-space:nowrap">▶ Start Sweep</button>
           </div>
           <div id="vex-sweep-list" style="margin-top:0.75rem"></div>
         </div>
