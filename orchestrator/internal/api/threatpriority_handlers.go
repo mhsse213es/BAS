@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/coverage"
 	"github.com/audspect/bas/internal/reporting/attackdata"
@@ -101,6 +104,49 @@ func buildTechniqueCoverage(
 	return out
 }
 
+// ActorSource is one source's own raw, pre-merge assertions about an actor
+// -- what MISP/OpenCTI/OTX each individually said, before MergeActors
+// flattened them into a single first-arrival-wins profile row. Aliases/
+// Sectors/Regions are always non-nil so the UI can distinguish "this source
+// reported none" from a missing field. See
+// docs/superpowers/specs/2026-08-11-source-provenance-design.md.
+type ActorSource struct {
+	Source         string     `json:"source"`
+	SourceID       string     `json:"sourceId,omitempty"`
+	Name           string     `json:"name"`
+	Aliases        []string   `json:"aliases"`
+	Sectors        []string   `json:"sectors"`
+	Regions        []string   `json:"regions"`
+	Confidence     string     `json:"confidence,omitempty"`
+	TechniqueCount int        `json:"techniqueCount"`
+	LastSeen       *time.Time `json:"lastSeen,omitempty"`
+}
+
+// loadActorSources returns every source's own record for one canonical
+// actor, source-ordered for stable rendering.
+func loadActorSources(ctx context.Context, db *pgxpool.Pool, actorName string) ([]ActorSource, error) {
+	if db == nil {
+		return []ActorSource{}, nil
+	}
+	rows, err := db.Query(ctx,
+		`SELECT source, source_id, name, aliases, sectors, regions, confidence, technique_count, last_seen
+		   FROM threat_actor_sources WHERE actor_name = $1 ORDER BY source`, actorName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ActorSource{}
+	for rows.Next() {
+		var a ActorSource
+		if err := rows.Scan(&a.Source, &a.SourceID, &a.Name, &a.Aliases, &a.Sectors,
+			&a.Regions, &a.Confidence, &a.TechniqueCount, &a.LastSeen); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 // threatPriorityActorDetail is the GET /api/threat-priority/actors/{name}
 // response shape: the actor's ActorPriority plus history, the concrete
 // list of uncovered techniques, and the full per-technique coverage
@@ -109,14 +155,15 @@ type threatPriorityActorDetail struct {
 	threatpriority.ActorPriority
 	History             []threatpriority.ActorPriorityHistory `json:"history"`
 	UncoveredTechniques []string                              `json:"uncoveredTechniques"`
-	TechniqueCoverage   []TechniqueCoverage                    `json:"techniqueCoverage"`
+	TechniqueCoverage   []TechniqueCoverage                   `json:"techniqueCoverage"`
+	Sources             []ActorSource                         `json:"sources"`
 }
 
 // GET /api/threat-priority/actors/{name}
 func (h *Handler) ThreatPriorityActorDetail(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if h.threatPriorityEngine == nil {
-		respond(w, threatPriorityActorDetail{UncoveredTechniques: []string{}, TechniqueCoverage: []TechniqueCoverage{}})
+		respond(w, threatPriorityActorDetail{UncoveredTechniques: []string{}, TechniqueCoverage: []TechniqueCoverage{}, Sources: []ActorSource{}})
 		return
 	}
 	ap, err := h.threatPriorityEngine.Score(r.Context(), name)
@@ -154,7 +201,14 @@ func (h *Handler) ThreatPriorityActorDetail(w http.ResponseWriter, r *http.Reque
 	}
 	techCoverage := buildTechniqueCoverage(ap.TechniqueIDs, sim, detect, compliant, prevention, validation)
 
+	sources, err := loadActorSources(r.Context(), h.db, name)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	respond(w, threatPriorityActorDetail{
 		ActorPriority: ap, History: hist, UncoveredTechniques: uncovered, TechniqueCoverage: techCoverage,
+		Sources: sources,
 	})
 }

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -157,4 +159,60 @@ func TestThreatPriorityActors_NoEngineAttached_ReturnsEmptyArray(t *testing.T) {
 	if strings.TrimSpace(w.Body.String()) != "[]" {
 		t.Fatalf("body = %q, want an empty JSON array (nil-safe when no priority engine attached)", w.Body.String())
 	}
+}
+
+func TestThreatPriorityActorDetail_ReturnsPerSourceProvenance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source, confidence)
+			 VALUES ('API-PROV-ACTOR','{}','{}','{}','misp','high')
+			 ON CONFLICT (name) DO NOTHING`); err != nil {
+			t.Fatalf("seed profile: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO threat_actor_sources (actor_name, source, source_id, name, aliases, sectors, regions, confidence, technique_count)
+			 VALUES ('API-PROV-ACTOR','misp','evt-1','API-PROV-ACTOR','{}','{"financial services"}','{}','high',2),
+			        ('API-PROV-ACTOR','opencti','ta-9','API-PROV-Tempest','{"API-PROV-ACTOR"}','{}','{}','medium',1)
+			 ON CONFLICT (actor_name, source) DO NOTHING`); err != nil {
+			t.Fatalf("seed sources: %v", err)
+		}
+
+		engine := scenario.NewEngine(t.TempDir())
+		if err := engine.Load(); err != nil {
+			t.Fatalf("engine.Load: %v", err)
+		}
+		pe := threatpriority.NewEngine(pool, engine, nil, nil)
+		h := New(pool, ws.NewHub(), engine, "").WithThreatPriority(pe)
+
+		req := httptest.NewRequest("GET", "/api/threat-priority/actors/API-PROV-ACTOR", nil)
+		req = withURLParams(req, map[string]string{"name": "API-PROV-ACTOR"})
+		w := httptest.NewRecorder()
+		h.ThreatPriorityActorDetail(w, req)
+
+		if w.Code != 200 {
+			t.Fatalf("status = %d, body: %s", w.Code, w.Body.String())
+		}
+		var got struct {
+			Sources []ActorSource `json:"sources"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(got.Sources) != 2 {
+			t.Fatalf("sources = %+v, want 2 entries", got.Sources)
+		}
+		// ORDER BY source -> misp, opencti
+		if got.Sources[0].Source != "misp" || got.Sources[0].Confidence != "high" ||
+			len(got.Sources[0].Sectors) != 1 || got.Sources[0].Sectors[0] != "financial services" {
+			t.Errorf("misp entry = %+v, want its own sectors/confidence", got.Sources[0])
+		}
+		if got.Sources[1].Source != "opencti" || got.Sources[1].Name != "API-PROV-Tempest" ||
+			got.Sources[1].TechniqueCount != 1 {
+			t.Errorf("opencti entry = %+v, want its OWN name (not the canonical one)", got.Sources[1])
+		}
+	})
 }
