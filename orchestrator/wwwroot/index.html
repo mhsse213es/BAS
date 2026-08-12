@@ -12031,18 +12031,30 @@ function viewRunResults(run) {
   // synthesized server-side without ever dispatching to the agent (e.g.
   // SkipReasonPolicyPrivilege) carry a zero-value time and are excluded --
   // an execution timeline for something that never executed is meaningless.
+  // bestTime: StartedAt arrives straight from the agent's raw ExecResult
+  // with no server-side fallback (unlike ExecutedAt, which defaults to
+  // time.Now() when zero -- see scenario.Interpret), so an agent that
+  // never populates it leaves a Go zero-value time.Time, which marshals to
+  // "0001-01-01T00:00:00Z" -- a non-empty, truthy string, so a plain
+  // `c.startedAt || c.executedAt` never actually falls through to the good
+  // value. Same fix already applied to the Evidence panel's "Started at" /
+  // Detection Timeline (see buildEvidenceHtml-equivalent code below).
+  function bestTime(c) {
+    if (c.startedAt && (new Date(c.startedAt)).getFullYear() > 2000) return new Date(c.startedAt);
+    if (c.executedAt && (new Date(c.executedAt)).getFullYear() > 2000) return new Date(c.executedAt);
+    return null;
+  }
   var timelineHtml = (function() {
     var events = results.filter(function(c) {
-      var d = new Date(c.startedAt || c.executedAt);
-      return !isNaN(d.getTime()) && d.getFullYear() > 1970;
+      return bestTime(c) !== null;
     }).slice().sort(function(a, b) {
-      return new Date(a.startedAt || a.executedAt) - new Date(b.startedAt || b.executedAt);
+      return bestTime(a) - bestTime(b);
     });
     if (!events.length) {
       return '<div class="dash-panel dash-soon" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">No timed execution data available for this run.</div>';
     }
     var rows = events.map(function(c) {
-      var t = new Date(c.startedAt || c.executedAt);
+      var t = bestTime(c);
       var col = c.result === 'pass' ? 'var(--success)' : c.result === 'skipped' ? 'var(--muted)' : 'var(--danger)';
       var techId = (c.technique && c.technique.id) ? '<code style="font-size:0.68rem;color:var(--muted)">' + x(c.technique.id) + '</code> ' : '';
       var detBadge = c.detectionVerdict
