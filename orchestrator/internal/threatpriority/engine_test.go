@@ -19,8 +19,8 @@ func mustExec(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) {
 
 func TestNewEngine_UsesDefaultFactors(t *testing.T) {
 	e := NewEngine(nil, scenario.NewEngine(t.TempDir()), nil, nil)
-	if len(e.factors) != 9 {
-		t.Fatalf("got %d factors, want 9", len(e.factors))
+	if len(e.factors) != 10 {
+		t.Fatalf("got %d factors, want 10", len(e.factors))
 	}
 }
 
@@ -51,8 +51,8 @@ func TestScoreActor_ComputesCompositeFromRealFactors(t *testing.T) {
 	if ap.Tier == "" {
 		t.Fatal("expected a non-empty tier")
 	}
-	if len(ap.Factors) != 9 {
-		t.Fatalf("got %d factor results, want 9", len(ap.Factors))
+	if len(ap.Factors) != 10 {
+		t.Fatalf("got %d factor results, want 10", len(ap.Factors))
 	}
 }
 

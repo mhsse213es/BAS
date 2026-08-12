@@ -3,12 +3,24 @@ package threatpriority
 import "math"
 
 const (
-	// flatWeight is each standalone factor's (IntelFreshness, Relevance,
-	// Confidence) fixed share of the composite.
+	// flatWeight is each curated standalone factor's (IntelFreshness,
+	// Relevance, Confidence) fixed share of the composite.
 	flatWeight = 0.05
-	// coverageValidationPool is what's left after the 3 standalone factors
-	// (3 * 0.05 = 0.15): 1.0 - 0.15 = 0.85, split between Coverage and
-	// Validation per blendWeights.
+	// activityWeight is ActivityFactor's fixed share -- half of
+	// flatWeight, deliberately: OTX activity is a weaker, noisier signal
+	// than curated intelligence, and giving it equal weight would recreate
+	// exactly the "OTX pretends to be curated intel" mismatch this
+	// sub-project exists to fix, just at the weighting layer instead of
+	// the data layer. Composite() renormalizes proportionally across
+	// whatever's Available for a given actor, so this can be tuned later
+	// without a migration.
+	activityWeight = 0.025
+	// coverageValidationPool is what's left after the 3 curated standalone
+	// factors (3 * 0.05 = 0.15): 1.0 - 0.15 = 0.85, split between Coverage
+	// and Validation per blendWeights. ActivityFactor's extra 0.025 is not
+	// subtracted here -- Composite() only cares about relative proportions
+	// among whatever factors are Available for a given actor, so the
+	// nominal weights not summing to exactly 1.0 causes no error.
 	coverageValidationPool = 0.85
 	numCoverageFactors     = 4.0
 	numValidationFactors   = 2.0

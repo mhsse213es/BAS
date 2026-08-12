@@ -169,6 +169,27 @@ func (e *Engine) loadAllProfiles(ctx context.Context) ([]ActorProfile, error) {
 	return out, rows.Err()
 }
 
+// loadActivity returns actorName's OTX activity record, or nil if none
+// exists yet. Filters explicitly to source='otx' rather than an unfiltered
+// LIMIT 1 -- today it's the only activity source, and an explicit filter
+// fails loudly (returns nil) instead of silently picking an arbitrary row
+// if a second activity source is ever added without updating this query.
+func (e *Engine) loadActivity(ctx context.Context, name string) (*ActivitySignal, error) {
+	if e.pool == nil {
+		return nil, nil
+	}
+	row := e.pool.QueryRow(ctx,
+		`SELECT pulse_count, first_observed, last_observed FROM threat_actor_activity WHERE actor_name=$1 AND source='otx'`, name)
+	var a ActivitySignal
+	if err := row.Scan(&a.PulseCount, &a.FirstObserved, &a.LastObserved); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &a, nil
+}
+
 // previousScore returns the most recent threat_priority_history score for
 // actorName, or ok=false if none exists yet (first-ever score for this
 // actor, or no pool attached -- e.g. a pool-less unit test). Read-only.
@@ -207,8 +228,13 @@ func (e *Engine) scoreActor(ctx context.Context, profile *ActorProfile, shared *
 		}
 	}
 
+	activity, err := e.loadActivity(ctx, profile.Name)
+	if err != nil {
+		return ActorPriority{}, err
+	}
+
 	tctx := Context{
-		ActorName: profile.Name, TechniqueIDs: techIDs, Profile: profile,
+		ActorName: profile.Name, TechniqueIDs: techIDs, Profile: profile, Activity: activity,
 		Sectors: e.sectors, Regions: e.regions, Now: time.Now().UTC(),
 		ValidatedCount: validatedCount, shared: shared,
 	}

@@ -41,6 +41,19 @@ type ActorProfile struct {
 	LastSeen         *time.Time
 }
 
+// ActivitySignal mirrors a threat_actor_activity row -- OTX pulse-mention
+// evidence about an actor, distinct from ActorProfile's curated
+// intelligence. A deliberately lightweight local type (not
+// internal/connector.ActivitySignal, which is shaped for the fetch-time
+// per-sync result, not the DB-read shape) -- same pattern ActorProfile
+// already uses to mirror threat_actor_profiles without importing
+// internal/connector.
+type ActivitySignal struct {
+	PulseCount    int
+	FirstObserved *time.Time
+	LastObserved  *time.Time
+}
+
 // sharedIndexes holds engine-level, fleet-wide lookups computed once per
 // Score/ScoreAll call and reused across every factor and every actor in that
 // call -- never rebuilt per-actor or per-factor. Coverage indexes use raw
@@ -61,6 +74,7 @@ type Context struct {
 	ActorName      string
 	TechniqueIDs   []string
 	Profile        *ActorProfile
+	Activity       *ActivitySignal
 	Sectors        []string
 	Regions        []string
 	Now            time.Time

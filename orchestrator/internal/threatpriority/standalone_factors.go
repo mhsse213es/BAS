@@ -85,3 +85,29 @@ func (ConfidenceFactor) Score(_ context.Context, tctx Context) (float64, string,
 		return 0, "Unrecognized confidence value", false, nil
 	}
 }
+
+// ActivityFactor scores OTX pulse-mention recency -- a weaker, noisier
+// signal than curated intelligence (see activityWeight). Deliberately
+// mirrors IntelFreshnessFactor's day-bucket shape with its own, tighter
+// boundaries (<7d/<30d/older) -- pulse activity ages faster than a
+// curated sighting.
+type ActivityFactor struct{}
+
+func (ActivityFactor) Name() string           { return "OTX Activity" }
+func (ActivityFactor) Weight(Context) float64 { return activityWeight }
+func (ActivityFactor) Score(_ context.Context, tctx Context) (float64, string, bool, error) {
+	if tctx.Activity == nil || tctx.Activity.LastObserved == nil {
+		return 0, "No OTX activity recorded", false, nil
+	}
+	age := tctx.Now.Sub(*tctx.Activity.LastObserved)
+	days := int(age.Hours() / 24)
+	explanation := fmt.Sprintf("%d OTX pulses, most recently %d days ago", tctx.Activity.PulseCount, days)
+	switch {
+	case age < 7*24*time.Hour:
+		return 100, explanation, true, nil
+	case age < 30*24*time.Hour:
+		return 60, explanation, true, nil
+	default:
+		return 20, explanation, true, nil
+	}
+}

@@ -108,3 +108,59 @@ func TestStandaloneFactors_FlatWeight(t *testing.T) {
 		}
 	}
 }
+
+func TestActivityFactor_Recent(t *testing.T) {
+	now := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	last := now.Add(-3 * 24 * time.Hour)
+	f := ActivityFactor{}
+	raw, explanation, available, err := f.Score(context.Background(), Context{
+		Now: now, Activity: &ActivitySignal{PulseCount: 4, LastObserved: &last},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !available || raw != 100 {
+		t.Fatalf("raw=%.2f available=%v, want 100/true", raw, available)
+	}
+	if explanation == "" {
+		t.Fatal("expected a non-empty explanation")
+	}
+}
+
+func TestActivityFactor_Stale(t *testing.T) {
+	now := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	last := now.Add(-20 * 24 * time.Hour)
+	f := ActivityFactor{}
+	raw, _, available, _ := f.Score(context.Background(), Context{
+		Now: now, Activity: &ActivitySignal{PulseCount: 2, LastObserved: &last},
+	})
+	if !available || raw != 60 {
+		t.Fatalf("raw=%.2f available=%v, want 60/true (8-29 day bucket)", raw, available)
+	}
+}
+
+func TestActivityFactor_VeryStale(t *testing.T) {
+	now := time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+	last := now.Add(-90 * 24 * time.Hour)
+	f := ActivityFactor{}
+	raw, _, available, _ := f.Score(context.Background(), Context{
+		Now: now, Activity: &ActivitySignal{PulseCount: 1, LastObserved: &last},
+	})
+	if !available || raw != 20 {
+		t.Fatalf("raw=%.2f available=%v, want 20/true (30+ day bucket)", raw, available)
+	}
+}
+
+func TestActivityFactor_NoActivity_Unavailable(t *testing.T) {
+	f := ActivityFactor{}
+	_, _, available, _ := f.Score(context.Background(), Context{Activity: nil})
+	if available {
+		t.Fatal("expected available=false with no Activity")
+	}
+}
+
+func TestActivityFactor_WeightIsLowerThanCuratedStandaloneFactors(t *testing.T) {
+	if (ActivityFactor{}).Weight(Context{}) >= (IntelFreshnessFactor{}).Weight(Context{}) {
+		t.Fatal("ActivityFactor's weight must be lower than the curated standalone factors' -- activity evidence is a weaker signal than curated intelligence")
+	}
+}
