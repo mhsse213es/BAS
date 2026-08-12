@@ -133,14 +133,25 @@ func (h *Handler) TestThreatIntelConfig(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	if conn == "otx" {
+		// OTX is an ActivitySource, not a Source -- FetchActivity reports
+		// activity signals, not curated actors. actorCount here means
+		// "distinct actors this connectivity check found activity for",
+		// same rough meaning as the misp/opencti branch below.
+		signals, err := connector.NewOTXSource(body.APIKey).FetchActivity()
+		if err != nil {
+			respond(w, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		respond(w, map[string]any{"ok": true, "actorCount": len(signals)})
+		return
+	}
 	var src connector.Source
 	switch conn {
 	case "misp":
 		src = connector.NewMISPClient(body.BaseURL, body.APIKey, nil, nil)
 	case "opencti":
 		src = connector.NewOpenCTIClient(body.BaseURL, body.APIKey, nil)
-	case "otx":
-		src = connector.NewOTXSource(body.APIKey)
 	}
 	actors, err := src.Fetch()
 	if err != nil {

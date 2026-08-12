@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/audspect/bas/internal/reporting/attackdata"
 )
@@ -14,8 +15,7 @@ import (
 // test: verifies the request path/header and that a pulse with no adversary
 // contributes to RawCount but not ActorCount. RawCount here means "pulses
 // fetched this sync" (bounded by pagination), not the account's total
-// subscribed-pulse count — see the RawCount semantics note in
-// docs/superpowers/specs/2026-07-22-otx-technique-mapping-design.md.
+// subscribed-pulse count.
 func TestOTXSource_Stats_CountsSubscribedPulses(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/pulses/subscribed" {
@@ -34,12 +34,12 @@ func TestOTXSource_Stats_CountsSubscribedPulses(t *testing.T) {
 	c := NewOTXSource("test-key")
 	c.baseURL = server.URL
 
-	actors, err := c.Fetch()
+	signals, err := c.FetchActivity()
 	if err != nil {
-		t.Fatalf("Fetch: %v", err)
+		t.Fatalf("FetchActivity: %v", err)
 	}
-	if len(actors) != 0 {
-		t.Fatalf("actors = %+v, want none (pulse has no adversary)", actors)
+	if len(signals) != 0 {
+		t.Fatalf("signals = %+v, want none (pulse has no adversary)", signals)
 	}
 
 	stat := c.Stats()
@@ -47,7 +47,7 @@ func TestOTXSource_Stats_CountsSubscribedPulses(t *testing.T) {
 		t.Fatalf("Stats() = %+v, want Name=otx RawCount=1 ActorCount=0 Error=\"\"", stat)
 	}
 	if stat.FetchedAt.IsZero() {
-		t.Fatal("Stats().FetchedAt should be set after a successful Fetch")
+		t.Fatal("Stats().FetchedAt should be set after a successful FetchActivity")
 	}
 }
 
@@ -60,7 +60,7 @@ func TestOTXSource_Stats_RecordsErrorOnFailedFetch(t *testing.T) {
 	c := NewOTXSource("test-key")
 	c.baseURL = server.URL
 
-	if _, err := c.Fetch(); err == nil {
+	if _, err := c.FetchActivity(); err == nil {
 		t.Fatal("expected error for HTTP 500")
 	}
 	stat := c.Stats()
@@ -69,15 +69,14 @@ func TestOTXSource_Stats_RecordsErrorOnFailedFetch(t *testing.T) {
 	}
 }
 
-// TestOTXSource_Fetch_MatchesKnownGroupToAuthoritativeTechniques uses "Wizard
-// Spider" — an established, real MITRE group name already relied on
-// elsewhere in this codebase as a stable test fixture (see
-// attackdata_test.go and ti_suggest_pack_test.go). The adversary field is
-// deliberately lowercase-with-padding to exercise normalization; the actor's
-// Name must come back in the index's canonical casing.
-func TestOTXSource_Fetch_MatchesKnownGroupToAuthoritativeTechniques(t *testing.T) {
-	wantTechs := attackdata.GroupTechniqueIndex()["Wizard Spider"]
-	if len(wantTechs) == 0 {
+// TestOTXSource_FetchActivity_MatchesKnownGroup uses "Wizard Spider" -- an
+// established, real MITRE group name already relied on elsewhere in this
+// codebase as a stable test fixture (see attackdata_test.go and
+// ti_suggest_pack_test.go). The adversary field is deliberately
+// lowercase-with-padding to exercise normalization; the signal's ActorName
+// must come back in the index's canonical casing.
+func TestOTXSource_FetchActivity_MatchesKnownGroup(t *testing.T) {
+	if len(attackdata.GroupTechniqueIndex()["Wizard Spider"]) == 0 {
 		t.Fatal("test fixture assumption broken: \"Wizard Spider\" not found in GroupTechniqueIndex()")
 	}
 
@@ -94,26 +93,69 @@ func TestOTXSource_Fetch_MatchesKnownGroupToAuthoritativeTechniques(t *testing.T
 	c := NewOTXSource("test-key")
 	c.baseURL = server.URL
 
-	actors, err := c.Fetch()
+	signals, err := c.FetchActivity()
 	if err != nil {
-		t.Fatalf("Fetch: %v", err)
+		t.Fatalf("FetchActivity: %v", err)
 	}
-	if len(actors) != 1 {
-		t.Fatalf("actors = %+v, want 1", actors)
+	if len(signals) != 1 {
+		t.Fatalf("signals = %+v, want 1", signals)
 	}
-	a := actors[0]
-	if a.Name != "Wizard Spider" || a.Source != "otx" || a.Confidence != "medium" {
-		t.Fatalf("actor = %+v, want Name=\"Wizard Spider\" Source=otx Confidence=medium", a)
+	sig := signals[0]
+	if sig.ActorName != "Wizard Spider" {
+		t.Fatalf("ActorName = %q, want \"Wizard Spider\"", sig.ActorName)
 	}
-	if len(a.Techniques) != len(wantTechs) {
-		t.Fatalf("got %d techniques, want %d (from GroupTechniqueIndex)", len(a.Techniques), len(wantTechs))
+	if sig.PulseCount != 1 {
+		t.Fatalf("PulseCount = %d, want 1", sig.PulseCount)
 	}
-	if a.LastSeen.IsZero() {
-		t.Fatal("LastSeen should be set from the pulse's Modified timestamp")
+	wantTime := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
+	if !sig.FirstObserved.Equal(wantTime) || !sig.LastObserved.Equal(wantTime) {
+		t.Fatalf("FirstObserved=%v LastObserved=%v, want both %v (single pulse)", sig.FirstObserved, sig.LastObserved, wantTime)
 	}
 }
 
-func TestOTXSource_Fetch_SkipsUnmatchedAdversary(t *testing.T) {
+// TestOTXSource_FetchActivity_AccumulatesPulseCountAndSpread is new
+// behavior this rewrite introduces: today's Fetch() only ever tracked the
+// latest Modified date per matched actor. FetchActivity must now count
+// every matching pulse and track both the earliest and latest Modified
+// date seen this sync.
+func TestOTXSource_FetchActivity_AccumulatesPulseCountAndSpread(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(otxPulsesResponse{
+			Count: 3,
+			Results: []otxPulse{
+				{Name: "pulse one", Adversary: "Wizard Spider", Modified: "2026-01-10T00:00:00Z"},
+				{Name: "pulse two", Adversary: "Wizard Spider", Modified: "2026-01-20T00:00:00Z"},
+				{Name: "pulse three", Adversary: "Wizard Spider", Modified: "2026-01-15T00:00:00Z"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	c := NewOTXSource("test-key")
+	c.baseURL = server.URL
+
+	signals, err := c.FetchActivity()
+	if err != nil {
+		t.Fatalf("FetchActivity: %v", err)
+	}
+	if len(signals) != 1 {
+		t.Fatalf("signals = %+v, want 1 (all three pulses match the same actor)", signals)
+	}
+	sig := signals[0]
+	if sig.PulseCount != 3 {
+		t.Fatalf("PulseCount = %d, want 3", sig.PulseCount)
+	}
+	wantFirst := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+	wantLast := time.Date(2026, 1, 20, 0, 0, 0, 0, time.UTC)
+	if !sig.FirstObserved.Equal(wantFirst) {
+		t.Errorf("FirstObserved = %v, want %v (the earliest of the three)", sig.FirstObserved, wantFirst)
+	}
+	if !sig.LastObserved.Equal(wantLast) {
+		t.Errorf("LastObserved = %v, want %v (the latest of the three)", sig.LastObserved, wantLast)
+	}
+}
+
+func TestOTXSource_FetchActivity_SkipsUnmatchedAdversary(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(otxPulsesResponse{
 			Count: 1,
@@ -127,16 +169,16 @@ func TestOTXSource_Fetch_SkipsUnmatchedAdversary(t *testing.T) {
 	c := NewOTXSource("test-key")
 	c.baseURL = server.URL
 
-	actors, err := c.Fetch()
+	signals, err := c.FetchActivity()
 	if err != nil {
-		t.Fatalf("Fetch: %v", err)
+		t.Fatalf("FetchActivity: %v", err)
 	}
-	if len(actors) != 0 {
-		t.Fatalf("actors = %+v, want none (adversary name doesn't match any MITRE group)", actors)
+	if len(signals) != 0 {
+		t.Fatalf("signals = %+v, want none (adversary name doesn't match any MITRE group)", signals)
 	}
 }
 
-func TestOTXSource_Fetch_SkipsEmptyAdversary(t *testing.T) {
+func TestOTXSource_FetchActivity_SkipsEmptyAdversary(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(otxPulsesResponse{
 			Count:   1,
@@ -148,16 +190,16 @@ func TestOTXSource_Fetch_SkipsEmptyAdversary(t *testing.T) {
 	c := NewOTXSource("test-key")
 	c.baseURL = server.URL
 
-	actors, err := c.Fetch()
+	signals, err := c.FetchActivity()
 	if err != nil {
-		t.Fatalf("Fetch: %v", err)
+		t.Fatalf("FetchActivity: %v", err)
 	}
-	if len(actors) != 0 {
-		t.Fatalf("actors = %+v, want none (empty adversary)", actors)
+	if len(signals) != 0 {
+		t.Fatalf("signals = %+v, want none (empty adversary)", signals)
 	}
 }
 
-func TestOTXSource_Fetch_PaginatesUpToCap(t *testing.T) {
+func TestOTXSource_FetchActivity_PaginatesUpToCap(t *testing.T) {
 	var requestedPages []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestedPages = append(requestedPages, r.URL.Query().Get("page"))
@@ -172,8 +214,8 @@ func TestOTXSource_Fetch_PaginatesUpToCap(t *testing.T) {
 	c := NewOTXSource("test-key")
 	c.baseURL = server.URL
 
-	if _, err := c.Fetch(); err != nil {
-		t.Fatalf("Fetch: %v", err)
+	if _, err := c.FetchActivity(); err != nil {
+		t.Fatalf("FetchActivity: %v", err)
 	}
 	if len(requestedPages) != 10 {
 		t.Fatalf("requested %d pages, want 10 (capped)", len(requestedPages))
@@ -183,7 +225,7 @@ func TestOTXSource_Fetch_PaginatesUpToCap(t *testing.T) {
 	}
 }
 
-func TestOTXSource_Fetch_StopsOnShortPage(t *testing.T) {
+func TestOTXSource_FetchActivity_StopsOnShortPage(t *testing.T) {
 	var requestCount int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
@@ -198,8 +240,8 @@ func TestOTXSource_Fetch_StopsOnShortPage(t *testing.T) {
 	c := NewOTXSource("test-key")
 	c.baseURL = server.URL
 
-	if _, err := c.Fetch(); err != nil {
-		t.Fatalf("Fetch: %v", err)
+	if _, err := c.FetchActivity(); err != nil {
+		t.Fatalf("FetchActivity: %v", err)
 	}
 	if requestCount != 1 {
 		t.Fatalf("requested %d pages, want 1 (short page ends pagination)", requestCount)
@@ -209,7 +251,7 @@ func TestOTXSource_Fetch_StopsOnShortPage(t *testing.T) {
 	}
 }
 
-func TestOTXSource_Fetch_PartialFailureReturnsActorsGatheredSoFar(t *testing.T) {
+func TestOTXSource_FetchActivity_PartialFailureReturnsSignalsGatheredSoFar(t *testing.T) {
 	var page int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page++
@@ -229,12 +271,12 @@ func TestOTXSource_Fetch_PartialFailureReturnsActorsGatheredSoFar(t *testing.T) 
 	c := NewOTXSource("test-key")
 	c.baseURL = server.URL
 
-	actors, err := c.Fetch()
+	signals, err := c.FetchActivity()
 	if err == nil {
 		t.Fatal("expected error from page 2 failure")
 	}
-	if len(actors) != 1 || actors[0].Name != "Wizard Spider" {
-		t.Fatalf("actors = %+v, want 1 actor (Wizard Spider, from page 1)", actors)
+	if len(signals) != 1 || signals[0].ActorName != "Wizard Spider" {
+		t.Fatalf("signals = %+v, want 1 signal (Wizard Spider, from page 1)", signals)
 	}
 	if c.Stats().Error == "" {
 		t.Fatal("Stats().Error should be set")

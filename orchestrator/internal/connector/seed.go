@@ -76,10 +76,6 @@ func LoadSourcesFromDB(ctx context.Context, pool *pgxpool.Pool, sectors, regions
 			if baseURL != "" && apiKey != "" {
 				sources = append(sources, NewOpenCTIClient(baseURL, apiKey, sectors))
 			}
-		case "otx":
-			if apiKey != "" {
-				sources = append(sources, NewOTXSource(apiKey))
-			}
 		}
 	}
 	return sources, rows.Err()

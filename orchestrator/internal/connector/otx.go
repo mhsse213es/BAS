@@ -10,19 +10,21 @@ import (
 	"github.com/audspect/bas/internal/reporting/attackdata"
 )
 
-// OTXSource performs a periodic sync against AlienVault OTX. It treats OTX
-// purely as an activity/attribution signal: each subscribed pulse's
-// adversary field is matched against attackdata.GroupTechniqueIndex()'s
-// MITRE-authoritative group names, and on a match the resulting ThreatActor
-// gets MITRE's own technique list for that group — not anything parsed from
-// the pulse's own tags, which aren't a reliable source of ATT&CK IDs. See
-// docs/superpowers/specs/2026-07-22-otx-technique-mapping-design.md.
+// OTXSource performs a periodic sync against AlienVault OTX, reporting
+// pulse-mention activity evidence -- never curated actor attribution. Each
+// subscribed pulse's adversary field is matched against
+// attackdata.GroupTechniqueIndex()'s MITRE-authoritative group names; on a
+// match, the pulse contributes to that actor's ActivitySignal (a count and
+// an observed date range), never a ThreatActor. See
+// docs/superpowers/specs/2026-08-12-otx-activity-signal-design.md, which
+// supersedes docs/superpowers/specs/2026-07-22-otx-technique-mapping-design.md
+// for everything concerning what Fetch (now FetchActivity) returns.
 //
 // This is a distinct client from internal/ioc/otx.go's otxProvider, which
 // performs synchronous on-demand single-indicator lookups (IP/domain/hash/
-// CVE) for LookupIOC — a different concern from this package's periodic
-// sync + scenario generation, matching this codebase's existing package
-// split between internal/ioc and internal/connector.
+// CVE) for LookupIOC -- a different concern from this package's periodic
+// sync, matching this codebase's existing package split between
+// internal/ioc and internal/connector.
 type OTXSource struct {
 	apiKey     string
 	httpClient *http.Client
@@ -63,21 +65,27 @@ type otxPulsesResponse struct {
 	Results []otxPulse `json:"results"`
 }
 
-// Fetch pages through the account's subscribed pulses (capped at
-// otxMaxPages x otxPageLimit) and builds one ThreatActor per matched MITRE
-// group. A page-1 failure returns nil, err. A later-page failure returns
-// whatever actors were gathered from the pages that did succeed, alongside
-// the error -- Scheduler.sync() currently discards actors on any Fetch
-// error, so this doesn't yet change sync behavior, but the data is there
-// for that gap to be closed separately later.
-func (c *OTXSource) Fetch() ([]ThreatActor, error) {
+// otxActivityAccumulator tracks one actor's pulse count and observed date
+// range while paging through subscribed pulses this sync.
+type otxActivityAccumulator struct {
+	count       int
+	first, last time.Time
+}
+
+// FetchActivity pages through the account's subscribed pulses (capped at
+// otxMaxPages x otxPageLimit) and builds one ActivitySignal per matched
+// MITRE group, counting every matching pulse and tracking the earliest/
+// latest Modified date seen this sync. A page-1 failure returns nil, err.
+// A later-page failure returns whatever signals were gathered from the
+// pages that did succeed, alongside the error.
+func (c *OTXSource) FetchActivity() ([]ActivitySignal, error) {
 	groupTechs := attackdata.GroupTechniqueIndex()
 	normalizedGroups := make(map[string]string, len(groupTechs))
 	for name := range groupTechs {
 		normalizedGroups[normalizeAdversary(name)] = name
 	}
 
-	actorMap := make(map[string]*ThreatActor)
+	accByActor := make(map[string]*otxActivityAccumulator)
 	var totalFetched int
 
 	for page := 1; page <= otxMaxPages; page++ {
@@ -87,7 +95,7 @@ func (c *OTXSource) Fetch() ([]ThreatActor, error) {
 				c.lastStat = SourceStat{Name: "otx", Error: err.Error(), FetchedAt: time.Now()}
 				return nil, fmt.Errorf("otx fetch page 1: %w", err)
 			}
-			out := otxActorsFromMap(actorMap)
+			out := otxSignalsFromMap(accByActor)
 			c.lastStat = SourceStat{Name: "otx", RawCount: totalFetched, ActorCount: len(out), Error: err.Error(), FetchedAt: time.Now()}
 			return out, fmt.Errorf("otx fetch page %d: %w", page, err)
 		}
@@ -102,27 +110,21 @@ func (c *OTXSource) Fetch() ([]ThreatActor, error) {
 				continue
 			}
 			modified, parseErr := time.Parse(time.RFC3339, p.Modified)
-
-			existing, ok := actorMap[groupName]
-			if !ok {
-				techs := make([]TechniqueRef, 0, len(groupTechs[groupName]))
-				for _, id := range groupTechs[groupName] {
-					techs = append(techs, TechniqueRef{ID: id})
-				}
-				a := &ThreatActor{
-					Name:       groupName,
-					Techniques: techs,
-					Source:     "otx",
-					Confidence: "medium",
-				}
-				if parseErr == nil {
-					a.LastSeen = modified
-				}
-				actorMap[groupName] = a
-				continue
+			if parseErr != nil {
+				continue // can't order an unparseable timestamp -- skip counting this pulse
 			}
-			if parseErr == nil && modified.After(existing.LastSeen) {
-				existing.LastSeen = modified
+
+			acc, ok := accByActor[groupName]
+			if !ok {
+				acc = &otxActivityAccumulator{first: modified, last: modified}
+				accByActor[groupName] = acc
+			}
+			acc.count++
+			if modified.Before(acc.first) {
+				acc.first = modified
+			}
+			if modified.After(acc.last) {
+				acc.last = modified
 			}
 		}
 
@@ -131,7 +133,7 @@ func (c *OTXSource) Fetch() ([]ThreatActor, error) {
 		}
 	}
 
-	out := otxActorsFromMap(actorMap)
+	out := otxSignalsFromMap(accByActor)
 	c.lastStat = SourceStat{Name: "otx", RawCount: totalFetched, ActorCount: len(out), FetchedAt: time.Now()}
 	return out, nil
 }
@@ -143,10 +145,13 @@ func normalizeAdversary(s string) string {
 	return strings.ToUpper(strings.TrimSpace(s))
 }
 
-func otxActorsFromMap(m map[string]*ThreatActor) []ThreatActor {
-	out := make([]ThreatActor, 0, len(m))
-	for _, a := range m {
-		out = append(out, *a)
+func otxSignalsFromMap(m map[string]*otxActivityAccumulator) []ActivitySignal {
+	out := make([]ActivitySignal, 0, len(m))
+	for name, acc := range m {
+		out = append(out, ActivitySignal{
+			ActorName: name, PulseCount: acc.count,
+			FirstObserved: acc.first, LastObserved: acc.last,
+		})
 	}
 	return out
 }
