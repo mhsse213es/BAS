@@ -2,7 +2,10 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -671,6 +674,134 @@ func TestUpsertActorProfiles_NoTechniques_PersistsEmptyArray(t *testing.T) {
 		}
 		if len(techs) != 0 {
 			t.Fatalf("techniques = %v, want empty", techs)
+		}
+	})
+}
+
+// TestUpsertTechniqueEvidence_ResolvesAgainstMergedRoster proves evidence
+// for an actor that DOES have a curated profile persists under that
+// actor's canonical (merged) name.
+func TestUpsertTechniqueEvidence_ResolvesAgainstMergedRoster(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		s.upsertActorProfiles([]ThreatActor{{
+			Name: "EVID-Wizard Spider", Aliases: []string{}, Sectors: []string{}, Regions: []string{},
+		}})
+		merged := []ThreatActor{{Name: "EVID-Wizard Spider"}}
+
+		s.upsertTechniqueEvidence([]TechniqueEvidence{
+			{ActorName: "EVID-Wizard Spider", TechniqueID: "T1059.001", Confidence: 80},
+		}, merged)
+
+		var techID string
+		var confidence int
+		if err := pool.QueryRow(t.Context(),
+			`SELECT technique_id, confidence FROM technique_evidence WHERE actor_name = $1 AND source = 'opencti'`,
+			"EVID-Wizard Spider",
+		).Scan(&techID, &confidence); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if techID != "T1059.001" || confidence != 80 {
+			t.Fatalf("got techID=%q confidence=%d, want T1059.001/80", techID, confidence)
+		}
+	})
+}
+
+// TestUpsertTechniqueEvidence_UnresolvedActorIsDropped is the key
+// difference from OTX's activity signals: no orphan stub gets created.
+func TestUpsertTechniqueEvidence_UnresolvedActorIsDropped(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		s.upsertTechniqueEvidence([]TechniqueEvidence{
+			{ActorName: "EVID-Nobody-Curated-Ever-Reported", TechniqueID: "T1059.001", Confidence: 50},
+		}, nil)
+
+		var count int
+		if err := pool.QueryRow(t.Context(),
+			`SELECT COUNT(*) FROM threat_actor_profiles WHERE name = $1`, "EVID-Nobody-Curated-Ever-Reported",
+		).Scan(&count); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if count != 0 {
+			t.Fatal("expected no profile stub created for unresolved evidence -- unlike OTX activity signals, evidence must not create actors")
+		}
+	})
+}
+
+// TestUpsertTechniqueEvidence_MultiplePathsToSameTechniquePersistSeparately
+// proves the composite PK (actor_name, technique_id, via, via_name,
+// source) lets a technique reached both directly and via a campaign keep
+// both rows -- two real, distinct pieces of evidence, never collapsed.
+func TestUpsertTechniqueEvidence_MultiplePathsToSameTechniquePersistSeparately(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		s.upsertActorProfiles([]ThreatActor{{
+			Name: "EVID-Multi-Path", Aliases: []string{}, Sectors: []string{}, Regions: []string{},
+		}})
+		merged := []ThreatActor{{Name: "EVID-Multi-Path"}}
+
+		s.upsertTechniqueEvidence([]TechniqueEvidence{
+			{ActorName: "EVID-Multi-Path", TechniqueID: "T1566.001", Via: "", ViaName: "", Confidence: 70},
+			{ActorName: "EVID-Multi-Path", TechniqueID: "T1566.001", Via: "campaign", ViaName: "Operation Ghost", Confidence: 40},
+		}, merged)
+
+		var count int
+		if err := pool.QueryRow(t.Context(),
+			`SELECT COUNT(*) FROM technique_evidence WHERE actor_name = $1 AND technique_id = 'T1566.001'`,
+			"EVID-Multi-Path",
+		).Scan(&count); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if count != 2 {
+			t.Fatalf("row count = %d, want 2 (direct + via campaign, both preserved)", count)
+		}
+	})
+}
+
+// TestScheduler_Sync_PersistsTechniqueEvidenceFromOpenCTI exercises the
+// real sync() path end to end.
+func TestScheduler_Sync_PersistsTechniqueEvidenceFromOpenCTI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			resp := octiThreatActorsResp{}
+			resp.Data.ThreatActors.Edges = []octiActorEdge{
+				{Node: octiThreatActorNode{
+					ID: "ta-sync-1", Name: "SYNC-EVID-ACTOR",
+					AttackPatterns: octiRelationshipConnection{Edges: []octiRelationshipEdge{
+						{Node: octiRelationshipNode{To: octiRelatedEntity{XMitreID: "T1059"}, Confidence: 90}},
+						{Node: octiRelationshipNode{To: octiRelatedEntity{XMitreID: "T1105"}, Confidence: 90}},
+					}},
+				}},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}))
+		defer server.Close()
+
+		octiClient := NewOpenCTIClient(server.URL, "test-key", nil)
+		s := NewScheduler([]Source{octiClient}, NewGenerator(t.TempDir(), nil, nil, nil), scenario.NewEngine(t.TempDir()), 24, pool, nil)
+
+		s.sync()
+
+		var count int
+		if err := pool.QueryRow(t.Context(),
+			`SELECT COUNT(*) FROM technique_evidence WHERE actor_name = $1 AND source = 'opencti'`, "SYNC-EVID-ACTOR",
+		).Scan(&count); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if count != 2 {
+			t.Fatalf("evidence row count = %d, want 2", count)
 		}
 	})
 }

@@ -460,6 +460,29 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// connector evidence existed. See
 		// docs/superpowers/specs/2026-08-12-technique-evidence-fallback-design.md.
 		`ALTER TABLE threat_actor_profiles ADD COLUMN IF NOT EXISTS techniques text[] NOT NULL DEFAULT '{}'`,
+
+		// technique_evidence: OpenCTI's own per-relationship "uses" evidence
+		// (confidence/dates), distinct from the flat, provenance-free
+		// technique lists every other source contributes. via/via_name
+		// distinguish a technique asserted directly by the actor from one
+		// reached through a linked campaign/malware/tool -- a technique
+		// reached multiple ways gets multiple rows, by design. MISP/bundle
+		// structurally cannot supply this data (see the design spec), so
+		// source is always 'opencti' today, kept as a real column for the
+		// same reason threat_actor_sources/threat_actor_activity do. See
+		// docs/superpowers/specs/2026-08-12-technique-evidence-layer-design.md.
+		`CREATE TABLE IF NOT EXISTS technique_evidence (
+			actor_name   text NOT NULL REFERENCES threat_actor_profiles(name) ON DELETE CASCADE,
+			technique_id text NOT NULL,
+			via          text NOT NULL DEFAULT '',
+			via_name     text NOT NULL DEFAULT '',
+			source       text NOT NULL,
+			confidence   int  NOT NULL DEFAULT 0,
+			start_time   timestamptz,
+			stop_time    timestamptz,
+			updated_at   timestamptz NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (actor_name, technique_id, via, via_name, source)
+		)`,
 	}
 
 	for _, s := range stmts {

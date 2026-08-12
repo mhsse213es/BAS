@@ -232,6 +232,7 @@ func (s *Scheduler) sync() {
 	sources := s.sources
 	activitySources := s.activitySources
 	s.mu.RUnlock()
+	var techEvidence []TechniqueEvidence
 	for _, src := range sources {
 		got, err := src.Fetch()
 		if ss, ok := src.(StatsSource); ok {
@@ -256,6 +257,9 @@ func (s *Scheduler) sync() {
 				allMalware = append(allMalware, malware...)
 				allTools = append(allTools, tools...)
 			}
+		}
+		if tes, ok := src.(TechniqueEvidenceSource); ok {
+			techEvidence = append(techEvidence, tes.FetchTechniqueEvidence()...)
 		}
 	}
 
@@ -309,6 +313,11 @@ func (s *Scheduler) sync() {
 	for _, r := range activityResults {
 		s.upsertActivitySignals(r.source, r.signals, actors)
 	}
+	// Per-relationship technique evidence (OpenCTI only) -- resolved
+	// against the merged roster; unlike activity signals, an unresolved
+	// actor's evidence is dropped, not stubbed (this enriches an actor
+	// that must already exist via a curated source).
+	s.upsertTechniqueEvidence(techEvidence, actors)
 
 	if s.pool != nil {
 		for _, c := range allCampaigns {
@@ -549,6 +558,38 @@ func (s *Scheduler) upsertActivitySignals(source string, signals []ActivitySigna
 			actorName, source, sig.PulseCount, sig.FirstObserved, sig.LastObserved)
 		if err != nil {
 			log.Printf("[connector] upsert activity signal %q/%q: %v", actorName, source, err)
+		}
+	}
+}
+
+// upsertTechniqueEvidence resolves each evidence record against the
+// merged curated roster (reusing resolveActivitySignalActor, unmodified)
+// and persists to technique_evidence. Unlike upsertActivitySignals, a
+// record that doesn't resolve to an existing actor is dropped and
+// logged -- this enriches an actor a curated source must already have
+// established, it never creates one. A single record failing is logged
+// and skipped, never aborting the rest -- same discipline every other
+// upsert* function in this file applies. No-op when pool is nil.
+func (s *Scheduler) upsertTechniqueEvidence(evidence []TechniqueEvidence, merged []ThreatActor) {
+	if s.pool == nil {
+		return
+	}
+	ctx := context.Background()
+	for _, ev := range evidence {
+		actorName, found := resolveActivitySignalActor(ev.ActorName, merged)
+		if !found {
+			log.Printf("[connector] technique evidence for unresolved actor %q dropped (technique %s)", ev.ActorName, ev.TechniqueID)
+			continue
+		}
+		_, err := s.pool.Exec(ctx,
+			`INSERT INTO technique_evidence (actor_name, technique_id, via, via_name, source, confidence, start_time, stop_time, updated_at)
+			 VALUES ($1,$2,$3,$4,'opencti',$5,$6,$7,NOW())
+			 ON CONFLICT (actor_name, technique_id, via, via_name, source) DO UPDATE SET
+			   confidence = EXCLUDED.confidence, start_time = EXCLUDED.start_time,
+			   stop_time = EXCLUDED.stop_time, updated_at = NOW()`,
+			actorName, ev.TechniqueID, ev.Via, ev.ViaName, ev.Confidence, ev.StartTime, ev.StopTime)
+		if err != nil {
+			log.Printf("[connector] upsert technique evidence %q/%s: %v", actorName, ev.TechniqueID, err)
 		}
 	}
 }
