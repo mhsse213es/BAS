@@ -3358,6 +3358,16 @@ body.theme-slate {
           <div id="openaev-scenarios-empty" class="empty" style="display:none">No scenarios synced yet.</div>
         </div>
         <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
+          <div class="card-title">OpenAEV Exercises</div>
+          <div class="tbl-wrap" style="margin-top:0.5rem">
+            <table id="openaev-exercises-table">
+              <thead><tr><th>Name</th><th>Category</th><th>Severity</th><th>Techniques</th><th>Injects</th><th>Synced</th></tr></thead>
+              <tbody id="openaev-exercises-body"></tbody>
+            </table>
+          </div>
+          <div id="openaev-exercises-empty" class="empty" style="display:none">No exercises synced yet.</div>
+        </div>
+        <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
           <div class="card-title">Exercise Plans</div>
           <div class="tbl-wrap" style="margin-top:0.5rem">
             <table>
@@ -5743,15 +5753,24 @@ function loadOpenAEVConfig() {
   apicall('/api/openaev/status').then(function(s) {
     var badge = document.getElementById('openaev-status-badge');
     var color = s.lastSyncStatus === 'ok' ? apColor(100) : s.lastSyncStatus === 'error' ? apColor(0) : 'var(--muted)';
-    badge.textContent = x(s.lastSyncStatus || 'never');
+    var label = s.lastSyncStatus || 'never';
+    if (s.lastSyncStatus === 'ok') {
+      label += ' — ' + (s.lastSyncCreated || 0) + ' created, ' + (s.lastSyncUpdated || 0) + ' updated';
+      if (s.lastSyncSkipped) label += ', ' + s.lastSyncSkipped + ' skipped';
+      if (s.lastSyncErrored) label += ', ' + s.lastSyncErrored + ' errored';
+    }
+    badge.textContent = x(label);
     badge.style.color = color;
   }).catch(function() {});
 }
 
-function loadOpenAEVScenarios() {
-  apicall('/api/openaev/scenarios').then(function(list) {
-    var body = document.getElementById('openaev-scenarios-body');
-    var empty = document.getElementById('openaev-scenarios-empty');
+function loadOpenAEVScenarios(type, bodyId, emptyId) {
+  type = type || 'scenario';
+  bodyId = bodyId || 'openaev-scenarios-body';
+  emptyId = emptyId || 'openaev-scenarios-empty';
+  apicall('/api/openaev/scenarios?type=' + encodeURIComponent(type)).then(function(list) {
+    var body = document.getElementById(bodyId);
+    var empty = document.getElementById(emptyId);
     if (!list || !list.length) {
       body.innerHTML = '';
       empty.style.display = 'block';
@@ -5853,7 +5872,8 @@ function closeOpenAEVDetail() {
 }
 
 function loadExercisesTab() {
-  loadOpenAEVScenarios();
+  loadOpenAEVScenarios('scenario', 'openaev-scenarios-body', 'openaev-scenarios-empty');
+  loadOpenAEVScenarios('exercise', 'openaev-exercises-body', 'openaev-exercises-empty');
   apicall('/api/exercises/plans').then(function(plans) {
     var body = document.getElementById('ex-plans-body');
     var empty = document.getElementById('ex-plans-empty');
