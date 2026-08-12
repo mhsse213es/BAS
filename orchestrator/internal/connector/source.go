@@ -48,3 +48,28 @@ type ActivitySignal struct {
 	FirstObserved time.Time
 	LastObserved  time.Time
 }
+
+// TechniqueEvidenceSource is implemented by connectors that can supply
+// real per-relationship confidence/date evidence for a technique
+// assertion -- today, only OpenCTI's STIX relationship-object graph
+// carries this data. See
+// docs/superpowers/specs/2026-08-12-technique-evidence-layer-design.md.
+type TechniqueEvidenceSource interface {
+	FetchTechniqueEvidence() []TechniqueEvidence
+}
+
+// TechniqueEvidence is one "uses" relationship's own STIX evidence --
+// Via/ViaName distinguish a technique asserted directly by the actor from
+// one reached through a linked campaign/malware/tool. Confidence/dates
+// are the source's own, never fabricated or inherited from the actor's
+// overall Confidence/LastSeen. A technique reached through multiple paths
+// produces multiple TechniqueEvidence entries, never merged into one.
+type TechniqueEvidence struct {
+	ActorName   string
+	TechniqueID string
+	Via         string // "" (direct) | "campaign" | "malware" | "tool"
+	ViaName     string // the linked entity's name, "" when Via == ""
+	Confidence  int
+	StartTime   *time.Time
+	StopTime    *time.Time
+}

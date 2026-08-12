@@ -32,6 +32,7 @@ type OpenCTIClient struct {
 	lastCampaigns []intelligence.Campaign
 	lastMalware   []intelligence.Malware
 	lastTools     []intelligence.Tool
+	lastTechniqueEvidence []TechniqueEvidence
 	retryDelay    time.Duration
 }
 
@@ -62,27 +63,33 @@ func (c *OpenCTIClient) Fetch() ([]ThreatActor, error) {
 	var campaigns []intelligence.Campaign
 	var malware []intelligence.Malware
 	var tools []intelligence.Tool
+	var evidence []TechniqueEvidence
 	for _, raw := range actorsRaw {
 		actor := c.convertActor(raw)
 		if actor == nil || len(actor.Techniques) < 2 {
 			continue
 		}
 		actors = append(actors, *actor)
+		evidence = append(evidence, techniqueEvidenceFrom(raw.AttackPatterns, actor.Name, "", "")...)
 
 		for _, entity := range campaignEntitiesFrom(raw.Campaigns) {
 			campaigns = append(campaigns, c.convertCampaign(entity, actor))
+			evidence = append(evidence, techniqueEvidenceFrom(entity.AttackPatterns, actor.Name, "campaign", entity.Name)...)
 		}
 		for _, entity := range malwareEntitiesFrom(raw.Malwares) {
 			malware = append(malware, c.convertMalware(entity, actor))
+			evidence = append(evidence, techniqueEvidenceFrom(entity.AttackPatterns, actor.Name, "malware", entity.Name)...)
 		}
 		for _, entity := range toolEntitiesFrom(raw.Tools) {
 			tools = append(tools, c.convertTool(entity, actor))
+			evidence = append(evidence, techniqueEvidenceFrom(entity.AttackPatterns, actor.Name, "tool", entity.Name)...)
 		}
 	}
 	c.lastStat = SourceStat{Name: "opencti", RawCount: len(actorsRaw), ActorCount: len(actors), FetchedAt: time.Now()}
 	c.lastCampaigns = campaigns
 	c.lastMalware = malware
 	c.lastTools = tools
+	c.lastTechniqueEvidence = evidence
 	return actors, nil
 }
 
@@ -115,11 +122,20 @@ type octiRelatedEntity struct {
 	AttackPatterns octiRelationshipConnection `json:"attackPatterns"`
 }
 
+// octiRelationshipNode is the "node" of one stixCoreRelationships edge --
+// named (not an inline anonymous struct) so it can carry the
+// relationship's own STIX properties (Confidence/StartTime/StopTime)
+// without every construction site needing to repeat the full field list.
+type octiRelationshipNode struct {
+	To         octiRelatedEntity `json:"to"`
+	From       octiRelatedEntity `json:"from"`
+	Confidence int               `json:"confidence"`
+	StartTime  string            `json:"start_time"`
+	StopTime   string            `json:"stop_time"`
+}
+
 type octiRelationshipEdge struct {
-	Node struct {
-		To   octiRelatedEntity `json:"to"`
-		From octiRelatedEntity `json:"from"`
-	} `json:"node"`
+	Node octiRelationshipNode `json:"node"`
 }
 
 type octiRelationshipConnection struct {
@@ -154,6 +170,33 @@ func techniqueRefsFrom(conn octiRelationshipConnection) []TechniqueRef {
 			tactic = e.Node.To.KillChainPhases[0].PhaseName
 		}
 		out = append(out, TechniqueRef{ID: id, Name: e.Node.To.Name, Tactic: tactic})
+	}
+	return out
+}
+
+// techniqueEvidenceFrom extracts TechniqueEvidence entries from a
+// "uses"->Attack-Pattern connection -- the same edges techniqueRefsFrom
+// reads, but preserving each edge's own confidence/dates instead of
+// discarding them. via/viaName tag whether this connection came from the
+// actor directly ("", "") or through a linked campaign/malware/tool.
+func techniqueEvidenceFrom(conn octiRelationshipConnection, actorName, via, viaName string) []TechniqueEvidence {
+	var out []TechniqueEvidence
+	for _, e := range conn.Edges {
+		id := strings.ToUpper(strings.TrimSpace(e.Node.To.XMitreID))
+		if !isATTACKID(id) {
+			continue
+		}
+		ev := TechniqueEvidence{
+			ActorName: actorName, TechniqueID: id, Via: via, ViaName: viaName,
+			Confidence: e.Node.Confidence,
+		}
+		if t, err := time.Parse(time.RFC3339, e.Node.StartTime); err == nil {
+			ev.StartTime = &t
+		}
+		if t, err := time.Parse(time.RFC3339, e.Node.StopTime); err == nil {
+			ev.StopTime = &t
+		}
+		out = append(out, ev)
 	}
 	return out
 }
@@ -227,6 +270,9 @@ const actorFieldsFragment = `
         ) {
           edges {
             node {
+              confidence
+              start_time
+              stop_time
               to {
                 ... on AttackPattern {
                   x_mitre_id
@@ -258,6 +304,9 @@ const actorFieldsFragment = `
                   ) {
                     edges {
                       node {
+                        confidence
+                        start_time
+                        stop_time
                         to {
                           ... on AttackPattern {
                             x_mitre_id
@@ -293,6 +342,9 @@ const actorFieldsFragment = `
                   ) {
                     edges {
                       node {
+                        confidence
+                        start_time
+                        stop_time
                         to {
                           ... on AttackPattern {
                             x_mitre_id
@@ -327,6 +379,9 @@ const actorFieldsFragment = `
                   ) {
                     edges {
                       node {
+                        confidence
+                        start_time
+                        stop_time
                         to {
                           ... on AttackPattern {
                             x_mitre_id
@@ -519,6 +574,12 @@ func (c *OpenCTIClient) convertTool(entity octiRelatedEntity, actor *ThreatActor
 // same after-the-fact-accessor pattern Stats() already uses.
 func (c *OpenCTIClient) FetchIntelligence() ([]intelligence.Campaign, []intelligence.Malware, []intelligence.Tool, error) {
 	return c.lastCampaigns, c.lastMalware, c.lastTools, nil
+}
+
+// FetchTechniqueEvidence implements TechniqueEvidenceSource -- returns the
+// per-relationship evidence gathered during the most recent Fetch() call.
+func (c *OpenCTIClient) FetchTechniqueEvidence() []TechniqueEvidence {
+	return c.lastTechniqueEvidence
 }
 
 func confidenceLabel(n int) string {
