@@ -4051,6 +4051,22 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- Generic Config Save Confirmation — reused by any "Save" that can silently
+     overwrite a previously-saved connector/config value (threat intel, OpenAEV,
+     ITSM ticketing connectors). Opened via openConfirmDiffModal(title, diffHtml, onConfirm). -->
+<div id="confirm-diff-overlay" class="overlay">
+  <div class="modal" style="width:440px">
+    <h3 id="confirm-diff-title">Confirm Config Change</h3>
+    <p class="sub2">Review what will change before saving.</p>
+    <div id="confirm-diff-body" style="margin:0.6rem 0"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="closeConfirmDiffModal()">Cancel</button>
+      <span style="flex:1"></span>
+      <button id="confirm-diff-submit-btn" class="btn btn-primary btn-sm" onclick="runConfirmDiffModal()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Group Picker (Move Agent to Group / Move Group to New Parent) -->
 <div id="group-picker-overlay" class="overlay">
   <div class="modal" style="width:400px">
@@ -5699,11 +5715,14 @@ function closeExposureDetail() {
 // alongside MISP/OpenCTI/OTX (see loadConnectorStatus). Synced scenarios live
 // in the Exercises tab (see loadExercisesTab), since that's where they turn
 // into exercise plans.
+var OAEV_CONFIG_LOADED = { baseUrl: '', enabled: false }; // last fetched from the server, for the save confirmation diff
+
 function loadOpenAEVConfig() {
   var configPanel = document.getElementById('openaev-config-panel');
   if (!configPanel) return;
   if (ROLE === 'admin') {
     apicall('/api/openaev/config').then(function(cfg) {
+      OAEV_CONFIG_LOADED = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled };
       configPanel.innerHTML =
         '<div class="kpi-row">' +
           '<input id="oaev-url" type="text" placeholder="https://openaev.example.local" value="' + x(cfg.baseUrl || '') + '" class="inp-sm" style="flex:1">' +
@@ -5772,15 +5791,35 @@ function testOpenAEVConfig() {
 }
 
 function saveOpenAEVConfig() {
+  var newUrl = document.getElementById('oaev-url').value;
+  var newToken = document.getElementById('oaev-token').value;
+  var newEnabled = document.getElementById('oaev-enabled').checked;
+  var payload = { baseUrl: newUrl, bearerToken: newToken, pollIntervalHours: 24, enabled: newEnabled };
+
+  var urlChanged = newUrl !== OAEV_CONFIG_LOADED.baseUrl;
+  var tokenChanged = newToken !== '';
+  var enabledChanged = newEnabled !== OAEV_CONFIG_LOADED.enabled;
+
+  if (!urlChanged && !tokenChanged && !enabledChanged) {
+    doSaveOpenAEVConfig(payload); // nothing to confirm
+    return;
+  }
+
+  var rows = '';
+  if (urlChanged) rows += _diffRow('Base URL', OAEV_CONFIG_LOADED.baseUrl, newUrl);
+  rows += _diffSecretRow('Bearer token', tokenChanged);
+  if (enabledChanged) rows += _diffRow('Enabled', OAEV_CONFIG_LOADED.enabled ? 'Yes' : 'No', newEnabled ? 'Yes' : 'No');
+
+  openConfirmDiffModal('Confirm OpenAEV Config Change', rows, function() {
+    doSaveOpenAEVConfig(payload);
+  });
+}
+
+function doSaveOpenAEVConfig(payload) {
   apicall('/api/openaev/config', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      baseUrl: document.getElementById('oaev-url').value,
-      bearerToken: document.getElementById('oaev-token').value,
-      pollIntervalHours: 24,
-      enabled: document.getElementById('oaev-enabled').checked
-    })
+    body: JSON.stringify(payload)
   }).then(function() {
     showToast('OpenAEV config saved', 'ok');
     loadOpenAEVConfig();
@@ -9379,7 +9418,10 @@ function renderConnectorList(list) {
   }).join('');
 }
 
+var TICKET_CONNECTOR_LOADED = null; // the record being edited (null for Add), for the save confirmation diff
+
 function openAddConnector() {
+  TICKET_CONNECTOR_LOADED = null;
   document.getElementById('cf-id').value = '';
   document.getElementById('cf-name').value = '';
   document.getElementById('cf-provider').value = 'servicenow';
@@ -9397,6 +9439,7 @@ function openAddConnector() {
 function openEditConnector(id) {
   var c = (_ticketingConfigs || []).find(function(cfg) { return cfg.id === id; });
   if (!c) return;
+  TICKET_CONNECTOR_LOADED = c;
   document.getElementById('cf-id').value = c.id;
   document.getElementById('cf-name').value = c.name || '';
   document.getElementById('cf-provider').value = c.provider || 'servicenow';
@@ -9541,6 +9584,51 @@ function saveConnectorForm() {
   };
   var url = id ? '/api/ticketing/configs/' + encodeURIComponent(id) : '/api/ticketing/configs';
   var method = id ? 'PUT' : 'POST';
+
+  // Only an edit of an existing connector has a prior saved value that could be
+  // silently overwritten — a brand-new connector (id empty, TICKET_CONNECTOR_LOADED
+  // null) has nothing to diff against, so it always saves directly.
+  if (!id || !TICKET_CONNECTOR_LOADED) {
+    doSaveConnectorForm(url, method, body);
+    return;
+  }
+
+  var prev = TICKET_CONNECTOR_LOADED;
+  var rows = '';
+  if (body.name !== (prev.name || '')) rows += _diffRow('Name', prev.name, body.name);
+  if (prov !== (prev.provider || '')) {
+    rows += _diffRow('Provider', PROVIDER_LABELS[prev.provider] || prev.provider, PROVIDER_LABELS[prov] || prov);
+    rows += '<div class="tiny muted" style="margin-bottom:0.4rem">Changing provider reconfigures every connection field below.</div>';
+  } else {
+    var prevSettings = prev.settings || {};
+    fields.forEach(function(f) {
+      var newVal = settings[f.key] || '';
+      var oldVal = prevSettings[f.key] || '';
+      if (f.type === 'password') {
+        if (newVal !== '***') rows += _diffSecretRow(f.label, true);
+      } else if (f.type === 'checkbox') {
+        if (newVal !== oldVal) rows += _diffRow(f.label, oldVal === 'yes' ? 'Yes' : 'No', newVal === 'yes' ? 'Yes' : 'No');
+      } else if (newVal !== oldVal) {
+        rows += _diffRow(f.label, oldVal, newVal);
+      }
+    });
+  }
+  if (body.enabled !== !!prev.enabled) rows += _diffRow('Enabled', prev.enabled ? 'Yes' : 'No', body.enabled ? 'Yes' : 'No');
+  if (body.autoCreate !== (prev.autoCreate || 'off')) rows += _diffRow('Auto-create', prev.autoCreate || 'off', body.autoCreate);
+  if (body.autoUpdate !== !!prev.autoUpdate) rows += _diffRow('Auto-update', prev.autoUpdate ? 'Yes' : 'No', body.autoUpdate ? 'Yes' : 'No');
+  if (body.autoClose !== !!prev.autoClose) rows += _diffRow('Auto-close', prev.autoClose ? 'Yes' : 'No', body.autoClose ? 'Yes' : 'No');
+
+  if (!rows) {
+    doSaveConnectorForm(url, method, body); // nothing to confirm
+    return;
+  }
+
+  openConfirmDiffModal('Confirm Connector Config Change', rows, function() {
+    doSaveConnectorForm(url, method, body);
+  });
+}
+
+function doSaveConnectorForm(url, method, body) {
   apicall(url, { method: method, body: JSON.stringify(body) })
     .then(function() {
       showToast('Connector saved', 'ok');
@@ -15192,15 +15280,57 @@ function _renderConnectorCard(prefix, enabled, stat, rawCountElId) {
   else { errEl.style.display = 'none'; }
 }
 
+// ── Generic config-save confirmation ────────────────────────────────────────
+// Shared by every "Save" that can silently overwrite a previously-saved
+// connector/config value (threat intel, OpenAEV, ITSM ticketing connectors).
+// Each caller builds its own diff HTML (via _diffRow/_diffSecretRow below)
+// and passes a zero-arg onConfirm that performs the actual save.
+var CONFIRM_DIFF_PENDING = null; // onConfirm callback awaiting the modal's Save click
+
+function openConfirmDiffModal(title, diffHtml, onConfirm) {
+  document.getElementById('confirm-diff-title').textContent = title;
+  document.getElementById('confirm-diff-body').innerHTML = diffHtml;
+  CONFIRM_DIFF_PENDING = onConfirm;
+  document.getElementById('confirm-diff-overlay').classList.add('open');
+}
+
+function closeConfirmDiffModal() {
+  document.getElementById('confirm-diff-overlay').classList.remove('open');
+  CONFIRM_DIFF_PENDING = null;
+}
+
+function runConfirmDiffModal() {
+  var onConfirm = CONFIRM_DIFF_PENDING;
+  document.getElementById('confirm-diff-overlay').classList.remove('open');
+  CONFIRM_DIFF_PENDING = null;
+  if (onConfirm) onConfirm();
+}
+
+// Old-value-struck-through / new-value-highlighted row for a plain field.
+function _diffRow(label, oldVal, newVal) {
+  return '<div class="tiny" style="margin-bottom:0.4rem"><span class="muted">' + x(label) + ':</span><br>' +
+    '<span style="color:var(--danger);text-decoration:line-through">' + x(oldVal || '(empty)') + '</span><br>' +
+    '<span style="color:var(--success)">' + x(newVal || '(empty)') + '</span></div>';
+}
+
+// A secret/password field never round-trips its real value to the browser, so it
+// can only ever say whether it will change, never show old/new text.
+function _diffSecretRow(label, changed) {
+  return '<div class="tiny" style="margin-bottom:0.4rem"><span class="muted">' + x(label) + ':</span> ' +
+    (changed ? '<span style="color:var(--warning)">will be replaced</span>' : '<span class="muted">unchanged (kept)</span>') + '</div>';
+}
+
 // ── Threat Intel connector config (MISP/OpenCTI/OTX) — editable, matching
 // loadOpenAEVConfig's pattern. 'otx' has no URL field (single hosted
 // service, unlike self-hosted MISP/OpenCTI).
 var TI_CONNECTOR_LABELS = { misp: 'MISP', opencti: 'OpenCTI', otx: 'OTX' };
+var TI_CONNECTOR_LOADED = {}; // name -> {baseUrl, enabled} as last fetched from the server, for the save confirmation diff
 
 function loadThreatIntelConfig(name) {
   var panel = document.getElementById('ti-' + name + '-config-panel');
   if (!panel || ROLE !== 'admin') { if (panel) panel.innerHTML = ''; return; }
   apicall('/api/threat-intel/' + name + '/config').then(function(cfg) {
+    TI_CONNECTOR_LOADED[name] = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled };
     var urlField = name === 'otx' ? '' :
       '<input id="ti-' + name + '-url" type="text" placeholder="Base URL" value="' + x(cfg.baseUrl || '') + '" class="inp-sm" style="flex:1">';
     panel.innerHTML =
@@ -15238,13 +15368,35 @@ function testConnectorConfig(name) {
 
 function saveConnectorConfig(name) {
   var urlEl = document.getElementById('ti-' + name + '-url');
+  var newUrl = urlEl ? urlEl.value : '';
+  var newKey = document.getElementById('ti-' + name + '-key').value;
+  var newEnabled = document.getElementById('ti-' + name + '-enabled').checked;
+  var payload = { baseUrl: newUrl, apiKey: newKey, enabled: newEnabled };
+
+  var prev = TI_CONNECTOR_LOADED[name] || { baseUrl: '', enabled: false };
+  var urlChanged = urlEl && newUrl !== prev.baseUrl;
+  var keyChanged = newKey !== '';
+  var enabledChanged = newEnabled !== prev.enabled;
+
+  if (!urlChanged && !keyChanged && !enabledChanged) {
+    doSaveConnectorConfig(name, payload); // nothing to confirm
+    return;
+  }
+
+  var rows = '';
+  if (urlChanged) rows += _diffRow('Base URL', prev.baseUrl, newUrl);
+  rows += _diffSecretRow('API key', keyChanged);
+  if (enabledChanged) rows += _diffRow('Enabled', prev.enabled ? 'Yes' : 'No', newEnabled ? 'Yes' : 'No');
+
+  openConfirmDiffModal('Confirm ' + TI_CONNECTOR_LABELS[name] + ' Config Change', rows, function() {
+    doSaveConnectorConfig(name, payload);
+  });
+}
+
+function doSaveConnectorConfig(name, payload) {
   apicall('/api/threat-intel/' + name + '/config', {
     method: 'PUT',
-    body: JSON.stringify({
-      baseUrl: urlEl ? urlEl.value : '',
-      apiKey: document.getElementById('ti-' + name + '-key').value,
-      enabled: document.getElementById('ti-' + name + '-enabled').checked
-    })
+    body: JSON.stringify(payload)
   }).then(function() {
     showToast(TI_CONNECTOR_LABELS[name] + ' config saved', 'ok');
     loadThreatIntelConfig(name);
