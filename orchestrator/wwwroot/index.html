@@ -11792,7 +11792,7 @@ function viewRunResults(run) {
       '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
       '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
       (canRerun
-        ? '<button class="btn btn-outline btn-sm" onclick="openModal(' + JSON.stringify(run.scenarioId) + ', ' + JSON.stringify(run.agentId) + ')" title="Open the run wizard pre-filled with this scenario and agent">Re-run</button>'
+        ? '<button class="btn btn-outline btn-sm" onclick="openModal(\'' + x(run.scenarioId) + '\', \'' + x(run.agentId) + '\')" title="Open the run wizard pre-filled with this scenario and agent">Re-run</button>'
         : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run requires the Analyst or Admin role">Re-run</button>');
   }
   document.getElementById('results-header-actions').innerHTML = actionsHtml;
