@@ -175,6 +175,28 @@ func TestInterpretARTAtomicArtifactsAreErrors(t *testing.T) {
 	}
 }
 
+// TestInterpretARTProcessSpawnFailure_NotMislabeledAsMalformedContent is the
+// regression guard for a real user-reported bug: Go's own exec.Cmd.Start()
+// failure text ("fork/exec ...: The handle is invalid.") contains the
+// substring "is invalid", which used to fall into the generic
+// malformed-content classification -- an agent/host-level process-spawn
+// failure is not a scenario content problem and must never be blamed on the
+// atomic. Verbatim from the actual error text reported against an
+// "Endpoint Mastery 02 - ATT&CK" run.
+func TestInterpretARTProcessSpawnFailure_NotMislabeledAsMalformedContent(t *testing.T) {
+	stdout := `fork/exec C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe: The handle is invalid.`
+	got, detail := interpretART(ExecResult{ExitCode: -1}, stdout)
+	if got != models.ResultError {
+		t.Fatalf("interpretART(%q) = %q, want error", stdout, got)
+	}
+	if strings.Contains(detail, "malformed atomic content") {
+		t.Fatalf("detail = %q, must NOT blame the atomic's content for an agent-side process-spawn failure", detail)
+	}
+	if !strings.Contains(detail, "agent could not launch the process") {
+		t.Fatalf("detail = %q, want it to name this an agent/host problem", detail)
+	}
+}
+
 // Guard against over-matching: a benign validation payload that genuinely ran
 // (PowerShell/CMD executed unblocked, exit 0, no error text) is a real FAIL —
 // the control did not prevent code execution. It must NOT be swept into ERROR.

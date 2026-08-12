@@ -37,6 +37,15 @@ const (
 	ErrMalformedContent    ErrorReason = "malformed-content"
 	ErrEnvArtifact         ErrorReason = "environmental-artifact"
 	ErrExecution           ErrorReason = "execution-error"
+	// ErrProcessSpawnFailed is Go's own fork/exec failure -- the agent's
+	// OS-level attempt to launch the step's process failed before any
+	// atomic content ever ran (e.g. a Windows CreateProcess handle
+	// error). Distinct from ErrMalformedContent: this is an agent/host
+	// problem, never anything about the atomic test's own content, and
+	// must be classified before the generic "is invalid" match below
+	// would otherwise catch Go's own "The handle is invalid." text and
+	// mislabel it as malformed content.
+	ErrProcessSpawnFailed ErrorReason = "process-spawn-failed"
 )
 
 // errorReasonLabel is the human phrase shown in the report's "What happened".
@@ -56,6 +65,8 @@ func errorReasonLabel(r ErrorReason) string {
 		return "blocked on an interactive prompt"
 	case ErrMalformedContent:
 		return "malformed atomic content"
+	case ErrProcessSpawnFailed:
+		return "agent could not launch the process — an OS/host problem, not the atomic's content"
 	case ErrEnvArtifact:
 		return "environmental artifact (resource already present)"
 	default:
@@ -73,6 +84,17 @@ func classifyExecutionError(lower string, exitCode int) ErrorReason {
 		return ErrSchedulerContention
 	case strings.Contains(lower, "exceeded execute timeout"):
 		return ErrTimeout
+
+	// Go's own exec.Cmd.Start() failure -- the agent process could not even
+	// launch the step (e.g. a Windows CreateProcess handle error), before
+	// any atomic content had a chance to run. Always begins "fork/exec " on
+	// every platform Go supports (see agent/executor.go's cmd.Start() error
+	// path), a specific, unambiguous signature -- must be checked before
+	// the generic "is invalid" malformed-content match below, since Go's
+	// own text ("The handle is invalid.") would otherwise collide with it
+	// and mislabel an agent/host problem as bad atomic content.
+	case strings.Contains(lower, "fork/exec "):
+		return ErrProcessSpawnFailed
 
 	// Interactive prompt the test could not answer (e.g. reg save "Overwrite?").
 	case strings.Contains(lower, "overwrite (yes/no)?"),
