@@ -147,6 +147,45 @@ func loadActorSources(ctx context.Context, db *pgxpool.Pool, actorName string) (
 	return out, rows.Err()
 }
 
+// TechniqueEvidenceRow is OpenCTI's own per-relationship evidence for one
+// actor-technique assertion. Via/ViaName distinguish a technique asserted
+// directly by the actor from one reached through a linked
+// campaign/malware/tool. Only ever populated for OpenCTI-sourced actors --
+// MISP/bundle cannot supply this (see
+// docs/superpowers/specs/2026-08-12-technique-evidence-layer-design.md).
+type TechniqueEvidenceRow struct {
+	TechniqueID string     `json:"techniqueId"`
+	Via         string     `json:"via,omitempty"`
+	ViaName     string     `json:"viaName,omitempty"`
+	Confidence  int        `json:"confidence"`
+	StartTime   *time.Time `json:"startTime,omitempty"`
+	StopTime    *time.Time `json:"stopTime,omitempty"`
+}
+
+// loadTechniqueEvidence returns every per-relationship evidence row for
+// one actor, technique-then-via-ordered for stable rendering.
+func loadTechniqueEvidence(ctx context.Context, db *pgxpool.Pool, actorName string) ([]TechniqueEvidenceRow, error) {
+	if db == nil {
+		return []TechniqueEvidenceRow{}, nil
+	}
+	rows, err := db.Query(ctx,
+		`SELECT technique_id, via, via_name, confidence, start_time, stop_time
+		   FROM technique_evidence WHERE actor_name = $1 ORDER BY technique_id, via`, actorName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []TechniqueEvidenceRow{}
+	for rows.Next() {
+		var e TechniqueEvidenceRow
+		if err := rows.Scan(&e.TechniqueID, &e.Via, &e.ViaName, &e.Confidence, &e.StartTime, &e.StopTime); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // threatPriorityActorDetail is the GET /api/threat-priority/actors/{name}
 // response shape: the actor's ActorPriority plus history, the concrete
 // list of uncovered techniques, and the full per-technique coverage
@@ -157,13 +196,14 @@ type threatPriorityActorDetail struct {
 	UncoveredTechniques []string                              `json:"uncoveredTechniques"`
 	TechniqueCoverage   []TechniqueCoverage                   `json:"techniqueCoverage"`
 	Sources             []ActorSource                         `json:"sources"`
+	TechniqueEvidence   []TechniqueEvidenceRow                `json:"techniqueEvidence"`
 }
 
 // GET /api/threat-priority/actors/{name}
 func (h *Handler) ThreatPriorityActorDetail(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if h.threatPriorityEngine == nil {
-		respond(w, threatPriorityActorDetail{UncoveredTechniques: []string{}, TechniqueCoverage: []TechniqueCoverage{}, Sources: []ActorSource{}})
+		respond(w, threatPriorityActorDetail{UncoveredTechniques: []string{}, TechniqueCoverage: []TechniqueCoverage{}, Sources: []ActorSource{}, TechniqueEvidence: []TechniqueEvidenceRow{}})
 		return
 	}
 	ap, err := h.threatPriorityEngine.Score(r.Context(), name)
@@ -207,8 +247,14 @@ func (h *Handler) ThreatPriorityActorDetail(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	techEvidence, err := loadTechniqueEvidence(r.Context(), h.db, name)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	respond(w, threatPriorityActorDetail{
 		ActorPriority: ap, History: hist, UncoveredTechniques: uncovered, TechniqueCoverage: techCoverage,
-		Sources: sources,
+		Sources: sources, TechniqueEvidence: techEvidence,
 	})
 }

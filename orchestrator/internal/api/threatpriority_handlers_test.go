@@ -216,3 +216,50 @@ func TestThreatPriorityActorDetail_ReturnsPerSourceProvenance(t *testing.T) {
 		}
 	})
 }
+
+func TestThreatPriorityActorDetail_ReturnsTechniqueEvidence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source, confidence)
+			 VALUES ('API-EVID-ACTOR','{}','{}','{}','opencti','high')
+			 ON CONFLICT (name) DO NOTHING`); err != nil {
+			t.Fatalf("seed profile: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO technique_evidence (actor_name, technique_id, via, via_name, source, confidence)
+			 VALUES ('API-EVID-ACTOR','T1059.001','','','opencti',80),
+			        ('API-EVID-ACTOR','T1566.001','campaign','Operation Ghost','opencti',40)
+			 ON CONFLICT (actor_name, technique_id, via, via_name, source) DO NOTHING`); err != nil {
+			t.Fatalf("seed evidence: %v", err)
+		}
+
+		engine := scenario.NewEngine(t.TempDir())
+		if err := engine.Load(); err != nil {
+			t.Fatalf("engine.Load: %v", err)
+		}
+		pe := threatpriority.NewEngine(pool, engine, nil, nil)
+		h := New(pool, ws.NewHub(), engine, "").WithThreatPriority(pe)
+
+		req := httptest.NewRequest("GET", "/api/threat-priority/actors/API-EVID-ACTOR", nil)
+		req = withURLParams(req, map[string]string{"name": "API-EVID-ACTOR"})
+		w := httptest.NewRecorder()
+		h.ThreatPriorityActorDetail(w, req)
+
+		if w.Code != 200 {
+			t.Fatalf("status = %d, body: %s", w.Code, w.Body.String())
+		}
+		var got struct {
+			TechniqueEvidence []TechniqueEvidenceRow `json:"techniqueEvidence"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(got.TechniqueEvidence) != 2 {
+			t.Fatalf("techniqueEvidence = %+v, want 2 entries", got.TechniqueEvidence)
+		}
+	})
+}
