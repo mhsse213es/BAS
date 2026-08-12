@@ -159,10 +159,16 @@ func (h *Handler) GetOpenAEVStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/openaev/scenarios — Viewer+.
+// GET /api/openaev/scenarios — Viewer+. ?type=scenario|exercise filters by
+// source; defaults to "scenario", preserving pre-Exercise-sync behavior for
+// every existing caller.
 func (h *Handler) ListOpenAEVScenarios(w http.ResponseWriter, r *http.Request) {
+	sourceType := r.URL.Query().Get("type")
+	if sourceType == "" {
+		sourceType = "scenario"
+	}
 	store := openaev.NewSQLStore(h.db)
-	scenarios, err := store.List(r.Context(), "scenario")
+	scenarios, err := store.List(r.Context(), sourceType)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return

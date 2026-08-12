@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/audspect/bas/internal/db"
+	"github.com/audspect/bas/internal/openaev"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -125,6 +126,61 @@ func TestListOpenAEVScenarios_EmptyByDefault(t *testing.T) {
 		json.Unmarshal(rec.Body.Bytes(), &out)
 		if len(out) != 0 {
 			t.Errorf("expected empty list, got %d entries", len(out))
+		}
+	})
+}
+
+func TestListOpenAEVScenarios_DefaultsToScenarioType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureContentSchema(context.Background(), pool)
+		store := openaev.NewSQLStore(pool)
+		store.Upsert(context.Background(), openaev.Scenario{OpenAEVScenarioID: "sc-filter-1", Name: "Scn", SourceType: "scenario"}, openaev.Detail{}, "h1", 10, 1)
+		store.Upsert(context.Background(), openaev.Scenario{OpenAEVScenarioID: "sc-filter-2", Name: "Exc", SourceType: "exercise"}, openaev.Detail{}, "h2", 10, 1)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.ListOpenAEVScenarios(rec, httptest.NewRequest(http.MethodGet, "/api/openaev/scenarios", nil))
+
+		var out []map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		for _, sc := range out {
+			if sc["OpenAEVScenarioID"] == "sc-filter-2" {
+				t.Error("default (no ?type=) must not include an exercise-sourced row")
+			}
+		}
+	})
+}
+
+func TestListOpenAEVScenarios_TypeExercise_FiltersToExercises(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureContentSchema(context.Background(), pool)
+		store := openaev.NewSQLStore(pool)
+		store.Upsert(context.Background(), openaev.Scenario{OpenAEVScenarioID: "sc-filter-3", Name: "Scn", SourceType: "scenario"}, openaev.Detail{}, "h3", 10, 1)
+		store.Upsert(context.Background(), openaev.Scenario{OpenAEVScenarioID: "sc-filter-4", Name: "Exc", SourceType: "exercise"}, openaev.Detail{}, "h4", 10, 1)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.ListOpenAEVScenarios(rec, httptest.NewRequest(http.MethodGet, "/api/openaev/scenarios?type=exercise", nil))
+
+		var out []map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		found := false
+		for _, sc := range out {
+			if sc["OpenAEVScenarioID"] == "sc-filter-4" {
+				found = true
+			}
+			if sc["OpenAEVScenarioID"] == "sc-filter-3" {
+				t.Error("?type=exercise must not include a scenario-sourced row")
+			}
+		}
+		if !found {
+			t.Error("?type=exercise must include the exercise-sourced row")
 		}
 	})
 }
