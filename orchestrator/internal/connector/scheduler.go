@@ -229,11 +229,19 @@ func (s *Scheduler) sync() {
 
 	// Merge actors with the same name across sources — bundle floor + live
 	// overlay compose here, since MergeActors unions their techniques.
-	actors = MergeActors(actors)
+	// rawActors keeps the pre-merge list alive: the merged result
+	// deliberately flattens away each source's own assertions, which
+	// upsertActorSources below persists separately.
+	rawActors := actors
+	merged, groups := MergeActorsWithProvenance(rawActors)
+	actors = merged
 
 	// Persist actor profiles (sectors/regions) for reporting's priority-score
 	// weighting — see docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
 	s.upsertActorProfiles(actors)
+	// Per-source provenance. MUST run after upsertActorProfiles -- these rows
+	// carry a foreign key to threat_actor_profiles(name).
+	s.upsertActorSources(rawActors, actors, groups)
 
 	if s.pool != nil {
 		for _, c := range allCampaigns {
@@ -309,8 +317,6 @@ func (s *Scheduler) setError(msg string, bySource map[string]SourceStat) {
 	s.status.NextSyncAt = time.Now().Add(s.interval)
 }
 
-// MergeActors combines actors with the same name (case-insensitive) from
-// different sources into one actor with the union of their techniques.
 // upsertActorProfiles persists each actor's sectors/regions/aliases so
 // internal/reporting can weight technique priority scores by sector/region
 // relevance. A single actor's upsert failing is logged and skipped, never
@@ -354,6 +360,65 @@ func (s *Scheduler) upsertActorProfiles(actors []ThreatActor) {
 			a.Name, nonNilStrings(a.Aliases), nonNilStrings(a.Sectors), nonNilStrings(a.Regions), a.Source, lastSeen, a.Confidence, a.CanonicalGroupID)
 		if err != nil {
 			log.Printf("[connector] upsert actor profile %q: %v", a.Name, err)
+		}
+	}
+}
+
+// upsertActorSources persists each source's OWN raw, pre-merge assertions
+// about an actor -- one row per (canonical actor, source). rawActors is the
+// combined pre-merge list exactly as fetched; merged[i] is the survivor
+// that groups[i]'s raw actors collapsed into (see
+// MergeActorsWithProvenance). Purely additive provenance:
+// upsertActorProfiles' own first-arrival-wins merged row is written
+// separately and is unaffected by anything here.
+//
+// Two raw actors from the SAME source merging into one canonical actor
+// (e.g. two MISP events about the same group) collide on the
+// (actor_name, source) key, so the later one wins -- this row answers
+// "what does this source say about this actor", not "every record this
+// source holds". Per-record granularity is sub-project #3's job.
+//
+// A single row failing is logged and skipped, never aborting the rest --
+// same discipline upsertActorProfiles already applies. No-op when pool is
+// nil (e.g. a test that never calls sync()).
+func (s *Scheduler) upsertActorSources(rawActors, merged []ThreatActor, groups [][]int) {
+	if s.pool == nil {
+		return
+	}
+	ctx := context.Background()
+	for gi, idxs := range groups {
+		if gi >= len(merged) {
+			continue // defensive: groups is index-aligned with merged by construction
+		}
+		actorName := merged[gi].Name
+		for _, ri := range idxs {
+			if ri >= len(rawActors) {
+				continue
+			}
+			raw := rawActors[ri]
+			if raw.Source == "" {
+				continue // nothing to attribute this record to
+			}
+			var lastSeen *time.Time
+			if !raw.LastSeen.IsZero() {
+				t := raw.LastSeen
+				lastSeen = &t
+			}
+			_, err := s.pool.Exec(ctx,
+				`INSERT INTO threat_actor_sources
+				   (actor_name, source, source_id, name, aliases, sectors, regions, confidence, technique_count, last_seen, updated_at)
+				 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+				 ON CONFLICT (actor_name, source) DO UPDATE SET
+				   source_id = EXCLUDED.source_id, name = EXCLUDED.name,
+				   aliases = EXCLUDED.aliases, sectors = EXCLUDED.sectors, regions = EXCLUDED.regions,
+				   confidence = EXCLUDED.confidence, technique_count = EXCLUDED.technique_count,
+				   last_seen = EXCLUDED.last_seen, updated_at = NOW()`,
+				actorName, raw.Source, raw.SourceID, raw.Name,
+				nonNilStrings(raw.Aliases), nonNilStrings(raw.Sectors), nonNilStrings(raw.Regions),
+				raw.Confidence, len(raw.Techniques), lastSeen)
+			if err != nil {
+				log.Printf("[connector] upsert actor source %q/%q: %v", actorName, raw.Source, err)
+			}
 		}
 	}
 }

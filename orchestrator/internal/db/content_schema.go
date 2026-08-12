@@ -409,6 +409,30 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// auto-exit) and force-cancel it instead of waiting forever. See
 		// dispatcher.go's stuckThreshold.
 		`ALTER TABLE vex_sweeps ADD COLUMN IF NOT EXISTS current_technique_started_at timestamptz`,
+
+		// threat_actor_sources: one row per (canonical actor, source),
+		// preserving each source's OWN raw pre-merge assertions. MergeActors
+		// flattens every source into a single first-arrival-wins
+		// threat_actor_profiles row, which cannot answer "why does Audspect
+		// believe this actor is relevant" by source. last_seen is
+		// deliberately per-source here -- MISP's event timestamp, OpenCTI's
+		// Modified timestamp and OTX's pulse timestamp mean different things
+		// and must not overwrite each other. See
+		// docs/superpowers/specs/2026-08-11-source-provenance-design.md.
+		`CREATE TABLE IF NOT EXISTS threat_actor_sources (
+			actor_name      text        NOT NULL REFERENCES threat_actor_profiles(name) ON DELETE CASCADE,
+			source          text        NOT NULL,
+			source_id       text        NOT NULL DEFAULT '',
+			name            text        NOT NULL,
+			aliases         text[]      NOT NULL DEFAULT '{}',
+			sectors         text[]      NOT NULL DEFAULT '{}',
+			regions         text[]      NOT NULL DEFAULT '{}',
+			confidence      text        NOT NULL DEFAULT '',
+			technique_count int         NOT NULL DEFAULT 0,
+			last_seen       timestamptz,
+			updated_at      timestamptz NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (actor_name, source)
+		)`,
 	}
 
 	for _, s := range stmts {

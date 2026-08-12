@@ -290,3 +290,137 @@ func TestUpsertActorProfiles_NilAliasesSectorsRegions_StillPersists(t *testing.T
 		}
 	})
 }
+
+// TestUpsertActorSources_TwoSourcesSameActorProduceTwoRows is the core of
+// this project: MISP and OpenCTI describing the same real-world actor
+// collapse into ONE threat_actor_profiles row (first-arrival-wins), but
+// each must keep its OWN record here -- its own name, its own sectors, its
+// own confidence -- so "why does Audspect believe this actor is relevant"
+// is answerable per source.
+func TestUpsertActorSources_TwoSourcesSameActorProduceTwoRows(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		raw := []ThreatActor{
+			{Name: "PROV-Wizard Spider", Source: "misp", SourceID: "evt-1",
+				Sectors: []string{"financial services"}, Confidence: "high",
+				Techniques: []TechniqueRef{{ID: "T1059.001"}, {ID: "T1566.001"}}},
+			{Name: "PROV-Sangria Tempest", Source: "opencti", SourceID: "ta-9",
+				Aliases: []string{"PROV-Wizard Spider"}, Confidence: "medium",
+				Techniques: []TechniqueRef{{ID: "T1078"}}},
+		}
+		merged, groups := MergeActorsWithProvenance(raw)
+		if len(merged) != 1 {
+			t.Fatalf("fixture precondition: want the two actors to merge, got %d", len(merged))
+		}
+		// The FK requires the parent profile row first -- same ordering
+		// sync() itself uses.
+		s.upsertActorProfiles(merged)
+		s.upsertActorSources(raw, merged, groups)
+
+		rows, err := pool.Query(t.Context(),
+			`SELECT source, source_id, name, sectors, confidence, technique_count
+			   FROM threat_actor_sources WHERE actor_name = $1 ORDER BY source`, merged[0].Name)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		defer rows.Close()
+		type row struct {
+			source, sourceID, name, confidence string
+			sectors                            []string
+			techniqueCount                     int
+		}
+		var got []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.source, &r.sourceID, &r.name, &r.sectors, &r.confidence, &r.techniqueCount); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			got = append(got, r)
+		}
+		if len(got) != 2 {
+			t.Fatalf("got %d source rows, want 2 (one per contributing source): %+v", len(got), got)
+		}
+		// ORDER BY source -> misp, opencti
+		if got[0].source != "misp" || got[0].name != "PROV-Wizard Spider" ||
+			got[0].confidence != "high" || got[0].techniqueCount != 2 ||
+			len(got[0].sectors) != 1 || got[0].sectors[0] != "financial services" {
+			t.Errorf("misp row = %+v, want its OWN name/sectors/confidence/technique count", got[0])
+		}
+		if got[1].source != "opencti" || got[1].name != "PROV-Sangria Tempest" ||
+			got[1].confidence != "medium" || got[1].techniqueCount != 1 ||
+			len(got[1].sectors) != 0 {
+			t.Errorf("opencti row = %+v, want its OWN name/confidence/technique count and empty sectors", got[1])
+		}
+	})
+}
+
+// TestUpsertActorSources_Idempotent proves a second sync with unchanged
+// data updates in place rather than accumulating duplicate rows.
+func TestUpsertActorSources_Idempotent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		raw := []ThreatActor{
+			{Name: "PROV-IDEMPOTENT", Source: "misp", Confidence: "high", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
+		}
+		merged, groups := MergeActorsWithProvenance(raw)
+		s.upsertActorProfiles(merged)
+		s.upsertActorSources(raw, merged, groups)
+		s.upsertActorSources(raw, merged, groups)
+
+		var count int
+		if err := pool.QueryRow(t.Context(),
+			`SELECT COUNT(*) FROM threat_actor_sources WHERE actor_name = $1`, "PROV-IDEMPOTENT").Scan(&count); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("row count = %d after two upserts, want 1", count)
+		}
+	})
+}
+
+// TestScheduler_SyncPersistsPerSourceProvenance exercises the real sync()
+// path end to end -- proving the pre-merge list actually survives to
+// upsertActorSources rather than being flattened away by MergeActors.
+func TestScheduler_SyncPersistsPerSourceProvenance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := NewScheduler([]Source{
+			fakeSource{name: "misp", actors: []ThreatActor{{
+				Name: "SYNC-PROV-ACTOR", Source: "misp", Sectors: []string{"government"},
+				Confidence: "high", Techniques: []TechniqueRef{{ID: "T1059.001"}, {ID: "T1566.001"}},
+			}}},
+			fakeSource{name: "opencti", actors: []ThreatActor{{
+				Name: "SYNC-PROV-ALIAS", Aliases: []string{"SYNC-PROV-ACTOR"}, Source: "opencti",
+				Confidence: "medium", Techniques: []TechniqueRef{{ID: "T1078"}},
+			}}},
+		}, NewGenerator(t.TempDir(), nil, nil, nil), scenario.NewEngine(t.TempDir()), 24, pool, nil)
+
+		s.sync()
+
+		var sources []string
+		rows, err := pool.Query(t.Context(),
+			`SELECT source FROM threat_actor_sources WHERE actor_name = $1 ORDER BY source`, "SYNC-PROV-ACTOR")
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var src string
+			if err := rows.Scan(&src); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			sources = append(sources, src)
+		}
+		if len(sources) != 2 || sources[0] != "misp" || sources[1] != "opencti" {
+			t.Fatalf("sources = %v, want [misp opencti] -- both contributing sources preserved through sync()", sources)
+		}
+	})
+}
