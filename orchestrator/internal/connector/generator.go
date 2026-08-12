@@ -97,16 +97,7 @@ func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
 	date := time.Now().UTC().Format("2006-01-02")
 
 	// Collect unique technique IDs
-	techIDs := make([]string, 0, len(actor.Techniques))
-	techSet := make(map[string]bool)
-	for _, t := range actor.Techniques {
-		up := strings.ToUpper(t.ID)
-		if !techSet[up] {
-			techSet[up] = true
-			techIDs = append(techIDs, up)
-		}
-	}
-	sort.Strings(techIDs)
+	techIDs := dedupedTechniqueIDs(actor.Techniques)
 
 	// Derive MITRE phases from techniques
 	phases := deriveMITREPhases(actor.Techniques)
@@ -186,6 +177,28 @@ func (g *Generator) buildYAML(actor ThreatActor, fingerprint string) string {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+// dedupedTechniqueIDs returns actor's technique IDs, uppercased,
+// deduplicated, and sorted -- shared by buildYAML's art_techniques list
+// and Scheduler.upsertActorProfiles' threat_actor_profiles.techniques
+// column, so the two never drift into different dedup/casing behavior.
+// Deliberately a distinct name/behavior from misp.go's techniqueIDs
+// (bare .ID extraction, no dedup/normalize, used for
+// intelligence.Campaign/Malware/Tool.TechniqueIDs) -- that helper serves a
+// different purpose and is untouched by this change.
+func dedupedTechniqueIDs(techs []TechniqueRef) []string {
+	out := make([]string, 0, len(techs))
+	seen := make(map[string]bool)
+	for _, t := range techs {
+		up := strings.ToUpper(t.ID)
+		if !seen[up] {
+			seen[up] = true
+			out = append(out, up)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
 
 func actorFingerprint(actor ThreatActor) string {
 	ids := make([]string, len(actor.Techniques))

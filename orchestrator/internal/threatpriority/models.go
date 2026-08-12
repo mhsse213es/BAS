@@ -39,6 +39,11 @@ type ActorProfile struct {
 	// if internal/connector.MergeActors couldn't confidently resolve one.
 	CanonicalGroupID string
 	LastSeen         *time.Time
+	// Techniques is the connector-merged technique roster (mirrors
+	// threat_actor_profiles.techniques) -- scoreActor's fallback when
+	// reporting.ResolveActorTechniques finds no MITRE-name match. See
+	// docs/superpowers/specs/2026-08-12-technique-evidence-fallback-design.md.
+	Techniques []string
 }
 
 // ActivitySignal mirrors a threat_actor_activity row -- OTX pulse-mention
@@ -104,6 +109,13 @@ type ActorPriority struct {
 	// the Recommendations rollup (internal/api's buildActorPriorityByTechnique)
 	// and the Actor Details UI's client-side Recommendations filter.
 	TechniqueIDs []string `json:"techniqueIds,omitempty"`
+
+	// TechniqueSource records which source scoreActor's TechniqueIDs came
+	// from -- "mitre" (ResolveActorTechniques matched, the strongest
+	// evidence) or "connector" (no MITRE match, fell back to
+	// ActorProfile.Techniques) or "" (neither). Lets the UI avoid implying
+	// MITRE-grade confidence for a connector-only actor.
+	TechniqueSource string `json:"techniqueSource,omitempty"`
 }
 
 // ActorPriorityHistory is one threat_priority_history snapshot row.

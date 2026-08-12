@@ -99,3 +99,22 @@ func TestBuildYAML_UnmatchedTechniqueGetsNoDetectionProfiles(t *testing.T) {
 		t.Errorf("did not expect detection_profiles: block for an unmatched technique, got:\n%s", yaml)
 	}
 }
+
+func TestDedupedTechniqueIDs_DedupesAndUppercases(t *testing.T) {
+	got := dedupedTechniqueIDs([]TechniqueRef{{ID: "t1059.001"}, {ID: "T1566.001"}, {ID: "T1059.001"}})
+	if len(got) != 2 {
+		t.Fatalf("got %v, want 2 deduped entries", got)
+	}
+	want := map[string]bool{"T1059.001": true, "T1566.001": true}
+	for _, id := range got {
+		if !want[id] {
+			t.Errorf("unexpected id %q in %v", id, got)
+		}
+	}
+}
+
+func TestDedupedTechniqueIDs_EmptyInput(t *testing.T) {
+	if got := dedupedTechniqueIDs(nil); len(got) != 0 {
+		t.Fatalf("got %v, want empty", got)
+	}
+}

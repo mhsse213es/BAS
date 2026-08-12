@@ -451,6 +451,15 @@ func EnsureContentSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at     timestamptz NOT NULL DEFAULT NOW(),
 			PRIMARY KEY (actor_name, source)
 		)`,
+
+		// threat_actor_profiles.techniques: the connector-merged technique
+		// roster (already deduped across sources by mergeActorGroup), used
+		// as Threat Prioritization's fallback when ResolveActorTechniques
+		// finds no MITRE-name match for this actor -- previously, such an
+		// actor was silently scored with zero techniques even when real
+		// connector evidence existed. See
+		// docs/superpowers/specs/2026-08-12-technique-evidence-fallback-design.md.
+		`ALTER TABLE threat_actor_profiles ADD COLUMN IF NOT EXISTS techniques text[] NOT NULL DEFAULT '{}'`,
 	}
 
 	for _, s := range stmts {

@@ -140,9 +140,9 @@ func LoadValidationVerdicts(ctx context.Context, pool *pgxpool.Pool) (map[string
 
 func (e *Engine) loadProfile(ctx context.Context, name string) (*ActorProfile, error) {
 	row := e.pool.QueryRow(ctx,
-		`SELECT name, aliases, sectors, regions, confidence, last_seen, canonical_group_id FROM threat_actor_profiles WHERE name=$1`, name)
+		`SELECT name, aliases, sectors, regions, confidence, last_seen, canonical_group_id, techniques FROM threat_actor_profiles WHERE name=$1`, name)
 	var p ActorProfile
-	if err := row.Scan(&p.Name, &p.Aliases, &p.Sectors, &p.Regions, &p.Confidence, &p.LastSeen, &p.CanonicalGroupID); err != nil {
+	if err := row.Scan(&p.Name, &p.Aliases, &p.Sectors, &p.Regions, &p.Confidence, &p.LastSeen, &p.CanonicalGroupID, &p.Techniques); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
@@ -153,7 +153,7 @@ func (e *Engine) loadProfile(ctx context.Context, name string) (*ActorProfile, e
 
 func (e *Engine) loadAllProfiles(ctx context.Context) ([]ActorProfile, error) {
 	rows, err := e.pool.Query(ctx,
-		`SELECT name, aliases, sectors, regions, confidence, last_seen, canonical_group_id FROM threat_actor_profiles`)
+		`SELECT name, aliases, sectors, regions, confidence, last_seen, canonical_group_id, techniques FROM threat_actor_profiles`)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (e *Engine) loadAllProfiles(ctx context.Context) ([]ActorProfile, error) {
 	var out []ActorProfile
 	for rows.Next() {
 		var p ActorProfile
-		if err := rows.Scan(&p.Name, &p.Aliases, &p.Sectors, &p.Regions, &p.Confidence, &p.LastSeen, &p.CanonicalGroupID); err != nil {
+		if err := rows.Scan(&p.Name, &p.Aliases, &p.Sectors, &p.Regions, &p.Confidence, &p.LastSeen, &p.CanonicalGroupID, &p.Techniques); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -214,7 +214,15 @@ func (e *Engine) previousScore(ctx context.Context, actorName string) (score int
 // actor's technique roster, runs every registered factor, and computes the
 // composite.
 func (e *Engine) scoreActor(ctx context.Context, profile *ActorProfile, shared *sharedIndexes) (ActorPriority, error) {
-	techIDs, _, _ := reporting.ResolveActorTechniques(profile.Name, profile.Aliases)
+	techIDs, _, ok := reporting.ResolveActorTechniques(profile.Name, profile.Aliases)
+	techniqueSource := ""
+	switch {
+	case ok:
+		techniqueSource = "mitre"
+	case len(profile.Techniques) > 0:
+		techIDs = profile.Techniques
+		techniqueSource = "connector"
+	}
 
 	validatedCount := 0
 	for _, id := range techIDs {
@@ -263,7 +271,7 @@ func (e *Engine) scoreActor(ctx context.Context, profile *ActorProfile, shared *
 	ap := ActorPriority{
 		ActorName: profile.Name, Score: score, Tier: reporting.PriorityTierFor(score),
 		Factors: results, TechniqueCount: len(techIDs), CoverageGapCount: coverageGap,
-		TechniqueIDs: techIDs, CanonicalGroupID: profile.CanonicalGroupID,
+		TechniqueIDs: techIDs, CanonicalGroupID: profile.CanonicalGroupID, TechniqueSource: techniqueSource,
 	}
 
 	prevScore, hasPrev, err := e.previousScore(ctx, profile.Name)

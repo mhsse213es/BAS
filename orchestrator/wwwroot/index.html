@@ -3451,6 +3451,7 @@ body.theme-slate {
 
           <div class="card" style="margin-bottom:1rem;padding:1rem 1.2rem">
             <div class="card-title">Technique Coverage Breakdown</div>
+            <div id="tp-detail-technique-source" class="tiny muted" style="margin-bottom:0.4rem"></div>
             <div id="tp-detail-coverage" class="tiny"></div>
           </div>
 
@@ -5471,6 +5472,12 @@ function renderThreatPriorityDetail(d) {
   document.getElementById('tp-detail-uncovered').innerHTML = uncovered.length
     ? uncovered.map(function(t) { return '<span class="tool-tag">' + x(t) + '</span>'; }).join(' ')
     : '<span class="muted">No coverage gaps.</span>';
+
+  var techSourceLabel = {
+    mitre: 'Techniques: MITRE-authoritative',
+    connector: 'Techniques: connector-derived (not yet MITRE-confirmed)'
+  }[d.techniqueSource] || '';
+  document.getElementById('tp-detail-technique-source').textContent = techSourceLabel;
 
   var techCoverage = (d.techniqueCoverage || []);
   document.getElementById('tp-detail-coverage').innerHTML = techCoverage.length

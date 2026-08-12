@@ -614,3 +614,63 @@ func TestReconfigureActivitySources_UpdatesOTXEnabledStatus(t *testing.T) {
 		t.Error("OTXEnabled should be false after reconfiguring OTX out")
 	}
 }
+
+// TestUpsertActorProfiles_PersistsTechniques proves the merged actor's
+// technique IDs survive into threat_actor_profiles.techniques -- the data
+// Threat Prioritization's scoreActor falls back to when no MITRE-name
+// match exists for this actor. Deduped and uppercased, same discipline
+// Generator.buildYAML already applies for the generated scenario's
+// art_techniques list.
+func TestUpsertActorProfiles_PersistsTechniques(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		s.upsertActorProfiles([]ThreatActor{{
+			Name: "APT-TECH-PERSIST-TEST",
+			Techniques: []TechniqueRef{
+				{ID: "t1059.001"}, {ID: "T1566.001"}, {ID: "t1059.001"}, // duplicate, mixed case
+			},
+			Aliases: []string{}, Sectors: []string{}, Regions: []string{},
+		}})
+
+		var techs []string
+		err := pool.QueryRow(t.Context(),
+			`SELECT techniques FROM threat_actor_profiles WHERE name=$1`, "APT-TECH-PERSIST-TEST").Scan(&techs)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if len(techs) != 2 {
+			t.Fatalf("techniques = %v, want 2 deduped entries", techs)
+		}
+		want := map[string]bool{"T1059.001": true, "T1566.001": true}
+		for _, id := range techs {
+			if !want[id] {
+				t.Errorf("unexpected technique %q in %v", id, techs)
+			}
+		}
+	})
+}
+
+func TestUpsertActorProfiles_NoTechniques_PersistsEmptyArray(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		s := &Scheduler{pool: pool}
+		s.upsertActorProfiles([]ThreatActor{{
+			Name: "APT-NO-TECH-TEST", Aliases: []string{}, Sectors: []string{}, Regions: []string{},
+		}})
+
+		var techs []string
+		err := pool.QueryRow(t.Context(),
+			`SELECT techniques FROM threat_actor_profiles WHERE name=$1`, "APT-NO-TECH-TEST").Scan(&techs)
+		if err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if len(techs) != 0 {
+			t.Fatalf("techniques = %v, want empty", techs)
+		}
+	})
+}

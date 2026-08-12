@@ -417,14 +417,14 @@ func (s *Scheduler) upsertActorProfiles(actors []ThreatActor) {
 			lastSeen = &t
 		}
 		_, err := s.pool.Exec(ctx,
-			`INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source, last_seen, confidence, canonical_group_id, updated_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+			`INSERT INTO threat_actor_profiles (name, aliases, sectors, regions, source, last_seen, confidence, canonical_group_id, techniques, updated_at)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
 			 ON CONFLICT (name) DO UPDATE SET
 			   aliases = EXCLUDED.aliases, sectors = EXCLUDED.sectors, regions = EXCLUDED.regions,
 			   source = EXCLUDED.source, last_seen = EXCLUDED.last_seen, confidence = EXCLUDED.confidence,
-			   canonical_group_id = EXCLUDED.canonical_group_id,
+			   canonical_group_id = EXCLUDED.canonical_group_id, techniques = EXCLUDED.techniques,
 			   updated_at = NOW()`,
-			a.Name, nonNilStrings(a.Aliases), nonNilStrings(a.Sectors), nonNilStrings(a.Regions), a.Source, lastSeen, a.Confidence, a.CanonicalGroupID)
+			a.Name, nonNilStrings(a.Aliases), nonNilStrings(a.Sectors), nonNilStrings(a.Regions), a.Source, lastSeen, a.Confidence, a.CanonicalGroupID, dedupedTechniqueIDs(a.Techniques))
 		if err != nil {
 			log.Printf("[connector] upsert actor profile %q: %v", a.Name, err)
 		}
