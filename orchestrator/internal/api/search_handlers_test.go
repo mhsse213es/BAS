@@ -247,12 +247,23 @@ func TestSearchOperators_ReturnsSupportedList(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	var body map[string][]string
+	// SearchOperators (search_handlers.go) responds with one object per
+	// operator -- {"name": ..., "values": [...]} -- not a flat string list,
+	// so the palette hint (index.html's cmdk-ops-hint) can show each
+	// operator's valid values, not just its name.
+	var body struct {
+		Operators []struct {
+			Name   string   `json:"name"`
+			Values []string `json:"values"`
+		} `json:"operators"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	want := []string{"type"}
-	if !reflect.DeepEqual(body["operators"], want) {
-		t.Errorf("operators = %+v, want %+v", body["operators"], want)
+	if len(body.Operators) != 1 || body.Operators[0].Name != "type" {
+		t.Fatalf("operators = %+v, want exactly one entry named \"type\"", body.Operators)
+	}
+	if !reflect.DeepEqual(body.Operators[0].Values, search.KnownDocTypes) {
+		t.Errorf("type operator values = %+v, want %+v", body.Operators[0].Values, search.KnownDocTypes)
 	}
 }
