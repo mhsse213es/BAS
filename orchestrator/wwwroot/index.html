@@ -10254,12 +10254,27 @@ function runRowHtml(r) {
     '<td style="color:var(--muted);font-size:0.78rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
     '<td>' + (function() {
       var acts = '';
-      // Live is only meaningful for runs that stream events (ART/Caldera live
-      // runs) — running, or finished with a progress summary. Posture/local-check
-      // runs never emit events, so don't offer an empty Live panel for them.
-      if (r.id && (r.status === 'running' || r.progress)) acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
+      // Live is only meaningful while the run is actually running -- once
+      // it's terminal (partial/completed), the same underlying data (see
+      // below) is history, not a live stream, so it gets the results-style
+      // pass/fail label instead of "Live".
+      if (r.id && r.status === 'running') acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
       if (r.id && r.status === 'running') acts += '<button class="btn btn-outline-red btn-sm" onclick="stopRun(\'' + x(r.id) + '\')" title="Stop this run — keeps completed steps, marks the run partial">&#9632; Stop</button> ';
-      if (cnt) acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
+      if (cnt) {
+        acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
+      } else if (r.id && r.status !== 'running' && r.progress) {
+        // A cancelled/partial run never gets the agent's one atomic
+        // `results` write (see cancelScenarioRun/forceCancelAfterGracePeriod
+        // in internal/api/handlers.go), so cnt is always 0 here -- but the
+        // per-step pass/fail counts already streamed in live via
+        // SubmitRunEvents (r.progress) and the same per-step detail is
+        // still queryable from run_events, so openRunPanel's timeline is
+        // real data, not empty. This is that same panel, just correctly
+        // labeled as a completed (partial) run's results instead of "Live".
+        var pr = r.progress;
+        var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
+        acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Per-step results for this partial run">' + toBadge + '</button>';
+      }
       return acts || '—';
     })() + '</td>' +
     '<td>' + scoreHtml + '</td></tr>';
@@ -13497,12 +13512,24 @@ function openSweepDrilldown(sweepId) {
       var cnt = (r.results || []).length;
       var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
       var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : r.status;
-      var liveBtn = (r.id && (r.status === 'running' || r.progress))
+      var liveBtn = (r.id && r.status === 'running')
         ? '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')">&#9673; Live</button> '
         : '';
-      var resultBtn = cnt
-        ? '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>'
-        : '<span class="tiny muted">' + x(badge) + '</span>';
+      // A cancelled/partial technique run never gets the agent's one atomic
+      // `results` write, so cnt is always 0 -- but its per-step pass/fail
+      // counts already streamed in live (r.progress) and the same detail is
+      // still queryable from run_events via openRunPanel, so this reuses
+      // that real data instead of a plain, unclickable status label.
+      var resultBtn;
+      if (cnt) {
+        resultBtn = '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
+      } else if (r.id && r.status !== 'running' && r.progress) {
+        var pr = r.progress;
+        var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
+        resultBtn = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')">' + toBadge + '</button>';
+      } else {
+        resultBtn = '<span class="tiny muted">' + x(badge) + '</span>';
+      }
       return '<li style="padding:0.5rem 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.5rem">' +
         '<span>' + x(r.name) + '</span>' +
         '<span style="white-space:nowrap">' + liveBtn + resultBtn + '</span></li>';
