@@ -258,3 +258,88 @@ func TestMergeActors_NoMITREDataLeavesCanonicalGroupIDEmpty(t *testing.T) {
 		t.Errorf("CanonicalGroupID = %q, want empty (no real MITRE group data shipped yet)", merged[0].CanonicalGroupID)
 	}
 }
+
+// TestMergeActorsWithProvenance_GroupsMapBackToRawIndices is the core
+// contract this whole project rests on: for each merged survivor, we must
+// be able to recover exactly which raw input actors (and therefore which
+// sources) collapsed into it. groups[i] is index-aligned with merged[i].
+func TestMergeActorsWithProvenance_GroupsMapBackToRawIndices(t *testing.T) {
+	raw := []ThreatActor{
+		{Name: "Wizard Spider", Source: "misp", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
+		{Name: "Sangria Tempest", Aliases: []string{"Wizard Spider"}, Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
+	}
+	merged, groups := MergeActorsWithProvenance(raw)
+	if len(merged) != 1 {
+		t.Fatalf("want 1 merged actor, got %d: %+v", len(merged), merged)
+	}
+	if len(groups) != len(merged) {
+		t.Fatalf("groups len %d != merged len %d -- must be index-aligned", len(groups), len(merged))
+	}
+	if len(groups[0]) != 2 {
+		t.Fatalf("groups[0] = %v, want both raw indices [0 1]", groups[0])
+	}
+	seen := map[int]bool{}
+	for _, idx := range groups[0] {
+		seen[idx] = true
+	}
+	if !seen[0] || !seen[1] {
+		t.Errorf("groups[0] = %v, want it to contain both 0 and 1", groups[0])
+	}
+	// The survivor must be the first-arriving member of its own group.
+	if merged[0].Name != raw[groups[0][0]].Name {
+		t.Errorf("merged[0].Name = %q, want it to match raw[groups[0][0]].Name = %q", merged[0].Name, raw[groups[0][0]].Name)
+	}
+}
+
+// TestMergeActorsWithProvenance_UnrelatedActorsEachGetOwnGroup proves the
+// single-source case: two actors that share nothing produce two merged
+// actors, each with a one-element group pointing at its own raw index.
+func TestMergeActorsWithProvenance_UnrelatedActorsEachGetOwnGroup(t *testing.T) {
+	raw := []ThreatActor{
+		{Name: "APT28", Source: "misp", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
+		{Name: "APT29", Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
+	}
+	merged, groups := MergeActorsWithProvenance(raw)
+	if len(merged) != 2 || len(groups) != 2 {
+		t.Fatalf("merged=%d groups=%d, want 2 and 2", len(merged), len(groups))
+	}
+	for i := range merged {
+		if len(groups[i]) != 1 {
+			t.Fatalf("groups[%d] = %v, want exactly one raw index", i, groups[i])
+		}
+		if merged[i].Name != raw[groups[i][0]].Name {
+			t.Errorf("merged[%d].Name = %q, want %q", i, merged[i].Name, raw[groups[i][0]].Name)
+		}
+	}
+}
+
+func TestMergeActorsWithProvenance_EmptyInput(t *testing.T) {
+	merged, groups := MergeActorsWithProvenance(nil)
+	if merged != nil || groups != nil {
+		t.Fatalf("merged=%v groups=%v, want nil/nil for empty input", merged, groups)
+	}
+}
+
+// TestMergeActorsWithCanonicalDataAndProvenance_CanonicalBridgeGroupsBothRawActors
+// covers the case the embedded (currently empty) MITRE dataset can't
+// exercise: two actors with ZERO direct token overlap, bridged only by both
+// resolving to the same canonical G####, must still land in one group with
+// both raw indices recoverable.
+func TestMergeActorsWithCanonicalDataAndProvenance_CanonicalBridgeGroupsBothRawActors(t *testing.T) {
+	canonicalIndex := map[string]string{"apt29": "G0016", "cozybear": "G0016"}
+	noGroups := func(string) *attackdata.Group { return nil }
+	raw := []ThreatActor{
+		{Name: "APT29", Source: "misp", Techniques: []TechniqueRef{{ID: "T1078"}}},
+		{Name: "Cozy Bear", Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
+	}
+	merged, groups := mergeActorsWithCanonicalDataAndProvenance(raw, canonicalIndex, noGroups)
+	if len(merged) != 1 || len(groups) != 1 {
+		t.Fatalf("merged=%d groups=%d, want 1 and 1", len(merged), len(groups))
+	}
+	if len(groups[0]) != 2 {
+		t.Fatalf("groups[0] = %v, want both raw indices", groups[0])
+	}
+	if merged[0].CanonicalGroupID != "G0016" {
+		t.Errorf("CanonicalGroupID = %q, want G0016", merged[0].CanonicalGroupID)
+	}
+}

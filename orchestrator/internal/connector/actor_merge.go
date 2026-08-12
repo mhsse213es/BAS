@@ -22,7 +22,19 @@ import (
 // docs/superpowers/specs/2026-08-11-alias-aware-actor-merge-design.md and
 // docs/superpowers/specs/2026-08-11-canonical-mitre-actor-identity-design.md.
 func MergeActors(actors []ThreatActor) []ThreatActor {
-	return mergeActorsWithCanonicalData(actors, attackdata.GroupCanonicalTokenIndex(), attackdata.GroupByID)
+	merged, _ := MergeActorsWithProvenance(actors)
+	return merged
+}
+
+// MergeActorsWithProvenance is MergeActors plus the provenance grouping it
+// otherwise discards: groups[i] holds the indices into the input actors
+// slice that merged into merged[i], index-aligned by construction. Callers
+// that only need the merged result use MergeActors; Scheduler.sync uses
+// this to persist each source's own pre-merge record (see
+// upsertActorSources and
+// docs/superpowers/specs/2026-08-11-source-provenance-design.md).
+func MergeActorsWithProvenance(actors []ThreatActor) ([]ThreatActor, [][]int) {
+	return mergeActorsWithCanonicalDataAndProvenance(actors, attackdata.GroupCanonicalTokenIndex(), attackdata.GroupByID)
 }
 
 // mergeActorsWithCanonicalData is MergeActors' testable core -- the
@@ -32,8 +44,17 @@ func MergeActors(actors []ThreatActor) []ThreatActor {
 // repo, ships empty until someone runs the gen tool against a real STIX
 // bundle -- see internal/reporting/attackdata/attack_groups.json).
 func mergeActorsWithCanonicalData(actors []ThreatActor, canonicalIndex map[string]string, groupByID func(string) *attackdata.Group) []ThreatActor {
+	merged, _ := mergeActorsWithCanonicalDataAndProvenance(actors, canonicalIndex, groupByID)
+	return merged
+}
+
+// mergeActorsWithCanonicalDataAndProvenance is the real core: identical
+// matching/merge/enrichment logic as before, but it also returns the
+// union-find grouping it already computes internally. groups[i] lists the
+// input indices that produced merged[i].
+func mergeActorsWithCanonicalDataAndProvenance(actors []ThreatActor, canonicalIndex map[string]string, groupByID func(string) *attackdata.Group) ([]ThreatActor, [][]int) {
 	if len(actors) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	uf := newTokenUnionFind()
@@ -72,7 +93,7 @@ func mergeActorsWithCanonicalData(actors []ThreatActor, canonicalIndex map[strin
 	for _, idxs := range groups {
 		out = append(out, mergeActorGroup(actors, idxs, canonicalByActor, groupByID))
 	}
-	return out
+	return out, groups
 }
 
 // resolveCanonicalGroupID checks an actor's own normalized tokens against
