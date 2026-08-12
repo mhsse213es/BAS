@@ -117,6 +117,32 @@ func TestPooledCandidate(t *testing.T) {
 	}
 }
 
+// TestPsHostKill_ReleasesProcessHandle is the regression guard for a real
+// leak: kill() used to call Process.Kill() without ever calling Wait(),
+// which (per os/exec's own documented contract -- "Wait ... releases any
+// resources associated with the Cmd") never released the underlying OS
+// process handle. Every pool host that got discarded (e.g. on a step
+// timeout, see TestHostPoolTimeout below) leaked one handle; a
+// long-running agent hammering many techniques through repeated timeouts
+// accumulates these until an unrelated, later exec.Cmd.Start() call
+// starts failing with Windows' ERROR_INVALID_HANDLE.
+func TestPsHostKill_ReleasesProcessHandle(t *testing.T) {
+	h, err := startHost()
+	if err != nil {
+		t.Fatalf("startHost: %v", err)
+	}
+	h.kill()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if h.cmd.ProcessState != nil {
+			return // Wait() completed -- the process handle was released
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("cmd.ProcessState was never populated -- kill() never reaped the process, leaking its OS handle")
+}
+
 // TestHostPoolTimeout verifies a hung command is bounded by the context deadline
 // and the host is discarded (the pool stays usable afterward via replacement).
 func TestHostPoolTimeout(t *testing.T) {

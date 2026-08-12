@@ -109,19 +109,30 @@ func startHost() (*psHost, error) {
 		"-EncodedCommand", encodePowerShell(hostHarness))
 	silentCmd(cmd)
 
+	// Each already-opened pipe is closed explicitly on any later failure --
+	// exec.Cmd only auto-closes the CHILD side of a pipe it created; the
+	// PARENT-side handle returned here (stdin/stdout/stderr) is this
+	// function's own responsibility, and Start() failing does not release
+	// pipes opened by an earlier StdinPipe/StdoutPipe/StderrPipe call.
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		stdin.Close()
 		return nil, err
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
+		stdin.Close()
+		stdout.Close()
 		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
+		stdin.Close()
+		stdout.Close()
+		stderr.Close()
 		return nil, err
 	}
 
@@ -146,6 +157,14 @@ func (h *psHost) kill() {
 	_ = h.stdin.Close() // harness exits when stdin closes
 	if h.cmd.Process != nil {
 		_ = h.cmd.Process.Kill()
+		// Wait releases the OS process handle Start() opened -- without this,
+		// every discarded host (e.g. a step-timeout recycle, see
+		// TestHostPoolTimeout) leaks one handle. A long-running agent session
+		// hammering many techniques accumulates these until an unrelated,
+		// later exec.Cmd.Start() call starts failing with Windows'
+		// ERROR_INVALID_HANDLE. Run in a goroutine -- kill() must not block
+		// its caller waiting for the killed process to fully exit.
+		go func() { _ = h.cmd.Wait() }()
 	}
 }
 
