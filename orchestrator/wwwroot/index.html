@@ -2084,19 +2084,23 @@ body.theme-slate {
               <span id="cs-art-version" class="conn-cfg-val">—</span>
             </div>
             <div class="conn-cfg-row">
-              <span class="conn-cfg-label">Techniques</span>
+              <span class="conn-cfg-label" title="Loaded = techniques the running engine currently has in memory, read from art_atomic_tests. In DB = technique_count recorded at the last (re)seed. These should always match — if Loaded is lower, some techniques' test rows are missing even though the seed record still counts them; Reseed from Pack will re-import and correct it.">Techniques</span>
               <span id="cs-art-techniques" class="conn-cfg-val">—</span>
             </div>
             <div class="conn-cfg-row">
-              <span class="conn-cfg-label">Atomic Tests</span>
+              <span class="conn-cfg-label" title="Total individual Windows atomic tests across all loaded techniques — most techniques have more than one test/variant.">Atomic Tests</span>
               <span id="cs-art-tests" class="conn-cfg-val">—</span>
             </div>
             <div class="conn-cfg-row">
-              <span class="conn-cfg-label">Payloads</span>
+              <span class="conn-cfg-label" title="Binary/script files (e.g. a test EXE, DLL, or EICAR file) that atomic tests need to actually execute a technique — delivered to the agent at run time. A test can reference a payload filename without it being indexed here; see the line below if any are missing.">Payloads</span>
               <span id="cs-art-payloads" class="conn-cfg-val">—</span>
             </div>
+            <div class="conn-cfg-row" id="cs-art-payloads-missing-row" style="display:none">
+              <span class="conn-cfg-label"></span>
+              <span id="cs-art-payloads-missing" class="conn-cfg-val tiny" style="color:var(--warning)"></span>
+            </div>
             <div class="conn-cfg-row">
-              <span class="conn-cfg-label">CISA KEV (CVEs)</span>
+              <span class="conn-cfg-label" title="CVEs on the U.S. CISA Known Exploited Vulnerabilities catalog — confirmed under active real-world exploitation, not just theoretically vulnerable. Used to prioritize KEV-tagged findings (Endpoint Risk's KEV badge) and to build a KEV Exposure Pack (Dashboard → Create KEV Pack) that validates detection against actively-exploited technique classes. Verify by clicking through any KEV badge to its underlying CVE.">CISA KEV (CVEs)</span>
               <span id="cs-art-kev" class="conn-cfg-val">—</span>
             </div>
             <div class="conn-cfg-row">
@@ -15479,12 +15483,30 @@ function loadARTContentStatus() {
       statusEl.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warning);margin-right:6px;vertical-align:middle"></span><span style="color:var(--warning)">Not seeded</span>';
     }
     document.getElementById('cs-art-version').textContent = d.version || '(unversioned)';
-    document.getElementById('cs-art-techniques').textContent =
-      (d.techniquesLoaded != null ? d.techniquesLoaded : (d.techniqueCount || 0)) + ' loaded' +
-      (d.techniqueCount != null ? ' / ' + d.techniqueCount + ' in DB' : '');
+    var loaded = d.techniquesLoaded != null ? d.techniquesLoaded : (d.techniqueCount || 0);
+    var techEl = document.getElementById('cs-art-techniques');
+    techEl.textContent = loaded + ' loaded' + (d.techniqueCount != null ? ' / ' + d.techniqueCount + ' in DB' : '');
+    // Loaded and in-DB should always match -- a mismatch means some techniques'
+    // rows are missing from art_atomic_tests even though the seed record still
+    // counts them (see the field's tooltip). Flag it instead of showing a
+    // silently-wrong number, so a stale seed record doesn't look like a healthy one.
+    techEl.style.color = (d.techniqueCount != null && loaded !== d.techniqueCount) ? 'var(--warning)' : '';
     document.getElementById('cs-art-tests').textContent =
       (d.testCount != null ? d.testCount : 0) + ' Windows atomics';
     document.getElementById('cs-art-payloads').textContent = (d.payloadCount || 0) + ' indexed';
+    var missingRow = document.getElementById('cs-art-payloads-missing-row');
+    var missingCount = d.missingPayloadCount || 0;
+    if (missingRow) {
+      if (missingCount > 0) {
+        var names = (d.missingPayloads || []).slice(0, 5).join(', ');
+        var extra = missingCount > 5 ? ' +' + (missingCount - 5) + ' more' : '';
+        document.getElementById('cs-art-payloads-missing').textContent =
+          '⚠ ' + missingCount + ' referenced but not indexed: ' + names + extra;
+        missingRow.style.display = '';
+      } else {
+        missingRow.style.display = 'none';
+      }
+    }
     document.getElementById('cs-art-kev').textContent =
       (d.kevCount != null ? d.kevCount : 0) + ' known-exploited';
     document.getElementById('cs-art-source').textContent = d.source || '—';
