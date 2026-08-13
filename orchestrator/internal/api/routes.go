@@ -378,6 +378,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Reads are Viewer+; writes are gated on fine-grained permissions so a
 		// large SOC can separate verifier, reviewer and evidence-deletion rights.
 		r.Get("/api/me/permissions", h.GetMyPermissions)
+		r.Get("/api/me", h.GetMe)
 		r.Get("/api/scenarios/runs/{runId}/verifications", h.ListRunVerifications)
 		r.Get("/api/scenarios/runs/{runId}/verifications/{expectationId}/history", h.GetVerificationHistory)
 		r.Get("/api/verifications/{id}/evidence", h.ListVerificationEvidence)

@@ -83,6 +83,63 @@ func TestGetMyPermissions_NoClaimsUnauthorized(t *testing.T) {
 	}
 }
 
+func TestGetMe_NoClaimsUnauthorized(t *testing.T) {
+	h := New(nil, ws.NewHub(), nil, testJWTSecret)
+	req := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	rec := httptest.NewRecorder()
+	h.GetMe(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (no claims in context)", rec.Code)
+	}
+}
+
+// TestGetMe_ReturnsOwnAccountOnly proves GetMe is strictly self-scoped: the
+// caller sees their OWN row, never another user's, even though both exist
+// in the same table -- the profile page must never leak another account's
+// data through this endpoint.
+func TestGetMe_ReturnsOwnAccountOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, testJWTSecret)
+		selfID := seedUser(t, pool, "gm-self", "password123", "analyst", true)
+		seedUser(t, pool, "gm-other", "password123", "admin", true)
+
+		req := authedRequest(t, http.MethodGet, "/api/me", nil, auth.RoleAnalyst, selfID)
+		rec := callAuthed(h.GetMe, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+
+		var got struct {
+			ID         string `json:"id"`
+			Username   string `json:"username"`
+			Role       string `json:"role"`
+			IsActive   bool   `json:"isActive"`
+			AuthSource string `json:"authSource"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if got.ID != selfID {
+			t.Fatalf("id = %q, want %q (must be the caller's own row)", got.ID, selfID)
+		}
+		if got.Username != "gm-self" {
+			t.Fatalf("username = %q, want %q", got.Username, "gm-self")
+		}
+		if got.Role != "analyst" {
+			t.Fatalf("role = %q, want %q", got.Role, "analyst")
+		}
+		if !got.IsActive {
+			t.Error("isActive = false, want true")
+		}
+		if got.AuthSource != "local" {
+			t.Fatalf("authSource = %q, want %q (default for a seeded password user)", got.AuthSource, "local")
+		}
+	})
+}
+
 func TestCreateUser_ValidationAndDuplicate(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

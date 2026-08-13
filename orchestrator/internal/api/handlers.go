@@ -2577,6 +2577,36 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	respond(w, users)
 }
 
+// GetMe returns the caller's OWN account details for the profile page —
+// self-scoped by claims.UserID, never another user's row. Mirrors
+// GetMyPermissions' auth pattern (internal/api/verification_handlers.go).
+// GET /api/me
+func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
+	claims, ok := auth.ClaimsFrom(r.Context())
+	if !ok {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var u struct {
+		ID         string     `json:"id"`
+		Username   string     `json:"username"`
+		Role       string     `json:"role"`
+		IsActive   bool       `json:"isActive"`
+		CreatedAt  time.Time  `json:"createdAt"`
+		LastLogin  *time.Time `json:"lastLogin"`
+		AuthSource string     `json:"authSource"`
+	}
+	err := h.db.QueryRow(r.Context(),
+		`SELECT id, username, role, is_active, created_at, last_login, auth_source FROM users WHERE id = $1`,
+		claims.UserID,
+	).Scan(&u.ID, &u.Username, &u.Role, &u.IsActive, &u.CreatedAt, &u.LastLogin, &u.AuthSource)
+	if err != nil {
+		jsonError(w, "user not found", http.StatusNotFound)
+		return
+	}
+	respond(w, u)
+}
+
 // POST /api/users
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
