@@ -1455,7 +1455,6 @@ body.theme-slate {
           <span id="ws-label">disconnected</span>
         </div>
         <span id="role-badge" class="role-chip">—</span>
-        <button class="btn btn-outline btn-sm" onclick="openChangePassword()">Password</button>
         <button class="btn btn-outline-red btn-sm" onclick="doLogout()">Sign out</button>
       </div>
     </header>
@@ -1914,6 +1913,7 @@ body.theme-slate {
 
         <div class="settings-layout">
           <div class="settings-nav">
+            <a class="sset" data-set="account" onclick="showSettingsSection('account')">My Account</a>
             <a class="sset active" data-set="users" onclick="showSettingsSection('users')">Users &amp; roles</a>
             <a class="sset" data-set="engine" onclick="showSettingsSection('engine')">Caldera engine</a>
             <a class="sset" data-set="intel" onclick="showSettingsSection('intel')">Threat intel</a>
@@ -1924,6 +1924,19 @@ body.theme-slate {
             <a class="sset" data-set="license" onclick="showSettingsSection('license')">License</a>
           </div>
           <div class="settings-body">
+
+          <!-- My Account -->
+          <div id="set-account" class="set-section" style="display:none">
+            <div class="sec-hdr">
+              <h2>My Account</h2>
+            </div>
+            <div class="conn-cfg-card" style="max-width:420px">
+              <div class="conn-cfg-row"><span class="conn-cfg-label">Role</span><span id="account-role" class="conn-cfg-val">—</span></div>
+              <div style="margin-top:0.9rem;padding-top:0.9rem;border-top:1px solid var(--border)">
+                <button class="btn btn-outline btn-sm" onclick="openChangePassword()">Change Password</button>
+              </div>
+            </div>
+          </div>
 
           <!-- Users & roles -->
           <div id="set-users" class="set-section">
@@ -6754,13 +6767,14 @@ var SETTINGS_SECTION = 'users';
 // Settings sub-section switcher — toggles the body panels + lazily loads each.
 function showSettingsSection(name) {
   SETTINGS_SECTION = name;
-  ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'dashprefs', 'license'].forEach(function(s) {
+  ['account', 'users', 'engine', 'intel', 'art', 'audit', 'theme', 'dashprefs', 'license'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
     if (el) el.style.display = s === name ? '' : 'none';
     var nav = document.querySelector('[data-set="' + s + '"]');
     if (nav) nav.classList.toggle('active', s === name);
   });
-  if (name === 'users') loadUsers();
+  if (name === 'account') document.getElementById('account-role').textContent = ROLE || '—';
+  else if (name === 'users') loadUsers();
   else if (name === 'engine') loadCalderaStatus();
   else if (name === 'intel') { loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadOpenAEVConfig(); }
   else if (name === 'art') loadARTContentStatus();
