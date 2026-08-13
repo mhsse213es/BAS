@@ -17912,8 +17912,12 @@ function renderScheduledAssessmentsList() {
     return;
   }
   tbody.innerHTML = SCHED.schedules.map(function(sch) {
-    var payload = {};
-    try { payload = JSON.parse(sch.Payload || '{}'); } catch (e) { payload = {}; }
+    // sch.Payload is a Go json.RawMessage with no json:"..." tag override, so
+    // it arrives already embedded as a real object in the outer response --
+    // NOT as a JSON string needing a second JSON.parse (that silently threw,
+    // caught below, and always fell back to {} -- see openSchedWizardForEdit's
+    // identical fix for the same root cause).
+    var payload = sch.Payload || {};
     var sc = scenarios.find(function(s) { return s.id === payload.scenarioId; });
     var name = sc ? sc.name : (payload.scenarioId || '—');
     var modeColor = sch.Mode === 'telemetry' ? 'var(--warning)' : 'var(--muted)';
@@ -17990,8 +17994,10 @@ function openSchedWizard() {
 function openSchedWizardForEdit(id) {
   var sch = SCHED.schedules.find(function(s) { return s.ID === id; });
   if (!sch) { showToast('Schedule not found', 'err'); return; }
-  var payload = {};
-  try { payload = JSON.parse(sch.Payload || '{}'); } catch (e) { payload = {}; }
+  // sch.Payload arrives already parsed (json.RawMessage embeds as a real
+  // object, not a JSON string) -- see renderScheduledAssessmentsList's
+  // matching fix for the full explanation.
+  var payload = sch.Payload || {};
 
   SCHED.selGroups = {};
   (sch.GroupIDs || []).forEach(function(gid) { SCHED.selGroups[gid] = true; });
