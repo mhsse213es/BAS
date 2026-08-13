@@ -93,23 +93,42 @@ func runChecks(cats []SimCategory, selected map[string]bool, onCheck func(SimChe
 	return out
 }
 
+// postureCatalogDefaultKey is the fallback catalog entry for any scenario ID
+// not in knownPostureScenarios() -- e.g. a user-created custom Local Check
+// scenario. RunScenarioChecks() already falls back to RunAllChecks() for an
+// unrecognized ID at execution time; without this key the catalog side had
+// no equivalent, so the orchestrator's "Customize" picker (and any live
+// check-count summary) had nothing to show for a custom scenario even
+// though it genuinely runs all checks fine. Must match the constant of the
+// same name/value the orchestrator falls back to in GetPostureCatalog.
+const postureCatalogDefaultKey = "*"
+
+func checksToMeta(cats []SimCategory) []PostureCheckMeta {
+	var metas []PostureCheckMeta
+	for _, cat := range cats {
+		for _, c := range cat.Checks {
+			metas = append(metas, PostureCheckMeta{
+				ID: c.ID, Phase: cat.Phase, TechniqueID: c.Technique.ID,
+				Name: c.Technique.Name, Severity: c.Severity,
+			})
+		}
+	}
+	return metas
+}
+
 // BuildPostureCatalog harvests selectable-check metadata for every known posture
-// scenario WITHOUT executing any check (checks are deferred since Part A).
+// scenario WITHOUT executing any check (checks are deferred since Part A), plus
+// a postureCatalogDefaultKey entry for RunAllChecks() -- the set any unrecognized
+// scenario ID actually runs.
 func BuildPostureCatalog() map[string][]PostureCheckMeta {
 	out := make(map[string][]PostureCheckMeta)
 	for _, sid := range knownPostureScenarios() {
-		var metas []PostureCheckMeta
-		for _, cat := range RunScenarioChecks(sid) {
-			for _, c := range cat.Checks {
-				metas = append(metas, PostureCheckMeta{
-					ID: c.ID, Phase: cat.Phase, TechniqueID: c.Technique.ID,
-					Name: c.Technique.Name, Severity: c.Severity,
-				})
-			}
-		}
-		if len(metas) > 0 {
+		if metas := checksToMeta(RunScenarioChecks(sid)); len(metas) > 0 {
 			out[sid] = metas
 		}
+	}
+	if metas := checksToMeta(RunAllChecks()); len(metas) > 0 {
+		out[postureCatalogDefaultKey] = metas
 	}
 	return out
 }

@@ -73,3 +73,20 @@ func TestBuildPostureCatalogHarvestsWithoutRunning(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildPostureCatalogIncludesDefaultFallback proves the catalog carries a
+// postureCatalogDefaultKey entry matching RunAllChecks() -- the set a custom
+// (unrecognized) scenario ID actually runs at execution time. Without this,
+// the orchestrator's Customize picker and any check-count summary have
+// nothing to show for a custom Local Check scenario.
+func TestBuildPostureCatalogIncludesDefaultFallback(t *testing.T) {
+	cat := BuildPostureCatalog()
+	def, ok := cat[postureCatalogDefaultKey]
+	if !ok || len(def) == 0 {
+		t.Fatalf("expected a %q fallback entry in the catalog, got keys: %v", postureCatalogDefaultKey, cat)
+	}
+	wantCount := len(checksToMeta(RunAllChecks()))
+	if len(def) != wantCount {
+		t.Errorf("default catalog entry has %d checks, want %d (RunAllChecks())", len(def), wantCount)
+	}
+}

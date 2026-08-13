@@ -3471,6 +3471,16 @@ func (h *Handler) GetPostureCatalog(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(raw, &cat)
 	checks := cat[scenarioID]
 	if checks == nil {
+		// A custom (unrecognized) scenario ID was never in the agent's
+		// pre-harvested snapshot -- knownPostureScenarios() only covers the
+		// built-in set. It still genuinely runs every check via the agent's
+		// own RunAllChecks() default fallback at execution time, so fall
+		// back to the matching catalog entry here rather than reporting
+		// "no checks" for a scenario that actually runs 20+ of them. Key
+		// must match agent/simulate.go's postureCatalogDefaultKey.
+		checks = cat["*"]
+	}
+	if checks == nil {
 		checks = []map[string]any{}
 	}
 	respond(w, checks)

@@ -11207,6 +11207,12 @@ function closePicker() { _pickerBuilderMode = false; document.getElementById('pi
 
 function clearSelection() { _runSelection = null; renderModalSelection(); }
 
+// _postureSummaryCache holds the rendered "N checks across M categories" HTML
+// per scId|agentId, so re-renders (agent/mode changes) don't refetch. Values:
+// undefined = never fetched, 'pending' = fetch in flight, '' = fetched but
+// empty (hide the note), non-empty string = ready to show.
+var _postureSummaryCache = {};
+
 // renderModalSelection shows the Customize link + a note of the chosen subset
 // inside the Run modal, reflecting the current scenario and pending selection.
 function renderModalSelection() {
@@ -11246,6 +11252,56 @@ function renderModalSelection() {
     note.innerHTML = '&#9989; Running a selected subset: <strong>' + _runSelection.ids.length + '</strong> ' + noun +
       (_runSelection.locked ? ' (targeted re-validate)' :
        ' <a href="javascript:void(0)" class="desc-toggle" style="margin-left:8px" onclick="clearSelection();return false;">Clear</a>');
+  } else if (fw === 'posture' && document.getElementById('modal-agent').value) {
+    // No explicit subset chosen — show what "run everything" actually means
+    // instead of leaving the operator to guess or dig into Customize. Uses
+    // the same per-agent catalog Customize itself fetches (GetPostureCatalog
+    // falls back to the agent's default RunAllChecks() set for a custom
+    // scenario ID, so this is accurate even before anyone re-enrolls it
+    // under a known name).
+    var agentId = document.getElementById('modal-agent').value;
+    var cacheKey = id + '|' + agentId;
+    var cached = _postureSummaryCache[cacheKey];
+    if (cached === undefined) {
+      _postureSummaryCache[cacheKey] = 'pending';
+      note.style.display = 'block';
+      note.innerHTML = '<span style="color:var(--muted)">Loading check catalog…</span>';
+      apicall('/api/posture/catalog?agentId=' + encodeURIComponent(agentId) + '&scenario=' + encodeURIComponent(id))
+        .then(function(d) {
+          var html = '';
+          if (Array.isArray(d) && d.length) {
+            var byPhase = {};
+            d.forEach(function(c) { var p = c.phase || 'other'; byPhase[p] = (byPhase[p] || 0) + 1; });
+            var catNames = Object.keys(byPhase).map(function(p) {
+              return p.replace(/-/g, ' ').replace(/\b\w/g, function(ch) { return ch.toUpperCase(); });
+            });
+            html = '&#9432; <strong>' + d.length + '</strong> check' + (d.length === 1 ? '' : 's') +
+              ' will run across ' + catNames.length + ' categor' + (catNames.length === 1 ? 'y' : 'ies') +
+              ': ' + catNames.join(', ') + '.';
+          }
+          _postureSummaryCache[cacheKey] = html;
+          // Only repaint if the modal is still on this exact scenario+agent —
+          // the operator may have navigated elsewhere while the fetch was in flight.
+          if (document.getElementById('modal-agent').value === agentId &&
+              (_modalScId || document.getElementById('modal-sc').value) === id) {
+            renderModalSelection();
+          }
+        }).catch(function() {
+          _postureSummaryCache[cacheKey] = '';
+          if (document.getElementById('modal-agent').value === agentId &&
+              (_modalScId || document.getElementById('modal-sc').value) === id) {
+            renderModalSelection();
+          }
+        });
+    } else if (cached === 'pending') {
+      note.style.display = 'block';
+      note.innerHTML = '<span style="color:var(--muted)">Loading check catalog…</span>';
+    } else if (cached) {
+      note.style.display = 'block';
+      note.innerHTML = cached;
+    } else {
+      note.style.display = 'none';
+    }
   } else {
     note.style.display = 'none';
   }
