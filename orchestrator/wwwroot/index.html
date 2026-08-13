@@ -717,6 +717,16 @@ code {
 .drawer-body { flex: 1; overflow-y: auto; overflow-x: auto; padding: 1.25rem; }
 .drawer-body::-webkit-scrollbar { width: 3px; height: 3px; }
 .drawer-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+/* Live Run drawer: keep the completed/failed/running summary pinned above the
+   scrolling step timeline. Negative margins cancel .drawer-body's own padding
+   so this reaches the true top/sides of the scrollport before sticking, and
+   an opaque background + bottom border keep timeline rows from showing
+   through underneath it once stuck. */
+#run-live-progress {
+  position: sticky; top: -1.25rem; z-index: 2;
+  margin: -1.25rem -1.25rem 0.6rem; padding: 1.25rem 1.25rem 0.6rem;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
 
 /* Run-results investigation workspace (Sub-project A) -- only applied when
    #results-overlay carries .run-mode, toggled by viewRunResults/closeResults.
