@@ -197,6 +197,12 @@ func (h *Handler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 		Mode: mode, ConfirmLive: req.ConfirmLive, ConfirmLab: req.ConfirmLab, Reason: req.Reason,
 		Techniques: req.Techniques, Abilities: req.Abilities, Steps: req.Steps, Checks: req.Checks,
 		CampaignID: id, InitiatedBy: initiatedBy, MaxPrivilege: req.ExecutionPolicy.MaxPrivilege,
+		// Without this, a campaign-dispatched run's name defaults to the
+		// bare scenario name (dispatchRun's own fallback) -- indistinguishable
+		// in Live Runs from a manually-triggered run. Mirrors the "Scheduled: "
+		// label scheduled_assessment_dispatch.go already applies for the same
+		// reason.
+		RunLabel: "Campaign: " + req.Name,
 	}
 	skips := []map[string]string{}
 	dispatched := 0

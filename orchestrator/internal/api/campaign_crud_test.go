@@ -229,6 +229,47 @@ func TestCreateCampaign_RecordsInitiatedByFromClaims(t *testing.T) {
 	})
 }
 
+// TestCreateCampaign_DispatchedRunNameCarriesCampaignLabel proves a
+// campaign-dispatched run's name is "Campaign: <campaign name>", not the
+// bare scenario name -- otherwise it's indistinguishable in Live Runs from
+// a manually-triggered run. Mirrors the "Scheduled: " label
+// scheduled_assessment_dispatch.go already applies to its own spawned runs.
+func TestCreateCampaign_DispatchedRunNameCarriesCampaignLabel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalPostureScenario(t, "cc-label-sc")
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "cc-label-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		uid := seedUser(t, pool, "cc-label-user", "pw-Password1!", "admin", true)
+		body, _ := json.Marshal(map[string]any{"name": "Q3 BFSI Sweep", "scenarioId": sc.ID, "agentIds": []string{agentID}})
+		req := authedRequest(t, http.MethodPost, "/api/campaigns", bytes.NewReader(body), auth.RoleAdmin, uid)
+		rec := callAuthed(h.CreateCampaign, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		campID, _ := out["campaignId"].(string)
+
+		var runName string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT name FROM scenario_runs WHERE campaign_id=$1`, campID,
+		).Scan(&runName); err != nil {
+			t.Fatalf("query run name: %v", err)
+		}
+		want := "Campaign: Q3 BFSI Sweep"
+		if runName != want {
+			t.Fatalf("run name = %q, want %q", runName, want)
+		}
+	})
+}
+
 // TestCreateCampaign_FanOutDispatchedAndSkipped is the core contract: one
 // online agent gets dispatched (a scenario_runs row with campaign_id set),
 // one offline agent is recorded as a skip — dispatched+skipped reconciles to
