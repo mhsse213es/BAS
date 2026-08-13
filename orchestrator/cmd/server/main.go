@@ -41,6 +41,7 @@ import (
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/search"
+	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
@@ -464,6 +465,12 @@ func main() {
 		return status, err
 	})
 
+	// Generic TAXII 2.1 connector -- deliberately its own Manager, not
+	// wired into the connector.Scheduler above (Phase 1 has no ThreatActor
+	// output; see docs/superpowers/specs/2026-08-13-taxii-connector-phase1-design.md).
+	taxiiStore := taxii.NewStore(pool)
+	taxiiManager := taxii.NewManager(pool, taxiiStore)
+
 	// Fleet Job Engine -- generic Job/JobTarget infrastructure. Ticks every
 	// 5s, same cadence as vexSweepScheduler. internal/jobs knows nothing
 	// about remediation; WithJobsDispatcher (below) wires in the one V1
@@ -504,6 +511,7 @@ func main() {
 		WithRuleLibrary(rulesEngine).
 		WithVexSweep(vexSweepStore, vexSweepDispatcher).
 		WithEMSweep(emSweepStore, emSweepDispatcher).
+		WithTAXII(taxiiStore, taxiiManager).
 		WithIOCProvider(iocProvider)
 
 	vexSweepScheduler.Start(func(ctx context.Context) {
@@ -519,6 +527,11 @@ func main() {
 		}
 	})
 	defer emSweepScheduler.Stop()
+
+	if err := taxiiManager.Start(context.Background()); err != nil {
+		log.Printf("[taxii] manager start: %v", err)
+	}
+	defer taxiiManager.Stop()
 
 	jobsScheduler.Start(func(ctx context.Context) {
 		if err := jobsDispatcher.Tick(ctx); err != nil {
