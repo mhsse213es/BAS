@@ -23,6 +23,7 @@ import (
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detect"
+	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/exercise"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
@@ -453,6 +454,16 @@ func main() {
 		return status, err
 	})
 
+	// Endpoint Mastery Full Sweep — same server-owned orchestration pattern
+	// as Full Variant Sweep, ticking every 5s.
+	emSweepStore := emsweep.NewStore(pool)
+	emSweepScheduler := exercise.NewPollScheduler(5 * time.Second)
+	emSweepDispatcher := emsweep.NewDispatcher(emSweepStore, func(ctx context.Context, scenarioRunID string) (string, error) {
+		var status string
+		err := pool.QueryRow(ctx, `SELECT status FROM scenario_runs WHERE id = $1`, scenarioRunID).Scan(&status)
+		return status, err
+	})
+
 	// Fleet Job Engine -- generic Job/JobTarget infrastructure. Ticks every
 	// 5s, same cadence as vexSweepScheduler. internal/jobs knows nothing
 	// about remediation; WithJobsDispatcher (below) wires in the one V1
@@ -492,6 +503,7 @@ func main() {
 		WithRelationshipStore(relationshipStore).
 		WithRuleLibrary(rulesEngine).
 		WithVexSweep(vexSweepStore, vexSweepDispatcher).
+		WithEMSweep(emSweepStore, emSweepDispatcher).
 		WithIOCProvider(iocProvider)
 
 	vexSweepScheduler.Start(func(ctx context.Context) {
@@ -500,6 +512,13 @@ func main() {
 		}
 	})
 	defer vexSweepScheduler.Stop()
+
+	emSweepScheduler.Start(func(ctx context.Context) {
+		if err := emSweepDispatcher.Tick(ctx); err != nil {
+			log.Printf("[emsweep] tick: %v", err)
+		}
+	})
+	defer emSweepScheduler.Stop()
 
 	jobsScheduler.Start(func(ctx context.Context) {
 		if err := jobsDispatcher.Tick(ctx); err != nil {
