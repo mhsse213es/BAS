@@ -994,7 +994,7 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore, "windows")
+	steps, _, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore, "windows")
 	if err != nil {
 		jsonError(w, "build steps: "+err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -1162,6 +1162,27 @@ func synthesizePolicySkipResult(st scenario.ScenarioStep, maxPrivilege string) m
 	}
 	sim := scenario.Interpret(step, result)
 	sim.SkipReason = models.SkipReasonPolicyPrivilege
+	return sim
+}
+
+// synthesizeCalderaSkipResult mirrors synthesizePolicySkipResult for a
+// caldera_abilities entry that never became a step: not found in the live
+// Caldera library, or found with no Windows-compatible executor. Routed
+// through the same scenario.Interpret path so it shows up in Findings/
+// Remediation/Live exactly like any other skip — only SkipReason and the
+// visible ability id/reason distinguish it.
+func synthesizeCalderaSkipResult(sk scenario.CalderaSkippedAbility) models.SimulationResult {
+	name := sk.Name
+	if name == "" {
+		name = sk.AbilityID
+	}
+	step := scenario.Step{TechniqueID: sk.TechniqueID, Name: name, Framework: "caldera"}
+	result := scenario.ExecResult{
+		TaskID: scenario.TaskID(sk.TechniqueID, name),
+		Stdout: fmt.Sprintf("SKIP: Caldera ability %s — %s", sk.AbilityID, sk.Reason),
+	}
+	sim := scenario.Interpret(step, result)
+	sim.SkipReason = models.SkipReasonPlatformUnavailable
 	return sim
 }
 
@@ -1356,7 +1377,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	}
 
 	// Build concrete commands — all framework logic resolved server-side.
-	steps, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
+	steps, calderaSkipped, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
 	if err != nil {
 		_, _ = h.db.Exec(context.Background(),
 			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
@@ -1367,6 +1388,17 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	// this run's configuration (reflecting any operator-selected subset) before
 	// any runtime filtering — the "Total" side of Scenario Coverage.
 	stepsTotalBase := len(steps)
+
+	// Pre-dispatch synthesized skips: entries that never made it into steps at
+	// all, but must still be visible in results/findings instead of silently
+	// vanishing between "N configured" and "M actually ran" — e.g. a
+	// caldera_abilities id that doesn't exist in the live Caldera library, or
+	// exists with no Windows-compatible executor. The MaxPrivilege filter below
+	// appends its own skips to the same slice so both persist through one merge.
+	var skippedResults []models.SimulationResult
+	for _, sk := range calderaSkipped {
+		skippedResults = append(skippedResults, synthesizeCalderaSkipResult(sk))
+	}
 
 	// Dynamically-built Caldera abilities carry their own fidelity tag. Payload-
 	// bearing abilities (e.g. emu APT chains) are "lab-only" and must never fire
@@ -1395,45 +1427,46 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	// MaxPrivilege are never dispatched. Each one gets a synthesized, scored-out
 	// Skipped result instead of being attempted — mirrors the lab-only filter
 	// above, but unlike it, filtering out EVERY step here is a legitimate outcome
-	// ("nothing was executable under this policy"), not a hard failure.
+	// ("nothing was executable under this policy"), not a hard failure. Appends
+	// to the same skippedResults slice the Caldera-ability skips above use, so
+	// both persist through one merge below.
 	if o.MaxPrivilege != "" {
 		kept := make([]scenario.ScenarioStep, 0, len(steps))
-		var policySkipped []models.SimulationResult
 		for _, st := range steps {
 			if scenario.PrivilegeExceeds(st.RequiresPriv, o.MaxPrivilege) {
-				policySkipped = append(policySkipped, synthesizePolicySkipResult(st, o.MaxPrivilege))
+				skippedResults = append(skippedResults, synthesizePolicySkipResult(st, o.MaxPrivilege))
 				continue
 			}
 			kept = append(kept, st)
 		}
 		steps = kept
-		if len(policySkipped) > 0 {
-			log.Printf("[scenario] run %s: %d step(s) exceeded MaxPrivilege=%s, skipped by policy",
-				runID, len(policySkipped), o.MaxPrivilege)
-			skippedJSON, _ := json.Marshal(policySkipped)
-			if _, err := h.db.Exec(context.Background(),
-				`UPDATE scenario_runs SET policy_skipped_results = $1 WHERE id = $2`, skippedJSON, runID,
-			); err != nil {
-				return "", "", fmt.Errorf("persist policy-skipped results: %w", err)
-			}
+	}
+	if len(skippedResults) > 0 {
+		log.Printf("[scenario] run %s: %d step(s)/ability(ies) skipped pre-dispatch (policy and/or Caldera resolution)",
+			runID, len(skippedResults))
+		skippedJSON, _ := json.Marshal(skippedResults)
+		if _, err := h.db.Exec(context.Background(),
+			`UPDATE scenario_runs SET policy_skipped_results = $1 WHERE id = $2`, skippedJSON, runID,
+		); err != nil {
+			return "", "", fmt.Errorf("persist pre-dispatch skipped results: %w", err)
 		}
-		if len(steps) == 0 {
-			// Every step was excluded by policy — a legitimate, reportable
-			// outcome, not a failure. Complete the run immediately using only
-			// the synthesized results; there is nothing to dispatch, and
-			// waiting for an agent submission that will never arrive would
-			// hang the run.
-			skippedJSON, _ := json.Marshal(policySkipped)
-			_, err := h.db.Exec(context.Background(),
-				`UPDATE scenario_runs SET status = 'completed', results = $1::jsonb, completed_at = NOW(),
-				        steps_total_base = $2, steps_eligible_base = 0 WHERE id = $3`,
-				skippedJSON, stepsTotalBase, runID,
-			)
-			if err != nil {
-				return "", "", fmt.Errorf("complete all-policy-skipped run: %w", err)
-			}
-			return runID, "", nil
+	}
+	if len(steps) == 0 {
+		// Every step was excluded before dispatch (policy and/or Caldera-ability
+		// resolution) — a legitimate, reportable outcome, not a failure. Complete
+		// the run immediately using only the synthesized results; there is
+		// nothing to dispatch, and waiting for an agent submission that will
+		// never arrive would hang the run.
+		skippedJSON, _ := json.Marshal(skippedResults)
+		_, err := h.db.Exec(context.Background(),
+			`UPDATE scenario_runs SET status = 'completed', results = $1::jsonb, completed_at = NOW(),
+			        steps_total_base = $2, steps_eligible_base = 0 WHERE id = $3`,
+			skippedJSON, stepsTotalBase, runID,
+		)
+		if err != nil {
+			return "", "", fmt.Errorf("complete all-skipped run: %w", err)
 		}
+		return runID, "", nil
 	}
 
 	// stepsEligibleBase is captured here, after both the lab-only and

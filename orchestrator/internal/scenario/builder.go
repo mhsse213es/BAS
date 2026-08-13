@@ -64,59 +64,69 @@ func BuildStepMeta(steps []ScenarioStep) map[string]StepMeta {
 // atomic variants for platform-aware scenarios. Pass "" to default to "windows".
 // Modes are checked in priority order (see Scenario type comment). Every built
 // step is then labelled with its curated resource profile so the agent scheduler
-// can run independent steps concurrently; unlabeled steps stay serial.
-func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) ([]ScenarioStep, error) {
-	steps, err := buildStepsRaw(sc, calderaURL, calderaKey, artStore, agentOS)
+// can run independent steps concurrently; unlabeled steps stay serial. The
+// second return value is only ever non-empty for a caldera_abilities scenario —
+// the configured ability IDs that never became a step (not found in the live
+// Caldera library, or no Windows-compatible executor), so a caller can make
+// them visible instead of letting them vanish silently between "N configured"
+// and "M actually ran".
+func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) ([]ScenarioStep, []CalderaSkippedAbility, error) {
+	steps, skipped, err := buildStepsRaw(sc, calderaURL, calderaKey, artStore, agentOS)
 	if err != nil {
-		return nil, err
+		return nil, skipped, err
 	}
 	AttachProfiles(steps)
-	return steps, nil
+	return steps, skipped, nil
 }
 
 // buildStepsRaw produces concrete steps without resource labels.
-func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) ([]ScenarioStep, error) {
+func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) ([]ScenarioStep, []CalderaSkippedAbility, error) {
 	if agentOS == "" {
 		agentOS = "windows"
 	}
 	if calderaURL != "" {
 		if sc.CalderaAllWindows {
-			return buildCalderaAllWindowsSteps(calderaURL, calderaKey)
+			steps, err := buildCalderaAllWindowsSteps(calderaURL, calderaKey)
+			return steps, nil, err
 		}
 		if len(sc.CalderaAbilities) > 0 {
 			return buildCalderaAbilitiesSteps(sc.CalderaAbilities, calderaURL, calderaKey)
 		}
 		if sc.CalderaAdversaryID != "" {
-			return buildCalderaAdversarySteps(sc.CalderaAdversaryID, calderaURL, calderaKey)
+			steps, err := buildCalderaAdversarySteps(sc.CalderaAdversaryID, calderaURL, calderaKey)
+			return steps, nil, err
 		}
 	}
 	if sc.ARTAllWindows {
 		if artStore == nil {
-			return nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
+			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		return buildARTPlatformSteps("windows", artStore)
+		steps, err := buildARTPlatformSteps("windows", artStore)
+		return steps, nil, err
 	}
 	if sc.ARTAllPlatform {
 		if artStore == nil {
-			return nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
+			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		return buildARTPlatformSteps(agentOS, artStore)
+		steps, err := buildARTPlatformSteps(agentOS, artStore)
+		return steps, nil, err
 	}
 	if len(sc.ARTTechniques) > 0 {
 		if artStore == nil {
-			return nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
+			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		return buildARTTechniquesSteps(sc.ARTTechniques, artStore, agentOS)
+		steps, err := buildARTTechniquesSteps(sc.ARTTechniques, artStore, agentOS)
+		return steps, nil, err
 	}
 	out := make([]ScenarioStep, 0, len(sc.Steps))
 	for _, s := range sc.Steps {
 		built, err := buildStep(s, calderaURL, calderaKey, artStore, agentOS)
 		if err != nil {
-			return nil, fmt.Errorf("step %q: %w", s.Name, err)
+			return nil, nil, fmt.Errorf("step %q: %w", s.Name, err)
 		}
 		out = append(out, built)
 	}
-	return out, nil
+	return out, nil, nil
 }
 
 func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) (ScenarioStep, error) {
@@ -460,19 +470,42 @@ func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]Scena
 	return steps, nil
 }
 
+// CalderaSkippedAbility explains why a configured caldera_abilities entry
+// never became a dispatched step. Surfaced up through BuildSteps so the
+// operator can see WHICH ids were dropped and WHY, instead of just noticing
+// the run's total came in lower than the scenario's configured count.
+type CalderaSkippedAbility struct {
+	AbilityID   string // as configured in the scenario YAML
+	Name        string // ability name, only known if the id resolved
+	TechniqueID string // only known if the id resolved
+	Reason      string
+}
+
 // buildCalderaAbilitiesSteps runs a specific admin-chosen list of ability IDs.
-func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) ([]ScenarioStep, error) {
+func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) ([]ScenarioStep, []CalderaSkippedAbility, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	base := strings.TrimRight(calderaURL, "/")
 
 	var steps []ScenarioStep
+	var skipped []CalderaSkippedAbility
 	for _, id := range abilityIDs {
 		ab, err := fetchCalderaAbilityFull(client, base, apiKey, id)
 		if err != nil {
+			log.Printf("[caldera] ability %s: not found in Caldera library — skipped (%v)", id, err)
+			skipped = append(skipped, CalderaSkippedAbility{AbilityID: id, Reason: "not found in Caldera library"})
 			continue
 		}
 		cmd := pickExecutorCommand(ab.Executors, "psh")
 		if cmd == "" {
+			techniqueID := ab.TechniqueID
+			if techniqueID == "" {
+				techniqueID = ab.Tactic
+			}
+			log.Printf("[caldera] ability %s (%q): no Windows-compatible executor — skipped", id, ab.Name)
+			skipped = append(skipped, CalderaSkippedAbility{
+				AbilityID: id, Name: ab.Name, TechniqueID: techniqueID,
+				Reason: "no Windows-compatible executor",
+			})
 			continue
 		}
 		techniqueID := ab.TechniqueID
@@ -492,12 +525,15 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 		})
 	}
 	if len(steps) == 0 {
-		return nil, fmt.Errorf(
+		return nil, skipped, fmt.Errorf(
 			"none of the %d ability IDs in caldera_abilities had a Windows executor in your Caldera instance. "+
 				"Browse real IDs at: GET /api/v2/abilities (KEY: <your-api-key>) and update the scenario YAML",
 			len(abilityIDs))
 	}
-	return steps, nil
+	if len(skipped) > 0 {
+		log.Printf("[caldera] %d of %d configured ability(ies) skipped, %d dispatched", len(skipped), len(abilityIDs), len(steps))
+	}
+	return steps, skipped, nil
 }
 
 // calderaStepFidelity returns "lab-only" if any of the ability's executors ships

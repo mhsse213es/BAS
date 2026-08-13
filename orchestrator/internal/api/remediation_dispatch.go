@@ -65,7 +65,7 @@ func (h *Handler) dispatchRemediationStep(ctx context.Context, agentID, scenario
 			TimeoutSec: timeoutSec,
 		}},
 	}
-	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
+	steps, _, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
 	if err != nil {
 		return "", false, err
 	}
@@ -112,7 +112,7 @@ func (h *Handler) dispatchTechniqueVerification(ctx context.Context, agentID, te
 			Framework:   "art",
 		}},
 	}
-	steps, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
+	steps, _, err := scenario.BuildSteps(sc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
 	if err != nil {
 		return "", false, err
 	}
