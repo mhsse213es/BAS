@@ -68,8 +68,11 @@ func (c *SimCheck) run() {
 
 // runChecks executes the checks in cats. When selected is non-empty, only checks
 // whose ID is in selected are run AND kept; categories left empty are dropped.
-// When selected is nil/empty, every check is run and all are kept.
-func runChecks(cats []SimCategory, selected map[string]bool) []SimCategory {
+// When selected is nil/empty, every check is run and all are kept. onCheck, if
+// non-nil, is invoked once per executed check (Result already filled in) --
+// runLocalScan uses this to emit live progress events, since these checks run
+// synchronously with no other per-check hook available.
+func runChecks(cats []SimCategory, selected map[string]bool, onCheck func(SimCheck)) []SimCategory {
 	out := make([]SimCategory, 0, len(cats))
 	for _, cat := range cats {
 		kept := make([]SimCheck, 0, len(cat.Checks))
@@ -78,6 +81,9 @@ func runChecks(cats []SimCategory, selected map[string]bool) []SimCategory {
 				continue
 			}
 			cat.Checks[i].run()
+			if onCheck != nil {
+				onCheck(cat.Checks[i])
+			}
 			kept = append(kept, cat.Checks[i])
 		}
 		if len(kept) > 0 {

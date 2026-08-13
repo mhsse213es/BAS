@@ -838,10 +838,42 @@ func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 	for _, id := range selected {
 		sel[id] = true
 	}
-	categories = runChecks(categories, sel) // execute (filtered) — checks no longer run at list time
+
+	// Live progress events -- without these the orchestrator's Live Run view
+	// (driven entirely by run_events) never receives a single event for a
+	// local-check scan and stays stuck at "Waiting for the first step…"
+	// forever, even after the scan has genuinely completed with real results.
+	// Mirrors the same event shape/plumbing runScenario uses for ART/Custom
+	// steps (see events.go).
+	var nextSeq int64
+	seq := func() int64 { return atomic.AddInt64(&nextSeq, 1) }
+	emitter := newEventEmitter(
+		func(b []RunEvent) error { return a.postJSON("/api/scenarios/events", b) },
+		1000, 300*time.Millisecond,
+	)
+	defer emitter.close()
+	emit := func(ev RunEvent) { ev.RunID = runID; ev.Seq = seq(); emitter.emit(ev) }
+
+	total := 0
+	for _, cat := range categories {
+		for _, c := range cat.Checks {
+			if len(sel) > 0 && !sel[c.ID] {
+				continue
+			}
+			total++
+		}
+	}
+	emit(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total}})
+
+	categories = runChecks(categories, sel, func(c SimCheck) { // execute (filtered) — checks no longer run at list time
+		emit(RunEvent{Type: "started", TaskID: c.ID, TechniqueID: c.Technique.ID, StepName: c.Technique.Name})
+		emit(RunEvent{Type: "completed", TaskID: c.ID, TechniqueID: c.Technique.ID, StepName: c.Technique.Name,
+			Payload: map[string]any{"verdict": c.Result, "durationMs": c.DurationMs}})
+	})
 	if len(categories) == 0 {
 		log.Printf("[!] local scan %s: no checks matched selection (%d ids) — nothing to run", runID, len(selected))
 	}
+	emit(RunEvent{Type: "run_completed", Payload: map[string]any{"stepsDone": total}})
 
 	// Submit full SimCheck metadata so the orchestrator can correctly populate
 	// technique ID, tactic, severity, threat impact, and remediation without

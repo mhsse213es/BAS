@@ -24,7 +24,7 @@ func TestRunChecksFiltersBySelection(t *testing.T) {
 		check("T2", "b", "t", "High", "x", "y", func() (string, string) { return "fail", "" }),
 	}}}
 	idB := checkID("T2", "b")
-	out := runChecks(cats, map[string]bool{idB: true})
+	out := runChecks(cats, map[string]bool{idB: true}, nil)
 	got := 0
 	for _, cat := range out {
 		got += len(cat.Checks)
@@ -34,6 +34,26 @@ func TestRunChecksFiltersBySelection(t *testing.T) {
 	}
 	if out[0].Checks[0].Result != "fail" {
 		t.Fatalf("selected check not executed: %+v", out[0].Checks[0])
+	}
+}
+
+// TestRunChecksInvokesCallbackPerExecutedCheck proves the optional onCheck
+// callback fires once per check that actually runs, with its result already
+// filled in -- this is what runLocalScan hooks to emit live progress events,
+// without it the orchestrator's Live Run view has no way to know a local
+// check scan is progressing at all.
+func TestRunChecksInvokesCallbackPerExecutedCheck(t *testing.T) {
+	cats := []SimCategory{{Phase: "p", Checks: []SimCheck{
+		check("T1", "a", "t", "High", "x", "y", func() (string, string) { return "pass", "" }),
+		check("T2", "b", "t", "High", "x", "y", func() (string, string) { return "fail", "" }),
+	}}}
+	var seen []SimCheck
+	runChecks(cats, nil, func(c SimCheck) { seen = append(seen, c) })
+	if len(seen) != 2 {
+		t.Fatalf("expected callback for both checks, got %d: %+v", len(seen), seen)
+	}
+	if seen[0].Result == "" || seen[1].Result == "" {
+		t.Fatalf("callback fired before check.run() filled in Result: %+v", seen)
 	}
 }
 
