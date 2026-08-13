@@ -296,16 +296,15 @@ func (h *Handler) GetVariantCoverage(w http.ResponseWriter, r *http.Request) {
 		var simResults []models.SimulationResult
 		json.Unmarshal(resultsRaw, &simResults)
 
-		// Look up ATT&CK tactic from payload_families for this technique.
-		var tactic string
-		h.db.QueryRow(ctx,
-			`SELECT COALESCE(MAX(tactic),'') FROM payload_families WHERE technique_id = $1`,
-			rr.techniqueID,
-		).Scan(&tactic)
-
 		row := variant.CoverageRow{
 			TechniqueID: rr.techniqueID,
-			Tactic:      tactic,
+			// The comprehensive ATT&CK TacticMap (same lookup every other
+			// report/finding in this codebase uses), not payload_families --
+			// that table only has rows for techniques a payload family was
+			// actually configured for, and never falls back from a
+			// sub-technique (e.g. T1074.001) to its parent, so it silently
+			// left this column empty for anything outside that narrow set.
+			Tactic: models.LookupTactic(rr.techniqueID),
 			BaseType:    rr.baseType,
 			BaseID:      rr.baseID,
 			TotalTested: len(simResults),

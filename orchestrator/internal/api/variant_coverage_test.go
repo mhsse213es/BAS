@@ -284,6 +284,56 @@ func TestGetVariantCoverage_AggregatesOncePerTechnique(t *testing.T) {
 	})
 }
 
+// TestGetVariantCoverage_TacticFallsBackForSubtechniqueNotInPayloadFamilies
+// proves the tactic column is populated from the comprehensive ATT&CK
+// TacticMap (via models.LookupTactic, which strips a sub-technique suffix
+// and falls back to its parent) rather than requiring an exact-match row in
+// payload_families -- a technique with no payload family configured (never
+// run through the variant *builder*, just executed via ART/Caldera and
+// reported here) must still show a real tactic, not an em-dash.
+func TestGetVariantCoverage_TacticFallsBackForSubtechniqueNotInPayloadFamilies(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedReportableRun(t, pool, "gvc-tactic-run", "gvc-tactic-agent", reportRunOpts{
+			Results: []models.SimulationResult{
+				{ID: "r1", Technique: models.AttackTechnique{ID: "T1074.001", Name: "Local Data Staging"}, Result: models.ResultFail},
+			},
+		})
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO variant_runs (agent_id, technique_id, base_type, base_id, scenario_run_id, total_variants, status)
+			 VALUES ('gvc-tactic-agent','T1074.001','art','test','gvc-tactic-run',1,'completed')`); err != nil {
+			t.Fatalf("seed variant_run: %v", err)
+		}
+		// Deliberately NOT seeding a payload_families row for T1074.001 --
+		// this is the exact condition that produced an empty tactic before
+		// the fix, even though T1074's tactic is well-known ATT&CK data.
+
+		h := variantHandler(t, pool)
+		rec := httptest.NewRecorder()
+		h.GetVariantCoverage(rec, httptest.NewRequest(http.MethodGet, "/api/variants/coverage", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+		var out []struct {
+			TechniqueID string `json:"techniqueId"`
+			Tactic      string `json:"tactic"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if len(out) != 1 || out[0].TechniqueID != "T1074.001" {
+			t.Fatalf("coverage = %+v, want 1 row T1074.001", out)
+		}
+		want := models.LookupTactic("T1074.001")
+		if want == "" {
+			t.Fatal("test invariant broken: models.TacticMap has no entry for T1074 -- pick a different technique")
+		}
+		if out[0].Tactic != want {
+			t.Fatalf("tactic = %q, want %q (from models.LookupTactic, not payload_families)", out[0].Tactic, want)
+		}
+	})
+}
+
 func TestGetVariantStats_ReflectsSeededCounts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
