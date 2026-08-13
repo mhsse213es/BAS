@@ -2106,6 +2106,25 @@ body.theme-slate {
           </div>
         </div>
 
+        <!-- TAXII 2.1 Connectors (generic -- FS-ISAC, HC-ISAC, Auto-ISAC, any TAXII 2.1 server) -->
+        <div class="sec-hdr" style="margin-top:1.25rem">
+          <h2>TAXII Connectors</h2>
+          <div style="display:flex;gap:0.5rem">
+            <button class="btn btn-outline btn-sm" onclick="loadTAXIIConnectors()">Refresh</button>
+            <button class="btn btn-primary btn-sm" onclick="openTAXIIConnectorModal(null)">+ Add Connector</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Name</th><th>Server URL</th><th>Enabled</th><th>Last Poll</th><th>Last Result</th><th></th>
+            </tr></thead>
+            <tbody id="taxii-connectors-body">
+              <tr><td colspan="6" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
           </div>
 
           <!-- ART content -->
@@ -4089,6 +4108,58 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- TAXII Connector Add/Edit -->
+<div id="taxii-connector-overlay" class="overlay">
+  <div class="modal" style="width:480px">
+    <h3 id="taxii-connector-modal-title">Add TAXII Connector</h3>
+
+    <label class="modal-lbl">Name</label>
+    <input id="taxii-conn-name" type="text" placeholder="e.g. FS-ISAC Production"
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+
+    <label class="modal-lbl" style="margin-top:0.6rem">Server URL</label>
+    <input id="taxii-conn-server-url" type="text" placeholder="https://taxii.example.org"
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+
+    <label class="modal-lbl" style="margin-top:0.6rem">API Root <span class="tiny muted">(optional — auto-discovered if blank)</span></label>
+    <input id="taxii-conn-api-root" type="text"
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+
+    <label class="modal-lbl" style="margin-top:0.6rem">Collection ID</label>
+    <input id="taxii-conn-collection-id" type="text"
+           style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+
+    <label class="modal-lbl" style="margin-top:0.6rem">Auth Type</label>
+    <select id="taxii-conn-auth-type" onchange="taxiiToggleAuthFields()"
+            style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem">
+      <option value="none">None</option>
+      <option value="basic">Basic (username/password)</option>
+    </select>
+
+    <div id="taxii-conn-basic-fields" style="display:none">
+      <label class="modal-lbl" style="margin-top:0.6rem">Username</label>
+      <input id="taxii-conn-username" type="text"
+             style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+      <label class="modal-lbl" style="margin-top:0.6rem">Password</label>
+      <input id="taxii-conn-password" type="password" placeholder="Leave blank to keep current"
+             style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit">
+    </div>
+
+    <label style="display:flex;align-items:center;gap:0.4rem;margin-top:0.6rem">
+      <input type="checkbox" id="taxii-conn-enabled"> Enabled
+    </label>
+
+    <div id="taxii-conn-test-result" class="tiny muted" style="margin-top:0.5rem"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-sm" onclick="testTAXIIConnectorForm()">Test Connection</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-outline btn-sm" onclick="closeTAXIIConnectorModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="taxii-conn-save-btn" onclick="saveTAXIIConnectorForm()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Stop Agent Modal -->
 <div id="stop-agent-overlay" class="overlay">
   <div class="modal" style="width:440px">
@@ -4813,7 +4884,7 @@ function bootApp() {
   loadAdversaries();
   loadAdversaryTemplates();
   loadRuns();
-  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadARTContentStatus(); }
+  if (ROLE === 'admin') { loadConnectionConfig(); loadCalderaStatus(); loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadTAXIIConnectors(); loadARTContentStatus(); }
   injectServerURL();
   // Restore the last active tab so a reload returns the user to where they were.
   // If there's a pending attack-path job in localStorage, go straight to that tab
@@ -6975,7 +7046,7 @@ function showSettingsSection(name) {
   });
   if (name === 'users') loadUsers();
   else if (name === 'engine') loadCalderaStatus();
-  else if (name === 'intel') { loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadOpenAEVConfig(); }
+  else if (name === 'intel') { loadConnectorStatus(); loadThreatIntelConfig('misp'); loadThreatIntelConfig('opencti'); loadThreatIntelConfig('otx'); loadTAXIIConnectors(); loadOpenAEVConfig(); }
   else if (name === 'art') loadARTContentStatus();
   else if (name === 'audit') loadAuditLogs();
   else if (name === 'license') loadLicenseInfo();
@@ -15710,6 +15781,152 @@ function doSaveConnectorConfig(name, payload) {
     loadThreatIntelConfig(name);
     loadConnectorStatus();
   }).catch(function(e) { showToast('Save failed: ' + (e.message || 'error'), 'err'); });
+}
+
+// ── TAXII Connectors (generic TAXII 2.1 -- FS-ISAC/HC-ISAC/Auto-ISAC/any) ──
+var TAXII_CONNECTORS = [];
+var TAXII_EDITING_ID = null;
+
+function loadTAXIIConnectors() {
+  var tbody = document.getElementById('taxii-connectors-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" class="empty">Loading…</td></tr>';
+  apicall('/api/taxii/connectors').then(function(rows) {
+    TAXII_CONNECTORS = rows || [];
+    renderTAXIIConnectorsList();
+  }).catch(function(e) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Failed to load: ' + x(e.message || 'unknown error') + '</td></tr>';
+  });
+}
+
+function renderTAXIIConnectorsList() {
+  var tbody = document.getElementById('taxii-connectors-body');
+  if (!TAXII_CONNECTORS.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No TAXII connectors configured yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = TAXII_CONNECTORS.map(function(c) {
+    var lastPoll = c.lastPollAt ? ago(c.lastPollAt) : 'Never';
+    var resultColor = c.lastPollStatus === 'ok' ? 'var(--success)' : (c.lastPollStatus === 'error' ? 'var(--danger)' : 'var(--muted)');
+    var summary = c.lastPollSummary || {};
+    var resultText = c.lastPollStatus === 'ok'
+      ? (summary.processed || 0) + ' processed, ' + (summary.skipped || 0) + ' skipped, ' + (summary.malformed || 0) + ' malformed'
+      : (c.lastPollStatus === 'error' ? x(c.lastError || 'error') : '—');
+    return '<tr>' +
+      '<td>' + x(c.name) + '</td>' +
+      '<td class="tiny muted">' + x(c.serverUrl) + '</td>' +
+      '<td>' + (c.enabled ? '<span class="badge" style="color:var(--success);border-color:var(--success)">Enabled</span>' : '<span class="badge" style="color:var(--muted);border-color:var(--muted)">Disabled</span>') + '</td>' +
+      '<td class="tiny muted">' + x(lastPoll) + '</td>' +
+      '<td class="tiny" style="color:' + resultColor + '">' + resultText + '</td>' +
+      '<td>' +
+        '<button class="btn btn-outline btn-sm" onclick="openTAXIIConnectorModal(\'' + x(c.id) + '\')">Edit</button> ' +
+        '<button class="btn btn-outline btn-sm" onclick="syncTAXIIConnectorNow(\'' + x(c.id) + '\')">Sync Now</button> ' +
+        '<button class="btn btn-outline btn-sm" onclick="deleteTAXIIConnector(\'' + x(c.id) + '\')">Delete</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function taxiiToggleAuthFields() {
+  var authType = document.getElementById('taxii-conn-auth-type').value;
+  document.getElementById('taxii-conn-basic-fields').style.display = authType === 'basic' ? '' : 'none';
+}
+
+function openTAXIIConnectorModal(id) {
+  TAXII_EDITING_ID = id;
+  document.getElementById('taxii-conn-test-result').textContent = '';
+  if (!id) {
+    document.getElementById('taxii-connector-modal-title').textContent = 'Add TAXII Connector';
+    document.getElementById('taxii-conn-save-btn').textContent = 'Save';
+    document.getElementById('taxii-conn-name').value = '';
+    document.getElementById('taxii-conn-server-url').value = '';
+    document.getElementById('taxii-conn-api-root').value = '';
+    document.getElementById('taxii-conn-collection-id').value = '';
+    document.getElementById('taxii-conn-auth-type').value = 'none';
+    document.getElementById('taxii-conn-username').value = '';
+    document.getElementById('taxii-conn-password').value = '';
+    document.getElementById('taxii-conn-enabled').checked = false;
+    taxiiToggleAuthFields();
+    document.getElementById('taxii-connector-overlay').classList.add('open');
+    return;
+  }
+  var c = TAXII_CONNECTORS.find(function(row) { return row.id === id; });
+  if (!c) { showToast('Connector not found', 'err'); return; }
+  document.getElementById('taxii-connector-modal-title').textContent = 'Edit TAXII Connector';
+  document.getElementById('taxii-conn-save-btn').textContent = 'Save Changes';
+  document.getElementById('taxii-conn-name').value = c.name || '';
+  document.getElementById('taxii-conn-server-url').value = c.serverUrl || '';
+  document.getElementById('taxii-conn-api-root').value = c.apiRoot || '';
+  document.getElementById('taxii-conn-collection-id').value = c.collectionId || '';
+  document.getElementById('taxii-conn-auth-type').value = c.authType || 'none';
+  document.getElementById('taxii-conn-username').value = c.username || '';
+  document.getElementById('taxii-conn-password').value = ''; // never round-tripped -- blank means "keep current"
+  document.getElementById('taxii-conn-enabled').checked = !!c.enabled;
+  taxiiToggleAuthFields();
+  document.getElementById('taxii-connector-overlay').classList.add('open');
+}
+
+function closeTAXIIConnectorModal() {
+  document.getElementById('taxii-connector-overlay').classList.remove('open');
+  TAXII_EDITING_ID = null;
+}
+
+function taxiiFormPayload() {
+  return {
+    name: document.getElementById('taxii-conn-name').value,
+    serverUrl: document.getElementById('taxii-conn-server-url').value,
+    apiRoot: document.getElementById('taxii-conn-api-root').value,
+    collectionId: document.getElementById('taxii-conn-collection-id').value,
+    authType: document.getElementById('taxii-conn-auth-type').value,
+    username: document.getElementById('taxii-conn-username').value,
+    password: document.getElementById('taxii-conn-password').value,
+    enabled: document.getElementById('taxii-conn-enabled').checked
+  };
+}
+
+function testTAXIIConnectorForm() {
+  var resultEl = document.getElementById('taxii-conn-test-result');
+  resultEl.textContent = 'Testing…';
+  resultEl.style.color = 'var(--muted)';
+  apicall('/api/taxii/connectors/test', { method: 'POST', body: JSON.stringify(taxiiFormPayload()) })
+    .then(function(res) {
+      resultEl.textContent = res.ok ? ('OK — ' + res.collectionCount + ' collection(s) visible') : ('Failed: ' + res.error);
+      resultEl.style.color = res.ok ? 'var(--success)' : 'var(--danger)';
+    })
+    .catch(function(e) {
+      resultEl.textContent = 'Failed: ' + (e.message || 'error');
+      resultEl.style.color = 'var(--danger)';
+    });
+}
+
+function saveTAXIIConnectorForm() {
+  var payload = taxiiFormPayload();
+  if (!payload.name || !payload.serverUrl) { showToast('Name and Server URL are required', 'err'); return; }
+  var isEdit = !!TAXII_EDITING_ID;
+  var url = isEdit ? '/api/taxii/connectors/' + encodeURIComponent(TAXII_EDITING_ID) : '/api/taxii/connectors';
+  apicall(url, { method: isEdit ? 'PUT' : 'POST', body: JSON.stringify(payload) })
+    .then(function() {
+      showToast('TAXII connector saved', 'ok');
+      closeTAXIIConnectorModal();
+      loadTAXIIConnectors();
+    })
+    .catch(function(e) { showToast('Save failed: ' + (e.message || 'error'), 'err'); });
+}
+
+function deleteTAXIIConnector(id) {
+  if (!confirm('Delete this TAXII connector? This stops its polling immediately and cannot be undone.')) return;
+  apicall('/api/taxii/connectors/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function() { showToast('Connector deleted', 'ok'); loadTAXIIConnectors(); })
+    .catch(function(e) { showToast('Delete failed: ' + (e.message || 'error'), 'err'); });
+}
+
+function syncTAXIIConnectorNow(id) {
+  apicall('/api/taxii/connectors/' + encodeURIComponent(id) + '/sync', { method: 'POST' })
+    .then(function(res) {
+      showToast(res.ok ? 'Sync completed' : ('Sync failed: ' + (res.error || 'unknown error')), res.ok ? 'ok' : 'err');
+      loadTAXIIConnectors();
+    })
+    .catch(function(e) { showToast('Sync failed: ' + (e.message || 'error'), 'err'); });
 }
 
 function loadConnectorStatus() {
