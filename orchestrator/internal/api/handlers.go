@@ -2156,12 +2156,17 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Derive/refresh persistent findings from this run's results (detection data,
-	// if any, is folded in by the detection-ingest hook). Idempotent.
-	// Skip for partial runs: an incomplete result set must not heal (remediate)
-	// findings — only a full, completed run can confirm a control is in place.
-	if !raw.Partial {
-		h.upsertFindingsForRun(r.Context(), raw.RunID)
-	}
+	// if any, is folded in by the detection-ingest hook). Idempotent. Runs for
+	// partial submissions too: the agent only includes steps that genuinely ran
+	// to completion (agent/agent.go's runScenario), each carrying a real,
+	// determinate Pass/Fail/Blocked verdict — except the one step that was
+	// in-flight when the scenario was cancelled, which the agent tags with a
+	// "step interrupted by scenario cancellation" marker so classifyExecution
+	// (internal/scenario/outcome.go) routes it to ResultError and
+	// upsertFindingsForRun's own switch excludes it (default: continue //
+	// error | skipped). So a partial run's real evidence is safe to score;
+	// only the kill artifact is excluded.
+	h.upsertFindingsForRun(r.Context(), raw.RunID)
 
 	// Auto-populate variant_findings for any ALLOWED results in variant runs.
 	h.upsertVariantFindingsForRun(r.Context(), raw.RunID, raw.ScenarioID, simResults)

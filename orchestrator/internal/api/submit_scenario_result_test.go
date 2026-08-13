@@ -537,6 +537,13 @@ func TestSubmitScenarioResult_FindingsFireOnCompletedRun(t *testing.T) {
 	})
 }
 
+// TestSubmitScenarioResult_FindingsSkippedOnPartialRun proves that the ONE step
+// that was actually in-flight when a scenario was cancelled -- tagged by the
+// agent's "step interrupted by scenario cancellation" marker -- never produces
+// a finding, even though the run it belongs to is Partial and findings now
+// otherwise fire for partial runs (see
+// TestSubmitScenarioResult_PartialRun_CompletedStepsStillProduceFindings).
+// A kill artifact must not masquerade as a security finding.
 func TestSubmitScenarioResult_FindingsSkippedOnPartialRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
@@ -550,7 +557,7 @@ func TestSubmitScenarioResult_FindingsSkippedOnPartialRun(t *testing.T) {
 
 		submitResultOK(t, h, scenario.RawRunResult{
 			RunID: "findings-partial-run", ScenarioID: sc.ID, AgentID: agentID, Partial: true,
-			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, Stdout: "FAIL: allowed"}},
+			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: -1, Stderr: "step interrupted by scenario cancellation"}},
 		})
 
 		var count int
@@ -560,7 +567,59 @@ func TestSubmitScenarioResult_FindingsSkippedOnPartialRun(t *testing.T) {
 			t.Fatalf("count findings: %v", err)
 		}
 		if count != 0 {
-			t.Fatalf("expected no findings row for a Partial run (must not heal on incomplete data), got %d", count)
+			t.Fatalf("expected no findings row for the cancelled in-flight step, got %d", count)
+		}
+	})
+}
+
+// TestSubmitScenarioResult_PartialRun_CompletedStepsStillProduceFindings proves
+// that a Partial run's genuinely-completed steps (real, determinate Pass/Fail
+// verdicts) still populate Findings/Remediation -- only the one step that was
+// actually in-flight when the scenario was cancelled (tagged with the agent's
+// "step interrupted by scenario cancellation" marker, exit -1) must be excluded,
+// since that entry is an artifact of the kill, not a real security outcome.
+func TestSubmitScenarioResult_PartialRun_CompletedStepsStillProduceFindings(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{
+			{Name: "step-0", TechniqueID: "T1059", Framework: "custom", Command: "echo 0"},
+			{Name: "step-1", TechniqueID: "T1072", Framework: "custom", Command: "echo 1"},
+		}
+		sc, engine := minimalLiveScenario(t, "sc-findings-partial-completed", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "agent-findings-partial-completed"
+		seedRunRow(t, pool, "findings-partial-completed-run", sc.ID, agentID, "running")
+
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: "findings-partial-completed-run", ScenarioID: sc.ID, AgentID: agentID, Partial: true,
+			Results: []scenario.ExecResult{
+				// step-0 genuinely ran to completion before cancellation.
+				{TaskID: scenario.TaskID("T1059", "step-0"), ExitCode: 0, Stdout: "FAIL: allowed"},
+				// step-1 was in-flight when the scenario was cancelled -- the
+				// agent's force-kill path tags it this way instead of leaving
+				// an ambiguous bare exit -1.
+				{TaskID: scenario.TaskID("T1072", "step-1"), ExitCode: -1, Stderr: "step interrupted by scenario cancellation"},
+			},
+		})
+
+		var t1059Count, t1072Count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM findings WHERE agent_id=$1 AND technique_id='T1059'`, agentID,
+		).Scan(&t1059Count); err != nil {
+			t.Fatalf("count T1059 findings: %v", err)
+		}
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM findings WHERE agent_id=$1 AND technique_id='T1072'`, agentID,
+		).Scan(&t1072Count); err != nil {
+			t.Fatalf("count T1072 findings: %v", err)
+		}
+		if t1059Count == 0 {
+			t.Fatal("expected a findings row for T1059 (a real, completed FAIL within the partial run), got none")
+		}
+		if t1072Count != 0 {
+			t.Fatalf("expected NO findings row for T1072 (the cancelled in-flight step), got %d -- a kill artifact must not masquerade as a security finding", t1072Count)
 		}
 	})
 }

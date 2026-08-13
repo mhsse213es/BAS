@@ -46,6 +46,13 @@ const (
 	// would otherwise catch Go's own "The handle is invalid." text and
 	// mislabel it as malformed content.
 	ErrProcessSpawnFailed ErrorReason = "process-spawn-failed"
+	// ErrCancelled marks a step that was still in-flight when the scenario
+	// itself was cancelled (stuck-technique force-cancel, manual stop, agent
+	// shutdown). The agent kills the process and submits it anyway so its
+	// partial output isn't lost, but the resulting exit code is an artifact
+	// of the kill, not a real security outcome -- it must never be scored as
+	// a FAIL/finding. See agent/executor.go's matching stderr marker.
+	ErrCancelled ErrorReason = "cancelled"
 )
 
 // errorReasonLabel is the human phrase shown in the report's "What happened".
@@ -53,6 +60,8 @@ func errorReasonLabel(r ErrorReason) string {
 	switch r {
 	case ErrTimeout:
 		return "execution timed out"
+	case ErrCancelled:
+		return "run cancelled — step was interrupted before completion"
 	case ErrSchedulerContention:
 		return "scheduler contention (BAS resource lock)"
 	case ErrMissingPrerequisite:
@@ -84,6 +93,12 @@ func classifyExecutionError(lower string, exitCode int) ErrorReason {
 		return ErrSchedulerContention
 	case strings.Contains(lower, "exceeded execute timeout"):
 		return ErrTimeout
+
+	// The step was still in-flight when the scenario itself was cancelled
+	// (agent/executor.go tags it this way rather than leaving a bare,
+	// ambiguous exit code). Never a security outcome — it's a kill artifact.
+	case strings.Contains(lower, "step interrupted by scenario cancellation"):
+		return ErrCancelled
 
 	// Go's own exec.Cmd.Start() failure -- the agent process could not even
 	// launch the step (e.g. a Windows CreateProcess handle error), before

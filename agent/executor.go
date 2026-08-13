@@ -148,10 +148,19 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 	// layer that reaches the ENTIRE process tree, including grandchildren and any
 	// dialog-holding GUI processes that the parent spawned.
 	if err := cmd.Start(); err != nil {
+		stderrMsg := err.Error()
+		// A scenario cancel that lands before this step even starts (e.g. the
+		// scheduler had already queued it when the cancel arrived) must carry
+		// the same unambiguous marker as a mid-flight kill below — otherwise
+		// Go's raw "context canceled" text reaches the server as an opaque
+		// exit -1, which classifyExecution defaults to a FAIL/finding.
+		if parentCtx.Err() != nil {
+			stderrMsg = "step interrupted by scenario cancellation"
+		}
 		return ExecResult{
 			TaskID:     step.TaskID,
 			ExitCode:   -1,
-			Stderr:     err.Error(),
+			Stderr:     stderrMsg,
 			DurationMs: time.Since(before).Milliseconds(),
 			ExecutedAt: time.Now(),
 		}
@@ -226,6 +235,19 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 		exitCode = -1
 		if strings.TrimSpace(stderr.String()) == "" {
 			fmt.Fprintf(&stderr, "step exceeded execute timeout of %ds", timeout)
+		}
+	}
+
+	// The step was still in-flight when the scenario itself was cancelled
+	// (stuck-technique force-cancel, manual stop, agent shutdown/disconnect
+	// watchdog) — tag it unambiguously rather than leaving a bare exit -1, so
+	// the server (classifyExecutionError, internal/scenario/outcome.go) can
+	// exclude this kill artifact from findings instead of scoring it as a
+	// real "control did not prevent it" result.
+	if !timedOut && parentCtx.Err() != nil {
+		exitCode = -1
+		if strings.TrimSpace(stderr.String()) == "" {
+			stderr.WriteString("step interrupted by scenario cancellation")
 		}
 	}
 

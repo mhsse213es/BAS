@@ -87,4 +87,15 @@ func TestExecStepCancelNotTimeout(t *testing.T) {
 	if r.TimedOut {
 		t.Error("scenario cancel was misreported as an execute timeout")
 	}
+	if r.ExitCode != -1 {
+		t.Errorf("expected exit -1 on scenario cancel, got %d", r.ExitCode)
+	}
+	// The server must be able to tell a kill artifact apart from a real
+	// technique result — otherwise a stuck-technique force-cancel or a
+	// manual stop can masquerade as "control did not prevent it" and
+	// generate a false finding. See internal/scenario/outcome.go's
+	// matching classifyExecutionError case on the orchestrator side.
+	if !strings.Contains(r.Stderr, "step interrupted by scenario cancellation") {
+		t.Errorf("expected the cancellation marker in Stderr so the server excludes this step from findings, got %q", r.Stderr)
+	}
 }
