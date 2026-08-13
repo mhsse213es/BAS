@@ -654,6 +654,30 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_vex_sweeps_one_running_per_agent
 			ON vex_sweeps (agent_id) WHERE status = 'running'`,
 
+		// em_sweeps: server-owned Endpoint Mastery Full Sweep orchestration
+		// state. One row per sweep; the partial unique index makes "one
+		// running sweep per agent" race-safe (not an app-level
+		// check-then-insert). See
+		// docs/superpowers/specs/2026-08-13-em-full-sweep-design.md.
+		`CREATE TABLE IF NOT EXISTS em_sweeps (
+			id                        text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			agent_id                  text        NOT NULL,
+			layers                    text[]      NOT NULL,
+			current_index             int         NOT NULL DEFAULT 0,
+			current_scenario_run_id   text        NOT NULL DEFAULT '',
+			current_layer_started_at  timestamptz,
+			completed_layers          int         NOT NULL DEFAULT 0,
+			total_layers              int         NOT NULL DEFAULT 0,
+			status                    text        NOT NULL DEFAULT 'running',
+			error                     text        NOT NULL DEFAULT '',
+			created_by                text        NOT NULL DEFAULT '',
+			started_at                timestamptz NOT NULL DEFAULT NOW(),
+			completed_at              timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_em_sweeps_agent ON em_sweeps (agent_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_em_sweeps_one_running_per_agent
+			ON em_sweeps (agent_id) WHERE status = 'running'`,
+
 		// payload_families: named PS script payloads per technique.
 		// Generate() is applied to each family, so total variants scale with family count.
 		`CREATE TABLE IF NOT EXISTS payload_families (
@@ -1396,6 +1420,12 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// See docs/superpowers/specs/2026-08-11-sweep-run-grouping-design.md.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS sweep_id text REFERENCES vex_sweeps(id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_sweep_id ON scenario_runs (sweep_id)`,
+
+		// Live Runs: collapse Endpoint Mastery Full Sweep layer runs into one
+		// row, same pattern as sweep_id for Full Variant Sweep. See
+		// docs/superpowers/specs/2026-08-13-em-full-sweep-design.md.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS em_sweep_id text REFERENCES em_sweeps(id)`,
+		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_em_sweep_id ON scenario_runs (em_sweep_id)`,
 
 		// OpenAEV sync-result visibility: last_sync_status alone can't
 		// distinguish "genuinely imported nothing" from "imported real
