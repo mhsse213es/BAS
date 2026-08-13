@@ -1076,6 +1076,46 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			updated_at        timestamptz NOT NULL DEFAULT NOW()
 		)`,
 
+		// taxii_connector_config: one row per configured TAXII 2.1 server
+		// (e.g. FS-ISAC, HC-ISAC) -- unlike threat_intel_config's one-row-
+		// per-connector-TYPE singleton, this is genuinely multi-instance: a
+		// deployment may run zero, one, or several TAXII sources at once.
+		// client_cert/client_key are reserved for a future mTLS phase and
+		// unused today. See
+		// docs/superpowers/specs/2026-08-13-taxii-connector-phase1-design.md.
+		`CREATE TABLE IF NOT EXISTS taxii_connector_config (
+			id                text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name              text        NOT NULL,
+			server_url        text        NOT NULL,
+			api_root          text        NOT NULL DEFAULT '',
+			collection_id     text        NOT NULL DEFAULT '',
+			auth_type         text        NOT NULL DEFAULT 'none',
+			username          text        NOT NULL DEFAULT '',
+			password          text        NOT NULL DEFAULT '',
+			client_cert       text        NOT NULL DEFAULT '',
+			client_key        text        NOT NULL DEFAULT '',
+			enabled           boolean     NOT NULL DEFAULT false,
+			last_poll_at      timestamptz,
+			last_poll_status  text        NOT NULL DEFAULT 'never',
+			last_poll_summary jsonb       NOT NULL DEFAULT '{}',
+			last_error        text        NOT NULL DEFAULT '',
+			created_at        timestamptz NOT NULL DEFAULT NOW(),
+			updated_at        timestamptz NOT NULL DEFAULT NOW()
+		)`,
+
+		// taxii_ingested_objects: the idempotency ledger. A poll re-seeing an
+		// unchanged (connector_id, stix_id, modified) triple short-circuits
+		// before re-parsing; a bumped `modified` on a known stix_id still
+		// flows through and hits iocs' existing (type,value) upsert.
+		`CREATE TABLE IF NOT EXISTS taxii_ingested_objects (
+			connector_id text        NOT NULL REFERENCES taxii_connector_config(id) ON DELETE CASCADE,
+			stix_id      text        NOT NULL,
+			modified     timestamptz NOT NULL,
+			ioc_id       text        NOT NULL REFERENCES iocs(id) ON DELETE CASCADE,
+			ingested_at  timestamptz NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (connector_id, stix_id, modified)
+		)`,
+
 		// dashboard_snapshots: Phase 6 executive dashboard. One row per day
 		// (UNIQUE(snapshot_date) makes the daily scheduler's upsert idempotent).
 		// See docs/superpowers/specs/2026-07-17-phase6-executive-dashboards-design.md.
