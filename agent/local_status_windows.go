@@ -9,17 +9,18 @@ import (
 
 // LocalOperation holds the state of a running or completed simulation.
 type LocalOperation struct {
-	ScenarioID   string     `json:"scenarioId"`
-	ScenarioName string     `json:"scenarioName"`
-	TechniqueID  string     `json:"techniqueId,omitempty"`
-	Phase        string     `json:"phase"`    // Execution | Collection | Upload
-	Progress     int        `json:"progress"` // 0-100
-	TotalSteps   int        `json:"totalSteps"`
-	StartTime    time.Time  `json:"startTime"`
-	Running      bool       `json:"running"`
-	Result       string     `json:"result,omitempty"` // Detected | Evaded | Partial | Error
-	CompletedAt  *time.Time `json:"completedAt,omitempty"`
-	DurationSec  int        `json:"durationSec,omitempty"`
+	ScenarioID     string     `json:"scenarioId"`
+	ScenarioName   string     `json:"scenarioName"`
+	TechniqueID    string     `json:"techniqueId,omitempty"`
+	Phase          string     `json:"phase"`    // Execution | Collection | Upload
+	Progress       int        `json:"progress"` // 0-100
+	CompletedSteps int        `json:"completedSteps"`
+	TotalSteps     int        `json:"totalSteps"`
+	StartTime      time.Time  `json:"startTime"`
+	Running        bool       `json:"running"`
+	Result         string     `json:"result,omitempty"` // Detected | Evaded | Partial | Error
+	CompletedAt    *time.Time `json:"completedAt,omitempty"`
+	DurationSec    int        `json:"durationSec,omitempty"`
 }
 
 // LocalActivity is a timestamped event shown in the Recent Activity list.
@@ -107,6 +108,7 @@ func (s *LocalAgentState) UpdateProgress(step, total int, phase string) {
 		return
 	}
 	s.currentOp.Phase = phase
+	s.currentOp.CompletedSteps = step
 	if total > 0 {
 		s.currentOp.Progress = step * 100 / total
 	}

@@ -467,7 +467,7 @@
     $("opResultWrap").innerHTML="";
     if(cur && cur.running){
       $("opTitle").textContent = (cur.techniqueId?cur.techniqueId+"  ":"") + (cur.scenarioName||"Simulation");
-      $("opMeta").textContent = "Started "+rel(cur.startTime)+" · "+(cur.totalSteps||0)+" steps";
+      $("opMeta").textContent = "Started "+rel(cur.startTime)+" · "+(cur.completedSteps||0)+"/"+(cur.totalSteps||0)+" steps";
       bar.classList.remove("idle");
       fill.style.width=(cur.progress||0)+"%";
       $("opPhase").textContent=(cur.phase||"EXECUTION").toUpperCase();
