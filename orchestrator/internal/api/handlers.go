@@ -46,6 +46,7 @@ import (
 	"github.com/audspect/bas/internal/reporting/attackdata"
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
@@ -108,6 +109,8 @@ type Handler struct {
 	threatPriorityEngine *threatpriority.Engine // nil when not loaded — Threat Prioritization
 	vexSweep             *vexsweep.Store        // nil when not loaded — Full Variant Sweep orchestration
 	emSweep              *emsweep.Store         // nil when not loaded — Endpoint Mastery Full Sweep orchestration
+	taxiiStore           *taxii.Store           // nil when not loaded — generic TAXII 2.1 connector config CRUD
+	taxiiManager         *taxii.Manager         // nil when not loaded — per-connector pollers
 	jobsStore            *jobs.Store            // nil when not loaded — Fleet Job Engine (batch remediation)
 	notifications        *notifications.Service // nil when not loaded — Phase 7 job-event notifications
 	notificationsStore   *notifications.Store   // nil when not loaded — direct read/config access for handlers
@@ -417,6 +420,14 @@ func (h *Handler) WithEMSweep(store *emsweep.Store, dispatcher *emsweep.Dispatch
 	// variant_runs-sync behavior for the Dispatcher's stuck-layer backstop,
 	// rather than duplicating any of that inside emsweep.
 	dispatcher.SetCancel(h.cancelScenarioRun)
+	return h
+}
+
+// WithTAXII attaches the generic TAXII 2.1 connector store and its
+// per-connector poller manager.
+func (h *Handler) WithTAXII(store *taxii.Store, manager *taxii.Manager) *Handler {
+	h.taxiiStore = store
+	h.taxiiManager = manager
 	return h
 }
 

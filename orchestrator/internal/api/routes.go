@@ -456,6 +456,15 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Post("/api/threat-intel/{connector}/config/test", h.TestThreatIntelConfig)
 		r.With(auth.RequirePermission(auth.CanDeleteConnectorScenario)).Delete("/api/connector/scenarios/{id}", h.DeleteIntelScenario)
 
+		// Generic TAXII 2.1 connector (FS-ISAC, HC-ISAC, Auto-ISAC, or any TAXII 2.1 server) — multi-instance CRUD
+		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/taxii/connectors", h.ListTAXIIConnectors)
+		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/taxii/connectors/{id}", h.GetTAXIIConnector)
+		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Post("/api/taxii/connectors", h.CreateTAXIIConnector)
+		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/taxii/connectors/{id}", h.UpdateTAXIIConnector)
+		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Delete("/api/taxii/connectors/{id}", h.DeleteTAXIIConnector)
+		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Post("/api/taxii/connectors/test", h.TestTAXIIConnector)
+		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Post("/api/taxii/connectors/{id}/sync", h.SyncTAXIIConnector)
+
 		// Attack-path schedule config — enables periodic fleet collection.
 		r.With(auth.RequirePermission(auth.CanSetAttackPathSchedule)).Post("/api/attackpath/schedule", h.SetAttackPathSchedule)
 
