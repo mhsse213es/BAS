@@ -4803,8 +4803,15 @@ func (h *Handler) GetARTContentStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	loaded := 0
+	windowsRunnable := 0
 	if h.artStore != nil {
 		loaded = h.artStore.Count()
+		// A technique can be imported (counted in `loaded`) with only
+		// Linux/macOS atomics and no Windows step at all -- ART Full Windows
+		// Sweep silently excludes those via ListTechniquesByPlatform, which
+		// is correct but was previously invisible, making the sweep's
+		// technique count look like a bug relative to `loaded`.
+		windowsRunnable = len(h.artStore.ListTechniquesByPlatform("windows"))
 	}
 	// Atomic-test total (Windows-executable tests across all techniques) and the
 	// seeded CISA KEV CVE catalog size. Both are advisory counts — a failed query
@@ -4843,6 +4850,7 @@ func (h *Handler) GetARTContentStatus(w http.ResponseWriter, r *http.Request) {
 		"source":              source,
 		"importedAt":          importedAt,
 		"techniquesLoaded":    loaded,
+		"windowsRunnable":     windowsRunnable,
 		"missingPayloads":     missing,
 		"missingPayloadCount": len(missing),
 	})

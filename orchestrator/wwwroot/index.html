@@ -2088,6 +2088,10 @@ body.theme-slate {
               <span id="cs-art-techniques" class="conn-cfg-val">—</span>
             </div>
             <div class="conn-cfg-row">
+              <span class="conn-cfg-label" title="Of the loaded techniques, how many have at least one Windows-tagged atomic test. The rest are Linux/macOS-only content — still counted in Techniques above, but ART Full Windows Sweep skips them since there's nothing to run on a Windows target. This is why a full sweep's technique count can be lower than Techniques above.">Windows-Runnable</span>
+              <span id="cs-art-windows-runnable" class="conn-cfg-val">—</span>
+            </div>
+            <div class="conn-cfg-row">
               <span class="conn-cfg-label" title="Total individual Windows atomic tests across all loaded techniques — most techniques have more than one test/variant.">Atomic Tests</span>
               <span id="cs-art-tests" class="conn-cfg-val">—</span>
             </div>
@@ -15491,6 +15495,13 @@ function loadARTContentStatus() {
     // counts them (see the field's tooltip). Flag it instead of showing a
     // silently-wrong number, so a stale seed record doesn't look like a healthy one.
     techEl.style.color = (d.techniqueCount != null && loaded !== d.techniqueCount) ? 'var(--warning)' : '';
+    var winEl = document.getElementById('cs-art-windows-runnable');
+    if (winEl) {
+      var winCount = d.windowsRunnable != null ? d.windowsRunnable : 0;
+      var nonWin = loaded - winCount;
+      winEl.textContent = winCount + ' of ' + loaded + (nonWin > 0 ? ' (' + nonWin + ' Linux/macOS-only, excluded from ART Full Windows Sweep)' : '');
+      winEl.style.color = nonWin > 0 ? 'var(--warning)' : '';
+    }
     document.getElementById('cs-art-tests').textContent =
       (d.testCount != null ? d.testCount : 0) + ' Windows atomics';
     document.getElementById('cs-art-payloads').textContent = (d.payloadCount || 0) + ' indexed';
