@@ -81,6 +81,11 @@ func (d *Dispatcher) advance(ctx context.Context, sw Sweep) {
 		status, err := d.status(ctx, sw.CurrentVariantRunID)
 		if err != nil {
 			log.Printf("[vexsweep] status check failed for sweep %s variant_run %s: %v", sw.ID, sw.CurrentVariantRunID, err)
+			// A persistent status-check failure must not permanently block
+			// stuck-recovery -- without this, a technique whose variant_run
+			// status can never be read again would never be force-cancelled
+			// either, hanging the sweep forever.
+			d.maybeForceCancelStuck(ctx, sw)
 			return
 		}
 		if status == "running" {
@@ -114,16 +119,20 @@ func (d *Dispatcher) maybeForceCancelStuck(ctx context.Context, sw Sweep) {
 	if d.cancelTriggeredForRun[sw.CurrentScenarioRunID] {
 		return
 	}
-	d.cancelTriggeredForRun[sw.CurrentScenarioRunID] = true
 
 	technique := ""
 	if sw.CurrentIndex >= 0 && sw.CurrentIndex < len(sw.Techniques) {
 		technique = sw.Techniques[sw.CurrentIndex]
 	}
 	if _, _, err := d.cancel(ctx, sw.CurrentScenarioRunID); err != nil {
-		log.Printf("[vexsweep] force-cancel stuck technique %s for sweep %s (run %s): %v", technique, sw.ID, sw.CurrentScenarioRunID, err)
+		// Deliberately NOT marking cancelTriggeredForRun here -- a failed
+		// cancel attempt (e.g. transient WS-send error) must retry on the
+		// next tick, not be abandoned forever. The flag is only set below,
+		// once a cancel attempt has actually succeeded.
+		log.Printf("[vexsweep] force-cancel stuck technique %s for sweep %s (run %s): %v -- will retry next tick", technique, sw.ID, sw.CurrentScenarioRunID, err)
 		return
 	}
+	d.cancelTriggeredForRun[sw.CurrentScenarioRunID] = true
 	log.Printf("[vexsweep] technique %s for sweep %s exceeded stuck threshold (%s) -- force-cancel triggered", technique, sw.ID, d.stuckThreshold)
 }
 

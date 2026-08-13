@@ -301,6 +301,112 @@ func TestDispatcher_Tick_DoesNotReTriggerCancelOnSubsequentTicks(t *testing.T) {
 	})
 }
 
+// TestDispatcher_Tick_RetriesStuckCancelAfterFailedAttempt is the regression
+// test for a real bug found while investigating a Full Sweep that stayed
+// stuck on T1072 well past stuckThreshold + cancelGracePeriod: the dispatcher
+// marked cancelTriggeredForRun BEFORE calling CancelFn, so a single failed
+// cancel attempt (e.g. a transient scenario_runs/variant_runs status desync)
+// permanently disabled all further recovery attempts for that technique --
+// the sweep was then stuck forever, with zero retries, no matter how long a
+// human waited. A failed cancel attempt must be retried on a later tick.
+func TestDispatcher_Tick_RetriesStuckCancelAfterFailedAttempt(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-stuck-retry-1", Mode: "sequential",
+			Techniques: []string{"T1072"}, TechniqueVariantCounts: []int{10}, TotalVariants: 10,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-stuck-retry-1", "sr-stuck-retry-1"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		cancelAttempts := 0
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			return "running", nil // still stuck across every tick in this test
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+			t.Fatal("dispatch should not be called")
+			return "", "", 0, nil
+		})
+		d.stuckThreshold = time.Millisecond
+		d.SetCancel(func(ctx context.Context, scenarioRunID string) (string, string, error) {
+			cancelAttempts++
+			if cancelAttempts == 1 {
+				return "", "", errors.New("simulated transient cancel failure")
+			}
+			return "agent-stuck-retry-1", "cancelling", nil
+		})
+
+		time.Sleep(5 * time.Millisecond)
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick 1: %v", err)
+		}
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick 2: %v", err)
+		}
+		if cancelAttempts != 2 {
+			t.Fatalf("cancelAttempts = %d, want 2 (the first failed attempt must not permanently block a retry)", cancelAttempts)
+		}
+	})
+}
+
+// TestDispatcher_Tick_ForceCancelsStuckTechniqueEvenIfStatusCheckErrors is
+// the regression test for the other half of the same bug class: advance()
+// returned immediately on any status-check error, before maybeForceCancelStuck
+// ever ran -- so a persistently-erroring status lookup (e.g. a bad/missing
+// variant_run row) silently disabled stuck-recovery forever too, with no log
+// signal beyond the one status-check-failed line repeating every tick.
+func TestDispatcher_Tick_ForceCancelsStuckTechniqueEvenIfStatusCheckErrors(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-stuck-statuserr-1", Mode: "sequential",
+			Techniques: []string{"T1072"}, TechniqueVariantCounts: []int{10}, TotalVariants: 10,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-stuck-statuserr-1", "sr-stuck-statuserr-1"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		var cancelledRunIDs []string
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			return "", errors.New("simulated persistent status-check failure")
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (string, string, int, error) {
+			t.Fatal("dispatch should not be called")
+			return "", "", 0, nil
+		})
+		d.stuckThreshold = time.Millisecond
+		d.SetCancel(func(ctx context.Context, scenarioRunID string) (string, string, error) {
+			cancelledRunIDs = append(cancelledRunIDs, scenarioRunID)
+			return "agent-stuck-statuserr-1", "cancelling", nil
+		})
+
+		time.Sleep(5 * time.Millisecond)
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if len(cancelledRunIDs) != 1 || cancelledRunIDs[0] != "sr-stuck-statuserr-1" {
+			t.Fatalf("cancelledRunIDs = %v, want exactly [sr-stuck-statuserr-1] (a persistent status-check error must still allow stuck-recovery to fire)", cancelledRunIDs)
+		}
+	})
+}
+
 func TestDispatcher_Tick_IgnoresStoppedAndFailedSweeps(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
