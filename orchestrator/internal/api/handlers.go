@@ -30,13 +30,16 @@ import (
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detectverify"
+	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/ioc"
 	"github.com/audspect/bas/internal/iocregistry"
+	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/relationships"
 	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/reporting"
@@ -46,8 +49,6 @@ import (
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
 	"github.com/audspect/bas/internal/verification"
-	"github.com/audspect/bas/internal/jobs"
-	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/vexsweep"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -75,41 +76,42 @@ type Handler struct {
 	// actionVendorClient builds an actions.VendorClient for a config. nil in
 	// production (call sites fall back to actions.NewVendorClient) — tests
 	// override it to avoid real HTTP calls.
-	actionVendorClient func(actions.ConnectorConfig) (actions.VendorClient, error)
-	secret                string
-	agentSecret           string // optional shared secret for agent-facing endpoints
-	calderaURL            string
-	calderaKey            string
-	iocProvider           ioc.Provider // nil when no OTX connector is configured
-	iocProviderMu         sync.RWMutex // guards iocProvider -- can be swapped live by a config save
-	artStore              *scenario.ARTStore
-	artContentDir         string               // seed source for ART atomics (ART_DIR)
-	artPayloadDir         string               // seed source for ART payload binaries (ART_PAYLOAD_DIR)
-	artKEVFile            string               // CISA KEV catalog JSON (KEV_FILE)
-	artEPSSFile           string               // FIRST EPSS CSV/GZ (EPSS_FILE)
-	artContentVer         string               // recorded content-pack version
-	manifest              *integrity.Manifest  // binary hash manifest — nil means verification disabled
-	complianceMapper      *compliance.Mapper   // nil when not loaded
-	controlHealthMapper   *controlhealth.Mapper // nil when not loaded
-	endpointRiskTaxonomy  *endpointrisk.Taxonomy // nil when not loaded
-	eolCatalog            *endpointrisk.Catalog  // nil when not loaded
-	remediationCatalog    *remediation.Catalog   // nil when not loaded
-	reportingEngine       *reporting.Engine    // nil when not loaded
-	scheduler             *connector.Scheduler // nil when no sources configured
-	ticketing             *ticketing.Manager   // nil when no connectors configured
-	licPath               string               // path to bas.lic for Settings → License display
-	exerciseStore         *exercise.Store
-	exerciseExecutor      *exercise.Executor
-	exerciseChain         *exercise.EvidenceChain
-	verification          *verification.Store  // nil when not loaded — SP2 verification store
-	relationships         *relationships.Store // nil when not loaded — CVE-ATT&CK Relationship Store
-	rules                 *rulelib.Engine      // nil when not loaded — Detection Rule Library
-	threatPriorityEngine  *threatpriority.Engine // nil when not loaded — Threat Prioritization
-	vexSweep              *vexsweep.Store      // nil when not loaded — Full Variant Sweep orchestration
-	jobsStore             *jobs.Store          // nil when not loaded — Fleet Job Engine (batch remediation)
-	notifications         *notifications.Service // nil when not loaded — Phase 7 job-event notifications
-	notificationsStore    *notifications.Store    // nil when not loaded — direct read/config access for handlers
-	correlationEngine     *correlation.Engine     // nil when not loaded — Intelligence Correlation Engine
+	actionVendorClient   func(actions.ConnectorConfig) (actions.VendorClient, error)
+	secret               string
+	agentSecret          string // optional shared secret for agent-facing endpoints
+	calderaURL           string
+	calderaKey           string
+	iocProvider          ioc.Provider // nil when no OTX connector is configured
+	iocProviderMu        sync.RWMutex // guards iocProvider -- can be swapped live by a config save
+	artStore             *scenario.ARTStore
+	artContentDir        string                 // seed source for ART atomics (ART_DIR)
+	artPayloadDir        string                 // seed source for ART payload binaries (ART_PAYLOAD_DIR)
+	artKEVFile           string                 // CISA KEV catalog JSON (KEV_FILE)
+	artEPSSFile          string                 // FIRST EPSS CSV/GZ (EPSS_FILE)
+	artContentVer        string                 // recorded content-pack version
+	manifest             *integrity.Manifest    // binary hash manifest — nil means verification disabled
+	complianceMapper     *compliance.Mapper     // nil when not loaded
+	controlHealthMapper  *controlhealth.Mapper  // nil when not loaded
+	endpointRiskTaxonomy *endpointrisk.Taxonomy // nil when not loaded
+	eolCatalog           *endpointrisk.Catalog  // nil when not loaded
+	remediationCatalog   *remediation.Catalog   // nil when not loaded
+	reportingEngine      *reporting.Engine      // nil when not loaded
+	scheduler            *connector.Scheduler   // nil when no sources configured
+	ticketing            *ticketing.Manager     // nil when no connectors configured
+	licPath              string                 // path to bas.lic for Settings → License display
+	exerciseStore        *exercise.Store
+	exerciseExecutor     *exercise.Executor
+	exerciseChain        *exercise.EvidenceChain
+	verification         *verification.Store    // nil when not loaded — SP2 verification store
+	relationships        *relationships.Store   // nil when not loaded — CVE-ATT&CK Relationship Store
+	rules                *rulelib.Engine        // nil when not loaded — Detection Rule Library
+	threatPriorityEngine *threatpriority.Engine // nil when not loaded — Threat Prioritization
+	vexSweep             *vexsweep.Store        // nil when not loaded — Full Variant Sweep orchestration
+	emSweep              *emsweep.Store         // nil when not loaded — Endpoint Mastery Full Sweep orchestration
+	jobsStore            *jobs.Store            // nil when not loaded — Fleet Job Engine (batch remediation)
+	notifications        *notifications.Service // nil when not loaded — Phase 7 job-event notifications
+	notificationsStore   *notifications.Store   // nil when not loaded — direct read/config access for handlers
+	correlationEngine    *correlation.Engine    // nil when not loaded — Intelligence Correlation Engine
 	// cancelGracePeriod is how long cancelScenarioRun waits for an agent to
 	// confirm a cancel (via SubmitScenarioResult) before force-marking the run
 	// 'partial' itself. Defaults to 60s in New(); tests override it directly
@@ -401,6 +403,19 @@ func (h *Handler) WithVexSweep(store *vexsweep.Store, dispatcher *vexsweep.Dispa
 	// Reuses cancelScenarioRun's existing agent-notify + grace-period +
 	// variant_runs-sync behavior for the Dispatcher's stuck-technique
 	// backstop, rather than duplicating any of that inside vexsweep.
+	dispatcher.SetCancel(h.cancelScenarioRun)
+	return h
+}
+
+// WithEMSweep attaches the Endpoint Mastery Full Sweep store and wires the
+// Dispatcher's DispatchFn to dispatchEMLayer -- same wire-the-callback-
+// inside-the-api-package pattern WithVexSweep already uses.
+func (h *Handler) WithEMSweep(store *emsweep.Store, dispatcher *emsweep.Dispatcher) *Handler {
+	h.emSweep = store
+	dispatcher.SetDispatch(h.dispatchEMLayer)
+	// Reuses cancelScenarioRun's existing agent-notify + grace-period +
+	// variant_runs-sync behavior for the Dispatcher's stuck-layer backstop,
+	// rather than duplicating any of that inside emsweep.
 	dispatcher.SetCancel(h.cancelScenarioRun)
 	return h
 }
