@@ -334,6 +334,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/vex/sweeps", h.ListVexSweeps)
 		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/vex/sweeps/{id}/cancel", h.CancelVexSweep)
 
+		// Endpoint Mastery Full Sweep — server-owned sequential orchestration
+		r.With(auth.RequirePermission(auth.CanRunScenario)).Post("/api/em/sweeps", h.CreateEMSweep)
+		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps/active", h.GetActiveEMSweep)
+		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps/{id}", h.GetEMSweep)
+		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps/{id}/runs", h.GetEMSweepRuns)
+		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps", h.ListEMSweeps)
+		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/em/sweeps/{id}/cancel", h.CancelEMSweep)
+
 		// Payload families (Phase 3) — mutation/delete is Admin only (see below)
 		r.With(auth.RequirePermission(auth.CanListPayloadFamilies)).Get("/api/payload-families", h.GetPayloadFamilies)
 		r.With(auth.RequirePermission(auth.CanViewPayloadFamily)).Get("/api/payload-families/{techniqueId}", h.GetTechniqueFamilies)
