@@ -3786,7 +3786,7 @@ body.theme-slate {
           </div>
           <div style="display:flex;gap:0.5rem;align-items:center">
             <button class="btn btn-outline btn-sm" onclick="loadEmTab()">&#x21bb; Refresh</button>
-            <button class="btn btn-primary btn-sm" onclick="runEmSweep()">&#9654; Run Full Sweep</button>
+            <button class="btn btn-primary btn-sm" onclick="openEMSweepModal()">&#9654; Run Full Sweep</button>
           </div>
         </div>
 
@@ -4427,6 +4427,58 @@ body.theme-slate {
     <div class="drawer-body">
       <div id="sweep-drilldown-summary" class="sub2" style="margin-bottom:0.75rem"></div>
       <ul id="sweep-drilldown-list" style="list-style:none;margin:0;padding:0"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- Endpoint Mastery Full Sweep: target picker -->
+<div id="em-sweep-modal-overlay" class="drawer-overlay" onclick="if(event.target===this)closeEMSweepModal()">
+  <div class="drawer" style="width:480px;max-width:94vw">
+    <div class="drawer-header">
+      <h3>Run Full Sweep — Endpoint Mastery</h3>
+      <button class="drawer-close" onclick="closeEMSweepModal()">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <p class="tiny muted" style="margin-bottom:0.75rem">Dispatches all 14 Endpoint Mastery layers sequentially — each layer runs to completion before the next starts.</p>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.3rem">
+          <input type="radio" name="em-sweep-target-mode" value="individual" checked onchange="setEMSweepTargetMode('individual')"> Individual Agent
+        </label>
+        <label style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.3rem">
+          <input type="radio" name="em-sweep-target-mode" value="group" onchange="setEMSweepTargetMode('group')"> Agent Group(s)
+        </label>
+        <label style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.75rem">
+          <input type="radio" name="em-sweep-target-mode" value="all" onchange="setEMSweepTargetMode('all')"> All Agents
+        </label>
+      </div>
+      <div id="em-sweep-individual-wrap">
+        <label class="modal-lbl">Agent</label>
+        <select id="em-sweep-agent" style="width:100%;padding:0.5rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)"></select>
+      </div>
+      <div id="em-sweep-group-wrap" style="display:none">
+        <div id="em-sweep-group-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem"></div>
+      </div>
+      <div style="margin-top:1rem;display:flex;justify-content:flex-end;gap:0.5rem">
+        <button class="btn btn-outline btn-sm" onclick="closeEMSweepModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="emSweepDispatch()">&#9654; Start Sweep</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Endpoint Mastery Full Sweep: live progress -->
+<div id="em-sweep-progress-overlay" class="drawer-overlay" onclick="if(event.target===this)closeEMSweepProgress()">
+  <div class="drawer" style="width:480px;max-width:94vw">
+    <div class="drawer-header">
+      <h3 id="em-sweep-progress-title">EM Full Sweep — Live</h3>
+      <button class="drawer-close" onclick="closeEMSweepProgress()">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <div id="em-sweep-progress-summary" style="margin-bottom:0.75rem"></div>
+      <ul id="em-sweep-progress-list" style="list-style:none;margin:0;padding:0"></ul>
+      <div style="margin-top:1rem;display:flex;justify-content:flex-end">
+        <button class="btn btn-outline-red btn-sm" id="em-sweep-stop-btn" onclick="stopEMSweep()">&#9632; Stop Sweep</button>
+      </div>
     </div>
   </div>
 </div>
@@ -17809,29 +17861,170 @@ function emRunLayer(scenarioId) {
   openModal(scenarioId, agents[0].agentId);
 }
 
-function runEmSweep() {
-  // Dispatch each EM layer as an individual posture run against the first enrolled agent.
-  // The endpoint is POST /api/scenarios/{id}/run — one scenario at a time.
+// ── Endpoint Mastery Full Sweep ─────────────────────────────────────────
+// Own target-mode state, deliberately not shared with _vexTargetMode/
+// _vexGroupSel -- see design spec's "duplicate and adapt, don't share"
+// decision (docs/superpowers/specs/2026-08-13-em-full-sweep-design.md).
+var _emTargetMode = 'individual';
+var _emGroupSel = {};
+
+function openEMSweepModal() {
   if (!agents.length) { showToast('No agents enrolled.', 'err'); showTab('agents'); return; }
-  var agentId = agents[0].agentId;
-  apicall('/api/scenarios').then(function(srv) {
-    var srvIds = (srv || []).map(function(s) { return s.id; });
-    var toRun = EM_CATALOG.map(function(e) { return e.id; }).filter(function(id) { return srvIds.indexOf(id) !== -1; });
-    if (!toRun.length) { showToast('No EM scenarios loaded on server yet. Reload the server with the latest scenarios.', 'err'); return; }
-    var dispatched = 0, failed = 0;
-    var next = function(i) {
-      if (i >= toRun.length) {
-        showToast('EM Sweep queued: ' + dispatched + ' layer' + (dispatched === 1 ? '' : 's') + (failed ? ', ' + failed + ' failed' : '') + '.', dispatched ? 'ok' : 'err');
-        if (dispatched) { setTimeout(function() { showTab('runs'); }, 600); }
-        return;
-      }
-      apicall('/api/scenarios/' + encodeURIComponent(toRun[i]) + '/run', {
-        method: 'POST', body: JSON.stringify({ agentId: agentId, mode: 'posture' })
-      }).then(function() { dispatched++; next(i + 1); })
-        .catch(function() { failed++; next(i + 1); });
-    };
-    next(0);
-  }).catch(function(e) { showToast('Failed to fetch scenarios: ' + e.message, 'err'); });
+  _emTargetMode = 'individual';
+  _emGroupSel = {};
+  document.querySelector('input[name="em-sweep-target-mode"][value="individual"]').checked = true;
+  document.getElementById('em-sweep-individual-wrap').style.display = '';
+  document.getElementById('em-sweep-group-wrap').style.display = 'none';
+  var sel = document.getElementById('em-sweep-agent');
+  sel.innerHTML = agents.map(function(a) {
+    return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + '</option>';
+  }).join('');
+  renderEMSweepGroupList(); // agentGroupTree is already loaded at boot by loadAgentGroupTree() -- no fresh fetch needed
+  document.getElementById('em-sweep-modal-overlay').classList.add('open');
+}
+
+// renderEMSweepGroupList mirrors renderVexGroupList exactly: gpFlattenGroups
+// is the same shared tree-flattening helper the Run Scenario wizard's own
+// Group(s) mode and vexRunFullSweep's group mode both already use.
+function renderEMSweepGroupList() {
+  var list = document.getElementById('em-sweep-group-list');
+  if (!list) return;
+  var options = gpFlattenGroups(agentGroupTree, 0, null, []);
+  if (!options.length) {
+    list.innerHTML = '<p class="tiny muted" style="margin:0">No agent groups have been created yet.</p>';
+    return;
+  }
+  list.innerHTML = options.map(function(o) {
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0.3rem;cursor:pointer">' +
+      '<input type="checkbox" ' + (_emGroupSel[o.id] ? 'checked' : '') +
+      ' onchange="_emGroupSel[' + o.id + ']=this.checked">' +
+      '<span style="font-size:0.8rem">' + x(o.label) + '</span></label>';
+  }).join('');
+}
+
+function closeEMSweepModal() {
+  document.getElementById('em-sweep-modal-overlay').classList.remove('open');
+}
+
+function setEMSweepTargetMode(mode) {
+  _emTargetMode = mode;
+  document.getElementById('em-sweep-individual-wrap').style.display = mode === 'individual' ? '' : 'none';
+  document.getElementById('em-sweep-group-wrap').style.display = mode === 'group' ? '' : 'none';
+}
+
+// emResolvedGroupAgents resolves the currently-checked groups to their
+// member agents via resolveGroupTargetAgents -- the same pre-existing,
+// already-correct helper vexResolvedGroupAgents uses, which recurses into
+// subgroups via buildGroupDescendantMap. Do not reimplement group flattening
+// here.
+function emResolvedGroupAgents() {
+  var selectedGroupIds = Object.keys(_emGroupSel).filter(function(k) { return _emGroupSel[k]; }).map(Number);
+  return resolveGroupTargetAgents(selectedGroupIds);
+}
+
+function emSweepDispatch() {
+  var targets = [];
+  if (_emTargetMode === 'individual') {
+    var agentId = document.getElementById('em-sweep-agent').value;
+    if (!agentId) { showToast('Select an agent', 'err'); return; }
+    targets = [agentId];
+  } else if (_emTargetMode === 'group') {
+    var resolved = emResolvedGroupAgents();
+    if (!resolved.length) { showToast('Select at least one group with agents', 'err'); return; }
+    targets = resolved.map(function(a) { return a.agentId; });
+  } else {
+    targets = (agents || []).filter(function(a) { return a.status === 'online'; }).map(function(a) { return a.agentId; });
+    if (!targets.length) { showToast('No online agents', 'err'); return; }
+  }
+
+  if (!confirm('Start Endpoint Mastery Full Sweep on ' + targets.length + ' agent(s)?\n\nEach agent runs all 14 layers sequentially — this may take a while per agent.\n\nContinue?')) return;
+
+  closeEMSweepModal();
+  var dispatches = targets.map(function(agentId) {
+    return apicall('/api/em/sweeps', {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agentId })
+    }).then(function(res) {
+      if (res && res.error) return { agentId: agentId, ok: false, error: res.error };
+      return { agentId: agentId, ok: true };
+    }).catch(function(e) {
+      return { agentId: agentId, ok: false, error: e.message };
+    });
+  });
+
+  Promise.all(dispatches).then(function(results) {
+    var ok = results.filter(function(r) { return r.ok; });
+    var failed = results.filter(function(r) { return !r.ok; });
+    if (!failed.length) {
+      showToast('Started ' + ok.length + ' EM sweep(s).', 'ok');
+    } else if (ok.length) {
+      showToast('Started ' + ok.length + '/' + results.length + ' sweeps. Failed: ' +
+        failed.map(function(f) { return f.agentId + ' (' + f.error + ')'; }).join(', '), 'err');
+    } else {
+      showToast('All ' + results.length + ' sweep dispatches failed. ' +
+        failed.map(function(f) { return f.agentId + ' (' + f.error + ')'; }).join(', '), 'err');
+    }
+    if (targets.length === 1 && ok.length === 1) {
+      apicall('/api/em/sweeps/active?agentId=' + encodeURIComponent(targets[0])).then(function(sw) {
+        if (sw && sw.id) openEMSweepProgress(sw.id);
+      }).catch(function() {});
+    }
+    showTab('runs');
+  });
+}
+
+var _emSweepPollTimer = null;
+var _emSweepCurrentId = null;
+
+function openEMSweepProgress(sweepId) {
+  _emSweepCurrentId = sweepId;
+  document.getElementById('em-sweep-progress-overlay').classList.add('open');
+  pollEMSweepProgress();
+  if (_emSweepPollTimer) clearInterval(_emSweepPollTimer);
+  _emSweepPollTimer = setInterval(pollEMSweepProgress, 3000);
+}
+
+function closeEMSweepProgress() {
+  document.getElementById('em-sweep-progress-overlay').classList.remove('open');
+  if (_emSweepPollTimer) { clearInterval(_emSweepPollTimer); _emSweepPollTimer = null; }
+  _emSweepCurrentId = null;
+}
+
+function pollEMSweepProgress() {
+  if (!_emSweepCurrentId) return;
+  apicall('/api/em/sweeps/' + encodeURIComponent(_emSweepCurrentId)).then(function(sw) {
+    if (!sw || sw.error) return;
+    renderEMSweepProgress(sw);
+    if (sw.status !== 'running' && _emSweepPollTimer) {
+      clearInterval(_emSweepPollTimer);
+      _emSweepPollTimer = null;
+    }
+  }).catch(function() {});
+}
+
+function renderEMSweepProgress(sw) {
+  document.getElementById('em-sweep-progress-title').textContent = 'EM Full Sweep — ' + x(sw.agentId);
+  document.getElementById('em-sweep-progress-summary').innerHTML =
+    '<strong>' + sw.completedLayers + '/' + sw.totalLayers + '</strong> layers complete &middot; status: ' + x(sw.status) +
+    (sw.error ? '<div style="color:var(--danger);margin-top:0.3rem">' + x(sw.error) + '</div>' : '');
+  var list = document.getElementById('em-sweep-progress-list');
+  list.innerHTML = (sw.layers || []).map(function(layerId, i) {
+    var state = i < sw.currentIndex ? 'done' : (i === sw.currentIndex && sw.status === 'running') ? 'running' : 'pending';
+    var color = state === 'done' ? 'var(--success)' : state === 'running' ? 'var(--accent)' : 'var(--muted)';
+    var label = state === 'done' ? '&#10003;' : state === 'running' ? '&#9679;' : '&#9675;';
+    return '<li style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;color:' + color + '">' +
+      '<span>' + label + '</span><span>' + x(layerId) + '</span></li>';
+  }).join('');
+  var stopBtn = document.getElementById('em-sweep-stop-btn');
+  stopBtn.style.display = sw.status === 'running' ? '' : 'none';
+}
+
+function stopEMSweep() {
+  if (!_emSweepCurrentId) return;
+  if (!confirm('Stop this EM sweep? The current layer keeps running to completion but no further layers will be dispatched.')) return;
+  apicall('/api/em/sweeps/' + encodeURIComponent(_emSweepCurrentId) + '/cancel', { method: 'POST' }).then(function() {
+    pollEMSweepProgress();
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
 // ── Scheduled Assessments ──────────────────────────────────────────────────
