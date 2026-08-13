@@ -32,6 +32,11 @@ const (
 	SourceScenario       Source = "scenario"
 	SourceVariant        Source = "variant"
 	SourceManual         Source = "manual"
+	// SourceThreatFeed marks an indicator ingested from an external threat
+	// intelligence feed (e.g. a TAXII/STIX ISAC feed) -- automated, not
+	// human-entered like SourceManual, and not observed during our own
+	// execution like SourceDetectionAlert/SourceScenario/SourceVariant.
+	SourceThreatFeed Source = "threat_feed"
 )
 
 type Origin string
@@ -63,6 +68,11 @@ const (
 	StatusMissed    Status = "missed"
 	StatusExpired   Status = "expired"
 	StatusArchived  Status = "archived"
+	// StatusReported marks an indicator that is intel-asserted (reported by
+	// an external threat feed) but has not gone through any stage of OUR
+	// OWN execution lifecycle (Draft..Archived above all describe stages of
+	// a scenario/run pipeline a TAXII-ingested indicator never entered).
+	StatusReported Status = "reported"
 )
 
 // IOC is the canonical model every producer (Detection Validation, Variant
