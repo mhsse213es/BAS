@@ -1251,6 +1251,9 @@ func (h *Handler) applyGeneratedArtifacts(ctx context.Context, scenarioID, runID
 }
 
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
+	if license.Current().State == license.StateLocked {
+		return "", "license_locked", nil
+	}
 	live := o.Mode == "telemetry" || o.Mode == "lab"
 
 	// ── Agent state gate ─────────────────────────────────────────────────────

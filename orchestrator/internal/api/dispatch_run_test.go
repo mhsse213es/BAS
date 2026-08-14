@@ -9,10 +9,42 @@ import (
 
 	"github.com/audspect/bas/internal/artifactgen"
 	"github.com/audspect/bas/internal/iocregistry"
+	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestDispatchRun_SkipsWhenLicenseLocked(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalPostureScenario(t, "dr-license-locked")
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "dr-agent-license-locked"
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO agents (agent_id, hostname, state) VALUES ($1,'h','active')`, agentID); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+
+		license.SetInitial(license.Info{State: license.StateLocked})
+		defer license.SetInitial(license.Info{})
+
+		runID, skip, err := h.dispatchRun(context.Background(), sc, agentID, dispatchOpts{Mode: "posture"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if runID != "" || skip != "license_locked" {
+			t.Fatalf("runID=%q skip=%q, want empty runID and skip=%q", runID, skip, "license_locked")
+		}
+		var count int
+		pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM scenario_runs WHERE agent_id=$1`, agentID).Scan(&count)
+		if count != 0 {
+			t.Fatalf("run row created despite license lockout gate")
+		}
+	})
+}
 
 func TestDispatchRun_AgentStateGate(t *testing.T) {
 	if testing.Short() {
