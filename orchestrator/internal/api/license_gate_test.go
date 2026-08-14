@@ -5,7 +5,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/audspect/bas/internal/license"
+	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/ws"
 )
 
 func TestLicenseGate_AllowlistPassesThroughWhenLocked(t *testing.T) {
@@ -86,4 +90,21 @@ func TestLicenseGate_PassesThroughWhenValidOrGrace(t *testing.T) {
 		}
 	}
 	license.SetInitial(license.Info{}) // reset
+}
+
+func TestWSUpgrade_RejectedWhenLocked(t *testing.T) {
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), testJWTSecret)
+		router := Mount(h, ws.NewHub(), testJWTSecret, "", http.NotFoundHandler(), 0, 0)
+
+		license.SetInitial(license.Info{State: license.StateLocked})
+		defer license.SetInitial(license.Info{})
+
+		req := httptest.NewRequest(http.MethodGet, "/ws/agent?agentId=test-agent", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusPaymentRequired {
+			t.Errorf("/ws/agent when locked: status = %d, want %d", rec.Code, http.StatusPaymentRequired)
+		}
+	})
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
+	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -60,6 +61,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// WebSocket — agents connect here.
 	// Validates agentSecret query param / X-Agent-Token header when configured.
 	r.Get("/ws/agent", func(w http.ResponseWriter, req *http.Request) {
+		if license.Current().State == license.StateLocked {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		if agentSecret != "" {
 			provided := req.URL.Query().Get("agentSecret")
 			if provided == "" {
@@ -76,6 +81,10 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// WebSocket — browser dashboard.
 	// Requires a valid JWT from the bas_token cookie or Authorization header.
 	r.Get("/ws/browser", func(w http.ResponseWriter, req *http.Request) {
+		if license.Current().State == license.StateLocked {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		tokenStr := auth.TokenFromRequest(req)
 		if tokenStr == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
