@@ -161,6 +161,28 @@ func (h *Hub) BroadcastTamperAlert(path, eventType, severity string) {
 	h.BroadcastBrowsers(msg)
 }
 
+// CloseAllAgentConnections force-closes every currently-connected agent
+// WebSocket session and clears the agents map. Called once, by the
+// license monitor's onLock callback (see cmd/server/main.go), on the
+// transition into license.StateLocked — agents must stop receiving new
+// work and stop submitting results while the platform is locked.
+func (h *Hub) CloseAllAgentConnections() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for agentID, c := range h.agents {
+		if c.ws != nil {
+			// Best-effort graceful close frame, mirroring writePump's own
+			// graceful-close path (hub.go:187) — then force the underlying
+			// connection closed so a blocked readPump's ReadMessage call
+			// returns immediately instead of waiting out pongWait.
+			c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+			c.ws.Close()
+		}
+		delete(h.agents, agentID)
+		log.Printf("[ws] agent force-disconnected (license locked): %s", agentID)
+	}
+}
+
 // ConnectedAgents returns the IDs of all currently connected agents.
 func (h *Hub) ConnectedAgents() []string {
 	h.mu.RLock()
