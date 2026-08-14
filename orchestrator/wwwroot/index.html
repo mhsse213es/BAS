@@ -4792,7 +4792,25 @@ var _groupSel = {}; // { [groupId]: true } for checked groups in Group(s) mode
 var _editUserId = null;
 var _pwForced = false;
 
+var LICENSE_INFO = null; // populated by the pre-login /api/license/status check below
+
 window.addEventListener('DOMContentLoaded', function() {
+  fetch('/api/license/status').then(function(r) { return r.json(); }).then(function(info) {
+    LICENSE_INFO = info;
+    if (info.state === 'locked') {
+      renderLicenseLockedScreen(info);
+      return;
+    }
+    if (info.state === 'grace') {
+      renderLicenseGraceBanner(info);
+    }
+    initLoginScreen();
+  }).catch(function() {
+    initLoginScreen(); // license-status endpoint unreachable — fail open to the normal login flow rather than stranding the operator
+  });
+});
+
+function initLoginScreen() {
   document.getElementById('inp-pass').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') doLogin();
   });
@@ -4803,7 +4821,67 @@ window.addEventListener('DOMContentLoaded', function() {
       .then(function(r) { if (r.ok) bootApp(); else { localStorage.removeItem('bas_role'); } })
       .catch(function() { localStorage.removeItem('bas_role'); });
   }
-});
+}
+
+function renderLicenseLockedScreen(info) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  var el = document.createElement('div');
+  el.id = 'license-locked-screen';
+  el.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#0b0e14);z-index:9999;padding:2rem';
+  el.innerHTML =
+    '<div style="max-width:520px;text-align:center;color:var(--text,#e6e6e6)">' +
+      '<div style="font-size:2.5rem;margin-bottom:1rem">&#x1F512;</div>' +
+      '<h1 style="font-size:1.4rem;margin-bottom:0.75rem">BAS LICENSE EXPIRED</h1>' +
+      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem">This Audspect BAS installation is currently unavailable because its license and grace period have expired.</p>' +
+      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1.5rem">Please contact your licensing administrator to renew the license.</p>' +
+      '<div style="font-size:0.85rem;color:var(--muted,#9aa9bc);margin-bottom:1.5rem">' +
+        'License Expiry: ' + x(info.expiresAt) + '<br>' +
+        'Access Disabled On: ' + x(info.lockoutAt) +
+      '</div>' +
+      '<a href="mailto:support@audspect.com" style="display:inline-block;padding:0.6rem 1.4rem;background:var(--danger,#da3633);color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Contact Licensing Support</a>' +
+    '</div>';
+  document.body.appendChild(el);
+}
+
+function _licenseBannerHTML(info) {
+  var dayWord = info.daysRemaining === 1 ? 'day' : 'days';
+  var tomorrowNote = info.daysRemaining === 1 ? ' BAS access will be disabled tomorrow.' : '';
+  return '<strong>&#x26A0;&#xFE0F; LICENSE EXPIRED — ACTION REQUIRED</strong><br>' +
+    'Your Audspect BAS license expired on ' + x(info.expiresAt) + '. You are currently within the 5-day license grace period.<br>' +
+    '<strong>Grace Period Remaining: ' + info.daysRemaining + ' ' + dayWord + '</strong><br>' +
+    'The BAS platform will become inaccessible after the grace period expires. Please contact your Audspect administrator or licensing representative to renew your license.' + tomorrowNote + '<br>' +
+    'License Expiry: ' + x(info.expiresAt) + ' &middot; Access Disabled On: ' + x(info.lockoutAt) + ' ' +
+    '<a href="mailto:support@audspect.com" style="color:inherit;text-decoration:underline">[Contact Licensing Support]</a>';
+}
+
+function renderLicenseGraceBanner(info) {
+  var existing = document.getElementById('license-grace-banner');
+  if (existing) existing.remove();
+  var el = document.createElement('div');
+  el.id = 'license-grace-banner';
+  el.style.cssText = 'position:relative;z-index:9998;padding:0.75rem 1.25rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
+  el.innerHTML = _licenseBannerHTML(info);
+  document.body.insertBefore(el, document.body.firstChild);
+  maybeShowLicenseGraceModal(info);
+}
+
+function maybeShowLicenseGraceModal(info) {
+  if (sessionStorage.getItem('bas_license_grace_modal_shown')) return;
+  sessionStorage.setItem('bas_license_grace_modal_shown', '1');
+  var overlay = document.createElement('div');
+  overlay.id = 'license-grace-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:10000';
+  overlay.innerHTML =
+    '<div style="max-width:480px;background:var(--surface,#152338);border:1px solid var(--warning,#d29922);border-radius:8px;padding:1.5rem;color:var(--text,#e6e6e6)">' +
+      _licenseBannerHTML(info) +
+      '<div style="text-align:right;margin-top:1rem"><button id="license-grace-modal-dismiss" style="padding:0.4rem 1rem;border-radius:6px;border:1px solid var(--border,#22324a);background:transparent;color:inherit;cursor:pointer">Dismiss</button></div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('license-grace-modal-dismiss').addEventListener('click', function() {
+    overlay.remove();
+  });
+}
 
 function doLogin() {
   var username = document.getElementById('inp-user').value.trim();
@@ -4842,6 +4920,7 @@ function doLogout() {
 }
 
 function bootApp() {
+  if (LICENSE_INFO && LICENSE_INFO.state === 'grace') renderLicenseGraceBanner(LICENSE_INFO);
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('role-badge').textContent = ROLE;
@@ -16229,8 +16308,8 @@ function loadLicenseInfo() {
   wrap.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
   apicall('/api/license').then(function(lic) {
     if (lic.error) { wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(lic.error) + '</div>'; return; }
-    var statusColor = lic.status === 'valid' ? 'var(--success)' : lic.status === 'expiring_soon' ? 'var(--warning)' : 'var(--danger)';
-    var statusLabel = lic.status === 'valid' ? 'Active' : lic.status === 'expiring_soon' ? 'Expiring Soon' : lic.status === 'expired' ? 'Expired' : 'Unknown';
+    var statusColor = lic.status === 'valid' ? 'var(--success)' : lic.status === 'grace' ? 'var(--warning)' : lic.status === 'locked' ? 'var(--danger)' : 'var(--muted)';
+    var statusLabel = lic.status === 'valid' ? 'Active' : lic.status === 'grace' ? 'Grace Period' : lic.status === 'locked' ? 'Locked' : 'Unknown';
     var features = (lic.features || []).map(function(f) {
       return '<span class="sbadge" style="background:rgba(47,129,247,0.12);color:var(--accent);margin:0.15rem 0.2rem 0.15rem 0;display:inline-block">' + x(f) + '</span>';
     }).join('');
@@ -16244,6 +16323,7 @@ function loadLicenseInfo() {
         _licRow('Customer ID', x(lic.customerId || '-')) +
         _licRow('Issued',      x(lic.issuedAt   || '-')) +
         _licRow('Expires',     '<span style="color:' + statusColor + ';font-weight:600">' + x(lic.expiresAt || '-') + '</span>') +
+        (lic.status === 'grace' ? _licRow('Grace Period', '<span style="color:var(--warning);font-weight:600">' + lic.daysRemaining + ' day(s) remaining — access disabled on ' + x(lic.lockoutAt) + '</span>') : '') +
         (features ? '<div style="padding:0.55rem 0;border-bottom:1px solid var(--border);display:flex;gap:0.5rem;font-size:0.8rem;align-items:flex-start"><span style="color:var(--muted);min-width:130px;flex-shrink:0">Features</span><div>' + features + '</div></div>' : '') +
       '</div>';
   }).catch(function(e) { wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(e.message) + '</div>'; });
