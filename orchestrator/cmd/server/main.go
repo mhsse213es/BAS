@@ -79,6 +79,28 @@ func main() {
 	if err := license.Check(cfg.LicensePath); err != nil {
 		log.Fatalf("[FATAL] %v", err)
 	}
+	if license.PublicKeyPEM == "KEYGEN_REQUIRED" {
+		// Dev-mode bypass, mirroring Check()'s own condition above — no
+		// bas.lic is expected to exist yet, so skip Get/Evaluate entirely
+		// rather than fatal on a file that was never meant to be there.
+		license.SetInitial(license.Info{State: license.StateValid})
+	} else {
+		lic, licErr := license.Get(cfg.LicensePath)
+		if licErr != nil {
+			log.Fatalf("[FATAL] %v", licErr) // Check() just verified this file parses; only reachable on a race with file deletion
+		}
+		initialLicenseInfo, licErr := license.Evaluate(lic, time.Now().UTC())
+		if licErr != nil {
+			log.Fatalf("[FATAL] %v", licErr)
+		}
+		license.SetInitial(initialLicenseInfo)
+		switch initialLicenseInfo.State {
+		case license.StateLocked:
+			log.Printf("[license] LOCKED — grace period expired on %s. Serving lockout-only mode.", initialLicenseInfo.LockoutAt.Format(time.RFC3339))
+		case license.StateGrace:
+			log.Printf("[license] WARNING: in grace period — %d day(s) remaining before lockout on %s", initialLicenseInfo.DaysRemaining, initialLicenseInfo.LockoutAt.Format(time.RFC3339))
+		}
+	}
 
 	// ── Database ──────────────────────────────────────────────────────────
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -485,6 +507,11 @@ func main() {
 	notificationsStore := notifications.NewStore(pool)
 
 	hub := ws.NewHub()
+	licenseMonitorCtx, licenseMonitorCancel := context.WithCancel(context.Background())
+	defer licenseMonitorCancel()
+	license.StartMonitor(licenseMonitorCtx, cfg.LicensePath, 5*time.Minute, func() {
+		hub.CloseAllAgentConnections()
+	})
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
