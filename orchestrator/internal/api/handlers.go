@@ -463,13 +463,16 @@ func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	info := license.Current()
 	respond(w, map[string]any{
-		"customer":   lic.Customer,
-		"customerId": lic.CustomerID,
-		"issuedAt":   lic.IssuedAt,
-		"expiresAt":  lic.ExpiresAt,
-		"features":   lic.Features,
-		"status":     license.Status(lic.ExpiresAt),
+		"customer":      lic.Customer,
+		"customerId":    lic.CustomerID,
+		"issuedAt":      lic.IssuedAt,
+		"expiresAt":     lic.ExpiresAt,
+		"features":      lic.Features,
+		"status":        string(info.State),
+		"daysRemaining": info.DaysRemaining,
+		"lockoutAt":     info.LockoutAt.Format("2006-01-02"),
 	})
 }
 
