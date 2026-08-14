@@ -357,6 +357,7 @@ var routeMatrix = []routeCase{
 // group — these are intentionally excluded from routeMatrix and from the
 // drift guard's "must have a matrix entry" requirement.
 var publicRoutes = map[string]bool{
+	"GET /api/license/status":                     true,
 	"POST /api/auth/login":                        true,
 	"POST /api/auth/logout":                       true,
 	"POST /api/auth/setup":                        true,

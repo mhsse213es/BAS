@@ -23,6 +23,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.StripSlashes)
+	r.Use(LicenseGate)
 
 	// API rate limiting (opt-in) — a single global token-bucket limit shared
 	// by the SCIM and JWT-authenticated groups below, protecting against a
@@ -34,6 +35,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	}
 
 	// ── Public endpoints (no auth) ────────────────────────────────────────
+	r.Get("/api/license/status", h.GetLicenseStatus)
 	r.Post("/api/auth/login", h.Login)
 	r.Post("/api/auth/logout", h.Logout)
 	r.Post("/api/auth/setup", h.Setup) // first-run admin provisioning (installer)

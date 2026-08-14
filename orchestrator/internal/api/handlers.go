@@ -473,6 +473,21 @@ func (h *Handler) GetLicenseInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetLicenseStatus is public (no auth) — the frontend polls it before
+// login to decide whether to render the normal app shell or the
+// permanent lockout screen. Deliberately excludes customer/features
+// (those stay behind auth in GetLicenseInfo) — only state + dates.
+// GET /api/license/status
+func (h *Handler) GetLicenseStatus(w http.ResponseWriter, r *http.Request) {
+	info := license.Current()
+	respond(w, map[string]any{
+		"state":         string(info.State),
+		"expiresAt":     info.ExpiresAt.Format("2006-01-02"),
+		"lockoutAt":     info.LockoutAt.Format("2006-01-02"),
+		"daysRemaining": info.DaysRemaining,
+	})
+}
+
 // verifyResultMAC checks X-Result-MAC on a pre-read body.
 // Returns true if the MAC is valid, or if agent secret is not configured.
 func (h *Handler) verifyResultMAC(r *http.Request, body []byte) bool {
