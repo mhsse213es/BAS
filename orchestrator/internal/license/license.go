@@ -38,7 +38,11 @@ func (l *License) payload() string {
 // Check validates the license at licPath.
 //   - If PublicKeyPEM is the placeholder (keygen.sh not yet run), skips — dev only.
 //   - Otherwise defaults to /etc/bas/bas.lic when licPath is empty.
-//   - Missing file, bad signature, or expired date are all fatal errors.
+//   - Missing file, bad signature, or a malformed expiry date are fatal errors.
+//   - An expired-but-well-formed license is NOT fatal here — grace period and
+//     lockout enforcement is Evaluate()'s and the runtime monitor's job (see
+//     state.go, monitor.go), not Check()'s. Check() only verifies the file is
+//     genuine and parseable.
 func Check(licPath string) error {
 	if PublicKeyPEM == "KEYGEN_REQUIRED" {
 		log.Println("[license] WARNING: signing key not initialised — enforcement disabled (run packaging/licensing/keygen.sh)")
@@ -74,14 +78,8 @@ func Check(licPath string) error {
 		return errors.New("license: signature verification failed — file may be tampered")
 	}
 
-	expiry, err := time.Parse("2006-01-02", lic.ExpiresAt)
-	if err != nil {
+	if _, err := time.Parse("2006-01-02", lic.ExpiresAt); err != nil {
 		return fmt.Errorf("license: invalid expiry date: %w", err)
-	}
-	// Give 24-hour grace period for timezone drift
-	if time.Now().UTC().After(expiry.UTC().Add(24 * time.Hour)) {
-		return fmt.Errorf("license: expired on %s (customer: %s) — contact support@audspect.com",
-			lic.ExpiresAt, lic.Customer)
 	}
 
 	log.Printf("[license] Valid — customer: %s, expires: %s", lic.Customer, lic.ExpiresAt)
@@ -105,20 +103,25 @@ func Get(licPath string) (*License, error) {
 	return &lic, nil
 }
 
-// Status returns "valid", "expiring_soon" (< 30 days), or "expired".
+// Status returns "valid", "expiring_soon" (< 30 days), "expired", or
+// "unknown" for a malformed date. Retained for the existing narrower
+// three-way contract some callers still expect; GetLicenseInfo now uses
+// the richer Current().State instead (see monitor.go).
 func Status(expiresAt string) string {
-	t, err := time.Parse("2006-01-02", expiresAt)
+	lic := &License{ExpiresAt: expiresAt}
+	info, err := Evaluate(lic, time.Now().UTC())
 	if err != nil {
 		return "unknown"
 	}
-	now := time.Now().UTC()
-	if now.After(t.UTC().Add(24 * time.Hour)) {
+	switch info.State {
+	case StateValid:
+		if info.ExpiresAt.Sub(time.Now().UTC()) < 30*24*time.Hour {
+			return "expiring_soon"
+		}
+		return "valid"
+	default: // StateGrace or StateLocked — both were "expired" under the old 3-way contract
 		return "expired"
 	}
-	if t.UTC().Sub(now) < 30*24*time.Hour {
-		return "expiring_soon"
-	}
-	return "valid"
 }
 
 func parsePublicKey(pemStr string) (*rsa.PublicKey, error) {
