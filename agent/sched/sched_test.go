@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -124,7 +125,7 @@ func makeJobs(n int, p *ResourceProfile, tr *tracker) []Job {
 func TestObservationSameDomainRunsConcurrently(t *testing.T) {
 	tr := &tracker{}
 	p := &ResourceProfile{Domains: []ResourceLock{{Domain: "registry"}}, Scope: "local", Risk: RiskObservation}
-	Run(context.Background(), 4, NewLockManager(), makeJobs(4, p, tr))
+	Run(context.Background(), 4, NewLockManager(), makeJobs(4, p, tr), nil)
 	if tr.peak() < 2 {
 		t.Errorf("read-only steps on the same domain must run in parallel; peak concurrency was %d", tr.peak())
 	}
@@ -133,7 +134,7 @@ func TestObservationSameDomainRunsConcurrently(t *testing.T) {
 func TestModificationSameDomainSerializes(t *testing.T) {
 	tr := &tracker{}
 	p := &ResourceProfile{Domains: []ResourceLock{{Domain: "registry"}}, Scope: "local", Risk: RiskModification}
-	Run(context.Background(), 4, NewLockManager(), makeJobs(4, p, tr))
+	Run(context.Background(), 4, NewLockManager(), makeJobs(4, p, tr), nil)
 	if tr.peak() != 1 {
 		t.Errorf("writes to the same domain must serialize; peak concurrency was %d", tr.peak())
 	}
@@ -147,7 +148,7 @@ func TestModificationDifferentDomainsRunConcurrently(t *testing.T) {
 		p := &ResourceProfile{Domains: []ResourceLock{{Domain: dom}}, Scope: "local", Risk: RiskModification}
 		jobs = append(jobs, makeJobs(1, p, tr)...)
 	}
-	Run(context.Background(), 4, lm, jobs)
+	Run(context.Background(), 4, lm, jobs, nil)
 	if tr.peak() < 2 {
 		t.Errorf("writes to disjoint domains must run in parallel; peak concurrency was %d", tr.peak())
 	}
@@ -156,7 +157,7 @@ func TestModificationDifferentDomainsRunConcurrently(t *testing.T) {
 func TestGlobalScopeSerializes(t *testing.T) {
 	tr := &tracker{}
 	p := &ResourceProfile{Scope: "global", Risk: RiskModification}
-	Run(context.Background(), 4, NewLockManager(), makeJobs(4, p, tr))
+	Run(context.Background(), 4, NewLockManager(), makeJobs(4, p, tr), nil)
 	if tr.peak() != 1 {
 		t.Errorf("global-scope steps must run one at a time; peak concurrency was %d", tr.peak())
 	}
@@ -164,7 +165,7 @@ func TestGlobalScopeSerializes(t *testing.T) {
 
 func TestNilProfileSerializes(t *testing.T) {
 	tr := &tracker{}
-	Run(context.Background(), 4, NewLockManager(), makeJobs(4, nil, tr))
+	Run(context.Background(), 4, NewLockManager(), makeJobs(4, nil, tr), nil)
 	if tr.peak() != 1 {
 		t.Errorf("unlabeled steps must default to serial; peak concurrency was %d", tr.peak())
 	}
@@ -202,7 +203,7 @@ func TestRandomizedNoDeadlock(t *testing.T) {
 	}
 
 	doneCh := make(chan struct{})
-	go func() { Run(context.Background(), 8, NewLockManager(), jobs); close(doneCh) }()
+	go func() { Run(context.Background(), 8, NewLockManager(), jobs, nil); close(doneCh) }()
 	select {
 	case <-doneCh:
 	case <-time.After(10 * time.Second):
@@ -255,7 +256,7 @@ func TestRunJobReleasesLocksOnPanic(t *testing.T) {
 		{Resource: reg, Run: func(context.Context) { panic("boom") }},
 		{Resource: reg, Run: func(context.Context) { ran2 = true }},
 	}
-	Run(context.Background(), 2, NewLockManager(), jobs)
+	Run(context.Background(), 2, NewLockManager(), jobs, nil)
 	if !ran2 {
 		t.Error("second job did not run — a panic leaked the registry write lock")
 	}
@@ -278,7 +279,7 @@ func TestScheduleTimeoutFires(t *testing.T) {
 		OnScheduleTimeout: func() { toFired = true },
 		Run:               func(context.Context) { ran = true },
 	}
-	Run(context.Background(), 1, lm, []Job{job})
+	Run(context.Background(), 1, lm, []Job{job}, nil)
 	if !toFired {
 		t.Error("OnScheduleTimeout did not fire for a step that could not acquire its lock")
 	}
@@ -327,10 +328,60 @@ func TestCancellationStopsDispatch(t *testing.T) {
 			time.Sleep(2 * time.Millisecond)
 		}}
 	}
-	Run(ctx, 1, NewLockManager(), jobs)
+	Run(ctx, 1, NewLockManager(), jobs, nil)
 	mu.Lock()
 	defer mu.Unlock()
 	if ran == len(jobs) {
 		t.Errorf("cancellation should have skipped remaining jobs, but all %d ran", ran)
+	}
+}
+
+func TestRun_GateHoldsNewJobsButFinishesInFlight(t *testing.T) {
+	gate := NewGate()
+	var started, finished int32
+	firstStarted := make(chan struct{})
+	release := make(chan struct{})
+
+	jobs := []Job{
+		{Run: func(ctx context.Context) {
+			atomic.AddInt32(&started, 1)
+			close(firstStarted)
+			<-release // held "in flight" until the test says go
+			atomic.AddInt32(&finished, 1)
+		}},
+		{Run: func(ctx context.Context) {
+			atomic.AddInt32(&started, 1)
+			atomic.AddInt32(&finished, 1)
+		}},
+	}
+
+	done := make(chan struct{})
+	// workers=1 -- deterministic: only one job can ever be "in flight" at a time.
+	go func() { Run(context.Background(), 1, NewLockManager(), jobs, gate); close(done) }()
+
+	<-firstStarted // job 1 is now executing
+	gate.Pause()   // pause while job 1 is still in flight
+	time.Sleep(20 * time.Millisecond)
+	if got := atomic.LoadInt32(&started); got != 1 {
+		t.Fatalf("started = %d, want 1 (job 2 must not start while paused)", got)
+	}
+
+	close(release) // let job 1 finish
+	time.Sleep(20 * time.Millisecond)
+	if got := atomic.LoadInt32(&finished); got != 1 {
+		t.Fatalf("finished = %d, want 1 (job 1 finishes even though paused)", got)
+	}
+	if got := atomic.LoadInt32(&started); got != 1 {
+		t.Fatalf("started = %d, want still 1 (job 2 must still be held)", got)
+	}
+
+	gate.Resume()
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("Run did not complete after Resume")
+	}
+	if s, f := atomic.LoadInt32(&started), atomic.LoadInt32(&finished); s != 2 || f != 2 {
+		t.Fatalf("started=%d finished=%d, want 2/2 after Resume", s, f)
 	}
 }

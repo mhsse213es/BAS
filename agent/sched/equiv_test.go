@@ -108,7 +108,7 @@ func TestParallelMatchesSerial(t *testing.T) {
 		rng = rand.New(rand.NewSource(int64(iter) + 1))
 		parallel := make([]bool, n)
 		jobsParallel := makeWorldJobs(rng, w, domains, n, parallel)
-		Run(context.Background(), 8, NewLockManager(), jobsParallel)
+		Run(context.Background(), 8, NewLockManager(), jobsParallel, nil)
 
 		for i := range n {
 			if !serial[i] {
@@ -148,7 +148,7 @@ func TestMislabelIsDetectable(t *testing.T) {
 				verdicts[idx] = (*w.cells[d] == id)
 			}}
 		}
-		Run(context.Background(), 8, NewLockManager(), jobs)
+		Run(context.Background(), 8, NewLockManager(), jobs, nil)
 		for _, v := range verdicts {
 			if !v {
 				sawDirty = true

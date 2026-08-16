@@ -29,10 +29,16 @@ type Job struct {
 // but may start and finish in any order. Run blocks until all jobs complete (or,
 // once ctx is cancelled, until in-flight jobs drain — remaining jobs are skipped).
 //
+// gate, if non-nil, is checked between jobs (never mid-job): while gate is
+// paused, a worker that has just pulled its next job off the queue blocks in
+// gate.Wait before starting it, so no NEW job starts while paused, but any
+// job already running always finishes normally. Pass nil for the original
+// (no pause support) behavior.
+//
 // Deadlock-freedom: a job in the queue holds no locks, so no running job can ever
 // wait on a lock held by a not-yet-started job; combined with canonical-order
 // acquisition (see resolve/LockManager), the scheduler cannot deadlock.
-func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job) {
+func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job, gate *Gate) {
 	if workers < 1 {
 		workers = 1
 	}
@@ -48,6 +54,10 @@ func Run(ctx context.Context, workers int, lm *LockManager, jobs []Job) {
 			for j := range ch {
 				if ctx.Err() != nil {
 					continue // cancelled: drain the channel without running
+				}
+				gate.Wait(ctx) // blocks here while paused; no-op if gate is nil or unpaused
+				if ctx.Err() != nil {
+					continue // cancel can race with a pause -- re-check before running
 				}
 				runJob(ctx, lm, j)
 			}
