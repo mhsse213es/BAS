@@ -304,7 +304,7 @@ func (h *Handler) GetVariantCoverage(w http.ResponseWriter, r *http.Request) {
 			// actually configured for, and never falls back from a
 			// sub-technique (e.g. T1074.001) to its parent, so it silently
 			// left this column empty for anything outside that narrow set.
-			Tactic: models.LookupTactic(rr.techniqueID),
+			Tactic:      models.LookupTactic(rr.techniqueID),
 			BaseType:    rr.baseType,
 			BaseID:      rr.baseID,
 			TotalTested: len(simResults),
@@ -496,8 +496,8 @@ func (h *Handler) resolveTemplates(
 		return templates, techniqueID, nil
 	}
 
-	// Fall back to ART store lookup.
-	cmd, exec, bid, ferr := h.resolveBaseCommand(techniqueID, baseID, cmdOverride, execOverride)
+	// Fall back to an ART atomic or Caldera ability lookup, per baseType.
+	cmd, exec, bid, ferr := h.resolveBaseCommand(techniqueID, baseType, baseID, cmdOverride, execOverride)
 	if ferr != nil {
 		return nil, "", ferr
 	}
@@ -525,10 +525,28 @@ func (h *Handler) loadPayloadFamilies(ctx context.Context, techniqueID string) (
 	return out, nil
 }
 
-// resolveBaseCommand is the single-ART-step fallback (used when no payload families exist).
-func (h *Handler) resolveBaseCommand(techniqueID, baseID, cmdOverride, execOverride string) (cmd, exec, resolvedBaseID string, err error) {
+// resolveBaseCommand is the single-step fallback used when no payload
+// families exist -- looks up an ART atomic or a Caldera ability, per
+// baseType, both pre-loaded stores indexed by technique ID (see ARTStore /
+// scenario.CalderaStore). Either lookup picks the step named baseID if
+// given, else the first match.
+func (h *Handler) resolveBaseCommand(techniqueID, baseType, baseID, cmdOverride, execOverride string) (cmd, exec, resolvedBaseID string, err error) {
 	if cmdOverride != "" && execOverride != "" {
 		return cmdOverride, execOverride, coalesce(baseID, "custom"), nil
+	}
+	if baseType == variant.SourceCaldera {
+		abilities := h.calderaStore.GetAbilities(techniqueID)
+		if len(abilities) == 0 {
+			return "", "", "", fmt.Errorf("no Caldera abilities found for technique %s", techniqueID)
+		}
+		step := abilities[0]
+		for _, s := range abilities {
+			if baseID != "" && s.Name == baseID {
+				step = s
+				break
+			}
+		}
+		return step.Command, step.Executor, step.Name, nil
 	}
 	if h.artStore == nil {
 		return "", "", "", fmt.Errorf("ART store not loaded")

@@ -160,6 +160,76 @@ func TestGenerateVariants_ARTStoreNoStepsForTechnique(t *testing.T) {
 	})
 }
 
+// TestGenerateVariants_FromCalderaStoreFallback pins resolveTemplates'
+// Caldera branch: with baseType "caldera", no override, and no payload
+// families for the technique, it falls back to the first Caldera ability
+// CalderaStore has indexed for that technique. Mirrors
+// TestGenerateVariants_FromARTStoreFallback exactly, one store swapped for
+// the other.
+func TestGenerateVariants_FromCalderaStoreFallback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		const abilitiesJSON = `[
+		  {"ability_id":"a1","name":"caldera-fallback-step","technique_id":"T1082","tactic":"discovery",
+		   "executors":[{"platform":"windows","name":"psh","command":"systeminfo"}]}
+		]`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(abilitiesJSON))
+		}))
+		defer srv.Close()
+		store := scenario.NewCalderaStore(srv.URL, "")
+
+		h := variantHandler(t, pool).WithCalderaStore(store)
+		rec := httptest.NewRecorder()
+		h.GenerateVariants(rec, variantsGenerateReq(map[string]any{
+			"techniqueId": "T1082", "baseType": "caldera",
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Count  int    `json:"count"`
+			BaseID string `json:"baseId"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if out.Count == 0 {
+			t.Fatal("expected templates generated from the Caldera-fallback ability")
+		}
+		if out.BaseID != "caldera-fallback-step" {
+			t.Errorf("baseId = %q, want caldera-fallback-step (the ability's name)", out.BaseID)
+		}
+	})
+}
+
+// TestGenerateVariants_CalderaStoreNoAbilitiesForTechnique pins
+// resolveBaseCommand's Caldera "no abilities found" error branch: a
+// CalderaStore is loaded, but has no entries for the requested technique.
+func TestGenerateVariants_CalderaStoreNoAbilitiesForTechnique(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+		}))
+		defer srv.Close()
+		store := scenario.NewCalderaStore(srv.URL, "")
+
+		h := variantHandler(t, pool).WithCalderaStore(store)
+		rec := httptest.NewRecorder()
+		h.GenerateVariants(rec, variantsGenerateReq(map[string]any{
+			"techniqueId": "T1499.999", "baseType": "caldera",
+		}))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 // TestARTStoreFromDB_CarriesRequiresPriv pins the read side of the ART
 // privilege-import fix: a technique seeded with requires_priv='admin' must
 // produce a ScenarioStep with RequiresPriv == "admin", proving the value
@@ -373,6 +443,69 @@ func TestRunVariants_SuccessDispatchesAndPersists(t *testing.T) {
 		pool.QueryRow(context.Background(), `SELECT status FROM variant_runs WHERE id=$1`, out.VariantRunID).Scan(&vrStatus)
 		if runStatus != "running" || vrStatus != "running" {
 			t.Errorf("runStatus=%q vrStatus=%q, want both running", runStatus, vrStatus)
+		}
+	})
+}
+
+// TestRunVariants_CalderaSourceDispatchesAndPersistsBaseType proves the full
+// Caldera round-trip end-to-end: no override given, so RunVariants must
+// resolve the base command via CalderaStore, dispatch to the agent, and
+// persist variant_runs.base_type = "caldera" (not the "art" default),
+// mirroring TestRunVariants_SuccessDispatchesAndPersists but exercising the
+// resolveBaseCommand fallback path instead of an explicit override.
+func TestRunVariants_CalderaSourceDispatchesAndPersistsBaseType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		const abilitiesJSON = `[
+		  {"ability_id":"a1","name":"rv-caldera-step","technique_id":"T1082","tactic":"discovery",
+		   "executors":[{"platform":"windows","name":"psh","command":"systeminfo"}]}
+		]`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(abilitiesJSON))
+		}))
+		defer srv.Close()
+		store := scenario.NewCalderaStore(srv.URL, "")
+
+		agentID := "rv-caldera-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		h := variantHandler(t, pool).WithCalderaStore(store)
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.RunVariants(rec, variantsRunReq(map[string]any{
+			"agentId": agentID, "techniqueId": "T1082", "baseType": "caldera",
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			VariantRunID  string `json:"variantRunId"`
+			ScenarioRunID string `json:"scenarioRunId"`
+			TotalVariants int    `json:"totalVariants"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if out.VariantRunID == "" || out.TotalVariants == 0 {
+			t.Fatalf("out = %+v, want non-empty variantRunId and totalVariants>0", out)
+		}
+		fake.WaitForMessage(t, 2*time.Second)
+
+		var baseType, baseID string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT base_type, base_id FROM variant_runs WHERE id = $1`, out.VariantRunID,
+		).Scan(&baseType, &baseID); err != nil {
+			t.Fatalf("query variant_runs: %v", err)
+		}
+		if baseType != "caldera" {
+			t.Errorf("base_type = %q, want caldera", baseType)
+		}
+		if baseID != "rv-caldera-step" {
+			t.Errorf("base_id = %q, want rv-caldera-step (the ability's name)", baseID)
 		}
 	})
 }

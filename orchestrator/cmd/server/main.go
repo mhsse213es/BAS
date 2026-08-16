@@ -202,6 +202,11 @@ func main() {
 		log.Printf("[+] ART loaded: %d techniques (from Postgres)", artStore.Count())
 	}
 
+	// ── Caldera ability store (variant-testing base-command source) ─────────
+	// Loaded once at startup like artStore above -- an empty store when
+	// CALDERA_URL is unset or unreachable, never fatal (see NewCalderaStore).
+	calderaStore := scenario.NewCalderaStore(cfg.CalderaURL, cfg.CalderaAPIKey)
+
 	// ── Binary integrity manifest ─────────────────────────────────────────
 	// LoadManifestVerified checks BINARIES.sha256.sig before parsing.
 	// A tampered or unsigned manifest is fatal — never trust it silently.
@@ -515,6 +520,7 @@ func main() {
 	handler := api.New(pool, hub, engine, cfg.JWTSecret).
 		WithCaldera(cfg.CalderaURL, cfg.CalderaAPIKey).
 		WithART(artStore).
+		WithCalderaStore(calderaStore).
 		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).

@@ -85,6 +85,7 @@ type Handler struct {
 	iocProvider          ioc.Provider // nil when no OTX connector is configured
 	iocProviderMu        sync.RWMutex // guards iocProvider -- can be swapped live by a config save
 	artStore             *scenario.ARTStore
+	calderaStore         *scenario.CalderaStore // technique-indexed ability cache for the variant-testing engine (nil-safe: see resolveBaseCommand)
 	artContentDir        string                 // seed source for ART atomics (ART_DIR)
 	artPayloadDir        string                 // seed source for ART payload binaries (ART_PAYLOAD_DIR)
 	artKEVFile           string                 // CISA KEV catalog JSON (KEV_FILE)
@@ -325,6 +326,16 @@ func (h *Handler) setIOCProvider(provider ioc.Provider) {
 // WithART attaches the pre-loaded ART store (may be nil if ART_DIR is unavailable).
 func (h *Handler) WithART(store *scenario.ARTStore) *Handler {
 	h.artStore = store
+	return h
+}
+
+// WithCalderaStore attaches the pre-loaded, technique-indexed Caldera
+// ability cache used by the variant-testing engine's resolveBaseCommand
+// (may be nil if Caldera isn't configured -- resolveBaseCommand treats a
+// nil store and an empty store identically, both yielding "no abilities for
+// this technique").
+func (h *Handler) WithCalderaStore(store *scenario.CalderaStore) *Handler {
+	h.calderaStore = store
 	return h
 }
 
