@@ -148,6 +148,46 @@ func TestListRunEventsOrderedBySeq(t *testing.T) {
 	})
 }
 
+func pausedState(t *testing.T, pool *pgxpool.Pool, runID string) bool {
+	t.Helper()
+	var p bool
+	if err := pool.QueryRow(context.Background(),
+		`SELECT paused FROM scenario_runs WHERE id = $1`, runID).Scan(&p); err != nil {
+		t.Fatalf("pausedState: %v", err)
+	}
+	return p
+}
+
+func TestSubmitRunEvents_PausedResumedSetsPausedColumn(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		runID := "run-pause-1"
+		seedRun(t, pool, runID)
+
+		ev := func(seq int, typ string) map[string]any {
+			return map[string]any{"runId": runID, "seq": seq, "type": typ, "ts": "2026-06-09T16:40:12Z"}
+		}
+
+		postEvents(t, h, []map[string]any{ev(1, "run_started")})
+		if pausedState(t, pool, runID) {
+			t.Fatal("paused = true before any pause event, want false")
+		}
+
+		postEvents(t, h, []map[string]any{ev(2, "paused")})
+		if !pausedState(t, pool, runID) {
+			t.Fatal("paused = false after a 'paused' event, want true")
+		}
+
+		postEvents(t, h, []map[string]any{ev(3, "resumed")})
+		if pausedState(t, pool, runID) {
+			t.Fatal("paused = true after a 'resumed' event, want false")
+		}
+	})
+}
+
 func TestBuildRunEventMsg(t *testing.T) {
 	batch := []models.RunEvent{
 		{RunID: "r9", Seq: 1, Type: "started", TaskID: "a1"},

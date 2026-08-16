@@ -50,7 +50,10 @@ func (h *Handler) SubmitRunEvents(w http.ResponseWriter, r *http.Request) {
 				steps_done    = s.steps_done    + CASE WHEN ins.type IN ('completed','timeout','killed') THEN 1 ELSE 0 END,
 				steps_passed  = s.steps_passed  + CASE WHEN ins.type='completed' AND ins.payload->>'verdict'='pass' THEN 1 ELSE 0 END,
 				steps_failed  = s.steps_failed  + CASE WHEN ins.type='completed' AND ins.payload->>'verdict' IN ('fail','blocked') THEN 1 ELSE 0 END,
-				steps_timeout = s.steps_timeout + CASE WHEN ins.type='timeout' THEN 1 ELSE 0 END
+				steps_timeout = s.steps_timeout + CASE WHEN ins.type='timeout' THEN 1 ELSE 0 END,
+				paused        = CASE WHEN ins.type='paused' THEN true
+				                     WHEN ins.type='resumed' THEN false
+				                     ELSE s.paused END
 			FROM ins
 			WHERE s.id = $1`,
 			e.RunID, e.Seq, e.Type, e.TaskID, e.TechniqueID, e.Ts, payload); err != nil {
