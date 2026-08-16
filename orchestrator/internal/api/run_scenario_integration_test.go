@@ -362,3 +362,87 @@ func TestRunScenarioIntegration_PostureOSMismatchStillDispatches(t *testing.T) {
 		fake.WaitForMessage(t, 2*time.Second)
 	})
 }
+
+// Proves the full pause/resume round-trip: dispatch a live run, pause it
+// (asserting the agent receives command_pause), simulate the agent's
+// confirmation the way a real one would (POSTing a "paused" run event),
+// assert ListScenarioRuns reflects paused=true, then symmetrically resume.
+func TestRunScenarioIntegration_PauseResumeRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalLiveScenario(t, "int-pause-resume")
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "int-agent-pause-resume"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.RunScenario(rec, runScenarioReq(sc.ID, map[string]any{
+			"agentId": agentID, "mode": "telemetry", "confirmLive": true,
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("dispatch status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		runID, _ := resp["runId"].(string)
+		if runID == "" {
+			t.Fatalf("resp = %+v, want a non-empty runId", resp)
+		}
+		fake.WaitForMessage(t, 2*time.Second) // drain command_scenario
+
+		// -- Pause --
+		pauseRec := httptest.NewRecorder()
+		h.PauseRun(pauseRec, withURLParam(httptest.NewRequest(http.MethodPost, "/api/scenarios/runs/"+runID+"/pause", nil), "runId", runID))
+		if pauseRec.Code != http.StatusOK {
+			t.Fatalf("pause status = %d, body = %s", pauseRec.Code, pauseRec.Body.String())
+		}
+		env := fake.WaitForMessage(t, 2*time.Second)
+		if env.Type != models.MsgCommandPause {
+			t.Fatalf("WS message type = %q, want %q", env.Type, models.MsgCommandPause)
+		}
+
+		// Simulate the agent's real confirmation (agent.go's pauseCurrentScenario
+		// would emit exactly this through the same batched event pipeline).
+		postEvents(t, h, []map[string]any{
+			{"runId": runID, "seq": 100, "type": "paused", "ts": "2026-06-09T16:40:12Z"},
+		})
+
+		listRec := httptest.NewRecorder()
+		h.ListScenarioRuns(listRec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?agentId="+agentID, nil))
+		var runs []runRow
+		_ = json.Unmarshal(listRec.Body.Bytes(), &runs)
+		if len(runs) != 1 || !runs[0].Paused {
+			t.Fatalf("after pause: runs = %+v, want exactly 1 run with Paused=true", runs)
+		}
+		if runs[0].Status != "running" {
+			t.Errorf("Status = %q, want unchanged %q (pause never touches status)", runs[0].Status, "running")
+		}
+
+		// -- Resume --
+		resumeRec := httptest.NewRecorder()
+		h.ResumeRun(resumeRec, withURLParam(httptest.NewRequest(http.MethodPost, "/api/scenarios/runs/"+runID+"/resume", nil), "runId", runID))
+		if resumeRec.Code != http.StatusOK {
+			t.Fatalf("resume status = %d, body = %s", resumeRec.Code, resumeRec.Body.String())
+		}
+		env2 := fake.WaitForMessage(t, 2*time.Second)
+		if env2.Type != models.MsgCommandResume {
+			t.Fatalf("WS message type = %q, want %q", env2.Type, models.MsgCommandResume)
+		}
+
+		postEvents(t, h, []map[string]any{
+			{"runId": runID, "seq": 101, "type": "resumed", "ts": "2026-06-09T16:40:13Z"},
+		})
+
+		listRec2 := httptest.NewRecorder()
+		h.ListScenarioRuns(listRec2, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?agentId="+agentID, nil))
+		var runs2 []runRow
+		_ = json.Unmarshal(listRec2.Body.Bytes(), &runs2)
+		if len(runs2) != 1 || runs2[0].Paused {
+			t.Fatalf("after resume: runs = %+v, want exactly 1 run with Paused=false", runs2)
+		}
+	})
+}
