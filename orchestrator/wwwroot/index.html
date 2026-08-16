@@ -294,7 +294,7 @@ body {
 
 /* ── Sidebar ───────────────────────────────────────────────── */
 #sidebar {
-  position: fixed; left: 0; top: 0; bottom: 0;
+  position: fixed; left: 0; top: var(--license-banner-h, 0px); bottom: 0;
   width: var(--sidebar-w);
   background: linear-gradient(180deg, #0d1e35 0%, #0a1628 100%);
   border-right: 1px solid var(--border);
@@ -3825,6 +3825,14 @@ body.theme-slate {
         <div id="em-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;width:100%">
           <div class="empty" style="grid-column:1/-1;padding:2rem">Loading Endpoint Mastery layers…</div>
         </div>
+
+        <!-- Endpoint Mastery-tagged scenarios (moved off the Scenarios page) -->
+        <div class="sec-hdr" style="margin-top:1.75rem">
+          <h2>Endpoint Mastery Scenarios</h2>
+        </div>
+        <div id="em-scenario-tiles">
+          <div class="empty" style="padding:1rem">Loading Endpoint Mastery scenarios…</div>
+        </div>
       </div>
     </main>
   </div>
@@ -4319,9 +4327,20 @@ body.theme-slate {
     <label class="modal-lbl">Name</label>
     <input id="cmp-name" type="text" placeholder="e.g. Q2 Ransomware Readiness" style="width:100%;padding:0.5rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:inherit">
 
+    <!-- ── Campaign Source (mutually exclusive: a campaign has ONE source) ── -->
+    <label class="modal-lbl" style="margin-top:0.9rem;display:block">Campaign Source</label>
+    <div style="display:flex;gap:1.1rem;margin:0.35rem 0 0;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
+        <input type="radio" name="cmp-source" value="threat_informed" checked onchange="setCampaignSource('threat_informed')"> Threat-Informed Campaign
+      </label>
+      <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
+        <input type="radio" name="cmp-source" value="existing_scenario" onchange="setCampaignSource('existing_scenario')"> Existing Scenario
+      </label>
+    </div>
+
     <!-- ── Threat-Informed Campaign Builder ── -->
-    <div style="margin:0.9rem 0 0;padding:0.85rem 1rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius)">
-      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);margin-bottom:0.65rem">Threat-Informed Campaigns</div>
+    <div id="cmp-source-ti" style="margin:0.65rem 0 0;padding:0.85rem 1rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius)">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);margin-bottom:0.65rem">Threat Intelligence</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem" id="ti-pack-grid">
         <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('kev')">&#9760; KEV Exposure</button>
         <button class="btn btn-outline btn-sm" style="justify-content:flex-start;gap:0.4rem;text-align:left" onclick="selectTIPack('ransomware')">&#128274; Ransomware Readiness</button>
@@ -4334,16 +4353,16 @@ body.theme-slate {
         <div id="ti-pack-info" style="font-size:0.8rem;color:var(--text);margin-bottom:0.5rem"></div>
         <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateTIScenario()">&#9654; Generate Campaign</button>
       </div>
+      <div id="ti-generated-preview" style="display:none;margin-top:0.65rem;padding:0.6rem 0.75rem;background:rgba(35,134,54,0.1);border:1px solid var(--success);border-radius:var(--radius);font-size:0.8rem;color:var(--text)"></div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:0.5rem;margin:0.75rem 0 0.4rem">
-      <div style="flex:1;height:1px;background:var(--border)"></div>
-      <span style="font-size:0.7rem;color:var(--muted);white-space:nowrap">or choose an existing scenario</span>
-      <div style="flex:1;height:1px;background:var(--border)"></div>
+    <!-- ── Existing Scenario ── -->
+    <div id="cmp-source-existing" style="display:none;margin:0.65rem 0 0">
+      <label class="modal-lbl">Scenario</label>
+      <select id="cmp-scenario" onchange="cmpOnExistingScenarioChange()"></select>
+      <div id="cmp-scenario-preview" style="margin-top:0.4rem;font-size:0.78rem;color:var(--muted)"></div>
     </div>
 
-    <label class="modal-lbl">Scenario</label>
-    <select id="cmp-scenario"></select>
     <label class="modal-lbl">Execution mode</label>
     <select id="cmp-mode">
       <option value="posture">Posture — read-only, safe on any host</option>
@@ -4478,9 +4497,12 @@ body.theme-slate {
 <!-- Live Run Drawer -->
 <div id="run-live-overlay" class="drawer-overlay" onclick="if(event.target===this)closeRunLive()">
   <div class="drawer" style="width:540px;max-width:94vw">
-    <div class="drawer-header">
-      <h3 id="run-live-title">Live Run</h3>
-      <button class="drawer-close" onclick="closeRunLive()">&#10005;</button>
+    <div class="drawer-header" style="flex-direction:column;align-items:flex-start;gap:0.1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
+        <h3 id="run-live-title">Live Run</h3>
+        <button class="drawer-close" onclick="closeRunLive()">&#10005;</button>
+      </div>
+      <div id="run-live-subtitle" style="font-size:0.72rem;color:var(--muted)"></div>
     </div>
     <div class="drawer-body">
       <div id="run-live-progress"></div>
@@ -4512,14 +4534,14 @@ body.theme-slate {
     </div>
     <div class="drawer-body">
       <p class="tiny muted" style="margin-bottom:0.75rem">Dispatches all 14 Endpoint Mastery layers sequentially — each layer runs to completion before the next starts.</p>
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.3rem">
+      <div style="margin-bottom:1rem;display:flex;gap:1.1rem;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
           <input type="radio" name="em-sweep-target-mode" value="individual" checked onchange="setEMSweepTargetMode('individual')"> Individual Agent
         </label>
-        <label style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.3rem">
+        <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
           <input type="radio" name="em-sweep-target-mode" value="group" onchange="setEMSweepTargetMode('group')"> Agent Group(s)
         </label>
-        <label style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.75rem">
+        <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
           <input type="radio" name="em-sweep-target-mode" value="all" onchange="setEMSweepTargetMode('all')"> All Agents
         </label>
       </div>
@@ -4855,6 +4877,11 @@ function _licenseBannerHTML(info) {
     '<a href="mailto:support@audspect.com" style="color:inherit;text-decoration:underline">[Contact Licensing Support]</a>';
 }
 
+function _syncLicenseBannerHeight() {
+  var el = document.getElementById('license-grace-banner');
+  document.documentElement.style.setProperty('--license-banner-h', el ? el.offsetHeight + 'px' : '0px');
+}
+
 function renderLicenseGraceBanner(info) {
   var existing = document.getElementById('license-grace-banner');
   if (existing) existing.remove();
@@ -4863,6 +4890,8 @@ function renderLicenseGraceBanner(info) {
   el.style.cssText = 'position:relative;z-index:9998;padding:0.75rem 1.25rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
   el.innerHTML = _licenseBannerHTML(info);
   document.body.insertBefore(el, document.body.firstChild);
+  _syncLicenseBannerHeight();
+  window.addEventListener('resize', _syncLicenseBannerHeight);
   maybeShowLicenseGraceModal(info);
 }
 
@@ -7691,6 +7720,9 @@ function renderScenarios() {
   var osFilter = osEl ? osEl.value : 'all';
 
   var filtered = scenarios.filter(function(s) {
+    // Endpoint Mastery scenarios live exclusively on the Endpoint Mastery
+    // dashboard (its own section below the 14 layer cards) now, not here.
+    if (scenarioCategoryOf(s) === 'em') return false;
     if (osFilter !== 'all' && (s.supportedOs || []).indexOf(osFilter) === -1) return false;
     if (src !== 'all' && scenarioSourceOf(s) !== src) return false;
     return true;
@@ -8209,10 +8241,20 @@ function openCampaignLaunch() {
   if (!agents.length) { showToast('No agents registered yet', 'err'); return; }
   document.getElementById('cmp-name').value = '';
   document.getElementById('cmp-notes').value = '';
-  document.getElementById('cmp-scenario').innerHTML = scenarios.map(function(s) {
-    return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>';
-  }).join('');
+  document.getElementById('cmp-scenario').innerHTML = '<option value="">— Select a scenario —</option>' +
+    scenarios.map(function(s) { return '<option value="' + x(s.id) + '">' + x(s.name) + '</option>'; }).join('');
+  document.getElementById('cmp-scenario-preview').innerHTML = '';
   document.getElementById('cmp-mode').value = 'posture';
+  // Reset Campaign Source to a clean default every time the modal opens --
+  // no state should carry over from a previous campaign.
+  CMP_SOURCE = 'threat_informed';
+  _tiPackData = null;
+  _tiGeneratedScenarioId = null;
+  document.getElementById('ti-pack-preview').style.display = 'none';
+  document.getElementById('ti-generated-preview').style.display = 'none';
+  document.querySelectorAll('#ti-pack-grid .btn').forEach(function(b) { b.style.borderColor = ''; });
+  document.querySelector('input[name="cmp-source"][value="threat_informed"]').checked = true;
+  renderCampaignSourceUI();
   var envs = {};
   agents.forEach(function(a) { if (a.envLabel) envs[a.envLabel] = true; });
   document.getElementById('cmp-filter-env').innerHTML = '<option value="">All environments</option>' +
@@ -8294,6 +8336,50 @@ function cmpUpdateExclusionCount() {
 
 function closeCampaignLaunch() { document.getElementById('campaign-overlay').classList.remove('open'); }
 
+// ── Campaign Source (mutually exclusive) ─────────────────────────────────────
+// A campaign has exactly ONE source, never two -- Threat-Informed generation
+// and Existing Scenario selection are alternative ways to arrive at a
+// scenarioId to launch, not two fields that can independently hold state.
+// CMP_SOURCE is the single source of truth the UI derives what to show from;
+// avoid adding parallel booleans like isThreatInformedSelected /
+// isScenarioSelected, which is exactly how the two states used to mix.
+var CMP_SOURCE = 'threat_informed'; // 'threat_informed' | 'existing_scenario'
+var _tiGeneratedScenarioId = null;  // set once Generate Campaign succeeds; null = nothing generated yet
+
+function renderCampaignSourceUI() {
+  document.getElementById('cmp-source-ti').style.display = (CMP_SOURCE === 'threat_informed') ? '' : 'none';
+  document.getElementById('cmp-source-existing').style.display = (CMP_SOURCE === 'existing_scenario') ? '' : 'none';
+}
+
+// setCampaignSource: switches the campaign's source. If the source being left
+// has real, unsaved work (a generated TI campaign, or a manually-picked
+// scenario), confirms first and reverts the radio on cancel; otherwise
+// switches immediately and clears the other source's state so it can never
+// leak into what actually launches.
+function setCampaignSource(newSource) {
+  if (newSource === CMP_SOURCE) return;
+  var hasWork = (CMP_SOURCE === 'threat_informed' && _tiGeneratedScenarioId) ||
+                (CMP_SOURCE === 'existing_scenario' && document.getElementById('cmp-scenario').value);
+  if (hasWork) {
+    var msg = CMP_SOURCE === 'threat_informed'
+      ? 'Switch campaign source? Your generated threat-informed campaign will be discarded.'
+      : 'Switch campaign source? Your selected scenario will be cleared.';
+    if (!confirm(msg)) {
+      document.querySelector('input[name="cmp-source"][value="' + CMP_SOURCE + '"]').checked = true;
+      return;
+    }
+  }
+  CMP_SOURCE = newSource;
+  _tiGeneratedScenarioId = null;
+  _tiPackData = null;
+  document.getElementById('ti-pack-preview').style.display = 'none';
+  document.getElementById('ti-generated-preview').style.display = 'none';
+  document.querySelectorAll('#ti-pack-grid .btn').forEach(function(b) { b.style.borderColor = ''; });
+  document.getElementById('cmp-scenario').value = '';
+  document.getElementById('cmp-scenario-preview').innerHTML = '';
+  renderCampaignSourceUI();
+}
+
 // ── Threat-Informed Campaign Builder ─────────────────────────────────────────
 var _tiPackData = null;
 
@@ -8308,6 +8394,10 @@ function selectTIPack(type) {
   var info = document.getElementById('ti-pack-info');
   preview.style.display = 'none';
   info.textContent = 'Loading…';
+  // Picking a (possibly different) pack starts over -- any earlier generated
+  // campaign from a prior pack in this same session no longer applies.
+  _tiGeneratedScenarioId = null;
+  document.getElementById('ti-generated-preview').style.display = 'none';
   // Highlight selected button
   document.querySelectorAll('#ti-pack-grid .btn').forEach(function(b) { b.style.borderColor = ''; });
   event && event.target && (event.target.style.borderColor = 'var(--accent)');
@@ -8318,11 +8408,14 @@ function selectTIPack(type) {
       preview.style.display = '';
       return;
     }
+    var tacticSet = {};
+    (pack.techniques || []).forEach(function(t) { if (t.tactic) tacticSet[t.tactic] = true; });
+    var tacticCount = Object.keys(tacticSet).length;
     var ransomNote = pack.ransomwareCount > 0 ? ' &middot; <strong style="color:var(--warning)">' + pack.ransomwareCount + ' ransomware-linked</strong>' : '';
     var kevNote = pack.totalKevCves > 0 ? ' &middot; ' + pack.totalKevCves + ' KEV CVEs' : '';
     info.innerHTML = (_tiPackIcons[type] || '') + ' <strong>' + x(pack.packName) + '</strong><br>' +
       '<span style="color:var(--muted)">' + x(pack.description) + '</span><br>' +
-      '<span style="font-size:0.75rem;margin-top:4px;display:inline-block"><strong>' + pack.techniqueCount + '</strong> techniques' + kevNote + ransomNote + '</span>';
+      '<span style="font-size:0.75rem;margin-top:4px;display:inline-block"><strong>' + pack.techniqueCount + '</strong> techniques &middot; <strong>' + tacticCount + '</strong> tactics' + kevNote + ransomNote + '</span>';
     preview.style.display = '';
     // Pre-fill campaign name
     var nameEl = document.getElementById('cmp-name');
@@ -8343,7 +8436,7 @@ function generateTIScenario() {
         if (res.error.indexOf('already exists') >= 0) {
           showToast(pack.packName + ' already exists — selecting it', 'ok');
           loadScenarios();
-          setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+          setTimeout(function() { _applyGeneratedTIScenario(pack); }, 600);
         } else {
           showToast('Failed: ' + res.error, 'err');
         }
@@ -8351,9 +8444,20 @@ function generateTIScenario() {
       }
       showToast(pack.packName + ' created — ' + pack.techniqueCount + ' techniques', 'ok');
       loadScenarios();
-      setTimeout(function() { _selectCmpScenario(pack.suggestedId); }, 600);
+      setTimeout(function() { _applyGeneratedTIScenario(pack); }, 600);
     })
     .catch(function() { showToast('Failed to create scenario', 'err'); });
+}
+
+// _applyGeneratedTIScenario: records the generated scenario as this
+// campaign's source (the "scenario_id = generated scenario result" half of
+// the threat_informed branch) and shows the confirmation preview.
+function _applyGeneratedTIScenario(pack) {
+  _selectCmpScenario(pack.suggestedId);
+  _tiGeneratedScenarioId = pack.suggestedId;
+  var el = document.getElementById('ti-generated-preview');
+  el.style.display = '';
+  el.innerHTML = '&#10003; Generated: <strong>' + x(pack.suggestedName) + '</strong> — ' + pack.techniqueCount + ' techniques. Ready to configure targets below.';
 }
 
 // loadKEVPack: legacy shortcut (dashboard widget "Create KEV Pack" link).
@@ -8382,9 +8486,25 @@ function _selectCmpScenario(id) {
   for (var i = 0; i < sel.options.length; i++) {
     if (sel.options[i].value === id) { sel.selectedIndex = i; return; }
   }
-  document.getElementById('cmp-scenario').innerHTML = scenarios.map(function(s) {
-    return '<option value="' + x(s.id) + '"' + (s.id === id ? ' selected' : '') + '>' + x(s.name) + '</option>';
-  }).join('');
+  document.getElementById('cmp-scenario').innerHTML = '<option value="">— Select a scenario —</option>' +
+    scenarios.map(function(s) {
+      return '<option value="' + x(s.id) + '"' + (s.id === id ? ' selected' : '') + '>' + x(s.name) + '</option>';
+    }).join('');
+}
+
+// cmpOnExistingScenarioChange: shows a short preview of the manually-picked
+// scenario (the "Scenario details/preview" bullet of the Existing Scenario
+// branch) -- purely descriptive, no data beyond what's already loaded.
+function cmpOnExistingScenarioChange() {
+  var id = document.getElementById('cmp-scenario').value;
+  var el = document.getElementById('cmp-scenario-preview');
+  if (!id) { el.innerHTML = ''; return; }
+  var sc = scenarios.find(function(s) { return s.id === id; });
+  if (!sc) { el.innerHTML = ''; return; }
+  var desc = (sc.description || '').trim();
+  if (desc.length > 160) desc = desc.substring(0, 157).replace(/\s+\S*$/, '') + '…';
+  var tagsLine = (sc.tags || []).length ? '<br><span style="font-size:0.7rem">' + sc.tags.map(x).join(' &middot; ') + '</span>' : '';
+  el.innerHTML = x(desc) + tagsLine;
 }
 
 // loadKEVWidget fetches the KEV pack data and populates the dashboard TI KPI tiles.
@@ -8542,10 +8662,20 @@ function submitCampaign() {
   var name = document.getElementById('cmp-name').value.trim();
   var targetType = document.getElementById('cmp-target-type').value;
   if (!name) { showToast('Campaign name required', 'err'); return; }
+  // A campaign has exactly one source -- validate against CMP_SOURCE, not
+  // whatever happens to be sitting in cmp-scenario, so a stale/leftover
+  // value from the other (inactive) source can never slip through.
+  if (CMP_SOURCE === 'threat_informed' && !_tiGeneratedScenarioId) {
+    showToast('Select a Threat Intel pack and click Generate Campaign first', 'err'); return;
+  }
+  var scenarioId = CMP_SOURCE === 'threat_informed' ? _tiGeneratedScenarioId : document.getElementById('cmp-scenario').value;
+  if (CMP_SOURCE === 'existing_scenario' && !scenarioId) {
+    showToast('Select a scenario', 'err'); return;
+  }
   var mode = document.getElementById('cmp-mode').value;
   if (mode !== 'posture' && !confirm(mode.toUpperCase() + ' mode runs real techniques and will generate alerts. Continue?')) return;
   var body = {
-    name: name, scenarioId: document.getElementById('cmp-scenario').value, targetType: targetType,
+    name: name, scenarioId: scenarioId, targetType: targetType,
     mode: mode, confirmLive: mode !== 'posture', confirmLab: mode === 'lab',
     notes: document.getElementById('cmp-notes').value.trim()
   };
@@ -8721,7 +8851,7 @@ function openTmplRun(templateId) {
   // Populate agent dropdown.
   var agentSel = document.getElementById('tmpl-run-agent');
   if (agentSel) {
-    var opts = (_agents || []).filter(function(a) { return a.status === 'online'; })
+    var opts = (agents || []).filter(function(a) { return a.status !== 'offline'; })
       .map(function(a) {
         var os = a.osVersion ? ' [' + (a.osVersion.toLowerCase().indexOf('windows') !== -1 ? 'Win' : 'Other') + ']' : '';
         return '<option value="' + x(a.agentId) + '">' + x(a.agentId) + ' — ' + x(a.hostname) + os + '</option>';
@@ -9030,10 +9160,10 @@ function populateCoverageFilters(d) {
   }
   // Agent dropdown.
   var agSel = document.getElementById('ca-agent');
-  if (agSel && window._agents) {
+  if (agSel && agents) {
     var cur2 = agSel.value;
     agSel.innerHTML = '<option value="">All agents</option>' +
-      (_agents || []).map(function(a) { return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + '</option>'; }).join('');
+      (agents || []).map(function(a) { return '<option value="' + x(a.agentId) + '">' + x(a.hostname || a.agentId) + '</option>'; }).join('');
     if (cur2) agSel.value = cur2;
   }
 }
@@ -10749,7 +10879,7 @@ function runRowHtml(r) {
       // it's terminal (partial/completed), the same underlying data (see
       // below) is history, not a live stream, so it gets the results-style
       // pass/fail label instead of "Live".
-      if (r.id && r.status === 'running') acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
+      if (r.id && r.status === 'running') acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
       if (r.id && r.status === 'running') acts += '<button class="btn btn-outline-red btn-sm" onclick="stopRun(\'' + x(r.id) + '\')" title="Stop this run — keeps completed steps, marks the run partial">&#9632; Stop</button> ';
       if (cnt) {
         acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
@@ -10764,7 +10894,7 @@ function runRowHtml(r) {
         // labeled as a completed (partial) run's results instead of "Live".
         var pr = r.progress;
         var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
-        acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')" title="Per-step results for this partial run">' + toBadge + '</button>';
+        acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + (pr.stepsTotal || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')" title="Per-step results for this partial run">' + toBadge + '</button>';
       }
       return acts || '—';
     })() + '</td>' +
@@ -10807,21 +10937,59 @@ function renderSweepRow(payload) {
     '<td>—</td></tr>';
 }
 
+// renderEMSweepRow builds one collapsed "Endpoint Mastery Full Sweep" <tr>
+// from a GET /api/em/sweeps/{id}/runs response ({sweep, runs}) -- mirrors
+// renderSweepRow above, reusing the same drawer (openEMSweepProgress) that
+// already shows live per-layer status when a sweep is first dispatched.
+function renderEMSweepRow(payload) {
+  var sw = payload.sweep, childRuns = payload.runs || [];
+  var totalCnt = 0, totalFail = 0;
+  childRuns.forEach(function(r) {
+    var cnt = (r.results || []).length;
+    var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
+    totalCnt += cnt; totalFail += fail;
+  });
+  var badge = totalCnt ? (totalFail + ' fail / ' + (totalCnt - totalFail) + ' pass') : '—';
+  var agent = agents.find(function(a) { return a.agentId === sw.agentId; });
+  var agentLabel = agent ? agent.hostname : sw.agentId;
+  return '<tr>' +
+    '<td><code>' + x(sw.id.substring(0,14)) + '</code></td>' +
+    '<td style="font-weight:500">Endpoint Mastery Full Sweep — ' + x(agentLabel) + '</td>' +
+    '<td><code>' + x(sw.agentId) + '</code></td>' +
+    '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sw.status) + '</span></td>' +
+    '<td style="color:var(--muted);font-size:0.78rem">' + x(sw.createdBy || '—') + '</td>' +
+    '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
+    '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
+    '<td><button class="btn btn-outline btn-sm" onclick="openEMSweepProgress(\'' + x(sw.id) + '\')" title="View every EM layer this sweep dispatched">' +
+        x(sw.completedLayers + '/' + sw.totalLayers + ' layers') + ' — ' + badge + '</button></td>' +
+    '<td>—</td></tr>';
+}
+
+// Sweep-grouping kinds Live Runs collapses into one row: field is the
+// runRow property carrying the group id, api builds the {sweep,runs}
+// fetch URL, render builds the collapsed <tr>. Add an entry here for any
+// future sweep type instead of duplicating loadRuns' grouping logic.
+var SWEEP_GROUP_KINDS = [
+  { field: 'sweepId',   api: function(id) { return '/api/vex/sweeps/' + id + '/runs'; }, render: renderSweepRow },
+  { field: 'emSweepId', api: function(id) { return '/api/em/sweeps/' + id + '/runs'; },  render: renderEMSweepRow }
+];
+
 function loadRuns() {
   apicall('/api/scenarios/runs').then(function(runs) {
-    // Group sweep-dispatched rows (non-null sweepId) so Live Runs shows one
-    // row per sweep instead of one row per technique it dispatched. Every
-    // OTHER consumer of this same endpoint (Dashboard, Coverage matrix, etc.)
-    // ignores sweepId entirely and is completely unaffected.
-    var sweepIds = [];
-    var seenSweepIds = {};
+    // Group sweep-dispatched rows (non-null sweepId/emSweepId) so Live Runs
+    // shows one row per sweep instead of one row per technique/layer it
+    // dispatched. Every OTHER consumer of this same endpoint (Dashboard,
+    // Coverage matrix, etc.) ignores these fields entirely and is
+    // completely unaffected.
+    var groups = SWEEP_GROUP_KINDS.map(function(kind) {
+      return { kind: kind, ids: [], seen: {} };
+    });
     var individualRuns = [];
     runs.forEach(function(r) {
-      if (r.sweepId) {
-        if (!seenSweepIds[r.sweepId]) { seenSweepIds[r.sweepId] = true; sweepIds.push(r.sweepId); }
-      } else {
-        individualRuns.push(r);
-      }
+      var group = groups.find(function(g) { return r[g.kind.field]; });
+      if (!group) { individualRuns.push(r); return; }
+      var id = r[group.kind.field];
+      if (!group.seen[id]) { group.seen[id] = true; group.ids.push(id); }
     });
 
     var tbody = document.getElementById('runs-body');
@@ -10831,35 +10999,43 @@ function loadRuns() {
       return;
     }
 
-    if (!sweepIds.length) {
+    var totalGroupIds = groups.reduce(function(n, g) { return n + g.ids.length; }, 0);
+    if (!totalGroupIds) {
       document.getElementById('runs-cnt').textContent = individualRuns.length;
       tbody.innerHTML = renderRunRows(individualRuns);
       return;
     }
 
-    Promise.all(sweepIds.map(function(id) {
-      return apicall('/api/vex/sweeps/' + id + '/runs').then(function(res) {
-        return { id: id, ok: true, data: res };
-      }).catch(function() {
-        return { id: id, ok: false };
+    var fetches = [];
+    groups.forEach(function(g) {
+      g.ids.forEach(function(id) {
+        fetches.push(
+          apicall(g.kind.api(id)).then(function(res) {
+            return { field: g.kind.field, id: id, ok: true, data: res, render: g.kind.render };
+          }).catch(function() {
+            return { field: g.kind.field, id: id, ok: false };
+          })
+        );
       });
-    })).then(function(sweepResults) {
+    });
+
+    Promise.all(fetches).then(function(groupResults) {
       var rowsToRenderIndividually = individualRuns.slice();
-      var sweepRowsHtml = [];
-      sweepResults.forEach(function(sr) {
-        if (!sr.ok) {
+      var groupRowsHtml = [];
+      groupResults.forEach(function(gr) {
+        if (!gr.ok) {
           // The per-sweep fetch failed -- fall back to rendering this sweep's
           // rows individually rather than silently hiding runs that genuinely
           // exist. Never show fewer runs than actually exist.
           rowsToRenderIndividually = rowsToRenderIndividually.concat(
-            runs.filter(function(r) { return r.sweepId === sr.id; })
+            runs.filter(function(r) { return r[gr.field] === gr.id; })
           );
           return;
         }
-        sweepRowsHtml.push(renderSweepRow(sr.data));
+        groupRowsHtml.push(gr.render(gr.data));
       });
-      document.getElementById('runs-cnt').textContent = rowsToRenderIndividually.length + sweepRowsHtml.length;
-      tbody.innerHTML = renderRunRows(rowsToRenderIndividually) + sweepRowsHtml.join('');
+      document.getElementById('runs-cnt').textContent = rowsToRenderIndividually.length + groupRowsHtml.length;
+      tbody.innerHTML = renderRunRows(rowsToRenderIndividually) + groupRowsHtml.join('');
     });
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
@@ -11381,17 +11557,20 @@ function openPicker(scId, fw) {
 function openPickerWith(scId, fw, sc, items) {
   _pickerItems = items;
   _pickerScId = scId; _pickerFw = fw; _pickerSel = {};
-  // Pre-check priority: a pending run selection > the scenario's explicit list > all (sweep).
-  var pre = null;
+  // Pre-check ONLY a genuine pending selection the operator already made in
+  // this session for this exact scenario+framework. A freshly-opened picker
+  // starts with nothing checked -- the scenario's own curated list (if any)
+  // is what the run falls back to server-side when nothing is customized;
+  // the picker pre-ticking it (or everything) on open is surprising, not
+  // helpful. IDs are kept exactly as selected -- Caldera ability ids are
+  // lowercase UUIDs matched case-sensitively against the catalog, so
+  // uppercasing them here (as this used to do, uniformly for every
+  // framework) silently broke the match: the count included them but no
+  // checkbox ever showed checked, and neither "None" nor "Select all"
+  // could ever fully agree with the real total again.
   if (_runSelection && _runSelection.scId === scId && _runSelection.fw === fw) {
-    pre = _runSelection.ids;
-  } else if (fw === 'art' && (sc.artTechniques || []).length) {
-    pre = sc.artTechniques.map(function(t) { return String(t).toUpperCase(); });
-  } else if (fw === 'caldera' && (sc.calderaAbilities || []).length) {
-    pre = sc.calderaAbilities.slice();
+    _runSelection.ids.forEach(function(id) { _pickerSel[id] = true; });
   }
-  if (pre) { pre.forEach(function(id) { _pickerSel[String(id).toUpperCase()] = true; }); }
-  else { _pickerItems.forEach(function(it) { _pickerSel[it.id] = true; }); }
   var titleNoun = fw === 'art' ? 'Select ART techniques'
                 : fw === 'caldera' ? 'Select Caldera abilities'
                 : fw === 'posture' ? 'Select posture checks'
@@ -11527,9 +11706,16 @@ function pickerToggle(el) {
 }
 
 function pickerSelectAll(on) {
-  _pickerFiltered.forEach(function(it) {
-    if (on) _pickerSel[it.id] = true; else delete _pickerSel[it.id];
-  });
+  if (on) {
+    // Scoped to the currently filtered/visible items -- lets an operator
+    // narrow with the search/filter chips and bulk-check just that subset.
+    _pickerFiltered.forEach(function(it) { _pickerSel[it.id] = true; });
+  } else {
+    // "None" is an unambiguous global reset, not "deselect what's currently
+    // visible" -- clear every selection regardless of any active filter, so
+    // the count always actually drops to 0.
+    _pickerSel = {};
+  }
   renderPickerList();
 }
 
@@ -12306,11 +12492,25 @@ function viewRunResults(run) {
     alertText = ' &nbsp;&middot;&nbsp; No alerts generated';
   }
 
+  // Run Settings — what was actually selected at dispatch (mode / privilege
+  // ceiling). Previously only inferable after the fact from per-step
+  // evidence (ExecutedAs / a policy-privilege skip, if any); this makes the
+  // question "was this the admin run or the no-limit run?" answerable at a
+  // glance instead. Absent on older runs / non-configurable dispatch paths
+  // (full-scan, safe-scan) — render nothing rather than a misleading blank.
+  var modeLabels = { posture: 'Posture', telemetry: 'Telemetry', lab: 'Lab' };
+  var modeText = run.mode ? (modeLabels[run.mode] || x(run.mode)) : '';
+  var privText = run.mode ? (run.maxPrivilege ? x(run.maxPrivilege.charAt(0).toUpperCase() + run.maxPrivilege.slice(1)) : 'No limit') : '';
+  var runSettingsText = modeText
+    ? ' &nbsp;&middot;&nbsp; Mode: <strong>' + modeText + '</strong> &nbsp;&middot;&nbsp; Privilege: <strong>' + privText + '</strong>'
+    : '';
+
   document.getElementById('results-summary').innerHTML =
     '<span style="color:var(--danger);font-weight:600">' + fail + ' fail</span>' +
     ' &nbsp;/&nbsp; <span style="color:var(--success);font-weight:600">' + pass + ' pass</span>' +
     (skipped ? ' &nbsp;/&nbsp; <span style="color:var(--muted)">' + skipped + ' skipped</span>' : '') +
     ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +
+    runSettingsText +
     alertText;
 
   var runId = run.id || '';
@@ -12339,7 +12539,7 @@ function viewRunResults(run) {
       '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
       '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
       (canRerun
-        ? '<button class="btn btn-outline btn-sm" onclick="openModal(\'' + x(run.scenarioId) + '\', \'' + x(run.agentId) + '\')" title="Open the run wizard pre-filled with this scenario and agent">Re-run</button>'
+        ? '<button class="btn btn-outline btn-sm" onclick="closeResults();openModal(\'' + x(run.scenarioId) + '\', \'' + x(run.agentId) + '\')" title="Open the run wizard pre-filled with this scenario and agent">Re-run</button>'
         : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run requires the Analyst or Admin role">Re-run</button>');
   }
   document.getElementById('results-header-actions').innerHTML = actionsHtml;
@@ -12629,7 +12829,10 @@ function viewRunResults(run) {
     var tb = (run.score && run.score.tacticBreakdown) || {};
     var tbKeys = Object.keys(tb);
     if (!tbKeys.length) {
-      return '<div class="dash-panel dash-soon" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">No ATT&CK tactic data available for this run.</div>';
+      // Not a "coming soon" placeholder -- this tab is fully built, this run
+      // just has no tactic breakdown to show. dash-soon's CSS stamps a
+      // "Coming Soon" badge that would misleadingly say otherwise.
+      return '<div class="dash-panel" style="padding:2rem;text-align:center;color:var(--muted);font-size:0.8rem">No ATT&CK tactic data available for this run.</div>';
     }
     var tacticOrder = ['initial-access','execution','persistence','privilege-escalation',
       'defense-evasion','credential-access','discovery','lateral-movement','collection',
@@ -14029,10 +14232,32 @@ function submitIOCImport() {
 
   // Opened from a run row. Replays persisted events first (reconnect-safe), then
   // live frames arrive via window.onRunEvent.
-  window.openRunPanel = async function (runId, name) {
-    state.runId = runId; state.steps = new Map(); state.total = 0;
+  //
+  // knownStepsTotal seeds state.total directly from the run row's own
+  // progress summary (scenario_runs.steps_total, always populated once any
+  // step event has landed) instead of relying solely on finding a
+  // 'run_started' event in the replay below. For a large sweep (hundreds+
+  // steps, thousands of events) that replay can legitimately not include it
+  // -- e.g. the panel is opened well after the run started, or the event
+  // arrives in a later page/batch than assumed -- which previously left
+  // state.total stuck at 0 ("264/0") even though steps were clearly
+  // completing. The 'run_started' event, when found during replay, still
+  // overwrites this via applyEvent's own assignment -- harmless, since both
+  // sources should always agree once it's found.
+  // mode/maxPrivilege are passed as plain strings (not a JSON object) since
+  // this is invoked from inline onclick="..." HTML attributes elsewhere —
+  // an embedded JSON.stringify object's double quotes would terminate the
+  // attribute early.
+  window.openRunPanel = async function (runId, name, knownStepsTotal, mode, maxPrivilege) {
+    state.runId = runId; state.steps = new Map(); state.total = knownStepsTotal || 0;
     state.done = 0; state.failed = 0; state.running = 0;
     document.getElementById('run-live-title').textContent = (name || 'Run') + ' — Live';
+    // Run Settings subtitle — same "what was selected" answer the Results
+    // drawer shows post-completion, so an in-flight run isn't a blind spot.
+    var modeLabels = { posture: 'Posture', telemetry: 'Telemetry', lab: 'Lab' };
+    document.getElementById('run-live-subtitle').textContent = mode
+      ? 'Mode: ' + (modeLabels[mode] || mode) + '  ·  Privilege: ' + (maxPrivilege ? (maxPrivilege.charAt(0).toUpperCase() + maxPrivilege.slice(1)) : 'No limit')
+      : '';
     document.getElementById('run-live-overlay').classList.add('open');
     render();
     try {
@@ -14072,7 +14297,7 @@ function openSweepDrilldown(sweepId) {
       var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
       var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : r.status;
       var liveBtn = (r.id && r.status === 'running')
-        ? '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')">&#9673; Live</button> '
+        ? '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">&#9673; Live</button> '
         : '';
       // A cancelled/partial technique run never gets the agent's one atomic
       // `results` write, so cnt is always 0 -- but its per-step pass/fail
@@ -14085,7 +14310,7 @@ function openSweepDrilldown(sweepId) {
       } else if (r.id && r.status !== 'running' && r.progress) {
         var pr = r.progress;
         var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
-        resultBtn = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\')">' + toBadge + '</button>';
+        resultBtn = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + (pr.stepsTotal || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">' + toBadge + '</button>';
       } else {
         resultBtn = '<span class="tiny muted">' + x(badge) + '</span>';
       }
@@ -15789,7 +16014,7 @@ function loadThreatIntelConfig(name) {
   var panel = document.getElementById('ti-' + name + '-config-panel');
   if (!panel || ROLE !== 'admin') { if (panel) panel.innerHTML = ''; return; }
   apicall('/api/threat-intel/' + name + '/config').then(function(cfg) {
-    TI_CONNECTOR_LOADED[name] = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled };
+    TI_CONNECTOR_LOADED[name] = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled, configured: !!cfg.configured };
     var urlField = name === 'otx' ? '' :
       '<input id="ti-' + name + '-url" type="text" placeholder="Base URL" value="' + x(cfg.baseUrl || '') + '" class="inp-sm" style="flex:1">';
     panel.innerHTML =
@@ -15832,12 +16057,15 @@ function saveConnectorConfig(name) {
   var newEnabled = document.getElementById('ti-' + name + '-enabled').checked;
   var payload = { baseUrl: newUrl, apiKey: newKey, enabled: newEnabled };
 
-  var prev = TI_CONNECTOR_LOADED[name] || { baseUrl: '', enabled: false };
+  var prev = TI_CONNECTOR_LOADED[name] || { baseUrl: '', enabled: false, configured: false };
   var urlChanged = urlEl && newUrl !== prev.baseUrl;
   var keyChanged = newKey !== '';
   var enabledChanged = newEnabled !== prev.enabled;
 
-  if (!urlChanged && !keyChanged && !enabledChanged) {
+  // A genuine first-time setup has nothing to overwrite -- the confirm
+  // modal exists to warn "you're about to replace an existing value", which
+  // is meaningless (and confusing) before any value has ever been saved.
+  if (!prev.configured || (!urlChanged && !keyChanged && !enabledChanged)) {
     doSaveConnectorConfig(name, payload); // nothing to confirm
     return;
   }
@@ -18001,7 +18229,7 @@ function loadRansomwareReadiness(runs) {
         '<div style="margin-top:0.25rem">' +
           '<span class="sbadge s-' + x(rrRun.status) + '">' + x(rrRun.status) + '</span>' +
         '</div>' +
-        '<a style="color:var(--accent);cursor:pointer;margin-top:0.4rem" onclick="viewRunResults(' + JSON.stringify(rrRun) + ')">View full report →</a>' +
+        '<a style="color:var(--accent);cursor:pointer;margin-top:0.4rem" onclick=\'viewRunResults(' + JSON.stringify(rrRun).replace(/'/g,"&#39;") + ')\'>View full report →</a>' +
       '</div>' +
     '</div>';
 }
@@ -18115,9 +18343,15 @@ function loadEmTab() {
       }
       var pct = (p + f) ? Math.round(p / (p + f) * 100) : null;
       var col = pct === null ? 'var(--muted)' : pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+      // A completed run with zero pass/fail (every step errored — e.g. the agent
+      // couldn't even launch the process) is NOT the same as "never run": it has
+      // a real timestamp and a real report. Only fall back to "Not run" when
+      // there's no run record at all.
       var statusHtml = pct !== null
         ? '<span class="sbadge" style="background:' + (pct >= 80 ? 'rgba(35,134,54,0.15)' : pct >= 50 ? 'rgba(210,153,34,0.15)' : 'rgba(218,54,51,0.15)') + ';color:' + col + '">' + pct + '% pass</span>'
-        : '<span class="sbadge" style="background:var(--elevated);color:var(--muted)">Not run</span>';
+        : run
+          ? '<span class="sbadge" style="background:rgba(218,54,51,0.15);color:var(--danger)">Error</span>'
+          : '<span class="sbadge" style="background:var(--elevated);color:var(--muted)">Not run</span>';
       var runTs = run ? '<div style="font-size:0.68rem;color:var(--muted);margin-top:0.3rem">Last: ' + ago(run.completedAt || run.startedAt) + (run.agentId ? ' · ' + x(run.agentId) : '') + '</div>' : '';
       var barHtml = pct !== null
         ? '<div style="height:3px;background:var(--elevated);border-radius:2px;margin:0.5rem 0 0;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:' + col + ';border-radius:2px"></div></div>'
@@ -18137,12 +18371,24 @@ function loadEmTab() {
           '</div>' +
         '</div>' +
         '<div style="border-top:1px solid var(--border);padding:0.5rem 1rem;display:flex;gap:0.5rem;align-items:center">' +
-          (run ? '<a style="font-size:0.75rem;color:var(--accent);cursor:pointer" onclick="viewRunResults(' + JSON.stringify(run) + ')">View report →</a>' : '') +
+          (run ? '<a style="font-size:0.75rem;color:var(--accent);cursor:pointer" onclick=\'viewRunResults(' + JSON.stringify(run).replace(/'/g,"&#39;") + ')\'>View report →</a>' : '') +
           '<span style="flex:1"></span>' +
           (canRun ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem" onclick="emRunLayer(\'' + x(e.id) + '\')" title="Run this layer">&#9654; Run</button>' : '') +
         '</div>' +
       '</div>';
     }).join('');
+
+    // Endpoint Mastery-tagged scenarios -- moved here from the Scenarios
+    // page (scenarioCategoryOf excludes them there now), rendered with the
+    // same tile renderer used for every other scenario category so they
+    // keep the same look, hover preview, and Run/Clone actions.
+    var tilesEl = document.getElementById('em-scenario-tiles');
+    if (tilesEl) {
+      var emScenarios = scenarios.filter(function(s) { return scenarioCategoryOf(s) === 'em'; });
+      tilesEl.innerHTML = emScenarios.length
+        ? renderScenarioTileGroup('em-dashboard', emScenarios)
+        : '<p class="empty">No Endpoint Mastery scenarios loaded.</p>';
+    }
   })
   .catch(function(e) { showToast('Endpoint Mastery load failed: ' + e.message, 'err'); });
 }
@@ -18231,7 +18477,7 @@ function emSweepDispatch() {
     if (!resolved.length) { showToast('Select at least one group with agents', 'err'); return; }
     targets = resolved.map(function(a) { return a.agentId; });
   } else {
-    targets = (agents || []).filter(function(a) { return a.status === 'online'; }).map(function(a) { return a.agentId; });
+    targets = (agents || []).filter(function(a) { return a.status !== 'offline'; }).map(function(a) { return a.agentId; });
     if (!targets.length) { showToast('No online agents', 'err'); return; }
   }
 
