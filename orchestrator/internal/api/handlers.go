@@ -2353,7 +2353,7 @@ type runRow struct {
 // initiated_by, started_at, completed_at, steps_total, steps_done,
 // steps_running, steps_passed, steps_failed, steps_timeout,
 // detection_summary, alerts_total, alerts_high_fidelity, noise_score,
-// reverted, mode, max_privilege.
+// reverted, mode, max_privilege, paused.
 func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 	var runs []runRow
 	for rows.Next() {
@@ -2363,7 +2363,7 @@ func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.SweepID, &run.EMSweepID, &run.Name,
 			&run.Status, &resultsJSON, &scoreRaw, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt,
 			&p.StepsTotal, &p.StepsDone, &p.StepsRunning, &p.StepsPassed, &p.StepsFailed, &p.StepsTimeout, &detRaw,
-			&run.AlertsTotal, &run.AlertsHighFidelity, &run.NoiseScore, &revertedRaw, &run.Mode, &run.MaxPrivilege); err != nil {
+			&run.AlertsTotal, &run.AlertsHighFidelity, &run.NoiseScore, &revertedRaw, &run.Mode, &run.MaxPrivilege, &run.Paused); err != nil {
 			log.Printf("[api] scan run row: %v", err)
 			continue
 		}
@@ -2395,7 +2395,7 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, scenario_id, agent_id, sweep_id, em_sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
 		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout, detection_summary,
-		        alerts_total, alerts_high_fidelity, noise_score, reverted, mode, max_privilege
+		        alerts_total, alerts_high_fidelity, noise_score, reverted, mode, max_privilege, paused
 		 FROM scenario_runs
 		 WHERE ($1 = '' OR agent_id = $1)
 		   AND ($2 = '' OR scenario_id = $2)

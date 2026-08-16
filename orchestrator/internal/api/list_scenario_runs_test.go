@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/vexsweep"
@@ -455,6 +456,100 @@ func TestListScenarioRuns_ExposesSweepIdOnlyForTaggedRows(t *testing.T) {
 		}
 		if byID["sr-untagged"] != nil {
 			t.Errorf("sr-untagged sweepId = %q, want nil (not sweep-dispatched)", *byID["sr-untagged"])
+		}
+	})
+}
+
+func TestListScenarioRuns_ExposesEMSweepIdOnlyForTaggedRows(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-list-em-sweep')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		store := emsweep.NewStore(pool)
+		sw, err := store.Create(ctx, emsweep.Sweep{
+			AgentID: "agent-list-em-sweep", Layers: []string{"em-01-control-validation"}, TotalLayers: 1,
+		})
+		if err != nil {
+			t.Fatalf("Create EM sweep: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, steps_total, em_sweep_id)
+			 VALUES ('sr-em-tagged', 'sc-x', 'agent-list-em-sweep', 'em tagged run', 'completed', '[]', 1, $1)`,
+			sw.ID); err != nil {
+			t.Fatalf("seed tagged run: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, steps_total)
+			 VALUES ('sr-em-untagged', 'sc-x', 'agent-list-em-sweep', 'em untagged run', 'completed', '[]', 1)`); err != nil {
+			t.Fatalf("seed untagged run: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.ListScenarioRuns(rec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?agentId=agent-list-em-sweep", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+
+		var got []struct {
+			ID        string  `json:"id"`
+			EMSweepID *string `json:"emSweepId"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		byID := map[string]*string{}
+		for _, r := range got {
+			byID[r.ID] = r.EMSweepID
+		}
+		if byID["sr-em-tagged"] == nil || *byID["sr-em-tagged"] != sw.ID {
+			t.Errorf("sr-em-tagged emSweepId = %v, want %q", byID["sr-em-tagged"], sw.ID)
+		}
+		if byID["sr-em-untagged"] != nil {
+			t.Errorf("sr-em-untagged emSweepId = %q, want nil (not EM-sweep-dispatched)", *byID["sr-em-untagged"])
+		}
+	})
+}
+
+func TestListScenarioRuns_PausedProjection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		seedRunRow(t, pool, "list-run-paused", "sc-list", "agent-list-paused-1", "running")
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE scenario_runs SET paused = true WHERE id = 'list-run-paused'`); err != nil {
+			t.Fatalf("set paused: %v", err)
+		}
+		seedRunRow(t, pool, "list-run-unpaused", "sc-list", "agent-list-paused-2", "running")
+
+		rec := httptest.NewRecorder()
+		h.ListScenarioRuns(rec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?scenarioId=sc-list", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+
+		var got []struct {
+			ID     string `json:"id"`
+			Paused bool   `json:"paused"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		byID := map[string]bool{}
+		for _, r := range got {
+			byID[r.ID] = r.Paused
+		}
+		if !byID["list-run-paused"] {
+			t.Error("list-run-paused paused = false, want true")
+		}
+		if byID["list-run-unpaused"] {
+			t.Error("list-run-unpaused paused = true, want false")
 		}
 	})
 }
