@@ -59,8 +59,13 @@ func NewCalderaStore(calderaURL, apiKey string) *CalderaStore {
 
 // GetAbilities returns every Caldera ability mapped to techniqueID, or nil
 // if none exist (unmapped technique, or the store is empty because Caldera
-// was unconfigured/unreachable at load time).
+// was unconfigured/unreachable at load time). Safe to call on a nil
+// *CalderaStore (returns nil), so callers don't need a separate nil-check
+// before every lookup.
 func (s *CalderaStore) GetAbilities(techniqueID string) []ScenarioStep {
+	if s == nil {
+		return nil
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.steps[strings.ToUpper(techniqueID)]
