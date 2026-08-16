@@ -2531,6 +2531,83 @@ func (h *Handler) forceCancelAfterGracePeriod(runID, agentID string) {
 	})
 }
 
+var errAgentOffline = fmt.Errorf("agent not connected")
+
+// sendRunControlCommand looks up runID's agent and status, requires it be
+// 'running' (paused or not -- pause/resume don't gate on the run's current
+// paused state, only its status; see the package doc on idempotency), and
+// forwards msgType to the agent over WS. Shared by PauseRun and ResumeRun.
+// Unlike cancelScenarioRun, there is no grace-period force-timer here: an
+// unconfirmed pause/resume is harmless, the run just keeps running as before.
+func (h *Handler) sendRunControlCommand(ctx context.Context, runID, msgType string) (agentID string, err error) {
+	var status string
+	if err := h.db.QueryRow(ctx,
+		`SELECT agent_id, status FROM scenario_runs WHERE id = $1`, runID,
+	).Scan(&agentID, &status); err != nil {
+		return "", errRunNotFound
+	}
+	if status != "running" {
+		return agentID, errRunNotRunning
+	}
+	sent := h.hub.SendToAgent(agentID, models.WSMessage{
+		Type:    msgType,
+		AgentID: agentID,
+		Data:    map[string]string{"runId": runID},
+	})
+	if !sent {
+		return agentID, errAgentOffline
+	}
+	return agentID, nil
+}
+
+// POST /api/scenarios/runs/{runId}/pause
+func (h *Handler) PauseRun(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runId")
+	agentID, err := h.sendRunControlCommand(r.Context(), runID, models.MsgCommandPause)
+	switch err {
+	case nil:
+	case errRunNotFound:
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	case errRunNotRunning:
+		jsonError(w, "run is not running", http.StatusConflict)
+		return
+	case errAgentOffline:
+		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
+		return
+	default:
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[scenario] pause requested for run %s → agent %s", runID, agentID)
+	h.auditLog(r, "scenario.pause", runID, map[string]any{"agentId": agentID}, "ok")
+	respond(w, map[string]string{"runId": runID, "status": "pausing"})
+}
+
+// POST /api/scenarios/runs/{runId}/resume
+func (h *Handler) ResumeRun(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runId")
+	agentID, err := h.sendRunControlCommand(r.Context(), runID, models.MsgCommandResume)
+	switch err {
+	case nil:
+	case errRunNotFound:
+		jsonError(w, "run not found", http.StatusNotFound)
+		return
+	case errRunNotRunning:
+		jsonError(w, "run is not running", http.StatusConflict)
+		return
+	case errAgentOffline:
+		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
+		return
+	default:
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[scenario] resume requested for run %s → agent %s", runID, agentID)
+	h.auditLog(r, "scenario.resume", runID, map[string]any{"agentId": agentID}, "ok")
+	respond(w, map[string]string{"runId": runID, "status": "resuming"})
+}
+
 // markVariantRunPartial mirrors a cancelled scenario_run's terminal status
 // onto its variant_runs row, if any -- most scenario_runs aren't
 // variant-backed, so this is a no-op for those. vexsweep.Dispatcher's

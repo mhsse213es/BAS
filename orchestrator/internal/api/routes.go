@@ -311,6 +311,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRunCalderaAdversary)).Post("/api/caldera/adversaries/{adversaryId}/run", h.RunCalderaAdversary)
 		r.With(auth.RequirePermission(auth.CanRunAdversaryTemplate)).Post("/api/adversary-templates/{id}/run", h.RunAdversaryTemplate)
 		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/scenarios/runs/{runId}/cancel", h.CancelRun)
+		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/scenarios/runs/{runId}/pause", h.PauseRun)
+		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/scenarios/runs/{runId}/resume", h.ResumeRun)
 		// SIEM Correlation — trigger and results (Analyst+)
 		r.With(auth.RequirePermission(auth.CanCorrelateSIEM)).Post("/api/siem/correlate/{runId}", h.TriggerSIEMCorrelation)
 		r.With(auth.RequirePermission(auth.CanViewSIEMCorrelations)).Get("/api/siem/correlations/{runId}", h.GetSIEMCorrelations)
