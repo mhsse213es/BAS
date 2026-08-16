@@ -3761,6 +3761,13 @@ body.theme-slate {
                 </div>
               </div>
               <div>
+                <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Base Source</label>
+                <select id="vex-base-type" class="btn btn-outline" style="width:100%;text-align:left">
+                  <option value="art">Atomic Red Team</option>
+                  <option value="caldera">Caldera</option>
+                </select>
+              </div>
+              <div>
                 <label class="modal-lbl" style="display:block;margin-bottom:0.25rem">Mode</label>
                 <select id="vex-mode" class="btn btn-outline" style="width:100%;text-align:left">
                   <option value="sequential">Sequential (all variants)</option>
@@ -17955,6 +17962,7 @@ function runVariants() {
   var techniques = vexSelectedTechniques();
   var mode = document.getElementById('vex-mode') ? document.getElementById('vex-mode').value : 'sequential';
   var advanced = document.getElementById('vex-advanced') ? document.getElementById('vex-advanced').checked : false;
+  var baseType = document.getElementById('vex-base-type') ? document.getElementById('vex-base-type').value : 'art';
   if (!techniques.length) { showToast('Check at least one technique', 'err'); return; }
 
   if (_vexRunTargetMode === 'group' || _vexRunTargetMode === 'all') {
@@ -17979,7 +17987,7 @@ function runVariants() {
       return apicall('/api/variants/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: a.agentId, techniqueId: techId, executionMode: mode, includeAdvanced: advanced })
+        body: JSON.stringify({ agentId: a.agentId, techniqueId: techId, baseType: baseType, executionMode: mode, includeAdvanced: advanced })
       }).then(function(res) {
         if (res && res.error) return { agentId: a.agentId, ok: false, error: res.error };
         return { agentId: a.agentId, ok: true };
@@ -18011,10 +18019,10 @@ function runVariants() {
   _vexAbortRequested = false; _vexActiveScenarioRunId = null;
   var btn = document.getElementById('vex-run-btn');
   if (btn) { btn.disabled = true; }
-  _vexRunVariantQueue(agentId, techniques, mode, advanced, 0);
+  _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, 0);
 }
 
-function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
+function _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx) {
   var btn = document.getElementById('vex-run-btn');
   if (_vexAbortRequested) { if (btn) { btn.disabled = false; btn.textContent = 'Run'; } return; }
   if (idx >= techniques.length) {
@@ -18046,7 +18054,7 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
   apicall('/api/variants/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agentId: agentId, techniqueId: tid, executionMode: mode, includeAdvanced: advanced })
+    body: JSON.stringify({ agentId: agentId, techniqueId: tid, baseType: baseType, executionMode: mode, includeAdvanced: advanced })
   }).then(function(resp) {
     _vexActiveScenarioRunId = resp.scenarioRunId;
     var vrId = resp.variantRunId;
@@ -18057,14 +18065,14 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, idx) {
       return;
     }
     // Multi: wait for this run to finish, then dispatch next
-    _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, idx);
+    _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, baseType, idx);
   }).catch(function(e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
     showToast('Failed on ' + tid + ': ' + (e.message || 'error'), 'err');
   });
 }
 
-function _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, idx) {
+function _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, baseType, idx) {
   if (_vexActivePoll) clearInterval(_vexActivePoll);
   _vexActivePoll = setInterval(function() {
     if (_vexAbortRequested) { clearInterval(_vexActivePoll); _vexActivePoll = null; return; }
@@ -18072,9 +18080,9 @@ function _vexWaitAndNext(vrId, agentId, techniques, mode, advanced, idx) {
       var s = detail.run && detail.run.status;
       if (s === 'completed' || s === 'failed' || s === 'partial') {
         clearInterval(_vexActivePoll); _vexActivePoll = null;
-        _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1);
+        _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx + 1);
       }
-    }).catch(function() { clearInterval(_vexActivePoll); _vexActivePoll = null; _vexRunVariantQueue(agentId, techniques, mode, advanced, idx + 1); });
+    }).catch(function() { clearInterval(_vexActivePoll); _vexActivePoll = null; _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx + 1); });
   }, 3000);
 }
 
