@@ -134,9 +134,9 @@ func (h *Handler) GetEMSweepRuns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.Query(r.Context(),
-		`SELECT id, scenario_id, agent_id, sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
+		`SELECT id, scenario_id, agent_id, sweep_id, em_sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
 		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout, detection_summary,
-		        alerts_total, alerts_high_fidelity, noise_score, reverted
+		        alerts_total, alerts_high_fidelity, noise_score, reverted, mode, max_privilege
 		 FROM scenario_runs WHERE em_sweep_id = $1 ORDER BY started_at`,
 		id,
 	)

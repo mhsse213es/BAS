@@ -216,6 +216,61 @@ func TestRunScenarioIntegration_MaxPrivilegeFiltersStep(t *testing.T) {
 	})
 }
 
+// The operator's chosen mode and privilege ceiling were previously discarded
+// after dispatch -- only their downstream effects (which steps got skipped)
+// were visible, with no way to tell "was this the admin run or the no-limit
+// run?" after the fact. This confirms both are persisted on the run row and
+// readable back through the same ListScenarioRuns endpoint the Results/Live
+// views use.
+func TestRunScenarioIntegration_ModeAndMaxPrivilegePersisted(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		sc, engine := minimalLiveScenario(t, "int-mode-maxpriv")
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "int-agent-mode-maxpriv"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.RunScenario(rec, runScenarioReq(sc.ID, map[string]any{
+			"agentId": agentID, "mode": "telemetry", "confirmLive": true,
+			"executionPolicy": map[string]any{"maxPrivilege": "admin"},
+		}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		runID, _ := resp["runId"].(string)
+		if runID == "" {
+			t.Fatalf("resp = %+v, want a non-empty runId", resp)
+		}
+		fake.WaitForMessage(t, 2*time.Second)
+
+		listRec := httptest.NewRecorder()
+		h.ListScenarioRuns(listRec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?agentId="+agentID, nil))
+		if listRec.Code != http.StatusOK {
+			t.Fatalf("ListScenarioRuns status = %d, body = %s", listRec.Code, listRec.Body.String())
+		}
+		var runs []runRow
+		if err := json.Unmarshal(listRec.Body.Bytes(), &runs); err != nil {
+			t.Fatalf("decode runs: %v", err)
+		}
+		if len(runs) != 1 {
+			t.Fatalf("runs = %d, want 1", len(runs))
+		}
+		if runs[0].Mode != "telemetry" {
+			t.Errorf("runs[0].Mode = %q, want %q", runs[0].Mode, "telemetry")
+		}
+		if runs[0].MaxPrivilege != "admin" {
+			t.Errorf("runs[0].MaxPrivilege = %q, want %q", runs[0].MaxPrivilege, "admin")
+		}
+	})
+}
+
 func TestRunScenarioIntegration_MaxPrivilegeAllFilteredCompletesImmediately(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

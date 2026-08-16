@@ -123,6 +123,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// variant_depth: depth selected by the operator at dispatch time.
 		// "none" (default) = base test only; "quick" / "standard" / "full" = expanded.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS variant_depth text NOT NULL DEFAULT 'none'`,
+		// mode / max_privilege: the execution options actually chosen at dispatch
+		// time ("posture"|"telemetry"|"lab", ""|"user"|"admin"|"system"). Neither
+		// was persisted before — only their downstream *effects* were visible
+		// (which steps got skipped), leaving no way to answer "was this the admin
+		// run or the no-limit run?" after the fact. Set once in dispatchRun's
+		// insert, surfaced read-only via scanRunRows for the Results/Live views.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT ''`,
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS max_privilege text NOT NULL DEFAULT ''`,
 
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_agent ON scenario_runs(agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_scenario ON scenario_runs(scenario_id)`,

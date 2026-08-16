@@ -1050,8 +1050,8 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		initiatedBy = &c.UserID
 	}
 	_, err = h.db.Exec(r.Context(),
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW())`,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, mode)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), 'posture')`,
 		runID, "full-scan", agentID, sc.Name, initiatedBy,
 	)
 	if err != nil {
@@ -1100,8 +1100,8 @@ func (h *Handler) SafeScan(w http.ResponseWriter, r *http.Request) {
 		initiatedBy = &c.UserID
 	}
 	_, err := h.db.Exec(r.Context(),
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW())`,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, mode)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), 'posture')`,
 		runID, "safe-simulation", agentID, sc.Name, initiatedBy,
 	)
 	if err != nil {
@@ -1328,10 +1328,14 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	if o.RunLabel != "" {
 		runName = o.RunLabel
 	}
+	mode := o.Mode
+	if mode == "" {
+		mode = "posture"
+	}
 	_, err = h.db.Exec(ctx,
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id, variant_depth)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6, $7)`,
-		runID, sc.ID, agentID, runName, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id, variant_depth, mode, max_privilege)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6, $7, $8, $9)`,
+		runID, sc.ID, agentID, runName, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth, mode, o.MaxPrivilege,
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -2345,21 +2349,21 @@ type runRow struct {
 // scanRunRows scans a scenario_runs query's rows, decoding the JSON blob
 // columns and deriving DetectedTechs/Progress the same way for every caller.
 // Every caller's SELECT must list columns in exactly this order: id,
-// scenario_id, agent_id, sweep_id, name, status, results, score,
+// scenario_id, agent_id, sweep_id, em_sweep_id, name, status, results, score,
 // initiated_by, started_at, completed_at, steps_total, steps_done,
 // steps_running, steps_passed, steps_failed, steps_timeout,
 // detection_summary, alerts_total, alerts_high_fidelity, noise_score,
-// reverted.
+// reverted, mode, max_privilege.
 func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 	var runs []runRow
 	for rows.Next() {
 		var run runRow
 		var resultsJSON, scoreRaw, detRaw, revertedRaw []byte
 		var p models.RunProgress
-		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.SweepID, &run.Name,
+		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.SweepID, &run.EMSweepID, &run.Name,
 			&run.Status, &resultsJSON, &scoreRaw, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt,
 			&p.StepsTotal, &p.StepsDone, &p.StepsRunning, &p.StepsPassed, &p.StepsFailed, &p.StepsTimeout, &detRaw,
-			&run.AlertsTotal, &run.AlertsHighFidelity, &run.NoiseScore, &revertedRaw); err != nil {
+			&run.AlertsTotal, &run.AlertsHighFidelity, &run.NoiseScore, &revertedRaw, &run.Mode, &run.MaxPrivilege); err != nil {
 			log.Printf("[api] scan run row: %v", err)
 			continue
 		}
@@ -2389,9 +2393,9 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	scenarioID := r.URL.Query().Get("scenarioId")
 
 	rows, err := h.db.Query(r.Context(),
-		`SELECT id, scenario_id, agent_id, sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
+		`SELECT id, scenario_id, agent_id, sweep_id, em_sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
 		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout, detection_summary,
-		        alerts_total, alerts_high_fidelity, noise_score, reverted
+		        alerts_total, alerts_high_fidelity, noise_score, reverted, mode, max_privilege
 		 FROM scenario_runs
 		 WHERE ($1 = '' OR agent_id = $1)
 		   AND ($2 = '' OR scenario_id = $2)
@@ -3312,25 +3316,30 @@ func (h *Handler) RunAdversaryTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ART technique dispatch — uses the art-selective base scenario with the
-	// template's curated technique list as an override.
+	// ART technique dispatch — synthesizes an ad-hoc scenario carrying the
+	// template's curated technique list, mirroring the Caldera adversary
+	// branch below rather than depending on a standalone "selective"
+	// scenario in the catalog (the operator-facing "Selective" scenarios
+	// were removed; only Full Sweep remains there).
 	if req.UseART && len(tmpl.ARTTechniques) > 0 {
-		sc, exists := h.engine.Get("art-selective")
-		if !exists {
-			skipped = append(skipped, result{Source: "art", Reason: "art-selective scenario not loaded"})
-		} else {
-			artOpts := base
-			artOpts.Techniques = tmpl.ARTTechniques
-			runID, skip, err := h.dispatchRun(r.Context(), sc, req.AgentID, artOpts)
-			switch {
-			case err != nil:
-				skipped = append(skipped, result{Source: "art", Reason: err.Error()})
-			case skip != "":
-				skipped = append(skipped, result{Source: "art", Reason: skip})
-			default:
-				dispatched = append(dispatched, result{Source: "art", RunID: runID})
-				h.auditLog(r, "template.run.art", runID, map[string]any{"template": id, "techniques": tmpl.ARTTechniques}, "ok")
-			}
+		synthSc := &scenario.Scenario{
+			ID:            "art-adversary-" + id,
+			Name:          tmpl.Name + " (ART)",
+			ARTTechniques: tmpl.ARTTechniques,
+			Executable:    true,
+			SupportedOS:   []string{"windows"},
+		}
+		artOpts := base
+		artOpts.Techniques = tmpl.ARTTechniques
+		runID, skip, err := h.dispatchRun(r.Context(), synthSc, req.AgentID, artOpts)
+		switch {
+		case err != nil:
+			skipped = append(skipped, result{Source: "art", Reason: err.Error()})
+		case skip != "":
+			skipped = append(skipped, result{Source: "art", Reason: skip})
+		default:
+			dispatched = append(dispatched, result{Source: "art", RunID: runID})
+			h.auditLog(r, "template.run.art", runID, map[string]any{"template": id, "techniques": tmpl.ARTTechniques}, "ok")
 		}
 	}
 

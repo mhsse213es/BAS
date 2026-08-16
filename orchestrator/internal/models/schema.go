@@ -39,28 +39,28 @@ type SimulationResult struct {
 	// configuration/posture-check steps (empty for ordinary ATT&CK technique
 	// steps), used by internal/endpointrisk's taxonomy to classify Security
 	// Configuration / Identity findings without overloading technique_id.
-	CheckID          string           `json:"checkId,omitempty"`
-	Technique        AttackTechnique  `json:"technique"`
-	Result           CheckResult      `json:"result"`
-	Severity         string           `json:"severity"`     // Critical | High | Medium | Low
-	ThreatImpact     string           `json:"threatImpact"` // what an attacker achieves on Fail
-	Details          string           `json:"details"`
-	Remediation      string           `json:"remediation"`
-	RawOutput        string           `json:"rawOutput,omitempty"`
+	CheckID      string          `json:"checkId,omitempty"`
+	Technique    AttackTechnique `json:"technique"`
+	Result       CheckResult     `json:"result"`
+	Severity     string          `json:"severity"`     // Critical | High | Medium | Low
+	ThreatImpact string          `json:"threatImpact"` // what an attacker achieves on Fail
+	Details      string          `json:"details"`
+	Remediation  string          `json:"remediation"`
+	RawOutput    string          `json:"rawOutput,omitempty"`
 	// Truncated/OriginalOutputBytes make evidence truncation visible instead
 	// of silent -- a parser (e.g. Application Risk's installed-software
 	// parser) can detect incomplete evidence rather than unknowingly working
 	// with a partial list.
-	Truncated            bool `json:"truncated,omitempty"`
-	OriginalOutputBytes  int  `json:"originalOutputBytes,omitempty"`
-	DurationMs       int64            `json:"durationMs"`
-	ExecutedAt       time.Time        `json:"executedAt"`
-	Framework        string           `json:"framework"`                  // art | caldera | sigma | custom
-	Events           []string         `json:"events,omitempty"`           // Windows Event IDs observed (per-step tokens)
-	DetectionVerdict string           `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
-	DetectionAlert   *DetectionAlert  `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
-	CleanupVerdict   string           `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
-	BlockingControl  *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
+	Truncated           bool             `json:"truncated,omitempty"`
+	OriginalOutputBytes int              `json:"originalOutputBytes,omitempty"`
+	DurationMs          int64            `json:"durationMs"`
+	ExecutedAt          time.Time        `json:"executedAt"`
+	Framework           string           `json:"framework"`                  // art | caldera | sigma | custom
+	Events              []string         `json:"events,omitempty"`           // Windows Event IDs observed (per-step tokens)
+	DetectionVerdict    string           `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
+	DetectionAlert      *DetectionAlert  `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
+	CleanupVerdict      string           `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
+	BlockingControl     *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
 	// RequestedPriv is the effective tier sent to the agent (PrivSpec.Effective()).
 	// Empty means the step was unannotated (legacy).
 	RequestedPriv string `json:"requestedPriv,omitempty"`
@@ -130,19 +130,28 @@ type BlockingControl struct {
 
 // ScenarioRun is a complete execution of a named scenario against one agent.
 type ScenarioRun struct {
-	ID          string             `json:"id"`
-	ScenarioID  string             `json:"scenarioId"`
-	Name        string             `json:"name"`
-	AgentID     string             `json:"agentId"`
+	ID         string `json:"id"`
+	ScenarioID string `json:"scenarioId"`
+	Name       string `json:"name"`
+	AgentID    string `json:"agentId"`
 	// SweepID is non-nil only for a scenario_run dispatched by a Full Variant
 	// Sweep (internal/vexsweep) -- see docs/superpowers/specs/2026-08-11-sweep-run-grouping-design.md.
-	SweepID     *string            `json:"sweepId,omitempty"`
+	SweepID *string `json:"sweepId,omitempty"`
+	// EMSweepID is non-nil only for a scenario_run dispatched by an Endpoint
+	// Mastery Full Sweep (internal/emsweep) -- mirrors SweepID's grouping role.
+	EMSweepID   *string            `json:"emSweepId,omitempty"`
 	Status      string             `json:"status"` // running | completed | partial | failed
 	Results     []SimulationResult `json:"results"`
 	Score       *Score             `json:"score,omitempty"`
 	Progress    *RunProgress       `json:"progress,omitempty"`
 	StartedAt   time.Time          `json:"startedAt"`
 	CompletedAt *time.Time         `json:"completedAt,omitempty"`
+
+	// Mode is the execution mode chosen at dispatch: "posture" | "telemetry" | "lab".
+	Mode string `json:"mode,omitempty"`
+	// MaxPrivilege is the operator-set privilege ceiling at dispatch: "" (no
+	// limit) | "user" | "admin" | "system".
+	MaxPrivilege string `json:"maxPrivilege,omitempty"`
 
 	// Reverted is one human-readable line per endpoint change the agent
 	// detected and successfully rolled back after the run (registry keys,
