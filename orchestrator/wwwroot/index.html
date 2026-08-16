@@ -733,6 +733,11 @@ code {
    findings/technique/search-fallback (the drawer's 3 other callers) never
    set this class, so they keep the default 520px .drawer width above. */
 .drawer-overlay.run-mode .drawer { width: 90vw; max-width: 1600px; }
+/* Full Sweep Preview & Confirm: a genuine full-viewport takeover rather than
+   a side drawer -- reuses the same slide-in overlay mechanics (position:
+   fixed, inset:0, translateX transition) with the drawer simply sized to
+   the whole screen instead of a fixed side panel. */
+.drawer-overlay.fullpage .drawer { width: 100vw; max-width: 100vw; }
 .run-tabbar {
   position: sticky; top: 0; z-index: 5; background: var(--surface);
   display: flex; gap: 0.25rem; flex-wrap: wrap;
@@ -4563,6 +4568,31 @@ body.theme-slate {
         <button class="btn btn-outline btn-sm" onclick="closeEMSweepModal()">Cancel</button>
         <button class="btn btn-primary btn-sm" onclick="emSweepDispatch()">&#9654; Start Sweep</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Full Sweep Preview & Confirm -- shared by Variant and EM Full Sweep.
+     Opened by vexRunFullSweep/emSweepDispatch AFTER target selection
+     (which stays entirely in their own existing modals above); Start Full
+     Sweep here calls straight into the existing dispatch functions
+     (_vexDispatchFullSweep/_emDispatchFullSweep) with no further
+     confirmation step. -->
+<div id="sweep-preview-overlay" class="drawer-overlay fullpage" onclick="if(event.target===this)closeSweepPreview()">
+  <div class="drawer">
+    <div class="drawer-header">
+      <h3 id="sweep-preview-title">Preview &amp; Confirm</h3>
+      <button class="drawer-close" onclick="closeSweepPreview()">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <div id="sweep-preview-summary" class="tiny muted" style="margin-bottom:0.75rem"></div>
+      <div id="sweep-preview-filters" style="display:flex;gap:0.5rem;margin-bottom:0.6rem"></div>
+      <div id="sweep-preview-count" style="font-size:0.72rem;color:var(--muted);margin-bottom:0.3rem"></div>
+      <div id="sweep-preview-list" style="border:1px solid var(--border);border-radius:6px"></div>
+    </div>
+    <div style="padding:0.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:0.5rem;flex-shrink:0">
+      <button class="btn btn-outline btn-sm" onclick="closeSweepPreview()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="startSweepFromPreview()">&#9654; Start Full Sweep</button>
     </div>
   </div>
 </div>
@@ -17727,26 +17757,38 @@ function renderVexGroupSummary() {
   el.textContent = resolved.length + ' agent(s) across ' + selectedCount + ' group(s).';
 }
 
+// vexRunFullSweep validates the current target selection (the existing
+// individual/group panel, entirely unchanged) and opens the Preview &
+// Confirm overlay -- it no longer dispatches directly. Actual dispatch
+// lives solely in _vexDispatchFullSweep, called only from the preview's
+// Start Full Sweep button, so there is exactly one dispatch implementation.
 function vexRunFullSweep() {
   var mode = (document.getElementById('vex-sweep-mode') || {}).value || 'sequential';
   var advanced = document.getElementById('vex-sweep-advanced') ? document.getElementById('vex-sweep-advanced').checked : false;
-  // n/variantTotal are a pre-flight estimate only (from the ad-hoc picker's
-  // already-loaded technique list) -- the server independently and
-  // authoritatively resolves the real technique list and count at creation
-  // time; that's what actually gets dispatched.
-  var n = _vexAllTechniques.length;
-  var variantTotal = _vexAvailableVariants || (n * 33);
 
   if (_vexTargetMode === 'group') {
     var resolved = vexResolvedGroupAgents();
     if (!resolved.length) { showToast('Select at least one group with agents', 'err'); return; }
-    var groupCount = Object.keys(_vexGroupSel).filter(function(k) { return _vexGroupSel[k]; }).length;
-    var msg = 'Start Full Variant Sweep on ' + resolved.length + ' agent(s) across ' + groupCount + ' group(s):\n\n' +
-      '  ~' + n + ' techniques dispatched sequentially PER AGENT\n' +
-      '  ~' + variantTotal.toLocaleString() + '+ individual variants PER AGENT\n\n' +
-      'This starts ' + resolved.length + ' independent sweeps. Each runs every technique to completion before the next and may take hours per agent.\n\nContinue?';
-    if (!confirm(msg)) return;
+    openSweepPreview('variant', { targetMode: 'group', agents: resolved, mode: mode, advanced: advanced });
+    return;
+  }
 
+  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
+  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
+  openSweepPreview('variant', { targetMode: 'individual', agents: [{ agentId: agentId }], mode: mode, advanced: advanced });
+}
+
+// _vexDispatchFullSweep is the single source of truth for actually starting
+// a Variant Full Sweep. n/variantTotal are a pre-flight estimate only (from
+// the ad-hoc picker's already-loaded technique list, shown in the preview's
+// summary line) -- the server independently and authoritatively resolves
+// the real technique list and count at creation time; that's what actually
+// gets dispatched.
+function _vexDispatchFullSweep(targets) {
+  var resolved = targets.agents;
+  var mode = targets.mode, advanced = targets.advanced;
+
+  if (targets.targetMode === 'group') {
     // Each dispatch is independent: a rejected promise or a {error:...}
     // response body is normalized into a resolved {ok:false} result so one
     // agent's failure (already sweeping, offline, etc.) can never abort or
@@ -17782,10 +17824,7 @@ function vexRunFullSweep() {
     return;
   }
 
-  var agentId = (document.getElementById('vex-sweep-agent') || {}).value || '';
-  if (!agentId) { showToast('Select an agent in the Full Sweep panel first', 'err'); return; }
-  if (!confirm('Start Full Variant Sweep:\n\n  ~' + n + ' techniques dispatched sequentially\n  ~' + variantTotal.toLocaleString() + '+ individual variants\n\nThis runs each technique to completion before the next. Depending on your endpoint it may take hours.\n\nContinue?')) return;
-
+  var agentId = resolved[0].agentId;
   apicall('/api/vex/sweeps', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -17820,14 +17859,22 @@ function _vexCheckAgentSweepConflict() {
   });
 }
 
-function filterVexTechniques() {
-  var tactic = document.getElementById('vex-tactic') ? document.getElementById('vex-tactic').value : '';
-  var search = (document.getElementById('vex-tech-search') ? document.getElementById('vex-tech-search').value : '').toLowerCase().trim();
-  var filtered = _vexAllTechniques.filter(function(t) {
+// filterVexTechniqueList is the single filtering predicate shared by the
+// technique picker (filterVexTechniques) and the Full Sweep preview
+// (_renderVexPreviewList), so the two can never drift apart.
+function filterVexTechniqueList(techniques, tactic, search) {
+  search = (search || '').toLowerCase().trim();
+  return techniques.filter(function(t) {
     if (tactic && t.tactic !== tactic) return false;
     if (search && t.id.toLowerCase().indexOf(search) < 0 && (t.name || '').toLowerCase().indexOf(search) < 0) return false;
     return true;
   });
+}
+
+function filterVexTechniques() {
+  var tactic = document.getElementById('vex-tactic') ? document.getElementById('vex-tactic').value : '';
+  var search = document.getElementById('vex-tech-search') ? document.getElementById('vex-tech-search').value : '';
+  var filtered = filterVexTechniqueList(_vexAllTechniques, tactic, search);
   var el = document.getElementById('vex-technique-list');
   if (!el) return;
   var countEl = document.getElementById('vex-tech-count');
@@ -18542,6 +18589,11 @@ function emResolvedGroupAgents() {
   return resolveGroupTargetAgents(selectedGroupIds);
 }
 
+// emSweepDispatch validates the current target selection (the existing
+// individual/group/all-agents picker, entirely unchanged) and opens the
+// Preview & Confirm overlay -- it no longer dispatches directly. Actual
+// dispatch lives solely in _emDispatchFullSweep, called only from the
+// preview's Start Full Sweep button.
 function emSweepDispatch() {
   var targets = [];
   if (_emTargetMode === 'individual') {
@@ -18557,10 +18609,15 @@ function emSweepDispatch() {
     if (!targets.length) { showToast('No online agents', 'err'); return; }
   }
 
-  if (!confirm('Start Endpoint Mastery Full Sweep on ' + targets.length + ' agent(s)?\n\nEach agent runs all 14 layers sequentially — this may take a while per agent.\n\nContinue?')) return;
-
   closeEMSweepModal();
-  var dispatches = targets.map(function(agentId) {
+  openSweepPreview('em', { agentIds: targets });
+}
+
+// _emDispatchFullSweep is the single source of truth for actually starting
+// an EM Full Sweep.
+function _emDispatchFullSweep(targets) {
+  var agentIds = targets.agentIds;
+  var dispatches = agentIds.map(function(agentId) {
     return apicall('/api/em/sweeps', {
       method: 'POST',
       body: JSON.stringify({ agentId: agentId })
@@ -18584,13 +18641,261 @@ function emSweepDispatch() {
       showToast('All ' + results.length + ' sweep dispatches failed. ' +
         failed.map(function(f) { return f.agentId + ' (' + f.error + ')'; }).join(', '), 'err');
     }
-    if (targets.length === 1 && ok.length === 1) {
-      apicall('/api/em/sweeps/active?agentId=' + encodeURIComponent(targets[0])).then(function(sw) {
+    if (agentIds.length === 1 && ok.length === 1) {
+      apicall('/api/em/sweeps/active?agentId=' + encodeURIComponent(agentIds[0])).then(function(sw) {
         if (sw && sw.id) openEMSweepProgress(sw.id);
       }).catch(function() {});
     }
     showTab('runs');
   });
+}
+
+// ── Full Sweep Preview & Confirm ──────────────────────────────────────────
+// Shared full-viewport overlay for both Variant and EM Full Sweep. Target
+// selection stays entirely in the existing modals (vex-sweep-agent/group
+// panel, em-sweep-modal-overlay) -- their final action opens this instead
+// of firing confirm()+dispatch directly. Start Full Sweep here calls
+// straight into _vexDispatchFullSweep/_emDispatchFullSweep with no further
+// confirmation, so those two functions remain the single source of truth
+// for actually starting a sweep.
+var _sweepPreviewType = null;      // 'variant' | 'em' | null when closed
+var _sweepPreviewTargets = null;   // opaque target-info object, passed straight through to the matching dispatch fn
+var _vexPreviewExpandedId = null;  // currently expanded technique id, or null
+var _vexPreviewCache = {};         // techniqueId -> {loading:bool, error:string, variants:[...]}
+var _vexPreviewTactic = '';
+var _vexPreviewSearch = '';
+var _emPreviewExpandedId = null;   // currently expanded EM layer id, or null
+var _emPreviewCache = {};          // layerId -> {loading:bool, error:string, scenario:{...}}
+
+function openSweepPreview(type, targets) {
+  _sweepPreviewType = type;
+  _sweepPreviewTargets = targets;
+  _vexPreviewExpandedId = null;
+  _emPreviewExpandedId = null;
+  // Fresh caches per opening -- a stale generated-variant/scenario list
+  // from a previous preview session must never leak into a new one.
+  _vexPreviewCache = {};
+  _emPreviewCache = {};
+  _vexPreviewTactic = '';
+  _vexPreviewSearch = '';
+  renderSweepPreview();
+  document.getElementById('sweep-preview-overlay').classList.add('open');
+}
+
+function closeSweepPreview() {
+  document.getElementById('sweep-preview-overlay').classList.remove('open');
+  _sweepPreviewType = null;
+  _sweepPreviewTargets = null;
+}
+
+function startSweepFromPreview() {
+  var type = _sweepPreviewType, targets = _sweepPreviewTargets;
+  closeSweepPreview();
+  if (type === 'variant') _vexDispatchFullSweep(targets);
+  else if (type === 'em') _emDispatchFullSweep(targets);
+}
+
+// renderSweepPreview populates the title/summary/filters ONCE per open (or
+// on the rare type switch) -- the search input and tactic select it builds
+// here are never recreated afterward, only the row list is (see
+// _renderVexPreviewList/_renderEMPreviewList), so typing in the search box
+// never loses focus or cursor position.
+function renderSweepPreview() {
+  var titleEl = document.getElementById('sweep-preview-title');
+  var summaryEl = document.getElementById('sweep-preview-summary');
+  var filtersEl = document.getElementById('sweep-preview-filters');
+  if (!titleEl || !summaryEl || !filtersEl) return;
+
+  if (_sweepPreviewType === 'variant') {
+    var targets = _sweepPreviewTargets;
+    var agentCount = (targets.agents || []).length;
+    var techCount = _vexAllTechniques.length;
+    var variantTotal = _vexAvailableVariants || 0;
+    titleEl.textContent = 'Preview & Confirm — Variant Full Sweep';
+    summaryEl.textContent = 'Targeting ' + agentCount + ' agent(s). ~' + techCount +
+      ' techniques dispatched sequentially per agent, ~' + variantTotal.toLocaleString() + '+ individual variants per agent total.';
+
+    var tactics = {};
+    _vexAllTechniques.forEach(function(t) { if (t.tactic) tactics[t.tactic] = true; });
+    var tacticOpts = '<option value="">All tactics</option>' +
+      Object.keys(tactics).sort().map(function(t) {
+        return '<option value="' + x(t) + '"' + (t === _vexPreviewTactic ? ' selected' : '') + '>' + x(t) + '</option>';
+      }).join('');
+    filtersEl.innerHTML =
+      '<select onchange="_setVexPreviewTactic(this.value)" class="btn btn-outline btn-sm" style="flex:1">' + tacticOpts + '</select>' +
+      '<input type="text" placeholder="Search T-ID or name…" value="' + x(_vexPreviewSearch) + '" oninput="_setVexPreviewSearch(this.value)" class="btn btn-outline btn-sm" style="flex:1">';
+    _renderVexPreviewList();
+  } else if (_sweepPreviewType === 'em') {
+    var emTargets = _sweepPreviewTargets;
+    titleEl.textContent = 'Preview & Confirm — Endpoint Mastery Full Sweep';
+    summaryEl.textContent = 'Targeting ' + (emTargets.agentIds || []).length + ' agent(s). All 14 layers run sequentially per agent.';
+    filtersEl.innerHTML = ''; // the EM catalogue is a fixed 14 layers -- no filtering needed
+    _renderEMPreviewList();
+  }
+}
+
+function _setVexPreviewTactic(v) { _vexPreviewTactic = v; _renderVexPreviewList(); }
+function _setVexPreviewSearch(v) { _vexPreviewSearch = v; _renderVexPreviewList(); }
+
+function _renderVexPreviewList() {
+  var listEl = document.getElementById('sweep-preview-list');
+  var countEl = document.getElementById('sweep-preview-count');
+  if (!listEl) return;
+  var filtered = filterVexTechniqueList(_vexAllTechniques, _vexPreviewTactic, _vexPreviewSearch);
+  if (countEl) countEl.textContent = filtered.length + ' technique(s)';
+  if (!filtered.length) {
+    listEl.innerHTML = '<div style="padding:0.75rem;color:var(--muted);font-size:0.78rem">No techniques match</div>';
+    return;
+  }
+  listEl.innerHTML = filtered.map(function(t) {
+    var expanded = _vexPreviewExpandedId === t.id;
+    return '<div style="border-bottom:1px solid var(--border)">' +
+      '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem;cursor:pointer" onclick="_toggleVexPreviewRow(\'' + x(t.id) + '\')">' +
+        '<span style="width:12px;flex-shrink:0;color:var(--muted);font-size:0.7rem">' + (expanded ? '&#9662;' : '&#9656;') + '</span>' +
+        '<span style="font-family:var(--font-mono);font-size:0.8rem;flex-shrink:0">' + x(t.id) + '</span>' +
+        (t.name ? '<span style="color:var(--muted);font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(t.name) + '</span>' : '') +
+      '</div>' +
+      (expanded ? _renderVexVariantDetail(t.id) : '') +
+    '</div>';
+  }).join('');
+}
+
+// _toggleVexPreviewRow expands/collapses one technique's variant detail.
+// Generation is lazy (only POSTed for the technique actually being
+// expanded, never all ~500-800 up front) and cached per techniqueId for as
+// long as the preview stays open, so collapsing and re-expanding never
+// re-generates.
+function _toggleVexPreviewRow(techId) {
+  if (_vexPreviewExpandedId === techId) {
+    _vexPreviewExpandedId = null;
+    _renderVexPreviewList();
+    return;
+  }
+  _vexPreviewExpandedId = techId;
+  if (!_vexPreviewCache[techId]) {
+    _vexPreviewCache[techId] = { loading: true };
+    var baseType = document.getElementById('vex-base-type') ? document.getElementById('vex-base-type').value : 'art';
+    apicall('/api/variants/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ techniqueId: techId, baseType: baseType })
+    }).then(function(res) {
+      _vexPreviewCache[techId] = (res && res.error) ? { error: res.error } : { variants: (res && res.templates) || [] };
+      // The user may have collapsed this row (or expanded a different one)
+      // while the request was in flight -- only re-render if it's still
+      // the active one, so a slow response can't pop open a stale row.
+      if (_vexPreviewExpandedId === techId) _renderVexPreviewList();
+    }).catch(function(e) {
+      _vexPreviewCache[techId] = { error: e.message || 'Failed to generate variants' };
+      if (_vexPreviewExpandedId === techId) _renderVexPreviewList();
+    });
+  }
+  _renderVexPreviewList();
+}
+
+function _renderVexVariantDetail(techId) {
+  var entry = _vexPreviewCache[techId];
+  if (!entry || entry.loading) {
+    return '<div style="padding:0.6rem 0.6rem 0.6rem 1.9rem;color:var(--muted);font-size:0.76rem">Generating variants…</div>';
+  }
+  if (entry.error) {
+    return '<div style="padding:0.6rem 0.6rem 0.6rem 1.9rem;color:var(--danger);font-size:0.76rem">' + x(entry.error) + '</div>';
+  }
+  var variants = entry.variants || [];
+  if (!variants.length) {
+    return '<div style="padding:0.6rem 0.6rem 0.6rem 1.9rem;color:var(--muted);font-size:0.76rem">No variants generated for this technique</div>';
+  }
+  return '<div style="padding:0.4rem 0.6rem 0.6rem 1.9rem;display:flex;flex-direction:column;gap:0.4rem">' +
+    variants.map(function(v) {
+      var riskColor = v.riskLevel === 'ADVANCED' ? 'var(--danger)' : v.riskLevel === 'MODERATE' ? 'var(--warning)' : 'var(--success)';
+      return '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.55rem;font-size:0.72rem">' +
+        '<div style="display:flex;gap:0.6rem;flex-wrap:wrap;color:var(--muted);margin-bottom:0.25rem">' +
+          '<span>Encoding: <b style="color:var(--text)">' + x(v.encoding || '—') + '</b></span>' +
+          '<span>Context: <b style="color:var(--text)">' + x(v.execContext || '—') + '</b></span>' +
+          '<span>Evasion: <b style="color:var(--text)">' + x(v.evasion || 'none') + '</b></span>' +
+          '<span>Risk: <b style="color:' + riskColor + '">' + x(v.riskLevel || '—') + '</b></span>' +
+        '</div>' +
+        '<div style="font-family:var(--font-mono);color:var(--text);white-space:pre-wrap;word-break:break-all">' + x(v.command || '') + '</div>' +
+      '</div>';
+    }).join('') +
+  '</div>';
+}
+
+function _renderEMPreviewList() {
+  var listEl = document.getElementById('sweep-preview-list');
+  var countEl = document.getElementById('sweep-preview-count');
+  if (!listEl) return;
+  if (countEl) countEl.textContent = EM_CATALOG.length + ' layer(s)';
+  listEl.innerHTML = EM_CATALOG.map(function(layer) {
+    var expanded = _emPreviewExpandedId === layer.id;
+    return '<div style="border-bottom:1px solid var(--border)">' +
+      '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem;cursor:pointer" onclick="_toggleEMPreviewRow(\'' + x(layer.id) + '\')">' +
+        '<span style="width:12px;flex-shrink:0;color:var(--muted);font-size:0.7rem">' + (expanded ? '&#9662;' : '&#9656;') + '</span>' +
+        '<span style="font-weight:600;font-size:0.8rem;flex-shrink:0">Layer ' + x(layer.num) + ' — ' + x(layer.name) + '</span>' +
+        '<span style="color:var(--muted);font-size:0.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(layer.desc) + '</span>' +
+      '</div>' +
+      (expanded ? _renderEMLayerDetail(layer.id) : '') +
+    '</div>';
+  }).join('');
+}
+
+// _toggleEMPreviewRow mirrors _toggleVexPreviewRow exactly, one store
+// swapped for the other: lazy per-layer fetch, cached while the preview
+// stays open.
+function _toggleEMPreviewRow(layerId) {
+  if (_emPreviewExpandedId === layerId) {
+    _emPreviewExpandedId = null;
+    _renderEMPreviewList();
+    return;
+  }
+  _emPreviewExpandedId = layerId;
+  if (!_emPreviewCache[layerId]) {
+    _emPreviewCache[layerId] = { loading: true };
+    apicall('/api/scenarios/' + encodeURIComponent(layerId)).then(function(s) {
+      _emPreviewCache[layerId] = { scenario: s || {} };
+      if (_emPreviewExpandedId === layerId) _renderEMPreviewList();
+    }).catch(function(e) {
+      _emPreviewCache[layerId] = { error: e.message || 'Failed to load layer' };
+      if (_emPreviewExpandedId === layerId) _renderEMPreviewList();
+    });
+  }
+  _renderEMPreviewList();
+}
+
+function _renderEMLayerDetail(layerId) {
+  var entry = _emPreviewCache[layerId];
+  if (!entry || entry.loading) {
+    return '<div style="padding:0.6rem 0.6rem 0.6rem 1.9rem;color:var(--muted);font-size:0.76rem">Loading…</div>';
+  }
+  if (entry.error) {
+    return '<div style="padding:0.6rem 0.6rem 0.6rem 1.9rem;color:var(--danger);font-size:0.76rem">' + x(entry.error) + '</div>';
+  }
+  var s = entry.scenario || {};
+  var steps = s.steps || [];
+  // Some EM layers may be authored as pure ART-technique lists (no literal
+  // step/command data of their own) rather than custom steps -- fall back
+  // to the technique IDs alone rather than showing nothing.
+  if (!steps.length && (s.artTechniques || []).length) {
+    return '<div style="padding:0.4rem 0.6rem 0.6rem 1.9rem;display:flex;flex-direction:column;gap:0.3rem">' +
+      s.artTechniques.map(function(tid) {
+        return '<div style="font-family:var(--font-mono);font-size:0.76rem;color:var(--text)">' + x(tid) + '</div>';
+      }).join('') +
+    '</div>';
+  }
+  if (!steps.length) {
+    return '<div style="padding:0.6rem 0.6rem 0.6rem 1.9rem;color:var(--muted);font-size:0.76rem">No steps found for this layer</div>';
+  }
+  return '<div style="padding:0.4rem 0.6rem 0.6rem 1.9rem;display:flex;flex-direction:column;gap:0.4rem">' +
+    steps.map(function(st) {
+      return '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.55rem;font-size:0.72rem">' +
+        '<div style="color:var(--muted);margin-bottom:0.25rem">' +
+          (st.techniqueId ? '<span style="font-family:var(--font-mono);color:var(--text)">' + x(st.techniqueId) + '</span> — ' : '') +
+          x(st.name || '') +
+        '</div>' +
+        (st.command ? '<div style="font-family:var(--font-mono);color:var(--text);white-space:pre-wrap;word-break:break-all">' + x(st.command) + '</div>' : '') +
+      '</div>';
+    }).join('') +
+  '</div>';
 }
 
 var _emSweepPollTimer = null;
