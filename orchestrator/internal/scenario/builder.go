@@ -561,26 +561,9 @@ func calderaStepFidelity(ab calderaAbilityFull) string {
 // buildCalderaAllWindowsSteps fetches the entire Caldera ability library and
 // returns a step for every ability that has a Windows executor.
 func buildCalderaAllWindowsSteps(calderaURL, apiKey string) ([]ScenarioStep, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	base := strings.TrimRight(calderaURL, "/")
-
-	req, _ := http.NewRequest("GET", base+"/api/v2/abilities", nil)
-	if apiKey != "" {
-		req.Header.Set("KEY", apiKey)
-	}
-	resp, err := client.Do(req)
+	abilities, err := fetchAllCalderaAbilities(calderaURL, apiKey)
 	if err != nil {
-		return nil, fmt.Errorf("fetch all abilities: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch all abilities: HTTP %d", resp.StatusCode)
-	}
-	body, _ := io.ReadAll(resp.Body)
-
-	var abilities []calderaAbilityFull
-	if err := json.Unmarshal(body, &abilities); err != nil {
-		return nil, fmt.Errorf("parse abilities: %w", err)
+		return nil, err
 	}
 
 	var steps []ScenarioStep
