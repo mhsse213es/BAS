@@ -65,3 +65,18 @@ func TestBuildARTTechniquesSubset(t *testing.T) {
 		}
 	}
 }
+
+// A technique ID repeated in the input list (including case/whitespace
+// variants) must not expand its atomic tests more than once — callers
+// (operator subsets, campaigns, generated packs) don't all guarantee a
+// unique list.
+func TestBuildARTTechniquesSubset_DedupsRepeatedTechnique(t *testing.T) {
+	store := newTestStore()
+	steps, err := buildARTTechniquesSteps([]string{"T1059", "t1059", " T1059 "}, store, "windows")
+	if err != nil {
+		t.Fatalf("buildARTTechniquesSteps: %v", err)
+	}
+	if len(steps) != 2 {
+		t.Fatalf("len(steps) = %d, want 2 (T1059 atomics expanded exactly once)", len(steps))
+	}
+}

@@ -236,9 +236,19 @@ func buildARTTechniquesSteps(techniques []string, artStore *ARTStore, platform s
 	if platform == "" {
 		platform = "windows"
 	}
+	// Dedup by normalized technique ID before expanding. Callers (operator-
+	// selected subsets, campaigns, generated packs) don't all guarantee a
+	// unique list, and expanding the same technique's full atomic-test set
+	// twice would dispatch identical steps twice in one run.
 	var steps []ScenarioStep
+	seen := make(map[string]bool, len(techniques))
 	for _, t := range techniques {
-		s := artStore.GetStepsByPlatform(strings.ToUpper(strings.TrimSpace(t)), platform)
+		id := strings.ToUpper(strings.TrimSpace(t))
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		s := artStore.GetStepsByPlatform(id, platform)
 		if len(s) == 0 {
 			log.Printf("[ART] no %s steps for %s — skipped", platform, t)
 			continue
