@@ -10881,6 +10881,15 @@ function runRowHtml(r) {
       // pass/fail label instead of "Live".
       if (r.id && r.status === 'running') acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')" title="Live run timeline + progress">&#9673; Live</button> ';
       if (r.id && r.status === 'running') acts += '<button class="btn btn-outline-red btn-sm" onclick="stopRun(\'' + x(r.id) + '\')" title="Stop this run — keeps completed steps, marks the run partial">&#9632; Stop</button> ';
+      // Pause/Resume is only meaningful for live-mode runs -- posture-mode
+      // scenarios mostly run via runLocalScan (no scheduler to pause between
+      // steps), and are excluded outright rather than distinguishing the rare
+      // posture+non-LocalCheck case (see the design spec's Non-Goals).
+      if (r.id && r.status === 'running' && r.mode !== 'posture') {
+        acts += r.paused
+          ? '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '" onclick="resumeRun(\'' + x(r.id) + '\')">&#9654; Resume</button> '
+          : '<button class="btn btn-outline btn-sm" id="pause-btn-' + x(r.id) + '" onclick="pauseRun(\'' + x(r.id) + '\')">&#10073;&#10073; Pause</button> ';
+      }
       if (cnt) {
         acts += '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
       } else if (r.id && r.status !== 'running' && r.progress) {
@@ -14639,6 +14648,53 @@ function stopRun(runId) {
     .catch(function(e) { showToast(e.message, 'err'); });
 }
 
+// _pausePending tracks runIds with an outstanding pause/resume click still
+// awaiting confirmation, so armPauseConfirmFallback's timeout can tell
+// whether loadRuns() already resolved it (see that function below).
+var _pausePending = {};
+
+function pauseRun(runId) {
+  apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/pause', { method: 'POST' })
+    .then(function() {
+      showToast('Pausing…', 'ok');
+      armPauseConfirmFallback(runId, 'Pause');
+    })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function resumeRun(runId) {
+  apicall('/api/scenarios/runs/' + encodeURIComponent(runId) + '/resume', { method: 'POST' })
+    .then(function() {
+      showToast('Resuming…', 'ok');
+      armPauseConfirmFallback(runId, 'Resume');
+    })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// Disables the clicked button immediately with a transient label, then
+// reverts it after 20s IF no confirmation (a 'paused'/'resumed' run_event,
+// see the run_event WS handler below) triggered a loadRuns() re-render in
+// the meantime -- loadRuns() fully replaces this row's DOM from fresh
+// server data when it does fire, so the only case this guards is a lost WS
+// frame or an agent that never actually applied the pause/resume.
+function armPauseConfirmFallback(runId, priorLabel) {
+  _pausePending[runId] = true;
+  var btn = document.getElementById('pause-btn-' + runId);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = priorLabel === 'Pause' ? 'Pausing…' : 'Resuming…';
+  }
+  setTimeout(function() {
+    if (!_pausePending[runId]) return; // already resolved by a real confirmation
+    delete _pausePending[runId];
+    var stillThere = document.getElementById('pause-btn-' + runId);
+    if (stillThere) {
+      stillThere.disabled = false;
+      stillThere.textContent = priorLabel === 'Pause' ? '❙❙ Pause' : '▶ Resume';
+    }
+  }, 20000);
+}
+
 var _dlCallback = null;
 function showDownloadOptions(title, callback) {
   document.getElementById('dl-options-title').textContent = title || 'Download Options';
@@ -14876,7 +14932,19 @@ function connectWS() {
   socket.onmessage = function(evt) {
     try {
       var msg = JSON.parse(evt.data);
-      if (msg.type === 'run_event')          { window.onRunEvent(msg); return; }
+      if (msg.type === 'run_event') {
+        window.onRunEvent(msg);
+        // A paused/resumed confirmation must refresh the Live Runs table --
+        // window.onRunEvent above only updates the Live drawer (scoped to
+        // whichever single run's drawer, if any, is currently open). Filtered
+        // to this rare event type so it doesn't fire loadRuns() on every
+        // routine step-level event.
+        if ((msg.data.events || []).some(function(e) { return e.type === 'paused' || e.type === 'resumed'; })) {
+          _pausePending = {}; // any pending fallback for this batch's run(s) is now resolved
+          loadRuns();
+        }
+        return;
+      }
       if (msg.type === 'agentUpdate')        loadAgents();
       if (msg.type === 'scenario_result')    { loadRuns(); loadAgents(); refreshDashboardCampaigns(); }
       if (msg.type === 'tamper_alert')       { showTamperBanner(msg.data); }
