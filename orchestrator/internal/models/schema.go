@@ -152,6 +152,9 @@ type ScenarioRun struct {
 	// MaxPrivilege is the operator-set privilege ceiling at dispatch: "" (no
 	// limit) | "user" | "admin" | "system".
 	MaxPrivilege string `json:"maxPrivilege,omitempty"`
+	// Paused is true while an operator has paused this run's step execution.
+	// Only meaningful while Status=="running"; always false on a terminal run.
+	Paused bool `json:"paused"`
 
 	// Reverted is one human-readable line per endpoint change the agent
 	// detected and successfully rolled back after the run (registry keys,
@@ -410,6 +413,8 @@ const (
 	MsgCommandScenario          = "command_scenario"
 	MsgCommandSimulate          = "command_simulate"
 	MsgCommandCancel            = "command_cancel"
+	MsgCommandPause             = "command_pause"
+	MsgCommandResume            = "command_resume"
 	MsgScenarioResult           = "scenario_result"
 	MsgPatchStatus              = "patch_status_update"
 	MsgCommandPatches           = "command_install_patches"

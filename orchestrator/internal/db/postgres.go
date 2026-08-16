@@ -131,6 +131,13 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// insert, surfaced read-only via scanRunRows for the Results/Live views.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT ''`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS max_privilege text NOT NULL DEFAULT ''`,
+		// paused: true while an operator has paused this run's step scheduler.
+		// status stays 'running' throughout a pause (see docs/superpowers/specs/
+		// 2026-08-16-pause-resume-live-runs-design.md) -- every existing
+		// status='running' check (busy guard, Live Runs button visibility,
+		// dashboard counts) needs zero changes; only this flag distinguishes a
+		// paused run from an actively-executing one.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false`,
 
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_agent ON scenario_runs(agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scenario_runs_scenario ON scenario_runs(scenario_id)`,
