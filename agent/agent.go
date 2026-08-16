@@ -30,12 +30,20 @@ type Agent struct {
 	client         *http.Client
 	cancelScenario context.CancelFunc
 	scenarioMu     sync.Mutex
-	binaryHash     string           // SHA-256 of own binary, computed once at startup
-	logger         *Logger          // 3-tier structured logger
-	localSt        *LocalAgentState // in-memory state for local status API
-	secProducts    []string         // installed security products, enumerated once at startup (guarded by mu)
-	spoolMu        sync.Mutex       // serializes spool drains so a tick and a reconnect-kick can't double-send
-	spoolKick      chan struct{}    // buffered (cap 1): nudges the drainer to deliver immediately on reconnect
+	// pauseGate and pauseEmit belong to whichever run is currently active
+	// through runScenario's scheduler (nil when idle or between runs — see
+	// runScenario's defer cleanup, which is why this differs from
+	// cancelScenario: calling a stale cancel() again is a harmless no-op,
+	// but calling a stale emit() would incorrectly mark an already-finished
+	// run as paused).
+	pauseGate   *sched.Gate
+	pauseEmit   func(RunEvent)
+	binaryHash  string           // SHA-256 of own binary, computed once at startup
+	logger      *Logger          // 3-tier structured logger
+	localSt     *LocalAgentState // in-memory state for local status API
+	secProducts []string         // installed security products, enumerated once at startup (guarded by mu)
+	spoolMu     sync.Mutex       // serializes spool drains so a tick and a reconnect-kick can't double-send
+	spoolKick   chan struct{}    // buffered (cap 1): nudges the drainer to deliver immediately on reconnect
 
 	// Disconnect tracking for the pause-then-finalize watchdog (guarded by mu).
 	disconnectedSince time.Time // when the server link was lost; zero = connected
@@ -282,6 +290,38 @@ func (a *Agent) cancelCurrentScenario() bool {
 		return false
 	}
 	a.cancelScenario()
+	return true
+}
+
+// pauseCurrentScenario pauses the in-flight scenario's step scheduler, if
+// any. Already-executing step(s) always finish -- only the next step(s) a
+// worker would otherwise start are held. Returns true if a run was active to
+// pause. Idempotent: pausing an already-paused run is a harmless no-op.
+func (a *Agent) pauseCurrentScenario() bool {
+	a.scenarioMu.Lock()
+	defer a.scenarioMu.Unlock()
+	if a.pauseGate == nil {
+		return false
+	}
+	a.pauseGate.Pause()
+	if a.pauseEmit != nil {
+		a.pauseEmit(RunEvent{Type: "paused"})
+	}
+	return true
+}
+
+// resumeCurrentScenario resumes a paused in-flight scenario's step
+// scheduler, if any. Returns true if a run was active to resume. Idempotent.
+func (a *Agent) resumeCurrentScenario() bool {
+	a.scenarioMu.Lock()
+	defer a.scenarioMu.Unlock()
+	if a.pauseGate == nil {
+		return false
+	}
+	a.pauseGate.Resume()
+	if a.pauseEmit != nil {
+		a.pauseEmit(RunEvent{Type: "resumed"})
+	}
 	return true
 }
 
@@ -536,6 +576,18 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	defer emitter.close()
 	emit := func(ev RunEvent) { ev.RunID = cmd.RunID; ev.Seq = seq(); emitter.emit(ev) }
 
+	gate := sched.NewGate()
+	a.scenarioMu.Lock()
+	a.pauseGate = gate
+	a.pauseEmit = emit
+	a.scenarioMu.Unlock()
+	defer func() {
+		a.scenarioMu.Lock()
+		a.pauseGate = nil
+		a.pauseEmit = nil
+		a.scenarioMu.Unlock()
+	}()
+
 	emit(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total, "mode": cmd.Mode}})
 
 	jobs := make([]sched.Job, total)
@@ -559,7 +611,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 			Schedule: schedDur,
 			OnScheduleTimeout: func() {
 				n := atomic.AddInt64(&completed, 1)
-				a.localSt.UpdateProgress(int(n), total, "Execution")
+				a.localSt.UpdateProgress(int(n), total, "Execution", step.TechniqueID+" — "+step.Name)
 				log.Printf("[*]   [%d/%d] %s — schedule timeout after %ds (locks unavailable)", i+1, total, step.TechniqueID, schedSec)
 				results[i] = ExecResult{
 					TaskID:     step.TaskID,
@@ -574,7 +626,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 			},
 			Run: func(ctx context.Context) {
 				n := atomic.AddInt64(&completed, 1)
-				a.localSt.UpdateProgress(int(n), total, "Execution")
+				a.localSt.UpdateProgress(int(n), total, "Execution", step.TechniqueID+" — "+step.Name)
 				log.Printf("[*]   [%d/%d] %s (%s) — %s", i+1, total, step.TechniqueID, step.Executor, step.Name)
 				a.logger.Sec("info", cmd.ScenarioID, cmd.RunID, step.TaskID, step.TechniqueID,
 					"scenario_step", fmt.Sprintf("[%d/%d] %s executor=%s", i+1, total, step.Name, step.Executor))
@@ -636,7 +688,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		}
 	}
 
-	sched.Run(ctx, workers, sched.NewLockManager(), jobs)
+	sched.Run(ctx, workers, sched.NewLockManager(), jobs, gate)
 
 	// Collect completed results in submission order. On cancellation the
 	// scheduler skips not-yet-started jobs, so some indices stay unran.
@@ -691,7 +743,7 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 	// Derive overall result label for the local status display, aligned with the
 	// server's 4-verdict taxonomy (ERROR steps are excluded, never counted as Evaded).
 	resultLabel := deriveLocalResultLabel(results, partial)
-	a.localSt.UpdateProgress(len(results), len(results), "Upload")
+	a.localSt.UpdateProgress(len(results), len(results), "Upload", "")
 	a.localSt.CompleteOperation(resultLabel, ev)
 
 	payload := RawRunResult{
@@ -908,7 +960,7 @@ func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 
 	// Close out the local operation so the console shows the completed scan
 	// instead of leaving a stale "running" panel.
-	a.localSt.UpdateProgress(len(checks), len(checks), "Upload")
+	a.localSt.UpdateProgress(len(checks), len(checks), "Upload", "")
 	a.localSt.CompleteOperation("Completed", LocalEvidenceStats{EventsCollected: len(checks)})
 
 	a.setStatus("idle")
@@ -1020,6 +1072,22 @@ func (a *Agent) connectWS() {
 					a.logger.Op("warn", "lifecycle", "scenario stopped by operator request")
 				} else {
 					log.Printf("[~] command_cancel received but no scenario is running")
+				}
+
+			case "command_pause":
+				if a.pauseCurrentScenario() {
+					log.Printf("[*] scenario paused by operator")
+					a.logger.Op("info", "lifecycle", "scenario paused by operator request")
+				} else {
+					log.Printf("[~] command_pause received but no scenario is running")
+				}
+
+			case "command_resume":
+				if a.resumeCurrentScenario() {
+					log.Printf("[*] scenario resumed by operator")
+					a.logger.Op("info", "lifecycle", "scenario resumed by operator request")
+				} else {
+					log.Printf("[~] command_resume received but no scenario is running")
 				}
 
 			case "command_stop_agent":
