@@ -355,6 +355,13 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps", h.ListEMSweeps)
 		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/em/sweeps/{id}/cancel", h.CancelEMSweep)
 
+		// Backup & Recovery — console requests, host worker executes.
+		// See docs/superpowers/specs/2026-08-17-backup-recovery-design.md.
+		r.With(auth.RequirePermission(auth.CanManageBackups)).Post("/api/backups", h.CreateBackupJob)
+		r.With(auth.RequirePermission(auth.CanManageBackups)).Get("/api/backups", h.ListBackupJobs)
+		r.With(auth.RequirePermission(auth.CanManageBackups)).Get("/api/backups/{id}", h.GetBackupJob)
+		r.With(auth.RequirePermission(auth.CanManageBackups)).Post("/api/backups/{id}/restore-marker", h.CreateRestoreMarker)
+
 		// Payload families (Phase 3) — mutation/delete is Admin only (see below)
 		r.With(auth.RequirePermission(auth.CanListPayloadFamilies)).Get("/api/payload-families", h.GetPayloadFamilies)
 		r.With(auth.RequirePermission(auth.CanViewPayloadFamily)).Get("/api/payload-families/{techniqueId}", h.GetTechniqueFamilies)

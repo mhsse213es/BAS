@@ -212,6 +212,12 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/em/sweeps/{id}/runs", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/em/sweeps", tierPermission, auth.CanViewVariantRun},
 	{http.MethodPost, "/api/em/sweeps/{id}/cancel", tierPermission, auth.CanCancelScenarioRun},
+
+	// Backup & Recovery -- console requests/reads only, admin-only tier.
+	{http.MethodPost, "/api/backups", tierPermission, auth.CanManageBackups},
+	{http.MethodGet, "/api/backups", tierPermission, auth.CanManageBackups},
+	{http.MethodGet, "/api/backups/{id}", tierPermission, auth.CanManageBackups},
+	{http.MethodPost, "/api/backups/{id}/restore-marker", tierPermission, auth.CanManageBackups},
 	{http.MethodGet, "/api/payload-families", tierPermission, auth.CanListPayloadFamilies},
 	{http.MethodGet, "/api/payload-families/{techniqueId}", tierPermission, auth.CanViewPayloadFamily},
 	{http.MethodPost, "/api/exercises/executions/{id}/launch", tierPermission, auth.CanLaunchExerciseExecution},
