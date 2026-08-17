@@ -7717,6 +7717,14 @@ function loadScenarios() {
       };
     });
     renderScenarios();
+    // renderScheduledAssessmentsList() looks up each schedule's human name
+    // from this scenarios array client-side, falling back to the raw
+    // scenario ID when not found. loadScenarios() and
+    // loadScheduledAssessments() fire independently at boot with no
+    // ordering guarantee -- on a fresh page load, if the schedules list
+    // rendered first, it's stuck showing the raw ID until something
+    // re-renders it. Re-render now that scenarios is actually populated.
+    if (SCHED.schedules.length) renderScheduledAssessmentsList();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
