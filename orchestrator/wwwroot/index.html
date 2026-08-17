@@ -2088,8 +2088,17 @@ body.theme-slate {
             </div>
           </div>
 
+          <!-- Despite the element id, this card is NOT OTX-specific -- it mixes
+               OTX's own enabled state with the sync scheduler's GLOBAL totals
+               (Last Sync/Status/Next Sync/Scenarios Created, which cover MISP
+               + OpenCTI's scenario generation combined). OTX is an
+               ActivitySource, not a scenario-generating Source (see
+               internal/connector/types.go's OTXEnabled doc comment) -- it never
+               creates scenarios itself, so "Scenarios Created" here showing
+               (say) OpenCTI's count is correct data under the wrong-looking
+               header if this card is read as "OTX's numbers." -->
           <div class="conn-cfg-card" id="connector-status-card">
-            <div style="font-weight:600;font-size:0.82rem;color:var(--text);margin-bottom:0.5rem">OTX (AlienVault)</div>
+            <div style="font-weight:600;font-size:0.82rem;color:var(--text);margin-bottom:0.5rem">Sync Overview</div>
             <div id="ti-otx-config-panel"></div>
             <div class="conn-cfg-row">
               <span class="conn-cfg-label">OTX (AlienVault)</span>
