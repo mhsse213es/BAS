@@ -1962,6 +1962,7 @@ body.theme-slate {
             <a class="sset" data-set="theme" onclick="showSettingsSection('theme')">Theme &amp; display</a>
             <a class="sset" data-set="dashprefs" onclick="showSettingsSection('dashprefs')">Dashboard</a>
             <a class="sset" data-set="license" onclick="showSettingsSection('license')">License</a>
+            <a class="sset" data-set="backup" onclick="showSettingsSection('backup')">Backup &amp; Recovery</a>
           </div>
           <div class="settings-body">
 
@@ -2343,6 +2344,43 @@ body.theme-slate {
             <div id="license-card-wrap">
               <div class="empty" style="padding:2rem">Loading…</div>
             </div>
+          </div>
+
+          <div id="set-backup" class="set-section" style="display:none">
+            <div class="sec-hdr">
+              <h2>Backup &amp; Recovery</h2>
+              <div style="display:flex;gap:0.5rem">
+                <button class="btn btn-outline btn-sm" onclick="loadBackups()">&#x21bb; Refresh</button>
+                <button class="btn btn-primary btn-sm" id="backup-now-btn" onclick="backupNow()">Backup Now</button>
+              </div>
+            </div>
+            <div style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem">
+              Backups are requested here but performed by a host-side service outside this console —
+              the app never touches the database dump or server files directly. Restore is host-only
+              by design and cannot be triggered from this page.
+            </div>
+            <div id="backup-status-card-wrap" style="margin-bottom:1.25rem">
+              <div class="empty" style="padding:2rem">Loading…</div>
+            </div>
+            <div class="conn-cfg-card">
+              <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:0.6rem">Available backups</div>
+              <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+                <thead>
+                  <tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border)">
+                    <th style="padding:0.4rem 0.5rem">Date</th>
+                    <th style="padding:0.4rem 0.5rem">Trigger</th>
+                    <th style="padding:0.4rem 0.5rem">Local</th>
+                    <th style="padding:0.4rem 0.5rem">Remote</th>
+                    <th style="padding:0.4rem 0.5rem">Status</th>
+                    <th style="padding:0.4rem 0.5rem">Restore</th>
+                  </tr>
+                </thead>
+                <tbody id="backup-jobs-body">
+                  <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.5rem">Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div id="restore-command-wrap"></div>
           </div>
 
           </div>
@@ -7184,7 +7222,7 @@ var SETTINGS_SECTION = 'users';
 // Settings sub-section switcher — toggles the body panels + lazily loads each.
 function showSettingsSection(name) {
   SETTINGS_SECTION = name;
-  ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'dashprefs', 'license'].forEach(function(s) {
+  ['users', 'engine', 'intel', 'art', 'audit', 'theme', 'dashprefs', 'license', 'backup'].forEach(function(s) {
     var el = document.getElementById('set-' + s);
     if (el) el.style.display = s === name ? '' : 'none';
     var nav = document.querySelector('[data-set="' + s + '"]');
@@ -7197,6 +7235,7 @@ function showSettingsSection(name) {
   else if (name === 'audit') loadAuditLogs();
   else if (name === 'license') loadLicenseInfo();
   else if (name === 'dashprefs') syncDashPrefCards();
+  else if (name === 'backup') loadBackups();
 }
 
 function selectDashPref(pref) {
@@ -16667,6 +16706,121 @@ function _licRow(label, val) {
     '<span style="color:var(--muted);min-width:130px;flex-shrink:0">' + label + '</span>' +
     '<span style="flex:1;color:var(--text)">' + val + '</span>' +
     '</div>';
+}
+
+var BACKUP_STATUS_LABEL = {
+  requested: 'Requested', running: 'Running…', protected: 'Protected',
+  local_success: 'Local only', remote_failed: 'Remote failed', failed: 'Failed'
+};
+var BACKUP_STATUS_COLOR = {
+  requested: 'var(--muted)', running: 'var(--accent)', protected: 'var(--success)',
+  local_success: 'var(--warning)', remote_failed: 'var(--danger)', failed: 'var(--danger)'
+};
+var BACKUP_POLL_TIMER = null;
+
+function loadBackups() {
+  var wrap = document.getElementById('backup-status-card-wrap');
+  apicall('/api/backups').then(function(jobs) {
+    if (jobs.error) {
+      if (wrap) wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(jobs.error) + '</div>';
+      return;
+    }
+    renderBackupStatusCard(jobs[0] || null);
+    renderBackupJobsTable(jobs);
+  }).catch(function(e) {
+    if (wrap) wrap.innerHTML = '<div class="empty" style="padding:2rem;color:var(--danger)">' + x(e.message) + '</div>';
+  });
+}
+
+function renderBackupStatusCard(job) {
+  var wrap = document.getElementById('backup-status-card-wrap');
+  if (!wrap) return;
+  if (!job) {
+    wrap.innerHTML = '<div class="conn-cfg-card"><div class="empty" style="padding:1rem 0">No backups yet. Click "Backup Now" to create one.</div></div>';
+    return;
+  }
+  var color = BACKUP_STATUS_COLOR[job.status] || 'var(--muted)';
+  var label = BACKUP_STATUS_LABEL[job.status] || job.status;
+  var size = job.archiveSizeBytes ? (job.archiveSizeBytes / 1048576).toFixed(1) + ' MB' : '—';
+  wrap.innerHTML =
+    '<div class="conn-cfg-card">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem">' +
+        '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Most recent backup</div>' +
+        '<span class="sbadge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;font-size:0.7rem;font-weight:700">' + x(label) + '</span>' +
+      '</div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Requested</span><span class="conn-cfg-val">' + x(new Date(job.requestedAt).toLocaleString()) + '</span></div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Trigger</span><span class="conn-cfg-val">' + x(job.trigger) + '</span></div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Size</span><span class="conn-cfg-val">' + size + '</span></div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Local</span><span class="conn-cfg-val">' + (job.localPath ? '✓' : '—') + '</span></div>' +
+      '<div class="conn-cfg-row"><span class="conn-cfg-label">Remote</span><span class="conn-cfg-val">' + (job.remotePath ? '✓' : (job.status === 'local_success' ? '✗' : '—')) + '</span></div>' +
+      (job.errorMessage ? '<div class="conn-cfg-row"><span class="conn-cfg-label">Error</span><span class="conn-cfg-val" style="color:var(--danger)">' + x(job.errorMessage) + '</span></div>' : '') +
+    '</div>';
+}
+
+function renderBackupJobsTable(jobs) {
+  var tbody = document.getElementById('backup-jobs-body');
+  if (!tbody) return;
+  if (!jobs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.5rem">No backups yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = jobs.map(function(j) {
+    var color = BACKUP_STATUS_COLOR[j.status] || 'var(--muted)';
+    var label = BACKUP_STATUS_LABEL[j.status] || j.status;
+    var canRestore = (j.status === 'protected' || j.status === 'local_success');
+    return '<tr style="border-bottom:1px solid var(--border)">' +
+      '<td style="padding:0.4rem 0.5rem">' + x(new Date(j.requestedAt).toLocaleString()) + '</td>' +
+      '<td style="padding:0.4rem 0.5rem">' + x(j.trigger) + '</td>' +
+      '<td style="padding:0.4rem 0.5rem">' + (j.localPath ? '✓' : '—') + '</td>' +
+      '<td style="padding:0.4rem 0.5rem">' + (j.remotePath ? '✓' : '—') + '</td>' +
+      '<td style="padding:0.4rem 0.5rem"><span class="sbadge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;font-size:0.7rem">' + x(label) + '</span></td>' +
+      '<td style="padding:0.4rem 0.5rem">' +
+        (canRestore ? '<button class="btn btn-outline btn-sm" onclick="prepareRestore(\'' + j.id + '\')">Prepare Restore</button>' : '—') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function backupNow() {
+  var btn = document.getElementById('backup-now-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Requesting…'; }
+  apicall('/api/backups', { method: 'POST' }).then(function(job) {
+    if (job.error) { alert('Backup request failed: ' + job.error); if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; } return; }
+    loadBackups();
+    pollBackupJob(job.id, btn);
+  }).catch(function(e) {
+    alert('Backup request failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; }
+  });
+}
+
+function pollBackupJob(id, btn) {
+  if (BACKUP_POLL_TIMER) clearInterval(BACKUP_POLL_TIMER);
+  BACKUP_POLL_TIMER = setInterval(function() {
+    apicall('/api/backups/' + id).then(function(job) {
+      if (job.error) { clearInterval(BACKUP_POLL_TIMER); return; }
+      renderBackupStatusCard(job);
+      if (job.status !== 'requested' && job.status !== 'running') {
+        clearInterval(BACKUP_POLL_TIMER);
+        loadBackups();
+        if (btn) { btn.disabled = false; btn.textContent = 'Backup Now'; }
+      }
+    }).catch(function() { clearInterval(BACKUP_POLL_TIMER); });
+  }, 4000);
+}
+
+function prepareRestore(id) {
+  apicall('/api/backups/' + id + '/restore-marker', { method: 'POST' }).then(function(res) {
+    var wrap = document.getElementById('restore-command-wrap');
+    if (!wrap) return;
+    if (res.error) { wrap.innerHTML = '<div class="empty" style="padding:1rem;color:var(--danger)">' + x(res.error) + '</div>'; return; }
+    wrap.innerHTML =
+      '<div class="conn-cfg-card" style="margin-top:1rem;border-color:var(--warning)">' +
+        '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--warning);margin-bottom:0.5rem">Restore must be run on the host</div>' +
+        '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.6rem">This console cannot and will not run this for you. An administrator with root access to the server must run the command below and type <b>RESTORE</b> to confirm.</div>' +
+        '<code style="display:block;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem;font-size:0.8rem;word-break:break-all">' + x(res.restoreCommand) + '</code>' +
+      '</div>';
+  }).catch(function(e) { alert('Failed to prepare restore: ' + e.message); });
 }
 
 function auditPage(dir) {
