@@ -41,14 +41,14 @@ const (
 	CanLookupIOC                Permission = "ioc:lookup"
 
 	// Campaigns, findings, ITSM push — Analyst+Admin.
-	CanCreateCampaign   Permission = "campaigns:create"
-	CanStopCampaign     Permission = "campaigns:stop"
+	CanCreateCampaign Permission = "campaigns:create"
+	CanStopCampaign   Permission = "campaigns:stop"
 	// CanTargetAllAgents is Admin-only, unlike every other campaign
 	// permission in this block -- targeting the entire fleet in one launch
 	// is a materially bigger blast radius than targeting a group or an
 	// explicit list, so it gets its own stricter gate rather than riding
 	// on CanCreateCampaign.
-	CanTargetAllAgents Permission = "campaigns:target-all-agents"
+	CanTargetAllAgents  Permission = "campaigns:target-all-agents"
 	CanSetFindingStatus Permission = "findings:set-status"
 	CanPushToITSM       Permission = "ticketing:push"
 	CanBulkPushToITSM   Permission = "ticketing:push-bulk"
@@ -87,7 +87,7 @@ const (
 	// CanViewAgentGroups is read-only and, unlike every other permission in
 	// this block, is granted to Analyst as well as Admin -- reading the
 	// group hierarchy is not a management action.
-	CanViewAgentGroups      Permission = "agent-groups:view"
+	CanViewAgentGroups Permission = "agent-groups:view"
 
 	// Admin-only: user management.
 	CanListUsers         Permission = "users:list"
@@ -97,14 +97,14 @@ const (
 	CanResetUserPassword Permission = "users:reset-password"
 
 	// Admin-only: Caldera engine status, threat-intel connector.
-	CanViewCalderaStatus       Permission = "caldera:status:view"
-	CanViewConnectorStatus     Permission = "connector:status:view"
-	CanSyncConnector           Permission = "connector:sync"
+	CanViewCalderaStatus   Permission = "caldera:status:view"
+	CanViewConnectorStatus Permission = "connector:status:view"
+	CanSyncConnector       Permission = "connector:sync"
 	// CanUpdateConnectorConfig is Admin-only, matching CanViewConnectorStatus
 	// and CanSyncConnector's existing tier -- it gates writing MISP/OpenCTI/
 	// OTX connection settings (URL, API key), not just viewing or triggering
 	// a sync of whatever's already configured.
-	CanUpdateConnectorConfig Permission = "connector:config:update"
+	CanUpdateConnectorConfig   Permission = "connector:config:update"
 	CanDeleteConnectorScenario Permission = "connector:scenarios:delete"
 
 	// Admin-only: attack-path schedule, ART content management.
@@ -203,6 +203,12 @@ const (
 	// permission in this file).
 	CanExecuteRemediation Permission = "remediation:execute"
 	CanApproveRemediation Permission = "remediation:approve"
+
+	// Backup & Recovery — Admin-only. The console never performs the backup
+	// itself (see docs/superpowers/specs/2026-08-17-backup-recovery-design.md);
+	// this permission gates only the ability to request one and to flag a
+	// backup for restore intent (an audit marker, not an execution trigger).
+	CanManageBackups Permission = "backups:manage"
 )
 
 // rolePermissions maps each role to the permissions it holds. Viewer is
@@ -256,6 +262,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
+		CanManageBackups: true,
 	},
 	RoleAnalyst: {
 		CanVerify:            true,
@@ -284,7 +291,7 @@ var rolePermissions = map[Role]map[Permission]bool{
 		// Read-only counterpart to the admin-only CanManageAgentGroups --
 		// analysts can see and target agent groups, not create/rename/
 		// move/delete them.
-		CanViewAgentGroups: true,
+		CanViewAgentGroups:    true,
 		CanExecuteRemediation: true,
 	},
 	RoleViewer: {},
@@ -336,6 +343,7 @@ func Permissions(role Role) []Permission {
 		CanViewSCIMConfig, CanManageSCIMConfig,
 
 		CanExecuteRemediation, CanApproveRemediation,
+		CanManageBackups,
 	} {
 		if set[p] {
 			out = append(out, p)

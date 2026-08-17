@@ -95,10 +95,10 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanListDetectionConnectors: true, CanCreateDetectionConnector: true,
 		CanUpdateDetectionConnector: true, CanDeleteDetectionConnector: true,
 		CanTestDetectionConnector: true,
-		CanExecuteResponseAction: true, CanViewResponseActions: true, CanListResponseConnectors: true,
+		CanExecuteResponseAction:  true, CanViewResponseActions: true, CanListResponseConnectors: true,
 		CanCreateResponseConnector: true, CanUpdateResponseConnector: true, CanDeleteResponseConnector: true,
 		CanTestResponseConnector: true,
-		CanViewOpenAEVConfig: true, CanUpdateOpenAEVConfig: true,
+		CanViewOpenAEVConfig:     true, CanUpdateOpenAEVConfig: true,
 		CanTestOpenAEVConfig: true, CanSyncOpenAEV: true, CanImportOpenAEVBundle: true,
 		CanCreateExercisePlanFromOpenAEV: true, CanCreateExercisePlan: true,
 		CanValidateExercisePlan: true, CanUpdateExercisePlan: true, CanDeleteExercisePlan: true,
@@ -106,6 +106,7 @@ func TestHasPermission_MatrixIsComplete(t *testing.T) {
 		CanViewSSOConfig: true, CanManageSSOConfig: true,
 		CanViewSCIMConfig: true, CanManageSCIMConfig: true,
 		CanExecuteRemediation: true, CanApproveRemediation: true,
+		CanManageBackups: true,
 	}
 	for _, p := range Permissions(RoleAdmin) {
 		if !tested[p] {
@@ -155,6 +156,7 @@ func TestPermissions_Ordering(t *testing.T) {
 		CanViewSCIMConfig, CanManageSCIMConfig,
 
 		CanExecuteRemediation, CanApproveRemediation,
+		CanManageBackups,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Permissions(RoleAdmin) len = %d, want %d", len(got), len(want))
@@ -295,5 +297,17 @@ func TestCanExecuteRemediation_AnalystAndAdmin(t *testing.T) {
 	}
 	if HasPermission(RoleViewer, CanExecuteRemediation) {
 		t.Error("expected RoleViewer NOT to hold CanExecuteRemediation")
+	}
+}
+
+func TestCanManageBackups_AdminOnly(t *testing.T) {
+	if !HasPermission(RoleAdmin, CanManageBackups) {
+		t.Error("expected RoleAdmin to hold CanManageBackups")
+	}
+	if HasPermission(RoleAnalyst, CanManageBackups) {
+		t.Error("expected RoleAnalyst NOT to hold CanManageBackups")
+	}
+	if HasPermission(RoleViewer, CanManageBackups) {
+		t.Error("expected RoleViewer NOT to hold CanManageBackups")
 	}
 }

@@ -1490,6 +1490,34 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE openaev_config ADD COLUMN IF NOT EXISTS last_sync_updated int NOT NULL DEFAULT 0`,
 		`ALTER TABLE openaev_config ADD COLUMN IF NOT EXISTS last_sync_skipped int NOT NULL DEFAULT 0`,
 		`ALTER TABLE openaev_config ADD COLUMN IF NOT EXISTS last_sync_errored int NOT NULL DEFAULT 0`,
+
+		// Backup & Recovery: console requests, host-side systemd timer
+		// executes. See docs/superpowers/specs/2026-08-17-backup-recovery-design.md.
+		// The 'manifest' column is a queryable summary the worker writes back
+		// after success -- separate from the manifest.json file inside the
+		// archive itself, which is what --restore actually trusts.
+		`CREATE TABLE IF NOT EXISTS backup_jobs (
+			id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			job_type           TEXT NOT NULL CHECK (job_type IN ('backup', 'restore_marker')),
+			trigger            TEXT NOT NULL CHECK (trigger IN ('console', 'scheduled', 'cli', 'pre_restore')),
+			requested_by       TEXT,
+			requested_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+			started_at         TIMESTAMPTZ,
+			finished_at        TIMESTAMPTZ,
+			status             TEXT NOT NULL DEFAULT 'requested'
+			                     CHECK (status IN ('requested','running','protected',
+			                                        'local_success','remote_failed','failed')),
+			archive_filename   TEXT,
+			archive_size_bytes BIGINT,
+			sha256             TEXT,
+			local_path         TEXT,
+			remote_path        TEXT,
+			error_message      TEXT,
+			restore_of_id      UUID REFERENCES backup_jobs(id),
+			manifest           JSONB
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_backup_jobs_status ON backup_jobs(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_backup_jobs_requested_at ON backup_jobs(requested_at DESC)`,
 	}
 
 	for _, s := range stmts {
