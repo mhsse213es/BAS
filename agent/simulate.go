@@ -82,15 +82,30 @@ func (c *SimCheck) run() {
 // mirrors runScenario's between-step granularity for ART/Custom steps. A
 // nil gate is a no-op (see sched.Gate.Wait), so callers that don't need
 // pause support (tests) can pass nil.
-func runChecks(ctx context.Context, cats []SimCategory, selected map[string]bool, gate *sched.Gate, onCheck func(SimCheck)) []SimCategory {
-	out := make([]SimCategory, 0, len(cats))
+//
+// ctx is checked both before and after gate.Wait -- mirrors sched.Run's
+// runJob dispatch loop exactly, for the same reason: a cancel can race with
+// a pause (fire while already blocked in Wait), so the post-Wait check
+// catches a cancel that arrived while paused, not just one that arrived
+// between checks. partial reports whether ctx was cancelled before every
+// selected check ran; whatever ran before that is still returned in out.
+func runChecks(ctx context.Context, cats []SimCategory, selected map[string]bool, gate *sched.Gate, onCheck func(SimCheck)) (out []SimCategory, partial bool) {
+	out = make([]SimCategory, 0, len(cats))
 	for _, cat := range cats {
 		kept := make([]SimCheck, 0, len(cat.Checks))
 		for i := range cat.Checks {
 			if len(selected) > 0 && !selected[cat.Checks[i].ID] {
 				continue
 			}
+			if ctx.Err() != nil {
+				partial = true
+				break
+			}
 			gate.Wait(ctx)
+			if ctx.Err() != nil {
+				partial = true
+				break
+			}
 			cat.Checks[i].run()
 			if onCheck != nil {
 				onCheck(cat.Checks[i])
@@ -100,8 +115,11 @@ func runChecks(ctx context.Context, cats []SimCategory, selected map[string]bool
 		if len(kept) > 0 {
 			out = append(out, SimCategory{Phase: cat.Phase, Checks: kept})
 		}
+		if partial {
+			break
+		}
 	}
-	return out
+	return out, partial
 }
 
 // postureCatalogDefaultKey is the fallback catalog entry for any scenario ID

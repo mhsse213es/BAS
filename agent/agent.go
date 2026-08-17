@@ -871,7 +871,7 @@ func deriveLocalResultLabel(results []ExecResult, partial bool) string {
 	}
 }
 
-func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
+func (a *Agent) runLocalScan(ctx context.Context, scenarioID, runID string, selected []string) {
 	a.mu.Lock()
 	st := a.state
 	a.mu.Unlock()
@@ -913,11 +913,10 @@ func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 	// Pause/Resume reuses the exact shared a.pauseGate/a.pauseEmit fields
 	// runScenario uses -- command_pause/command_resume already operate
 	// generically on whatever's set here, so no WS dispatch changes were
-	// needed to extend pause to posture-mode scans. Uses context.Background()
-	// rather than a cancellable context: posture scans have no cancel-
-	// while-running support (command_cancel is a no-op for them, unchanged
-	// by this) -- Resume is always available to un-pause a paused scan, but
-	// it cannot be stopped early while paused.
+	// needed to extend pause to posture-mode scans. ctx (wired by the caller
+	// from a.cancelScenario, same as runScenario) lets command_cancel stop a
+	// scan that's mid-flight OR currently paused -- gate.Wait(ctx) unblocks
+	// on either Resume or ctx cancellation.
 	gate := sched.NewGate()
 	a.scenarioMu.Lock()
 	a.pauseGate = gate
@@ -941,15 +940,24 @@ func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 	}
 	emit(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total}})
 
-	categories = runChecks(context.Background(), categories, sel, gate, func(c SimCheck) { // execute (filtered) — checks no longer run at list time
+	categories, partial := runChecks(ctx, categories, sel, gate, func(c SimCheck) { // execute (filtered) — checks no longer run at list time
 		emit(RunEvent{Type: "started", TaskID: c.ID, TechniqueID: c.Technique.ID, StepName: c.Technique.Name})
 		emit(RunEvent{Type: "completed", TaskID: c.ID, TechniqueID: c.Technique.ID, StepName: c.Technique.Name,
 			Payload: map[string]any{"verdict": c.Result, "durationMs": c.DurationMs}})
 	})
-	if len(categories) == 0 {
+	if len(categories) == 0 && !partial {
 		log.Printf("[!] local scan %s: no checks matched selection (%d ids) — nothing to run", runID, len(selected))
 	}
-	emit(RunEvent{Type: "run_completed", Payload: map[string]any{"stepsDone": total}})
+	stepsDone := 0
+	for _, cat := range categories {
+		stepsDone += len(cat.Checks)
+	}
+	if partial {
+		emit(RunEvent{Type: "run_cancelled", Payload: map[string]any{"stepsDone": stepsDone}})
+		log.Printf("[*] local scan %s cancelled — %d/%d checks completed, submitting partial results", runID, stepsDone, total)
+	} else {
+		emit(RunEvent{Type: "run_completed", Payload: map[string]any{"stepsDone": stepsDone}})
+	}
 
 	// Submit full SimCheck metadata so the orchestrator can correctly populate
 	// technique ID, tactic, severity, threat impact, and remediation without
@@ -979,13 +987,22 @@ func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 		ScenarioID: scenarioID,
 		AgentID:    a.id.AgentID,
 		Checks:     checks,
+		Partial:    partial,
 	}
-	a.submitRunResult(payload, "scan")
+	scanLabel := "scan"
+	if partial {
+		scanLabel = "scan-partial"
+	}
+	a.submitRunResult(payload, scanLabel)
 
 	// Close out the local operation so the console shows the completed scan
 	// instead of leaving a stale "running" panel.
+	opResult := "Completed"
+	if partial {
+		opResult = "Partial"
+	}
 	a.localSt.UpdateProgress(len(checks), len(checks), "Upload", "")
-	a.localSt.CompleteOperation("Completed", LocalEvidenceStats{EventsCollected: len(checks)}, "", "", false)
+	a.localSt.CompleteOperation(opResult, LocalEvidenceStats{EventsCollected: len(checks)}, "", "", false)
 
 	a.setStatus("idle")
 	a.sendHeartbeat("idle")
@@ -1078,8 +1095,15 @@ func (a *Agent) connectWS() {
 					log.Printf("[!] WS: bad command_simulate payload: %v", err)
 					continue
 				}
+				ctx, cancel := context.WithCancel(context.Background())
+				a.scenarioMu.Lock()
+				if a.cancelScenario != nil {
+					a.cancelScenario()
+				}
+				a.cancelScenario = cancel
+				a.scenarioMu.Unlock()
 				a.runWG.Add(1)
-				go func() { defer a.runWG.Done(); a.runLocalScan(sim.ScenarioID, sim.RunID, sim.Checks) }()
+				go func() { defer a.runWG.Done(); a.runLocalScan(ctx, sim.ScenarioID, sim.RunID, sim.Checks) }()
 
 			case "command_attackpath_collect":
 				var apc AttackPathCollectCommand

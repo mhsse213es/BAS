@@ -30,7 +30,7 @@ func TestRunChecksFiltersBySelection(t *testing.T) {
 		check("T2", "b", "t", "High", "x", "y", func() (string, string) { return "fail", "" }),
 	}}}
 	idB := checkID("T2", "b")
-	out := runChecks(context.Background(), cats, map[string]bool{idB: true}, nil, nil)
+	out, _ := runChecks(context.Background(), cats, map[string]bool{idB: true}, nil, nil)
 	got := 0
 	for _, cat := range out {
 		got += len(cat.Checks)
@@ -74,7 +74,7 @@ func TestRunChecksBlocksOnPausedGate(t *testing.T) {
 		check("T1", "a", "t", "High", "x", "y", func() (string, string) { return "pass", "" }),
 	}}}
 	done := make(chan []SimCategory, 1)
-	go func() { done <- runChecks(context.Background(), cats, nil, gate, nil) }()
+	go func() { out, _ := runChecks(context.Background(), cats, nil, gate, nil); done <- out }()
 
 	select {
 	case <-done:
@@ -91,6 +91,51 @@ func TestRunChecksBlocksOnPausedGate(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("runChecks did not complete after Resume")
+	}
+}
+
+// TestRunChecksCancelWhilePausedStopsAndReturnsPartial proves cancelling ctx
+// while the gate is paused actually unblocks and stops runChecks (rather
+// than waiting forever for a Resume that may never come), and that it
+// reports partial=true with none of the still-queued checks run.
+func TestRunChecksCancelWhilePausedStopsAndReturnsPartial(t *testing.T) {
+	gate := sched.NewGate()
+	gate.Pause()
+	ctx, cancel := context.WithCancel(context.Background())
+	cats := []SimCategory{{Phase: "p", Checks: []SimCheck{
+		check("T1", "a", "t", "High", "x", "y", func() (string, string) { return "pass", "" }),
+		check("T2", "b", "t", "High", "x", "y", func() (string, string) { return "pass", "" }),
+	}}}
+	type result struct {
+		out     []SimCategory
+		partial bool
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, partial := runChecks(ctx, cats, nil, gate, nil)
+		done <- result{out, partial}
+	}()
+
+	// Give the goroutine a moment to actually be blocked inside gate.Wait
+	// before cancelling, so this exercises the "cancel arrives while
+	// already waiting" path, not just "cancel arrives before Wait is called".
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case res := <-done:
+		if !res.partial {
+			t.Fatal("expected partial=true after cancelling a paused run")
+		}
+		total := 0
+		for _, cat := range res.out {
+			total += len(cat.Checks)
+		}
+		if total != 0 {
+			t.Fatalf("expected zero checks to have run before the cancel, got %d: %+v", total, res.out)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("runChecks did not return after cancelling while paused")
 	}
 }
 
