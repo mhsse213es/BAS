@@ -86,6 +86,11 @@ while [[ $# -gt 0 ]]; do
     --backup)          MODE="backup"          ;;
     --backup-request)  MODE="backup-request"  ;;
     --backup-worker)   MODE="backup-worker"   ;;
+    --restore)
+      MODE="restore"
+      shift
+      RESTORE_ARCHIVE="${1:-}"
+      ;;
     --config)       shift; CONFIG_FILE="$1" ;;
     --purge-images) PURGE_IMAGES=true ;;
     --yes|-y)       YES=true ;;
@@ -129,6 +134,7 @@ REMOTE_BACKUP_ENABLED=""
 REMOTE_BACKUP_TYPE=""
 REMOTE_BACKUP_PATH=""
 REMOTE_BACKUP_RETENTION=""
+RESTORE_ARCHIVE=""
 
 # ── Config loader -safe key=value parser (no source / eval) ─────────────────
 load_config() {
@@ -1185,6 +1191,71 @@ mode_backup_worker() {
   " >/dev/null
 }
 
+# mode_restore is the only place a restore ever actually executes. Requires
+# root, an existing archive under DATA_DIR/backups (or an absolute path),
+# and the literal word RESTORE typed at the confirmation prompt -- mirrors
+# this script's other destructive-op confirmations (see mode_uninstall).
+mode_restore() {
+  local archive="$1"
+  [[ -z "$archive" ]] && { err "Usage: sudo bash install.sh --restore <archive-filename-or-path>"; exit 1; }
+  [[ "$archive" != /* ]] && archive="${DATA_DIR}/backups/${archive}"
+  [[ -f "$archive" ]] || { err "Archive not found: ${archive}"; exit 1; }
+
+  step "1/8  Verifying archive integrity"
+  if [[ -f "${archive}.sha256" ]]; then
+    local expected actual
+    expected=$(cat "${archive}.sha256")
+    actual=$(sha256sum "$archive" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$archive" | awk '{print $1}')
+    [[ "$expected" == "$actual" ]] || { err "Checksum mismatch -- archive may be corrupt. Refusing to restore."; exit 1; }
+  else
+    info "No .sha256 sidecar found for this archive -- skipping integrity check."
+  fi
+
+  step "2/8  Decrypting and reading manifest"
+  local work_dir tar_path
+  work_dir=$(mktemp -d)
+  tar_path="${work_dir}/archive.tar"
+  openssl enc -d -aes-256-cbc -pbkdf2 -in "$archive" -out "$tar_path" -pass "file:${DATA_DIR}/.backup_key" \
+    || { err "Decryption failed -- wrong .backup_key or corrupt archive."; rm -rf "$work_dir"; exit 1; }
+  tar -xf "$tar_path" -C "$work_dir"
+  [[ -f "${work_dir}/manifest.json" ]] || { err "Archive missing manifest.json -- refusing to restore."; rm -rf "$work_dir"; exit 1; }
+  local archive_version
+  archive_version=$(grep -o '"basVersion"[^,]*' "${work_dir}/manifest.json" | grep -o '"[^"]*"$' | tr -d '"')
+  info "Archive BAS version: ${archive_version:-unknown}. Installed: ${BAS_VERSION}."
+
+  echo
+  echo "  This will STOP Audspect, REPLACE the current database and configuration"
+  echo "  with the contents of ${archive}, then restart."
+  echo
+  read -r -p "  Type RESTORE to continue: " confirm
+  [[ "$confirm" == "RESTORE" ]] || { info "Aborted -- no changes made."; rm -rf "$work_dir"; exit 0; }
+
+  step "3/8  Taking a pre-restore safety snapshot"
+  TRIGGER=pre_restore _run_backup_engine >/dev/null || info "Pre-restore snapshot failed -- continuing anyway (you typed RESTORE)."
+
+  step "4/8  Stopping services"
+  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" stop orchestrator caldera chrome)
+
+  step "5/8  Restoring PostgreSQL"
+  docker exec -i audspect-postgres pg_restore -U bas_user -d bas_platform --clean --if-exists < "${work_dir}/postgres/audspect.dump" \
+    || { err "pg_restore failed -- database may be in a partial state. The pre-restore snapshot is at ${DATA_DIR}/backups/ if you need to recover from before this attempt."; rm -rf "$work_dir"; exit 1; }
+
+  step "6/8  Restoring configuration"
+  tar -xf "${work_dir}/config.tar" -C "${DATA_DIR}"
+
+  step "7/8  Starting services"
+  (cd "${DATA_DIR}" && docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans)
+  _wait_healthy
+
+  step "8/8  Health check"
+  if curl -fsSk "https://localhost:${BAS_PORT:-9443}/health" >/dev/null 2>&1 || curl -fs "http://localhost:${BAS_PORT:-9443}/health" >/dev/null 2>&1; then
+    log "Restore complete and healthy."
+  else
+    err "Restore finished but health check failed -- inspect 'docker compose logs orchestrator'."
+  fi
+  rm -rf "$work_dir"
+}
+
 _wait_healthy() {
   local max=60 elapsed=0
   info "Waiting for orchestrator to become healthy..."
@@ -1269,4 +1340,5 @@ case "$MODE" in
   backup)         mode_backup         ;;
   backup-request) mode_backup_request ;;
   backup-worker)  mode_backup_worker  ;;
+  restore)        mode_restore "$RESTORE_ARCHIVE" ;;
 esac
