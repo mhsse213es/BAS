@@ -180,10 +180,25 @@ func TestCryptoSelfTest(t *testing.T) {
 
 // ── PBKDF2 tamper-resistance ──────────────────────────────────────────────────
 
+// flipMiddleChar corrupts one character strictly inside a string, never the
+// last one. The last character of a base64 (or base64url) quantum can carry
+// "don't care" padding bits that don't affect the decoded bytes, so
+// replacing only it can occasionally decode to identical output -- flaking
+// tamper-detection tests that rely on last-character corruption. Any
+// non-final position is fully bit-determined, so this always changes the
+// decoded value.
+func flipMiddleChar(s string) string {
+	i := len(s) / 2
+	repl := byte('A')
+	if s[i] == 'A' {
+		repl = 'B'
+	}
+	return s[:i] + string(repl) + s[i+1:]
+}
+
 func TestVerify_TamperedHash(t *testing.T) {
 	h, _ := HashPassword("pw")
-	// Corrupt the last character of the derived key portion.
-	corrupted := h[:len(h)-1] + "X"
+	corrupted := flipMiddleChar(h)
 	ok, _, err := VerifyPassword("pw", corrupted)
 	if err != nil && strings.Contains(err.Error(), "encoding") {
 		t.Skip("corruption produced base64 decode error — acceptable")

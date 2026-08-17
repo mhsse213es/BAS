@@ -47,7 +47,7 @@ func TestSSOState_Tampered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateSSOState: %v", err)
 	}
-	tampered := tok[:len(tok)-1] + "x"
+	tampered := flipMiddleChar(tok)
 	if _, err := ValidateSSOState(tampered, "secret"); err == nil {
 		t.Fatal("expected an error for a tampered state token, got nil")
 	}
