@@ -83,7 +83,9 @@ while [[ $# -gt 0 ]]; do
     --rollback)     MODE="rollback"  ;;
     --status)       MODE="status"    ;;
     --uninstall)    MODE="uninstall" ;;
-    --backup)       MODE="backup"    ;;
+    --backup)          MODE="backup"          ;;
+    --backup-request)  MODE="backup-request"  ;;
+    --backup-worker)   MODE="backup-worker"   ;;
     --config)       shift; CONFIG_FILE="$1" ;;
     --purge-images) PURGE_IMAGES=true ;;
     --yes|-y)       YES=true ;;
@@ -606,6 +608,7 @@ mode_install() {
 
   step "7/10  Installing docker-compose.yml"
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
+  cp "${SCRIPT_DIR}/install.sh" "${DATA_DIR}/install.sh"
   log "Compose file installed"
 
   step "8/10  Installing systemd service (auto-start on boot)"
@@ -613,6 +616,9 @@ mode_install() {
   systemctl daemon-reload
   systemctl enable "${SERVICE_NAME}"
   log "Systemd service enabled: ${SERVICE_NAME}.service"
+
+  step "8b/10  Installing backup worker + schedule timers"
+  _write_backup_systemd_units
 
   step "9/10  Starting stack"
   systemctl start "${SERVICE_NAME}"
@@ -668,8 +674,10 @@ mode_upgrade() {
   [[ -d "${SCRIPT_DIR}/art-payloads" ]] && cp -r "${SCRIPT_DIR}/art-payloads/." "${DATA_DIR}/art-payloads/"
   [[ -f "$LIC_PATH"                 ]] && { cp "$LIC_PATH" "${DATA_DIR}/bas.lic"; chmod 644 "${DATA_DIR}/bas.lic"; }
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
+  cp "${SCRIPT_DIR}/install.sh" "${DATA_DIR}/install.sh"
   _write_env        # refreshes BAS_VERSION; preserves existing secrets via load_config
   _write_systemd_unit  # refresh WorkingDirectory in case DATA_DIR changed
+  _write_backup_systemd_units
   systemctl daemon-reload
   log "Files updated"
 
@@ -894,6 +902,64 @@ EOF
   chmod 644 "$unit_file"
 }
 
+_write_backup_systemd_units() {
+  cat > /etc/systemd/system/audspect-backup-worker.service << EOF
+[Unit]
+Description=Audspect backup worker (executes requested backup_jobs rows)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=${DATA_DIR}
+ExecStart=/usr/bin/env bash ${DATA_DIR}/install.sh --backup-worker
+EOF
+  chmod 644 /etc/systemd/system/audspect-backup-worker.service
+
+  cat > /etc/systemd/system/audspect-backup-worker.timer << 'EOF'
+[Unit]
+Description=Poll backup_jobs every 60s
+
+[Timer]
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+EOF
+  chmod 644 /etc/systemd/system/audspect-backup-worker.timer
+
+  cat > /etc/systemd/system/audspect-backup-schedule.service << EOF
+[Unit]
+Description=Audspect scheduled backup request (inserts one requested row)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=TRIGGER=scheduled
+WorkingDirectory=${DATA_DIR}
+ExecStart=/usr/bin/env bash ${DATA_DIR}/install.sh --backup-request
+EOF
+  chmod 644 /etc/systemd/system/audspect-backup-schedule.service
+
+  cat > /etc/systemd/system/audspect-backup-schedule.timer << EOF
+[Unit]
+Description=Daily scheduled backup trigger
+
+[Timer]
+OnCalendar=*-*-* ${BACKUP_SCHEDULE_TIME}:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+  chmod 644 /etc/systemd/system/audspect-backup-schedule.timer
+
+  systemctl daemon-reload
+  systemctl enable --now audspect-backup-worker.timer audspect-backup-schedule.timer
+}
+
 _write_env() {
   local env_file="${DATA_DIR}/.env"
   cat > "$env_file" << EOF
@@ -1075,6 +1141,50 @@ mode_backup() {
   [[ -n "$error" ]] && info "$error"
 }
 
+# mode_backup_request inserts one 'requested' row and exits -- it never
+# performs a backup itself. Called by audspect-backup-schedule.timer (daily)
+# and directly for CLI-triggered scheduling tests.
+mode_backup_request() {
+  local trigger="${TRIGGER:-cli}"
+  docker exec audspect-postgres psql -U bas_user -d bas_platform -tAc \
+    "INSERT INTO backup_jobs (job_type, trigger) VALUES ('backup', '${trigger}')" >/dev/null
+}
+
+# mode_backup_worker performs exactly one poll-and-execute pass: claim the
+# oldest 'requested' backup row (if any), run the same engine as --backup,
+# write the result back. Called every 60s by audspect-backup-worker.timer --
+# this is what makes console-requested, scheduled, and CLI-requested backups
+# all execute through one path.
+mode_backup_worker() {
+  local id
+  id=$(docker exec audspect-postgres psql -U bas_user -d bas_platform -tAc \
+    "SELECT id FROM backup_jobs WHERE status = 'requested' AND job_type = 'backup' ORDER BY requested_at LIMIT 1" 2>/dev/null | tr -d '[:space:]')
+  [[ -z "$id" ]] && return 0
+
+  local claimed
+  claimed=$(docker exec audspect-postgres psql -U bas_user -d bas_platform -tAc \
+    "UPDATE backup_jobs SET status = 'running', started_at = now() WHERE id = '${id}' AND status = 'requested' RETURNING id" 2>/dev/null | tr -d '[:space:]')
+  [[ -z "$claimed" ]] && return 0  # lost the race to another worker instance
+
+  local result status filename size sha local_path remote_path error
+  result=$(_run_backup_engine)
+  IFS='|' read -r status filename size sha local_path remote_path error <<< "$result"
+  if [[ "$status" == "FAILED" ]]; then status="failed"; fi
+
+  docker exec audspect-postgres psql -U bas_user -d bas_platform -c "
+    UPDATE backup_jobs SET
+      status = '${status}',
+      finished_at = now(),
+      archive_filename = NULLIF('${filename}', ''),
+      archive_size_bytes = NULLIF('${size}', '')::bigint,
+      sha256 = NULLIF('${sha}', ''),
+      local_path = NULLIF('${local_path}', ''),
+      remote_path = NULLIF('${remote_path}', ''),
+      error_message = NULLIF('${error}', '')
+    WHERE id = '${claimed}'
+  " >/dev/null
+}
+
 _wait_healthy() {
   local max=60 elapsed=0
   info "Waiting for orchestrator to become healthy..."
@@ -1156,5 +1266,7 @@ case "$MODE" in
   rollback)  mode_rollback  ;;
   status)    mode_status    ;;
   uninstall) mode_uninstall ;;
-  backup)    mode_backup    ;;
+  backup)         mode_backup         ;;
+  backup-request) mode_backup_request ;;
+  backup-worker)  mode_backup_worker  ;;
 esac
