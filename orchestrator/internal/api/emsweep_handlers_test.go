@@ -9,6 +9,7 @@ import (
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/emsweep"
+	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -45,6 +46,48 @@ func TestCreateEMSweep_DispatchesFirstLayerEventually(t *testing.T) {
 		layers, _ := out["layers"].([]any)
 		if len(layers) != 1 || layers[0] != "em-01-control-validation" {
 			t.Fatalf("expected exactly the one registered EM layer, got %v", layers)
+		}
+	})
+}
+
+func TestCreateEMSweep_AppendsValidExtraScenarios(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		_, engine := minimalPostureScenario(t, "em-01-control-validation")
+		extra := &scenario.Scenario{ID: "custom-extra-scenario", Name: "Extra Scenario", LocalCheck: true}
+		if err := engine.Save(extra); err != nil {
+			t.Fatalf("save extra scenario: %v", err)
+		}
+		store := emsweep.NewStore(pool)
+		h := New(pool, ws.NewHub(), engine, testJWTSecret).WithEMSweep(store, testEMSweepDispatcher(store))
+		agentID := "em-extra-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		uid := seedUser(t, pool, "em-extra-user", "pw-Password1!", "admin", true)
+
+		body, _ := json.Marshal(map[string]any{
+			"agentId": agentID,
+			// "does-not-exist" (unregistered) and "em-01-control-validation"
+			// (already one of the fixed 14) must both be dropped server-side.
+			"extraScenarioIds": []string{"custom-extra-scenario", "does-not-exist", "em-01-control-validation"},
+		})
+		req := authedRequest(t, http.MethodPost, "/api/em/sweeps", bytes.NewReader(body), auth.RoleAdmin, uid)
+		rec := callAuthed(h.CreateEMSweep, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		layers, _ := out["layers"].([]any)
+		want := []string{"em-01-control-validation", "custom-extra-scenario"}
+		if len(layers) != len(want) {
+			t.Fatalf("layers = %v, want exactly %v", layers, want)
+		}
+		for i, w := range want {
+			if layers[i] != w {
+				t.Fatalf("layers[%d] = %v, want %v", i, layers[i], w)
+			}
 		}
 	})
 }

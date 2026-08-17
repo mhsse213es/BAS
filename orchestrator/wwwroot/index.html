@@ -4587,7 +4587,7 @@ body.theme-slate {
       <button class="drawer-close" onclick="closeEMSweepModal()">&#10005;</button>
     </div>
     <div class="drawer-body">
-      <p class="tiny muted" style="margin-bottom:0.75rem">Dispatches all 14 Endpoint Mastery layers sequentially — each layer runs to completion before the next starts.</p>
+      <p class="tiny muted" style="margin-bottom:0.75rem">Dispatches all 14 Endpoint Mastery layers sequentially — each layer runs to completion before the next starts. You can add extra scenarios from the full library in the next step.</p>
       <div style="margin-bottom:1rem;display:flex;gap:1.1rem;flex-wrap:wrap">
         <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.82rem">
           <input type="radio" name="em-sweep-target-mode" value="individual" checked onchange="setEMSweepTargetMode('individual')"> Individual Agent
@@ -18788,12 +18788,12 @@ function emSweepDispatch() {
 
 // _emDispatchFullSweep is the single source of truth for actually starting
 // an EM Full Sweep.
-function _emDispatchFullSweep(targets) {
+function _emDispatchFullSweep(targets, extraScenarioIds) {
   var agentIds = targets.agentIds;
   var dispatches = agentIds.map(function(agentId) {
     return apicall('/api/em/sweeps', {
       method: 'POST',
-      body: JSON.stringify({ agentId: agentId })
+      body: JSON.stringify({ agentId: agentId, extraScenarioIds: extraScenarioIds || [] })
     }).then(function(res) {
       if (res && res.error) return { agentId: agentId, ok: false, error: res.error };
       return { agentId: agentId, ok: true };
@@ -18839,6 +18839,8 @@ var _vexPreviewTactic = '';
 var _vexPreviewSearch = '';
 var _emPreviewExpandedId = null;   // currently expanded EM layer id, or null
 var _emPreviewCache = {};          // layerId -> {loading:bool, error:string, scenario:{...}}
+var _emExtraSelected = {};         // scenarioId -> true, for extra (non-fixed-14) scenarios added to the sweep
+var _emExtraSearch = '';
 
 function openSweepPreview(type, targets) {
   _sweepPreviewType = type;
@@ -18851,6 +18853,8 @@ function openSweepPreview(type, targets) {
   _emPreviewCache = {};
   _vexPreviewTactic = '';
   _vexPreviewSearch = '';
+  _emExtraSelected = {};
+  _emExtraSearch = '';
   renderSweepPreview();
   document.getElementById('sweep-preview-overlay').classList.add('open');
 }
@@ -18863,9 +18867,10 @@ function closeSweepPreview() {
 
 function startSweepFromPreview() {
   var type = _sweepPreviewType, targets = _sweepPreviewTargets;
+  var extraScenarioIds = Object.keys(_emExtraSelected);
   closeSweepPreview();
   if (type === 'variant') _vexDispatchFullSweep(targets);
-  else if (type === 'em') _emDispatchFullSweep(targets);
+  else if (type === 'em') _emDispatchFullSweep(targets, extraScenarioIds);
 }
 
 // renderSweepPreview populates the title/summary/filters ONCE per open (or
@@ -18900,9 +18905,12 @@ function renderSweepPreview() {
     _renderVexPreviewList();
   } else if (_sweepPreviewType === 'em') {
     var emTargets = _sweepPreviewTargets;
+    var extraCount = Object.keys(_emExtraSelected).length;
     titleEl.textContent = 'Preview & Confirm — Endpoint Mastery Full Sweep';
-    summaryEl.textContent = 'Targeting ' + (emTargets.agentIds || []).length + ' agent(s). All 14 layers run sequentially per agent.';
-    filtersEl.innerHTML = ''; // the EM catalogue is a fixed 14 layers -- no filtering needed
+    summaryEl.textContent = 'Targeting ' + (emTargets.agentIds || []).length + ' agent(s). ' +
+      EM_CATALOG.length + ' fixed layers' + (extraCount ? ' + ' + extraCount + ' extra scenario(s)' : '') +
+      ' run sequentially per agent.';
+    filtersEl.innerHTML = '<input type="text" placeholder="Search extra scenarios to add…" value="' + x(_emExtraSearch) + '" oninput="_setEMExtraSearch(this.value)" class="btn btn-outline btn-sm" style="flex:1">';
     _renderEMPreviewList();
   }
 }
@@ -18998,8 +19006,19 @@ function _renderEMPreviewList() {
   var listEl = document.getElementById('sweep-preview-list');
   var countEl = document.getElementById('sweep-preview-count');
   if (!listEl) return;
-  if (countEl) countEl.textContent = EM_CATALOG.length + ' layer(s)';
-  listEl.innerHTML = EM_CATALOG.map(function(layer) {
+
+  var fixedIds = {};
+  EM_CATALOG.forEach(function(e) { fixedIds[e.id] = true; });
+  var extraCandidates = (scenarios || []).filter(function(s) { return s.id && !fixedIds[s.id]; });
+  var q = (_emExtraSearch || '').trim().toLowerCase();
+  var extraFiltered = q ? extraCandidates.filter(function(s) {
+    return (s.name || '').toLowerCase().indexOf(q) !== -1 || s.id.toLowerCase().indexOf(q) !== -1;
+  }) : extraCandidates;
+  var extraSelectedCount = Object.keys(_emExtraSelected).length;
+
+  if (countEl) countEl.textContent = EM_CATALOG.length + ' fixed layer(s), ' + extraSelectedCount + ' extra selected';
+
+  var fixedHtml = EM_CATALOG.map(function(layer) {
     var expanded = _emPreviewExpandedId === layer.id;
     return '<div style="border-bottom:1px solid var(--border)">' +
       '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem;cursor:pointer" onclick="_toggleEMPreviewRow(\'' + x(layer.id) + '\')">' +
@@ -19010,6 +19029,39 @@ function _renderEMPreviewList() {
       (expanded ? _renderEMLayerDetail(layer.id) : '') +
     '</div>';
   }).join('');
+
+  var extraHeaderHtml = '<div style="padding:0.5rem 0.6rem;font-size:0.7rem;font-weight:600;letter-spacing:0.03em;color:var(--muted);background:var(--elevated)">' +
+    'EXTRA SCENARIOS &mdash; optional, appended after the ' + EM_CATALOG.length + ' fixed layers</div>';
+  var extraRowsHtml = extraFiltered.length ? extraFiltered.map(function(s) {
+    var checked = !!_emExtraSelected[s.id];
+    return '<label style="display:flex;align-items:center;gap:0.55rem;padding:0.45rem 0.6rem;cursor:pointer;border-bottom:1px solid var(--border)">' +
+      '<input type="checkbox"' + (checked ? ' checked' : '') + ' onchange="_toggleEMExtraScenario(\'' + x(s.id) + '\')">' +
+      '<span style="font-size:0.8rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(s.name || s.id) + '</span>' +
+      '<span style="font-family:var(--font-mono);font-size:0.68rem;color:var(--muted);flex-shrink:0">' + x(s.id) + '</span>' +
+    '</label>';
+  }).join('') : '<div style="padding:0.6rem;color:var(--muted);font-size:0.76rem">No scenarios match</div>';
+
+  listEl.innerHTML = fixedHtml + extraHeaderHtml + extraRowsHtml;
+}
+
+function _setEMExtraSearch(v) { _emExtraSearch = v; _renderEMPreviewList(); }
+
+// _toggleEMExtraScenario only flips selection state -- it does not
+// re-render the search input (renderSweepPreview builds filters once per
+// open, see its own comment), so typing then checking boxes never loses
+// focus.
+function _toggleEMExtraScenario(id) {
+  if (_emExtraSelected[id]) delete _emExtraSelected[id];
+  else _emExtraSelected[id] = true;
+  _renderEMPreviewList();
+  var summaryEl = document.getElementById('sweep-preview-summary');
+  var emTargets = _sweepPreviewTargets;
+  var extraCount = Object.keys(_emExtraSelected).length;
+  if (summaryEl && emTargets) {
+    summaryEl.textContent = 'Targeting ' + (emTargets.agentIds || []).length + ' agent(s). ' +
+      EM_CATALOG.length + ' fixed layers' + (extraCount ? ' + ' + extraCount + ' extra scenario(s)' : '') +
+      ' run sequentially per agent.';
+  }
 }
 
 // _toggleEMPreviewRow mirrors _toggleVexPreviewRow exactly, one store

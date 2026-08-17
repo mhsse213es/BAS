@@ -33,7 +33,8 @@ func (h *Handler) CreateEMSweep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		AgentID string `json:"agentId"`
+		AgentID          string   `json:"agentId"`
+		ExtraScenarioIDs []string `json:"extraScenarioIds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid JSON", http.StatusBadRequest)
@@ -50,14 +51,31 @@ func (h *Handler) CreateEMSweep(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var layers []string
+	fixed := make(map[string]bool, len(emLayerIDs))
 	for _, id := range emLayerIDs {
 		if _, ok := h.engine.Get(id); ok {
 			layers = append(layers, id)
+			fixed[id] = true
 		}
 	}
 	if len(layers) == 0 {
 		jsonError(w, "no EM layer scenarios loaded on the server", http.StatusUnprocessableEntity)
 		return
+	}
+
+	// Extra scenarios are appended after the 14 fixed layers -- never
+	// trust the client-submitted list either: only IDs that resolve on
+	// the live scenario engine are kept, and the fixed 14 are deduped
+	// out in case the client accidentally resubmits one.
+	seenExtra := make(map[string]bool, len(req.ExtraScenarioIDs))
+	for _, id := range req.ExtraScenarioIDs {
+		if id == "" || fixed[id] || seenExtra[id] {
+			continue
+		}
+		if _, ok := h.engine.Get(id); ok {
+			layers = append(layers, id)
+			seenExtra[id] = true
+		}
 	}
 
 	c, _ := auth.ClaimsFrom(ctx)
@@ -77,7 +95,7 @@ func (h *Handler) CreateEMSweep(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.auditLog(r, "emsweep.create", sw.ID, map[string]any{"agentId": req.AgentID, "layerCount": len(layers)}, "ok")
+	h.auditLog(r, "emsweep.create", sw.ID, map[string]any{"agentId": req.AgentID, "layerCount": len(layers), "extraCount": len(seenExtra)}, "ok")
 	w.WriteHeader(http.StatusCreated)
 	jsonOK(w, emSweepToJSON(sw))
 }
