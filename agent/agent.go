@@ -910,6 +910,26 @@ func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 	defer emitter.close()
 	emit := func(ev RunEvent) { ev.RunID = runID; ev.Seq = seq(); emitter.emit(ev) }
 
+	// Pause/Resume reuses the exact shared a.pauseGate/a.pauseEmit fields
+	// runScenario uses -- command_pause/command_resume already operate
+	// generically on whatever's set here, so no WS dispatch changes were
+	// needed to extend pause to posture-mode scans. Uses context.Background()
+	// rather than a cancellable context: posture scans have no cancel-
+	// while-running support (command_cancel is a no-op for them, unchanged
+	// by this) -- Resume is always available to un-pause a paused scan, but
+	// it cannot be stopped early while paused.
+	gate := sched.NewGate()
+	a.scenarioMu.Lock()
+	a.pauseGate = gate
+	a.pauseEmit = emit
+	a.scenarioMu.Unlock()
+	defer func() {
+		a.scenarioMu.Lock()
+		a.pauseGate = nil
+		a.pauseEmit = nil
+		a.scenarioMu.Unlock()
+	}()
+
 	total := 0
 	for _, cat := range categories {
 		for _, c := range cat.Checks {
@@ -921,7 +941,7 @@ func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 	}
 	emit(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total}})
 
-	categories = runChecks(categories, sel, func(c SimCheck) { // execute (filtered) — checks no longer run at list time
+	categories = runChecks(context.Background(), categories, sel, gate, func(c SimCheck) { // execute (filtered) — checks no longer run at list time
 		emit(RunEvent{Type: "started", TaskID: c.ID, TechniqueID: c.Technique.ID, StepName: c.Technique.Name})
 		emit(RunEvent{Type: "completed", TaskID: c.ID, TechniqueID: c.Technique.ID, StepName: c.Technique.Name,
 			Payload: map[string]any{"verdict": c.Result, "durationMs": c.DurationMs}})

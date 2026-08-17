@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+
+	"audspect/agent/sched"
+)
 
 func TestCheckDefersExecution(t *testing.T) {
 	ran := false
@@ -24,7 +30,7 @@ func TestRunChecksFiltersBySelection(t *testing.T) {
 		check("T2", "b", "t", "High", "x", "y", func() (string, string) { return "fail", "" }),
 	}}}
 	idB := checkID("T2", "b")
-	out := runChecks(cats, map[string]bool{idB: true}, nil)
+	out := runChecks(context.Background(), cats, map[string]bool{idB: true}, nil, nil)
 	got := 0
 	for _, cat := range out {
 		got += len(cat.Checks)
@@ -48,12 +54,43 @@ func TestRunChecksInvokesCallbackPerExecutedCheck(t *testing.T) {
 		check("T2", "b", "t", "High", "x", "y", func() (string, string) { return "fail", "" }),
 	}}}
 	var seen []SimCheck
-	runChecks(cats, nil, func(c SimCheck) { seen = append(seen, c) })
+	runChecks(context.Background(), cats, nil, nil, func(c SimCheck) { seen = append(seen, c) })
 	if len(seen) != 2 {
 		t.Fatalf("expected callback for both checks, got %d: %+v", len(seen), seen)
 	}
 	if seen[0].Result == "" || seen[1].Result == "" {
 		t.Fatalf("callback fired before check.run() filled in Result: %+v", seen)
+	}
+}
+
+// TestRunChecksBlocksOnPausedGate proves a paused gate holds the next check
+// (not the currently-running one, since there isn't one yet) and Resume lets
+// it proceed -- this is what makes Pause/Resume actually work for
+// posture-mode scans, not just show a button that does nothing.
+func TestRunChecksBlocksOnPausedGate(t *testing.T) {
+	gate := sched.NewGate()
+	gate.Pause()
+	cats := []SimCategory{{Phase: "p", Checks: []SimCheck{
+		check("T1", "a", "t", "High", "x", "y", func() (string, string) { return "pass", "" }),
+	}}}
+	done := make(chan []SimCategory, 1)
+	go func() { done <- runChecks(context.Background(), cats, nil, gate, nil) }()
+
+	select {
+	case <-done:
+		t.Fatal("runChecks completed while the gate was paused -- pause did not block execution")
+	case <-time.After(50 * time.Millisecond):
+		// expected: still blocked
+	}
+
+	gate.Resume()
+	select {
+	case out := <-done:
+		if len(out) != 1 || len(out[0].Checks) != 1 {
+			t.Fatalf("expected the one check to run after resume, got %+v", out)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("runChecks did not complete after Resume")
 	}
 }
 

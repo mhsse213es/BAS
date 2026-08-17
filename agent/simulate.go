@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"time"
+
+	"audspect/agent/sched"
 )
 
 // SimCategory is a group of related ATT&CK-aligned checks.
@@ -72,7 +75,14 @@ func (c *SimCheck) run() {
 // non-nil, is invoked once per executed check (Result already filled in) --
 // runLocalScan uses this to emit live progress events, since these checks run
 // synchronously with no other per-check hook available.
-func runChecks(cats []SimCategory, selected map[string]bool, onCheck func(SimCheck)) []SimCategory {
+//
+// gate.Wait(ctx) is called before each check, not mid-check: a check is a
+// single fast synchronous read (registry/WMI/config), so there's no
+// meaningful "partway through" point to pause at -- gating between checks
+// mirrors runScenario's between-step granularity for ART/Custom steps. A
+// nil gate is a no-op (see sched.Gate.Wait), so callers that don't need
+// pause support (tests) can pass nil.
+func runChecks(ctx context.Context, cats []SimCategory, selected map[string]bool, gate *sched.Gate, onCheck func(SimCheck)) []SimCategory {
 	out := make([]SimCategory, 0, len(cats))
 	for _, cat := range cats {
 		kept := make([]SimCheck, 0, len(cat.Checks))
@@ -80,6 +90,7 @@ func runChecks(cats []SimCategory, selected map[string]bool, onCheck func(SimChe
 			if len(selected) > 0 && !selected[cat.Checks[i].ID] {
 				continue
 			}
+			gate.Wait(ctx)
 			cat.Checks[i].run()
 			if onCheck != nil {
 				onCheck(cat.Checks[i])
