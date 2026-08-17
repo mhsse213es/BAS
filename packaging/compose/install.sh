@@ -118,6 +118,14 @@ LOG_RETENTION_DAYS=""
 JWT_SECRET=""
 AGENT_SECRET=""
 LIC_PATH=""
+BACKUP_RETENTION_DAILY=""
+BACKUP_RETENTION_WEEKLY=""
+BACKUP_RETENTION_MONTHLY=""
+BACKUP_SCHEDULE_TIME=""
+REMOTE_BACKUP_ENABLED=""
+REMOTE_BACKUP_TYPE=""
+REMOTE_BACKUP_PATH=""
+REMOTE_BACKUP_RETENTION=""
 
 # ── Config loader -safe key=value parser (no source / eval) ─────────────────
 load_config() {
@@ -145,9 +153,17 @@ load_config() {
       ADMIN_EMAIL)          ADMIN_EMAIL="$val"          ;;
       ADMIN_PASSWORD)       ADMIN_PASSWORD="$val"       ;;
       LOG_RETENTION_DAYS)   LOG_RETENTION_DAYS="$val"  ;;
-      JWT_SECRET)           JWT_SECRET="$val"           ;;
-      AGENT_SECRET)         AGENT_SECRET="$val"         ;;
-      LIC_PATH)             LIC_PATH="$val"             ;;
+      JWT_SECRET)              JWT_SECRET="$val"              ;;
+      AGENT_SECRET)            AGENT_SECRET="$val"            ;;
+      LIC_PATH)                LIC_PATH="$val"                ;;
+      BACKUP_RETENTION_DAILY)   BACKUP_RETENTION_DAILY="$val"   ;;
+      BACKUP_RETENTION_WEEKLY)  BACKUP_RETENTION_WEEKLY="$val"  ;;
+      BACKUP_RETENTION_MONTHLY) BACKUP_RETENTION_MONTHLY="$val" ;;
+      BACKUP_SCHEDULE_TIME)     BACKUP_SCHEDULE_TIME="$val"     ;;
+      REMOTE_BACKUP_ENABLED)    REMOTE_BACKUP_ENABLED="$val"    ;;
+      REMOTE_BACKUP_TYPE)       REMOTE_BACKUP_TYPE="$val"       ;;
+      REMOTE_BACKUP_PATH)       REMOTE_BACKUP_PATH="$val"       ;;
+      REMOTE_BACKUP_RETENTION)  REMOTE_BACKUP_RETENTION="$val"  ;;
     esac
   done < "$cfg"
 
@@ -156,6 +172,12 @@ load_config() {
   [[ -z "$BAS_PORT"           ]] && BAS_PORT="$DEFAULT_PORT"
   [[ -z "$BAS_TLS"            ]] && BAS_TLS="false"
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
+  [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
+  [[ -z "$BACKUP_RETENTION_WEEKLY"  ]] && BACKUP_RETENTION_WEEKLY="4"
+  [[ -z "$BACKUP_RETENTION_MONTHLY" ]] && BACKUP_RETENTION_MONTHLY="3"
+  [[ -z "$BACKUP_SCHEDULE_TIME"     ]] && BACKUP_SCHEDULE_TIME="02:00"
+  [[ -z "$REMOTE_BACKUP_ENABLED"    ]] && REMOTE_BACKUP_ENABLED="false"
+  [[ -z "$REMOTE_BACKUP_RETENTION"  ]] && REMOTE_BACKUP_RETENTION="30"
 
   # Validate required fields
   local missing=false
@@ -568,6 +590,15 @@ mode_install() {
     log "TLS certificates installed"
   fi
 
+  # Backup archive encryption key -- generated once, never touches the app
+  # container or the database. Losing this file makes existing backups
+  # unrecoverable; --status reminds the operator to preserve it.
+  if [[ ! -f "${DATA_DIR}/.backup_key" ]]; then
+    openssl rand -base64 48 > "${DATA_DIR}/.backup_key"
+    chmod 600 "${DATA_DIR}/.backup_key"
+    chown root:root "${DATA_DIR}/.backup_key"
+  fi
+
   step "6/10  Writing .env (root-readable only)"
   _write_env
   log ".env written to ${DATA_DIR}/.env"
@@ -886,6 +917,14 @@ TLS_KEY=${TLS_KEY:-}
 DATA_DIR=${DATA_DIR}
 LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS}
 SHARPHOUND_DIR=${DATA_DIR}/sharphound
+BACKUP_RETENTION_DAILY=${BACKUP_RETENTION_DAILY}
+BACKUP_RETENTION_WEEKLY=${BACKUP_RETENTION_WEEKLY}
+BACKUP_RETENTION_MONTHLY=${BACKUP_RETENTION_MONTHLY}
+BACKUP_SCHEDULE_TIME=${BACKUP_SCHEDULE_TIME}
+REMOTE_BACKUP_ENABLED=${REMOTE_BACKUP_ENABLED}
+REMOTE_BACKUP_TYPE=${REMOTE_BACKUP_TYPE:-}
+REMOTE_BACKUP_PATH=${REMOTE_BACKUP_PATH:-}
+REMOTE_BACKUP_RETENTION=${REMOTE_BACKUP_RETENTION}
 EOF
   chmod 600 "$env_file"
 }
