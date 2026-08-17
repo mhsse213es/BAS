@@ -1755,7 +1755,10 @@ body.theme-slate {
             <h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0 0 0.3rem;color:var(--text)">Simulation agents <span id="agent-cnt" class="cnt">0</span></h1>
             <div style="font-size:0.8rem;color:var(--muted)">Lightweight collectors across your environment — they execute safe emulations locally and stream telemetry back.</div>
           </div>
-          <div style="display:flex;gap:0.5rem;flex-shrink:0">
+          <div style="display:flex;gap:0.5rem;flex-shrink:0;align-items:center">
+            <input type="search" id="agent-search" placeholder="Search hostname, agent ID, IP, group…"
+                   oninput="renderAgentRows()"
+                   style="padding:0.45rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;min-width:220px">
             <button class="btn btn-outline btn-sm" onclick="loadAgents()">Refresh</button>
             <button class="btn btn-primary btn-sm" onclick="showAgentDownload()">&#8595; Deploy agent</button>
           </div>
@@ -7510,8 +7513,22 @@ function renderAgentRows() {
   var list = agents.filter(function(a) {
     return AGENT_FILTER === 'all' ? agentBucket(a) !== 'retired' : agentBucket(a) === AGENT_FILTER;
   });
+  var searchEl = document.getElementById('agent-search');
+  var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  if (q) {
+    list = list.filter(function(a) {
+      return (a.hostname || '').toLowerCase().indexOf(q) !== -1 ||
+        (a.agentId || '').toLowerCase().indexOf(q) !== -1 ||
+        (a.ipAddress || '').toLowerCase().indexOf(q) !== -1 ||
+        (a.groupName || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
   var tbody = document.getElementById('agents-body');
-  if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.') + '</td></tr>'; return; }
+  if (!list.length) {
+    var emptyMsg = q ? 'No agents match "' + x(q) + '".' : ('No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.'));
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">' + emptyMsg + '</td></tr>';
+    return;
+  }
   tbody.innerHTML = list.map(function(a, idx) {
     var dot = agentDotColor(agentBucket(a));
     var menuId = 'agent-menu-' + idx;
