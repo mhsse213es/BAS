@@ -105,3 +105,47 @@ func (h *Handler) GetBackupJob(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOK(w, job)
 }
+
+// POST /api/backups/{id}/restore-marker — records that an admin flagged a
+// backup for restore intent. This is pure audit trail: nothing executes
+// automatically from this row. The actual restore is always
+// `sudo bash install.sh --restore <archive_filename>`, run by a human with
+// host access, typing the literal confirmation word RESTORE. See
+// docs/superpowers/specs/2026-08-17-backup-recovery-design.md's Restore Flow.
+func (h *Handler) CreateRestoreMarker(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	ctx := r.Context()
+
+	var status string
+	var archiveFilename *string
+	if err := h.db.QueryRow(ctx,
+		`SELECT status, archive_filename FROM backup_jobs WHERE id = $1 AND job_type = 'backup'`, id,
+	).Scan(&status, &archiveFilename); err != nil {
+		jsonError(w, "backup job not found", http.StatusNotFound)
+		return
+	}
+	if archiveFilename == nil || (status != "protected" && status != "local_success") {
+		jsonError(w, "backup has not completed successfully -- cannot restore from it", http.StatusConflict)
+		return
+	}
+
+	var requestedBy *string
+	if claims, ok := auth.ClaimsFrom(ctx); ok && claims != nil {
+		requestedBy = &claims.UserID
+	}
+	var markerID string
+	if err := h.db.QueryRow(ctx,
+		`INSERT INTO backup_jobs (job_type, trigger, requested_by, restore_of_id, status)
+		 VALUES ('restore_marker', 'console', $1, $2, 'requested')
+		 RETURNING id`,
+		requestedBy, id,
+	).Scan(&markerID); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonOK(w, map[string]string{
+		"markerId":       markerID,
+		"restoreCommand": "sudo bash install.sh --restore " + *archiveFilename,
+	})
+}
