@@ -257,11 +257,19 @@ func (r *resources) drawHero(hdc win.HDC, snap StatusSnapshot) {
 
 	r.drawText(hdc, "ENDPOINT PROTECTION STATUS", dpiRect(56, 104, 400, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 	r.drawText(hdc, stateLabel(s), dpiRect(56, 122, 400, 36), r.fontHero, colText, co.DT_LEFT)
+	// Mirrors stateLabel's priority order exactly (paused > disconnected >
+	// quarantined/restricted > default) -- this used to fall straight
+	// through to the "healthy" default whenever the agent was disconnected
+	// but not mid-run, showing "Disconnected" as the title next to "Agent
+	// healthy and connected" as the description.
 	desc := "Agent healthy and connected. No simulation is running."
-	if s.State == "quarantined" || s.State == "restricted" {
-		desc = "Agent integrity check failed — server has been notified."
-	} else if s.Paused {
+	switch {
+	case !s.ServerConnected && s.Paused:
 		desc = "Server link lost — run continues locally if one is active."
+	case !s.ServerConnected:
+		desc = "Cannot reach the BAS server. The agent will keep retrying; any results are buffered locally until the link is restored."
+	case s.State == "quarantined" || s.State == "restricted":
+		desc = "Agent integrity check failed — server has been notified."
 	}
 	r.drawText(hdc, desc, dpiRect(56, 160, 500, 18), r.fontBody, colMuted, co.DT_LEFT)
 
@@ -392,13 +400,20 @@ func heartbeatText(s statusclient.StatusResponse) string {
 	return s.LastHeartbeat.Format("15:04:05")
 }
 
-func (r *resources) drawOperationCard(hdc win.HDC, a statusclient.ActivityResponse) {
+func (r *resources) drawOperationCard(hdc win.HDC, snap StatusSnapshot) {
+	a := snap.Activity
 	rc := dpiRect(468, 204, 428, 190)
 	r.drawCard(hdc, rc)
 	r.drawIconPlayCircle(hdc, dpiXOnly(484), dpiXOnly(224), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "CURRENT OPERATION", dpiRect(504, 220, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
-	title, meta, result, sweepResult, stepLine := "No active simulation", "Awaiting tasking from the BAS console", "", "", ""
+	idleMeta := "Awaiting tasking from the BAS console"
+	if !snap.Status.ServerConnected {
+		// Otherwise this reads as if tasking is imminent while the agent
+		// can't actually reach the server to receive any.
+		idleMeta = "Disconnected — cannot receive tasking until the link is restored"
+	}
+	title, meta, result, sweepResult, stepLine := "No active simulation", idleMeta, "", "", ""
 	progress := 0
 	switch {
 	case a.CurrentOperation != nil && a.CurrentOperation.Running:
