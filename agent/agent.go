@@ -107,12 +107,16 @@ func newAgent(cfg Config, id Identity) *Agent {
 	// Enumerate installed security products once, off the startup path (the WMI /
 	// Defender queries can take a few seconds). Cached for the heartbeat.
 	go func() {
-		products := enumerateSecurityProducts()
+		products, diag := enumerateSecurityProducts()
 		a.mu.Lock()
 		a.secProducts = products
 		a.mu.Unlock()
 		if len(products) > 0 {
 			log.Printf("[*] security products detected: %s", strings.Join(products, ", "))
+		}
+		for _, d := range diag {
+			log.Printf("[!] security product detection: %s", d)
+			a.logger.Op("warn", "secproducts", d)
 		}
 	}()
 	a.logger.Op("info", "lifecycle", fmt.Sprintf("agent started v%s hash=%s...", version, func() string {

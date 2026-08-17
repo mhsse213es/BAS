@@ -4,4 +4,4 @@ package main
 
 // enumerateSecurityProducts is Windows-only; non-Windows endpoints report no
 // inventory (the report shows "not reported" rather than a false empty claim).
-func enumerateSecurityProducts() []string { return nil }
+func enumerateSecurityProducts() (products []string, diag []string) { return nil, nil }
