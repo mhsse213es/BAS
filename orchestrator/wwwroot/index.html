@@ -11652,7 +11652,7 @@ function openPicker(scId, fw) {
     }).catch(function(e) { showToast('Posture catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
     return;
   }
-  var have = (fw === 'art') ? artCatalog : calderaCatalog;
+  var have = (fw === 'art') ? scopeArtItems(sc, artCatalog) : calderaCatalog;
   if (have.length) { openPickerWith(scId, fw, sc, have); return; }
   // Catalog not loaded (or a prior fetch failed silently) — fetch on demand and
   // surface the actual reason instead of a generic "unavailable" message.
@@ -11664,14 +11664,30 @@ function openPicker(scId, fw) {
     }
     if (fw === 'art') artCatalog = d; else calderaCatalog = d;
     if (scenarios.length) renderScenarios();
-    if (!d.length) {
+    var items = (fw === 'art') ? scopeArtItems(sc, d) : d;
+    if (!items.length) {
       showToast(fw === 'art' ? 'ART catalog is empty — reseed ART content' : 'Caldera returned no abilities', 'err');
       return;
     }
-    openPickerWith(scId, fw, sc, d);
+    openPickerWith(scId, fw, sc, items);
   }).catch(function(e) {
     showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err');
   });
+}
+
+// scopeArtItems narrows the full ART catalog down to a scenario's own
+// curated technique list, when it has one. Only a blanket art_all_windows
+// sweep scenario is meant to expose the entire catalog in Customize -- a
+// scenario with its own sc.artTechniques (e.g. threat-intel-generated from
+// a real actor's ATT&CK profile) should only ever offer what it actually
+// curated, matching what its preview card already promised. Without this,
+// every ART-framework scenario's Customize picker showed the identical
+// full catalog regardless of which scenario was opened.
+function scopeArtItems(sc, items) {
+  if (sc.artAllWindows || !(sc.artTechniques || []).length) return items;
+  var wanted = {};
+  sc.artTechniques.forEach(function(t) { wanted[String(t).toUpperCase()] = true; });
+  return items.filter(function(item) { return item.id && wanted[item.id.toUpperCase()]; });
 }
 
 function openPickerWith(scId, fw, sc, items) {
