@@ -561,6 +561,20 @@ func main() {
 	})
 	defer emSweepScheduler.Stop()
 
+	// Never-started run watchdog — see ReapNeverStartedRuns for why this is
+	// needed: SendToAgent (ws.Hub) reports success once a message is
+	// queued, not once it's actually delivered, so a large dispatch that
+	// fails mid-write can leave a run "running" at 0-of-0 forever with
+	// nothing to surface the failure. 30s tick is generous against the 60s
+	// guard -- catches a stuck run within one, at most two, ticks.
+	dispatchWatchdogScheduler := exercise.NewPollScheduler(30 * time.Second)
+	dispatchWatchdogScheduler.Start(func(ctx context.Context) {
+		if err := handler.ReapNeverStartedRuns(ctx); err != nil {
+			log.Printf("[dispatch] never-started watchdog: %v", err)
+		}
+	})
+	defer dispatchWatchdogScheduler.Stop()
+
 	if err := taxiiManager.Start(context.Background()); err != nil {
 		log.Printf("[taxii] manager start: %v", err)
 	}

@@ -210,11 +210,20 @@ func (c *conn) writePump() {
 				return
 			}
 			if err := c.ws.WriteMessage(websocket.TextMessage, msg); err != nil {
+				// This used to fail silently -- SendToAgent had already
+				// returned true (it only confirms the message was queued,
+				// not delivered), so a write that can't complete within
+				// writeWait (e.g. a large ScenarioCommand over a slow link)
+				// dropped the connection with no trace anywhere. Logging
+				// the message size makes a slow/oversized payload visible
+				// instead of indistinguishable from a normal disconnect.
+				log.Printf("[ws] write failed (%d bytes), closing connection: %v", len(msg), err)
 				return
 			}
 		case <-ticker.C:
 			c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("[ws] ping write failed, closing connection: %v", err)
 				return
 			}
 		}
