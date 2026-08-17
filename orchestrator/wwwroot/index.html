@@ -7811,6 +7811,9 @@ function renderScenarios() {
   // count for an unrelated array. See sc-tmpl-filters above for the
   // filter that actually applies to templates (category, not source).
   document.getElementById('sc-filter-source').style.display = '';
+  // Same reasoning as sc-filter-source above -- renderTemplateGrid() never
+  // reads this either, and templates carry no supportedOs field.
+  document.getElementById('sc-filter-os').style.display = '';
 
   if (q) { scenarioView = 'search'; }
 
@@ -7843,6 +7846,7 @@ function renderScenarios() {
     catEl.style.display = 'block';
     document.getElementById('sc-tmpl-filters').style.display = 'flex';
     document.getElementById('sc-filter-source').style.display = 'none';
+    document.getElementById('sc-filter-os').style.display = 'none';
     renderTemplateGrid();
     return;
   }
