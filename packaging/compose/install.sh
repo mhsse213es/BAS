@@ -83,6 +83,7 @@ while [[ $# -gt 0 ]]; do
     --rollback)     MODE="rollback"  ;;
     --status)       MODE="status"    ;;
     --uninstall)    MODE="uninstall" ;;
+    --backup)       MODE="backup"    ;;
     --config)       shift; CONFIG_FILE="$1" ;;
     --purge-images) PURGE_IMAGES=true ;;
     --yes|-y)       YES=true ;;
@@ -929,6 +930,151 @@ EOF
   chmod 600 "$env_file"
 }
 
+# ── Backup & Recovery engine ──────────────────────────────────────────────────
+# Shared by `--backup` (run directly) and `--backup-worker` (polls
+# backup_jobs for a 'requested' row and calls this same code). See
+# docs/superpowers/specs/2026-08-17-backup-recovery-design.md.
+
+_run_pg_dump() {
+  local out_file="$1"
+  docker exec audspect-postgres pg_dump -U bas_user -Fc bas_platform > "$out_file"
+}
+
+_package_config() {
+  local out_file="$1"
+  tar -cf "$out_file" -C "${DATA_DIR}" \
+    --ignore-failed-read \
+    .env bas.lic certs scenarios docker-compose.yml 2>/dev/null || true
+}
+
+_write_backup_manifest() {
+  local out_file="$1" pg_version
+  pg_version=$(docker exec audspect-postgres psql -U bas_user -d bas_platform -tAc "SHOW server_version" 2>/dev/null | tr -d '[:space:]')
+  cat > "$out_file" << EOF
+{
+  "basVersion": "${BAS_VERSION}",
+  "postgresVersion": "${pg_version}",
+  "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "contents": ["postgres/audspect.dump", "config/.env", "config/bas.lic", "config/certs", "config/scenarios", "config/docker-compose.yml"],
+  "retention": {
+    "dailyDays": ${BACKUP_RETENTION_DAILY},
+    "weeklyWeeks": ${BACKUP_RETENTION_WEEKLY},
+    "monthlyMonths": ${BACKUP_RETENTION_MONTHLY}
+  }
+}
+EOF
+}
+
+_encrypt_backup_archive() {
+  local in_file="$1" out_file="$2"
+  openssl enc -aes-256-cbc -pbkdf2 -salt -in "$in_file" -out "$out_file" -pass "file:${DATA_DIR}/.backup_key"
+}
+
+# _push_remote_backup copies the finished local archive to REMOTE_BACKUP_PATH.
+# REMOTE_BACKUP_TYPE=mount assumes the operator already mounted the remote
+# filesystem (NFS/SMB) at that path -- this function only copies into it.
+# REMOTE_BACKUP_TYPE=rsync treats REMOTE_BACKUP_PATH as an rsync destination
+# (local path or user@host:/path). Returns non-zero on failure; callers must
+# not report "protected" unless this returns 0.
+_push_remote_backup() {
+  local archive="$1"
+  [[ "$REMOTE_BACKUP_ENABLED" == "true" ]] || return 1
+  [[ -n "$REMOTE_BACKUP_PATH" ]] || return 1
+  case "$REMOTE_BACKUP_TYPE" in
+    mount) cp "$archive" "${REMOTE_BACKUP_PATH}/" ;;
+    rsync) rsync -a "$archive" "${REMOTE_BACKUP_PATH}/" ;;
+    *) return 1 ;;
+  esac
+}
+
+# _prune_backups keeps every archive within BACKUP_RETENTION_DAILY days,
+# thins to one-per-week for BACKUP_RETENTION_WEEKLY weeks after that, one-
+# per-month for BACKUP_RETENTION_MONTHLY months after that, deletes the rest.
+_prune_backups() {
+  local dir="${DATA_DIR}/backups"
+  local daily_cutoff weekly_cutoff monthly_cutoff
+  daily_cutoff=$(date -d "-${BACKUP_RETENTION_DAILY} days" +%s 2>/dev/null || date -v-"${BACKUP_RETENTION_DAILY}"d +%s)
+  weekly_cutoff=$(date -d "-$((BACKUP_RETENTION_WEEKLY * 7)) days" +%s 2>/dev/null || date -v-"$((BACKUP_RETENTION_WEEKLY * 7))"d +%s)
+  monthly_cutoff=$(date -d "-$((BACKUP_RETENTION_MONTHLY * 30)) days" +%s 2>/dev/null || date -v-"$((BACKUP_RETENTION_MONTHLY * 30))"d +%s)
+
+  local seen_weeks="" seen_months=""
+  for f in $(ls -1t "${dir}"/audspect-backup-*.tar.enc 2>/dev/null); do
+    local mtime week_key month_key
+    mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
+    [[ "$mtime" -ge "$daily_cutoff" ]] && continue
+    week_key=$(date -d "@$mtime" +%G-%V 2>/dev/null || date -r "$mtime" +%G-%V)
+    month_key=$(date -d "@$mtime" +%Y-%m 2>/dev/null || date -r "$mtime" +%Y-%m)
+    if [[ "$mtime" -ge "$weekly_cutoff" ]]; then
+      if [[ "$seen_weeks" == *"|${week_key}|"* ]]; then rm -f "$f"; else seen_weeks="${seen_weeks}|${week_key}|"; fi
+    elif [[ "$mtime" -ge "$monthly_cutoff" ]]; then
+      if [[ "$seen_months" == *"|${month_key}|"* ]]; then rm -f "$f"; else seen_months="${seen_months}|${month_key}|"; fi
+    else
+      rm -f "$f"
+    fi
+  done
+}
+
+# _run_backup_engine performs one full backup and prints the result as
+# "STATUS|filename|size_bytes|sha256|local_path|remote_path|error" so both
+# mode_backup (human-readable) and mode_backup_worker (writes to
+# backup_jobs) can consume the same run.
+_run_backup_engine() {
+  local ts archive_dir work_dir tar_path enc_path status="protected" error=""
+  ts=$(date -u +%Y%m%d-%H%M%S)
+  archive_dir="${DATA_DIR}/backups"
+  work_dir=$(mktemp -d)
+  mkdir -p "${work_dir}/postgres" "${work_dir}/config"
+
+  if ! _run_pg_dump "${work_dir}/postgres/audspect.dump"; then
+    echo "FAILED|||||pg_dump failed"; rm -rf "$work_dir"; return 1
+  fi
+  _package_config "${work_dir}/config.tar"
+  _write_backup_manifest "${work_dir}/manifest.json"
+
+  tar_path="${work_dir}/audspect-backup-${ts}.tar"
+  tar -cf "$tar_path" -C "$work_dir" postgres/audspect.dump config.tar manifest.json
+
+  enc_path="${archive_dir}/audspect-backup-${ts}.tar.enc"
+  if ! _encrypt_backup_archive "$tar_path" "$enc_path"; then
+    echo "FAILED|||||encryption failed"; rm -rf "$work_dir"; return 1
+  fi
+
+  local size sha
+  size=$(stat -c %s "$enc_path" 2>/dev/null || stat -f %z "$enc_path")
+  sha=$(sha256sum "$enc_path" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$enc_path" | awk '{print $1}')
+  echo "$sha" > "${enc_path}.sha256"
+
+  local remote_path=""
+  if [[ "$REMOTE_BACKUP_ENABLED" == "true" ]]; then
+    if _push_remote_backup "$enc_path"; then
+      remote_path="${REMOTE_BACKUP_PATH}/$(basename "$enc_path")"
+    else
+      status="local_success"
+      error="local backup succeeded, remote replication failed"
+    fi
+  else
+    status="local_success"
+  fi
+
+  _prune_backups
+  rm -rf "$work_dir"
+  echo "${status}|$(basename "$enc_path")|${size}|${sha}|${enc_path}|${remote_path}|${error}"
+}
+
+mode_backup() {
+  [[ -f "${DATA_DIR}/docker-compose.yml" ]] || { err "No installation found at ${DATA_DIR}."; exit 1; }
+  step "Running backup..."
+  local result
+  result=$(_run_backup_engine)
+  IFS='|' read -r status filename size sha local_path remote_path error <<< "$result"
+  if [[ "$status" == "FAILED" ]]; then
+    err "Backup failed: ${error}"
+    exit 1
+  fi
+  log "Backup complete: ${filename} (${size} bytes, status=${status})"
+  [[ -n "$error" ]] && info "$error"
+}
+
 _wait_healthy() {
   local max=60 elapsed=0
   info "Waiting for orchestrator to become healthy..."
@@ -1010,4 +1156,5 @@ case "$MODE" in
   rollback)  mode_rollback  ;;
   status)    mode_status    ;;
   uninstall) mode_uninstall ;;
+  backup)    mode_backup    ;;
 esac
