@@ -1178,6 +1178,16 @@ type dispatchOpts struct {
 	// "user" | "admin" | "system". Steps whose RequiresPriv exceeds this tier are
 	// filtered out before dispatch — see dispatchRun's policy filter.
 	MaxPrivilege string
+	// SweepID/SweepName/SweepLabel/SweepFinal are forwarded verbatim onto the
+	// outgoing ScenarioCommand -- see that type's doc comment. Set only by EM
+	// Full Sweep's dispatch path (em_dispatch.go); empty/false for every
+	// other caller, including Variant Full Sweep, which sends its own
+	// ScenarioCommand directly in variant_handlers.go rather than through
+	// dispatchRun.
+	SweepID    string
+	SweepName  string
+	SweepLabel string
+	SweepFinal bool
 }
 
 // nullIfEmpty maps "" to a SQL NULL so an ad-hoc run leaves campaign_id null
@@ -1565,6 +1575,10 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		Mode:                 o.Mode,
 		Policy:               sc.LivePolicy,
 		PreventScreenTimeout: sc.PreventScreenTimeout,
+		SweepID:              o.SweepID,
+		SweepName:            o.SweepName,
+		SweepLabel:           o.SweepLabel,
+		SweepFinal:           o.SweepFinal,
 	}
 	sent := h.hub.SendToAgent(agentID, models.WSMessage{
 		Type:    models.MsgCommandScenario,

@@ -398,7 +398,7 @@ func (r *resources) drawOperationCard(hdc win.HDC, a statusclient.ActivityRespon
 	r.drawIconPlayCircle(hdc, dpiXOnly(484), dpiXOnly(224), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "CURRENT OPERATION", dpiRect(504, 220, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
-	title, meta, result := "No active simulation", "Awaiting tasking from the BAS console", ""
+	title, meta, result, sweepResult, stepLine := "No active simulation", "Awaiting tasking from the BAS console", "", "", ""
 	progress := 0
 	switch {
 	case a.CurrentOperation != nil && a.CurrentOperation.Running:
@@ -407,7 +407,10 @@ func (r *resources) drawOperationCard(hdc win.HDC, a statusclient.ActivityRespon
 		if op.TechniqueID != "" {
 			title = op.TechniqueID + "  " + op.ScenarioName
 		}
-		meta = fmt.Sprintf("%d steps · phase: %s", op.TotalSteps, orDash(op.Phase))
+		if op.CurrentStep != "" {
+			stepLine = "Executing: " + op.CurrentStep
+		}
+		meta = fmt.Sprintf("%d/%d steps · phase: %s", op.CompletedSteps, op.TotalSteps, orDash(op.Phase))
 		progress = op.Progress
 	case a.LastOperation != nil:
 		op := a.LastOperation
@@ -418,14 +421,40 @@ func (r *resources) drawOperationCard(hdc win.HDC, a statusclient.ActivityRespon
 		meta = fmt.Sprintf("Completed · %ds", op.DurationSec)
 		progress = 100
 		if op.Result != "" {
-			result = "Result: " + op.Result
+			// SweepLabel disambiguates which Full Sweep layer this result
+			// belongs to -- without it every layer in a 14-layer EM sweep
+			// would show the same bare "Result: Evaded" with no way to
+			// tell them apart.
+			label := "Result"
+			if op.SweepLabel != "" {
+				label = "Result (" + op.SweepLabel + ")"
+			}
+			result = label + ": " + op.Result
+		}
+		// Set only on the operation that was the sweep's last layer -- one
+		// rolled-up verdict across every layer this agent ran.
+		if op.SweepAggregateResult != "" {
+			aggLabel := op.SweepAggregateLabel
+			if aggLabel == "" {
+				aggLabel = "Full Sweep"
+			}
+			sweepResult = "Result (" + aggLabel + "): " + op.SweepAggregateResult
 		}
 	}
 	r.drawText(hdc, title, dpiRect(484, 248, 380, 22), r.fontBody, colText, co.DT_LEFT)
-	r.drawText(hdc, meta, dpiRect(484, 272, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
-	r.drawProgressBar(hdc, dpiRect(484, 300, 380, 8), progress)
+	metaY, barY, resultY := 272, 300, 316
+	if stepLine != "" {
+		r.drawText(hdc, stepLine, dpiRect(484, metaY, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
+		metaY, barY, resultY = 292, 318, 334
+	}
+	r.drawText(hdc, meta, dpiRect(484, metaY, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
+	r.drawProgressBar(hdc, dpiRect(484, barY, 380, 8), progress)
 	if result != "" {
-		r.drawText(hdc, result, dpiRect(484, 316, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
+		r.drawText(hdc, result, dpiRect(484, resultY, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
+		resultY += 18
+	}
+	if sweepResult != "" {
+		r.drawText(hdc, sweepResult, dpiRect(484, resultY, 380, 18), r.fontBody, colMuted, co.DT_LEFT)
 	}
 }
 

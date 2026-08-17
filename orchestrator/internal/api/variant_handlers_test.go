@@ -25,7 +25,7 @@ func TestDispatchVariantForSweep_NoARTStoreReturnsError(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), nil, testJWTSecret)
-		_, _, _, err := h.dispatchVariantForSweep(context.Background(), "", "agent-1", "T1059.001", "sequential", false)
+		_, _, _, err := h.dispatchVariantForSweep(context.Background(), "", "agent-1", "T1059.001", "sequential", false, 0, 1)
 		if err == nil {
 			t.Fatal("dispatchVariantForSweep() with no ART store loaded, want an error, got nil")
 		}
@@ -93,7 +93,7 @@ func TestDispatchVariantRun_PersistsSweepID(t *testing.T) {
 		// scenario_runs row (with sweep_id) is already committed by the time that
 		// happens, which is what this test verifies, so the returned error is
 		// deliberately discarded.
-		_, _, _ = h.dispatchVariantRun(ctx, sw.ID, "agent-sweep-tag", "T1059.001", "art", "tpl-1", "sequential", templates)
+		_, _, _ = h.dispatchVariantRun(ctx, sw.ID, "agent-sweep-tag", "T1059.001", "art", "tpl-1", "sequential", templates, "", "", false)
 
 		var gotSweepID *string
 		if err := pool.QueryRow(ctx,
@@ -123,7 +123,7 @@ func TestDispatchVariantRun_NoSweepID_PersistsNull(t *testing.T) {
 			ID: "tpl-1", TechniqueID: "T1059.001", Encoding: "none", ExecContext: "user",
 			Evasion: "none", Executor: "powershell", Command: "Get-Process",
 		}}
-		_, _, _ = h.dispatchVariantRun(ctx, "", "agent-no-sweep-tag", "T1059.001", "art", "tpl-1", "sequential", templates)
+		_, _, _ = h.dispatchVariantRun(ctx, "", "agent-no-sweep-tag", "T1059.001", "art", "tpl-1", "sequential", templates, "", "", false)
 
 		var gotSweepID *string
 		if err := pool.QueryRow(ctx,

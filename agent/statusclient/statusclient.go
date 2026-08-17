@@ -121,17 +121,24 @@ type StatusResponse struct {
 }
 
 type Operation struct {
-	ScenarioID   string     `json:"scenarioId"`
-	ScenarioName string     `json:"scenarioName"`
-	TechniqueID  string     `json:"techniqueId,omitempty"`
-	Phase        string     `json:"phase"`
-	Progress     int        `json:"progress"`
-	TotalSteps   int        `json:"totalSteps"`
-	StartTime    time.Time  `json:"startTime"`
-	Running      bool       `json:"running"`
-	Result       string     `json:"result,omitempty"`
-	CompletedAt  *time.Time `json:"completedAt,omitempty"`
-	DurationSec  int        `json:"durationSec,omitempty"`
+	ScenarioID     string     `json:"scenarioId"`
+	ScenarioName   string     `json:"scenarioName"`
+	TechniqueID    string     `json:"techniqueId,omitempty"`
+	Phase          string     `json:"phase"`
+	Progress       int        `json:"progress"`
+	CurrentStep    string     `json:"currentStep,omitempty"`
+	CompletedSteps int        `json:"completedSteps"`
+	TotalSteps     int        `json:"totalSteps"`
+	StartTime      time.Time  `json:"startTime"`
+	Running        bool       `json:"running"`
+	Result         string     `json:"result,omitempty"`
+	CompletedAt    *time.Time `json:"completedAt,omitempty"`
+	DurationSec    int        `json:"durationSec,omitempty"`
+	// SweepLabel/SweepAggregateLabel/SweepAggregateResult mirror LocalOperation
+	// in ../local_status_windows.go -- see that type's doc comment.
+	SweepLabel           string `json:"sweepLabel,omitempty"`
+	SweepAggregateLabel  string `json:"sweepAggregateLabel,omitempty"`
+	SweepAggregateResult string `json:"sweepAggregateResult,omitempty"`
 }
 
 type Activity struct {

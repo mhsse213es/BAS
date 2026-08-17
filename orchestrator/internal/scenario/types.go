@@ -118,27 +118,27 @@ type YAMLPayload struct {
 
 // Step is one ATT&CK technique in a scenario YAML file — server-side definition.
 type Step struct {
-	Name        string        `yaml:"name"                  json:"name"`
-	TechniqueID string        `yaml:"technique_id"          json:"techniqueId"`
+	Name        string `yaml:"name"                  json:"name"`
+	TechniqueID string `yaml:"technique_id"          json:"techniqueId"`
 	// CheckID is a stable, ATT&CK-independent identifier for configuration/
 	// posture checks (e.g. "windows-firewall-enabled"). technique_id stays
 	// optional metadata for checks that genuinely map to a technique;
 	// CheckID is what internal/endpointrisk's taxonomy classifies on, so a
 	// check like BitLocker (no honest ATT&CK fit) doesn't need a forced
 	// technique_id at all.
-	CheckID     string        `yaml:"check_id,omitempty"    json:"checkId,omitempty"`
+	CheckID string `yaml:"check_id,omitempty"    json:"checkId,omitempty"`
 	// MaxOutputBytes overrides the default 3000-byte RawOutput truncation
 	// limit for checks whose evidence is legitimately large (e.g. a full
 	// installed-software inventory). 0 means "use the default".
-	MaxOutputBytes int        `yaml:"max_output_bytes,omitempty" json:"maxOutputBytes,omitempty"`
-	Framework   string        `yaml:"framework"             json:"framework"`
-	Command     string        `yaml:"command,omitempty"     json:"command,omitempty"`
-	AbilityID   string        `yaml:"ability_id,omitempty"  json:"abilityId,omitempty"`
-	TestIndex   int           `yaml:"test_index"            json:"testIndex"`
-	Executor    string        `yaml:"executor,omitempty"    json:"executor,omitempty"`
-	TimeoutSec  int           `yaml:"timeout_sec,omitempty" json:"timeoutSec,omitempty"`
-	Payloads    []YAMLPayload `yaml:"payloads,omitempty"   json:"payloads,omitempty"`
-	Cleanup     string        `yaml:"cleanup,omitempty"    json:"cleanup,omitempty"`
+	MaxOutputBytes int           `yaml:"max_output_bytes,omitempty" json:"maxOutputBytes,omitempty"`
+	Framework      string        `yaml:"framework"             json:"framework"`
+	Command        string        `yaml:"command,omitempty"     json:"command,omitempty"`
+	AbilityID      string        `yaml:"ability_id,omitempty"  json:"abilityId,omitempty"`
+	TestIndex      int           `yaml:"test_index"            json:"testIndex"`
+	Executor       string        `yaml:"executor,omitempty"    json:"executor,omitempty"`
+	TimeoutSec     int           `yaml:"timeout_sec,omitempty" json:"timeoutSec,omitempty"`
+	Payloads       []YAMLPayload `yaml:"payloads,omitempty"   json:"payloads,omitempty"`
+	Cleanup        string        `yaml:"cleanup,omitempty"    json:"cleanup,omitempty"`
 
 	// ── Hybrid/live-mode safety & telemetry metadata (optional) ──────────────
 	// These document the risk and expected detection signal of a live step so
@@ -319,6 +319,22 @@ type ScenarioCommand struct {
 	// hold a display/system wake lock for the run. Only set when the scenario author
 	// has explicitly opted in; never injected by the dispatcher.
 	PreventScreenTimeout bool `json:"preventScreenTimeout,omitempty"`
+	// SweepID, SweepName, SweepLabel and SweepFinal are set only when this
+	// run is one layer of an EM Full Sweep or Variant Full Sweep, letting
+	// the agent's local console show which layer a result belongs to
+	// ("Result (EM 01): Evaded") instead of a bare, indistinguishable
+	// "Result: Evaded" repeated per layer. SweepID is the em_sweeps/
+	// vex_sweeps row id, used only so the agent can tell "still the same
+	// sweep" from "a different sweep started" -- never rendered. SweepName
+	// is the sweep-type's display name ("EM Full Sweep" / "Variant Full
+	// Sweep"); SweepFinal marks the sweep's last layer, telling the agent
+	// to also show one rolled-up sweep-wide result ("Result (EM Full
+	// Sweep): Evaded") alongside that layer's own. All empty/false for a
+	// plain, non-sweep run — no behavior change outside sweeps.
+	SweepID    string `json:"sweepId,omitempty"`
+	SweepName  string `json:"sweepName,omitempty"`
+	SweepLabel string `json:"sweepLabel,omitempty"`
+	SweepFinal bool   `json:"sweepFinal,omitempty"`
 }
 
 // ExecResult is the raw output returned by the agent per step.

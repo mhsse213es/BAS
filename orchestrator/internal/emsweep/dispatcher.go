@@ -10,7 +10,11 @@ import (
 // Injected after construction (SetDispatch) to avoid an
 // internal/emsweep -> internal/api import cycle -- the same pattern
 // internal/vexsweep.DispatchFn and internal/exercise.Executor already use.
-type DispatchFn func(ctx context.Context, sweepID, agentID, scenarioID string) (scenarioRunID string, err error)
+// layerIndex/totalLayers (0-based index, full sweep length) let the
+// implementation label the dispatched run for the agent's local console
+// ("EM 01") and flag the sweep's last layer so the agent also shows a
+// rolled-up sweep-wide result.
+type DispatchFn func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (scenarioRunID string, err error)
 
 // StatusFn reports a scenario_run's current status ("running"/"completed"/
 // "failed"/"partial"), read directly from scenario_runs -- no callback into
@@ -134,7 +138,7 @@ func (d *Dispatcher) dispatchNext(ctx context.Context, sw Sweep, justFinishedCou
 		return
 	}
 
-	scenarioRunID, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Layers[nextIdx])
+	scenarioRunID, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Layers[nextIdx], nextIdx, len(sw.Layers))
 	if err != nil {
 		// Deliberately does not fall through to the next layer -- a
 		// silently-skipped layer in a security-validation sweep is worse

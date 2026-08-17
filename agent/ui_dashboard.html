@@ -160,6 +160,7 @@
 
   /* current operation */
   .op-title{font-family:var(--font-display);font-size:15px;font-weight:600;margin-bottom:3px}
+  .op-step{color:#56b6ff;font-size:12px;margin-bottom:5px}
   .op-meta{color:var(--muted);font-size:12px;margin-bottom:13px}
   .bar{height:8px;border-radius:5px;background:var(--surface-3);overflow:hidden;position:relative}
   .bar > i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0;transition:width .6s cubic-bezier(.2,.8,.2,1)}
@@ -301,6 +302,7 @@
     <div class="card reveal d3">
       <h2><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" stroke="#56b6ff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Current Operation</h2>
       <div class="op-title" id="opTitle">No active simulation</div>
+      <div class="op-step" id="opStep" style="display:none"></div>
       <div class="op-meta" id="opMeta">Awaiting tasking from the BAS console</div>
       <div class="bar idle" id="opBar"><i id="opBarFill"></i></div>
       <div class="op-phase"><span id="opPhase">IDLE</span><span id="opPct"></span></div>
@@ -460,13 +462,22 @@
   }
   function escapeHtml(s){ return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
 
+  function resultTag(label, result){
+    var r=(result||"").toLowerCase();
+    var cls=r==="detected"?"r-detected":r==="evaded"?"r-evaded":r==="error"?"r-error":"r-partial";
+    return '<span class="result-tag '+cls+'" style="display:block">'+escapeHtml(label)+': '+escapeHtml(result)+'</span>';
+  }
+
   function renderOperation(a){
     var cur = a && a.currentOperation;
     var last = a && a.lastOperation;
     var bar=$("opBar"), fill=$("opBarFill");
     $("opResultWrap").innerHTML="";
+    var stepEl=$("opStep");
     if(cur && cur.running){
       $("opTitle").textContent = (cur.techniqueId?cur.techniqueId+"  ":"") + (cur.scenarioName||"Simulation");
+      if(cur.currentStep){ stepEl.textContent="Executing: "+cur.currentStep; stepEl.style.display=""; }
+      else { stepEl.style.display="none"; }
       $("opMeta").textContent = "Started "+rel(cur.startTime)+" · "+(cur.completedSteps||0)+"/"+(cur.totalSteps||0)+" steps";
       bar.classList.remove("idle");
       fill.style.width=(cur.progress||0)+"%";
@@ -474,14 +485,22 @@
       $("opPct").textContent=(cur.progress||0)+"%";
     } else if(last){
       $("opTitle").textContent=(last.techniqueId?last.techniqueId+"  ":"")+(last.scenarioName||"Last simulation");
+      stepEl.style.display="none";
       $("opMeta").textContent="Completed "+rel(last.completedAt)+" · "+(last.durationSec||0)+"s";
       bar.classList.add("idle"); fill.style.width="100%";
       $("opPhase").textContent="COMPLETE"; $("opPct").textContent="100%";
-      var r=(last.result||"").toLowerCase();
-      var cls=r==="detected"?"r-detected":r==="evaded"?"r-evaded":r==="error"?"r-error":"r-partial";
-      if(last.result) $("opResultWrap").innerHTML='<span class="result-tag '+cls+'">Result: '+escapeHtml(last.result)+'</span>';
+      var tags="";
+      // sweepLabel disambiguates which Full Sweep layer this result belongs
+      // to -- without it, every layer in a 14-layer EM sweep would show the
+      // same bare "Result: Evaded" tag with no way to tell them apart.
+      if(last.result) tags += resultTag(last.sweepLabel ? "Result ("+last.sweepLabel+")" : "Result", last.result);
+      // Set only on the operation that was the sweep's last layer -- one
+      // rolled-up verdict across every layer this agent ran.
+      if(last.sweepAggregateResult) tags += resultTag("Result ("+(last.sweepAggregateLabel||"Full Sweep")+")", last.sweepAggregateResult);
+      $("opResultWrap").innerHTML = tags;
     } else {
       $("opTitle").textContent="No active simulation";
+      stepEl.style.display="none";
       $("opMeta").textContent="Awaiting tasking from the BAS console";
       bar.classList.add("idle"); fill.style.width="0%";
       $("opPhase").textContent="IDLE"; $("opPct").textContent="";

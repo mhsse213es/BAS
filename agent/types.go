@@ -126,6 +126,14 @@ type ScenarioCommand struct {
 	// entire run via SetThreadExecutionState. Opt-in per scenario only — never
 	// applied globally so enterprise idle/lock policies are respected by default.
 	PreventScreenTimeout bool `json:"preventScreenTimeout,omitempty"`
+	// SweepID, SweepName, SweepLabel and SweepFinal mirror
+	// orchestrator/internal/scenario.ScenarioCommand -- set only when this
+	// run is one layer of a server-side Full Sweep. See that type's doc
+	// comment for the full rationale.
+	SweepID    string `json:"sweepId,omitempty"`
+	SweepName  string `json:"sweepName,omitempty"`
+	SweepLabel string `json:"sweepLabel,omitempty"`
+	SweepFinal bool   `json:"sweepFinal,omitempty"`
 }
 
 // LivePolicy mirrors the server-side guardrails the agent must honour for live runs.

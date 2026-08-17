@@ -10,12 +10,12 @@ type LocalEvidenceStats struct{ EventsCollected, DefenderAlerts, SysmonDetection
 type LocalOperation struct{}
 type LocalActivity struct{}
 
-func newLocalAgentState() *LocalAgentState                                  { return &LocalAgentState{} }
-func (s *LocalAgentState) SetConnected(_ bool)                              {}
-func (s *LocalAgentState) StartOperation(_, _, _ string, _ int)             {}
-func (s *LocalAgentState) UpdateProgress(_, _ int, _ string)                {}
-func (s *LocalAgentState) CompleteOperation(_ string, _ LocalEvidenceStats) {}
-func (s *LocalAgentState) RecordActivity(_ string)                          {}
+func newLocalAgentState() *LocalAgentState                                                       { return &LocalAgentState{} }
+func (s *LocalAgentState) SetConnected(_ bool)                                                   {}
+func (s *LocalAgentState) StartOperation(_, _, _, _ string, _ int)                               {}
+func (s *LocalAgentState) UpdateProgress(_, _ int, _, _ string)                                  {}
+func (s *LocalAgentState) CompleteOperation(_ string, _ LocalEvidenceStats, _, _ string, _ bool) {}
+func (s *LocalAgentState) RecordActivity(_ string)                                               {}
 
 // startLocalAPI is a no-op on non-Windows platforms.
 func (a *Agent) startLocalAPI() {}

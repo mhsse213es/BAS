@@ -40,7 +40,7 @@ func TestDispatchEMLayer_DispatchesAndTagsRunWithSweepID(t *testing.T) {
 			t.Fatalf("seed em_sweeps row: %v", err)
 		}
 
-		runID, err := h.dispatchEMLayer(context.Background(), sw.ID, agentID, sc.ID)
+		runID, err := h.dispatchEMLayer(context.Background(), sw.ID, agentID, sc.ID, 0, 1)
 		if err != nil {
 			t.Fatalf("dispatchEMLayer: %v", err)
 		}
@@ -67,7 +67,7 @@ func TestDispatchEMLayer_UnknownScenario_ReturnsError(t *testing.T) {
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, engine := minimalPostureScenario(t, "em-dispatch-other-sc")
 		h := New(pool, ws.NewHub(), engine, "")
-		_, err := h.dispatchEMLayer(context.Background(), "sweep-1", "some-agent", "does-not-exist")
+		_, err := h.dispatchEMLayer(context.Background(), "sweep-1", "some-agent", "does-not-exist", 0, 1)
 		if err == nil {
 			t.Fatal("expected an error for an unknown scenario id")
 		}

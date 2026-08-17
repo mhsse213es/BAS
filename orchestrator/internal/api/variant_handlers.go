@@ -107,7 +107,7 @@ func (h *Handler) RunVariants(w http.ResponseWriter, r *http.Request) {
 
 	mode := coalesce(req.ExecutionMode, variant.ExecutionSequential)
 	runID, vrID, err := h.dispatchVariantRun(ctx, "", req.AgentID, req.TechniqueID,
-		coalesce(req.BaseType, "art"), baseID, mode, templates)
+		coalesce(req.BaseType, "art"), baseID, mode, templates, "", "", false)
 	if err != nil {
 		log.Printf("[variant] dispatch failed for %s on %s: %v", req.TechniqueID, req.AgentID, err)
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -565,11 +565,14 @@ func (h *Handler) resolveBaseCommand(techniqueID, baseType, baseID, cmdOverride,
 	return step.Command, step.Executor, step.Name, nil
 }
 
-// dispatchVariantRun creates DB records and dispatches via the WebSocket pipeline.
+// dispatchVariantRun creates DB records and dispatches via the WebSocket
+// pipeline. sweepName/sweepLabel/sweepFinal are forwarded onto the outgoing
+// ScenarioCommand -- empty/false for the ad-hoc (non-sweep) caller.
 func (h *Handler) dispatchVariantRun(
 	ctx context.Context,
 	sweepID, agentID, techniqueID, baseType, baseID, executionMode string,
 	templates []variant.Template,
+	sweepName, sweepLabel string, sweepFinal bool,
 ) (scenarioRunID, variantRunID string, err error) {
 
 	syntheticScenarioID := "__variant__" + strings.ToLower(techniqueID)
@@ -647,6 +650,10 @@ func (h *Handler) dispatchVariantRun(
 			Name:       runName,
 			Steps:      steps,
 			Mode:       "posture",
+			SweepID:    sweepID,
+			SweepName:  sweepName,
+			SweepLabel: sweepLabel,
+			SweepFinal: sweepFinal,
 		},
 	})
 	if !sent {
@@ -664,7 +671,10 @@ func (h *Handler) dispatchVariantRun(
 // resolves templates and dispatches exactly like RunVariants does for a
 // single ad-hoc request, but returns the resolved variant count too so the
 // Dispatcher can credit the sweep's real (not precomputed) total.
-func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool) (scenarioRunID, variantRunID string, totalVariants int, err error) {
+// techniqueIndex/totalTechniques label the dispatched run for the agent's
+// local console and flag the sweep's last technique -- see
+// scenario.ScenarioCommand's SweepName/SweepLabel/SweepFinal doc comment.
+func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (scenarioRunID, variantRunID string, totalVariants int, err error) {
 	templates, baseID, err := h.resolveTemplates(ctx, techniqueID, "art", "", "", "", includeAdvanced)
 	if err != nil {
 		return "", "", 0, err
@@ -672,7 +682,8 @@ func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID,
 	if len(templates) == 0 {
 		return "", "", 0, fmt.Errorf("no variants generated for %s", techniqueID)
 	}
-	scenarioRunID, variantRunID, err = h.dispatchVariantRun(ctx, sweepID, agentID, techniqueID, "art", baseID, mode, templates)
+	sweepFinal := techniqueIndex == totalTechniques-1
+	scenarioRunID, variantRunID, err = h.dispatchVariantRun(ctx, sweepID, agentID, techniqueID, "art", baseID, mode, templates, "Variant Full Sweep", techniqueID, sweepFinal)
 	if err != nil {
 		return "", "", 0, err
 	}

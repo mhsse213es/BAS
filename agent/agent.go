@@ -517,7 +517,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 
 	a.setStatus("scanning")
 	a.sendHeartbeat("scanning")
-	a.localSt.StartOperation(cmd.ScenarioID, cmd.Name, cmd.ScenarioID, len(cmd.Steps))
+	a.localSt.StartOperation(cmd.ScenarioID, cmd.Name, cmd.ScenarioID, cmd.SweepLabel, len(cmd.Steps))
 
 	// Policy variables exposed to every step command as environment variables.
 	policyEnv := map[string]string{"BAS_RUN_MODE": cmd.Mode}
@@ -748,7 +748,7 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 	// server's 4-verdict taxonomy (ERROR steps are excluded, never counted as Evaded).
 	resultLabel := deriveLocalResultLabel(results, partial)
 	a.localSt.UpdateProgress(len(results), len(results), "Upload", "")
-	a.localSt.CompleteOperation(resultLabel, ev)
+	a.localSt.CompleteOperation(resultLabel, ev, cmd.SweepID, cmd.SweepName, cmd.SweepFinal)
 
 	payload := RawRunResult{
 		RunID:      cmd.RunID,
@@ -886,7 +886,7 @@ func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 	// with the "Simulation In Progress" banner (the banner is driven by status,
 	// the panel by currentOp — without this the panel reads "No active simulation"
 	// during a posture scan). The ART path does this in runScenario.
-	a.localSt.StartOperation(scenarioID, scenarioID, "", 0)
+	a.localSt.StartOperation(scenarioID, scenarioID, "", "", 0)
 
 	categories := RunScenarioChecks(scenarioID)
 
@@ -965,7 +965,7 @@ func (a *Agent) runLocalScan(scenarioID, runID string, selected []string) {
 	// Close out the local operation so the console shows the completed scan
 	// instead of leaving a stale "running" panel.
 	a.localSt.UpdateProgress(len(checks), len(checks), "Upload", "")
-	a.localSt.CompleteOperation("Completed", LocalEvidenceStats{EventsCollected: len(checks)})
+	a.localSt.CompleteOperation("Completed", LocalEvidenceStats{EventsCollected: len(checks)}, "", "", false)
 
 	a.setStatus("idle")
 	a.sendHeartbeat("idle")

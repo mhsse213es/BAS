@@ -27,7 +27,7 @@ func TestDispatcher_Tick_DispatchesFirstLayerForNewSweep(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
 			return "running", nil // nothing has "completed" yet in this test
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			dispatchedLayers = append(dispatchedLayers, scenarioID)
 			return "sr-1", nil
 		})
@@ -72,7 +72,7 @@ func TestDispatcher_Tick_AdvancesWhenCurrentLayerFinishes(t *testing.T) {
 			}
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			dispatchedLayers = append(dispatchedLayers, scenarioID)
 			return "sr-2", nil
 		})
@@ -110,7 +110,7 @@ func TestDispatcher_Tick_CompletesSweepAfterLastLayer(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
 			return "completed", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			t.Fatal("dispatch should not be called -- no layers remain after the last one")
 			return "", nil
 		})
@@ -142,7 +142,7 @@ func TestDispatcher_Tick_MarksFailedOnDispatchError(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			return "", errors.New("agent not connected")
 		})
 
@@ -183,7 +183,7 @@ func TestDispatcher_Tick_ForceCancelsStuckLayerAfterThreshold(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
 			return "running", nil // never finishes -- simulates a truly hung layer
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			t.Fatal("dispatch should not be called -- the current layer never leaves running in this test")
 			return "", nil
 		})
@@ -225,7 +225,7 @@ func TestDispatcher_Tick_DoesNotForceCancelBeforeThreshold(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
 			return "running", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			t.Fatal("dispatch should not be called")
 			return "", nil
 		})
@@ -269,7 +269,7 @@ func TestDispatcher_Tick_DoesNotReTriggerCancelOnSubsequentTicks(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
 			return "running", nil // still stuck across every tick in this test
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			t.Fatal("dispatch should not be called")
 			return "", nil
 		})
@@ -318,7 +318,7 @@ func TestDispatcher_Tick_RetriesStuckCancelAfterFailedAttempt(t *testing.T) {
 		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
 			return "running", nil // still stuck across every tick in this test
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			t.Fatal("dispatch should not be called")
 			return "", nil
 		})
@@ -369,7 +369,7 @@ func TestDispatcher_Tick_ForceCancelsStuckLayerEvenIfStatusCheckErrors(t *testin
 		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
 			return "", errors.New("simulated persistent status-check failure")
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			t.Fatal("dispatch should not be called")
 			return "", nil
 		})
@@ -411,7 +411,7 @@ func TestDispatcher_Tick_IgnoresStoppedAndFailedSweeps(t *testing.T) {
 			t.Fatal("status check should not be called for a stopped sweep")
 			return "", nil
 		})
-		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string) (string, error) {
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
 			t.Fatal("dispatch should not be called for a stopped sweep")
 			return "", nil
 		})
