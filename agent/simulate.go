@@ -17,17 +17,17 @@ type SimCategory struct {
 
 // SimCheck is a single simulation result — matches orchestrator SimulationResult schema.
 type SimCheck struct {
-	ID           string    `json:"id"`
-	Technique    Tech      `json:"technique"`
-	Result       string    `json:"result"`   // pass | fail | skipped
-	Severity     string    `json:"severity"` // Critical | High | Medium | Low
-	ThreatImpact string    `json:"threatImpact"`
-	Details      string    `json:"details"`
-	Remediation  string    `json:"remediation"`
-	RawOutput    string    `json:"rawOutput,omitempty"`
-	DurationMs   int64     `json:"durationMs"`
-	ExecutedAt   time.Time `json:"executedAt"`
-	Framework    string    `json:"framework"`
+	ID           string                          `json:"id"`
+	Technique    Tech                            `json:"technique"`
+	Result       string                          `json:"result"`   // pass | fail | skipped
+	Severity     string                          `json:"severity"` // Critical | High | Medium | Low
+	ThreatImpact string                          `json:"threatImpact"`
+	Details      string                          `json:"details"`
+	Remediation  string                          `json:"remediation"`
+	RawOutput    string                          `json:"rawOutput,omitempty"`
+	DurationMs   int64                           `json:"durationMs"`
+	ExecutedAt   time.Time                       `json:"executedAt"`
+	Framework    string                          `json:"framework"`
 	fn           func() (result, details string) // deferred execution; never serialized
 }
 
