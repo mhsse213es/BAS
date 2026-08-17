@@ -19487,8 +19487,15 @@ function renderScheduledAssessmentsList() {
     var name = sc ? sc.name : (payload.scenarioId || '—');
     var modeColor = sch.Mode === 'telemetry' ? 'var(--warning)' : 'var(--muted)';
     var modeLabel = sch.Mode === 'telemetry' ? 'Telemetry' : 'Posture';
-    var statusColor = sch.Enabled ? 'var(--success)' : 'var(--muted)';
-    var statusLabel = sch.Enabled ? 'Enabled' : 'Cancelled';
+    // A "once" schedule's Enabled flag is never flipped after it fires --
+    // only LastOccurrenceAt gets set (see internal/jobs/dispatch.go's
+    // spawnDueSchedules -> MarkScheduleOccurrenceHandled). nextOccurrenceOnce
+    // already treats LastOccurrenceAt != nil as "never fires again" server-
+    // side; mirror that here so Edit/Cancel stop being offered for a
+    // one-time schedule that has nothing left to edit or cancel.
+    var onceCompleted = sch.RecurrenceType === 'once' && !!sch.LastOccurrenceAt;
+    var statusColor = onceCompleted ? 'var(--accent)' : (sch.Enabled ? 'var(--success)' : 'var(--muted)');
+    var statusLabel = onceCompleted ? 'Completed' : (sch.Enabled ? 'Enabled' : 'Cancelled');
     var lastRun = sch.LastOccurrenceAt ? fmtDate(sch.LastOccurrenceAt) : 'Never';
     return '<tr>' +
       '<td>' + x(name) + '</td>' +
@@ -19498,8 +19505,10 @@ function renderScheduledAssessmentsList() {
       '<td>' + x(lastRun) + '</td>' +
       '<td><span class="badge" style="color:' + statusColor + ';border-color:' + statusColor + '">' + statusLabel + '</span></td>' +
       '<td>' +
-        '<button class="btn btn-outline btn-sm" onclick="openSchedWizardForEdit(\'' + x(sch.ID) + '\')">Edit</button>' +
-        (sch.Enabled ? ' <button class="btn btn-outline btn-sm" onclick="cancelScheduledAssessment(\'' + x(sch.ID) + '\')">Cancel</button>' : '') +
+        (onceCompleted
+          ? '<span class="tiny muted">Ran once — nothing to edit or cancel</span>'
+          : '<button class="btn btn-outline btn-sm" onclick="openSchedWizardForEdit(\'' + x(sch.ID) + '\')">Edit</button>' +
+            (sch.Enabled ? ' <button class="btn btn-outline btn-sm" onclick="cancelScheduledAssessment(\'' + x(sch.ID) + '\')">Cancel</button>' : '')) +
       '</td>' +
     '</tr>';
   }).join('');
