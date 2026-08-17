@@ -19192,9 +19192,20 @@ function closeEMSweepProgress() {
 
 function pollEMSweepProgress() {
   if (!_emSweepCurrentId) return;
-  apicall('/api/em/sweeps/' + encodeURIComponent(_emSweepCurrentId)).then(function(sw) {
+  // Fetches both the sweep's own status (layers, currentIndex, overall
+  // status) AND the real per-layer run data (results, progress) every
+  // tick -- without the second fetch this drawer could only ever show a
+  // done/running/pending icon per layer, with no way to see what a
+  // completed (or halted-mid-sweep) layer actually found. Mirrors
+  // openSweepDrilldown's childRuns rendering for Full Variant Sweep.
+  Promise.all([
+    apicall('/api/em/sweeps/' + encodeURIComponent(_emSweepCurrentId)),
+    apicall('/api/em/sweeps/' + encodeURIComponent(_emSweepCurrentId) + '/runs')
+  ]).then(function(res) {
+    var sw = res[0];
     if (!sw || sw.error) return;
-    renderEMSweepProgress(sw);
+    var runs = (res[1] && res[1].runs) || [];
+    renderEMSweepProgress(sw, runs);
     if (sw.status !== 'running' && _emSweepPollTimer) {
       clearInterval(_emSweepPollTimer);
       _emSweepPollTimer = null;
@@ -19202,18 +19213,45 @@ function pollEMSweepProgress() {
   }).catch(function() {});
 }
 
-function renderEMSweepProgress(sw) {
+function renderEMSweepProgress(sw, runs) {
   document.getElementById('em-sweep-progress-title').textContent = 'EM Full Sweep — ' + x(sw.agentId);
   document.getElementById('em-sweep-progress-summary').innerHTML =
     '<strong>' + sw.completedLayers + '/' + sw.totalLayers + '</strong> layers complete &middot; status: ' + x(sw.status) +
     (sw.error ? '<div style="color:var(--danger);margin-top:0.3rem">' + x(sw.error) + '</div>' : '');
+  var runsByScenario = {};
+  (runs || []).forEach(function(r) { runsByScenario[r.scenarioId] = r; });
   var list = document.getElementById('em-sweep-progress-list');
   list.innerHTML = (sw.layers || []).map(function(layerId, i) {
     var state = i < sw.currentIndex ? 'done' : (i === sw.currentIndex && sw.status === 'running') ? 'running' : 'pending';
     var color = state === 'done' ? 'var(--success)' : state === 'running' ? 'var(--accent)' : 'var(--muted)';
     var label = state === 'done' ? '&#10003;' : state === 'running' ? '&#9679;' : '&#9675;';
-    return '<li style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;color:' + color + '">' +
-      '<span>' + label + '</span><span>' + x(layerId) + '</span></li>';
+    var r = runsByScenario[layerId];
+    var actionHtml = '';
+    if (r) {
+      var cnt = (r.results || []).length;
+      var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
+      var badge = cnt ? (fail + ' fail / ' + (cnt - fail) + ' pass') : r.status;
+      if (r.id && r.status === 'running') {
+        actionHtml = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + ((r.progress && r.progress.stepsTotal) || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">&#9673; Live</button>';
+      } else if (cnt) {
+        actionHtml = '<button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>' + badge + '</button>';
+      } else if (r.id && r.progress) {
+        // A cancelled/partial layer (e.g. the agent disconnected mid-sweep)
+        // never gets the agent's one atomic `results` write, so cnt is 0 --
+        // but its per-step pass/fail counts already streamed in live
+        // (r.progress) and are still queryable via openRunPanel, so this
+        // reuses that real data instead of leaving a completed-but-halted
+        // layer with no way to see what it found.
+        var pr = r.progress;
+        var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
+        actionHtml = '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + (pr.stepsTotal || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')">' + toBadge + '</button>';
+      } else {
+        actionHtml = '<span class="tiny muted">' + x(badge) + '</span>';
+      }
+    }
+    return '<li style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.3rem 0">' +
+      '<span style="display:flex;align-items:center;gap:0.5rem;color:' + color + '"><span>' + label + '</span><span>' + x(layerId) + '</span></span>' +
+      '<span style="white-space:nowrap">' + actionHtml + '</span></li>';
   }).join('');
   var stopBtn = document.getElementById('em-sweep-stop-btn');
   stopBtn.style.display = sw.status === 'running' ? '' : 'none';
