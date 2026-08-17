@@ -64,6 +64,10 @@
 
 html, body { height: 100%; }
 body {
+  /* #license-grace-banner is position:fixed (pinned, doesn't scroll away) --
+     this reserves the space it would otherwise occupy in-flow. Defaults to
+     0px via the CSS var fallback when no banner exists. */
+  padding-top: var(--license-banner-h, 0px);
   font-family: var(--font-ui);
   background: var(--bg);
   background-image:
@@ -366,7 +370,7 @@ body {
 
 /* ── Header ────────────────────────────────────────────────── */
 header {
-  position: sticky; top: 0; z-index: 100;
+  position: sticky; top: var(--license-banner-h, 0px); z-index: 100;
   height: var(--header-h);
   background: linear-gradient(90deg, rgba(15,26,46,0.97) 0%, rgba(12,20,36,0.97) 100%);
   border-bottom: 1px solid var(--border);
@@ -4962,7 +4966,11 @@ function renderLicenseGraceBanner(info) {
   if (existing) existing.remove();
   var el = document.createElement('div');
   el.id = 'license-grace-banner';
-  el.style.cssText = 'position:relative;z-index:9998;padding:0.75rem 1.25rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
+  // Fixed (not in-flow) so it stays visible while scrolling instead of
+  // scrolling away and leaving #sidebar's --license-banner-h offset stale --
+  // see body's padding-top and header's sticky top below, which depend on
+  // this banner actually staying put at the height they were measured against.
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;padding:0.75rem 1.25rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
   el.innerHTML = _licenseBannerHTML(info);
   document.body.insertBefore(el, document.body.firstChild);
   _syncLicenseBannerHeight();
