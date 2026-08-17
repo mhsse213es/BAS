@@ -3,6 +3,8 @@ package connector
 import (
 	"context"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -19,8 +21,8 @@ type Scheduler struct {
 	sources         []Source
 	activitySources []ActivitySource // OTX today -- see WithActivitySources
 	generator       *Generator
-	engine    *scenario.Engine
-	interval  time.Duration
+	engine          *scenario.Engine
+	interval        time.Duration
 	// pool persists fetched actor profiles (sectors/regions) for
 	// internal/reporting's priority-score weighting. See
 	// docs/superpowers/specs/2026-07-19-sp5-sector-region-weighting-design.md.
@@ -40,9 +42,20 @@ type Scheduler struct {
 	// construction.
 	mu      sync.RWMutex
 	status  ConnectorStatus
-	started bool // true once run() has actually been launched (by Start or Reconfigure)
+	started bool          // true once run() has actually been launched (by Start or Reconfigure)
 	syncCh  chan struct{} // manual trigger
 	stopCh  chan struct{}
+
+	// bundleDir/bundleVerify let the scheduler own the bundle source's
+	// presence itself (see WithBundleDir/checkBundleSource), instead of
+	// relying on main.go's one-time boot check. Two problems otherwise: a
+	// bundle file dropped in after boot (none present at startup) was never
+	// picked up short of a restart, since nothing ever re-checked; and any
+	// MISP/OpenCTI/OTX config save called Reconfigure with a DB-loaded
+	// source list that never included the bundle at all, silently dropping
+	// an already-working bundle source from the very next sync onward.
+	bundleDir    string
+	bundleVerify func(string) error
 }
 
 // NewScheduler creates a Scheduler over the given threat-intel sources (any of
@@ -85,9 +98,14 @@ func NewScheduler(
 	return s
 }
 
-// Start launches the background polling goroutine.
+// Start launches the background polling goroutine. Also starts with zero
+// sources when a bundle directory is configured (WithBundleDir), even if
+// no bundle file is present yet -- otherwise a bundle dropped in later, on
+// a deployment with no MISP/OpenCTI/OTX ever configured either, would have
+// no running sync loop to be picked up by, and would need a restart after
+// all despite checkBundleSource existing.
 func (s *Scheduler) Start() {
-	if len(s.sources) == 0 {
+	if len(s.sources) == 0 && s.bundleDir == "" {
 		log.Println("[connector] no sources configured — connector idle")
 		return
 	}
@@ -99,6 +117,55 @@ func (s *Scheduler) Start() {
 
 	// Run immediately on startup
 	s.TriggerSync()
+}
+
+// WithBundleDir attaches the air-gapped bundle directory + signature
+// verifier so the scheduler can (re-)detect the bundle source itself on
+// every sync, rather than only once at construction. Safe to call once
+// after NewScheduler, before Start. Chainable. Pass dir="" to disable
+// bundle checking entirely (matches the existing "TIBundleDir unset"
+// behavior in main.go).
+func (s *Scheduler) WithBundleDir(dir string, verify func(string) error) *Scheduler {
+	s.mu.Lock()
+	s.bundleDir = dir
+	s.bundleVerify = verify
+	s.mu.Unlock()
+	return s
+}
+
+// checkBundleSource re-detects the bundle file's presence and keeps
+// s.sources/s.status.BundleEnabled in sync with it, called at the top of
+// every sync() -- both the periodic tick and any manually/config-save-
+// triggered one. Registers a BundleSource the first time the file appears
+// (no restart needed), and de-registers it if the file is later removed,
+// without disturbing any other source already in the list.
+func (s *Scheduler) checkBundleSource() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.bundleDir == "" {
+		return
+	}
+	present := false
+	if _, err := os.Stat(filepath.Join(s.bundleDir, BundleFileName)); err == nil {
+		present = true
+	}
+	haveIdx := -1
+	for i, src := range s.sources {
+		if _, ok := src.(*BundleSource); ok {
+			haveIdx = i
+			break
+		}
+	}
+	switch {
+	case present && haveIdx == -1:
+		s.sources = append(s.sources, NewBundleSource(s.bundleDir, s.bundleVerify))
+		s.status.BundleEnabled = true
+		log.Printf("[connector] bundle file detected at %s — registered, no restart needed", s.bundleDir)
+	case !present && haveIdx != -1:
+		s.sources = append(s.sources[:haveIdx], s.sources[haveIdx+1:]...)
+		s.status.BundleEnabled = false
+		log.Printf("[connector] bundle file no longer present at %s — de-registered", s.bundleDir)
+	}
 }
 
 // Reconfigure replaces the source list live -- no restart needed. If the
@@ -128,6 +195,13 @@ func (s *Scheduler) Reconfigure(sources []Source) {
 		s.started = true
 	}
 	s.mu.Unlock()
+
+	// Restore the bundle source immediately if it was already registered --
+	// sources above came from LoadSourcesFromDB (MISP/OpenCTI/OTX only), so
+	// without this, saving any one of those three would silently drop an
+	// already-working bundle source until the next sync tick noticed it was
+	// gone via checkBundleSource on its own.
+	s.checkBundleSource()
 
 	if shouldStart {
 		go s.run()
@@ -213,6 +287,11 @@ func (s *Scheduler) run() {
 }
 
 func (s *Scheduler) sync() {
+	// Re-detect the bundle file's presence before touching s.sources below,
+	// so a bundle dropped in since the last tick is picked up this cycle
+	// with no restart needed.
+	s.checkBundleSource()
+
 	log.Println("[connector] starting threat-intel sync")
 	start := time.Now()
 
@@ -522,7 +601,7 @@ func resolveActivitySignalActor(signalName string, merged []ThreatActor) (string
 // upsertActivitySignals resolves each signal against the merged curated
 // roster and persists to threat_actor_activity. A signal matching nothing
 // curated gets a minimal threat_actor_profiles stub (bare name; every
-// other column keeps the table's own default -- '' confidence, NULL
+// other column keeps the table's own default -- ” confidence, NULL
 // last_seen) so the activity has somewhere to attach.
 // internal/reporting/insights.go's ResolveActorTechniques independently
 // re-derives the actor's MITRE technique list from its Name at scoring

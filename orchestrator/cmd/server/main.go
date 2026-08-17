@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -321,14 +320,6 @@ func main() {
 	for _, src := range tiSources {
 		log.Printf("[+] %s connector configured", src.Name())
 	}
-	// Air-gapped floor: only add the bundle source when a signed ti-bundle.json is
-	// actually present. Verified with the release key via integrity.VerifyScenarioFile.
-	if cfg.TIBundleDir != "" {
-		if _, err := os.Stat(filepath.Join(cfg.TIBundleDir, connector.BundleFileName)); err == nil {
-			tiSources = append(tiSources, connector.NewBundleSource(cfg.TIBundleDir, integrity.VerifyScenarioFile))
-			log.Printf("[+] Threat-intel bundle found in %s (air-gapped source)", cfg.TIBundleDir)
-		}
-	}
 	gen := connector.NewGenerator(cfg.ScenariosDir, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions, engine.Profiles())
 	priorityEngine := threatpriority.NewEngine(pool, engine, cfg.ThreatIntelSectors, cfg.ThreatIntelRegions)
 	correlationEngine := correlation.NewEngine(pool, engine)
@@ -338,6 +329,14 @@ func main() {
 		log.Printf("[!] threat-intel activity source load warning: %v", err)
 	}
 	scheduler.WithActivitySources(tiActivitySources)
+	// Air-gapped bundle: the scheduler now owns detecting ti-bundle.json
+	// itself (checkBundleSource, re-checked on every sync) instead of only
+	// once here at boot -- a bundle dropped in later (or removed) takes
+	// effect on the next sync tick, no restart needed. WithBundleDir must
+	// be set before Start() since Start()'s "anything to do?" guard reads
+	// it too (a bundle-only deployment with zero live connectors still
+	// needs its sync loop running to ever notice the file appear).
+	scheduler.WithBundleDir(cfg.TIBundleDir, integrity.VerifyScenarioFile)
 	scheduler.Start()
 	defer scheduler.Stop()
 

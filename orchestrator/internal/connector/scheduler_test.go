@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -56,8 +58,8 @@ func TestScheduler_Sync_PopulatesBySourcePerSource(t *testing.T) {
 			stats:  mispStat,
 		},
 		fakeSource{
-			name: "opencti",
-			err:  errors.New("opencti unreachable"),
+			name:  "opencti",
+			err:   errors.New("opencti unreachable"),
 			stats: SourceStat{Name: "opencti", Error: "opencti unreachable", FetchedAt: time.Now()},
 		},
 	}, NewGenerator(t.TempDir(), nil, nil, nil), scenario.NewEngine(t.TempDir()), 24, sharedDB.Pool, nil)
@@ -615,6 +617,121 @@ func TestReconfigureActivitySources_UpdatesOTXEnabledStatus(t *testing.T) {
 	s.ReconfigureActivitySources(nil)
 	if s.Status().OTXEnabled {
 		t.Error("OTXEnabled should be false after reconfiguring OTX out")
+	}
+}
+
+// TestCheckBundleSource_RegistersWhenFileAppears proves a bundle file
+// dropped in after construction (nothing present yet, matching a fresh
+// deployment with no bundle at boot) gets picked up on the next check --
+// no restart, no separate config-save action required, since nothing in
+// the UI even represents "save the bundle path".
+func TestCheckBundleSource_RegistersWhenFileAppears(t *testing.T) {
+	dir := t.TempDir()
+	s := NewScheduler(nil, nil, nil, 24, nil, nil)
+	s.WithBundleDir(dir, nil)
+
+	s.checkBundleSource()
+	if s.Status().BundleEnabled {
+		t.Fatal("BundleEnabled should be false before the file exists")
+	}
+
+	writeMinimalBundle(t, dir)
+	s.checkBundleSource()
+	if !s.Status().BundleEnabled {
+		t.Fatal("BundleEnabled should be true once the file appears")
+	}
+	if n := countBundleSources(s); n != 1 {
+		t.Fatalf("expected exactly 1 BundleSource registered, got %d", n)
+	}
+}
+
+// TestCheckBundleSource_Deregisters proves a bundle file removed later is
+// dropped from the source list on the next check, not left dangling.
+func TestCheckBundleSource_Deregisters(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalBundle(t, dir)
+	s := NewScheduler(nil, nil, nil, 24, nil, nil)
+	s.WithBundleDir(dir, nil)
+	s.checkBundleSource()
+	if !s.Status().BundleEnabled {
+		t.Fatal("expected BundleEnabled true with the file present")
+	}
+
+	if err := os.Remove(filepath.Join(dir, BundleFileName)); err != nil {
+		t.Fatalf("remove bundle file: %v", err)
+	}
+	s.checkBundleSource()
+	if s.Status().BundleEnabled {
+		t.Fatal("BundleEnabled should be false once the file is gone")
+	}
+	if n := countBundleSources(s); n != 0 {
+		t.Fatalf("expected 0 BundleSources after removal, got %d", n)
+	}
+}
+
+// TestReconfigure_PreservesBundleSource proves Reconfigure -- called from
+// saving any of MISP/OpenCTI/OTX's config -- never silently drops an
+// already-registered bundle source. Reconfigure's sources argument comes
+// from LoadSourcesFromDB, which knows nothing about the bundle at all;
+// without checkBundleSource restoring it, a working bundle source would
+// vanish from the very next sync onward the first time an operator saved
+// any other connector's settings.
+func TestReconfigure_PreservesBundleSource(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalBundle(t, dir)
+	s := NewScheduler(nil, nil, nil, 24, nil, nil)
+	s.WithBundleDir(dir, nil)
+	s.checkBundleSource()
+	if n := countBundleSources(s); n != 1 {
+		t.Fatalf("setup: expected bundle registered, got %d sources", n)
+	}
+
+	// Pretend already running so Reconfigure doesn't spawn the real sync
+	// goroutine (which would touch the nil generator/pool this test never
+	// set up) -- this test is only about the source list it leaves behind.
+	s.started = true
+	s.Reconfigure([]Source{fakeSource{name: "misp"}})
+
+	if !s.Status().BundleEnabled {
+		t.Fatal("BundleEnabled should still be true after Reconfigure with a MISP-only source list")
+	}
+	if n := countBundleSources(s); n != 1 {
+		t.Fatalf("expected the bundle source to survive Reconfigure, got %d bundle sources", n)
+	}
+}
+
+// TestStart_RunsWithZeroSourcesWhenBundleDirSet proves a bundle-only
+// deployment (no MISP/OpenCTI/OTX configured at all) still gets its sync
+// loop started, so a bundle file added after boot has a running loop to
+// be noticed by -- otherwise checkBundleSource would exist but never run.
+func TestStart_RunsWithZeroSourcesWhenBundleDirSet(t *testing.T) {
+	s := NewScheduler(nil, nil, nil, 24, nil, nil)
+	s.WithBundleDir(t.TempDir(), nil)
+	s.Start()
+	defer s.Stop()
+	if !s.started {
+		t.Fatal("expected Start() to launch the sync loop when a bundle dir is configured, even with zero other sources")
+	}
+}
+
+func countBundleSources(s *Scheduler) int {
+	n := 0
+	for _, src := range s.sources {
+		if _, ok := src.(*BundleSource); ok {
+			n++
+		}
+	}
+	return n
+}
+
+func writeMinimalBundle(t *testing.T, dir string) {
+	t.Helper()
+	raw, err := json.Marshal(Bundle{Version: "test", GeneratedAt: time.Now(), Actors: nil})
+	if err != nil {
+		t.Fatalf("marshal minimal bundle: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, BundleFileName), raw, 0644); err != nil {
+		t.Fatalf("write bundle file: %v", err)
 	}
 }
 
