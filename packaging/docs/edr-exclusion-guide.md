@@ -13,6 +13,17 @@ excluded — your security controls should still detect and alert on those.
 > as **Blocked**, and reports it as a finding — which is exactly the result
 > you want.
 
+> **Standalone Windows Defender Antivirus is handled automatically.** Both
+> `bas_agent.exe --install` and `--update` call `Add-MpPreference` to add a
+> process + path exclusion for the agent's own exe, best-effort (a failure
+> here never blocks install). This is what most single-machine/consumer
+> Windows endpoints run — a false-positive detection there (commonly
+> `Behavior:Win32/Execution.A!ml`, an ML behavioral heuristic on the
+> agent's own process) should self-resolve on the next install/update.
+> Everything below this point (CrowdStrike, MDE, SentinelOne, etc.) still
+> needs to be configured by hand — those are centrally-managed policies the
+> agent has no way to reach from the endpoint.
+
 ---
 
 ## What to exclude
@@ -20,8 +31,8 @@ excluded — your security controls should still detect and alert on those.
 | Item | Value |
 |------|-------|
 | **Linux binary path** | `/opt/bas/bas-agent` (or wherever your team deployed it) |
-| **Windows binary path** | `C:\ProgramData\BAS\bas-agent.exe` |
-| **Process name** | `bas-agent` / `bas-agent.exe` |
+| **Windows binary path** | Wherever `bas_agent.exe` was installed — there's no single fixed path; check `(Get-Service BASAgent).BinaryPathName` on the endpoint, or ask whoever deployed it. |
+| **Process name** | `bas-agent` / `bas_agent.exe` |
 | **Outbound destination** | BAS Orchestrator IP/hostname, port `9000` (TCP) |
 
 Do **not** exclude `cmd.exe`, `powershell.exe`, `bash`, or any technique
@@ -34,7 +45,7 @@ detection findings.
 
 1. **Falcon Console** → Prevention Policies → select your policy → **Exclusions**
 2. Add a **Process Exclusion**:
-   - Path: `C:\ProgramData\BAS\bas-agent.exe` (Windows)  
+   - Path: `<install path>\bas_agent.exe` (Windows — see "What to exclude" above)  
      or `/opt/bas/bas-agent` (Linux sensor)
    - Toggle **Prevent** off; leave **Detect** on
 3. Repeat for each OS policy that covers the target hosts.
@@ -60,7 +71,7 @@ Computer Configuration → Policies → Administrative Templates →
   Windows Components → Microsoft Defender Antivirus →
   Exclusions → Process Exclusions
 ```
-Value: `C:\ProgramData\BAS\bas-agent.exe`
+Value: `<install path>\bas_agent.exe` (see "What to exclude" above)
 
 ---
 
@@ -68,7 +79,7 @@ Value: `C:\ProgramData\BAS\bas-agent.exe`
 
 1. **Sentinels** → Exclusions → **New Exclusion**
 2. Type: **Path**  
-   Value: `/opt/bas/bas-agent` or `C:\ProgramData\BAS\bas-agent.exe`
+   Value: `/opt/bas/bas-agent` or `<install path>\bas_agent.exe`
 3. Operating Mode: **Detect** (not Protect) — keeps alerting on child techniques
 
 ---
@@ -76,7 +87,7 @@ Value: `C:\ProgramData\BAS\bas-agent.exe`
 ## Symantec Endpoint Security (SES/SEP)
 
 **Policies** → Exceptions → **Add Exception** → Application Exception  
-- Application name: `bas-agent.exe`  
+- Application name: `bas_agent.exe`  
 - Action: Exclude from SONAR and intrusion prevention
 
 ---

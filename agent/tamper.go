@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -248,5 +249,31 @@ func ApplyRegistryACL() error {
 		return fmt.Errorf("registry ACL: %w — %s", err, string(out))
 	}
 	log.Printf("[tamper] registry ACL applied on Parameters key")
+	return nil
+}
+
+// ApplyDefenderExclusion adds exePath as both a process and path exclusion in
+// Windows Defender Antivirus, via Add-MpPreference. A BAS agent legitimately
+// spawns processes and inspects installed security tooling as part of its
+// job -- exactly the kind of behavior Defender's ML behavioral heuristics
+// (e.g. "Behavior:Win32/Execution.A!ml") flag on the agent's own process.
+// This automates the manual step already documented in
+// packaging/docs/edr-exclusion-guide.md. Only the agent's own exe is
+// excluded, never the install directory or any technique it spawns, so
+// simulated attacks still produce real detections. Best-effort and
+// non-fatal, same as every other Apply* hardening step in this file:
+// Defender may be absent, disabled, or overridden by another AV, and none
+// of that should block install/update.
+func ApplyDefenderExclusion(exePath string) error {
+	quoted := "'" + strings.ReplaceAll(exePath, "'", "''") + "'"
+	script := fmt.Sprintf(
+		`Add-MpPreference -ExclusionProcess %s -ExclusionPath %s -ErrorAction Stop`,
+		quoted, quoted,
+	)
+	out, err := exec.Command("powershell", "-NonInteractive", "-Command", script).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("Add-MpPreference: %w — %s", err, string(out))
+	}
+	log.Printf("[tamper] Windows Defender exclusion added for %s", exePath)
 	return nil
 }

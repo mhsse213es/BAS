@@ -179,6 +179,11 @@ func svcInstall(serverURL, envLabel, secret string) error {
 	if err := ApplyRegistryACL(); err != nil {
 		log.Printf("[svc] warning: registry ACL: %v", err)
 	}
+	if err := ApplyDefenderExclusion(exePath); err != nil {
+		log.Printf("[svc] warning: Defender exclusion: %v", err)
+	} else {
+		fmt.Printf("[+] Windows Defender exclusion added for %s\n", exePath)
+	}
 
 	fmt.Printf("    Run: sc start %s\n", svcName)
 	return nil
@@ -240,6 +245,16 @@ func svcUpdate() error {
 		if data, err := os.ReadFile(mfSrc); err == nil {
 			_ = os.WriteFile(mfDst, data, 0644)
 		}
+	}
+
+	// Re-apply the Defender exclusion on every update, not just fresh
+	// installs -- covers an exclusion an operator removed by hand, and
+	// costs nothing when it's already present (Add-MpPreference is
+	// idempotent). Best-effort, same as at install time.
+	if err := ApplyDefenderExclusion(installedPath); err != nil {
+		log.Printf("[svc] warning: Defender exclusion: %v", err)
+	} else {
+		fmt.Printf("[+] Windows Defender exclusion confirmed for %s\n", installedPath)
 	}
 
 	// Restart
