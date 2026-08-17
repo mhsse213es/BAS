@@ -4561,6 +4561,25 @@ body.theme-slate {
 </div>
 
 <!-- Live Run Drawer -->
+<!-- Re-run Review: read-only clone of a past run's exact configuration --
+     no agent/mode/technique picker, just what will run and a Start button. -->
+<div id="rerun-review-overlay" class="drawer-overlay" onclick="if(event.target===this)closeRerunReview()">
+  <div class="drawer" style="width:480px;max-width:94vw">
+    <div class="drawer-header">
+      <h3>Re-run Review</h3>
+      <button class="drawer-close" onclick="closeRerunReview()">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <p class="tiny muted" style="margin-bottom:0.75rem">Exact clone of the original run's configuration — nothing below is editable.</p>
+      <div id="rerun-review-body"></div>
+    </div>
+    <div style="padding:0.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:0.5rem;flex-shrink:0">
+      <button class="btn btn-outline btn-sm" onclick="closeRerunReview()">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="rerun-review-start-btn" onclick="startRerunFromReview()">&#9654; Start Re-run</button>
+    </div>
+  </div>
+</div>
+
 <div id="run-live-overlay" class="drawer-overlay" onclick="if(event.target===this)closeRunLive()">
   <div class="drawer" style="width:540px;max-width:94vw">
     <div class="drawer-header" style="flex-direction:column;align-items:flex-start;gap:0.1rem">
@@ -12679,10 +12698,10 @@ function viewRunResults(run) {
     '<span class="sbadge" style="background:' + runStatusColor + '22;color:' + runStatusColor + ';border:1px solid ' + runStatusColor + '44;font-size:0.65rem;margin-left:0.4rem;vertical-align:middle">' + x(run.status || '') + '</span>';
 
   // Header toolbar -- real export actions relocated verbatim from the old
-  // inline export bar. Compare/Re-run are NOT real features anywhere in this
-  // app today (confirmed: the only existing "Re-run" is a disabled
-  // "coming soon" button, for campaigns, not runs -- index.html:6567), so
-  // they render the same disabled way here rather than as working buttons.
+  // inline export bar. Compare is not a real feature anywhere in this app
+  // today, so it stays disabled. Re-run opens a read-only review (see
+  // openRerunReview) that clones this exact run's configuration -- no
+  // wizard, nothing to reselect.
   var actionsHtml = '';
   if (hasOutput) {
     var canRerun = ROLE === 'admin' || ROLE === 'analyst';
@@ -12692,7 +12711,7 @@ function viewRunResults(run) {
       '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
       '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
       (canRerun
-        ? '<button class="btn btn-outline btn-sm" onclick="closeResults();openModal(\'' + x(run.scenarioId) + '\', \'' + x(run.agentId) + '\')" title="Open the run wizard pre-filled with this scenario and agent">Re-run</button>'
+        ? '<button class="btn btn-outline btn-sm" onclick=\'openRerunReview(' + JSON.stringify(run).replace(/'/g,"&#39;") + ')\' title="Review and re-run this exact configuration">Re-run</button>'
         : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run requires the Analyst or Admin role">Re-run</button>');
   }
   document.getElementById('results-header-actions').innerHTML = actionsHtml;
@@ -14000,6 +14019,112 @@ function renderRunIOCList() {
 }
 
 function closeResults() { document.getElementById('results-overlay').classList.remove('open', 'run-mode'); }
+
+// ── Re-run Review ────────────────────────────────────────────────────────────
+// Clones a past run's exact configuration -- agent, mode, privilege, and
+// (framework permitting) the exact technique/check subset that ran -- and
+// presents it read-only with a single Start button. No wizard, nothing to
+// reselect; replaces the earlier "Re-run reopens the full dispatch wizard"
+// behavior.
+var _rerunReviewRun = null;
+
+// rerunSubset derives the exact dispatch-subset field (techniques/checks) a
+// past run used, from its own results -- the most accurate source available,
+// since it reflects what actually ran rather than the scenario's full
+// current catalog. Returns {field, ids} or {field: null} when the framework
+// has no subset concept, or when the framework's dispatch-subset identifier
+// can't be reliably reconstructed from results alone:
+//   - art: result.technique.id IS the dispatch id -- exact.
+//   - posture: result.checkId IS the dispatch id -- exact.
+//   - caldera: result.technique.id is the MITRE technique, not the Caldera
+//     ability UUID that was actually dispatched (several abilities can map
+//     to the same technique) -- not reconstructable, falls back to "all".
+//   - steps: results carry no original step index -- not reconstructable,
+//     falls back to "all".
+function rerunSubset(run, fw) {
+  if (fw !== 'art' && fw !== 'posture') return { field: null, ids: [] };
+  var seen = {}, ids = [];
+  (run.results || []).forEach(function(r) {
+    var id = fw === 'art' ? (r.technique && r.technique.id) : r.checkId;
+    if (id && !seen[id]) { seen[id] = true; ids.push(id); }
+  });
+  return { field: fw === 'art' ? 'techniques' : 'checks', ids: ids };
+}
+
+function openRerunReview(run) {
+  _rerunReviewRun = run;
+  var sc = scenarios.find(function(s) { return s.id === run.scenarioId; });
+  var fw = scenarioFramework(sc);
+  var agent = agents.find(function(a) { return a.agentId === run.agentId; });
+  var modeLabels = { posture: 'Posture', telemetry: 'Telemetry', lab: 'Lab' };
+  var subset = rerunSubset(run, fw);
+
+  var rows = [];
+  rows.push(['Scenario', x(sc ? sc.name : run.scenarioId)]);
+  rows.push(['Agent', x(agent ? agent.hostname + ' (' + agent.agentId + ')' : run.agentId)]);
+  rows.push(['Mode', x(modeLabels[run.mode] || run.mode || 'Posture')]);
+  if (run.maxPrivilege) rows.push(['Privilege ceiling', x(run.maxPrivilege.charAt(0).toUpperCase() + run.maxPrivilege.slice(1))]);
+  if (subset.field) {
+    rows.push(['Techniques', subset.ids.length + ' — ' + subset.ids.slice(0, 6).join(', ') + (subset.ids.length > 6 ? ', …' : '')]);
+  } else if (fw === 'caldera' || fw === 'steps') {
+    rows.push(['Techniques', 'All (this scenario\'s ' + (fw === 'caldera' ? 'Caldera ability' : 'step') + ' subset can\'t be exactly replayed — re-runs the full scenario)']);
+  } else {
+    rows.push(['Techniques', 'All']);
+  }
+
+  document.getElementById('rerun-review-body').innerHTML = rows.map(function(r) {
+    return '<div class="conn-cfg-row"><span class="conn-cfg-label">' + r[0] + '</span><span class="conn-cfg-val">' + r[1] + '</span></div>';
+  }).join('');
+  document.getElementById('rerun-review-overlay').classList.add('open');
+}
+
+function closeRerunReview() {
+  document.getElementById('rerun-review-overlay').classList.remove('open');
+  _rerunReviewRun = null;
+}
+
+function startRerunFromReview() {
+  var run = _rerunReviewRun;
+  if (!run) return;
+  var sc = scenarios.find(function(s) { return s.id === run.scenarioId; });
+  var fw = scenarioFramework(sc);
+  var mode = run.mode || 'posture';
+
+  // Same safety gate every other live/lab dispatch in this app requires --
+  // a review screen skips re-SELECTING anything, it doesn't skip confirming
+  // a real-technique execution is intentional.
+  if (mode === 'telemetry' && !confirm('TELEMETRY mode runs real, identity-safe techniques and WILL generate EDR/SIEM alerts.\n\nProceed only on an approved, monitored target. Continue?')) return;
+  if (mode === 'lab') {
+    if (!confirm('LAB mode runs FULL-FIDELITY techniques (LSASS dump, allowlisted spray) and will trigger EDR.\n\nISOLATED AD RANGE ONLY — never production. Continue?')) return;
+    if (!confirm('Second confirmation required for LAB mode.\n\nConfirm the target is an isolated lab/range with a snapshot?')) return;
+  }
+
+  var body = {
+    agentId: run.agentId, mode: mode,
+    confirmLive: mode !== 'posture', confirmLab: mode === 'lab',
+    reason: mode !== 'posture' ? ('Re-run of run ' + (run.id || '')) : '',
+    runLabel: run.name ? (run.name + ' — Re-run') : ''
+  };
+  if (run.maxPrivilege) body.executionPolicy = { maxPrivilege: run.maxPrivilege };
+  var subset = rerunSubset(run, fw);
+  if (subset.field) body[subset.field] = subset.ids;
+
+  var btn = document.getElementById('rerun-review-start-btn');
+  btn.disabled = true; btn.textContent = 'Dispatching…';
+  apicall('/api/scenarios/' + encodeURIComponent(run.scenarioId) + '/run', {
+    method: 'POST', body: JSON.stringify(body)
+  }).then(function(res) {
+    btn.disabled = false; btn.innerHTML = '&#9654; Start Re-run';
+    if (res && res.error) { showToast(res.error, 'err'); return; }
+    showToast('Re-run started', 'ok');
+    closeRerunReview();
+    closeResults();
+    showTab('runs');
+  }).catch(function(e) {
+    btn.disabled = false; btn.innerHTML = '&#9654; Start Re-run';
+    showToast(e.message, 'err');
+  });
+}
 
 // ── IOC Registry ─────────────────────────────────────────────────────────────
 // Cross-run indicator search (GET /api/iocs), distinct from the per-run
