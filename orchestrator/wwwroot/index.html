@@ -14244,6 +14244,17 @@ function submitIOCImport() {
       var blink  = s.state === 'running' ? ';animation:blink 1.5s infinite' : '';
       var techId = s.tech || task;
 
+      // s.techName (from lookupTech/artCatalog) is deliberately NOT used for
+      // display here. It's a technique-level "representative name" --
+      // ListTechniqueMeta picks steps[0].Name to label a whole technique in
+      // pickers/dropdowns, e.g. one row for "T1003" standing in for all 7 of
+      // its atomic tests. A technique with multiple tests dispatches one
+      // event per test though, each with its own real name in s.stepName --
+      // showing techName per-event mislabels every test that isn't the
+      // technique's first with that first test's name (every T1003 event
+      // reading "Test 1: Gsecdump" regardless of which of the 7 it actually
+      // is). s.stepName is what the agent actually reported running.
+
       // Verdict badge
       var vColor = (s.verdict && VERDICT_COLOR[s.verdict]) || color;
       var vLabel = (s.verdict && VERDICT_LABEL[s.verdict]) || '';
@@ -14265,8 +14276,7 @@ function submitIOCImport() {
       var detailHtml = '';
       if (s.expanded) {
         var dl = [];
-        if (s.techName) dl.push('<b>Technique:</b> ' + x(s.techName));
-        if (s.stepName && s.stepName !== s.techName) dl.push('<b>Test:</b> ' + x(s.stepName));
+        if (s.stepName) dl.push('<b>Test:</b> ' + x(s.stepName));
         if (s.tactic)   dl.push('<b>Tactic:</b> ' + x(humanTactic(s.tactic)));
         if (vLabel)     dl.push('<b>Verdict:</b> <span style="color:' + vColor + '">' + x(vLabel) + '</span>');
         if (s.durationMs != null) dl.push('<b>Duration:</b> ' + s.durationMs + ' ms');
@@ -14282,15 +14292,15 @@ function submitIOCImport() {
           '<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.78rem">' +
             '<span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + color + blink + '"></span>' +
             '<span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--accent);flex-shrink:0;min-width:5.2rem">' + x(techId) + '</span>' +
-            '<span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(s.techName || '—') + '</span>' +
+            '<span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(s.stepName || techId) + '</span>' +
             '<span style="color:' + color + ';font-size:0.67rem;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">' + x(s.state === 'done' ? 'done' : s.state) + '</span>' +
             verdictHtml +
           '</div>' +
-          // Sub-line: tactic badge · step name · duration
-          (s.stepName || s.tactic || durHtml
+          // Sub-line: tactic badge · duration (step name is already the main-line title above)
+          (s.tactic || durHtml
             ? '<div style="display:flex;align-items:center;gap:0.35rem;margin-top:0.12rem;margin-left:1.25rem;font-size:0.7rem;color:var(--muted);overflow:hidden">' +
                 tacticHtml +
-                (s.stepName ? '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(s.stepName) + '</span>' : '<span style="flex:1"></span>') +
+                '<span style="flex:1"></span>' +
                 durHtml +
               '</div>'
             : '') +
