@@ -7805,12 +7805,23 @@ function loadScenarios() {
 var SCENARIO_CATEGORIES = {
   em:    { label: 'Endpoint Mastery',
            icon: '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z" stroke-width="2" fill="none"/></svg>' },
+  intel: { label: 'Threat-Intel',
+           icon: '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2"/><path d="M9 12l2 2 4-4" stroke-width="2"/></svg>' },
   other: { label: 'Standard & Custom',
            icon: '<svg style="width:18px;height:18px;stroke:var(--muted)" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2"/><path d="M3 9h18M9 21V9" stroke-width="2"/></svg>' }
 };
 
+// Threat-intel-sourced scenarios (one auto-generated per tracked threat
+// actor -- can number in the hundreds) get their own top-level category
+// rather than being folded into "Standard & Custom", where a handful of
+// real built-in/custom scenarios would otherwise be buried under a huge
+// Threat-Intel sub-group. EM still takes priority for the rare case a
+// scenario is somehow both (Endpoint Mastery has its own dedicated
+// dashboard elsewhere).
 function scenarioCategoryOf(s) {
-  return ((s.id || '').indexOf('em-') === 0 || (s.tags || []).indexOf('endpoint-mastery') !== -1) ? 'em' : 'other';
+  if ((s.id || '').indexOf('em-') === 0 || (s.tags || []).indexOf('endpoint-mastery') !== -1) return 'em';
+  if (scenarioSourceOf(s) === 'intel') return 'intel';
+  return 'other';
 }
 
 function scenarioCategoryCounts(list, key) {
@@ -7825,11 +7836,15 @@ var TMPL_ICON = '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBo
 function renderScenarioLanding(list, src) {
   var el = document.getElementById('sc-landing');
   if (!el) return;
-  var html = ['em', 'other'].map(function(key) {
+  var html = ['em', 'intel', 'other'].map(function(key) {
     var cat = SCENARIO_CATEGORIES[key];
     var c = scenarioCategoryCounts(list, key);
     if (c.total === 0) return '';
-    var breakdown = [c.builtin ? c.builtin + ' Built-in' : '', c.custom ? c.custom + ' Custom' : '', c.intel ? c.intel + ' Intel' : '']
+    // The intel category is single-source by construction (scenarioCategoryOf
+    // routes every threat-intel scenario here) -- a Built-in/Custom/Intel
+    // breakdown would just repeat "N Intel" next to the count above it.
+    var breakdown = key === 'intel' ? '' :
+      [c.builtin ? c.builtin + ' Built-in' : '', c.custom ? c.custom + ' Custom' : '', c.intel ? c.intel + ' Intel' : '']
       .filter(Boolean).join(' · ');
     return '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
       'onclick="openScenarioCategory(\'' + key + '\')" ' +
@@ -8057,8 +8072,17 @@ function scenarioTileHTML(s) {
 function renderScenarioTileGroup(viewKey, list) {
   var bySrc = { builtin: [], custom: [], intel: [] };
   list.forEach(function(s) { bySrc[scenarioSourceOf(s)].push(s); });
-  return SCENARIO_SOURCE_ORDER.map(function(k) {
-    if (!bySrc[k].length) return '';
+  var activeSources = SCENARIO_SOURCE_ORDER.filter(function(k) { return bySrc[k].length; });
+  // A single active source (e.g. the Threat-Intel category, which is
+  // single-source by construction) would just repeat "X (N)" as a
+  // sub-header directly under the backbar title that already says the
+  // same thing -- render those tiles flat instead. Mixed-source views
+  // (search results, or a category that legitimately spans sources) keep
+  // the per-source grouping.
+  if (activeSources.length <= 1) {
+    return list.map(scenarioTileHTML).join('');
+  }
+  return activeSources.map(function(k) {
     var collapsed = !!(scenarioSrcCollapsed[viewKey] && scenarioSrcCollapsed[viewKey][k]);
     return '<div class="sc-src-group">' +
       '<div class="sc-src-hdr' + (collapsed ? ' collapsed' : '') + '" onclick="toggleScenarioSrcGroup(\'' + viewKey + '\',\'' + k + '\')">' +
