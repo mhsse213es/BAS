@@ -11974,11 +11974,24 @@ function pickerSelectAll(on) {
 function pickerSelectedIds() { return Object.keys(_pickerSel); }
 
 function updatePickerCount() {
-  var n = pickerSelectedIds().length;
+  var selectedIds = pickerSelectedIds();
+  var n = selectedIds.length;
   var total = _pickerItems.length;
   var shown = _pickerFiltered.length;
   var txt = n + ' of ' + total + ' selected';
   if (shown !== total) txt += ' · ' + shown + ' shown';
+  // "N selected" counts techniques, but each technique expands to a
+  // different number of underlying tests (it.tests, shown per-row -- see
+  // the item caption above) -- surface the real execution volume, not
+  // just how many technique checkboxes are ticked. Only ART items carry
+  // .tests (Caldera abilities/adversaries don't), so this silently adds
+  // nothing when it's not applicable rather than showing a misleading 0.
+  var totalTests = 0, anyHasTests = false;
+  selectedIds.forEach(function(id) {
+    var it = _pickerItems.find(function(x) { return x.id === id; });
+    if (it && it.tests) { anyHasTests = true; totalTests += it.tests; }
+  });
+  if (anyHasTests) txt += ' · ' + totalTests + ' test' + (totalTests === 1 ? '' : 's');
   document.getElementById('picker-count').textContent = txt;
   var btn = document.getElementById('picker-apply');
   btn.disabled = (n === 0);
