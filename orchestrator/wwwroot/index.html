@@ -11235,10 +11235,20 @@ function loadRuns() {
       return;
     }
 
+    // Sort by real recency (most recently started first), never by
+    // insertion/grouping order -- a currently-running sweep is the most
+    // recent thing happening and belongs at the top, not stuck at the
+    // bottom just because it's rendered as a collapsed group row.
+    function byStartedAtDesc(a, b) {
+      var ta = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+      var tb = b.startedAt ? new Date(b.startedAt).getTime() : 0;
+      return tb - ta;
+    }
+
     var totalGroupIds = groups.reduce(function(n, g) { return n + g.ids.length; }, 0);
     if (!totalGroupIds) {
       document.getElementById('runs-cnt').textContent = individualRuns.length;
-      tbody.innerHTML = renderRunRows(individualRuns);
+      tbody.innerHTML = individualRuns.slice().sort(byStartedAtDesc).map(runRowHtml).join('');
       return;
     }
 
@@ -11257,7 +11267,7 @@ function loadRuns() {
 
     Promise.all(fetches).then(function(groupResults) {
       var rowsToRenderIndividually = individualRuns.slice();
-      var groupRowsHtml = [];
+      var groupEntries = []; // {startedAt, html} -- merged with individual rows below, not appended after them
       groupResults.forEach(function(gr) {
         if (!gr.ok) {
           // The per-sweep fetch failed -- fall back to rendering this sweep's
@@ -11268,10 +11278,13 @@ function loadRuns() {
           );
           return;
         }
-        groupRowsHtml.push(gr.render(gr.data));
+        groupEntries.push({ startedAt: gr.data.sweep && gr.data.sweep.startedAt, html: gr.render(gr.data) });
       });
-      document.getElementById('runs-cnt').textContent = rowsToRenderIndividually.length + groupRowsHtml.length;
-      tbody.innerHTML = renderRunRows(rowsToRenderIndividually) + groupRowsHtml.join('');
+      var allEntries = rowsToRenderIndividually.map(function(r) {
+        return { startedAt: r.startedAt, html: runRowHtml(r) };
+      }).concat(groupEntries).sort(byStartedAtDesc);
+      document.getElementById('runs-cnt').textContent = allEntries.length;
+      tbody.innerHTML = allEntries.map(function(e) { return e.html; }).join('');
     });
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
