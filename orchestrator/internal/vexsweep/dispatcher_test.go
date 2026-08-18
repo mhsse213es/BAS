@@ -439,3 +439,214 @@ func TestDispatcher_Tick_IgnoresStoppedAndFailedSweeps(t *testing.T) {
 		}
 	})
 }
+
+// TestDispatcher_Tick_PausesOnDisconnectAndCancelsInFlightRun mirrors
+// internal/emsweep/dispatcher_test.go's identical test -- see there for the
+// full rationale (this is the regression test for the actual bug report).
+func TestDispatcher_Tick_PausesOnDisconnectAndCancelsInFlightRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-disc-1", Mode: "sequential",
+			Techniques: []string{"T1059.001", "T1059.003"}, TechniqueVariantCounts: []int{33, 12}, TotalVariants: 45,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-disc-1", "sr-disc-1"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		var cancelledRunIDs []string
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			return "running", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+			t.Fatal("dispatch should not be called -- the sweep must pause, not advance")
+			return "", "", 0, nil
+		})
+		d.SetCancel(func(ctx context.Context, scenarioRunID string) (string, string, error) {
+			cancelledRunIDs = append(cancelledRunIDs, scenarioRunID)
+			return "agent-disc-1", "partial", nil
+		})
+		d.SetConnected(func(agentID string) bool { return false })
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "agent_disconnected" {
+			t.Fatalf("Status = %q, want agent_disconnected", got.Status)
+		}
+		if len(cancelledRunIDs) != 1 || cancelledRunIDs[0] != "sr-disc-1" {
+			t.Fatalf("cancelledRunIDs = %v, want exactly [sr-disc-1]", cancelledRunIDs)
+		}
+		if got.CurrentIndex != 0 {
+			t.Fatalf("CurrentIndex = %d, want 0", got.CurrentIndex)
+		}
+	})
+}
+
+func TestDispatcher_Tick_WaitsIndefinitelyWhileDisconnected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-disc-2", Mode: "sequential", Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{5}, TotalVariants: 5,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, sw.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			t.Fatal("status should not be checked -- no run is in flight while disconnected")
+			return "", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+			t.Fatal("dispatch should not be called -- agent is still offline")
+			return "", "", 0, nil
+		})
+		d.SetCancel(func(ctx context.Context, scenarioRunID string) (string, string, error) {
+			t.Fatal("cancel should not be called -- nothing is in flight while disconnected")
+			return "", "", nil
+		})
+		d.stuckThreshold = time.Millisecond
+		d.SetConnected(func(agentID string) bool { return false })
+
+		time.Sleep(5 * time.Millisecond)
+
+		for i := 0; i < 3; i++ {
+			if err := d.Tick(ctx); err != nil {
+				t.Fatalf("Tick %d: %v", i, err)
+			}
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "agent_disconnected" {
+			t.Fatalf("Status = %q after 3 ticks while still offline, want agent_disconnected", got.Status)
+		}
+	})
+}
+
+func TestDispatcher_Tick_ResumesInterruptedTechniqueOnReconnect(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-disc-3", Mode: "sequential",
+			Techniques: []string{"T1059.001", "T1059.003"}, TechniqueVariantCounts: []int{33, 12}, TotalVariants: 45,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, sw.ID, 1); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+
+		var dispatchedTechniques []string
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			t.Fatal("status should not be checked this tick")
+			return "", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+			dispatchedTechniques = append(dispatchedTechniques, techniqueID)
+			if techniqueIndex != 1 {
+				t.Fatalf("techniqueIndex = %d, want 1", techniqueIndex)
+			}
+			return "sr-resumed", "vr-resumed", 12, nil
+		})
+		d.SetConnected(func(agentID string) bool { return true })
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if len(dispatchedTechniques) != 1 || dispatchedTechniques[0] != "T1059.003" {
+			t.Fatalf("dispatchedTechniques = %v, want [T1059.003]", dispatchedTechniques)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "running" {
+			t.Fatalf("Status = %q, want running", got.Status)
+		}
+		if got.CurrentVariantRunID != "vr-resumed" || got.CurrentScenarioRunID != "sr-resumed" {
+			t.Fatalf("current run IDs = (%q, %q), want (vr-resumed, sr-resumed)", got.CurrentVariantRunID, got.CurrentScenarioRunID)
+		}
+	})
+}
+
+func TestDispatcher_Tick_ExistingBehaviorUnaffectedWhenConnectedFnNotSet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		if _, err := store.Create(ctx, Sweep{
+			AgentID: "agent-no-connected-fn", Mode: "sequential", Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{5}, TotalVariants: 5,
+		}); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		var dispatched []string
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			return "running", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+			dispatched = append(dispatched, techniqueID)
+			return "sr-1", "vr-1", 5, nil
+		})
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if len(dispatched) != 1 {
+			t.Fatalf("dispatched = %v, want exactly 1 dispatch", dispatched)
+		}
+	})
+}
+
+func TestDispatcher_Tick_PausesInsteadOfFailingOnOfflineRaceDuringDispatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-race-1", Mode: "sequential", Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{5}, TotalVariants: 5,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		d := NewDispatcher(store, func(ctx context.Context, variantRunID string) (string, error) {
+			return "running", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (string, string, int, error) {
+			return "", "", 0, ErrAgentOffline
+		})
+		d.SetConnected(func(agentID string) bool { return true })
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "agent_disconnected" {
+			t.Fatalf("Status = %q, want agent_disconnected (not failed)", got.Status)
+		}
+		if got.CurrentIndex != 0 {
+			t.Fatalf("CurrentIndex = %d, want 0", got.CurrentIndex)
+		}
+	})
+}

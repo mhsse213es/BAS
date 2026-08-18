@@ -2,6 +2,7 @@ package vexsweep
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 )
@@ -30,6 +31,16 @@ type VariantRunStatusFn func(ctx context.Context, variantRunID string) (status s
 // here (see internal/api/handlers.go).
 type CancelFn func(ctx context.Context, scenarioRunID string) (agentID, status string, err error)
 
+// ConnectedFn reports whether a specific agent currently has a live
+// connection. See internal/emsweep/dispatcher.go's identical type for the
+// full rationale.
+type ConnectedFn func(agentID string) bool
+
+// ErrAgentOffline is the sentinel a DispatchFn implementation returns when
+// a technique failed to dispatch specifically because its agent is
+// unreachable. See internal/emsweep/dispatcher.go's identical sentinel.
+var ErrAgentOffline = errors.New("vexsweep: agent offline")
+
 // defaultStuckThreshold is how long a technique can sit with no progress
 // (variant_runs.status still "running") before the Dispatcher treats it as
 // genuinely hung and force-cancels it, freeing the sweep to move on. This
@@ -43,10 +54,11 @@ type CancelFn func(ctx context.Context, scenarioRunID string) (agentID, status s
 const defaultStuckThreshold = 3 * time.Minute
 
 type Dispatcher struct {
-	store    *Store
-	status   VariantRunStatusFn
-	dispatch DispatchFn
-	cancel   CancelFn
+	store     *Store
+	status    VariantRunStatusFn
+	dispatch  DispatchFn
+	cancel    CancelFn
+	connected ConnectedFn
 
 	stuckThreshold time.Duration
 	// cancelTriggeredForRun tracks scenario_run_ids a stuck-cancel has
@@ -63,14 +75,18 @@ func NewDispatcher(store *Store, status VariantRunStatusFn) *Dispatcher {
 	}
 }
 
-func (d *Dispatcher) SetDispatch(fn DispatchFn) { d.dispatch = fn }
-func (d *Dispatcher) SetCancel(fn CancelFn)     { d.cancel = fn }
+func (d *Dispatcher) SetDispatch(fn DispatchFn)   { d.dispatch = fn }
+func (d *Dispatcher) SetCancel(fn CancelFn)       { d.cancel = fn }
+func (d *Dispatcher) SetConnected(fn ConnectedFn) { d.connected = fn }
 
 // Tick advances every running sweep by at most one step. Exported so tests
 // can call it directly without a real ticker; production wiring calls it
 // from an exercise.PollScheduler tick callback.
 func (d *Dispatcher) Tick(ctx context.Context) error {
-	sweeps, err := d.store.ListRunning(ctx)
+	// ListActionable, not ListRunning -- a paused (agent_disconnected)
+	// sweep must keep being visited every tick, or a reconnect would never
+	// be noticed.
+	sweeps, err := d.store.ListActionable(ctx)
 	if err != nil {
 		return err
 	}
@@ -81,6 +97,17 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 }
 
 func (d *Dispatcher) advance(ctx context.Context, sw Sweep) {
+	if d.connected != nil && !d.connected(sw.AgentID) {
+		if sw.Status == "running" {
+			d.handleDisconnect(ctx, sw)
+		}
+		return
+	}
+	if sw.Status == "agent_disconnected" {
+		d.resume(ctx, sw)
+		return
+	}
+
 	if sw.CurrentVariantRunID != "" {
 		status, err := d.status(ctx, sw.CurrentVariantRunID)
 		if err != nil {
@@ -103,6 +130,53 @@ func (d *Dispatcher) advance(ctx context.Context, sw Sweep) {
 	}
 	// No technique in flight yet -- this is the sweep's very first tick.
 	d.dispatchNext(ctx, sw, 0)
+}
+
+// handleDisconnect pauses a running sweep once its agent is found
+// unreachable. See internal/emsweep/dispatcher.go's identical method for
+// the full rationale.
+func (d *Dispatcher) handleDisconnect(ctx context.Context, sw Sweep) {
+	if sw.CurrentScenarioRunID != "" && d.cancel != nil {
+		if _, _, err := d.cancel(ctx, sw.CurrentScenarioRunID); err != nil {
+			log.Printf("[vexsweep] cancel in-flight run %s for disconnected sweep %s: %v", sw.CurrentScenarioRunID, sw.ID, err)
+		}
+	}
+	if err := d.store.MarkDisconnected(ctx, sw.ID, sw.CurrentIndex); err != nil {
+		log.Printf("[vexsweep] mark sweep %s agent_disconnected: %v", sw.ID, err)
+		return
+	}
+	log.Printf("[vexsweep] sweep %s paused: agent %s disconnected", sw.ID, sw.AgentID)
+}
+
+// resume re-dispatches the pending technique once the agent is reachable
+// again. See internal/emsweep/dispatcher.go's identical method for the
+// full rationale.
+func (d *Dispatcher) resume(ctx context.Context, sw Sweep) {
+	if d.dispatch == nil {
+		return
+	}
+	baseType := "art"
+	if sw.CurrentIndex < len(sw.BaseTypes) && sw.BaseTypes[sw.CurrentIndex] != "" {
+		baseType = sw.BaseTypes[sw.CurrentIndex]
+	}
+	scenarioRunID, variantRunID, _, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Techniques[sw.CurrentIndex], baseType, sw.Mode, sw.IncludeAdvanced, sw.CurrentIndex, len(sw.Techniques))
+	if err != nil {
+		if errors.Is(err, ErrAgentOffline) {
+			if merr := d.store.MarkDisconnected(ctx, sw.ID, sw.CurrentIndex); merr != nil {
+				log.Printf("[vexsweep] re-mark sweep %s agent_disconnected after failed resume: %v", sw.ID, merr)
+			}
+			return
+		}
+		if merr := d.store.MarkFailed(ctx, sw.ID, err.Error()); merr != nil {
+			log.Printf("[vexsweep] mark sweep %s failed after resume attempt: %v", sw.ID, merr)
+		}
+		return
+	}
+	if err := d.store.Resume(ctx, sw.ID, variantRunID, scenarioRunID); err != nil {
+		log.Printf("[vexsweep] resume sweep %s: %v", sw.ID, err)
+		return
+	}
+	log.Printf("[vexsweep] sweep %s resumed: agent %s reconnected, re-dispatched technique %s", sw.ID, sw.AgentID, sw.Techniques[sw.CurrentIndex])
 }
 
 // maybeForceCancelStuck triggers a cancel for the current technique once it
@@ -158,6 +232,12 @@ func (d *Dispatcher) dispatchNext(ctx context.Context, sw Sweep, justFinishedCou
 	}
 	scenarioRunID, variantRunID, _, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Techniques[nextIdx], baseType, sw.Mode, sw.IncludeAdvanced, nextIdx, len(sw.Techniques))
 	if err != nil {
+		if errors.Is(err, ErrAgentOffline) {
+			if merr := d.store.MarkDisconnected(ctx, sw.ID, nextIdx); merr != nil {
+				log.Printf("[vexsweep] mark sweep %s agent_disconnected (offline race): %v", sw.ID, merr)
+			}
+			return
+		}
 		// Deliberately does not fall through to the next technique -- a
 		// silently-skipped technique in a security-validation sweep is
 		// worse than a sweep that stops and says why. See design spec
