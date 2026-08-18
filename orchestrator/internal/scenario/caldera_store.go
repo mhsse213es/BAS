@@ -6,9 +6,12 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/audspect/bas/internal/models"
 )
 
 // CalderaStore holds Caldera abilities indexed by ATT&CK technique ID,
@@ -19,6 +22,14 @@ import (
 type CalderaStore struct {
 	mu    sync.RWMutex
 	steps map[string][]ScenarioStep
+}
+
+// NewCalderaStoreFromSteps builds a CalderaStore directly from a pre-built
+// technique-indexed step map, bypassing the live Caldera fetch NewCalderaStore
+// requires. Used by tests that need a populated store without a running
+// Caldera instance.
+func NewCalderaStoreFromSteps(steps map[string][]ScenarioStep) *CalderaStore {
+	return &CalderaStore{steps: steps}
 }
 
 // NewCalderaStore fetches every ability from a live Caldera instance and
@@ -69,6 +80,60 @@ func (s *CalderaStore) GetAbilities(techniqueID string) []ScenarioStep {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.steps[strings.ToUpper(techniqueID)]
+}
+
+// ListTechniqueMeta returns one catalog entry per technique with at least
+// one loaded ability, sorted by technique ID -- same shape as
+// ARTStore.ListTechniqueMeta, so the frontend can render both sources with
+// shared code. Safe to call on a nil *CalderaStore (returns nil).
+func (s *CalderaStore) ListTechniqueMeta() []TechniqueMeta {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]TechniqueMeta, 0, len(s.steps))
+	for id, steps := range s.steps {
+		name := ""
+		if len(steps) > 0 {
+			name = steps[0].Name
+		}
+		out = append(out, TechniqueMeta{ID: id, Name: name, Tests: len(steps), Tactic: models.LookupTactic(id)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// ListTechniqueIDs returns every technique ID this store has at least one
+// ability mapped to, sorted for stable iteration. Safe to call on a nil
+// *CalderaStore (returns nil).
+func (s *CalderaStore) ListTechniqueIDs() []string {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := make([]string, 0, len(s.steps))
+	for id := range s.steps {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// Count returns the total number of loaded abilities across every mapped
+// technique. Safe to call on a nil *CalderaStore (returns 0).
+func (s *CalderaStore) Count() int {
+	if s == nil {
+		return 0
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	n := 0
+	for _, steps := range s.steps {
+		n += len(steps)
+	}
+	return n
 }
 
 // fetchAllCalderaAbilities fetches and parses the full abilities list from a

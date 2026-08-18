@@ -653,6 +653,7 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			include_advanced         boolean     NOT NULL DEFAULT false,
 			techniques               text[]      NOT NULL,
 			technique_variant_counts int[]       NOT NULL,
+			base_types               text[]      NOT NULL DEFAULT '{}',
 			current_index            int         NOT NULL DEFAULT 0,
 			current_variant_run_id   text        NOT NULL DEFAULT '',
 			current_scenario_run_id  text        NOT NULL DEFAULT '',
@@ -1518,6 +1519,15 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_backup_jobs_status ON backup_jobs(status)`,
 		`CREATE INDEX IF NOT EXISTS idx_backup_jobs_requested_at ON backup_jobs(requested_at DESC)`,
+
+		// Full Variant Sweep: combined ART + Caldera dispatch. base_types is
+		// parallel to techniques (same index maps to the same technique's
+		// source) so the dispatcher knows which store to resolve each step
+		// against. Existing rows default to '{}' and are backfilled to all
+		// 'art' below, since every sweep created before this change was
+		// ART-only.
+		`ALTER TABLE vex_sweeps ADD COLUMN IF NOT EXISTS base_types text[] NOT NULL DEFAULT '{}'`,
+		`UPDATE vex_sweeps SET base_types = (SELECT array_agg('art'::text) FROM unnest(techniques)) WHERE base_types = '{}' AND array_length(techniques,1) > 0`,
 	}
 
 	for _, s := range stmts {

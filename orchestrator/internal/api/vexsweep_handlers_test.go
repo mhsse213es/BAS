@@ -81,6 +81,79 @@ func TestCreateVexSweep_RejectsWhenAgentHasRunningVariantRun(t *testing.T) {
 	})
 }
 
+func TestCreateVexSweep_CombinesARTAndCalderaTechniques(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO techniques (technique_id, name, tactic) VALUES ('T1059.001','PowerShell','execution')
+			 ON CONFLICT (technique_id) DO NOTHING`); err != nil {
+			t.Fatalf("seed technique: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO art_atomic_tests (technique_id, test_index, name, executor, command)
+			 VALUES ('T1059.001', 0, 'combined-test-step', 'powershell', 'Get-Process')`); err != nil {
+			t.Fatalf("seed art_atomic_tests: %v", err)
+		}
+		artStore, err := scenario.NewARTStoreFromDB(ctx, pool, nil)
+		if err != nil {
+			t.Fatalf("NewARTStoreFromDB: %v", err)
+		}
+		calderaStore := scenario.NewCalderaStoreFromSteps(map[string][]scenario.ScenarioStep{
+			"T1059.003": {{
+				TaskID:      scenario.TaskID("T1059.003", "combined-caldera-ability"),
+				TechniqueID: "T1059.003",
+				Name:        "combined-caldera-ability",
+				Framework:   "caldera",
+				Executor:    "powershell",
+				Command:     "whoami",
+				TimeoutSec:  60,
+			}},
+		})
+
+		store := vexsweep.NewStore(pool)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).
+			WithVexSweep(store, testVexSweepDispatcher(store)).
+			WithART(artStore).
+			WithCalderaStore(calderaStore)
+		userID := seedUser(t, pool, "sweep-combined-user", "password123", "admin", true)
+		body, _ := json.Marshal(map[string]string{"agentId": "agent-combined", "mode": "sequential"})
+		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps", bytes.NewReader(body), auth.RoleAdmin, userID)
+		rec := callAuthed(h.CreateVexSweep, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201, body: %s", rec.Code, rec.Body.String())
+		}
+		var got struct {
+			ID         string   `json:"id"`
+			Techniques []string `json:"techniques"`
+			BaseTypes  []string `json:"baseTypes"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if len(got.Techniques) != len(got.BaseTypes) {
+			t.Fatalf("techniques/baseTypes length mismatch: %d vs %d", len(got.Techniques), len(got.BaseTypes))
+		}
+		foundART, foundCaldera := false, false
+		for i, tech := range got.Techniques {
+			if tech == "T1059.001" && got.BaseTypes[i] == "art" {
+				foundART = true
+			}
+			if tech == "T1059.003" && got.BaseTypes[i] == "caldera" {
+				foundCaldera = true
+			}
+		}
+		if !foundART {
+			t.Errorf("expected T1059.001 dispatched with baseType=art, got techniques=%v baseTypes=%v", got.Techniques, got.BaseTypes)
+		}
+		if !foundCaldera {
+			t.Errorf("expected T1059.003 dispatched with baseType=caldera, got techniques=%v baseTypes=%v", got.Techniques, got.BaseTypes)
+		}
+	})
+}
+
 func TestGetActiveVexSweep_404WhenNoneRunning(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

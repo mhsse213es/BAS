@@ -20,7 +20,7 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
-const sweepCols = `id, agent_id, mode, include_advanced, techniques, technique_variant_counts,
+const sweepCols = `id, agent_id, mode, include_advanced, techniques, technique_variant_counts, base_types,
 	current_index, current_variant_run_id, current_scenario_run_id, current_technique_started_at,
 	completed_variants, total_variants, status, error, created_by, started_at, completed_at`
 
@@ -28,18 +28,28 @@ func scanSweep(row interface {
 	Scan(dest ...any) error
 }) (Sweep, error) {
 	var sw Sweep
-	err := row.Scan(&sw.ID, &sw.AgentID, &sw.Mode, &sw.IncludeAdvanced, &sw.Techniques, &sw.TechniqueVariantCounts,
+	err := row.Scan(&sw.ID, &sw.AgentID, &sw.Mode, &sw.IncludeAdvanced, &sw.Techniques, &sw.TechniqueVariantCounts, &sw.BaseTypes,
 		&sw.CurrentIndex, &sw.CurrentVariantRunID, &sw.CurrentScenarioRunID, &sw.CurrentTechniqueStartedAt,
 		&sw.CompletedVariants, &sw.TotalVariants, &sw.Status, &sw.Error, &sw.CreatedBy, &sw.StartedAt, &sw.CompletedAt)
 	return sw, err
 }
 
 func (s *Store) Create(ctx context.Context, sw Sweep) (Sweep, error) {
+	// Callers that haven't been updated to pass BaseTypes (existing tests,
+	// any future single-source caller) default every technique to "art" --
+	// matches the pre-Caldera-combination behavior and keeps the NOT NULL
+	// base_types column satisfied.
+	if len(sw.BaseTypes) == 0 && len(sw.Techniques) > 0 {
+		sw.BaseTypes = make([]string, len(sw.Techniques))
+		for i := range sw.BaseTypes {
+			sw.BaseTypes[i] = "art"
+		}
+	}
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO vex_sweeps (agent_id, mode, include_advanced, techniques, technique_variant_counts, total_variants, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7)
+		`INSERT INTO vex_sweeps (agent_id, mode, include_advanced, techniques, technique_variant_counts, base_types, total_variants, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		 RETURNING `+sweepCols,
-		sw.AgentID, sw.Mode, sw.IncludeAdvanced, sw.Techniques, sw.TechniqueVariantCounts, sw.TotalVariants, sw.CreatedBy)
+		sw.AgentID, sw.Mode, sw.IncludeAdvanced, sw.Techniques, sw.TechniqueVariantCounts, sw.BaseTypes, sw.TotalVariants, sw.CreatedBy)
 	created, err := scanSweep(row)
 	if err != nil {
 		if isUniqueViolation(err) {

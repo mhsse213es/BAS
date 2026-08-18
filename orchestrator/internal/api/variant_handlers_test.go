@@ -25,7 +25,7 @@ func TestDispatchVariantForSweep_NoARTStoreReturnsError(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		h := New(pool, ws.NewHub(), nil, testJWTSecret)
-		_, _, _, err := h.dispatchVariantForSweep(context.Background(), "", "agent-1", "T1059.001", "sequential", false, 0, 1)
+		_, _, _, err := h.dispatchVariantForSweep(context.Background(), "", "agent-1", "T1059.001", "art", "sequential", false, 0, 1)
 		if err == nil {
 			t.Fatal("dispatchVariantForSweep() with no ART store loaded, want an error, got nil")
 		}

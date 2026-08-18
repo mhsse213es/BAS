@@ -3735,7 +3735,7 @@ body.theme-slate {
                 <svg viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6" style="width:16px;height:16px;flex-shrink:0"><path d="M3 10a7 7 0 1 1 14 0A7 7 0 0 1 3 10z"/><path d="m10 7 3 3-3 3M7 10h6"/></svg>
                 Full Variant Sweep
               </div>
-              <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> ART techniques sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
+              <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> ART techniques<span id="vex-sweep-caldera-count"></span> sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
             </div>
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
               <div style="display:flex;gap:0.6rem;margin-right:0.4rem">
@@ -16702,12 +16702,14 @@ function loadSimCoverage() {
     apicall('/api/art/content/status').catch(function() { return {}; }),
     apicall('/api/caldera/abilities').catch(function() { return []; }),
     apicall('/api/scenarios').catch(function() { return []; }),
-    apicall('/api/techniques/unified').catch(function() { return []; })
+    apicall('/api/techniques/unified').catch(function() { return []; }),
+    apicall('/api/variants/stats').catch(function() { return {}; })
   ]).then(function(res) {
     var art     = res[0] || {};
     var cal     = Array.isArray(res[1]) ? res[1] : [];
     var scen    = Array.isArray(res[2]) ? res[2] : [];
     var unified = Array.isArray(res[3]) ? res[3] : [];
+    var vstats  = res[4] || {};
 
     var artTechniques = art.techniqueCount  || 0;
     var artTests      = art.testCount       || 0;
@@ -16717,6 +16719,13 @@ function loadSimCoverage() {
     var artPayloads   = art.payloadCount    || 0;
     var kevCount      = art.kevCount        || 0;
     var calCount      = cal.length;
+    // Combined ART + Caldera total -- /api/variants/stats is the single
+    // source of truth for this (see GetVariantStats), so this page's
+    // headline number matches the Variant Executor's own dashboard tile
+    // instead of drifting as a second, ART-only computation of the same
+    // thing.
+    var combinedVariants  = vstats.availableVariants        || artVariants;
+    var calderaVariants   = vstats.calderaAvailableVariants || 0;
     var builtinScen   = scen.filter(function(s) { return s.source === 'builtin'; }).length;
     var customScen    = scen.filter(function(s) { return s.source === 'custom';  }).length;
     var intelScen     = scen.filter(function(s) { return s.source === 'intel';   }).length;
@@ -16763,7 +16772,7 @@ function loadSimCoverage() {
         ['  CMD executor',                     artCMD  || null,      'CMD steps: 12 variants each (1 encoding x 3 privilege tiers x 4 exec contexts)'],
         ['ART payload-backed tests',           artPayloads,          'Atomics requiring a bundled binary payload (subset of atomics above)'],
         // Variant Engine
-        ['Variant Engine — available variants', artVariants,    'Variant Engine total: all encoding x privilege x exec-context combinations across every ART atomic test'],
+        ['Variant Engine — available variants', combinedVariants, 'Variant Engine total: all encoding x privilege x exec-context combinations across every ART atomic test' + (calderaVariants ? ' + every loaded Caldera ability' : '')],
         ['  Encoding variants (PS only)',      artPS * 3 || null,    'plain / base64 (-EncodedCommand) / charcode ([char]N+IEX)'],
         ['  Privilege variants',               artTests * 3 || null, 'user / admin / system per test'],
         ['  Exec-context variants',            artTests * 4 || null, 'direct / WMI (T1047) / Scheduled Task (T1053.005) / COM WScript.Shell (T1559.001)'],
@@ -16777,6 +16786,7 @@ function loadSimCoverage() {
         ['  macOS/Darwin platform',            calMac || null,       'Caldera abilities with a macOS executor'],
         ['Caldera unique techniques',          calUniqTech,          'Distinct ATT&CK technique IDs (raw count overstates coverage — this is accurate)'],
         ['Caldera unique sub-techniques',      calUniqSubTech,       'Distinct sub-techniques (e.g. T1059.001)'],
+        ['  Caldera variant contribution',     calderaVariants || null, 'Caldera abilities × the same encoding/privilege/exec-context combinatorics ART uses — included in the Variant Engine total above'],
         // Scenarios
         ['Built-in scenarios',                 builtinScen,          'Signed YAML scenarios shipped with the platform'],
         ['Custom / operator scenarios',        customScen,           'Operator-authored scenarios'],
@@ -17896,8 +17906,18 @@ function populateVexAgents() {
 }
 
 var _vexAllTechniques = [];
+// _vexCalderaTechniques mirrors _vexAllTechniques but for Caldera's ability
+// catalog -- populated alongside it so the Full Sweep preview can show both
+// sources without a second round-trip. Empty when Caldera isn't configured.
+var _vexCalderaTechniques = [];
 
 function populateVexTechniques() {
+  apicall('/api/caldera/techniques').then(function(techs) {
+    _vexCalderaTechniques = (techs || []).filter(function(t) { return t.id; });
+    var calderaEl = document.getElementById('vex-sweep-caldera-count');
+    if (calderaEl) calderaEl.textContent = _vexCalderaTechniques.length ? (' + ' + _vexCalderaTechniques.length + ' Caldera') : '';
+  }).catch(function() { _vexCalderaTechniques = []; });
+
   apicall('/api/art/techniques').then(function(techs) {
     _vexAllTechniques = (techs || []).filter(function(t) { return t.id; });
     // Update sweep card counts
@@ -19017,10 +19037,16 @@ function _emDispatchFullSweep(targets, extraScenarioIds) {
 // for actually starting a sweep.
 var _sweepPreviewType = null;      // 'variant' | 'em' | null when closed
 var _sweepPreviewTargets = null;   // opaque target-info object, passed straight through to the matching dispatch fn
-var _vexPreviewExpandedId = null;  // currently expanded technique id, or null
-var _vexPreviewCache = {};         // techniqueId -> {loading:bool, error:string, variants:[...]}
+var _vexPreviewExpandedKey = null; // currently expanded "source:techniqueId", or null
+var _vexPreviewCache = {};         // "source:techniqueId" -> {loading:bool, error:string, variants:[...]}
 var _vexPreviewTactic = '';
 var _vexPreviewSearch = '';
+// Combined sweep preview shows ART and Caldera as separate collapsible
+// sections -- ART starts open (the larger, established source), Caldera
+// starts collapsed so a first-time viewer isn't hit with both huge lists
+// expanded at once.
+var _vexPreviewArtCollapsed = false;
+var _vexPreviewCalderaCollapsed = true;
 var _emPreviewExpandedId = null;   // currently expanded EM layer id, or null
 var _emPreviewCache = {};          // layerId -> {loading:bool, error:string, scenario:{...}}
 var _emExtraSelected = {};         // scenarioId -> true, for extra (non-fixed-14) scenarios added to the sweep
@@ -19029,7 +19055,7 @@ var _emExtraSearch = '';
 function openSweepPreview(type, targets) {
   _sweepPreviewType = type;
   _sweepPreviewTargets = targets;
-  _vexPreviewExpandedId = null;
+  _vexPreviewExpandedKey = null;
   _emPreviewExpandedId = null;
   // Fresh caches per opening -- a stale generated-variant/scenario list
   // from a previous preview session must never leak into a new one.
@@ -19037,6 +19063,8 @@ function openSweepPreview(type, targets) {
   _emPreviewCache = {};
   _vexPreviewTactic = '';
   _vexPreviewSearch = '';
+  _vexPreviewArtCollapsed = false;
+  _vexPreviewCalderaCollapsed = true;
   _emExtraSelected = {};
   _emExtraSearch = '';
   renderSweepPreview();
@@ -19071,14 +19099,17 @@ function renderSweepPreview() {
   if (_sweepPreviewType === 'variant') {
     var targets = _sweepPreviewTargets;
     var agentCount = (targets.agents || []).length;
-    var techCount = _vexAllTechniques.length;
+    var artCount = _vexAllTechniques.length;
+    var calderaCount = _vexCalderaTechniques.length;
     var variantTotal = _vexAvailableVariants || 0;
     titleEl.textContent = 'Preview & Confirm — Variant Full Sweep';
-    summaryEl.textContent = 'Targeting ' + agentCount + ' agent(s). ~' + techCount +
-      ' techniques dispatched sequentially per agent, ~' + variantTotal.toLocaleString() + '+ individual variants per agent total.';
+    summaryEl.textContent = 'Targeting ' + agentCount + ' agent(s). ~' + artCount + ' ART technique(s)' +
+      (calderaCount ? ' + ~' + calderaCount + ' Caldera ability/technique(s)' : '') +
+      ' dispatched sequentially per agent, ~' + variantTotal.toLocaleString() + '+ individual variants per agent total.';
 
     var tactics = {};
     _vexAllTechniques.forEach(function(t) { if (t.tactic) tactics[t.tactic] = true; });
+    _vexCalderaTechniques.forEach(function(t) { if (t.tactic) tactics[t.tactic] = true; });
     var tacticOpts = '<option value="">All tactics</option>' +
       Object.keys(tactics).sort().map(function(t) {
         return '<option value="' + x(t) + '"' + (t === _vexPreviewTactic ? ' selected' : '') + '>' + x(t) + '</option>';
@@ -19102,64 +19133,91 @@ function renderSweepPreview() {
 function _setVexPreviewTactic(v) { _vexPreviewTactic = v; _renderVexPreviewList(); }
 function _setVexPreviewSearch(v) { _vexPreviewSearch = v; _renderVexPreviewList(); }
 
+// _renderVexPreviewList renders two collapsible sections -- ART first, then
+// Caldera -- since a combined sweep dispatches every ART technique followed
+// by every Caldera ability (see CreateVexSweep). Each section's own
+// collapse state is independent (_vexPreviewArtCollapsed/
+// _vexPreviewCalderaCollapsed) so a viewer can browse one source without
+// wading through the other.
 function _renderVexPreviewList() {
   var listEl = document.getElementById('sweep-preview-list');
   var countEl = document.getElementById('sweep-preview-count');
   if (!listEl) return;
-  var filtered = filterVexTechniqueList(_vexAllTechniques, _vexPreviewTactic, _vexPreviewSearch);
-  if (countEl) countEl.textContent = filtered.length + ' technique(s)';
+  var artFiltered = filterVexTechniqueList(_vexAllTechniques, _vexPreviewTactic, _vexPreviewSearch);
+  var calderaFiltered = filterVexTechniqueList(_vexCalderaTechniques, _vexPreviewTactic, _vexPreviewSearch);
+  if (countEl) countEl.textContent = artFiltered.length + ' ART, ' + calderaFiltered.length + ' Caldera';
+  listEl.innerHTML =
+    _renderVexPreviewSection('art', 'ART', artFiltered, _vexPreviewArtCollapsed) +
+    _renderVexPreviewSection('caldera', 'Caldera', calderaFiltered, _vexPreviewCalderaCollapsed);
+}
+
+function _renderVexPreviewSection(source, label, filtered, collapsed) {
+  var header = '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem;cursor:pointer;background:var(--elevated);border-bottom:1px solid var(--border)" onclick="_toggleVexPreviewSection(\'' + source + '\')">' +
+      '<span style="width:12px;flex-shrink:0;color:var(--muted);font-size:0.7rem">' + (collapsed ? '&#9656;' : '&#9662;') + '</span>' +
+      '<span style="font-weight:600;font-size:0.78rem;letter-spacing:0.02em">' + label + '</span>' +
+      '<span style="color:var(--muted);font-size:0.74rem">' + filtered.length + ' technique(s)</span>' +
+    '</div>';
+  if (collapsed) return header;
   if (!filtered.length) {
-    listEl.innerHTML = '<div style="padding:0.75rem;color:var(--muted);font-size:0.78rem">No techniques match</div>';
-    return;
+    return header + '<div style="padding:0.75rem;color:var(--muted);font-size:0.78rem">No ' + label + ' techniques match</div>';
   }
-  listEl.innerHTML = filtered.map(function(t) {
-    var expanded = _vexPreviewExpandedId === t.id;
+  var rows = filtered.map(function(t) {
+    var key = source + ':' + t.id;
+    var expanded = _vexPreviewExpandedKey === key;
     return '<div style="border-bottom:1px solid var(--border)">' +
-      '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem;cursor:pointer" onclick="_toggleVexPreviewRow(\'' + x(t.id) + '\')">' +
+      '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.6rem 0.5rem 1.7rem;cursor:pointer" onclick="_toggleVexPreviewRow(\'' + source + '\',\'' + x(t.id) + '\')">' +
         '<span style="width:12px;flex-shrink:0;color:var(--muted);font-size:0.7rem">' + (expanded ? '&#9662;' : '&#9656;') + '</span>' +
         '<span style="font-family:var(--font-mono);font-size:0.8rem;flex-shrink:0">' + x(t.id) + '</span>' +
         (t.name ? '<span style="color:var(--muted);font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(t.name) + '</span>' : '') +
       '</div>' +
-      (expanded ? _renderVexVariantDetail(t.id) : '') +
+      (expanded ? _renderVexVariantDetail(source, t.id) : '') +
     '</div>';
   }).join('');
+  return header + rows;
+}
+
+function _toggleVexPreviewSection(source) {
+  if (source === 'art') _vexPreviewArtCollapsed = !_vexPreviewArtCollapsed;
+  else _vexPreviewCalderaCollapsed = !_vexPreviewCalderaCollapsed;
+  _renderVexPreviewList();
 }
 
 // _toggleVexPreviewRow expands/collapses one technique's variant detail.
 // Generation is lazy (only POSTed for the technique actually being
-// expanded, never all ~500-800 up front) and cached per techniqueId for as
-// long as the preview stays open, so collapsing and re-expanding never
-// re-generates.
-function _toggleVexPreviewRow(techId) {
-  if (_vexPreviewExpandedId === techId) {
-    _vexPreviewExpandedId = null;
+// expanded, never all ~500-800 up front) and cached per "source:techniqueId"
+// for as long as the preview stays open, so collapsing and re-expanding
+// never re-generates -- and an ART/Caldera technique-ID collision can never
+// serve the wrong source's cached variants.
+function _toggleVexPreviewRow(source, techId) {
+  var key = source + ':' + techId;
+  if (_vexPreviewExpandedKey === key) {
+    _vexPreviewExpandedKey = null;
     _renderVexPreviewList();
     return;
   }
-  _vexPreviewExpandedId = techId;
-  if (!_vexPreviewCache[techId]) {
-    _vexPreviewCache[techId] = { loading: true };
-    var baseType = document.getElementById('vex-base-type') ? document.getElementById('vex-base-type').value : 'art';
+  _vexPreviewExpandedKey = key;
+  if (!_vexPreviewCache[key]) {
+    _vexPreviewCache[key] = { loading: true };
     apicall('/api/variants/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ techniqueId: techId, baseType: baseType })
+      body: JSON.stringify({ techniqueId: techId, baseType: source })
     }).then(function(res) {
-      _vexPreviewCache[techId] = (res && res.error) ? { error: res.error } : { variants: (res && res.templates) || [] };
+      _vexPreviewCache[key] = (res && res.error) ? { error: res.error } : { variants: (res && res.templates) || [] };
       // The user may have collapsed this row (or expanded a different one)
       // while the request was in flight -- only re-render if it's still
       // the active one, so a slow response can't pop open a stale row.
-      if (_vexPreviewExpandedId === techId) _renderVexPreviewList();
+      if (_vexPreviewExpandedKey === key) _renderVexPreviewList();
     }).catch(function(e) {
-      _vexPreviewCache[techId] = { error: e.message || 'Failed to generate variants' };
-      if (_vexPreviewExpandedId === techId) _renderVexPreviewList();
+      _vexPreviewCache[key] = { error: e.message || 'Failed to generate variants' };
+      if (_vexPreviewExpandedKey === key) _renderVexPreviewList();
     });
   }
   _renderVexPreviewList();
 }
 
-function _renderVexVariantDetail(techId) {
-  var entry = _vexPreviewCache[techId];
+function _renderVexVariantDetail(source, techId) {
+  var entry = _vexPreviewCache[source + ':' + techId];
   if (!entry || entry.loading) {
     return '<div style="padding:0.6rem 0.6rem 0.6rem 1.9rem;color:var(--muted);font-size:0.76rem">Generating variants…</div>';
   }

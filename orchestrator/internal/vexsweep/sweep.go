@@ -14,19 +14,22 @@ type Sweep struct {
 	IncludeAdvanced        bool
 	Techniques             []string
 	TechniqueVariantCounts []int
-	CurrentIndex           int
-	CurrentVariantRunID    string
-	CurrentScenarioRunID   string
+	// BaseTypes is parallel to Techniques -- BaseTypes[i] ("art" or
+	// "caldera") is the source Techniques[i] should be resolved against.
+	BaseTypes            []string
+	CurrentIndex         int
+	CurrentVariantRunID  string
+	CurrentScenarioRunID string
 	// CurrentTechniqueStartedAt is when the current technique was dispatched
 	// (nil when no technique is in flight). Dispatcher uses it to detect a
 	// technique that has genuinely hung and force-cancel it -- see
 	// dispatcher.go's stuckThreshold.
 	CurrentTechniqueStartedAt *time.Time
-	CompletedVariants      int
-	TotalVariants          int
-	Status                 string
-	Error                  string
-	CreatedBy              string
-	StartedAt              time.Time
-	CompletedAt            *time.Time
+	CompletedVariants         int
+	TotalVariants             int
+	Status                    string
+	Error                     string
+	CreatedBy                 string
+	StartedAt                 time.Time
+	CompletedAt               *time.Time
 }

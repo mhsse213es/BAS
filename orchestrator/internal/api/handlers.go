@@ -3667,6 +3667,14 @@ func (h *Handler) GetARTTechniques(w http.ResponseWriter, r *http.Request) {
 	respond(w, h.artStore.ListTechniqueMeta())
 }
 
+// GET /api/caldera/techniques — live Caldera catalog from the pre-loaded
+// ability cache (technique id, representative ability name, ability count).
+// Same shape as GetARTTechniques so the frontend can render both sources
+// with shared code. Returns an empty list if Caldera isn't configured.
+func (h *Handler) GetCalderaTechniques(w http.ResponseWriter, r *http.Request) {
+	respond(w, h.calderaStore.ListTechniqueMeta())
+}
+
 // GetPostureCatalog returns the selectable posture checks for a scenario, as
 // reported by the given agent at enroll time. The catalog is per-agent because
 // the check set is compiled into the agent and varies by OS. Viewer+.

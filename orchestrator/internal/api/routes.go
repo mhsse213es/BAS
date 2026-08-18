@@ -189,6 +189,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// Live framework catalogs — drive the real-time sweep counts and the
 		// selectable technique/ability picker. Read-only, Viewer+.
 		r.Get("/api/art/techniques", h.GetARTTechniques)
+		r.Get("/api/caldera/techniques", h.GetCalderaTechniques)
 		r.Get("/api/caldera/abilities", h.GetCalderaAbilities)
 		r.Get("/api/techniques/unified", h.GetUnifiedTechniques)
 		r.Get("/api/techniques/catalog", h.GetTechniqueCatalog)

@@ -24,9 +24,9 @@ const (
 
 // Default (Phase 1) evasions — safe for all environments including BFSI.
 const (
-	EvasionNone        = "none"                // no evasion
-	EvasionSleepJitter = "sleep_jitter"        // random 3–12s sleep — evades sandbox timeouts
-	EvasionDelay       = "delay"               // fixed 5s delay — tests time-gated detections
+	EvasionNone        = "none"                 // no evasion
+	EvasionSleepJitter = "sleep_jitter"         // random 3–12s sleep — evades sandbox timeouts
+	EvasionDelay       = "delay"                // fixed 5s delay — tests time-gated detections
 	EvasionParentShift = "parent_process_shift" // spawns via Start-Process — shifts parent in tree
 )
 
@@ -67,12 +67,12 @@ const (
 // Stored as base_type on variant_runs. Extend this list as new sources are added
 // without breaking existing records.
 const (
-	SourceART             = "art"             // Atomic Red Team
-	SourceCaldera         = "caldera"         // MITRE Caldera ability
-	SourceCustom          = "custom"          // operator-supplied script
+	SourceART             = "art"              // Atomic Red Team
+	SourceCaldera         = "caldera"          // MITRE Caldera ability
+	SourceCustom          = "custom"           // operator-supplied script
 	SourceEndpointMastery = "endpoint_mastery" // built-in Audspect EM scenarios
-	SourceCVE             = "cve"             // CVE-specific PoC payload
-	SourceFamily          = "family"          // payload_families DB entry
+	SourceCVE             = "cve"              // CVE-specific PoC payload
+	SourceFamily          = "family"           // payload_families DB entry
 )
 
 // ── Core Types ────────────────────────────────────────────────────────────────
@@ -82,8 +82,8 @@ const (
 type Template struct {
 	ID               string    `json:"id"`
 	TechniqueID      string    `json:"techniqueId"`
-	BaseType         string    `json:"baseType"`         // see SimulationSource constants
-	BaseID           string    `json:"baseId"`           // ART test name / family name / ability_id
+	BaseType         string    `json:"baseType"` // see SimulationSource constants
+	BaseID           string    `json:"baseId"`   // ART test name / family name / ability_id
 	Encoding         string    `json:"encoding"`
 	ExecContext      string    `json:"execContext"`
 	Evasion          string    `json:"evasion"`
@@ -103,10 +103,10 @@ type Template struct {
 type PayloadFamily struct {
 	ID          string    `json:"id"`
 	TechniqueID string    `json:"techniqueId"`
-	Name        string    `json:"name"`        // short human-readable label
+	Name        string    `json:"name"` // short human-readable label
 	Description string    `json:"description"`
-	Payload     string    `json:"payload"`     // raw PowerShell script body
-	Purpose     string    `json:"purpose"`     // recon | credential | download | persistence | lateral
+	Payload     string    `json:"payload"` // raw PowerShell script body
+	Purpose     string    `json:"purpose"` // recon | credential | download | persistence | lateral
 	RiskLevel   RiskLevel `json:"riskLevel"`
 	Platform    string    `json:"platform"`
 	Executor    string    `json:"executor"`
@@ -123,7 +123,7 @@ type Run struct {
 	ScenarioRunID    string     `json:"scenarioRunId"`
 	TotalVariants    int        `json:"totalVariants"`
 	Status           string     `json:"status"`
-	ExecutionMode    string     `json:"executionMode"`    // sequential | parallel | adaptive
+	ExecutionMode    string     `json:"executionMode"` // sequential | parallel | adaptive
 	GeneratorVersion string     `json:"generatorVersion"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	CompletedAt      *time.Time `json:"completedAt,omitempty"`
@@ -183,27 +183,30 @@ type Summary struct {
 
 // CoverageRow is one row in the aggregate variant coverage view.
 type CoverageRow struct {
-	TechniqueID string    `json:"techniqueId"`
-	Tactic      string    `json:"tactic"`      // ATT&CK tactic (Execution, Persistence, …)
-	BaseType    string    `json:"baseType"`
-	BaseID      string    `json:"baseId"`
-	TotalTested int       `json:"totalTested"`
-	Prevented   int       `json:"prevented"`
-	Allowed     int       `json:"allowed"`
-	Errored     int       `json:"errored"`
-	FirstBypass string    `json:"firstBypass,omitempty"`
+	TechniqueID string `json:"techniqueId"`
+	Tactic      string `json:"tactic"` // ATT&CK tactic (Execution, Persistence, …)
+	BaseType    string `json:"baseType"`
+	BaseID      string `json:"baseId"`
+	TotalTested int    `json:"totalTested"`
+	Prevented   int    `json:"prevented"`
+	Allowed     int    `json:"allowed"`
+	Errored     int    `json:"errored"`
+	FirstBypass string `json:"firstBypass,omitempty"`
 }
 
 // Stats is the response for GET /api/variants/stats.
 // Keeps "Executed Variants" and "Available Variants" separate — never inflate
 // the executed count with un-run theoretical variants.
 type Stats struct {
-	ExecutedVariants       int `json:"executedVariants"`       // sum of completed variant_run.total_variants
-	AvailableVariants      int `json:"availableVariants"`      // ART atomics × encoding × privilege × exec-context permutations
-	ARTTechniqueCount      int `json:"artTechniqueCount"`      // distinct technique IDs in art_atomic_tests
-	ARTAtomicCount         int `json:"artAtomicCount"`         // total rows in art_atomic_tests (techniques × tests/technique)
-	PayloadFamilyCount     int `json:"payloadFamilyCount"`     // custom payload families in DB
-	PayloadFamilyVariants  int `json:"payloadFamilyVariants"`  // payload_family count × variants_per_family
-	TechniquesWithFamilies int `json:"techniquesWithFamilies"` // techniques with at least one payload family
-	VariantsPerFamily      int `json:"variantsPerFamily"`      // = 56 default / 70 with advanced
+	ExecutedVariants         int `json:"executedVariants"`         // sum of completed variant_run.total_variants
+	AvailableVariants        int `json:"availableVariants"`        // combined ART + Caldera: atomics/abilities × encoding × privilege × exec-context permutations
+	ARTAvailableVariants     int `json:"artAvailableVariants"`     // ART-only portion of AvailableVariants
+	CalderaAvailableVariants int `json:"calderaAvailableVariants"` // Caldera-only portion of AvailableVariants
+	CalderaAbilityCount      int `json:"calderaAbilityCount"`      // total loaded Caldera abilities across all mapped techniques
+	ARTTechniqueCount        int `json:"artTechniqueCount"`        // distinct technique IDs in art_atomic_tests
+	ARTAtomicCount           int `json:"artAtomicCount"`           // total rows in art_atomic_tests (techniques × tests/technique)
+	PayloadFamilyCount       int `json:"payloadFamilyCount"`       // custom payload families in DB
+	PayloadFamilyVariants    int `json:"payloadFamilyVariants"`    // payload_family count × variants_per_family
+	TechniquesWithFamilies   int `json:"techniquesWithFamilies"`   // techniques with at least one payload family
+	VariantsPerFamily        int `json:"variantsPerFamily"`        // = 56 default / 70 with advanced
 }

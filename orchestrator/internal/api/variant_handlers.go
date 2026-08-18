@@ -346,16 +346,26 @@ func (h *Handler) GetVariantStats(w http.ResponseWriter, r *http.Request) {
 	// screens agree. Falls back to 0 on error — non-fatal.
 	_, _, artVariants, _ := scenario.QueryVariantCount(ctx, h.db)
 
+	// Caldera-derived total: every loaded ability × the same PowerShell
+	// combinatorial count ART uses (abilities are always indexed with
+	// Executor "powershell" -- see CalderaStore.NewCalderaStore). Safe on a
+	// nil calderaStore (Count() returns 0).
+	calderaAbilities := h.calderaStore.Count()
+	calderaVariants := calderaAbilities * scenario.StepVariantCount("powershell")
+
 	perFamily := variant.VariantsPerFamily(false)
 	jsonOK(w, variant.Stats{
-		ExecutedVariants:       executed,
-		AvailableVariants:      artVariants,
-		ARTTechniqueCount:      artTechCount,
-		ARTAtomicCount:         artAtomicCount,
-		PayloadFamilyCount:     familyCount,
-		PayloadFamilyVariants:  familyCount * perFamily,
-		TechniquesWithFamilies: techCount,
-		VariantsPerFamily:      perFamily,
+		ExecutedVariants:         executed,
+		AvailableVariants:        artVariants + calderaVariants,
+		ARTAvailableVariants:     artVariants,
+		CalderaAvailableVariants: calderaVariants,
+		CalderaAbilityCount:      calderaAbilities,
+		ARTTechniqueCount:        artTechCount,
+		ARTAtomicCount:           artAtomicCount,
+		PayloadFamilyCount:       familyCount,
+		PayloadFamilyVariants:    familyCount * perFamily,
+		TechniquesWithFamilies:   techCount,
+		VariantsPerFamily:        perFamily,
 	})
 }
 
@@ -674,8 +684,8 @@ func (h *Handler) dispatchVariantRun(
 // techniqueIndex/totalTechniques label the dispatched run for the agent's
 // local console and flag the sweep's last technique -- see
 // scenario.ScenarioCommand's SweepName/SweepLabel/SweepFinal doc comment.
-func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID, techniqueID, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (scenarioRunID, variantRunID string, totalVariants int, err error) {
-	templates, baseID, err := h.resolveTemplates(ctx, techniqueID, "art", "", "", "", includeAdvanced)
+func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID, techniqueID, baseType, mode string, includeAdvanced bool, techniqueIndex, totalTechniques int) (scenarioRunID, variantRunID string, totalVariants int, err error) {
+	templates, baseID, err := h.resolveTemplates(ctx, techniqueID, baseType, "", "", "", includeAdvanced)
 	if err != nil {
 		return "", "", 0, err
 	}
@@ -683,7 +693,7 @@ func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID,
 		return "", "", 0, fmt.Errorf("no variants generated for %s", techniqueID)
 	}
 	sweepFinal := techniqueIndex == totalTechniques-1
-	scenarioRunID, variantRunID, err = h.dispatchVariantRun(ctx, sweepID, agentID, techniqueID, "art", baseID, mode, templates, "Variant Full Sweep", techniqueID, sweepFinal)
+	scenarioRunID, variantRunID, err = h.dispatchVariantRun(ctx, sweepID, agentID, techniqueID, baseType, baseID, mode, templates, "Variant Full Sweep", techniqueID, sweepFinal)
 	if err != nil {
 		return "", "", 0, err
 	}
