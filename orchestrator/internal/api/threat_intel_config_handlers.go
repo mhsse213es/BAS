@@ -27,7 +27,12 @@ func (h *Handler) GetThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 		`SELECT base_url, enabled, last_sync_status, last_error FROM threat_intel_config WHERE connector = $1`, conn,
 	).Scan(&baseURL, &enabled, &status, &lastError)
 	if err != nil {
-		respond(w, map[string]any{"baseUrl": "", "enabled": false, "lastSyncStatus": "never", "lastError": ""})
+		// No row has ever been saved for this connector -- "configured: false"
+		// tells the frontend this is a genuine first-time setup, so its
+		// save-confirmation "you're about to overwrite an existing value"
+		// modal (which only makes sense once real values are already in
+		// place) can stay hidden until an actual update happens.
+		respond(w, map[string]any{"baseUrl": "", "enabled": false, "lastSyncStatus": "never", "lastError": "", "configured": false})
 		return
 	}
 	respond(w, map[string]any{
@@ -35,6 +40,7 @@ func (h *Handler) GetThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 		"enabled":        enabled,
 		"lastSyncStatus": status,
 		"lastError":      lastError,
+		"configured":     true,
 	})
 }
 
@@ -118,6 +124,46 @@ func (h *Handler) PutThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.auditLog(r, "connector.config.update", conn, map[string]any{"baseUrl": body.BaseURL, "enabled": body.Enabled}, "ok")
+	respond(w, resp)
+}
+
+// DELETE /api/threat-intel/{connector}/config — Admin. Removes the stored
+// config entirely (base URL + API key), returning the connector to
+// "configured: false" -- unlike Enabled=false via PUT, which stops syncing
+// but leaves the credentials in place. Reconfigures the live scheduler
+// immediately, same as PutThreatIntelConfig, so removal takes effect
+// without a restart.
+func (h *Handler) DeleteThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
+	conn := chi.URLParam(r, "connector")
+	if !validConnectors[conn] {
+		jsonError(w, "unknown connector — must be misp, opencti, or otx", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.db.Exec(r.Context(), `DELETE FROM threat_intel_config WHERE connector = $1`, conn); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]any{"status": "ok"}
+	if h.scheduler != nil {
+		sources, lerr := connector.LoadSourcesFromDB(r.Context(), h.db, nil, nil)
+		if lerr == nil {
+			h.scheduler.Reconfigure(sources)
+		} else {
+			log.Printf("[threat-intel] reconfigure after delete %s: load sources from db failed: %v", conn, lerr)
+			resp["warning"] = "config removed, but the live connector could not be reloaded — it may keep syncing until the next scheduled sync or a server restart"
+		}
+		if activitySources, aerr := connector.LoadActivitySourcesFromDB(r.Context(), h.db); aerr == nil {
+			h.scheduler.ReconfigureActivitySources(activitySources)
+		} else {
+			log.Printf("[threat-intel] reconfigure after delete %s: load activity sources from db failed: %v", conn, aerr)
+		}
+	}
+	if conn == "otx" {
+		h.setIOCProvider(nil)
+	}
+
+	h.auditLog(r, "connector.config.delete", conn, nil, "ok")
 	respond(w, resp)
 }
 

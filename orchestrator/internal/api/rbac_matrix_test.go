@@ -250,6 +250,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/threat-intel/{connector}/config", tierPermission, auth.CanViewConnectorStatus},
 	{http.MethodPut, "/api/threat-intel/{connector}/config", tierPermission, auth.CanUpdateConnectorConfig},
 	{http.MethodPost, "/api/threat-intel/{connector}/config/test", tierPermission, auth.CanUpdateConnectorConfig},
+	{http.MethodDelete, "/api/threat-intel/{connector}/config", tierPermission, auth.CanUpdateConnectorConfig},
 	{http.MethodGet, "/api/taxii/connectors", tierPermission, auth.CanViewConnectorStatus},
 	{http.MethodGet, "/api/taxii/connectors/{id}", tierPermission, auth.CanViewConnectorStatus},
 	{http.MethodPost, "/api/taxii/connectors", tierPermission, auth.CanUpdateConnectorConfig},

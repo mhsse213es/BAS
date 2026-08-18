@@ -16373,6 +16373,7 @@ function loadThreatIntelConfig(name) {
       '<div class="kpi-row" style="margin-top:0.5rem">' +
         '<button class="btn btn-outline btn-sm" onclick="testConnectorConfig(\'' + name + '\')">Test Connection</button>' +
         '<button class="btn btn-primary btn-sm" onclick="saveConnectorConfig(\'' + name + '\')">Save</button>' +
+        (cfg.configured ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="removeConnectorConfig(\'' + name + '\')">Remove</button>' : '') +
         '<span id="ti-' + name + '-test-result" class="tiny muted"></span>' +
       '</div>';
   }).catch(function() {});
@@ -16436,6 +16437,23 @@ function doSaveConnectorConfig(name, payload) {
     loadThreatIntelConfig(name);
     loadConnectorStatus();
   }).catch(function(e) { showToast('Save failed: ' + (e.message || 'error'), 'err'); });
+}
+
+// removeConnectorConfig deletes the stored base URL + API key entirely
+// (unlike unchecking Enabled + Save, which stops syncing but leaves the
+// credentials in place) -- confirmed first since it's destructive and the
+// connector stops syncing immediately, no restart needed.
+function removeConnectorConfig(name) {
+  var rows = _diffRow('Base URL', TI_CONNECTOR_LOADED[name] ? TI_CONNECTOR_LOADED[name].baseUrl : '', '(removed)') +
+    '<div class="tiny muted" style="margin-top:0.4rem">This deletes the stored API key too. ' + TI_CONNECTOR_LABELS[name] + ' will stop syncing immediately.</div>';
+  openConfirmDiffModal('Remove ' + TI_CONNECTOR_LABELS[name] + ' Config', rows, function() {
+    apicall('/api/threat-intel/' + name + '/config', { method: 'DELETE' }).then(function(res) {
+      if (res && res.warning) showToast(res.warning, 'err');
+      else showToast(TI_CONNECTOR_LABELS[name] + ' config removed', 'ok');
+      loadThreatIntelConfig(name);
+      loadConnectorStatus();
+    }).catch(function(e) { showToast('Remove failed: ' + (e.message || 'error'), 'err'); });
+  });
 }
 
 // ── TAXII Connectors (generic TAXII 2.1 -- FS-ISAC/HC-ISAC/Auto-ISAC/any) ──

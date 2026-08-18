@@ -34,6 +34,90 @@ func TestGetThreatIntelConfig_UnknownConnector_BadRequest(t *testing.T) {
 	}
 }
 
+// TestGetThreatIntelConfig_ConfiguredFlagDistinguishesFirstTimeFromUpdate
+// proves the GET response tells the frontend whether this connector has
+// ever been saved before -- the confirm-diff "you're about to overwrite an
+// existing value" modal makes no sense on a genuine first-time setup, only
+// once real values are already in place and someone is changing them.
+func TestGetThreatIntelConfig_ConfiguredFlagDistinguishesFirstTimeFromUpdate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+
+		preRec := httptest.NewRecorder()
+		h.GetThreatIntelConfig(preRec, threatIntelConfigReq(http.MethodGet, "opencti", nil))
+		var pre map[string]any
+		json.Unmarshal(preRec.Body.Bytes(), &pre)
+		if pre["configured"] != false {
+			t.Errorf("configured = %v before any save, want false", pre["configured"])
+		}
+
+		h.PutThreatIntelConfig(httptest.NewRecorder(), threatIntelConfigReq(http.MethodPut, "opencti", map[string]any{
+			"baseUrl": "https://opencti.example.com", "apiKey": "secret-key-1", "enabled": true,
+		}))
+
+		postRec := httptest.NewRecorder()
+		h.GetThreatIntelConfig(postRec, threatIntelConfigReq(http.MethodGet, "opencti", nil))
+		var post map[string]any
+		json.Unmarshal(postRec.Body.Bytes(), &post)
+		if post["configured"] != true {
+			t.Errorf("configured = %v after a save, want true", post["configured"])
+		}
+	})
+}
+
+func TestDeleteThreatIntelConfig_UnknownConnector_BadRequest(t *testing.T) {
+	h := New(nil, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+	rec := httptest.NewRecorder()
+	h.DeleteThreatIntelConfig(rec, threatIntelConfigReq(http.MethodDelete, "mandiant", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (unknown connector)", rec.Code)
+	}
+}
+
+// TestDeleteThreatIntelConfig_RemovesStoredCredentials proves DELETE
+// actually clears the row -- unlike enabled=false via PUT, which stops
+// syncing but leaves the base URL/API key stored, GET must report
+// configured=false again afterward.
+func TestDeleteThreatIntelConfig_RemovesStoredCredentials(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+
+		h.PutThreatIntelConfig(httptest.NewRecorder(), threatIntelConfigReq(http.MethodPut, "misp", map[string]any{
+			"baseUrl": "https://misp.example.com", "apiKey": "secret-key-2", "enabled": true,
+		}))
+		preRec := httptest.NewRecorder()
+		h.GetThreatIntelConfig(preRec, threatIntelConfigReq(http.MethodGet, "misp", nil))
+		var pre map[string]any
+		json.Unmarshal(preRec.Body.Bytes(), &pre)
+		if pre["configured"] != true {
+			t.Fatalf("configured = %v after save, want true", pre["configured"])
+		}
+
+		delRec := httptest.NewRecorder()
+		h.DeleteThreatIntelConfig(delRec, threatIntelConfigReq(http.MethodDelete, "misp", nil))
+		if delRec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", delRec.Code, delRec.Body.String())
+		}
+
+		postRec := httptest.NewRecorder()
+		h.GetThreatIntelConfig(postRec, threatIntelConfigReq(http.MethodGet, "misp", nil))
+		var post map[string]any
+		json.Unmarshal(postRec.Body.Bytes(), &post)
+		if post["configured"] != false {
+			t.Errorf("configured = %v after delete, want false", post["configured"])
+		}
+		if post["baseUrl"] != "" {
+			t.Errorf("baseUrl = %q after delete, want empty", post["baseUrl"])
+		}
+	})
+}
+
 func TestPutThreatIntelConfig_NeverReturnsApiKey(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
