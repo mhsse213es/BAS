@@ -223,7 +223,7 @@ func (h *Handler) CancelEMSweep(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "sweep not found", http.StatusNotFound)
 		return
 	}
-	if sw.Status != "running" {
+	if sw.Status != "running" && sw.Status != "agent_disconnected" {
 		jsonError(w, "sweep is not running (status: "+sw.Status+")", http.StatusConflict)
 		return
 	}
@@ -247,7 +247,7 @@ func emSweepToJSON(sw emsweep.Sweep) map[string]any {
 		"currentLayer": currentEMLayer(sw), "currentScenarioRunId": sw.CurrentScenarioRunID,
 		"completedLayers": sw.CompletedLayers, "totalLayers": sw.TotalLayers,
 		"status": sw.Status, "error": sw.Error, "createdBy": sw.CreatedBy,
-		"startedAt": sw.StartedAt, "completedAt": sw.CompletedAt,
+		"startedAt": sw.StartedAt, "completedAt": sw.CompletedAt, "disconnectedAt": sw.DisconnectedAt,
 	}
 }
 

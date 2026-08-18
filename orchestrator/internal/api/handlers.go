@@ -431,6 +431,10 @@ func (h *Handler) WithEMSweep(store *emsweep.Store, dispatcher *emsweep.Dispatch
 	// variant_runs-sync behavior for the Dispatcher's stuck-layer backstop,
 	// rather than duplicating any of that inside emsweep.
 	dispatcher.SetCancel(h.cancelScenarioRun)
+	// Lets advance() distinguish "agent disconnected" from "agent connected
+	// but genuinely stuck" -- see the Dispatcher's disconnect/resume state
+	// machine.
+	dispatcher.SetConnected(h.hub.IsAgentConnected)
 	return h
 }
 

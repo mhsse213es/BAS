@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+
+	"github.com/audspect/bas/internal/emsweep"
 )
 
 // emLayerNumRe pulls the layer number out of a fixed-catalog EM scenario id
@@ -43,6 +45,9 @@ func (h *Handler) dispatchEMLayer(ctx context.Context, sweepID, agentID, scenari
 	})
 	if err != nil {
 		return "", err
+	}
+	if skip == "offline" {
+		return "", emsweep.ErrAgentOffline
 	}
 	if skip != "" {
 		return "", fmt.Errorf("layer skipped: %s", skip)

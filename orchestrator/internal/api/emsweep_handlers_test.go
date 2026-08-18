@@ -251,6 +251,53 @@ func TestCancelEMSweep_StopsSweepAndCancelsCurrentRun(t *testing.T) {
 	})
 }
 
+// TestCancelEMSweep_SucceedsWhenAgentDisconnected is the regression test
+// for the "no option of Stop after the agent disconnected" report: once a
+// sweep is paused (agent_disconnected), it must still be cancellable --
+// disconnection can be the user's own intentional action (they stopped the
+// agent service on purpose) and they must be able to definitively stop the
+// sweep rather than being stuck waiting for a reconnect that may never come.
+func TestCancelEMSweep_SucceedsWhenAgentDisconnected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		_, engine := minimalPostureScenario(t, "em-01-control-validation")
+		store := emsweep.NewStore(pool)
+		h := New(pool, ws.NewHub(), engine, testJWTSecret).WithEMSweep(store, testEMSweepDispatcher(store))
+		agentID := "em-cancel-disc-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		uid := seedUser(t, pool, "em-cancel-disc-user", "pw-Password1!", "admin", true)
+
+		body, _ := json.Marshal(map[string]any{"agentId": agentID})
+		createReq := authedRequest(t, http.MethodPost, "/api/em/sweeps", bytes.NewReader(body), auth.RoleAdmin, uid)
+		createRec := callAuthed(h.CreateEMSweep, createReq)
+		var created map[string]any
+		json.Unmarshal(createRec.Body.Bytes(), &created)
+		sweepID, _ := created["id"].(string)
+		if sweepID == "" {
+			t.Fatalf("no sweep id in create response: %s", createRec.Body.String())
+		}
+		if err := store.MarkDisconnected(context.Background(), sweepID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+
+		cancelReq := withURLParam(authedRequest(t, http.MethodPost, "/api/em/sweeps/"+sweepID+"/cancel", nil, auth.RoleAdmin, uid), "id", sweepID)
+		cancelRec := callAuthed(h.CancelEMSweep, cancelReq)
+		if cancelRec.Code != http.StatusOK {
+			t.Fatalf("cancel status = %d, want 200 (agent_disconnected must still be cancellable), body = %s", cancelRec.Code, cancelRec.Body.String())
+		}
+
+		var status string
+		if err := pool.QueryRow(context.Background(), `SELECT status FROM em_sweeps WHERE id = $1`, sweepID).Scan(&status); err != nil {
+			t.Fatalf("query status: %v", err)
+		}
+		if status != "stopped" {
+			t.Fatalf("status = %q, want stopped", status)
+		}
+	})
+}
+
 func TestListEMSweeps_ReturnsRunningByDefault(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
