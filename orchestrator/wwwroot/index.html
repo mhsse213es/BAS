@@ -7818,7 +7818,7 @@ function scenarioCategoryCounts(list, key) {
 
 var TMPL_ICON = '<svg style="width:18px;height:18px;stroke:var(--accent)" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2" stroke-linejoin="round"/></svg>';
 
-function renderScenarioLanding(list) {
+function renderScenarioLanding(list, src) {
   var el = document.getElementById('sc-landing');
   if (!el) return;
   var html = ['em', 'other'].map(function(key) {
@@ -7835,6 +7835,17 @@ function renderScenarioLanding(list) {
       '<div class="sc-cat-breakdown">' + x(breakdown) + '</div>' +
     '</div>';
   }).join('');
+  // The source filter (Threat intel / Custom) only narrows `list` -- it has
+  // no bearing on Adversary Templates below, which aren't drawn from
+  // `scenarios` at all (see the sc-filter-source display-toggle comment
+  // above). Without this message, filtering to a source with zero real
+  // scenarios left "BFSI Scenarios (0)" sitting directly above the
+  // Adversary Templates card with no explanation -- reading as if the
+  // filter had matched templates instead of correctly matching nothing.
+  if (!list.length && src && src !== 'all') {
+    var emptySrcLabel = { builtin: 'Built-in', custom: 'Custom', intel: 'Threat Intel' }[src] || src;
+    html = '<div class="tiny muted" style="width:100%;padding:0.5rem 0.1rem">There is no Scenarios for ' + x(emptySrcLabel) + ' yet</div>' + html;
+  }
   if (_templates.length) {
     html += '<div class="sc-cat-card sc-fade" tabindex="0" role="button" ' +
       'onclick="openScenarioCategory(\'templates\')" ' +
@@ -7940,7 +7951,7 @@ function renderScenarios() {
   if (scenarioView === 'landing') {
     catEl.style.display = 'none';
     landingEl.style.display = 'block';
-    renderScenarioLanding(filtered);
+    renderScenarioLanding(filtered, src);
     return;
   }
 
