@@ -16880,7 +16880,7 @@ function loadSimCoverage() {
     var baseTotal = artTests + calCount + customScen + intelScen + builtinScen;
 
     totalEl.textContent = baseTotal.toLocaleString();
-    if (variantEl) variantEl.textContent = artVariants > 0 ? artVariants.toLocaleString() + '+' : '--';
+    if (variantEl) variantEl.textContent = combinedVariants > 0 ? combinedVariants.toLocaleString() + '+' : '--';
     if (subEl) subEl.textContent =
       artTests.toLocaleString() + ' ART base atomics \xb7 ' +
       calCount.toLocaleString() + ' Caldera abilities \xb7 ' +
