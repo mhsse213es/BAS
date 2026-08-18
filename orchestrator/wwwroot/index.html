@@ -536,6 +536,8 @@ code {
 .s-empty::before { background: var(--muted); }
 .s-stopped    { background: var(--warning-dim); color: #fbbf24; border: 1px solid var(--warning-border); }
 .s-stopped::before { background: #fbbf24; }
+.s-agent_disconnected { background: var(--warning-dim); color: #fbbf24; border: 1px solid var(--warning-border); }
+.s-agent_disconnected::before { background: #fbbf24; }
 
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
@@ -4697,7 +4699,7 @@ body.theme-slate {
       <div id="em-sweep-progress-summary" style="margin-bottom:0.75rem"></div>
       <ul id="em-sweep-progress-list" style="list-style:none;margin:0;padding:0"></ul>
       <div style="margin-top:1rem;display:flex;justify-content:flex-end">
-        <button class="btn btn-outline-red btn-sm" id="em-sweep-stop-btn" onclick="stopEMSweep()">&#9632; Stop Sweep</button>
+        <button class="btn btn-outline-red btn-sm" id="em-sweep-stop-btn" onclick="stopEMSweep(_emSweepCurrentId)">&#9632; Stop Sweep</button>
       </div>
     </div>
   </div>
@@ -11141,6 +11143,14 @@ function renderRunRows(list) {
   return list.map(runRowHtml).join('');
 }
 
+// sweepStatusLabel maps a sweep's raw status to display text. Every status
+// except agent_disconnected already reads fine verbatim (CSS capitalizes
+// the first letter) -- agent_disconnected needs an explicit mapping since
+// its underscore would otherwise render literally ("Agent_disconnected").
+function sweepStatusLabel(status) {
+  return status === 'agent_disconnected' ? 'Agent Disconnected' : status;
+}
+
 // renderSweepRow builds one collapsed "Full Variant Sweep" <tr> from a
 // GET /api/vex/sweeps/{id}/runs response ({sweep, runs}). The badge sums
 // each child run's own fail/pass counts (same per-run counting runRowHtml
@@ -11164,13 +11174,15 @@ function renderSweepRow(payload) {
     '<td><code>' + x(sw.id.substring(0,14)) + '</code></td>' +
     '<td style="font-weight:500">Full Variant Sweep — ' + x(agentLabel) + '</td>' +
     '<td><code>' + x(sw.agentId) + '</code></td>' +
-    '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sw.status) + '</span></td>' +
+    '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sweepStatusLabel(sw.status)) + '</span></td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + x(sw.createdBy || '—') + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
     '<td><button class="btn btn-outline btn-sm" onclick="openSweepDrilldown(\'' + x(sw.id) + '\')" title="View every technique this sweep dispatched">' +
         x(progressLabel) + ' — ' + badge + '</button></td>' +
-    '<td>—</td></tr>';
+    '<td>' + ((sw.status === 'running' || sw.status === 'agent_disconnected')
+      ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVexSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
+      : '—') + '</td></tr>';
 }
 
 // renderEMSweepRow builds one collapsed "Endpoint Mastery Full Sweep" <tr>
@@ -11192,13 +11204,15 @@ function renderEMSweepRow(payload) {
     '<td><code>' + x(sw.id.substring(0,14)) + '</code></td>' +
     '<td style="font-weight:500">Endpoint Mastery Full Sweep — ' + x(agentLabel) + '</td>' +
     '<td><code>' + x(sw.agentId) + '</code></td>' +
-    '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sw.status) + '</span></td>' +
+    '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sweepStatusLabel(sw.status)) + '</span></td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + x(sw.createdBy || '—') + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
     '<td><button class="btn btn-outline btn-sm" onclick="openEMSweepProgress(\'' + x(sw.id) + '\')" title="View every EM layer this sweep dispatched">' +
         x(sw.completedLayers + '/' + sw.totalLayers + ' layers') + ' — ' + badge + '</button></td>' +
-    '<td>—</td></tr>';
+    '<td>' + ((sw.status === 'running' || sw.status === 'agent_disconnected')
+      ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopEMSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
+      : '—') + '</td></tr>';
 }
 
 // Sweep-grouping kinds Live Runs collapses into one row: field is the
@@ -18085,8 +18099,15 @@ function startVexSweepPolling() {
 }
 
 function pollVexSweeps() {
-  apicall('/api/vex/sweeps?status=running').then(function(sweeps) {
-    sweeps = sweeps || [];
+  // Also fetch agent_disconnected sweeps -- otherwise a paused sweep
+  // vanishes from this list entirely (the endpoint only ever returns one
+  // status per call) and reportVexSweepFinished's completion-detection
+  // logic below would misreport it as finished.
+  Promise.all([
+    apicall('/api/vex/sweeps?status=running'),
+    apicall('/api/vex/sweeps?status=agent_disconnected')
+  ]).then(function(results) {
+    var sweeps = (results[0] || []).concat(results[1] || []);
     var currentIds = sweeps.map(function(s) { return s.id; });
 
     // Completion detection: any previously-tracked ID missing from this
@@ -18127,11 +18148,13 @@ function renderVexSweepList(sweeps) {
     // nonzero progress at 1% so the bar never looks stuck when it isn't.
     var rawPct = sw.totalVariants > 0 ? (sw.completedVariants / sw.totalVariants) * 100 : 0;
     var pct = rawPct > 0 && rawPct < 1 ? 1 : Math.round(rawPct);
+    var disconnected = sw.status === 'agent_disconnected';
     return '<div class="card" style="margin-top:0.5rem;padding:0.75rem 1rem" id="vex-sweep-card-' + x(sw.id) + '">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;margin-bottom:0.3rem">' +
-        '<span style="font-weight:600">' + x(sw.agentId) + '</span>' +
+        '<span style="font-weight:600">' + x(sw.agentId) +
+          (disconnected ? ' <span class="sbadge s-agent_disconnected">Agent Disconnected</span>' : '') + '</span>' +
         '<span style="display:flex;align-items:center;gap:0.6rem">' +
-          '<span style="font-weight:700;color:var(--accent)">' + pct + '%</span>' +
+          (disconnected ? '' : '<span style="font-weight:700;color:var(--accent)">' + pct + '%</span>') +
           '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);padding:2px 8px;font-size:0.7rem" onclick="stopVexSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>' +
         '</span>' +
       '</div>' +
@@ -19515,7 +19538,7 @@ function pollEMSweepProgress() {
     if (!sw || sw.error) return;
     var runs = (res[1] && res[1].runs) || [];
     renderEMSweepProgress(sw, runs);
-    if (sw.status !== 'running' && _emSweepPollTimer) {
+    if (sw.status !== 'running' && sw.status !== 'agent_disconnected' && _emSweepPollTimer) {
       clearInterval(_emSweepPollTimer);
       _emSweepPollTimer = null;
     }
@@ -19525,7 +19548,7 @@ function pollEMSweepProgress() {
 function renderEMSweepProgress(sw, runs) {
   document.getElementById('em-sweep-progress-title').textContent = 'EM Full Sweep — ' + x(sw.agentId);
   document.getElementById('em-sweep-progress-summary').innerHTML =
-    '<strong>' + sw.completedLayers + '/' + sw.totalLayers + '</strong> layers complete &middot; status: ' + x(sw.status) +
+    '<strong>' + sw.completedLayers + '/' + sw.totalLayers + '</strong> layers complete &middot; status: ' + x(sweepStatusLabel(sw.status)) +
     (sw.error ? '<div style="color:var(--danger);margin-top:0.3rem">' + x(sw.error) + '</div>' : '');
   var runsByScenario = {};
   (runs || []).forEach(function(r) { runsByScenario[r.scenarioId] = r; });
@@ -19563,14 +19586,16 @@ function renderEMSweepProgress(sw, runs) {
       '<span style="white-space:nowrap">' + actionHtml + '</span></li>';
   }).join('');
   var stopBtn = document.getElementById('em-sweep-stop-btn');
-  stopBtn.style.display = sw.status === 'running' ? '' : 'none';
+  stopBtn.style.display = (sw.status === 'running' || sw.status === 'agent_disconnected') ? '' : 'none';
 }
 
-function stopEMSweep() {
-  if (!_emSweepCurrentId) return;
+function stopEMSweep(sweepId) {
+  sweepId = sweepId || _emSweepCurrentId;
+  if (!sweepId) return;
   if (!confirm('Stop this EM sweep? The current layer keeps running to completion but no further layers will be dispatched.')) return;
-  apicall('/api/em/sweeps/' + encodeURIComponent(_emSweepCurrentId) + '/cancel', { method: 'POST' }).then(function() {
-    pollEMSweepProgress();
+  apicall('/api/em/sweeps/' + encodeURIComponent(sweepId) + '/cancel', { method: 'POST' }).then(function() {
+    if (sweepId === _emSweepCurrentId) pollEMSweepProgress();
+    loadRuns();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
