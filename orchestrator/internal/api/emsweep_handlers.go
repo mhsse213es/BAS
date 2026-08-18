@@ -3,12 +3,14 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/emsweep"
+	"github.com/audspect/bas/internal/scenario"
 )
 
 // emLayerIDs lists the 14 Endpoint Mastery scenario IDs, in sweep order.
@@ -20,6 +22,13 @@ var emLayerIDs = []string{
 	"em-07-ransomware-readiness", "em-08-exploit-mitigation", "em-09-browser-attack",
 	"em-10-endpoint-exfiltration", "em-11-hardening-validation", "em-12-adversary-emulation",
 	"em-13-product-validation", "em-14-continuous-validation",
+}
+
+// isEMCategoryScenario mirrors wwwroot/index.html's scenarioCategoryOf --
+// a scenario is Endpoint Mastery-category if its ID is prefixed "em-" or it
+// carries the "endpoint-mastery" tag. Keep both in sync.
+func isEMCategoryScenario(sc *scenario.Scenario) bool {
+	return strings.HasPrefix(sc.ID, "em-") || slices.Contains(sc.Tags, "endpoint-mastery")
 }
 
 // POST /api/em/sweeps
@@ -64,18 +73,24 @@ func (h *Handler) CreateEMSweep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extra scenarios are appended after the 14 fixed layers -- never
-	// trust the client-submitted list either: only IDs that resolve on
-	// the live scenario engine are kept, and the fixed 14 are deduped
-	// out in case the client accidentally resubmits one.
+	// trust the client-submitted list either: only IDs that resolve on the
+	// live scenario engine AND are themselves Endpoint Mastery-category
+	// scenarios are kept (mirrors wwwroot/index.html's scenarioCategoryOf:
+	// id starting "em-", or tagged endpoint-mastery). A standard/non-EM
+	// scenario ID submitted here -- accidentally or otherwise -- is
+	// silently dropped, not appended; the fixed 14 are deduped out in case
+	// the client accidentally resubmits one.
 	seenExtra := make(map[string]bool, len(req.ExtraScenarioIDs))
 	for _, id := range req.ExtraScenarioIDs {
 		if id == "" || fixed[id] || seenExtra[id] {
 			continue
 		}
-		if _, ok := h.engine.Get(id); ok {
-			layers = append(layers, id)
-			seenExtra[id] = true
+		sc, ok := h.engine.Get(id)
+		if !ok || !isEMCategoryScenario(sc) {
+			continue
 		}
+		layers = append(layers, id)
+		seenExtra[id] = true
 	}
 
 	c, _ := auth.ClaimsFrom(ctx)

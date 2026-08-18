@@ -56,7 +56,10 @@ func TestCreateEMSweep_AppendsValidExtraScenarios(t *testing.T) {
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
 		_, engine := minimalPostureScenario(t, "em-01-control-validation")
-		extra := &scenario.Scenario{ID: "custom-extra-scenario", Name: "Extra Scenario", LocalCheck: true}
+		// Tagged endpoint-mastery despite a non-"em-" ID -- a custom scenario
+		// someone built specifically for EM purposes is exactly the case this
+		// tag exists to cover (see isEMCategoryScenario).
+		extra := &scenario.Scenario{ID: "custom-extra-scenario", Name: "Extra Scenario", LocalCheck: true, Tags: []string{"endpoint-mastery"}}
 		if err := engine.Save(extra); err != nil {
 			t.Fatalf("save extra scenario: %v", err)
 		}
@@ -88,6 +91,45 @@ func TestCreateEMSweep_AppendsValidExtraScenarios(t *testing.T) {
 			if layers[i] != w {
 				t.Fatalf("layers[%d] = %v, want %v", i, layers[i], w)
 			}
+		}
+	})
+}
+
+// TestCreateEMSweep_DropsNonEMExtraScenario proves a scenario that resolves
+// on the engine but is NOT Endpoint Mastery-category (no "em-" ID prefix,
+// no endpoint-mastery tag) is silently dropped, not appended -- extra
+// scenarios must be additional EM scenarios, not arbitrary standard/custom/
+// threat-intel scenarios from the main Scenarios library.
+func TestCreateEMSweep_DropsNonEMExtraScenario(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		_, engine := minimalPostureScenario(t, "em-01-control-validation")
+		standard := &scenario.Scenario{ID: "standard-non-em-scenario", Name: "Standard Scenario", LocalCheck: true}
+		if err := engine.Save(standard); err != nil {
+			t.Fatalf("save standard scenario: %v", err)
+		}
+		store := emsweep.NewStore(pool)
+		h := New(pool, ws.NewHub(), engine, testJWTSecret).WithEMSweep(store, testEMSweepDispatcher(store))
+		agentID := "em-nonem-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		uid := seedUser(t, pool, "em-nonem-user", "pw-Password1!", "admin", true)
+
+		body, _ := json.Marshal(map[string]any{
+			"agentId":          agentID,
+			"extraScenarioIds": []string{"standard-non-em-scenario"},
+		})
+		req := authedRequest(t, http.MethodPost, "/api/em/sweeps", bytes.NewReader(body), auth.RoleAdmin, uid)
+		rec := callAuthed(h.CreateEMSweep, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		layers, _ := out["layers"].([]any)
+		if len(layers) != 1 || layers[0] != "em-01-control-validation" {
+			t.Fatalf("layers = %v, want only the fixed em-01-control-validation layer (standard-non-em-scenario must be dropped)", layers)
 		}
 	})
 }

@@ -19322,7 +19322,14 @@ function _renderEMPreviewList() {
 
   var fixedIds = {};
   EM_CATALOG.forEach(function(e) { fixedIds[e.id] = true; });
-  var extraCandidates = (scenarios || []).filter(function(s) { return s.id && !fixedIds[s.id]; });
+  // Extra scenarios are additional Endpoint Mastery-category scenarios
+  // (id starting "em-", or tagged endpoint-mastery -- see scenarioCategoryOf)
+  // beyond the 14 fixed layers, e.g. a custom or threat-intel-generated EM
+  // scenario. Standard/non-EM scenarios from the main Scenarios library are
+  // NOT valid candidates here, even though they're also in `scenarios`.
+  var extraCandidates = (scenarios || []).filter(function(s) {
+    return s.id && !fixedIds[s.id] && scenarioCategoryOf(s) === 'em';
+  });
   var q = (_emExtraSearch || '').trim().toLowerCase();
   var extraFiltered = q ? extraCandidates.filter(function(s) {
     return (s.name || '').toLowerCase().indexOf(q) !== -1 || s.id.toLowerCase().indexOf(q) !== -1;
