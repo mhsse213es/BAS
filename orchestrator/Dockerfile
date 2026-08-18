@@ -34,12 +34,8 @@ RUN CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" 
     CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-windows-amd64.exe . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-amd64  . && \
     CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /agents/bas-agent-darwin-arm64  .
-# Generate BINARIES.sha256 from the binaries just compiled so the orchestrator
-# can verify connecting agents at runtime. Must be generated here - from the
-# same build - so hashes match what endpoints actually download and run.
-RUN cd /agents && sha256sum bas-agent-linux-amd64 bas-agent-linux-arm64 \
-        bas-agent-windows-amd64.exe bas-agent-darwin-amd64 bas-agent-darwin-arm64 \
-    > /agents/BINARIES.sha256
+# BINARIES.sha256 is generated later, in the binaries-manifest stage, once
+# both this stage's and agent-legacy-builder's binaries exist to hash together.
 # Windows GUI installer — embeds the single Windows agent binary built above.
 # The agent contains the tray + status-window UI (run via --tray / --status-window),
 # so there is no separate tray executable to build.
@@ -55,6 +51,52 @@ RUN apk add --no-cache zip && \
     EXE_MB=$(( $(stat -c%s /agents/Audspect_Agent.exe) / 1024 / 1024 )) && \
     if [ "$EXE_MB" -gt 25 ]; then echo "Audspect_Agent.exe is ${EXE_MB}MB, expected ~14MB - something is being embedded that shouldn't be" >&2; exit 1; fi && \
     cd /agents && zip -q bas-agent-windows-amd64-setup.zip Audspect_Agent.exe && rm Audspect_Agent.exe
+
+# ── Legacy Windows Agent Builder ─────────────────────────────────────────────
+# Separately toolchained via GOTOOLCHAIN=go1.20.14 (go.mod itself stays at a
+# bare `go 1.20` -- the `toolchain` directive predates Go 1.21 and go1.20.14
+# can't parse it). go1.20.14 is the last Go release supporting Windows 7
+# SP1/8/8.1/Server 2008 R2-2012 R2. See
+# docs/superpowers/specs/2026-08-18-legacy-windows-agent-phase1-design.md.
+FROM golang:1.26-alpine AS agent-legacy-builder
+# gcompat: Go's GOTOOLCHAIN auto-download fetches a glibc-linked go1.20.14
+# binary from go.dev -- Alpine's musl libc can't exec it without this shim
+# ("go: exec go1.20.14: no such file or directory" without it, a confusing
+# error for what's actually a missing dynamic linker).
+RUN apk add --no-cache git zip gcompat
+WORKDIR /agent-legacy
+COPY agent-legacy/go.mod agent-legacy/go.sum ./
+ENV GOTOOLCHAIN=go1.20.14
+RUN go mod download
+COPY agent-legacy/ .
+# Hard assertion: fail the image build outright if the resolved toolchain
+# isn't exactly go1.20.14, rather than silently shipping a binary built
+# against a newer runtime than the legacy OSes this agent targets support.
+RUN GOVERSION=$(go version) && \
+    echo "Resolved toolchain: $GOVERSION" && \
+    case "$GOVERSION" in \
+      *go1.20.14*) ;; \
+      *) echo "FATAL: expected go1.20.14, got: $GOVERSION" >&2; exit 1 ;; \
+    esac
+RUN CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
+    go build -trimpath -ldflags="-s -w" -o /agents-legacy/bas-agent-windows-legacy-amd64.exe .
+RUN cd /agents-legacy && zip -q bas-agent-windows-legacy-amd64-setup.zip bas-agent-windows-legacy-amd64.exe
+
+# ── Combined Binary Manifest ─────────────────────────────────────────────────
+# Must run after BOTH agent-builder and agent-legacy-builder so the manifest
+# covers every binary an endpoint can download -- generated from a single
+# COPY of each stage's real output, not duplicated/recomputed elsewhere, so
+# the hashes always match what's actually shipped.
+FROM alpine AS binaries-manifest
+RUN mkdir /agents
+COPY --from=agent-builder /agents/bas-agent-linux-amd64 /agents/bas-agent-linux-arm64 \
+     /agents/bas-agent-windows-amd64.exe /agents/bas-agent-darwin-amd64 /agents/bas-agent-darwin-arm64 \
+     /agents/
+COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.exe /agents/
+RUN cd /agents && sha256sum \
+      bas-agent-linux-amd64 bas-agent-linux-arm64 bas-agent-windows-amd64.exe \
+      bas-agent-darwin-amd64 bas-agent-darwin-arm64 bas-agent-windows-legacy-amd64.exe \
+    > /agents/BINARIES.sha256
 
 # ── Package Builder (.deb, .rpm) ─────────────────────────────────────────────
 FROM debian:bookworm-slim AS packager
@@ -90,7 +132,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOGARBLE='github.com/audspect/*' \
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /bin/orchestrator /orchestrator
+COPY --from=binaries-manifest /agents/BINARIES.sha256 /agents/BINARIES.sha256
 COPY --from=agent-builder /agents /agents
+COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64.exe /agents/bas-agent-windows-legacy-amd64.exe
+COPY --from=agent-legacy-builder /agents-legacy/bas-agent-windows-legacy-amd64-setup.zip /agents/bas-agent-windows-legacy-amd64-setup.zip
 COPY --from=packager /packages/ /agents/
 COPY orchestrator/wwwroot /wwwroot
 COPY scenarios /scenarios

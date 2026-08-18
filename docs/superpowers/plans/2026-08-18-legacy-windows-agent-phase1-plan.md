@@ -1242,7 +1242,13 @@ git push
 # binary) so this stage is correct even if the base image's Go version ever
 # changes independently of agent-legacy/go.mod's pin.
 FROM golang:1.26-alpine AS agent-legacy-builder
-RUN apk add --no-cache git zip
+# gcompat: Go's GOTOOLCHAIN auto-download fetches a glibc-linked go1.20.14
+# binary from go.dev -- Alpine's musl libc can't exec it without this shim
+# ("go: exec go1.20.14: no such file or directory" without it, a confusing
+# error for what's actually a missing dynamic linker). Found and fixed
+# during implementation -- the local Windows dev build never hits this
+# since Windows Go toolchain downloads don't have a musl/glibc split.
+RUN apk add --no-cache git zip gcompat
 WORKDIR /agent-legacy
 COPY agent-legacy/go.mod agent-legacy/go.sum ./
 ENV GOTOOLCHAIN=go1.20.14
