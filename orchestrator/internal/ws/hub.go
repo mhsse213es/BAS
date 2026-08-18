@@ -194,6 +194,18 @@ func (h *Hub) ConnectedAgents() []string {
 	return ids
 }
 
+// IsAgentConnected reports whether a specific agent currently has a live
+// WebSocket connection. Used by the EM Sweep and Full Variant Sweep
+// dispatchers to distinguish "the agent disconnected" from "the agent is
+// connected but a layer/technique is genuinely hung" -- see
+// docs/superpowers/specs/2026-08-18-sweep-disconnect-resilience-design.md.
+func (h *Hub) IsAgentConnected(agentID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	_, ok := h.agents[agentID]
+	return ok
+}
+
 func (c *conn) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {

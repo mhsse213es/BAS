@@ -49,6 +49,24 @@ func TestSendToAgent_UnknownAgent(t *testing.T) {
 // doesn't need a real TCP websocket connection; a conn in h.agents always
 // has a real ws in production (only ever constructed in ServeAgentWS after
 // a successful upgrader.Upgrade).
+func TestIsAgentConnected_TrueForRegisteredAgent(t *testing.T) {
+	h := NewHub()
+	h.mu.Lock()
+	h.agents["agent-connected"] = &conn{send: make(chan []byte, 1)}
+	h.mu.Unlock()
+
+	if !h.IsAgentConnected("agent-connected") {
+		t.Fatal("IsAgentConnected returned false for a registered agent")
+	}
+}
+
+func TestIsAgentConnected_FalseForUnknownAgent(t *testing.T) {
+	h := NewHub()
+	if h.IsAgentConnected("does-not-exist") {
+		t.Fatal("IsAgentConnected returned true for an unregistered agent")
+	}
+}
+
 func TestCloseAllAgentConnections_ClosesEveryAgentConn(t *testing.T) {
 	h := NewHub()
 	h.mu.Lock()
