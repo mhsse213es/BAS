@@ -407,11 +407,11 @@ func (r *resources) drawOperationCard(hdc win.HDC, snap StatusSnapshot) {
 	r.drawIconPlayCircle(hdc, dpiXOnly(484), dpiXOnly(224), dpiXOnly(16), colMuted)
 	r.drawText(hdc, "CURRENT OPERATION", dpiRect(504, 220, 300, 16), r.fontEyebrow, colMuted, co.DT_LEFT)
 
-	idleMeta := "Awaiting tasking from the BAS console"
+	idleMeta := "Awaiting a task from the BAS console"
 	if !snap.Status.ServerConnected {
-		// Otherwise this reads as if tasking is imminent while the agent
-		// can't actually reach the server to receive any.
-		idleMeta = "Disconnected — cannot receive tasking until the link is restored"
+		// Otherwise this reads as if a task is imminent while the agent
+		// can't actually reach the server to receive one.
+		idleMeta = "Disconnected — cannot receive a task until the link is restored"
 	}
 	title, meta, result, sweepResult, stepLine := "No active simulation", idleMeta, "", "", ""
 	progress := 0

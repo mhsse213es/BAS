@@ -303,7 +303,7 @@
       <h2><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" stroke="#56b6ff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Current Operation</h2>
       <div class="op-title" id="opTitle">No active simulation</div>
       <div class="op-step" id="opStep" style="display:none"></div>
-      <div class="op-meta" id="opMeta">Awaiting tasking from the BAS console</div>
+      <div class="op-meta" id="opMeta">Awaiting a task from the BAS console</div>
       <div class="bar idle" id="opBar"><i id="opBarFill"></i></div>
       <div class="op-phase"><span id="opPhase">IDLE</span><span id="opPct"></span></div>
       <div id="opResultWrap"></div>
@@ -501,7 +501,7 @@
     } else {
       $("opTitle").textContent="No active simulation";
       stepEl.style.display="none";
-      $("opMeta").textContent="Awaiting tasking from the BAS console";
+      $("opMeta").textContent="Awaiting a task from the BAS console";
       bar.classList.add("idle"); fill.style.width="0%";
       $("opPhase").textContent="IDLE"; $("opPct").textContent="";
     }
