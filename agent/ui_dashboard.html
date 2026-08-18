@@ -67,16 +67,11 @@
   .topbar{display:flex;align-items:center;gap:16px;padding-bottom:20px}
   .brand{display:flex;align-items:center;gap:13px;min-width:0}
   .logo{
-    width:42px;height:42px;flex:0 0 auto;border-radius:11px;
-    background:linear-gradient(150deg,#1d3a5f,#0e1f36);
-    border:1px solid #2b466b;
+    height:44px;flex:0 0 auto;border-radius:11px;padding:6px 10px;
+    background:#fff;border:1px solid #2b466b;
     display:grid;place-items:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
   }
-  .logo svg{width:23px;height:23px}
-  .brand-text h1{
-    font-family:var(--font-display);font-size:18px;font-weight:700;letter-spacing:.2px;
-    line-height:1.1;white-space:nowrap;
-  }
+  .logo img{height:100%;width:auto;display:block}
   .brand-text .sub{
     font-size:11.5px;color:var(--muted);letter-spacing:.4px;margin-top:1px;
   }
@@ -251,10 +246,9 @@
   <div class="topbar reveal d1">
     <div class="brand">
       <div class="logo">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z" fill="url(#g)" stroke="#56b6ff" stroke-width="1.1"/><path d="M9 12l2 2 4-4.5" stroke="#cfeaff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><defs><linearGradient id="g" x1="4" y1="2" x2="20" y2="22"><stop offset="0" stop-color="#22507f"/><stop offset="1" stop-color="#0d2138"/></linearGradient></defs></svg>
+        <img src="/logo.png" alt="Audspect" />
       </div>
       <div class="brand-text">
-        <h1>Audspect BAS Agent</h1>
         <div class="sub">Breach &amp; Attack Simulation · Endpoint Defense Validation</div>
       </div>
     </div>

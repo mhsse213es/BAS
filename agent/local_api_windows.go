@@ -61,6 +61,14 @@ func (a *Agent) startLocalAPI() {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Write(dashboardHTML)
 	})
+	// Reuses the same embedded wordmark logo_windows.go decodes for the
+	// native status window's own header, so the browser dashboard shows the
+	// identical Audspect logo rather than a separate hand-drawn icon.
+	mux.HandleFunc("/logo.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "max-age=86400")
+		w.Write(logoNamePNG)
+	})
 	mux.HandleFunc("/status",   bearer(a.handleLocalStatus))
 	mux.HandleFunc("/activity", bearer(a.handleLocalActivity))
 	mux.HandleFunc("/evidence", bearer(a.handleLocalEvidence))
