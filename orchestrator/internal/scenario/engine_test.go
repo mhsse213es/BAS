@@ -249,34 +249,37 @@ func TestLoad_UnsignedBuiltinRefused(t *testing.T) {
 	}
 }
 
-func TestDelete_IntelRescan(t *testing.T) {
+// TestDelete_CustomRescan verifies the delete-then-reload cycle: removing a
+// scenario's file must be reflected both in memory immediately and by a
+// subsequent Load() rescan. Uses a custom-sourced fixture -- intel-sourced
+// scenarios can no longer be deleted at all (see
+// TestDelete_NotFoundAndBuiltinGuarded's intel case), so they're no longer
+// a valid vehicle for this test.
+func TestDelete_CustomRescan(t *testing.T) {
 	dir := t.TempDir()
-	intelDir := filepath.Join(dir, "intel")
-	if err := os.MkdirAll(intelDir, 0o755); err != nil {
-		t.Fatalf("mkdir intel: %v", err)
+	customDir := filepath.Join(dir, "custom")
+	if err := os.MkdirAll(customDir, 0o755); err != nil {
+		t.Fatalf("mkdir custom: %v", err)
 	}
-	filePath := filepath.Join(intelDir, "intel-delete-sc.yaml")
-	intelYAML := []byte("id: intel-delete-sc\nname: Intel Delete\nlocal_check: true\n")
-	if err := os.WriteFile(filePath, intelYAML, 0o644); err != nil {
-		t.Fatalf("write intel file: %v", err)
+	filePath := filepath.Join(customDir, "custom-delete-sc.yaml")
+	customYAML := []byte("id: custom-delete-sc\nname: Custom Delete\nlocal_check: true\n")
+	if err := os.WriteFile(filePath, customYAML, 0o644); err != nil {
+		t.Fatalf("write custom file: %v", err)
 	}
 
 	e := NewEngine(dir)
 	if err := e.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if _, ok := e.Get("intel-delete-sc"); !ok {
+	if _, ok := e.Get("custom-delete-sc"); !ok {
 		t.Fatalf("fixture not loaded")
 	}
 
-	// Engine-level Delete permits removing an intel-sourced scenario — only
-	// the API layer restricts intel deletion (see DeleteScenario's source
-	// guard, tested in internal/api/scenario_source_guard_test.go).
-	if err := e.Delete("intel-delete-sc"); err != nil {
+	if err := e.Delete("custom-delete-sc"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
-	if _, ok := e.Get("intel-delete-sc"); ok {
+	if _, ok := e.Get("custom-delete-sc"); ok {
 		t.Fatalf("scenario still present in memory after delete")
 	}
 	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
@@ -344,8 +347,8 @@ func TestSave_RefusesToOverwriteNonCustomDirectly(t *testing.T) {
 	}
 }
 
-// TestDelete_NotFoundAndBuiltinGuarded exercises Delete()'s own not-found and
-// builtin-source guards (engine.go:211-216) directly, independent of any
+// TestDelete_NotFoundAndBuiltinGuarded exercises Delete()'s own not-found,
+// builtin-source, and intel-source guards directly, independent of any
 // API-layer pre-check. Same white-box injection technique as
 // TestSave_RefusesToOverwriteNonCustomDirectly.
 func TestDelete_NotFoundAndBuiltinGuarded(t *testing.T) {
@@ -365,6 +368,17 @@ func TestDelete_NotFoundAndBuiltinGuarded(t *testing.T) {
 	}
 	if _, ok := e.Get("fake-builtin-sc"); !ok {
 		t.Fatalf("builtin scenario should not have been removed from memory")
+	}
+
+	// No one should be able to delete an auto-generated intel scenario, by
+	// any caller, ever -- enforced here at the engine level (not just the
+	// now-removed API handler) so no future code path can reopen it.
+	e.scenarios["fake-intel-sc"] = &Scenario{ID: "fake-intel-sc", Name: "Fake Intel", Source: "intel"}
+	if err := e.Delete("fake-intel-sc"); err == nil {
+		t.Fatalf("expected error deleting an intel-sourced scenario")
+	}
+	if _, ok := e.Get("fake-intel-sc"); !ok {
+		t.Fatalf("intel scenario should not have been removed from memory")
 	}
 }
 

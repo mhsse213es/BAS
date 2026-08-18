@@ -203,9 +203,11 @@ func (e *Engine) Save(s *Scenario) error {
 	return nil
 }
 
-// Delete removes a custom or intel scenario from memory and deletes its YAML file.
-// Builtin (shipped) scenarios cannot be deleted. Returns an error if the file
-// cannot be found or removed.
+// Delete removes a custom scenario from memory and deletes its YAML file.
+// Builtin (shipped) and intel (threat-intel-generated) scenarios cannot be
+// deleted, by anyone, through any caller -- enforced here rather than only
+// at the API layer so no future handler can accidentally reopen the path.
+// Returns an error if the file cannot be found or removed.
 func (e *Engine) Delete(id string) error {
 	sc, ok := e.scenarios[id]
 	if !ok {
@@ -213,6 +215,9 @@ func (e *Engine) Delete(id string) error {
 	}
 	if sc.Source == "builtin" {
 		return fmt.Errorf("scenario %q is a built-in and cannot be deleted", id)
+	}
+	if sc.Source == "intel" {
+		return fmt.Errorf("scenario %q is auto-generated from threat intel and cannot be deleted", id)
 	}
 
 	// Find the file on disk by re-scanning for the matching ID

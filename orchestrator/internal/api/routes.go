@@ -476,7 +476,6 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Put("/api/threat-intel/{connector}/config", h.PutThreatIntelConfig)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Post("/api/threat-intel/{connector}/config/test", h.TestThreatIntelConfig)
 		r.With(auth.RequirePermission(auth.CanUpdateConnectorConfig)).Delete("/api/threat-intel/{connector}/config", h.DeleteThreatIntelConfig)
-		r.With(auth.RequirePermission(auth.CanDeleteConnectorScenario)).Delete("/api/connector/scenarios/{id}", h.DeleteIntelScenario)
 
 		// Generic TAXII 2.1 connector (FS-ISAC, HC-ISAC, Auto-ISAC, or any TAXII 2.1 server) — multi-instance CRUD
 		r.With(auth.RequirePermission(auth.CanViewConnectorStatus)).Get("/api/taxii/connectors", h.ListTAXIIConnectors)

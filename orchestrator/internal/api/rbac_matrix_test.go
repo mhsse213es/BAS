@@ -246,7 +246,6 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/caldera/status", tierPermission, auth.CanViewCalderaStatus},
 	{http.MethodGet, "/api/connector/status", tierPermission, auth.CanViewConnectorStatus},
 	{http.MethodPost, "/api/connector/sync", tierPermission, auth.CanSyncConnector},
-	{http.MethodDelete, "/api/connector/scenarios/{id}", tierPermission, auth.CanDeleteConnectorScenario},
 	{http.MethodGet, "/api/threat-intel/{connector}/config", tierPermission, auth.CanViewConnectorStatus},
 	{http.MethodPut, "/api/threat-intel/{connector}/config", tierPermission, auth.CanUpdateConnectorConfig},
 	{http.MethodPost, "/api/threat-intel/{connector}/config/test", tierPermission, auth.CanUpdateConnectorConfig},

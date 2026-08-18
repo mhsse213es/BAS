@@ -8183,11 +8183,10 @@ function scenarioDetailHTML(s) {
           ' &nbsp;<span style="color:' + confColor + '">' + x(s.intelConfidence) + '</span>' +
           ' &nbsp;·&nbsp; ' + x(s.intelSource.toUpperCase()) + '</span><br>';
         var techCount = (s.artTechniques || []).length;
-        var deleteBtn = (ROLE === 'admin')
-          ? ' <button class="btn btn-sm" style="background:rgba(218,54,51,0.12);color:#f85149;margin-left:4px" ' +
-            'onclick="deleteIntelScenario(\'' + x(s.id) + '\')" title="Delete intel scenario">&#10005;</button>'
-          : '';
-        var footerMeta = techCount + ' techniques' + deleteBtn;
+        // No delete action here, deliberately -- auto-generated intel
+        // scenarios cannot be deleted by anyone, through any path (the
+        // backend enforces this too; see Engine.Delete's intel-source guard).
+        var footerMeta = techCount + ' techniques';
         return '<div>' + intelBadge + '</div>' +
           '<h3>' + x(s.name) + '</h3>' +
           descHtml(s.description, s.id, {limit:120, style:'font-size:0.78rem;color:var(--muted)'}) +
@@ -17240,20 +17239,6 @@ function exportAuditLogs() {
 
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function deleteIntelScenario(id) {
-  if (!confirm('Delete intel scenario "' + id + '"? This removes the generated YAML file.')) return;
-  fetch('/api/connector/scenarios/' + encodeURIComponent(id), {
-    method: 'DELETE', credentials: 'same-origin'
-  }).then(function(r) {
-    if (r.ok || r.status === 204) {
-      showToast('Intel scenario deleted', 'ok');
-      loadScenarios();
-    } else {
-      r.json().then(function(e) { showToast(e.error || 'Delete failed', 'err'); });
-    }
-  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

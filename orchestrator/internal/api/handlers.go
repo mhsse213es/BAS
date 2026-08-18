@@ -4180,26 +4180,6 @@ func (h *Handler) TriggerConnectorSync(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]bool{"queued": true})
 }
 
-// DELETE /api/connector/scenarios/{id}  — removes a generated intel scenario
-func (h *Handler) DeleteIntelScenario(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	sc, ok := h.engine.Get(id)
-	if !ok {
-		jsonError(w, "scenario not found", http.StatusNotFound)
-		return
-	}
-	if sc.IntelSource == "" {
-		jsonError(w, "only auto-generated intel scenarios can be deleted via this endpoint", http.StatusBadRequest)
-		return
-	}
-	if err := h.engine.Delete(id); err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	h.auditLog(r, "scenario.delete", id, map[string]any{"source": "intel"}, "ok")
-	w.WriteHeader(http.StatusNoContent)
-}
-
 // ── Full Reporting + Audit Pack ───────────────────────────────────────────────
 
 // GET /api/report/full/html?agentId=X
