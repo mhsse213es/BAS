@@ -30,7 +30,7 @@
 - Test: `agent-legacy/toolchain_test.go`
 
 **Interfaces:**
-- Produces: the `agent-legacy` module root other tasks build files into. `go.mod` declares `module audspect/agent-legacy`, `go 1.20`, `toolchain go1.20.14`.
+- Produces: the `agent-legacy` module root other tasks build files into. `go.mod` declares `module audspect/agent-legacy`, `go 1.20` — no `toolchain` directive (see Step 1's note on why).
 
 - [ ] **Step 1: Create the module**
 
@@ -40,14 +40,19 @@ cd agent-legacy
 GOTOOLCHAIN=go1.20.14 go mod init audspect/agent-legacy
 ```
 
-This downloads and caches Go 1.20.14 locally (if not already present) and initializes `go.mod`. Confirm the generated `go.mod` contains both a `go 1.20` line and a `toolchain go1.20.14` line — if `go mod init` only wrote `go 1.20` without a `toolchain` line, add it manually:
+This downloads and caches Go 1.20.14 locally (if not already present) and initializes `go.mod` with a bare `go 1.20` line.
+
+**Do not add a `toolchain go1.20.14` line to `go.mod`.** Verified empirically: the `toolchain`
+directive syntax is itself a Go 1.21+ concept. Once `GOTOOLCHAIN=go1.20.14` correctly re-execs
+into the real go1.20.14 binary, that binary parses `go.mod` itself — and go1.20.14 doesn't
+recognize the `toolchain` keyword, since it predates it, so the build fails immediately with
+`unknown directive: toolchain`. `GOTOOLCHAIN` (set in the environment, everywhere this module is
+built) is the *only* pinning mechanism — `go.mod` stays at a bare `go 1.20`:
 
 ```go
 module audspect/agent-legacy
 
 go 1.20
-
-toolchain go1.20.14
 ```
 
 - [ ] **Step 2: Write the failing toolchain-verification test**
@@ -1088,7 +1093,7 @@ $goVersionOutput = (go version)
 Write-Host "[*] Resolved toolchain: $goVersionOutput"
 if ($goVersionOutput -notmatch "go1\.20\.14") {
     Write-Host "[!] Wrong toolchain resolved. Expected go1.20.14, got: $goVersionOutput"
-    Write-Host "[!] Check GOTOOLCHAIN and agent-legacy\go.mod's toolchain directive."
+    Write-Host "[!] Check that GOTOOLCHAIN=go1.20.14 is actually set -- go.mod must NOT have a toolchain directive (go1.20.14 can't parse that syntax)."
     Pop-Location
     exit 1
 }
@@ -1229,7 +1234,9 @@ git push
 
 ```dockerfile
 # ── Legacy Windows Agent Builder ─────────────────────────────────────────────
-# Separately toolchained: agent-legacy/go.mod pins toolchain go1.20.14, the
+# Separately toolchained via GOTOOLCHAIN=go1.20.14 (go.mod itself stays at a
+# bare `go 1.20` -- the `toolchain` directive predates Go 1.21 and go1.20.14
+# can't parse it). go1.20.14 is the
 # last Go release supporting Windows 7 SP1/8/8.1/Server 2008 R2-2012 R2.
 # GOTOOLCHAIN is set explicitly (not relying on the base image's own `go`
 # binary) so this stage is correct even if the base image's Go version ever
@@ -1333,7 +1340,9 @@ In `packaging/windows-build.ps1`, after the existing standalone-Windows-agent bl
 
 ```powershell
 # -- 5a2. Build Legacy Windows agent binary (amd64 only) ---------------------
-# Separately toolchained: agent-legacy/go.mod pins toolchain go1.20.14, the
+# Separately toolchained via GOTOOLCHAIN=go1.20.14 (go.mod itself stays at a
+# bare `go 1.20` -- the `toolchain` directive predates Go 1.21 and go1.20.14
+# can't parse it). go1.20.14 is the
 # last Go release supporting Windows 7 SP1/8/8.1/Server 2008 R2-2012 R2. See
 # docs/superpowers/specs/2026-08-18-legacy-windows-agent-phase1-design.md.
 Log "Building Legacy Windows agent binary (go1.20.14, amd64 only)..."

@@ -108,16 +108,19 @@ source of truth every future A/B/C classification decision references and update
 A bare `go 1.20` line in `go.mod` only enforces a minimum *language* version — if a newer `go`
 binary is on PATH, the build still uses it, which does not produce a binary linked against the
 Go 1.20 runtime/stdlib the legacy OS compatibility actually depends on. Phase 1 pins the toolchain
-two ways:
+via **`GOTOOLCHAIN=go1.20.14` set explicitly in the build environment only** — `go.mod` carries no
+`toolchain` directive at all. This was verified empirically during implementation: the `toolchain`
+directive syntax is itself a Go 1.21+ concept. Once `GOTOOLCHAIN=go1.20.14` correctly re-execs the
+1.21+ dispatcher into the real go1.20.14 binary, that binary parses `go.mod` itself to do the
+build — and go1.20.14 doesn't recognize the `toolchain` keyword, since it predates it, so a
+`toolchain go1.20.14` line in `go.mod` breaks the build with `unknown directive: toolchain` the
+moment `GOTOOLCHAIN` actually takes effect. The two mechanisms are mutually exclusive; `go.mod`
+must stay at a bare `go 1.20`, and `GOTOOLCHAIN` is the only pin.
 
-1. `agent-legacy/go.mod` carries an explicit `toolchain go1.20.14` directive (not just `go 1.20`).
-2. The build script sets `GOTOOLCHAIN=go1.20.14` explicitly in its environment for this build step
-   (Go auto-downloads and caches that exact release on first use if not already present).
-3. Before producing the artifact, the build script runs `go version` against the resolved
-   toolchain and **fails the build** if the output is not exactly `go1.20.14` — this is a hard
-   assertion, not a log line, so a silent toolchain drift (e.g. `GOTOOLCHAIN` unset in some other
-   CI context) breaks the build loudly instead of quietly shipping a binary built against the wrong
-   runtime.
+Before producing the artifact, the build script runs `go version` against the resolved toolchain
+and **fails the build** if the output is not exactly `go1.20.14` — this is a hard assertion, not a
+log line, so a silent toolchain drift (e.g. `GOTOOLCHAIN` unset in some other CI context) breaks
+the build loudly instead of quietly shipping a binary built against the wrong runtime.
 
 `go1.20.14` (released 2024-02-06) is confirmed via go.dev's own release history as the final Go 1.20
 patch release.
