@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/ws"
@@ -46,6 +47,23 @@ func TestDownloadAgent_PathTraversalAttemptRejectedAsUnknownPlatform(t *testing.
 				t.Fatalf("status = %d, want 404 (must resolve as unknown platform via the allowlist map, never reach os.Open with this value)", rec.Code)
 			}
 		})
+	}
+}
+
+func TestDownloadAgent_WindowsLegacyPlatform_KnownButFileMissing(t *testing.T) {
+	h := New(nil, ws.NewHub(), nil, "")
+	req := withURLParam(httptest.NewRequest(http.MethodGet, "/api/agents/download/windows-legacy-amd64", nil), "platform", "windows-legacy-amd64")
+	rec := httptest.NewRecorder()
+	h.DownloadAgent(rec, req)
+	// Platform IS recognized (not 404 "unknown platform") -- it's the
+	// backing file that's absent in this bare-handler test, same distinction
+	// TestDownloadAgent_KnownPlatformNoFilePresent already draws for
+	// windows-amd64. A 404 here with "unknown platform" in the body would
+	// mean the agentFiles map entry is missing; any other outcome
+	// (including a different-flavored error about the missing file) proves
+	// the map entry exists.
+	if rec.Code == http.StatusNotFound && strings.Contains(rec.Body.String(), "unknown platform") {
+		t.Fatalf("windows-legacy-amd64 not recognized as a platform: %s", rec.Body.String())
 	}
 }
 
