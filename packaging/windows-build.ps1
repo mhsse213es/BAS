@@ -304,6 +304,37 @@ else {
 $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
 Pop-Location
 
+# -- 5a2. Build Legacy Windows agent binary (amd64 only) ---------------------
+# Separately toolchained via GOTOOLCHAIN=go1.20.14 (agent-legacy/go.mod stays
+# at a bare `go 1.20` -- the `toolchain` directive predates Go 1.21 and
+# go1.20.14 can't parse it). go1.20.14 is the last Go release supporting
+# Windows 7 SP1/8/8.1/Server 2008 R2-2012 R2. See
+# docs/superpowers/specs/2026-08-18-legacy-windows-agent-phase1-design.md.
+Log "Building Legacy Windows agent binary (go1.20.14, amd64 only)..."
+$LegacyAgentDir = Join-Path $RepoRoot "agent-legacy"
+Push-Location $LegacyAgentDir
+$env:GOTOOLCHAIN = "go1.20.14"
+$env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+
+$legacyGoVersion = (go version)
+Log "  Resolved toolchain: $legacyGoVersion"
+if ($legacyGoVersion -notmatch "go1\.20\.14") {
+    Pop-Location
+    Err "Legacy agent toolchain mismatch. Expected go1.20.14, got: $legacyGoVersion"
+}
+
+go build -trimpath -ldflags="-s -w" -o "$OutDir\bas-agent-windows-legacy-amd64.exe" . 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Warn "Legacy Windows agent build failed."
+} else {
+    $legacySizeMB = [math]::Round((Get-Item "$OutDir\bas-agent-windows-legacy-amd64.exe").Length / 1MB, 1)
+    Log "  bas-agent-windows-legacy-amd64.exe (${legacySizeMB}MB)"
+}
+Compress-Archive -Path "$OutDir\bas-agent-windows-legacy-amd64.exe" -DestinationPath "$OutDir\bas-agent-windows-legacy-amd64-setup.zip" -Force
+
+$env:GOTOOLCHAIN = ""; $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
+Pop-Location
+
 # -- 5b. Build Linux agent binaries (amd64 + arm64) --------------------------
 # CGO_ENABLED=0: required for cross-compile from Windows. All platform-specific
 # code (webview2, tray, UAC) lives in *_windows.go files  -  excluded automatically
