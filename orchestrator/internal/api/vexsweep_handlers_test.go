@@ -275,6 +275,49 @@ func TestCancelVexSweep_StopsSweepAndCancelsCurrentRun(t *testing.T) {
 	})
 }
 
+// TestCancelVexSweep_SucceedsWhenAgentDisconnected mirrors
+// TestCancelEMSweep_SucceedsWhenAgentDisconnected -- see there for the full
+// rationale (the "no option of Stop after the agent disconnected" report).
+func TestCancelVexSweep_SucceedsWhenAgentDisconnected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-cancel-disc')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		store := vexsweep.NewStore(pool)
+		sw, err := store.Create(ctx, vexsweep.Sweep{
+			AgentID: "agent-cancel-disc", Mode: "sequential",
+			Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{33}, TotalVariants: 33,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, sw.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).WithVexSweep(store, testVexSweepDispatcher(store))
+		userID := seedUser(t, pool, "sweep-cancel-disc-user", "password123", "admin", true)
+		req := authedRequest(t, http.MethodPost, "/api/vex/sweeps/"+sw.ID+"/cancel", nil, auth.RoleAdmin, userID)
+		req = withURLParam(req, "id", sw.ID)
+		rec := callAuthed(h.CancelVexSweep, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (agent_disconnected must still be cancellable), body: %s", rec.Code, rec.Body.String())
+		}
+
+		got, err := store.Get(ctx, sw.ID)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if got.Status != "stopped" {
+			t.Errorf("Status = %q, want %q", got.Status, "stopped")
+		}
+	})
+}
+
 func TestGetVexSweepRuns_ReturnsOnlyTaggedRunsPlusSweepSummary(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

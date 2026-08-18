@@ -222,7 +222,7 @@ func (h *Handler) CancelVexSweep(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "sweep not found", http.StatusNotFound)
 		return
 	}
-	if sw.Status != "running" {
+	if sw.Status != "running" && sw.Status != "agent_disconnected" {
 		jsonError(w, "sweep is not running (status: "+sw.Status+")", http.StatusConflict)
 		return
 	}
@@ -268,7 +268,7 @@ func sweepToJSON(db *pgxpool.Pool, sw vexsweep.Sweep) map[string]any {
 		"currentScenarioRunId": sw.CurrentScenarioRunID, "completedVariants": live,
 		"totalVariants": sw.TotalVariants, "totalTechniques": len(sw.Techniques),
 		"status": sw.Status, "error": sw.Error, "createdBy": sw.CreatedBy,
-		"startedAt": sw.StartedAt, "completedAt": sw.CompletedAt,
+		"startedAt": sw.StartedAt, "completedAt": sw.CompletedAt, "disconnectedAt": sw.DisconnectedAt,
 	}
 }
 

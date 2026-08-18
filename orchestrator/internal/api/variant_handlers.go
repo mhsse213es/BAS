@@ -14,6 +14,7 @@ import (
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/variant"
+	"github.com/audspect/bas/internal/vexsweep"
 )
 
 // cmdPreview returns the first 120 chars of a command for UI display.
@@ -669,7 +670,7 @@ func (h *Handler) dispatchVariantRun(
 	if !sent {
 		h.db.Exec(ctx, `UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, scenarioRunID)
 		h.db.Exec(ctx, `UPDATE variant_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, variantRunID)
-		return "", "", fmt.Errorf("agent %s not connected", agentID)
+		return "", "", vexsweep.ErrAgentOffline
 	}
 
 	log.Printf("[variant] dispatched %d variants for %s → agent %s (run %s / variant_run %s)",
