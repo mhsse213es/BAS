@@ -421,3 +421,244 @@ func TestDispatcher_Tick_IgnoresStoppedAndFailedSweeps(t *testing.T) {
 		}
 	})
 }
+
+// TestDispatcher_Tick_PausesOnDisconnectAndCancelsInFlightRun is the
+// regression test for the actual bug reported: an agent that disconnects
+// mid-layer used to sit "running" for a full 3 minutes, then get force-
+// cancelled and the WHOLE SWEEP marked failed on the next dispatch attempt
+// (since the agent was still offline) -- typically well before the user
+// could reconnect. The Dispatcher must instead detect the disconnect
+// immediately (via ConnectedFn) and pause, not fail.
+func TestDispatcher_Tick_PausesOnDisconnectAndCancelsInFlightRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-disc-1", Layers: []string{"em-01", "em-02"}, TotalLayers: 2,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "sr-disc-1"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		var cancelledRunIDs []string
+		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
+			return "running", nil // the layer never gets a chance to finish -- agent went offline
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
+			t.Fatal("dispatch should not be called -- the sweep must pause, not advance")
+			return "", nil
+		})
+		d.SetCancel(func(ctx context.Context, scenarioRunID string) (string, string, error) {
+			cancelledRunIDs = append(cancelledRunIDs, scenarioRunID)
+			return "agent-disc-1", "partial", nil
+		})
+		d.SetConnected(func(agentID string) bool { return false }) // agent is offline
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "agent_disconnected" {
+			t.Fatalf("Status = %q, want agent_disconnected", got.Status)
+		}
+		if got.DisconnectedAt == nil {
+			t.Fatal("DisconnectedAt should be set")
+		}
+		if len(cancelledRunIDs) != 1 || cancelledRunIDs[0] != "sr-disc-1" {
+			t.Fatalf("cancelledRunIDs = %v, want exactly [sr-disc-1] (the in-flight layer must be cancelled, not left dangling)", cancelledRunIDs)
+		}
+		if got.CurrentIndex != 0 {
+			t.Fatalf("CurrentIndex = %d, want 0 (the interrupted layer, unchanged, ready to re-dispatch on reconnect)", got.CurrentIndex)
+		}
+	})
+}
+
+// TestDispatcher_Tick_WaitsIndefinitelyWhileDisconnected proves the
+// no-timeout decision: unlike the connected-but-stuck path, a disconnected
+// sweep never force-advances or fails on its own, no matter how much time
+// passes -- it just waits for reconnect or an explicit Stop.
+func TestDispatcher_Tick_WaitsIndefinitelyWhileDisconnected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-disc-2", Layers: []string{"em-01"}, TotalLayers: 1,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, sw.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+
+		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
+			t.Fatal("status should not be checked -- no run is in flight while disconnected")
+			return "", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
+			t.Fatal("dispatch should not be called -- agent is still offline")
+			return "", nil
+		})
+		d.SetCancel(func(ctx context.Context, scenarioRunID string) (string, string, error) {
+			t.Fatal("cancel should not be called -- nothing is in flight while disconnected")
+			return "", "", nil
+		})
+		d.stuckThreshold = time.Millisecond // would force-fail almost instantly if the old timer still applied here
+		d.SetConnected(func(agentID string) bool { return false })
+
+		time.Sleep(5 * time.Millisecond)
+
+		for i := 0; i < 3; i++ {
+			if err := d.Tick(ctx); err != nil {
+				t.Fatalf("Tick %d: %v", i, err)
+			}
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "agent_disconnected" {
+			t.Fatalf("Status = %q after 3 ticks while still offline, want agent_disconnected (must not time out)", got.Status)
+		}
+	})
+}
+
+// TestDispatcher_Tick_ResumesInterruptedLayerOnReconnect proves the resume
+// behavior the user explicitly asked for: the interrupted layer is
+// re-dispatched from scratch, not skipped, once the agent reconnects.
+func TestDispatcher_Tick_ResumesInterruptedLayerOnReconnect(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-disc-3", Layers: []string{"em-01", "em-02"}, TotalLayers: 2,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, sw.ID, 1); err != nil { // was mid-layer 1 (0-indexed second layer) when it disconnected
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+
+		var dispatchedLayers []string
+		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
+			t.Fatal("status should not be checked this tick -- no run was in flight before resuming")
+			return "", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
+			dispatchedLayers = append(dispatchedLayers, scenarioID)
+			if layerIndex != 1 {
+				t.Fatalf("layerIndex = %d, want 1 (the interrupted layer)", layerIndex)
+			}
+			return "sr-resumed", nil
+		})
+		d.SetConnected(func(agentID string) bool { return true }) // agent is back
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if len(dispatchedLayers) != 1 || dispatchedLayers[0] != "em-02" {
+			t.Fatalf("dispatchedLayers = %v, want [em-02] (the interrupted layer, re-dispatched from scratch)", dispatchedLayers)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "running" {
+			t.Fatalf("Status = %q, want running", got.Status)
+		}
+		if got.DisconnectedAt != nil {
+			t.Fatal("DisconnectedAt should be cleared")
+		}
+		if got.CurrentScenarioRunID != "sr-resumed" {
+			t.Fatalf("CurrentScenarioRunID = %q, want sr-resumed", got.CurrentScenarioRunID)
+		}
+		if got.CurrentIndex != 1 {
+			t.Fatalf("CurrentIndex = %d, want unchanged at 1", got.CurrentIndex)
+		}
+	})
+}
+
+// TestDispatcher_Tick_ExistingBehaviorUnaffectedWhenConnectedFnNotSet proves
+// backward compatibility: every dispatcher_test.go test written before this
+// change never calls SetConnected, so d.connected stays nil. Those tests
+// must keep passing unmodified -- a nil ConnectedFn must mean "connectivity
+// awareness is off", not "treat every agent as disconnected".
+func TestDispatcher_Tick_ExistingBehaviorUnaffectedWhenConnectedFnNotSet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		if _, err := store.Create(ctx, Sweep{
+			AgentID: "agent-no-connected-fn", Layers: []string{"em-01"}, TotalLayers: 1,
+		}); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		var dispatchedLayers []string
+		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
+			return "running", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
+			dispatchedLayers = append(dispatchedLayers, scenarioID)
+			return "sr-1", nil
+		})
+		// Deliberately no SetConnected call.
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		if len(dispatchedLayers) != 1 {
+			t.Fatalf("dispatchedLayers = %v, want exactly 1 dispatch (nil ConnectedFn must not block normal dispatch)", dispatchedLayers)
+		}
+	})
+}
+
+// TestDispatcher_Tick_PausesInsteadOfFailingOnOfflineRaceDuringDispatch
+// covers the narrow race window: ConnectedFn said the agent was reachable,
+// but the dispatch call itself still failed because the agent dropped in
+// between. dispatchNext must special-case ErrAgentOffline into a pause
+// (same as a proactively-detected disconnect), not the ordinary
+// MarkFailed/hard-fail path every other dispatch error still takes.
+func TestDispatcher_Tick_PausesInsteadOfFailingOnOfflineRaceDuringDispatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{
+			AgentID: "agent-race-1", Layers: []string{"em-01"}, TotalLayers: 1,
+		})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		d := NewDispatcher(store, func(ctx context.Context, scenarioRunID string) (string, error) {
+			return "running", nil
+		})
+		d.SetDispatch(func(ctx context.Context, sweepID, agentID, scenarioID string, layerIndex, totalLayers int) (string, error) {
+			return "", ErrAgentOffline
+		})
+		d.SetConnected(func(agentID string) bool { return true }) // said reachable, but dispatch itself then fails
+
+		if err := d.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "agent_disconnected" {
+			t.Fatalf("Status = %q, want agent_disconnected (not failed)", got.Status)
+		}
+		if got.CurrentIndex != 0 {
+			t.Fatalf("CurrentIndex = %d, want 0 (the layer the failed dispatch was trying to reach)", got.CurrentIndex)
+		}
+	})
+}

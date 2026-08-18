@@ -2,6 +2,7 @@ package emsweep
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 )
@@ -28,6 +29,23 @@ type StatusFn func(ctx context.Context, scenarioRunID string) (status string, er
 // vexsweep's CancelFn uses -- no new cancellation logic, just reused.
 type CancelFn func(ctx context.Context, scenarioRunID string) (agentID, status string, err error)
 
+// ConnectedFn reports whether a specific agent currently has a live
+// connection. Injected after construction (SetConnected), same
+// import-cycle-avoidance pattern as DispatchFn/CancelFn. A nil ConnectedFn
+// (SetConnected never called) means connectivity-awareness is off --
+// advance() falls back to its pre-existing behavior entirely, so callers
+// that never opt in (and every dispatcher_test.go case written before this
+// change) are unaffected.
+type ConnectedFn func(agentID string) bool
+
+// ErrAgentOffline is the sentinel a DispatchFn implementation returns when
+// a layer failed to dispatch specifically because its agent is
+// unreachable -- distinguished from any other dispatch failure so
+// dispatchNext can pause the sweep (agent_disconnected) instead of
+// force-failing it outright. Covers the race window between advance()'s
+// proactive connectivity check and the dispatch call actually going out.
+var ErrAgentOffline = errors.New("emsweep: agent offline")
+
 // defaultStuckThreshold mirrors vexsweep's: how long a layer can sit with
 // no progress before the Dispatcher treats it as genuinely hung and
 // force-cancels it. See internal/vexsweep/dispatcher.go's identical
@@ -36,10 +54,11 @@ type CancelFn func(ctx context.Context, scenarioRunID string) (agentID, status s
 const defaultStuckThreshold = 3 * time.Minute
 
 type Dispatcher struct {
-	store    *Store
-	status   StatusFn
-	dispatch DispatchFn
-	cancel   CancelFn
+	store     *Store
+	status    StatusFn
+	dispatch  DispatchFn
+	cancel    CancelFn
+	connected ConnectedFn
 
 	stuckThreshold time.Duration
 	// cancelTriggeredForRun tracks scenario_run_ids a stuck-cancel has
@@ -56,14 +75,18 @@ func NewDispatcher(store *Store, status StatusFn) *Dispatcher {
 	}
 }
 
-func (d *Dispatcher) SetDispatch(fn DispatchFn) { d.dispatch = fn }
-func (d *Dispatcher) SetCancel(fn CancelFn)     { d.cancel = fn }
+func (d *Dispatcher) SetDispatch(fn DispatchFn)   { d.dispatch = fn }
+func (d *Dispatcher) SetCancel(fn CancelFn)       { d.cancel = fn }
+func (d *Dispatcher) SetConnected(fn ConnectedFn) { d.connected = fn }
 
 // Tick advances every running sweep by at most one step. Exported so tests
 // can call it directly without a real ticker; production wiring calls it
 // from an exercise.PollScheduler tick callback.
 func (d *Dispatcher) Tick(ctx context.Context) error {
-	sweeps, err := d.store.ListRunning(ctx)
+	// ListActionable, not ListRunning -- a paused (agent_disconnected)
+	// sweep must keep being visited every tick, or a reconnect would never
+	// be noticed.
+	sweeps, err := d.store.ListActionable(ctx)
 	if err != nil {
 		return err
 	}
@@ -74,6 +97,20 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 }
 
 func (d *Dispatcher) advance(ctx context.Context, sw Sweep) {
+	if d.connected != nil && !d.connected(sw.AgentID) {
+		if sw.Status == "running" {
+			d.handleDisconnect(ctx, sw)
+		}
+		// Already agent_disconnected and still offline: no-op. Waits
+		// indefinitely -- no stuck-timer applies in this state, since
+		// "disconnected" is a known condition now, not an unexplained stall.
+		return
+	}
+	if sw.Status == "agent_disconnected" {
+		d.resume(ctx, sw)
+		return
+	}
+
 	if sw.CurrentScenarioRunID != "" {
 		status, err := d.status(ctx, sw.CurrentScenarioRunID)
 		if err != nil {
@@ -95,6 +132,59 @@ func (d *Dispatcher) advance(ctx context.Context, sw Sweep) {
 	}
 	// No layer in flight yet -- this is the sweep's very first tick.
 	d.dispatchNext(ctx, sw, 0)
+}
+
+// handleDisconnect pauses a running sweep once its agent is found
+// unreachable: best-effort-cancels the in-flight layer (cancelScenarioRun,
+// the production CancelFn, resolves this immediately to 'partial' when the
+// agent is offline -- no grace-period wait) and pauses the sweep at its
+// current layer, ready to re-dispatch on reconnect. Not gated on the
+// cancel call succeeding: detecting and recording the disconnect matters
+// more than that best-effort cleanup, and a failed cancel here doesn't
+// block anything -- there's no dedup flag to desync, unlike
+// maybeForceCancelStuck's cancel.
+func (d *Dispatcher) handleDisconnect(ctx context.Context, sw Sweep) {
+	if sw.CurrentScenarioRunID != "" && d.cancel != nil {
+		if _, _, err := d.cancel(ctx, sw.CurrentScenarioRunID); err != nil {
+			log.Printf("[emsweep] cancel in-flight run %s for disconnected sweep %s: %v", sw.CurrentScenarioRunID, sw.ID, err)
+		}
+	}
+	if err := d.store.MarkDisconnected(ctx, sw.ID, sw.CurrentIndex); err != nil {
+		log.Printf("[emsweep] mark sweep %s agent_disconnected: %v", sw.ID, err)
+		return
+	}
+	log.Printf("[emsweep] sweep %s paused: agent %s disconnected", sw.ID, sw.AgentID)
+}
+
+// resume re-dispatches the pending layer (sw.CurrentIndex, left unchanged
+// by MarkDisconnected/a prior resume attempt) once the agent is reachable
+// again. A dispatch failure here can legitimately mean the agent dropped
+// again in the instant between advance()'s connectivity check and this
+// call -- ErrAgentOffline re-pauses rather than failing the sweep; any
+// other error still hard-fails it, matching dispatchNext's existing
+// semantics for a genuine dispatch problem.
+func (d *Dispatcher) resume(ctx context.Context, sw Sweep) {
+	if d.dispatch == nil {
+		return
+	}
+	scenarioRunID, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Layers[sw.CurrentIndex], sw.CurrentIndex, len(sw.Layers))
+	if err != nil {
+		if errors.Is(err, ErrAgentOffline) {
+			if merr := d.store.MarkDisconnected(ctx, sw.ID, sw.CurrentIndex); merr != nil {
+				log.Printf("[emsweep] re-mark sweep %s agent_disconnected after failed resume: %v", sw.ID, merr)
+			}
+			return
+		}
+		if merr := d.store.MarkFailed(ctx, sw.ID, err.Error()); merr != nil {
+			log.Printf("[emsweep] mark sweep %s failed after resume attempt: %v", sw.ID, merr)
+		}
+		return
+	}
+	if err := d.store.Resume(ctx, sw.ID, scenarioRunID); err != nil {
+		log.Printf("[emsweep] resume sweep %s: %v", sw.ID, err)
+		return
+	}
+	log.Printf("[emsweep] sweep %s resumed: agent %s reconnected, re-dispatched layer %s", sw.ID, sw.AgentID, sw.Layers[sw.CurrentIndex])
 }
 
 // maybeForceCancelStuck triggers a cancel for the current layer once it has
@@ -140,6 +230,17 @@ func (d *Dispatcher) dispatchNext(ctx context.Context, sw Sweep, justFinishedCou
 
 	scenarioRunID, err := d.dispatch(ctx, sw.ID, sw.AgentID, sw.Layers[nextIdx], nextIdx, len(sw.Layers))
 	if err != nil {
+		if errors.Is(err, ErrAgentOffline) {
+			// The agent dropped in the window between this tick's
+			// connectivity check (or the lack of one) and this dispatch
+			// call actually going out. Pause at nextIdx -- the layer this
+			// attempt was trying to reach, which current_index has not
+			// advanced to yet in the DB -- rather than failing the sweep.
+			if merr := d.store.MarkDisconnected(ctx, sw.ID, nextIdx); merr != nil {
+				log.Printf("[emsweep] mark sweep %s agent_disconnected (offline race): %v", sw.ID, merr)
+			}
+			return
+		}
 		// Deliberately does not fall through to the next layer -- a
 		// silently-skipped layer in a security-validation sweep is worse
 		// than a sweep that stops and says why. Matches vexsweep's identical
