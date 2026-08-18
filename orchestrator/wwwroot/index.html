@@ -4992,7 +4992,23 @@ function _syncLicenseBannerHeight() {
   document.documentElement.style.setProperty('--license-banner-h', el ? el.offsetHeight + 'px' : '0px');
 }
 
+// _dismissLicenseGraceBanner removes the banner and reclaims the layout
+// space it reserved (body padding-top / sidebar+header top offset all read
+// --license-banner-h). Session-scoped, not permanent -- the warning is
+// real and comes back on the next login, this just lets an operator who
+// has already seen it get it out of the way to work.
+function _dismissLicenseGraceBanner() {
+  var el = document.getElementById('license-grace-banner');
+  if (el) el.remove();
+  document.documentElement.style.setProperty('--license-banner-h', '0px');
+  sessionStorage.setItem('bas_license_grace_banner_dismissed', '1');
+}
+
 function renderLicenseGraceBanner(info) {
+  if (sessionStorage.getItem('bas_license_grace_banner_dismissed')) {
+    maybeShowLicenseGraceModal(info);
+    return;
+  }
   var existing = document.getElementById('license-grace-banner');
   if (existing) existing.remove();
   var el = document.createElement('div');
@@ -5001,8 +5017,18 @@ function renderLicenseGraceBanner(info) {
   // scrolling away and leaving #sidebar's --license-banner-h offset stale --
   // see body's padding-top and header's sticky top below, which depend on
   // this banner actually staying put at the height they were measured against.
-  el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;padding:0.75rem 1.25rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
-  el.innerHTML = _licenseBannerHTML(info);
+  // z-index is deliberately BELOW every drawer/modal overlay in the app
+  // (.drawer-overlay/.modal-overlay start at z-index:100, the lowest of
+  // any overlay here) -- it previously sat at 9998, well above all of
+  // them, so opening any wizard/drawer left its top content painted over
+  // by this banner instead of the banner yielding to whatever the
+  // operator actually opened.
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:90;padding:0.75rem 2.5rem;background:var(--warning,#d29922);color:#1a1200;font-size:0.85rem;line-height:1.5;text-align:center';
+  el.innerHTML = _licenseBannerHTML(info) +
+    '<button onclick="_dismissLicenseGraceBanner()" aria-label="Dismiss" title="Dismiss" ' +
+      'style="position:absolute;top:0.5rem;right:0.6rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;' +
+      'background:transparent;border:none;color:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:0.75" ' +
+      'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.75">&#10005;</button>';
   document.body.insertBefore(el, document.body.firstChild);
   _syncLicenseBannerHeight();
   window.addEventListener('resize', _syncLicenseBannerHeight);
