@@ -167,9 +167,9 @@ const (
 // so the window matches the look of any other Windows program.
 
 const (
-	colHdrBg  = uintptr(0x0020140B) // dark navy header — brand identifier only
-	colWhite  = uintptr(0x00FFFFFF)
-	colHdrSub = uintptr(0x00C8C8C8) // neutral light grey subtitle text
+	colHdrBg    = uintptr(0x00FFF97D) // electric blue header — brand identifier only (#7DF9FF)
+	colHdrTitle = uintptr(0x0020140B) // dark navy title text — was the header bg; kept for contrast on the new light header
+	colHdrSub   = uintptr(0x00503C2D) // dark slate subtitle text — lighter than the title, still readable on electric blue
 )
 
 // ── Win32 structs ─────────────────────────────────────────────────────────────
@@ -379,7 +379,7 @@ func paintWindow(hdc uintptr) {
 	procSetBkMode.Call(hdc, 1 /*TRANSPARENT*/)
 
 	procSelectObject.Call(hdc, hFontTitle)
-	procSetTextColor.Call(hdc, colWhite)
+	procSetTextColor.Call(hdc, colHdrTitle)
 	drawText(hdc, "BAS Platform Agent Setup", LPAD, 22, WINW-LPAD, 52,
 		DT_LEFT|DT_SINGLELINE|DT_NOCLIP|DT_NOPREFIX)
 
