@@ -216,6 +216,152 @@ func TestAdvanceToNext_CreditsAndAdvancesThenCompletes(t *testing.T) {
 	})
 }
 
+func TestGetActiveForAgent_TreatsDisconnectedAsActive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{AgentID: "agent-disc-active", Layers: []string{"em-01"}, TotalLayers: 1})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, sw.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+		got, found, err := store.GetActiveForAgent(ctx, "agent-disc-active")
+		if err != nil {
+			t.Fatalf("GetActiveForAgent: %v", err)
+		}
+		if !found || got.ID != sw.ID {
+			t.Fatalf("GetActiveForAgent = (%+v, %v), want the disconnected sweep to still count as active", got, found)
+		}
+	})
+}
+
+func TestListActionable_IncludesRunningAndDisconnectedOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		running, err := store.Create(ctx, Sweep{AgentID: "agent-actionable-running", Layers: []string{"em-01"}, TotalLayers: 1})
+		if err != nil {
+			t.Fatalf("Create running: %v", err)
+		}
+		disconnected, err := store.Create(ctx, Sweep{AgentID: "agent-actionable-disc", Layers: []string{"em-01"}, TotalLayers: 1})
+		if err != nil {
+			t.Fatalf("Create disconnected: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, disconnected.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+		stopped, err := store.Create(ctx, Sweep{AgentID: "agent-actionable-stopped", Layers: []string{"em-01"}, TotalLayers: 1})
+		if err != nil {
+			t.Fatalf("Create stopped: %v", err)
+		}
+		if err := store.MarkStopped(ctx, stopped.ID); err != nil {
+			t.Fatalf("MarkStopped: %v", err)
+		}
+
+		got, err := store.ListActionable(ctx)
+		if err != nil {
+			t.Fatalf("ListActionable: %v", err)
+		}
+		ids := map[string]bool{}
+		for _, sw := range got {
+			ids[sw.ID] = true
+		}
+		if !ids[running.ID] || !ids[disconnected.ID] {
+			t.Fatalf("ListActionable() = %+v, want both the running and disconnected sweeps", got)
+		}
+		if ids[stopped.ID] {
+			t.Fatalf("ListActionable() included a stopped sweep: %+v", got)
+		}
+	})
+}
+
+// TestMarkDisconnected_SetsStatusAndClearsCurrentRun proves the pause
+// transition: status flips, disconnected_at is stamped, and the current run
+// pointer clears since whatever was in flight has already been separately
+// resolved by the caller (or never existed, in the dispatchNext race case).
+// pendingIndex names the layer to re-dispatch on reconnect.
+func TestMarkDisconnected_SetsStatusAndClearsCurrentRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{AgentID: "agent-mark-disc", Layers: []string{"em-01", "em-02"}, TotalLayers: 2})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "sr-mark-disc"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		if err := store.MarkDisconnected(ctx, sw.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "agent_disconnected" {
+			t.Fatalf("Status = %q, want agent_disconnected", got.Status)
+		}
+		if got.DisconnectedAt == nil {
+			t.Fatal("DisconnectedAt should be set")
+		}
+		if got.CurrentScenarioRunID != "" {
+			t.Fatalf("CurrentScenarioRunID = %q, want cleared", got.CurrentScenarioRunID)
+		}
+		if got.CurrentLayerStartedAt != nil {
+			t.Fatal("CurrentLayerStartedAt should be cleared")
+		}
+		if got.CurrentIndex != 0 {
+			t.Fatalf("CurrentIndex = %d, want 0 (pendingIndex)", got.CurrentIndex)
+		}
+	})
+}
+
+// TestResume_ClearsDisconnectedAtAndSetsNewRun proves the un-pause
+// transition: status flips back, disconnected_at clears, and the new run
+// (from re-dispatching the pending layer) becomes current.
+func TestResume_ClearsDisconnectedAtAndSetsNewRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{AgentID: "agent-resume", Layers: []string{"em-01"}, TotalLayers: 1})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, sw.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+
+		if err := store.Resume(ctx, sw.ID, "sr-resumed"); err != nil {
+			t.Fatalf("Resume: %v", err)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "running" {
+			t.Fatalf("Status = %q, want running", got.Status)
+		}
+		if got.DisconnectedAt != nil {
+			t.Fatal("DisconnectedAt should be cleared")
+		}
+		if got.CurrentScenarioRunID != "sr-resumed" {
+			t.Fatalf("CurrentScenarioRunID = %q, want sr-resumed", got.CurrentScenarioRunID)
+		}
+		if got.CurrentLayerStartedAt == nil {
+			t.Fatal("CurrentLayerStartedAt should be set")
+		}
+	})
+}
+
 func TestMarkStopped_And_MarkFailed(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

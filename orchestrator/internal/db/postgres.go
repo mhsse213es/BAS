@@ -1528,6 +1528,21 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// ART-only.
 		`ALTER TABLE vex_sweeps ADD COLUMN IF NOT EXISTS base_types text[] NOT NULL DEFAULT '{}'`,
 		`UPDATE vex_sweeps SET base_types = (SELECT array_agg('art'::text) FROM unnest(techniques)) WHERE base_types = '{}' AND array_length(techniques,1) > 0`,
+
+		// Sweep agent-disconnect resilience: a sweep whose agent drops mid-run
+		// transitions to 'agent_disconnected' (a new status value -- no CHECK
+		// constraint exists to update) instead of being force-failed by the old
+		// blind 3-minute stuck-timer. disconnected_at records when. The partial
+		// unique index enforcing "one active sweep per agent" must treat this
+		// status as active too, or a second sweep could be started against an
+		// agent whose first sweep is merely paused waiting on reconnect --
+		// CREATE UNIQUE INDEX IF NOT EXISTS won't redefine an index under an
+		// unchanged name, so this is an explicit drop+recreate. See
+		// docs/superpowers/specs/2026-08-18-sweep-disconnect-resilience-design.md.
+		`ALTER TABLE em_sweeps ADD COLUMN IF NOT EXISTS disconnected_at timestamptz`,
+		`DROP INDEX IF EXISTS idx_em_sweeps_one_running_per_agent`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_em_sweeps_one_running_per_agent
+			ON em_sweeps (agent_id) WHERE status IN ('running', 'agent_disconnected')`,
 	}
 
 	for _, s := range stmts {
