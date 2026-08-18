@@ -20,10 +20,16 @@ func (h *Handler) GetOpenAEVConfig(w http.ResponseWriter, r *http.Request) {
 		   FROM openaev_config WHERE id = 1`,
 	).Scan(&baseURL, &pollHours, &enabled, &status, &lastError, &created, &updated, &skipped, &errored)
 	if err != nil {
-		// No row yet — defaults.
+		// No row yet — defaults. "configured: false" tells the frontend this
+		// is a genuine first-time setup, so its save-confirmation "you're
+		// about to overwrite an existing value" modal (which only makes
+		// sense once real values are already in place) can stay hidden
+		// until an actual update happens -- same fix already applied to
+		// GetThreatIntelConfig for MISP/OpenCTI/OTX.
 		respond(w, map[string]any{
 			"baseUrl": "", "pollIntervalHours": 24, "enabled": false, "lastSyncStatus": "never", "lastError": "",
 			"lastSyncCreated": 0, "lastSyncUpdated": 0, "lastSyncSkipped": 0, "lastSyncErrored": 0,
+			"configured": false,
 		})
 		return
 	}
@@ -37,6 +43,7 @@ func (h *Handler) GetOpenAEVConfig(w http.ResponseWriter, r *http.Request) {
 		"lastSyncUpdated":   updated,
 		"lastSyncSkipped":   skipped,
 		"lastSyncErrored":   errored,
+		"configured":        true,
 	})
 }
 

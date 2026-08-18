@@ -60,6 +60,42 @@ func TestGetOpenAEVConfig_RedactsToken(t *testing.T) {
 	})
 }
 
+// TestGetOpenAEVConfig_ConfiguredFlagDistinguishesFirstTimeFromUpdate proves
+// the GET response tells the frontend whether OpenAEV has ever been saved
+// before -- the confirm-diff "you're about to overwrite an existing value"
+// modal makes no sense on a genuine first-time setup, only once real values
+// are already in place and someone is changing them. Same fix as
+// GetThreatIntelConfig's own configured flag for MISP/OpenCTI/OTX.
+func TestGetOpenAEVConfig_ConfiguredFlagDistinguishesFirstTimeFromUpdate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureSchema(context.Background(), pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+
+		preRec := httptest.NewRecorder()
+		h.GetOpenAEVConfig(preRec, httptest.NewRequest(http.MethodGet, "/api/openaev/config", nil))
+		var pre map[string]any
+		json.Unmarshal(preRec.Body.Bytes(), &pre)
+		if pre["configured"] != false {
+			t.Errorf("configured = %v before any save, want false", pre["configured"])
+		}
+
+		pool.Exec(context.Background(),
+			`INSERT INTO openaev_config (id, base_url, bearer_token, enabled) VALUES (1, 'https://openaev.local', 'super-secret', true)
+			 ON CONFLICT (id) DO UPDATE SET base_url = EXCLUDED.base_url, bearer_token = EXCLUDED.bearer_token, enabled = EXCLUDED.enabled`)
+
+		postRec := httptest.NewRecorder()
+		h.GetOpenAEVConfig(postRec, httptest.NewRequest(http.MethodGet, "/api/openaev/config", nil))
+		var post map[string]any
+		json.Unmarshal(postRec.Body.Bytes(), &post)
+		if post["configured"] != true {
+			t.Errorf("configured = %v after a save, want true", post["configured"])
+		}
+	})
+}
+
 func TestGetOpenAEVStatus_ReturnsSyncCounts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
