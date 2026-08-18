@@ -6022,7 +6022,7 @@ function loadThreatPriorityActors() {
       }
       empty.style.display = 'none';
       body.innerHTML = TP_ACTOR_CACHE.map(function(a) {
-        return '<tr style="cursor:pointer" onclick="showThreatPriorityDetail(' + JSON.stringify(a.actorName) + ')">' +
+        return '<tr style="cursor:pointer" onclick=\'showThreatPriorityDetail(' + JSON.stringify(a.actorName).replace(/'/g, "&#39;") + ')\'>' +
           '<td style="font-weight:600">' + x(a.actorName) + '</td>' +
           '<td>' + tpTierBadge(a.tier) + '</td>' +
           '<td>' + x(a.score) + '</td>' +
@@ -6293,14 +6293,14 @@ function closeExposureDetail() {
 // alongside MISP/OpenCTI/OTX (see loadConnectorStatus). Synced scenarios live
 // in the Exercises tab (see loadExercisesTab), since that's where they turn
 // into exercise plans.
-var OAEV_CONFIG_LOADED = { baseUrl: '', enabled: false }; // last fetched from the server, for the save confirmation diff
+var OAEV_CONFIG_LOADED = { baseUrl: '', enabled: false, configured: false }; // last fetched from the server, for the save confirmation diff
 
 function loadOpenAEVConfig() {
   var configPanel = document.getElementById('openaev-config-panel');
   if (!configPanel) return;
   if (ROLE === 'admin') {
     apicall('/api/openaev/config').then(function(cfg) {
-      OAEV_CONFIG_LOADED = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled };
+      OAEV_CONFIG_LOADED = { baseUrl: cfg.baseUrl || '', enabled: !!cfg.enabled, configured: !!cfg.configured };
       configPanel.innerHTML =
         '<div class="kpi-row">' +
           '<input id="oaev-url" type="text" placeholder="https://openaev.example.local" value="' + x(cfg.baseUrl || '') + '" class="inp-sm" style="flex:1">' +
@@ -6387,7 +6387,11 @@ function saveOpenAEVConfig() {
   var tokenChanged = newToken !== '';
   var enabledChanged = newEnabled !== OAEV_CONFIG_LOADED.enabled;
 
-  if (!urlChanged && !tokenChanged && !enabledChanged) {
+  // A genuine first-time setup has nothing to overwrite -- the confirm
+  // modal exists to warn "you're about to replace an existing value", which
+  // is meaningless (and confusing) before any value has ever been saved.
+  // Same fix as saveConnectorConfig's own !prev.configured check.
+  if (!OAEV_CONFIG_LOADED.configured || (!urlChanged && !tokenChanged && !enabledChanged)) {
     doSaveOpenAEVConfig(payload); // nothing to confirm
     return;
   }
@@ -8749,7 +8753,7 @@ function renderTIActors(actors) {
     '<div style="font-size:0.68rem;font-weight:600;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase;margin:0.75rem 0 0.4rem">Top Threat Actors</div>' +
     actors.map(function(a) {
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.35rem 0;border-bottom:1px solid var(--border)">' +
-        '<span style="font-weight:600;cursor:pointer" onclick="showTab(\'threat-priority\');setTimeout(function(){ showThreatPriorityDetail(' + JSON.stringify(a.actorName) + '); }, 150)">' + x(a.actorName) + '</span>' +
+        '<span style="font-weight:600;cursor:pointer" onclick="showTab(\'threat-priority\');setTimeout(function(){ showThreatPriorityDetail(\'' + x(a.actorName).replace(/'/g, "&#39;") + '\'); }, 150)">' + x(a.actorName) + '</span>' +
         '<span style="display:flex;align-items:center;gap:0.5rem">' + tpTierBadge(a.tier) + '<strong>' + x(a.score) + '</strong></span>' +
         '</div>';
     }).join('');
