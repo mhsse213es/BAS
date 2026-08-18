@@ -254,3 +254,135 @@ func TestMarkStopped_And_MarkFailed(t *testing.T) {
 		}
 	})
 }
+
+func TestGetActiveForAgent_TreatsDisconnectedAsActive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{AgentID: "agent-disc-active", Mode: "sequential", Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{5}, TotalVariants: 5})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, sw.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+		got, found, err := store.GetActiveForAgent(ctx, "agent-disc-active")
+		if err != nil {
+			t.Fatalf("GetActiveForAgent: %v", err)
+		}
+		if !found || got.ID != sw.ID {
+			t.Fatalf("GetActiveForAgent = (%+v, %v), want the disconnected sweep to still count as active", got, found)
+		}
+	})
+}
+
+func TestListActionable_IncludesRunningAndDisconnectedOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		running, err := store.Create(ctx, Sweep{AgentID: "agent-actionable-running", Mode: "sequential", Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{5}, TotalVariants: 5})
+		if err != nil {
+			t.Fatalf("Create running: %v", err)
+		}
+		disconnected, err := store.Create(ctx, Sweep{AgentID: "agent-actionable-disc", Mode: "sequential", Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{5}, TotalVariants: 5})
+		if err != nil {
+			t.Fatalf("Create disconnected: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, disconnected.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+		stopped, err := store.Create(ctx, Sweep{AgentID: "agent-actionable-stopped", Mode: "sequential", Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{5}, TotalVariants: 5})
+		if err != nil {
+			t.Fatalf("Create stopped: %v", err)
+		}
+		if err := store.MarkStopped(ctx, stopped.ID); err != nil {
+			t.Fatalf("MarkStopped: %v", err)
+		}
+
+		got, err := store.ListActionable(ctx)
+		if err != nil {
+			t.Fatalf("ListActionable: %v", err)
+		}
+		ids := map[string]bool{}
+		for _, sw := range got {
+			ids[sw.ID] = true
+		}
+		if !ids[running.ID] || !ids[disconnected.ID] {
+			t.Fatalf("ListActionable() = %+v, want both the running and disconnected sweeps", got)
+		}
+		if ids[stopped.ID] {
+			t.Fatalf("ListActionable() included a stopped sweep: %+v", got)
+		}
+	})
+}
+
+func TestMarkDisconnected_SetsStatusAndClearsCurrentRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{AgentID: "agent-mark-disc", Mode: "sequential", Techniques: []string{"T1059.001", "T1059.003"}, TechniqueVariantCounts: []int{5, 3}, TotalVariants: 8})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.AdvanceToNext(ctx, sw.ID, 0, 0, "vr-mark-disc", "sr-mark-disc"); err != nil {
+			t.Fatalf("seed AdvanceToNext: %v", err)
+		}
+
+		if err := store.MarkDisconnected(ctx, sw.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "agent_disconnected" {
+			t.Fatalf("Status = %q, want agent_disconnected", got.Status)
+		}
+		if got.DisconnectedAt == nil {
+			t.Fatal("DisconnectedAt should be set")
+		}
+		if got.CurrentScenarioRunID != "" || got.CurrentVariantRunID != "" {
+			t.Fatalf("current run IDs = (%q, %q), want both cleared", got.CurrentScenarioRunID, got.CurrentVariantRunID)
+		}
+		if got.CurrentTechniqueStartedAt != nil {
+			t.Fatal("CurrentTechniqueStartedAt should be cleared")
+		}
+	})
+}
+
+func TestResume_ClearsDisconnectedAtAndSetsNewRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := NewStore(pool)
+		sw, err := store.Create(ctx, Sweep{AgentID: "agent-resume", Mode: "sequential", Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{5}, TotalVariants: 5})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := store.MarkDisconnected(ctx, sw.ID, 0); err != nil {
+			t.Fatalf("MarkDisconnected: %v", err)
+		}
+
+		if err := store.Resume(ctx, sw.ID, "vr-resumed", "sr-resumed"); err != nil {
+			t.Fatalf("Resume: %v", err)
+		}
+		got, _ := store.Get(ctx, sw.ID)
+		if got.Status != "running" {
+			t.Fatalf("Status = %q, want running", got.Status)
+		}
+		if got.DisconnectedAt != nil {
+			t.Fatal("DisconnectedAt should be cleared")
+		}
+		if got.CurrentVariantRunID != "vr-resumed" || got.CurrentScenarioRunID != "sr-resumed" {
+			t.Fatalf("current run IDs = (%q, %q), want (vr-resumed, sr-resumed)", got.CurrentVariantRunID, got.CurrentScenarioRunID)
+		}
+	})
+}

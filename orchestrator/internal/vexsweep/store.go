@@ -22,7 +22,7 @@ func NewStore(pool *pgxpool.Pool) *Store {
 
 const sweepCols = `id, agent_id, mode, include_advanced, techniques, technique_variant_counts, base_types,
 	current_index, current_variant_run_id, current_scenario_run_id, current_technique_started_at,
-	completed_variants, total_variants, status, error, created_by, started_at, completed_at`
+	completed_variants, total_variants, status, error, created_by, started_at, completed_at, disconnected_at`
 
 func scanSweep(row interface {
 	Scan(dest ...any) error
@@ -30,7 +30,7 @@ func scanSweep(row interface {
 	var sw Sweep
 	err := row.Scan(&sw.ID, &sw.AgentID, &sw.Mode, &sw.IncludeAdvanced, &sw.Techniques, &sw.TechniqueVariantCounts, &sw.BaseTypes,
 		&sw.CurrentIndex, &sw.CurrentVariantRunID, &sw.CurrentScenarioRunID, &sw.CurrentTechniqueStartedAt,
-		&sw.CompletedVariants, &sw.TotalVariants, &sw.Status, &sw.Error, &sw.CreatedBy, &sw.StartedAt, &sw.CompletedAt)
+		&sw.CompletedVariants, &sw.TotalVariants, &sw.Status, &sw.Error, &sw.CreatedBy, &sw.StartedAt, &sw.CompletedAt, &sw.DisconnectedAt)
 	return sw, err
 }
 
@@ -67,7 +67,7 @@ func (s *Store) Get(ctx context.Context, id string) (Sweep, error) {
 
 func (s *Store) GetActiveForAgent(ctx context.Context, agentID string) (Sweep, bool, error) {
 	row := s.pool.QueryRow(ctx,
-		`SELECT `+sweepCols+` FROM vex_sweeps WHERE agent_id = $1 AND status = 'running'`, agentID)
+		`SELECT `+sweepCols+` FROM vex_sweeps WHERE agent_id = $1 AND status IN ('running', 'agent_disconnected')`, agentID)
 	sw, err := scanSweep(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -84,6 +84,27 @@ func (s *Store) ListRunning(ctx context.Context) ([]Sweep, error) {
 
 func (s *Store) ListByStatus(ctx context.Context, status string) ([]Sweep, error) {
 	rows, err := s.pool.Query(ctx, `SELECT `+sweepCols+` FROM vex_sweeps WHERE status = $1 ORDER BY started_at`, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Sweep
+	for rows.Next() {
+		sw, err := scanSweep(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sw)
+	}
+	return out, rows.Err()
+}
+
+// ListActionable returns every sweep the Dispatcher must keep ticking:
+// actively running, or paused waiting for its agent to reconnect. Distinct
+// from ListRunning (status='running' only).
+func (s *Store) ListActionable(ctx context.Context) ([]Sweep, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+sweepCols+` FROM vex_sweeps WHERE status IN ('running', 'agent_disconnected') ORDER BY started_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +146,32 @@ func (s *Store) AdvanceToNext(ctx context.Context, id string, justCompletedVaria
 		        current_variant_run_id = $4, current_scenario_run_id = $5, current_technique_started_at = NOW()
 		  WHERE id = $1`,
 		id, justCompletedVariants, nextIndex, nextVariantRunID, nextScenarioRunID)
+	return err
+}
+
+// MarkDisconnected pauses a sweep whose agent is no longer reachable.
+// pendingIndex is the technique index to re-dispatch on reconnect -- see
+// internal/emsweep/store.go's identical method for the full rationale.
+func (s *Store) MarkDisconnected(ctx context.Context, id string, pendingIndex int) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE vex_sweeps
+		    SET status = 'agent_disconnected', disconnected_at = NOW(),
+		        current_index = $2, current_variant_run_id = '', current_scenario_run_id = '', current_technique_started_at = NULL
+		  WHERE id = $1`,
+		id, pendingIndex)
+	return err
+}
+
+// Resume un-pauses a sweep after its agent reconnects. The caller has
+// already re-dispatched Techniques[current_index] as a fresh run and passes
+// both resulting IDs here; current_index itself is left unchanged.
+func (s *Store) Resume(ctx context.Context, id, variantRunID, scenarioRunID string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE vex_sweeps
+		    SET status = 'running', disconnected_at = NULL,
+		        current_variant_run_id = $2, current_scenario_run_id = $3, current_technique_started_at = NOW()
+		  WHERE id = $1`,
+		id, variantRunID, scenarioRunID)
 	return err
 }
 

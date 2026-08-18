@@ -32,4 +32,8 @@ type Sweep struct {
 	CreatedBy                 string
 	StartedAt                 time.Time
 	CompletedAt               *time.Time
+	// DisconnectedAt is when the Dispatcher last detected the agent was
+	// unreachable (nil while running normally, or once resumed). See
+	// dispatcher.go's advance() disconnect/resume state machine.
+	DisconnectedAt *time.Time
 }

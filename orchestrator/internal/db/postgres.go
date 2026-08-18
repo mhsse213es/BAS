@@ -1543,6 +1543,10 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`DROP INDEX IF EXISTS idx_em_sweeps_one_running_per_agent`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_em_sweeps_one_running_per_agent
 			ON em_sweeps (agent_id) WHERE status IN ('running', 'agent_disconnected')`,
+		`ALTER TABLE vex_sweeps ADD COLUMN IF NOT EXISTS disconnected_at timestamptz`,
+		`DROP INDEX IF EXISTS idx_vex_sweeps_one_running_per_agent`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_vex_sweeps_one_running_per_agent
+			ON vex_sweeps (agent_id) WHERE status IN ('running', 'agent_disconnected')`,
 	}
 
 	for _, s := range stmts {
