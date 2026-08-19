@@ -324,6 +324,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/job-targets", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/openaev/config", tierPermission, auth.CanViewOpenAEVConfig},
 	{http.MethodPut, "/api/openaev/config", tierPermission, auth.CanUpdateOpenAEVConfig},
+	{http.MethodDelete, "/api/openaev/config", tierPermission, auth.CanUpdateOpenAEVConfig},
 	{http.MethodPost, "/api/openaev/config/test", tierPermission, auth.CanTestOpenAEVConfig},
 	{http.MethodPost, "/api/openaev/sync", tierPermission, auth.CanSyncOpenAEV},
 	{http.MethodPost, "/api/openaev/import", tierPermission, auth.CanImportOpenAEVBundle},

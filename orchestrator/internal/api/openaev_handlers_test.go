@@ -96,6 +96,46 @@ func TestGetOpenAEVConfig_ConfiguredFlagDistinguishesFirstTimeFromUpdate(t *test
 	})
 }
 
+// TestDeleteOpenAEVConfig_RemovesStoredCredentials proves DELETE actually
+// clears the row -- unlike enabled=false via PUT, which stops syncing but
+// leaves the base URL/bearer token stored, GET must report
+// configured=false again afterward. Mirrors
+// TestDeleteThreatIntelConfig_RemovesStoredCredentials.
+func TestDeleteOpenAEVConfig_RemovesStoredCredentials(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		db.EnsureSchema(context.Background(), pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+
+		h.PutOpenAEVConfig(httptest.NewRecorder(), httptest.NewRequest(http.MethodPut, "/api/openaev/config",
+			bytes.NewReader([]byte(`{"baseUrl":"https://openaev.example.com","bearerToken":"secret-token","enabled":true}`))))
+
+		preRec := httptest.NewRecorder()
+		h.GetOpenAEVConfig(preRec, httptest.NewRequest(http.MethodGet, "/api/openaev/config", nil))
+		var pre map[string]any
+		json.Unmarshal(preRec.Body.Bytes(), &pre)
+		if pre["configured"] != true {
+			t.Fatalf("configured = %v after save, want true", pre["configured"])
+		}
+
+		delRec := httptest.NewRecorder()
+		h.DeleteOpenAEVConfig(delRec, httptest.NewRequest(http.MethodDelete, "/api/openaev/config", nil))
+		if delRec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", delRec.Code)
+		}
+
+		postRec := httptest.NewRecorder()
+		h.GetOpenAEVConfig(postRec, httptest.NewRequest(http.MethodGet, "/api/openaev/config", nil))
+		var post map[string]any
+		json.Unmarshal(postRec.Body.Bytes(), &post)
+		if post["configured"] != false {
+			t.Errorf("configured = %v after delete, want false", post["configured"])
+		}
+	})
+}
+
 func TestGetOpenAEVStatus_ReturnsSyncCounts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

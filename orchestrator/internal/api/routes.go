@@ -584,6 +584,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)
 		r.With(auth.RequirePermission(auth.CanUpdateOpenAEVConfig)).Put("/api/openaev/config", h.PutOpenAEVConfig)
+		r.With(auth.RequirePermission(auth.CanUpdateOpenAEVConfig)).Delete("/api/openaev/config", h.DeleteOpenAEVConfig)
 		r.With(auth.RequirePermission(auth.CanTestOpenAEVConfig)).Post("/api/openaev/config/test", h.TestOpenAEVConfig)
 		r.With(auth.RequirePermission(auth.CanSyncOpenAEV)).Post("/api/openaev/sync", h.SyncOpenAEV)
 		r.With(auth.RequirePermission(auth.CanImportOpenAEVBundle)).Post("/api/openaev/import", h.ImportOpenAEVBundle)

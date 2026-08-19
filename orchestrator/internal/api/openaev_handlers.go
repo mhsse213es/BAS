@@ -78,6 +78,20 @@ func (h *Handler) PutOpenAEVConfig(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"status": "ok"})
 }
 
+// DELETE /api/openaev/config — Admin. Removes the stored config entirely
+// (base URL + bearer token), returning OpenAEV to "configured: false" --
+// unlike enabled=false via PUT, which stops syncing but leaves the
+// credentials in place. Mirrors DeleteThreatIntelConfig's existing
+// precedent for MISP/OpenCTI/OTX.
+func (h *Handler) DeleteOpenAEVConfig(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.db.Exec(r.Context(), `DELETE FROM openaev_config WHERE id = 1`); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "openaev.config.delete", "", nil, "ok")
+	respond(w, map[string]string{"status": "ok"})
+}
+
 // POST /api/openaev/config/test — Admin. Validates connectivity/credentials
 // before the operator flips enabled=true.
 func (h *Handler) TestOpenAEVConfig(w http.ResponseWriter, r *http.Request) {
