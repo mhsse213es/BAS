@@ -1,6 +1,6 @@
 //go:build windows
 
-//go:generate rsrc -manifest installer.exe.manifest -arch amd64 -o rsrc.syso
+//go:generate rsrc -manifest installer.exe.manifest -ico logo.ico -arch amd64 -o rsrc.syso
 
 package main
 
@@ -55,6 +55,7 @@ var (
 	procCreateAcceleratorTable = user32.NewProc("CreateAcceleratorTableW")
 	procTranslateAccelerator   = user32.NewProc("TranslateAcceleratorW")
 	procAdjustWindowRectEx     = user32.NewProc("AdjustWindowRectEx")
+	procLoadImage              = user32.NewProc("LoadImageW")
 
 	procCreateSolidBrush = gdi32.NewProc("CreateSolidBrush")
 	procCreateFont       = gdi32.NewProc("CreateFontW")
@@ -106,6 +107,9 @@ const (
 
 	COLOR_BTNFACE = 15
 
+	IMAGE_ICON = 1
+	LR_SHARED  = 0x00008000
+
 	EM_SETSEL = 0x00B1
 
 	FVIRTKEY = 0x01
@@ -134,7 +138,7 @@ const (
 
 const (
 	WINW = 520
-	HDR  = 96            // header banner height (client coords)
+	HDR  = 150           // header banner height (client coords) -- fits the Audspect logo lockup above the title/subtitle text
 	LPAD = 24            // left/right gutter
 	FW   = WINW - LPAD*2 // usable field width
 	EDTH = 28            // edit control height
@@ -378,14 +382,17 @@ func paintWindow(hdc uintptr) {
 	fillRect(hdc, 0, 0, WINW, HDR, hdrBrush)
 	procSetBkMode.Call(hdc, 1 /*TRANSPARENT*/)
 
+	// Audspect logo + wordmark, left-aligned above the title/subtitle text.
+	drawLogo(hdc, RECT{Left: LPAD, Top: 14, Right: LPAD + 170, Bottom: 14 + 56})
+
 	procSelectObject.Call(hdc, hFontTitle)
 	procSetTextColor.Call(hdc, colHdrTitle)
-	drawText(hdc, "BAS Platform Agent Setup", LPAD, 22, WINW-LPAD, 52,
+	drawText(hdc, "BAS Platform Agent Setup", LPAD, 86, WINW-LPAD, 116,
 		DT_LEFT|DT_SINGLELINE|DT_NOCLIP|DT_NOPREFIX)
 
 	procSelectObject.Call(hdc, hFontSub)
 	procSetTextColor.Call(hdc, colHdrSub)
-	drawText(hdc, "Breach & Attack Simulation - Audspect Security", LPAD, 58, WINW-LPAD, 80,
+	drawText(hdc, "Breach & Attack Simulation - Audspect Security", LPAD, 122, WINW-LPAD, 144,
 		DT_LEFT|DT_SINGLELINE|DT_NOCLIP|DT_NOPREFIX)
 }
 
@@ -658,6 +665,15 @@ func main() {
 
 	hInst, _, _ = procGetModuleHandle.Call(0)
 
+	// Resource ID 2 -- rsrc (see go:generate above) always assigns the
+	// manifest RT_MANIFEST resource ID 1 (a Windows loader requirement, not
+	// a choice), so our RT_GROUP_ICON from -ico logo.ico lands at the next
+	// ID, 2. Verified empirically against the built exe; if the go:generate
+	// flags ever change order, re-verify. LR_SHARED means Windows owns and
+	// caches the handle -- no DestroyIcon needed.
+	iconBig, _, _ := procLoadImage.Call(hInst, 2, IMAGE_ICON, 32, 32, LR_SHARED)
+	iconSm, _, _ := procLoadImage.Call(hInst, 2, IMAGE_ICON, 16, 16, LR_SHARED)
+
 	className := utf16("AudspectInstallerWnd")
 	wc := WNDCLASSEX{
 		Size:       uint32(unsafe.Sizeof(WNDCLASSEX{})),
@@ -665,6 +681,8 @@ func main() {
 		Instance:   hInst,
 		ClassName:  className,
 		Background: uintptr(COLOR_BTNFACE + 1), // default system light-grey body
+		Icon:       iconBig,
+		IconSm:     iconSm,
 	}
 	wc.Cursor, _, _ = procLoadCursor.Call(0, 32512 /*IDC_ARROW*/)
 	procRegisterClassEx.Call(uintptr(unsafe.Pointer(&wc)))

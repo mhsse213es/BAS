@@ -186,9 +186,14 @@ func runTray() {
 		0, 0, trayHInst, 0,
 	)
 
-	// Try loading our custom icon from the executable's resources (ID 1),
-	// falling back to standard shield if not present.
-	trayIcon, _, _ = trayLoadImage.Call(trayHInst, 1, tIMAGE_ICON, 0, 0, tLR_SHARED)
+	// Try loading our custom icon from the executable's resources, falling
+	// back to standard shield if not present. rsrc (see go:generate in
+	// main.go) always assigns the manifest RT_MANIFEST resource ID 1 --
+	// that's a Windows requirement, not a choice, since the OS loader only
+	// picks up an embedded manifest at ID 1 -- so our RT_GROUP_ICON (from
+	// -ico logo.ico) lands at the next ID, 2. Verified empirically against
+	// the built exe; if the go:generate flags ever change order, re-verify.
+	trayIcon, _, _ = trayLoadImage.Call(trayHInst, 2, tIMAGE_ICON, 0, 0, tLR_SHARED)
 	if trayIcon == 0 {
 		trayIcon, _, _ = trayLoadImage.Call(0, tIDI_SHIELD, tIMAGE_ICON, 0, 0, tLR_SHARED)
 	}

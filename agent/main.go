@@ -1,4 +1,4 @@
-//go:generate rsrc -manifest bas_agent.exe.manifest -arch amd64 -o rsrc.syso
+//go:generate rsrc -manifest bas_agent.exe.manifest -ico logo.ico -arch amd64 -o rsrc.syso
 
 package main
 
