@@ -101,6 +101,7 @@ type Handler struct {
 	scheduler            *connector.Scheduler   // nil when no sources configured
 	ticketing            *ticketing.Manager     // nil when no connectors configured
 	licPath              string                 // path to bas.lic for Settings → License display
+	publicBaseURL        string                 // orchestrator's externally-reachable base URL; used for {{SINK_URL}} substitution and exercise tracker links
 	exerciseStore        *exercise.Store
 	exerciseExecutor     *exercise.Executor
 	exerciseChain        *exercise.EvidenceChain
@@ -364,6 +365,13 @@ func (h *Handler) WithManifest(m *integrity.Manifest) *Handler {
 
 func (h *Handler) WithLicensePath(path string) *Handler {
 	h.licPath = path
+	return h
+}
+
+// WithPublicBaseURL sets the orchestrator's externally-reachable base URL,
+// used to build {{SINK_URL}} for DLP sink-wired scenario steps.
+func (h *Handler) WithPublicBaseURL(url string) *Handler {
+	h.publicBaseURL = url
 	return h
 }
 
@@ -1466,6 +1474,12 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		return "", "", fmt.Errorf("build steps: %w", err)
 	}
 	steps = h.applyGeneratedArtifacts(ctx, sc.ID, runID, agentID, steps)
+	steps, err = h.issueSinkTokensAndSubstitute(ctx, runID, h.publicBaseURL, steps)
+	if err != nil {
+		_, _ = h.db.Exec(context.Background(),
+			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		return "", "", fmt.Errorf("issue sink tokens: %w", err)
+	}
 	// stepsTotalBase captures the scenario's full base-technique step count for
 	// this run's configuration (reflecting any operator-selected subset) before
 	// any runtime filtering — the "Total" side of Scenario Coverage.

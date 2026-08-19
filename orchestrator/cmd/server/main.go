@@ -537,6 +537,7 @@ func main() {
 		WithCorrelation(correlationEngine).
 		WithTicketing(ticketingManager).
 		WithLicensePath(cfg.LicensePath).
+		WithPublicBaseURL(cfg.PublicBaseURL).
 		WithExercise(exStore, exExecutor, exChain).
 		WithVerificationStore(verificationStore).
 		WithRelationshipStore(relationshipStore).
