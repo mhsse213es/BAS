@@ -2103,6 +2103,23 @@ body.theme-slate {
                 <span id="openaev-status-badge" class="badge"></span>
               </div>
               <div id="openaev-config-panel"></div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Status</span>
+                <span id="cs-openaev-status" class="conn-cfg-val">—</span>
+              </div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Scenarios Synced</span>
+                <span id="cs-openaev-scenarios" class="conn-cfg-val">—</span>
+              </div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Created / Updated</span>
+                <span id="cs-openaev-created" class="conn-cfg-val">—</span>
+              </div>
+              <div class="conn-cfg-row">
+                <span class="conn-cfg-label">Last Fetch</span>
+                <span id="cs-openaev-lastfetch" class="conn-cfg-val">—</span>
+              </div>
+              <div id="cs-openaev-error" style="display:none;margin-top:0.5rem;font-size:0.72rem;color:#f85149"></div>
             </div>
           </div>
 
@@ -6305,6 +6322,7 @@ function loadOpenAEVConfig() {
           '<button class="btn btn-outline btn-sm" onclick="testOpenAEVConfig()">Test Connection</button>' +
           '<button class="btn btn-primary btn-sm" onclick="saveOpenAEVConfig()">Save</button>' +
           '<button class="btn btn-outline btn-sm" onclick="syncOpenAEVNow()">Sync Now</button>' +
+          (cfg.configured ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="removeOpenAEVConfig()">Remove</button>' : '') +
           '<span id="oaev-test-result" class="tiny muted"></span>' +
         '</div>';
     }).catch(function() {});
@@ -6323,7 +6341,43 @@ function loadOpenAEVConfig() {
     }
     badge.textContent = x(label);
     badge.style.color = color;
+
+    // Info-row grid -- same visual shape as the MISP/OpenCTI cards
+    // (_renderConnectorCard), using OpenAEV's own status fields (scenario
+    // sync counts, not threat-actor extraction).
+    var statusEl = document.getElementById('cs-openaev-status');
+    if (statusEl) {
+      if (s.lastSyncStatus === 'error') { statusEl.textContent = '⚠ Error'; statusEl.style.color = '#f85149'; }
+      else if (s.lastSyncStatus === 'ok') { statusEl.textContent = '✓ Connected'; statusEl.style.color = '#5cead8'; }
+      else { statusEl.textContent = '— Not synced yet'; statusEl.style.color = 'var(--muted)'; }
+    }
+    var scenariosEl = document.getElementById('cs-openaev-scenarios');
+    if (scenariosEl) scenariosEl.textContent = (s.scenarioCount || 0).toLocaleString();
+    var createdEl = document.getElementById('cs-openaev-created');
+    if (createdEl) createdEl.textContent = (s.lastSyncCreated || 0) + ' / ' + (s.lastSyncUpdated || 0);
+    var lastFetchEl = document.getElementById('cs-openaev-lastfetch');
+    if (lastFetchEl) lastFetchEl.textContent = s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : '—';
+    var errEl = document.getElementById('cs-openaev-error');
+    if (errEl) {
+      if (s.lastError) { errEl.textContent = s.lastError; errEl.style.display = ''; }
+      else { errEl.style.display = 'none'; }
+    }
   }).catch(function() {});
+}
+
+// removeOpenAEVConfig deletes the stored base URL + bearer token entirely
+// (unlike unchecking Enabled + Save, which stops syncing but leaves the
+// credentials in place) -- confirmed first since it's destructive. Mirrors
+// removeConnectorConfig's existing precedent for MISP/OpenCTI/OTX.
+function removeOpenAEVConfig() {
+  var rows = _diffRow('Base URL', OAEV_CONFIG_LOADED.baseUrl, '(removed)') +
+    '<div class="tiny muted" style="margin-top:0.4rem">This deletes the stored bearer token too. OpenAEV will stop syncing immediately.</div>';
+  openConfirmDiffModal('Remove OpenAEV Config', rows, function() {
+    apicall('/api/openaev/config', { method: 'DELETE' }).then(function() {
+      showToast('OpenAEV config removed', 'ok');
+      loadOpenAEVConfig();
+    }).catch(function(e) { showToast('Remove failed: ' + (e.message || 'error'), 'err'); });
+  });
 }
 
 function loadOpenAEVScenarios(type, bodyId, emptyId) {

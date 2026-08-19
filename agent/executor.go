@@ -127,7 +127,13 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 	// switch to the logged-in user's token via WTS; on POSIX it is a no-op.
 	// Must be called BEFORE setting cmd.Env below so user-context env is
 	// established first and step overrides can then be layered on top.
-	executedAs := applyExecutionContext(cmd, step)
+	//
+	// releaseExecCtx must stay open until after cmd.Start() has consumed it —
+	// on Windows it holds the WTS token CreateProcessAsUserW needs at launch,
+	// so deferring it here (rather than closing inside applyExecutionContext)
+	// is required, not just tidy.
+	executedAs, releaseExecCtx := applyExecutionContext(cmd, step)
+	defer releaseExecCtx()
 
 	// If applyExecutionContext did not already set cmd.Env (i.e. agent context),
 	// apply step-level env overrides now.
@@ -158,11 +164,13 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 			stderrMsg = "step interrupted by scenario cancellation"
 		}
 		return ExecResult{
-			TaskID:     step.TaskID,
-			ExitCode:   -1,
-			Stderr:     stderrMsg,
-			DurationMs: time.Since(before).Milliseconds(),
-			ExecutedAt: time.Now(),
+			TaskID:        step.TaskID,
+			ExitCode:      -1,
+			Stderr:        stderrMsg,
+			DurationMs:    time.Since(before).Milliseconds(),
+			ExecutedAt:    time.Now(),
+			RequestedPriv: step.RequiresPriv,
+			ExecutedAs:    executedAs,
 		}
 	}
 
@@ -199,7 +207,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 			case <-t.C:
 			}
 		}
-		terminateStepJob(job) // kills entire tree: parent + all spawned children
+		terminateStepJob(job, stepPID) // kills entire tree: parent + all spawned children, plus a PID sweep
 	}()
 
 	err := cmd.Wait()

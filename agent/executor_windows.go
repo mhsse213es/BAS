@@ -113,17 +113,20 @@ else { Write-Output "WMI_TIMEOUT: inner process did not write output within time
 
 // applyExecutionContext resolves the privilege context for a step, optionally
 // switches the cmd to run under the logged-in user's token (for "user" steps),
-// and returns the label that should be recorded in ExecResult.ExecutedAs.
+// and returns the label that should be recorded in ExecResult.ExecutedAs plus
+// a cleanup func that closes the token.
 //
-// When token resolution succeeds the caller is responsible for closing the
-// token after the process has started — we close it here because exec.Cmd.Start
-// duplicates the token before the process is created.
-func applyExecutionContext(cmd *exec.Cmd, step ScenarioStep) string {
+// The token must stay open until after cmd.Start() has used it: exec.Cmd.Start
+// passes SysProcAttr.Token to CreateProcessAsUserW as-is, it does NOT duplicate
+// it first. Closing the token before Start() runs (as this function used to do
+// via its own defer) invalidates the handle out from under CreateProcessAsUserW,
+// which fails every such launch with "the handle is invalid". The caller must
+// defer the returned cleanup itself, after Start() has been called.
+func applyExecutionContext(cmd *exec.Cmd, step ScenarioStep) (string, func()) {
 	tok, label := agentContextFor(step)
 	if tok == 0 {
-		return label // running in agent's own context — no token switch needed
+		return label, func() {} // running in agent's own context — no token switch needed
 	}
-	defer tok.Close()
 
 	env, _ := buildUserEnv(tok, step)
 	cmd.Env = env
@@ -134,7 +137,7 @@ func applyExecutionContext(cmd *exec.Cmd, step ScenarioStep) string {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	cmd.SysProcAttr.Token = syscall.Token(tok)
-	return label
+	return label, func() { tok.Close() }
 }
 
 // hostIsDomainController reports whether this Windows host is a domain controller.

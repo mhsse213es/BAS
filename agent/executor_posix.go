@@ -52,17 +52,22 @@ func hostIsDomainController() bool { return false }
 // via SysProcAttr.Credential — the POSIX equivalent of CreateProcessAsUser.
 //
 // Requires the agent to be running as root (CAP_SETUID/CAP_SETGID).
-func applyExecutionContext(cmd *exec.Cmd, step ScenarioStep) string {
+//
+// The returned cleanup func has nothing to release on POSIX (Credential is a
+// plain value, not a handle) — it exists only to keep the signature identical
+// to the Windows build, which does hold a closable token.
+func applyExecutionContext(cmd *exec.Cmd, step ScenarioStep) (string, func()) {
+	noop := func() {}
 	switch step.RequiresPriv {
 	case "":
-		return ""
+		return "", noop
 	case "admin", "system":
-		return step.RequiresPriv
+		return step.RequiresPriv, noop
 	case "user":
 		ctx, ok := activeUserCtx()
 		if !ok {
 			// No interactive session — fall back to agent context, record honestly.
-			return "user→admin"
+			return "user→admin", noop
 		}
 		if cmd.SysProcAttr == nil {
 			cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -74,9 +79,9 @@ func applyExecutionContext(cmd *exec.Cmd, step ScenarioStep) string {
 			NoSetGroups: len(ctx.groups) == 0,
 		}
 		cmd.Env = buildPosixUserEnv(ctx, step)
-		return "user"
+		return "user", noop
 	default:
-		return ""
+		return "", noop
 	}
 }
 

@@ -17,33 +17,23 @@ import (
 // ── Win32 constants ───────────────────────────────────────────────────────────
 
 const (
-	wmCommand          = uintptr(0x0111) // WM_COMMAND
-	wmClose            = uintptr(0x0010) // WM_CLOSE
-	idCancel           = uintptr(2)      // IDCANCEL — "No / Cancel" button
-	th32csSnapProcess  = uint32(0x00000002)
+	wmCommand         = uintptr(0x0111) // WM_COMMAND
+	wmClose           = uintptr(0x0010) // WM_CLOSE
+	idCancel          = uintptr(2)      // IDCANCEL — "No / Cancel" button
+	th32csSnapProcess = uint32(0x00000002)
 )
-
-// dialogClasses is the set of window class names that indicate an interactive
-// blocking dialog. We dismiss any visible window in this set that is owned by
-// an active scenario step process.
-var dialogClasses = map[string]bool{
-	"#32770":           true, // Standard Win32 dialog — MessageBox, common dialogs
-	"TaskDialogWindow": true, // Vista+ TaskDialog (UAC-style rich dialogs)
-	"MsgBoxDlg":        true, // Some application-defined dialog class
-	"#32769":           true, // Desktop — sometimes wraps a stuck dialog
-}
 
 // ── Lazy user32 procs (unique prefix to avoid name conflicts) ─────────────────
 
 var (
 	dlgUser32 = windows.NewLazySystemDLL("user32.dll")
 
-	procDlgEnumWindows     = dlgUser32.NewProc("EnumWindows")
-	procDlgGetWinPID       = dlgUser32.NewProc("GetWindowThreadProcessId")
-	procDlgIsVisible       = dlgUser32.NewProc("IsWindowVisible")
-	procDlgPostMsg         = dlgUser32.NewProc("PostMessageW")
-	procDlgGetClassName    = dlgUser32.NewProc("GetClassNameW")
-	procDlgGetWindowText   = dlgUser32.NewProc("GetWindowTextW")
+	procDlgEnumWindows   = dlgUser32.NewProc("EnumWindows")
+	procDlgGetWinPID     = dlgUser32.NewProc("GetWindowThreadProcessId")
+	procDlgIsVisible     = dlgUser32.NewProc("IsWindowVisible")
+	procDlgPostMsg       = dlgUser32.NewProc("PostMessageW")
+	procDlgGetClassName  = dlgUser32.NewProc("GetClassNameW")
+	procDlgGetWindowText = dlgUser32.NewProc("GetWindowTextW")
 )
 
 // ── Active scenario PID tracking ─────────────────────────────────────────────
@@ -97,8 +87,18 @@ func startDismisser(ctx context.Context) {
 	}()
 }
 
-// enumDlgCB is allocated once. It collects visible dialog-class window handles
-// into the []uintptr slice whose address is passed as lParam.
+// enumDlgCB is allocated once. It collects every visible top-level window
+// handle into the []uintptr slice whose address is passed as lParam --
+// unfiltered by window class. An earlier version only matched a hardcoded
+// allowlist of standard Win32 dialog classes (#32770, TaskDialogWindow,
+// MsgBoxDlg), which let anything with a custom-rendered window (a real
+// browser window, an Electron app, any GUI app that isn't a plain message
+// box) block a step forever, invisible to the dismisser. Ownership is what
+// actually matters here, not class: dismissScenarioDialogs below filters to
+// windows owned by a tracked scenario-step process (or its descendants), so
+// broadening this to "every window" only expands what a stuck step's own
+// process tree can be rescued from -- it can't affect windows belonging to
+// anything else running on the box.
 // EnumWindows is synchronous so the slice lives on the caller's stack frame
 // for the entire duration of the callback — safe to pass as unsafe.Pointer.
 var enumDlgCB = syscall.NewCallback(func(hwnd, lParam uintptr) uintptr {
@@ -108,20 +108,14 @@ var enumDlgCB = syscall.NewCallback(func(hwnd, lParam uintptr) uintptr {
 		return 1 // continue enumeration
 	}
 
-	// Check window class.
-	var buf [256]uint16
-	procDlgGetClassName.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
-	if !dialogClasses[windows.UTF16ToString(buf[:])] {
-		return 1
-	}
-
 	results := (*[]uintptr)(unsafe.Pointer(lParam))
 	*results = append(*results, hwnd)
 	return 1
 })
 
 func dismissScenarioDialogs() {
-	// Collect all visible dialog windows on the desktop.
+	// Collect every visible top-level window on the desktop; filtered to
+	// scenario-owned ones below.
 	// KeepAlive pins the slice header so the GC doesn't move it while the
 	// synchronous EnumWindows callback is writing into it via unsafe.Pointer.
 	var dialogs []uintptr
@@ -141,12 +135,18 @@ func dismissScenarioDialogs() {
 			continue
 		}
 
-		// Read the title for the audit log.
+		// Read the title and class for the audit log -- class is diagnostic
+		// only now (not filtered on), useful for seeing which GUI apps are
+		// actually blocking steps in practice.
 		var title [256]uint16
 		procDlgGetWindowText.Call(hwnd, uintptr(unsafe.Pointer(&title[0])), uintptr(len(title)))
 		titleStr := windows.UTF16ToString(title[:])
 
-		log.Printf("[BAS-DISMISS] dialog auto-dismissed: pid=%d title=%q", pid, titleStr)
+		var class [256]uint16
+		procDlgGetClassName.Call(hwnd, uintptr(unsafe.Pointer(&class[0])), uintptr(len(class)))
+		classStr := windows.UTF16ToString(class[:])
+
+		log.Printf("[BAS-DISMISS] window auto-dismissed: pid=%d class=%q title=%q", pid, classStr, titleStr)
 
 		// PostMessage is non-blocking — we don't wait for the dialog to close.
 		// IDCANCEL first: handles dialogs with a Cancel / No button.

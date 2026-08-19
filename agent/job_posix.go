@@ -7,5 +7,5 @@ package main
 // on POSIX — the signal propagates to the entire process group automatically.
 
 func newStepJob(_ int) (uintptr, error) { return 0, nil }
-func terminateStepJob(_ uintptr)        {}
+func terminateStepJob(_ uintptr, _ int) {}
 func closeStepJob(_ uintptr)            {}

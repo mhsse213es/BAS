@@ -12,7 +12,7 @@ import (
 
 // Separate lazy-DLL var name to avoid conflict with modKernel32 in suppress_windows.go.
 var (
-	jobKernel32                = windows.NewLazySystemDLL("kernel32.dll")
+	jobKernel32                 = windows.NewLazySystemDLL("kernel32.dll")
 	procSetInformationJobObject = jobKernel32.NewProc("SetInformationJobObject")
 )
 
@@ -114,15 +114,72 @@ func newStepJob(pid int) (uintptr, error) {
 	return uintptr(job), nil
 }
 
-// terminateStepJob immediately terminates every process in the job.
-// Called from the context-watcher goroutine when a step times out or is cancelled.
-// After this call, cmd.Wait() returns quickly because the main process is dead.
-func terminateStepJob(job uintptr) {
-	if job == 0 {
+// terminateStepJob immediately terminates every process in the job, then
+// always also sweeps by PID via killProcessTree. The PID sweep is not
+// redundant: TerminateJobObject only reaches processes actually inside the
+// job, and a process can end up outside it two ways -- the job assignment
+// itself failed (newStepJob logs "timeout will only kill direct child" and
+// returns job=0, e.g. because the target was already in a different job,
+// which real-world apps like Chrome commonly are for their own sandboxing),
+// or a child process used CREATE_BREAKAWAY_FROM_JOB to opt out after a
+// successful assignment. Either way, pid is the one thing we always have --
+// walking the live process tree from it catches what the job could not.
+// Called from the context-watcher goroutine when a step times out or is
+// cancelled. After this call, cmd.Wait() returns quickly because the main
+// process is dead.
+func terminateStepJob(job uintptr, pid int) {
+	if job != 0 {
+		if err := windows.TerminateJobObject(windows.Handle(job), 1); err != nil {
+			log.Printf("[job] TerminateJobObject: %v", err)
+		}
+	}
+	killProcessTree(uint32(pid))
+}
+
+// killProcessTree force-terminates pid and every one of its descendant
+// processes (any depth), walking the live process table directly -- entirely
+// independent of Job Objects, so it still works when a process could not be
+// (or no longer is) job-assigned. Safe to call on PIDs that have already
+// exited: OpenProcess simply fails for them and they're skipped.
+func killProcessTree(pid uint32) {
+	snap, err := windows.CreateToolhelp32Snapshot(th32csSnapProcess, 0)
+	if err != nil {
+		log.Printf("[job] killProcessTree: snapshot: %v", err)
 		return
 	}
-	if err := windows.TerminateJobObject(windows.Handle(job), 1); err != nil {
-		log.Printf("[job] TerminateJobObject: %v", err)
+	defer windows.CloseHandle(snap)
+
+	parentOf := make(map[uint32]uint32, 128)
+	var entry windows.ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+	for err = windows.Process32First(snap, &entry); err == nil; err = windows.Process32Next(snap, &entry) {
+		parentOf[entry.ProcessID] = entry.ParentProcessID
+	}
+
+	// BFS out from pid to every descendant, any depth.
+	toKill := map[uint32]bool{pid: true}
+	for changed := true; changed; {
+		changed = false
+		for candidate, parent := range parentOf {
+			if toKill[parent] && !toKill[candidate] {
+				toKill[candidate] = true
+				changed = true
+			}
+		}
+	}
+
+	killed := 0
+	for target := range toKill {
+		ph, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, target)
+		if err != nil {
+			continue // already exited, or access denied — nothing more we can do
+		}
+		windows.TerminateProcess(ph, 1)
+		windows.CloseHandle(ph)
+		killed++
+	}
+	if killed > 0 {
+		log.Printf("[job] killProcessTree: terminated %d process(es) rooted at pid=%d", killed, pid)
 	}
 }
 
