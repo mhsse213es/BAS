@@ -4983,7 +4983,7 @@ function renderLicenseLockedScreen(info) {
     '<div style="max-width:520px;text-align:center;color:var(--text,#e6e6e6)">' +
       '<div style="font-size:2.5rem;margin-bottom:1rem">&#x1F512;</div>' +
       '<h1 style="font-size:1.4rem;margin-bottom:0.75rem">BAS LICENSE EXPIRED</h1>' +
-      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem">This Audspect BAS installation is currently unavailable because its license and grace period have expired.</p>' +
+      '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1rem">This Audspect BAS Server is currently unavailable because its license and grace period have expired.</p>' +
       '<p style="color:var(--muted,#9aa9bc);line-height:1.6;margin-bottom:1.5rem">Please contact your licensing administrator to renew the license.</p>' +
       '<div style="font-size:0.85rem;color:var(--muted,#9aa9bc);margin-bottom:1.5rem">' +
         'License Expiry: ' + x(info.expiresAt) + '<br>' +
@@ -11099,7 +11099,8 @@ function runRowHtml(r) {
     '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
     '<td style="font-weight:500">' + x(r.name) + '</td>' +
     '<td><code>' + x(r.agentId) + '</code></td>' +
-    '<td><span class="sbadge s-' + x(r.status) + '">' + x(r.status) + '</span></td>' +
+    '<td><span class="sbadge ' + (r.agentDisconnected && r.status === 'running' ? 's-agent_disconnected' : 's-' + x(r.status)) + '">' +
+        (r.agentDisconnected && r.status === 'running' ? 'Agent Disconnected' : x(r.status)) + '</span></td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + x(r.initiatedBy || '—') + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(r.startedAt) + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
