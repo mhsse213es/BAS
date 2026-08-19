@@ -250,16 +250,36 @@ type TechniqueMeta struct {
 // ListTechniqueMeta returns one catalog entry per technique that has at least one
 // Windows step, sorted by technique ID. Drives the live count shown on sweep cards
 // and the selectable technique picker.
+//
+// Tests/Name reflect only the technique's Windows steps -- a technique whose
+// atomics are a mix of platforms (e.g. some Windows, some Linux) must not
+// have its Windows-facing Tests count inflated by non-Windows entries, and
+// its representative Name must be a Windows step (never the first entry in
+// steps[id] regardless of platform, which could be a Linux-only atomic).
 func (s *ARTStore) ListTechniqueMeta() []TechniqueMeta {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]TechniqueMeta, 0, len(s.steps))
 	for id, steps := range s.steps {
 		name := ""
-		if len(steps) > 0 {
-			name = steps[0].Name
+		winCount := 0
+		for _, st := range steps {
+			p := st.Platform
+			if p == "" {
+				p = "windows"
+			}
+			if !strings.EqualFold(p, "windows") {
+				continue
+			}
+			if name == "" {
+				name = st.Name
+			}
+			winCount++
 		}
-		out = append(out, TechniqueMeta{ID: id, Name: name, Tests: len(steps), Tactic: models.LookupTactic(id)})
+		if winCount == 0 {
+			continue // no Windows step at all -- excluded, matching ListTechniquesByPlatform("windows")
+		}
+		out = append(out, TechniqueMeta{ID: id, Name: name, Tests: winCount, Tactic: models.LookupTactic(id)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out

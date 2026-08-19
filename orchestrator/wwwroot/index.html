@@ -3770,7 +3770,9 @@ body.theme-slate {
                 <svg viewBox="0 0 20 20" fill="none" stroke="var(--accent)" stroke-width="1.6" style="width:16px;height:16px;flex-shrink:0"><path d="M3 10a7 7 0 1 1 14 0A7 7 0 0 1 3 10z"/><path d="m10 7 3 3-3 3M7 10h6"/></svg>
                 Full Variant Sweep
               </div>
-              <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> ART techniques<span id="vex-sweep-caldera-count"></span> sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
+              <div class="tiny muted">Run all <strong id="vex-sweep-tech-count" style="color:var(--text)">—</strong> Windows-runnable ART techniques<span id="vex-sweep-caldera-count"></span> sequentially · <span id="vex-sweep-total-variants" style="color:var(--text)">—</span> total variants ·
+                <button type="button" class="btn btn-sm" onclick="showVexStatHelp('Windows-runnable ART techniques','This is the subset of ART techniques that have at least one Windows atomic test — see Settings → Simulation Engine for the full breakdown (total ART techniques, how many are Windows-runnable, and total atomic tests across all of them). Techniques with Linux/macOS-only atomics are excluded here since this sweep only runs on Windows agents.')" title="Why this number?" style="padding:0 3px;line-height:1;font-size:0.68rem;color:var(--muted);background:transparent;border:none;text-decoration:underline;cursor:pointer">why this number?</button>
+                · <span class="tiny muted">runs technique-by-technique; you can see live progress</span></div>
             </div>
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
               <div style="display:flex;gap:0.6rem;margin-right:0.4rem">

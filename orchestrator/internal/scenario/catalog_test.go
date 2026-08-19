@@ -32,6 +32,43 @@ func TestListTechniqueMeta(t *testing.T) {
 	}
 }
 
+// TestListTechniqueMeta_ExcludesTechniquesWithNoWindowsStep proves
+// ListTechniqueMeta actually honors its own doc comment ("returns one
+// catalog entry per technique that has at least one Windows step").
+// Previously it returned every technique key in the store unconditionally,
+// with no platform check at all -- inconsistent with the sibling
+// ListTechniquesByPlatform("windows") (used by /api/art/content/status'
+// windowsRunnable count), which does filter correctly. That inconsistency
+// is exactly why the Full Variant Sweep card and the Customize technique
+// picker showed 314 techniques (ListTechniqueMeta, unfiltered) while a
+// non-customized full sweep actually only dispatched 268 (the real
+// Windows-runnable count) -- two different functions over the same data,
+// silently disagreeing.
+func TestListTechniqueMeta_ExcludesTechniquesWithNoWindowsStep(t *testing.T) {
+	store := &ARTStore{steps: map[string][]ScenarioStep{
+		"T1059": {{Name: "exec", TechniqueID: "T1059", Platform: "windows", Executor: "powershell", Command: "whoami"}},
+		"T1499": {{Name: "linux dos", TechniqueID: "T1499", Platform: "linux", Executor: "sh", Command: "true"}},
+		"T1204": {{Name: "no platform set", TechniqueID: "T1204", Executor: "powershell", Command: "whoami"}}, // empty Platform defaults to windows
+	}}
+	meta := store.ListTechniqueMeta()
+	ids := make(map[string]bool, len(meta))
+	for _, m := range meta {
+		ids[m.ID] = true
+	}
+	if !ids["T1059"] {
+		t.Error("T1059 (has a windows step) should be included")
+	}
+	if !ids["T1204"] {
+		t.Error("T1204 (empty Platform, defaults to windows) should be included")
+	}
+	if ids["T1499"] {
+		t.Error("T1499 (linux-only, no windows step at all) must be excluded -- ListTechniqueMeta's own doc comment promises windows-only")
+	}
+	if len(meta) != 2 {
+		t.Errorf("len(meta) = %d, want 2 (T1499 excluded)", len(meta))
+	}
+}
+
 // UnknownTechniques flags only the IDs absent from the store and is case/space
 // insensitive on the valid ones.
 func TestUnknownTechniques(t *testing.T) {
