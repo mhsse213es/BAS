@@ -84,6 +84,9 @@ func (j *Job) processRun(ctx context.Context, runID, scenarioID string, resultsR
 			return err
 		}
 	}
+	if err := j.annotateSinkReceipts(ctx, runID, results); err != nil {
+		return err
+	}
 	specs := reporting.ResolveStepDetectionSpecs(j.scenarios, scenarioID)
 	if len(specs) == 0 {
 		return nil // nothing declared any expectation
@@ -116,6 +119,47 @@ func (j *Job) processRun(ctx context.Context, runID, scenarioID string, resultsR
 			RuleIDs:       vr.RuleIDs,
 		}); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// annotateSinkReceipts sets SinkTokenObserved on each result whose
+// technique had a sink token issued for this run -- true if
+// dlp_sink_receipts shows it was received at least once, false if the
+// token was issued but never received, left nil (untouched) for any
+// technique with no issued token at all. Mutates results in place; this
+// is the one place in the DLP sink verification path that touches the
+// database -- internal/reporting stays a pure function throughout.
+func (j *Job) annotateSinkReceipts(ctx context.Context, runID string, results []models.SimulationResult) error {
+	rows, err := j.db.Query(ctx,
+		`SELECT t.technique_id, EXISTS (
+		   SELECT 1 FROM dlp_sink_receipts r WHERE r.token = t.token
+		 ) AS received
+		 FROM dlp_sink_tokens t WHERE t.run_id = $1`,
+		runID,
+	)
+	if err != nil {
+		return err
+	}
+	observed := map[string]bool{}
+	for rows.Next() {
+		var techniqueID string
+		var received bool
+		if err := rows.Scan(&techniqueID, &received); err != nil {
+			rows.Close()
+			return err
+		}
+		observed[techniqueID] = received
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range results {
+		if received, ok := observed[results[i].ID]; ok {
+			r := received
+			results[i].SinkTokenObserved = &r
 		}
 	}
 	return nil

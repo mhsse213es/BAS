@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/testutil"
@@ -148,3 +149,54 @@ func TestTick_MarksProcessedRunsAutoVerified(t *testing.T) {
 }
 
 var _ reporting.ScenarioResolver = fakeResolver{}
+
+func TestAnnotateSinkReceipts_SetsObservedOnlyForIssuedTokens(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		store := verification.NewStore(pool)
+		job := NewJob(pool, store, fakeResolver{})
+
+		// T1567: token issued AND received -> want true.
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO dlp_sink_tokens (token, run_id, technique_id, expires_at)
+			 VALUES ('tok-received', 'run-sink-annotate', 'T1567', NOW() + interval '10 minutes')`); err != nil {
+			t.Fatalf("seed dlp_sink_tokens (received): %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO dlp_sink_receipts (token, payload_hash, payload_size, channel)
+			 VALUES ('tok-received', 'deadbeef', 42, 'https-post')`); err != nil {
+			t.Fatalf("seed dlp_sink_receipts: %v", err)
+		}
+
+		// T1052.001: token issued, never received -> want false.
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO dlp_sink_tokens (token, run_id, technique_id, expires_at)
+			 VALUES ('tok-not-received', 'run-sink-annotate', 'T1052.001', NOW() + interval '10 minutes')`); err != nil {
+			t.Fatalf("seed dlp_sink_tokens (not received): %v", err)
+		}
+
+		// T1115: no token issued at all -> want nil (untouched).
+		results := []models.SimulationResult{
+			{ID: "T1567"},
+			{ID: "T1052.001"},
+			{ID: "T1115"},
+		}
+
+		if err := job.annotateSinkReceipts(ctx, "run-sink-annotate", results); err != nil {
+			t.Fatalf("annotateSinkReceipts: %v", err)
+		}
+
+		if results[0].SinkTokenObserved == nil || !*results[0].SinkTokenObserved {
+			t.Errorf("T1567 SinkTokenObserved = %v, want true", results[0].SinkTokenObserved)
+		}
+		if results[1].SinkTokenObserved == nil || *results[1].SinkTokenObserved {
+			t.Errorf("T1052.001 SinkTokenObserved = %v, want false", results[1].SinkTokenObserved)
+		}
+		if results[2].SinkTokenObserved != nil {
+			t.Errorf("T1115 SinkTokenObserved = %v, want nil (no token was ever issued for this technique)", *results[2].SinkTokenObserved)
+		}
+	})
+}
