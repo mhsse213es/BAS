@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/audspect/bas/internal/dnssink"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,17 +18,30 @@ import (
 func TestGenerateSinkToken_ProducesUniqueUnpredictableValues(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < 100; i++ {
-		tok, err := generateSinkToken()
+		tok, err := generateSinkToken(32)
 		if err != nil {
-			t.Fatalf("generateSinkToken: %v", err)
+			t.Fatalf("generateSinkToken(32): %v", err)
 		}
-		if len(tok) < 32 {
-			t.Fatalf("token %q too short to be meaningfully unpredictable (crypto/rand, not a timestamp)", tok)
+		if len(tok) != 64 { // 32 bytes hex-encoded = 64 chars
+			t.Fatalf("token %q wrong length for 32-byte input: got %d chars, want 64", tok, len(tok))
 		}
 		if seen[tok] {
 			t.Fatalf("generateSinkToken produced a duplicate: %q", tok)
 		}
 		seen[tok] = true
+	}
+}
+
+func TestGenerateSinkToken_ShorterLengthForDNSLabelSafety(t *testing.T) {
+	tok, err := generateSinkToken(8)
+	if err != nil {
+		t.Fatalf("generateSinkToken(8): %v", err)
+	}
+	if len(tok) != 16 { // 8 bytes hex-encoded = 16 chars
+		t.Fatalf("token %q wrong length for 8-byte input: got %d chars, want 16", tok, len(tok))
+	}
+	if len(tok) > 63 {
+		t.Fatalf("token %q exceeds the 63-character DNS label limit", tok)
 	}
 }
 
@@ -142,4 +156,57 @@ func TestDLPSink_UnrecognizedTokenStillReturns200(t *testing.T) {
 			t.Fatalf("status = %d, want 200 even for an unrecognized token", rec.Code)
 		}
 	})
+}
+
+func TestIssueSinkTokensAndSubstitute_DNSPlaceholders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1071.004", Command: "nslookup 000.4.{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}} {{SINK_DNS_SERVER}}"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-dns-1", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		cmd := out[0].Command
+		if strings.Contains(cmd, "{{SINK_DNS_CAMPAIGN_ID}}") || strings.Contains(cmd, "{{SINK_DNS_SERVER}}") || strings.Contains(cmd, "{{SINK_DNS_DOMAIN}}") {
+			t.Fatalf("DNS placeholders not fully substituted: %s", cmd)
+		}
+		if !strings.Contains(cmd, "orchestrator.example") {
+			t.Fatalf("expected the bare host in the command: %s", cmd)
+		}
+		if strings.Contains(cmd, "orchestrator.example:9443") {
+			t.Fatalf("SINK_DNS_SERVER must not include the port: %s", cmd)
+		}
+		if !strings.Contains(cmd, dnssink.DomainSuffix) {
+			t.Fatalf("expected dnssink.DomainSuffix (%s) in the command: %s", dnssink.DomainSuffix, cmd)
+		}
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM dlp_sink_tokens WHERE run_id = 'run-dns-1' AND technique_id = 'T1071.004'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("dlp_sink_tokens rows for run-dns-1/T1071.004 = %d, want 1", count)
+		}
+	})
+}
+
+func TestDNSServerHost_StripsSchemeAndPort(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://orchestrator.example:9443", "orchestrator.example"},
+		{"https://10.0.0.5:9443", "10.0.0.5"},
+		{"http://localhost", "localhost"},
+	}
+	for _, c := range cases {
+		got := dnsServerHost(c.in)
+		if got != c.want {
+			t.Errorf("dnsServerHost(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
 }
