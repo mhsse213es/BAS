@@ -134,6 +134,12 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.Post("/x/hook/{token}", tr.HandleWebhook) // inbound webhook from external systems
 	}
 
+	// DLP exfiltration sink — no auth; a per-attempt single-use token
+	// (issued at dispatch time, see internal/api/dlp_sink.go) is the sole
+	// correlation mechanism. Same "no auth; single-use tokens gate access"
+	// pattern as the exercise-tracking routes above.
+	r.Post("/api/dlp/sink", h.DLPSink)
+
 	// ── Authenticated endpoints (JWT required) ────────────────────────────
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(jwtSecret))

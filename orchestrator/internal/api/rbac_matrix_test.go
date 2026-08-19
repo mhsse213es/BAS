@@ -397,6 +397,7 @@ var publicRoutes = map[string]bool{
 	"GET /ws/browser":                             true,
 	"POST /api/ticketing/webhook/{configId}":      true,
 	"GET /health":                                 true,
+	"POST /api/dlp/sink":                          true,
 }
 
 func tierAllows(tier authTier, perm auth.Permission, role auth.Role) bool {
