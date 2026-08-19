@@ -10,7 +10,7 @@
 # connector exists to verify them — this profile intentionally declares none.
 profile: windows_dlp_exfiltration
 version: 1
-technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001]
+technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001, T1567]
 expected_detection:
   - id: dlp-usb-block
     provider: trellix_dlp
@@ -86,3 +86,18 @@ expected_detection:
         paths (e.g. C:\Users\Public) for regulated-data patterns, not only
         removable-media and network egress.
       reference: "MITRE ATT&CK T1074.001 — Local Data Staging"
+  - id: dlp-sink-https-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP did not block HTTPS exfiltration of regulated data"
+      remediation: >-
+        Confirm DLP/proxy content inspection covers outbound HTTPS POST
+        bodies for PAN/Aadhaar/SWIFT/UPI/credit-card patterns and blocks
+        the request rather than allowing it to complete.
+      reference: "MITRE ATT&CK T1567 — Exfiltration Over Web Service"
