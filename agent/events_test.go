@@ -90,6 +90,64 @@ func TestEmitterBoundedDropsAndNeverBlocks(t *testing.T) {
 	em.close()
 }
 
+// TestEmitCritical_SurvivesQueueEviction reproduces the "264/0" production
+// bug: run_started is always the first event emitted, so on a large sweep
+// (e.g. 314 ART techniques) the burst of "queued" events that immediately
+// follows can fill the bounded queue while the consumer goroutine is
+// blocked inside a single slow send() call -- at which point emit()'s
+// drop-oldest eviction discards run_started first, since it's the oldest
+// item in the queue. scenario_runs.steps_total is set exclusively from
+// run_started's payload (event_handlers.go), so losing it leaves the run's
+// progress total stuck at 0 forever even though hundreds of subsequent
+// step-completion events arrive fine. emitCritical must bypass the queue
+// entirely so run_started can never be evicted this way.
+func TestEmitCritical_SurvivesQueueEviction(t *testing.T) {
+	var mu sync.Mutex
+	var batches [][]RunEvent
+	firstCall := make(chan struct{})
+	release := make(chan struct{})
+	callCount := 0
+	send := func(b []RunEvent) error {
+		mu.Lock()
+		callCount++
+		isFirst := callCount == 1
+		cp := make([]RunEvent, len(b))
+		copy(cp, b)
+		batches = append(batches, cp)
+		mu.Unlock()
+		if isFirst {
+			close(firstCall)
+			<-release // hold the consumer inside send() so the queue can fill behind it
+		}
+		return nil
+	}
+
+	em := newEventEmitter(send, 5, 5*time.Millisecond) // tiny queue -- easy to overflow
+	em.emitCritical(RunEvent{Type: "run_started", Seq: 0})
+
+	<-firstCall // consumer is now blocked inside the first send() call
+
+	// Flood well past the queue's capacity while the consumer can't drain --
+	// this is what a 314-technique sweep's burst of "queued" events does.
+	for i := 1; i <= 50; i++ {
+		em.emit(RunEvent{Type: "queued", Seq: int64(i)})
+	}
+
+	close(release)
+	em.close()
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, b := range batches {
+		for _, ev := range b {
+			if ev.Type == "run_started" {
+				return // survived -- test passes
+			}
+		}
+	}
+	t.Fatal("run_started was dropped by queue eviction under load -- emitCritical must bypass the bounded queue")
+}
+
 func TestHeartbeatAdvertisesCapability(t *testing.T) {
 	hb := Heartbeat{AgentID: "a", ProtocolVersion: protocolVersion, EmitsEvents: true}
 	raw, _ := json.Marshal(hb)

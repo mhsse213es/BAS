@@ -93,6 +93,35 @@ func (e *eventEmitter) emit(ev RunEvent) {
 	}
 }
 
+// emitCritical sends ev directly, bypassing the bounded queue entirely --
+// used only for events whose loss would be unrecoverable, currently just
+// run_started. Everything else (queued/started/completed/etc.) goes
+// through the normal batched emit(): losing one of those is a minor gap in
+// an otherwise-fine progress feed, but losing run_started leaves
+// scenario_runs.steps_total stuck at 0 forever, since nothing else ever
+// sets it (see event_handlers.go's CASE WHEN ins.type='run_started').
+// run_started is always the FIRST event of a run, which makes it the
+// oldest -- and therefore the first candidate -- for emit()'s drop-oldest
+// eviction once the queue fills, which a large sweep's immediate burst of
+// "queued" events can trigger while the consumer is still blocked sending
+// an earlier batch. Fires its own short-lived goroutine with a small
+// retry budget since this is a single small message, once per run, not a
+// high-frequency stream that needs batching.
+func (e *eventEmitter) emitCritical(ev RunEvent) {
+	if ev.Ts.IsZero() {
+		ev.Ts = time.Now()
+	}
+	go func() {
+		for attempt := 0; attempt < 3; attempt++ {
+			if err := e.send([]RunEvent{ev}); err == nil {
+				return
+			}
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+		}
+		log.Printf("[events] critical event %q for run %s failed after retries", ev.Type, ev.RunID)
+	}()
+}
+
 func (e *eventEmitter) noteDrop() {
 	e.dropMu.Lock()
 	e.dropped++

@@ -579,6 +579,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	)
 	defer emitter.close()
 	emit := func(ev RunEvent) { ev.RunID = cmd.RunID; ev.Seq = seq(); emitter.emit(ev) }
+	emitCritical := func(ev RunEvent) { ev.RunID = cmd.RunID; ev.Seq = seq(); emitter.emitCritical(ev) }
 
 	gate := sched.NewGate()
 	a.scenarioMu.Lock()
@@ -592,7 +593,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 		a.scenarioMu.Unlock()
 	}()
 
-	emit(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total, "mode": cmd.Mode}})
+	emitCritical(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total, "mode": cmd.Mode}})
 
 	jobs := make([]sched.Job, total)
 	for i := range cmd.Steps {
@@ -909,6 +910,7 @@ func (a *Agent) runLocalScan(ctx context.Context, scenarioID, runID string, sele
 	)
 	defer emitter.close()
 	emit := func(ev RunEvent) { ev.RunID = runID; ev.Seq = seq(); emitter.emit(ev) }
+	emitCritical := func(ev RunEvent) { ev.RunID = runID; ev.Seq = seq(); emitter.emitCritical(ev) }
 
 	// Pause/Resume reuses the exact shared a.pauseGate/a.pauseEmit fields
 	// runScenario uses -- command_pause/command_resume already operate
@@ -938,7 +940,7 @@ func (a *Agent) runLocalScan(ctx context.Context, scenarioID, runID string, sele
 			total++
 		}
 	}
-	emit(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total}})
+	emitCritical(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total}})
 
 	categories, partial := runChecks(ctx, categories, sel, gate, func(c SimCheck) { // execute (filtered) — checks no longer run at list time
 		emit(RunEvent{Type: "started", TaskID: c.ID, TechniqueID: c.Technique.ID, StepName: c.Technique.Name})
