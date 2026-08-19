@@ -77,7 +77,10 @@ ADMIN_EMAIL=                      # ← REQUIRED  e.g. bas-admin@corp.internal
 ADMIN_PASSWORD=                   # ← REQUIRED  min 10 chars
 
 # ── [licence] ──────────────────────────────────────────────────────────────────
-# Path to the Audspect licence file (.lic) delivered with the bundle.
-# The installer copies it to ${DATA_DIR}/bas.lic (chmod 640).
+# Path to the Audspect licence file (.lic) delivered with the bundle -- kept
+# under its own issued filename (e.g. hdfc-prod-001.lic for customer ID
+# hdfc-prod-001) end-to-end, never renamed to a generic bas.lic. The
+# installer copies it to ${DATA_DIR}/<its own filename> (chmod 644) and
+# records that filename as LICENSE_FILE in .env.
 
-LIC_PATH=                         # ← REQUIRED  e.g. /home/ubuntu/client.lic
+LIC_PATH=                         # ← REQUIRED  e.g. /home/ubuntu/hdfc-prod-001.lic

@@ -75,8 +75,9 @@ but your team should know they are active:
   RSA-4096 signature (`.sig`). The orchestrator verifies each scenario before
   it can be dispatched; an unsigned or altered scenario is rejected.
 
-- **Signed license** — `bas.lic` is RSA-4096 signed and verified at startup.
-  The platform will not run on a forged or edited license.
+- **Signed license** — the `.lic` file (kept under its own issued customer-ID
+  filename, e.g. `hdfc-prod-001.lic`) is RSA-4096 signed and verified at
+  startup. The platform will not run on a forged or edited license.
 
 - **Signed agent results** — results returned by agents are authenticated with
   HMAC-SHA256 using a per-deployment agent secret, so results cannot be forged

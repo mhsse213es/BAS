@@ -101,8 +101,10 @@ func main() {
 	fmt.Printf("    Expires:   %s\n", lic.ExpiresAt)
 	fmt.Printf("    Features:  %s\n", strings.Join(lic.Features, ", "))
 	fmt.Printf("\n    Delivery instructions for client:\n")
-	fmt.Printf("    1. Place bas.lic at /etc/bas/bas.lic on the server\n")
-	fmt.Printf("    2. Set BAS_LICENSE_PATH=/etc/bas/bas.lic in docker-compose .env or Helm values\n")
+	fmt.Printf("    1. Send %s as-is -- do not rename it\n", outPath)
+	fmt.Printf("    2. Install: set LIC_PATH=/path/to/%s in setup.conf\n", outPath)
+	fmt.Printf("       (install.sh derives LICENSE_FILE=%s in .env automatically --\n", outPath)
+	fmt.Printf("       no bas.lic rename anywhere in the stack)\n")
 }
 
 func loadPrivateKey(path string) (*rsa.PrivateKey, error) {

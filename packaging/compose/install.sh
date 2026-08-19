@@ -126,6 +126,12 @@ LOG_RETENTION_DAYS=""
 JWT_SECRET=""
 AGENT_SECRET=""
 LIC_PATH=""
+# LICENSE_FILE is never set directly by the operator's config -- it's
+# derived from LIC_PATH's own basename (see _resolve_license_file) so the
+# customer-ID-named file a license is issued as (e.g. hdfc-prod-001.lic,
+# see packaging/licensing/licensegen) is used verbatim end-to-end, with no
+# forced rename to a generic "bas.lic" anywhere in the stack.
+LICENSE_FILE=""
 BACKUP_RETENTION_DAILY=""
 BACKUP_RETENTION_WEEKLY=""
 BACKUP_RETENTION_MONTHLY=""
@@ -584,11 +590,13 @@ mode_install() {
     cp -r "${SCRIPT_DIR}/art-payloads/." "${DATA_DIR}/art-payloads/"
     log "ART payloads staged"
   fi
-  # Licence
+  # Licence -- kept under its own issued filename (e.g. hdfc-prod-001.lic),
+  # never renamed to a generic bas.lic. See _resolve_license_file.
+  _resolve_license_file
   if [[ -f "$LIC_PATH" ]]; then
-    cp "$LIC_PATH" "${DATA_DIR}/bas.lic"
-    chmod 644 "${DATA_DIR}/bas.lic"
-    log "Licence installed"
+    cp "$LIC_PATH" "${DATA_DIR}/${LICENSE_FILE}"
+    chmod 644 "${DATA_DIR}/${LICENSE_FILE}"
+    log "Licence installed: ${LICENSE_FILE}"
   fi
   # TLS certs
   if [[ "$BAS_TLS" == "true" ]]; then
@@ -678,7 +686,8 @@ mode_upgrade() {
   [[ -d "${SCRIPT_DIR}/scenarios"   ]] && cp -r "${SCRIPT_DIR}/scenarios/."   "${DATA_DIR}/scenarios/"
   [[ -d "${SCRIPT_DIR}/wwwroot"     ]] && cp -r "${SCRIPT_DIR}/wwwroot/."     "${DATA_DIR}/wwwroot/"
   [[ -d "${SCRIPT_DIR}/art-payloads" ]] && cp -r "${SCRIPT_DIR}/art-payloads/." "${DATA_DIR}/art-payloads/"
-  [[ -f "$LIC_PATH"                 ]] && { cp "$LIC_PATH" "${DATA_DIR}/bas.lic"; chmod 644 "${DATA_DIR}/bas.lic"; }
+  _resolve_license_file
+  [[ -f "$LIC_PATH" ]] && { cp "$LIC_PATH" "${DATA_DIR}/${LICENSE_FILE}"; chmod 644 "${DATA_DIR}/${LICENSE_FILE}"; }
   cp "${SCRIPT_DIR}/docker-compose.yml" "${DATA_DIR}/docker-compose.yml"
   cp "${SCRIPT_DIR}/install.sh" "${DATA_DIR}/install.sh"
   _write_env        # refreshes BAS_VERSION; preserves existing secrets via load_config
@@ -966,6 +975,26 @@ EOF
   systemctl enable --now audspect-backup-worker.timer audspect-backup-schedule.timer
 }
 
+# _resolve_license_file sets LICENSE_FILE to the actual filename the
+# license should be known by everywhere (the compose mount, the container's
+# BAS_LICENSE_PATH, .env). If LIC_PATH was supplied this run (fresh install,
+# or an explicit license refresh during --upgrade), it wins and LICENSE_FILE
+# becomes that file's own basename -- e.g. LIC_PATH=/tmp/hdfc-prod-001.lic
+# -> LICENSE_FILE=hdfc-prod-001.lic, preserving the customer-ID name
+# licensegen issued it under. Otherwise (a routine upgrade not re-supplying
+# a license) falls back to whatever LICENSE_FILE the existing .env already
+# has, so it survives an upgrade run untouched. Only a brand-new install
+# with no prior .env and no LIC_PATH falls back to "bas.lic" for backward
+# compatibility with deployments from before this existed.
+_resolve_license_file() {
+  if [[ -n "$LIC_PATH" ]]; then
+    LICENSE_FILE="$(basename "$LIC_PATH")"
+  elif [[ -z "$LICENSE_FILE" && -f "${DATA_DIR}/.env" ]]; then
+    LICENSE_FILE=$(grep -oP '(?<=^LICENSE_FILE=).+' "${DATA_DIR}/.env" 2>/dev/null | head -1 || true)
+  fi
+  LICENSE_FILE="${LICENSE_FILE:-bas.lic}"
+}
+
 _write_env() {
   local env_file="${DATA_DIR}/.env"
   cat > "$env_file" << EOF
@@ -983,6 +1012,7 @@ CALDERA_API_KEY=${_CALDERA_KEY:-$(openssl rand -hex 20)}
 CALDERA_API_KEY_BLUE=${_CALDERA_KEY_BLUE:-$(openssl rand -hex 20)}
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 BAS_ADMIN_EMAIL=${ADMIN_EMAIL}
+LICENSE_FILE=${LICENSE_FILE:-bas.lic}
 BAS_PORT=${BAS_PORT}
 BAS_TLS=${BAS_TLS}
 TLS_CERT=${TLS_CERT:-}
@@ -1014,9 +1044,13 @@ _run_pg_dump() {
 
 _package_config() {
   local out_file="$1"
+  # LIC_PATH is never set in a backup context (no --config file is loaded
+  # here) -- _resolve_license_file falls back to reading the already-
+  # installed .env's own LICENSE_FILE, which is exactly what's on disk.
+  _resolve_license_file
   tar -cf "$out_file" -C "${DATA_DIR}" \
     --ignore-failed-read \
-    .env bas.lic certs scenarios docker-compose.yml 2>/dev/null || true
+    .env "${LICENSE_FILE}" certs scenarios docker-compose.yml 2>/dev/null || true
 }
 
 _write_backup_manifest() {
@@ -1027,7 +1061,7 @@ _write_backup_manifest() {
   "basVersion": "${BAS_VERSION}",
   "postgresVersion": "${pg_version}",
   "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "contents": ["postgres/audspect.dump", "config/.env", "config/bas.lic", "config/certs", "config/scenarios", "config/docker-compose.yml"],
+  "contents": ["postgres/audspect.dump", "config/.env", "config/${LICENSE_FILE}", "config/certs", "config/scenarios", "config/docker-compose.yml"],
   "retention": {
     "dailyDays": ${BACKUP_RETENTION_DAILY},
     "weeklyWeeks": ${BACKUP_RETENTION_WEEKLY},

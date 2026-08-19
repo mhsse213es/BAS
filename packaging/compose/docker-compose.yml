@@ -101,7 +101,7 @@ services:
       BAS_DB_BREAKGLASS_PASSWORD: ${BAS_DB_BREAKGLASS_PASSWORD:-}
       HTTP_PORT:        "9443"
       SCENARIOS_DIR:    /scenarios
-      BAS_LICENSE_PATH: /etc/bas/bas.lic
+      BAS_LICENSE_PATH: /etc/bas/${LICENSE_FILE:-bas.lic}
       CALDERA_URL:      "${CALDERA_URL:-http://caldera:8888}"
       CALDERA_API_KEY:  ${CALDERA_API_KEY:-BASPlatform2024}
       BAS_ADMIN_EMAIL:    ${BAS_ADMIN_EMAIL:-}
@@ -141,7 +141,11 @@ services:
       # which trips the startup integrity check and crash-loops the container.
       # UI updates ship via a new image only — that is what keeps tamper-detection
       # meaningful. Do NOT re-add a wwwroot bind-mount.
-      - ./bas.lic:/etc/bas/bas.lic:ro
+      # Filename is kept exactly as issued (e.g. hdfc-prod-001.lic) -- never
+      # renamed to a generic bas.lic. LICENSE_FILE is written into .env by
+      # install.sh (see _resolve_license_file); bas.lic is only the default
+      # for deployments from before this existed.
+      - ./${LICENSE_FILE:-bas.lic}:/etc/bas/${LICENSE_FILE:-bas.lic}:ro
       # ART external payloads (gsecdump, etc.) — drop binaries in ./art-payloads
       # on the host to enable payload-dependent atomics; empty by default.
       - ./art-payloads:/art-payloads:ro
