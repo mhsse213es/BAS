@@ -3909,14 +3909,6 @@ body.theme-slate {
         <div id="em-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;width:100%">
           <div class="empty" style="grid-column:1/-1;padding:2rem">Loading Endpoint Mastery layers…</div>
         </div>
-
-        <!-- Endpoint Mastery-tagged scenarios (moved off the Scenarios page) -->
-        <div class="sec-hdr" style="margin-top:1.75rem">
-          <h2>Endpoint Mastery Scenarios</h2>
-        </div>
-        <div id="em-scenario-tiles">
-          <div class="empty" style="padding:1rem">Loading Endpoint Mastery scenarios…</div>
-        </div>
       </div>
     </main>
   </div>
@@ -19007,22 +18999,11 @@ function loadEmTab() {
         '<div style="border-top:1px solid var(--border);padding:0.5rem 1rem;display:flex;gap:0.5rem;align-items:center">' +
           (run ? '<a style="font-size:0.75rem;color:var(--accent);cursor:pointer" onclick=\'viewRunResults(' + JSON.stringify(run).replace(/'/g,"&#39;") + ')\'>View report →</a>' : '') +
           '<span style="flex:1"></span>' +
+          ((ROLE === 'admin' || ROLE === 'analyst') ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem" onclick="cloneScenario(\'' + x(e.id) + '\')" title="Clone into an editable custom scenario">&#9112; Clone</button>' : '') +
           (canRun ? '<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.6rem" onclick="emRunLayer(\'' + x(e.id) + '\')" title="Run this layer">&#9654; Run</button>' : '') +
         '</div>' +
       '</div>';
     }).join('');
-
-    // Endpoint Mastery-tagged scenarios -- moved here from the Scenarios
-    // page (scenarioCategoryOf excludes them there now), rendered with the
-    // same tile renderer used for every other scenario category so they
-    // keep the same look, hover preview, and Run/Clone actions.
-    var tilesEl = document.getElementById('em-scenario-tiles');
-    if (tilesEl) {
-      var emScenarios = scenarios.filter(function(s) { return scenarioCategoryOf(s) === 'em'; });
-      tilesEl.innerHTML = emScenarios.length
-        ? renderScenarioTileGroup('em-dashboard', emScenarios)
-        : '<p class="empty">No Endpoint Mastery scenarios loaded.</p>';
-    }
   })
   .catch(function(e) { showToast('Endpoint Mastery load failed: ' + e.message, 'err'); });
 }
