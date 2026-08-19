@@ -34,6 +34,22 @@ func runIsStale(runStarted, agentLastUpdate, now time.Time) bool {
 // another dispatch to the same agent happens to be attempted).
 const neverStartedGuard = 60 * time.Second
 
+// abandonedRunGuard is how long a 'running' scenario_run's agent may sit
+// offline (stale heartbeat) before ReapAbandonedRuns force-marks the run
+// 'partial' on the server's own initiative. Deliberately longer than the
+// agent's own runDisconnectWatchdog (agent/agent.go: disconnectGracePeriod
+// = 90s, matched to AgentOfflineAfter) plus a fair reconnect-and-submit
+// window -- an agent that's merely had a brief network blip should get the
+// chance to resolve its own run first via its spooled Partial submission.
+// This reaper exists only for the agent that never comes back at all
+// (crashed, uninstalled, decommissioned): without it, that run would sit
+// "Running" until the unrelated, purely-reactive staleRunGuard (2h) in
+// dispatchRun's concurrency guard happens to fire -- which requires another
+// dispatch attempt to that exact agent, something that may never happen for
+// a dead one. See
+// docs/superpowers/specs/2026-08-18-individual-run-disconnect-resilience-design.md.
+const abandonedRunGuard = 5 * time.Minute
+
 // ReapNeverStartedRuns marks any 'running' scenario_run that has exceeded
 // neverStartedGuard with zero reported progress as 'failed'. Called on a
 // poll tick (see cmd/server/main.go). Safe to call concurrently with
@@ -73,6 +89,54 @@ func (h *Handler) ReapNeverStartedRuns(ctx context.Context) error {
 		}
 		if tag.RowsAffected() > 0 {
 			log.Printf("[dispatch] run %s on agent %s never started (no progress within %s) — marked failed", s.id, s.agentID, neverStartedGuard)
+		}
+	}
+	return nil
+}
+
+// ReapAbandonedRuns marks any 'running' scenario_run 'partial' once its
+// agent has been offline (stale heartbeat) past abandonedRunGuard. Called
+// on the same poll tick as ReapNeverStartedRuns (see cmd/server/main.go).
+// Mirrors that function's structure: match rows first, then UPDATE each
+// with its own "AND status = 'running'" re-check in the WHERE clause so a
+// run that started progressing (or was independently resolved by the
+// agent's own watchdog + late submission) between the SELECT and the
+// UPDATE is never clobbered.
+func (h *Handler) ReapAbandonedRuns(ctx context.Context) error {
+	rows, err := h.db.Query(ctx,
+		`SELECT sr.id, sr.agent_id
+		   FROM scenario_runs sr
+		   JOIN agents a ON a.agent_id = sr.agent_id
+		  WHERE sr.status = 'running'
+		    AND a.last_update < NOW() - make_interval(secs => $1)`,
+		int(abandonedRunGuard.Seconds()),
+	)
+	if err != nil {
+		return err
+	}
+	type abandonedRun struct{ id, agentID string }
+	var abandoned []abandonedRun
+	for rows.Next() {
+		var a abandonedRun
+		if err := rows.Scan(&a.id, &a.agentID); err != nil {
+			continue
+		}
+		abandoned = append(abandoned, a)
+	}
+	rows.Close()
+
+	for _, a := range abandoned {
+		tag, err := h.db.Exec(ctx,
+			`UPDATE scenario_runs SET status = 'partial', completed_at = NOW()
+			  WHERE id = $1 AND status = 'running'`,
+			a.id,
+		)
+		if err != nil {
+			log.Printf("[dispatch] reap abandoned run %s: %v", a.id, err)
+			continue
+		}
+		if tag.RowsAffected() > 0 {
+			log.Printf("[dispatch] run %s on agent %s abandoned (agent offline beyond %s) — marked partial", a.id, a.agentID, abandonedRunGuard)
 		}
 	}
 	return nil

@@ -571,6 +571,15 @@ func main() {
 		if err := handler.ReapNeverStartedRuns(ctx); err != nil {
 			log.Printf("[dispatch] never-started watchdog: %v", err)
 		}
+		// Runs the same tick, independently -- one failing must not skip
+		// the other. See ReapAbandonedRuns for why this exists: an agent
+		// that never reconnects at all (vs. a brief blip its own
+		// disconnectGracePeriod watchdog already self-heals) would
+		// otherwise leave its run "Running" until the unrelated, purely
+		// reactive 2h staleRunGuard happens to fire.
+		if err := handler.ReapAbandonedRuns(ctx); err != nil {
+			log.Printf("[dispatch] abandoned-run watchdog: %v", err)
+		}
 	})
 	defer dispatchWatchdogScheduler.Stop()
 
