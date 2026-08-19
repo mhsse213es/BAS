@@ -19366,13 +19366,12 @@ function _renderVexVariantDetail(source, techId) {
     variants.map(function(v) {
       var riskColor = v.riskLevel === 'ADVANCED' ? 'var(--danger)' : v.riskLevel === 'MODERATE' ? 'var(--warning)' : 'var(--success)';
       return '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.55rem;font-size:0.72rem">' +
-        '<div style="display:flex;gap:0.6rem;flex-wrap:wrap;color:var(--muted);margin-bottom:0.25rem">' +
+        '<div style="display:flex;gap:0.6rem;flex-wrap:wrap;color:var(--muted)">' +
           '<span>Encoding: <b style="color:var(--text)">' + x(v.encoding || '—') + '</b></span>' +
           '<span>Context: <b style="color:var(--text)">' + x(v.execContext || '—') + '</b></span>' +
           '<span>Evasion: <b style="color:var(--text)">' + x(v.evasion || 'none') + '</b></span>' +
           '<span>Risk: <b style="color:' + riskColor + '">' + x(v.riskLevel || '—') + '</b></span>' +
         '</div>' +
-        '<div style="font-family:var(--font-mono);color:var(--text);white-space:pre-wrap;word-break:break-all">' + x(v.command || '') + '</div>' +
       '</div>';
     }).join('') +
   '</div>';
@@ -19493,14 +19492,29 @@ function _renderEMLayerDetail(layerId) {
   if (!steps.length) {
     return '<div style="padding:0.6rem 0.6rem 0.6rem 1.9rem;color:var(--muted);font-size:0.76rem">No steps found for this layer</div>';
   }
+  // Deliberately shows what a step DOES and WHY (blast radius, risk,
+  // reversibility, expected telemetry/detection) rather than its raw
+  // PowerShell/command text -- this is an operator-facing preview of what a
+  // sweep is about to run, not a code viewer. Every step already carries
+  // this metadata for exactly this purpose (see Step.BlastRadius etc.,
+  // internal/scenario/types.go).
   return '<div style="padding:0.4rem 0.6rem 0.6rem 1.9rem;display:flex;flex-direction:column;gap:0.4rem">' +
     steps.map(function(st) {
-      return '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.55rem;font-size:0.72rem">' +
-        '<div style="color:var(--muted);margin-bottom:0.25rem">' +
-          (st.techniqueId ? '<span style="font-family:var(--font-mono);color:var(--text)">' + x(st.techniqueId) + '</span> — ' : '') +
-          x(st.name || '') +
+      var riskCol = st.risk === 'high' ? 'var(--danger)' : st.risk === 'medium' ? 'var(--warning)' : 'var(--success)';
+      var badges =
+        (st.risk ? '<span class="sbadge" style="background:rgba(0,0,0,0.15);color:' + riskCol + '">' + x(st.risk) + ' risk</span>' : '') +
+        (st.reversible ? '<span class="sbadge" style="background:rgba(35,134,54,0.15);color:var(--success)">reversible</span>' : '');
+      var telemetry = (st.telemetry || []).length ? '<div style="color:var(--muted);line-height:1.4;margin-top:0.2rem"><strong style="color:var(--text)">Telemetry:</strong> ' + st.telemetry.map(x).join(' · ') + '</div>' : '';
+      var detection = (st.detection || []).length ? '<div style="color:var(--muted);line-height:1.4;margin-top:0.2rem"><strong style="color:var(--text)">Detection:</strong> ' + st.detection.map(x).join(' · ') + '</div>' : '';
+      var blast = st.blastRadius ? '<div style="color:var(--muted);line-height:1.4;margin-top:0.2rem"><strong style="color:var(--text)">What it does:</strong> ' + x(st.blastRadius) + '</div>' : '';
+      var noDetail = (!blast && !telemetry && !detection) ? '<div style="color:var(--muted);margin-top:0.2rem">No additional details available for this step.</div>' : '';
+      return '<div style="background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:0.45rem 0.6rem;font-size:0.72rem">' +
+        '<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">' +
+          (st.techniqueId ? '<span style="font-family:var(--font-mono);color:var(--text);font-weight:600">' + x(st.techniqueId) + '</span>' : '') +
+          '<span style="color:var(--text)">' + x(st.name || '') + '</span>' +
+          badges +
         '</div>' +
-        (st.command ? '<div style="font-family:var(--font-mono);color:var(--text);white-space:pre-wrap;word-break:break-all">' + x(st.command) + '</div>' : '') +
+        blast + telemetry + detection + noDetail +
       '</div>';
     }).join('') +
   '</div>';
