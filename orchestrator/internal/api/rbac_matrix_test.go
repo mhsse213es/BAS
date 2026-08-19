@@ -78,6 +78,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/rules/export", tierAny, ""},
 	{http.MethodPost, "/api/scan/safe/{agentId}", tierAny, ""},
 	{http.MethodGet, "/api/art/techniques", tierAny, ""},
+	{http.MethodGet, "/api/art/atomics", tierAny, ""},
 	{http.MethodGet, "/api/caldera/techniques", tierAny, ""},
 	{http.MethodGet, "/api/caldera/abilities", tierAny, ""},
 	{http.MethodGet, "/api/techniques/unified", tierAny, ""},

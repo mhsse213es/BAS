@@ -69,6 +69,47 @@ func TestListTechniqueMeta_ExcludesTechniquesWithNoWindowsStep(t *testing.T) {
 	}
 }
 
+// ListAtomicsByPlatform returns one row per individual atomic test (not
+// aggregated per technique like ListTechniqueMeta) -- powers the read-only
+// "Detailed view" shown for the art_all_windows Full Sweep scenario, which
+// now runs every atomic per technique and so no longer offers a selectable
+// subset.
+func TestListAtomicsByPlatform(t *testing.T) {
+	atoms := newTestStore().ListAtomicsByPlatform("windows")
+	if len(atoms) != 4 {
+		t.Fatalf("len(atoms) = %d, want 4 (T1059 x2, T1083 x1, T1003 x1)", len(atoms))
+	}
+	// sorted by technique ID, then name: T1003, T1059(exec a, exec b), T1083
+	want := []struct{ tech, name string }{
+		{"T1003", "cred dump"},
+		{"T1059", "exec a"},
+		{"T1059", "exec b"},
+		{"T1083", "discovery"},
+	}
+	for i, w := range want {
+		if atoms[i].TechniqueID != w.tech || atoms[i].Name != w.name {
+			t.Errorf("atoms[%d] = %+v, want {TechniqueID:%s Name:%s}", i, atoms[i], w.tech, w.name)
+		}
+	}
+}
+
+// A technique with no Windows atomics at all (Linux-only) must not appear
+// in ListAtomicsByPlatform("windows") -- same platform-filtering contract
+// as ListTechniqueMeta.
+func TestListAtomicsByPlatform_ExcludesNonMatchingPlatform(t *testing.T) {
+	store := &ARTStore{steps: map[string][]ScenarioStep{
+		"T1059": {{Name: "exec", TechniqueID: "T1059", Platform: "windows", Executor: "powershell", Command: "whoami"}},
+		"T1499": {{Name: "linux dos", TechniqueID: "T1499", Platform: "linux", Executor: "sh", Command: "true"}},
+	}}
+	atoms := store.ListAtomicsByPlatform("windows")
+	if len(atoms) != 1 {
+		t.Fatalf("len(atoms) = %d, want 1 (T1499's linux-only atomic excluded)", len(atoms))
+	}
+	if atoms[0].TechniqueID != "T1059" {
+		t.Errorf("atoms[0].TechniqueID = %q, want T1059", atoms[0].TechniqueID)
+	}
+}
+
 // UnknownTechniques flags only the IDs absent from the store and is case/space
 // insensitive on the valid ones.
 func TestUnknownTechniques(t *testing.T) {

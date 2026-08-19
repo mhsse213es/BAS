@@ -4403,13 +4403,13 @@ body.theme-slate {
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;font-size:0.78rem">
-      <span><a href="javascript:void(0)" class="desc-toggle" onclick="pickerSelectAll(true);return false;">Select all</a>
+      <span id="picker-selectall-wrap"><a href="javascript:void(0)" class="desc-toggle" onclick="pickerSelectAll(true);return false;">Select all</a>
         &nbsp;·&nbsp; <a href="javascript:void(0)" class="desc-toggle" onclick="pickerSelectAll(false);return false;">None</a></span>
       <span id="picker-count" class="card-meta"></span>
     </div>
     <div id="picker-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.25rem"></div>
     <div class="modal-actions">
-      <button class="btn btn-outline btn-sm" onclick="closePicker()">Cancel</button>
+      <button class="btn btn-outline btn-sm" id="picker-cancel-btn" onclick="closePicker()">Cancel</button>
       <button id="picker-apply" class="btn btn-outline-green btn-sm" onclick="applyPicker()">&#9654; Use selection</button>
     </div>
   </div>
@@ -11812,6 +11812,11 @@ function scenarioFramework(sc) {
 }
 
 var _pickerScId = null, _pickerFw = '', _pickerItems = [], _pickerSel = {}, _pickerFiltered = [];
+// _pickerReadOnly: true only for the "Detailed view" opened via
+// openDetailedView (art_all_windows scenarios, which run every atomic and
+// so have no selectable subset) -- suppresses checkboxes, Select all/None,
+// and the Apply footer, leaving only search/browse.
+var _pickerReadOnly = false;
 // Caldera picker filter state
 var _pf = { plugin: 'all', payload: 'all', admin: 'all', platform: 'all', tactic: 'all' };
 
@@ -11883,6 +11888,17 @@ function scopeArtItems(sc, items) {
 }
 
 function openPickerWith(scId, fw, sc, items) {
+  // Always reset read-only state here -- the only entry point into
+  // read-only mode is openDetailedView, which sets _pickerReadOnly itself
+  // right after calling this. Any other picker open (the normal selectable
+  // flow) must never inherit read-only from a previous Detailed-view visit.
+  _pickerReadOnly = false;
+  var selAllWrap = document.getElementById('picker-selectall-wrap');
+  if (selAllWrap) selAllWrap.style.display = '';
+  var applyBtn = document.getElementById('picker-apply');
+  if (applyBtn) applyBtn.style.display = '';
+  var cancelBtn = document.getElementById('picker-cancel-btn');
+  if (cancelBtn) cancelBtn.textContent = 'Cancel';
   _pickerItems = items;
   _pickerScId = scId; _pickerFw = fw; _pickerSel = {};
   // Pre-check ONLY a genuine pending selection the operator already made in
@@ -11949,6 +11965,48 @@ function openPickerFromModal() {
   openPicker(_modalScId || document.getElementById('modal-sc').value);
 }
 
+// openDetailedViewFromModal opens the read-only "Detailed view" for an
+// art_all_windows Full Sweep scenario -- every atomic test that will
+// actually run, browsable but not selectable, since this scenario always
+// runs everything and has no subset to choose from.
+function openDetailedViewFromModal() {
+  var id = _modalScId || document.getElementById('modal-sc').value;
+  var sc = scenarios.find(function(s) { return s.id === id; });
+  if (!sc) return;
+  apicall('/api/art/atomics?platform=windows').then(function(atoms) {
+    if (!atoms || !atoms.length) {
+      showToast('ART catalog is empty — reseed ART content', 'err');
+      return;
+    }
+    var items = atoms.map(function(a, i) {
+      return { id: a.techniqueId + '#' + i, techniqueId: a.techniqueId, name: a.name, executor: a.executor };
+    });
+    openDetailedView(sc, items);
+  }).catch(function(e) {
+    showToast('Catalog request failed: ' + (e && e.message ? e.message : e), 'err');
+  });
+}
+
+function openDetailedView(sc, items) {
+  _pickerItems = items;
+  _pickerScId = sc.id; _pickerFw = 'art-atomics'; _pickerSel = {};
+  _pickerReadOnly = true;
+  document.getElementById('picker-title').textContent = 'Every atomic test — ' + sc.name;
+  document.getElementById('picker-sub').textContent =
+    items.length + ' atomic test' + (items.length === 1 ? '' : 's') + ' across every Windows-runnable technique will run. Search by technique ID or atomic name — this list is not selectable.';
+  document.getElementById('picker-search').value = '';
+  var filtersEl = document.getElementById('picker-caldera-filters');
+  if (filtersEl) filtersEl.style.display = 'none';
+  var selAllWrap = document.getElementById('picker-selectall-wrap');
+  if (selAllWrap) selAllWrap.style.display = 'none';
+  var applyBtn = document.getElementById('picker-apply');
+  if (applyBtn) applyBtn.style.display = 'none';
+  var cancelBtn = document.getElementById('picker-cancel-btn');
+  if (cancelBtn) cancelBtn.textContent = 'Close';
+  renderPickerList();
+  document.getElementById('picker-overlay').classList.add('open');
+}
+
 // ensureCovStatus populates window._covSt (technique→last-verdict) once, so the
 // picker can show coverage badges even if the Coverage tab was never opened.
 function ensureCovStatus(cb) {
@@ -11998,9 +12056,12 @@ function renderPickerList() {
     // the prominent label and the technique ID as meta, not the raw index.
     var label = (fw === 'steps') ? ('Step ' + (Number(it.id) + 1))
               : (fw === 'posture') ? (it.techniqueId || it.name || it.id)
+              : (fw === 'art-atomics') ? it.techniqueId
               : it.id;
     var meta = (fw === 'art')
       ? (it.tests ? (it.tests + (it.tests === 1 ? ' test' : ' tests')) : '')
+      : (fw === 'art-atomics')
+      ? (it.executor || '')
       : (fw === 'steps')
       ? (it.technique || '')
       : (fw === 'posture')
@@ -12015,8 +12076,11 @@ function renderPickerList() {
       if (it.requiresPayload) extraBadges += ' <span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:rgba(218,54,51,0.12);border:1px solid rgba(218,54,51,0.3);color:#da3633">payload</span>';
       if (it.requiresAdmin)   extraBadges += ' <span style="font-size:0.65rem;padding:1px 5px;border-radius:7px;background:rgba(240,136,62,0.12);border:1px solid rgba(240,136,62,0.3);color:#f0883e">admin</span>';
     }
-    return '<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.8rem">' +
-      '<input type="checkbox" data-id="' + x(it.id) + '"' + checked + ' onchange="pickerToggle(this)" style="margin-top:2px">' +
+    var checkbox = _pickerReadOnly ? '' :
+      '<input type="checkbox" data-id="' + x(it.id) + '"' + checked + ' onchange="pickerToggle(this)" style="margin-top:2px">';
+    return '<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.4rem 0.5rem;border-bottom:1px solid var(--border);' +
+      (_pickerReadOnly ? '' : 'cursor:pointer;') + 'font-size:0.8rem">' +
+      checkbox +
       '<span style="flex:1">' +
         '<span style="font-weight:600;color:var(--accent)">' + x(label) + '</span>' +
         (it.name ? ' <span>' + x(it.name) + '</span>' : '') + cbadge + extraBadges +
@@ -12050,10 +12114,15 @@ function pickerSelectAll(on) {
 function pickerSelectedIds() { return Object.keys(_pickerSel); }
 
 function updatePickerCount() {
-  var selectedIds = pickerSelectedIds();
-  var n = selectedIds.length;
   var total = _pickerItems.length;
   var shown = _pickerFiltered.length;
+  if (_pickerReadOnly) {
+    document.getElementById('picker-count').textContent =
+      total + ' atomic test' + (total === 1 ? '' : 's') + (shown !== total ? ' · ' + shown + ' shown' : '');
+    return;
+  }
+  var selectedIds = pickerSelectedIds();
+  var n = selectedIds.length;
   var txt = n + ' of ' + total + ' selected';
   if (shown !== total) txt += ' · ' + shown + ' shown';
   // "N selected" counts techniques, but each technique expands to a
@@ -12115,6 +12184,22 @@ function renderModalSelection() {
   var sc = scenarios.find(function(s) { return s.id === id; });
   var fw = scenarioFramework(sc);
   if (!sc || !fw) { cw.style.display = 'none'; note.style.display = 'none'; return; }
+  // art_all_windows scenarios always run every atomic for every
+  // Windows-runnable technique -- there is no subset to choose, so
+  // "Customize" would be misleading here. Show a read-only "Detailed view"
+  // instead (see openDetailedViewFromModal) and skip the rest of this
+  // function entirely, since none of the selection/subset logic below
+  // applies to a scenario that has nothing to select.
+  if (sc.artAllWindows) {
+    cw.style.display = 'block';
+    link.innerHTML = '&#128269; Detailed view — every atomic test that will run';
+    link.style.opacity = '';
+    link.style.pointerEvents = '';
+    link.onclick = function() { openDetailedViewFromModal(); return false; };
+    note.style.display = 'none';
+    return;
+  }
+  link.onclick = function() { openPickerFromModal(); return false; };
   // A posture selection is tied to the agent whose catalog produced it (check IDs
   // are per-OS). If the operator switched agents, the stale subset would no longer
   // match — drop it so the run reverts to "all checks" rather than an empty run.

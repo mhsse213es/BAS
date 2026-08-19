@@ -210,26 +210,17 @@ func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore, agentO
 
 // ── ART Local Store Modes ──────────────────────────────────────────────────────
 
-// buildARTPlatformSteps runs one representative atomic per technique for the
-// given platform. Breadth-first: one test per technique, not every variant.
+// buildARTPlatformSteps runs every atomic test for every technique that has
+// at least one step on the given platform -- true depth, not just breadth.
+// Delegates to buildARTTechniquesSteps (the same expansion the "Selective"
+// scenario/operator-subset dispatch path already uses and already tests)
+// rather than duplicating its per-technique atomic-expansion loop.
 func buildARTPlatformSteps(platform string, artStore *ARTStore) ([]ScenarioStep, error) {
 	techniques := artStore.ListTechniquesByPlatform(platform)
 	if len(techniques) == 0 {
 		return nil, fmt.Errorf("ART store has no %s steps — verify ART_DIR was loaded at startup", platform)
 	}
-	steps := make([]ScenarioStep, 0, len(techniques))
-	for _, t := range techniques {
-		s := artStore.GetStepsByPlatform(strings.ToUpper(strings.TrimSpace(t)), platform)
-		if len(s) == 0 {
-			log.Printf("[ART] no %s steps for %s — skipped", platform, t)
-			continue
-		}
-		steps = append(steps, artStore.materialize(s[0]))
-	}
-	if len(steps) == 0 {
-		return nil, fmt.Errorf("ART: no %s steps found across %d techniques", platform, len(techniques))
-	}
-	return steps, nil
+	return buildARTTechniquesSteps(techniques, artStore, platform)
 }
 
 func buildARTTechniquesSteps(techniques []string, artStore *ARTStore, platform string) ([]ScenarioStep, error) {

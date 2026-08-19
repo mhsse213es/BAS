@@ -247,6 +247,16 @@ type TechniqueMeta struct {
 	Tactic string `json:"tactic"` // ATT&CK tactic, e.g. "credential-access"
 }
 
+// AtomicMeta is one individual atomic test entry -- unlike TechniqueMeta,
+// which aggregates one row per technique, this is one row per atomic. A
+// technique with multiple atomics (e.g. a PowerShell and a cmd variant)
+// produces multiple AtomicMeta entries, all sharing the same TechniqueID.
+type AtomicMeta struct {
+	TechniqueID string `json:"techniqueId"` // ATT&CK technique ID, e.g. T1003.001
+	Name        string `json:"name"`        // this specific atomic's name
+	Executor    string `json:"executor"`    // powershell | cmd | etc.
+}
+
 // ListTechniqueMeta returns one catalog entry per technique that has at least one
 // Windows step, sorted by technique ID. Drives the live count shown on sweep cards
 // and the selectable technique picker.
@@ -282,6 +292,41 @@ func (s *ARTStore) ListTechniqueMeta() []TechniqueMeta {
 		out = append(out, TechniqueMeta{ID: id, Name: name, Tests: winCount, Tactic: models.LookupTactic(id)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// ListAtomicsByPlatform returns one entry per individual atomic test for the
+// given platform, across every technique -- the literal, full-depth
+// execution list buildARTPlatformSteps dispatches (via
+// buildARTTechniquesSteps). Powers the read-only "Detailed view" shown in
+// place of a selectable Customize picker on the art_all_windows Full Sweep
+// scenario, which runs every atomic per technique and so has no subset to
+// choose from anymore.
+func (s *ARTStore) ListAtomicsByPlatform(platform string) []AtomicMeta {
+	if platform == "" {
+		platform = "windows"
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []AtomicMeta
+	for id, steps := range s.steps {
+		for _, st := range steps {
+			p := st.Platform
+			if p == "" {
+				p = "windows"
+			}
+			if !strings.EqualFold(p, platform) {
+				continue
+			}
+			out = append(out, AtomicMeta{TechniqueID: id, Name: st.Name, Executor: st.Executor})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].TechniqueID != out[j].TechniqueID {
+			return out[i].TechniqueID < out[j].TechniqueID
+		}
+		return out[i].Name < out[j].Name
+	})
 	return out
 }
 

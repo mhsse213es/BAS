@@ -3735,6 +3735,20 @@ func (h *Handler) GetARTTechniques(w http.ResponseWriter, r *http.Request) {
 	respond(w, h.artStore.ListTechniqueMeta())
 }
 
+// GET /api/art/atomics?platform=windows — every individual atomic test for
+// the given platform (default windows), one row per atomic rather than
+// aggregated per technique like GetARTTechniques. Powers the read-only
+// "Detailed view" for the art_all_windows Full Sweep scenario, which runs
+// every atomic per technique and so no longer offers a selectable subset.
+func (h *Handler) GetARTAtomics(w http.ResponseWriter, r *http.Request) {
+	if h.artStore == nil {
+		respond(w, []scenario.AtomicMeta{})
+		return
+	}
+	platform := r.URL.Query().Get("platform")
+	respond(w, h.artStore.ListAtomicsByPlatform(platform))
+}
+
 // GET /api/caldera/techniques — live Caldera catalog from the pre-loaded
 // ability cache (technique id, representative ability name, ability count).
 // Same shape as GetARTTechniques so the frontend can render both sources
