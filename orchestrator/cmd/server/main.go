@@ -22,6 +22,7 @@ import (
 	"github.com/audspect/bas/internal/correlation"
 	"github.com/audspect/bas/internal/db"
 	"github.com/audspect/bas/internal/detect"
+	"github.com/audspect/bas/internal/dnssink"
 	"github.com/audspect/bas/internal/emsweep"
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/exercise"
@@ -654,6 +655,17 @@ func main() {
 	// Transitions stale iocs rows to 'expired' daily -- the first real use of
 	// that lifecycle status since Phase 0+A defined it.
 	iocregistry.StartExpiration(context.Background(), pool, iocregistry.DefaultStaleAfter)
+
+	// ── DNS Tunneling Exfiltration Sink ───────────────────────────────────
+	// Second channel of the DLP sink-verification architecture (see
+	// docs/superpowers/specs/2026-08-19-dns-tunneling-exfiltration-channel-design.md).
+	// Independently enable/disable-able; a bind failure is logged and
+	// reflected in Status(), never fatal to the rest of the orchestrator.
+	if cfg.DNSSinkEnabled {
+		dnssink.StartListener(context.Background(), ":53", dnssink.DomainSuffix, pool)
+	} else {
+		log.Println("[dnssink] disabled via DNS_SINK_ENABLED=false")
+	}
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),

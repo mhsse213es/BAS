@@ -75,6 +75,15 @@ type Config struct {
 	RateLimitEnabled bool `json:"rate_limit_enabled,omitempty"`
 	RateLimitPerMin  int  `json:"rate_limit_per_min,omitempty"`
 	RateLimitBurst   int  `json:"rate_limit_burst,omitempty"`
+
+	// DNSSinkEnabled controls the DNS-tunneling exfiltration listener
+	// (internal/dnssink). Defaults to true -- unlike RateLimitEnabled above,
+	// this is a detection-capability feature, not an opt-in safety limit, so
+	// it should be on by default; a bind failure (e.g. port 53 already
+	// owned) is logged and reflected in the listener's own Status(), never
+	// fatal to the rest of the orchestrator, so leaving it enabled by
+	// default carries no risk to existing installs. Env: DNS_SINK_ENABLED.
+	DNSSinkEnabled bool `json:"dns_sink_enabled,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -90,6 +99,7 @@ func Load(path string) (*Config, error) {
 		TIBundleDir:      "/intel-bundles",
 		RateLimitPerMin:  1000,
 		RateLimitBurst:   200,
+		DNSSinkEnabled:   true,
 	}
 
 	// Try file first (local dev)
@@ -223,6 +233,11 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("API_RATE_BURST"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.RateLimitBurst)
+	}
+	if v := os.Getenv("DNS_SINK_ENABLED"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.DNSSinkEnabled = b
+		}
 	}
 
 	if cfg.DatabaseURL == "" {

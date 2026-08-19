@@ -80,6 +80,12 @@ services:
   orchestrator:
     image: ${REGISTRY:-}bas-orchestrator:${BAS_VERSION:-latest}
     container_name: audspect-orchestrator
+    # NET_BIND_SERVICE (not root) lets the orchestrator bind UDP/53 directly
+    # for the DNS-tunneling exfiltration listener (internal/dnssink) -- real
+    # DNS traffic on the standard port is what makes that channel a
+    # meaningful test of network-layer inspection.
+    cap_add:
+      - NET_BIND_SERVICE
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,6 +108,7 @@ services:
       HTTP_PORT:        "9443"
       SCENARIOS_DIR:    /scenarios
       BAS_LICENSE_PATH: /etc/bas/${LICENSE_FILE:-bas.lic}
+      DNS_SINK_ENABLED: ${DNS_SINK_ENABLED:-true}
       CALDERA_URL:      "${CALDERA_URL:-http://caldera:8888}"
       CALDERA_API_KEY:  ${CALDERA_API_KEY:-BASPlatform2024}
       BAS_ADMIN_EMAIL:    ${BAS_ADMIN_EMAIL:-}
@@ -160,6 +167,7 @@ services:
       - ${SHARPHOUND_DIR:-./sharphound}:/sharphound:ro
     ports:
       - "${BAS_PORT:-9443}:9443"
+      - "53:53/udp"
     networks:
       - bas-internal
     restart: unless-stopped
