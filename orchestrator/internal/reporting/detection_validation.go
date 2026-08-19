@@ -47,6 +47,9 @@ type StepEvidence struct {
 	Events            []string // raw Windows event tokens ("1116:...Defender/Operational")
 	ExpectedTelemetry []string // step's expected telemetry lines (for completeness)
 	RawOutput         string   // full step output text; read by verifiers that parse a self-reported marker, e.g. dlpVerifier
+	// SinkTokenObserved mirrors models.SimulationResult's field of the same
+	// name -- see its doc comment.
+	SinkTokenObserved *bool
 }
 
 // VerificationResult is the outcome of checking one expected detection.
@@ -618,10 +621,11 @@ func evidenceByTechnique(results []models.SimulationResult) map[string]StepEvide
 	out := map[string]StepEvidence{}
 	for _, r := range results {
 		ev := StepEvidence{
-			TechniqueID:      r.ID,
-			DetectionVerdict: r.DetectionVerdict,
-			Events:           r.Events,
-			RawOutput:        r.RawOutput,
+			TechniqueID:       r.ID,
+			DetectionVerdict:  r.DetectionVerdict,
+			Events:            r.Events,
+			RawOutput:         r.RawOutput,
+			SinkTokenObserved: r.SinkTokenObserved,
 		}
 		if r.DetectionAlert != nil {
 			ev.AlertProvider = r.DetectionAlert.Provider

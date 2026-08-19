@@ -80,7 +80,17 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 	r.ExpectedOutcome = scenario.ResolveExpectedOutcome(exp)
 
 	observed := ObservationUnknown
-	if m := dlpMarkerRe.FindStringSubmatch(ev.RawOutput); m != nil {
+	if ev.SinkTokenObserved != nil {
+		// Sink-primary: destination-side receipt is authoritative ground
+		// truth for whether the data actually left, superseding the local
+		// marker for this step -- see
+		// docs/superpowers/specs/2026-08-19-dlp-exfiltration-sink-service-design.md.
+		if *ev.SinkTokenObserved {
+			observed = ObservationSucceeded
+		} else {
+			observed = ObservationBlocked
+		}
+	} else if m := dlpMarkerRe.FindStringSubmatch(ev.RawOutput); m != nil {
 		switch m[1] {
 		case ObservationSucceeded, ObservationBlocked:
 			observed = m[1]

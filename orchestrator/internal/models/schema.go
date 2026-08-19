@@ -61,6 +61,14 @@ type SimulationResult struct {
 	DetectionAlert      *DetectionAlert  `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
 	CleanupVerdict      string           `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
 	BlockingControl     *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
+	// SinkTokenObserved is set (non-nil) only for a step whose command was
+	// wired to the DLP exfiltration sink (see internal/api/dlp_sink.go).
+	// true = the sink received this step's token (data reached the
+	// destination); false = it never arrived within the token's window.
+	// nil means this step was never sink-wired -- verification falls back
+	// to the pre-existing local-marker path. Populated by
+	// internal/verifysync, never by the agent itself.
+	SinkTokenObserved *bool `json:"sinkTokenObserved,omitempty"`
 	// RequestedPriv is the effective tier sent to the agent (PrivSpec.Effective()).
 	// Empty means the step was unannotated (legacy).
 	RequestedPriv string `json:"requestedPriv,omitempty"`

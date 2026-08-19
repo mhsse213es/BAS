@@ -93,3 +93,49 @@ func TestDLPVerifier(t *testing.T) {
 		t.Errorf("outcome fields: got expected=%q observed=%q", r.ExpectedOutcome, r.ObservedOutcome)
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }
+
+func TestDLPVerifier_SinkPrimary_TokenReceived(t *testing.T) {
+	exp := dlpExp("dlp-https-block", "Block")
+	// Sink says the token WAS received -- data reached the destination, DLP
+	// failed to catch it -- regardless of what any local marker claims.
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput:         "DLP_OBSERVATION: OperationBlocked", // local script thought it was blocked
+		SinkTokenObserved: boolPtr(true),                       // but the sink proves it actually arrived
+	})
+	if r.Status != StatusNotDetected || r.Comparison != Mismatch {
+		t.Errorf("sink-received must be authoritative (Succeeded) even when the local marker disagrees: got status=%s comparison=%v", r.Status, r.Comparison)
+	}
+	if r.ObservedOutcome != ObservationSucceeded {
+		t.Errorf("ObservedOutcome = %q, want %q", r.ObservedOutcome, ObservationSucceeded)
+	}
+}
+
+func TestDLPVerifier_SinkPrimary_TokenNotReceived(t *testing.T) {
+	exp := dlpExp("dlp-https-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		SinkTokenObserved: boolPtr(false),
+	})
+	if r.Status != StatusDetected || r.Comparison != Match {
+		t.Errorf("token-not-received must resolve Blocked: got status=%s comparison=%v", r.Status, r.Comparison)
+	}
+	if r.ObservedOutcome != ObservationBlocked {
+		t.Errorf("ObservedOutcome = %q, want %q", r.ObservedOutcome, ObservationBlocked)
+	}
+}
+
+func TestDLPVerifier_NoSinkToken_UnaffectedByNewLogic(t *testing.T) {
+	// Regression test: the existing 5 local-marker-only
+	// dlp-exfiltration-validation.yaml steps never set SinkTokenObserved --
+	// nil must still take the pre-existing local-marker regex path exactly
+	// as before this task.
+	exp := dlpExp("dlp-usb-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput: "DLP_OBSERVATION: OperationBlocked",
+		// SinkTokenObserved deliberately left nil.
+	})
+	if r.Status != StatusDetected || r.Comparison != Match {
+		t.Errorf("nil SinkTokenObserved must fall back to the local-marker path: got status=%s comparison=%v", r.Status, r.Comparison)
+	}
+}
