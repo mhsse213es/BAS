@@ -1,0 +1,39 @@
+id: art-selective-darwin
+name: Atomic Red Team  -  Selective macOS Capabilities
+description: >
+  Same full-depth ATT&CK sweep as "Full macOS Sweep"  -  every macOS atomic
+  test for every technique across the entire seeded Atomic Red Team library,
+  resolved live from the platform database at run time. The only difference
+  is Customize: use it to narrow the run down to a chosen subset of
+  techniques (every atomic for each one you pick still runs). Leave
+  Customize untouched and this runs the exact same full breadth as Full
+  macOS Sweep.
+  Note: an unmodified run is a large run  -  substantially more steps than a
+  one-per-technique sweep, so expect a correspondingly longer runtime on a
+  single endpoint. An agent runs one scenario at a time; starting another
+  mid-run is rejected.
+author: Audspect Research
+supported_os: [darwin]
+tags:
+  - art
+  - atomic-red-team
+  - selective
+  - macos
+  - darwin
+  - mitre-attack
+mitre_phases:
+  - initial-access
+  - execution
+  - persistence
+  - privilege-escalation
+  - defense-evasion
+  - credential-access
+  - discovery
+  - lateral-movement
+  - collection
+  - exfiltration
+  - impact
+
+# Defaults to every macOS atomic for every technique (same builder as
+# art_all_platform) -- Customize lets an operator narrow this to a subset.
+art_selective_platform: true

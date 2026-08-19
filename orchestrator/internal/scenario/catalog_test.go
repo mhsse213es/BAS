@@ -69,6 +69,32 @@ func TestListTechniqueMeta_ExcludesTechniquesWithNoWindowsStep(t *testing.T) {
 	}
 }
 
+// ListTechniqueMetaByPlatform is ListTechniqueMeta scoped to an arbitrary
+// platform -- powers the Customize picker for art_selective_platform
+// (Linux/macOS) scenarios, which need their own technique catalog rather
+// than the Windows-only one ListTechniqueMeta always returns.
+func TestListTechniqueMetaByPlatform(t *testing.T) {
+	store := &ARTStore{steps: map[string][]ScenarioStep{
+		"T1059": {{Name: "exec sh", TechniqueID: "T1059", Platform: "linux", Executor: "sh", Command: "whoami"}},
+		"T1499": {{Name: "windows dos", TechniqueID: "T1499", Platform: "windows", Executor: "powershell", Command: "true"}},
+	}}
+	meta := store.ListTechniqueMetaByPlatform("linux")
+	if len(meta) != 1 || meta[0].ID != "T1059" {
+		t.Fatalf("meta = %+v, want exactly [T1059] (T1499 is windows-only, must be excluded from a linux query)", meta)
+	}
+}
+
+// ListTechniqueMeta must still behave exactly as before after being
+// refactored to delegate to ListTechniqueMetaByPlatform("windows") --
+// regression guard for the refactor.
+func TestListTechniqueMeta_StillWindowsOnlyAfterRefactor(t *testing.T) {
+	meta := newTestStore().ListTechniqueMeta()
+	byPlatform := newTestStore().ListTechniqueMetaByPlatform("windows")
+	if len(meta) != len(byPlatform) {
+		t.Fatalf("ListTechniqueMeta() len = %d, ListTechniqueMetaByPlatform(\"windows\") len = %d -- must match", len(meta), len(byPlatform))
+	}
+}
+
 // ListAtomicsByPlatform returns one row per individual atomic test (not
 // aggregated per technique like ListTechniqueMeta) -- powers the read-only
 // "Detailed view" shown for the art_all_windows Full Sweep scenario, which

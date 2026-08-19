@@ -1452,7 +1452,16 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		}
 		if len(o.Techniques) > 0 {
 			c.ARTTechniques = o.Techniques
+			// Every ART "run everything" flag must be cleared here, not just
+			// ARTAllWindows -- BuildSteps checks them in priority order before
+			// ARTTechniques, so leaving any of them true would make an
+			// operator-selected subset silently run the full sweep instead
+			// (this was previously missed for ARTAllPlatform, and would have
+			// been missed again for the new Selective flags below).
 			c.ARTAllWindows = false
+			c.ARTAllPlatform = false
+			c.ARTSelectiveWindows = false
+			c.ARTSelectivePlatform = false
 		}
 		if len(o.Abilities) > 0 {
 			c.CalderaAbilities = o.Abilities
@@ -3727,12 +3736,21 @@ func (h *Handler) GetCoverageAnalytics(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/art/techniques — live ART catalog (technique id, representative name,
 // atomic-test count). Returns an empty list if the ART store isn't loaded.
+// GET /api/art/techniques?platform=windows — one catalog entry per technique
+// for the given platform (default windows, preserving every existing
+// caller's behavior). The platform param exists so the Customize picker can
+// show a Linux/macOS scenario its own technique catalog instead of the
+// Windows-only one every other caller relies on.
 func (h *Handler) GetARTTechniques(w http.ResponseWriter, r *http.Request) {
 	if h.artStore == nil {
 		respond(w, []scenario.TechniqueMeta{})
 		return
 	}
-	respond(w, h.artStore.ListTechniqueMeta())
+	platform := r.URL.Query().Get("platform")
+	if platform == "" {
+		platform = "windows"
+	}
+	respond(w, h.artStore.ListTechniqueMetaByPlatform(platform))
 }
 
 // GET /api/art/atomics?platform=windows — every individual atomic test for

@@ -44,3 +44,57 @@ func TestBuildARTAllWindowsStepsIncludesAllTechniques(t *testing.T) {
 		t.Errorf("len(steps) = %d, want 5 (both T1059 atomics + 1 each for T1083/T1529/T1485)", len(steps))
 	}
 }
+
+// ARTSelectiveWindows/ARTSelectivePlatform must dispatch through BuildSteps to
+// the exact same full-depth builder as ARTAllWindows/ARTAllPlatform -- the
+// "Selective" scenarios are meant to have byte-for-byte identical default
+// coverage to the "Full Sweep" ones, differing only in the frontend's
+// Customize-vs-Detailed-view affordance, never in what actually runs.
+func TestBuildSteps_ARTSelectiveWindows_MatchesARTAllWindows(t *testing.T) {
+	store := &ARTStore{steps: map[string][]ScenarioStep{
+		"T1059": {
+			{Name: "exec ps", TechniqueID: "T1059", Platform: "windows", Executor: "powershell", Command: "whoami"},
+			{Name: "exec cmd", TechniqueID: "T1059", Platform: "windows", Executor: "cmd", Command: "whoami"},
+		},
+		"T1083": {{Name: "discovery", TechniqueID: "T1083", Platform: "windows", Executor: "powershell", Command: "dir"}},
+	}}
+
+	allSteps, _, err := BuildSteps(&Scenario{ARTAllWindows: true}, "", "", store, "windows")
+	if err != nil {
+		t.Fatalf("BuildSteps(ARTAllWindows): %v", err)
+	}
+	selSteps, _, err := BuildSteps(&Scenario{ARTSelectiveWindows: true}, "", "", store, "windows")
+	if err != nil {
+		t.Fatalf("BuildSteps(ARTSelectiveWindows): %v", err)
+	}
+	if len(selSteps) != len(allSteps) {
+		t.Fatalf("len(selSteps) = %d, len(allSteps) = %d -- selective must match full sweep exactly", len(selSteps), len(allSteps))
+	}
+	if len(selSteps) != 3 {
+		t.Errorf("len(selSteps) = %d, want 3", len(selSteps))
+	}
+}
+
+// Same guarantee for the non-Windows sibling: ARTSelectivePlatform must match
+// ARTAllPlatform's output for a given agentOS.
+func TestBuildSteps_ARTSelectivePlatform_MatchesARTAllPlatform(t *testing.T) {
+	store := &ARTStore{steps: map[string][]ScenarioStep{
+		"T1059": {{Name: "exec sh", TechniqueID: "T1059", Platform: "linux", Executor: "sh", Command: "whoami"}},
+		"T1083": {{Name: "discovery", TechniqueID: "T1083", Platform: "linux", Executor: "sh", Command: "ls"}},
+	}}
+
+	allSteps, _, err := BuildSteps(&Scenario{ARTAllPlatform: true}, "", "", store, "linux")
+	if err != nil {
+		t.Fatalf("BuildSteps(ARTAllPlatform): %v", err)
+	}
+	selSteps, _, err := BuildSteps(&Scenario{ARTSelectivePlatform: true}, "", "", store, "linux")
+	if err != nil {
+		t.Fatalf("BuildSteps(ARTSelectivePlatform): %v", err)
+	}
+	if len(selSteps) != len(allSteps) {
+		t.Fatalf("len(selSteps) = %d, len(allSteps) = %d -- selective must match full sweep exactly", len(selSteps), len(allSteps))
+	}
+	if len(selSteps) != 2 {
+		t.Errorf("len(selSteps) = %d, want 2", len(selSteps))
+	}
+}

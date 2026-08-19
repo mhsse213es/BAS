@@ -210,6 +210,15 @@ type Scenario struct {
 	// Used by linux-full / darwin-full sweep scenarios; respects supported_os.
 	ARTAllPlatform bool     `yaml:"art_all_platform,omitempty"     json:"artAllPlatform,omitempty"`
 	ARTTechniques  []string `yaml:"art_techniques,omitempty"       json:"artTechniques,omitempty"`
+	// ARTSelectiveWindows/ARTSelectivePlatform build the exact same full-depth
+	// Windows/agent-OS sweep as ARTAllWindows/ARTAllPlatform (same builder,
+	// same live coverage, no drift between them) -- the only difference is
+	// frontend affordance: these get a real selectable Customize picker
+	// instead of the read-only Detailed view, so an operator can narrow the
+	// run to a chosen technique subset while still defaulting to full breadth
+	// when left alone.
+	ARTSelectiveWindows  bool `yaml:"art_selective_windows,omitempty"  json:"artSelectiveWindows,omitempty"`
+	ARTSelectivePlatform bool `yaml:"art_selective_platform,omitempty" json:"artSelectivePlatform,omitempty"`
 
 	// LivePolicy holds the guardrails enforced during live (telemetry/lab) runs.
 	LivePolicy *LivePolicy `yaml:"live_policy,omitempty" json:"livePolicy,omitempty"`

@@ -111,6 +111,26 @@ func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTSto
 		steps, err := buildARTPlatformSteps(agentOS, artStore)
 		return steps, nil, err
 	}
+	// ARTSelectiveWindows/ARTSelectivePlatform default to the exact same
+	// full-depth builder as ARTAllWindows/ARTAllPlatform above -- an operator
+	// narrows the run via the Customize picker's technique subset, which
+	// arrives here as ARTTechniques after the API handler clears these flags
+	// (see RunScenario's subset-override logic), so this branch only ever
+	// runs for the unmodified "everything" default.
+	if sc.ARTSelectiveWindows {
+		if artStore == nil {
+			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
+		}
+		steps, err := buildARTPlatformSteps("windows", artStore)
+		return steps, nil, err
+	}
+	if sc.ARTSelectivePlatform {
+		if artStore == nil {
+			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
+		}
+		steps, err := buildARTPlatformSteps(agentOS, artStore)
+		return steps, nil, err
+	}
 	if len(sc.ARTTechniques) > 0 {
 		if artStore == nil {
 			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")

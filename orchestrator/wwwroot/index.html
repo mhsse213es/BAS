@@ -4942,8 +4942,9 @@ var overlayPinned = null; // scenario id of the pinned tile's overlay, or null
 var scenarioView = 'landing'; // 'landing' | 'em' | 'other'
 var scenarioSrcCollapsed = { em: {}, other: {}, search: {} };
 var agents   = [];
-var artCatalog = [];      // live ART catalog: [{id,name,tests}]
+var artCatalog = [];      // live ART catalog: [{id,name,tests}] -- always windows
 var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
+var _artCatalogByPlatform = {};  // live ART catalog per non-windows platform, keyed by 'linux'/'darwin' -- for art_selective_platform scenarios' Customize picker
 var _toast;
 var _modalScId = null;
 var _runSelection = null;  // {scId, fw:'art'|'caldera', ids:[]} — operator-chosen subset for the next run
@@ -7834,6 +7835,8 @@ function loadScenarios() {
         calderaAdversaryId: s.calderaAdversaryId || '',
         artAllWindows:      !!s.artAllWindows,
         artAllPlatform:     !!s.artAllPlatform,
+        artSelectiveWindows:  !!s.artSelectiveWindows,
+        artSelectivePlatform: !!s.artSelectivePlatform,
         intelSource:        s.intelSource         || '',
         intelActor:         s.intelActor          || '',
         intelConfidence:    s.intelConfidence      || '',
@@ -8276,6 +8279,10 @@ function scenarioDetailHTML(s) {
         // for a Linux/macOS full sweep, so no count is shown here (the
         // read-only Detailed view has the real per-platform number).
         modeMeta = 'Full ART sweep';
+      } else if (s.artSelectiveWindows) {
+        modeMeta = 'Selective ART sweep' + (artCatalog.length ? ' · up to ' + artCatalog.length + ' techniques' : '');
+      } else if (s.artSelectivePlatform) {
+        modeMeta = 'Selective ART sweep';
       } else if (s.calderaAllWindows) {
         modeMeta = 'Full Caldera sweep' + (calderaCatalog.length ? ' · ' + calderaCatalog.length + ' abilities' : '');
       } else if ((s.artTechniques || []).length) {
@@ -8314,7 +8321,7 @@ function scenarioDetailHTML(s) {
       // Customize: ART/Caldera scenarios can be narrowed to a chosen subset of
       // techniques/abilities before running. Detect the framework from the flags
       // or the explicit list.
-      var fw = (s.artAllWindows || s.artAllPlatform || (s.artTechniques || []).length) ? 'art'
+      var fw = (s.artAllWindows || s.artAllPlatform || s.artSelectiveWindows || s.artSelectivePlatform || (s.artTechniques || []).length) ? 'art'
              : (s.calderaAllWindows || (s.calderaAbilities || []).length) ? 'caldera'
              : (!s.localCheck && stepN) ? 'steps'
              : '';
@@ -11701,7 +11708,15 @@ function updateVariantDepthNote() {
   var depth = sel ? sel.value : 'none';
   var scId = _modalScId || document.getElementById('modal-sc').value;
   var sc = scenarios.find(function(s) { return s.id === scId; });
-  var baseSteps = sc ? ((sc.artTechniques || []).length || (sc.artAllWindows ? '3,467' : 0)) : '?';
+  // Full-sweep-style scenarios (Full Sweep and its Selective siblings, when
+  // left uncustomized) dispatch against the entire technique catalog --
+  // hundreds of techniques, always well over the warning threshold below.
+  // No exact count is needed (and none was reliably available here even
+  // before this fix -- the old '3,467' was a stale snapshot, and being a
+  // string it silently never triggered the typeof === 'number' check that
+  // was supposed to color this warning red).
+  var isFullSweepFlag = sc && (sc.artAllWindows || sc.artAllPlatform || sc.artSelectiveWindows || sc.artSelectivePlatform);
+  var baseSteps = sc ? ((sc.artTechniques || []).length || (isFullSweepFlag ? Infinity : 0)) : '?';
   var mult = { none: '1', quick: '~5', standard: '~15', full: '33' }[depth] || '1';
   var notes = {
     none: 'One test per step — base command only. Fast, low noise.',
@@ -11818,7 +11833,7 @@ function renderWizardReview() {
 function scenarioFramework(sc) {
   if (!sc) return '';
   if (sc.localCheck) return 'posture';
-  if (sc.artAllWindows || sc.artAllPlatform || (sc.artTechniques || []).length) return 'art';
+  if (sc.artAllWindows || sc.artAllPlatform || sc.artSelectiveWindows || sc.artSelectivePlatform || (sc.artTechniques || []).length) return 'art';
   if (sc.calderaAllWindows || (sc.calderaAbilities || []).length) return 'caldera';
   if ((sc.steps || []).length) return 'steps';
   return '';
@@ -11862,17 +11877,26 @@ function openPicker(scId, fw) {
     }).catch(function(e) { showToast('Posture catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
     return;
   }
-  var have = (fw === 'art') ? scopeArtItems(sc, artCatalog) : calderaCatalog;
+  // art_selective_platform scenarios (Linux/macOS) need their own platform's
+  // catalog, not the Windows-only one every other 'art' scenario uses --
+  // GetARTTechniques defaults to windows, so only override for those.
+  var artPlatform = sc.artSelectivePlatform ? ((sc.supportedOs && sc.supportedOs[0]) || 'windows') : 'windows';
+  var artCache = (artPlatform === 'windows') ? artCatalog : (_artCatalogByPlatform[artPlatform] || []);
+  var have = (fw === 'art') ? scopeArtItems(sc, artCache) : calderaCatalog;
   if (have.length) { openPickerWith(scId, fw, sc, have); return; }
   // Catalog not loaded (or a prior fetch failed silently) — fetch on demand and
   // surface the actual reason instead of a generic "unavailable" message.
-  var url = (fw === 'art') ? '/api/art/techniques' : '/api/caldera/abilities';
+  var url = (fw === 'art')
+    ? ('/api/art/techniques' + (artPlatform !== 'windows' ? '?platform=' + encodeURIComponent(artPlatform) : ''))
+    : '/api/caldera/abilities';
   apicall(url).then(function(d) {
     if (!Array.isArray(d)) {
       showToast((d && d.error) ? d.error : 'Catalog unavailable', 'err');
       return;
     }
-    if (fw === 'art') artCatalog = d; else calderaCatalog = d;
+    if (fw === 'art') {
+      if (artPlatform === 'windows') artCatalog = d; else _artCatalogByPlatform[artPlatform] = d;
+    } else calderaCatalog = d;
     if (scenarios.length) renderScenarios();
     var items = (fw === 'art') ? scopeArtItems(sc, d) : d;
     if (!items.length) {
@@ -11894,7 +11918,7 @@ function openPicker(scId, fw) {
 // every ART-framework scenario's Customize picker showed the identical
 // full catalog regardless of which scenario was opened.
 function scopeArtItems(sc, items) {
-  if (sc.artAllWindows || sc.artAllPlatform || !(sc.artTechniques || []).length) return items;
+  if (sc.artAllWindows || sc.artAllPlatform || sc.artSelectiveWindows || sc.artSelectivePlatform || !(sc.artTechniques || []).length) return items;
   var wanted = {};
   sc.artTechniques.forEach(function(t) { wanted[String(t).toUpperCase()] = true; });
   return items.filter(function(item) { return item.id && wanted[item.id.toUpperCase()]; });

@@ -267,29 +267,41 @@ type AtomicMeta struct {
 // its representative Name must be a Windows step (never the first entry in
 // steps[id] regardless of platform, which could be a Linux-only atomic).
 func (s *ARTStore) ListTechniqueMeta() []TechniqueMeta {
+	return s.ListTechniqueMetaByPlatform("windows")
+}
+
+// ListTechniqueMetaByPlatform is ListTechniqueMeta scoped to an arbitrary
+// platform -- powers the selectable Customize picker for non-Windows
+// art_selective_platform scenarios (Linux/macOS), which need their own
+// technique catalog rather than the Windows-only one ListTechniqueMeta
+// always returned.
+func (s *ARTStore) ListTechniqueMetaByPlatform(platform string) []TechniqueMeta {
+	if platform == "" {
+		platform = "windows"
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]TechniqueMeta, 0, len(s.steps))
 	for id, steps := range s.steps {
 		name := ""
-		winCount := 0
+		count := 0
 		for _, st := range steps {
 			p := st.Platform
 			if p == "" {
 				p = "windows"
 			}
-			if !strings.EqualFold(p, "windows") {
+			if !strings.EqualFold(p, platform) {
 				continue
 			}
 			if name == "" {
 				name = st.Name
 			}
-			winCount++
+			count++
 		}
-		if winCount == 0 {
-			continue // no Windows step at all -- excluded, matching ListTechniquesByPlatform("windows")
+		if count == 0 {
+			continue // no step for this platform at all -- excluded, matching ListTechniquesByPlatform(platform)
 		}
-		out = append(out, TechniqueMeta{ID: id, Name: name, Tests: winCount, Tactic: models.LookupTactic(id)})
+		out = append(out, TechniqueMeta{ID: id, Name: name, Tests: count, Tactic: models.LookupTactic(id)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
