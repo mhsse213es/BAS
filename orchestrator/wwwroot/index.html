@@ -2133,7 +2133,7 @@ body.theme-slate {
                (say) OpenCTI's count is correct data under the wrong-looking
                header if this card is read as "OTX's numbers." -->
           <div class="conn-cfg-card" id="connector-status-card">
-            <div style="font-weight:600;font-size:0.82rem;color:var(--text);margin-bottom:0.5rem">Sync Overview</div>
+            <div style="font-weight:600;font-size:0.82rem;color:var(--text);margin-bottom:0.5rem">OTX Sync Overview</div>
             <div id="ti-otx-config-panel"></div>
             <div class="conn-cfg-row">
               <span class="conn-cfg-label">OTX (AlienVault)</span>
@@ -2481,7 +2481,7 @@ body.theme-slate {
       <!-- Scenarios -->
       <div id="tab-scenarios">
         <div class="sec-hdr">
-          <h2>BFSI Scenarios <span id="sc-cnt" class="cnt">0</span></h2>
+          <h1>Scenarios <span id="sc-cnt" class="cnt">0</span></h1>
           <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap">
             <input type="search" id="sc-search" placeholder="Search name, tag, technique…"
                    oninput="if (!this.value.trim() && scenarioView === 'search') { scenarioView = 'landing'; } renderScenarios()"
@@ -7833,6 +7833,7 @@ function loadScenarios() {
         calderaAbilities:   s.calderaAbilities   || [],
         calderaAdversaryId: s.calderaAdversaryId || '',
         artAllWindows:      !!s.artAllWindows,
+        artAllPlatform:     !!s.artAllPlatform,
         intelSource:        s.intelSource         || '',
         intelActor:         s.intelActor          || '',
         intelConfidence:    s.intelConfidence      || '',
@@ -8270,6 +8271,11 @@ function scenarioDetailHTML(s) {
           'onclick="openModal(\'' + x(s.id) + '\',null);return false;">Posture check &#9881;</a>';
       } else if (s.artAllWindows) {
         modeMeta = 'Full ART sweep' + (artCatalog.length ? ' · ' + artCatalog.length + ' techniques' : '');
+      } else if (s.artAllPlatform) {
+        // artCatalog is the Windows-scoped catalog count -- not meaningful
+        // for a Linux/macOS full sweep, so no count is shown here (the
+        // read-only Detailed view has the real per-platform number).
+        modeMeta = 'Full ART sweep';
       } else if (s.calderaAllWindows) {
         modeMeta = 'Full Caldera sweep' + (calderaCatalog.length ? ' · ' + calderaCatalog.length + ' abilities' : '');
       } else if ((s.artTechniques || []).length) {
@@ -8308,12 +8314,19 @@ function scenarioDetailHTML(s) {
       // Customize: ART/Caldera scenarios can be narrowed to a chosen subset of
       // techniques/abilities before running. Detect the framework from the flags
       // or the explicit list.
-      var fw = (s.artAllWindows || (s.artTechniques || []).length) ? 'art'
+      var fw = (s.artAllWindows || s.artAllPlatform || (s.artTechniques || []).length) ? 'art'
              : (s.calderaAllWindows || (s.calderaAbilities || []).length) ? 'caldera'
              : (!s.localCheck && stepN) ? 'steps'
              : '';
       var fwNoun = fw === 'art' ? 'techniques' : fw === 'caldera' ? 'abilities' : 'steps';
-      var customizeBtn = fw
+      // art_all_windows/art_all_platform always run every atomic for every
+      // technique their platform supports -- no subset to choose, so a
+      // read-only Detailed view replaces the selectable Customize button
+      // here too (same reasoning as renderModalSelection for the Run modal).
+      var customizeBtn = (s.artAllWindows || s.artAllPlatform)
+        ? '<button class="btn btn-outline btn-sm" onclick="openDetailedViewForScenario(\'' + x(s.id) + '\')" ' +
+          'title="Every atomic test that will run">&#128269; Detailed view</button> '
+        : fw
         ? '<button class="btn btn-outline btn-sm" onclick="openPicker(\'' + x(s.id) + '\',\'' + fw + '\')" ' +
           'title="Choose which ' + fwNoun + ' to run">&#9881; Customize</button> '
         : '';
@@ -11805,7 +11818,7 @@ function renderWizardReview() {
 function scenarioFramework(sc) {
   if (!sc) return '';
   if (sc.localCheck) return 'posture';
-  if (sc.artAllWindows || (sc.artTechniques || []).length) return 'art';
+  if (sc.artAllWindows || sc.artAllPlatform || (sc.artTechniques || []).length) return 'art';
   if (sc.calderaAllWindows || (sc.calderaAbilities || []).length) return 'caldera';
   if ((sc.steps || []).length) return 'steps';
   return '';
@@ -11881,7 +11894,7 @@ function openPicker(scId, fw) {
 // every ART-framework scenario's Customize picker showed the identical
 // full catalog regardless of which scenario was opened.
 function scopeArtItems(sc, items) {
-  if (sc.artAllWindows || !(sc.artTechniques || []).length) return items;
+  if (sc.artAllWindows || sc.artAllPlatform || !(sc.artTechniques || []).length) return items;
   var wanted = {};
   sc.artTechniques.forEach(function(t) { wanted[String(t).toUpperCase()] = true; });
   return items.filter(function(item) { return item.id && wanted[item.id.toUpperCase()]; });
@@ -11965,15 +11978,22 @@ function openPickerFromModal() {
   openPicker(_modalScId || document.getElementById('modal-sc').value);
 }
 
-// openDetailedViewFromModal opens the read-only "Detailed view" for an
-// art_all_windows Full Sweep scenario -- every atomic test that will
-// actually run, browsable but not selectable, since this scenario always
-// runs everything and has no subset to choose from.
-function openDetailedViewFromModal() {
-  var id = _modalScId || document.getElementById('modal-sc').value;
-  var sc = scenarios.find(function(s) { return s.id === id; });
+// openDetailedViewForScenario opens the read-only "Detailed view" for an
+// art_all_windows/art_all_platform Full Sweep scenario -- every atomic
+// test that will actually run for its target platform, browsable but not
+// selectable, since these scenarios always run everything and have no
+// subset to choose from. Shared by the Run modal's Customize replacement
+// (openDetailedViewFromModal) and the scenario tile's own hover-detail
+// Customize replacement (scenarioDetailHTML).
+function openDetailedViewForScenario(scId) {
+  var sc = scenarios.find(function(s) { return s.id === scId; });
   if (!sc) return;
-  apicall('/api/art/atomics?platform=windows').then(function(atoms) {
+  // Each art_all_windows/art_all_platform scenario targets exactly one
+  // platform (supportedOs is single-element for these) -- fetch that
+  // platform's atomics, not always "windows", so the Linux/macOS sweeps
+  // show their own real atomic list instead of the Windows one.
+  var platform = (sc.supportedOs && sc.supportedOs[0]) || 'windows';
+  apicall('/api/art/atomics?platform=' + encodeURIComponent(platform)).then(function(atoms) {
     if (!atoms || !atoms.length) {
       showToast('ART catalog is empty — reseed ART content', 'err');
       return;
@@ -11987,13 +12007,19 @@ function openDetailedViewFromModal() {
   });
 }
 
+function openDetailedViewFromModal() {
+  openDetailedViewForScenario(_modalScId || document.getElementById('modal-sc').value);
+}
+
 function openDetailedView(sc, items) {
   _pickerItems = items;
   _pickerScId = sc.id; _pickerFw = 'art-atomics'; _pickerSel = {};
   _pickerReadOnly = true;
+  var platform = (sc.supportedOs && sc.supportedOs[0]) || 'windows';
+  var platformLabel = platform === 'darwin' ? 'macOS' : platform.charAt(0).toUpperCase() + platform.slice(1);
   document.getElementById('picker-title').textContent = 'Every atomic test — ' + sc.name;
   document.getElementById('picker-sub').textContent =
-    items.length + ' atomic test' + (items.length === 1 ? '' : 's') + ' across every Windows-runnable technique will run. Search by technique ID or atomic name — this list is not selectable.';
+    items.length + ' atomic test' + (items.length === 1 ? '' : 's') + ' across every ' + platformLabel + '-runnable technique will run. Search by technique ID or atomic name — this list is not selectable.';
   document.getElementById('picker-search').value = '';
   var filtersEl = document.getElementById('picker-caldera-filters');
   if (filtersEl) filtersEl.style.display = 'none';
@@ -12184,13 +12210,13 @@ function renderModalSelection() {
   var sc = scenarios.find(function(s) { return s.id === id; });
   var fw = scenarioFramework(sc);
   if (!sc || !fw) { cw.style.display = 'none'; note.style.display = 'none'; return; }
-  // art_all_windows scenarios always run every atomic for every
-  // Windows-runnable technique -- there is no subset to choose, so
-  // "Customize" would be misleading here. Show a read-only "Detailed view"
-  // instead (see openDetailedViewFromModal) and skip the rest of this
-  // function entirely, since none of the selection/subset logic below
-  // applies to a scenario that has nothing to select.
-  if (sc.artAllWindows) {
+  // art_all_windows/art_all_platform scenarios always run every atomic for
+  // every technique their target platform supports -- there is no subset
+  // to choose, so "Customize" would be misleading here. Show a read-only
+  // "Detailed view" instead (see openDetailedViewFromModal) and skip the
+  // rest of this function entirely, since none of the selection/subset
+  // logic below applies to a scenario that has nothing to select.
+  if (sc.artAllWindows || sc.artAllPlatform) {
     cw.style.display = 'block';
     link.innerHTML = '&#128269; Detailed view — every atomic test that will run';
     link.style.opacity = '';
