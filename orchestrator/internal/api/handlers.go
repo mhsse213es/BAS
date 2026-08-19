@@ -2379,6 +2379,13 @@ type runRow struct {
 	// fallback) — same classification the campaign rollup and kill-chain use.
 	// Lets the dashboard split fails into "detected" vs "missed" honestly.
 	DetectedTechs map[string]bool `json:"detectedTechs,omitempty"`
+	// AgentDisconnected is set by ListScenarioRuns' own follow-up query (not
+	// scanRunRows -- this field has no backing column) for any 'running' row
+	// whose agent's heartbeat is stale. Distinct from sweeps' real, persisted
+	// agent_disconnected status: an individual run has no dispatcher to pause
+	// on this, so it stays a display-only overlay. See
+	// docs/superpowers/specs/2026-08-18-individual-run-disconnect-resilience-design.md.
+	AgentDisconnected bool `json:"agentDisconnected,omitempty"`
 }
 
 // scanRunRows scans a scenario_runs query's rows, decoding the JSON blob
@@ -2451,6 +2458,43 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	if runs == nil {
 		runs = []runRow{}
 	}
+
+	// Live "Agent Disconnected" overlay: for every running row, check whether
+	// its agent's heartbeat has gone stale. A separate follow-up query rather
+	// than joining agents into the SELECT above -- scanRunRows' column order
+	// is a documented contract shared with GetVexSweepRuns/GetEMSweepRuns,
+	// neither of which needs this field (sweep rows already carry their own
+	// real agent_disconnected status from the sweep-level fix).
+	var runningAgentIDs []string
+	seen := map[string]bool{}
+	for _, run := range runs {
+		if run.Status == "running" && !seen[run.AgentID] {
+			seen[run.AgentID] = true
+			runningAgentIDs = append(runningAgentIDs, run.AgentID)
+		}
+	}
+	if len(runningAgentIDs) > 0 {
+		offlineRows, err := h.db.Query(r.Context(),
+			`SELECT agent_id FROM agents WHERE agent_id = ANY($1) AND last_update < NOW() - make_interval(secs => $2)`,
+			runningAgentIDs, int(models.AgentOfflineAfter.Seconds()),
+		)
+		if err == nil {
+			offline := map[string]bool{}
+			for offlineRows.Next() {
+				var id string
+				if err := offlineRows.Scan(&id); err == nil {
+					offline[id] = true
+				}
+			}
+			offlineRows.Close()
+			for i := range runs {
+				if runs[i].Status == "running" && offline[runs[i].AgentID] {
+					runs[i].AgentDisconnected = true
+				}
+			}
+		}
+	}
+
 	respond(w, runs)
 }
 

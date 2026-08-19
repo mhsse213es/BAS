@@ -553,3 +553,57 @@ func TestListScenarioRuns_PausedProjection(t *testing.T) {
 		}
 	})
 }
+
+func TestListScenarioRuns_AgentDisconnectedProjection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+
+		// Agent offline (stale heartbeat) + running row -> agentDisconnected true.
+		seedRunRow(t, pool, "run-disc", "sc-disc", "agent-disc", "running")
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE agents SET last_update = NOW() - interval '10 minutes' WHERE agent_id='agent-disc'`); err != nil {
+			t.Fatalf("age the agent: %v", err)
+		}
+
+		// Agent alive + running row -> agentDisconnected false/absent.
+		seedRunRow(t, pool, "run-alive", "sc-disc", "agent-alive", "running")
+
+		// Agent offline but the RUN is not 'running' (terminal) -> agentDisconnected
+		// must not apply retroactively to a completed run.
+		seedRunRow(t, pool, "run-done-offline-agent", "sc-disc", "agent-done-offline", "completed")
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE agents SET last_update = NOW() - interval '10 minutes' WHERE agent_id='agent-done-offline'`); err != nil {
+			t.Fatalf("age the agent: %v", err)
+		}
+
+		rec := httptest.NewRecorder()
+		h.ListScenarioRuns(rec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?scenarioId=sc-disc", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+
+		var got []struct {
+			ID                string `json:"id"`
+			AgentDisconnected bool   `json:"agentDisconnected"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		byID := map[string]bool{}
+		for _, r := range got {
+			byID[r.ID] = r.AgentDisconnected
+		}
+		if !byID["run-disc"] {
+			t.Error("run-disc: agentDisconnected = false, want true (agent heartbeat is stale)")
+		}
+		if byID["run-alive"] {
+			t.Error("run-alive: agentDisconnected = true, want false (agent heartbeat is fresh)")
+		}
+		if byID["run-done-offline-agent"] {
+			t.Error("run-done-offline-agent: agentDisconnected = true, want false (run is not 'running')")
+		}
+	})
+}
