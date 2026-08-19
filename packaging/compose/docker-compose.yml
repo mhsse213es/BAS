@@ -90,7 +90,17 @@ services:
       postgres:
         condition: service_healthy
       caldera:
-        condition: service_started
+        # service_healthy, not service_started -- Caldera's healthcheck has a
+        # 180s start_period specifically because it loads its plugin/ability
+        # library on boot and isn't ready to serve /api/v2/abilities until
+        # that finishes. service_started only waits for the process to exist,
+        # which let the orchestrator's one-shot startup fetch
+        # (scenario.NewCalderaStore, main.go) race ahead of Caldera and load
+        # permanently empty on a cold rebuild -- confirmed in production
+        # 2026-08-19 ("connection refused" at orchestrator boot, Caldera
+        # itself healthy ~90s later, CalderaStore never recovered without a
+        # manual orchestrator restart since there's no retry).
+        condition: service_healthy
       chrome:
         condition: service_started  # orchestrator falls back to built-in PDF if chrome unhealthy
     environment:
