@@ -1547,6 +1547,33 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		`DROP INDEX IF EXISTS idx_vex_sweeps_one_running_per_agent`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_vex_sweeps_one_running_per_agent
 			ON vex_sweeps (agent_id) WHERE status IN ('running', 'agent_disconnected')`,
+
+		// DLP exfiltration sink service: dlp_sink_tokens records a per-attempt
+		// token issued at dispatch time (crypto/rand, not newID() -- see
+		// internal/api/dlp_sink.go); dlp_sink_receipts is an append-only log of
+		// whatever the sink endpoint actually received. token is NOT unique in
+		// dlp_sink_receipts -- a retried request can legitimately produce more
+		// than one receipt for the same token; the verifier only needs "was it
+		// received at least once", not exactly-once. See
+		// docs/superpowers/specs/2026-08-19-dlp-exfiltration-sink-service-design.md.
+		`CREATE TABLE IF NOT EXISTS dlp_sink_tokens (
+			token text PRIMARY KEY,
+			run_id text NOT NULL,
+			technique_id text NOT NULL,
+			created_at timestamptz NOT NULL DEFAULT NOW(),
+			expires_at timestamptz NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_dlp_sink_tokens_run_id ON dlp_sink_tokens (run_id)`,
+		`CREATE TABLE IF NOT EXISTS dlp_sink_receipts (
+			id bigserial PRIMARY KEY,
+			token text NOT NULL,
+			received_at timestamptz NOT NULL DEFAULT NOW(),
+			source_ip text NOT NULL DEFAULT '',
+			payload_hash text NOT NULL DEFAULT '',
+			payload_size integer NOT NULL DEFAULT 0,
+			channel text NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_dlp_sink_receipts_token ON dlp_sink_receipts (token)`,
 	}
 
 	for _, s := range stmts {
