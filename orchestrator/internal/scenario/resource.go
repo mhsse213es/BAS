@@ -106,9 +106,22 @@ var discoveryProfiles = map[string]*ResourceProfile{
 	"T1614": observe(domProcess),    // System Location Discovery
 	"T1016": observe(domNetwork),    // System Network Configuration Discovery
 	"T1049": observe(domNetwork),    // System Network Connections Discovery
-	"T1018": observe(domNetwork),    // Remote System Discovery -- under review 2026-08-20: real atomics may also be active network probes (host discovery/ping sweeps) rather than sub-second local enumeration, same concern as T1046 above
-	"T1087": observe(domSecPolicy),  // Account Discovery
-	"T1069": observe(domSecPolicy),  // Permission Groups Discovery
+	// T1018 (Remote System Discovery) -- checked 2026-08-20 against real
+	// production ART content, kept deliberately (unlike T1046 above): 5 of its
+	// 6 Linux atomics are genuinely fast local reads (arp -a, ip neighbour/
+	// route show, netstat -r, ip tcp_metrics show). Only one ("Test 7:
+	// sweep" -- a sequential, unthrottled `ping -c 1` of 254 addresses with
+	// no -W deadline) shares T1046's problem and can run well past 20s.
+	// This map is keyed by technique, not by individual atomic/test_index,
+	// so there's no way to exempt just that one test without a bigger,
+	// riskier change to the curation mechanism itself. Removing the whole
+	// technique would trade away the legitimate fast/parallel treatment for
+	// the other 5 to fix one -- the wrong tradeoff. Left as a known, narrow
+	// limitation: only that one atomic, in a technique the sweep dispatches
+	// depth-mode, is affected.
+	"T1018": observe(domNetwork),   // Remote System Discovery
+	"T1087": observe(domSecPolicy), // Account Discovery
+	"T1069": observe(domSecPolicy), // Permission Groups Discovery
 }
 
 // ResourceProfileFor returns the curated profile for an ATT&CK technique, or nil
