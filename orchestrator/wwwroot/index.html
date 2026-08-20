@@ -3588,7 +3588,7 @@ body.theme-slate {
           <div class="card-title">Executions</div>
           <div class="tbl-wrap" style="margin-top:0.5rem">
             <table>
-              <thead><tr><th>Name</th><th>Status</th><th>Started</th></tr></thead>
+              <thead><tr><th>Name</th><th>Status</th><th>Progress</th><th>Started</th><th></th></tr></thead>
               <tbody id="ex-execs-body"></tbody>
             </table>
           </div>
@@ -4595,11 +4595,11 @@ body.theme-slate {
 <div id="rerun-review-overlay" class="drawer-overlay" onclick="if(event.target===this)closeRerunReview()">
   <div class="drawer" style="width:480px;max-width:94vw">
     <div class="drawer-header">
-      <h3>Re-run Review</h3>
+      <h3 id="rerun-review-title">Re-run Review</h3>
       <button class="drawer-close" onclick="closeRerunReview()">&#10005;</button>
     </div>
     <div class="drawer-body">
-      <p class="tiny muted" style="margin-bottom:0.75rem">Exact clone of the original run's configuration — nothing below is editable.</p>
+      <p class="tiny muted" id="rerun-review-subtitle" style="margin-bottom:0.75rem">Exact clone of the original run's configuration — nothing below is editable.</p>
       <div id="rerun-review-body"></div>
     </div>
     <div style="padding:0.85rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:0.5rem;flex-shrink:0">
@@ -6515,17 +6515,49 @@ function loadExercisesTab() {
   apicall('/api/exercises/executions').then(function(execs) {
     var body = document.getElementById('ex-execs-body');
     var empty = document.getElementById('ex-execs-empty');
-    if (!execs || !execs.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
+    if (!execs || !execs.length) { body.innerHTML = ''; empty.style.display = 'block'; stopExPoll(); return; }
     empty.style.display = 'none';
     body.innerHTML = execs.map(function(e) {
+      var live = e.status === 'running' || e.status === 'paused';
+      var progress = e.steps_total
+        ? (e.steps_done || 0) + ' / ' + e.steps_total + ' steps'
+        : '<span class="tiny muted">—</span>';
+      var abortBtn = live
+        ? '<button class="btn btn-outline-red btn-sm" onclick="event.stopPropagation();abortExecution(\'' + x(e.id) + '\')">&#9632; Abort</button>'
+        : '';
       return '<tr style="cursor:pointer" onclick="openExerciseDetail(\'' + x(e.id) + '\')">' +
         '<td>' + x(e.name || e.plan_id) + '</td>' +
-        '<td><span class="badge">' + x(e.status) + '</span></td>' +
+        '<td><span class="badge">' + x(e.status) + (live ? ' <span class="tiny" style="opacity:.7">&#9679; live</span>' : '') + '</span></td>' +
+        '<td class="tiny">' + progress + '</td>' +
         '<td class="tiny muted">' + x(e.started_at || e.created_at || '') + '</td>' +
+        '<td class="td-r">' + abortBtn + '</td>' +
         '</tr>';
     }).join('');
+    // Keep the list (and any open detail drawer) live while anything is
+    // still running/paused -- previously this was a one-shot snapshot from
+    // whenever the tab was opened, so a launched exercise just sat on
+    // "running" forever with zero feedback until the operator manually
+    // reloaded. The executor itself already ticks server-side every 5s
+    // (cmd/server/main.go); this just catches the UI up to it.
+    if (execs.some(function(e) { return e.status === 'running' || e.status === 'paused'; })) {
+      startExPoll();
+    } else {
+      stopExPoll();
+    }
   }).catch(function() {});
 }
+
+var _exPollTimer = null;
+function startExPoll() {
+  if (_exPollTimer) return;
+  _exPollTimer = setInterval(function() {
+    var tab = document.getElementById('tab-exercises');
+    if (!tab || tab.style.display === 'none') { stopExPoll(); return; }
+    loadExercisesTab();
+    if (_exDetailOpenId) openExerciseDetail(_exDetailOpenId);
+  }, 5000);
+}
+function stopExPoll() { clearInterval(_exPollTimer); _exPollTimer = null; }
 
 function launchExercisePrompt(planId) {
   apicall('/api/exercises/plans/' + encodeURIComponent(planId)).then(function(p) {
@@ -6549,7 +6581,9 @@ function launchExercisePrompt(planId) {
   }).catch(function() {});
 }
 
+var _exDetailOpenId = null;
 function openExerciseDetail(id) {
+  _exDetailOpenId = id;
   apicall('/api/exercises/executions/' + encodeURIComponent(id)).then(function(d) {
     var ex = d.execution || {}, steps = d.steps || [];
     document.getElementById('exercise-detail-title').textContent = ex.name || ex.plan_id || 'Execution';
@@ -6579,6 +6613,7 @@ function openExerciseDetail(id) {
 
 function closeExerciseDetail() {
   document.getElementById('exercise-detail-overlay').classList.remove('open');
+  _exDetailOpenId = null;
 }
 
 function approveExStep(id, stepId) {
@@ -6588,6 +6623,7 @@ function approveExStep(id, stepId) {
 }
 
 function abortExecution(id) {
+  if (!confirm('Abort this exercise execution?')) return;
   apicall('/api/exercises/executions/' + encodeURIComponent(id) + '/abort', { method: 'POST' })
     .then(function() { showToast('Execution aborted', 'ok'); openExerciseDetail(id); loadExercisesTab(); })
     .catch(function(e) { showToast('Abort failed: ' + (e.message || 'error'), 'err'); });
@@ -8463,10 +8499,15 @@ function openCampaignDetail(id) {
       kv('Result mix', campaignMixBar(s)) + '</div></div>';
     // ── actions ──
     var actions = (s.status === 'running')
-      ? '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>'
+      ? (s.paused
+          ? '<button class="btn btn-outline btn-sm" onclick="resumeCampaign(\'' + x(c.id) + '\')" title="Resume every paused child run">&#9654; Resume campaign</button> '
+          : '<button class="btn btn-outline btn-sm" onclick="pauseCampaign(\'' + x(c.id) + '\')" title="Pause every running child run">&#10073;&#10073; Pause campaign</button> ')
+        + '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>'
       : '<button class="btn btn-outline btn-sm" onclick="openCampaignReport(\'' + x(c.id) + '\')" title="Open the fleet-wide HTML report">&#8595; HTML Report</button>' +
         ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignCSV(\'' + x(c.id) + '\')" title="Download the fleet forensic CSV (one row per technique across all agents)">&#8595; CSV</button>' +
-        ' <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run campaign — coming soon">Re-run · soon</button>';
+        ' ' + ((ROLE === 'admin' || ROLE === 'analyst')
+          ? '<button class="btn btn-outline btn-sm" onclick=\'openCampaignRerunReview(' + JSON.stringify(c).replace(/'/g,"&#39;") + ')\' title="Review and re-run this exact campaign configuration">Re-run</button>'
+          : '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Re-run requires the Analyst or Admin role">Re-run</button>');
 
     document.getElementById('campaigns-detail').innerHTML =
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">' +
@@ -8520,6 +8561,16 @@ function stopCampaign(id) {
   if (!confirm('Stop this campaign? Running child runs will be marked partial.')) return;
   apicall('/api/campaigns/' + encodeURIComponent(id) + '/stop', { method: 'POST' })
     .then(function() { showToast('Campaign stopped', 'ok'); openCampaignDetail(id); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+function pauseCampaign(id) {
+  apicall('/api/campaigns/' + encodeURIComponent(id) + '/pause', { method: 'POST' })
+    .then(function(res) { showToast('Pausing ' + ((res && res.pausing) || 0) + ' running child run(s)', 'ok'); openCampaignDetail(id); })
+    .catch(function(e) { showToast(e.message, 'err'); });
+}
+function resumeCampaign(id) {
+  apicall('/api/campaigns/' + encodeURIComponent(id) + '/resume', { method: 'POST' })
+    .then(function(res) { showToast('Resuming ' + ((res && res.resuming) || 0) + ' paused child run(s)', 'ok'); openCampaignDetail(id); })
     .catch(function(e) { showToast(e.message, 'err'); });
 }
 
@@ -14331,32 +14382,38 @@ function closeResults() { document.getElementById('results-overlay').classList.r
 // reselect; replaces the earlier "Re-run reopens the full dispatch wizard"
 // behavior.
 var _rerunReviewRun = null;
+// _rerunReviewKind ('run' | 'campaign') lets the one shared drawer route
+// Start/Cancel to the right entity -- openCampaignRerunReview below reuses
+// this same drawer rather than duplicating its markup.
+var _rerunReviewKind = null;
+var _rerunReviewCampaign = null;
 
-// rerunSubset derives the exact dispatch-subset field (techniques/checks) a
-// past run used, from its own results -- the most accurate source available,
-// since it reflects what actually ran rather than the scenario's full
-// current catalog. Returns {field, ids} or {field: null} when the framework
-// has no subset concept, or when the framework's dispatch-subset identifier
-// can't be reliably reconstructed from results alone:
-//   - art: result.technique.id IS the dispatch id -- exact.
-//   - posture: result.checkId IS the dispatch id -- exact.
-//   - caldera: result.technique.id is the MITRE technique, not the Caldera
-//     ability UUID that was actually dispatched (several abilities can map
-//     to the same technique) -- not reconstructable, falls back to "all".
-//   - steps: results carry no original step index -- not reconstructable,
-//     falls back to "all".
+// rerunSubset returns the exact dispatch-subset (field + ids) a past run
+// used. run.dispatchSubset is captured verbatim at dispatch time (see
+// dispatchSubsetFromOpts, internal/api/handlers.go) and is exact for every
+// framework, including Caldera (ability UUID) and custom steps (step index)
+// -- neither is recoverable from results after the fact. Only runs dispatched
+// before that field existed fall back to reconstructing from results, which
+// is exact for art/posture (result.technique.id / result.checkId IS the
+// dispatch id) but not for caldera/steps, so those legacy runs re-run in full.
 function rerunSubset(run, fw) {
+  if (run.dispatchSubset && run.dispatchSubset.field && (run.dispatchSubset.ids || []).length) {
+    return { field: run.dispatchSubset.field, ids: run.dispatchSubset.ids, exact: true };
+  }
   if (fw !== 'art' && fw !== 'posture') return { field: null, ids: [] };
   var seen = {}, ids = [];
   (run.results || []).forEach(function(r) {
     var id = fw === 'art' ? (r.technique && r.technique.id) : r.checkId;
     if (id && !seen[id]) { seen[id] = true; ids.push(id); }
   });
-  return { field: fw === 'art' ? 'techniques' : 'checks', ids: ids };
+  return { field: fw === 'art' ? 'techniques' : 'checks', ids: ids, exact: true };
 }
 
 function openRerunReview(run) {
+  _rerunReviewKind = 'run';
   _rerunReviewRun = run;
+  document.getElementById('rerun-review-title').textContent = 'Re-run Review';
+  document.getElementById('rerun-review-subtitle').textContent = "Exact clone of the original run's configuration — nothing below is editable.";
   var sc = scenarios.find(function(s) { return s.id === run.scenarioId; });
   var fw = scenarioFramework(sc);
   var agent = agents.find(function(a) { return a.agentId === run.agentId; });
@@ -14370,8 +14427,10 @@ function openRerunReview(run) {
   if (run.maxPrivilege) rows.push(['Privilege ceiling', x(run.maxPrivilege.charAt(0).toUpperCase() + run.maxPrivilege.slice(1))]);
   if (subset.field) {
     rows.push(['Techniques', subset.ids.length + ' — ' + subset.ids.slice(0, 6).join(', ') + (subset.ids.length > 6 ? ', …' : '')]);
-  } else if (fw === 'caldera' || fw === 'steps') {
-    rows.push(['Techniques', 'All (this scenario\'s ' + (fw === 'caldera' ? 'Caldera ability' : 'step') + ' subset can\'t be exactly replayed — re-runs the full scenario)']);
+  } else if (!subset.exact && (fw === 'caldera' || fw === 'steps')) {
+    // Only reachable for a run dispatched before dispatch_subset existed --
+    // its exact ability/step subset was never recoverable from results alone.
+    rows.push(['Techniques', 'All (this run predates exact re-run tracking, so its ' + (fw === 'caldera' ? 'Caldera ability' : 'step') + ' subset can\'t be recovered — re-runs the full scenario)']);
   } else {
     rows.push(['Techniques', 'All']);
   }
@@ -14385,9 +14444,12 @@ function openRerunReview(run) {
 function closeRerunReview() {
   document.getElementById('rerun-review-overlay').classList.remove('open');
   _rerunReviewRun = null;
+  _rerunReviewCampaign = null;
+  _rerunReviewKind = null;
 }
 
 function startRerunFromReview() {
+  if (_rerunReviewKind === 'campaign') { startCampaignRerunFromReview(); return; }
   var run = _rerunReviewRun;
   if (!run) return;
   var sc = scenarios.find(function(s) { return s.id === run.scenarioId; });
@@ -14411,7 +14473,9 @@ function startRerunFromReview() {
   };
   if (run.maxPrivilege) body.executionPolicy = { maxPrivilege: run.maxPrivilege };
   var subset = rerunSubset(run, fw);
-  if (subset.field) body[subset.field] = subset.ids;
+  // steps is the one subset field the API takes as numeric indices (scenario
+  // step-list positions), not string ids -- see dispatchOpts.Steps []int.
+  if (subset.field) body[subset.field] = (subset.field === 'steps') ? subset.ids.map(Number) : subset.ids;
 
   var btn = document.getElementById('rerun-review-start-btn');
   btn.disabled = true; btn.textContent = 'Dispatching…';
@@ -14424,6 +14488,87 @@ function startRerunFromReview() {
     closeRerunReview();
     closeResults();
     showTab('runs');
+  }).catch(function(e) {
+    btn.disabled = false; btn.innerHTML = '&#9654; Start Re-run';
+    showToast(e.message, 'err');
+  });
+}
+
+// openCampaignRerunReview mirrors openRerunReview for a whole campaign,
+// reusing the same read-only drawer. c is GetCampaign's response (see
+// openCampaignDetail) -- it carries targets (the exact agent-id snapshot
+// frozen at launch, immune to any group-membership changes since) and
+// subset (techniques/abilities/steps/checks/executionPolicy, captured
+// verbatim by CreateCampaign). Re-running always redispatches to that exact
+// frozen agent list via targetType 'agents', never by re-resolving the
+// original group/all target -- a group can be edited or deleted after
+// launch, and "clone this campaign" means the same targets, not "whoever is
+// in the group now".
+function openCampaignRerunReview(c) {
+  _rerunReviewKind = 'campaign';
+  _rerunReviewCampaign = c;
+  document.getElementById('rerun-review-title').textContent = 'Re-run Campaign Review';
+  document.getElementById('rerun-review-subtitle').textContent = "Exact clone of the original campaign's configuration — nothing below is editable.";
+
+  var modeLabels = { posture: 'Posture', telemetry: 'Telemetry', lab: 'Lab' };
+  var subset = c.subset || {};
+  var targetCount = (c.targets || []).length;
+  var targetKv = c.targetType === 'group'
+    ? 'Agent Group — ' + x(CMP.groupsById[c.targetGroupId] || ('Group #' + c.targetGroupId)) + ' (' + targetCount + ' agent(s) at launch)'
+    : c.targetType === 'all' ? 'All Agents at launch (' + targetCount + ' agent(s))'
+    : targetCount + ' agent(s)';
+
+  var rows = [];
+  rows.push(['Scenario', x(c.scenarioName || c.scenarioId)]);
+  rows.push(['Targets', targetKv]);
+  rows.push(['Mode', x(modeLabels[c.mode] || c.mode || 'Posture')]);
+  if (subset.executionPolicy && subset.executionPolicy.maxPrivilege) {
+    rows.push(['Privilege ceiling', x(subset.executionPolicy.maxPrivilege.charAt(0).toUpperCase() + subset.executionPolicy.maxPrivilege.slice(1))]);
+  }
+  var subsetField = ['techniques', 'abilities', 'steps', 'checks'].find(function(f) { return subset[f] && subset[f].length; });
+  rows.push(['Techniques', subsetField
+    ? (subset[subsetField].length + ' — ' + subset[subsetField].slice(0, 6).join(', ') + (subset[subsetField].length > 6 ? ', …' : ''))
+    : 'All']);
+
+  document.getElementById('rerun-review-body').innerHTML = rows.map(function(r) {
+    return '<div class="conn-cfg-row"><span class="conn-cfg-label">' + r[0] + '</span><span class="conn-cfg-val">' + r[1] + '</span></div>';
+  }).join('');
+  document.getElementById('rerun-review-overlay').classList.add('open');
+}
+
+function startCampaignRerunFromReview() {
+  var c = _rerunReviewCampaign;
+  if (!c) return;
+  var mode = c.mode || 'posture';
+
+  if (mode === 'telemetry' && !confirm('TELEMETRY mode runs real, identity-safe techniques and WILL generate EDR/SIEM alerts across every target.\n\nProceed only on an approved, monitored target set. Continue?')) return;
+  if (mode === 'lab') {
+    if (!confirm('LAB mode runs FULL-FIDELITY techniques (LSASS dump, allowlisted spray) and will trigger EDR, across every target.\n\nISOLATED AD RANGE ONLY — never production. Continue?')) return;
+    if (!confirm('Second confirmation required for LAB mode.\n\nConfirm every target is in an isolated lab/range with a snapshot?')) return;
+  }
+
+  var subset = c.subset || {};
+  var body = {
+    name: (c.name || c.scenarioName || 'Campaign') + ' — Re-run',
+    scenarioId: c.scenarioId, mode: mode,
+    confirmLive: mode !== 'posture', confirmLab: mode === 'lab',
+    reason: c.reason || ('Re-run of campaign ' + (c.id || '')),
+    notes: c.notes || '',
+    targetType: 'agents', agentIds: c.targets || [],
+    techniques: subset.techniques, abilities: subset.abilities,
+    steps: subset.steps, checks: subset.checks
+  };
+  if (subset.executionPolicy && subset.executionPolicy.maxPrivilege) body.executionPolicy = subset.executionPolicy;
+
+  var btn = document.getElementById('rerun-review-start-btn');
+  btn.disabled = true; btn.textContent = 'Dispatching…';
+  apicall('/api/campaigns', { method: 'POST', body: JSON.stringify(body) }).then(function(res) {
+    btn.disabled = false; btn.innerHTML = '&#9654; Start Re-run';
+    if (res && res.error) { showToast(res.error, 'err'); return; }
+    showToast('Campaign re-run started — ' + res.dispatched + ' dispatched, ' + res.skipped + ' skipped', 'ok');
+    closeRerunReview();
+    refreshDashboardCampaigns();
+    showTab('campaigns'); loadCampaigns();
   }).catch(function(e) {
     btn.disabled = false; btn.innerHTML = '&#9654; Start Re-run';
     showToast(e.message, 'err');
@@ -17602,7 +17747,7 @@ function loadAgtScenarios(agentId) {
         '<td style="color:var(--muted);font-size:0.75rem">' + ago(r.startedAt) + '</td>' +
         '<td>' + scoreHtml + '</td>' +
         '<td><span style="color:' + statusColor + '">' + x(r.status) + '</span></td>' +
-        '<td><button class="btn btn-outline btn-sm" onclick="viewRunResults(\'' + x(r.id) + '\')">&#128202; Results</button></td>' +
+        '<td><button class="btn btn-outline btn-sm" onclick=\'viewRunResults(' + JSON.stringify(r).replace(/'/g,"&#39;") + ')\'>&#128202; Results</button></td>' +
         '</tr>';
     }).join('');
     pane.innerHTML =
