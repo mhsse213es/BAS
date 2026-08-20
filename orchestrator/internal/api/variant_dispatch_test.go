@@ -657,8 +657,86 @@ func TestGetVariantRun_ReturnsLiveStepsDoneWhileRunning(t *testing.T) {
 		}
 		for _, res := range out.Results {
 			if res.Verdict != "PENDING" {
-				t.Errorf("verdict = %q, want PENDING -- results only resolve once the run submits its final snapshot", res.Verdict)
+				t.Errorf("verdict = %q, want PENDING -- no run_event backs this task yet, and results only resolve at the very end without one (see TestGetVariantRun_LiveVerdictFromRunEventsWhileRunning for the case where one does)", res.Verdict)
 			}
+		}
+	})
+}
+
+// TestGetVariantRun_LiveVerdictFromRunEventsWhileRunning pins the fix for a
+// step whose agent-reported verdict *did* arrive live via run_events (the
+// same 'completed' event SubmitRunEvents already uses to increment
+// steps_passed/steps_failed) while the run is still "running" overall and
+// scenario_runs.results (the one-shot final snapshot) is still empty --
+// previously this variant showed PENDING for the run's entire in-flight
+// duration regardless of what the agent had already reported, which is
+// exactly what the agent's own console (steps_done ticking up) contradicted.
+func TestGetVariantRun_LiveVerdictFromRunEventsWhileRunning(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		agentID := "gvr-liveverdict-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		h := variantHandler(t, pool)
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		runRec := httptest.NewRecorder()
+		h.RunVariants(runRec, variantsRunReq(map[string]any{
+			"agentId": agentID, "techniqueId": "T1059.001", "command": "whoami", "executor": "powershell",
+		}))
+		var runOut struct {
+			VariantRunID  string `json:"variantRunId"`
+			ScenarioRunID string `json:"scenarioRunId"`
+		}
+		json.Unmarshal(runRec.Body.Bytes(), &runOut)
+		fake.WaitForMessage(t, 2*time.Second)
+
+		var taskID string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT task_id FROM variant_run_steps WHERE variant_run_id=$1 LIMIT 1`, runOut.VariantRunID,
+		).Scan(&taskID); err != nil {
+			t.Fatalf("query a step's task_id: %v", err)
+		}
+		// Mirrors what SubmitRunEvents itself inserts for a 'completed' step
+		// event -- the run stays 'running' (scenario_runs.results untouched).
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO run_events (run_id, seq, type, task_id, ts, payload)
+			 VALUES ($1, 1, 'completed', $2, NOW(), '{"verdict":"blocked"}'::jsonb)`,
+			runOut.ScenarioRunID, taskID,
+		); err != nil {
+			t.Fatalf("seed run_event: %v", err)
+		}
+
+		rec := httptest.NewRecorder()
+		h.GetVariantRun(rec, withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", runOut.VariantRunID))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Run struct {
+				Status string `json:"status"`
+			} `json:"run"`
+			Results []struct {
+				TaskID  string `json:"taskId"`
+				Verdict string `json:"verdict"`
+			} `json:"results"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if out.Run.Status != "running" {
+			t.Fatalf("run.status = %q, want running (results snapshot not written yet)", out.Run.Status)
+		}
+		var got string
+		for _, res := range out.Results {
+			if res.TaskID == taskID {
+				got = res.Verdict
+			}
+		}
+		if got != "PREVENTED" {
+			t.Fatalf("verdict for %s = %q, want PREVENTED (live from run_events, blocked -> PREVENTED)", taskID, got)
 		}
 	})
 }

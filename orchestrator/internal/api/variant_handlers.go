@@ -189,6 +189,32 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 		srMap[sr.ID] = sr
 	}
 
+	// Live per-step verdicts from run_events, for while the run is still in
+	// flight: scenario_runs.results is only ever written once, atomically,
+	// with the run's complete final snapshot (see the comment above), so
+	// srMap stays empty the whole time a run is running -- every variant
+	// showed PENDING even for steps the agent had already finished and
+	// reported, until the entire batch completed. SubmitRunEvents already
+	// writes one 'completed' event per step with the real verdict in its
+	// payload (used live to increment steps_passed/steps_failed), so read
+	// that back the same way instead of waiting for the final blob.
+	liveVerdicts := make(map[string]models.CheckResult)
+	if runStatus == "running" {
+		evRows, everr := h.db.Query(ctx,
+			`SELECT task_id, payload->>'verdict' FROM run_events
+			  WHERE run_id = $1 AND type = 'completed' AND task_id != '' ORDER BY seq`,
+			vr.ScenarioRunID)
+		if everr == nil {
+			for evRows.Next() {
+				var taskID, verdict string
+				if evRows.Scan(&taskID, &verdict) == nil && verdict != "" {
+					liveVerdicts[taskID] = models.CheckResult(verdict)
+				}
+			}
+			evRows.Close()
+		}
+	}
+
 	// Load step records ordered by insertion (= dispatch order).
 	stepRows, err := h.db.Query(ctx,
 		`SELECT task_id, encoding, exec_context, evasion, executor,
@@ -233,6 +259,8 @@ func (h *Handler) GetVariantRun(w http.ResponseWriter, r *http.Request) {
 			if sim.DetectionAlert != nil {
 				res.DetectionSource = sim.DetectionAlert.Provider
 			}
+		} else if v, found := liveVerdicts[sr.TaskID]; found {
+			res.Verdict = simResultToVerdict(v)
 		}
 
 		switch res.Verdict {
@@ -703,7 +731,7 @@ func (h *Handler) dispatchVariantForSweep(ctx context.Context, sweepID, agentID,
 
 func simResultToVerdict(r models.CheckResult) string {
 	switch r {
-	case models.ResultPass:
+	case models.ResultPass, models.ResultBlocked:
 		return "PREVENTED"
 	case models.ResultFail:
 		return "ALLOWED"
