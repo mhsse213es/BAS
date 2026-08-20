@@ -50,7 +50,37 @@ import (
 	"github.com/audspect/bas/internal/ws"
 )
 
+// runHealthcheck is invoked as `orchestrator --healthcheck` by Docker's
+// container HEALTHCHECK (packaging/compose/docker-compose.yml). The image
+// is gcr.io/distroless/static-debian12 -- no shell, no wget/curl -- so a
+// CMD-SHELL-style "wget ... || exit 1" check can never run at all; it must
+// be the binary checking itself in-process via an argv flag (array-form
+// CMD, no shell involved). Reads HTTP_PORT directly rather than going
+// through config.Load(), since that requires DATABASE_URL/JWT_SECRET this
+// short-lived self-check has no need for. Returns a process exit code (0 =
+// healthy) -- that exit code is the only signal Docker's HEALTHCHECK reads.
+func runHealthcheck() int {
+	port := 9000
+	if v := os.Getenv("HTTP_PORT"); v != "" {
+		fmt.Sscanf(v, "%d", &port)
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
+	if err != nil {
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
+}
+
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--healthcheck" {
+		os.Exit(runHealthcheck())
+	}
+
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	cfgPath := "config.json"

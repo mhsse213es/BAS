@@ -182,7 +182,13 @@ services:
       - bas-internal
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9443/health || exit 1"]
+      # No CMD-SHELL: this image (gcr.io/distroless/static-debian12) has no
+      # shell and no wget/curl, so a shell-wrapped check can never actually
+      # run -- confirmed in production 2026-08-20, container was silently
+      # "unhealthy" forever regardless of real app health. Array-form CMD
+      # invokes the orchestrator binary's own --healthcheck flag directly
+      # (see cmd/server/main.go's runHealthcheck), no shell involved.
+      test: ["CMD", "/orchestrator", "--healthcheck"]
       interval: 15s
       timeout: 5s
       retries: 3
