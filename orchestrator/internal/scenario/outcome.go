@@ -207,10 +207,26 @@ func ranToCompletion(lower string) bool {
 		strings.Contains(lower, "technique ran to completion")
 }
 
-// executedDetail is the headline for a technique that ran without being stopped.
-// It reports the security outcome (control did not prevent it), not the raw
-// command output — the raw output is shown separately as labelled evidence.
+// executedDetail is the security-meaning prefix for a technique that ran
+// without being stopped. Real evidence (the step's actual output) is appended
+// via withEvidence below, clearly labelled -- never blended in unlabelled,
+// which is what made raw output alone (e.g. "Hello, from PowerShell!")
+// misread as if it were the important part rather than trivia. Leading with
+// the security conclusion and labelling the output as evidence gives both:
+// what a control failed to stop, and specifically what happened.
 const executedDetail = "Security control did not prevent this technique — it executed without being blocked."
+
+// withEvidence appends a step's actual output to a headline as clearly
+// labelled evidence, so a reader gets the security conclusion AND the real,
+// specific output — not one or the other. Returns headline unchanged when
+// there's no output to show.
+func withEvidence(headline, combined string) string {
+	ev := strings.TrimSpace(firstLine(combined))
+	if ev == "" {
+		return headline
+	}
+	return headline + " Output: " + ev
+}
 
 // classifyExecution maps a raw ART ExecResult to a coarse ExecutionOutcome plus,
 // for errors, a reason. The returned detail is the report's "What happened" line.
@@ -240,16 +256,15 @@ func classifyExecution(r ExecResult, combined string) (ExecutionOutcome, ErrorRe
 	}
 
 	// Clear evidence the technique executed, even on a non-zero trailing exit.
-	// State the SECURITY meaning — the control did not prevent it — rather than
-	// echoing the raw command output (e.g. "Hello, from PowerShell!") as the
-	// headline, which misreads as a successful malware run. The raw output is
-	// preserved in RawOutput and surfaced separately as labelled evidence.
+	// Lead with the SECURITY meaning — the control did not prevent it — then
+	// append the actual output as labelled evidence (withEvidence), so the
+	// headline states both the conclusion and specifically what happened.
 	if ranToCompletion(lower) {
-		return OutcomeExecuted, ErrNone, executedDetail
+		return OutcomeExecuted, ErrNone, withEvidence(executedDetail, combined)
 	}
 
 	if r.ExitCode == 0 {
-		return OutcomeExecuted, ErrNone, executedDetail
+		return OutcomeExecuted, ErrNone, withEvidence(executedDetail, combined)
 	}
 
 	// Non-zero exit with no recognizable signal: the technique did not reach a

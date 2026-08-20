@@ -234,28 +234,42 @@ func TestInterpretARTProcessSpawnFailure_NotMislabeledAsMalformedContent(t *test
 // the control did not prevent code execution. It must NOT be swept into ERROR.
 // The FAIL detail must state the SECURITY meaning, not echo the raw command
 // output ("Hello, from PowerShell!") as if malware succeeded.
+// TestInterpretARTBenignExecutionStaysFail also proves the FAIL headline
+// carries real evidence (2026-08-20 fix), not just the security-meaning
+// framing on its own -- the previous version of this test asserted the
+// OPPOSITE (raw output must never appear), which meant a FAIL headline was
+// genuinely uninformative on its own: "Security control did not prevent
+// this technique" told a reader nothing about WHAT ran. The output is now
+// appended as clearly-labelled evidence ("Output: ...") specifically so it
+// can't misread as if the raw text were the important part by itself --
+// labelling, not omission, is what avoids that confusion.
 func TestInterpretARTBenignExecutionStaysFail(t *testing.T) {
 	for _, out := range []string{"Hello, from PowerShell!", "Hello, from CMD!"} {
 		got, detail := interpretART(ExecResult{ExitCode: 0}, out)
 		if got != models.ResultFail {
 			t.Errorf("interpretART(%q, exit=0) = %q, want fail (detail=%q)", out, got, detail)
 		}
-		if strings.Contains(detail, "Hello") {
-			t.Errorf("interpretART(%q) detail echoes raw output (%q) — should state the security outcome", out, detail)
-		}
 		if !strings.Contains(strings.ToLower(detail), "did not prevent") {
 			t.Errorf("interpretART(%q) detail = %q, want the security-outcome framing", out, detail)
+		}
+		if !strings.Contains(detail, "Output: "+out) {
+			t.Errorf("interpretART(%q) detail = %q, want the real output included as labelled evidence", out, detail)
 		}
 	}
 }
 
 // A non-zero exit that still shows the technique executed (e.g. a trailing
-// cleanup line failed) is a genuine FAIL, not an execution error.
+// cleanup line failed) is a genuine FAIL, not an execution error. Also
+// covers the ranToCompletion branch of the evidence fix above -- a
+// distinct code path from the exit==0 branch.
 func TestInterpretARTRanToCompletionIsFail(t *testing.T) {
 	for _, out := range []string{"The operation completed successfully.", "technique ran to completion"} {
-		got, _ := interpretART(ExecResult{ExitCode: 1}, out)
+		got, detail := interpretART(ExecResult{ExitCode: 1}, out)
 		if got != models.ResultFail {
 			t.Errorf("interpretART(%q, exit=1) = %q, want fail", out, got)
+		}
+		if !strings.Contains(detail, "Output: "+out) {
+			t.Errorf("interpretART(%q) detail = %q, want the real output included as labelled evidence", out, detail)
 		}
 	}
 }
