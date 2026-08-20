@@ -189,6 +189,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/siem/correlations/{runId}", tierPermission, auth.CanViewSIEMCorrelations},
 	{http.MethodPost, "/api/campaigns", tierPermission, auth.CanCreateCampaign},
 	{http.MethodPost, "/api/campaigns/{id}/stop", tierPermission, auth.CanStopCampaign},
+	{http.MethodPost, "/api/campaigns/{id}/pause", tierPermission, auth.CanStopCampaign},
+	{http.MethodPost, "/api/campaigns/{id}/resume", tierPermission, auth.CanStopCampaign},
 	{http.MethodPost, "/api/findings/{id}/status", tierPermission, auth.CanSetFindingStatus},
 	{http.MethodPost, "/api/ticketing/push", tierPermission, auth.CanPushToITSM},
 	{http.MethodPost, "/api/ticketing/push/bulk", tierPermission, auth.CanBulkPushToITSM},
