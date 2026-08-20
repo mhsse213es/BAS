@@ -403,17 +403,47 @@ func TestParseYAML_UbuntuHardeningValidation(t *testing.T) {
 	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "linux" {
 		t.Fatalf("supported_os = %v, want [linux]", sc.SupportedOS)
 	}
+	// As of the 2026-08-20 rewrite (production verification found 8/12
+	// techniques had zero real Linux ART atomics), this scenario uses
+	// explicit steps: instead of the art_techniques: shorthand -- 20 real
+	// framework: art steps (one per real atomic, across the 4 covered
+	// techniques) plus 8 hand-authored framework: custom checks.
+	if len(sc.ARTTechniques) != 0 {
+		t.Fatalf("art_techniques = %v, want empty -- this scenario now declares steps: explicitly", sc.ARTTechniques)
+	}
 	wantTechniques := []string{
-		"T1547.006", "T1055", "T1003", "T1562.001", "T1554", "T1078",
-		"T1046", "T1200", "T1222", "T1059", "T1548.001", "T1548.003",
+		"T1046", "T1547.006", "T1548.001", "T1548.003", // real ART atomics
+		"T1055", "T1003", "T1562.001", "T1554", "T1078", "T1200", "T1222", "T1059", // hand-authored custom checks
 	}
-	if len(sc.ARTTechniques) != len(wantTechniques) {
-		t.Fatalf("art_techniques count = %d, want %d (%v)", len(sc.ARTTechniques), len(wantTechniques), sc.ARTTechniques)
-	}
-	for i, want := range wantTechniques {
-		if sc.ARTTechniques[i] != want {
-			t.Fatalf("art_techniques[%d] = %q, want %q", i, sc.ARTTechniques[i], want)
+	gotTechniques := map[string]bool{}
+	artCount, customCount := 0, 0
+	for _, st := range sc.Steps {
+		gotTechniques[st.TechniqueID] = true
+		switch st.Framework {
+		case "art":
+			artCount++
+		case "custom":
+			customCount++
+			if st.Command == "" {
+				t.Errorf("custom step %q has an empty command", st.Name)
+			}
+		default:
+			t.Errorf("step %q has unexpected framework %q", st.Name, st.Framework)
 		}
+	}
+	for _, want := range wantTechniques {
+		if !gotTechniques[want] {
+			t.Errorf("missing step(s) for technique %s", want)
+		}
+	}
+	if len(gotTechniques) != len(wantTechniques) {
+		t.Errorf("distinct techniques = %d, want %d (%v)", len(gotTechniques), len(wantTechniques), gotTechniques)
+	}
+	if artCount != 20 {
+		t.Errorf("framework:art steps = %d, want 20", artCount)
+	}
+	if customCount != 8 {
+		t.Errorf("framework:custom steps = %d, want 8", customCount)
 	}
 }
 

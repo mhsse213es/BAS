@@ -80,6 +80,19 @@ func observe(domain string) *ResourceProfile {
 // These dominate the full ART sweep, so labelling them read-only is where the
 // safe speedup comes from. Add to this map only after the equivalence harness
 // confirms a technique is genuinely non-mutating.
+//
+// This map also drives TimeoutProfileFor's aggressive 20s execute-timeout
+// override (below) -- the two concerns are coupled by design, since both rest
+// on the same "enumerates host state and returns in well under a second"
+// assumption. T1046 was removed 2026-08-20: verified against real production
+// ART content, its atomics are active network port scans (a sequential bash
+// /dev/tcp scan of all 65535 ports, an nmap /24 sweep + telnet + nc, and a
+// full-range nmap -sV scan), not sub-second local enumeration -- the 20s cap
+// was producing false TIMEOUT verdicts instead of real PASS/FAIL. Removing it
+// from this map both drops the bad timeout (falls through to the step's own
+// timeout_sec) and drops the "run concurrently" resource label -- a pure
+// safety-direction tradeoff (can only make a sweep slower, never wrong),
+// consistent with this map's own conservative-labelling philosophy.
 var discoveryProfiles = map[string]*ResourceProfile{
 	"T1012": observe(domRegistry),   // Query Registry
 	"T1083": observe(domFilesystem), // File and Directory Discovery
@@ -93,8 +106,7 @@ var discoveryProfiles = map[string]*ResourceProfile{
 	"T1614": observe(domProcess),    // System Location Discovery
 	"T1016": observe(domNetwork),    // System Network Configuration Discovery
 	"T1049": observe(domNetwork),    // System Network Connections Discovery
-	"T1018": observe(domNetwork),    // Remote System Discovery
-	"T1046": observe(domNetwork),    // Network Service Discovery
+	"T1018": observe(domNetwork),    // Remote System Discovery -- under review 2026-08-20: real atomics may also be active network probes (host discovery/ping sweeps) rather than sub-second local enumeration, same concern as T1046 above
 	"T1087": observe(domSecPolicy),  // Account Discovery
 	"T1069": observe(domSecPolicy),  // Permission Groups Discovery
 }

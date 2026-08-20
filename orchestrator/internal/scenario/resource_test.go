@@ -45,6 +45,23 @@ func TestResourceProfileForUnlabeledIsSerial(t *testing.T) {
 	}
 }
 
+// TestResourceProfileForT1046IsUnlabeled proves T1046 (Network Service
+// Discovery) was deliberately removed from the curated discovery set: its
+// real ART atomics are active network port scans (a 65535-port sequential
+// bash scan, an nmap /24 sweep + telnet + nc, a full-range nmap -sV scan),
+// verified against production 2026-08-20 -- not the "sub-second local
+// enumeration" this profile's 20s execute-timeout assumes. Must stay
+// unlabeled so a step keeps its own declared timeout_sec instead of being
+// force-capped at 20s and misclassified as a timeout.
+func TestResourceProfileForT1046IsUnlabeled(t *testing.T) {
+	if p := ResourceProfileFor("T1046"); p != nil {
+		t.Errorf("T1046 must be unlabeled (no curated resource profile), got %+v", p)
+	}
+	if p := TimeoutProfileFor("T1046"); p != nil {
+		t.Errorf("T1046 must not get the curated 20s discovery timeout, got %+v", p)
+	}
+}
+
 func TestAttachProfiles(t *testing.T) {
 	steps := []ScenarioStep{
 		{TechniqueID: "T1057"},                  // labelled discovery
