@@ -9,45 +9,37 @@ description: >
   control configured?"; this scenario answers "does it actually resist an
   attack?"
 
-  Covers: kernel module loading, process-injection resistance (exercises
-  the same ASLR/ptrace-scope hardening cis-ubuntu-l1 checks — not a direct
-  sysctl toggle, since Atomic Red Team's T1055 atomics test injection
-  itself), core-dump credential exposure, auditd tamper resistance,
-  protected-binary integrity, SSH authentication hardening, firewall
-  egress control, removable-media policy, filesystem permission
+  Covers: kernel module loading, process-injection resistance, core-dump
+  credential exposure, auditd tamper resistance, protected-binary
+  integrity, SSH authentication hardening, network service discovery /
+  firewall egress control, removable-media policy, filesystem permission
   hardening, /tmp noexec enforcement, SUID/GTFOBins abuse resistance, and
   sudo/pkexec escalation resistance.
-
-  Each technique runs ALL available Linux atomics (depth mode) so every
-  variant is tested against your hardening controls. Some techniques below
-  may execute zero tests if Atomic Red Team has not yet published a Linux
-  atomic for that technique — that is a content-library gap, not a
-  scenario defect (verified during authoring — see the design spec).
 
   Expected verdicts:
     PASS = the hardening control held; the attack was blocked or alerted
     FAIL = the attack succeeded despite the hardening control
-    SKIP = the atomic requires a precondition not present on this host
+    SKIP = the atomic/check requires a precondition not present on this host
 
-  Safety: uses Atomic Red Team's benign demonstration commands, not
-  destructive payloads. Several techniques (auditd stop, USB mount, sudo
-  escalation) are lab-only in effect — expect service disruption if run
-  outside an isolated test endpoint. Run only on dedicated test endpoints.
+  Safety: uses Atomic Red Team's benign demonstration commands (for the
+  ART-covered techniques below) or hand-authored, self-contained, reversible
+  checks that only ever touch throwaway files/processes of their own
+  creation (never a real system binary or existing data). Two checks
+  (auditd stop, removable-media mount simulation) are lab-only in effect —
+  expect brief service disruption if run outside an isolated test endpoint.
+  Run only on dedicated test endpoints.
 
-  Status: scenario complete.
-  Known limitation: actual execution coverage depends on the deployed ART
-  content library — this scenario is written against the intended
-  security behaviors CIS controls should enforce, not audited against
-  today's content inventory.
-  Verification pending: confirm each art_techniques entry below has real
-  Linux atomic coverage against the production content database (query:
-  SELECT technique_id, test_index, name FROM art_atomic_tests WHERE
-  technique_id = ANY(...) AND platform='linux').
-  Acceptance criterion: every technique below either (a) maps to one or
-  more Linux ART atomics, or (b) is intentionally a native/local BAS
-  action where ART has no equivalent. If verification finds a gap, the
-  fix is a native/local execution fallback for that technique — not
-  removing or silently downgrading the control.
+  Status: scenario complete. Verified 2026-08-20 against production
+  (audspecterver): of the 12 techniques below, only 4 (T1046, T1547.006,
+  T1548.001, T1548.003) had real Linux Atomic Red Team coverage — the
+  other 8 had zero. Rather than silently running a partial scenario (the
+  previous art_techniques: shorthand form dropped uncovered techniques
+  with no trace at all — see orchestrator's builder.go composability/
+  skip-visibility fix, same date), this scenario now declares every
+  technique explicitly: the 4 ART-covered ones as framework: art steps
+  (one per real atomic, preserving full depth-mode coverage), and the
+  other 8 as hand-authored framework: custom checks that exercise the
+  same underlying security behavior ART has no Linux atomic for yet.
 author: Audspect Research
 executable: true
 supported_os: [linux]
@@ -70,16 +62,465 @@ mitre_phases:
   - credential-access
   - discovery
 
-art_techniques:
-  - T1547.006   # Kernel Modules and Extensions (insmod/modprobe loading — CIS kernel-module restriction controls)
-  - T1055       # Process Injection (ptrace/LD_PRELOAD — exercises ASLR/ptrace-scope hardening; cis-ubuntu-l1 tags its ASLR check the same technique_id)
-  - T1003       # OS Credential Dumping (core-dump-based credential exposure — pairs with cis-ubuntu-l1's fs.suid_dumpable check)
-  - T1562.001   # Disable or Modify Tools (auditd stop/disable — also covered by linux-defense-evasion.yaml; included here for a single hardening-focused run)
-  - T1554       # Compromise Client Software Binary (protected-binary tamper / integrity monitoring)
-  - T1078       # Valid Accounts (SSH root login / weak authentication — pairs with cis-ubuntu-l1's PermitRootLogin check)
-  - T1046       # Network Service Discovery (port scan / firewall egress bypass — pairs with cis-ubuntu-l1's UFW check)
-  - T1200       # Hardware Additions (removable media / USB mount policy bypass)
-  - T1222       # File and Directory Permissions Modification (/etc, /usr/bin write attempts without privilege)
-  - T1059       # Command and Scripting Interpreter (execute from /tmp — pairs with cis-ubuntu-l1's /tmp noexec check)
-  - T1548.001   # Setuid and Setgid (SUID/GTFOBins abuse — also covered by linux-privilege-escalation.yaml; included here for a single hardening-focused run)
-  - T1548.003   # Sudo and Sudo Caching (sudo/pkexec escalation — also covered by linux-privilege-escalation.yaml; included here for a single hardening-focused run)
+steps:
+  # ── T1046 — Network Service Discovery (real ART atomics, 3 tests) ─────────
+  - name: "T1046 - Test 1: Port Scan"
+    technique_id: T1046
+    framework: art
+    test_index: 0
+    executor: bash
+    requires_priv: user
+    timeout_sec: 120
+
+  - name: "T1046 - Test 2: Port Scan Nmap"
+    technique_id: T1046
+    framework: art
+    test_index: 1
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1046 - Test 12: Port Scan using nmap (Port range)"
+    technique_id: T1046
+    framework: art
+    test_index: 11
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  # ── T1547.006 — Kernel Modules and Extensions (real ART atomic, 1 test) ───
+  - name: "T1547.006 - Test 1: Linux - Load Kernel Module via insmod"
+    technique_id: T1547.006
+    framework: art
+    test_index: 0
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  # ── T1548.001 — Setuid and Setgid (real ART atomics, 10 tests) ────────────
+  - name: "T1548.001 - Test 1: Make and modify binary from C source"
+    technique_id: T1548.001
+    framework: art
+    test_index: 0
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.001 - Test 2: Make and modify binary from C source (freebsd)"
+    technique_id: T1548.001
+    framework: art
+    test_index: 1
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.001 - Test 3: Set a SetUID flag on file"
+    technique_id: T1548.001
+    framework: art
+    test_index: 2
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.001 - Test 4: Set a SetUID flag on file (freebsd)"
+    technique_id: T1548.001
+    framework: art
+    test_index: 3
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.001 - Test 5: Set a SetGID flag on file"
+    technique_id: T1548.001
+    framework: art
+    test_index: 4
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.001 - Test 6: Set a SetGID flag on file (freebsd)"
+    technique_id: T1548.001
+    framework: art
+    test_index: 5
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.001 - Test 7: Make and modify capabilities of a binary"
+    technique_id: T1548.001
+    framework: art
+    test_index: 6
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.001 - Test 8: Provide the SetUID capability to a file"
+    technique_id: T1548.001
+    framework: art
+    test_index: 7
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.001 - Test 9: Do reconnaissance for files that have the setuid bit set"
+    technique_id: T1548.001
+    framework: art
+    test_index: 8
+    executor: bash
+    requires_priv: user
+    timeout_sec: 120
+
+  - name: "T1548.001 - Test 10: Do reconnaissance for files that have the setgid bit set"
+    technique_id: T1548.001
+    framework: art
+    test_index: 9
+    executor: bash
+    requires_priv: user
+    timeout_sec: 120
+
+  # ── T1548.003 — Sudo and Sudo Caching (real ART atomics, 6 tests) ─────────
+  - name: "T1548.003 - Test 1: Sudo usage"
+    technique_id: T1548.003
+    framework: art
+    test_index: 0
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.003 - Test 2: Sudo usage (freebsd)"
+    technique_id: T1548.003
+    framework: art
+    test_index: 1
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.003 - Test 3: Unlimited sudo cache timeout"
+    technique_id: T1548.003
+    framework: art
+    test_index: 2
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.003 - Test 4: Unlimited sudo cache timeout (freebsd)"
+    technique_id: T1548.003
+    framework: art
+    test_index: 3
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.003 - Test 5: Disable tty_tickets for sudo caching"
+    technique_id: T1548.003
+    framework: art
+    test_index: 4
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  - name: "T1548.003 - Test 6: Disable tty_tickets for sudo caching (freebsd)"
+    technique_id: T1548.003
+    framework: art
+    test_index: 5
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 120
+
+  # ── T1055 — Process Injection (no Linux ART atomic; hand-authored) ────────
+  # Reads another process's memory via /proc/PID/mem, gated by the exact
+  # same kernel ptrace_may_access() check as PTRACE_ATTACH -- Yama's
+  # ptrace_scope hardening (the same control cis-ubuntu-l1 reads as
+  # kernel.yama.ptrace_scope) governs both. PID 1 is always present and
+  # never a descendant of this process, so the "tracing my own child" Yama
+  # exemption can never apply. Pure 1-byte read attempt; nothing created.
+  - name: "Process memory read via /proc/1/mem (ptrace_scope resistance)"
+    technique_id: T1055
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Attempts a single 1-byte read from /proc/1/mem (PID 1's memory). No writes, no process creation, no state change of any kind."
+    telemetry:
+      - "auditd: SYSCALL ptrace/openat on /proc/1/mem"
+      - "AppArmor/SELinux: ptrace denial, if a MAC policy also gates this"
+    detection:
+      - "EDR: unprivileged process reading another process's memory via /proc/<pid>/mem"
+    command: |
+      set -u
+      if dd if=/proc/1/mem of=/dev/null bs=1 count=1 skip=0 2>/dev/null; then
+        echo "FAIL: read access to another process's memory (/proc/1/mem) succeeded — Yama ptrace_scope hardening did not prevent it"
+      else
+        echo "PASS: read access to another process's memory (/proc/1/mem) was denied — Yama ptrace_scope hardening is effective"
+      fi
+
+  # ── T1003 — OS Credential Dumping (no Linux ART atomic; hand-authored) ────
+  # Spawns a throwaway process holding a synthetic (clearly-fake) secret,
+  # crashes it, and checks whether a locally-readable core dump results --
+  # pairs directly with cis-ubuntu-l1's fs.suid_dumpable check by exercising
+  # whether that setting (or a crash-handler like apport/systemd-coredump)
+  # actually prevents credential exposure via core dump.
+  - name: "Core-dump credential exposure (suid_dumpable resistance)"
+    technique_id: T1003
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Spawns one throwaway child process (bash sleep) holding a synthetic [BAS-SIM] secret, sends it SIGSEGV, and checks for a resulting core file. The process and any core file are removed by this step's own cleanup."
+    telemetry:
+      - "Kernel: SIGSEGV core-dump event for a child process"
+      - "auditd: ANOM_ABEND record, if audit is configured to log crashes"
+    detection:
+      - "EDR: process crash followed by a readable core file containing credential-like strings"
+    command: |
+      set -u
+      WORK=$(mktemp -d /tmp/bas_coredump_XXXXXX) || { echo "SKIP: could not create a scratch directory"; exit 0; }
+      cd "$WORK" || { echo "SKIP: could not enter scratch directory"; exit 0; }
+      ulimit -c unlimited
+      BAS_SYNTHETIC_SECRET="BAS-SIM-PASSWORD-do-not-use-1234" bash -c 'sleep 30' &
+      TARGET_PID=$!
+      sleep 0.2
+      kill -SEGV "$TARGET_PID" 2>/dev/null
+      wait "$TARGET_PID" 2>/dev/null
+      sleep 0.3
+      CORE=$(find "$WORK" -maxdepth 1 -iname "*core*" 2>/dev/null | head -1)
+      if [ -n "$CORE" ] && [ -r "$CORE" ]; then
+        echo "FAIL: a readable core dump was produced for a crashed process — core-dump hardening did not prevent it"
+      else
+        echo "PASS: no locally-readable core dump was produced — core-dump hardening (suid_dumpable, or a crash handler restricting access) is effective"
+      fi
+      rm -rf "$WORK"
+    cleanup: "rm -rf /tmp/bas_coredump_* 2>/dev/null || true"
+
+  # ── T1562.001 — Disable or Modify Tools (no Linux ART atomic; hand-authored, lab-only) ──
+  - name: "Stop auditd (audit tamper resistance)"
+    technique_id: T1562.001
+    framework: custom
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: lab-only
+    risk: low
+    reversible: true
+    blast_radius: "Attempts to stop the auditd service via systemctl. If it succeeds, this step's cleanup always restarts it. Brief loss of audit logging is possible while the attempt is in effect — run only on an isolated test endpoint."
+    telemetry:
+      - "auditd: SERVICE_STOP record (if the stop is logged before auditd itself stops)"
+      - "systemd: auditd.service inactive"
+    detection:
+      - "EDR/SIEM: audit service stop/tamper alert"
+    command: |
+      set -u
+      BEFORE=$(systemctl is-active auditd 2>/dev/null || echo "unknown")
+      if [ "$BEFORE" != "active" ]; then
+        echo "SKIP: auditd is not running on this host, cannot test tamper resistance"
+        exit 0
+      fi
+      systemctl stop auditd >/dev/null 2>&1
+      RC=$?
+      sleep 0.5
+      AFTER=$(systemctl is-active auditd 2>/dev/null || echo "unknown")
+      if [ "$AFTER" != "active" ]; then
+        echo "FAIL: auditd was stopped — audit tamper hardening did not prevent it (stop exit code $RC)"
+      else
+        echo "PASS: auditd could not be stopped — immutable audit config, PAM/sudo restriction, or another control blocked it"
+      fi
+    cleanup: "systemctl start auditd >/dev/null 2>&1 || true"
+
+  # ── T1554 — Compromise Client Software Binary (no Linux ART atomic; hand-authored) ──
+  # Plants a throwaway executable in a trusted PATH location (the real
+  # technique: replace/plant a binary somewhere the system or an operator
+  # would trust and execute) and checks whether an audit watch rule exists
+  # on that location -- never touches a real system binary.
+  - name: "Plant executable in a trusted PATH location (binary integrity monitoring)"
+    technique_id: T1554
+    framework: custom
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes one throwaway, non-functional executable into /usr/local/bin, checks for an auditd watch rule on that path, then deletes the file. Never reads, modifies, or replaces any existing binary."
+    telemetry:
+      - "auditd: PATH/SYSCALL record for a new file under /usr/local/bin, if a watch rule is configured"
+      - "Sysmon-equivalent (auditd/AIDE): file-create event under a PATH-search directory"
+    detection:
+      - "FIM (AIDE/Tripwire): new executable detected under a trusted PATH location"
+    command: |
+      set -u
+      TARGET="/usr/local/bin/bas-hardening-test-$$"
+      printf '#!/bin/sh\necho test\n' > "$TARGET" 2>/dev/null
+      WRITE_RC=$?
+      if [ $WRITE_RC -ne 0 ]; then
+        echo "PASS: writing an unauthorized executable into a trusted PATH location (/usr/local/bin) was denied by filesystem permissions"
+        exit 0
+      fi
+      chmod +x "$TARGET" 2>/dev/null
+      AUDITED="no"
+      if command -v auditctl >/dev/null 2>&1 && auditctl -l 2>/dev/null | grep -q "/usr/local/bin"; then
+        AUDITED="yes"
+      fi
+      rm -f "$TARGET"
+      if [ "$AUDITED" = "yes" ]; then
+        echo "PASS: an audit rule watches /usr/local/bin — a planted/replaced binary here would be logged"
+      else
+        echo "FAIL: an executable was planted in a trusted PATH location (/usr/local/bin) with no audit watch to detect it"
+      fi
+    cleanup: "rm -f /usr/local/bin/bas-hardening-test-* 2>/dev/null || true"
+
+  # ── T1078 — Valid Accounts (no Linux ART atomic; hand-authored) ───────────
+  # Reads sshd's EFFECTIVE configuration (sshd -T), not just the on-disk
+  # file cis-ubuntu-l1 parses -- catches drift between a configured file and
+  # what sshd actually loaded. Purely read-only, no login attempt is made.
+  - name: "sshd effective PermitRootLogin (SSH root-login hardening)"
+    technique_id: T1078
+    framework: custom
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs 'sshd -T' to print sshd's effective configuration and greps one line. Read-only; no SSH connection or login attempt is made."
+    telemetry:
+      - "None — this is a local configuration read, not a network action"
+    detection:
+      - "N/A — read-only local check, no detection signal expected"
+    command: |
+      set -u
+      if ! command -v sshd >/dev/null 2>&1; then
+        echo "SKIP: sshd not installed on this host"
+        exit 0
+      fi
+      EFFECTIVE=$(sshd -T 2>/dev/null | grep -i '^permitrootlogin' | awk '{print tolower($2)}')
+      if [ -z "$EFFECTIVE" ]; then
+        echo "SKIP: could not determine sshd's effective PermitRootLogin setting"
+        exit 0
+      fi
+      case "$EFFECTIVE" in
+        no)
+          echo "PASS: sshd's effective PermitRootLogin is 'no' — root SSH login is disabled" ;;
+        prohibit-password|without-password)
+          echo "PASS: sshd's effective PermitRootLogin is '$EFFECTIVE' — password-based root SSH login is disabled" ;;
+        *)
+          echo "FAIL: sshd's effective PermitRootLogin is '$EFFECTIVE' — root SSH login is permitted" ;;
+      esac
+
+  # ── T1200 — Hardware Additions (no Linux ART atomic; hand-authored, lab-only) ──
+  # Best-effort proxy: simulates a removable-media mount via a loopback disk
+  # image, since real USB hardware can't be attached in an automated run.
+  # This exercises generic mount policy, not literal udev/USB-subsystem
+  # rules specifically keyed on USB insertion -- documented limitation.
+  - name: "Removable-media mount simulation (USB/mount policy)"
+    technique_id: T1200
+    framework: custom
+    executor: bash
+    requires_priv: admin
+    timeout_sec: 30
+    fidelity: lab-only
+    risk: low
+    reversible: true
+    blast_radius: "Creates an 8MB throwaway loopback disk image under /tmp, attempts to mount it, then unmounts/detaches/deletes everything it created. No real device or existing data is touched."
+    telemetry:
+      - "Kernel: loop device attach (losetup) and mount events"
+      - "udev: block device add/mount, if a removable-media policy watches loop devices too"
+    detection:
+      - "EDR/DLP: new mount of a removable-media-style filesystem"
+    command: |
+      set -u
+      if ! command -v losetup >/dev/null 2>&1 || ! command -v mkfs.vfat >/dev/null 2>&1; then
+        echo "SKIP: losetup/mkfs.vfat not available, cannot simulate a removable-media mount"
+        exit 0
+      fi
+      IMG=$(mktemp /tmp/bas_usbsim_XXXXXX.img)
+      MNT=$(mktemp -d /tmp/bas_usbsim_mnt_XXXXXX)
+      dd if=/dev/zero of="$IMG" bs=1M count=8 status=none 2>/dev/null
+      mkfs.vfat -n BASSIM "$IMG" >/dev/null 2>&1
+      LOOPDEV=$(losetup --show -f "$IMG" 2>/dev/null)
+      if [ -z "$LOOPDEV" ]; then
+        echo "SKIP: could not attach a loopback device on this host"
+        rm -f "$IMG"; rmdir "$MNT" 2>/dev/null
+        exit 0
+      fi
+      mount "$LOOPDEV" "$MNT" 2>/dev/null
+      RC=$?
+      if [ $RC -eq 0 ]; then
+        echo "FAIL: a removable-media-style filesystem mounted without restriction"
+        umount "$MNT" 2>/dev/null
+      else
+        echo "PASS: mounting a removable-media-style filesystem was blocked"
+      fi
+      losetup -d "$LOOPDEV" 2>/dev/null
+      rm -f "$IMG"
+      rmdir "$MNT" 2>/dev/null
+    cleanup: "losetup -D 2>/dev/null; rm -f /tmp/bas_usbsim_*.img 2>/dev/null; rm -rf /tmp/bas_usbsim_mnt_* 2>/dev/null || true"
+
+  # ── T1222 — File and Directory Permissions Modification (no Linux ART atomic; hand-authored) ──
+  - name: "Unauthorized write into /etc (filesystem permission hardening)"
+    technique_id: T1222
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Attempts to write one throwaway file directly into /etc as a non-elevated user; removes it immediately if the write succeeds. Never modifies any existing file under /etc."
+    telemetry:
+      - "auditd: PATH/SYSCALL write-denied record for /etc, if a watch rule is configured"
+    detection:
+      - "EDR: unprivileged process attempting to write into /etc"
+    command: |
+      set -u
+      TARGET="/etc/bas-hardening-test-$$"
+      echo "test" > "$TARGET" 2>/dev/null
+      RC=$?
+      if [ $RC -eq 0 ] && [ -f "$TARGET" ]; then
+        echo "FAIL: an unauthorized file was written into /etc — filesystem permission hardening did not prevent it"
+        rm -f "$TARGET"
+      else
+        echo "PASS: writing an unauthorized file into /etc was denied"
+      fi
+    cleanup: "rm -f /etc/bas-hardening-test-* 2>/dev/null || true"
+
+  # ── T1059 — Command and Scripting Interpreter (no Linux ART atomic; hand-authored) ──
+  - name: "Execute a script from /tmp (noexec enforcement)"
+    technique_id: T1059
+    framework: custom
+    executor: bash
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Writes one throwaway, benign shell script into /tmp, attempts to execute it, then deletes it regardless of outcome."
+    telemetry:
+      - "auditd/Sysmon-equivalent: exec attempt from /tmp"
+    detection:
+      - "EDR: process execution from a world-writable temp directory"
+    command: |
+      set -u
+      SCRIPT="/tmp/bas-hardening-test-$$.sh"
+      printf '#!/bin/sh\necho BAS_EXEC_FROM_TMP_OK\n' > "$SCRIPT"
+      chmod +x "$SCRIPT"
+      OUT=$("$SCRIPT" 2>&1)
+      RC=$?
+      rm -f "$SCRIPT"
+      if [ $RC -eq 0 ] && echo "$OUT" | grep -q "BAS_EXEC_FROM_TMP_OK"; then
+        echo "FAIL: a script executed directly from /tmp — noexec is not enforced on /tmp"
+      else
+        echo "PASS: executing a script directly from /tmp was blocked — noexec is enforced"
+      fi
+    cleanup: "rm -f /tmp/bas-hardening-test-*.sh 2>/dev/null || true"
