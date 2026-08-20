@@ -16,6 +16,10 @@ type ChildRun struct {
 	// here — i.e. the attack succeeded but the blue team still saw it. Otherwise
 	// it's a true miss.
 	DetectedTechs map[string]bool
+	// Paused mirrors scenario_runs.paused -- only meaningful while Status ==
+	// "running" (agent-confirmed via its own paused run_event, see
+	// event_handlers.go), same as a single run's own Paused field.
+	Paused bool
 }
 
 // Skip records a target agent that could not be dispatched at launch.
@@ -79,6 +83,12 @@ type Summary struct {
 	Detected   int    `json:"detected"`   // technique allowed by control but seen by EDR/SIEM
 	Missed     int    `json:"missed"`     // technique allowed AND not seen — the real gap
 	Errored    int    `json:"errored"`    // execution error or skipped step (excluded from score)
+	// Paused is true while at least one still-running child is paused --
+	// enough to drive a "Resume campaign" vs "Pause campaign" toggle. A
+	// campaign fanned out across many agents pauses independently per
+	// agent, so this is "any", not "all": as long as one child needs a
+	// Resume, that's the action the operator can still take.
+	Paused bool `json:"paused"`
 }
 
 // Aggregate rolls child runs + launch-time skips into a campaign Summary. The
@@ -98,6 +108,9 @@ func Aggregate(runs []ChildRun, skips []Skip) Summary {
 	for _, r := range runs {
 		if isTerminal(r.Status) {
 			terminal++
+		}
+		if r.Status == "running" && r.Paused {
+			s.Paused = true
 		}
 		for _, res := range r.Results {
 			switch res.Result {

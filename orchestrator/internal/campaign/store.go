@@ -94,7 +94,7 @@ func ListWithRollups(ctx context.Context, pool *pgxpool.Pool) ([]Rollup, error) 
 // childRunOut for the detail view).
 func loadChildRunsForRollup(ctx context.Context, pool *pgxpool.Pool, campaignID string) ([]ChildRun, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT status, results, score, detection_summary
+		`SELECT status, results, score, detection_summary, paused
 		   FROM scenario_runs WHERE campaign_id = $1 ORDER BY started_at`, campaignID)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,8 @@ func loadChildRunsForRollup(ctx context.Context, pool *pgxpool.Pool, campaignID 
 	for rows.Next() {
 		var status string
 		var resultsRaw, scoreRaw, detRaw []byte
-		if err := rows.Scan(&status, &resultsRaw, &scoreRaw, &detRaw); err != nil {
+		var paused bool
+		if err := rows.Scan(&status, &resultsRaw, &scoreRaw, &detRaw, &paused); err != nil {
 			return nil, err
 		}
 		var results []models.SimulationResult
@@ -118,7 +119,7 @@ func loadChildRunsForRollup(ctx context.Context, pool *pgxpool.Pool, campaignID 
 			}
 		}
 		det := reporting.DetectedTechniques(detRaw, results)
-		out = append(out, ChildRun{Status: status, Results: results, Score: score, DetectedTechs: det})
+		out = append(out, ChildRun{Status: status, Results: results, Score: score, DetectedTechs: det, Paused: paused})
 	}
 	return out, rows.Err()
 }

@@ -104,3 +104,23 @@ func TestAggregateMissAndProgress(t *testing.T) {
 		t.Errorf("Detected = %d, want 0", got.Detected)
 	}
 }
+
+func TestAggregate_PausedIsAnyRunningChildPaused(t *testing.T) {
+	cases := []struct {
+		name string
+		runs []ChildRun
+		want bool
+	}{
+		{"no children", nil, false},
+		{"all running, none paused", []ChildRun{{Status: "running"}, {Status: "running"}}, false},
+		{"one running child paused", []ChildRun{{Status: "running"}, {Status: "running", Paused: true}}, true},
+		{"paused flag on a terminal child is ignored", []ChildRun{{Status: "completed", Paused: true}}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Aggregate(c.runs, nil).Paused; got != c.want {
+				t.Errorf("Paused = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

@@ -520,6 +520,68 @@ func TestGetCampaign_Success(t *testing.T) {
 	})
 }
 
+// TestGetCampaign_ReturnsSubsetAndTargetsForRerun covers the exact data
+// Campaign Re-run reads (openCampaignRerunReview/startCampaignRerunFromReview
+// in wwwroot/index.html): the frozen agent-id snapshot and the operator's
+// original techniques/abilities/steps/checks subset, both persisted at
+// CreateCampaign time but previously never surfaced by GetCampaign.
+func TestGetCampaign_ReturnsSubsetAndTargetsForRerun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		steps := []scenario.Step{
+			{Name: "step-0", TechniqueID: "T1059", Framework: "custom", Command: "echo 0"},
+			{Name: "step-1", TechniqueID: "T1059", Framework: "custom", Command: "echo 1"},
+		}
+		sc, engine := minimalLiveScenario(t, "gc-subset-sc", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "gc-subset-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		createRec := httptest.NewRecorder()
+		h.CreateCampaign(createRec, createCampaignReq(map[string]any{
+			"name": "Subset Campaign", "scenarioId": sc.ID, "agentIds": []string{agentID},
+			"mode": "telemetry", "confirmLive": true, "steps": []int{0},
+		}))
+		if createRec.Code != http.StatusOK {
+			t.Fatalf("create status = %d, body = %s", createRec.Code, createRec.Body.String())
+		}
+		var created map[string]any
+		json.Unmarshal(createRec.Body.Bytes(), &created)
+		campID, _ := created["campaignId"].(string)
+		if campID == "" {
+			t.Fatal("campaignId missing from create response")
+		}
+		fake.WaitForMessage(t, 2*time.Second)
+
+		getRec := httptest.NewRecorder()
+		h.GetCampaign(getRec, campaignReq("/api/campaigns/"+campID, campID, ""))
+		if getRec.Code != http.StatusOK {
+			t.Fatalf("get status = %d, body = %s", getRec.Code, getRec.Body.String())
+		}
+		var out map[string]any
+		if err := json.Unmarshal(getRec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+
+		targets, _ := out["targets"].([]any)
+		if len(targets) != 1 || targets[0] != agentID {
+			t.Fatalf("targets = %v, want [%s]", out["targets"], agentID)
+		}
+		subset, _ := out["subset"].(map[string]any)
+		if subset == nil {
+			t.Fatal("subset missing from GetCampaign response")
+		}
+		stepsOut, _ := subset["steps"].([]any)
+		if len(stepsOut) != 1 || stepsOut[0] != float64(0) {
+			t.Fatalf("subset.steps = %v, want [0]", subset["steps"])
+		}
+	})
+}
+
 func TestCampaignSummary_NotFound(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
@@ -677,6 +739,137 @@ func TestStopCampaign_Idempotent(t *testing.T) {
 		h.StopCampaign(rec2, campaignReq("/api/campaigns/sc-idem-camp/stop", "sc-idem-camp", ""))
 		if rec2.Code != http.StatusOK {
 			t.Fatalf("second stop: status = %d, want 200 (not 404)", rec2.Code)
+		}
+	})
+}
+
+func TestPauseCampaign_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.PauseCampaign(rec, campaignReq("/api/campaigns/nope/pause", "nope", ""))
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", rec.Code)
+		}
+	})
+}
+
+// TestPauseCampaign_SendsCommandToRunningChildren pins: a running, not-yet-paused
+// child's online agent gets command_pause with its runId, and the response count
+// reflects it — mirrors TestStopCampaign_Running_AgentOnline for pause.
+func TestPauseCampaign_SendsCommandToRunningChildren(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		agentID := "pc-camp-agent"
+		runID := "pc-camp-run"
+		seedCampaign(t, pool, "pc-camp", "Pause Campaign Scenario")
+		seedReportableRun(t, pool, runID, agentID, reportRunOpts{CampaignID: "pc-camp", Status: "running"})
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.PauseCampaign(rec, campaignReq("/api/campaigns/pc-camp/pause", "pc-camp", ""))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if p, _ := out["pausing"].(float64); p != 1 {
+			t.Errorf("pausing = %v, want 1", out["pausing"])
+		}
+
+		env := fake.WaitForMessage(t, 2*time.Second)
+		if env.Type != models.MsgCommandPause {
+			t.Fatalf("message type = %q, want %q", env.Type, models.MsgCommandPause)
+		}
+		var data map[string]string
+		if err := json.Unmarshal(env.Data, &data); err != nil {
+			t.Fatalf("decode command data: %v", err)
+		}
+		if data["runId"] != runID {
+			t.Fatalf("command data = %+v, want runId=%s", data, runID)
+		}
+	})
+}
+
+// TestPauseCampaign_SkipsAlreadyPausedChildren pins: a child already paused
+// (paused=true) doesn't get a second command_pause -- the fan-out only
+// targets running=true AND paused=false children.
+func TestPauseCampaign_SkipsAlreadyPausedChildren(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		agentID := "pc-paused-agent"
+		runID := "pc-paused-run"
+		seedCampaign(t, pool, "pc-paused-camp", "Pause Campaign Already-Paused Scenario")
+		seedReportableRun(t, pool, runID, agentID, reportRunOpts{CampaignID: "pc-paused-camp", Status: "running"})
+		if _, err := pool.Exec(context.Background(), `UPDATE scenario_runs SET paused=true WHERE id=$1`, runID); err != nil {
+			t.Fatalf("seed paused: %v", err)
+		}
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.PauseCampaign(rec, campaignReq("/api/campaigns/pc-paused-camp/pause", "pc-paused-camp", ""))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if p, _ := out["pausing"].(float64); p != 0 {
+			t.Errorf("pausing = %v, want 0 (already paused)", out["pausing"])
+		}
+	})
+}
+
+// TestResumeCampaign_SendsCommandToPausedChildren mirrors
+// TestPauseCampaign_SendsCommandToRunningChildren for resume: a paused
+// child's online agent gets command_resume.
+func TestResumeCampaign_SendsCommandToPausedChildren(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		agentID := "rc-camp-agent"
+		runID := "rc-camp-run"
+		seedCampaign(t, pool, "rc-camp", "Resume Campaign Scenario")
+		seedReportableRun(t, pool, runID, agentID, reportRunOpts{CampaignID: "rc-camp", Status: "running"})
+		if _, err := pool.Exec(context.Background(), `UPDATE scenario_runs SET paused=true WHERE id=$1`, runID); err != nil {
+			t.Fatalf("seed paused: %v", err)
+		}
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.ResumeCampaign(rec, campaignReq("/api/campaigns/rc-camp/resume", "rc-camp", ""))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		if r, _ := out["resuming"].(float64); r != 1 {
+			t.Errorf("resuming = %v, want 1", out["resuming"])
+		}
+
+		env := fake.WaitForMessage(t, 2*time.Second)
+		if env.Type != models.MsgCommandResume {
+			t.Fatalf("message type = %q, want %q", env.Type, models.MsgCommandResume)
+		}
+		var data map[string]string
+		if err := json.Unmarshal(env.Data, &data); err != nil {
+			t.Fatalf("decode command data: %v", err)
+		}
+		if data["runId"] != runID {
+			t.Fatalf("command data = %+v, want runId=%s", data, runID)
 		}
 	})
 }

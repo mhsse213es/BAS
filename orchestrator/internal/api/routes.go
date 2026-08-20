@@ -329,6 +329,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanLookupIOC)).Get("/api/threatintel/lookup", h.LookupIOC)
 		r.With(auth.RequirePermission(auth.CanCreateCampaign)).Post("/api/campaigns", h.CreateCampaign)
 		r.With(auth.RequirePermission(auth.CanStopCampaign)).Post("/api/campaigns/{id}/stop", h.StopCampaign)
+		r.With(auth.RequirePermission(auth.CanStopCampaign)).Post("/api/campaigns/{id}/pause", h.PauseCampaign)
+		r.With(auth.RequirePermission(auth.CanStopCampaign)).Post("/api/campaigns/{id}/resume", h.ResumeCampaign)
 		r.With(auth.RequirePermission(auth.CanSetFindingStatus)).Post("/api/findings/{id}/status", h.SetFindingStatus)
 		r.With(auth.RequirePermission(auth.CanPushToITSM)).Post("/api/ticketing/push", h.PushFindingToITSM)
 		r.With(auth.RequirePermission(auth.CanBulkPushToITSM)).Post("/api/ticketing/push/bulk", h.BulkPushToITSM)

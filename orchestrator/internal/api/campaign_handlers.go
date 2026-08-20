@@ -236,6 +236,11 @@ type campaignRow struct {
 	Stopped                                                            bool
 	TargetType                                                         string
 	TargetGroupID                                                      *int64
+	// Subset is the exact techniques/abilities/steps/checks/executionPolicy
+	// this campaign was launched with (see CreateCampaign's own `subset`
+	// marshal) -- passed straight through as raw JSON so Re-run can replay
+	// it verbatim without a second struct mirroring that shape.
+	Subset json.RawMessage
 }
 
 // childRunOut is the per-agent breakdown row returned in a campaign's detail.
@@ -252,7 +257,7 @@ type childRunOut struct {
 // each FAIL step as detected/missed using the run's persisted detection_summary.
 func (h *Handler) loadChildren(ctx context.Context, campaignID string) ([]campaign.ChildRun, []childRunOut, error) {
 	rows, err := h.db.Query(ctx,
-		`SELECT id, agent_id, status, results, score, detection_summary
+		`SELECT id, agent_id, status, results, score, detection_summary, paused
 		   FROM scenario_runs WHERE campaign_id = $1 ORDER BY started_at`, campaignID)
 	if err != nil {
 		return nil, nil, err
@@ -263,7 +268,8 @@ func (h *Handler) loadChildren(ctx context.Context, campaignID string) ([]campai
 	for rows.Next() {
 		var rid, agentID, status string
 		var resultsRaw, scoreRaw, detRaw []byte
-		if err := rows.Scan(&rid, &agentID, &status, &resultsRaw, &scoreRaw, &detRaw); err != nil {
+		var paused bool
+		if err := rows.Scan(&rid, &agentID, &status, &resultsRaw, &scoreRaw, &detRaw, &paused); err != nil {
 			return nil, nil, err
 		}
 		var results []models.SimulationResult
@@ -276,7 +282,7 @@ func (h *Handler) loadChildren(ctx context.Context, campaignID string) ([]campai
 			}
 		}
 		det := reporting.DetectedTechniques(detRaw, results)
-		cr = append(cr, campaign.ChildRun{Status: status, Results: results, Score: score, DetectedTechs: det})
+		cr = append(cr, campaign.ChildRun{Status: status, Results: results, Score: score, DetectedTechs: det, Paused: paused})
 		var prevPct float64
 		if score != nil {
 			prevPct = score.PreventionScore
@@ -294,11 +300,11 @@ func (h *Handler) loadCampaign(ctx context.Context, id string) (*campaignRow, er
 	err := h.db.QueryRow(ctx,
 		`SELECT id, name, scenario_id, scenario_name, mode, reason, notes,
 		        COALESCE(created_by,''), targets, skips, tags, created_at, started_at, stopped_at,
-		        target_type, target_group_id
+		        target_type, target_group_id, subset
 		   FROM campaigns WHERE id=$1`, id,
 	).Scan(&c.ID, &c.Name, &c.ScenarioID, &c.ScenarioName, &c.Mode, &c.Reason, &c.Notes,
 		&c.CreatedBy, &targetsRaw, &skipsRaw, &tagsRaw, &c.CreatedAt, &c.StartedAt, &stoppedAt,
-		&c.TargetType, &c.TargetGroupID)
+		&c.TargetType, &c.TargetGroupID, &c.Subset)
 	if err != nil {
 		return nil, err
 	}
@@ -469,6 +475,7 @@ func (h *Handler) GetCampaign(w http.ResponseWriter, r *http.Request) {
 		"targets": c.Targets, "skips": c.Skips, "createdBy": c.CreatedBy,
 		"startedAt": c.StartedAt, "summary": s, "runs": children,
 		"targetType": c.TargetType, "targetGroupId": c.TargetGroupID,
+		"subset": json.RawMessage(c.Subset),
 	})
 }
 
@@ -523,4 +530,73 @@ func (h *Handler) StopCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 	h.auditLog(r, "campaign.stop", id, map[string]any{"cancelledRuns": len(runs)}, "ok")
 	respond(w, map[string]any{"stopped": true, "cancelled": len(runs)})
+}
+
+// campaignRunControlFanOut sends msgType (command_pause/command_resume) to
+// every child scenario_run currently running=true, paused=want, mirroring
+// StopCampaign's fan-out (individual Pause/Resume — sendRunControlCommand —
+// is per single run; a campaign has many, so this repeats that same
+// WS-command dispatch across all of them). An agent that's offline for a
+// pause/resume simply doesn't get the command — unlike Stop, there's no DB
+// fallback to force paused=true, since only the agent's own paused/resumed
+// run_event is authoritative for that column (see event_handlers.go), and a
+// child run left running-but-uncommanded is not the same failure mode as an
+// abandoned cancel.
+func (h *Handler) campaignRunControlFanOut(ctx context.Context, campaignID, msgType string, wantPaused bool) (sent int, err error) {
+	rows, qerr := h.db.Query(ctx,
+		`SELECT id, agent_id FROM scenario_runs WHERE campaign_id=$1 AND status='running' AND paused=$2`,
+		campaignID, !wantPaused,
+	)
+	if qerr != nil {
+		return 0, qerr
+	}
+	defer rows.Close()
+	type runRef struct{ id, agentID string }
+	var runs []runRef
+	for rows.Next() {
+		var rr runRef
+		if rows.Scan(&rr.id, &rr.agentID) == nil {
+			runs = append(runs, rr)
+		}
+	}
+	for _, rr := range runs {
+		if h.hub.SendToAgent(rr.agentID, models.WSMessage{
+			Type: msgType, AgentID: rr.agentID, Data: map[string]string{"runId": rr.id},
+		}) {
+			sent++
+		}
+	}
+	return sent, nil
+}
+
+// PauseCampaign pauses every currently-running child run. POST /api/campaigns/{id}/pause
+func (h *Handler) PauseCampaign(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.loadCampaign(r.Context(), id); err != nil {
+		jsonError(w, "campaign not found", http.StatusNotFound)
+		return
+	}
+	sent, err := h.campaignRunControlFanOut(r.Context(), id, models.MsgCommandPause, true)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "campaign.pause", id, map[string]any{"pausedRuns": sent}, "ok")
+	respond(w, map[string]any{"pausing": sent})
+}
+
+// ResumeCampaign resumes every currently-paused child run. POST /api/campaigns/{id}/resume
+func (h *Handler) ResumeCampaign(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.loadCampaign(r.Context(), id); err != nil {
+		jsonError(w, "campaign not found", http.StatusNotFound)
+		return
+	}
+	sent, err := h.campaignRunControlFanOut(r.Context(), id, models.MsgCommandResume, false)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "campaign.resume", id, map[string]any{"resumedRuns": sent}, "ok")
+	respond(w, map[string]any{"resuming": sent})
 }
