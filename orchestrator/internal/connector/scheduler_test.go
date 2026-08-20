@@ -118,10 +118,15 @@ func TestScheduler_SyncUpsertsActorProfiles(t *testing.T) {
 		t.Skip("skipping container-backed test in -short mode")
 	}
 	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		// Fictional actor name deliberately -- attack_groups.json now ships
+		// real MITRE group data (regenerated 2026-08-20), and a real name
+		// like "APT36" would pull in its own real MITRE-canonical aliases
+		// via the actor-merge canonical bridge, which isn't what this test
+		// is pinning (source-provided sectors/regions/aliases persistence).
 		s := NewScheduler([]Source{
 			fakeSource{name: "bundle", actors: []ThreatActor{{
-				Name:       "APT36",
-				Aliases:    []string{"Transparent Tribe"},
+				Name:       "Quartz Badger",
+				Aliases:    []string{"Onyx Falcon"},
 				Sectors:    []string{"government"},
 				Regions:    []string{"south-asia"},
 				Source:     "bundle",
@@ -133,13 +138,13 @@ func TestScheduler_SyncUpsertsActorProfiles(t *testing.T) {
 
 		var aliases, sectors, regions []string
 		err := pool.QueryRow(t.Context(),
-			`SELECT aliases, sectors, regions FROM threat_actor_profiles WHERE name = 'APT36'`,
+			`SELECT aliases, sectors, regions FROM threat_actor_profiles WHERE name = 'Quartz Badger'`,
 		).Scan(&aliases, &sectors, &regions)
 		if err != nil {
-			t.Fatalf("expected APT36 profile to be persisted: %v", err)
+			t.Fatalf("expected Quartz Badger profile to be persisted: %v", err)
 		}
-		if len(aliases) != 1 || aliases[0] != "Transparent Tribe" {
-			t.Errorf("aliases = %v, want [Transparent Tribe]", aliases)
+		if len(aliases) != 1 || aliases[0] != "Onyx Falcon" {
+			t.Errorf("aliases = %v, want [Onyx Falcon]", aliases)
 		}
 		if len(sectors) != 1 || sectors[0] != "government" {
 			t.Errorf("sectors = %v, want [government]", sectors)

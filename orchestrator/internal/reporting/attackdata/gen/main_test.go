@@ -59,7 +59,7 @@ func TestLoadD3fend(t *testing.T) {
 
 func TestParseGroups(t *testing.T) {
 	raw := `[
-		{"type":"intrusion-set","name":"Wizard Spider","x_mitre_aliases":["Sangria Tempest","UNC1878"],
+		{"type":"intrusion-set","name":"Wizard Spider","aliases":["Sangria Tempest","UNC1878"],
 		 "external_references":[{"source_name":"mitre-attack","external_id":"G0102"}]},
 		{"type":"intrusion-set","name":"Revoked Group","revoked":true,
 		 "external_references":[{"source_name":"mitre-attack","external_id":"G9998"}]},

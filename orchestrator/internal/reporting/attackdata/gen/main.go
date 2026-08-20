@@ -99,7 +99,16 @@ type stixObj struct {
 	Platforms           []string `json:"x_mitre_platforms"`
 	PermissionsRequired []string `json:"x_mitre_permissions_required"`
 	DataSources         []string `json:"x_mitre_data_sources"`
-	Aliases             []string `json:"x_mitre_aliases"`
+	// STIX intrusion-set (Group) objects carry their alias list under the
+	// plain STIX 2.1 property "aliases", not "x_mitre_aliases" -- that
+	// x_mitre-prefixed name belongs to malware/tool objects (unused by
+	// this tool), not groups. Getting this wrong silently ships every
+	// group with zero aliases (Go leaves the slice nil on a tag mismatch,
+	// no error) -- which defeats the whole point of the canonical
+	// Group-ID cross-source bridge (see attackdata's Group doc comment):
+	// it can only match a MISP "APT29" to an OpenCTI "Cozy Bear" by
+	// knowing that's an alias.
+	Aliases []string `json:"aliases"`
 	ExternalRefs        []struct {
 		SourceName string `json:"source_name"`
 		ExternalID string `json:"external_id"`

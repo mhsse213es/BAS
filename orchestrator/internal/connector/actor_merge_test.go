@@ -30,10 +30,17 @@ func TestMergeActors_UnionsTechniques(t *testing.T) {
 // whose Aliases field lists that same name. Today's name-only matcher would
 // keep these as two separate actors; the alias-aware matcher must merge
 // them into one.
+//
+// Uses fictional actor/alias names (not a real MITRE group like "Wizard
+// Spider") deliberately -- attack_groups.json now ships real MITRE group
+// data (see attackdata's Group doc comment), and a real group name here
+// would pull in its own real MITRE-canonical aliases via the separate
+// Project 2 bridge, making this test no longer isolated to the OpenCTI-
+// alias-only matching layer it exists to pin.
 func TestMergeActors_MatchesViaOpenCTIProvidedAlias(t *testing.T) {
 	merged := MergeActors([]ThreatActor{
-		{Name: "Wizard Spider", Source: "misp", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
-		{Name: "Sangria Tempest", Aliases: []string{"Wizard Spider", "UNC1878"}, Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
+		{Name: "Frostbyte Jackal", Source: "misp", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
+		{Name: "Umbral Kestrel", Aliases: []string{"Frostbyte Jackal", "Shadow Finch"}, Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
 	})
 	if len(merged) != 1 {
 		t.Fatalf("want 1 merged actor, got %d: %+v", len(merged), merged)
@@ -41,10 +48,10 @@ func TestMergeActors_MatchesViaOpenCTIProvidedAlias(t *testing.T) {
 	if len(merged[0].Techniques) != 2 {
 		t.Fatalf("want 2 unioned techniques, got %d: %+v", len(merged[0].Techniques), merged[0].Techniques)
 	}
-	if merged[0].Name != "Wizard Spider" {
-		t.Errorf("Name = %q, want %q (first-arrival wins)", merged[0].Name, "Wizard Spider")
+	if merged[0].Name != "Frostbyte Jackal" {
+		t.Errorf("Name = %q, want %q (first-arrival wins)", merged[0].Name, "Frostbyte Jackal")
 	}
-	wantAliases := map[string]bool{"Sangria Tempest": true, "UNC1878": true}
+	wantAliases := map[string]bool{"Umbral Kestrel": true, "Shadow Finch": true}
 	if len(merged[0].Aliases) != len(wantAliases) {
 		t.Fatalf("Aliases = %v, want exactly %v", merged[0].Aliases, wantAliases)
 	}
@@ -52,7 +59,7 @@ func TestMergeActors_MatchesViaOpenCTIProvidedAlias(t *testing.T) {
 		if !wantAliases[a] {
 			t.Errorf("unexpected alias %q in %v", a, merged[0].Aliases)
 		}
-		if a == "Wizard Spider" {
+		if a == "Frostbyte Jackal" {
 			t.Error("survivor's own name must not appear in its own Aliases")
 		}
 	}
@@ -64,8 +71,8 @@ func TestMergeActors_MatchesViaOpenCTIProvidedAlias(t *testing.T) {
 // arrival-wins is unchanged; only the matching itself is new).
 func TestMergeActors_MatchesViaAlias_OrderIndependent(t *testing.T) {
 	merged := MergeActors([]ThreatActor{
-		{Name: "Sangria Tempest", Aliases: []string{"Wizard Spider", "UNC1878"}, Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
-		{Name: "Wizard Spider", Source: "misp", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
+		{Name: "Umbral Kestrel", Aliases: []string{"Frostbyte Jackal", "Shadow Finch"}, Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
+		{Name: "Frostbyte Jackal", Source: "misp", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
 	})
 	if len(merged) != 1 {
 		t.Fatalf("want 1 merged actor regardless of arrival order, got %d: %+v", len(merged), merged)
@@ -73,8 +80,8 @@ func TestMergeActors_MatchesViaAlias_OrderIndependent(t *testing.T) {
 	if len(merged[0].Techniques) != 2 {
 		t.Fatalf("want 2 unioned techniques, got %d: %+v", len(merged[0].Techniques), merged[0].Techniques)
 	}
-	if merged[0].Name != "Sangria Tempest" {
-		t.Errorf("Name = %q, want %q (first-arrival wins, and OpenCTI's entry arrived first this time)", merged[0].Name, "Sangria Tempest")
+	if merged[0].Name != "Umbral Kestrel" {
+		t.Errorf("Name = %q, want %q (first-arrival wins, and OpenCTI's entry arrived first this time)", merged[0].Name, "Umbral Kestrel")
 	}
 }
 
@@ -240,22 +247,25 @@ func TestMergeActors_ActiveEnrichmentFoldsMITREAliasesIntoSurvivor(t *testing.T)
 	}
 }
 
-// TestMergeActors_NoMITREDataLeavesCanonicalGroupIDEmpty uses the real,
-// public MergeActors -- exercising the actual
-// attackdata.GroupCanonicalTokenIndex(), which is empty in this repo until
-// someone regenerates attack_groups.json from a real MITRE bundle.
-// Confirms Project 1's alias-token matching is completely unaffected by
-// this project's wiring when no MITRE data resolves.
-func TestMergeActors_NoMITREDataLeavesCanonicalGroupIDEmpty(t *testing.T) {
+// TestMergeActors_NoMatchingMITREGroupLeavesCanonicalGroupIDEmpty uses the
+// real, public MergeActors -- exercising the actual
+// attackdata.GroupCanonicalTokenIndex() against attack_groups.json's real
+// MITRE data (regenerated 2026-08-20; this repo shipped it as an empty
+// placeholder before that -- this test originally exercised that empty
+// state, renamed now that real data exists). Fictional actor/alias names
+// guarantee no entry in the real MITRE catalog, so this still confirms
+// Project 1's alias-token matching is unaffected when nothing resolves --
+// same invariant, now proven against real data instead of an empty file.
+func TestMergeActors_NoMatchingMITREGroupLeavesCanonicalGroupIDEmpty(t *testing.T) {
 	merged := MergeActors([]ThreatActor{
-		{Name: "Wizard Spider", Source: "misp", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
-		{Name: "Sangria Tempest", Aliases: []string{"Wizard Spider"}, Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
+		{Name: "Obsidian Marmot", Source: "misp", Techniques: []TechniqueRef{{ID: "T1059.001"}}},
+		{Name: "Velvet Tumbleweed", Aliases: []string{"Obsidian Marmot"}, Source: "opencti", Techniques: []TechniqueRef{{ID: "T1566.001"}}},
 	})
 	if len(merged) != 1 {
 		t.Fatalf("want 1 merged actor (Project 1 alias-token matching unaffected), got %d", len(merged))
 	}
 	if merged[0].CanonicalGroupID != "" {
-		t.Errorf("CanonicalGroupID = %q, want empty (no real MITRE group data shipped yet)", merged[0].CanonicalGroupID)
+		t.Errorf("CanonicalGroupID = %q, want empty (fictional actor has no real MITRE group match)", merged[0].CanonicalGroupID)
 	}
 }
 
