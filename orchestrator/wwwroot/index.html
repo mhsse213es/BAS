@@ -18297,6 +18297,67 @@ function loadVariantTab() {
   populateVexAgents();
   populateVexTechniques();
   startVexSweepPolling();
+  _vexResumeActiveRun();
+}
+
+// ── Run Variants reload-survival ────────────────────────────────────────────
+// A Run Variants dispatch (single technique, or a queued multi-technique
+// batch) only ever tracked its live state in JS variables -- a page reload
+// wiped them, leaving the result panel blank forever even though the
+// dispatched run itself kept going server-side. Worse for a queued batch:
+// nothing but this tab's own JS loop (_vexWaitAndNext -> _vexRunVariantQueue)
+// ever dispatches the NEXT technique, so a reload didn't just blank the
+// panel, it silently stopped the rest of the queue from running at all.
+// _vexSaveActiveState/_vexLoadActiveState/_vexClearActiveState persist just
+// enough (which run to reconnect to, and the queue's remaining work) in
+// localStorage to survive a reload; _vexResumeActiveRun reconnects on load.
+var VEX_ACTIVE_KEY = 'bas_vex_active_run';
+function _vexSaveActiveState(state) {
+  try { localStorage.setItem(VEX_ACTIVE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+function _vexLoadActiveState() {
+  try {
+    var raw = localStorage.getItem(VEX_ACTIVE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function _vexClearActiveState() {
+  try { localStorage.removeItem(VEX_ACTIVE_KEY); } catch (e) {}
+}
+
+function _vexResumeActiveRun() {
+  if (_vexRunPoll || _vexActivePoll) return; // already polling something this session
+  var st = _vexLoadActiveState();
+  if (!st || !st.vrId) return;
+  apicall('/api/variants/run/' + st.vrId).then(function(detail) {
+    var s = detail.run && detail.run.status;
+    if (!s || s === 'completed' || s === 'failed' || s === 'partial') {
+      // The in-flight technique already finished while nobody was watching.
+      // For a queue, pick up right where it left off rather than silently
+      // abandoning the remaining techniques.
+      if (st.techniques.length > 1 && st.idx + 1 < st.techniques.length) {
+        _vexAbortRequested = false;
+        var btn = document.getElementById('vex-run-btn');
+        if (btn) btn.disabled = true;
+        _vexRunVariantQueue(st.agentId, st.techniques, st.mode, st.advanced, st.baseType, st.idx + 1);
+      } else {
+        _vexClearActiveState();
+      }
+      return;
+    }
+    // Still running -- reconnect the live panel/polling exactly as if this
+    // tab had never left.
+    _vexAbortRequested = false;
+    _vexActiveScenarioRunId = detail.run.scenarioRunId || null;
+    var btn2 = document.getElementById('vex-run-btn');
+    if (btn2) { btn2.disabled = true; btn2.textContent = st.techniques.length > 1 ? (st.idx + 1) + '/' + st.techniques.length + ' Running…' : 'Dispatching…'; }
+    if (st.techniques.length > 1) {
+      _vexRenderQueuePanel(st.techniques[st.idx], st.idx, st.techniques);
+      _vexWaitAndNext(st.vrId, st.agentId, st.techniques, st.mode, st.advanced, st.baseType, st.idx);
+    } else {
+      pollVariantRun(st.vrId);
+    }
+  }).catch(function() { _vexClearActiveState(); });
 }
 
 // _vexAvailableVariants caches the server-computed real variant total (ART
@@ -18908,12 +18969,28 @@ function runVariants() {
   _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, 0);
 }
 
+function _vexRenderQueuePanel(tid, idx, techniques) {
+  var panel = document.getElementById('vex-result-panel');
+  if (!panel) return;
+  var pct = Math.round((idx / techniques.length) * 100);
+  panel.innerHTML = '<div class="card" style="padding:1.5rem">' +
+    '<div class="card-title" style="margin-bottom:0.75rem">Queue Progress</div>' +
+    '<div style="font-size:0.83rem;color:var(--muted);margin-bottom:0.6rem">Running <span style="font-family:var(--font-mono);color:var(--text)">' + x(tid) + '</span> — <span style="color:var(--accent);font-weight:600">' + (idx + 1) + ' / ' + techniques.length + '</span></div>' +
+    '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:0.75rem">' +
+      '<div style="height:4px;background:var(--accent);border-radius:2px;width:' + pct + '%;transition:width 0.4s"></div>' +
+    '</div>' +
+    (idx > 0 ? '<div style="margin-bottom:0.6rem;font-size:0.74rem;color:var(--muted)">' + idx + ' completed</div>' : '') +
+    '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button>' +
+  '</div>';
+}
+
 function _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx) {
   var btn = document.getElementById('vex-run-btn');
-  if (_vexAbortRequested) { if (btn) { btn.disabled = false; btn.textContent = 'Run'; } return; }
+  if (_vexAbortRequested) { if (btn) { btn.disabled = false; btn.textContent = 'Run'; } _vexClearActiveState(); return; }
   if (idx >= techniques.length) {
     if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
     if (techniques.length > 1) showToast('All ' + techniques.length + ' techniques queued', 'ok');
+    _vexClearActiveState();
     loadVariantCoverage();
     loadVariantStats();
     return;
@@ -18921,21 +18998,7 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx)
   var tid = techniques[idx];
   if (btn) btn.textContent = techniques.length > 1 ? (idx + 1) + '/' + techniques.length + ' Running…' : 'Dispatching…';
 
-  if (techniques.length > 1) {
-    var panel = document.getElementById('vex-result-panel');
-    if (panel) {
-      var pct = Math.round((idx / techniques.length) * 100);
-      panel.innerHTML = '<div class="card" style="padding:1.5rem">' +
-        '<div class="card-title" style="margin-bottom:0.75rem">Queue Progress</div>' +
-        '<div style="font-size:0.83rem;color:var(--muted);margin-bottom:0.6rem">Running <span style="font-family:var(--font-mono);color:var(--text)">' + x(tid) + '</span> — <span style="color:var(--accent);font-weight:600">' + (idx + 1) + ' / ' + techniques.length + '</span></div>' +
-        '<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:0.75rem">' +
-          '<div style="height:4px;background:var(--accent);border-radius:2px;width:' + pct + '%;transition:width 0.4s"></div>' +
-        '</div>' +
-        (idx > 0 ? '<div style="margin-bottom:0.6rem;font-size:0.74rem;color:var(--muted)">' + idx + ' completed</div>' : '') +
-        '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVex()">&#9632; Stop</button>' +
-      '</div>';
-    }
-  }
+  if (techniques.length > 1) _vexRenderQueuePanel(tid, idx, techniques);
 
   apicall('/api/variants/run', {
     method: 'POST',
@@ -18944,6 +19007,10 @@ function _vexRunVariantQueue(agentId, techniques, mode, advanced, baseType, idx)
   }).then(function(resp) {
     _vexActiveScenarioRunId = resp.scenarioRunId;
     var vrId = resp.variantRunId;
+    // Persist so a page reload can reconnect to this run instead of the
+    // panel just going blank -- and, for a queue, so the remaining
+    // techniques still get dispatched (see _vexResumeActiveRun above).
+    _vexSaveActiveState({ vrId: vrId, agentId: agentId, techniques: techniques, mode: mode, advanced: advanced, baseType: baseType, idx: idx });
     if (techniques.length === 1) {
       if (btn) { btn.disabled = false; btn.textContent = 'Run'; }
       showToast('Dispatched ' + (resp.totalVariants || 0) + ' variants', 'ok');
@@ -18987,6 +19054,7 @@ function pollVariantRun(vrId) {
       var s = detail.run && detail.run.status;
       if (s === 'completed' || s === 'failed' || s === 'partial') {
         clearInterval(_vexRunPoll);
+        _vexClearActiveState();
         loadVariantCoverage();
         loadVariantStats();
       }
@@ -19003,6 +19071,7 @@ function stopVex() {
   _vexAbortRequested = true;
   if (_vexActivePoll) { clearInterval(_vexActivePoll); _vexActivePoll = null; }
   clearInterval(_vexRunPoll); _vexRunPoll = null;
+  _vexClearActiveState();
   if (_vexActiveScenarioRunId) {
     apicall('/api/scenarios/runs/' + encodeURIComponent(_vexActiveScenarioRunId) + '/cancel', { method: 'POST' }).catch(function(){});
   }
