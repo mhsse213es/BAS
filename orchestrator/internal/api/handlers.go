@@ -1274,21 +1274,31 @@ func synthesizePolicySkipResult(st scenario.ScenarioStep, maxPrivilege string) m
 	return sim
 }
 
-// synthesizeCalderaSkipResult mirrors synthesizePolicySkipResult for a
-// caldera_abilities entry that never became a step: not found in the live
-// Caldera library, or found with no Windows-compatible executor. Routed
-// through the same scenario.Interpret path so it shows up in Findings/
-// Remediation/Live exactly like any other skip — only SkipReason and the
-// visible ability id/reason distinguish it.
-func synthesizeCalderaSkipResult(sk scenario.CalderaSkippedAbility) models.SimulationResult {
+// synthesizeSkippedContentResult mirrors synthesizePolicySkipResult for a
+// caldera_abilities/caldera_adversary_id/art_techniques entry that never
+// became a step: a Caldera ability not found in the live library or with no
+// Windows-compatible executor, or an ART technique with no local atomic for
+// the target platform. Routed through the same scenario.Interpret path so it
+// shows up in Findings/Remediation/Live exactly like any other skip — only
+// SkipReason and the visible id/technique/reason distinguish it.
+func synthesizeSkippedContentResult(sk scenario.CalderaSkippedAbility) models.SimulationResult {
 	name := sk.Name
 	if name == "" {
 		name = sk.AbilityID
 	}
-	step := scenario.Step{TechniqueID: sk.TechniqueID, Name: name, Framework: "caldera"}
+	if name == "" {
+		name = sk.TechniqueID
+	}
+	step := scenario.Step{TechniqueID: sk.TechniqueID, Name: name, Framework: sk.Framework}
+	var stdout string
+	if sk.Framework == "art" {
+		stdout = fmt.Sprintf("SKIP: ART technique %s — %s", sk.TechniqueID, sk.Reason)
+	} else {
+		stdout = fmt.Sprintf("SKIP: Caldera ability %s — %s", sk.AbilityID, sk.Reason)
+	}
 	result := scenario.ExecResult{
 		TaskID: scenario.TaskID(sk.TechniqueID, name),
-		Stdout: fmt.Sprintf("SKIP: Caldera ability %s — %s", sk.AbilityID, sk.Reason),
+		Stdout: stdout,
 	}
 	sim := scenario.Interpret(step, result)
 	sim.SkipReason = models.SkipReasonPlatformUnavailable
@@ -1506,7 +1516,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	}
 
 	// Build concrete commands — all framework logic resolved server-side.
-	steps, calderaSkipped, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
+	steps, skippedContent, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
 	if err != nil {
 		_, _ = h.db.Exec(context.Background(),
 			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
@@ -1527,12 +1537,14 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	// Pre-dispatch synthesized skips: entries that never made it into steps at
 	// all, but must still be visible in results/findings instead of silently
 	// vanishing between "N configured" and "M actually ran" — e.g. a
-	// caldera_abilities id that doesn't exist in the live Caldera library, or
-	// exists with no Windows-compatible executor. The MaxPrivilege filter below
-	// appends its own skips to the same slice so both persist through one merge.
+	// caldera_abilities/caldera_adversary_id id that doesn't exist in the live
+	// Caldera library or has no Windows-compatible executor, or an
+	// art_techniques entry with no local ART atomic for the platform. The
+	// MaxPrivilege filter below appends its own skips to the same slice so
+	// both persist through one merge.
 	var skippedResults []models.SimulationResult
-	for _, sk := range calderaSkipped {
-		skippedResults = append(skippedResults, synthesizeCalderaSkipResult(sk))
+	for _, sk := range skippedContent {
+		skippedResults = append(skippedResults, synthesizeSkippedContentResult(sk))
 	}
 
 	// Dynamically-built Caldera abilities carry their own fidelity tag. Payload-

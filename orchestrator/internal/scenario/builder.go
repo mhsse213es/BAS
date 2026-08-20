@@ -62,14 +62,24 @@ func BuildStepMeta(steps []ScenarioStep) map[string]StepMeta {
 // BuildSteps converts a Scenario into concrete ScenarioSteps the agent executes.
 // agentOS is "windows", "linux", or "darwin" — used to select the correct ART
 // atomic variants for platform-aware scenarios. Pass "" to default to "windows".
-// Modes are checked in priority order (see Scenario type comment). Every built
-// step is then labelled with its curated resource profile so the agent scheduler
-// can run independent steps concurrently; unlabeled steps stay serial. The
-// second return value is only ever non-empty for a caldera_abilities scenario —
-// the configured ability IDs that never became a step (not found in the live
-// Caldera library, or no Windows-compatible executor), so a caller can make
-// them visible instead of letting them vanish silently between "N configured"
-// and "M actually ran".
+// Modes are checked in priority order (see Scenario type comment); whichever
+// shorthand matches (if any) resolves first, and any explicit steps: entries
+// are then always built and appended after it -- letting a scenario cover most
+// techniques via a shorthand and hand-author the rest, instead of the two
+// being mutually exclusive. An infrastructure-level error from the matched
+// shorthand (ART store unavailable, Caldera unreachable, etc.) still aborts
+// the whole build immediately, exactly as before; steps: is only appended
+// after a successful (possibly partial) shorthand resolution. Every built
+// step is then labelled with its curated resource profile so the agent
+// scheduler can run independent steps concurrently; unlabeled steps stay
+// serial. The second return value carries any configured ability/technique
+// that never became a step (not found in the live Caldera library, no
+// Windows-compatible executor, or no local ART atomic for the platform) --
+// see CalderaSkippedAbility -- so a caller can make it visible instead of
+// letting it vanish silently between "N configured" and "M actually ran".
+// Only caldera_abilities, caldera_adversary_id, and art_techniques ever
+// populate it: the other shorthand modes mean "everything the library has,"
+// with no declared-vs-found gap to report.
 func BuildSteps(sc *Scenario, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) ([]ScenarioStep, []CalderaSkippedAbility, error) {
 	steps, skipped, err := buildStepsRaw(sc, calderaURL, calderaKey, artStore, agentOS)
 	if err != nil {
@@ -84,69 +94,91 @@ func buildStepsRaw(sc *Scenario, calderaURL, calderaKey string, artStore *ARTSto
 	if agentOS == "" {
 		agentOS = "windows"
 	}
-	if calderaURL != "" {
-		if sc.CalderaAllWindows {
-			steps, err := buildCalderaAllWindowsSteps(calderaURL, calderaKey)
-			return steps, nil, err
+
+	var steps []ScenarioStep
+	var skipped []CalderaSkippedAbility
+	switch {
+	case calderaURL != "" && sc.CalderaAllWindows:
+		s, err := buildCalderaAllWindowsSteps(calderaURL, calderaKey)
+		if err != nil {
+			return nil, nil, err
 		}
-		if len(sc.CalderaAbilities) > 0 {
-			return buildCalderaAbilitiesSteps(sc.CalderaAbilities, calderaURL, calderaKey)
+		steps = s
+	case calderaURL != "" && len(sc.CalderaAbilities) > 0:
+		s, sk, err := buildCalderaAbilitiesSteps(sc.CalderaAbilities, calderaURL, calderaKey)
+		if err != nil {
+			return nil, sk, err
 		}
-		if sc.CalderaAdversaryID != "" {
-			steps, err := buildCalderaAdversarySteps(sc.CalderaAdversaryID, calderaURL, calderaKey)
-			return steps, nil, err
+		steps, skipped = s, sk
+	case calderaURL != "" && sc.CalderaAdversaryID != "":
+		s, sk, err := buildCalderaAdversarySteps(sc.CalderaAdversaryID, calderaURL, calderaKey)
+		if err != nil {
+			return nil, sk, err
 		}
-	}
-	if sc.ARTAllWindows {
+		steps, skipped = s, sk
+	case sc.ARTAllWindows:
 		if artStore == nil {
 			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		steps, err := buildARTPlatformSteps("windows", artStore)
-		return steps, nil, err
-	}
-	if sc.ARTAllPlatform {
+		s, err := buildARTPlatformSteps("windows", artStore)
+		if err != nil {
+			return nil, nil, err
+		}
+		steps = s
+	case sc.ARTAllPlatform:
 		if artStore == nil {
 			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		steps, err := buildARTPlatformSteps(agentOS, artStore)
-		return steps, nil, err
-	}
+		s, err := buildARTPlatformSteps(agentOS, artStore)
+		if err != nil {
+			return nil, nil, err
+		}
+		steps = s
 	// ARTSelectiveWindows/ARTSelectivePlatform default to the exact same
 	// full-depth builder as ARTAllWindows/ARTAllPlatform above -- an operator
 	// narrows the run via the Customize picker's technique subset, which
 	// arrives here as ARTTechniques after the API handler clears these flags
 	// (see RunScenario's subset-override logic), so this branch only ever
 	// runs for the unmodified "everything" default.
-	if sc.ARTSelectiveWindows {
+	case sc.ARTSelectiveWindows:
 		if artStore == nil {
 			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		steps, err := buildARTPlatformSteps("windows", artStore)
-		return steps, nil, err
-	}
-	if sc.ARTSelectivePlatform {
+		s, err := buildARTPlatformSteps("windows", artStore)
+		if err != nil {
+			return nil, nil, err
+		}
+		steps = s
+	case sc.ARTSelectivePlatform:
 		if artStore == nil {
 			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		steps, err := buildARTPlatformSteps(agentOS, artStore)
-		return steps, nil, err
-	}
-	if len(sc.ARTTechniques) > 0 {
+		s, err := buildARTPlatformSteps(agentOS, artStore)
+		if err != nil {
+			return nil, nil, err
+		}
+		steps = s
+	case len(sc.ARTTechniques) > 0:
 		if artStore == nil {
 			return nil, nil, fmt.Errorf("ART store not available — set ART_DIR to a directory containing ART atomic YAML files")
 		}
-		steps, err := buildARTTechniquesSteps(sc.ARTTechniques, artStore, agentOS)
-		return steps, nil, err
+		s, sk, err := buildARTTechniquesSteps(sc.ARTTechniques, artStore, agentOS)
+		if err != nil {
+			return nil, sk, err
+		}
+		steps, skipped = s, sk
 	}
-	out := make([]ScenarioStep, 0, len(sc.Steps))
+
+	// Explicit steps: entries always run in addition to whatever shorthand
+	// mode (if any) already resolved above.
 	for _, s := range sc.Steps {
 		built, err := buildStep(s, calderaURL, calderaKey, artStore, agentOS)
 		if err != nil {
-			return nil, nil, fmt.Errorf("step %q: %w", s.Name, err)
+			return nil, skipped, fmt.Errorf("step %q: %w", s.Name, err)
 		}
-		out = append(out, built)
+		steps = append(steps, built)
 	}
-	return out, nil, nil
+	return steps, skipped, nil
 }
 
 func buildStep(s Step, calderaURL, calderaKey string, artStore *ARTStore, agentOS string) (ScenarioStep, error) {
@@ -240,10 +272,15 @@ func buildARTPlatformSteps(platform string, artStore *ARTStore) ([]ScenarioStep,
 	if len(techniques) == 0 {
 		return nil, fmt.Errorf("ART store has no %s steps — verify ART_DIR was loaded at startup", platform)
 	}
-	return buildARTTechniquesSteps(techniques, artStore, platform)
+	// techniques is sourced from ListTechniquesByPlatform, so every entry is
+	// guaranteed to have at least one step -- the skipped list is always empty
+	// here and deliberately discarded; this "everything available" sweep mode
+	// has no declared-vs-found gap to surface (see buildStepsRaw's doc comment).
+	steps, _, err := buildARTTechniquesSteps(techniques, artStore, platform)
+	return steps, err
 }
 
-func buildARTTechniquesSteps(techniques []string, artStore *ARTStore, platform string) ([]ScenarioStep, error) {
+func buildARTTechniquesSteps(techniques []string, artStore *ARTStore, platform string) ([]ScenarioStep, []CalderaSkippedAbility, error) {
 	if platform == "" {
 		platform = "windows"
 	}
@@ -252,6 +289,7 @@ func buildARTTechniquesSteps(techniques []string, artStore *ARTStore, platform s
 	// unique list, and expanding the same technique's full atomic-test set
 	// twice would dispatch identical steps twice in one run.
 	var steps []ScenarioStep
+	var skipped []CalderaSkippedAbility
 	seen := make(map[string]bool, len(techniques))
 	for _, t := range techniques {
 		id := strings.ToUpper(strings.TrimSpace(t))
@@ -262,6 +300,10 @@ func buildARTTechniquesSteps(techniques []string, artStore *ARTStore, platform s
 		s := artStore.GetStepsByPlatform(id, platform)
 		if len(s) == 0 {
 			log.Printf("[ART] no %s steps for %s — skipped", platform, t)
+			skipped = append(skipped, CalderaSkippedAbility{
+				Framework: "art", TechniqueID: id,
+				Reason: "no " + platform + " ART atomic available for this technique",
+			})
 			continue
 		}
 		for _, st := range s {
@@ -269,9 +311,9 @@ func buildARTTechniquesSteps(techniques []string, artStore *ARTStore, platform s
 		}
 	}
 	if len(steps) == 0 {
-		return nil, fmt.Errorf("ART: no %s steps found for any of the %d requested techniques", platform, len(techniques))
+		return nil, skipped, fmt.Errorf("ART: no %s steps found for any of the %d requested techniques", platform, len(techniques))
 	}
-	return steps, nil
+	return steps, skipped, nil
 }
 
 // buildCalderaCommand returns the ability command from Caldera API,
@@ -429,10 +471,14 @@ func mapCalderaElevation(privilege string) PrivSpec {
 
 // buildCalderaAdversarySteps fetches an adversary profile from Caldera,
 // then fetches each ability in its atomic_ordering and builds a ScenarioStep
-// for every ability that has a Windows (psh/powershell/cmd) executor.
-func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]ScenarioStep, error) {
+// for every ability that has a Windows (psh/powershell/cmd) executor. Any
+// ability that fails to resolve or has no Windows-compatible executor is
+// reported in the returned skipped list rather than silently dropped --
+// mirrors buildCalderaAbilitiesSteps, which had the same "declared vs
+// found" gap and was already fixed.
+func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]ScenarioStep, []CalderaSkippedAbility, error) {
 	if !safeID.MatchString(adversaryID) {
-		return nil, fmt.Errorf("invalid adversary ID %q: must be alphanumeric/hyphen/underscore", adversaryID)
+		return nil, nil, fmt.Errorf("invalid adversary ID %q: must be alphanumeric/hyphen/underscore", adversaryID)
 	}
 	client := &http.Client{Timeout: 15 * time.Second}
 	base := strings.TrimRight(calderaURL, "/")
@@ -443,29 +489,43 @@ func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]Scena
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch adversary: %w", err)
+		return nil, nil, fmt.Errorf("fetch adversary: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch adversary: HTTP %d", resp.StatusCode)
+		return nil, nil, fmt.Errorf("fetch adversary: HTTP %d", resp.StatusCode)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	var adversary calderaAdversary
 	if err := json.Unmarshal(body, &adversary); err != nil {
-		return nil, fmt.Errorf("parse adversary: %w", err)
+		return nil, nil, fmt.Errorf("parse adversary: %w", err)
 	}
 	if len(adversary.AtomicOrdering) == 0 {
-		return nil, fmt.Errorf("adversary %s has no abilities in atomic_ordering", adversaryID)
+		return nil, nil, fmt.Errorf("adversary %s has no abilities in atomic_ordering", adversaryID)
 	}
 
 	var steps []ScenarioStep
+	var skipped []CalderaSkippedAbility
 	for _, abilityID := range adversary.AtomicOrdering {
 		ab, err := fetchCalderaAbilityFull(client, base, apiKey, abilityID)
 		if err != nil {
+			log.Printf("[caldera] adversary %s: ability %s not found — skipped (%v)", adversaryID, abilityID, err)
+			skipped = append(skipped, CalderaSkippedAbility{
+				Framework: "caldera", AbilityID: abilityID, Reason: "not found in Caldera library",
+			})
 			continue
 		}
 		cmd := pickExecutorCommand(ab.Executors, "psh")
 		if cmd == "" {
+			log.Printf("[caldera] adversary %s: ability %s (%q) has no Windows-compatible executor — skipped", adversaryID, abilityID, ab.Name)
+			techniqueID := ab.TechniqueID
+			if techniqueID == "" {
+				techniqueID = ab.Tactic
+			}
+			skipped = append(skipped, CalderaSkippedAbility{
+				Framework: "caldera", AbilityID: abilityID, Name: ab.Name, TechniqueID: techniqueID,
+				Reason: "no Windows-compatible executor",
+			})
 			continue
 		}
 		techniqueID := ab.TechniqueID
@@ -486,19 +546,24 @@ func buildCalderaAdversarySteps(adversaryID, calderaURL, apiKey string) ([]Scena
 	}
 
 	if len(steps) == 0 {
-		return nil, fmt.Errorf("adversary %s yielded no executable steps for Windows platform", adversaryID)
+		return nil, skipped, fmt.Errorf("adversary %s yielded no executable steps for Windows platform", adversaryID)
 	}
-	return steps, nil
+	return steps, skipped, nil
 }
 
-// CalderaSkippedAbility explains why a configured caldera_abilities entry
-// never became a dispatched step. Surfaced up through BuildSteps so the
-// operator can see WHICH ids were dropped and WHY, instead of just noticing
-// the run's total came in lower than the scenario's configured count.
+// CalderaSkippedAbility explains why a configured caldera_abilities,
+// caldera_adversary_id, or art_techniques entry never became a dispatched
+// step. Surfaced up through BuildSteps so the operator can see WHICH ids/
+// techniques were dropped and WHY, instead of just noticing the run's total
+// came in lower than the scenario's configured count. Despite the name
+// (kept to avoid an unrelated rename across every existing caller), this is
+// shared by both Caldera and ART shorthand modes — Framework disambiguates
+// which one a given entry came from for the message synthesized from it.
 type CalderaSkippedAbility struct {
-	AbilityID   string // as configured in the scenario YAML
-	Name        string // ability name, only known if the id resolved
-	TechniqueID string // only known if the id resolved
+	Framework   string // "caldera" or "art" — which shorthand mode produced this skip
+	AbilityID   string // as configured in the scenario YAML; empty for an "art" skip
+	Name        string // ability name, only known if the id resolved; empty for an "art" skip
+	TechniqueID string // only known if the id resolved (caldera) or always set (art)
 	Reason      string
 }
 
@@ -513,7 +578,7 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 		ab, err := fetchCalderaAbilityFull(client, base, apiKey, id)
 		if err != nil {
 			log.Printf("[caldera] ability %s: not found in Caldera library — skipped (%v)", id, err)
-			skipped = append(skipped, CalderaSkippedAbility{AbilityID: id, Reason: "not found in Caldera library"})
+			skipped = append(skipped, CalderaSkippedAbility{Framework: "caldera", AbilityID: id, Reason: "not found in Caldera library"})
 			continue
 		}
 		cmd := pickExecutorCommand(ab.Executors, "psh")
@@ -524,7 +589,7 @@ func buildCalderaAbilitiesSteps(abilityIDs []string, calderaURL, apiKey string) 
 			}
 			log.Printf("[caldera] ability %s (%q): no Windows-compatible executor — skipped", id, ab.Name)
 			skipped = append(skipped, CalderaSkippedAbility{
-				AbilityID: id, Name: ab.Name, TechniqueID: techniqueID,
+				Framework: "caldera", AbilityID: id, Name: ab.Name, TechniqueID: techniqueID,
 				Reason: "no Windows-compatible executor",
 			})
 			continue

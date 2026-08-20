@@ -156,7 +156,7 @@ func TestUnknownTechniques(t *testing.T) {
 // atomic for each), confirming the override path the run handler relies on.
 func TestBuildARTTechniquesSubset(t *testing.T) {
 	store := newTestStore()
-	steps, err := buildARTTechniquesSteps([]string{"T1059"}, store, "windows")
+	steps, _, err := buildARTTechniquesSteps([]string{"T1059"}, store, "windows")
 	if err != nil {
 		t.Fatalf("buildARTTechniquesSteps: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestBuildARTTechniquesSubset(t *testing.T) {
 // unique list.
 func TestBuildARTTechniquesSubset_DedupsRepeatedTechnique(t *testing.T) {
 	store := newTestStore()
-	steps, err := buildARTTechniquesSteps([]string{"T1059", "t1059", " T1059 "}, store, "windows")
+	steps, _, err := buildARTTechniquesSteps([]string{"T1059", "t1059", " T1059 "}, store, "windows")
 	if err != nil {
 		t.Fatalf("buildARTTechniquesSteps: %v", err)
 	}
