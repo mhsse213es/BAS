@@ -440,8 +440,15 @@ type RemediationPlan struct {
 // TechniqueRow is one row in the Detection Validation table — execution verdict
 // combined with post-run EDR/alert correlation for the same technique.
 type TechniqueRow struct {
-	TechniqueID      string `json:"techniqueId"`
-	TechniqueName    string `json:"techniqueName"`
+	TechniqueID   string `json:"techniqueId"`
+	TechniqueName string `json:"techniqueName"`
+	// StepName is the specific dispatched atomic's own name (e.g. "T1003 -
+	// Test 3: LSASS dump via comsvcs.dll MiniDump"), distinguishing rows
+	// that share the same TechniqueID/TechniqueName -- routine in a Full
+	// Sweep, where one technique commonly has several atomics. Empty for
+	// local_check-sourced results, where TechniqueName is already the
+	// specific check name (see models.SimulationResult.StepName).
+	StepName         string `json:"stepName,omitempty"`
 	Tactic           string `json:"tactic"`
 	Severity         string `json:"severity"`
 	ExecVerdict      string `json:"execVerdict"`                // pass|fail|blocked|error|skipped
@@ -667,10 +674,13 @@ type AttackFlowNode struct {
 	Step          int    `json:"step"`
 	TechniqueID   string `json:"techniqueId"`
 	TechniqueName string `json:"techniqueName"`
-	Tactic        string `json:"tactic"`
-	TacticLabel   string `json:"tacticLabel"`
-	Severity      string `json:"severity"`
-	DurationMs    int64  `json:"durationMs"`
+	// StepName is the specific dispatched atomic's own name -- see
+	// TechniqueRow.StepName for why this is separate from TechniqueName.
+	StepName    string `json:"stepName,omitempty"`
+	Tactic      string `json:"tactic"`
+	TacticLabel string `json:"tacticLabel"`
+	Severity    string `json:"severity"`
+	DurationMs  int64  `json:"durationMs"`
 
 	// Verdict: "blocked" | "detected" | "logged" | "bypassed" | "error" | "skipped"
 	Verdict      string `json:"verdict"`
@@ -702,6 +712,7 @@ func BuildAttackFlow(results []models.SimulationResult) []AttackFlowNode {
 			Step:          i + 1,
 			TechniqueID:   r.Technique.ID,
 			TechniqueName: r.Technique.Name,
+			StepName:      r.StepName,
 			Tactic:        r.Technique.Tactic,
 			TacticLabel:   humanizeTactic(r.Technique.Tactic),
 			Severity:      r.Severity,
@@ -912,6 +923,7 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 		row := TechniqueRow{
 			TechniqueID:       r.Technique.ID,
 			TechniqueName:     r.Technique.Name,
+			StepName:          r.StepName,
 			Tactic:            r.Technique.Tactic,
 			Severity:          r.Severity,
 			ExecVerdict:       string(r.Result),

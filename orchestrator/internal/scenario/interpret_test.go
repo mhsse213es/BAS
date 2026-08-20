@@ -64,6 +64,38 @@ func TestInterpretCheckIDEmptyWhenUnset(t *testing.T) {
 	}
 }
 
+// TestInterpretStepNamePreservesSpecificAtomicName proves StepName always
+// carries the step's own specific name, even when the technique ID resolves
+// to a generic ATT&CK catalog name -- previously step.Name was discarded
+// whenever that lookup succeeded (the common case), so two different atomics
+// under the same technique (e.g. "T1003 - Test 1" and "T1003 - Test 3", both
+// T1003) were indistinguishable everywhere downstream (reports, CSV, results
+// drawer) except the live run panel.
+func TestInterpretStepNamePreservesSpecificAtomicName(t *testing.T) {
+	step := Step{TechniqueID: "T1003", Name: "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump", Framework: "art"}
+	res := Interpret(step, ExecResult{ExitCode: 0})
+	if res.StepName != step.Name {
+		t.Errorf("StepName = %q, want %q", res.StepName, step.Name)
+	}
+	// The generic catalog name must still be resolved for Technique.Name --
+	// StepName is additive, not a replacement.
+	if res.Technique.Name == "" || res.Technique.Name == step.Name {
+		t.Errorf("Technique.Name = %q, want the resolved generic ATT&CK catalog name, distinct from the specific step name", res.Technique.Name)
+	}
+}
+
+// TestInterpretStepNameEmptyWhenStepNameEmpty proves StepName isn't
+// backfilled from the resolved technique name -- it's genuinely empty when
+// the step itself has no name, so downstream rendering can tell "no specific
+// atomic name available" apart from "name happens to equal the generic one".
+func TestInterpretStepNameEmptyWhenStepNameEmpty(t *testing.T) {
+	step := Step{TechniqueID: "T1003", Framework: "art"}
+	res := Interpret(step, ExecResult{ExitCode: 0})
+	if res.StepName != "" {
+		t.Errorf("StepName = %q, want empty", res.StepName)
+	}
+}
+
 func TestInterpretARTBlockDetection(t *testing.T) {
 	cases := []struct {
 		name   string

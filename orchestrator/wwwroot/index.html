@@ -13322,6 +13322,7 @@ function viewRunResults(run) {
           techId + '<span style="font-size:0.8rem">' + x((c.technique && c.technique.name) || c.name || '') + '</span>' +
           fwBadge + privBadge + '<span style="color:var(--muted);font-size:0.68rem;margin-left:auto">' + x(c.severity || '') + '</span>' + evidenceBtn +
         '</div>' +
+        (c.stepName && c.stepName !== ((c.technique && c.technique.name) || c.name) ? '<div style="color:var(--muted);font-size:0.7rem;padding-left:52px;margin-top:0.1rem">' + x(c.stepName) + '</div>' : '') +
         (c.details ? '<div style="color:var(--muted);font-size:0.72rem;padding-left:52px;margin-top:0.1rem">' + x(c.details) + '</div>' : '') +
         (c.result === 'fail' && c.threatImpact ? '<div style="color:var(--muted);font-size:0.7rem;padding-left:52px;margin-top:0.1rem">' + x(c.threatImpact) + '</div>' : '') +
         (c.result === 'fail' && c.remediation ? '<div style="color:var(--warning);font-size:0.7rem;padding-left:52px;margin-top:0.1rem;white-space:pre-wrap">' + x(c.remediation) + '</div>' : '') +
@@ -13372,7 +13373,8 @@ function viewRunResults(run) {
         '<span style="min-width:78px;font-size:0.68rem;color:var(--muted);font-variant-numeric:tabular-nums">' + x(t.toLocaleTimeString()) + '</span>' +
         '<span style="min-width:56px;text-align:right;font-size:0.65rem;color:var(--muted);font-variant-numeric:tabular-nums">' + x(dur) + '</span>' +
         '<span style="color:' + col + ';font-size:0.7rem;font-weight:600;min-width:46px">' + x(c.result) + '</span>' +
-        techId + '<span style="font-size:0.8rem;flex:1">' + x((c.technique && c.technique.name) || c.name || c.command || '') + '</span>' +
+        techId + '<span style="font-size:0.8rem;flex:1">' + x((c.technique && c.technique.name) || c.name || c.command || '') +
+          (c.stepName && c.stepName !== ((c.technique && c.technique.name) || c.name) ? '<span style="color:var(--muted);font-size:0.7rem"> — ' + x(c.stepName) + '</span>' : '') + '</span>' +
         detBadge +
       '</div>';
     }).join('');
@@ -13411,7 +13413,8 @@ function viewRunResults(run) {
           : '';
         return '<div style="display:flex;align-items:center;gap:0.4rem;padding:0.22rem 0;font-size:0.74rem">' +
           '<span style="color:' + col + ';font-weight:600;min-width:44px;font-size:0.65rem">' + x(c.result) + '</span>' +
-          techId + '<span>' + x((c.technique && c.technique.name) || c.name || '') + '</span>' + detBadge +
+          techId + '<span>' + x((c.technique && c.technique.name) || c.name || '') +
+            (c.stepName && c.stepName !== ((c.technique && c.technique.name) || c.name) ? '<span style="color:var(--muted);font-size:0.68rem"> — ' + x(c.stepName) + '</span>' : '') + '</span>' + detBadge +
         '</div>';
       }).join('');
       return '<div class="dash-panel" style="margin-bottom:0.85rem"><div class="dash-panel-body" style="padding:0.75rem 0.9rem">' +
@@ -15144,7 +15147,8 @@ function openEvidence(idx) {
   if (!c) return;
   var techName = (c.technique && c.technique.name) || c.name || 'Technique';
   var techId   = (c.technique && c.technique.id)   ? c.technique.id + ' — ' : '';
-  document.getElementById('evidence-title').textContent = techId + techName;
+  var stepSuffix = (c.stepName && c.stepName !== techName) ? ' (' + c.stepName + ')' : '';
+  document.getElementById('evidence-title').textContent = techId + techName + stepSuffix;
   renderEvidencePanel(c);
   document.getElementById('evidence-overlay').style.display = 'block';
 }
@@ -15372,6 +15376,7 @@ function renderEvidencePanel(c) {
     var miHtml = kv('Technique',
       '<a href="https://attack.mitre.org/techniques/' + xe(tid) + '" target="_blank" style="color:var(--accent);text-decoration:none">'
       + xe(c.technique.id) + ' &#8212; ' + xe(c.technique.name||'') + ' &#8599;</a>');
+    if (c.stepName && c.stepName !== c.technique.name) miHtml += kv('Test', xe(c.stepName));
     if (c.technique.tactic) miHtml += kv('Tactic', xe(c.technique.tactic.replace(/-/g,' ')));
     var fw2 = (c.framework||'custom').toLowerCase();
     var fw2col = fw2 === 'art' ? 'var(--accent)' : fw2 === 'caldera' ? '#bc8cff' : 'var(--muted)';

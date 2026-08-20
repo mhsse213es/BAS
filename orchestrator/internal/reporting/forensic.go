@@ -67,7 +67,7 @@ func WriteForensicCSV(w io.Writer, scenarioName string, results []models.Simulat
 		_ = cw.Write([]string{}) // blank separator row
 	}
 	_ = cw.Write([]string{
-		"Timestamp", "Scenario", "Tactic", "Technique ID", "Technique", "Severity",
+		"Timestamp", "Scenario", "Tactic", "Technique ID", "Technique", "Step Name", "Severity",
 		"Status", "Requested Priv", "Executed As", "Detection", "Threat Impact", "Mitigation", "Evidence", "CVE", "ATT&CK URL",
 	})
 	for _, r := range results {
@@ -103,7 +103,7 @@ func WriteForensicCSV(w io.Writer, scenarioName string, results []models.Simulat
 			execAs = "Legacy"
 		}
 		_ = cw.Write([]string{
-			ts, scenarioName, humanizeTactic(r.Technique.Tactic), r.Technique.ID, r.Technique.Name,
+			ts, scenarioName, humanizeTactic(r.Technique.Tactic), r.Technique.ID, r.Technique.Name, r.StepName,
 			r.Severity, forensicStatusLabel(r.Result), reqPriv, execAs, detection, strings.TrimSpace(r.ThreatImpact),
 			strings.TrimSpace(r.Remediation), truncateStr(evidence, 500), cve, url,
 		})

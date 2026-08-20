@@ -60,6 +60,40 @@ func TestGenerateHTML_CleanupVerdictOmitted(t *testing.T) {
 	}
 }
 
+// TestGenerateHTML_DistinguishesStepNamesForSameTechnique proves the
+// Detection Validation Matrix table renders each atomic's own step name, so
+// two rows sharing the same TechniqueID/TechniqueName (routine in a Full
+// Sweep, where one technique commonly has several atomics) are visually
+// distinguishable in the rendered HTML report, not just identical duplicate
+// rows.
+func TestGenerateHTML_DistinguishesStepNamesForSameTechnique(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	rep := robustnessReport(now)
+	rep.TechniqueMatrix = []TechniqueRow{
+		{
+			TechniqueID: "T1003", TechniqueName: "OS Credential Dumping", Tactic: "credential-access",
+			StepName: "T1003 - Test 1: Mimikatz",
+			Severity: "Critical", ExecVerdict: "fail",
+		},
+		{
+			TechniqueID: "T1003", TechniqueName: "OS Credential Dumping", Tactic: "credential-access",
+			StepName: "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump",
+			Severity: "Critical", ExecVerdict: "pass",
+		},
+	}
+	var buf bytes.Buffer
+	if err := GenerateHTML(&buf, rep, nil); err != nil {
+		t.Fatalf("GenerateHTML errored after %d bytes: %v", buf.Len(), err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "T1003 - Test 1: Mimikatz") {
+		t.Error("rendered report missing the first atomic's step name")
+	}
+	if !strings.Contains(out, "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump") {
+		t.Error("rendered report missing the second atomic's step name")
+	}
+}
+
 // TestGenerateHTML_EnvRestorationNil regression-tests that a FullReport with
 // EnvRestoration == nil (real shape: engine.go only assigns it when
 // buildEnvRestoration reports HasData) renders cleanly. Before the fix, the

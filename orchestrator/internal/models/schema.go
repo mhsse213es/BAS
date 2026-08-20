@@ -39,7 +39,15 @@ type SimulationResult struct {
 	// configuration/posture-check steps (empty for ordinary ATT&CK technique
 	// steps), used by internal/endpointrisk's taxonomy to classify Security
 	// Configuration / Identity findings without overloading technique_id.
-	CheckID      string          `json:"checkId,omitempty"`
+	CheckID string `json:"checkId,omitempty"`
+	// StepName is the specific dispatched step/atomic's own human-readable
+	// name (e.g. "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump"), as
+	// opposed to Technique.Name below (the generic ATT&CK catalog name,
+	// identical for every atomic under that technique ID). Without this, a
+	// technique with multiple atomics -- routine in a Full Sweep -- renders
+	// as indistinguishable duplicate rows everywhere this struct is
+	// displayed (reports, CSV exports, the results drawer).
+	StepName     string          `json:"stepName,omitempty"`
 	Technique    AttackTechnique `json:"technique"`
 	Result       CheckResult     `json:"result"`
 	Severity     string          `json:"severity"`     // Critical | High | Medium | Low

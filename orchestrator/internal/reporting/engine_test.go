@@ -36,6 +36,67 @@ func TestReportExcludesErrorFromOutcomes(t *testing.T) {
 	}
 }
 
+// TestBuildTechniqueMatrix_PreservesStepName proves two atomics of the same
+// technique produce two distinguishable TechniqueRows -- previously
+// TechniqueName alone was identical for every atomic under one technique ID,
+// so the report table, CSV, and results drawer showed indistinguishable
+// duplicate rows for any technique with more than one atomic (routine in a
+// Full Sweep).
+func TestBuildTechniqueMatrix_PreservesStepName(t *testing.T) {
+	results := []models.SimulationResult{
+		{
+			Technique: models.AttackTechnique{ID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access"},
+			StepName:  "T1003 - Test 1: Mimikatz",
+			Result:    models.ResultFail,
+		},
+		{
+			Technique: models.AttackTechnique{ID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access"},
+			StepName:  "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump",
+			Result:    models.ResultPass,
+		},
+	}
+	rows := buildTechniqueMatrix(results, nil)
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2", len(rows))
+	}
+	if rows[0].TechniqueName != rows[1].TechniqueName {
+		t.Fatalf("TechniqueName should be identical for both (same technique): %q vs %q", rows[0].TechniqueName, rows[1].TechniqueName)
+	}
+	if rows[0].StepName == rows[1].StepName {
+		t.Error("StepName must distinguish the two atomics, got the same value for both")
+	}
+	if rows[0].StepName != "T1003 - Test 1: Mimikatz" {
+		t.Errorf("rows[0].StepName = %q, want %q", rows[0].StepName, "T1003 - Test 1: Mimikatz")
+	}
+	if rows[1].StepName != "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump" {
+		t.Errorf("rows[1].StepName = %q, want %q", rows[1].StepName, "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump")
+	}
+}
+
+// TestBuildAttackFlow_PreservesStepName mirrors the TechniqueMatrix case for
+// the Attack Flow visualization, which is also built one node per raw result.
+func TestBuildAttackFlow_PreservesStepName(t *testing.T) {
+	results := []models.SimulationResult{
+		{
+			Technique: models.AttackTechnique{ID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access"},
+			StepName:  "T1003 - Test 1: Mimikatz",
+			Result:    models.ResultFail,
+		},
+		{
+			Technique: models.AttackTechnique{ID: "T1003", Name: "OS Credential Dumping", Tactic: "credential-access"},
+			StepName:  "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump",
+			Result:    models.ResultFail,
+		},
+	}
+	nodes := BuildAttackFlow(results)
+	if len(nodes) != 2 {
+		t.Fatalf("len(nodes) = %d, want 2", len(nodes))
+	}
+	if nodes[0].StepName == nodes[1].StepName {
+		t.Error("StepName must distinguish the two atomics, got the same value for both")
+	}
+}
+
 // The same ATT&CK technique run many times must collapse into ONE group with a
 // per-verdict tally, in first-seen order — so the report stops repeating the same
 // "Critical" finding dozens of times.

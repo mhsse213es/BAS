@@ -1629,7 +1629,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   {{if eq .verdict "error"}}{{$vc = "#6e7681"}}{{end}}
   <tr>
     <td><code>{{.techniqueId}}</code></td>
-    <td>{{.techniqueName}}</td>
+    <td>{{.techniqueName}}{{if and .stepName (ne .stepName .techniqueName)}}<br><span style="font-weight:400;font-size:0.75rem;color:#6e7681">{{.stepName}}</span>{{end}}</td>
     <td style="font-size:0.7rem;color:#6e7681">{{humanize .tactic}}</td>
     <td style="font-weight:600;color:{{$vc}}">{{.verdictLabel}}</td>
     <td>
@@ -2637,6 +2637,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
     <div class="fc-heading">
       <div class="fc-name{{if eq .severity "Critical"}} critical{{end}}">
         {{.techniqueName}}
+        {{if and .stepName (ne .stepName .techniqueName)}}<div style="font-weight:400;font-size:0.7rem;color:#9aa5b5;margin-top:1px">{{.stepName}}</div>{{end}}
         {{$actors := techActors .techniqueId}}{{if $actors}}&nbsp;<span style="font-size:0.62rem;color:#9aa5b5;font-weight:400">&#8212; {{range $i,$a := $actors}}{{if $i}}, {{end}}{{$a}}{{end}}</span>{{end}}
       </div>
       <div class="fc-tid">{{.techniqueId}} &nbsp;&#183;&nbsp; {{humanize .tactic}} &nbsp;&#183;&nbsp; Duration: {{if .durationMs}}{{.durationMs}}ms{{else}}&#8212;{{end}}{{if .framework}} &nbsp;&#183;&nbsp; <span style="color:#58a6ff;font-weight:700;text-transform:uppercase;font-size:0.52rem">{{.framework}}</span>{{end}}</div>
@@ -2895,7 +2896,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <tbody>
   {{range .techniqueMatrix}}{{if or (eq (str .cleanupVerdict) "partial") (eq (str .cleanupVerdict) "leaked")}}
   <tr>
-    <td style="font-weight:600">{{.techniqueId}}{{if .techniqueName}}<br><span style="font-weight:400;font-size:0.78rem;color:#6e7681">{{.techniqueName}}</span>{{end}}</td>
+    <td style="font-weight:600">{{.techniqueId}}{{if .techniqueName}}<br><span style="font-weight:400;font-size:0.78rem;color:#6e7681">{{.techniqueName}}</span>{{end}}{{if and .stepName (ne .stepName .techniqueName)}}<br><span style="font-weight:400;font-size:0.72rem;color:#9aa5b5">{{.stepName}}</span>{{end}}</td>
     <td style="font-size:0.82rem;color:#6e7681">{{if .tactic}}{{humanize .tactic}}{{end}}</td>
     <td><span style="font-size:0.78rem;padding:2px 8px;border-radius:4px;font-weight:700;background:{{verdictBg .execVerdict}};color:{{verdictColor .execVerdict}}">{{upper .execVerdict}}</span></td>
     <td style="font-weight:700;color:{{cleanupVerdictColor .cleanupVerdict}}">{{cleanupVerdictLabel .cleanupVerdict}}</td>
@@ -3098,7 +3099,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <tbody>
   {{range .techniqueMatrix}}
   <tr>
-    <td><code style="font-size:0.78rem">{{.techniqueId}}</code><br><span style="font-size:0.8rem">{{.techniqueName}}</span></td>
+    <td><code style="font-size:0.78rem">{{.techniqueId}}</code><br><span style="font-size:0.8rem">{{.techniqueName}}</span>{{if and .stepName (ne .stepName .techniqueName)}}<br><span style="font-size:0.72rem;color:#9aa5b5">{{.stepName}}</span>{{end}}</td>
     <td style="font-size:0.8rem;color:#6e7681">{{humanize .tactic}}</td>
     <td><span class="dot" style="background:{{sevColor .severity}}"></span>{{.severity}}</td>
     <td><span style="font-size:0.78rem;font-weight:600;color:{{execVerdictColor .execVerdict}}">{{upper .execVerdict}}</span></td>
