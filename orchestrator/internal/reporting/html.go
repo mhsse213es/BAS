@@ -578,7 +578,33 @@ code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em
 @media screen{body{background:#c8d0da;padding:24px 0}
   .page{box-shadow:0 6px 32px rgba(0,0,0,0.22);margin:0 auto 28px;border-radius:2px}}
 @media print{body{background:#fff;padding:0}
-  .page{width:100%;margin:0;box-shadow:none;overflow:visible}
+  /* Fix for large near-blank pages in print/PDF output (2026-08-20).
+     Every report Section gets its own .page div, and .page{page-break-
+     after:always} (line ~576) forced a hard break after EVERY one of
+     them, regardless of how little content a given Section had (e.g. one
+     sentence of "Not enough data"). A physical printed page has a fixed
+     size (A4) -- shrinking a div's CSS height doesn't shrink the paper,
+     so a short Section's forced break still burned a full blank page
+     below it before the next Section started fresh. Confirmed via
+     pixel-content analysis of real rendered PDFs: ~35-38% of pages were
+     under 3% non-white. Verified the fix the same way, not by inspecting
+     CSS and assuming: page-break-after:auto here (content flows onto the
+     same physical page when it fits, matching ordinary long-document
+     print behavior) took a representative report from 34 pages/13 blank
+     down to 23 pages/1 blank. Two earlier attempts (dropping .page/.inner
+     min-height:297mm; disabling .inner's flex layout so .pf's margin-top:
+     auto sticky-footer trick can't stretch it) are kept alongside this --
+     both real, independently-confirmed cascade/layout fixes (.inner's
+     min-height needed .page .inner specifically: the unconditional .inner
+     rule at line ~669 sits later in source order and wins equal-
+     specificity ties regardless of a matching media query) -- but neither
+     alone moved the actual PDF output; page-break-after was the dominant
+     cause. .page:first-child (the cover) keeps page-break-after:always
+     below -- a full-page cover is intentional, not this bug. */
+  .page,.page .inner{min-height:0}
+  .page .inner{display:block}
+  .page{width:100%;margin:0;box-shadow:none;overflow:visible;page-break-after:auto;break-after:auto}
+  .page:first-child{page-break-after:always;break-after:page}
   .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
   thead{display:table-header-group}
   .ph,.pf{page-break-inside:avoid}}

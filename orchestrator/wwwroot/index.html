@@ -8503,7 +8503,8 @@ function openCampaignDetail(id) {
           ? '<button class="btn btn-outline btn-sm" onclick="resumeCampaign(\'' + x(c.id) + '\')" title="Resume every paused child run">&#9654; Resume campaign</button> '
           : '<button class="btn btn-outline btn-sm" onclick="pauseCampaign(\'' + x(c.id) + '\')" title="Pause every running child run">&#10073;&#10073; Pause campaign</button> ')
         + '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>'
-      : '<button class="btn btn-outline btn-sm" onclick="openCampaignReport(\'' + x(c.id) + '\')" title="Open the fleet-wide HTML report">&#8595; HTML Report</button>' +
+      : '<button class="btn btn-outline btn-sm" onclick="openCampaignReport(\'' + x(c.id) + '\')" title="Open the fleet-wide HTML report">&#8599; HTML Report</button>' +
+        ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignReport(\'' + x(c.id) + '\')" title="Download the fleet-wide HTML report as a file">&#8595; HTML Report</button>' +
         ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignCSV(\'' + x(c.id) + '\')" title="Download the fleet forensic CSV (one row per technique across all agents)">&#8595; CSV</button>' +
         ' ' + ((ROLE === 'admin' || ROLE === 'analyst')
           ? '<button class="btn btn-outline btn-sm" onclick=\'openCampaignRerunReview(' + JSON.stringify(c).replace(/'/g,"&#39;") + ')\' title="Review and re-run this exact campaign configuration">Re-run</button>'
@@ -13095,7 +13096,8 @@ function viewRunResults(run) {
     var canRerun = ROLE === 'admin' || ROLE === 'analyst';
     actionsHtml =
       '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
-      '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8595; HTML Report</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8599; HTML Report</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="downloadRunReport(\'' + runId + '\')" title="Download the HTML report as a file">&#8595; HTML Report</button>' +
       '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
       '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
       (canRerun
@@ -13528,7 +13530,8 @@ function viewRunResults(run) {
         '</div></div>' +
         '<div class="dash-panel"><div class="dash-panel-hdr">Export</div><div class="dash-panel-body" style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
           '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')">&#8595; JSON</button>' +
-          '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')">&#8595; HTML Report</button>' +
+          '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')">&#8599; HTML Report</button>' +
+          '<button class="btn btn-sm btn-outline" onclick="downloadRunReport(\'' + runId + '\')">&#8595; HTML Report</button>' +
           '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')">&#8595; CSV</button>' +
         '</div></div>';
     } else {
@@ -15506,10 +15509,33 @@ function openRunReport(runId) {
     window.open('/api/scenarios/runs/' + encodeURIComponent(runId) + '/report' + query, '_blank');
   });
 }
+// downloadRunReport saves the report as an actual .html file instead of just
+// opening it inline -- previously the only option was "open in a new tab"
+// (openRunReport above), with no way to save a copy without knowing to use
+// the browser's own "Save Page As".
+function downloadRunReport(runId) {
+  showDownloadOptions('Simulation HTML Report', function(filter) {
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    var a = document.createElement('a');
+    a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/report' + query;
+    a.download = 'bas-run-report-' + runId.substring(0, 8) + '.html';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  });
+}
 function openCampaignReport(id) {
   showDownloadOptions('Campaign HTML Report', function(filter) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
     window.open('/api/campaigns/' + encodeURIComponent(id) + '/report' + query, '_blank');
+  });
+}
+// downloadCampaignReport mirrors downloadRunReport for the campaign report.
+function downloadCampaignReport(id) {
+  showDownloadOptions('Campaign HTML Report', function(filter) {
+    var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
+    var a = document.createElement('a');
+    a.href = '/api/campaigns/' + encodeURIComponent(id) + '/report' + query;
+    a.download = 'bas-campaign-report-' + id.substring(0, 8) + '.html';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   });
 }
 function downloadCampaignCSV(id) {
