@@ -11271,6 +11271,37 @@ function sweepStatusLabel(status) {
   return status === 'agent_disconnected' ? 'Agent Disconnected' : status;
 }
 
+// sweepAggregateScoreHtml averages the per-child-run score across every run
+// a sweep dispatched, mirroring runRowHtml's own preventionScore/riskScore
+// branch selection so a sweep's Score column reads the same way an
+// individual run's does. Previously the sweep rows never computed this at
+// all -- their last <td> (under the "Score" header) was actually the Stop
+// button, which always renders "—" once the sweep is no longer running,
+// making a completed sweep's score permanently blank.
+function sweepAggregateScoreHtml(childRuns) {
+  var withPrevention = childRuns.filter(function(r) { return r.score && typeof r.score.preventionScore !== 'undefined'; });
+  var withRisk = childRuns.filter(function(r) { return r.score && typeof r.score.riskScore !== 'undefined'; });
+  if (withPrevention.length) {
+    var avgPrev = withPrevention.reduce(function(s, r) { return s + (r.score.preventionScore || 0); }, 0) / withPrevention.length;
+    var avgExp  = withPrevention.reduce(function(s, r) { return s + (r.score.exposureScore || 0); }, 0) / withPrevention.length;
+    var prevPct = Math.round(avgPrev);
+    var expVal  = Math.round(avgExp);
+    var prevCol = prevPct >= 80 ? 'var(--teal)' : prevPct >= 50 ? 'var(--warning)' : 'var(--danger)';
+    var expCol  = expVal  <= 20 ? 'var(--success)' : expVal  <= 50 ? 'var(--warning)' : 'var(--danger)';
+    return '<span style="font-weight:600;color:' + prevCol + '">' + prevPct + '%</span>' +
+           '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.2rem">avg prev</span>' +
+           '<span style="color:' + expCol + ';font-size:0.72rem;margin-left:0.45rem">exp:' + expVal + '</span>';
+  }
+  if (withRisk.length) {
+    var avgRisk = withRisk.reduce(function(s, r) { return s + (r.score.riskScore || 0); }, 0) / withRisk.length;
+    var riskPct = Math.round(avgRisk);
+    var riskCol = riskPct <= 20 ? 'var(--success)' : riskPct <= 50 ? 'var(--warning)' : 'var(--danger)';
+    return '<span style="font-weight:600;color:' + riskCol + '">' + riskPct + '</span>' +
+           '<span style="color:var(--muted);font-size:0.72rem;margin-left:0.3rem">avg risk</span>';
+  }
+  return '—';
+}
+
 // renderSweepRow builds one collapsed "Full Variant Sweep" <tr> from a
 // GET /api/vex/sweeps/{id}/runs response ({sweep, runs}). The badge sums
 // each child run's own fail/pass counts (same per-run counting runRowHtml
@@ -11299,10 +11330,11 @@ function renderSweepRow(payload) {
     '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
     '<td><button class="btn btn-outline btn-sm" onclick="openSweepDrilldown(\'' + x(sw.id) + '\')" title="View every technique this sweep dispatched">' +
-        x(progressLabel) + ' — ' + badge + '</button></td>' +
-    '<td>' + ((sw.status === 'running' || sw.status === 'agent_disconnected')
-      ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVexSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
-      : '—') + '</td></tr>';
+        x(progressLabel) + ' — ' + badge + '</button>' +
+        ((sw.status === 'running' || sw.status === 'agent_disconnected')
+          ? ' <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopVexSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
+          : '') + '</td>' +
+    '<td>' + sweepAggregateScoreHtml(childRuns) + '</td></tr>';
 }
 
 // renderEMSweepRow builds one collapsed "Endpoint Mastery Full Sweep" <tr>
@@ -11329,10 +11361,11 @@ function renderEMSweepRow(payload) {
     '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(sw.startedAt) + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + (sw.completedAt ? fmtDate(sw.completedAt) : '—') + '</td>' +
     '<td><button class="btn btn-outline btn-sm" onclick="openEMSweepProgress(\'' + x(sw.id) + '\')" title="View every EM layer this sweep dispatched">' +
-        x(sw.completedLayers + '/' + sw.totalLayers + ' layers') + ' — ' + badge + '</button></td>' +
-    '<td>' + ((sw.status === 'running' || sw.status === 'agent_disconnected')
-      ? '<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopEMSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
-      : '—') + '</td></tr>';
+        x(sw.completedLayers + '/' + sw.totalLayers + ' layers') + ' — ' + badge + '</button>' +
+        ((sw.status === 'running' || sw.status === 'agent_disconnected')
+          ? ' <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="stopEMSweep(\'' + x(sw.id) + '\')">&#9632; Stop</button>'
+          : '') + '</td>' +
+    '<td>' + sweepAggregateScoreHtml(childRuns) + '</td></tr>';
 }
 
 // Sweep-grouping kinds Live Runs collapses into one row: field is the
