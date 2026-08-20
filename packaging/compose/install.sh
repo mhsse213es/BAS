@@ -1302,7 +1302,72 @@ _wait_healthy() {
     fi
     sleep 3; elapsed=$(( elapsed + 3 ))
   done
-  warn "Orchestrator health check timed out -check: docker compose -p ${COMPOSE_PROJECT} logs"
+  warn "Orchestrator health check timed out after ${max}s -- running diagnostics..."
+  _diagnose_orchestrator_failure
+}
+
+# _diagnose_orchestrator_failure runs targeted checks for the exact failure
+# mode hit in production 2026-08-20 (HDFC): a port-bind conflict left the
+# orchestrator container with NO network attached at all (not a DNS/config
+# problem -- Docker aborts the whole network setup when a published port
+# fails to bind), which just looked like a generic DB-connect crash-loop
+# until someone manually worked through `docker inspect`/`journalctl` by
+# hand. Surface the same diagnosis automatically instead of requiring that
+# again. Deliberately does NOT restart the Docker daemon automatically --
+# that's the actual fix for a stale port reservation, but it briefly stops
+# every container on the host, including anything else sharing it; that's
+# an operator decision, not something this script should do unattended.
+_diagnose_orchestrator_failure() {
+  echo ""
+  echo "  --  Orchestrator diagnostics  -----------------------------------"
+
+  local state
+  state=$(docker inspect --format '{{.State.Status}}' audspect-orchestrator 2>/dev/null || echo "missing")
+  echo "  Container state : ${state}"
+
+  if [[ "$state" == "created" ]]; then
+    echo "  - Container never started (stuck in 'created') -- its network"
+    echo "    setup likely failed. Removing it so the next attempt gets a"
+    echo "    clean slate:"
+    if docker rm audspect-orchestrator >/dev/null 2>&1; then
+      echo "    Removed -- re-run this command to try again."
+    fi
+  fi
+
+  local networks
+  networks=$(docker inspect --format '{{json .NetworkSettings.Networks}}' audspect-orchestrator 2>/dev/null || echo "{}")
+  if [[ "$networks" == "{}" || "$networks" == "null" ]]; then
+    echo "  - Container has NO network attached (NetworkSettings.Networks"
+    echo "    is empty). Docker failed to attach networking entirely --"
+    echo "    usually because a published port failed to bind. Checking"
+    echo "    the Docker daemon log for a port conflict..."
+    if journalctl -u docker --since "5 minutes ago" 2>/dev/null | grep -q "address already in use"; then
+      echo ""
+      echo "  - CONFIRMED: Docker failed to bind a published port:"
+      journalctl -u docker --since "5 minutes ago" 2>/dev/null | grep "address already in use" | tail -3 | sed 's/^/      /' || true
+      echo ""
+      echo "    This exact failure hit HDFC prod 2026-08-20 on port 53/udp"
+      echo "    (the DNS-tunneling exfiltration listener) with nothing"
+      echo "    visible in 'ss -ulnp' or 'lsof' holding it -- a stale"
+      echo "    Docker-level port reservation can survive even after the"
+      echo "    process that held it is gone. Restarting the Docker daemon"
+      echo "    clears it, but that briefly stops EVERY container on this"
+      echo "    host -- not something to do unattended. To do it manually:"
+      echo "      sudo systemctl restart docker"
+      echo "      docker compose -p ${COMPOSE_PROJECT} up -d"
+      echo "    If you can't take that downtime right now, temporarily drop"
+      echo "    the conflicting port from the orchestrator service's"
+      echo "    'ports:' list in ${DATA_DIR}/docker-compose.yml and re-run"
+      echo "    this command -- everything except that one feature keeps"
+      echo "    working."
+    fi
+  fi
+
+  echo "  Recent orchestrator logs:"
+  docker compose -p "$COMPOSE_PROJECT" logs --tail=15 orchestrator 2>/dev/null | sed 's/^/    /' || true
+  echo "  -------------------------------------------------------------------"
+  echo ""
+  warn "Orchestrator did not become healthy -- see diagnostics above, or: docker compose -p ${COMPOSE_PROJECT} logs orchestrator"
 }
 
 _create_admin() {
