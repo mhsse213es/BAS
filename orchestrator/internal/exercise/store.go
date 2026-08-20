@@ -164,11 +164,22 @@ func (s *Store) ListExecutions(ctx context.Context, limit int) ([]Execution, err
 	if limit <= 0 {
 		limit = 50
 	}
+	// steps_total/steps_done come from a LEFT JOIN aggregate (not a stored
+	// counter) so the executions list can show live progress -- an operator
+	// staring at a bare "running" badge with zero feedback is exactly the
+	// "is this actually doing anything?" complaint this exists to answer.
+	// Terminal step states mirror StepStatus's own vocabulary (types.go).
 	rows, err := s.db.Query(ctx,
-		`SELECT id, plan_id, name, status, initiated_by, targets_json, metadata_json,
-		        variables_json, plan_version, score_json, started_at, completed_at, created_at, updated_at,
-		        execution_policy_json
-		 FROM exercise_executions ORDER BY created_at DESC LIMIT $1`, limit)
+		`SELECT e.id, e.plan_id, e.name, e.status, e.initiated_by, e.targets_json, e.metadata_json,
+		        e.variables_json, e.plan_version, e.score_json, e.started_at, e.completed_at, e.created_at, e.updated_at,
+		        e.execution_policy_json, COALESCE(se.total, 0), COALESCE(se.done, 0)
+		 FROM exercise_executions e
+		 LEFT JOIN (
+		   SELECT execution_id, COUNT(*) AS total,
+		          COUNT(*) FILTER (WHERE status IN ('completed','failed','cancelled','skipped')) AS done
+		   FROM exercise_step_executions GROUP BY execution_id
+		 ) se ON se.execution_id = e.id
+		 ORDER BY e.created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +190,8 @@ func (s *Store) ListExecutions(ctx context.Context, limit int) ([]Execution, err
 		var targetsRaw, metaRaw, varsRaw, scoreRaw, policyRaw []byte
 		if err := rows.Scan(&e.ID, &e.PlanID, &e.Name, &e.Status, &e.InitiatedBy,
 			&targetsRaw, &metaRaw, &varsRaw, &e.PlanVersion, &scoreRaw,
-			&e.StartedAt, &e.CompletedAt, &e.CreatedAt, &e.UpdatedAt, &policyRaw); err != nil {
+			&e.StartedAt, &e.CompletedAt, &e.CreatedAt, &e.UpdatedAt, &policyRaw,
+			&e.StepsTotal, &e.StepsDone); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(targetsRaw, &e.Targets)

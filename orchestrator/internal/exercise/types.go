@@ -211,6 +211,13 @@ type Execution struct {
 	CompletedAt     *time.Time               `json:"completed_at,omitempty"`
 	CreatedAt       time.Time                `json:"created_at"`
 	UpdatedAt       time.Time                `json:"updated_at"`
+	// StepsTotal/StepsDone are populated only by ListExecutions (a cheap
+	// aggregate over exercise_step_executions, not stored) -- they let the
+	// executions list show live progress ("3/8 steps") without a second
+	// per-row fetch. GetExecution leaves both zero since its caller already
+	// fetches the full step list separately (see GetExerciseExecution).
+	StepsTotal int `json:"steps_total,omitempty"`
+	StepsDone  int `json:"steps_done,omitempty"`
 }
 
 // Target is a participant in the exercise (human or agent).

@@ -171,6 +171,55 @@ func TestListRunningExecutions_OnlyRunningAndPaused(t *testing.T) {
 	})
 }
 
+// TestListExecutions_StepsProgressAggregate pins the steps_total/steps_done
+// aggregate the executions list surfaces so an operator can see live
+// progress ("3/8 steps") instead of a bare "running" badge that never
+// changes. done counts every terminal StepStatus (completed/failed/
+// cancelled/skipped); pending and running/waiting steps don't count as done.
+func TestListExecutions_StepsProgressAggregate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := NewStore(pool)
+		ctx := context.Background()
+		execID := seedExecution(t, store)
+
+		statuses := []StepStatus{StepCompleted, StepFailed, StepCancelled, StepSkipped, StepRunning, StepPending}
+		for i, st := range statuses {
+			se := &StepExecution{ExecutionID: execID, StepID: string(rune('a' + i)), StepType: StepTypeNotify, Status: StepPending}
+			if err := store.UpsertStepExecution(ctx, se); err != nil {
+				t.Fatalf("seed step %d: %v", i, err)
+			}
+			if st != StepPending {
+				if err := store.SetStepStatus(ctx, execID, se.StepID, st, ""); err != nil {
+					t.Fatalf("set step %d status: %v", i, err)
+				}
+			}
+		}
+
+		list, err := store.ListExecutions(ctx, 50)
+		if err != nil {
+			t.Fatalf("ListExecutions: %v", err)
+		}
+		var got *Execution
+		for i := range list {
+			if list[i].ID == execID {
+				got = &list[i]
+			}
+		}
+		if got == nil {
+			t.Fatalf("seeded execution %s not in list", execID)
+		}
+		if got.StepsTotal != 6 {
+			t.Errorf("StepsTotal = %d, want 6", got.StepsTotal)
+		}
+		if got.StepsDone != 4 {
+			t.Errorf("StepsDone = %d, want 4 (completed+failed+cancelled+skipped)", got.StepsDone)
+		}
+	})
+}
+
 func TestTemplate_UpsertAndSeed(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")
