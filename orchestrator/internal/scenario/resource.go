@@ -53,6 +53,11 @@ func TimeoutProfileFor(techniqueID string) *TimeoutProfile {
 }
 
 // Resource domains and risk levels — kept in sync with the agent's sched package.
+// domFilesystem currently has no consumer in discoveryProfiles below (T1083,
+// its only user, was removed 2026-08-20 -- see that map's doc comment) but
+// stays defined: it's a real domain the agent's sched package still
+// recognises (agent/sched's own tests reference it), so a future
+// genuinely-fast filesystem-reading technique can reuse it directly.
 const (
 	domRegistry   = "registry"
 	domFilesystem = "filesystem"
@@ -84,41 +89,47 @@ func observe(domain string) *ResourceProfile {
 // This map also drives TimeoutProfileFor's aggressive 20s execute-timeout
 // override (below) -- the two concerns are coupled by design, since both rest
 // on the same "enumerates host state and returns in well under a second"
-// assumption. T1046 was removed 2026-08-20: verified against real production
-// ART content, its atomics are active network port scans (a sequential bash
-// /dev/tcp scan of all 65535 ports, an nmap /24 sweep + telnet + nc, and a
-// full-range nmap -sV scan), not sub-second local enumeration -- the 20s cap
-// was producing false TIMEOUT verdicts instead of real PASS/FAIL. Removing it
-// from this map both drops the bad timeout (falls through to the step's own
-// timeout_sec) and drops the "run concurrently" resource label -- a pure
-// safety-direction tradeoff (can only make a sweep slower, never wrong),
-// consistent with this map's own conservative-labelling philosophy.
+// assumption.
+//
+// **2026-08-20 audit**: every technique below was checked against real
+// production ART command text for exactly that assumption. Two
+// (T1046, T1614) were removed entirely -- the MAJORITY of their real atomics
+// are active network operations (port scans; an external HTTPS geolocation
+// call with no timeout flag), not sub-second local reads, so the 20s cap was
+// producing false TIMEOUT verdicts. A few others (T1012, T1016, T1018, T1049)
+// keep a single documented exception each -- see their inline comments --
+// where only a minority of atomics share that problem; the map is keyed by
+// technique, not by individual atomic/test_index, so removing the whole
+// technique to fix one atomic would trade away legitimate fast/parallel
+// treatment for the rest. Everything else checked clean. Re-verify any
+// technique added here later the same way before trusting the 20s bound.
 var discoveryProfiles = map[string]*ResourceProfile{
-	"T1012": observe(domRegistry),   // Query Registry
-	"T1083": observe(domFilesystem), // File and Directory Discovery
-	"T1057": observe(domProcess),    // Process Discovery
-	"T1007": observe(domProcess),    // System Service Discovery
-	"T1518": observe(domProcess),    // Software Discovery
-	"T1010": observe(domProcess),    // Application Window Discovery
-	"T1082": observe(domProcess),    // System Information Discovery
-	"T1033": observe(domProcess),    // System Owner/User Discovery
-	"T1124": observe(domProcess),    // System Time Discovery
-	"T1614": observe(domProcess),    // System Location Discovery
-	"T1016": observe(domNetwork),    // System Network Configuration Discovery
-	"T1049": observe(domNetwork),    // System Network Connections Discovery
-	// T1018 (Remote System Discovery) -- checked 2026-08-20 against real
-	// production ART content, kept deliberately (unlike T1046 above): 5 of its
-	// 6 Linux atomics are genuinely fast local reads (arp -a, ip neighbour/
-	// route show, netstat -r, ip tcp_metrics show). Only one ("Test 7:
-	// sweep" -- a sequential, unthrottled `ping -c 1` of 254 addresses with
-	// no -W deadline) shares T1046's problem and can run well past 20s.
-	// This map is keyed by technique, not by individual atomic/test_index,
-	// so there's no way to exempt just that one test without a bigger,
-	// riskier change to the curation mechanism itself. Removing the whole
-	// technique would trade away the legitimate fast/parallel treatment for
-	// the other 5 to fix one -- the wrong tradeoff. Left as a known, narrow
-	// limitation: only that one atomic, in a technique the sweep dispatches
-	// depth-mode, is affected.
+	// T1012 (Query Registry) -- Test 3 loops over every registered COM CLSID
+	// (often thousands on a real Windows host) and actually instantiates each
+	// one via [activator]::CreateInstance(...). The other 5 of 6 atomics are
+	// simple, fast reg query/Get-Item reads. Kept; that one atomic is a known
+	// narrow exception.
+	"T1012": observe(domRegistry), // Query Registry
+	"T1057": observe(domProcess),  // Process Discovery
+	"T1007": observe(domProcess),  // System Service Discovery
+	"T1518": observe(domProcess),  // Software Discovery
+	"T1010": observe(domProcess),  // Application Window Discovery
+	"T1082": observe(domProcess),  // System Information Discovery
+	"T1033": observe(domProcess),  // System Owner/User Discovery
+	"T1124": observe(domProcess),  // System Time Discovery
+	// T1016 (System Network Configuration Discovery) -- Test 9's
+	// `nslookup -timeout=12` is bounded but borderline: a retry or two could
+	// push it past the 20s cap. Only 1 of 9 atomics, and softer risk than the
+	// removed techniques since it's at least timeout-capped. Kept.
+	"T1016": observe(domNetwork), // System Network Configuration Discovery
+	// T1049 (System Network Connections Discovery) -- Test 7 runs SharpView's
+	// ACL scanner, Kerberoasting, and domain-share discovery, all known-slow
+	// against a live AD domain. Only 1 of 7 atomics. Kept.
+	"T1049": observe(domNetwork), // System Network Connections Discovery
+	// T1018 (Remote System Discovery) -- 5 of 6 Linux atomics are fast local
+	// reads (arp -a, ip neighbour/route show, netstat -r, ip tcp_metrics
+	// show). Only "Test 7: sweep" (a sequential, unthrottled `ping -c 1` of
+	// 254 addresses with no -W deadline) shares T1046's problem. Kept.
 	"T1018": observe(domNetwork),   // Remote System Discovery
 	"T1087": observe(domSecPolicy), // Account Discovery
 	"T1069": observe(domSecPolicy), // Permission Groups Discovery

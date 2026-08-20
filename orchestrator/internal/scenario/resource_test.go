@@ -5,6 +5,25 @@ import (
 	"testing"
 )
 
+// TestResourceProfileForKeptDespiteNarrowException proves T1012, T1016, and
+// T1049 stay in the curated discovery set even though each has one atomic
+// that shares T1046/T1614/T1083's problem (2026-08-20 audit) -- the majority
+// of each technique's real atomics are genuinely fast local reads, and this
+// map is keyed by technique (not by individual atomic/test_index), so
+// removing the whole technique would trade away correct fast/parallel
+// treatment for the rest to fix one. See resource.go's inline comments for
+// the specific atomic each exception refers to.
+func TestResourceProfileForKeptDespiteNarrowException(t *testing.T) {
+	for _, id := range []string{"T1012", "T1016", "T1049"} {
+		if p := ResourceProfileFor(id); p == nil {
+			t.Errorf("%s should still be labelled (kept as a documented narrow exception), got nil", id)
+		}
+		if p := TimeoutProfileFor(id); p == nil {
+			t.Errorf("%s should still get the curated discovery timeout, got nil", id)
+		}
+	}
+}
+
 func TestResourceProfileForKnownDiscovery(t *testing.T) {
 	p := ResourceProfileFor("T1057")
 	if p == nil {
@@ -45,20 +64,41 @@ func TestResourceProfileForUnlabeledIsSerial(t *testing.T) {
 	}
 }
 
-// TestResourceProfileForT1046IsUnlabeled proves T1046 (Network Service
-// Discovery) was deliberately removed from the curated discovery set: its
-// real ART atomics are active network port scans (a 65535-port sequential
-// bash scan, an nmap /24 sweep + telnet + nc, a full-range nmap -sV scan),
-// verified against production 2026-08-20 -- not the "sub-second local
-// enumeration" this profile's 20s execute-timeout assumes. Must stay
-// unlabeled so a step keeps its own declared timeout_sec instead of being
-// force-capped at 20s and misclassified as a timeout.
-func TestResourceProfileForT1046IsUnlabeled(t *testing.T) {
-	if p := ResourceProfileFor("T1046"); p != nil {
-		t.Errorf("T1046 must be unlabeled (no curated resource profile), got %+v", p)
+// TestResourceProfileForRemovedNetworkHeavyTechniquesAreUnlabeled proves
+// T1046 and T1614 were deliberately removed from the curated discovery set
+// (2026-08-20 audit, verified against real production ART command text) --
+// both must stay unlabeled so a step keeps its own declared timeout_sec
+// instead of being force-capped at 20s and misclassified as a timeout.
+//   - T1046 (Network Service Discovery): active network port scans (a
+//     65535-port sequential bash scan, an nmap /24 sweep + telnet + nc, a
+//     full-range nmap -sV scan) -- 3 of 3 atomics.
+//   - T1614 (System Location Discovery): `curl -k https://ipinfo.io/` with
+//     no --max-time flag, on BOTH platforms (2 of 2 atomics) -- a blocked/
+//     dropped egress connection to that external service can hang far past
+//     20s, especially on an egress-filtered production endpoint.
+func TestResourceProfileForRemovedNetworkHeavyTechniquesAreUnlabeled(t *testing.T) {
+	for _, id := range []string{"T1046", "T1614"} {
+		if p := ResourceProfileFor(id); p != nil {
+			t.Errorf("%s must be unlabeled (no curated resource profile), got %+v", id, p)
+		}
+		if p := TimeoutProfileFor(id); p != nil {
+			t.Errorf("%s must not get the curated 20s discovery timeout, got %+v", id, p)
+		}
 	}
-	if p := TimeoutProfileFor("T1046"); p != nil {
-		t.Errorf("T1046 must not get the curated 20s discovery timeout, got %+v", p)
+}
+
+// TestResourceProfileForT1083IsUnlabeled proves T1083 (File and Directory
+// Discovery) was deliberately removed: 7 of 9 real Linux/Windows atomics are
+// unbounded recursive filesystem walks (`dir /s c:\` -- the entire system
+// drive; `find` over the whole $HOME tree; bare `Get-ChildItem -Recurse`),
+// not sub-second reads. A large real filesystem can take minutes, not
+// seconds, to enumerate -- same failure mode as T1046/T1614 above.
+func TestResourceProfileForT1083IsUnlabeled(t *testing.T) {
+	if p := ResourceProfileFor("T1083"); p != nil {
+		t.Errorf("T1083 must be unlabeled (no curated resource profile), got %+v", p)
+	}
+	if p := TimeoutProfileFor("T1083"); p != nil {
+		t.Errorf("T1083 must not get the curated 20s discovery timeout, got %+v", p)
 	}
 }
 
