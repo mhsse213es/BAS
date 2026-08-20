@@ -71,6 +71,13 @@ var logoNamePNG []byte
 type logoBitmap struct {
 	hbm  uintptr
 	w, h int32
+	// contentX/Y/W/H crop out the flat white margin baked into the source
+	// PNG around the icon+wordmark (the asset is shared with the agent
+	// status console, browser favicon, and PDF reports, so it can't be
+	// re-cropped globally -- trimming happens only here, at draw time, so
+	// the installer header shows less dead white space around the mark
+	// without touching any other consumer of the asset).
+	contentX, contentY, contentW, contentH int32
 }
 
 var cachedLogo *logoBitmap
@@ -109,6 +116,7 @@ func loadLogoBitmap(hdc uintptr) *logoBitmap {
 	}
 
 	buf := unsafe.Slice((*byte)(unsafe.Pointer(bitsPtr)), w*h*4)
+	minX, minY, maxX, maxY := w, h, -1, -1
 	for yy := 0; yy < h; yy++ {
 		for xx := 0; xx < w; xx++ {
 			// color.Color.RGBA() returns alpha-premultiplied 16-bit
@@ -121,10 +129,45 @@ func loadLogoBitmap(hdc uintptr) *logoBitmap {
 			buf[i+1] = byte(gg >> 8)
 			buf[i+2] = byte(rr >> 8)
 			buf[i+3] = byte(aa >> 8)
+
+			// Track the bounding box of non-white, non-transparent pixels
+			// so drawLogo can source-crop away the flat white margin baked
+			// into this asset instead of blending the whole canvas.
+			if aa>>8 > 20 && !(rr>>8 > 245 && gg>>8 > 245 && bb>>8 > 245) {
+				if xx < minX {
+					minX = xx
+				}
+				if xx > maxX {
+					maxX = xx
+				}
+				if yy < minY {
+					minY = yy
+				}
+				if yy > maxY {
+					maxY = yy
+				}
+			}
 		}
 	}
 
-	cachedLogo = &logoBitmap{hbm: hbm, w: int32(w), h: int32(h)}
+	// A little breathing room around the tight content box -- reduces the
+	// margin without butting the icon right up against the header edge.
+	const pad = 5
+	if maxX < 0 {
+		// No non-white content found (shouldn't happen for this asset) --
+		// fall back to the full canvas rather than an empty crop.
+		minX, minY, maxX, maxY = 0, 0, w-1, h-1
+	}
+	minX = max(0, minX-pad)
+	minY = max(0, minY-pad)
+	maxX = min(w-1, maxX+pad)
+	maxY = min(h-1, maxY+pad)
+
+	cachedLogo = &logoBitmap{
+		hbm: hbm, w: int32(w), h: int32(h),
+		contentX: int32(minX), contentY: int32(minY),
+		contentW: int32(maxX - minX + 1), contentH: int32(maxY - minY + 1),
+	}
 	return cachedLogo
 }
 
@@ -146,7 +189,7 @@ func drawLogo(hdc uintptr, destRc RECT) {
 
 	destW := destRc.Right - destRc.Left
 	destH := destRc.Bottom - destRc.Top
-	srcAspect := float64(logo.w) / float64(logo.h)
+	srcAspect := float64(logo.contentW) / float64(logo.contentH)
 	dstAspect := float64(destW) / float64(destH)
 
 	drawW, drawH := destW, destH
@@ -158,5 +201,5 @@ func drawLogo(hdc uintptr, destRc RECT) {
 	offX := destRc.Left + (destW-drawW)/2
 	offY := destRc.Top + (destH-drawH)/2
 
-	alphaBlend(hdc, offX, offY, drawW, drawH, memDC, 0, 0, logo.w, logo.h)
+	alphaBlend(hdc, offX, offY, drawW, drawH, memDC, logo.contentX, logo.contentY, logo.contentW, logo.contentH)
 }
