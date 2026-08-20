@@ -229,6 +229,12 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			payload      jsonb       NOT NULL DEFAULT '{}',
 			PRIMARY KEY (run_id, seq)
 		)`,
+		// step_name is the agent-submitted human-readable test name (e.g. "T1003
+		// - Test 3: ..."), sent on every event but previously never persisted --
+		// only the live WS relay carried it, so a step's real name silently
+		// reverted to its bare technique ID on any replay/reconnect (GET
+		// .../events), for every scenario.
+		`ALTER TABLE run_events ADD COLUMN IF NOT EXISTS step_name text NOT NULL DEFAULT ''`,
 
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_total   int NOT NULL DEFAULT 0`,
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS steps_done    int NOT NULL DEFAULT 0`,

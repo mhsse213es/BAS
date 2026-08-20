@@ -35,8 +35,8 @@ func (h *Handler) SubmitRunEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, err := h.db.Exec(ctx, `
 			WITH ins AS (
-				INSERT INTO run_events (run_id, seq, type, task_id, technique_id, ts, payload)
-				VALUES ($1,$2,$3,$4,$5,$6,$7)
+				INSERT INTO run_events (run_id, seq, type, task_id, technique_id, ts, payload, step_name)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 				ON CONFLICT (run_id, seq) DO NOTHING
 				RETURNING type, payload
 			)
@@ -56,7 +56,7 @@ func (h *Handler) SubmitRunEvents(w http.ResponseWriter, r *http.Request) {
 				                     ELSE s.paused END
 			FROM ins
 			WHERE s.id = $1`,
-			e.RunID, e.Seq, e.Type, e.TaskID, e.TechniqueID, e.Ts, payload); err != nil {
+			e.RunID, e.Seq, e.Type, e.TaskID, e.TechniqueID, e.Ts, payload, e.StepName); err != nil {
 			log.Printf("[events] ingest run %s seq %d: %v", e.RunID, e.Seq, err)
 		}
 	}
@@ -93,7 +93,7 @@ func (h *Handler) relayRunEvents(batch []models.RunEvent) {
 func (h *Handler) ListRunEvents(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runId")
 	rows, err := h.db.Query(r.Context(),
-		`SELECT seq, type, task_id, technique_id, ts, payload
+		`SELECT seq, type, task_id, technique_id, ts, payload, step_name
 		 FROM run_events WHERE run_id = $1 ORDER BY seq ASC`, runID)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -104,7 +104,7 @@ func (h *Handler) ListRunEvents(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var e models.RunEvent
 		var payload []byte
-		if err := rows.Scan(&e.Seq, &e.Type, &e.TaskID, &e.TechniqueID, &e.Ts, &payload); err != nil {
+		if err := rows.Scan(&e.Seq, &e.Type, &e.TaskID, &e.TechniqueID, &e.Ts, &payload, &e.StepName); err != nil {
 			continue
 		}
 		_ = json.Unmarshal(payload, &e.Payload)

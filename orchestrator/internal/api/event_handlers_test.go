@@ -148,6 +148,55 @@ func TestListRunEventsOrderedBySeq(t *testing.T) {
 	})
 }
 
+// TestListRunEvents_PreservesStepName proves a step's human-readable name
+// (e.g. "T1003 - Test 3: ...") survives a full SubmitRunEvents -> DB ->
+// ListRunEvents round-trip, not just the live WS relay path. Previously
+// run_events had no step_name column at all, so every replay/reconnect
+// (opening the Live panel after the fact, or on WS reconnect) lost every
+// step's real name and fell back to displaying the bare technique ID --
+// for every scenario, not one in particular.
+func TestListRunEvents_PreservesStepName(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		runID := "run-stepname-1"
+		seedRun(t, pool, runID)
+
+		postEvents(t, h, []map[string]any{
+			{"runId": runID, "seq": 1, "type": "queued", "taskId": "tk1", "techniqueId": "T1003",
+				"stepName": "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump", "ts": "2026-06-09T16:40:12Z"},
+			{"runId": runID, "seq": 2, "type": "started", "taskId": "tk1", "techniqueId": "T1003",
+				"stepName": "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump", "ts": "2026-06-09T16:40:13Z"},
+			{"runId": runID, "seq": 3, "type": "completed", "taskId": "tk1", "techniqueId": "T1003",
+				"stepName": "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump", "ts": "2026-06-09T16:40:14Z",
+				"payload": map[string]any{"verdict": "pass"}},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/api/scenarios/runs/"+runID+"/events", nil)
+		req = withURLParam(req, "runId", runID)
+		rec := httptest.NewRecorder()
+		h.ListRunEvents(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status %d", rec.Code)
+		}
+		var got []models.RunEvent
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(got) != 3 {
+			t.Fatalf("expected 3 events, got %d", len(got))
+		}
+		want := "T1003 - Test 3: LSASS dump via comsvcs.dll MiniDump"
+		for _, e := range got {
+			if e.StepName != want {
+				t.Errorf("seq %d: StepName = %q, want %q", e.Seq, e.StepName, want)
+			}
+		}
+	})
+}
+
 func pausedState(t *testing.T, pool *pgxpool.Pool, runID string) bool {
 	t.Helper()
 	var p bool
