@@ -133,6 +133,37 @@ func TestRunScenarioIntegration_TechniqueAndStepSubset(t *testing.T) {
 		if len(cmd.Steps) != 1 || cmd.Steps[0].Name != "step-0" {
 			t.Fatalf("cmd.Steps = %+v, want exactly [step-0]", cmd.Steps)
 		}
+
+		// dispatch_subset must persist the exact request verbatim -- this is
+		// what lets Re-run replay this run exactly instead of reconstructing
+		// (lossily, for steps) from results after the fact.
+		var subsetRaw []byte
+		if err := pool.QueryRow(context.Background(),
+			`SELECT dispatch_subset FROM scenario_runs WHERE agent_id = $1`, agentID,
+		).Scan(&subsetRaw); err != nil {
+			t.Fatalf("query dispatch_subset: %v", err)
+		}
+		var subset models.DispatchSubset
+		if err := json.Unmarshal(subsetRaw, &subset); err != nil {
+			t.Fatalf("decode dispatch_subset: %v", err)
+		}
+		if subset.Field != "steps" || len(subset.IDs) != 1 || subset.IDs[0] != "0" {
+			t.Fatalf("dispatch_subset = %+v, want {field:steps ids:[0]}", subset)
+		}
+
+		// And it must round-trip through the same list endpoint the frontend's
+		// Re-run Review reads (GET /api/scenarios/runs).
+		listRec := httptest.NewRecorder()
+		h.ListScenarioRuns(listRec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?agentId="+agentID, nil))
+		var runs []struct {
+			DispatchSubset *models.DispatchSubset `json:"dispatchSubset"`
+		}
+		if err := json.Unmarshal(listRec.Body.Bytes(), &runs); err != nil {
+			t.Fatalf("decode list: %v", err)
+		}
+		if len(runs) != 1 || runs[0].DispatchSubset == nil || runs[0].DispatchSubset.Field != "steps" {
+			t.Fatalf("ListScenarioRuns runs = %+v, want one run with dispatchSubset.field=steps", runs)
+		}
 	})
 }
 

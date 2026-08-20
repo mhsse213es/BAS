@@ -182,6 +182,22 @@ type ScenarioRun struct {
 	PerfRAMAfter   float64 `json:"perfRamAfter"`
 	PerfDiskBefore float64 `json:"perfDiskBefore"`
 	PerfDiskAfter  float64 `json:"perfDiskAfter"`
+
+	// DispatchSubset is the operator-selected subset captured verbatim at
+	// dispatch time (nil for a full, unfiltered run) -- lets Re-run replay
+	// the exact original request instead of reconstructing an approximation
+	// from Results, which can't recover a Caldera ability UUID or step index.
+	DispatchSubset *DispatchSubset `json:"dispatchSubset,omitempty"`
+}
+
+// DispatchSubset is the exact operator-selected subset a scenario run was
+// dispatched with. Field names the RunScenario request field it came from
+// ("techniques" | "abilities" | "steps" | "checks"); IDs are that field's
+// values verbatim (technique IDs, Caldera ability UUIDs, step indices as
+// strings, or posture check IDs).
+type DispatchSubset struct {
+	Field string   `json:"field"`
+	IDs   []string `json:"ids"`
 }
 
 // RunProgress is the live/partial step summary maintained from the run-event

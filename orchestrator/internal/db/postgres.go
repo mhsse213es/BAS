@@ -1574,6 +1574,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 			channel text NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_dlp_sink_receipts_token ON dlp_sink_receipts (token)`,
+
+		// Re-run exact clone: the operator-selected subset (techniques/
+		// abilities/steps/checks) captured verbatim at dispatch time, so
+		// Re-run can replay it exactly instead of reconstructing a lossy
+		// approximation from results after the fact -- the prior approach
+		// couldn't recover Caldera ability IDs or step indices from results
+		// at all and silently fell back to running everything.
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS dispatch_subset jsonb`,
 	}
 
 	for _, s := range stmts {

@@ -1217,6 +1217,32 @@ func nullIfEmpty(s string) any {
 	return s
 }
 
+// dispatchSubsetFromOpts captures which operator-selected subset (if any) a
+// run was dispatched with, verbatim, for scenario_runs.dispatch_subset — so
+// Re-run can replay the exact original request instead of reconstructing an
+// approximation from Results after the fact (which can't recover a Caldera
+// ability UUID or step index at all). Returns nil for a full, unfiltered run.
+// At most one of o.Techniques/Abilities/Steps/Checks is ever set by a single
+// dispatch request, so checking them in this fixed order is unambiguous.
+func dispatchSubsetFromOpts(o dispatchOpts) *models.DispatchSubset {
+	switch {
+	case len(o.Techniques) > 0:
+		return &models.DispatchSubset{Field: "techniques", IDs: o.Techniques}
+	case len(o.Abilities) > 0:
+		return &models.DispatchSubset{Field: "abilities", IDs: o.Abilities}
+	case len(o.Steps) > 0:
+		ids := make([]string, len(o.Steps))
+		for i, s := range o.Steps {
+			ids[i] = strconv.Itoa(s)
+		}
+		return &models.DispatchSubset{Field: "steps", IDs: ids}
+	case len(o.Checks) > 0:
+		return &models.DispatchSubset{Field: "checks", IDs: o.Checks}
+	default:
+		return nil
+	}
+}
+
 // dispatchRun creates and dispatches ONE run of sc on agentID, applying the
 // agent-state gate, OS-compat check, busy guard, run-row insert, and WS dispatch
 // — the per-agent core shared by the single-run endpoint and the campaign
@@ -1371,10 +1397,14 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	if mode == "" {
 		mode = "posture"
 	}
+	subsetJSON, err := json.Marshal(dispatchSubsetFromOpts(o))
+	if err != nil {
+		return "", "", err
+	}
 	_, err = h.db.Exec(ctx,
-		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id, variant_depth, mode, max_privilege)
-		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6, $7, $8, $9)`,
-		runID, sc.ID, agentID, runName, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth, mode, o.MaxPrivilege,
+		`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, initiated_by, started_at, campaign_id, variant_depth, mode, max_privilege, dispatch_subset)
+		 VALUES ($1, $2, $3, $4, 'running', $5, NOW(), $6, $7, $8, $9, $10)`,
+		runID, sc.ID, agentID, runName, o.InitiatedBy, nullIfEmpty(o.CampaignID), vdepth, mode, o.MaxPrivilege, subsetJSON,
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -2418,17 +2448,18 @@ type runRow struct {
 // initiated_by, started_at, completed_at, steps_total, steps_done,
 // steps_running, steps_passed, steps_failed, steps_timeout,
 // detection_summary, alerts_total, alerts_high_fidelity, noise_score,
-// reverted, mode, max_privilege, paused.
+// reverted, mode, max_privilege, paused, dispatch_subset.
 func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 	var runs []runRow
 	for rows.Next() {
 		var run runRow
-		var resultsJSON, scoreRaw, detRaw, revertedRaw []byte
+		var resultsJSON, scoreRaw, detRaw, revertedRaw, subsetRaw []byte
 		var p models.RunProgress
 		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.SweepID, &run.EMSweepID, &run.Name,
 			&run.Status, &resultsJSON, &scoreRaw, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt,
 			&p.StepsTotal, &p.StepsDone, &p.StepsRunning, &p.StepsPassed, &p.StepsFailed, &p.StepsTimeout, &detRaw,
-			&run.AlertsTotal, &run.AlertsHighFidelity, &run.NoiseScore, &revertedRaw, &run.Mode, &run.MaxPrivilege, &run.Paused); err != nil {
+			&run.AlertsTotal, &run.AlertsHighFidelity, &run.NoiseScore, &revertedRaw, &run.Mode, &run.MaxPrivilege, &run.Paused,
+			&subsetRaw); err != nil {
 			log.Printf("[api] scan run row: %v", err)
 			continue
 		}
@@ -2438,6 +2469,9 @@ func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 		}
 		if len(revertedRaw) > 0 {
 			json.Unmarshal(revertedRaw, &run.Reverted)
+		}
+		if len(subsetRaw) > 0 {
+			json.Unmarshal(subsetRaw, &run.DispatchSubset)
 		}
 		if d := reporting.DetectedTechniques(detRaw, run.Results); len(d) > 0 {
 			run.DetectedTechs = d
@@ -2460,7 +2494,7 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, scenario_id, agent_id, sweep_id, em_sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
 		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout, detection_summary,
-		        alerts_total, alerts_high_fidelity, noise_score, reverted, mode, max_privilege, paused
+		        alerts_total, alerts_high_fidelity, noise_score, reverted, mode, max_privilege, paused, dispatch_subset
 		 FROM scenario_runs
 		 WHERE ($1 = '' OR agent_id = $1)
 		   AND ($2 = '' OR scenario_id = $2)
