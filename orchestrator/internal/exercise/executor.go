@@ -784,10 +784,18 @@ func (e *Executor) computeScore(ctx context.Context, ex *Execution) *ExerciseSco
 	if t.SIEMAlerted {
 		detBonus += 0.5
 	}
-	return &ExerciseScore{
+	score := &ExerciseScore{
 		Human:      h,
 		Technical:  t,
 		Overall:    (1-h.ClickRate)*60 + detBonus*40,
 		ComputedAt: time.Now(),
 	}
+	// An exercise that sent nothing and detected nothing has no measurable
+	// result -- Overall above would be a misleading 60 (see the Measurable
+	// field's doc comment). Flag it so consumers render "not measurable"
+	// instead of a confident-looking number. Overall is left as-computed
+	// rather than zeroed: a 0 would read as "scored terribly", which is a
+	// different and equally wrong claim.
+	score.Measurable = score.measurable()
+	return score
 }

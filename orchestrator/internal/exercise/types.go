@@ -1,6 +1,7 @@
 package exercise
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/audspect/bas/internal/scenario"
@@ -269,7 +270,44 @@ type ExerciseScore struct {
 	Technical  TechnicalScore  `json:"technical"`
 	Management ManagementScore `json:"management"`
 	Overall    float64         `json:"overall"`
-	ComputedAt time.Time       `json:"computed_at"`
+	// Measurable is false when the exercise produced no measurable activity
+	// at all -- nothing sent, nothing detected. Overall is meaningless in
+	// that case and must NOT be shown as a real result: the formula's
+	// (1-ClickRate)*60 term reads a zero denominator (0 clicked / 0 sent,
+	// leaving ClickRate at its 0.0 zero value) as a perfect human-resilience
+	// result and yields a confident-looking 60 for an exercise where nothing
+	// whatsoever ran. Worse, that 60 is indistinguishable from a genuinely
+	// excellent run (1000 mails sent, zero clicks, no EDR/SIEM alert). Same
+	// "absence of data must never render as a favourable result" rule the
+	// reporting layer already applies via detectionScore's (score, measured)
+	// pair. Always derived at marshal time -- see MarshalJSON.
+	Measurable bool      `json:"measurable"`
+	ComputedAt time.Time `json:"computed_at"`
+}
+
+// measurable reports whether this score reflects any real measured activity:
+// at least one inject actually sent, or at least one technical signal
+// observed. Derived from the score's own contents, never stored state.
+func (s ExerciseScore) measurable() bool {
+	if s.Human.Sent > 0 {
+		return true
+	}
+	t := s.Technical
+	return t.EDRDetected || t.EDRBlocked || t.SIEMAlerted ||
+		t.SOARIncident || t.TicketCreated || t.SOCAcknowledged
+}
+
+// exerciseScoreJSON mirrors ExerciseScore without its MarshalJSON method, so
+// the custom marshaller below can delegate without recursing infinitely.
+type exerciseScoreJSON ExerciseScore
+
+// MarshalJSON always recomputes Measurable from the score's own contents
+// rather than emitting whatever was stored. This keeps scores persisted
+// before Measurable existed classified correctly when read back, instead of
+// silently defaulting to false and hiding a legitimately-measured result.
+func (s ExerciseScore) MarshalJSON() ([]byte, error) {
+	s.Measurable = s.measurable() // value receiver: mutates a copy only
+	return json.Marshal(exerciseScoreJSON(s))
 }
 
 type HumanScore struct {

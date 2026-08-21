@@ -6588,21 +6588,76 @@ function openExerciseDetail(id) {
     var ex = d.execution || {}, steps = d.steps || [];
     document.getElementById('exercise-detail-title').textContent = ex.name || ex.plan_id || 'Execution';
     var sc = ex.score;
-    var scoreHtml = sc ?
-      ('<div class="kpi-row" style="margin-bottom:0.75rem">' +
+    var scoreHtml;
+    if (!sc) {
+      scoreHtml = '<div class="tiny muted" style="margin-bottom:0.75rem">Not yet scored</div>';
+    } else if (!sc.measurable) {
+      // Nothing was sent and nothing was detected, so there is no result to
+      // report. Say that plainly instead of rendering score.overall, which in
+      // this state is a misleading 60 (see ExerciseScore.Measurable in
+      // internal/exercise/types.go) that looks identical to a genuinely
+      // excellent run.
+      var sentCount = (sc.human && sc.human.sent) || 0;
+      scoreHtml =
+        '<div style="margin-bottom:0.75rem;padding:0.6rem 0.75rem;border:1px solid var(--border);border-left:3px solid var(--warning);border-radius:4px;background:var(--elevated)">' +
+          '<div style="font-size:0.8rem;font-weight:600;color:var(--warning)">Not measurable — no result to report</div>' +
+          '<div class="tiny muted" style="margin-top:0.25rem;line-height:1.6">' +
+            'This exercise completed without producing anything measurable: ' + sentCount + ' inject(s) sent, ' +
+            'and no EDR, SIEM, or ticketing signal observed. A score is deliberately withheld rather than ' +
+            'shown as a number that would not mean anything. Add a step that actually sends an inject ' +
+            '(email/SMS/agent task) to get a real result — approval and wait steps alone perform no ' +
+            'technical action and cannot be scored.' +
+          '</div>' +
+        '</div>';
+    } else {
+      var hasSent = !!(sc.human && sc.human.sent > 0);
+      scoreHtml =
+        '<div class="kpi-row" style="margin-bottom:0.75rem">' +
         '<span class="badge">Overall ' + (sc.overall != null ? sc.overall.toFixed(0) : '—') + '</span>' +
-        '<span class="badge">Click rate ' + ((sc.human && sc.human.click_rate != null) ? (sc.human.click_rate * 100).toFixed(0) + '%' : '—') + '</span>' +
-        '<span class="badge">EDR ' + ((sc.technical && sc.technical.edr_detected) ? 'detected' : '—') + '</span>' +
-        '<span class="badge">SLA ' + ((sc.management && sc.management.sla_met) ? 'met' : '—') + '</span>' +
-        '</div>') :
-      '<div class="tiny muted" style="margin-bottom:0.75rem">Not yet scored</div>';
+        // 0 clicked of 0 sent is not "0% clicked" -- that reads as "nobody fell
+        // for it" when nothing was ever sent. Only show a rate with a real
+        // denominator.
+        '<span class="badge">Click rate ' + ((hasSent && sc.human.click_rate != null) ? (sc.human.click_rate * 100).toFixed(0) + '% (' + (sc.human.clicked || 0) + '/' + sc.human.sent + ')' : '— n/a') + '</span>' +
+        '<span class="badge">EDR ' + ((sc.technical && sc.technical.edr_detected) ? 'detected' : '— not detected') + '</span>' +
+        '<span class="badge">SLA ' + ((sc.management && sc.management.sla_met) ? 'met' : '— n/a') + '</span>' +
+        '</div>';
+    }
+    // What each step type actually does, so a row of "completed" badges can't
+    // be mistaken for "something was tested". Approval/wait in particular
+    // perform no technical action at all by design.
+    var EX_STEP_WHAT = {
+      approval:   'human approval gate — pauses for a person to approve; performs no technical action',
+      wait:       'timed delay — performs no technical action',
+      send_email: 'sends an email inject to the targets',
+      send_sms:   'sends an SMS inject to the targets',
+      agent_task: 'dispatches a task to the BAS agent on the endpoint',
+      webhook:    'calls an external HTTP endpoint',
+      notify:     'sends a notification',
+      slack:      'sends a Slack message'
+    };
     var stepsHtml = steps.map(function(s) {
       var canApprove = s.status === 'waiting' && s.step_type === 'approval';
-      return '<div class="kpi-row" style="justify-content:space-between">' +
-        '<span>' + x(s.step_id) + ' <span class="tiny muted">' + x(s.step_type) + '</span></span>' +
-        '<span><span class="badge">' + x(s.status) + '</span>' +
-        (canApprove ? ' <button class="btn btn-outline btn-sm" onclick="approveExStep(\'' + x(id) + '\',\'' + x(s.step_id) + '\')">Approve</button>' : '') +
-        '</span></div>';
+      var what = EX_STEP_WHAT[s.step_type] || '';
+      // Real per-step outcome the API already returns and this drawer used to
+      // discard entirely -- the "no info, no result" gap.
+      var detail = '';
+      if (s.error) {
+        detail = '<div class="tiny" style="color:var(--danger);margin-left:0.2rem">Error: ' + x(s.error) + '</div>';
+      } else if (s.result && Object.keys(s.result).length) {
+        detail = '<div class="tiny muted" style="margin-left:0.2rem;word-break:break-word">Result: ' + x(JSON.stringify(s.result)) + '</div>';
+      } else if (s.status === 'completed' && (s.step_type === 'approval' || s.step_type === 'wait')) {
+        detail = '<div class="tiny muted" style="margin-left:0.2rem">No technical action — nothing executed on any endpoint.</div>';
+      }
+      return '<div style="padding:0.4rem 0;border-bottom:1px solid var(--border)">' +
+        '<div class="kpi-row" style="justify-content:space-between">' +
+          '<span>' + x(s.step_id) + ' <span class="tiny muted">' + x(s.step_type) + '</span></span>' +
+          '<span><span class="badge">' + x(s.status) + '</span>' +
+          (canApprove ? ' <button class="btn btn-outline btn-sm" onclick="approveExStep(\'' + x(id) + '\',\'' + x(s.step_id) + '\')">Approve</button>' : '') +
+          '</span>' +
+        '</div>' +
+        (what ? '<div class="tiny muted" style="margin-left:0.2rem">' + x(what) + '</div>' : '') +
+        detail +
+      '</div>';
     }).join('');
     var actions = (ex.status === 'running' || ex.status === 'paused') ?
       '<button class="btn btn-outline btn-sm" onclick="abortExecution(\'' + x(id) + '\')">Abort</button>' : '';

@@ -2,6 +2,7 @@ package exercise
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -315,7 +316,78 @@ func TestComputeScore_HumanAndOverall(t *testing.T) {
 		if score.Overall != 30 {
 			t.Fatalf("overall = %v, want 30", score.Overall)
 		}
+		// Real injects were sent, so this IS a measurable result.
+		if !score.Measurable {
+			t.Error("Measurable = false, want true — 2 injects were actually sent")
+		}
 	})
+}
+
+// TestComputeScore_NoActivityIsNotMeasurable pins the fix for a real defect:
+// an exercise whose steps perform no technical action (e.g. a plan of only
+// approval gates — exactly what a user hit) sends nothing and detects
+// nothing, leaving ClickRate at its 0.0 zero value because the
+// `if h.Sent > 0` guard never runs. Overall then computes to
+// (1-0)*60 + 0*40 = a confident-looking 60 for an exercise where literally
+// nothing happened -- and indistinguishable from a genuinely excellent run
+// (many sent, zero clicked, no EDR alert). Measurable must be false so the
+// UI withholds the number instead of presenting it as a result.
+func TestComputeScore_NoActivityIsNotMeasurable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e, store := newTestExecutor(pool)
+		ctx := context.Background()
+		execID := seedExecution(t, store) // no evidence appended at all
+
+		score := e.computeScore(ctx, &Execution{ID: execID})
+		if score.Measurable {
+			t.Error("Measurable = true, want false — nothing was sent and nothing detected")
+		}
+		// The misleading value is still computed (documented: zeroing it would
+		// read as "scored terribly", an equally wrong claim) -- Measurable is
+		// what gates its display, so assert the trap it guards against is real.
+		if score.Overall != 60 {
+			t.Errorf("overall = %v, want the documented misleading 60 this flag exists to suppress", score.Overall)
+		}
+		if score.Human.Sent != 0 || score.Human.Clicked != 0 {
+			t.Errorf("human = %+v, want all zero", score.Human)
+		}
+	})
+}
+
+// TestExerciseScore_MarshalJSONDerivesMeasurable proves Measurable is always
+// recomputed at marshal time rather than trusting stored state, so a score
+// persisted before the field existed (unmarshals to false) is still reported
+// correctly on read instead of hiding a legitimately-measured result.
+func TestExerciseScore_MarshalJSONDerivesMeasurable(t *testing.T) {
+	// Simulates a legacy row: real activity, but Measurable false on the struct.
+	legacy := ExerciseScore{
+		Human:      HumanScore{Sent: 10, Clicked: 2, ClickRate: 0.2},
+		Overall:    48,
+		Measurable: false,
+	}
+	b, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["measurable"] != true {
+		t.Errorf("measurable = %v, want true — 10 injects were sent, must be derived not trusted", out["measurable"])
+	}
+
+	// And the genuinely-empty case still marshals as not measurable.
+	empty := ExerciseScore{Overall: 60, Measurable: true} // stored flag deliberately wrong
+	b2, _ := json.Marshal(empty)
+	var out2 map[string]any
+	_ = json.Unmarshal(b2, &out2)
+	if out2["measurable"] != false {
+		t.Errorf("measurable = %v, want false — nothing sent, nothing detected", out2["measurable"])
+	}
 }
 
 func TestBuiltinHandlers_SynchronousGuards(t *testing.T) {
