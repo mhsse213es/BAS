@@ -228,3 +228,29 @@ func TestCorrelate_GapsSortedWorstFirstWithPriority(t *testing.T) {
 		}
 	}
 }
+
+// TestComputeScore_NoPathsIsNotMeasurable pins a real defect: the score is a
+// pure-deficit model, so with no weighted paths (no attack-path collection has
+// run, or the graph reaches no Domain Admin / crown jewel) there is no deficit
+// and the score comes out a flawless 100. That value fed the exposure and
+// endpoint-health dashboards, where an endpoint nothing was known about
+// presented as perfectly defended. The score is still returned for arithmetic,
+// but measurable=false marks it as not a real result.
+func TestComputeScore_NoPathsIsNotMeasurable(t *testing.T) {
+	score, measurable := computeScore(nil)
+	if measurable {
+		t.Error("measurable = true, want false — there were no paths to score")
+	}
+	if score != 100 {
+		t.Errorf("score = %d, want the documented 100 this flag exists to suppress", score)
+	}
+
+	// Zero-weight paths are equally unmeasurable: nothing contributes.
+	score, measurable = computeScore([]AnnotatedPath{{Weight: 0}})
+	if measurable {
+		t.Error("measurable = true for a zero-weight path, want false")
+	}
+	if score != 100 {
+		t.Errorf("score = %d, want 100", score)
+	}
+}

@@ -74,8 +74,12 @@ func (h *Handler) GetAgentRisk(w http.ResponseWriter, r *http.Request) {
 // AgentRiskRow is the fleet-list projection -- one row per managed agent,
 // enough to sort/filter by before drilling into GetAgentRisk's full detail.
 type AgentRiskRow struct {
-	AgentID            string `json:"agentId"`
-	Hostname           string `json:"hostname"`
+	AgentID  string `json:"agentId"`
+	Hostname string `json:"hostname"`
+	// Measurable is false when nothing has been collected for this agent yet;
+	// HealthScore is then a mean over an empty set and must be rendered as
+	// "no data", never as a number (see endpointrisk.EndpointHealth.Measurable).
+	Measurable         bool   `json:"measurable"`
 	HealthScore        int    `json:"healthScore"`
 	CriticalityRisk    int    `json:"criticalityRisk"`
 	Trend              string `json:"trend"`
@@ -131,6 +135,7 @@ func (h *Handler) GetAgentRiskSummary(w http.ResponseWriter, r *http.Request) {
 
 		row := AgentRiskRow{
 			AgentID: s.Asset.AgentID, Hostname: s.Asset.Label,
+			Measurable:  health.Measurable,
 			HealthScore: health.HealthScore, CriticalityRisk: health.CriticalityRisk, Trend: health.Trend.Direction,
 		}
 		if len(health.ActionPlan) > 0 {

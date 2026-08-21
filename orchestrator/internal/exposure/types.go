@@ -43,6 +43,21 @@ type ScoreBreakdown struct {
 	DetectionCoverageScore int `json:"detectionCoverageScore"`
 	VulnerabilityScore     int `json:"vulnerabilityScore"`
 	CriticalityRisk        int `json:"criticalityRisk"` // 0-100, higher = matters more (not inverted like the scores above)
+
+	// Every score above is a pure-deficit model (100 - risk), so an asset
+	// about which NOTHING has been collected scores a flawless 100 across
+	// the board -- no data means no deficit means "perfect". That is the
+	// most dangerous possible default on a security dashboard labelled
+	// "higher is safer", so each score carries an explicit measurability
+	// flag. False means "not collected / nothing to measure", NOT "safe":
+	// consumers must render it as unknown and must exclude it from any
+	// aggregate (see internal/endpointrisk.ComputeHealth, which drops
+	// uncollected categories from HealthScore rather than averaging in a
+	// fabricated 100).
+	AttackPathMeasurable    bool `json:"attackPathMeasurable"`
+	DetectionMeasurable     bool `json:"detectionMeasurable"`
+	VulnerabilityMeasurable bool `json:"vulnerabilityMeasurable"`
+	ExposureMeasurable      bool `json:"exposureMeasurable"`
 }
 
 // AttackPathContext is this asset's position in the attack-path graph.

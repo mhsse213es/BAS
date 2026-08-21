@@ -24,26 +24,44 @@ const (
 // filtered to 7 days ago by the caller; exposure-derived categories have no
 // past counterpart, per spec §6, so Trend.Direction never reflects them.
 func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, now, past HealthInputs) EndpointHealth {
+	// Collected comes from the exposure profile's own measurability flags, NOT
+	// a hardcoded true. Every exposure score is a pure-deficit model
+	// (100 - risk), so an endpoint with nothing collected scored a flawless
+	// 100 in all three of these categories and -- because only Collected
+	// categories feed HealthScore below -- produced an overall HealthScore of
+	// 100 for an endpoint about which nothing whatsoever was known. That is
+	// the most dangerous possible default on a "higher is safer" dashboard.
+	// The other six categories already gate on a real Collected flag; these
+	// three now do the same.
 	exposureAttackPath := CategoryScore{
-		ID: CategoryExposureAttackPath, Name: "Exposure / Attack Path", Collected: true,
-		Score: mean2(profile.Scores.ExposureScore, profile.Scores.AttackPathScore),
+		ID: CategoryExposureAttackPath, Name: "Exposure / Attack Path",
+		Collected: profile.Scores.ExposureMeasurable || profile.Scores.AttackPathMeasurable,
 	}
-	exposureAttackPath.Deficit = 100 - exposureAttackPath.Score
-	exposureAttackPath.Findings = attackPathFindings(profile)
+	if exposureAttackPath.Collected {
+		exposureAttackPath.Score = mean2(profile.Scores.ExposureScore, profile.Scores.AttackPathScore)
+		exposureAttackPath.Deficit = 100 - exposureAttackPath.Score
+		exposureAttackPath.Findings = attackPathFindings(profile)
+	}
 
 	detection := CategoryScore{
-		ID: CategoryDetectionHealth, Name: "Detection Health", Collected: true,
-		Score: profile.Scores.DetectionCoverageScore,
+		ID: CategoryDetectionHealth, Name: "Detection Health",
+		Collected: profile.Scores.DetectionMeasurable,
 	}
-	detection.Deficit = 100 - detection.Score
-	detection.Findings = detectionFindings(profile)
+	if detection.Collected {
+		detection.Score = profile.Scores.DetectionCoverageScore
+		detection.Deficit = 100 - detection.Score
+		detection.Findings = detectionFindings(profile)
+	}
 
 	vulns := CategoryScore{
-		ID: CategoryVulnerabilities, Name: "Vulnerabilities", Collected: true,
-		Score: profile.Scores.VulnerabilityScore,
+		ID: CategoryVulnerabilities, Name: "Vulnerabilities",
+		Collected: profile.Scores.VulnerabilityMeasurable,
 	}
-	vulns.Deficit = 100 - vulns.Score
-	vulns.Findings = vulnerabilityFindings(profile)
+	if vulns.Collected {
+		vulns.Score = profile.Scores.VulnerabilityScore
+		vulns.Deficit = 100 - vulns.Score
+		vulns.Findings = vulnerabilityFindings(profile)
+	}
 
 	compCat := CategoryScore{ID: CategoryCompliance, Name: "Compliance", Collected: now.Compliance.Collected}
 	if now.Compliance.Collected {
@@ -99,6 +117,7 @@ func ComputeHealth(agentID string, profile exposure.AssetExposureProfile, now, p
 	return EndpointHealth{
 		AgentID:         agentID,
 		HealthScore:     round(meanInts(collectedScores)),
+		Measurable:      len(collectedScores) > 0,
 		CriticalityRisk: profile.Scores.CriticalityRisk,
 		Categories:      categories,
 		ActionPlan:      buildActionPlan(categories),

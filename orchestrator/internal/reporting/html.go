@@ -1779,11 +1779,22 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
 <h3>Attack Path Detection Coverage</h3>
 <p style="color:#6e7681;font-size:0.82rem">{{.summary}}</p>
 <div class="score-row">
+  {{if .measurable}}
   <div class="scard" style="border-left:3px solid {{scoreColor .detectionCoverageScore}}">
     <div class="scard-label">Detection Coverage Score</div>
     <div class="scard-value" style="color:{{scoreColor .detectionCoverageScore}}">{{.detectionCoverageScore}}<span style="font-size:0.9rem;color:#6e7681">/100</span></div>
     <div style="font-size:0.8rem;color:#6e7681">higher is safer · independent of Attack Path Score</div>
   </div>
+  {{else}}
+  {{/* No weighted attack paths to score: the pure-deficit model would report
+       a flawless 100 from an empty set. Never print that under a "higher is
+       safer" label -- say there is no data instead. */}}
+  <div class="scard" style="border-left:3px solid #d29922">
+    <div class="scard-label">Detection Coverage Score</div>
+    <div class="scard-value" style="color:#6e7681">&#8212;</div>
+    <div style="font-size:0.8rem;color:#6e7681">not measurable &#183; no attack paths were collected to score</div>
+  </div>
+  {{end}}
   <div class="scard">
     <div class="scard-label">Verified Coverage</div>
     <div class="scard-value" style="font-size:1.2rem">{{.statistics.verifiedCovered}}<span style="font-size:0.9rem;color:#6e7681">/{{.statistics.edgesTotal}}</span></div>

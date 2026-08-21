@@ -174,3 +174,66 @@ type fakeFindingsLookup struct{ byAgent map[string][]FindingSummary }
 func (f *fakeFindingsLookup) AllOpenFindings(_ context.Context) (map[string][]FindingSummary, error) {
 	return f.byAgent, nil
 }
+
+// TestBuild_UncollectedAssetScoresAreNotMeasurable pins a real defect. Every
+// score here is a pure-deficit model (100 - risk), so an enrolled agent with
+// nothing collected -- not in the attack-path graph, no correlated detection
+// edges, no CVE lookup available -- scored a flawless 100 on exposure, attack
+// path, detection AND vulnerability. Those fed endpoint health, where such a
+// host reported HealthScore 100 on a "higher is safer" dashboard. The scores
+// still compute, but the *Measurable flags mark them as not real results.
+func TestBuild_UncollectedAssetScoresAreNotMeasurable(t *testing.T) {
+	g := attackpath.BuildGraph()
+	var s attackpath.Summary
+	corr, err := pathcorrelation.Correlate(context.Background(), g, s, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Correlate: %v", err)
+	}
+	if corr.Measurable {
+		t.Fatal("correlation reported measurable with no paths at all")
+	}
+
+	agents := []AgentRow{{AgentID: "agent-1", Hostname: "HOST-1"}}
+	// nil rels + nil enricher => no CVE lookup is even possible.
+	ag, err := Build(context.Background(), g, s, corr, nil, nil, nil, agents)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	p, ok := ag.Profile("HOST-1")
+	if !ok {
+		t.Fatal("expected a profile for HOST-1")
+	}
+
+	if p.Scores.ExposureMeasurable || p.Scores.AttackPathMeasurable ||
+		p.Scores.DetectionMeasurable || p.Scores.VulnerabilityMeasurable {
+		t.Errorf("expected every *Measurable flag false for a fully-uncollected asset, got %+v", p.Scores)
+	}
+	// The trap itself: without the flags these read as a perfect endpoint.
+	if p.Scores.ExposureScore != 100 || p.Scores.DetectionCoverageScore != 100 {
+		t.Errorf("scores = %+v, want the documented 100s the flags exist to suppress", p.Scores)
+	}
+}
+
+// TestBuild_CollectedAssetIsMeasurable is the counterpart: a host that IS in
+// the graph must still report measurable attack-path/detection data, so the
+// fix above cannot silently blank out real results.
+func TestBuild_CollectedAssetIsMeasurable(t *testing.T) {
+	g, s, corr := buildDaFixtureCorrelation(t)
+	ag, err := Build(context.Background(), g, s, corr, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	var anyMeasurable bool
+	for _, sum := range ag.Summaries() {
+		p, ok := ag.Profile(sum.Asset.HostKey)
+		if !ok {
+			continue
+		}
+		if p.Scores.AttackPathMeasurable {
+			anyMeasurable = true
+		}
+	}
+	if !anyMeasurable {
+		t.Error("no asset reported AttackPathMeasurable despite a real attack-path graph")
+	}
+}

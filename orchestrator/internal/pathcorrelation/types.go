@@ -141,8 +141,17 @@ type Statistics struct {
 // redesign. The report renders it under the title "Attack Path Detection
 // Coverage".
 type AttackPathCorrelation struct {
-	Summary     string                `json:"summary"`
-	Score       int                   `json:"detectionCoverageScore"`
+	Summary string `json:"summary"`
+	Score   int    `json:"detectionCoverageScore"`
+	// Measurable is false when there were no weighted attack paths to score
+	// at all -- i.e. no attack-path collection has run yet, or the graph
+	// yielded no path to a Domain Admin or crown jewel. Score is a hardcoded
+	// 100 in that case (a pure-deficit model over an empty set: no paths ->
+	// no deficit -> "perfect"), which is NOT a real result and must never be
+	// presented as one -- an endpoint nothing is known about would otherwise
+	// read as flawlessly defended. Consumers must check this before
+	// displaying Score or folding it into any aggregate.
+	Measurable  bool                  `json:"measurable"`
 	Paths       []AnnotatedPath       `json:"paths"`
 	ChokePoints []AnnotatedChokePoint `json:"chokePoints"`
 	Gaps        []PrioritizedGap      `json:"gaps"`

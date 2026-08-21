@@ -93,11 +93,12 @@ func Correlate(
 
 	gaps := buildGaps(g, s, paths, canonical, statuses)
 	stats := buildStatistics(canonical, statuses, gaps)
-	score := computeScore(annotatedPaths)
+	score, measurable := computeScore(annotatedPaths)
 
 	return AttackPathCorrelation{
 		Summary:     summarize(annotatedPaths, stats),
 		Score:       score,
+		Measurable:  measurable,
 		Paths:       annotatedPaths,
 		ChokePoints: annotatedChoke,
 		Gaps:        gaps,
@@ -248,7 +249,12 @@ func pathStrength(p AnnotatedPath) float64 {
 	return best
 }
 
-func computeScore(paths []AnnotatedPath) int {
+// computeScore returns the weighted detection-coverage score and whether it
+// was measurable at all. With no weighted paths the pure-deficit model has an
+// empty set to work from and yields a meaningless "perfect" 100 -- measurable
+// is false there so callers can refuse to present it as a result. See
+// AttackPathCorrelation.Measurable.
+func computeScore(paths []AnnotatedPath) (score int, measurable bool) {
 	var totalWeight, deficitSum float64
 	for _, p := range paths {
 		if p.Weight <= 0 {
@@ -258,15 +264,15 @@ func computeScore(paths []AnnotatedPath) int {
 		deficitSum += p.Weight * (1 - pathStrength(p))
 	}
 	if totalWeight == 0 {
-		return 100
+		return 100, false
 	}
-	score := 100 - int(100*deficitSum/totalWeight+0.5)
+	score = 100 - int(100*deficitSum/totalWeight+0.5)
 	if score < 0 {
 		score = 0
 	} else if score > 100 {
 		score = 100
 	}
-	return score
+	return score, true
 }
 
 func targetNodes(s attackpath.Summary) []string {

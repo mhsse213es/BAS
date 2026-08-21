@@ -88,8 +88,15 @@ type TrendDetail struct {
 
 // EndpointHealth is the full computed result for one agent.
 type EndpointHealth struct {
-	AgentID         string           `json:"agentId"`
-	HealthScore     int              `json:"healthScore"`
+	AgentID     string `json:"agentId"`
+	HealthScore int    `json:"healthScore"`
+	// Measurable is false when NOT ONE category was collected -- nothing is
+	// known about this endpoint, so HealthScore (a mean over an empty set,
+	// i.e. 0) is not a real result and must be shown as "no data" rather
+	// than as a number. A 0 would read as "catastrophically insecure" and a
+	// pre-fix 100 read as "flawless"; both are fabrications from the same
+	// absence of data.
+	Measurable      bool             `json:"measurable"`
 	CriticalityRisk int              `json:"criticalityRisk"` // exposure.Scores.CriticalityRisk, sort/priority signal only -- never part of HealthScore
 	Categories      []CategoryScore  `json:"categories"`
 	ActionPlan      []ActionItem     `json:"actionPlan"`

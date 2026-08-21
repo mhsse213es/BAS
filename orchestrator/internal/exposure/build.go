@@ -66,6 +66,11 @@ func Build(ctx context.Context, g *attackpath.Graph, s attackpath.Summary,
 	if err != nil {
 		return nil, err
 	}
+	// CVE lookup is only possible with both a relationship source and an
+	// enricher (vulnerabilitiesForTechniques returns an empty map otherwise).
+	// Without it "no CVEs found" is indistinguishable from "never looked",
+	// and the pure-deficit score would call that a perfect 100.
+	cveLookupAvailable := rels != nil && enricher != nil
 
 	var findingsByAgent map[string][]FindingSummary
 	if findingsLookup != nil {
@@ -191,12 +196,35 @@ func Build(ctx context.Context, g *attackpath.Graph, s attackpath.Summary,
 		// asset still costs up to 20 points, by design).
 		exposureRisk := 0.30*p.apRisk + 0.30*p.detRisk + 0.20*worst + 0.20*critRisk
 		exposureScore := clamp100(100 - int(exposureRisk+0.5))
+
+		// Measurability -- see ScoreBreakdown's doc comment. Each of these
+		// scores is 100-minus-risk, so "nothing collected" silently produces a
+		// flawless score; record whether there was anything to measure at all
+		// so consumers can show "not collected" instead of a green 100.
+		//   - attack path: this asset is actually a node in the graph. An asset
+		//     that exists only as an enrolled agent row has no path data.
+		//   - detection: the correlation itself had weighted paths to score AND
+		//     this asset has correlated edges of its own.
+		//   - vulnerability: a CVE lookup was actually possible and this asset
+		//     had at least one technique to look up.
+		apMeasurable := p.asset.nodeID != ""
+		detMeasurable := corr.Measurable && len(p.detect.Edges) > 0
+		vulnMeasurable := cveLookupAvailable && len(p.techIDs) > 0
 		profile.Scores = ScoreBreakdown{
 			ExposureScore:          exposureScore,
 			AttackPathScore:        attackPathScore,
 			DetectionCoverageScore: detectionScore,
 			VulnerabilityScore:     vulnScore,
 			CriticalityRisk:        int(critRisk),
+
+			AttackPathMeasurable:    apMeasurable,
+			DetectionMeasurable:     detMeasurable,
+			VulnerabilityMeasurable: vulnMeasurable,
+			// The blended exposure score is only meaningful if at least one of
+			// its risk terms came from real data. Criticality alone doesn't
+			// count: it is asset metadata, not an observation about the
+			// asset's security state.
+			ExposureMeasurable: apMeasurable || detMeasurable || vulnMeasurable,
 		}
 
 		ag.profiles[p.asset.hostKey] = profile

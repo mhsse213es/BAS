@@ -10,7 +10,14 @@ import (
 
 func TestComputeHealth_ScoresOnlyCollectedCategories(t *testing.T) {
 	profile := exposure.AssetExposureProfile{
-		Scores: exposure.ScoreBreakdown{ExposureScore: 80, AttackPathScore: 60, DetectionCoverageScore: 90, VulnerabilityScore: 70, CriticalityRisk: 40},
+		// The *Measurable flags mark this as really-collected exposure data.
+		// Without them these three categories are correctly treated as "not
+		// collected" and excluded from HealthScore -- see
+		// TestComputeHealth_UncollectedExposureIsNotAPerfectScore.
+		Scores: exposure.ScoreBreakdown{
+			ExposureScore: 80, AttackPathScore: 60, DetectionCoverageScore: 90, VulnerabilityScore: 70, CriticalityRisk: 40,
+			ExposureMeasurable: true, AttackPathMeasurable: true, DetectionMeasurable: true, VulnerabilityMeasurable: true,
+		},
 	}
 	got := ComputeHealth("agent-1", profile, HealthInputs{}, HealthInputs{})
 
@@ -93,7 +100,10 @@ func TestComputeHealth_PatchManagementAndApplicationRisk_CollectedWhenPresent(t 
 
 func TestComputeHealth_ActionPlanRankedByDeficit(t *testing.T) {
 	profile := exposure.AssetExposureProfile{
-		Scores:    exposure.ScoreBreakdown{ExposureScore: 90, AttackPathScore: 90, DetectionCoverageScore: 40, VulnerabilityScore: 95},
+		Scores: exposure.ScoreBreakdown{
+			ExposureScore: 90, AttackPathScore: 90, DetectionCoverageScore: 40, VulnerabilityScore: 95,
+			ExposureMeasurable: true, AttackPathMeasurable: true, DetectionMeasurable: true, VulnerabilityMeasurable: true,
+		},
 		Detection: exposure.DetectionContext{Gap: 1},
 	}
 	got := ComputeHealth("agent-1", profile, HealthInputs{}, HealthInputs{})
@@ -173,5 +183,78 @@ func TestComputeTrend_SameFindingsBothSides_NoNewNoResolved(t *testing.T) {
 	got := computeTrend(HealthInputs{SecurityConfig: shared}, HealthInputs{SecurityConfig: shared})
 	if len(got.NewFindings) != 0 || len(got.ResolvedFindings) != 0 {
 		t.Errorf("expected no new/resolved findings when both sides match, got new=%+v resolved=%+v", got.NewFindings, got.ResolvedFindings)
+	}
+}
+
+// TestComputeHealth_UncollectedExposureIsNotAPerfectScore pins a real defect.
+// Every exposure score is a pure-deficit model (100 - risk), so an endpoint
+// with nothing collected produced ExposureScore/AttackPathScore/
+// DetectionCoverageScore/VulnerabilityScore all = 100 (verified empirically
+// against exposure.Build). These three categories used to hardcode
+// Collected:true, and only Collected categories feed HealthScore -- so an
+// endpoint about which NOTHING was known reported HealthScore 100 on a
+// dashboard labelled "higher is safer". They must now be excluded entirely.
+func TestComputeHealth_UncollectedExposureIsNotAPerfectScore(t *testing.T) {
+	profile := exposure.AssetExposureProfile{
+		Scores: exposure.ScoreBreakdown{
+			// Exactly what exposure.Build emits with zero collected data.
+			ExposureScore: 100, AttackPathScore: 100,
+			DetectionCoverageScore: 100, VulnerabilityScore: 100,
+			// ...and nothing was actually measurable.
+			ExposureMeasurable: false, AttackPathMeasurable: false,
+			DetectionMeasurable: false, VulnerabilityMeasurable: false,
+		},
+	}
+	got := ComputeHealth("agent-nodata", profile, HealthInputs{}, HealthInputs{})
+
+	if got.Measurable {
+		t.Error("Measurable = true, want false — not one category was collected")
+	}
+	if got.HealthScore == 100 {
+		t.Fatal("HealthScore = 100 for an endpoint with nothing collected — the exact defect this guards")
+	}
+	for _, c := range got.Categories {
+		if c.Collected {
+			t.Errorf("category %s Collected=true, want false — nothing was collected", c.ID)
+		}
+		if c.Score != 0 {
+			t.Errorf("category %s Score=%d, want 0 — an uncollected category must not carry a fabricated score", c.ID, c.Score)
+		}
+	}
+	if len(got.ActionPlan) != 0 {
+		t.Errorf("ActionPlan = %+v, want empty — no data means no actionable findings", got.ActionPlan)
+	}
+}
+
+// TestComputeHealth_PartialCollectionScoresOnlyWhatIsReal proves the fix is
+// per-category, not all-or-nothing: detection genuinely collected, attack
+// path and vulnerabilities not, so only detection's score counts.
+func TestComputeHealth_PartialCollectionScoresOnlyWhatIsReal(t *testing.T) {
+	profile := exposure.AssetExposureProfile{
+		Scores: exposure.ScoreBreakdown{
+			ExposureScore: 100, AttackPathScore: 100,
+			DetectionCoverageScore: 40, VulnerabilityScore: 100,
+			DetectionMeasurable: true, // only this one is real
+		},
+	}
+	got := ComputeHealth("agent-partial", profile, HealthInputs{}, HealthInputs{})
+
+	if !got.Measurable {
+		t.Error("Measurable = false, want true — detection was collected")
+	}
+	if got.HealthScore != 40 {
+		t.Errorf("HealthScore = %d, want 40 — only the genuinely-collected detection score counts", got.HealthScore)
+	}
+	for _, c := range got.Categories {
+		switch c.ID {
+		case CategoryDetectionHealth:
+			if !c.Collected || c.Score != 40 {
+				t.Errorf("detection = %+v, want Collected=true Score=40", c)
+			}
+		case CategoryExposureAttackPath, CategoryVulnerabilities:
+			if c.Collected {
+				t.Errorf("category %s Collected=true, want false — its 100 is a no-data artifact", c.ID)
+			}
+		}
 	}
 }

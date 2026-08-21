@@ -5335,11 +5335,19 @@ function renderAgentRiskSummary(rows) {
     tb.innerHTML = '<tr><td colspan="7" class="empty">No agents to show.</td></tr>';
     return;
   }
-  rows.sort(function(a, b) { return a.healthScore - b.healthScore; });
+  // Worst-first, but agents with nothing collected sort LAST rather than
+  // masquerading as the worst endpoints: their healthScore is a mean over an
+  // empty set (0), not a real finding.
+  rows.sort(function(a, b) {
+    if (a.measurable !== b.measurable) return a.measurable ? -1 : 1;
+    return a.healthScore - b.healthScore;
+  });
   tb.innerHTML = rows.map(function(a) {
     return '<tr>' +
       '<td>' + x(a.hostname || a.agentId) + '</td>' +
-      '<td style="color:' + _riskScoreColor(a.healthScore) + ';font-weight:700">' + a.healthScore + '</td>' +
+      (a.measurable
+        ? '<td style="color:' + _riskScoreColor(a.healthScore) + ';font-weight:700">' + a.healthScore + '</td>'
+        : '<td style="color:var(--muted)" title="Nothing collected for this endpoint yet — an absent score is not a safe score">— no data</td>') +
       '<td>' + (a.criticalityRisk || 0) + '</td>' +
       '<td>' + _riskTrendBadge(a.trend) + '</td>' +
       '<td>' + x(a.topDeficitCategory || '—') + '</td>' +
@@ -6241,11 +6249,22 @@ function openExposureDetail(hostKey) {
   body.innerHTML = '<div class="empty" style="padding:2rem">Loading…</div>';
   document.getElementById('exposure-detail-overlay').classList.add('open');
   apicall('/api/exposure/assets/' + encodeURIComponent(hostKey)).then(function(p) {
+    // Each of these is a pure-deficit score (100 - risk), so an asset with
+    // nothing collected scores a flawless 100 across the board. Show "no
+    // data" instead when the backend says it wasn't measurable — on a
+    // "higher is safer" card, an unmeasured 100 is the most misleading
+    // value we could print.
+    var sc = p.scores || {};
+    function expCard(label, val, measurable, note) {
+      return measurable
+        ? apCard(label, val, apColor(typeof val === 'number' ? val : parseInt(val, 10)), note)
+        : apCard(label, '<span style="color:var(--muted);font-size:1.1rem">— no data</span>', 'var(--muted)', 'not collected yet');
+    }
     var h = '<div class="kpi-row" style="margin-bottom:1rem">' +
-      apCard('Exposure Score', p.scores.exposureScore + '<span style="font-size:0.9rem;color:var(--muted)">/100</span>', apColor(p.scores.exposureScore), 'higher is safer') +
-      apCard('Attack Path', p.scores.attackPathScore, apColor(p.scores.attackPathScore), '') +
-      apCard('Detection', p.scores.detectionCoverageScore, apColor(p.scores.detectionCoverageScore), '') +
-      apCard('Vulnerability', p.scores.vulnerabilityScore, apColor(p.scores.vulnerabilityScore), '') +
+      expCard('Exposure Score', sc.exposureScore + '<span style="font-size:0.9rem;color:var(--muted)">/100</span>', sc.exposureMeasurable, 'higher is safer') +
+      expCard('Attack Path', sc.attackPathScore, sc.attackPathMeasurable, '') +
+      expCard('Detection', sc.detectionCoverageScore, sc.detectionMeasurable, '') +
+      expCard('Vulnerability', sc.vulnerabilityScore, sc.vulnerabilityMeasurable, '') +
       '</div>';
 
     h += '<div style="font-weight:700;color:var(--text);margin-bottom:0.4rem">Prioritized Recommendations</div>';
@@ -18016,10 +18035,24 @@ function _riskCategoryCard(c) {
 function renderAgtRisk(health) {
   var panel = document.getElementById('agt-tab-risk');
   if (!panel) return;
+  // health.measurable is false when not one category was collected. The score
+  // is a mean over an empty set then, so showing any number is a fabrication:
+  // a 0 reads as "catastrophically insecure" and the pre-fix 100 read as
+  // "flawless", both invented from the same absence of data.
+  var healthScoreCard = health.measurable
+    ? '<div class="kpi-card"><div class="kpi-label">Health Score</div><div class="kpi-value" style="color:' + _riskScoreColor(health.healthScore) + '">' + health.healthScore + '</div><div class="tiny muted">' + _riskTrendBadge(health.trend.direction) + '</div></div>'
+    : '<div class="kpi-card"><div class="kpi-label">Health Score</div><div class="kpi-value" style="color:var(--muted)">—</div><div class="tiny muted">No data collected yet</div></div>';
   var h = '<div class="kpi-row" style="margin-bottom:1rem">' +
-    '<div class="kpi-card"><div class="kpi-label">Health Score</div><div class="kpi-value" style="color:' + _riskScoreColor(health.healthScore) + '">' + health.healthScore + '</div><div class="tiny muted">' + _riskTrendBadge(health.trend.direction) + '</div></div>' +
+    healthScoreCard +
     '<div class="kpi-card"><div class="kpi-label">Criticality</div><div class="kpi-value">' + health.criticalityRisk + '</div><div class="tiny muted">sort/priority signal, not part of Health Score</div></div>' +
-    '</div>';
+    '</div>' +
+    (health.measurable ? '' :
+      '<div style="margin-bottom:1rem;padding:0.6rem 0.75rem;border:1px solid var(--border);border-left:3px solid var(--warning);border-radius:4px;background:var(--elevated)">' +
+        '<div style="font-size:0.8rem;font-weight:600;color:var(--warning)">Nothing collected for this endpoint yet</div>' +
+        '<div class="tiny muted" style="margin-top:0.25rem;line-height:1.6">No health score is shown because no category has any data. ' +
+        'Run a posture scan, an attack-path collection, or a BAS scenario against this agent to populate it. ' +
+        'An absent score is not a safe score.</div>' +
+      '</div>');
 
   if ((health.trend.newFindings || []).length || (health.trend.resolvedFindings || []).length) {
     h += '<div class="tiny muted" style="margin-bottom:1rem">' +
