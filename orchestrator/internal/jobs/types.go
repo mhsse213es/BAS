@@ -41,6 +41,7 @@ type Job struct {
 	CompletedAt      *time.Time
 	ScheduledAt      *time.Time // nil = dispatch immediately; non-nil = don't dispatch before this
 	ConcurrencyLimit int        // 0 = unlimited; caps how many of this job's targets Tick() dispatches simultaneously
+	InitiativeID     string     // "" = not part of any initiative
 }
 
 // JobTarget is one agent's independently tracked execution within a Job.

@@ -65,9 +65,20 @@ func (s *Store) CreateBatchWithConcurrency(ctx context.Context, jobType string, 
 func (s *Store) Get(ctx context.Context, id string) (Job, error) {
 	var j Job
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, type, state, payload, created_by, created_at, started_at, completed_at, scheduled_at, concurrency_limit FROM jobs WHERE id=$1`, id,
-	).Scan(&j.ID, &j.Type, &j.State, &j.Payload, &j.CreatedBy, &j.CreatedAt, &j.StartedAt, &j.CompletedAt, &j.ScheduledAt, &j.ConcurrencyLimit)
+		`SELECT id, type, state, payload, created_by, created_at, started_at, completed_at, scheduled_at, concurrency_limit, initiative_id FROM jobs WHERE id=$1`, id,
+	).Scan(&j.ID, &j.Type, &j.State, &j.Payload, &j.CreatedBy, &j.CreatedAt, &j.StartedAt, &j.CompletedAt, &j.ScheduledAt, &j.ConcurrencyLimit, &j.InitiativeID)
 	return j, err
+}
+
+// SetJobInitiative assigns, reassigns, or clears (initiativeID == "") a
+// Job's initiative membership. Pure plumbing -- no rule about the target
+// initiative's lifecycle state lives here; internal/api enforces "only an
+// active initiative accepts new members" before calling this.
+func (s *Store) SetJobInitiative(ctx context.Context, jobID, initiativeID string) (Job, error) {
+	if _, err := s.pool.Exec(ctx, `UPDATE jobs SET initiative_id=$1 WHERE id=$2`, initiativeID, jobID); err != nil {
+		return Job{}, err
+	}
+	return s.Get(ctx, jobID)
 }
 
 func scanJobTargets(rows pgx.Rows) ([]JobTarget, error) {
