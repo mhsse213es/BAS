@@ -4623,6 +4623,17 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- Initiative Detail Drawer -->
+<div id="init-drawer-overlay" class="drawer-overlay" onclick="if(event.target===this)closeInitiativeDrawer()">
+  <div class="drawer" style="width:480px;max-width:94vw">
+    <div class="drawer-header">
+      <h3 id="init-drawer-title">Initiative</h3>
+      <button class="drawer-close" onclick="closeInitiativeDrawer()">&#10005;</button>
+    </div>
+    <div class="drawer-body" id="init-drawer-body"></div>
+  </div>
+</div>
+
 <!-- Live Run Drawer -->
 <!-- Re-run Review: read-only clone of a past run's exact configuration --
      no agent/mode/technique picker, just what will run and a Start button. -->
@@ -5500,6 +5511,69 @@ function renderInitiativesList() {
       '<td>' + x(fmtDate(it.CreatedAt)) + '</td>' +
     '</tr>';
   }).join('');
+}
+
+var INIT_CURRENT = null; // the currently-open drawer's Initiative object, or null
+
+function closeInitiativeDrawer() {
+  document.getElementById('init-drawer-overlay').classList.remove('open');
+  INIT_CURRENT = null;
+}
+
+function openInitiativeDrawer(id) {
+  apicall('/api/initiatives/' + encodeURIComponent(id)).then(function(res) {
+    if (res && res.error) { showToast(res.error, 'err'); return; }
+    INIT_CURRENT = res.initiative;
+    renderInitiativeDrawer(res.initiative, res.progress, res.jobs || []);
+    document.getElementById('init-drawer-overlay').classList.add('open');
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function initiativeProgressCounts(p) {
+  var parts = [p.Total + ' total'];
+  if (p.Completed)  parts.push(p.Completed + ' completed');
+  if (p.Running)    parts.push(p.Running + ' running');
+  if (p.Requested)  parts.push(p.Requested + ' requested');
+  if (p.Partial)    parts.push(p.Partial + ' partial');
+  if (p.Failed)     parts.push(p.Failed + ' failed');
+  if (p.Cancelled)  parts.push(p.Cancelled + ' cancelled');
+  return parts.join(' · ');
+}
+
+function renderInitiativeDrawer(it, progress, jobs) {
+  document.getElementById('init-drawer-title').textContent = it.Name;
+  var col = initiativeStateColor(it.State);
+  var pct = Math.round(progress.PercentComplete || 0);
+
+  var jobRows = jobs.length
+    ? jobs.map(function(j) {
+        return '<tr>' +
+          '<td class="tiny muted" style="font-family:var(--font-mono)">' + x(j.id.slice(0, 8)) + '</td>' +
+          '<td>' + x(j.type) + '</td>' +
+          '<td><span class="badge">' + x(j.state) + '</span></td>' +
+          '<td>' + x(fmtDate(j.createdAt)) + '</td>' +
+          '<td>' + (j.completedAt ? x(fmtDate(j.completedAt)) : '—') + '</td>' +
+        '</tr>';
+      }).join('')
+    : '<tr><td colspan="5" class="empty">No jobs yet.</td></tr>';
+
+  document.getElementById('init-drawer-body').innerHTML =
+    '<div style="margin-bottom:1rem">' +
+      '<span class="badge" style="color:' + col + ';border-color:' + col + '">' + initiativeStateLabel(it.State) + '</span> ' +
+      '<span class="tiny muted">Created by ' + x(it.CreatedBy || '—') + ' · ' + x(fmtDate(it.CreatedAt)) + '</span>' +
+    '</div>' +
+    '<div id="init-drawer-actions" style="display:flex;gap:0.5rem;margin-bottom:1rem"></div>' +
+    '<div id="init-drawer-error" style="margin-bottom:0.85rem"></div>' +
+    (it.Description ? '<p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:1.1rem;line-height:1.5">' + x(it.Description) + '</p>' : '') +
+    '<div class="bar-row" style="margin-bottom:1.25rem">' +
+      '<div class="bar-label"><span>Progress</span><span>' + pct + '%</span></div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:var(--accent)"></div></div>' +
+      '<div class="tiny muted" style="margin-top:0.3rem">' + x(initiativeProgressCounts(progress)) + '</div>' +
+    '</div>' +
+    '<h4 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.5rem">Jobs</h4>' +
+    '<div class="tbl-wrap"><table><thead><tr>' +
+      '<th>ID</th><th>Type</th><th>State</th><th>Created</th><th>Completed</th>' +
+    '</tr></thead><tbody>' + jobRows + '</tbody></table></div>';
 }
 
 // ── Detection Verification (SP2) ───────────────────────────────────────────
