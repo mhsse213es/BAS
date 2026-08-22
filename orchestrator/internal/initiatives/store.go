@@ -9,8 +9,15 @@ import (
 )
 
 // ErrInvalidTransition is returned when Close or Archive is called on an
-// Initiative not currently in the state that transition requires.
+// Initiative not currently in the state that transition requires. Delete
+// also returns it when the Initiative isn't currently archived.
 var ErrInvalidTransition = errors.New("invalid initiative state transition")
+
+// ErrHasJobs is returned by Delete when at least one Job is still tagged
+// with this Initiative's ID -- delete requires every job be detached or
+// reassigned first, so no orphaned jobs.initiative_id references are ever
+// created (that column has no FK constraint, so nothing else would stop it).
+var ErrHasJobs = errors.New("initiative has jobs attached")
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -99,4 +106,26 @@ func (s *Store) Archive(ctx context.Context, id string) (Initiative, error) {
 		return Initiative{}, err
 	}
 	return it, nil
+}
+
+// Delete permanently removes an Initiative. Requires the current state to
+// be archived (ErrInvalidTransition otherwise) and requires no Job still
+// carry this Initiative's ID (ErrHasJobs otherwise) -- jobs must be
+// detached or reassigned first via jobs.Store.SetJobInitiative.
+func (s *Store) Delete(ctx context.Context, id string) error {
+	var jobCount int
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM jobs WHERE initiative_id=$1`, id).Scan(&jobCount); err != nil {
+		return err
+	}
+	if jobCount > 0 {
+		return ErrHasJobs
+	}
+	tag, err := s.pool.Exec(ctx, `DELETE FROM initiatives WHERE id=$1 AND state=$2`, id, StateArchived)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrInvalidTransition
+	}
+	return nil
 }
