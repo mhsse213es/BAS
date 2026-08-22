@@ -2,10 +2,15 @@ package initiatives
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ErrInvalidTransition is returned when Close or Archive is called on an
+// Initiative not currently in the state that transition requires.
+var ErrInvalidTransition = errors.New("invalid initiative state transition")
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -60,4 +65,38 @@ func (s *Store) List(ctx context.Context, state string) ([]Initiative, error) {
 		out = append(out, it)
 	}
 	return out, rows.Err()
+}
+
+// Close moves an Initiative from active to closed. Requires the current
+// state to be active.
+func (s *Store) Close(ctx context.Context, id string) (Initiative, error) {
+	row := s.pool.QueryRow(ctx,
+		`UPDATE initiatives SET state=$1, closed_at=NOW() WHERE id=$2 AND state=$3
+		 RETURNING `+initiativeColumns,
+		StateClosed, id, StateActive)
+	it, err := scanInitiative(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Initiative{}, ErrInvalidTransition
+		}
+		return Initiative{}, err
+	}
+	return it, nil
+}
+
+// Archive moves an Initiative from closed to archived. Requires the
+// current state to be closed.
+func (s *Store) Archive(ctx context.Context, id string) (Initiative, error) {
+	row := s.pool.QueryRow(ctx,
+		`UPDATE initiatives SET state=$1, archived_at=NOW() WHERE id=$2 AND state=$3
+		 RETURNING `+initiativeColumns,
+		StateArchived, id, StateClosed)
+	it, err := scanInitiative(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Initiative{}, ErrInvalidTransition
+		}
+		return Initiative{}, err
+	}
+	return it, nil
 }
