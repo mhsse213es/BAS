@@ -1351,6 +1351,13 @@ body.theme-slate {
           </svg>
           Scheduled Assessments
         </div>
+        <div class="nav-item" data-tab="initiatives" onclick="showTab('initiatives')">
+          <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/>
+            <rect x="2" y="9" width="5" height="5" rx="1"/><path d="M9 11.5h5M11.5 9v5"/>
+          </svg>
+          Initiatives
+        </div>
         <div class="nav-item" data-tab="campaigns" onclick="showTab('campaigns')">
           <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
             <path d="M2 13V3M2 13h12M5 11V7M8.5 11V5M12 11V8"/>
@@ -2663,6 +2670,33 @@ body.theme-slate {
             </tr></thead>
             <tbody id="sched-body">
               <tr><td colspan="7" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Initiatives -->
+      <div id="tab-initiatives" style="display:none">
+        <div class="sec-hdr">
+          <h2>Initiatives <span id="init-cnt" class="cnt">0</span></h2>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <div id="init-filter" style="display:flex;gap:0.3rem">
+              <button class="btn btn-outline btn-sm active" data-init-filter="active" onclick="initiativeSetFilter('active')">Active</button>
+              <button class="btn btn-outline btn-sm" data-init-filter="closed" onclick="initiativeSetFilter('closed')">Closed</button>
+              <button class="btn btn-outline btn-sm" data-init-filter="archived" onclick="initiativeSetFilter('archived')">Archived</button>
+              <button class="btn btn-outline btn-sm" data-init-filter="all" onclick="initiativeSetFilter('all')">All</button>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="loadInitiatives()">Refresh</button>
+            <button class="btn btn-primary btn-sm" onclick="openInitiativeCreateDrawer()">+ New Initiative</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Name</th><th>State</th><th>Created by</th><th>Created</th>
+            </tr></thead>
+            <tbody id="init-body">
+              <tr><td colspan="4" class="empty">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -4930,7 +4964,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -5271,7 +5305,7 @@ function goToProfile() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','scheduled-assessments','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -5381,6 +5415,7 @@ function showTab(name) {
   if (name === 'runs') loadRuns();
   if (name === 'campaigns') closeCampaignDetail();
   if (name === 'scheduled-assessments') loadScheduledAssessments();
+  if (name === 'initiatives') loadInitiatives();
   if (name === 'coverage') { loadCoverage(); loadUnifiedTechniques(); loadCoverageAnalytics(); }
   if (name === 'attack-coverage') { loadCoverageActors(); loadCoverageMatrix(); }
   if (name === 'threat-priority') { showThreatPriorityList(); loadThreatPriorityActors(); }
@@ -5410,6 +5445,61 @@ function showTab(name) {
       showSettingsSection('theme');
     }
   }
+}
+
+// ── Initiative Layer ─────────────────────────────────────────────────────
+// Frontend for docs/superpowers/specs/2026-08-22-initiative-layer-ui-design.md.
+// Field-casing note: the `initiative` and `progress` objects serialize with
+// capitalized Go field names (no json tags, matching internal/jobs.Job's
+// established convention) -- e.g. it.ID, it.State, progress.PercentComplete.
+// The `jobs` array inside GET /api/initiatives/{id} is the one exception:
+// it has explicit lowercase camelCase json tags (id/type/state/createdAt/
+// completedAt). Verified against the actual Go source, not assumed.
+var INITIATIVES = { list: [], filter: 'active' };
+
+function initiativeStateColor(state) {
+  return state === 'active' ? 'var(--success)' : 'var(--muted)';
+}
+function initiativeStateLabel(state) {
+  if (state === 'active') return 'Active';
+  if (state === 'closed') return 'Closed';
+  if (state === 'archived') return 'Archived';
+  return state;
+}
+
+function initiativeSetFilter(state) {
+  INITIATIVES.filter = state;
+  document.querySelectorAll('#init-filter [data-init-filter]').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-init-filter') === state);
+  });
+  loadInitiatives();
+}
+
+function loadInitiatives() {
+  var q = INITIATIVES.filter === 'all' ? '' : ('?state=' + INITIATIVES.filter);
+  apicall('/api/initiatives' + q).then(function(res) {
+    if (res && res.error) { showToast(res.error, 'err'); return; }
+    INITIATIVES.list = (res && res.initiatives) || [];
+    renderInitiativesList();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+function renderInitiativesList() {
+  document.getElementById('init-cnt').textContent = INITIATIVES.list.length;
+  var tbody = document.getElementById('init-body');
+  if (!INITIATIVES.list.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No initiatives yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = INITIATIVES.list.map(function(it) {
+    var col = initiativeStateColor(it.State);
+    return '<tr onclick="openInitiativeDrawer(\'' + x(it.ID) + '\')" style="cursor:pointer">' +
+      '<td>' + x(it.Name) + '</td>' +
+      '<td><span class="badge" style="color:' + col + ';border-color:' + col + '">' + initiativeStateLabel(it.State) + '</span></td>' +
+      '<td>' + x(it.CreatedBy || '—') + '</td>' +
+      '<td>' + x(fmtDate(it.CreatedAt)) + '</td>' +
+    '</tr>';
+  }).join('');
 }
 
 // ── Detection Verification (SP2) ───────────────────────────────────────────
