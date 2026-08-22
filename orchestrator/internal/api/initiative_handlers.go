@@ -194,3 +194,33 @@ func (h *Handler) SetJobInitiative(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, map[string]any{"job": job})
 }
+
+// DeleteInitiative permanently removes an archived Initiative with no
+// jobs still attached. Requires CanApproveRemediation (Admin-only) --
+// unlike the other 5 Initiative endpoints, this one is genuinely
+// destructive, matching the higher tier this codebase already uses for
+// other destructive/high-trust actions (maintenance-freeze delete,
+// notification-webhook write).
+// DELETE /api/initiatives/{initiativeId}
+func (h *Handler) DeleteInitiative(w http.ResponseWriter, r *http.Request) {
+	if h.initiativesStore == nil {
+		jsonError(w, "initiative layer not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	id := chi.URLParam(r, "initiativeId")
+	err := h.initiativesStore.Delete(r.Context(), id)
+	if errors.Is(err, initiatives.ErrHasJobs) {
+		jsonError(w, "detach all jobs before deleting this initiative", http.StatusConflict)
+		return
+	}
+	if errors.Is(err, initiatives.ErrInvalidTransition) {
+		jsonError(w, "initiative is not archived", http.StatusConflict)
+		return
+	}
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.auditLog(r, "initiatives.deleted", id, map[string]any{}, "ok")
+	respond(w, map[string]any{"deleted": true})
+}

@@ -263,3 +263,100 @@ func TestGetInitiative_ReturnsProgressAndJobList(t *testing.T) {
 		}
 	})
 }
+
+func TestDeleteInitiative_RejectsNonArchived(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		initStore := initiatives.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithInitiatives(initStore)
+
+		it, err := initStore.Create(context.Background(), "delete-reject", "", "user-1")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		req := withURLParam(httptest.NewRequest(http.MethodDelete, "/x", nil), "initiativeId", it.ID)
+		w := httptest.NewRecorder()
+		h.DeleteInitiative(w, req)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("status = %d, body = %s, want 409", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestDeleteInitiative_RejectsWithJobsAttached(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('di-a1', 'DI-A1')`)
+		jobsStore := jobs.NewStore(pool)
+		initStore := initiatives.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore)).
+			WithInitiatives(initStore)
+
+		it, err := initStore.Create(context.Background(), "delete-jobs-reject", "", "user-1")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if _, err := initStore.Close(context.Background(), it.ID); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		if _, err := initStore.Archive(context.Background(), it.ID); err != nil {
+			t.Fatalf("Archive: %v", err)
+		}
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := jobsStore.CreateBatch(context.Background(), "batch_remediation", payload, "user-1", []string{"di-a1"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		if _, err := jobsStore.SetJobInitiative(context.Background(), job.ID, it.ID); err != nil {
+			t.Fatalf("SetJobInitiative: %v", err)
+		}
+
+		req := withURLParam(httptest.NewRequest(http.MethodDelete, "/x", nil), "initiativeId", it.ID)
+		w := httptest.NewRecorder()
+		h.DeleteInitiative(w, req)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("status = %d, body = %s, want 409", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestDeleteInitiative_SucceedsAndWritesAuditLog(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		initStore := initiatives.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithInitiatives(initStore)
+
+		it, err := initStore.Create(context.Background(), "delete-succeeds", "", "user-1")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if _, err := initStore.Close(context.Background(), it.ID); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		if _, err := initStore.Archive(context.Background(), it.ID); err != nil {
+			t.Fatalf("Archive: %v", err)
+		}
+
+		req := withURLParam(httptest.NewRequest(http.MethodDelete, "/x", nil), "initiativeId", it.ID)
+		w := httptest.NewRecorder()
+		h.DeleteInitiative(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+
+		if _, err := initStore.Get(context.Background(), it.ID); err == nil {
+			t.Error("Get after delete: expected an error, got nil")
+		}
+		waitForAuditLog(t, pool, "initiatives.deleted", it.ID)
+	})
+}
