@@ -4634,6 +4634,30 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- Initiative Create Drawer -->
+<div id="init-create-overlay" class="drawer-overlay" onclick="if(event.target===this)closeInitiativeCreateDrawer()">
+  <div class="drawer" style="width:420px;max-width:94vw">
+    <div class="drawer-header">
+      <h3>New Initiative</h3>
+      <button class="drawer-close" onclick="closeInitiativeCreateDrawer()">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Name</label>
+      <input type="text" id="init-create-name" placeholder="Q3 2026 Patch Compliance" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem;font-family:inherit">
+
+      <label style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;display:block;margin-bottom:0.35rem">Description (optional)</label>
+      <textarea id="init-create-desc" rows="3" placeholder="Quarterly patch push across the BFSI fleet" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem;font-family:inherit;resize:vertical"></textarea>
+
+      <div id="init-create-error" style="margin-bottom:0.85rem"></div>
+
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+        <button class="btn btn-outline btn-sm" onclick="closeInitiativeCreateDrawer()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="submitInitiativeCreate()">Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Live Run Drawer -->
 <!-- Re-run Review: read-only clone of a past run's exact configuration --
      no agent/mode/technique picker, just what will run and a Start button. -->
@@ -5604,6 +5628,34 @@ function initiativeArchiveAction() {
     openInitiativeDrawer(INIT_CURRENT.ID);
     loadInitiatives();
   }).catch(function(e) { initiativeShowDrawerError(e.message); });
+}
+
+function openInitiativeCreateDrawer() {
+  document.getElementById('init-create-name').value = '';
+  document.getElementById('init-create-desc').value = '';
+  document.getElementById('init-create-error').innerHTML = '';
+  document.getElementById('init-create-overlay').classList.add('open');
+}
+
+function closeInitiativeCreateDrawer() {
+  document.getElementById('init-create-overlay').classList.remove('open');
+}
+
+function submitInitiativeCreate() {
+  var name = document.getElementById('init-create-name').value.trim();
+  var errEl = document.getElementById('init-create-error');
+  if (!name) {
+    errEl.innerHTML = '<div class="tiny" style="color:var(--danger)">Name is required.</div>';
+    return;
+  }
+  errEl.innerHTML = '';
+  var desc = document.getElementById('init-create-desc').value.trim();
+  apicall('/api/initiatives', { method: 'POST', body: JSON.stringify({ name: name, description: desc }) }).then(function(res) {
+    if (res && res.error) { errEl.innerHTML = '<div class="tiny" style="color:var(--danger)">' + x(res.error) + '</div>'; return; }
+    showToast('Initiative created', 'ok');
+    closeInitiativeCreateDrawer();
+    loadInitiatives();
+  }).catch(function(e) { errEl.innerHTML = '<div class="tiny" style="color:var(--danger)">' + x(e.message) + '</div>'; });
 }
 
 // ── Detection Verification (SP2) ───────────────────────────────────────────
