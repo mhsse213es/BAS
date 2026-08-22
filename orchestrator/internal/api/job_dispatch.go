@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/audspect/bas/internal/initiatives"
 	"github.com/audspect/bas/internal/jobs"
 	"github.com/audspect/bas/internal/remediation"
 )
@@ -137,5 +138,11 @@ func (h *Handler) WithJobsDispatcher(store *jobs.Store, dispatcher *jobs.Dispatc
 	dispatcher.SetDispatch(h.dispatchJobTarget)
 	dispatcher.SetStatus(h.statusForJobTarget)
 	dispatcher.SetNotify(h.dispatchJobNotify)
+	return h
+}
+
+// WithInitiatives wires the Initiative layer's store into the handler.
+func (h *Handler) WithInitiatives(store *initiatives.Store) *Handler {
+	h.initiativesStore = store
 	return h
 }

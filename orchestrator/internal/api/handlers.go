@@ -34,6 +34,7 @@ import (
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/exercise"
 	"github.com/audspect/bas/internal/integrity"
+	"github.com/audspect/bas/internal/initiatives"
 	"github.com/audspect/bas/internal/ioc"
 	"github.com/audspect/bas/internal/iocregistry"
 	"github.com/audspect/bas/internal/jobs"
@@ -114,6 +115,7 @@ type Handler struct {
 	taxiiStore           *taxii.Store           // nil when not loaded — generic TAXII 2.1 connector config CRUD
 	taxiiManager         *taxii.Manager         // nil when not loaded — per-connector pollers
 	jobsStore            *jobs.Store            // nil when not loaded — Fleet Job Engine (batch remediation)
+	initiativesStore     *initiatives.Store     // nil when not loaded — Initiative layer (groups related Jobs)
 	notifications        *notifications.Service // nil when not loaded — Phase 7 job-event notifications
 	notificationsStore   *notifications.Store   // nil when not loaded — direct read/config access for handlers
 	correlationEngine    *correlation.Engine    // nil when not loaded — Intelligence Correlation Engine

@@ -583,6 +583,12 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanApproveRemediation)).Delete("/api/notification-webhooks/{id}", h.DeleteNotificationWebhook)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/job-targets/{targetId}/assign", h.AssignJobTarget)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/job-targets", h.GetJobTargetsByOwner)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/initiatives", h.CreateInitiative)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/initiatives", h.ListInitiatives)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/initiatives/{initiativeId}", h.GetInitiative)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/initiatives/{initiativeId}/close", h.CloseInitiative)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/initiatives/{initiativeId}/archive", h.ArchiveInitiative)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Patch("/api/jobs/{jobId}/initiative", h.SetJobInitiative)
 
 		// OpenAEV Connector — config + sync + air-gapped import (Admin only)
 		r.With(auth.RequirePermission(auth.CanViewOpenAEVConfig)).Get("/api/openaev/config", h.GetOpenAEVConfig)

@@ -27,6 +27,7 @@ import (
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/exercise"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
+	"github.com/audspect/bas/internal/initiatives"
 	"github.com/audspect/bas/internal/integrity"
 	"github.com/audspect/bas/internal/ioc"
 	"github.com/audspect/bas/internal/iocregistry"
@@ -541,6 +542,11 @@ func main() {
 	// the NotifyFn hook wired in WithJobsDispatcher/WithNotifications below.
 	notificationsStore := notifications.NewStore(pool)
 
+	// Initiative layer -- groups related Jobs (possibly of different types)
+	// into one auditable security initiative. No ticker of its own; it's
+	// purely a relationship/aggregation layer over the Job Engine above.
+	initiativesStore := initiatives.NewStore(pool)
+
 	hub := ws.NewHub()
 	licenseMonitorCtx, licenseMonitorCancel := context.WithCancel(context.Background())
 	defer licenseMonitorCancel()
@@ -561,6 +567,7 @@ func main() {
 		WithEOLCatalog(eolCatalog).
 		WithRemediationCatalog(remediationCatalog).
 		WithJobsDispatcher(jobsStore, jobsDispatcher).
+		WithInitiatives(initiativesStore).
 		WithNotifications(notificationsStore).
 		WithReporting(reportingEngine).
 		WithScheduler(scheduler).
