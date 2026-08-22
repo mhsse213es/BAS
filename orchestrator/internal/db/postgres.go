@@ -1588,6 +1588,26 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// couldn't recover Caldera ability IDs or step indices from results
 		// at all and silently fell back to running everything.
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS dispatch_subset jsonb`,
+
+		// Initiative layer: groups related internal/jobs.Job rows -- possibly
+		// of different types -- into one auditable security initiative with
+		// an explicit active/closed/archived lifecycle. No FK on
+		// jobs.initiative_id, matching the unconstrained-text convention
+		// already used for owner_id/created_by/requested_by elsewhere in
+		// this schema. See
+		// docs/superpowers/specs/2026-08-22-initiative-layer-design.md.
+		`CREATE TABLE IF NOT EXISTS initiatives (
+			id            text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			name          text        NOT NULL,
+			description   text        NOT NULL DEFAULT '',
+			state         text        NOT NULL DEFAULT 'active',
+			created_by    text        NOT NULL DEFAULT '',
+			created_at    timestamptz NOT NULL DEFAULT NOW(),
+			closed_at     timestamptz,
+			archived_at   timestamptz
+		)`,
+		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS initiative_id text NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_jobs_initiative_id ON jobs (initiative_id) WHERE initiative_id <> ''`,
 	}
 
 	for _, s := range stmts {
