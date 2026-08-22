@@ -2693,10 +2693,10 @@ body.theme-slate {
         <div class="tbl-wrap">
           <table>
             <thead><tr>
-              <th>Name</th><th>State</th><th>Created by</th><th>Created</th>
+              <th>Name</th><th>State</th><th>Created by</th><th>Created</th><th></th>
             </tr></thead>
             <tbody id="init-body">
-              <tr><td colspan="4" class="empty">Loading…</td></tr>
+              <tr><td colspan="5" class="empty">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -5523,16 +5523,27 @@ function renderInitiativesList() {
   document.getElementById('init-cnt').textContent = INITIATIVES.list.length;
   var tbody = document.getElementById('init-body');
   if (!INITIATIVES.list.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty">No initiatives yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">No initiatives yet.</td></tr>';
     return;
   }
-  tbody.innerHTML = INITIATIVES.list.map(function(it) {
+  tbody.innerHTML = INITIATIVES.list.map(function(it, idx) {
     var col = initiativeStateColor(it.State);
+    var menuId = 'init-menu-' + idx;
+    var canDelete = it.State === 'archived' && ROLE === 'admin';
     return '<tr onclick="openInitiativeDrawer(\'' + x(it.ID) + '\')" style="cursor:pointer">' +
       '<td>' + x(it.Name) + '</td>' +
       '<td><span class="badge" style="color:' + col + ';border-color:' + col + '">' + initiativeStateLabel(it.State) + '</span></td>' +
       '<td>' + x(it.CreatedBy || '—') + '</td>' +
       '<td>' + x(fmtDate(it.CreatedAt)) + '</td>' +
+      '<td onclick="event.stopPropagation()">' +
+        (canDelete ?
+          '<div class="row-menu-wrap">' +
+          '<button class="btn btn-outline btn-sm row-menu-btn" onclick="toggleRowMenu(event,\'' + menuId + '\')" title="Actions" aria-haspopup="true">&#8942;</button>' +
+          '<div class="row-menu-panel" id="' + menuId + '">' +
+            '<button class="row-menu-item row-menu-item-danger" onclick="closeAllRowMenus();initiativeDeleteAction(\'' + x(it.ID) + '\',\'' + x(it.Name) + '\')">&#128465; Delete</button>' +
+          '</div>' +
+          '</div>' : '') +
+      '</td>' +
     '</tr>';
   }).join('');
 }
@@ -5656,6 +5667,15 @@ function submitInitiativeCreate() {
     closeInitiativeCreateDrawer();
     loadInitiatives();
   }).catch(function(e) { errEl.innerHTML = '<div class="tiny" style="color:var(--danger)">' + x(e.message) + '</div>'; });
+}
+
+function initiativeDeleteAction(id, name) {
+  if (!confirm('Delete "' + name + '"? This cannot be undone.')) return;
+  apicall('/api/initiatives/' + encodeURIComponent(id), { method: 'DELETE' }).then(function(res) {
+    if (res && res.error) { showToast(res.error, 'err'); return; }
+    showToast('Initiative deleted', 'ok');
+    loadInitiatives();
+  }).catch(function(e) { showToast(e.message, 'err'); });
 }
 
 // ── Detection Verification (SP2) ───────────────────────────────────────────
