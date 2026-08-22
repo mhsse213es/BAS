@@ -467,3 +467,100 @@ func TestCreateBatchRemediationJob_InvalidScheduledAt_BadRequest(t *testing.T) {
 		}
 	})
 }
+
+func TestListJobs_NoFilterReturnsEverything(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('lj-a1', 'LJ-A1')`)
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		job, err := jobsStore.CreateBatch(context.Background(), "batch_remediation", payload, "user-1", []string{"lj-a1"})
+		if err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/jobs", nil)
+		w := httptest.NewRecorder()
+		h.ListJobs(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Jobs []struct {
+				ID string `json:"id"`
+			} `json:"jobs"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		found := false
+		for _, j := range resp.Jobs {
+			if j.ID == job.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("jobs = %+v, want to include %q", resp.Jobs, job.ID)
+		}
+	})
+}
+
+func TestListJobs_EmptyInitiativeIdFiltersToUnassigned(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('lj-a2', 'LJ-A2')`)
+		jobsStore := jobs.NewStore(pool)
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").
+			WithJobsDispatcher(jobsStore, jobs.NewDispatcher(jobsStore))
+
+		payload, _ := json.Marshal(map[string]string{"remediationId": "enable_windows_firewall", "reason": "test"})
+		unassigned, err := jobsStore.CreateBatch(context.Background(), "batch_remediation", payload, "user-1", []string{"lj-a2"})
+		if err != nil {
+			t.Fatalf("CreateBatch unassigned: %v", err)
+		}
+		assigned, err := jobsStore.CreateBatch(context.Background(), "batch_remediation", payload, "user-1", []string{"lj-a2"})
+		if err != nil {
+			t.Fatalf("CreateBatch assigned: %v", err)
+		}
+		if _, err := jobsStore.SetJobInitiative(context.Background(), assigned.ID, "some-initiative"); err != nil {
+			t.Fatalf("SetJobInitiative: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/jobs?initiativeId=", nil)
+		w := httptest.NewRecorder()
+		h.ListJobs(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Jobs []struct {
+				ID string `json:"id"`
+			} `json:"jobs"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		foundUnassigned, foundAssigned := false, false
+		for _, j := range resp.Jobs {
+			if j.ID == unassigned.ID {
+				foundUnassigned = true
+			}
+			if j.ID == assigned.ID {
+				foundAssigned = true
+			}
+		}
+		if !foundUnassigned {
+			t.Error("expected the unassigned job in the response")
+		}
+		if foundAssigned {
+			t.Error("did not expect the assigned job in an initiativeId=\"\" filtered response")
+		}
+	})
+}

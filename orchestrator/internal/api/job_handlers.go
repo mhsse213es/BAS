@@ -113,6 +113,45 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]any{"job": job, "targets": targets, "progress": progress})
 }
 
+// jobSummary is the lightweight wire shape for job listings -- same fields
+// and json tags GetInitiative already embeds for its jobs array, so
+// frontend code that renders one can render the other identically.
+type jobSummary struct {
+	ID          string     `json:"id"`
+	Type        string     `json:"type"`
+	State       string     `json:"state"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
+}
+
+// ListJobs lists Jobs, optionally filtered by initiativeId. The query
+// param's mere presence (even empty) means "filter"; its absence means "no
+// filter, list everything" -- an empty value filters to jobs with no
+// initiative, matching jobs.initiative_id's own "" == unassigned
+// convention. General-purpose job listing, not Initiative-feature-
+// specific, even though today's only filter dimension is initiativeId.
+// GET /api/jobs?initiativeId=<value>
+func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
+	if h.jobsStore == nil {
+		jsonError(w, "job engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	var filter *string
+	if vals, ok := r.URL.Query()["initiativeId"]; ok && len(vals) > 0 {
+		filter = &vals[0]
+	}
+	list, err := h.jobsStore.List(r.Context(), filter)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	summaries := make([]jobSummary, 0, len(list))
+	for _, j := range list {
+		summaries = append(summaries, jobSummary{ID: j.ID, Type: j.Type, State: j.State, CreatedAt: j.CreatedAt, CompletedAt: j.CompletedAt})
+	}
+	respond(w, map[string]any{"jobs": summaries})
+}
+
 // POST /api/jobs/{jobId}/cancel
 // Cancels every still-pending target and the job itself. Targets already
 // dispatched are untouched -- that WS message already went out; an

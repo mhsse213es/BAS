@@ -565,6 +565,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanRunScenario)).Get("/api/technique-verification-runs/{id}", h.GetTechniqueVerification)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/remediation-reports/summary", h.RemediationReportSummary)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/jobs/batch-remediation", h.CreateBatchRemediationJob)
+		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/jobs", h.ListJobs)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Get("/api/jobs/{jobId}", h.GetJob)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/jobs/{jobId}/cancel", h.CancelJob)
 		r.With(auth.RequirePermission(auth.CanExecuteRemediation)).Post("/api/job-schedules", h.CreateJobSchedule)

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -75,28 +74,14 @@ func (h *Handler) GetInitiative(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	rows, err := h.db.Query(r.Context(),
-		`SELECT id, type, state, created_at, completed_at FROM jobs WHERE initiative_id=$1 ORDER BY created_at`, id)
+	jobList, err := h.jobsStore.List(r.Context(), &id)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
-	type jobSummary struct {
-		ID          string     `json:"id"`
-		Type        string     `json:"type"`
-		State       string     `json:"state"`
-		CreatedAt   time.Time  `json:"createdAt"`
-		CompletedAt *time.Time `json:"completedAt,omitempty"`
-	}
-	var jobSummaries []jobSummary
-	for rows.Next() {
-		var js jobSummary
-		if err := rows.Scan(&js.ID, &js.Type, &js.State, &js.CreatedAt, &js.CompletedAt); err != nil {
-			jsonError(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		jobSummaries = append(jobSummaries, js)
+	jobSummaries := make([]jobSummary, 0, len(jobList))
+	for _, j := range jobList {
+		jobSummaries = append(jobSummaries, jobSummary{ID: j.ID, Type: j.Type, State: j.State, CreatedAt: j.CreatedAt, CompletedAt: j.CompletedAt})
 	}
 	respond(w, map[string]any{"initiative": it, "progress": progress, "jobs": jobSummaries})
 }
