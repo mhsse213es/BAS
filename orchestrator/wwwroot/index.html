@@ -5562,7 +5562,10 @@ function renderInitiativeDrawer(it, progress, jobs) {
       '<span class="badge" style="color:' + col + ';border-color:' + col + '">' + initiativeStateLabel(it.State) + '</span> ' +
       '<span class="tiny muted">Created by ' + x(it.CreatedBy || '—') + ' · ' + x(fmtDate(it.CreatedAt)) + '</span>' +
     '</div>' +
-    '<div id="init-drawer-actions" style="display:flex;gap:0.5rem;margin-bottom:1rem"></div>' +
+    '<div style="display:flex;gap:0.5rem;margin-bottom:1rem">' +
+      (it.State === 'active' ? '<button class="btn btn-outline btn-sm" onclick="initiativeCloseAction()">Close Initiative</button>' : '') +
+      (it.State === 'closed' ? '<button class="btn btn-outline btn-sm" onclick="initiativeArchiveAction()">Archive Initiative</button>' : '') +
+    '</div>' +
     '<div id="init-drawer-error" style="margin-bottom:0.85rem"></div>' +
     (it.Description ? '<p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:1.1rem;line-height:1.5">' + x(it.Description) + '</p>' : '') +
     '<div class="bar-row" style="margin-bottom:1.25rem">' +
@@ -5574,6 +5577,33 @@ function renderInitiativeDrawer(it, progress, jobs) {
     '<div class="tbl-wrap"><table><thead><tr>' +
       '<th>ID</th><th>Type</th><th>State</th><th>Created</th><th>Completed</th>' +
     '</tr></thead><tbody>' + jobRows + '</tbody></table></div>';
+}
+
+function initiativeShowDrawerError(msg) {
+  var el = document.getElementById('init-drawer-error');
+  if (el) el.innerHTML = msg ? '<div class="tiny" style="color:var(--danger)">' + x(msg) + '</div>' : '';
+}
+
+function initiativeCloseAction() {
+  if (!INIT_CURRENT) return;
+  initiativeShowDrawerError('');
+  apicall('/api/initiatives/' + encodeURIComponent(INIT_CURRENT.ID) + '/close', { method: 'POST' }).then(function(res) {
+    if (res && res.error) { initiativeShowDrawerError(res.error); return; }
+    showToast('Initiative closed', 'ok');
+    openInitiativeDrawer(INIT_CURRENT.ID); // re-fetch to refresh drawer state/buttons
+    loadInitiatives(); // refresh the underlying list row
+  }).catch(function(e) { initiativeShowDrawerError(e.message); });
+}
+
+function initiativeArchiveAction() {
+  if (!INIT_CURRENT) return;
+  initiativeShowDrawerError('');
+  apicall('/api/initiatives/' + encodeURIComponent(INIT_CURRENT.ID) + '/archive', { method: 'POST' }).then(function(res) {
+    if (res && res.error) { initiativeShowDrawerError(res.error); return; }
+    showToast('Initiative archived', 'ok');
+    openInitiativeDrawer(INIT_CURRENT.ID);
+    loadInitiatives();
+  }).catch(function(e) { initiativeShowDrawerError(e.message); });
 }
 
 // ── Detection Verification (SP2) ───────────────────────────────────────────
