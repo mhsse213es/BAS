@@ -4658,6 +4658,25 @@ body.theme-slate {
   </div>
 </div>
 
+<!-- Initiative Attach Job Drawer -->
+<div id="init-attach-overlay" class="drawer-overlay" onclick="if(event.target===this)closeInitiativeAttachDrawer()">
+  <div class="drawer" style="width:420px;max-width:94vw">
+    <div class="drawer-header">
+      <h3>Attach Job</h3>
+      <button class="drawer-close" onclick="closeInitiativeAttachDrawer()">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <input type="text" id="init-attach-search" placeholder="Search job ID or type" oninput="initiativeRenderAttachList()" style="width:100%;padding:0.5rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem;font-size:0.8rem;font-family:inherit">
+      <div id="init-attach-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:0.85rem"></div>
+      <div id="init-attach-error" style="margin-bottom:0.85rem"></div>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+        <button class="btn btn-outline btn-sm" onclick="closeInitiativeAttachDrawer()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="submitInitiativeAttach()">Attach</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Live Run Drawer -->
 <!-- Re-run Review: read-only clone of a past run's exact configuration --
      no agent/mode/technique picker, just what will run and a Start button. -->
@@ -5590,7 +5609,7 @@ function renderInitiativeDrawer(it, progress, jobs) {
           '<td>' + (j.completedAt ? x(fmtDate(j.completedAt)) : '—') + '</td>' +
         '</tr>';
       }).join('')
-    : '<tr><td colspan="5" class="empty">No jobs yet.</td></tr>';
+    : '<tr><td colspan="5" class="empty">No jobs attached yet. This initiative tracks related remediation jobs and their overall progress.</td></tr>';
 
   document.getElementById('init-drawer-body').innerHTML =
     '<div style="margin-bottom:1rem">' +
@@ -5608,7 +5627,10 @@ function renderInitiativeDrawer(it, progress, jobs) {
       '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:var(--accent)"></div></div>' +
       '<div class="tiny muted" style="margin-top:0.3rem">' + x(initiativeProgressCounts(progress)) + '</div>' +
     '</div>' +
-    '<h4 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:0.5rem">Jobs</h4>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">' +
+      '<h4 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0">Jobs</h4>' +
+      (it.State === 'active' ? '<button class="btn btn-outline btn-sm" onclick="openInitiativeAttachDrawer()">+ Attach Job</button>' : '') +
+    '</div>' +
     '<div class="tbl-wrap"><table><thead><tr>' +
       '<th>ID</th><th>Type</th><th>State</th><th>Created</th><th>Completed</th>' +
     '</tr></thead><tbody>' + jobRows + '</tbody></table></div>';
@@ -5666,6 +5688,7 @@ function submitInitiativeCreate() {
     showToast('Initiative created', 'ok');
     closeInitiativeCreateDrawer();
     loadInitiatives();
+    openInitiativeDrawer(res.initiative.ID); // jump straight in -- an empty just-created record has nothing useful to show on the list
   }).catch(function(e) { errEl.innerHTML = '<div class="tiny" style="color:var(--danger)">' + x(e.message) + '</div>'; });
 }
 
@@ -5676,6 +5699,69 @@ function initiativeDeleteAction(id, name) {
     showToast('Initiative deleted', 'ok');
     loadInitiatives();
   }).catch(function(e) { showToast(e.message, 'err'); });
+}
+
+// Attach Job: fetches the unassigned-job pool once when the picker opens
+// (INIT_ATTACH_POOL), then initiativeRenderAttachList() re-filters that
+// already-fetched list in-memory on every keystroke -- no per-keystroke
+// network call.
+var INIT_ATTACH_POOL = [];
+var INIT_ATTACH_SELECTED = '';
+
+function openInitiativeAttachDrawer() {
+  if (!INIT_CURRENT) return;
+  INIT_ATTACH_SELECTED = '';
+  document.getElementById('init-attach-search').value = '';
+  document.getElementById('init-attach-error').innerHTML = '';
+  document.getElementById('init-attach-list').innerHTML = '<div class="tiny muted" style="padding:0.75rem">Loading…</div>';
+  document.getElementById('init-attach-overlay').classList.add('open');
+  apicall('/api/jobs?initiativeId=').then(function(res) {
+    if (res && res.error) { document.getElementById('init-attach-list').innerHTML = '<div class="tiny" style="color:var(--danger);padding:0.75rem">' + x(res.error) + '</div>'; return; }
+    INIT_ATTACH_POOL = (res && res.jobs) || [];
+    initiativeRenderAttachList();
+  }).catch(function(e) { document.getElementById('init-attach-list').innerHTML = '<div class="tiny" style="color:var(--danger);padding:0.75rem">' + x(e.message) + '</div>'; });
+}
+
+function closeInitiativeAttachDrawer() {
+  document.getElementById('init-attach-overlay').classList.remove('open');
+}
+
+function initiativeRenderAttachList() {
+  var q = document.getElementById('init-attach-search').value.trim().toLowerCase();
+  var filtered = INIT_ATTACH_POOL.filter(function(j) {
+    return !q || j.id.toLowerCase().indexOf(q) !== -1 || j.type.toLowerCase().indexOf(q) !== -1;
+  });
+  var list = document.getElementById('init-attach-list');
+  if (!filtered.length) {
+    list.innerHTML = '<div class="tiny muted" style="padding:0.75rem">No unassigned jobs found.</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(function(j) {
+    var checked = j.id === INIT_ATTACH_SELECTED ? 'checked' : '';
+    return '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--border);cursor:pointer;font-size:0.78rem">' +
+      '<input type="radio" name="init-attach-radio" value="' + x(j.id) + '" ' + checked + ' onchange="INIT_ATTACH_SELECTED=this.value">' +
+      '<span style="font-family:var(--font-mono);color:var(--muted)">' + x(j.id.slice(0, 8)) + '</span>' +
+      '<span>' + x(j.type) + '</span>' +
+      '<span class="badge">' + x(j.state) + '</span>' +
+    '</label>';
+  }).join('');
+}
+
+function submitInitiativeAttach() {
+  var errEl = document.getElementById('init-attach-error');
+  if (!INIT_ATTACH_SELECTED) {
+    errEl.innerHTML = '<div class="tiny" style="color:var(--danger)">Select a job to attach.</div>';
+    return;
+  }
+  errEl.innerHTML = '';
+  apicall('/api/jobs/' + encodeURIComponent(INIT_ATTACH_SELECTED) + '/initiative', {
+    method: 'PATCH', body: JSON.stringify({ initiativeId: INIT_CURRENT.ID })
+  }).then(function(res) {
+    if (res && res.error) { errEl.innerHTML = '<div class="tiny" style="color:var(--danger)">' + x(res.error) + '</div>'; return; }
+    showToast('Job attached', 'ok');
+    closeInitiativeAttachDrawer();
+    openInitiativeDrawer(INIT_CURRENT.ID);
+  }).catch(function(e) { errEl.innerHTML = '<div class="tiny" style="color:var(--danger)">' + x(e.message) + '</div>'; });
 }
 
 // ── Detection Verification (SP2) ───────────────────────────────────────────
