@@ -13980,6 +13980,7 @@ function viewRunResults(run) {
         if (findingsEl) findingsEl.innerHTML = renderRunFindings(rep);
         var recEl = document.getElementById('run-report-recommendation');
         if (recEl) recEl.innerHTML = renderRunRecommendations(rep);
+        renderDetectionValidationTab(rep, run);
       }
     }).catch(function() {
       extraEl.innerHTML = '';
@@ -14007,8 +14008,10 @@ function viewRunResults(run) {
       if (el) el.innerHTML = '<div style="color:var(--muted);font-size:0.72rem;padding:1.5rem 0;text-align:center">Variant coverage unavailable.</div>';
     });
 
-    // SIEM Correlation panel — load if a correlation result exists for this run.
-    loadSIEMCorrelationPanel(runId);
+    // Detection Validation tab is populated by renderDetectionValidationTab
+    // above, as part of the shared report.json fetch -- it calls
+    // loadSIEMCorrelationPanel itself as its own fallback branch when
+    // detectionValidation.hasData is false, so no separate call here.
 
     // Indicators (IOCs) — extraction runs for every completed run regardless
     // of whether a threat-intel provider is configured (see GetRunIOCsEnriched);
@@ -14049,6 +14052,115 @@ function switchRunTab(tabId) {
   Array.prototype.forEach.call(document.getElementById('run-tabbar').querySelectorAll('.run-tab-btn'), function(btn) {
     btn.classList.toggle('active', btn.id === 'run-tabbtn-' + tabId);
   });
+}
+
+// Status label map for the unified Detection Validation tab. Deliberately
+// separate from vfStatusLabel (used by the analyst verification-review
+// queue elsewhere in this file) -- that one says "SILENT" for NotDetected,
+// a wording choice specific to that different audience. This tab uses the
+// generic DETECTED/MISSED/NOT RUN wording the user explicitly requested,
+// since this platform supports 6+ detection providers and "SIEM
+// DETECTED/MISSED" is too narrow now that detectverify's connectors
+// (Sentinel, Defender, Splunk, QRadar, CrowdStrike, Trellix) all feed in.
+var DV_STATUS_LABEL = {
+  Detected: 'DETECTED',
+  NotDetected: 'MISSED',
+  Pending: 'NOT RUN',
+  Unknown: 'NOT RUN'
+  // NotApplicable rows are filtered out before reaching this map -- see
+  // renderDetectionValidationTab's .filter() call below.
+};
+
+// renderDetectionValidationTab renders internal/reporting.DetectionValidationSection
+// (fetched as part of the shared report.json call) into the Detection
+// Validation tab. This section already overlays detectverify's Verification
+// Store attestations (Source=api, Provider=<connector>) on top of automatic
+// on-host verdicts server-side (internal/reporting/detection_validation.go)
+// -- this function only renders what's already been merged, it does not
+// merge anything itself.
+//
+// Falls back to the legacy per-run SIEM bulk-correlation panel
+// (loadSIEMCorrelationPanel, unchanged) when dv.hasData is false -- true for
+// roughly 3/4 of runs today, since most scenarios don't yet declare
+// detection_profiles. That fallback stays in place; this is additive, not
+// a replacement.
+function renderDetectionValidationTab(rep, run) {
+  var el = document.getElementById('rv-siem');
+  if (!el) return;
+  var runId = (run && run.id) || '';
+  var dv = rep && rep.detectionValidation;
+  if (!dv || !dv.hasData) {
+    loadSIEMCorrelationPanel(runId);
+    return;
+  }
+
+  var coverage = dv.coverage || 0;
+  var covColor = coverage >= 70 ? 'var(--success)' : coverage >= 40 ? 'var(--warning)' : 'var(--danger)';
+  // Miss rate: percentage of *resolved* (Detected or NotDetected) expectations
+  // that were NotDetected. Using dv.verified (not dv.expected) as the
+  // denominator so an in-flight run with many still-Pending expectations
+  // doesn't show an inflated miss rate for expectations nobody has checked
+  // yet -- Pending rows are "not run", not "missed".
+  var missRate = dv.verified > 0 ? Math.round(((dv.verified - dv.detected) / dv.verified) * 1000) / 10 : 0;
+  // "Verified Findings" = dv.detected: a technique-scoped count of
+  // expectations independently confirmed Detected, backed by connector/
+  // on-host evidence -- not a raw alert tally, which the user explicitly
+  // said not to present as if it were a detection-rate statistic.
+  var verifiedFindings = dv.detected || 0;
+
+  var sources = (rep.detectionSources || []).map(function(s) {
+    return '<span style="display:inline-flex;align-items:center;gap:0.3rem;background:var(--elevated);border:1px solid var(--border);border-radius:999px;padding:0.15rem 0.6rem;font-size:0.72rem;color:var(--text)">' +
+      '<span style="color:var(--success)">&#10003;</span>' + x(s.product) + '</span>';
+  }).join(' ');
+
+  var runTs = run && (run.completedAt || run.startedAt);
+  var metaParts = [];
+  if (runTs) metaParts.push('Verified: ' + new Date(runTs).toLocaleString());
+  if (run && run.agentId) metaParts.push('Agent: <code>' + x(run.agentId) + '</code>');
+
+  var rows = (dv.rows || [])
+    .filter(function(row) { return row.status !== 'NotApplicable'; })
+    .map(function(row) {
+      var label = DV_STATUS_LABEL[row.status] || (row.status || 'NOT RUN').toUpperCase();
+      var color = vfStatusColor(row.status);
+      var badge = '<span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '55;border-radius:3px;font-size:0.67rem;font-weight:700;padding:0.1rem 0.4rem">' + x(label) + '</span>';
+      var providerBadge = row.provider
+        ? '<span style="font-size:0.68rem;color:var(--muted);background:var(--elevated);border:1px solid var(--border);border-radius:3px;padding:0.03rem 0.3rem">' + x(row.provider) + '</span>'
+        : '<span style="color:var(--muted)">&mdash;</span>';
+      return '<tr><td style="font-family:monospace;font-size:0.72rem;padding:0.3rem 0.5rem">' + x(row.techniqueId) + '</td>' +
+             '<td style="padding:0.3rem 0.5rem">' + badge + '</td>' +
+             '<td style="padding:0.3rem 0.5rem">' + providerBadge + '</td>' +
+             '<td style="font-size:0.72rem;color:var(--muted);text-transform:capitalize;padding:0.3rem 0.5rem">' + x(row.domain || '') + '</td></tr>';
+    }).join('');
+
+  el.innerHTML =
+    '<div style="padding:1rem 0 0.5rem">' +
+      '<div style="display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap">' +
+        '<div style="text-align:center">' +
+          '<div style="font-size:1.7rem;font-weight:700;color:' + covColor + '">' + coverage + '%</div>' +
+          '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Detection Coverage</div>' +
+        '</div>' +
+        '<div style="text-align:center">' +
+          '<div style="font-size:1.7rem;font-weight:700;color:var(--danger)">' + missRate + '%</div>' +
+          '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Detection Miss Rate</div>' +
+        '</div>' +
+        '<div style="text-align:center">' +
+          '<div style="font-size:1.7rem;font-weight:700">' + verifiedFindings + '</div>' +
+          '<div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Verified Findings</div>' +
+        '</div>' +
+      '</div>' +
+      (sources ? '<div style="margin-bottom:0.5rem;font-size:0.7rem;color:var(--muted)">Verification source:</div><div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.75rem">' + sources + '</div>' : '') +
+      (metaParts.length ? '<div style="font-size:0.68rem;color:var(--muted);margin-bottom:0.75rem">' + metaParts.join(' &nbsp;|&nbsp; ') + '</div>' : '') +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.73rem">' +
+        '<thead><tr style="border-bottom:1px solid var(--border);color:var(--muted);font-size:0.67rem;text-align:left">' +
+          '<th style="padding:0.3rem 0.5rem">Technique</th>' +
+          '<th style="padding:0.3rem 0.5rem">Detection</th>' +
+          '<th style="padding:0.3rem 0.5rem">Source</th>' +
+          '<th style="padding:0.3rem 0.5rem">Domain</th>' +
+        '</tr></thead>' +
+        '<tbody>' + (rows || '<tr><td colspan="4" style="color:var(--muted);padding:1rem 0;text-align:center">No technique details available</td></tr>') + '</tbody>' +
+      '</table>' +
+    '</div>';
 }
 
 function loadSIEMCorrelationPanel(runId) {
