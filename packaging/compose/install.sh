@@ -116,6 +116,7 @@ fi
 # ── Config variables (populated by load_config) ───────────────────────────────
 DATA_DIR=""
 BAS_PORT=""
+DNS_SINK_BIND_IP=""
 BAS_TLS=""
 TLS_CERT=""
 TLS_KEY=""
@@ -161,6 +162,7 @@ load_config() {
     case "$key" in
       DATA_DIR)             DATA_DIR="$val"             ;;
       BAS_PORT)             BAS_PORT="$val"             ;;
+      DNS_SINK_BIND_IP)     DNS_SINK_BIND_IP="$val"     ;;
       BAS_TLS)              BAS_TLS="$val"              ;;
       TLS_CERT)             TLS_CERT="$val"             ;;
       TLS_KEY)              TLS_KEY="$val"              ;;
@@ -185,6 +187,13 @@ load_config() {
   # Defaults
   [[ -z "$DATA_DIR"           ]] && DATA_DIR="$DEFAULT_DATA_DIR"
   [[ -z "$BAS_PORT"           ]] && BAS_PORT="$DEFAULT_PORT"
+  # Auto-detect the DNS sink's bind IP: first non-loopback address `hostname
+  # -I` reports. Deliberately NOT a route-lookup (e.g. `ip route get`) --
+  # this must work identically on air-gapped hosts with no route to the
+  # internet, since it only reads local interface config, never sends a
+  # packet. See setup.conf.template's DNS_SINK_BIND_IP comment for why this
+  # can't be 0.0.0.0.
+  [[ -z "$DNS_SINK_BIND_IP"   ]] && DNS_SINK_BIND_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   [[ -z "$BAS_TLS"            ]] && BAS_TLS="false"
   [[ -z "$LOG_RETENTION_DAYS" ]] && LOG_RETENTION_DAYS="90"
   [[ -z "$BACKUP_RETENTION_DAILY"   ]] && BACKUP_RETENTION_DAILY="7"
@@ -205,6 +214,7 @@ load_config() {
   [[ ${#DB_PASSWORD}    -lt 8  ]] && { err "DB_PASSWORD must be at least 8 characters.";      exit 1; }
   [[ ${#ADMIN_PASSWORD} -lt 10 ]] && { err "ADMIN_PASSWORD must be at least 10 characters.";  exit 1; }
   [[ "$ADMIN_EMAIL" != *@*     ]] && { err "ADMIN_EMAIL must be a valid email address.";       exit 1; }
+  [[ -z "$DNS_SINK_BIND_IP"    ]] && { err "Could not auto-detect a host IP for DNS_SINK_BIND_IP (hostname -I returned nothing). Set DNS_SINK_BIND_IP explicitly in setup.conf."; exit 1; }
 
   # TLS cert paths
   if [[ "$BAS_TLS" == "true" ]]; then
@@ -366,6 +376,27 @@ _check_port() {
   fi
 }
 
+# Checks UDP/53 on the specific DNS_SINK_BIND_IP (not the wildcard address --
+# see setup.conf.template's DNS_SINK_BIND_IP comment). Binding to a specific
+# non-loopback IP means this only conflicts with something else that has
+# ALSO bound that exact IP:53/udp -- systemd-resolved's stub listener
+# (127.0.0.53/127.0.0.54, loopback-only) never collides with it. If this
+# still FAILs, a real service (not systemd-resolved) already owns that IP.
+_check_dns_sink_port() {
+  local bind_ip="$1"
+  if [[ -z "$bind_ip" ]]; then
+    echo "FAIL:DNS sink (UDP/53) -DNS_SINK_BIND_IP is empty, cannot check"
+    return
+  fi
+  if ss -ulnp 2>/dev/null | grep -q "${bind_ip}:53[[:space:]]"; then
+    local proc
+    proc=$(ss -ulnp 2>/dev/null | grep "${bind_ip}:53[[:space:]]" | grep -oP '"[^"]+"' | head -1 || echo "unknown")
+    echo "FAIL:DNS sink (UDP/53) -${bind_ip}:53 already in use by ${proc}"
+  else
+    echo "PASS:DNS sink (UDP/53) -${bind_ip}:53 available"
+  fi
+}
+
 _check_openssl() {
   command -v openssl &>/dev/null \
     && echo "PASS:openssl -$(openssl version 2>/dev/null | awk '{print $1,$2}')" \
@@ -475,16 +506,20 @@ mode_check() {
   # Disk and port checks use config values if supplied
   local check_dir="$DEFAULT_DATA_DIR"
   local check_port="$DEFAULT_PORT"
+  local check_dns_ip=""
   local check_cert="" check_key="" check_lic=""
   if [[ -n "$CONFIG_FILE" ]]; then
     load_config "$CONFIG_FILE" 2>/dev/null || true
     [[ -n "$DATA_DIR" ]] && check_dir="$DATA_DIR"
     [[ -n "$BAS_PORT" ]] && check_port="$BAS_PORT"
+    check_dns_ip="$DNS_SINK_BIND_IP"
     check_cert="$TLS_CERT"; check_key="$TLS_KEY"; check_lic="$LIC_PATH"
   fi
+  [[ -z "$check_dns_ip" ]] && check_dns_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 
   results+=( "$(_check_disk "$check_dir")" )
   results+=( "$(_check_port "$check_port")" )
+  results+=( "$(_check_dns_sink_port "$check_dns_ip")" )
   results+=( "$(_check_openssl)" )
   results+=( "$(_check_bundle_integrity)" )
   if [[ -n "$check_cert" || -n "$CONFIG_FILE" ]]; then results+=( "$(_check_tls_certs "$check_cert" "$check_key")" ); fi
@@ -529,6 +564,7 @@ mode_install() {
   results+=( "$(_check_cpu)" )
   results+=( "$(_check_disk "$DATA_DIR")" )
   results+=( "$(_check_port "$BAS_PORT")" )
+  results+=( "$(_check_dns_sink_port "$DNS_SINK_BIND_IP")" )
   results+=( "$(_check_openssl)" )
   results+=( "$(_check_bundle_integrity)" )
   if [[ "$BAS_TLS" == "true" ]]; then results+=( "$(_check_tls_certs "$TLS_CERT" "$TLS_KEY")" ); fi
@@ -1014,6 +1050,7 @@ BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 BAS_ADMIN_EMAIL=${ADMIN_EMAIL}
 LICENSE_FILE=${LICENSE_FILE:-bas.lic}
 BAS_PORT=${BAS_PORT}
+DNS_SINK_BIND_IP=${DNS_SINK_BIND_IP}
 BAS_TLS=${BAS_TLS}
 TLS_CERT=${TLS_CERT:-}
 TLS_KEY=${TLS_KEY:-}
@@ -1306,17 +1343,33 @@ _wait_healthy() {
   _diagnose_orchestrator_failure
 }
 
-# _diagnose_orchestrator_failure runs targeted checks for the exact failure
-# mode hit in production 2026-08-20 (HDFC): a port-bind conflict left the
-# orchestrator container with NO network attached at all (not a DNS/config
-# problem -- Docker aborts the whole network setup when a published port
-# fails to bind), which just looked like a generic DB-connect crash-loop
-# until someone manually worked through `docker inspect`/`journalctl` by
-# hand. Surface the same diagnosis automatically instead of requiring that
-# again. Deliberately does NOT restart the Docker daemon automatically --
-# that's the actual fix for a stale port reservation, but it briefly stops
-# every container on the host, including anything else sharing it; that's
-# an operator decision, not something this script should do unattended.
+# _diagnose_orchestrator_failure runs targeted checks for the failure mode
+# hit in production 2026-08-20 AND AGAIN 2026-08-24 (both HDFC, both port
+# 53/udp): a port-bind conflict left the orchestrator container with NO
+# network attached at all (not a DNS/config problem -- Docker aborts the
+# whole network setup when a published port fails to bind), which just
+# looked like a generic DB-connect crash-loop until someone manually worked
+# through `docker inspect`/`journalctl` by hand.
+#
+# 2026-08-24 root-caused the RECURRING trigger: the port was published as
+# "53:53/udp" (the 0.0.0.0 wildcard), which conflicts at the kernel level
+# with systemd-resolved's stub listener (127.0.0.53/.54:53, loopback-only --
+# Linux won't let a wildcard and a specific-address bind coexist on one
+# port). Fixed structurally: the port is now published against a specific
+# host IP (DNS_SINK_BIND_IP, auto-detected in load_config, see
+# setup.conf.template) instead of the wildcard, so it can never overlap
+# with a loopback-scoped listener again -- this also removes the 2026-08-20
+# "stale reservation" case's actual trigger, since that was a stale
+# reservation FOR THE WILDCARD BIND specifically; a differently-addressed
+# bind request doesn't reuse the same stale entry. This function stays as
+# defense-in-depth (e.g. DNS_SINK_BIND_IP genuinely colliding with a real
+# service on that IP), not the primary line of defense anymore.
+#
+# Deliberately does NOT restart the Docker daemon automatically -- that was
+# the 2026-08-20 workaround for a stale port reservation, but it briefly
+# stops every container on the host, including anything else sharing it;
+# that's an operator decision, not something this script should do
+# unattended.
 _diagnose_orchestrator_failure() {
   echo ""
   echo "  --  Orchestrator diagnostics  -----------------------------------"

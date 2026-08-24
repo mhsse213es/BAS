@@ -29,6 +29,22 @@ BAS_HOST=                         # ← REQUIRED  e.g. bas.corp.internal
 BAS_PORT=9443                     # Default: 9443
 BAS_TLS=false                     # true | false
 
+# DNS_SINK_BIND_IP is the host IP the DLP DNS-tunneling sink (UDP/53) binds
+# to. Auto-detected (first non-loopback IP via `hostname -I`) if left blank.
+# It is deliberately NOT bound to 0.0.0.0 (all interfaces): on most Linux
+# hosts, systemd-resolved already listens on 127.0.0.53/127.0.0.54:53, and a
+# wildcard bind on the same port conflicts with that (Linux won't let a
+# wildcard and a specific-address bind coexist on one port), which prevents
+# the orchestrator container's network from attaching at all and crash-loops
+# it with a "postgres" DNS-resolution failure. Binding to a specific,
+# non-loopback host IP avoids the conflict entirely -- and is more correct
+# anyway, since the DNS sink only needs to receive queries from BAS agents
+# over the real network, never via loopback. Override only if this host is
+# multi-homed and `hostname -I`'s first entry isn't the address agents use
+# to reach it.
+
+DNS_SINK_BIND_IP=                 # Auto-detected if blank (recommended)
+
 # ── [tls] ──────────────────────────────────────────────────────────────────────
 # Required only when BAS_TLS=true. Paths are on the SERVER (not the bundle).
 # The installer copies these files into ${DATA_DIR}/certs/ and sets chmod 640.

@@ -177,7 +177,16 @@ services:
       - ${SHARPHOUND_DIR:-./sharphound}:/sharphound:ro
     ports:
       - "${BAS_PORT:-9443}:9443"
-      - "53:53/udp"
+      # Bound to a specific host IP, never the 0.0.0.0 wildcard: most Linux
+      # hosts run systemd-resolved's stub listener on 127.0.0.53/.54:53, and
+      # a wildcard bind on the same port conflicts with that at the kernel
+      # level (a wildcard and a specific-address bind can't coexist on one
+      # port) -- Docker then fails to attach this container's network
+      # endpoint AT ALL, which crash-loops the orchestrator on a "postgres"
+      # DNS-resolution failure that looks unrelated to port 53. install.sh
+      # resolves DNS_SINK_BIND_IP (see setup.conf.template) before writing
+      # .env; there is no safe wildcard default here on purpose.
+      - "${DNS_SINK_BIND_IP}:53:53/udp"
     networks:
       - bas-internal
     restart: unless-stopped
