@@ -667,6 +667,72 @@ func TestParseYAML_RBICSCFDrill(t *testing.T) {
 	}
 }
 
+func TestParseYAML_EntraHybridIdentityAttack(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "entra-hybrid-identity-attack.yaml"))
+	if err != nil {
+		t.Fatalf("read scenario file: %v", err)
+	}
+	sc, err := ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if sc.ID != "entra-hybrid-identity-attack" {
+		t.Fatalf("id = %q, want entra-hybrid-identity-attack", sc.ID)
+	}
+	if !sc.Executable {
+		t.Fatalf("expected executable: true")
+	}
+	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
+		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
+	}
+	if len(sc.Steps) != 6 {
+		t.Fatalf("steps = %d, want 6", len(sc.Steps))
+	}
+	type wantStep struct {
+		technique   string
+		framework   string
+		testIndex   int // only meaningful when framework == "art"
+		isExecution bool
+	}
+	wantSteps := []wantStep{
+		{"T1082", "custom", -1, false},
+		{"T1528", "custom", -1, false},
+		{"T1539", "art", 3, true},
+		{"T1555.003", "art", 0, true},
+		{"T1550.001", "custom", -1, false},
+		{"T1556.007", "custom", -1, false},
+	}
+	for i, want := range wantSteps {
+		st := sc.Steps[i]
+		if st.TechniqueID != want.technique {
+			t.Errorf("step %d technique_id = %q, want %q", i, st.TechniqueID, want.technique)
+		}
+		if st.Framework != want.framework {
+			t.Errorf("step %d framework = %q, want %q", i, st.Framework, want.framework)
+		}
+		if want.framework == "art" && st.TestIndex != want.testIndex {
+			t.Errorf("step %d test_index = %d, want %d", i, st.TestIndex, want.testIndex)
+		}
+		if want.framework == "custom" && st.Command == "" {
+			t.Errorf("step %d (custom) has an empty command", i)
+		}
+		// Condition-check steps must never touch/read real cached credential
+		// or token content -- only Test-Path/Get-Service existence checks.
+		if !want.isExecution && want.framework == "custom" {
+			if strings.Contains(st.Command, "Get-Content") || strings.Contains(st.Command, "[IO.File]::ReadAllBytes") {
+				t.Errorf("step %d is a condition check but reads file content -- must be existence-only (Test-Path)", i)
+			}
+		}
+		wantLabel := "Condition Check"
+		if want.isExecution {
+			wantLabel = "Execution"
+		}
+		if !strings.Contains(st.Name, wantLabel) {
+			t.Errorf("step %d name = %q, want it to say %q", i, st.Name, wantLabel)
+		}
+	}
+}
+
 func TestParseYAML_DLPExfiltrationValidation(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "dlp-exfiltration-validation.yaml"))
 	if err != nil {

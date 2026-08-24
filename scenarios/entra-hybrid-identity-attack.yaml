@@ -1,0 +1,213 @@
+id: entra-hybrid-identity-attack
+name: Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure
+description: >
+  Six-stage emulation of identity-attack tradecraft against Entra ID (Azure
+  AD) / M365-hybrid-joined Windows endpoints -- the realistic cloud-identity
+  attack surface for an on-prem BFSI workstation, as opposed to techniques
+  that only apply when the endpoint itself is a cloud-hosted VM (see the
+  separate, environment-conditional Cloud VM pack).
+
+  Two of six stages are real execution techniques (T1539 browser session
+  cookie theft, T1555.003 browser credential theft); four are hand-authored
+  CONDITION CHECKS that discover the local attack surface (Entra join state,
+  cached MSAL/WAM token artifacts, hybrid-identity bridge exposure) without
+  performing a live token-theft/decryption or a real OAuth illicit-consent-
+  grant flow, both of which need real Entra tenant admin API access this
+  platform does not have. Condition-check steps are explicitly labeled
+  "Condition Check" in their step name and must not be scored as equivalent
+  to the execution steps.
+
+  Verified against real upstream Atomic Red Team content before designing:
+  T1528 (Steal Application Access Token) and T1526 (Cloud Service Discovery)
+  -- the techniques a first guess would reach for -- have real atomics only
+  for Azure/AWS control-plane operations (Functions code injection, MicroBurst
+  subscription dumps), making them Cloud-VM-pack material, not relevant to an
+  on-prem endpoint. T1550.001 (Application Access Token reuse), T1087.004
+  (Cloud Account Discovery), T1556.007 (Hybrid Identity), T1621 (MFA Request
+  Generation), and T1538 (Cloud Service Dashboard) have zero real atomics
+  upstream at all.
+
+  Expected verdicts:
+    PASS  = EDR/SIEM detected the technique (or, for condition checks, the
+            enumeration itself)
+    FAIL  = the technique executed, or the discovered surface is exposed,
+            without generating an alert
+    SKIP  = a required prerequisite (e.g. Chrome not installed) is absent
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - entra-id
+  - azure-ad
+  - m365
+  - hybrid-identity
+  - identity-attack
+  - cloud
+  - bfsi
+  - t1539
+  - t1555
+  - t1528
+  - t1550
+  - t1556
+  - mitre-attack
+mitre_phases:
+  - discovery
+  - credential-access
+  - defense-evasion
+
+steps:
+  # ── Stage 1 — Entra ID Join & Device Identity Discovery (hand-authored:
+  #    no ART atomic exists for dsregcmd-based join-state discovery) ────────
+  - name: "Stage 1 - Condition Check: Entra ID Join & Device Identity Discovery (T1082)"
+    technique_id: T1082
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Runs dsregcmd /status (read-only) and parses AzureAdJoined/DomainJoined/TenantId/DeviceId/TenantName from its output. No state change, no credentials accessed."
+    telemetry:
+      - "Sysmon EID 1: dsregcmd.exe spawned by powershell.exe"
+      - "Security EID 4688: dsregcmd.exe process creation"
+    detection:
+      - "EDR: dsregcmd.exe invoked outside a device-management/support-tool context -- hybrid-identity recon signal"
+      - "SIEM: dsregcmd /status output parsing from a scripted parent process"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $out = & dsregcmd /status 2>&1 | Out-String
+      $azureAdJoined = ($out -match 'AzureAdJoined\s*:\s*YES')
+      $domainJoined = ($out -match 'DomainJoined\s*:\s*YES')
+      $tenantMatch = [regex]::Match($out, 'TenantName\s*:\s*(\S.*)')
+      $tenantName = if ($tenantMatch.Success) { $tenantMatch.Groups[1].Value.Trim() } else { 'unknown' }
+      Write-Output "EXEC T1082: dsregcmd /status parsed -- AzureAdJoined=$azureAdJoined, DomainJoined=$domainJoined, TenantName=$tenantName. [BAS-SIM-ENTRA-S1]"
+      if ($azureAdJoined -or $domainJoined) {
+        Write-Output "FAIL: device identity state (Entra-joined=$azureAdJoined, hybrid-domain-joined=$domainJoined) was enumerated without interference -- this is the precondition attackers check before pursuing PRT/WAM token theft on a hybrid-joined endpoint."
+      } else {
+        Write-Output "PASS: endpoint is neither Entra-joined nor domain-joined -- the hybrid-identity attack surface this pack targets does not apply here."
+      }
+    cleanup: ""
+
+  # ── Stage 2 — Cached M365/Entra Identity Artifact Discovery (hand-
+  #    authored: existence-only check, never decrypts token contents) ──────
+  - name: "Stage 2 - Condition Check: Cached M365/Entra Identity Artifact Discovery (T1528)"
+    technique_id: T1528
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Checks for the EXISTENCE of well-documented WAM/MSAL token-cache locations (Test-Path only -- never opens, reads, or decrypts any cache file) and Office identity registry keys. No credentials or tokens are accessed."
+    telemetry:
+      - "Sysmon EID 11 (if FileCreate auditing extends to reads is not applicable -- this step never opens the files)"
+      - "Security EID 4663 (object access) if SACL auditing is configured on the WAM token-cache directory"
+    detection:
+      - "EDR: enumeration of WAM/TokenBroker cache directory by a non-Microsoft-signed process"
+      - "SIEM: scripted registry read of Office identity keys -- precedes real T1528/T1550.001 token theft"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $wamCache = Test-Path "$env:LOCALAPPDATA\Microsoft\TokenBroker\Cache"
+      $identityServiceCache = Test-Path "$env:LOCALAPPDATA\.IdentityService"
+      $officeIdentityKey = Test-Path "HKCU:\Software\Microsoft\Office\16.0\Common\Identity\Identities"
+      $found = @()
+      if ($wamCache) { $found += "WAM-TokenBroker-Cache" }
+      if ($identityServiceCache) { $found += ".IdentityService-cache" }
+      if ($officeIdentityKey) { $found += "Office-Identity-registry-key" }
+      Write-Output "EXEC T1528: cached identity artifact locations checked (existence only, no content read). Found: $($found -join ', '). [BAS-SIM-ENTRA-S2]"
+      if ($found.Count -gt 0) {
+        Write-Output "FAIL: $($found.Count) cached M365/Entra identity artifact location(s) exist on this endpoint and were enumerated without interference -- these are exactly what a real T1528/T1550.001 token-theft tool targets."
+      } else {
+        Write-Output "PASS: no known WAM/MSAL/Office identity cache locations were found on this endpoint."
+      }
+    cleanup: ""
+
+  # ── Stage 3 — Browser-Cached M365 Session Cookie Theft (real ART atomic,
+  #    T1539 test 3: no dependencies, Chrome v127+ remote-debugging method) ─
+  - name: "Stage 3 - Execution: Browser-Cached M365 Session Cookie Theft (T1539)"
+    technique_id: T1539
+    framework: art
+    test_index: 3
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 4 — Browser-Cached Credential Theft (real ART atomic, same
+  #    technique+test_index already proven in scenarios/apt36-spearphish.yaml) ─
+  - name: "Stage 4 - Execution: Browser-Cached M365 Credential Theft (T1555.003)"
+    technique_id: T1555.003
+    framework: art
+    test_index: 0
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 5 — OAuth Application Consent Artifact Discovery (hand-
+  #    authored: existence-only check; a real illicit-consent-grant flow
+  #    needs live Entra tenant admin API access this platform doesn't have) ─
+  - name: "Stage 5 - Condition Check: OAuth Application Consent Artifact Discovery (T1550.001)"
+    technique_id: T1550.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Checks for the EXISTENCE of known Teams/OneDrive MSAL token-cache locations (Test-Path only -- never opens, reads, or decrypts any cache file). No credentials or tokens are accessed, and no OAuth consent flow is initiated against any real Entra tenant."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe enumerating Teams/OneDrive local storage paths"
+    detection:
+      - "EDR: enumeration of Teams/OneDrive MSAL cache locations by a non-Microsoft-signed process -- precedes real T1550.001 token reuse"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $teamsCookies = Test-Path "$env:APPDATA\Microsoft\Teams\Cookies"
+      $oneDriveIdentity = Test-Path "$env:LOCALAPPDATA\Microsoft\OneDrive\settings"
+      $found = @()
+      if ($teamsCookies) { $found += "Teams-Cookies" }
+      if ($oneDriveIdentity) { $found += "OneDrive-identity-settings" }
+      Write-Output "EXEC T1550.001: OAuth-application-adjacent cache locations checked (existence only, no content read, no live consent flow attempted). Found: $($found -join ', '). [BAS-SIM-ENTRA-S5]"
+      if ($found.Count -gt 0) {
+        Write-Output "FAIL: $($found.Count) OAuth-application-adjacent cache location(s) exist and were enumerated without interference -- represents the local surface a real illicit-consent-grant / application-token-reuse attack would target."
+      } else {
+        Write-Output "PASS: no known Teams/OneDrive MSAL-adjacent cache locations were found on this endpoint."
+      }
+    cleanup: ""
+
+  # ── Stage 6 — Hybrid Identity Bridge Exposure (hand-authored: T1556.007
+  #    has zero real atomics upstream; checks for the real, documented
+  #    AzureADConnectAuthenticationAgentService PTA-agent target -- see
+  #    MITRE T1556.007, procedure example AADInternals/PTASpy) ─────────────
+  - name: "Stage 6 - Condition Check: Hybrid Identity Bridge Exposure (T1556.007)"
+    technique_id: T1556.007
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Queries the status of two well-known Windows services (Get-Service, read-only). No DLL injection, no service modification, no credential access. Most endpoints will not have either service and will PASS."
+    telemetry:
+      - "Security EID 4688: powershell.exe with Get-Service arguments naming ADSync/AzureADConnectAuthenticationAgentService"
+    detection:
+      - "EDR: enumeration of hybrid-identity-bridge service names -- precedes real T1556.007 PTA-agent DLL injection (AADInternals/PTASpy pattern)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $adSync = Get-Service -Name 'ADSync' -ErrorAction SilentlyContinue
+      $ptaAgent = Get-Service -Name 'AzureADConnectAuthenticationAgentService' -ErrorAction SilentlyContinue
+      $adSyncRunning = [bool]($adSync -and $adSync.Status -eq 'Running')
+      $ptaRunning = [bool]($ptaAgent -and $ptaAgent.Status -eq 'Running')
+      Write-Output "EXEC T1556.007: hybrid-identity-bridge services checked -- Azure AD Connect (ADSync) running=$adSyncRunning, Pass-Through Authentication agent running=$ptaRunning. [BAS-SIM-ENTRA-S6]"
+      if ($adSyncRunning -or $ptaRunning) {
+        Write-Output "FAIL: this endpoint runs a hybrid-identity bridge service (ADSync=$adSyncRunning, PTA-agent=$ptaRunning) and its status was enumerated without interference. Per MITRE T1556.007, compromising this host lets an attacker inject a malicious DLL into the authentication path and authorise ALL Entra ID sign-in attempts (the real-world AADInternals/PTASpy technique) -- this endpoint should be treated as Tier-0."
+      } else {
+        Write-Output "PASS: no Azure AD Connect / Pass-Through Authentication agent found on this endpoint -- the hybrid-identity-bridge attack surface does not apply here."
+      }
+    cleanup: ""
