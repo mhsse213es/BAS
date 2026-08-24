@@ -527,8 +527,13 @@ func GenerateHTML(w io.Writer, r *FullReport, compliance []ComplianceSummaryRow)
 		return err
 	}
 	_logoLoadOnce.Do(_loadLogos)
-	data["logoLightUri"] = _logoLight
-	data["logoDarkUri"] = _logoDark
+	// template.URL marks these base64 data: URIs as pre-vetted safe for a src=
+	// attribute. Without it, html/template's contextual auto-escaper treats a
+	// plain string in a URL context as untrusted and silently replaces the
+	// entire value with "#ZgotmplZ" — a valid-looking but broken URL, which is
+	// exactly why the cover-page logo rendered as a broken image.
+	data["logoLightUri"] = template.URL(_logoLight)
+	data["logoDarkUri"] = template.URL(_logoDark)
 
 	var buf bytes.Buffer
 	if err := reportTmpl.Execute(&buf, data); err != nil {

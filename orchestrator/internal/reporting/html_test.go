@@ -222,3 +222,30 @@ func TestGenerateHTML_IncludesTableOfContents(t *testing.T) {
 		t.Error("expected Executive Summary section title to still render")
 	}
 }
+
+// TestGenerateHTMLCoverLogoNotSanitized guards against a regression where the
+// cover-page logo silently renders as a broken image: a base64 data: URI
+// interpolated into a src="..." attribute as a plain Go string is untyped as
+// far as html/template's contextual auto-escaper is concerned, so it gets
+// replaced wholesale with the literal "#ZgotmplZ" placeholder instead of the
+// real image data. The fix marks the value as template.URL; this test asserts
+// that placeholder never appears and, when the logo files are present on this
+// host (they are, at orchestrator/wwwroot/images/logo.png), the <img> tag
+// carries genuine base64 PNG data.
+func TestGenerateHTMLCoverLogoNotSanitized(t *testing.T) {
+	var buf bytes.Buffer
+	if err := GenerateHTML(&buf, &FullReport{}, nil); err != nil {
+		t.Fatalf("GenerateHTML: %v", err)
+	}
+	out := buf.String()
+
+	if strings.Contains(out, "ZgotmplZ") {
+		t.Fatal("output contains the html/template unsafe-URL sanitizer placeholder (#ZgotmplZ) — the logo data: URI is not typed as template.URL")
+	}
+	if _logoDark == "" {
+		t.Skip("logo.png not found on this host (wwwroot/images/logo.png) — sanitizer-placeholder check above already covers the regression")
+	}
+	if !strings.Contains(out, `<img src="data:image/png;base64,`) {
+		t.Error("expected cover logo <img> to carry a real base64 PNG data URI")
+	}
+}
