@@ -19382,7 +19382,11 @@ function _vexDispatchFullSweep(targets) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agentId: agentId, mode: mode, includeAdvanced: advanced })
-  }).then(function() {
+  }).then(function(res) {
+    // apicall() only rejects on 401 -- every other status (including a 409
+    // conflict) resolves with the {error:...} body, so that shape must be
+    // checked explicitly or a rejected dispatch silently does nothing.
+    if (res && res.error) { showToast(res.error, 'err'); return; }
     pollVexSweeps(); // render the new sweep immediately instead of waiting up to 3s for the next tick
   }).catch(function(e) {
     showToast(e.message || 'Failed to start sweep', 'err');
