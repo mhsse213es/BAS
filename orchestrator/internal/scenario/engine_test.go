@@ -733,6 +733,59 @@ func TestParseYAML_EntraHybridIdentityAttack(t *testing.T) {
 	}
 }
 
+func TestParseYAML_OutlookRulesBEC(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "outlook-rules-bec.yaml"))
+	if err != nil {
+		t.Fatalf("read scenario file: %v", err)
+	}
+	sc, err := ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if sc.ID != "outlook-rules-bec" {
+		t.Fatalf("id = %q, want outlook-rules-bec", sc.ID)
+	}
+	if !sc.Executable {
+		t.Fatalf("expected executable: true")
+	}
+	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
+		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
+	}
+	if len(sc.Steps) != 5 {
+		t.Fatalf("steps = %d, want 5", len(sc.Steps))
+	}
+	// Every stage is technique_id T1137.005, framework:art, but at a
+	// different test_index -- the security-objective ordering the user
+	// specified (discovery -> evidence hiding -> targeted suppression ->
+	// BEC exfiltration -> defense evasion), not the atomic file's own order.
+	wantTestIndices := []int{3, 0, 1, 2, 4}
+	for i, want := range wantTestIndices {
+		st := sc.Steps[i]
+		if st.TechniqueID != "T1137.005" {
+			t.Errorf("step %d technique_id = %q, want T1137.005", i, st.TechniqueID)
+		}
+		if st.Framework != "art" {
+			t.Errorf("step %d framework = %q, want art", i, st.Framework)
+		}
+		if st.TestIndex != want {
+			t.Errorf("step %d test_index = %d, want %d", i, st.TestIndex, want)
+		}
+		if st.RequiresPriv.Minimum != "user" {
+			t.Errorf("step %d requires_priv = %q, want user -- Outlook COM fails when elevated", i, st.RequiresPriv.Minimum)
+		}
+	}
+	wantStageLabels := []string{
+		"Stage 1 - Rule Discovery", "Stage 2 - Evidence Hiding",
+		"Stage 3 - Targeted Communication Suppression", "Stage 4 - BEC / Mail Exfiltration",
+		"Stage 5 - Defense Evasion",
+	}
+	for i, want := range wantStageLabels {
+		if !strings.Contains(sc.Steps[i].Name, want) {
+			t.Errorf("step %d name = %q, want it to start with %q", i, sc.Steps[i].Name, want)
+		}
+	}
+}
+
 func TestParseYAML_DLPExfiltrationValidation(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "dlp-exfiltration-validation.yaml"))
 	if err != nil {

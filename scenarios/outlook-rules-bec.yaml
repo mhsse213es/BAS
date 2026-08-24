@@ -1,0 +1,111 @@
+id: outlook-rules-bec
+name: Outlook Rules / BEC  -  Malicious Inbox Rule & Business Email Compromise Simulation
+description: >
+  Five-stage emulation of T1137.005 (Office Application Startup: Outlook
+  Rules), the real technique behind both the "BEC" and "malicious inbox/
+  mail-forwarding rules" items on the roadmap -- all five atomics are real,
+  unmodified upstream Atomic Red Team content, executed via Outlook COM
+  automation against the endpoint's own already-configured Outlook profile.
+  No Exchange Online, Graph API, tenant admin, or cloud credentials are
+  required or used anywhere in this scenario.
+
+  Each stage targets a distinct security objective, not an arbitrary atomic
+  pick:
+    1. Rule Discovery            -- attacker reconnaissance before implanting
+                                     a rule (this is attacker BEHAVIOR being
+                                     simulated, not test setup)
+    2. Evidence Hiding            -- subject-keyword auto-delete rule
+    3. Targeted Comm. Suppression -- sender-address auto-delete rule (hiding
+                                     replies from a specific victim)
+    4. BEC / Mail Exfiltration    -- external auto-forward rule, the classic
+                                     real-world BEC pattern
+    5. Defense Evasion            -- rule with a zero-width-space name,
+                                     invisible in the standard Outlook Rules
+                                     UI (the MAPI-editor/Ruler hiding pattern)
+
+  HONEST SCOPE: Stage 4 proves the endpoint CAN establish the mail-forwarding
+  component of a BEC scenario and lets the security stack demonstrate
+  whether that activity is detected/responded to -- it does not prove
+  enterprise-wide BEC detection (mail-flow rules, Secure Score alerts, and
+  tenant-level anomaly detection are outside what a single endpoint can
+  exercise). T1114.003/T1114.002/T1098.002 (email forwarding via Exchange
+  Online, remote mail collection, mailbox delegate permissions) were
+  deliberately excluded: their real ART atomics require a live, authenticated
+  Exchange Online PowerShell admin session against a real tenant, which this
+  platform's endpoint-only agent architecture does not have.
+
+  Prerequisite: Windows endpoint with Classic Microsoft Outlook installed
+  and an existing configured Outlook profile. New Outlook is NOT supported
+  -- these atomics rely on Outlook COM automation, which the new Outlook for
+  Windows does not implement. Expect a step ERROR (not a clean SKIP -- this
+  platform has no software-presence prerequisite-skip mechanism) on an
+  endpoint without Classic Outlook configured.
+
+  IMPORTANT: every test in this scenario MUST run from a non-elevated
+  (standard user) PowerShell session -- Outlook COM fails with 0x80080005
+  when invoked as Administrator.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - outlook
+  - bec
+  - business-email-compromise
+  - inbox-rules
+  - mail-forwarding
+  - phishing
+  - t1137
+  - t1137.005
+  - mitre-attack
+mitre_phases:
+  - discovery
+  - persistence
+  - collection
+  - exfiltration
+  - defense-evasion
+
+steps:
+  # ── Stage 1 — Rule Discovery (attacker reconnaissance, not test setup) ──
+  - name: "Stage 1 - Rule Discovery: Enumerate Existing Outlook Rules (T1137.005)"
+    technique_id: T1137.005
+    framework: art
+    test_index: 3
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 2 — Evidence Hiding: subject-keyword auto-delete rule ─────────
+  - name: "Stage 2 - Evidence Hiding: Subject-Trigger Auto-Delete Rule (T1137.005)"
+    technique_id: T1137.005
+    framework: art
+    test_index: 0
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 3 — Targeted Communication Suppression: sender-address rule ──
+  - name: "Stage 3 - Targeted Communication Suppression: Sender-Trigger Auto-Delete Rule (T1137.005)"
+    technique_id: T1137.005
+    framework: art
+    test_index: 1
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 4 — BEC / Mail Exfiltration: external auto-forward rule ──────
+  - name: "Stage 4 - BEC / Mail Exfiltration: External Auto-Forward Rule (T1137.005)"
+    technique_id: T1137.005
+    framework: art
+    test_index: 2
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 5 — Defense Evasion: hidden rule, zero-width-space name ──────
+  - name: "Stage 5 - Defense Evasion: Hidden Rule with Obfuscated Blank Name (T1137.005)"
+    technique_id: T1137.005
+    framework: art
+    test_index: 4
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
