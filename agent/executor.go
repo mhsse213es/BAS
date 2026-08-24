@@ -95,6 +95,11 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 
 	before := time.Now()
 
+	var preCleanupSnap *SystemSnapshot
+	if step.Cleanup != "" {
+		preCleanupSnap = captureSnapshotLite(step.TaskID)
+	}
+
 	// Fast path: read-only PowerShell discovery steps run on a warm pooled host,
 	// skipping per-step process cold start. Each runs in a fresh runspace, so it is
 	// isolated from other steps. A pool miss (ok=false) falls through to the robust
@@ -104,6 +109,8 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 			r.Events = collectRecentEvents(parentCtx, before)
 			if step.Cleanup != "" {
 				r.CleanupVerdict = runCleanup(step)
+				r.CleanupResidual, r.CleanupVerdict = reconcileCleanupVerdict(
+					preCleanupSnap, captureSnapshotLite(step.TaskID), r.CleanupVerdict)
 			}
 			// Pooled steps are observation-risk discovery running in the agent's
 			// own context. Record what was requested vs what ran.
@@ -279,6 +286,8 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 
 	if step.Cleanup != "" {
 		result.CleanupVerdict = runCleanup(step)
+		result.CleanupResidual, result.CleanupVerdict = reconcileCleanupVerdict(
+			preCleanupSnap, captureSnapshotLite(step.TaskID), result.CleanupVerdict)
 	}
 
 	return result

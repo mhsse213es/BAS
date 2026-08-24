@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -56,6 +57,21 @@ func TestReconcileCleanupVerdict(t *testing.T) {
 				t.Errorf("len(residual) = %d, want %d (residual=%v)", len(residual), c.wantResidual, residual)
 			}
 		})
+	}
+}
+
+// TestExecStep_NoCleanupNeverSnapshots documents the invariant that
+// preCleanupSnap (and therefore both captureSnapshotLite calls) are gated
+// behind step.Cleanup != "" — a step with no cleanup script must never pay
+// the snapshot cost. Enforced by code inspection here rather than an
+// integration run of execStep, which needs a real process/pool.
+func TestExecStep_NoCleanupNeverSnapshots(t *testing.T) {
+	src, err := os.ReadFile("executor.go")
+	if err != nil {
+		t.Fatalf("read executor.go: %v", err)
+	}
+	if !strings.Contains(string(src), "if step.Cleanup != \"\" {\n\t\tpreCleanupSnap = captureSnapshotLite") {
+		t.Error("preCleanupSnap must only be captured when step.Cleanup != \"\"")
 	}
 }
 
