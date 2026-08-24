@@ -786,6 +786,62 @@ func TestParseYAML_OutlookRulesBEC(t *testing.T) {
 	}
 }
 
+func TestParseYAML_CloudVMAttack(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "cloud-vm-attack.yaml"))
+	if err != nil {
+		t.Fatalf("read scenario file: %v", err)
+	}
+	sc, err := ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if sc.ID != "cloud-vm-attack" {
+		t.Fatalf("id = %q, want cloud-vm-attack", sc.ID)
+	}
+	if !sc.Executable {
+		t.Fatalf("expected executable: true")
+	}
+	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
+		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
+	}
+	if len(sc.Steps) != 5 {
+		t.Fatalf("steps = %d, want 5", len(sc.Steps))
+	}
+	wantTechniques := []string{"T1552.005", "T1550.001", "T1552.005", "T1550.001", "T1552.001"}
+	for i, want := range wantTechniques {
+		st := sc.Steps[i]
+		if st.TechniqueID != want {
+			t.Errorf("step %d technique_id = %q, want %q", i, st.TechniqueID, want)
+		}
+		if st.Framework != "custom" {
+			t.Errorf("step %d framework = %q, want custom", i, st.Framework)
+		}
+		if st.Command == "" {
+			t.Errorf("step %d has an empty command", i)
+		}
+	}
+	// Stages 1-4 are cloud-specific and must self-report SKIP when their
+	// target metadata service is unreachable -- this is the entire
+	// environment-conditional mechanism (no server-side cloud detector).
+	// Stage 5 (index 4) is cloud-agnostic and has no SKIP branch.
+	for i := range 4 {
+		if !strings.Contains(sc.Steps[i].Command, "SKIP:") {
+			t.Errorf("step %d (cloud-specific) has no SKIP: branch -- must self-report when its metadata service is unreachable", i)
+		}
+	}
+	// No step may depend on another step's output -- this engine has no
+	// step-to-step state passing, so every cloud-specific step performs its
+	// own independent reachability check.
+	azureIMDS := "169.254.169.254/metadata"
+	awsIMDS := "169.254.169.254/latest"
+	if !strings.Contains(sc.Steps[0].Command, azureIMDS) || !strings.Contains(sc.Steps[1].Command, azureIMDS) {
+		t.Error("both Azure stages (0, 1) must independently query the Azure IMDS endpoint")
+	}
+	if !strings.Contains(sc.Steps[2].Command, awsIMDS) || !strings.Contains(sc.Steps[3].Command, awsIMDS) {
+		t.Error("both AWS stages (2, 3) must independently query the AWS IMDS endpoint")
+	}
+}
+
 func TestParseYAML_DLPExfiltrationValidation(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "dlp-exfiltration-validation.yaml"))
 	if err != nil {

