@@ -5044,6 +5044,7 @@ func (h *Handler) GetRunReportData(w http.ResponseWriter, r *http.Request) {
 		"cleanupFailed":          report.CleanupFailed,
 		"cleanupFailedCount":     report.CleanupFailedCount,
 		"reverted":               report.Reverted,
+		"envRestoration":         report.EnvRestoration,
 	})
 }
 

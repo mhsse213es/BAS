@@ -123,6 +123,7 @@ type reportRunOpts struct {
 	Name              string
 	Results           []models.SimulationResult
 	TechniqueOverride string
+	Reverted          []string
 }
 
 // seedReportableRun inserts a rich agents row (all report-relevant columns
@@ -163,6 +164,10 @@ func seedReportableRun(t *testing.T, pool *pgxpool.Pool, runID, agentID string, 
 	if err != nil {
 		t.Fatalf("marshal results: %v", err)
 	}
+	revertedJSON, err := json.Marshal(opts.Reverted)
+	if err != nil {
+		t.Fatalf("marshal reverted: %v", err)
+	}
 
 	status := opts.Status
 	if status == "" {
@@ -184,12 +189,12 @@ func seedReportableRun(t *testing.T, pool *pgxpool.Pool, runID, agentID string, 
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO scenario_runs
-		   (id, scenario_id, agent_id, name, status, results, started_at, campaign_id,
+		   (id, scenario_id, agent_id, name, status, results, started_at, campaign_id, reverted,
 		    alerts_total, alerts_high_fidelity, noise_score,
 		    perf_cpu_before, perf_cpu_after, perf_ram_before, perf_ram_after, perf_disk_before, perf_disk_after)
-		 VALUES ($1,'sc-report',$2,$3,$4,$5, COALESCE($6::timestamptz, NOW()), $7,
+		 VALUES ($1,'sc-report',$2,$3,$4,$5, COALESCE($6::timestamptz, NOW()), $7, $8,
 		    42, 7, 3.5, 10, 25, 30, 55, 1, 2)`,
-		runID, agentID, name, status, resultsJSON, startedAt, campaignID); err != nil {
+		runID, agentID, name, status, resultsJSON, startedAt, campaignID, revertedJSON); err != nil {
 		t.Fatalf("seed reportable run: %v", err)
 	}
 }

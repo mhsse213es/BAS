@@ -7,7 +7,9 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/audspect/bas/internal/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -79,6 +81,87 @@ func TestGetRunReportData_Shape(t *testing.T) {
 		}
 		if _, ok := out["killChain"]; !ok {
 			t.Fatal("missing killChain key")
+		}
+		if _, ok := out["detectionValidation"]; !ok {
+			t.Fatal("missing detectionValidation key")
+		}
+		dv, ok := out["detectionValidation"].(map[string]any)
+		if !ok {
+			t.Fatalf("detectionValidation = %T, want a JSON object", out["detectionValidation"])
+		}
+		if _, ok := dv["hasData"]; !ok {
+			t.Fatal("detectionValidation missing hasData key")
+		}
+	})
+}
+
+// TestGetRunReportData_EnvRestoration_RescuedNotContradictory is the direct
+// regression test for the bug this plan fixes: a step whose own cleanup
+// script failed (CleanupVerdict "leaked") but whose artifact the whole-run
+// safety net later removed (present in reverted[]) must be counted as
+// cleaned in the envRestoration headline, not as leaked — so the panel's
+// stepsLeaked figure never contradicts the reverted[] rollback list shown
+// alongside it.
+func TestGetRunReportData_EnvRestoration_RescuedNotContradictory(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		rescuedStep := models.SimulationResult{
+			ID:              "res-rescued",
+			Technique:       models.AttackTechnique{ID: "T1053.005", Name: "Scheduled Task", Tactic: "persistence"},
+			Result:          models.ResultFail,
+			Severity:        "High",
+			CleanupVerdict:  "leaked",
+			CleanupResidual: []string{"schtask:\\Evil\\RescueMe"},
+			ExecutedAt:      time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
+			StartedAt:       time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
+		}
+		genuinelyLeakedStep := models.SimulationResult{
+			ID:             "res-leaked",
+			Technique:      models.AttackTechnique{ID: "T1543.003", Name: "Windows Service", Tactic: "persistence"},
+			Result:         models.ResultFail,
+			Severity:       "High",
+			CleanupVerdict: "leaked",
+			ExecutedAt:     time.Date(2026, 7, 1, 12, 1, 0, 0, time.UTC),
+			StartedAt:      time.Date(2026, 7, 1, 12, 1, 0, 0, time.UTC),
+		}
+
+		seedReportableRun(t, pool, "rr-rescued", "agent-rr-rescued", reportRunOpts{
+			Results:  []models.SimulationResult{rescuedStep, genuinelyLeakedStep},
+			Reverted: []string{"schtask deleted: \\Evil\\RescueMe"},
+		})
+
+		h := newReportingHandler(t, pool, nil)
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/api/scenarios/runs/rr-rescued/report.json", nil), "runId", "rr-rescued")
+		rec := httptest.NewRecorder()
+		h.GetRunReportData(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+
+		var resp map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+
+		er, ok := resp["envRestoration"].(map[string]any)
+		if !ok {
+			t.Fatalf("envRestoration missing or wrong shape: %v", resp["envRestoration"])
+		}
+		if got := er["stepsRescued"]; got != float64(1) {
+			t.Errorf("envRestoration.stepsRescued = %v, want 1", got)
+		}
+		if got := er["stepsLeaked"]; got != float64(1) {
+			t.Errorf("envRestoration.stepsLeaked = %v, want 1 (only the genuinely-leaked step)", got)
+		}
+		if got := er["stepsCleaned"]; got != float64(1) {
+			t.Errorf("envRestoration.stepsCleaned = %v, want 1 (the rescued step counts as cleaned)", got)
+		}
+
+		reverted, _ := resp["reverted"].([]any)
+		if len(reverted) != 1 {
+			t.Fatalf("reverted = %v, want 1 entry", reverted)
 		}
 	})
 }
