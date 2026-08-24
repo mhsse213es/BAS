@@ -91,6 +91,75 @@ func captureSnapshot(runID string) *SystemSnapshot {
 	return s
 }
 
+// captureSnapshotLite captures the same categories as captureSnapshot minus
+// the netsh firewall dump and the hosts-file read — the two slowest calls,
+// and essentially never what a step's own cleanup: script targets. Used for
+// the per-step before/after bracket (see agent/executor.go), where the cost
+// is paid twice per cleanup-bearing step rather than once per run.
+func captureSnapshotLite(runID string) *SystemSnapshot {
+	s := newSnapshot(runID)
+
+	if out, err := snapCmd("schtasks", "/query", "/fo", "CSV", "/nh"); err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			fields := strings.SplitN(line, ",", 2)
+			if len(fields) > 0 {
+				name := strings.Trim(fields[0], `"`)
+				s.Lists["schtasks"] = append(s.Lists["schtasks"], name)
+			}
+		}
+	}
+
+	if out, err := snapCmd("sc", "query", "type=", "all", "state=", "all"); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "SERVICE_NAME:") {
+				name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "SERVICE_NAME:"))
+				if name != "" {
+					s.Lists["services"] = append(s.Lists["services"], name)
+				}
+			}
+		}
+	}
+
+	regKeys := []string{
+		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`,
+		`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
+		`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce`,
+	}
+	for _, key := range regKeys {
+		if out, err := snapCmd("reg", "query", key); err == nil {
+			s.Files["reg:"+key] = out
+		}
+	}
+
+	tmpDirs := []string{os.TempDir(), `C:\Windows\Temp`}
+	for _, dir := range tmpDirs {
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, e := range entries {
+				s.Lists["tmp_files"] = append(s.Lists["tmp_files"], filepath.Join(dir, e.Name()))
+			}
+		}
+	}
+
+	startupDirs := []string{
+		filepath.Join(os.Getenv("APPDATA"), `Microsoft\Windows\Start Menu\Programs\Startup`),
+		`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`,
+	}
+	for _, dir := range startupDirs {
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, e := range entries {
+				s.Lists["startup"] = append(s.Lists["startup"], filepath.Join(dir, e.Name()))
+			}
+		}
+	}
+
+	return s
+}
+
 func revertFromSnapshot(s *SystemSnapshot) []string {
 	var reverted []string
 

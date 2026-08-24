@@ -146,3 +146,10 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 
 // diffRegistry is a no-op on POSIX — there is no registry to diff.
 func diffRegistry(_, _ *SystemSnapshot) []string { return nil }
+
+// captureSnapshotLite is identical to captureSnapshot on POSIX — none of its
+// calls are expensive enough to warrant a trimmed variant (unlike Windows'
+// netsh firewall dump).
+func captureSnapshotLite(runID string) *SystemSnapshot {
+	return captureSnapshot(runID)
+}

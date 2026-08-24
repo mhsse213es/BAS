@@ -34,3 +34,14 @@ func TestDiffRegistry_KeyMissingFromBeforeSkipped(t *testing.T) {
 		t.Errorf("diffRegistry = %v, want empty (key absent from before is not a diffable pair)", got)
 	}
 }
+
+func TestCaptureSnapshotLite_ExcludesFirewallAndHosts(t *testing.T) {
+	lite := captureSnapshotLite("test-run")
+	if _, ok := lite.Files["firewall"]; ok {
+		t.Error("captureSnapshotLite must not capture the firewall dump")
+	}
+	hostsPath := `C:\Windows\System32\drivers\etc\hosts`
+	if _, ok := lite.Files[hostsPath]; ok {
+		t.Error("captureSnapshotLite must not capture the hosts file")
+	}
+}
