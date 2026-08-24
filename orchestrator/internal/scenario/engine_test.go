@@ -489,6 +489,72 @@ func TestParseYAML_WindowsDiscovery(t *testing.T) {
 	}
 }
 
+func TestParseYAML_DLLHijackExecution(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "dll-hijack-execution.yaml"))
+	if err != nil {
+		t.Fatalf("read scenario file: %v", err)
+	}
+	sc, err := ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if sc.ID != "dll-hijack-execution" {
+		t.Fatalf("id = %q, want dll-hijack-execution", sc.ID)
+	}
+	if !sc.Executable {
+		t.Fatalf("expected executable: true")
+	}
+	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
+		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
+	}
+	if len(sc.Steps) != 6 {
+		t.Fatalf("steps = %d, want 6", len(sc.Steps))
+	}
+	type wantStep struct {
+		technique string
+		framework string
+		testIndex int // only meaningful when framework == "art"
+	}
+	wantSteps := []wantStep{
+		{"T1574.001", "art", 0},
+		{"T1574.001", "art", 6},
+		{"T1574.008", "custom", -1},
+		{"T1574.011", "art", 0},
+		{"T1574.011", "art", 1},
+		{"T1574.012", "art", 2},
+	}
+	for i, want := range wantSteps {
+		st := sc.Steps[i]
+		if st.TechniqueID != want.technique {
+			t.Errorf("step %d technique_id = %q, want %q", i, st.TechniqueID, want.technique)
+		}
+		if st.Framework != want.framework {
+			t.Errorf("step %d framework = %q, want %q", i, st.Framework, want.framework)
+		}
+		if want.framework == "art" && st.TestIndex != want.testIndex {
+			t.Errorf("step %d test_index = %d, want %d", i, st.TestIndex, want.testIndex)
+		}
+		if want.framework == "custom" && st.Command == "" {
+			t.Errorf("step %d (custom) has an empty command", i)
+		}
+	}
+	// Step index 3 (T1574.011 test 0) is a pure read-only ACL enumeration,
+	// not a hijack execution -- its name must say so, per the user's
+	// explicit requirement that condition checks not be presented as
+	// equivalent to successful hijack execution.
+	if !strings.Contains(sc.Steps[3].Name, "Condition Check") {
+		t.Errorf("step 3 name = %q, want it to say Condition Check (it's a read-only ACL enumeration, not an execution)", sc.Steps[3].Name)
+	}
+	for i, st := range sc.Steps {
+		if i == 3 {
+			continue
+		}
+		if !strings.Contains(st.Name, "Execution") {
+			t.Errorf("step %d name = %q, want it to say Execution (it performs the hijack, unlike step 3's condition check)", i, st.Name)
+		}
+	}
+}
+
 func TestParseYAML_DLPExfiltrationValidation(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "dlp-exfiltration-validation.yaml"))
 	if err != nil {
