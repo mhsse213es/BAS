@@ -4724,6 +4724,7 @@ body.theme-slate {
     </div>
     <div class="drawer-body">
       <div id="sweep-drilldown-summary" class="sub2" style="margin-bottom:0.75rem"></div>
+      <div id="sweep-drilldown-actions" style="margin-bottom:0.75rem"></div>
       <ul id="sweep-drilldown-list" style="list-style:none;margin:0;padding:0"></ul>
     </div>
   </div>
@@ -15621,6 +15622,7 @@ function closeRunLive() { document.getElementById('run-live-overlay').classList.
 function openSweepDrilldown(sweepId) {
   document.getElementById('sweep-drilldown-title').textContent = 'Full Variant Sweep';
   document.getElementById('sweep-drilldown-summary').textContent = 'Loading…';
+  document.getElementById('sweep-drilldown-actions').innerHTML = '';
   document.getElementById('sweep-drilldown-list').innerHTML = '';
   document.getElementById('sweep-drilldown-overlay').classList.add('open');
   apicall('/api/vex/sweeps/' + sweepId + '/runs').then(function(payload) {
@@ -15628,6 +15630,10 @@ function openSweepDrilldown(sweepId) {
     document.getElementById('sweep-drilldown-title').textContent = 'Full Variant Sweep — ' + (sw.agentId || '');
     document.getElementById('sweep-drilldown-summary').textContent =
       sw.status + ' · ' + childRuns.length + ' technique(s) dispatched';
+    document.getElementById('sweep-drilldown-actions').innerHTML =
+      '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/report\',\'_blank\')" title="Open the combined sweep report">&#8599; HTML Report</button> ' +
+      '<button class="btn btn-outline btn-sm" onclick="downloadSweepReport(\'' + x(sweepId) + '\')" title="Download the combined sweep report as a file">&#8595; HTML Report</button> ' +
+      '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/pdf\',\'_blank\')" title="Download the combined sweep report as PDF">&#8595; PDF</button>';
     document.getElementById('sweep-drilldown-list').innerHTML = childRuns.map(function(r) {
       var cnt = (r.results || []).length;
       var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
@@ -16097,6 +16103,13 @@ function downloadCampaignReport(id) {
     a.download = 'bas-campaign-report-' + id.substring(0, 8) + '.html';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   });
+}
+// downloadSweepReport mirrors downloadCampaignReport for the sweep report.
+function downloadSweepReport(id) {
+  var a = document.createElement('a');
+  a.href = '/api/vex/sweeps/' + encodeURIComponent(id) + '/report';
+  a.download = 'bas-sweep-report-' + id.substring(0, 8) + '.html';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 function downloadCampaignCSV(id) {
   showDownloadOptions('Campaign Forensic CSV', function(filter) {
