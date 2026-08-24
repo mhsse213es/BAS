@@ -35,7 +35,7 @@ const (
 type Config struct {
 	ID                 string
 	Name               string
-	Provider           string // "microsoft_sentinel" | "microsoft_defender" | "splunk"
+	Provider           string // "microsoft_sentinel" | "microsoft_defender" | "splunk" | "qradar" | "crowdstrike" | "trellix"
 	Enabled            bool
 	AutoVerify         bool
 	TenantID           string
@@ -85,8 +85,8 @@ type Connector interface {
 }
 
 // NewConnector builds the Connector for cfg.Provider. Returns an error for
-// any provider not yet implemented — Elastic/Trellix arrive in later slices
-// using this same framework.
+// any provider not yet implemented — Elastic arrives in a later slice using
+// this same framework.
 func NewConnector(cfg Config) (Connector, error) {
 	switch cfg.Provider {
 	case "microsoft_sentinel":
@@ -99,6 +99,8 @@ func NewConnector(cfg Config) (Connector, error) {
 		return newQRadarConnector(cfg), nil
 	case "crowdstrike":
 		return newCrowdStrikeConnector(cfg), nil
+	case "trellix":
+		return newTrellixConnector(cfg), nil
 	default:
 		return nil, fmt.Errorf("detectverify: provider %q not supported", cfg.Provider)
 	}

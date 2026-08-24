@@ -76,10 +76,10 @@ func (h *Handler) CreateDetectionConnector(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	validProviders := map[string]bool{
-		"microsoft_sentinel": true, "microsoft_defender": true, "splunk": true, "qradar": true, "crowdstrike": true,
+		"microsoft_sentinel": true, "microsoft_defender": true, "splunk": true, "qradar": true, "crowdstrike": true, "trellix": true,
 	}
 	if !validProviders[req.Provider] {
-		jsonError(w, "provider must be microsoft_sentinel | microsoft_defender | splunk | qradar | crowdstrike", http.StatusBadRequest)
+		jsonError(w, "provider must be microsoft_sentinel | microsoft_defender | splunk | qradar | crowdstrike | trellix", http.StatusBadRequest)
 		return
 	}
 	if req.VerifyDelaySeconds <= 0 {
