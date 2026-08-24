@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -39,4 +41,56 @@ func snapCmd(name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return exec.CommandContext(ctx, name, args...).Output()
+}
+
+// listCategoryPrefixes maps each SystemSnapshot.Lists category key to the
+// normalized key prefix diffSnapshots emits. A given platform's snapshot only
+// ever populates the categories its own captureSnapshot captures — entries
+// for the other platform's categories are harmless no-ops here.
+var listCategoryPrefixes = map[string]string{
+	"tmp_files": "tmp:",
+	"services":  "service:",
+	"schtasks":  "schtask:",
+	"startup":   "startup:",
+	"cron_dirs": "cron:",
+}
+
+// diffSnapshots returns normalized keys for every item present in after but
+// absent (or changed) from before, across every category both snapshots
+// share: "tmp:<path>", "service:<name>", "schtask:<name>", "startup:<path>",
+// "cron:<path>" (list categories, via listCategoryPrefixes), plus
+// "registry:<key>\<value>" (Windows Run/RunOnce values, via diffRegistry) and
+// whole-file keys unchanged from SystemSnapshot.Files (e.g. "crontab:user",
+// "iptables", "/etc/hosts") whenever their content differs. Order is not
+// significant to callers.
+func diffSnapshots(before, after *SystemSnapshot) []string {
+	var diff []string
+
+	for category, items := range after.Lists {
+		prefix, ok := listCategoryPrefixes[category]
+		if !ok {
+			continue
+		}
+		beforeSet := toSet(before.Lists[category])
+		for _, item := range items {
+			if !beforeSet[item] {
+				diff = append(diff, prefix+item)
+			}
+		}
+	}
+
+	diff = append(diff, diffRegistry(before, after)...)
+
+	for key, afterBlob := range after.Files {
+		if strings.HasPrefix(key, "reg:") {
+			continue // handled by diffRegistry above
+		}
+		beforeBlob, ok := before.Files[key]
+		if !ok || bytes.Equal(beforeBlob, afterBlob) {
+			continue
+		}
+		diff = append(diff, key)
+	}
+
+	return diff
 }

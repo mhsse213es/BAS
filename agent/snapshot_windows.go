@@ -209,6 +209,32 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 	return reverted
 }
 
+// diffRegistry returns "registry:<key>\<value>" for every Run/RunOnce value
+// present in after but absent from before. Registry values need per-value
+// diffing (not whole-blob comparison) because a single "reg:<key>" capture
+// covers every value under that key — see parseRegValues.
+func diffRegistry(before, after *SystemSnapshot) []string {
+	var diff []string
+	for key, afterBlob := range after.Files {
+		if !strings.HasPrefix(key, "reg:") {
+			continue
+		}
+		beforeBlob, ok := before.Files[key]
+		if !ok {
+			continue
+		}
+		beforeValues := parseRegValues(beforeBlob)
+		afterValues := parseRegValues(afterBlob)
+		regKey := strings.TrimPrefix(key, "reg:")
+		for name := range afterValues {
+			if !beforeValues[name] {
+				diff = append(diff, "registry:"+regKey+`\`+name)
+			}
+		}
+	}
+	return diff
+}
+
 // parseRegValues extracts value names from `reg query` output into a set.
 func parseRegValues(out []byte) map[string]bool {
 	result := make(map[string]bool)

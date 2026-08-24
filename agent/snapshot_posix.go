@@ -143,3 +143,6 @@ func revertFromSnapshot(s *SystemSnapshot) []string {
 
 	return reverted
 }
+
+// diffRegistry is a no-op on POSIX — there is no registry to diff.
+func diffRegistry(_, _ *SystemSnapshot) []string { return nil }
