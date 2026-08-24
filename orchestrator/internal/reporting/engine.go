@@ -462,8 +462,12 @@ type TechniqueRow struct {
 	MTTDMs           int64  `json:"mttdMs,omitempty"`
 	DurationMs       int64  `json:"durationMs"`
 	CleanupVerdict   string `json:"cleanupVerdict,omitempty"` // reverted|partial|leaked
-	ControlName      string `json:"controlName,omitempty"`    // specific control that blocked (Defender ASR, AppLocker, WDAC)
-	ControlRuleID    string `json:"controlRuleId,omitempty"`  // ASR GUID or AppLocker policy name
+	// CleanupResidual mirrors models.SimulationResult.CleanupResidual — see
+	// buildEnvRestoration for how it's cross-referenced against reverted[] to
+	// produce the "rescued" verdict.
+	CleanupResidual []string `json:"cleanupResidual,omitempty"`
+	ControlName     string   `json:"controlName,omitempty"`   // specific control that blocked (Defender ASR, AppLocker, WDAC)
+	ControlRuleID   string   `json:"controlRuleId,omitempty"` // ASR GUID or AppLocker policy name
 	// RequestedPriv is the effective tier sent to the agent (PrivSpec.Effective()).
 	// "Legacy" when the step was unannotated.
 	RequestedPriv string `json:"requestedPriv"`
@@ -929,6 +933,7 @@ func buildTechniqueMatrix(results []models.SimulationResult, dets []DetectionTec
 			ExecVerdict:       string(r.Result),
 			DurationMs:        r.DurationMs,
 			CleanupVerdict:    r.CleanupVerdict,
+			CleanupResidual:   r.CleanupResidual,
 			RequestedPriv:     privLabel(r.RequestedPriv),
 			RequestedPrivMin:  privLabel(r.RequestedPrivMin),
 			RequestedPrivPref: privLabel(r.RequestedPrivPref),

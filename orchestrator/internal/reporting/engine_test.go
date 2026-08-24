@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -404,5 +405,25 @@ func TestBuildCoverageSummary(t *testing.T) {
 					got, c.wantExecuted, c.wantScenarioPct, c.wantEligiblePct)
 			}
 		})
+	}
+}
+
+func TestBuildTechniqueMatrix_PassesThroughCleanupResidual(t *testing.T) {
+	results := []models.SimulationResult{
+		{
+			Technique:       models.AttackTechnique{ID: "T1053.005", Tactic: "persistence"},
+			Result:          models.ResultFail,
+			Severity:        "High",
+			CleanupVerdict:  "partial",
+			CleanupResidual: []string{"schtask:\\Evil\\Task"},
+		},
+	}
+	rows := buildTechniqueMatrix(results, nil)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	want := []string{"schtask:\\Evil\\Task"}
+	if !reflect.DeepEqual(rows[0].CleanupResidual, want) {
+		t.Errorf("CleanupResidual = %v, want %v", rows[0].CleanupResidual, want)
 	}
 }

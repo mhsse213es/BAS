@@ -68,6 +68,7 @@ type SimulationResult struct {
 	DetectionVerdict    string           `json:"detectionVerdict,omitempty"` // prevented | detected | undetected (populated after agent posts detections)
 	DetectionAlert      *DetectionAlert  `json:"detectionAlert,omitempty"`   // matched EDR/AV alert when DetectionVerdict=detected
 	CleanupVerdict      string           `json:"cleanupVerdict,omitempty"`   // reverted | partial | leaked (populated from agent cleanup exit code)
+	CleanupResidual     []string         `json:"cleanupResidual,omitempty"`  // normalized snapshot-diff keys still present after the step's own cleanup ran
 	BlockingControl     *BlockingControl `json:"blockingControl,omitempty"`  // specific control that prevented the technique (populated when DetectionVerdict=prevented)
 	// SinkTokenObserved is set (non-nil) only for a step whose command was
 	// wired to the DLP exfiltration sink (see internal/api/dlp_sink.go).

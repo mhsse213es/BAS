@@ -364,6 +364,11 @@ type ExecResult struct {
 	// CleanupVerdict is set by the agent after running the step's cleanup command.
 	// "reverted" = exit 0; "partial" = non-zero exit; "leaked" = timeout/start failure.
 	CleanupVerdict string `json:"cleanupVerdict,omitempty"`
+	// CleanupResidual lists the normalized snapshot-diff keys the agent found
+	// still present after this step's own cleanup command ran (see
+	// agent/executor.go's reconcileCleanupVerdict). Nil when no cleanup was
+	// defined or the agent's before/after snapshot pair wasn't captured.
+	CleanupResidual []string `json:"cleanupResidual,omitempty"`
 	// RequestedPriv mirrors the step's requires_priv declaration. Empty for
 	// unannotated (legacy) steps.
 	RequestedPriv string `json:"requestedPriv,omitempty"`
