@@ -11662,8 +11662,8 @@ function runRowHtml(r) {
     '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
     '<td style="font-weight:500">' + x(r.name) + '</td>' +
     '<td><code>' + x(r.agentId) + '</code></td>' +
-    '<td><span class="sbadge ' + (r.agentDisconnected && r.status === 'running' ? 's-agent_disconnected' : 's-' + x(r.status)) + '">' +
-        (r.agentDisconnected && r.status === 'running' ? 'Agent Disconnected' : x(r.status)) + '</span></td>' +
+    '<td><span class="sbadge ' + (r.agentDisconnected && r.status === 'running' ? 's-agent_disconnected' : (r.status === 'running' && r.paused ? 's-paused' : 's-' + x(r.status))) + '">' +
+        (r.agentDisconnected && r.status === 'running' ? 'Agent Disconnected' : (r.status === 'running' && r.paused ? 'Paused' : x(r.status))) + '</span></td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + x(r.initiatedBy || '—') + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + fmtDate(r.startedAt) + '</td>' +
     '<td style="color:var(--muted);font-size:0.78rem">' + (r.completedAt ? fmtDate(r.completedAt) : '—') + '</td>' +
@@ -16995,8 +16995,9 @@ function loadDashboard() {
           scol = r.score.classification === 'Protected' ? 'var(--teal)' :
                  r.score.classification === 'Medium Risk' ? 'var(--warning)' : 'var(--danger)';
         }
+        var dashPaused = r.status === 'running' && r.paused;
         return '<div class="dash-run-row">' +
-          '<span class="sbadge s-' + x(r.status) + '" style="flex-shrink:0">' + x(r.status) + '</span>' +
+          '<span class="sbadge ' + (dashPaused ? 's-paused' : 's-' + x(r.status)) + '" style="flex-shrink:0">' + (dashPaused ? 'paused' : x(r.status)) + '</span>' +
           '<span class="dash-run-name">' + x(r.name) + '</span>' +
           (cnt ? '<span style="font-size:0.72rem;color:var(--danger)">' + fail + ' fail</span>' : '') +
           '<span style="font-size:0.8rem;font-weight:600;color:' + scol + ';flex-shrink:0">' + scoreStr + '</span>' +
