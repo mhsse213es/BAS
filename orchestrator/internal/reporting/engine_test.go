@@ -1,12 +1,15 @@
 package reporting
 
 import (
+	"context"
+	"encoding/json"
 	"math"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/audspect/bas/internal/models"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ERROR results are BAS execution problems, not security outcomes. They must not
@@ -639,4 +642,96 @@ func TestBuildSweepEncodingBreakdown_EmptyInput(t *testing.T) {
 	if rows := buildSweepEncodingBreakdown(nil, nil); len(rows) != 0 {
 		t.Errorf("len(rows) = %d, want 0", len(rows))
 	}
+}
+
+func TestBuildFromSweep_AggregatesAcrossTechniquesAndEncodings(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		e := NewEngine(pool)
+
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-sweep-report')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO vex_sweeps (id, agent_id, techniques, technique_variant_counts, status, completed_variants, total_variants, started_at)
+			 VALUES ('sw-report-1', 'agent-sweep-report', ARRAY['T1055','T1059.001'], ARRAY[2,2], 'completed', 4, 4, NOW())`); err != nil {
+			t.Fatalf("seed sweep: %v", err)
+		}
+
+		t1055Results := []models.SimulationResult{
+			{ID: "t1055-r1", Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}, Result: models.ResultBlocked, Severity: "High"},
+			{ID: "t1055-r2", Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}, Result: models.ResultFail, Severity: "High"},
+		}
+		t1055JSON, _ := json.Marshal(t1055Results)
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, sweep_id)
+			 VALUES ('sr-t1055', '__variant__T1055', 'agent-sweep-report', 'T1055 variants', 'completed', $1, 'sw-report-1')`,
+			t1055JSON); err != nil {
+			t.Fatalf("seed sr-t1055: %v", err)
+		}
+
+		t1059Results := []models.SimulationResult{
+			{ID: "t1059-r1", Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"}, Result: models.ResultFail, Severity: "High"},
+			{ID: "t1059-r2", Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"}, Result: models.ResultFail, Severity: "High"},
+		}
+		t1059JSON, _ := json.Marshal(t1059Results)
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, sweep_id)
+			 VALUES ('sr-t1059', '__variant__T1059.001', 'agent-sweep-report', 'T1059.001 variants', 'completed', $1, 'sw-report-1')`,
+			t1059JSON); err != nil {
+			t.Fatalf("seed sr-t1059: %v", err)
+		}
+
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO variant_runs (id, agent_id, technique_id, scenario_run_id, total_variants, status)
+			 VALUES ('vr-t1055', 'agent-sweep-report', 'T1055', 'sr-t1055', 2, 'completed')`); err != nil {
+			t.Fatalf("seed vr-t1055: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO variant_run_steps (variant_run_id, task_id, technique_id, encoding, exec_context, evasion, executor, risk_level, variant_hash)
+			 VALUES ('vr-t1055', 't1055-r1', 'T1055', 'base64', 'powershell_direct', 'none', 'powershell', 'SAFE', 'hash1'),
+			        ('vr-t1055', 't1055-r2', 'T1055', 'plain', 'powershell_direct', 'none', 'powershell', 'SAFE', 'hash2')`); err != nil {
+			t.Fatalf("seed variant_run_steps: %v", err)
+		}
+
+		rep, err := e.BuildFromSweep(ctx, "sw-report-1", "")
+		if err != nil {
+			t.Fatalf("BuildFromSweep: %v", err)
+		}
+
+		if rep.Scope == nil || rep.Scope.Kind != "sweep" {
+			t.Fatalf("Scope = %+v, want Kind=sweep", rep.Scope)
+		}
+		if len(rep.SweepTechniqueBreakdown) != 2 {
+			t.Fatalf("len(SweepTechniqueBreakdown) = %d, want 2", len(rep.SweepTechniqueBreakdown))
+		}
+		byTech := map[string]SweepTechniqueRow{}
+		for _, r := range rep.SweepTechniqueBreakdown {
+			byTech[r.TechniqueID] = r
+		}
+		if t1055 := byTech["T1055"]; t1055.Blocked != 1 || t1055.ScenarioRunID != "sr-t1055" {
+			t.Errorf("T1055 row = %+v, want Blocked=1 ScenarioRunID=sr-t1055", t1055)
+		}
+		if len(rep.SweepEncodingBreakdown) != 2 {
+			t.Fatalf("len(SweepEncodingBreakdown) = %d, want 2 (base64, plain)", len(rep.SweepEncodingBreakdown))
+		}
+		if len(rep.TacticHeatmap) == 0 {
+			t.Error("TacticHeatmap is empty — union of sweep results did not reach the reused report sections")
+		}
+	})
+}
+
+func TestBuildFromSweep_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e := NewEngine(pool)
+		if _, err := e.BuildFromSweep(context.Background(), "nope", ""); err == nil {
+			t.Fatal("expected an error for an unknown sweep id")
+		}
+	})
 }

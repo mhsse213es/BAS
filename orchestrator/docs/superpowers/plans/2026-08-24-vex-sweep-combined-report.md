@@ -708,9 +708,9 @@ func TestBuildFromSweep_AggregatesAcrossTechniquesAndEncodings(t *testing.T) {
 			t.Fatalf("seed vr-t1055: %v", err)
 		}
 		if _, err := pool.Exec(ctx,
-			`INSERT INTO variant_run_steps (variant_run_id, task_id, encoding, exec_context, evasion, executor, risk_level, variant_hash)
-			 VALUES ('vr-t1055', 't1055-r1', 'base64', 'powershell_direct', 'none', 'powershell', 'SAFE', 'hash1'),
-			        ('vr-t1055', 't1055-r2', 'plain', 'powershell_direct', 'none', 'powershell', 'SAFE', 'hash2')`); err != nil {
+			`INSERT INTO variant_run_steps (variant_run_id, task_id, technique_id, encoding, exec_context, evasion, executor, risk_level, variant_hash)
+			 VALUES ('vr-t1055', 't1055-r1', 'T1055', 'base64', 'powershell_direct', 'none', 'powershell', 'SAFE', 'hash1'),
+			        ('vr-t1055', 't1055-r2', 'T1055', 'plain', 'powershell_direct', 'none', 'powershell', 'SAFE', 'hash2')`); err != nil {
 			t.Fatalf("seed variant_run_steps: %v", err)
 		}
 

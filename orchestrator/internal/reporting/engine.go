@@ -2197,6 +2197,133 @@ func (e *Engine) BuildFromCampaign(ctx context.Context, campaignID string, filte
 	return report, nil
 }
 
+// BuildFromSweep is the combined-report equivalent of BuildFromCampaign for a
+// Full Variant Sweep: it unions every dispatched technique's results into one
+// document, reusing every report section BuildFromCampaign already computes
+// from a result union, plus two sweep-specific sections
+// (SweepTechniqueBreakdown, SweepEncodingBreakdown).
+func (e *Engine) BuildFromSweep(ctx context.Context, sweepID string, filter string) (*FullReport, error) {
+	report := &FullReport{GeneratedAt: time.Now().UTC()}
+
+	var agentID string
+	var techniques []string
+	var status, sweepErr string
+	var completedVariants, totalVariants int
+	var startedAt time.Time
+	var completedAt *time.Time
+	if err := e.db.QueryRow(ctx,
+		`SELECT agent_id, techniques, status, error, completed_variants, total_variants, started_at, completed_at
+		   FROM vex_sweeps WHERE id = $1`, sweepID,
+	).Scan(&agentID, &techniques, &status, &sweepErr, &completedVariants, &totalVariants, &startedAt, &completedAt); err != nil {
+		return nil, fmt.Errorf("sweep %s not found: %w", sweepID, err)
+	}
+
+	rows, err := e.db.Query(ctx,
+		`SELECT id, results FROM scenario_runs WHERE sweep_id = $1 ORDER BY started_at`, sweepID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var allResults []models.SimulationResult
+	resultsByID := make(map[string]models.SimulationResult)
+	runIDByTechnique := make(map[string]string)
+	var scenarioRunIDs []string
+	runCount := 0
+	for rows.Next() {
+		var runID string
+		var resultsRaw []byte
+		if rows.Scan(&runID, &resultsRaw) != nil {
+			continue
+		}
+		runCount++
+		scenarioRunIDs = append(scenarioRunIDs, runID)
+		var results []models.SimulationResult
+		if len(resultsRaw) > 0 {
+			if json.Unmarshal(resultsRaw, &results) == nil {
+				results = FilterResults(results, filter)
+				for _, r := range results {
+					resultsByID[r.ID] = r
+					if _, ok := runIDByTechnique[r.Technique.ID]; !ok {
+						runIDByTechnique[r.Technique.ID] = runID
+					}
+				}
+				allResults = append(allResults, results...)
+			}
+		}
+	}
+
+	report.TacticHeatmap = buildTacticHeatmap(allResults)
+	report.TopFindings = buildTopFindings(allResults, "Full Variant Sweep")
+	report.ObjectiveRisks = buildObjectiveRisks(allResults)
+	report.Detection = buildDetectionSummary(allResults)
+	report.AttackPath = buildAttackPath(allResults)
+	report.TechniqueMatrix = buildTechniqueMatrix(allResults, nil)
+	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
+	report.PrivilegeSummary = buildPrivilegeSummary(report.TechniqueMatrix)
+	report.KillChain = buildKillChain(allResults, nil)
+
+	report.SweepTechniqueBreakdown = buildSweepTechniqueBreakdown(allResults, nil)
+	for i := range report.SweepTechniqueBreakdown {
+		report.SweepTechniqueBreakdown[i].ScenarioRunID = runIDByTechnique[report.SweepTechniqueBreakdown[i].TechniqueID]
+	}
+
+	var encSamples []sweepEncodingSample
+	if len(scenarioRunIDs) > 0 {
+		stepRows, err := e.db.Query(ctx,
+			`SELECT vrs.task_id, vrs.encoding
+			   FROM variant_run_steps vrs
+			   JOIN variant_runs vr ON vr.id = vrs.variant_run_id
+			  WHERE vr.scenario_run_id = ANY($1)`, scenarioRunIDs)
+		if err == nil {
+			for stepRows.Next() {
+				var taskID, encoding string
+				if stepRows.Scan(&taskID, &encoding) != nil {
+					continue
+				}
+				if res, ok := resultsByID[taskID]; ok {
+					encSamples = append(encSamples, sweepEncodingSample{Encoding: encoding, Result: res})
+				}
+			}
+			stepRows.Close()
+		}
+	}
+	report.SweepEncodingBreakdown = buildSweepEncodingBreakdown(encSamples, nil)
+
+	score := models.ComputeScore(allResults, nil)
+	report.Summary = ExecutiveSummary{
+		RiskScore: score.RiskScore, Classification: score.Classification,
+		PreventionScore: score.PreventionScore, ExposureScore: score.ExposureScore,
+		CoverageScore: score.CoverageScore, KillChainCoverage: score.KillChainCoverage,
+		KillChainAmplifier: score.KillChainAmplifier, Trend: score.Trend,
+		TotalRuns: runCount, TotalTechniques: score.TotalTechniques,
+		PassedTechniques: score.PassedTechniques, FailedTechniques: score.FailedTechniques,
+		ErroredTechniques: score.ErroredTechniques, SkippedTechniques: score.SkippedTechniques,
+		LastRunAt: startedAt, LastScenarioName: "Full Variant Sweep",
+		CriticalFailures: score.CriticalFailures,
+		Recommendations:  buildRecommendations(score, report.TacticHeatmap),
+	}
+	if report.Summary.Classification == "" {
+		report.Summary.Classification = "No Data"
+	}
+
+	title := fmt.Sprintf("Full Variant Sweep — %s", agentID)
+	subtitle := fmt.Sprintf("%d/%d techniques completed", completedVariants, totalVariants)
+	if status == "running" || status == "agent_disconnected" {
+		subtitle = "Sweep in progress — " + subtitle
+	}
+	report.Agent.Hostname = agentID
+	report.ScenarioName = "Full Variant Sweep"
+	report.Scope = &ReportScope{
+		Kind: "sweep", Title: title, Subtitle: subtitle,
+		Scenario: "Full Variant Sweep", AgentCount: 1, RunCount: runCount,
+	}
+
+	deriveExecutive(report, allResults, nil)
+
+	return report, nil
+}
+
 // TechniqueGroup aggregates every result for one ATT&CK technique so the report
 // shows a single rolled-up entry with counts, instead of repeating the same
 // technique (and its identical threat/remediation) dozens of times — the
