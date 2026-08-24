@@ -12644,7 +12644,7 @@ function renderPickerList() {
       checkbox +
       '<span style="flex:1">' +
         '<span style="font-weight:600;color:var(--accent)">' + x(label) + '</span>' +
-        (it.name ? ' <span>' + x(displayStepName(it.name, label)) + '</span>' : '') + cbadge + extraBadges +
+        (it.name ? ' <span>' + x(it.name) + '</span>' : '') + cbadge + extraBadges +
         (meta ? '<br><span class="card-meta">' + x(meta) + '</span>' : '') +
       '</span></label>';
   }).join('');
@@ -15241,23 +15241,6 @@ function submitIOCImport() {
     .catch(function(e) { btn.disabled = false; errEl.textContent = e.message || 'Import failed'; errEl.style.display = ''; });
 }
 
-// Many real Atomic Red Team test names already embed their own technique ID
-// as a text prefix (e.g. "T1055.004 - Test 2: EarlyBird APC Queue Injection
-// in Go"). Anywhere the ID is already shown in its own badge/label right
-// before the name, repeating it at the start of the name is redundant -- and
-// on longer names it eats into the space before the text truncates with an
-// ellipsis. Strip a leading "<techId> - " (or ": ") only when it matches the
-// badge's own ID, so names that don't start with the ID are left untouched.
-// Shared by the Live Run Panel (below) and the "every atomic test" picker
-// list (renderPickerList) -- top-level so both can call it regardless of
-// definition order.
-function displayStepName(name, techId) {
-  if (!name || !techId) return name || techId || '';
-  var esc = techId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  var stripped = name.replace(new RegExp('^' + esc + '\\s*[-:]\\s*', 'i'), '');
-  return stripped || name;
-}
-
 // ── Live Run Panel ────────────────────────────────────────────────────────────
 // Streams run-event frames over the shared browser WS and renders live progress
 // (done/total · failed · running) + a per-step timeline. On open it first replays
@@ -15365,7 +15348,7 @@ function displayStepName(name, techId) {
       var detailHtml = '';
       if (s.expanded) {
         var dl = [];
-        if (s.stepName) dl.push('<b>Test:</b> ' + x(displayStepName(s.stepName, techId)));
+        if (s.stepName) dl.push('<b>Test:</b> ' + x(s.stepName));
         if (s.tactic)   dl.push('<b>Tactic:</b> ' + x(humanTactic(s.tactic)));
         if (vLabel)     dl.push('<b>Verdict:</b> <span style="color:' + vColor + '">' + x(vLabel) + '</span>');
         if (s.durationMs != null) dl.push('<b>Duration:</b> ' + s.durationMs + ' ms');
@@ -15377,12 +15360,15 @@ function displayStepName(name, techId) {
 
       rows.push(
         '<li style="border-bottom:1px solid var(--border);padding:0.3rem 0;cursor:pointer" onclick="window.toggleLiveStep(\'' + task.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">' +
-          // Main line: dot · ID · name · state
-          '<div style="display:flex;align-items:center;gap:0.5rem;font-size:0.78rem">' +
-            '<span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + color + blink + '"></span>' +
-            '<span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--accent);flex-shrink:0;min-width:5.2rem">' + x(techId) + '</span>' +
-            '<span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + x(displayStepName(s.stepName, techId) || techId) + '</span>' +
-            '<span style="color:' + color + ';font-size:0.67rem;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0">' + x(s.state === 'done' ? 'done' : s.state) + '</span>' +
+          // Main line: dot · ID · name · state. name wraps onto additional
+          // lines rather than truncating with an ellipsis, so the complete
+          // title (including its own technique-ID prefix, when the real ART
+          // atomic name has one) is always fully visible.
+          '<div style="display:flex;align-items:flex-start;gap:0.5rem;font-size:0.78rem">' +
+            '<span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:0.42em;background:' + color + blink + '"></span>' +
+            '<span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--accent);flex-shrink:0;min-width:5.2rem;padding-top:0.1em">' + x(techId) + '</span>' +
+            '<span style="flex:1;color:var(--text);word-break:break-word">' + x(s.stepName || techId) + '</span>' +
+            '<span style="color:' + color + ';font-size:0.67rem;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;padding-top:0.1em">' + x(s.state === 'done' ? 'done' : s.state) + '</span>' +
             verdictHtml +
           '</div>' +
           // Sub-line: tactic badge · duration (step name is already the main-line title above)
