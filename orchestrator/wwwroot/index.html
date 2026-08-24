@@ -532,6 +532,8 @@ code {
 .s-dispatched::before { background: #7ab5ff; }
 .s-partial    { background: var(--warning-dim); color: #fbbf24; border: 1px solid var(--warning-border); }
 .s-partial::before { background: #fbbf24; }
+.s-paused     { background: var(--warning-dim); color: #fbbf24; border: 1px solid var(--warning-border); }
+.s-paused::before { background: #fbbf24; }
 .s-empty      { background: rgba(122,148,176,0.08); color: var(--muted); border: 1px solid rgba(122,148,176,0.15); }
 .s-empty::before { background: var(--muted); }
 .s-stopped    { background: var(--warning-dim); color: #fbbf24; border: 1px solid var(--warning-border); }
@@ -8822,6 +8824,18 @@ function campaignMixBar(s) {
     (s.skipped ? ' · Skipped ' + s.skipped + ' agents' : '') + '" style="display:flex;height:8px;border-radius:5px;overflow:hidden;background:var(--elevated);min-width:120px">' +
     seg(s.prevented, 'var(--success)') + seg(s.detected, 'var(--warning)') + seg(s.missed, 'var(--danger)') + '</div>';
 }
+// campaignDisplayStatus folds the paused overlay into a single badge state.
+// A campaign's summary.status stays 'running' the whole time it's dispatched
+// (paused is a separate boolean, mirroring how individual runs track it) --
+// without this, the status badge keeps its blinking "Running" dot even while
+// dispatch is actually suspended, contradicting the Pause/Resume button (which
+// already checks s.paused correctly) right next to it.
+function campaignDisplayStatus(s) {
+  if (s.status === 'running' && s.paused) {
+    return { cls: 'paused', label: 'paused', live: false };
+  }
+  return { cls: s.status || 'running', label: s.status || '—', live: s.status === 'running' };
+}
 var CAMPAIGN_TAB = 'all';
 function loadCampaigns() {
   apicall('/api/campaigns').then(function(list) {
@@ -8846,7 +8860,8 @@ function renderCampaignRows() {
   if (!list.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">No campaigns' + (CAMPAIGN_TAB === 'all' ? ' yet.' : ' in this state.') + '</td></tr>'; return; }
   tb.innerHTML = list.map(function(c) {
     var s = c.summary || {};
-    var status = '<span class="sbadge s-' + x(s.status || 'running') + '">' + x(s.status || '—') + '</span>';
+    var cds = campaignDisplayStatus(s);
+    var status = '<span class="sbadge s-' + cds.cls + '">' + x(cds.label) + '</span>';
     if (s.status === 'running') {
       status += '<div class="prog" style="width:90px;margin-top:5px"><i style="width:' + (s.progress || 0) + '%"></i></div>' +
         '<span class="tiny muted">' + (s.progress || 0) + '%</span>';
@@ -8872,8 +8887,9 @@ function closeCampaignDetail() {
 function openCampaignDetail(id) {
   apicall('/api/campaigns/' + encodeURIComponent(id)).then(function(c) {
     var s = c.summary || {};
-    var status = x(s.status || '—');
-    var liveDot = s.status === 'running' ? '<span class="dot-live"></span> ' : '';
+    var cds = campaignDisplayStatus(s);
+    var status = x(cds.label);
+    var liveDot = cds.live ? '<span class="dot-live"></span> ' : '';
     // ── stat tiles ──
     var tile = function(lbl, val, col, foot) {
       return '<div class="kpi-card stat-tile"><div class="stat-top"><div>' +
@@ -8891,8 +8907,9 @@ function openCampaignDetail(id) {
       tile('Missed', s.missed || 0, (s.missed ? 'var(--danger)' : 'var(--muted)'), 'no control response') + '</div>';
     // ── running banner ──
     var banner = (s.status === 'running')
-      ? '<div class="dash-panel" style="margin-bottom:1.25rem;border-color:var(--accent)"><div class="dash-panel-body" style="display:flex;align-items:center;gap:1rem">' +
-        '<span class="dot-live"></span><div style="flex:1"><div style="font-weight:600">Campaign in progress — ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents dispatched</div>' +
+      ? '<div class="dash-panel" style="margin-bottom:1.25rem;border-color:' + (s.paused ? 'var(--warning)' : 'var(--accent)') + '"><div class="dash-panel-body" style="display:flex;align-items:center;gap:1rem">' +
+        (cds.live ? '<span class="dot-live"></span>' : '<span class="sbadge s-paused" style="flex-shrink:0">paused</span>') +
+        '<div style="flex:1"><div style="font-weight:600">' + (s.paused ? 'Campaign paused — ' : 'Campaign in progress — ') + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents dispatched</div>' +
         '<div class="prog" style="margin-top:0.5rem"><i style="width:' + (s.progress || 0) + '%"></i></div></div>' +
         '<div style="font-family:var(--font-display);font-size:1.4rem;font-weight:700">' + (s.progress || 0) + '%</div></div></div>'
       : '';
@@ -8939,7 +8956,7 @@ function openCampaignDetail(id) {
     document.getElementById('campaigns-detail').innerHTML =
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">' +
         '<div><a class="tiny" style="color:var(--accent);cursor:pointer" onclick="closeCampaignDetail()">&larr; Campaigns</a>' +
-        '<h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0.3rem 0;color:var(--text)">' + x(c.name) + ' <span class="sbadge s-' + x(s.status || 'running') + '" style="font-size:0.7rem;vertical-align:middle">' + liveDot + status + '</span></h1>' +
+        '<h1 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin:0.3rem 0;color:var(--text)">' + x(c.name) + ' <span class="sbadge s-' + cds.cls + '" style="font-size:0.7rem;vertical-align:middle">' + liveDot + status + '</span></h1>' +
         '<div style="font-size:0.8rem;color:var(--muted)">' + x(c.scenarioName) + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents · started ' + fmtDate(c.startedAt) + (c.createdBy ? ' by ' + x(c.createdBy) : '') + '</div></div>' +
         '<div style="display:flex;gap:0.5rem;flex-shrink:0">' + actions + '</div>' +
       '</div>' +
@@ -17245,9 +17262,10 @@ function refreshDashboardCampaigns() {
     if (!liveList.length) { el.innerHTML = '<div class="empty" style="padding:1.5rem">No campaigns running.</div>'; return; }
     el.innerHTML = liveList.map(function(c) {
       var s = c.summary || {};
+      var cds = campaignDisplayStatus(s);
       return '<div class="lrow" style="cursor:pointer" onclick="openCampaignDetail(\'' + x(c.id) + '\')">' +
         '<div class="lic" style="color:var(--accent);background:rgba(47,129,247,0.1)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8h3l2-5 4 10 2-5h3"/></svg></div>' +
-        '<div class="lmain"><div class="lt">' + x(c.name) + ' <span class="sbadge s-' + x(s.status || 'running') + '">' + x(s.status || '—') + '</span></div>' +
+        '<div class="lmain"><div class="lt">' + x(c.name) + ' <span class="sbadge s-' + cds.cls + '">' + x(cds.label) + '</span></div>' +
           '<div class="ls">' + x(c.scenarioName || '') + ' · ' + (s.dispatched || 0) + '/' + (s.targets || 0) + ' agents</div>' +
           '<div class="prog"><i style="width:' + (s.progress || 0) + '%"></i></div></div>' +
         '<div class="lr"><div style="font-family:var(--font-display);font-size:1rem;font-weight:700">' + (s.progress || 0) + '%</div></div></div>';
