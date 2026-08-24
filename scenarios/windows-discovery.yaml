@@ -1,0 +1,66 @@
+id: windows-discovery
+name: Windows Discovery  -  Host, Network, User, Process Enumeration
+description: >
+  Windows post-compromise discovery simulation using Atomic Red Team atomics.
+  Covers the reconnaissance techniques an adversary runs immediately after
+  landing on a Windows system: host identification, network topology
+  mapping, user/group/domain enumeration, process and service listing,
+  installed and security software discovery, and registry querying.
+
+  Each technique runs ALL available Windows atomics (depth mode).
+
+  Expected verdicts:
+    PASS  = EDR/SIEM detected the discovery activity
+    FAIL  = enumeration completed without generating an alert
+    SKIP  = atomic requires a tool not installed on the test host
+
+  Note: discovery techniques are almost always FAIL in an unconfigured SIEM.
+  Use this scenario to tune your detection rules (process ancestry, command
+  argument matching on systeminfo/whoami/net/tasklist/reg/wmic patterns).
+
+  T1083 (File and Directory Discovery) is deliberately excluded: its real
+  Windows atomics are full recursive scans (dir /s c:\, Get-ChildItem
+  -Recurse) that risk running past a reasonable timeout and producing false
+  TIMEOUT verdicts instead of real PASS/FAIL.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - discovery
+  - windows
+  - art
+  - atomic-red-team
+  - t1082
+  - t1016
+  - t1049
+  - t1057
+  - t1087
+  - t1018
+  - t1007
+  - t1518
+  - t1010
+  - t1033
+  - t1124
+  - t1069
+  - t1012
+  - mitre-attack
+mitre_phases:
+  - discovery
+
+art_techniques:
+  - T1082       # System Information Discovery (systeminfo, Get-ComputerInfo)
+  - T1016       # System Network Configuration Discovery (ipconfig, route print)
+  - T1049       # System Network Connections Discovery (netstat, Get-NetTCPConnection)
+  - T1057       # Process Discovery (tasklist, Get-Process)
+  - T1087.001   # Local Account Discovery (net user, Get-LocalUser)
+  - T1087.002   # Domain Account Discovery (net user /domain, Get-ADUser)
+  - T1018       # Remote System Discovery (net view, ping sweep)
+  - T1007       # System Service Discovery (net start, Get-Service)
+  - T1518       # Software Discovery (Get-WmiObject Win32_Product)
+  - T1518.001   # Security Software Discovery (AV/EDR product enumeration)
+  - T1010       # Application Window Discovery (Get-Process with MainWindowTitle)
+  - T1033       # System Owner/User Discovery (whoami, query user)
+  - T1124       # System Time Discovery (net time, w32tm)
+  - T1069.001   # Local Permission Groups Discovery (net localgroup)
+  - T1069.002   # Domain Permission Groups Discovery (net group /domain)
+  - T1012       # Query Registry (reg query)

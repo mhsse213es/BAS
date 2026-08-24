@@ -447,6 +447,48 @@ func TestParseYAML_UbuntuHardeningValidation(t *testing.T) {
 	}
 }
 
+func TestParseYAML_WindowsDiscovery(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "windows-discovery.yaml"))
+	if err != nil {
+		t.Fatalf("read scenario file: %v", err)
+	}
+	sc, err := ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if sc.ID != "windows-discovery" {
+		t.Fatalf("id = %q, want windows-discovery", sc.ID)
+	}
+	if !sc.Executable {
+		t.Fatalf("expected executable: true")
+	}
+	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
+		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
+	}
+	wantTechniques := []string{
+		"T1082", "T1016", "T1049", "T1057", "T1087.001", "T1087.002", "T1018",
+		"T1007", "T1518", "T1518.001", "T1010", "T1033", "T1124", "T1069.001",
+		"T1069.002", "T1012",
+	}
+	if len(sc.ARTTechniques) != len(wantTechniques) {
+		t.Fatalf("art_techniques = %v (len %d), want %d entries", sc.ARTTechniques, len(sc.ARTTechniques), len(wantTechniques))
+	}
+	for i, want := range wantTechniques {
+		if sc.ARTTechniques[i] != want {
+			t.Errorf("art_techniques[%d] = %q, want %q", i, sc.ARTTechniques[i], want)
+		}
+	}
+	// T1083 (File and Directory Discovery) is deliberately excluded -- its
+	// real Windows atomics are full recursive scans that risk timing out
+	// past the discovery techniques' curated 20s execute cap (see
+	// internal/scenario/resource.go's discoveryProfiles audit).
+	for _, tid := range sc.ARTTechniques {
+		if tid == "T1083" {
+			t.Fatalf("T1083 must not be included -- its real atomics risk false TIMEOUT verdicts")
+		}
+	}
+}
+
 func TestParseYAML_DLPExfiltrationValidation(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "dlp-exfiltration-validation.yaml"))
 	if err != nil {
