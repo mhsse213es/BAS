@@ -1015,6 +1015,55 @@ func buildSweepTechniqueBreakdown(results []models.SimulationResult, dets []Dete
 	return out
 }
 
+// sweepEncodingSample is one variant's already-joined encoding + outcome,
+// gathered by BuildFromSweep's DB query (scenario_runs -> variant_runs ->
+// variant_run_steps, matched to a result by TaskID == result.ID) and fed
+// into buildSweepEncodingBreakdown as a plain in-memory slice, keeping the
+// aggregation itself DB-free and directly testable.
+type sweepEncodingSample struct {
+	Encoding string
+	Result   models.SimulationResult
+}
+
+// buildSweepEncodingBreakdown rolls sweep-wide variant samples up by
+// encoding: how often each encoding got caught (classifyOutcome ==
+// "blocked") vs bypassed (classifyOutcome == "detected" or "missed").
+// Samples classified "excluded" (error/skipped) count toward Total but not
+// Caught/Bypassed. Row order follows first-appearance order in samples.
+func buildSweepEncodingBreakdown(samples []sweepEncodingSample, dets []DetectionTechnique) []SweepEncodingRow {
+	detByTech := detTechIndex(dets)
+	order := []string{}
+	byEnc := make(map[string]*SweepEncodingRow)
+
+	for _, s := range samples {
+		row, ok := byEnc[s.Encoding]
+		if !ok {
+			row = &SweepEncodingRow{Encoding: s.Encoding}
+			byEnc[s.Encoding] = row
+			order = append(order, s.Encoding)
+		}
+		row.Total++
+		switch classifyOutcome(s.Result, detByTech) {
+		case "blocked":
+			row.Caught++
+		case "detected", "missed":
+			row.Bypassed++
+		}
+	}
+
+	out := make([]SweepEncodingRow, 0, len(order))
+	for _, enc := range order {
+		row := byEnc[enc]
+		measurable := row.Caught+row.Bypassed > 0
+		row.Measurable = measurable
+		if measurable {
+			row.CaughtPct = float64(row.Caught) / float64(row.Caught+row.Bypassed) * 100
+		}
+		out = append(out, *row)
+	}
+	return out
+}
+
 // privLabel normalises a raw ExecutedAs/RequestedPriv value to a report-friendly
 // label. Empty (unannotated legacy step) becomes "Legacy"; the value is otherwise
 // title-cased so "user→admin" stays readable and "admin" becomes "Admin".

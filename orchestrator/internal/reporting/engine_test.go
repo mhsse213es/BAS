@@ -592,3 +592,51 @@ func TestBuildSweepTechniqueBreakdown_MultipleTechniquesAndEmptyInput(t *testing
 		t.Errorf("empty input: len(rows) = %d, want 0", len(rows))
 	}
 }
+
+func TestBuildSweepEncodingBreakdown_CaughtVsBypassed(t *testing.T) {
+	samples := []sweepEncodingSample{
+		{Encoding: "base64", Result: models.SimulationResult{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultBlocked}},
+		{Encoding: "base64", Result: models.SimulationResult{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultFail}},
+		{Encoding: "plain", Result: models.SimulationResult{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultFail}},
+		{Encoding: "plain", Result: models.SimulationResult{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultFail}},
+	}
+	rows := buildSweepEncodingBreakdown(samples, nil)
+	byEnc := map[string]SweepEncodingRow{}
+	for _, r := range rows {
+		byEnc[r.Encoding] = r
+	}
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2", len(rows))
+	}
+	if b := byEnc["base64"]; b.Total != 2 || b.Caught != 1 || b.Bypassed != 1 {
+		t.Errorf("base64 = %+v, want Total=2 Caught=1 Bypassed=1", b)
+	}
+	if p := byEnc["plain"]; p.Total != 2 || p.Caught != 0 || p.Bypassed != 2 {
+		t.Errorf("plain = %+v, want Total=2 Caught=0 Bypassed=2", p)
+	}
+	if !byEnc["base64"].Measurable || byEnc["base64"].CaughtPct != 50 {
+		t.Errorf("base64 CaughtPct/Measurable = %v/%v, want 50/true", byEnc["base64"].CaughtPct, byEnc["base64"].Measurable)
+	}
+}
+
+func TestBuildSweepEncodingBreakdown_AllErrorNotMeasurable(t *testing.T) {
+	samples := []sweepEncodingSample{
+		{Encoding: "gzip_b64", Result: models.SimulationResult{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultError}},
+	}
+	rows := buildSweepEncodingBreakdown(samples, nil)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if rows[0].Measurable {
+		t.Error("Measurable = true, want false")
+	}
+	if rows[0].CaughtPct != 0 {
+		t.Errorf("CaughtPct = %v, want 0", rows[0].CaughtPct)
+	}
+}
+
+func TestBuildSweepEncodingBreakdown_EmptyInput(t *testing.T) {
+	if rows := buildSweepEncodingBreakdown(nil, nil); len(rows) != 0 {
+		t.Errorf("len(rows) = %d, want 0", len(rows))
+	}
+}
