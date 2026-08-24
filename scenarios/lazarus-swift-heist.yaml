@@ -1,0 +1,233 @@
+id: lazarus-swift-heist
+name: Lazarus / APT38 — SWIFT Banking Heist Kill Chain
+description: >
+  Nine-stage telemetry-safe emulation of Lazarus Group / APT38 (Bureau 121,
+  BlueNoroff) tradecraft against SWIFT-connected banking environments, based
+  on MITRE ATT&CK Group G0082 and public technical reporting (Kaspersky, BAE
+  Systems, Symantec) on the February 2016 Bangladesh Bank heist (~$81M
+  stolen via fraudulent SWIFT transfers) and related campaigns against
+  Cosmos Bank, Banco de Chile, and Bancomext.
+
+  KILL CHAIN STAGES (all real ATT&CK G0082 techniques except Stages 7-8,
+  which have no upstream Atomic Red Team content and are hand-authored to
+  match the actual documented SWIFT-fraud tradecraft):
+    1. Initial Access        — weaponised attachment execution (T1566.001)
+    2. Host Discovery         — system information enumeration (T1082)
+    3. Network Share Discovery — mapping toward the SWIFT terminal segment (T1135)
+    4. Credential Access      — LSASS memory dump for SWIFT operator creds (T1003.001)
+    5. Security Software Discovery — AV/EDR presence check before proceeding (T1518.001)
+    6. Persistence            — malicious Windows service (T1543.003)
+    7. SWIFT Record Manipulation — tampering a synthetic local transaction
+       log, mirroring the real DYEPACK tool's manipulation of SWIFT Alliance
+       Access's local database/message records (T1565.001)
+    8. Anti-Forensics         — deleting and timestomping the tampered
+       record, mirroring the malware the real attackers deployed on
+       2016-02-06 to erase local SWIFT records (it failed only because
+       Bangladesh Bank had already shut the server down) (T1070.004/T1070.006)
+    9. Command and Control    — HTTP beacon with malicious user agents (T1071.001)
+
+  SAFETY: Stages 7-8 operate ONLY on a synthetic decoy file this scenario
+  creates itself ($env:TEMP\swift_alliance_transactions.log) with obviously
+  fake account numbers, BIC codes, and amounts, tagged [BAS-SIM] throughout
+  -- no real SWIFT software, database, or financial system is touched or
+  targeted. No reboot required at any stage. Stage 4 requires the
+  ProcDump binary already curated in packaging/art-payloads/procdump.exe;
+  the step SKIPs cleanly if that payload is missing from a given
+  deployment. Stage 9's beacon target follows this platform's existing
+  accepted precedent (see scenarios/apt36-spearphish.yaml) rather than an
+  RFC-6761 .invalid domain, since the underlying Atomic Red Team test's
+  user-agent-string default is baked in at content-import time and cannot
+  be overridden per-scenario.
+  PRODUCTION-SAFE: all nine stages run in telemetry mode. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - lazarus
+  - apt38
+  - bluenoroff
+  - bureau-121
+  - swift
+  - banking-heist
+  - bfsi
+  - kill-chain
+  - t1566
+  - t1082
+  - t1135
+  - t1003
+  - t1518
+  - t1543
+  - t1565
+  - t1070
+  - t1071
+  - mitre-attack
+mitre_phases:
+  - initial-access
+  - discovery
+  - credential-access
+  - persistence
+  - impact
+  - defense-evasion
+  - command-and-control
+
+steps:
+  # ── Stage 1 — Initial Access (T1566.001) — same real ART atomic already
+  #    proven in scenarios/apt36-spearphish.yaml ────────────────────────────
+  - name: "Lazarus Stage 1 — Initial Access via Weaponised Attachment (T1566.001)"
+    technique_id: T1566.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 2 — Host Discovery (T1082) ───────────────────────────────────
+  - name: "Lazarus Stage 2 — Host & System Discovery (T1082)"
+    technique_id: T1082
+    framework: art
+    test_index: 0
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 3 — Network Share Discovery (T1135) — mapping toward the SWIFT
+  #    terminal segment, mirroring the real MACKTRUCK network-mapping tool ─
+  - name: "Lazarus Stage 3 — Network Share Discovery Toward SWIFT Segment (T1135)"
+    technique_id: T1135
+    framework: art
+    test_index: 4
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 4 — Credential Access (T1003.001) — needs packaging/art-payloads/
+  #    procdump.exe, already curated in this repo's payload library ─────────
+  - name: "Lazarus Stage 4 — LSASS Credential Dump for SWIFT Operator Access (T1003.001)"
+    technique_id: T1003.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+
+  # ── Stage 5 — Security Software Discovery (T1518.001) — real APT38
+  #    tradecraft: checking AV/EDR presence before deploying further tooling ─
+  - name: "Lazarus Stage 5 — Security Software Discovery (T1518.001)"
+    technique_id: T1518.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+
+  # ── Stage 6 — Persistence (T1543.003) — same real ART atomic already
+  #    proven in scenarios/apt36-spearphish.yaml ────────────────────────────
+  - name: "Lazarus Stage 6 — Persistence via Malicious Windows Service (T1543.003)"
+    technique_id: T1543.003
+    framework: art
+    test_index: 0
+    executor: powershell
+    requires_priv: admin
+    timeout_sec: 30
+
+  # ── Stage 7 — SWIFT Record Manipulation (T1565.001) — hand-authored: no
+  #    upstream ART atomic exists for this technique. Mirrors the real
+  #    DYEPACK tool, which manipulated SWIFT Alliance Access's local
+  #    database/message records to hide the fraudulent Bangladesh Bank
+  #    transfers. Operates ONLY on a synthetic decoy file this step creates
+  #    itself -- no real SWIFT software or database is touched. ────────────
+  - name: "Lazarus Stage 7 — SWIFT Local Transaction Record Manipulation (T1565.001)"
+    technique_id: T1565.001
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates a synthetic decoy file at $env:TEMP\\swift_alliance_transactions.log with obviously fake BIC codes, account numbers, and amounts (all clearly BAS-SIM-tagged, no real financial data), then tampers one field to mirror DYEPACK's real technique of altering local SWIFT Alliance Access transaction records to hide fraudulent transfers from confirmation printouts. No real SWIFT software, database, or financial system is touched."
+    telemetry:
+      - "Sysmon EID 11: swift_alliance_transactions.log created in %TEMP%"
+      - "Sysmon EID 11 (FileDelete/FileChange if enabled): the decoy file modified seconds after creation"
+    detection:
+      - "EDR/FIM: file integrity monitoring on financial-application-adjacent paths flagging unexpected modification of a file named like a transaction log"
+      - "SIEM: file write immediately followed by a content-altering write to the same path -- a tamper pattern rather than an append pattern"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      $logPath = Join-Path $env:TEMP "swift_alliance_transactions.log"
+      $lines = @(
+        "[BAS-SIM] SWIFT Alliance Access - Local Transaction Record (SYNTHETIC TEST DATA)"
+        "MessageType: MT103"
+        "SenderBIC: TESTINBBXXX (fake, not a real BIC)"
+        "ReceiverBIC: TESTPHBBXXX (fake, not a real BIC)"
+        "Amount: 9999999.00 SIMCUR"
+        "Status: CONFIRMED"
+        "Timestamp: $(Get-Date -Format o)"
+      )
+      Set-Content -Path $logPath -Value $lines -Encoding ASCII
+      Start-Sleep -Milliseconds 200
+      (Get-Content $logPath) -replace 'Status: CONFIRMED', 'Status: CONFIRMED_TAMPERED_BAS_SIM' | Set-Content $logPath -Encoding ASCII
+      Write-Output "EXEC T1565.001: synthetic SWIFT transaction record created and tampered at $logPath. [BAS-SIM-LAZARUS-S7]"
+      Write-Output "FAIL: local transaction record was created and tampered without interference -- ensure file integrity monitoring covers paths where a compromised SWIFT/payment terminal might stage transaction data."
+    cleanup: |
+      Remove-Item -Path (Join-Path $env:TEMP "swift_alliance_transactions.log") -Force -ErrorAction SilentlyContinue
+
+  # ── Stage 8 — Anti-Forensics (T1070.004 / T1070.006) — hand-authored:
+  #    the real ART atomics for both techniques either target non-Windows
+  #    platforms, need a live GitHub download, or rely on a prereq file our
+  #    engine has no mechanism to create (it does not run ART's own
+  #    dependency-resolution phase) -- so this step creates and acts on its
+  #    own self-contained artifact instead, mirroring the actual malware
+  #    Lazarus deployed on 2016-02-06 to erase local SWIFT records (which
+  #    failed only because the bank had already shut the server down). ────
+  - name: "Lazarus Stage 8 — Anti-Forensics: Record Deletion & Timestomp (T1070.004 / T1070.006)"
+    technique_id: T1070.004
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    reversible: true
+    blast_radius: "Creates its own throwaway decoy artifact ($env:TEMP\\bas-sim-lazarus-record-copy.log), backdates its timestamps to two years in the past (T1070.006 Timestomp), then deletes both it and Stage 7's decoy transaction log (T1070.004 File Deletion). Mirrors the real anti-forensic step Lazarus attempted against Bangladesh Bank's actual SWIFT server records. No real system files are touched."
+    telemetry:
+      - "Sysmon EID 2 (FileCreateTime changed): decoy file's creation/write timestamps backdated"
+      - "Sysmon EID 23/26 (FileDelete): decoy SWIFT record and its copy deleted seconds after creation"
+    detection:
+      - "EDR: a file's timestamps rewritten to a date far in the past immediately before deletion -- a strong anti-forensic signal"
+      - "SIEM: rapid create -> timestomp -> delete sequence on a financial-record-named file, well outside normal application behavior"
+    command: |
+      $ErrorActionPreference = 'Stop'
+      $copyPath = Join-Path $env:TEMP "bas-sim-lazarus-record-copy.log"
+      Set-Content -Path $copyPath -Value "[BAS-SIM] SWIFT record copy (synthetic)" -Encoding ASCII
+      $pastDate = (Get-Date).AddYears(-2)
+      $item = Get-Item $copyPath
+      $item.CreationTime = $pastDate
+      $item.LastWriteTime = $pastDate
+      $item.LastAccessTime = $pastDate
+      $swiftLog = Join-Path $env:TEMP "swift_alliance_transactions.log"
+      $deletedSwiftLog = $false
+      if (Test-Path $swiftLog) {
+        Remove-Item -Path $swiftLog -Force
+        $deletedSwiftLog = $true
+      }
+      Remove-Item -Path $copyPath -Force
+      Write-Output "EXEC T1070.004/T1070.006: decoy record timestomped to $($pastDate.ToString('o')) then deleted (SWIFT log also deleted: $deletedSwiftLog). [BAS-SIM-LAZARUS-S8]"
+      Write-Output "FAIL: timestomp and deletion completed without interference -- ensure Sysmon EID 2 (timestamp change) and EID 23/26 (file delete) are forwarded and correlated for financial-application-adjacent paths."
+    cleanup: |
+      Remove-Item -Path (Join-Path $env:TEMP "bas-sim-lazarus-record-copy.log") -Force -ErrorAction SilentlyContinue
+      Remove-Item -Path (Join-Path $env:TEMP "swift_alliance_transactions.log") -Force -ErrorAction SilentlyContinue
+
+  # ── Stage 9 — Command and Control (T1071.001) — same real ART atomic and
+  #    same accepted www.google.com-default precedent already proven in
+  #    scenarios/apt36-spearphish.yaml (input_arguments are baked to their
+  #    upstream default at content-import time; not overridable per-scenario) ─
+  - name: "Lazarus Stage 9 — HTTP C2 Beacon with Malicious User Agents (T1071.001)"
+    technique_id: T1071.001
+    framework: art
+    test_index: 0
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30

@@ -555,6 +555,72 @@ func TestParseYAML_DLLHijackExecution(t *testing.T) {
 	}
 }
 
+func TestParseYAML_LazarusSwiftHeist(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "lazarus-swift-heist.yaml"))
+	if err != nil {
+		t.Fatalf("read scenario file: %v", err)
+	}
+	sc, err := ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if sc.ID != "lazarus-swift-heist" {
+		t.Fatalf("id = %q, want lazarus-swift-heist", sc.ID)
+	}
+	if !sc.Executable {
+		t.Fatalf("expected executable: true")
+	}
+	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
+		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
+	}
+	if len(sc.Steps) != 9 {
+		t.Fatalf("steps = %d, want 9", len(sc.Steps))
+	}
+	type wantStep struct {
+		technique string
+		framework string
+		testIndex int // only meaningful when framework == "art"
+	}
+	wantSteps := []wantStep{
+		{"T1566.001", "art", 0},
+		{"T1082", "art", 0},
+		{"T1135", "art", 4},
+		{"T1003.001", "art", 0},
+		{"T1518.001", "art", 0},
+		{"T1543.003", "art", 0},
+		{"T1565.001", "custom", -1},
+		{"T1070.004", "custom", -1},
+		{"T1071.001", "art", 0},
+	}
+	for i, want := range wantSteps {
+		st := sc.Steps[i]
+		if st.TechniqueID != want.technique {
+			t.Errorf("step %d technique_id = %q, want %q", i, st.TechniqueID, want.technique)
+		}
+		if st.Framework != want.framework {
+			t.Errorf("step %d framework = %q, want %q", i, st.Framework, want.framework)
+		}
+		if want.framework == "art" && st.TestIndex != want.testIndex {
+			t.Errorf("step %d test_index = %d, want %d", i, st.TestIndex, want.testIndex)
+		}
+		if want.framework == "custom" && st.Command == "" {
+			t.Errorf("step %d (custom) has an empty command", i)
+		}
+	}
+	// Stages 7-8 (indices 6-7) are the hand-authored steps -- confirm they
+	// only ever touch the scenario's own decoy artifacts, never a real
+	// SWIFT path, per the design's explicit safety constraint.
+	for _, i := range []int{6, 7} {
+		cmd := sc.Steps[i].Command + sc.Steps[i].Cleanup
+		if strings.Contains(cmd, "Program Files") || strings.Contains(cmd, "System32") {
+			t.Errorf("step %d touches a real system path, want only $env:TEMP decoy artifacts: %q", i, cmd)
+		}
+		if !strings.Contains(cmd, "TEMP") {
+			t.Errorf("step %d does not reference $env:TEMP, want it to operate only on decoy artifacts there", i)
+		}
+	}
+}
+
 func TestParseYAML_DLPExfiltrationValidation(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "dlp-exfiltration-validation.yaml"))
 	if err != nil {
