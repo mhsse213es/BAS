@@ -408,6 +408,89 @@ func TestBuildCoverageSummary(t *testing.T) {
 	}
 }
 
+func TestBuildEnvRestoration_RescuedWhenResidualMatchesReverted(t *testing.T) {
+	matrix := []TechniqueRow{
+		{TechniqueID: "T1053.005", CleanupVerdict: "leaked", CleanupResidual: []string{"schtask:\\Evil\\Task"}},
+	}
+	reverted := []string{"schtask deleted: \\Evil\\Task"}
+
+	e := buildEnvRestoration(matrix, reverted)
+
+	if e.StepsRescued != 1 {
+		t.Errorf("StepsRescued = %d, want 1", e.StepsRescued)
+	}
+	if e.StepsCleaned != 1 {
+		t.Errorf("StepsCleaned = %d, want 1 (rescued counts toward cleaned)", e.StepsCleaned)
+	}
+	if e.StepsLeaked != 0 {
+		t.Errorf("StepsLeaked = %d, want 0", e.StepsLeaked)
+	}
+	if matrix[0].CleanupVerdict != "rescued" {
+		t.Errorf("matrix[0].CleanupVerdict = %q, want %q (mutated in place)", matrix[0].CleanupVerdict, "rescued")
+	}
+}
+
+func TestBuildEnvRestoration_LeakedWhenResidualHasNoMatch(t *testing.T) {
+	matrix := []TechniqueRow{
+		{TechniqueID: "T1053.005", CleanupVerdict: "leaked", CleanupResidual: []string{"tmp:/tmp/evil"}},
+	}
+	reverted := []string{"schtask deleted: \\Unrelated\\Task"}
+
+	e := buildEnvRestoration(matrix, reverted)
+
+	if e.StepsRescued != 0 {
+		t.Errorf("StepsRescued = %d, want 0", e.StepsRescued)
+	}
+	if e.StepsLeaked != 1 {
+		t.Errorf("StepsLeaked = %d, want 1", e.StepsLeaked)
+	}
+	if matrix[0].CleanupVerdict != "leaked" {
+		t.Errorf("matrix[0].CleanupVerdict = %q, want unchanged %q", matrix[0].CleanupVerdict, "leaked")
+	}
+}
+
+func TestBuildEnvRestoration_NilResidualFallsBackToLegacyMath(t *testing.T) {
+	// Historical row recorded before this change: CleanupVerdict set, CleanupResidual nil.
+	matrix := []TechniqueRow{
+		{TechniqueID: "T1053.005", CleanupVerdict: "leaked", CleanupResidual: nil},
+	}
+	reverted := []string{"schtask deleted: \\Evil\\Task"}
+
+	e := buildEnvRestoration(matrix, reverted)
+
+	if e.StepsRescued != 0 {
+		t.Errorf("StepsRescued = %d, want 0 (nil residual must never match)", e.StepsRescued)
+	}
+	if e.StepsLeaked != 1 {
+		t.Errorf("StepsLeaked = %d, want 1 (unchanged legacy classification)", e.StepsLeaked)
+	}
+}
+
+func TestNormalizeReverted(t *testing.T) {
+	cases := []struct {
+		entry   string
+		wantKey string
+		wantOK  bool
+	}{
+		{"tmp removed: /tmp/evil", "tmp:/tmp/evil", true},
+		{"registry removed: HKCU\\Run\\Evil", "registry:HKCU\\Run\\Evil", true},
+		{"schtask deleted: \\Evil\\Task", "schtask:\\Evil\\Task", true},
+		{"service stopped: EvilSvc", "service:EvilSvc", true},
+		{"startup removed: C:\\Startup\\evil.lnk", "startup:C:\\Startup\\evil.lnk", true},
+		{"cron removed: /etc/cron.d/evil", "cron:/etc/cron.d/evil", true},
+		{"file restored: /etc/hosts", "/etc/hosts", true},
+		{"crontab: user crontab restored", "crontab:user", true},
+		{"iptables: rules restored", "iptables", true},
+		{"something unrecognized", "", false},
+	}
+	for _, c := range cases {
+		key, ok := normalizeReverted(c.entry)
+		if ok != c.wantOK || key != c.wantKey {
+			t.Errorf("normalizeReverted(%q) = (%q, %v), want (%q, %v)", c.entry, key, ok, c.wantKey, c.wantOK)
+		}
+	}
+}
+
 func TestBuildTechniqueMatrix_PassesThroughCleanupResidual(t *testing.T) {
 	results := []models.SimulationResult{
 		{

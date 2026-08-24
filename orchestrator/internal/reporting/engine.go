@@ -461,7 +461,7 @@ type TechniqueRow struct {
 	Confidence       string `json:"confidence,omitempty"` // high|low
 	MTTDMs           int64  `json:"mttdMs,omitempty"`
 	DurationMs       int64  `json:"durationMs"`
-	CleanupVerdict   string `json:"cleanupVerdict,omitempty"` // reverted|partial|leaked
+	CleanupVerdict   string `json:"cleanupVerdict,omitempty"` // reverted|partial|leaked|rescued ("rescued" is set only by buildEnvRestoration, at report-build time — never the raw agent verdict)
 	// CleanupResidual mirrors models.SimulationResult.CleanupResidual — see
 	// buildEnvRestoration for how it's cross-referenced against reverted[] to
 	// produce the "rescued" verdict.
@@ -3198,6 +3198,7 @@ type EnvRestoration struct {
 	StepsWithCleanup int     `json:"stepsWithCleanup"`
 	StepsCleaned     int     `json:"stepsCleaned"`
 	StepsLeaked      int     `json:"stepsLeaked"`
+	StepsRescued     int     `json:"stepsRescued,omitempty"` // subset of StepsCleaned that a step's own script failed to clean, later confirmed removed by the whole-run safety net
 	StepsNoCleanup   int     `json:"stepsNoCleanup"`
 	RevertedCount    int     `json:"revertedCount"`
 	CleanupRate      float64 `json:"cleanupRate"`  // stepsCleaned/(cleaned+leaked)*100
@@ -3212,9 +3213,71 @@ type EnvRestoration struct {
 	RunsWithIssues int `json:"runsWithIssues,omitempty"`
 }
 
+// revertedKeyPrefixes maps each human-readable prefix revertFromSnapshot
+// writes into a run's reverted[] log (agent/snapshot_windows.go,
+// agent/snapshot_posix.go) back to the normalized key format diffSnapshots
+// uses for CleanupResidual, so a step's residual keys can be cross-referenced
+// against what the whole-run safety net actually confirmed removing.
+var revertedKeyPrefixes = []struct{ from, to string }{
+	{"tmp removed: ", "tmp:"},
+	{"registry removed: ", "registry:"},
+	{"schtask deleted: ", "schtask:"},
+	{"service stopped: ", "service:"},
+	{"startup removed: ", "startup:"},
+	{"cron removed: ", "cron:"},
+	{"file restored: ", ""},
+}
+
+// normalizeReverted maps one reverted[] log entry to its normalized
+// CleanupResidual-format key. ok is false for an entry with no known mapping
+// ("crontab: user crontab restored", "iptables: rules restored" — fixed
+// literal log lines handled as exact-match special cases below, and anything
+// else unrecognized) — those never match a residual key, so the step they
+// might relate to is conservatively left at its raw verdict rather than
+// guessed as rescued.
+func normalizeReverted(entry string) (key string, ok bool) {
+	switch entry {
+	case "crontab: user crontab restored":
+		return "crontab:user", true
+	case "iptables: rules restored":
+		return "iptables", true
+	}
+	for _, p := range revertedKeyPrefixes {
+		if strings.HasPrefix(entry, p.from) {
+			return p.to + strings.TrimPrefix(entry, p.from), true
+		}
+	}
+	return "", false
+}
+
+// normalizeRevertedSet builds a lookup set of every reverted[] entry this
+// run's whole-run safety net logged, in normalized-key form.
+func normalizeRevertedSet(reverted []string) map[string]bool {
+	set := make(map[string]bool, len(reverted))
+	for _, entry := range reverted {
+		if key, ok := normalizeReverted(entry); ok {
+			set[key] = true
+		}
+	}
+	return set
+}
+
 // buildEnvRestoration computes Environment Restoration metrics from the
 // per-step cleanup verdicts already present in the TechniqueMatrix.
 func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoration {
+	revertedSet := normalizeRevertedSet(reverted)
+	for i := range matrix {
+		if matrix[i].CleanupVerdict != "leaked" && matrix[i].CleanupVerdict != "partial" {
+			continue
+		}
+		for _, key := range matrix[i].CleanupResidual {
+			if revertedSet[key] {
+				matrix[i].CleanupVerdict = "rescued"
+				break
+			}
+		}
+	}
+
 	e := EnvRestoration{
 		StepsTotal:    len(matrix),
 		RevertedCount: len(reverted),
@@ -3224,6 +3287,10 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 		case "reverted":
 			e.StepsWithCleanup++
 			e.StepsCleaned++
+		case "rescued":
+			e.StepsWithCleanup++
+			e.StepsCleaned++
+			e.StepsRescued++
 		case "partial", "leaked":
 			e.StepsWithCleanup++
 			e.StepsLeaked++
@@ -3263,6 +3330,10 @@ func buildEnvRestoration(matrix []TechniqueRow, reverted []string) EnvRestoratio
 		e.ImpactLabel = fmt.Sprintf("Persistent Changes Detected (%d)", e.StepsLeaked)
 		e.StatusLabel = "Failed"
 		e.ExecSummary = fmt.Sprintf("%d simulation changes were not reverted. Manual endpoint remediation is required.", e.StepsLeaked)
+	}
+
+	if e.StepsRescued > 0 {
+		e.ExecSummary += fmt.Sprintf(" %d of these were cleaned by the safety-net sweep, not by their own script.", e.StepsRescued)
 	}
 
 	e.HasData = e.StepsTotal > 0
