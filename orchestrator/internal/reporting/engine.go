@@ -845,16 +845,47 @@ func summariseAttackFlow(nodes []AttackFlowNode) AttackFlowSummary {
 // "prevented"; FAIL → "detected" when an alert fired (the agent's detection sweep
 // first, falling back to the coarse per-step events), else "missed". ERROR/SKIPPED
 // and tactic-less steps are excluded. Honest: no detected verdict without evidence.
-func buildKillChain(results []models.SimulationResult, dets []DetectionTechnique) []KillChainStep {
-	detByTech := make(map[string]DetectionTechnique, len(dets))
+// detTechIndex builds a TechniqueID -> DetectionTechnique lookup, built once
+// and shared across every result classification in a report (avoids
+// rebuilding this map per-result).
+func detTechIndex(dets []DetectionTechnique) map[string]DetectionTechnique {
+	idx := make(map[string]DetectionTechnique, len(dets))
 	for _, d := range dets {
 		if d.TechniqueID != "" {
-			detByTech[d.TechniqueID] = d
+			idx[d.TechniqueID] = d
 		}
 	}
+	return idx
+}
+
+// classifyOutcome classifies one result's security outcome: "blocked" (a
+// control prevented it), "detected" (ran, but an alert fired), "missed"
+// (ran, no detection — the blind spot), or "excluded" (ERROR/SKIPPED — an
+// execution problem, not a security outcome). Shared by buildKillChain and
+// the sweep technique/encoding rollups (buildSweepTechniqueBreakdown,
+// buildSweepEncodingBreakdown) so there is one source of truth for this
+// classification instead of copies that can drift apart.
+func classifyOutcome(r models.SimulationResult, detByTech map[string]DetectionTechnique) string {
+	if r.Result == models.ResultError || r.Result == models.ResultSkipped {
+		return "excluded"
+	}
+	if r.Result == models.ResultPass || r.Result == models.ResultBlocked {
+		return "blocked"
+	}
+	if d, ok := detByTech[r.Technique.ID]; ok && d.Verdict == "detected" {
+		return "detected"
+	}
+	if cd := classifyDetection(r.Events); cd.Status == "Detected" {
+		return "detected"
+	}
+	return "missed"
+}
+
+func buildKillChain(results []models.SimulationResult, dets []DetectionTechnique) []KillChainStep {
+	detByTech := detTechIndex(dets)
 	byTactic := make(map[string][]models.SimulationResult)
 	for _, r := range results {
-		if r.Result == models.ResultError || r.Result == models.ResultSkipped {
+		if classifyOutcome(r, detByTech) == "excluded" {
 			continue
 		}
 		if r.Technique.Tactic == "" {
@@ -874,22 +905,24 @@ func buildKillChain(results []models.SimulationResult, dets []DetectionTechnique
 				Phase: tactic, TechniqueID: r.Technique.ID,
 				Technique: r.Technique.Name, Action: killChainAction(r),
 			}
-			if r.Result == models.ResultPass || r.Result == models.ResultBlocked {
+			switch classifyOutcome(r, detByTech) {
+			case "blocked":
 				step.Outcome = "prevented"
 				if ctrl := attributeControl(r); ctrl != "" {
 					step.Detail = "Blocked by " + ctrl
 				} else {
 					step.Detail = "Prevented by a control"
 				}
-			} else if d, ok := detByTech[r.Technique.ID]; ok && d.Verdict == "detected" {
+			case "detected":
 				step.Outcome = "detected"
-				step.Confidence = d.Confidence
-				step.LatencyMs = d.TimeToDetectMs
-				step.Detail = "Detection alert raised"
-			} else if cd := classifyDetection(r.Events); cd.Status == "Detected" {
-				step.Outcome = "detected"
-				step.Detail = cd.Detail
-			} else {
+				if d, ok := detByTech[r.Technique.ID]; ok && d.Verdict == "detected" {
+					step.Confidence = d.Confidence
+					step.LatencyMs = d.TimeToDetectMs
+					step.Detail = "Detection alert raised"
+				} else {
+					step.Detail = classifyDetection(r.Events).Detail
+				}
+			default: // "missed"
 				step.Outcome = "missed"
 				step.Detail = "No detection — executed unseen"
 			}

@@ -15,6 +15,31 @@ func step(id, tactic, verdict string, at time.Time) models.SimulationResult {
 	}
 }
 
+func TestClassifyOutcome(t *testing.T) {
+	dets := []DetectionTechnique{{TechniqueID: "T1003", Verdict: "detected", Confidence: "high"}}
+	detByTech := detTechIndex(dets)
+
+	cases := []struct {
+		name string
+		r    models.SimulationResult
+		want string
+	}{
+		{"blocked pass", models.SimulationResult{Result: models.ResultPass, Technique: models.AttackTechnique{ID: "T1059"}}, "blocked"},
+		{"blocked result", models.SimulationResult{Result: models.ResultBlocked, Technique: models.AttackTechnique{ID: "T1059"}}, "blocked"},
+		{"error excluded", models.SimulationResult{Result: models.ResultError, Technique: models.AttackTechnique{ID: "T1059"}}, "excluded"},
+		{"skipped excluded", models.SimulationResult{Result: models.ResultSkipped, Technique: models.AttackTechnique{ID: "T1059"}}, "excluded"},
+		{"fail with detection alert", models.SimulationResult{Result: models.ResultFail, Technique: models.AttackTechnique{ID: "T1003"}}, "detected"},
+		{"fail no detection", models.SimulationResult{Result: models.ResultFail, Technique: models.AttackTechnique{ID: "T1059"}}, "missed"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := classifyOutcome(c.r, detByTech); got != c.want {
+				t.Errorf("classifyOutcome() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
 func TestBuildKillChain(t *testing.T) {
 	base := time.Date(2026, 6, 16, 10, 0, 0, 0, time.UTC)
 	results := []models.SimulationResult{
