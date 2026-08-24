@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -508,5 +509,86 @@ func TestBuildTechniqueMatrix_PassesThroughCleanupResidual(t *testing.T) {
 	want := []string{"schtask:\\Evil\\Task"}
 	if !reflect.DeepEqual(rows[0].CleanupResidual, want) {
 		t.Errorf("CleanupResidual = %v, want %v", rows[0].CleanupResidual, want)
+	}
+}
+
+func TestBuildSweepTechniqueBreakdown_MixedOutcomes(t *testing.T) {
+	results := []models.SimulationResult{
+		{ID: "r1", Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}, Result: models.ResultBlocked},
+		{ID: "r2", Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}, Result: models.ResultFail},
+		{ID: "r3", Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}, Result: models.ResultFail},
+		{ID: "r4", Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}, Result: models.ResultError},
+	}
+	dets := []DetectionTechnique{{TechniqueID: "T1055", Verdict: "detected", Confidence: "high"}}
+
+	rows := buildSweepTechniqueBreakdown(results, dets)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	r := rows[0]
+	if r.TechniqueID != "T1055" || r.TechniqueName != "Process Injection" || r.Tactic != "defense-evasion" {
+		t.Errorf("row identity = %+v", r)
+	}
+	if r.Variants != 4 {
+		t.Errorf("Variants = %d, want 4", r.Variants)
+	}
+	if r.Blocked != 1 {
+		t.Errorf("Blocked = %d, want 1", r.Blocked)
+	}
+	if r.Detected != 2 {
+		t.Errorf("Detected = %d, want 2", r.Detected)
+	}
+	if r.Missed != 0 {
+		t.Errorf("Missed = %d, want 0", r.Missed)
+	}
+	if r.ErrorSkipped != 1 {
+		t.Errorf("ErrorSkipped = %d, want 1", r.ErrorSkipped)
+	}
+	if !r.Measurable {
+		t.Error("Measurable = false, want true")
+	}
+	wantPrevention := 1.0 / 3.0 * 100
+	if math.Abs(r.PreventionPct-wantPrevention) > 0.01 {
+		t.Errorf("PreventionPct = %v, want %v", r.PreventionPct, wantPrevention)
+	}
+	wantDetection := 2.0 / 3.0 * 100
+	if math.Abs(r.DetectionPct-wantDetection) > 0.01 {
+		t.Errorf("DetectionPct = %v, want %v", r.DetectionPct, wantDetection)
+	}
+}
+
+func TestBuildSweepTechniqueBreakdown_AllErrorNotMeasurable(t *testing.T) {
+	results := []models.SimulationResult{
+		{ID: "r1", Technique: models.AttackTechnique{ID: "T1059", Name: "PowerShell"}, Result: models.ResultError},
+		{ID: "r2", Technique: models.AttackTechnique{ID: "T1059", Name: "PowerShell"}, Result: models.ResultSkipped},
+	}
+	rows := buildSweepTechniqueBreakdown(results, nil)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	r := rows[0]
+	if r.Measurable {
+		t.Error("Measurable = true, want false (all results are error/skipped)")
+	}
+	if r.PreventionPct != 0 || r.DetectionPct != 0 {
+		t.Errorf("PreventionPct/DetectionPct = %v/%v, want 0/0 when not measurable", r.PreventionPct, r.DetectionPct)
+	}
+	if r.ErrorSkipped != 2 {
+		t.Errorf("ErrorSkipped = %d, want 2", r.ErrorSkipped)
+	}
+}
+
+func TestBuildSweepTechniqueBreakdown_MultipleTechniquesAndEmptyInput(t *testing.T) {
+	results := []models.SimulationResult{
+		{ID: "r1", Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection"}, Result: models.ResultBlocked},
+		{ID: "r2", Technique: models.AttackTechnique{ID: "T1059", Name: "PowerShell"}, Result: models.ResultFail},
+	}
+	rows := buildSweepTechniqueBreakdown(results, nil)
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2 (one per technique)", len(rows))
+	}
+
+	if rows := buildSweepTechniqueBreakdown(nil, nil); len(rows) != 0 {
+		t.Errorf("empty input: len(rows) = %d, want 0", len(rows))
 	}
 }

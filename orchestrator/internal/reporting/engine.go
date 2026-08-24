@@ -966,6 +966,55 @@ func buildKillChain(results []models.SimulationResult, dets []DetectionTechnique
 	return out
 }
 
+// buildSweepTechniqueBreakdown rolls a sweep's unioned results up into one
+// row per technique — Blocked/Detected/Missed/ErrorSkipped counts plus
+// Prevention/Detection percentages, using the same classifyOutcome rule
+// buildKillChain uses. Row order follows first-appearance order in results.
+func buildSweepTechniqueBreakdown(results []models.SimulationResult, dets []DetectionTechnique) []SweepTechniqueRow {
+	detByTech := detTechIndex(dets)
+	order := []string{}
+	byTech := make(map[string]*SweepTechniqueRow)
+
+	for _, r := range results {
+		row, ok := byTech[r.Technique.ID]
+		if !ok {
+			row = &SweepTechniqueRow{
+				TechniqueID:   r.Technique.ID,
+				TechniqueName: r.Technique.Name,
+				Tactic:        r.Technique.Tactic,
+				ScenarioRunID: r.ID, // overwritten by BuildFromSweep with the real run id
+			}
+			byTech[r.Technique.ID] = row
+			order = append(order, r.Technique.ID)
+		}
+		row.Variants++
+		switch classifyOutcome(r, detByTech) {
+		case "blocked":
+			row.Blocked++
+		case "detected":
+			row.Detected++
+		case "missed":
+			row.Missed++
+		case "excluded":
+			row.ErrorSkipped++
+		}
+	}
+
+	out := make([]SweepTechniqueRow, 0, len(order))
+	for _, id := range order {
+		row := byTech[id]
+		measurable := row.Blocked+row.Detected+row.Missed > 0
+		row.Measurable = measurable
+		if measurable {
+			denom := float64(row.Blocked + row.Detected + row.Missed)
+			row.PreventionPct = float64(row.Blocked) / denom * 100
+			row.DetectionPct = float64(row.Detected) / denom * 100
+		}
+		out = append(out, *row)
+	}
+	return out
+}
+
 // privLabel normalises a raw ExecutedAs/RequestedPriv value to a report-friendly
 // label. Empty (unannotated legacy step) becomes "Legacy"; the value is otherwise
 // title-cased so "user→admin" stays readable and "admin" becomes "Admin".
