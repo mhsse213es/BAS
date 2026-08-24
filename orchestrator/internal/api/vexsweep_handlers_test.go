@@ -5,9 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/vexsweep"
 	"github.com/audspect/bas/internal/ws"
@@ -397,6 +400,72 @@ func TestGetVexSweepRuns_404ForUnknownSweep(t *testing.T) {
 		rec := callAuthed(h.GetVexSweepRuns, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want 404, body: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestGetSweepReport_Success(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-sweep-report-api')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		store := vexsweep.NewStore(pool)
+		sw, err := store.Create(ctx, vexsweep.Sweep{
+			AgentID: "agent-sweep-report-api", Mode: "sequential",
+			Techniques: []string{"T1059.001"}, TechniqueVariantCounts: []int{1}, TotalVariants: 1,
+		})
+		if err != nil {
+			t.Fatalf("Create sweep: %v", err)
+		}
+		results := []models.SimulationResult{
+			{ID: "r1", Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"}, Result: models.ResultFail, Severity: "High"},
+		}
+		resultsJSON, _ := json.Marshal(results)
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, sweep_id)
+			 VALUES ('sr-report-api', '__variant__T1059.001', 'agent-sweep-report-api', 'T1059.001 variants', 'completed', $1, $2)`,
+			resultsJSON, sw.ID); err != nil {
+			t.Fatalf("seed scenario_runs: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).
+			WithVexSweep(store, testVexSweepDispatcher(store)).
+			WithReporting(reporting.NewEngine(pool))
+		userID := seedUser(t, pool, "sweep-report-user", "password123", "viewer", true)
+		req := authedRequest(t, http.MethodGet, "/api/vex/sweeps/"+sw.ID+"/report", nil, auth.RoleViewer, userID)
+		req = withURLParam(req, "id", sw.ID)
+		rec := callAuthed(h.GetSweepReport, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+			t.Fatalf("content-type = %q", ct)
+		}
+		if !strings.Contains(rec.Body.String(), "T1059.001") {
+			t.Fatal("HTML report missing seeded technique T1059.001")
+		}
+	})
+}
+
+func TestGetSweepReport_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := vexsweep.NewStore(pool)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).
+			WithVexSweep(store, testVexSweepDispatcher(store)).
+			WithReporting(reporting.NewEngine(pool))
+		userID := seedUser(t, pool, "sweep-report-404-user", "password123", "viewer", true)
+		req := authedRequest(t, http.MethodGet, "/api/vex/sweeps/nope/report", nil, auth.RoleViewer, userID)
+		req = withURLParam(req, "id", "nope")
+		rec := callAuthed(h.GetSweepReport, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", rec.Code)
 		}
 	})
 }

@@ -3,13 +3,17 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/vexsweep"
 )
 
@@ -188,6 +192,50 @@ func (h *Handler) GetVexSweepRuns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonOK(w, map[string]any{"sweep": sweepToJSON(h.db, sw), "runs": runs})
+}
+
+// GET /api/vex/sweeps/{id}/report
+// Combined HTML report for a Full Variant Sweep: one row per dispatched
+// technique (Blocked/Detected/Missed/Error rollup) plus an
+// encoding-effectiveness breakdown, aggregated from every scenario_runs row
+// the sweep dispatched.
+func (h *Handler) GetSweepReport(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	rep, err := h.reportingEngine.BuildFromSweep(r.Context(), id, r.URL.Query().Get("filter"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	h.auditLog(r, "report.export", id, map[string]any{"format": "html", "type": "sweep"}, "ok")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := reporting.GenerateHTML(w, rep, nil); err != nil {
+		log.Printf("[api] sweep report html: %v", err)
+	}
+}
+
+// GET /api/vex/sweeps/{id}/pdf
+func (h *Handler) GetSweepPDF(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	rep, err := h.reportingEngine.BuildFromSweep(r.Context(), id, r.URL.Query().Get("filter"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	fname := fmt.Sprintf("bas-sweep-%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), time.Now().UTC().Format("2006-01-02"))
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	h.auditLog(r, "report.export", id, map[string]any{"format": "pdf", "type": "sweep"}, "ok")
+	if err := h.reportingEngine.PDFFromReport(r.Context(), w, rep, nil, nil); err != nil {
+		log.Printf("[api] sweep report pdf: %v", err)
+	}
 }
 
 // GET /api/vex/sweeps?status=running
