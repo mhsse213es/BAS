@@ -1,0 +1,189 @@
+id: rbi-cscf-drill
+name: RBI Cyber Security Framework in Banks — Baseline Controls Posture Drill
+local_check: true
+description: >
+  Nine-category posture validation against RBI's Cyber Security Framework in
+  Banks circular (DBS.CO/CSITE/BC.11/33.01.001/2015-16, dated 2016-06-02),
+  Annex 1 "Baseline Cyber Security and Resilience Requirements". Each check
+  cites the exact Annex 1 clause number.
+
+  Distinct from scenarios/cscrf-mii-drill.yaml (SEBI's framework for Market
+  Infrastructure Institutions): SEBI CSCRF validates whether detective
+  controls actually FIRE by executing real techniques (port scans, failed
+  auth probes, account creation) and checking for telemetry. RBI's baseline
+  controls are configuration/posture requirements, not a detection-testing
+  exercise -- this scenario is pure read-only posture validation. It has no
+  steps: attack techniques, and reports PASS/FAIL against configuration
+  state, never EXEC/telemetry expectations.
+
+  Categories checked: Audit Logging (RBI-16/17), Multi-Factor Authentication
+  (RBI-8.4), Privileged Access Management (RBI-8.3/8.5), Backup (RBI-19.4),
+  EDR/Antivirus (RBI-13.2), Removable Media/USB (RBI-12), Application
+  Control (RBI-2.1/2.2), Encryption (RBI-8.1), Patch Management (RBI-7.1/7.2).
+
+  HONEST LIMITATIONS: MFA and Backup are best-effort LOCAL PROXIES. True
+  org-wide MFA enforcement (e.g. Azure MFA/Duo at the identity provider) and
+  true backup/DR posture (off-site copies, tested recovery time objectives)
+  cannot be fully verified from a single endpoint -- each check says so
+  explicitly in its own PASS/FAIL output, the same way
+  scenarios/cscrf-mii-drill.yaml flags EID 4798's own inconsistency.
+author: Audspect Research
+supported_os: [windows]
+tags:
+  - rbi
+  - cscf
+  - banking
+  - compliance
+  - bfsi
+  - india
+  - regulatory
+  - posture
+
+steps:
+  - name: "Audit Logging (RBI-16/17)"
+    check_id: rbi-audit-logging
+    technique_id: T1562.002
+    framework: custom
+    executor: local
+    command: >-
+      $ErrorActionPreference = 'SilentlyContinue';
+      $auditOut = (& auditpol /get /category:* 2>&1) -join ' ';
+      $successFailureCount = ([regex]::Matches($auditOut, 'Success and Failure')).Count;
+      $secLog = Get-WinEvent -ListLog Security -ErrorAction SilentlyContinue;
+      $logEnabled = [bool]($secLog -and $secLog.IsEnabled);
+      if ($successFailureCount -ge 1 -and $logEnabled) {
+        Write-Output "PASS: RBI-16/17 (Audit Logging) - Security log enabled, $successFailureCount audit subcategories capture Success and Failure (beyond Windows out-of-box defaults, which set none to Success and Failure)."
+      } else {
+        Write-Output "FAIL: RBI-16/17 (Audit Logging) - Security log enabled=$logEnabled, only $successFailureCount subcategories capture both Success and Failure. Annex-1 SS16-17 requires managed, analysed audit logs covering user actions, sufficient for forensic auditing if needed."
+      }
+    timeout_sec: 20
+
+  - name: "Multi-Factor Authentication proxy: RDP NLA enforcement (RBI-8.4)"
+    check_id: rbi-mfa-proxy-rdp-nla
+    technique_id: T1021.001
+    framework: custom
+    executor: local
+    command: >-
+      $ErrorActionPreference = 'SilentlyContinue';
+      $rdpEnabled = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -ErrorAction SilentlyContinue).fDenyTSConnections -eq 0;
+      $nlaEnforced = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -ErrorAction SilentlyContinue).UserAuthentication -eq 1;
+      if (-not $rdpEnabled -or $nlaEnforced) {
+        Write-Output "PASS: RBI-8.4 (MFA proxy) - RDP disabled or NLA enforced (rdpEnabled=$rdpEnabled, nlaEnforced=$nlaEnforced). NOTE: this is a local proxy only -- true org-wide MFA (e.g. Azure MFA/Duo at the identity provider) cannot be fully verified from a single endpoint."
+      } else {
+        Write-Output "FAIL: RBI-8.4 (MFA proxy) - RDP is enabled without NLA enforced, meaning a password alone reaches a logon prompt. Annex-1 SS8.4 requires two-factor/multi-factor authentication depending on risk assessment."
+      }
+    timeout_sec: 15
+
+  - name: "Privileged Access Management: interactive session admin rights (RBI-8.3/8.5)"
+    check_id: rbi-pam-local-admin
+    technique_id: T1078.003
+    framework: custom
+    executor: local
+    command: >-
+      $ErrorActionPreference = 'SilentlyContinue';
+      $currentUser = "$env:USERDOMAIN\$env:USERNAME";
+      $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator);
+      $localAdminCount = (Get-LocalGroupMember -Group 'Administrators' -ErrorAction SilentlyContinue | Measure-Object).Count;
+      if (-not $isAdmin) {
+        Write-Output "PASS: RBI-8.3/8.5 (PAM) - current interactive session ($currentUser) is not a local Administrator. $localAdminCount account(s) total in local Administrators group."
+      } else {
+        Write-Output "FAIL: RBI-8.3/8.5 (PAM) - current interactive session ($currentUser) IS a local Administrator. Annex-1 SS8.3 requires disallowing administrative rights on end-user workstations, granted only on a need-to-know, time-bound basis."
+      }
+    timeout_sec: 15
+
+  - name: "Backup readiness proxy: VSS + scheduled backup task (RBI-19.4)"
+    check_id: rbi-backup-proxy
+    technique_id: T1490
+    framework: custom
+    executor: local
+    command: >-
+      $ErrorActionPreference = 'SilentlyContinue';
+      $vss = Get-Service -Name VSS -ErrorAction SilentlyContinue;
+      $vssRunning = [bool]($vss -and $vss.Status -eq 'Running');
+      $backupTasks = Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'Backup' -or $_.TaskPath -match 'WindowsBackup' };
+      $backupTaskCount = ($backupTasks | Measure-Object).Count;
+      if ($vssRunning -and $backupTaskCount -ge 1) {
+        Write-Output "PASS: RBI-19.4 (Backup proxy) - VSS running, $backupTaskCount scheduled backup task(s) found. NOTE: this is a local proxy only -- true BCP/DR posture (off-site copies, tested recovery time objectives) cannot be fully verified from a single endpoint."
+      } else {
+        Write-Output "FAIL: RBI-19.4 (Backup proxy) - VSS running=$vssRunning, scheduled backup tasks found=$backupTaskCount. Annex-1 SS19.4 requires BCP/DR capabilities that support rapid recovery from cyber incidents."
+      }
+    timeout_sec: 20
+
+  - name: "EDR / Antivirus real-time and behavioural protection (RBI-13.2)"
+    check_id: rbi-edr-antivirus
+    technique_id: T1562.001
+    framework: custom
+    executor: local
+    command: >-
+      $ErrorActionPreference = 'SilentlyContinue';
+      $mp = Get-MpComputerStatus -ErrorAction SilentlyContinue;
+      $rtp = [bool]($mp -and $mp.RealTimeProtectionEnabled);
+      $behavior = [bool]($mp -and $mp.BehaviorMonitorEnabled);
+      if ($rtp -and $behavior) {
+        Write-Output "PASS: RBI-13.2 (EDR/Antivirus) - real-time protection and behaviour monitoring both enabled."
+      } else {
+        Write-Output "FAIL: RBI-13.2 (EDR/Antivirus) - real-time protection=$rtp, behaviour monitoring=$behavior. Annex-1 SS13.2 requires anti-malware/antivirus protection including behavioural detection systems."
+      }
+    timeout_sec: 15
+
+  - name: "Removable Media / USB restriction (RBI-12)"
+    check_id: rbi-removable-media
+    technique_id: T1052.001
+    framework: custom
+    executor: local
+    command: >-
+      $ErrorActionPreference = 'SilentlyContinue';
+      $usbStor = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\UsbStor' -Name Start -ErrorAction SilentlyContinue;
+      $usbDisabled = [bool]($usbStor -and $usbStor.Start -eq 4);
+      $writeDeny = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices' -Name 'Deny_Write' -ErrorAction SilentlyContinue).Deny_Write -eq 1;
+      if ($usbDisabled -or $writeDeny) {
+        Write-Output "PASS: RBI-12 (Removable Media) - USB mass storage disabled (Start=4) or write access denied by policy."
+      } else {
+        Write-Output "FAIL: RBI-12 (Removable Media) - USB mass storage is enabled with no write-restriction policy detected. Annex-1 SS12.5 states removable device/media use should NOT be permitted by default unless specifically authorised for a defined use and duration."
+      }
+    timeout_sec: 15
+
+  - name: "Application Control: AppLocker / WDAC (RBI-2.1/2.2)"
+    check_id: rbi-application-control
+    technique_id: T1218
+    framework: custom
+    executor: local
+    command: >-
+      $ErrorActionPreference = 'SilentlyContinue';
+      $appLockerActive = $false;
+      try { $p = Get-AppLockerPolicy -Effective -ErrorAction Stop; $appLockerActive = [bool]($p -and $p.RuleCollections.Count -gt 0) } catch {};
+      $wdacActive = Test-Path 'C:\Windows\System32\CodeIntegrity\SIPolicy.p7b';
+      if ($appLockerActive -or $wdacActive) {
+        Write-Output "PASS: RBI-2.1/2.2 (Application Control) - AppLocker policy active or WDAC (SIPolicy) present."
+      } else {
+        Write-Output "FAIL: RBI-2.1/2.2 (Application Control) - no AppLocker rules or WDAC policy detected. Annex-1 SS2.1 recommends whitelisting of authorised applications/software/libraries."
+      }
+    timeout_sec: 20
+
+  - name: "Encryption at rest: BitLocker on OS volume (RBI-8.1)"
+    check_id: rbi-encryption-bitlocker
+    technique_id: T1552.004
+    framework: custom
+    executor: local
+    command: >-
+      $ErrorActionPreference = 'SilentlyContinue';
+      $osDrive = $env:SystemDrive;
+      $bl = Get-BitLockerVolume -MountPoint $osDrive -ErrorAction SilentlyContinue;
+      $blOn = [bool]($bl -and $bl.ProtectionStatus -eq 'On');
+      if ($blOn) {
+        Write-Output "PASS: RBI-8.1 (Encryption) - BitLocker protection ON for $osDrive."
+      } else {
+        Write-Output "FAIL: RBI-8.1 (Encryption) - BitLocker protection is OFF or unavailable for $osDrive. Annex-1 SS8.1 requires protecting data at rest using encryption, if supported by the device."
+      }
+    timeout_sec: 15
+
+  - name: "Patch Currency (RBI-7.1/7.2)"
+    check_id: rbi-patch-currency
+    technique_id: T1082
+    framework: custom
+    executor: local
+    command: >-
+      $h = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 1;
+      if ($h -and $h.InstalledOn -and ((Get-Date) - $h.InstalledOn).Days -le 30) { Write-Output 'PASS: RBI-7.1/7.2 (Patch Management) - last patch installed within 30 days' }
+      else { Write-Output 'FAIL: RBI-7.1/7.2 (Patch Management) - last patch installed more than 30 days ago (or unknown). Annex-1 SS7.1-7.2 requires minimizing the time window of vulnerability exposure.' }
+    timeout_sec: 15

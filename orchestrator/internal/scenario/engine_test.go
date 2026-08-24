@@ -621,6 +621,52 @@ func TestParseYAML_LazarusSwiftHeist(t *testing.T) {
 	}
 }
 
+func TestParseYAML_RBICSCFDrill(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "rbi-cscf-drill.yaml"))
+	if err != nil {
+		t.Fatalf("read scenario file: %v", err)
+	}
+	sc, err := ParseYAML(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if sc.ID != "rbi-cscf-drill" {
+		t.Fatalf("id = %q, want rbi-cscf-drill", sc.ID)
+	}
+	if !sc.LocalCheck {
+		t.Fatalf("expected local_check: true")
+	}
+	if sc.Executable {
+		t.Fatalf("expected executable to be unset -- this is a pure posture drill, not an attack scenario")
+	}
+	if len(sc.SupportedOS) != 1 || sc.SupportedOS[0] != "windows" {
+		t.Fatalf("supported_os = %v, want [windows]", sc.SupportedOS)
+	}
+	wantCheckIDs := []string{
+		"rbi-audit-logging", "rbi-mfa-proxy-rdp-nla", "rbi-pam-local-admin",
+		"rbi-backup-proxy", "rbi-edr-antivirus", "rbi-removable-media",
+		"rbi-application-control", "rbi-encryption-bitlocker", "rbi-patch-currency",
+	}
+	if len(sc.Steps) != len(wantCheckIDs) {
+		t.Fatalf("steps = %d, want %d", len(sc.Steps), len(wantCheckIDs))
+	}
+	for i, want := range wantCheckIDs {
+		st := sc.Steps[i]
+		if st.CheckID != want {
+			t.Errorf("step %d check_id = %q, want %q", i, st.CheckID, want)
+		}
+		if st.Framework != "custom" {
+			t.Errorf("step %d framework = %q, want custom", i, st.Framework)
+		}
+		if st.Command == "" {
+			t.Errorf("step %d (%s) has an empty command", i, want)
+		}
+		if !strings.Contains(st.Command, "PASS:") || !strings.Contains(st.Command, "FAIL:") {
+			t.Errorf("step %d (%s) command doesn't report both PASS and FAIL -- this is a posture check, not an attack step", i, want)
+		}
+	}
+}
+
 func TestParseYAML_DLPExfiltrationValidation(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "..", "scenarios", "dlp-exfiltration-validation.yaml"))
 	if err != nil {
