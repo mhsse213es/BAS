@@ -520,6 +520,47 @@ func TestGetCampaign_Success(t *testing.T) {
 	})
 }
 
+// TestGetCampaign_RunsIncludePausedFlag guards the per-agent "runs" breakdown
+// against the same running-vs-paused ambiguity already fixed on the campaign
+// summary badge: a child run's own paused state (set independently of its
+// status, which stays "running" while paused) must reach the frontend so the
+// campaign detail's per-agent table can show "Paused" instead of "Running".
+func TestGetCampaign_RunsIncludePausedFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		seedCampaign(t, pool, "gc-paused-camp", "Paused Child Run Scenario")
+		seedReportableRun(t, pool, "gc-paused-run", "gc-paused-agent", reportRunOpts{
+			CampaignID: "gc-paused-camp",
+			Status:     "running",
+		})
+		if _, err := pool.Exec(context.Background(),
+			`UPDATE scenario_runs SET paused = true WHERE id = $1`, "gc-paused-run"); err != nil {
+			t.Fatalf("mark run paused: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		rec := httptest.NewRecorder()
+		h.GetCampaign(rec, campaignReq("/api/campaigns/gc-paused-camp", "gc-paused-camp", ""))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		runs, _ := out["runs"].([]any)
+		if len(runs) != 1 {
+			t.Fatalf("runs = %v, want 1 entry", out["runs"])
+		}
+		run, _ := runs[0].(map[string]any)
+		if paused, _ := run["paused"].(bool); !paused {
+			t.Errorf("runs[0].paused = %v, want true", run["paused"])
+		}
+	})
+}
+
 // TestGetCampaign_ReturnsSubsetAndTargetsForRerun covers the exact data
 // Campaign Re-run reads (openCampaignRerunReview/startCampaignRerunFromReview
 // in wwwroot/index.html): the frozen agent-id snapshot and the operator's

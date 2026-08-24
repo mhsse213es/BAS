@@ -248,6 +248,7 @@ type childRunOut struct {
 	RunID           string  `json:"runId"`
 	AgentID         string  `json:"agentId"`
 	Status          string  `json:"status"`
+	Paused          bool    `json:"paused,omitempty"`
 	PreventionScore float64 `json:"preventionScore"`
 	Steps           int     `json:"steps"`
 }
@@ -287,7 +288,7 @@ func (h *Handler) loadChildren(ctx context.Context, campaignID string) ([]campai
 		if score != nil {
 			prevPct = score.PreventionScore
 		}
-		out = append(out, childRunOut{RunID: rid, AgentID: agentID, Status: status, PreventionScore: prevPct, Steps: len(results)})
+		out = append(out, childRunOut{RunID: rid, AgentID: agentID, Status: status, Paused: paused, PreventionScore: prevPct, Steps: len(results)})
 	}
 	return cr, out, rows.Err()
 }

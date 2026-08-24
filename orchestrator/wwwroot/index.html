@@ -8916,7 +8916,8 @@ function openCampaignDetail(id) {
     // ── per-agent results table (our fan-out equivalent of the mockup step table) ──
     var rows = (c.runs || []).map(function(rn) {
       var col = rn.status === 'completed' ? 'var(--success)' : rn.status === 'failed' ? 'var(--danger)' : 'var(--muted)';
-      return '<tr><td><span class="sbadge s-' + x(rn.status) + '">' + x(rn.status) + '</span></td>' +
+      var rnPaused = rn.status === 'running' && rn.paused;
+      return '<tr><td><span class="sbadge ' + (rnPaused ? 's-paused' : 's-' + x(rn.status)) + '">' + (rnPaused ? 'paused' : x(rn.status)) + '</span></td>' +
         '<td style="font-family:var(--font-mono);font-size:0.72rem">' + x(rn.agentId) + '</td>' +
         '<td style="font-weight:600;color:' + col + '">' + (rn.preventionScore ? Math.round(rn.preventionScore) + '%' : '—') + '</td>' +
         '<td class="td-r"><button class="btn btn-outline btn-sm" onclick="openRunFromCampaign(\'' + x(rn.runId) + '\')">Results &rarr;</button></td></tr>';
