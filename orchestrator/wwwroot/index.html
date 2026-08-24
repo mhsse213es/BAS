@@ -14717,6 +14717,7 @@ function renderRunReportExtra(rep) {
         '</div>' +
       '</div>' +
       (erLeaked > 0 ? '<div style="font-size:0.72rem;color:var(--danger);margin-bottom:4px">&#9888; ' + erLeaked + ' step(s) leaked &nbsp;&#8226;&nbsp; ' + erCleaned + ' cleaned</div>' : '') +
+      (envR && envR.stepsRescued > 0 ? '<div style="font-size:0.72rem;color:var(--warning);margin-bottom:4px">&#9888; ' + envR.stepsRescued + ' step(s) cleaned by the safety-net sweep, not by their own script</div>' : '') +
       erItemsHtml +
     '</div>';
   }
