@@ -28,6 +28,37 @@ func TestDeclinePromptInput(t *testing.T) {
 	}
 }
 
+func TestReconcileCleanupVerdict(t *testing.T) {
+	clean := &SystemSnapshot{Lists: map[string][]string{"tmp_files": {"/tmp/a"}}}
+	dirty := &SystemSnapshot{Lists: map[string][]string{"tmp_files": {"/tmp/a", "/tmp/evil"}}}
+
+	cases := []struct {
+		name         string
+		pre, post    *SystemSnapshot
+		verdict      string
+		wantVerdict  string
+		wantResidual int // len(residual) — 0 or 1 for these fixtures
+	}{
+		{"reverted downgrades when residue found", clean, dirty, "reverted", "partial", 1},
+		{"leaked upgrades when no residue found", clean, clean, "leaked", "reverted", 0},
+		{"partial stays partial regardless of residue", clean, dirty, "partial", "partial", 1},
+		{"reverted stays reverted when no residue", clean, clean, "reverted", "reverted", 0},
+		{"nil pre skips reconciliation", nil, clean, "leaked", "leaked", 0},
+		{"nil post skips reconciliation", clean, nil, "leaked", "leaked", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			residual, verdict := reconcileCleanupVerdict(c.pre, c.post, c.verdict)
+			if verdict != c.wantVerdict {
+				t.Errorf("verdict = %q, want %q", verdict, c.wantVerdict)
+			}
+			if len(residual) != c.wantResidual {
+				t.Errorf("len(residual) = %d, want %d (residual=%v)", len(residual), c.wantResidual, residual)
+			}
+		})
+	}
+}
+
 func TestExecuteSecondsPrecedence(t *testing.T) {
 	cases := []struct {
 		name string

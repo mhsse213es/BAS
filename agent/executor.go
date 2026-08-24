@@ -284,6 +284,29 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 	return result
 }
 
+// reconcileCleanupVerdict lets snapshot-diff evidence override the raw
+// exit-code verdict from runCleanup when they disagree: an exit-0 "reverted"
+// verdict downgrades to "partial" if evidence shows residue left behind; a
+// timed-out "leaked" verdict upgrades to "reverted" if evidence shows nothing
+// left behind. "partial" is left unchanged either way — the spec calls out
+// only these two specific overrides. A nil pre or post (snapshot capture
+// unavailable) skips reconciliation entirely and returns the raw verdict
+// unchanged with a nil residual — this never blocks or fails the step.
+func reconcileCleanupVerdict(pre, post *SystemSnapshot, verdict string) ([]string, string) {
+	if pre == nil || post == nil {
+		return nil, verdict
+	}
+	residual := diffSnapshots(pre, post)
+	switch {
+	case verdict == "reverted" && len(residual) > 0:
+		return residual, "partial"
+	case verdict == "leaked" && len(residual) == 0:
+		return residual, "reverted"
+	default:
+		return residual, verdict
+	}
+}
+
 func trimOutput(b []byte) string {
 	s := strings.TrimSpace(string(b))
 	if len(s) > maxOutputBytes {

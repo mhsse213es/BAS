@@ -225,6 +225,12 @@ type ExecResult struct {
 	// "reverted" = cleanup ran and exited 0; "partial" = non-zero exit;
 	// "leaked" = cleanup timed out or failed to start; "" = no cleanup defined.
 	CleanupVerdict string `json:"cleanupVerdict,omitempty"`
+	// CleanupResidual lists the normalized snapshot-diff keys (see
+	// diffSnapshots) still present after this step's own cleanup command ran.
+	// Populated only for steps with a non-empty Cleanup script; nil means
+	// either no cleanup was defined or the before/after snapshot pair could
+	// not be captured (fails soft — never blocks the step).
+	CleanupResidual []string `json:"cleanupResidual,omitempty"`
 	// RequestedPriv is the requires_priv value from the scenario step as declared
 	// by the scenario author. Empty means the step was unannotated (legacy).
 	RequestedPriv string `json:"requestedPriv,omitempty"`
