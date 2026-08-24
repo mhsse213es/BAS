@@ -191,6 +191,11 @@ type FullReport struct {
 	// and the per-agent breakdown instead of single-agent metadata.
 	Scope          *ReportScope       `json:"scope,omitempty"`
 	CampaignAgents []CampaignAgentRow `json:"campaignAgents,omitempty"`
+	// SweepTechniqueBreakdown and SweepEncodingBreakdown are set only for a
+	// Full Variant Sweep's combined report (Scope.Kind == "sweep"); nil for
+	// every other report kind.
+	SweepTechniqueBreakdown []SweepTechniqueRow `json:"sweepTechniqueBreakdown,omitempty"`
+	SweepEncodingBreakdown  []SweepEncodingRow  `json:"sweepEncodingBreakdown,omitempty"`
 	// AttackPathValidation is the native attack-path engine's lateral-movement /
 	// blast-radius / crown-jewel analysis for the subject. nil until the
 	// attackpath.collect task has produced edges and the graph has been analyzed
@@ -837,6 +842,35 @@ func summariseAttackFlow(nodes []AttackFlowNode) AttackFlowSummary {
 		}
 	}
 	return s
+}
+
+// SweepTechniqueRow is one technique's rolled-up outcome across every
+// variant dispatched for it within a Full Variant Sweep.
+type SweepTechniqueRow struct {
+	TechniqueID   string  `json:"techniqueId"`
+	TechniqueName string  `json:"techniqueName"`
+	Tactic        string  `json:"tactic"`
+	Variants      int     `json:"variants"`      // total results for this technique
+	Blocked       int     `json:"blocked"`       // prevented
+	Detected      int     `json:"detected"`      // ran, but alerted
+	Missed        int     `json:"missed"`        // ran, no alert — the blind spot
+	ErrorSkipped  int     `json:"errorSkipped"`  // execution problems, not security outcomes
+	Measurable    bool    `json:"measurable"`    // false when Blocked+Detected+Missed == 0
+	PreventionPct float64 `json:"preventionPct"` // Blocked / (Blocked+Detected+Missed) * 100; 0 when !Measurable
+	DetectionPct  float64 `json:"detectionPct"`  // Detected / (Blocked+Detected+Missed) * 100; 0 when !Measurable
+	ScenarioRunID string  `json:"scenarioRunId"` // drill-down target for the existing per-technique report
+}
+
+// SweepEncodingRow is one encoding/evasion dimension's effectiveness across
+// every technique in a sweep — which obfuscation actually gets past
+// controls, folded from classifyOutcome's "blocked" vs "detected"/"missed".
+type SweepEncodingRow struct {
+	Encoding   string  `json:"encoding"`
+	Total      int     `json:"total"`
+	Caught     int     `json:"caught"`     // classifyOutcome == "blocked"
+	Bypassed   int     `json:"bypassed"`   // classifyOutcome == "detected" or "missed"
+	Measurable bool    `json:"measurable"` // false when Caught+Bypassed == 0 (all excluded)
+	CaughtPct  float64 `json:"caughtPct"`  // Caught / (Caught+Bypassed) * 100; 0 when !Measurable
 }
 
 // buildKillChain fuses the run's per-step verdicts with the detection verdicts
