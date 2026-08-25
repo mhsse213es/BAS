@@ -2324,6 +2324,98 @@ func (e *Engine) BuildFromSweep(ctx context.Context, sweepID string, filter stri
 	return report, nil
 }
 
+// BuildFromEMSweep is the combined-report equivalent of BuildFromCampaign for
+// an Endpoint Mastery Full Sweep: it unions every dispatched layer's results
+// into one document. Unlike BuildFromSweep (Full Variant Sweep), an EM layer
+// is one plain scenario dispatch, not an ART technique fanned into variants
+// -- so there is no per-technique/per-encoding rollup to build here, only the
+// same generic sections BuildFromCampaign already computes from a result
+// union.
+func (e *Engine) BuildFromEMSweep(ctx context.Context, sweepID string, filter string) (*FullReport, error) {
+	report := &FullReport{GeneratedAt: time.Now().UTC()}
+
+	var agentID string
+	var status, sweepErr string
+	var completedLayers, totalLayers int
+	var startedAt time.Time
+	var completedAt *time.Time
+	if err := e.db.QueryRow(ctx,
+		`SELECT agent_id, status, error, completed_layers, total_layers, started_at, completed_at
+		   FROM em_sweeps WHERE id = $1`, sweepID,
+	).Scan(&agentID, &status, &sweepErr, &completedLayers, &totalLayers, &startedAt, &completedAt); err != nil {
+		return nil, fmt.Errorf("EM sweep %s not found: %w", sweepID, err)
+	}
+
+	rows, err := e.db.Query(ctx,
+		`SELECT results FROM scenario_runs WHERE em_sweep_id = $1 ORDER BY started_at`, sweepID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var allResults []models.SimulationResult
+	runCount := 0
+	for rows.Next() {
+		var resultsRaw []byte
+		if rows.Scan(&resultsRaw) != nil {
+			continue
+		}
+		runCount++
+		if len(resultsRaw) > 0 {
+			var results []models.SimulationResult
+			if json.Unmarshal(resultsRaw, &results) == nil {
+				allResults = append(allResults, FilterResults(results, filter)...)
+			}
+		}
+	}
+
+	report.TacticHeatmap = buildTacticHeatmap(allResults)
+	report.TopFindings = buildTopFindings(allResults, "Endpoint Mastery Full Sweep")
+	report.ObjectiveRisks = buildObjectiveRisks(allResults)
+	report.Detection = buildDetectionSummary(allResults)
+	report.AttackPath = buildAttackPath(allResults)
+	report.TechniqueMatrix = buildTechniqueMatrix(allResults, nil)
+	report.CoverageBreakdown = buildCoverageBreakdown(report.TechniqueMatrix)
+	report.PrivilegeSummary = buildPrivilegeSummary(report.TechniqueMatrix)
+	report.KillChain = buildKillChain(allResults, nil)
+
+	score := models.ComputeScore(allResults, nil)
+	report.Summary = ExecutiveSummary{
+		RiskScore: score.RiskScore, Classification: score.Classification,
+		PreventionScore: score.PreventionScore, ExposureScore: score.ExposureScore,
+		CoverageScore: score.CoverageScore, KillChainCoverage: score.KillChainCoverage,
+		KillChainAmplifier: score.KillChainAmplifier, Trend: score.Trend,
+		TotalRuns: runCount, TotalTechniques: score.TotalTechniques,
+		PassedTechniques: score.PassedTechniques, FailedTechniques: score.FailedTechniques,
+		ErroredTechniques: score.ErroredTechniques, SkippedTechniques: score.SkippedTechniques,
+		LastRunAt: startedAt, LastScenarioName: "Endpoint Mastery Full Sweep",
+		CriticalFailures: score.CriticalFailures,
+		Recommendations:  buildRecommendations(score, report.TacticHeatmap),
+	}
+	if report.Summary.Classification == "" {
+		report.Summary.Classification = "No Data"
+	}
+
+	title := fmt.Sprintf("Endpoint Mastery Full Sweep — %s", agentID)
+	subtitle := fmt.Sprintf("%d/%d layers completed", completedLayers, totalLayers)
+	if status == "running" || status == "agent_disconnected" {
+		subtitle = "Sweep in progress — " + subtitle
+	}
+	if sweepErr != "" {
+		subtitle += " — " + sweepErr
+	}
+	report.Agent.Hostname = agentID
+	report.ScenarioName = "Endpoint Mastery Full Sweep"
+	report.Scope = &ReportScope{
+		Kind: "em_sweep", Title: title, Subtitle: subtitle,
+		Scenario: "Endpoint Mastery Full Sweep", AgentCount: 1, RunCount: runCount,
+	}
+
+	deriveExecutive(report, allResults, nil)
+
+	return report, nil
+}
+
 // TechniqueGroup aggregates every result for one ATT&CK technique so the report
 // shows a single rolled-up entry with counts, instead of repeating the same
 // technique (and its identical threat/remediation) dozens of times — the

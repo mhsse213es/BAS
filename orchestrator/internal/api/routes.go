@@ -364,6 +364,8 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps/active", h.GetActiveEMSweep)
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps/{id}", h.GetEMSweep)
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps/{id}/runs", h.GetEMSweepRuns)
+		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps/{id}/report", h.GetEMSweepReport)
+		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps/{id}/pdf", h.GetEMSweepPDF)
 		r.With(auth.RequirePermission(auth.CanViewVariantRun)).Get("/api/em/sweeps", h.ListEMSweeps)
 		r.With(auth.RequirePermission(auth.CanCancelScenarioRun)).Post("/api/em/sweeps/{id}/cancel", h.CancelEMSweep)
 

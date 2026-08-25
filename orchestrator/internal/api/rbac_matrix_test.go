@@ -216,6 +216,8 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/em/sweeps/active", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/em/sweeps/{id}", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/em/sweeps/{id}/runs", tierPermission, auth.CanViewVariantRun},
+	{http.MethodGet, "/api/em/sweeps/{id}/report", tierPermission, auth.CanViewVariantRun},
+	{http.MethodGet, "/api/em/sweeps/{id}/pdf", tierPermission, auth.CanViewVariantRun},
 	{http.MethodGet, "/api/em/sweeps", tierPermission, auth.CanViewVariantRun},
 	{http.MethodPost, "/api/em/sweeps/{id}/cancel", tierPermission, auth.CanCancelScenarioRun},
 

@@ -735,3 +735,75 @@ func TestBuildFromSweep_NotFound(t *testing.T) {
 		}
 	})
 }
+
+func TestBuildFromEMSweep_AggregatesAcrossLayers(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		e := NewEngine(pool)
+
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-emsweep-report')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO em_sweeps (id, agent_id, layers, completed_layers, total_layers, status, started_at)
+			 VALUES ('em-report-1', 'agent-emsweep-report', ARRAY['em-01-control-validation','em-04-credential-theft'], 2, 2, 'completed', NOW())`); err != nil {
+			t.Fatalf("seed em_sweep: %v", err)
+		}
+
+		layer1Results := []models.SimulationResult{
+			{ID: "l1-r1", Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}, Result: models.ResultBlocked, Severity: "High"},
+			{ID: "l1-r2", Technique: models.AttackTechnique{ID: "T1059.001", Name: "PowerShell", Tactic: "execution"}, Result: models.ResultFail, Severity: "High"},
+		}
+		l1JSON, _ := json.Marshal(layer1Results)
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, em_sweep_id)
+			 VALUES ('sr-em-l1', 'em-01-control-validation', 'agent-emsweep-report', 'EM Layer 1', 'completed', $1, 'em-report-1')`,
+			l1JSON); err != nil {
+			t.Fatalf("seed sr-em-l1: %v", err)
+		}
+
+		layer2Results := []models.SimulationResult{
+			{ID: "l2-r1", Technique: models.AttackTechnique{ID: "T1003", Name: "Credential Dumping", Tactic: "credential-access"}, Result: models.ResultFail, Severity: "Critical"},
+		}
+		l2JSON, _ := json.Marshal(layer2Results)
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, em_sweep_id)
+			 VALUES ('sr-em-l2', 'em-04-credential-theft', 'agent-emsweep-report', 'EM Layer 4', 'completed', $1, 'em-report-1')`,
+			l2JSON); err != nil {
+			t.Fatalf("seed sr-em-l2: %v", err)
+		}
+
+		rep, err := e.BuildFromEMSweep(ctx, "em-report-1", "")
+		if err != nil {
+			t.Fatalf("BuildFromEMSweep: %v", err)
+		}
+
+		if rep.Scope == nil || rep.Scope.Kind != "em_sweep" {
+			t.Fatalf("Scope = %+v, want Kind=em_sweep", rep.Scope)
+		}
+		if rep.Scope.RunCount != 2 {
+			t.Errorf("Scope.RunCount = %d, want 2", rep.Scope.RunCount)
+		}
+		if len(rep.TacticHeatmap) == 0 {
+			t.Error("TacticHeatmap is empty — union of EM sweep results did not reach the reused report sections")
+		}
+		if rep.Summary.TotalTechniques != 3 {
+			t.Errorf("Summary.TotalTechniques = %d, want 3 (union of both layers' results)", rep.Summary.TotalTechniques)
+		}
+	})
+}
+
+func TestBuildFromEMSweep_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		e := NewEngine(pool)
+		if _, err := e.BuildFromEMSweep(context.Background(), "nope", ""); err == nil {
+			t.Fatal("expected an error for an unknown EM sweep id")
+		}
+	})
+}

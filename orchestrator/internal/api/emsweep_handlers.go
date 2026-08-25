@@ -2,14 +2,18 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/emsweep"
+	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 )
 
@@ -189,6 +193,46 @@ func (h *Handler) GetEMSweepRuns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonOK(w, map[string]any{"sweep": emSweepToJSON(sw), "runs": runs})
+}
+
+// GET /api/em/sweeps/{id}/report
+func (h *Handler) GetEMSweepReport(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	rep, err := h.reportingEngine.BuildFromEMSweep(r.Context(), id, r.URL.Query().Get("filter"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	h.auditLog(r, "report.export", id, map[string]any{"format": "html", "type": "em_sweep"}, "ok")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := reporting.GenerateHTML(w, rep, nil); err != nil {
+		log.Printf("[api] em sweep report html: %v", err)
+	}
+}
+
+// GET /api/em/sweeps/{id}/pdf
+func (h *Handler) GetEMSweepPDF(w http.ResponseWriter, r *http.Request) {
+	if h.reportingEngine == nil {
+		jsonError(w, "reporting engine not loaded", http.StatusServiceUnavailable)
+		return
+	}
+	id := chi.URLParam(r, "id")
+	rep, err := h.reportingEngine.BuildFromEMSweep(r.Context(), id, r.URL.Query().Get("filter"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	fname := fmt.Sprintf("bas-em-sweep-%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), time.Now().UTC().Format("2006-01-02"))
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
+	h.auditLog(r, "report.export", id, map[string]any{"format": "pdf", "type": "em_sweep"}, "ok")
+	if err := h.reportingEngine.PDFFromReport(r.Context(), w, rep, nil, nil); err != nil {
+		log.Printf("[api] em sweep report pdf: %v", err)
+	}
 }
 
 // GET /api/em/sweeps?status=running

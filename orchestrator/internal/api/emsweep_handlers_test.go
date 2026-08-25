@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/audspect/bas/internal/auth"
 	"github.com/audspect/bas/internal/emsweep"
+	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/reporting"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -325,6 +328,71 @@ func TestListEMSweeps_ReturnsRunningByDefault(t *testing.T) {
 		json.Unmarshal(listRec.Body.Bytes(), &out)
 		if len(out) != 1 || out[0]["agentId"] != agentID {
 			t.Fatalf("ListEMSweeps = %+v, want exactly one sweep for %q", out, agentID)
+		}
+	})
+}
+
+func TestGetEMSweepReport_Success(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO agents (agent_id) VALUES ('agent-emsweep-report-api')`); err != nil {
+			t.Fatalf("seed agent: %v", err)
+		}
+		store := emsweep.NewStore(pool)
+		sw, err := store.Create(ctx, emsweep.Sweep{
+			AgentID: "agent-emsweep-report-api", Layers: []string{"em-01-control-validation"}, TotalLayers: 1,
+		})
+		if err != nil {
+			t.Fatalf("Create EM sweep: %v", err)
+		}
+		results := []models.SimulationResult{
+			{ID: "r1", Technique: models.AttackTechnique{ID: "T1055", Name: "Process Injection", Tactic: "defense-evasion"}, Result: models.ResultFail, Severity: "High"},
+		}
+		resultsJSON, _ := json.Marshal(results)
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO scenario_runs (id, scenario_id, agent_id, name, status, results, em_sweep_id)
+			 VALUES ('sr-emreport-api', 'em-01-control-validation', 'agent-emsweep-report-api', 'EM Layer 1', 'completed', $1, $2)`,
+			resultsJSON, sw.ID); err != nil {
+			t.Fatalf("seed scenario_runs: %v", err)
+		}
+
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).
+			WithEMSweep(store, testEMSweepDispatcher(store)).
+			WithReporting(reporting.NewEngine(pool))
+		userID := seedUser(t, pool, "emsweep-report-user", "password123", "viewer", true)
+		req := authedRequest(t, http.MethodGet, "/api/em/sweeps/"+sw.ID+"/report", nil, auth.RoleViewer, userID)
+		req = withURLParam(req, "id", sw.ID)
+		rec := callAuthed(h.GetEMSweepReport, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+			t.Fatalf("content-type = %q", ct)
+		}
+		if !strings.Contains(rec.Body.String(), "T1055") {
+			t.Fatal("HTML report missing seeded technique T1055")
+		}
+	})
+}
+
+func TestGetEMSweepReport_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		store := emsweep.NewStore(pool)
+		h := New(pool, ws.NewHub(), nil, testJWTSecret).
+			WithEMSweep(store, testEMSweepDispatcher(store)).
+			WithReporting(reporting.NewEngine(pool))
+		userID := seedUser(t, pool, "emsweep-report-404-user", "password123", "viewer", true)
+		req := authedRequest(t, http.MethodGet, "/api/em/sweeps/nope/report", nil, auth.RoleViewer, userID)
+		req = withURLParam(req, "id", "nope")
+		rec := callAuthed(h.GetEMSweepReport, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404", rec.Code)
 		}
 	})
 }
