@@ -11500,7 +11500,7 @@ function loadReports() {
     (runs || []).forEach(function(r) {
       if (r.status !== 'completed' && r.status !== 'partial') return;
       var id = r.agentId; if (!id) return;
-      if (!byAgent[id]) byAgent[id] = { runs: 0, last: r.completedAt || r.startedAt };
+      if (!byAgent[id]) byAgent[id] = { runs: 0, last: r.completedAt || r.startedAt, lastName: r.name };
       byAgent[id].runs++;
     });
     var hostOf = {};
@@ -11513,11 +11513,11 @@ function loadReports() {
     }
     var d = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 1.5h6l3 3V14.5H4z"/><path d="M9.5 1.5v3.5H13M6 8h4M6 10.5h4"/></svg>';
     el.innerHTML = ids.map(function(id) {
-      var host = hostOf[id] || id, n = byAgent[id].runs;
+      var host = hostOf[id] || id, n = byAgent[id].runs, lastName = byAgent[id].lastName;
       return '<div class="rep-row">' +
         '<div class="rep-ic">' + d + '</div>' +
         '<div class="rep-main"><div class="rep-host">' + x(host) + '</div>' +
-          '<div class="rep-sub">' + n + ' run' + (n === 1 ? '' : 's') + ' · last ' + ago(byAgent[id].last) + '</div></div>' +
+          '<div class="rep-sub">Reports on: <strong style="color:var(--text)">' + x(lastName || 'unnamed scenario') + '</strong> (latest run) · ' + n + ' run' + (n === 1 ? '' : 's') + ' total · last ' + ago(byAgent[id].last) + '</div></div>' +
         '<div class="rep-acts">' +
           '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'html\')">HTML Report</button>' +
           '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'csv\')">CSV</button>' +
