@@ -5602,6 +5602,7 @@ function renderInitiativeDrawer(it, progress, jobs) {
   var col = initiativeStateColor(it.State);
   var pct = Math.round(progress.PercentComplete || 0);
 
+  var canDetach = it.State !== 'archived';
   var jobRows = jobs.length
     ? jobs.map(function(j) {
         return '<tr>' +
@@ -5610,9 +5611,10 @@ function renderInitiativeDrawer(it, progress, jobs) {
           '<td><span class="badge">' + x(j.state) + '</span></td>' +
           '<td>' + x(fmtDate(j.createdAt)) + '</td>' +
           '<td>' + (j.completedAt ? x(fmtDate(j.completedAt)) : '—') + '</td>' +
+          '<td>' + (canDetach ? '<button class="btn btn-outline btn-sm" onclick="initiativeDetachJob(\'' + x(j.id) + '\')">Detach</button>' : '') + '</td>' +
         '</tr>';
       }).join('')
-    : '<tr><td colspan="5" class="empty">No jobs attached yet. This initiative tracks related remediation jobs and their overall progress.</td></tr>';
+    : '<tr><td colspan="6" class="empty">No jobs attached yet. This initiative tracks related remediation jobs and their overall progress.</td></tr>';
 
   document.getElementById('init-drawer-body').innerHTML =
     '<div style="margin-bottom:1rem">' +
@@ -5635,8 +5637,21 @@ function renderInitiativeDrawer(it, progress, jobs) {
       (it.State === 'active' ? '<button class="btn btn-outline btn-sm" onclick="openInitiativeAttachDrawer()">+ Attach Job</button>' : '') +
     '</div>' +
     '<div class="tbl-wrap"><table><thead><tr>' +
-      '<th>ID</th><th>Type</th><th>State</th><th>Created</th><th>Completed</th>' +
+      '<th>ID</th><th>Type</th><th>State</th><th>Created</th><th>Completed</th><th></th>' +
     '</tr></thead><tbody>' + jobRows + '</tbody></table></div>';
+}
+
+function initiativeDetachJob(jobId) {
+  if (!INIT_CURRENT) return;
+  if (!confirm('Detach this job from "' + INIT_CURRENT.Name + '"?')) return;
+  initiativeShowDrawerError('');
+  apicall('/api/jobs/' + encodeURIComponent(jobId) + '/initiative', {
+    method: 'PATCH', body: JSON.stringify({ initiativeId: '' })
+  }).then(function(res) {
+    if (res && res.error) { initiativeShowDrawerError(res.error); return; }
+    showToast('Job detached', 'ok');
+    openInitiativeDrawer(INIT_CURRENT.ID); // re-fetch to refresh the jobs table + progress
+  }).catch(function(e) { initiativeShowDrawerError(e.message); });
 }
 
 function initiativeShowDrawerError(msg) {
