@@ -4799,6 +4799,7 @@ body.theme-slate {
     </div>
     <div class="drawer-body">
       <div id="em-sweep-progress-summary" style="margin-bottom:0.75rem"></div>
+      <div id="em-sweep-progress-actions" style="margin-bottom:0.75rem"></div>
       <ul id="em-sweep-progress-list" style="list-style:none;margin:0;padding:0"></ul>
       <div style="margin-top:1rem;display:flex;justify-content:flex-end">
         <button class="btn btn-outline-red btn-sm" id="em-sweep-stop-btn" onclick="stopEMSweep(_emSweepCurrentId)">&#9632; Stop Sweep</button>
@@ -13526,12 +13527,27 @@ function viewRunResults(run) {
     ? ' &nbsp;&middot;&nbsp; Mode: <strong>' + modeText + '</strong> &nbsp;&middot;&nbsp; Privilege: <strong>' + privText + '</strong>'
     : '';
 
+  // Selection — which techniques/checks/steps/abilities were actually
+  // dispatched, same data Re-run Review already shows, surfaced here too so
+  // it's a glance instead of a click. Only shown for a real subset (a full
+  // scenario run is the common case and would just be noise here); "All" is
+  // the implicit default when this is absent.
+  var sc = scenarios.find(function(s) { return s.id === run.scenarioId; });
+  var subset = rerunSubset(run, scenarioFramework(sc));
+  var subsetFieldLabels = { techniques: 'Techniques', abilities: 'Abilities', steps: 'Steps', checks: 'Checks' };
+  var subsetText = '';
+  if (subset.field && subset.ids.length) {
+    subsetText = ' &nbsp;&middot;&nbsp; ' + (subsetFieldLabels[subset.field] || subset.field) + ': <strong>' +
+      subset.ids.length + '</strong> — ' + x(subset.ids.slice(0, 4).join(', ')) + (subset.ids.length > 4 ? ', …' : '');
+  }
+
   document.getElementById('results-summary').innerHTML =
     '<span style="color:var(--danger);font-weight:600">' + fail + ' fail</span>' +
     ' &nbsp;/&nbsp; <span style="color:var(--success);font-weight:600">' + pass + ' pass</span>' +
     (skipped ? ' &nbsp;/&nbsp; <span style="color:var(--muted)">' + skipped + ' skipped</span>' : '') +
     ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +
     runSettingsText +
+    subsetText +
     alertText;
 
   var runId = run.id || '';
@@ -16124,6 +16140,13 @@ function downloadSweepReport(id) {
   var a = document.createElement('a');
   a.href = '/api/vex/sweeps/' + encodeURIComponent(id) + '/report';
   a.download = 'bas-sweep-report-' + id.substring(0, 8) + '.html';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+// downloadEMSweepReport mirrors downloadSweepReport for the EM sweep's combined report.
+function downloadEMSweepReport(id) {
+  var a = document.createElement('a');
+  a.href = '/api/em/sweeps/' + encodeURIComponent(id) + '/report';
+  a.download = 'bas-em-sweep-report-' + id.substring(0, 8) + '.html';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 function downloadCampaignCSV(id) {
@@ -20583,6 +20606,7 @@ var _emSweepCurrentId = null;
 
 function openEMSweepProgress(sweepId) {
   _emSweepCurrentId = sweepId;
+  document.getElementById('em-sweep-progress-actions').innerHTML = '';
   document.getElementById('em-sweep-progress-overlay').classList.add('open');
   pollEMSweepProgress();
   if (_emSweepPollTimer) clearInterval(_emSweepPollTimer);
@@ -20623,6 +20647,15 @@ function renderEMSweepProgress(sw, runs) {
   document.getElementById('em-sweep-progress-summary').innerHTML =
     '<strong>' + sw.completedLayers + '/' + sw.totalLayers + '</strong> layers complete &middot; status: ' + x(sweepStatusLabel(sw.status)) +
     (sw.error ? '<div style="color:var(--danger);margin-top:0.3rem">' + x(sw.error) + '</div>' : '');
+  // Combined report only once the sweep has stopped advancing -- a partial
+  // union of whatever layers happened to finish so far is a lot less useful
+  // for EM's 14 fixed-layer structure than waiting for the real thing.
+  var terminal = sw.status !== 'running' && sw.status !== 'agent_disconnected';
+  document.getElementById('em-sweep-progress-actions').innerHTML = terminal
+    ? '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/em/sweeps/' + encodeURIComponent(sw.id) + '/report\',\'_blank\')" title="Open the combined EM sweep report">&#8599; HTML Report</button> ' +
+      '<button class="btn btn-outline btn-sm" onclick="downloadEMSweepReport(\'' + x(sw.id) + '\')" title="Download the combined EM sweep report as a file">&#8595; HTML Report</button> ' +
+      '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/em/sweeps/' + encodeURIComponent(sw.id) + '/pdf\',\'_blank\')" title="Download the combined EM sweep report as PDF">&#8595; PDF</button>'
+    : '';
   var runsByScenario = {};
   (runs || []).forEach(function(r) { runsByScenario[r.scenarioId] = r; });
   var list = document.getElementById('em-sweep-progress-list');
