@@ -198,12 +198,14 @@ There is no numbered-migration-file system. Schema is defined as a single ordere
 
 ```bash
 cd orchestrator
-go test ./...
+go test ./... -p 2            # Windows/Docker Desktop dev host — see note below
 go test ./... -race           # Race detector
 go test -cover ./...          # Coverage
 ```
 
-Handler tests use `httptest.NewRecorder()` and `httptest.NewRequest()`. Database-dependent tests spin up a real, throwaway PostgreSQL instance automatically via `testcontainers-go` (Docker must be running) — no `DATABASE_URL` to set, no mock database. Pass `-short` to skip container-backed tests when Docker isn't available. Most packages share one container per test binary (`sharedDB`/`MustSharedTestDB()`, truncated between tests) rather than spinning up a fresh container per test.
+Handler tests use `httptest.NewRecorder()` and `httptest.NewRequest()`. Database-dependent tests spin up a real, throwaway PostgreSQL instance automatically via `testcontainers-go` (Docker must be running) — no `DATABASE_URL` to set, no mock database. Pass `-short` to skip container-backed tests when Docker isn't available. Most packages share one container per test binary (`sharedDB`/`MustSharedTestDB()`, truncated between tests) rather than spinning up a fresh container per test — but each *package* still gets its own container, and `go test ./...` runs multiple packages' test binaries concurrently by default.
+
+**Windows dev host memory note:** with no `-p` flag, `go test ./...` defaults to Go's full CPU-count parallelism, which on a memory-constrained Docker Desktop host (this build host has ~7.8GB total RAM, Docker capped at ~3.8GB) starts too many Postgres containers at once and fails with spurious `unexpected EOF` Postgres-connection errors — not a real test/code defect. `-p 2` is the validated safe ceiling on this host (confirmed clean under a full cold run, ~35-45% faster than fully serial), but only once enough memory is free — stop `gopls.exe` first (`taskkill /F /IM gopls.exe`; it restarts automatically, no data lost) if free RAM is under ~1.5GB. If `-p 2` still throws `unexpected EOF` errors, fall back to `go test ./... -p 1` (fully serial, always safe, just slower). This is a local-machine-only workaround — CI (`ubuntu-latest` GitHub-hosted runner) runs bare `go test ./...` with no `-p` and has not shown this problem, since it's a different OS/memory profile without Docker Desktop's VM overhead.
 
 ---
 
@@ -226,7 +228,7 @@ Handler tests use `httptest.NewRecorder()` and `httptest.NewRequest()`. Database
 
 - [ ] There is no `version.go` to edit — the version string is passed as `-Version` to `packaging\windows-build.ps1` and flows from there into the Docker build-arg, `dist\bas-install-<version>\`, and the ZIP name. Nothing to hand-edit beforehand.
 - [ ] Run `go mod tidy`
-- [ ] Run `go test ./...` — all green
+- [ ] Run `go test ./... -p 2` (or `-p 1` if that throws `unexpected EOF` errors — see Testing above) — all green
 - [ ] Run `packaging\windows-build.ps1 -Version <x.y.z> -Customer ... -CustomerID ... -Days ...` — full pipeline
 - [ ] Scenario/manifest signature verification is automatic at orchestrator startup (RSA-4096, public key compiled into the binary) — there's no separate pre-release CLI verify step; a build that produced unsigned or mismatched `.sig` files will fail to load those scenarios when the new image starts, which is itself the check
 - [ ] If GPG bundle-signing is configured, confirm the build's summary output reports the ZIP as signed (`.zip.asc` present), not skipped with a warning

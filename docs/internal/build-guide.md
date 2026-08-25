@@ -188,12 +188,14 @@ At `dist\` root: `bas-install-<version>.zip`, `.zip.sha256`, and (if GPG signing
 
 ```powershell
 cd orchestrator
-go test ./...
+go test ./... -p 2            # Windows/Docker Desktop dev host — see note below
 go test ./... -race           # Race detector
 go test -cover ./...          # Coverage
 ```
 
-Handler tests use `httptest.NewRecorder()`/`httptest.NewRequest()`. Database-dependent tests spin up a real PostgreSQL instance via `testcontainers-go` (Docker must be running) — there is no mock database. Pass `-short` to skip container-backed tests when Docker isn't available.
+Handler tests use `httptest.NewRecorder()`/`httptest.NewRequest()`. Database-dependent tests spin up a real PostgreSQL instance via `testcontainers-go` (Docker must be running) — there is no mock database, and every package spins up its own container. Pass `-short` to skip container-backed tests when Docker isn't available.
+
+**Windows dev host memory note:** running `go test ./...` with no `-p` flag defaults to Go's full CPU-count parallelism, which on a memory-constrained Docker Desktop host (this build host has ~7.8GB total RAM, Docker capped at ~3.8GB) starts far too many Postgres containers at once and fails with spurious `unexpected EOF` Postgres-connection errors — not a real test/code defect. `-p 2` is the validated safe ceiling on this host (confirmed clean under a full cold run, ~35-45% faster than fully serial), but only once enough memory is free — stop `gopls.exe` first (`taskkill /F /IM gopls.exe`; it restarts automatically, no data lost) if free RAM is under ~1.5GB. If `-p 2` still throws `unexpected EOF` errors, fall back to `go test ./... -p 1` (fully serial, always safe, just slower).
 
 ---
 
