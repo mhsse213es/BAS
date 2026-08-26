@@ -103,6 +103,12 @@ func observe(domain string) *ResourceProfile {
 // technique to fix one atomic would trade away legitimate fast/parallel
 // treatment for the rest. Everything else checked clean. Re-verify any
 // technique added here later the same way before trusting the 20s bound.
+//
+// **2026-08-26 expansion audit**: evaluated 5 more discovery-tactic
+// candidates (T1120, T1201, T1217, T1652, T1654) against real production
+// command text. Added T1652 (clean) and T1120 (kept, one narrow exception --
+// see its inline comment). Excluded T1201, T1217, T1654 -- see the comment
+// block immediately after this map for why.
 var discoveryProfiles = map[string]*ResourceProfile{
 	// T1012 (Query Registry) -- Test 3 loops over every registered COM CLSID
 	// (often thousands on a real Windows host) and actually instantiates each
@@ -133,7 +139,28 @@ var discoveryProfiles = map[string]*ResourceProfile{
 	"T1018": observe(domNetwork),   // Remote System Discovery
 	"T1087": observe(domSecPolicy), // Account Discovery
 	"T1069": observe(domSecPolicy), // Permission Groups Discovery
+	"T1652": observe(domProcess),   // Device Driver Discovery
+	// T1120 (Peripheral Device Discovery) -- Test 2 "WinPwn - printercheck"
+	// downloads and executes an entire third-party script
+	// (iex(new-object net.webclient).downloadstring(...)), an unbounded
+	// network call sharing T1614's problem. The other 3 of 4 atomics (WMI
+	// PnP query, fsutil fsinfo drives, Get-Printer) are simple, fast local
+	// reads. Only 1 of 4 atomics. Kept as a documented narrow exception
+	// (2026-08-26 expansion audit).
+	"T1120": observe(domProcess), // Peripheral Device Discovery
 }
+
+// Expansion candidates evaluated 2026-08-26 and deliberately left OUT of
+// discoveryProfiles above (real production art_atomic_tests command text
+// checked, same methodology as the 2026-08-20 audit):
+//   - T1201 (Password Policy Discovery) -- 3 of 11 atomics hit the network/AD
+//     (`net accounts /domain`, a PowerSploit `IEX(IWR ...)` download,
+//     `get-addefaultdomainpasswordpolicy`), well past the narrow-exception bar.
+//   - T1217 (Browser Information Discovery) -- 5 of 11 atomics run a full
+//     filesystem `find /` walk (macOS x3, Linux x2), T1083's exact problem.
+//   - T1654 (Log Enumeration) -- Test 1 (`Get-EventLog 'Security' | where ...`)
+//     is a well-known slow operation against large Security logs, especially
+//     on a heavily-audited production host; 1 of 2 atomics.
 
 // ResourceProfileFor returns the curated profile for an ATT&CK technique, or nil
 // if the technique is not in the conservative label set (→ the agent runs it

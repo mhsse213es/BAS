@@ -24,6 +24,37 @@ func TestResourceProfileForKeptDespiteNarrowException(t *testing.T) {
 	}
 }
 
+// TestResourceProfileForT1652AndT1120Added proves the 2026-08-26 expansion
+// audit's two additions are labelled: T1652 (Device Driver Discovery, clean --
+// kextstat/lsmod/driverquery/a find scoped to a known kernel-modules dir, all
+// local and fast) and T1120 (Peripheral Device Discovery, kept with a narrow
+// exception -- see resource.go's inline comment for the one atomic that
+// downloads and runs a third-party script).
+func TestResourceProfileForT1652AndT1120Added(t *testing.T) {
+	for _, id := range []string{"T1652", "T1120"} {
+		if p := ResourceProfileFor(id); p == nil {
+			t.Errorf("%s should be labelled after the 2026-08-26 expansion audit, got nil", id)
+		}
+		if p := TimeoutProfileFor(id); p == nil {
+			t.Errorf("%s should get the curated discovery timeout, got nil", id)
+		}
+	}
+}
+
+// TestResourceProfileForExpansionCandidatesExcluded proves the three
+// candidates the 2026-08-26 audit ruled out stay unlabeled: T1201 (3/11
+// atomics hit the network/AD -- net accounts /domain, a PowerSploit download,
+// get-addefaultdomainpasswordpolicy), T1217 (5/11 atomics do a full
+// filesystem `find /` walk, T1083's exact problem), and T1654 (Get-EventLog
+// against the Security log is a well-known slow operation, 1/2 atomics).
+func TestResourceProfileForExpansionCandidatesExcluded(t *testing.T) {
+	for _, id := range []string{"T1201", "T1217", "T1654"} {
+		if p := ResourceProfileFor(id); p != nil {
+			t.Errorf("%s should stay unlabeled (2026-08-26 audit excluded it), got %+v", id, p)
+		}
+	}
+}
+
 func TestResourceProfileForKnownDiscovery(t *testing.T) {
 	p := ResourceProfileFor("T1057")
 	if p == nil {
