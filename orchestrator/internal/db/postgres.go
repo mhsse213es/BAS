@@ -1616,6 +1616,42 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		// Results drawer showed a bare "0 fail / 0 pass" and a red badge with
 		// no way to tell "agent was offline" from "scenario is broken".
 		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS fail_reason text`,
+
+		// posture_findings: persisted lifecycle for CIS Security Configuration
+		// + Identity posture-check findings, keyed (agent_id, check_id) --
+		// deliberately narrower than the BAS findings table's
+		// (agent_id, technique_id, control_class) key, since a posture check_id
+		// maps to exactly one finding per agent (unlike Application Risk, where
+		// one check_id can produce many findings -- explicitly out of scope,
+		// see docs/superpowers/specs/2026-08-26-posture-finding-sla-foundation-design.md).
+		// Reuses internal/findings.Apply's state machine unchanged; this table
+		// only differs from `findings` by dropping BAS-specific columns
+		// (technique_name/tactic/source_type/attack_data_source/
+		// security_product_snapshot/last_campaign_id/resolved_by) that have no
+		// posture-check equivalent.
+		`CREATE TABLE IF NOT EXISTS posture_findings (
+			id                text        PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			agent_id          text        NOT NULL,
+			check_id          text        NOT NULL,
+			category          text        NOT NULL DEFAULT '',
+			title             text        NOT NULL DEFAULT '',
+			severity          text        NOT NULL DEFAULT 'Medium',
+			exposure_state    text        NOT NULL DEFAULT 'missed',
+			status            text        NOT NULL DEFAULT 'open',
+			occurrence_count  int         NOT NULL DEFAULT 1,
+			reopened_count    int         NOT NULL DEFAULT 0,
+			last_run_id       text,
+			first_seen        timestamptz NOT NULL DEFAULT NOW(),
+			last_seen         timestamptz NOT NULL DEFAULT NOW(),
+			last_observed_at  timestamptz NOT NULL DEFAULT NOW(),
+			resolved_at       timestamptz,
+			resolved_reason   text,
+			created_at        timestamptz NOT NULL DEFAULT NOW(),
+			tenant_id         text        NOT NULL DEFAULT 'default',
+			CONSTRAINT uq_posture_finding UNIQUE (agent_id, check_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_posture_findings_agent ON posture_findings (agent_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_posture_findings_status ON posture_findings (status)`,
 	}
 
 	for _, s := range stmts {
