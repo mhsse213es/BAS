@@ -1483,7 +1483,7 @@ body.theme-slate {
         </div>
       </div>
     </nav>
-    <div class="sidebar-footer">v1.7.1 &nbsp;&middot;&nbsp; On-Premise</div>
+    <div class="sidebar-footer">v1.7.6 &nbsp;&middot;&nbsp; On-Premise</div>
   </aside>
 
   <div class="main-wrapper">
@@ -12350,9 +12350,28 @@ function renderWizardReview() {
   var maxPrivEl = document.getElementById('modal-max-privilege');
   var maxPrivLabel = maxPrivEl && maxPrivEl.value ?
     { user: 'User (skips admin/system steps)', admin: 'Admin (skips system steps)' }[maxPrivEl.value] || maxPrivEl.value : '';
+  // Group/All targeting resolves to a completely different agent set than the
+  // Individual-mode primary-agent dropdown (modal-agent) -- reading agSel/
+  // additionalAgentIds() unconditionally here (as this used to) shows a stale
+  // single-agent line left over from before Group/All targeting existed, even
+  // though confirmRun() dispatches to the correct resolved set. Mirror
+  // confirmRun()'s own _targetMode branch so Review shows what will actually
+  // run, not what the (hidden, in this mode) Individual-mode dropdown holds.
   var addlIds = additionalAgentIds();
-  var agentsRow;
-  if (addlIds.length) {
+  var agentsRow, blastRow = '';
+  if (_targetMode === 'group' || _targetMode === 'all') {
+    var resolved = _targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
+    var eligible = resolved.eligible;
+    var groupCount = _targetMode === 'group'
+      ? Object.keys(_groupSel).filter(function(k) { return _groupSel[k]; }).length : 0;
+    var names2 = eligible.map(function(a) { return x(a.agentId + ' — ' + a.hostname); });
+    agentsRow = '<div class="wz-rev-row"><span>Agents (' + eligible.length + ')</span><span>' +
+      (names2.length ? names2.join('<br>') : '<span class="muted">No eligible agents</span>') + '</span></div>';
+    var blastMsg = _targetMode === 'all'
+      ? 'This will run on all ' + eligible.length + ' eligible agent(s).'
+      : 'This will run on ' + eligible.length + ' agent(s) across ' + groupCount + ' group(s).';
+    blastRow = '<div class="wz-rev-warn">' + x(blastMsg) + '</div>';
+  } else if (addlIds.length) {
     var allIds = [agSel.value].concat(addlIds);
     var names = allIds.map(function(id) {
       var a = agents.find(function(ag) { return ag.agentId === id; });
@@ -12364,6 +12383,7 @@ function renderWizardReview() {
   }
   var html = row('Scenario', x(sc ? sc.name : scId)) +
              agentsRow +
+             blastRow +
              row('Mode', x(modeLabel)) +
              row('Scope', x(subset)) +
              (variantLabel ? row('Variant depth', x(variantLabel)) : '') +
