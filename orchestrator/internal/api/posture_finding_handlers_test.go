@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -210,6 +213,118 @@ func TestUpsertPostureFindingsForRun_OutOfScopeCategoryNeverCreatesRow(t *testin
 			`SELECT COUNT(*) FROM posture_findings WHERE agent_id='agent-pf-oos'`).Scan(&count)
 		if count != 0 {
 			t.Errorf("count=%d, want 0 (windows-installed-software is Application Risk, out of scope)", count)
+		}
+	})
+}
+
+func TestListAgentPostureFindings_EmptyReturnsEmptyList(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('agent-pf-empty', 'host-agent-pf-empty')`)
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "agentId", "agent-pf-empty")
+		w := httptest.NewRecorder()
+		h.ListAgentPostureFindings(w, req)
+
+		var got []map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("got %d findings, want 0", len(got))
+		}
+	})
+}
+
+func TestListAgentPostureFindings_ReturnsOpenByDefaultAndAllOnFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+		t1 := time.Now()
+		t2 := t1.Add(time.Hour)
+		seedPostureCheckRun(t, pool, "pf-list-1", "agent-pf-list", "fail", t1)
+		h.upsertPostureFindingsForRun(context.Background(), "pf-list-1")
+		seedPostureCheckRun(t, pool, "pf-list-2", "agent-pf-list", "pass", t2)
+		h.upsertPostureFindingsForRun(context.Background(), "pf-list-2")
+		// finding is now status=remediated
+
+		reqOpen := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "agentId", "agent-pf-list")
+		wOpen := httptest.NewRecorder()
+		h.ListAgentPostureFindings(wOpen, reqOpen)
+		var openOnly []map[string]any
+		if err := json.Unmarshal(wOpen.Body.Bytes(), &openOnly); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(openOnly) != 0 {
+			t.Errorf("default (open-only) got %d, want 0 (finding is remediated)", len(openOnly))
+		}
+
+		reqAll := withURLParam(httptest.NewRequest(http.MethodGet, "/x?status=all", nil), "agentId", "agent-pf-list")
+		wAll := httptest.NewRecorder()
+		h.ListAgentPostureFindings(wAll, reqAll)
+		var all []map[string]any
+		if err := json.Unmarshal(wAll.Body.Bytes(), &all); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if len(all) != 1 {
+			t.Fatalf("?status=all got %d, want 1", len(all))
+		}
+		if all[0]["checkId"] != "windows-firewall-enabled" {
+			t.Errorf("checkId=%v, want windows-firewall-enabled", all[0]["checkId"])
+		}
+		if all[0]["status"] != "remediated" {
+			t.Errorf("status=%v, want remediated", all[0]["status"])
+		}
+	})
+}
+
+func TestGetPostureFinding_NotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", "nonexistent-id")
+		w := httptest.NewRecorder()
+		h.GetPostureFinding(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Errorf("status=%d, want 404", w.Code)
+		}
+	})
+}
+
+func TestGetPostureFinding_ReturnsFinding(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+		seedPostureCheckRun(t, pool, "pf-get-1", "agent-pf-get", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "pf-get-1")
+
+		var id string
+		pool.QueryRow(context.Background(),
+			`SELECT id FROM posture_findings WHERE agent_id='agent-pf-get' AND check_id='windows-firewall-enabled'`).Scan(&id)
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", id)
+		w := httptest.NewRecorder()
+		h.GetPostureFinding(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status=%d, want 200", w.Code)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got["checkId"] != "windows-firewall-enabled" {
+			t.Errorf("checkId=%v, want windows-firewall-enabled", got["checkId"])
 		}
 	})
 }

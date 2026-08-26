@@ -337,6 +337,8 @@ var routeMatrix = []routeCase{
 	{http.MethodPost, "/api/initiatives/{initiativeId}/archive", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodDelete, "/api/initiatives/{initiativeId}", tierPermission, auth.CanApproveRemediation},
 	{http.MethodPatch, "/api/jobs/{jobId}/initiative", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodGet, "/api/agents/{agentId}/posture-findings", tierPermission, auth.CanExecuteRemediation},
+	{http.MethodGet, "/api/posture-findings/{id}", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/openaev/config", tierPermission, auth.CanViewOpenAEVConfig},
 	{http.MethodPut, "/api/openaev/config", tierPermission, auth.CanUpdateOpenAEVConfig},
 	{http.MethodDelete, "/api/openaev/config", tierPermission, auth.CanUpdateOpenAEVConfig},

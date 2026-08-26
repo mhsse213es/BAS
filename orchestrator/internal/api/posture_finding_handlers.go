@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"time"
 
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/findings"
 	"github.com/audspect/bas/internal/models"
+	"github.com/go-chi/chi/v5"
 )
 
 // postureFindingAgg is the run-level aggregate outcome for one check_id,
@@ -151,4 +153,76 @@ func (h *Handler) applyPostureFinding(ctx context.Context, agentID string, a *po
 		o.RunID, o.ObservedAt,
 		clearResolved, resolvedAtSet, resolvedReason,
 		agentID, a.checkID)
+}
+
+const postureFindingCols = `id, agent_id, check_id, category, title, severity, status,
+	occurrence_count, reopened_count, first_seen, last_seen, last_observed_at,
+	COALESCE(last_run_id,''), resolved_at, resolved_reason`
+
+func scanPostureFindings(rows findingScanner) []map[string]any {
+	out := []map[string]any{}
+	for rows.Next() {
+		var id, agentID, checkID, category, title, severity, status, lastRunID string
+		var occ, reopened int
+		var firstSeen, lastSeen, lastObserved time.Time
+		var resolvedAt *time.Time
+		var resolvedReason *string
+		if rows.Scan(&id, &agentID, &checkID, &category, &title, &severity, &status,
+			&occ, &reopened, &firstSeen, &lastSeen, &lastObserved, &lastRunID, &resolvedAt, &resolvedReason) != nil {
+			continue
+		}
+		m := map[string]any{
+			"id": id, "agentId": agentID, "checkId": checkID, "category": category,
+			"title": title, "severity": severity, "status": status,
+			"occurrenceCount": occ, "reopenedCount": reopened,
+			"firstSeen": firstSeen, "lastSeen": lastSeen, "lastObservedAt": lastObserved,
+			"lastRunId": lastRunID,
+		}
+		if resolvedAt != nil {
+			m["resolvedAt"] = *resolvedAt
+		}
+		if resolvedReason != nil {
+			m["resolvedReason"] = *resolvedReason
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// ListAgentPostureFindings returns one agent's posture findings, open-only by
+// default (?status=all includes remediated). GET /api/agents/{agentId}/posture-findings
+func (h *Handler) ListAgentPostureFindings(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "agentId")
+	statusFilter := "open"
+	if r.URL.Query().Get("status") == "all" {
+		statusFilter = ""
+	}
+	rows, err := h.db.Query(r.Context(),
+		`SELECT `+postureFindingCols+` FROM posture_findings
+		  WHERE agent_id=$1 AND ($2='' OR status=$2)
+		  ORDER BY last_seen DESC`,
+		agentID, statusFilter)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	respond(w, scanPostureFindings(rows))
+}
+
+// GetPostureFinding returns one posture finding by ID. GET /api/posture-findings/{id}
+func (h *Handler) GetPostureFinding(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(),
+		`SELECT `+postureFindingCols+` FROM posture_findings WHERE id=$1`, chi.URLParam(r, "id"))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	list := scanPostureFindings(rows)
+	rows.Close()
+	if len(list) == 0 {
+		jsonError(w, "posture finding not found", http.StatusNotFound)
+		return
+	}
+	respond(w, list[0])
 }
