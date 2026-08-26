@@ -297,6 +297,55 @@ func TestSetAgentState_ValidationAndIdempotency(t *testing.T) {
 	})
 }
 
+// TestGetAgents_WSConnectedReflectsHubNotHeartbeat proves WSConnected comes
+// from the hub's real live-connection map, independent of heartbeat-driven
+// Status -- two agents with an equally fresh heartbeat (both look "active")
+// must still be told apart by whether the WebSocket task-delivery channel
+// is actually up. Without this, an operator can't see the gap this session
+// investigated: a proxy/firewall that passes plain HTTPS heartbeats through
+// but breaks the WS Upgrade handshake leaves the dashboard looking healthy
+// right up until a dispatch attempt fails.
+func TestGetAgents_WSConnectedReflectsHubNotHeartbeat(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		hub := ws.NewHub()
+		h := New(pool, hub, nil, "")
+
+		wsUpAgent := "agent-ws-up"
+		wsDownAgent := "agent-ws-down"
+		seedActiveAgent(t, pool, wsUpAgent, "Windows")
+		seedActiveAgent(t, pool, wsDownAgent, "Windows")
+
+		// Only wsUpAgent gets a real WS connection -- wsDownAgent has an
+		// equally fresh heartbeat (both seeded the same way) but no socket,
+		// simulating the exact split this test guards against.
+		fake := startFakeAgent(t, hub, wsUpAgent)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.GetAgents(rec, httptest.NewRequest(http.MethodGet, "/api/agents", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var agents []models.Agent
+		if err := json.Unmarshal(rec.Body.Bytes(), &agents); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		got := make(map[string]bool, len(agents))
+		for _, a := range agents {
+			got[a.AgentID] = a.WSConnected
+		}
+		if !got[wsUpAgent] {
+			t.Errorf("%s: WSConnected = false, want true (has a live fake WS connection)", wsUpAgent)
+		}
+		if got[wsDownAgent] {
+			t.Errorf("%s: WSConnected = true, want false (never connected over WS)", wsDownAgent)
+		}
+	})
+}
+
 func TestGetAgents_EmptyOrderingAndNullableFields(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

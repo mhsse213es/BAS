@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +99,26 @@ func TestRunScenarioIntegration_SkipReasonsSurfaceCorrectStatus(t *testing.T) {
 		h.RunScenario(offlineRec, runScenarioReq(sc.ID, map[string]any{"agentId": offlineAgent}))
 		if offlineRec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("offline: status = %d, want 503", offlineRec.Code)
+		}
+
+		// The run this dispatch created must persist a genuine reason, not just
+		// a bare status='failed' with nothing to explain it -- see
+		// project_environmental_error_triage.md-adjacent gap: a Failed run
+		// previously showed "0 fail / 0 pass" with zero indication of why.
+		listRec := httptest.NewRecorder()
+		h.ListScenarioRuns(listRec, httptest.NewRequest(http.MethodGet, "/api/scenarios/runs?agentId="+offlineAgent, nil))
+		var runs []runRow
+		if err := json.Unmarshal(listRec.Body.Bytes(), &runs); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(runs) != 1 {
+			t.Fatalf("runs = %d, want 1", len(runs))
+		}
+		if runs[0].Status != "failed" {
+			t.Fatalf("Status = %q, want failed", runs[0].Status)
+		}
+		if runs[0].FailReason == "" || !strings.Contains(strings.ToLower(runs[0].FailReason), "offline") {
+			t.Fatalf("FailReason = %q, want a genuine reason mentioning the agent is offline", runs[0].FailReason)
 		}
 	})
 }

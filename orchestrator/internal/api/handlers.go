@@ -717,6 +717,10 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 		// last_update, so surface it as offline rather than its frozen last status.
 		a.Status = models.EffectiveAgentStatus(a.Status, a.LastUpdate, now)
 		a.State = models.AgentState(stateStr)
+		// The hub's live connection map is the ground truth for whether a
+		// dispatch could actually reach this agent right now -- independent of
+		// heartbeat freshness above. See models.Agent.WSConnected's doc comment.
+		a.WSConnected = h.hub.IsAgentConnected(a.AgentID)
 		a.UninstallError = models.EffectiveUninstallError(a.State, a.UninstallError, uninstallRequestedAt, now)
 		var p models.PolicyBundle
 		if err := json.Unmarshal([]byte(policyRaw), &p); err == nil {
@@ -1104,8 +1108,7 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		Data:    cmd,
 	})
 	if !sent {
-		_, _ = h.db.Exec(context.Background(),
-			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
 		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
 		return
 	}
@@ -1146,8 +1149,7 @@ func (h *Handler) SafeScan(w http.ResponseWriter, r *http.Request) {
 		Data:    map[string]string{"scenarioId": "safe-simulation", "runId": runID},
 	})
 	if !sent {
-		_, _ = h.db.Exec(context.Background(),
-			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
 		jsonError(w, "agent not connected", http.StatusServiceUnavailable)
 		return
 	}
@@ -1330,6 +1332,16 @@ func (h *Handler) applyGeneratedArtifacts(ctx context.Context, scenarioID, runID
 	return steps
 }
 
+// markRunFailed persists status='failed' along with a genuine, specific
+// reason a run never reached execution (dispatch-time only). Without a real
+// reason, the Results drawer previously showed a bare "0 fail / 0 pass" with
+// no way to tell "agent was offline" from "scenario content is broken".
+func (h *Handler) markRunFailed(ctx context.Context, runID string, reason string) {
+	_, _ = h.db.Exec(ctx,
+		`UPDATE scenario_runs SET status = 'failed', fail_reason = $1, completed_at = NOW() WHERE id = $2`,
+		reason, runID)
+}
+
 func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentID string, o dispatchOpts) (runID string, skipReason string, err error) {
 	if license.Current().State == license.StateLocked {
 		return "", "license_locked", nil
@@ -1440,8 +1452,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			},
 		})
 		if !sent {
-			_, _ = h.db.Exec(context.Background(),
-				`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+			h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
 			return "", "offline", nil
 		}
 		log.Printf("[scenario] dispatched posture-check %s → agent %s (run %s)", sc.ID, agentID, runID)
@@ -1520,15 +1531,13 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 	// Build concrete commands — all framework logic resolved server-side.
 	steps, skippedContent, err := scenario.BuildSteps(buildSc, h.calderaURL, h.calderaKey, h.artStore, agentOS)
 	if err != nil {
-		_, _ = h.db.Exec(context.Background(),
-			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		h.markRunFailed(context.Background(), runID, "Failed to build scenario steps: "+err.Error())
 		return "", "", fmt.Errorf("build steps: %w", err)
 	}
 	steps = h.applyGeneratedArtifacts(ctx, sc.ID, runID, agentID, steps)
 	steps, err = h.issueSinkTokensAndSubstitute(ctx, runID, h.publicBaseURL, steps)
 	if err != nil {
-		_, _ = h.db.Exec(context.Background(),
-			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		h.markRunFailed(context.Background(), runID, "Failed to prepare exfiltration sink tokens: "+err.Error())
 		return "", "", fmt.Errorf("issue sink tokens: %w", err)
 	}
 	// stepsTotalBase captures the scenario's full base-technique step count for
@@ -1566,8 +1575,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 			log.Printf("[scenario] run %s: dropped %d lab-only step(s) for mode=%s", runID, dropped, o.Mode)
 		}
 		if len(steps) == 0 {
-			_, _ = h.db.Exec(context.Background(),
-				`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+			h.markRunFailed(context.Background(), runID, "Every step in this scenario is lab-only (ships real payloads) — switch to Lab mode to run it")
 			return "", "", fmt.Errorf("every step in this scenario is lab-only (ships real payloads) — run it in lab mode against an isolated range")
 		}
 	}
@@ -1663,8 +1671,7 @@ func (h *Handler) dispatchRun(ctx context.Context, sc *scenario.Scenario, agentI
 		Data:    cmd,
 	})
 	if !sent {
-		_, _ = h.db.Exec(context.Background(),
-			`UPDATE scenario_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, runID)
+		h.markRunFailed(context.Background(), runID, "Agent is offline — could not deliver the run")
 		return "", "offline", nil
 	}
 
@@ -2462,18 +2469,19 @@ type runRow struct {
 // initiated_by, started_at, completed_at, steps_total, steps_done,
 // steps_running, steps_passed, steps_failed, steps_timeout,
 // detection_summary, alerts_total, alerts_high_fidelity, noise_score,
-// reverted, mode, max_privilege, paused, dispatch_subset.
+// reverted, mode, max_privilege, paused, dispatch_subset, fail_reason.
 func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 	var runs []runRow
 	for rows.Next() {
 		var run runRow
 		var resultsJSON, scoreRaw, detRaw, revertedRaw, subsetRaw []byte
+		var failReason *string
 		var p models.RunProgress
 		if err := rows.Scan(&run.ID, &run.ScenarioID, &run.AgentID, &run.SweepID, &run.EMSweepID, &run.Name,
 			&run.Status, &resultsJSON, &scoreRaw, &run.InitiatedBy, &run.StartedAt, &run.CompletedAt,
 			&p.StepsTotal, &p.StepsDone, &p.StepsRunning, &p.StepsPassed, &p.StepsFailed, &p.StepsTimeout, &detRaw,
 			&run.AlertsTotal, &run.AlertsHighFidelity, &run.NoiseScore, &revertedRaw, &run.Mode, &run.MaxPrivilege, &run.Paused,
-			&subsetRaw); err != nil {
+			&subsetRaw, &failReason); err != nil {
 			log.Printf("[api] scan run row: %v", err)
 			continue
 		}
@@ -2486,6 +2494,9 @@ func scanRunRows(rows pgx.Rows) ([]runRow, error) {
 		}
 		if len(subsetRaw) > 0 {
 			json.Unmarshal(subsetRaw, &run.DispatchSubset)
+		}
+		if failReason != nil {
+			run.FailReason = *failReason
 		}
 		if d := reporting.DetectedTechniques(detRaw, run.Results); len(d) > 0 {
 			run.DetectedTechs = d
@@ -2508,7 +2519,7 @@ func (h *Handler) ListScenarioRuns(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
 		`SELECT id, scenario_id, agent_id, sweep_id, em_sweep_id, name, status, results, score, initiated_by, started_at, completed_at,
 		        steps_total, steps_done, steps_running, steps_passed, steps_failed, steps_timeout, detection_summary,
-		        alerts_total, alerts_high_fidelity, noise_score, reverted, mode, max_privilege, paused, dispatch_subset
+		        alerts_total, alerts_high_fidelity, noise_score, reverted, mode, max_privilege, paused, dispatch_subset, fail_reason
 		 FROM scenario_runs
 		 WHERE ($1 = '' OR agent_id = $1)
 		   AND ($2 = '' OR scenario_id = $2)
@@ -5041,6 +5052,7 @@ func (h *Handler) GetRunReportData(w http.ResponseWriter, r *http.Request) {
 		"perfDiskBefore":         perfDiskBefore,
 		"perfDiskAfter":          perfDiskAfter,
 		"detectionSources":       report.DetectionSources,
+		"detectionValidation":    report.DetectionValidation,
 		"cleanupFailed":          report.CleanupFailed,
 		"cleanupFailedCount":     report.CleanupFailedCount,
 		"reverted":               report.Reverted,

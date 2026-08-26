@@ -158,6 +158,11 @@ type ScenarioRun struct {
 	// Mastery Full Sweep (internal/emsweep) -- mirrors SweepID's grouping role.
 	EMSweepID   *string            `json:"emSweepId,omitempty"`
 	Status      string             `json:"status"` // running | completed | partial | failed
+	// FailReason is a genuine, human-readable explanation for a dispatch-time
+	// failure (Status=="failed" only) -- e.g. "Agent is offline", a scenario
+	// build error, or "every step is lab-only". Empty for every other status;
+	// a run that reached execution always has real per-step Results instead.
+	FailReason  string             `json:"failReason,omitempty"`
 	Results     []SimulationResult `json:"results"`
 	Score       *Score             `json:"score,omitempty"`
 	Progress    *RunProgress       `json:"progress,omitempty"`
@@ -362,6 +367,15 @@ type Agent struct {
 	Username      string        `json:"username"`
 	Status        string        `json:"status"` // idle | scanning | offline (connectivity)
 	State         AgentState    `json:"state"`  // active | restricted | quarantined | retired (lifecycle)
+	// WSConnected reports the WebSocket hub's real, live connection state --
+	// distinct from Status above, which is derived purely from heartbeat
+	// freshness (a separate HTTP channel, on its own 30s interval). An agent
+	// can have a fresh heartbeat (Status looks fine) while its WebSocket --
+	// the channel a dispatched run actually needs -- is independently down
+	// (e.g. a proxy/firewall that passes plain HTTPS but mishandles the WS
+	// Upgrade handshake). Without this, an operator has no way to see that
+	// gap until a dispatch attempt actually fails.
+	WSConnected bool `json:"wsConnected"`
 	EnvLabel      string        `json:"envLabel"`
 	HasReport     bool          `json:"hasReport"`
 	BinaryHash    string        `json:"binaryHash,omitempty"`

@@ -8148,6 +8148,12 @@ function renderAgentRows() {
       '<td>' +
         '<span class="sbadge s-' + x(a.status || 'idle') + '">' + x(a.status || 'idle') + '</span>' +
         (a.state && a.state !== 'active' ? ' <span class="sbadge s-' + x(a.state) + '" title="Lifecycle state">' + x(a.state) + '</span>' : '') +
+        // Heartbeat (HTTP, every 30s) and the WebSocket task-delivery channel
+        // are separate connections -- a proxy/firewall can pass one and block
+        // the other, so a fresh heartbeat alone doesn't mean a run can reach
+        // this agent. Only shown when that gap is real: status already reads
+        // offline covers the "nothing at all" case on its own.
+        (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '') +
         (apActiveJobs[a.agentId] ? ' <span class="sbadge s-running" title="Attack-path collection: ' + x(apActiveJobs[a.agentId].status) + '">&#128202; AP</span>' : '') +
       '</td>' +
       '<td style="color:var(--muted);font-size:0.78rem;white-space:nowrap">' + ago(a.lastUpdate) + '</td>' +
@@ -13541,14 +13547,26 @@ function viewRunResults(run) {
       subset.ids.length + '</strong> — ' + x(subset.ids.slice(0, 4).join(', ')) + (subset.ids.length > 4 ? ', …' : '');
   }
 
-  document.getElementById('results-summary').innerHTML =
-    '<span style="color:var(--danger);font-weight:600">' + fail + ' fail</span>' +
-    ' &nbsp;/&nbsp; <span style="color:var(--success);font-weight:600">' + pass + ' pass</span>' +
-    (skipped ? ' &nbsp;/&nbsp; <span style="color:var(--muted)">' + skipped + ' skipped</span>' : '') +
-    ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +
-    runSettingsText +
-    subsetText +
-    alertText;
+  // A dispatch-time failure (status='failed') never reached execution, so
+  // "0 fail / 0 pass · 0 total" is meaningless noise here -- show the genuine
+  // persisted reason instead (run.failReason, from scenario_runs.fail_reason)
+  // so it's clear e.g. "agent was offline" vs. "scenario content is broken",
+  // not just a bare red badge with nothing to explain it.
+  if (run.status === 'failed') {
+    document.getElementById('results-summary').innerHTML =
+      '<span style="color:var(--danger);font-weight:600">Run failed to start</span>' +
+      ' &nbsp;&middot;&nbsp; ' + x(run.failReason || 'No reason recorded for this failure.') +
+      ' &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>';
+  } else {
+    document.getElementById('results-summary').innerHTML =
+      '<span style="color:var(--danger);font-weight:600">' + fail + ' fail</span>' +
+      ' &nbsp;/&nbsp; <span style="color:var(--success);font-weight:600">' + pass + ' pass</span>' +
+      (skipped ? ' &nbsp;/&nbsp; <span style="color:var(--muted)">' + skipped + ' skipped</span>' : '') +
+      ' &nbsp;&middot;&nbsp; ' + results.length + ' total &nbsp;&middot;&nbsp; Agent: <code>' + x(run.agentId) + '</code>' +
+      runSettingsText +
+      subsetText +
+      alertText;
+  }
 
   var runId = run.id || '';
   var hasOutput = runId && (run.status === 'completed' || run.status === 'partial');

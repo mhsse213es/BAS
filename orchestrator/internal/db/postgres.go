@@ -1608,6 +1608,14 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS initiative_id text NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_jobs_initiative_id ON jobs (initiative_id) WHERE initiative_id <> ''`,
+
+		// fail_reason: a genuine, human-readable explanation for why a run's
+		// status became 'failed' (dispatch-time only -- e.g. agent offline,
+		// malformed scenario content, every step lab-only in a non-lab mode).
+		// Previously status='failed' persisted with zero context -- the
+		// Results drawer showed a bare "0 fail / 0 pass" and a red badge with
+		// no way to tell "agent was offline" from "scenario is broken".
+		`ALTER TABLE scenario_runs ADD COLUMN IF NOT EXISTS fail_reason text`,
 	}
 
 	for _, s := range stmts {
