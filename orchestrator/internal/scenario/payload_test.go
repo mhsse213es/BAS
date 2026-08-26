@@ -115,6 +115,52 @@ func TestMaterializeSkipsWhenPayloadMissing(t *testing.T) {
 	_ = res
 }
 
+// TestMaterializeSkipsUnreachablePeerTechnique proves T1021.004 (ESXi lateral
+// movement) is skipped before dispatch rather than run and timing out --
+// 2026-08-26 audit: BOTH real atomics connect to a hardcoded placeholder
+// hostname ("atomic.local") that can never resolve on a single-endpoint
+// sweep. See project_environmental_error_triage.md.
+func TestMaterializeSkipsUnreachablePeerTechnique(t *testing.T) {
+	store := &ARTStore{payloads: NewPayloadStore(t.TempDir())}
+
+	step := ScenarioStep{
+		TechniqueID: "T1021.004", Executor: "powershell", Framework: "art",
+		Command: `Connect-VIServer -Server atomic.local -User root -Password pass`,
+	}
+	out := store.materialize(step)
+	if !strings.Contains(out.Command, "SKIP:") {
+		t.Fatalf("expected a SKIP command for T1021.004, got %q", out.Command)
+	}
+	if !strings.Contains(out.Command, "ESXi") {
+		t.Errorf("SKIP reason should explain why (ESXi/peer unreachable), got %q", out.Command)
+	}
+	res, _ := interpretART(ExecResult{ExitCode: 0, Stdout: stripPSWrite(out.Command)}, stripPSWrite(out.Command))
+	if res != models.ResultSkipped {
+		t.Errorf("interpretART on the SKIP command = %q, want skipped", res)
+	}
+}
+
+// TestMaterializeDoesNotSkipMixedPeerTechniques proves the 2026-08-26 audit's
+// mixed techniques (some atomics target a real peer, others target
+// 127.0.0.1/localhost and run fine standalone) are NOT blanket-skipped --
+// only T1021.004 is 100% peer-dependent. Blanket-skipping T1021.001/.002/
+// .006, T1039, or T1048.003 would wrongly discard atomics that currently
+// produce a real result.
+func TestMaterializeDoesNotSkipMixedPeerTechniques(t *testing.T) {
+	store := &ARTStore{payloads: NewPayloadStore(t.TempDir())}
+
+	for _, id := range []string{"T1021.001", "T1021.002", "T1021.006", "T1039", "T1048.003"} {
+		step := ScenarioStep{
+			TechniqueID: id, Executor: "powershell", Framework: "art",
+			Command: "whoami",
+		}
+		out := store.materialize(step)
+		if strings.Contains(out.Command, "SKIP:") {
+			t.Errorf("%s should not be blanket-skipped (mixed peer/local atomics), got %q", id, out.Command)
+		}
+	}
+}
+
 // stripPSWrite turns `Write-Output "SKIP: x"` into `SKIP: x` to simulate the
 // agent's stdout for the skip echo.
 func stripPSWrite(cmd string) string {

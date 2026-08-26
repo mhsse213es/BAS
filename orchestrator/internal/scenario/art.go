@@ -564,11 +564,33 @@ func payloadBasename(path string) string {
 	return ""
 }
 
+// requiresUnreachablePeer names ATT&CK techniques whose real atomics ALL
+// target a hardcoded placeholder peer (a hostname/IP that can never resolve
+// on a single-endpoint sweep), verified against production art_atomic_tests
+// command text (2026-08-26 audit -- see project_environmental_error_triage.md
+// memory). Kept deliberately small and technique-level, mirroring
+// resource.go's discoveryProfiles precedent: only added when EVERY real
+// atomic shares the problem. T1021.001/.002/.006, T1039, and T1048.003 were
+// all checked and found MIXED -- some atomics target 127.0.0.1/localhost and
+// produce a real result today -- so they are deliberately NOT here; adding
+// them would wrongly skip atomics that currently work.
+var requiresUnreachablePeer = map[string]string{
+	"T1021.004": "requires a live ESXi host (real atomics connect to a hardcoded placeholder hostname, e.g. atomic.local) -- unreachable on a single-endpoint sweep",
+}
+
 // materialize prepares an ART step for dispatch: it ships every required
 // external payload from the server store into the step's Payloads, or — if any
 // payload is missing — replaces the command with a clean SKIP so the result is
-// recorded as skipped rather than failing with "not recognized".
+// recorded as skipped rather than failing with "not recognized". A technique in
+// requiresUnreachablePeer is skipped the same way, before ever being dispatched,
+// so it doesn't burn a real execute-timeout attempting an unreachable connection.
 func (s *ARTStore) materialize(step ScenarioStep) ScenarioStep {
+	if reason, ok := requiresUnreachablePeer[strings.ToUpper(step.TechniqueID)]; ok {
+		step.Payloads = nil
+		step.Cleanup = ""
+		step.Command = skipCommand(step.Executor, reason)
+		return step
+	}
 	if len(step.requiredPayloads) == 0 {
 		return step
 	}
