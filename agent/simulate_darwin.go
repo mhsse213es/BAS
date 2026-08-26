@@ -46,7 +46,7 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	case "apt36-spearphish":
 		return apt36Checks()
 	case "apt36-kill-chain":
-		return notApplicableWindows("APT36 Kill Chain", "T1566.001", "initial-access")
+		return apt36KillChainChecks()
 	case "ransomware-drill":
 		return ransomwareChecks()
 	case "ad-credential-access":
@@ -56,7 +56,7 @@ func RunScenarioChecks(scenarioID string) []SimCategory {
 	case "cscrf-mii-drill":
 		return cscrfChecks()
 	case "purplesharp-ad-drill":
-		return notApplicableWindows("PurpleSharp AD Credential Drill", "T1558.003", "credential-access")
+		return purpleSharpADChecks()
 	case "lolbin-execution":
 		return notApplicableWindows("LOLBin Execution drill", "T1218", "execution")
 	case "lolbin-execution-coverage":
@@ -99,6 +99,23 @@ func apt36Checks() []SimCategory {
 			checkApplicationFirewall(),
 		}},
 	}
+}
+
+// apt36KillChainChecks is apt36-kill-chain's macOS posture bundle. The
+// three-tier rewrite only ever implemented real checks for Windows --
+// apt36-kill-chain fell back to notApplicableWindows() on macOS, silently
+// dropping apt36Checks()'s real coverage above whenever the legacy scenario
+// (apt36-spearphish.yaml) is eventually retired. Migrated 2026-08-26: same
+// checks, same functions, no new implementations.
+func apt36KillChainChecks() []SimCategory {
+	return apt36Checks()
+}
+
+// purpleSharpADChecks is purplesharp-ad-drill's macOS posture bundle -- same
+// migration as apt36KillChainChecks above, for ad-credential-access.yaml's
+// macOS coverage.
+func purpleSharpADChecks() []SimCategory {
+	return adCredentialChecks()
 }
 
 // ransomware-drill — defence evasion / system integrity, data-at-rest impact.

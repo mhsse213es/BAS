@@ -137,7 +137,7 @@ steps:
     timeout_sec: 30
 
   # ── Stage 4 — Browser-Cached Credential Theft (real ART atomic, same
-  #    technique+test_index already proven in scenarios/apt36-spearphish.yaml) ─
+  #    technique+test_index already proven in scenarios/apt36-kill-chain.yaml) ─
   - name: "Stage 4 - Execution: Browser-Cached M365 Credential Theft (T1555.003)"
     technique_id: T1555.003
     framework: art

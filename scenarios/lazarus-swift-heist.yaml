@@ -34,7 +34,7 @@ description: >
   ProcDump binary already curated in packaging/art-payloads/procdump.exe;
   the step SKIPs cleanly if that payload is missing from a given
   deployment. Stage 9's beacon target follows this platform's existing
-  accepted precedent (see scenarios/apt36-spearphish.yaml) rather than an
+  accepted precedent (see scenarios/apt36-kill-chain.yaml) rather than an
   RFC-6761 .invalid domain, since the underlying Atomic Red Team test's
   user-agent-string default is baked in at content-import time and cannot
   be overridden per-scenario.
@@ -72,7 +72,7 @@ mitre_phases:
 
 steps:
   # ── Stage 1 — Initial Access (T1566.001) — same real ART atomic already
-  #    proven in scenarios/apt36-spearphish.yaml ────────────────────────────
+  #    proven in scenarios/apt36-kill-chain.yaml ────────────────────────────
   - name: "Lazarus Stage 1 — Initial Access via Weaponised Attachment (T1566.001)"
     technique_id: T1566.001
     framework: art
@@ -121,7 +121,7 @@ steps:
     timeout_sec: 30
 
   # ── Stage 6 — Persistence (T1543.003) — same real ART atomic already
-  #    proven in scenarios/apt36-spearphish.yaml ────────────────────────────
+  #    proven in scenarios/apt36-kill-chain.yaml ────────────────────────────
   - name: "Lazarus Stage 6 — Persistence via Malicious Windows Service (T1543.003)"
     technique_id: T1543.003
     framework: art
@@ -222,7 +222,7 @@ steps:
 
   # ── Stage 9 — Command and Control (T1071.001) — same real ART atomic and
   #    same accepted www.google.com-default precedent already proven in
-  #    scenarios/apt36-spearphish.yaml (input_arguments are baked to their
+  #    scenarios/apt36-kill-chain.yaml (input_arguments are baked to their
   #    upstream default at content-import time; not overridable per-scenario) ─
   - name: "Lazarus Stage 9 — HTTP C2 Beacon with Malicious User Agents (T1071.001)"
     technique_id: T1071.001

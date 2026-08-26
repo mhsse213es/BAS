@@ -297,6 +297,12 @@ func lolbinPostureChecks() []SimCategory {
 // purpleSharpADChecks is the POSTURE side of the PurpleSharp AD drill — it
 // validates the defences against the three techniques the live scenario runs
 // (Password Spraying, Kerberoasting, LSASS dumping). Read-only; no changes.
+// purpleSharpADChecks is the canonical Windows AD credential-access posture
+// bundle -- the superset of ad-credential-access.yaml's retired adCredentialChecks()
+// (AutoLogon + lateral-movement + privilege-escalation, migrated 2026-08-26)
+// plus this scenario's own original credential-access/lockout checks. No
+// check content was duplicated: every function below already existed and is
+// reused verbatim, not reimplemented.
 func purpleSharpADChecks() []SimCategory {
 	return []SimCategory{
 		{Phase: "credential-access", Checks: []SimCheck{
@@ -305,9 +311,23 @@ func purpleSharpADChecks() []SimCategory {
 			checkCredentialGuard(),       // vs LSASS dump
 			checkLSASSAuditPolicy(),      // detection of LSASS access
 			checkKerberosAESEncryption(), // vs Kerberoasting RC4 (T1558.003)
+			checkAutoLogon(),             // vs AutoLogon creds in registry (T1552.002) -- migrated from ad-credential-access.yaml
 		}},
 		{Phase: "credential-access-policy", Checks: []SimCheck{
 			checkAccountLockoutPolicy(), // vs Password Spraying (T1110.003)
+		}},
+		// Migrated from ad-credential-access.yaml's adCredentialChecks() --
+		// real, distinct coverage the three-tier rewrite had dropped.
+		{Phase: "lateral-movement", Checks: []SimCheck{
+			checkNTLMRestrictions(),
+			checkPassTheHashMitigation(),
+			checkSMBSigning(),
+			checkLLMNR(),
+		}},
+		{Phase: "privilege-escalation", Checks: []SimCheck{
+			checkUACEnabled(),
+			checkLocalAdminTokenFilter(),
+			checkAlwaysInstallElevated(),
 		}},
 	}
 }
