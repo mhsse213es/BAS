@@ -11677,7 +11677,7 @@ function runRowHtml(r) {
                 '<span style="color:var(--muted);font-size:0.65rem;margin-left:0.35rem">' + pr.stepsDone + '/' + pr.stepsTotal + ' partial</span>';
   }
   return '<tr>' +
-    '<td><code>' + x(r.id ? r.id.substring(0,14) : '—') + '</code></td>' +
+    '<td>' + fmtRunIdCode(r.id) + '</td>' +
     '<td style="font-weight:500">' + x(r.name) + '</td>' +
     '<td><code>' + x(r.agentId) + '</code></td>' +
     '<td><span class="sbadge ' + (r.agentDisconnected && r.status === 'running' ? 's-agent_disconnected' : (r.status === 'running' && r.paused ? 's-paused' : 's-' + x(r.status))) + '">' +
@@ -11784,7 +11784,7 @@ function renderSweepRow(payload) {
   var agent = agents.find(function(a) { return a.agentId === sw.agentId; });
   var agentLabel = agent ? agent.hostname : sw.agentId;
   return '<tr>' +
-    '<td><code>' + x(sw.id.substring(0,14)) + '</code></td>' +
+    '<td>' + fmtRunIdCode(sw.id) + '</td>' +
     '<td style="font-weight:500">Full Variant Sweep — ' + x(agentLabel) + '</td>' +
     '<td><code>' + x(sw.agentId) + '</code></td>' +
     '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sweepStatusLabel(sw.status)) + '</span></td>' +
@@ -11815,7 +11815,7 @@ function renderEMSweepRow(payload) {
   var agent = agents.find(function(a) { return a.agentId === sw.agentId; });
   var agentLabel = agent ? agent.hostname : sw.agentId;
   return '<tr>' +
-    '<td><code>' + x(sw.id.substring(0,14)) + '</code></td>' +
+    '<td>' + fmtRunIdCode(sw.id) + '</td>' +
     '<td style="font-weight:500">Endpoint Mastery Full Sweep — ' + x(agentLabel) + '</td>' +
     '<td><code>' + x(sw.agentId) + '</code></td>' +
     '<td><span class="sbadge s-' + x(sw.status) + '">' + x(sweepStatusLabel(sw.status)) + '</span></td>' +
@@ -16379,6 +16379,17 @@ function daysAgo(iso) {
 function fmtDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString();
+}
+// fmtRunIdCode renders a run/sweep ID as a <code> cell truncated for table
+// width, but -- unlike a bare .substring(0,14) -- an ellipsis marks it as
+// truncated and the full ID is available via title (hover) and by copying
+// the visible text plus the tooltip. Without this, a truncated ID silently
+// LOOKS complete (e.g. "18cea85f279812" for the real ID "18cea85f279812f5"),
+// which breaks any attempt to look the run up directly by that ID later.
+function fmtRunIdCode(id) {
+  if (!id) return '<code>—</code>';
+  var shown = id.length > 14 ? x(id.substring(0, 14)) + '&hellip;' : x(id);
+  return '<code title="' + x(id) + '">' + shown + '</code>';
 }
 function showToast(msg, type) {
   var el = document.getElementById('toast');
