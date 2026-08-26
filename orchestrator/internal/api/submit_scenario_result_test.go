@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/models"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
@@ -533,6 +534,44 @@ func TestSubmitScenarioResult_FindingsFireOnCompletedRun(t *testing.T) {
 		}
 		if count == 0 {
 			t.Fatal("expected a findings row for a completed run with a FAIL result, got none")
+		}
+	})
+}
+
+func TestSubmitScenarioResult_CreatesPostureFinding(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		// A real posture-check step carries both a TechniqueID (Scenario.Validate,
+		// only reachable via Engine.Save which minimalLiveScenario uses, requires
+		// one on every step) and a CheckID -- matching the real fixture shape seen
+		// in endpointrisk_aggregations_test.go ("windows-firewall-enabled" paired
+		// with technique T1562.004).
+		steps := []scenario.Step{{Name: "step-0", TechniqueID: "T1562.004", CheckID: "windows-firewall-enabled", Framework: "custom", Command: "echo 0"}}
+		sc, engine := minimalLiveScenario(t, "sc-pf-hook", steps...)
+		h := New(pool, ws.NewHub(), engine, "")
+		tx, err := endpointrisk.NewTaxonomy()
+		if err != nil {
+			t.Fatalf("NewTaxonomy: %v", err)
+		}
+		h.endpointRiskTaxonomy = tx
+		agentID := "agent-pf-hook"
+		seedRunRow(t, pool, "pf-hook-run", sc.ID, agentID, "running")
+
+		submitResultOK(t, h, scenario.RawRunResult{
+			RunID: "pf-hook-run", ScenarioID: sc.ID, AgentID: agentID,
+			Results: []scenario.ExecResult{{TaskID: scenario.TaskID("T1562.004", "step-0"), ExitCode: 0, Stdout: "FAIL: disabled"}},
+		})
+
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM posture_findings WHERE agent_id=$1 AND check_id='windows-firewall-enabled'`, agentID,
+		).Scan(&count); err != nil {
+			t.Fatalf("count posture_findings: %v", err)
+		}
+		if count == 0 {
+			t.Fatal("expected a posture_findings row -- SubmitScenarioResult must call upsertPostureFindingsForRun")
 		}
 	})
 }

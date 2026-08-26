@@ -2360,6 +2360,7 @@ func (h *Handler) SubmitScenarioResult(w http.ResponseWriter, r *http.Request) {
 	// error | skipped). So a partial run's real evidence is safe to score;
 	// only the kill artifact is excluded.
 	h.upsertFindingsForRun(r.Context(), raw.RunID)
+	h.upsertPostureFindingsForRun(r.Context(), raw.RunID)
 
 	// Auto-populate variant_findings for any ALLOWED results in variant runs.
 	h.upsertVariantFindingsForRun(r.Context(), raw.RunID, raw.ScenarioID, simResults)
