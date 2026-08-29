@@ -5054,7 +5054,7 @@ body.theme-slate {
   var t = localStorage.getItem('audspect_theme') || 'dark';
   if (t !== 'dark') document.body.classList.add('theme-' + t);
 })();
-var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile' };
+var TAB_TITLES = { dashboard:'Dashboard', agents:'Agents', scenarios:'Scenarios', runs:'Live Runs', 'scheduled-assessments':'Scheduled Assessments', initiatives:'Initiatives', campaigns:'Campaigns', coverage:'ATT&CK Coverage', findings:'Findings', remediation:'Remediation', reports:'Reports', verification:'Detection Verification', users:'Users', compliance:'Compliance', settings:'Settings', variants:'Variant Executor', em:'Endpoint Mastery', exposure:'Exposure Explorer', recommendations:'Recommendations', exercises:'Exercises', 'attack-coverage':'Technique Coverage', 'threat-priority':'Threat Prioritization', iocs:'IOC Registry', profile:'My Profile', 'sla-report':'SLA Compliance' };
 var STRIPE_COLORS = ['#2f81f7','#da3633','#d29922','#e0609e','#8957e5','#2fd8c3'];
 
 var TOKEN    = ''; // kept in memory only — never persisted to localStorage
@@ -5395,7 +5395,7 @@ function goToProfile() {
 // data loaders — so callers like openCampaignDetail can switch to a tab and then
 // render their own sub-view without the tab's loader resetting it.
 function activateTab(name) {
-  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile'].forEach(function(t) {
+  ['dashboard','agents','scenarios','runs','scheduled-assessments','initiatives','campaigns','coverage','findings','remediation','reports','verification','compliance','settings','variants','em','attackpath','exposure','recommendations','integrations','exercises','attack-coverage','threat-priority','iocs','profile','sla-report'].forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === name ? '' : 'none';
     var nav = document.querySelector('[data-tab="' + t + '"]');
@@ -10374,8 +10374,12 @@ function renderSLAKPIs(overall) {
     tile('Currently Open', overall.currentlyOpen, overall.currentlyOpen ? 'var(--warning)' : 'var(--muted)');
 }
 function renderSLASeverityBars(bySeverity) {
+  // order[sev] || 9 would be wrong here -- Critical's value is 0, and
+  // 0 || 9 evaluates to 9 in JS (0 is falsy), so Critical would silently
+  // sort last instead of first. Use an explicit "in" check instead.
   var order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-  var sorted = bySeverity.slice().sort(function(a, b) { return (order[a.severity] || 9) - (order[b.severity] || 9); });
+  var rank = function(sev) { return sev in order ? order[sev] : 9; };
+  var sorted = bySeverity.slice().sort(function(a, b) { return rank(a.severity) - rank(b.severity); });
   var el = document.getElementById('sla-rpt-severity');
   if (!sorted.length) { el.innerHTML = '<div class="empty" style="padding:1.25rem">No severities with SLA episodes.</div>'; return; }
   el.innerHTML = sorted.map(function(s) {
