@@ -127,9 +127,19 @@ func (h *Handler) UpdateSLAPolicy(w http.ResponseWriter, r *http.Request) {
 // first. GET /api/sla/breaches
 func (h *Handler) GetSLABreaches(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
-		`SELECT pf.agent_id, pf.check_id, pf.title, pf.severity, pf.category, fs.breached_at, fs.deadline_at
+		`SELECT pf.agent_id, pf.check_id, pf.title, pf.severity, pf.category, fs.breached_at, fs.deadline_at,
+		        rr.id, rr.remediation_id, rr.tier, rr.status, rr.error, rr.requested_at, rr.dispatched_at,
+		        rr.execution_completed_at, rr.verification_completed_at, rr.completed_at
 		   FROM finding_slas fs
 		   JOIN posture_findings pf ON pf.id = fs.posture_finding_id
+		   LEFT JOIN LATERAL (
+		       SELECT id, remediation_id, tier, status, error, requested_at, dispatched_at,
+		              execution_completed_at, verification_completed_at, completed_at
+		         FROM remediation_requests
+		        WHERE agent_id = pf.agent_id AND check_id = pf.check_id
+		          AND requested_at >= COALESCE(fs.started_at, '-infinity')
+		        ORDER BY requested_at DESC, id DESC LIMIT 1
+		   ) rr ON true
 		  WHERE fs.status = 'breached'
 		  ORDER BY fs.breached_at ASC`)
 	if err != nil {
@@ -141,13 +151,23 @@ func (h *Handler) GetSLABreaches(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var agentID, checkID, title, severity, category string
 		var breachedAt, deadlineAt time.Time
-		if rows.Scan(&agentID, &checkID, &title, &severity, &category, &breachedAt, &deadlineAt) != nil {
+		var rrID, rrRemediationID, rrStatus, rrError *string
+		var rrTier *int
+		var rrRequestedAt, rrDispatchedAt, rrExecutionCompletedAt, rrVerificationCompletedAt, rrCompletedAt *time.Time
+		if rows.Scan(&agentID, &checkID, &title, &severity, &category, &breachedAt, &deadlineAt,
+			&rrID, &rrRemediationID, &rrTier, &rrStatus, &rrError, &rrRequestedAt, &rrDispatchedAt,
+			&rrExecutionCompletedAt, &rrVerificationCompletedAt, &rrCompletedAt) != nil {
 			continue
 		}
-		out = append(out, map[string]any{
+		m := map[string]any{
 			"agentId": agentID, "checkId": checkID, "title": title, "severity": severity,
 			"category": category, "breachedAt": breachedAt, "deadlineAt": deadlineAt,
-		})
+		}
+		if lr := buildLatestRemediation(rrID, rrRemediationID, rrStatus, rrError, rrTier,
+			rrRequestedAt, rrDispatchedAt, rrExecutionCompletedAt, rrVerificationCompletedAt, rrCompletedAt); lr != nil {
+			m["latestRemediation"] = lr
+		}
+		out = append(out, m)
 	}
 	respond(w, out)
 }

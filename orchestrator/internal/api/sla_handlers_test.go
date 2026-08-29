@@ -263,3 +263,61 @@ func TestGetSLABreaches_ReturnsOnlyBreachedOldestFirst(t *testing.T) {
 		}
 	})
 }
+
+func TestGetSLABreaches_IncludesLatestRemediation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('breach-rt1', 'BREACH-RT1')`)
+		breachedAt := time.Now().Add(-1 * time.Hour)
+		seedFindingSLA(t, pool, "fs-breach-rt", "breach-rt1", "windows-firewall-enabled", "High", "breached", time.Now().Add(-2*time.Hour), &breachedAt)
+		mustExecAPI(t, pool,
+			`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, requested_at)
+			 VALUES ('rr-breach-rt', 'test-remediation', 'breach-rt1', 'windows-firewall-enabled', 1, 'failed', 'user-1', 'test', $1)`,
+			time.Now().Add(time.Minute))
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		req := httptest.NewRequest(http.MethodGet, "/api/sla/breaches", nil)
+		w := httptest.NewRecorder()
+		h.GetSLABreaches(w, req)
+
+		var got []map[string]any
+		json.Unmarshal(w.Body.Bytes(), &got)
+		if len(got) != 1 {
+			t.Fatalf("len = %d, want 1", len(got))
+		}
+		lr, ok := got[0]["latestRemediation"].(map[string]any)
+		if !ok {
+			t.Fatalf("latestRemediation missing or wrong shape: %v", got[0]["latestRemediation"])
+		}
+		if lr["id"] != "rr-breach-rt" || lr["status"] != "failed" || lr["inProgress"] != false {
+			t.Errorf("latestRemediation = %+v, want id=rr-breach-rt status=failed inProgress=false", lr)
+		}
+	})
+}
+
+func TestGetSLABreaches_NoRemediationAttempt_LatestRemediationAbsent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('breach-rt2', 'BREACH-RT2')`)
+		breachedAt := time.Now().Add(-1 * time.Hour)
+		seedFindingSLA(t, pool, "fs-breach-rt2", "breach-rt2", "windows-smbv1-disabled", "High", "breached", time.Now().Add(-2*time.Hour), &breachedAt)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		req := httptest.NewRequest(http.MethodGet, "/api/sla/breaches", nil)
+		w := httptest.NewRecorder()
+		h.GetSLABreaches(w, req)
+
+		var got []map[string]any
+		json.Unmarshal(w.Body.Bytes(), &got)
+		if len(got) != 1 {
+			t.Fatalf("len = %d, want 1", len(got))
+		}
+		if _, present := got[0]["latestRemediation"]; present {
+			t.Errorf("latestRemediation present = %v, want absent", got[0]["latestRemediation"])
+		}
+	})
+}
