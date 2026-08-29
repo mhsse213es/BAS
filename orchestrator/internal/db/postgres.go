@@ -1461,6 +1461,16 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_notifications_job_id ON notifications (job_id)`,
+		// Sub-project B of the SLA initiative introduces the first
+		// non-job-scoped event type (sla_breached, see
+		// docs/superpowers/specs/2026-08-29-posture-finding-sla-policy-design.md).
+		// job_id was mandatory because every event type so far was job-driven;
+		// dropping NOT NULL lets a job-less event store NULL instead of
+		// needing a fake jobs row. NULL is exempt from the FK check, so the
+		// existing REFERENCES jobs(id) still holds for every job-scoped event.
+		// Idempotent: re-running DROP NOT NULL on an already-nullable column
+		// is a no-op, not an error.
+		`ALTER TABLE notifications ALTER COLUMN job_id DROP NOT NULL`,
 
 		`CREATE TABLE IF NOT EXISTS notification_webhooks (
 			id           text        PRIMARY KEY DEFAULT gen_random_uuid()::text,

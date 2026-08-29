@@ -634,6 +634,14 @@ func main() {
 	})
 	defer jobsScheduler.Stop()
 
+	slaScheduler := exercise.NewPollScheduler(5 * time.Minute)
+	slaScheduler.Start(func(ctx context.Context) {
+		if err := handler.TickSLABreaches(ctx); err != nil {
+			log.Printf("[sla] tick: %v", err)
+		}
+	})
+	defer slaScheduler.Stop()
+
 	rateLimitPerMin := 0
 	if cfg.RateLimitEnabled {
 		rateLimitPerMin = cfg.RateLimitPerMin

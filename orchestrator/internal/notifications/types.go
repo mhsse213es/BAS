@@ -14,6 +14,8 @@ const (
 	EventTargetFailed   EventType = "target_failed"
 	EventTargetDeferred EventType = "target_deferred"
 	EventTargetAssigned EventType = "target_assigned"
+
+	EventSLABreached EventType = "sla_breached"
 )
 
 type Severity string

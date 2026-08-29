@@ -22,10 +22,17 @@ func (s *Store) Insert(ctx context.Context, evt Event) error {
 	if err != nil {
 		return err
 	}
+	// job_id is nullable (see postgres.go) so a job-less event (e.g.
+	// sla_breached) stores NULL rather than an empty string, which would
+	// fail the jobs(id) FK -- NULL is exempt from FK checks, "" is not.
+	var jobID *string
+	if evt.JobID != "" {
+		jobID = &evt.JobID
+	}
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO notifications (type, job_id, target_id, agent_id, severity, message, metadata)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		string(evt.Type), evt.JobID, evt.TargetID, evt.AgentID, string(evt.Severity), evt.Message, metaJSON)
+		string(evt.Type), jobID, evt.TargetID, evt.AgentID, string(evt.Severity), evt.Message, metaJSON)
 	return err
 }
 
@@ -76,9 +83,13 @@ func (s *Store) List(ctx context.Context, f ListFilter) ([]Event, error) {
 	for rows.Next() {
 		var e Event
 		var typ, sev string
+		var jobID *string
 		var metaJSON []byte
-		if err := rows.Scan(&e.ID, &typ, &e.JobID, &e.TargetID, &e.AgentID, &sev, &e.Message, &metaJSON, &e.Timestamp); err != nil {
+		if err := rows.Scan(&e.ID, &typ, &jobID, &e.TargetID, &e.AgentID, &sev, &e.Message, &metaJSON, &e.Timestamp); err != nil {
 			return nil, err
+		}
+		if jobID != nil {
+			e.JobID = *jobID
 		}
 		e.Type = EventType(typ)
 		e.Severity = Severity(sev)
