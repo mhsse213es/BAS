@@ -9,6 +9,7 @@ import (
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/findings"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/slapolicy"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -104,13 +105,14 @@ func (h *Handler) upsertPostureFindingsForRun(ctx context.Context, runID string)
 // this sub-project).
 func (h *Handler) applyPostureFinding(ctx context.Context, agentID string, a *postureFindingAgg, o findings.Observation) {
 	var s findings.State
+	var pfID string
 	var resolvedAt *time.Time
 	err := h.db.QueryRow(ctx,
-		`SELECT status, exposure_state, occurrence_count, reopened_count,
+		`SELECT id, status, exposure_state, occurrence_count, reopened_count,
 		        COALESCE(last_run_id,''), last_observed_at, resolved_at
 		   FROM posture_findings WHERE agent_id=$1 AND check_id=$2`,
 		agentID, a.checkID).
-		Scan(&s.Status, &s.ExposureState, &s.OccurrenceCount, &s.ReopenedCount, &s.LastRunID, &s.LastObservedAt, &resolvedAt)
+		Scan(&pfID, &s.Status, &s.ExposureState, &s.OccurrenceCount, &s.ReopenedCount, &s.LastRunID, &s.LastObservedAt, &resolvedAt)
 	if err == nil {
 		s.Exists = true
 		s.Resolved = resolvedAt != nil
@@ -126,12 +128,22 @@ func (h *Handler) applyPostureFinding(ctx context.Context, agentID string, a *po
 		if severity == "" {
 			severity = "Medium"
 		}
-		_, _ = h.db.Exec(ctx,
+		var newID string
+		err := h.db.QueryRow(ctx,
 			`INSERT INTO posture_findings (agent_id, check_id, category, title, severity, exposure_state, status,
 			        occurrence_count, last_run_id, first_seen, last_seen, last_observed_at)
 			 VALUES ($1,$2,$3,$4,$5,$6,'open',1,$7,NOW(),NOW(),$8)
-			 ON CONFLICT (agent_id, check_id) DO NOTHING`,
-			agentID, a.checkID, a.category, text.Title, severity, next.ExposureState, o.RunID, o.ObservedAt)
+			 ON CONFLICT (agent_id, check_id) DO NOTHING
+			 RETURNING id`,
+			agentID, a.checkID, a.category, text.Title, severity, next.ExposureState, o.RunID, o.ObservedAt).
+			Scan(&newID)
+		if err != nil {
+			// ON CONFLICT DO NOTHING with RETURNING returns no row on a
+			// conflict (a rare concurrent-insert race for the same
+			// agent/check) -- nothing to start a clock for in that case.
+			return
+		}
+		h.startSLAClock(ctx, newID, severity, o.ObservedAt)
 		return
 	}
 
@@ -157,6 +169,42 @@ func (h *Handler) applyPostureFinding(ctx context.Context, agentID string, a *po
 		o.RunID, o.ObservedAt,
 		clearResolved, resolvedAtSet, resolvedReason,
 		agentID, a.checkID)
+
+	switch tr {
+	case findings.Healed:
+		h.resolveSLAClock(ctx, pfID)
+	case findings.Reopened:
+		var severity string
+		h.db.QueryRow(ctx, `SELECT severity FROM posture_findings WHERE id=$1`, pfID).Scan(&severity)
+		h.startSLAClock(ctx, pfID, severity, o.ObservedAt)
+	}
+}
+
+// startSLAClock opens a new finding_slas episode for postureFindingID,
+// using the sla_policy row matching severity. Silently no-ops if that
+// severity has no policy row (shouldn't happen -- all 4 severities are
+// seeded by migration -- but a missing policy must never panic the ingest
+// path).
+func (h *Handler) startSLAClock(ctx context.Context, postureFindingID, severity string, startedAt time.Time) {
+	var durationHours int
+	if err := h.db.QueryRow(ctx, `SELECT duration_hours FROM sla_policy WHERE severity=$1`, severity).Scan(&durationHours); err != nil {
+		return
+	}
+	deadlineAt := slapolicy.DeadlineFor(slapolicy.Policy{Severity: severity, DurationHours: durationHours}, startedAt)
+	_, _ = h.db.Exec(ctx,
+		`INSERT INTO finding_slas (posture_finding_id, severity_at_start, started_at, deadline_at, status)
+		 VALUES ($1,$2,$3,$4,'active')`,
+		postureFindingID, severity, startedAt, deadlineAt)
+}
+
+// resolveSLAClock closes postureFindingID's current non-terminal episode
+// (active or already-breached -- a late resolution after a miss is still a
+// real resolution, breached_at stays set as history).
+func (h *Handler) resolveSLAClock(ctx context.Context, postureFindingID string) {
+	_, _ = h.db.Exec(ctx,
+		`UPDATE finding_slas SET status='resolved', resolved_at=NOW()
+		  WHERE posture_finding_id=$1 AND status IN ('active','breached')`,
+		postureFindingID)
 }
 
 const postureFindingCols = `id, agent_id, check_id, category, title, severity, status,

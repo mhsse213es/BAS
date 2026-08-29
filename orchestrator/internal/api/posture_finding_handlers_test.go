@@ -352,3 +352,91 @@ func TestUpsertPostureFindingsForRun_PersistsPerCheckSeverity(t *testing.T) {
 		}
 	})
 }
+
+func TestApplyPostureFinding_CreatedStartsSLAClock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+
+		// windows-firewall-enabled is the only check_id seedPostureCheckRun
+		// seeds (it hardcodes it) -- severity "High" per postureCheckFindingText.
+		seedPostureCheckRun(t, pool, "sla-run-1", "sla-a1", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "sla-run-1")
+
+		var pfID, status, severityAtStart string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT id FROM posture_findings WHERE agent_id='sla-a1' AND check_id='windows-firewall-enabled'`,
+		).Scan(&pfID); err != nil {
+			t.Fatalf("posture_findings query: %v", err)
+		}
+		if err := pool.QueryRow(context.Background(),
+			`SELECT status, severity_at_start FROM finding_slas WHERE posture_finding_id=$1`, pfID,
+		).Scan(&status, &severityAtStart); err != nil {
+			t.Fatalf("expected a finding_slas row: %v", err)
+		}
+		if status != "active" || severityAtStart != "High" {
+			t.Errorf("status=%q severityAtStart=%q, want active/High", status, severityAtStart)
+		}
+	})
+}
+
+func TestApplyPostureFinding_HealedResolvesActiveSLA(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+
+		seedPostureCheckRun(t, pool, "sla-run-2a", "sla-a2", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "sla-run-2a")
+		seedPostureCheckRun(t, pool, "sla-run-2b", "sla-a2", "pass", time.Now().Add(time.Hour))
+		h.upsertPostureFindingsForRun(context.Background(), "sla-run-2b")
+
+		var pfID string
+		pool.QueryRow(context.Background(),
+			`SELECT id FROM posture_findings WHERE agent_id='sla-a2' AND check_id='windows-firewall-enabled'`,
+		).Scan(&pfID)
+
+		var status string
+		var resolvedAt *time.Time
+		if err := pool.QueryRow(context.Background(),
+			`SELECT status, resolved_at FROM finding_slas WHERE posture_finding_id=$1`, pfID,
+		).Scan(&status, &resolvedAt); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if status != "resolved" || resolvedAt == nil {
+			t.Errorf("status=%q resolvedAt=%v, want resolved/non-nil", status, resolvedAt)
+		}
+	})
+}
+
+func TestApplyPostureFinding_ReopenedStartsNewSLAEpisode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+
+		seedPostureCheckRun(t, pool, "sla-run-3a", "sla-a3", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "sla-run-3a")
+		seedPostureCheckRun(t, pool, "sla-run-3b", "sla-a3", "pass", time.Now().Add(time.Hour))
+		h.upsertPostureFindingsForRun(context.Background(), "sla-run-3b")
+		seedPostureCheckRun(t, pool, "sla-run-3c", "sla-a3", "fail", time.Now().Add(2*time.Hour))
+		h.upsertPostureFindingsForRun(context.Background(), "sla-run-3c")
+
+		var pfID string
+		pool.QueryRow(context.Background(),
+			`SELECT id FROM posture_findings WHERE agent_id='sla-a3' AND check_id='windows-firewall-enabled'`,
+		).Scan(&pfID)
+
+		var total, activeCount, resolvedCount int
+		pool.QueryRow(context.Background(), `SELECT count(*) FROM finding_slas WHERE posture_finding_id=$1`, pfID).Scan(&total)
+		pool.QueryRow(context.Background(), `SELECT count(*) FROM finding_slas WHERE posture_finding_id=$1 AND status='active'`, pfID).Scan(&activeCount)
+		pool.QueryRow(context.Background(), `SELECT count(*) FROM finding_slas WHERE posture_finding_id=$1 AND status='resolved'`, pfID).Scan(&resolvedCount)
+		if total != 2 || activeCount != 1 || resolvedCount != 1 {
+			t.Errorf("total=%d active=%d resolved=%d, want 2/1/1 (prior episode resolved, new episode active)", total, activeCount, resolvedCount)
+		}
+	})
+}

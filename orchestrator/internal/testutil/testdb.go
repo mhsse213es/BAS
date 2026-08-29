@@ -214,4 +214,14 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 		ON CONFLICT (id) DO NOTHING`); err != nil {
 		t.Fatalf("testutil: reseed default tenant: %v", err)
 	}
+	// Same problem, same fix, for sla_policy -- EnsureSchema's 4 default
+	// severity rows are reference data, not per-test data, but the blanket
+	// TRUNCATE above wipes them like any other table. Without this, only
+	// the first test in a shared container to touch sla_policy would ever
+	// see it populated.
+	if _, err := pool.Exec(ctx, `INSERT INTO sla_policy (severity, duration_hours) VALUES
+		('Critical', 24), ('High', 72), ('Medium', 168), ('Low', 720)
+		ON CONFLICT (severity) DO NOTHING`); err != nil {
+		t.Fatalf("testutil: reseed sla_policy: %v", err)
+	}
 }
