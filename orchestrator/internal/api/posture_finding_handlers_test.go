@@ -468,3 +468,234 @@ func TestListAgentPostureFindings_IncludesSLAFields(t *testing.T) {
 		}
 	})
 }
+
+func seedRemediationRequest(t *testing.T, pool *pgxpool.Pool, id, agentID, checkID, status string, requestedAt time.Time) {
+	t.Helper()
+	mustExecAPI(t, pool,
+		`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, requested_at)
+		 VALUES ($1, 'test-remediation', $2, $3, 1, $4, 'user-1', 'test', $5)`,
+		id, agentID, checkID, status, requestedAt)
+}
+
+func TestListAgentPostureFindings_NoRemediationAttempt_LatestRemediationAbsent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+		seedPostureCheckRun(t, pool, "rt-run-none", "rt-none", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "rt-run-none")
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "agentId", "rt-none")
+		w := httptest.NewRecorder()
+		h.ListAgentPostureFindings(w, req)
+
+		var got []map[string]any
+		json.Unmarshal(w.Body.Bytes(), &got)
+		if len(got) != 1 {
+			t.Fatalf("len = %d, want 1", len(got))
+		}
+		if _, present := got[0]["latestRemediation"]; present {
+			t.Errorf("latestRemediation present = %v, want absent", got[0]["latestRemediation"])
+		}
+	})
+}
+
+func TestGetPostureFinding_OneRemediationAttempt_Surfaced(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+		seedPostureCheckRun(t, pool, "rt-run-one", "rt-one", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "rt-run-one")
+
+		var pfID string
+		pool.QueryRow(context.Background(),
+			`SELECT id FROM posture_findings WHERE agent_id='rt-one' AND check_id='windows-firewall-enabled'`).Scan(&pfID)
+		seedRemediationRequest(t, pool, "rr-one", "rt-one", "windows-firewall-enabled", "running", time.Now().Add(time.Minute))
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", pfID)
+		w := httptest.NewRecorder()
+		h.GetPostureFinding(w, req)
+
+		var got map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		lr, ok := got["latestRemediation"].(map[string]any)
+		if !ok {
+			t.Fatalf("latestRemediation missing or wrong shape: %v", got["latestRemediation"])
+		}
+		if lr["id"] != "rr-one" || lr["status"] != "running" || lr["inProgress"] != true {
+			t.Errorf("latestRemediation = %+v, want id=rr-one status=running inProgress=true", lr)
+		}
+	})
+}
+
+func TestGetPostureFinding_MultipleAttempts_NewestWins(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+		seedPostureCheckRun(t, pool, "rt-run-multi", "rt-multi", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "rt-run-multi")
+
+		var pfID string
+		pool.QueryRow(context.Background(),
+			`SELECT id FROM posture_findings WHERE agent_id='rt-multi' AND check_id='windows-firewall-enabled'`).Scan(&pfID)
+		seedRemediationRequest(t, pool, "rr-older", "rt-multi", "windows-firewall-enabled", "failed", time.Now().Add(time.Minute))
+		seedRemediationRequest(t, pool, "rr-newer", "rt-multi", "windows-firewall-enabled", "completed", time.Now().Add(2*time.Minute))
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", pfID)
+		w := httptest.NewRecorder()
+		h.GetPostureFinding(w, req)
+
+		var got map[string]any
+		json.Unmarshal(w.Body.Bytes(), &got)
+		lr := got["latestRemediation"].(map[string]any)
+		if lr["id"] != "rr-newer" {
+			t.Errorf("latestRemediation.id = %v, want rr-newer (newest by requested_at)", lr["id"])
+		}
+	})
+}
+
+func TestGetPostureFinding_AttemptFromPriorEpisode_NotSurfaced(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('rt-prior', 'RT-PRIOR')`)
+		mustExecAPI(t, pool,
+			`INSERT INTO posture_findings (id, agent_id, check_id, category, title, severity, status, first_seen, last_seen, last_observed_at)
+			 VALUES ('pf-rt-prior', 'rt-prior', 'windows-firewall-enabled', 'security-configuration', 'Windows Firewall disabled', 'High', 'open', NOW(), NOW(), NOW())`)
+
+		priorStart := time.Now().Add(-48 * time.Hour)
+		priorEnd := time.Now().Add(-24 * time.Hour)
+		mustExecAPI(t, pool,
+			`INSERT INTO finding_slas (id, posture_finding_id, severity_at_start, started_at, deadline_at, status, resolved_at)
+			 VALUES ('fs-rt-prior', 'pf-rt-prior', 'High', $1, $2, 'resolved', $2)`,
+			priorStart, priorEnd)
+		seedRemediationRequest(t, pool, "rr-prior-episode", "rt-prior", "windows-firewall-enabled", "completed", priorStart.Add(time.Hour))
+
+		currentStart := time.Now().Add(-time.Hour)
+		mustExecAPI(t, pool,
+			`INSERT INTO finding_slas (id, posture_finding_id, severity_at_start, started_at, deadline_at, status)
+			 VALUES ('fs-rt-current', 'pf-rt-prior', 'High', $1, $2, 'active')`,
+			currentStart, time.Now().Add(time.Hour))
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", "pf-rt-prior")
+		w := httptest.NewRecorder()
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		h.GetPostureFinding(w, req)
+
+		var got map[string]any
+		json.Unmarshal(w.Body.Bytes(), &got)
+		if _, present := got["latestRemediation"]; present {
+			t.Errorf("latestRemediation present = %v, want absent (only attempt is from a prior, closed episode)", got["latestRemediation"])
+		}
+	})
+}
+
+func TestGetPostureFinding_RemediationInProgress_ReflectsStatus(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	cases := []struct {
+		name           string
+		status         string
+		wantInProgress bool
+	}{
+		{"non-terminal status is in progress", "verifying", true},
+		{"terminal status is not in progress", "completed", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+				h := newPostureTestHandler(t, pool)
+				agentID := "rt-inprog-" + c.status
+				seedPostureCheckRun(t, pool, "rt-run-"+c.status, agentID, "fail", time.Now())
+				h.upsertPostureFindingsForRun(context.Background(), "rt-run-"+c.status)
+
+				var pfID string
+				pool.QueryRow(context.Background(),
+					`SELECT id FROM posture_findings WHERE agent_id=$1 AND check_id='windows-firewall-enabled'`, agentID).Scan(&pfID)
+				seedRemediationRequest(t, pool, "rr-"+c.status, agentID, "windows-firewall-enabled", c.status, time.Now().Add(time.Minute))
+
+				req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", pfID)
+				w := httptest.NewRecorder()
+				h.GetPostureFinding(w, req)
+
+				var got map[string]any
+				json.Unmarshal(w.Body.Bytes(), &got)
+				lr := got["latestRemediation"].(map[string]any)
+				if lr["inProgress"] != c.wantInProgress {
+					t.Errorf("inProgress = %v, want %v", lr["inProgress"], c.wantInProgress)
+				}
+			})
+		})
+	}
+}
+
+func TestGetPostureFinding_StaleDispatchedAttempt_ReapedToTimedOut(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+		seedPostureCheckRun(t, pool, "rt-run-stale-get", "rt-stale-get", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "rt-run-stale-get")
+
+		var pfID string
+		pool.QueryRow(context.Background(),
+			`SELECT id FROM posture_findings WHERE agent_id='rt-stale-get' AND check_id='windows-firewall-enabled'`).Scan(&pfID)
+		mustExecAPI(t, pool,
+			`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, requested_at, dispatched_at)
+			 VALUES ('rr-stale-get', 'test-remediation', 'rt-stale-get', 'windows-firewall-enabled', 1, 'dispatched', 'user-1', 'test', $1, $2)`,
+			time.Now().Add(time.Minute), time.Now().Add(-2*time.Hour))
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "id", pfID)
+		w := httptest.NewRecorder()
+		h.GetPostureFinding(w, req)
+
+		var got map[string]any
+		json.Unmarshal(w.Body.Bytes(), &got)
+		lr := got["latestRemediation"].(map[string]any)
+		if lr["status"] != "timed_out" {
+			t.Errorf("status = %v, want timed_out (GetPostureFinding must reap a stale dispatched attempt)", lr["status"])
+		}
+
+		var dbStatus string
+		pool.QueryRow(context.Background(), `SELECT status FROM remediation_requests WHERE id='rr-stale-get'`).Scan(&dbStatus)
+		if dbStatus != "timed_out" {
+			t.Errorf("db status = %q, want timed_out (reap must persist, not just affect the response)", dbStatus)
+		}
+	})
+}
+
+func TestListAgentPostureFindings_StaleDispatchedAttempt_NotReaped(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+		seedPostureCheckRun(t, pool, "rt-run-stale-list", "rt-stale-list", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "rt-run-stale-list")
+		mustExecAPI(t, pool,
+			`INSERT INTO remediation_requests (id, remediation_id, agent_id, check_id, tier, status, requested_by, reason, requested_at, dispatched_at)
+			 VALUES ('rr-stale-list', 'test-remediation', 'rt-stale-list', 'windows-firewall-enabled', 1, 'dispatched', 'user-1', 'test', $1, $2)`,
+			time.Now().Add(time.Minute), time.Now().Add(-2*time.Hour))
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "agentId", "rt-stale-list")
+		w := httptest.NewRecorder()
+		h.ListAgentPostureFindings(w, req)
+
+		var got []map[string]any
+		json.Unmarshal(w.Body.Bytes(), &got)
+		lr := got[0]["latestRemediation"].(map[string]any)
+		if lr["status"] != "dispatched" {
+			t.Errorf("status = %v, want still dispatched (ListAgentPostureFindings must NOT reap, matching ListAgentRemediations' precedent)", lr["status"])
+		}
+	})
+}

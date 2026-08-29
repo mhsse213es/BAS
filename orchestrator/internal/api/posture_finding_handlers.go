@@ -9,6 +9,7 @@ import (
 	"github.com/audspect/bas/internal/endpointrisk"
 	"github.com/audspect/bas/internal/findings"
 	"github.com/audspect/bas/internal/models"
+	"github.com/audspect/bas/internal/remediation"
 	"github.com/audspect/bas/internal/slapolicy"
 	"github.com/go-chi/chi/v5"
 )
@@ -210,7 +211,9 @@ func (h *Handler) resolveSLAClock(ctx context.Context, postureFindingID string) 
 const postureFindingCols = `pf.id, pf.agent_id, pf.check_id, pf.category, pf.title, pf.severity, pf.status,
 	pf.occurrence_count, pf.reopened_count, pf.first_seen, pf.last_seen, pf.last_observed_at,
 	COALESCE(pf.last_run_id,''), pf.resolved_at, pf.resolved_reason,
-	fs.status, fs.started_at, fs.deadline_at, fs.breached_at`
+	fs.status, fs.started_at, fs.deadline_at, fs.breached_at,
+	rr.id, rr.remediation_id, rr.tier, rr.status, rr.error, rr.requested_at, rr.dispatched_at,
+	rr.execution_completed_at, rr.verification_completed_at, rr.completed_at`
 
 const postureFindingJoin = `FROM posture_findings pf
 	LEFT JOIN LATERAL (
@@ -218,7 +221,46 @@ const postureFindingJoin = `FROM posture_findings pf
 		  FROM finding_slas
 		 WHERE posture_finding_id = pf.id
 		 ORDER BY started_at DESC LIMIT 1
-	) fs ON true`
+	) fs ON true
+	LEFT JOIN LATERAL (
+		SELECT id, remediation_id, tier, status, error, requested_at, dispatched_at,
+		       execution_completed_at, verification_completed_at, completed_at
+		  FROM remediation_requests
+		 WHERE agent_id = pf.agent_id AND check_id = pf.check_id
+		   AND requested_at >= COALESCE(fs.started_at, '-infinity')
+		 ORDER BY requested_at DESC, id DESC LIMIT 1
+	) rr ON true`
+
+// buildLatestRemediation turns one rr.* row (all nullable -- a LEFT JOIN
+// LATERAL ... ON true still yields exactly one row of NULLs when nothing
+// matches) into the latestRemediation JSON object, or nil when nothing
+// matched. Shared by scanPostureFindings and GetSLABreaches.
+func buildLatestRemediation(id, remediationID, status, errText *string, tier *int,
+	requestedAt, dispatchedAt, executionCompletedAt, verificationCompletedAt, completedAt *time.Time) map[string]any {
+	if id == nil {
+		return nil
+	}
+	m := map[string]any{
+		"id": *id, "remediationId": *remediationID, "tier": *tier, "status": *status,
+		"inProgress": !remediation.IsTerminal(*status), "requestedAt": *requestedAt,
+	}
+	if errText != nil && *errText != "" {
+		m["error"] = *errText
+	}
+	if dispatchedAt != nil {
+		m["dispatchedAt"] = *dispatchedAt
+	}
+	if executionCompletedAt != nil {
+		m["executionCompletedAt"] = *executionCompletedAt
+	}
+	if verificationCompletedAt != nil {
+		m["verificationCompletedAt"] = *verificationCompletedAt
+	}
+	if completedAt != nil {
+		m["completedAt"] = *completedAt
+	}
+	return m
+}
 
 func scanPostureFindings(rows findingScanner) []map[string]any {
 	out := []map[string]any{}
@@ -230,9 +272,14 @@ func scanPostureFindings(rows findingScanner) []map[string]any {
 		var resolvedReason *string
 		var slaStatus *string
 		var slaStartedAt, slaDeadlineAt, slaBreachedAt *time.Time
+		var rrID, rrRemediationID, rrStatus, rrError *string
+		var rrTier *int
+		var rrRequestedAt, rrDispatchedAt, rrExecutionCompletedAt, rrVerificationCompletedAt, rrCompletedAt *time.Time
 		if rows.Scan(&id, &agentID, &checkID, &category, &title, &severity, &status,
 			&occ, &reopened, &firstSeen, &lastSeen, &lastObserved, &lastRunID, &resolvedAt, &resolvedReason,
-			&slaStatus, &slaStartedAt, &slaDeadlineAt, &slaBreachedAt) != nil {
+			&slaStatus, &slaStartedAt, &slaDeadlineAt, &slaBreachedAt,
+			&rrID, &rrRemediationID, &rrTier, &rrStatus, &rrError, &rrRequestedAt, &rrDispatchedAt,
+			&rrExecutionCompletedAt, &rrVerificationCompletedAt, &rrCompletedAt) != nil {
 			continue
 		}
 		m := map[string]any{
@@ -259,6 +306,10 @@ func scanPostureFindings(rows findingScanner) []map[string]any {
 		}
 		if slaBreachedAt != nil {
 			m["slaBreachedAt"] = *slaBreachedAt
+		}
+		if lr := buildLatestRemediation(rrID, rrRemediationID, rrStatus, rrError, rrTier,
+			rrRequestedAt, rrDispatchedAt, rrExecutionCompletedAt, rrVerificationCompletedAt, rrCompletedAt); lr != nil {
+			m["latestRemediation"] = lr
 		}
 		out = append(out, m)
 	}
@@ -300,5 +351,33 @@ func (h *Handler) GetPostureFinding(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "posture finding not found", http.StatusNotFound)
 		return
 	}
-	respond(w, list[0])
+	found := list[0]
+	h.reapLatestRemediation(r.Context(), found)
+	respond(w, found)
+}
+
+// reapLatestRemediation applies the same on-read staleness correction
+// GetRemediation already does (reapTimedOutRemediation, remediation_query.go)
+// to found's latestRemediation entry, if present, mutating found in place.
+// Only called from GetPostureFinding (single-record read) -- list endpoints
+// deliberately skip this, matching ListAgentRemediations' own existing
+// precedent of not reaping on every list poll.
+func (h *Handler) reapLatestRemediation(ctx context.Context, found map[string]any) {
+	lr, ok := found["latestRemediation"].(map[string]any)
+	if !ok {
+		return
+	}
+	req := remediation.RemediationRequest{
+		ID:            lr["id"].(string),
+		RemediationID: lr["remediationId"].(string),
+		Status:        lr["status"].(string),
+	}
+	if dispatchedAt, ok := lr["dispatchedAt"].(time.Time); ok {
+		req.DispatchedAt = &dispatchedAt
+	}
+	h.reapTimedOutRemediation(ctx, &req)
+	if req.Status != lr["status"] {
+		lr["status"] = req.Status
+		lr["inProgress"] = !remediation.IsTerminal(req.Status)
+	}
 }
