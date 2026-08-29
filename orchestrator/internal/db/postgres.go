@@ -1652,6 +1652,51 @@ func EnsureSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_posture_findings_agent ON posture_findings (agent_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_posture_findings_status ON posture_findings (status)`,
+
+		// ── Posture Finding SLA Policy (Sub-project B of the SLA initiative,
+		// see docs/superpowers/specs/2026-08-29-posture-finding-sla-policy-design.md).
+		// Scoped to posture_findings only, same as Sub-project A -- no
+		// polymorphic finding_type/finding_id reference.
+		`CREATE TABLE IF NOT EXISTS sla_policy (
+			severity       text PRIMARY KEY,
+			duration_hours int  NOT NULL CHECK (duration_hours > 0 AND duration_hours <= 8760),
+			updated_at     timestamptz NOT NULL DEFAULT NOW(),
+			updated_by     text NOT NULL DEFAULT ''
+		)`,
+		`INSERT INTO sla_policy (severity, duration_hours) VALUES
+			('Critical', 24), ('High', 72), ('Medium', 168), ('Low', 720)
+		 ON CONFLICT (severity) DO NOTHING`,
+		// finding_slas is one row per open EPISODE of a posture_findings row,
+		// not 1:1 with it -- a finding that heals then reopens months later
+		// gets a fresh row with a fresh clock; the prior episode's row stays
+		// as history. severity_at_start is a snapshot so a later
+		// postureCheckFindingText edit never rewrites history, and editing
+		// sla_policy only affects episodes started after the edit (an
+		// existing deadline_at is never recomputed).
+		`CREATE TABLE IF NOT EXISTS finding_slas (
+			id                 text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			posture_finding_id text NOT NULL REFERENCES posture_findings(id),
+			severity_at_start  text NOT NULL,
+			started_at         timestamptz NOT NULL,
+			deadline_at        timestamptz NOT NULL,
+			status             text NOT NULL DEFAULT 'active',
+			breached_at        timestamptz,
+			resolved_at        timestamptz
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_finding_slas_posture_finding ON finding_slas (posture_finding_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_finding_slas_active_deadline ON finding_slas (status, deadline_at) WHERE status = 'active'`,
+		// Backfill: any posture_findings row that was already 'open' before
+		// this migration ran gets an SLA clock starting now (not backdated to
+		// its original first_seen -- backdating would let some findings
+		// arrive already breached, a migration artifact, not a real SLA
+		// miss). The NOT EXISTS guard makes this statement idempotent across
+		// repeated EnsureSchema runs.
+		`INSERT INTO finding_slas (posture_finding_id, severity_at_start, started_at, deadline_at, status)
+		 SELECT pf.id, pf.severity, NOW(), NOW() + (sp.duration_hours || ' hours')::interval, 'active'
+		   FROM posture_findings pf
+		   JOIN sla_policy sp ON sp.severity = pf.severity
+		  WHERE pf.status = 'open'
+		    AND NOT EXISTS (SELECT 1 FROM finding_slas fs WHERE fs.posture_finding_id = pf.id)`,
 	}
 
 	for _, s := range stmts {
