@@ -122,12 +122,16 @@ func (h *Handler) applyPostureFinding(ctx context.Context, agentID string, a *po
 	}
 	if tr == findings.Created {
 		text := postureCheckFindingText[a.checkID]
+		severity := text.Severity
+		if severity == "" {
+			severity = "Medium"
+		}
 		_, _ = h.db.Exec(ctx,
-			`INSERT INTO posture_findings (agent_id, check_id, category, title, exposure_state, status,
+			`INSERT INTO posture_findings (agent_id, check_id, category, title, severity, exposure_state, status,
 			        occurrence_count, last_run_id, first_seen, last_seen, last_observed_at)
-			 VALUES ($1,$2,$3,$4,$5,'open',1,$6,NOW(),NOW(),$7)
+			 VALUES ($1,$2,$3,$4,$5,$6,'open',1,$7,NOW(),NOW(),$8)
 			 ON CONFLICT (agent_id, check_id) DO NOTHING`,
-			agentID, a.checkID, a.category, text.Title, next.ExposureState, o.RunID, o.ObservedAt)
+			agentID, a.checkID, a.category, text.Title, severity, next.ExposureState, o.RunID, o.ObservedAt)
 		return
 	}
 

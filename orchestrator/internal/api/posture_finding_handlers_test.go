@@ -328,3 +328,27 @@ func TestGetPostureFinding_ReturnsFinding(t *testing.T) {
 		}
 	})
 }
+
+func TestUpsertPostureFindingsForRun_PersistsPerCheckSeverity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+
+		// seedPostureCheckRun hardcodes check_id="windows-firewall-enabled" --
+		// its severity per postureCheckFindingText is "High".
+		seedPostureCheckRun(t, pool, "sev-run-high", "sev-agent", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "sev-run-high")
+
+		var severity string
+		if err := pool.QueryRow(context.Background(),
+			`SELECT severity FROM posture_findings WHERE agent_id='sev-agent' AND check_id='windows-firewall-enabled'`,
+		).Scan(&severity); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if severity != "High" {
+			t.Fatalf("severity = %q, want High (was defaulting to Medium before this fix)", severity)
+		}
+	})
+}

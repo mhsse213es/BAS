@@ -99,33 +99,38 @@ func (h *Handler) basReadinessInput(asOf time.Time, allResults []models.Simulati
 }
 
 // postureCheckFindingText holds the static per-check_id copy (description,
-// expected/observed values, remediation, reference) used to build a
-// Finding without inventing anything from raw command output. Keyed by
+// expected/observed values, remediation, reference, severity) used to build
+// a Finding without inventing anything from raw command output. Keyed by
 // check_id; shared across Security Configuration and Identity since a
-// check_id is unique across both categories.
+// check_id is unique across both categories. Severity is assigned by actual
+// security impact (direct remote-exploitation/auth-bypass/disabled-defense
+// checks rank High/Critical; hardening/hygiene checks rank Medium; pure
+// staleness checks with no specific known-exploitable gap rank Low) -- see
+// docs/superpowers/specs/2026-08-29-posture-finding-sla-policy-design.md's
+// Background section for the full rationale table.
 var postureCheckFindingText = map[string]struct {
-	Title, Description, Expected, Observed, Remediation, Reference string
+	Title, Description, Expected, Observed, Remediation, Reference, Severity string
 }{
-	"windows-firewall-enabled":            {"Windows Firewall disabled", "Windows Firewall must be enabled for the Domain, Private, and Public profiles.", "Enabled", "Disabled", "Enable Windows Firewall for all profiles.", "Microsoft Security Baseline"},
-	"windows-defender-realtime":           {"Defender real-time protection disabled", "Windows Defender's real-time protection must be active.", "Enabled", "Disabled", "Enable Windows Defender real-time protection.", "Microsoft Security Baseline"},
-	"windows-bitlocker-enabled":           {"BitLocker not enabled", "The system volume should be encrypted with BitLocker.", "On", "Off", "Enable BitLocker on the system volume.", "CIS Microsoft Windows Benchmark"},
-	"windows-rdp-nla-required":            {"RDP exposed without NLA", "RDP, if enabled, must require Network Level Authentication.", "Disabled or NLA required", "Enabled without NLA", "Disable RDP or require NLA.", "CIS Microsoft Windows Benchmark"},
-	"windows-smbv1-disabled":              {"SMBv1 enabled", "The legacy, vulnerable SMBv1 protocol must be disabled.", "Disabled", "Enabled", "Disable the SMB1Protocol Windows feature.", "Microsoft Security Baseline"},
-	"windows-guest-account-disabled":      {"Guest account enabled", "The built-in Guest account must be disabled.", "Disabled", "Enabled", "Disable the local Guest account.", "CIS Microsoft Windows Benchmark"},
-	"windows-local-admin-count":           {"Excess local administrators", "Local Administrators group membership should be minimal.", "<= 2 members", "> 2 members", "Review and remove unnecessary local administrator accounts.", "CIS Microsoft Windows Benchmark"},
-	"windows-password-min-length":         {"Weak minimum password length", "Minimum password length should be at least 12 characters.", ">= 12", "< 12", "Increase the minimum password length to 12+.", "CIS Microsoft Windows Benchmark"},
-	"windows-password-max-age":            {"Password max age out of policy", "Maximum password age should be 90 days or fewer.", "1-90 days", "Out of range", "Set maximum password age to 90 days or fewer.", "CIS Microsoft Windows Benchmark"},
-	"windows-account-lockout-threshold":   {"Account lockout threshold not configured", "Account lockout threshold should be between 1 and 10 attempts.", "1-10", "Not configured", "Configure an account lockout threshold.", "CIS Microsoft Windows Benchmark"},
-	"linux-firewall-enabled":              {"UFW firewall not confirmed active", "The UFW firewall should be active.", "active", "inactive", "Enable UFW (ufw enable).", "CIS Ubuntu Benchmark"},
-	"linux-apparmor-enabled":              {"AppArmor not enforcing", "AppArmor should be enabled and enforcing.", "enforcing", "not enforcing", "Enable and enforce AppArmor profiles.", "CIS Ubuntu Benchmark"},
-	"linux-ssh-root-login-disabled":       {"SSH root login permitted", "SSH root login should be disabled.", "PermitRootLogin no", "permitted", "Set PermitRootLogin no in sshd_config.", "CIS Ubuntu Benchmark"},
-	"linux-ssh-empty-passwords-forbidden": {"SSH empty passwords permitted", "SSH must not allow empty passwords.", "PermitEmptyPasswords no", "permitted", "Set PermitEmptyPasswords no in sshd_config.", "CIS Ubuntu Benchmark"},
-	"linux-password-min-length":           {"Weak minimum password length", "Minimum password length should be at least 12 characters.", ">= 12", "< 12", "Set PASS_MIN_LEN 12 in /etc/login.defs.", "CIS Ubuntu Benchmark"},
-	"linux-password-max-age":              {"Password max age out of policy", "Maximum password age should be 365 days or fewer.", "<= 365", "> 365", "Set PASS_MAX_DAYS 365 in /etc/login.defs.", "CIS Ubuntu Benchmark"},
-	"linux-no-empty-password-accounts":    {"Accounts with empty passwords found", "No account should have an empty password.", "none", "one or more found", "Set a password or lock the affected account(s).", "CIS Ubuntu Benchmark"},
-	"windows-last-patch-age":              {"Last patch overdue", "The last installed security update should be within 30 days.", "<= 30 days", "> 30 days or unknown", "Install pending Windows Updates.", "SEBI CSCRF"},
-	"linux-pending-security-updates":      {"Pending security updates", "No pending security updates should be outstanding.", "0 pending", "1 or more pending", "Run apt upgrade to install pending security updates.", "SEBI CSCRF"},
-	"linux-last-patch-age":                {"Last patch overdue", "The last installed patch should be within 30 days.", "<= 30 days", "> 30 days", "Run apt upgrade regularly to keep patches current.", "SEBI CSCRF"},
+	"windows-firewall-enabled":            {"Windows Firewall disabled", "Windows Firewall must be enabled for the Domain, Private, and Public profiles.", "Enabled", "Disabled", "Enable Windows Firewall for all profiles.", "Microsoft Security Baseline", "High"},
+	"windows-defender-realtime":           {"Defender real-time protection disabled", "Windows Defender's real-time protection must be active.", "Enabled", "Disabled", "Enable Windows Defender real-time protection.", "Microsoft Security Baseline", "High"},
+	"windows-bitlocker-enabled":           {"BitLocker not enabled", "The system volume should be encrypted with BitLocker.", "On", "Off", "Enable BitLocker on the system volume.", "CIS Microsoft Windows Benchmark", "High"},
+	"windows-rdp-nla-required":            {"RDP exposed without NLA", "RDP, if enabled, must require Network Level Authentication.", "Disabled or NLA required", "Enabled without NLA", "Disable RDP or require NLA.", "CIS Microsoft Windows Benchmark", "High"},
+	"windows-smbv1-disabled":              {"SMBv1 enabled", "The legacy, vulnerable SMBv1 protocol must be disabled.", "Disabled", "Enabled", "Disable the SMB1Protocol Windows feature.", "Microsoft Security Baseline", "High"},
+	"windows-guest-account-disabled":      {"Guest account enabled", "The built-in Guest account must be disabled.", "Disabled", "Enabled", "Disable the local Guest account.", "CIS Microsoft Windows Benchmark", "Medium"},
+	"windows-local-admin-count":           {"Excess local administrators", "Local Administrators group membership should be minimal.", "<= 2 members", "> 2 members", "Review and remove unnecessary local administrator accounts.", "CIS Microsoft Windows Benchmark", "High"},
+	"windows-password-min-length":         {"Weak minimum password length", "Minimum password length should be at least 12 characters.", ">= 12", "< 12", "Increase the minimum password length to 12+.", "CIS Microsoft Windows Benchmark", "Medium"},
+	"windows-password-max-age":            {"Password max age out of policy", "Maximum password age should be 90 days or fewer.", "1-90 days", "Out of range", "Set maximum password age to 90 days or fewer.", "CIS Microsoft Windows Benchmark", "Low"},
+	"windows-account-lockout-threshold":   {"Account lockout threshold not configured", "Account lockout threshold should be between 1 and 10 attempts.", "1-10", "Not configured", "Configure an account lockout threshold.", "CIS Microsoft Windows Benchmark", "Medium"},
+	"linux-firewall-enabled":              {"UFW firewall not confirmed active", "The UFW firewall should be active.", "active", "inactive", "Enable UFW (ufw enable).", "CIS Ubuntu Benchmark", "High"},
+	"linux-apparmor-enabled":              {"AppArmor not enforcing", "AppArmor should be enabled and enforcing.", "enforcing", "not enforcing", "Enable and enforce AppArmor profiles.", "CIS Ubuntu Benchmark", "Medium"},
+	"linux-ssh-root-login-disabled":       {"SSH root login permitted", "SSH root login should be disabled.", "PermitRootLogin no", "permitted", "Set PermitRootLogin no in sshd_config.", "CIS Ubuntu Benchmark", "High"},
+	"linux-ssh-empty-passwords-forbidden": {"SSH empty passwords permitted", "SSH must not allow empty passwords.", "PermitEmptyPasswords no", "permitted", "Set PermitEmptyPasswords no in sshd_config.", "CIS Ubuntu Benchmark", "Critical"},
+	"linux-password-min-length":           {"Weak minimum password length", "Minimum password length should be at least 12 characters.", ">= 12", "< 12", "Set PASS_MIN_LEN 12 in /etc/login.defs.", "CIS Ubuntu Benchmark", "Medium"},
+	"linux-password-max-age":              {"Password max age out of policy", "Maximum password age should be 365 days or fewer.", "<= 365", "> 365", "Set PASS_MAX_DAYS 365 in /etc/login.defs.", "CIS Ubuntu Benchmark", "Low"},
+	"linux-no-empty-password-accounts":    {"Accounts with empty passwords found", "No account should have an empty password.", "none", "one or more found", "Set a password or lock the affected account(s).", "CIS Ubuntu Benchmark", "Critical"},
+	"windows-last-patch-age":              {"Last patch overdue", "The last installed security update should be within 30 days.", "<= 30 days", "> 30 days or unknown", "Install pending Windows Updates.", "SEBI CSCRF", "Medium"},
+	"linux-pending-security-updates":      {"Pending security updates", "No pending security updates should be outstanding.", "0 pending", "1 or more pending", "Run apt upgrade to install pending security updates.", "SEBI CSCRF", "Medium"},
+	"linux-last-patch-age":                {"Last patch overdue", "The last installed patch should be within 30 days.", "<= 30 days", "> 30 days", "Run apt upgrade regularly to keep patches current.", "SEBI CSCRF", "Medium"},
 }
 
 // postureCheckInput aggregates Security Configuration or Identity evidence
