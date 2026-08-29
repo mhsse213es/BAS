@@ -1,7 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -151,6 +155,83 @@ func TestTickSLABreaches_ResolvedRowNeverTouched(t *testing.T) {
 		events, _ := notifStore.List(context.Background(), notifications.ListFilter{Type: string(notifications.EventSLABreached), Limit: 10})
 		if len(events) != 0 {
 			t.Errorf("events = %d, want 0", len(events))
+		}
+	})
+}
+
+func TestListSLAPolicies_ReturnsAllFour(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		req := httptest.NewRequest(http.MethodGet, "/api/sla/policies", nil)
+		w := httptest.NewRecorder()
+		h.ListSLAPolicies(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var got []map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(got) != 4 {
+			t.Fatalf("len = %d, want 4", len(got))
+		}
+	})
+}
+
+func TestUpdateSLAPolicy_HappyPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		body, _ := json.Marshal(map[string]int{"durationHours": 8})
+		req := withURLParam(httptest.NewRequest(http.MethodPatch, "/x", bytes.NewReader(body)), "severity", "Critical")
+		w := httptest.NewRecorder()
+		h.UpdateSLAPolicy(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var got int
+		pool.QueryRow(context.Background(), `SELECT duration_hours FROM sla_policy WHERE severity='Critical'`).Scan(&got)
+		if got != 8 {
+			t.Errorf("duration_hours = %d, want 8", got)
+		}
+	})
+}
+
+func TestUpdateSLAPolicy_UnknownSeverity_404(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		body, _ := json.Marshal(map[string]int{"durationHours": 8})
+		req := withURLParam(httptest.NewRequest(http.MethodPatch, "/x", bytes.NewReader(body)), "severity", "Nope")
+		w := httptest.NewRecorder()
+		h.UpdateSLAPolicy(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want 404", w.Code)
+		}
+	})
+}
+
+func TestUpdateSLAPolicy_InvalidDuration_400(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		for _, hours := range []int{0, -5, 9000} {
+			body, _ := json.Marshal(map[string]int{"durationHours": hours})
+			req := withURLParam(httptest.NewRequest(http.MethodPatch, "/x", bytes.NewReader(body)), "severity", "High")
+			w := httptest.NewRecorder()
+			h.UpdateSLAPolicy(w, req)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("durationHours=%d: status = %d, want 400", hours, w.Code)
+			}
 		}
 	})
 }

@@ -2,11 +2,14 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/audspect/bas/internal/notifications"
 	"github.com/audspect/bas/internal/slapolicy"
+	"github.com/go-chi/chi/v5"
 )
 
 // TickSLABreaches scans finding_slas for active episodes whose deadline has
@@ -62,6 +65,62 @@ func (h *Handler) TickSLABreaches(ctx context.Context) error {
 		})
 	}
 	return nil
+}
+
+var validSLASeverities = map[string]bool{"Critical": true, "High": true, "Medium": true, "Low": true}
+
+// ListSLAPolicies returns all 4 severity->deadline rows. GET /api/sla/policies
+func (h *Handler) ListSLAPolicies(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(), `SELECT severity, duration_hours, updated_at, updated_by FROM sla_policy ORDER BY severity`)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var severity, updatedBy string
+		var durationHours int
+		var updatedAt time.Time
+		if rows.Scan(&severity, &durationHours, &updatedAt, &updatedBy) != nil {
+			continue
+		}
+		out = append(out, map[string]any{
+			"severity": severity, "durationHours": durationHours,
+			"updatedAt": updatedAt, "updatedBy": updatedBy,
+		})
+	}
+	respond(w, out)
+}
+
+// UpdateSLAPolicy sets one severity's durationHours. Only affects future
+// finding_slas episodes -- an existing row's deadline_at was already
+// computed and is never recomputed. PATCH /api/sla/policies/{severity}
+func (h *Handler) UpdateSLAPolicy(w http.ResponseWriter, r *http.Request) {
+	severity := chi.URLParam(r, "severity")
+	if !validSLASeverities[severity] {
+		jsonError(w, "unknown severity", http.StatusNotFound)
+		return
+	}
+	var body struct {
+		DurationHours int `json:"durationHours"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "malformed JSON", http.StatusBadRequest)
+		return
+	}
+	if body.DurationHours < 1 || body.DurationHours > 8760 {
+		jsonError(w, "durationHours must be between 1 and 8760", http.StatusBadRequest)
+		return
+	}
+	_, err := h.db.Exec(r.Context(),
+		`UPDATE sla_policy SET duration_hours=$1, updated_at=NOW(), updated_by=$2 WHERE severity=$3`,
+		body.DurationHours, actorID(r), severity)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	respond(w, map[string]any{"severity": severity, "durationHours": body.DurationHours})
 }
 
 // slaNotifySeverity maps a posture finding's severity to a notification
