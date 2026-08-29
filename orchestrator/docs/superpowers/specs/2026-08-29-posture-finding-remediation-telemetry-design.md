@@ -109,31 +109,51 @@ row entirely.)
 
 ## Read-model shape
 
-A small, unexported projection struct in `internal/api` (presentation-layer
-shape, not domain logic — same status as `postureFindingAgg` from
-Sub-project A):
+Every existing response this sub-project touches (`scanPostureFindings`,
+`GetSLABreaches`) is already `map[string]any`, not a typed Go struct — no
+response type anywhere in this initiative's API layer uses one (Sub-project
+A's spec: "mirrors `scanFindings`' existing map-based JSON, not a new Go
+type"). `latestRemediation` follows the same convention: a small helper
+function returning `map[string]any` (or `nil`), not a named struct —
 
 ```go
-type latestRemediation struct {
-	ID                      string     `json:"id"`
-	RemediationID           string     `json:"remediationId"`
-	Tier                    int        `json:"tier"`
-	Status                  string     `json:"status"`
-	Error                   string     `json:"error,omitempty"`
-	InProgress              bool       `json:"inProgress"`
-	RequestedAt             time.Time  `json:"requestedAt"`
-	DispatchedAt            *time.Time `json:"dispatchedAt,omitempty"`
-	ExecutionCompletedAt    *time.Time `json:"executionCompletedAt,omitempty"`
-	VerificationCompletedAt *time.Time `json:"verificationCompletedAt,omitempty"`
-	CompletedAt             *time.Time `json:"completedAt,omitempty"`
+// buildLatestRemediation turns one rr.* row (all nullable -- a LEFT JOIN
+// LATERAL ... ON true still yields exactly one row of NULLs when nothing
+// matches) into the latestRemediation JSON object, or nil when nothing
+// matched.
+func buildLatestRemediation(id, remediationID, status, errText *string, tier *int,
+	requestedAt, dispatchedAt, executionCompletedAt, verificationCompletedAt, completedAt *time.Time) map[string]any {
+	if id == nil {
+		return nil
+	}
+	m := map[string]any{
+		"id": *id, "remediationId": *remediationID, "tier": *tier, "status": *status,
+		"inProgress": !remediation.IsTerminal(*status), "requestedAt": *requestedAt,
+	}
+	if errText != nil && *errText != "" {
+		m["error"] = *errText
+	}
+	if dispatchedAt != nil {
+		m["dispatchedAt"] = *dispatchedAt
+	}
+	if executionCompletedAt != nil {
+		m["executionCompletedAt"] = *executionCompletedAt
+	}
+	if verificationCompletedAt != nil {
+		m["verificationCompletedAt"] = *verificationCompletedAt
+	}
+	if completedAt != nil {
+		m["completedAt"] = *completedAt
+	}
+	return m
 }
 ```
 
-`InProgress` is `!remediation.IsTerminal(status)` — reusing the existing
+`inProgress` is `!remediation.IsTerminal(status)` — reusing the existing
 function rather than re-deriving the terminal/non-terminal split. When no
-remediation attempt exists in the episode's window, the field is absent from
-the JSON response entirely (a `nil` in the map-based responses this codebase
-already uses for posture findings), not an empty object.
+remediation attempt exists in the episode's window, `latestRemediation` is
+absent from the response entirely (the map has no such key), not an empty
+object or `null` value.
 
 ## API
 
