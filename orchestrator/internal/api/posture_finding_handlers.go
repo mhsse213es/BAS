@@ -207,9 +207,18 @@ func (h *Handler) resolveSLAClock(ctx context.Context, postureFindingID string) 
 		postureFindingID)
 }
 
-const postureFindingCols = `id, agent_id, check_id, category, title, severity, status,
-	occurrence_count, reopened_count, first_seen, last_seen, last_observed_at,
-	COALESCE(last_run_id,''), resolved_at, resolved_reason`
+const postureFindingCols = `pf.id, pf.agent_id, pf.check_id, pf.category, pf.title, pf.severity, pf.status,
+	pf.occurrence_count, pf.reopened_count, pf.first_seen, pf.last_seen, pf.last_observed_at,
+	COALESCE(pf.last_run_id,''), pf.resolved_at, pf.resolved_reason,
+	fs.status, fs.started_at, fs.deadline_at, fs.breached_at`
+
+const postureFindingJoin = `FROM posture_findings pf
+	LEFT JOIN LATERAL (
+		SELECT status, started_at, deadline_at, breached_at
+		  FROM finding_slas
+		 WHERE posture_finding_id = pf.id
+		 ORDER BY started_at DESC LIMIT 1
+	) fs ON true`
 
 func scanPostureFindings(rows findingScanner) []map[string]any {
 	out := []map[string]any{}
@@ -219,8 +228,11 @@ func scanPostureFindings(rows findingScanner) []map[string]any {
 		var firstSeen, lastSeen, lastObserved time.Time
 		var resolvedAt *time.Time
 		var resolvedReason *string
+		var slaStatus *string
+		var slaStartedAt, slaDeadlineAt, slaBreachedAt *time.Time
 		if rows.Scan(&id, &agentID, &checkID, &category, &title, &severity, &status,
-			&occ, &reopened, &firstSeen, &lastSeen, &lastObserved, &lastRunID, &resolvedAt, &resolvedReason) != nil {
+			&occ, &reopened, &firstSeen, &lastSeen, &lastObserved, &lastRunID, &resolvedAt, &resolvedReason,
+			&slaStatus, &slaStartedAt, &slaDeadlineAt, &slaBreachedAt) != nil {
 			continue
 		}
 		m := map[string]any{
@@ -236,6 +248,18 @@ func scanPostureFindings(rows findingScanner) []map[string]any {
 		if resolvedReason != nil {
 			m["resolvedReason"] = *resolvedReason
 		}
+		if slaStatus != nil {
+			m["slaStatus"] = *slaStatus
+		}
+		if slaStartedAt != nil {
+			m["slaStartedAt"] = *slaStartedAt
+		}
+		if slaDeadlineAt != nil {
+			m["slaDeadlineAt"] = *slaDeadlineAt
+		}
+		if slaBreachedAt != nil {
+			m["slaBreachedAt"] = *slaBreachedAt
+		}
 		out = append(out, m)
 	}
 	return out
@@ -250,9 +274,9 @@ func (h *Handler) ListAgentPostureFindings(w http.ResponseWriter, r *http.Reques
 		statusFilter = ""
 	}
 	rows, err := h.db.Query(r.Context(),
-		`SELECT `+postureFindingCols+` FROM posture_findings
-		  WHERE agent_id=$1 AND ($2='' OR status=$2)
-		  ORDER BY last_seen DESC`,
+		`SELECT `+postureFindingCols+` `+postureFindingJoin+`
+		  WHERE pf.agent_id=$1 AND ($2='' OR pf.status=$2)
+		  ORDER BY pf.last_seen DESC`,
 		agentID, statusFilter)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
@@ -265,7 +289,7 @@ func (h *Handler) ListAgentPostureFindings(w http.ResponseWriter, r *http.Reques
 // GetPostureFinding returns one posture finding by ID. GET /api/posture-findings/{id}
 func (h *Handler) GetPostureFinding(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(),
-		`SELECT `+postureFindingCols+` FROM posture_findings WHERE id=$1`, chi.URLParam(r, "id"))
+		`SELECT `+postureFindingCols+` `+postureFindingJoin+` WHERE pf.id=$1`, chi.URLParam(r, "id"))
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return

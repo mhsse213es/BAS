@@ -341,6 +341,7 @@ var routeMatrix = []routeCase{
 	{http.MethodGet, "/api/posture-findings/{id}", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/sla/policies", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodPatch, "/api/sla/policies/{severity}", tierPermission, auth.CanApproveRemediation},
+	{http.MethodGet, "/api/sla/breaches", tierPermission, auth.CanExecuteRemediation},
 	{http.MethodGet, "/api/openaev/config", tierPermission, auth.CanViewOpenAEVConfig},
 	{http.MethodPut, "/api/openaev/config", tierPermission, auth.CanUpdateOpenAEVConfig},
 	{http.MethodDelete, "/api/openaev/config", tierPermission, auth.CanUpdateOpenAEVConfig},

@@ -440,3 +440,31 @@ func TestApplyPostureFinding_ReopenedStartsNewSLAEpisode(t *testing.T) {
 		}
 	})
 }
+
+func TestListAgentPostureFindings_IncludesSLAFields(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := newPostureTestHandler(t, pool)
+
+		seedPostureCheckRun(t, pool, "sla-read-run", "sla-read-1", "fail", time.Now())
+		h.upsertPostureFindingsForRun(context.Background(), "sla-read-run")
+
+		req := withURLParam(httptest.NewRequest(http.MethodGet, "/x", nil), "agentId", "sla-read-1")
+		w := httptest.NewRecorder()
+		h.ListAgentPostureFindings(w, req)
+
+		var got []map[string]any
+		json.Unmarshal(w.Body.Bytes(), &got)
+		if len(got) != 1 {
+			t.Fatalf("len = %d, want 1", len(got))
+		}
+		if got[0]["slaStatus"] != "active" {
+			t.Errorf("slaStatus = %v, want active", got[0]["slaStatus"])
+		}
+		if got[0]["slaDeadlineAt"] == nil {
+			t.Errorf("slaDeadlineAt missing")
+		}
+	})
+}

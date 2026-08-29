@@ -235,3 +235,31 @@ func TestUpdateSLAPolicy_InvalidDuration_400(t *testing.T) {
 		}
 	})
 }
+
+func TestGetSLABreaches_ReturnsOnlyBreachedOldestFirst(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		mustExecAPI(t, pool, `INSERT INTO agents (agent_id, hostname) VALUES ('breach-a1', 'BREACH-A1')`)
+		oldBreach := time.Now().Add(-48 * time.Hour)
+		newBreach := time.Now().Add(-12 * time.Hour)
+		seedFindingSLA(t, pool, "fs-active", "breach-a1", "windows-firewall-enabled", "High", "active", time.Now().Add(time.Hour), nil)
+		seedFindingSLA(t, pool, "fs-b-old", "breach-a1", "windows-smbv1-disabled", "High", "breached", time.Now().Add(-72*time.Hour), &oldBreach)
+		seedFindingSLA(t, pool, "fs-b-new", "breach-a1", "windows-rdp-nla-required", "High", "breached", time.Now().Add(-24*time.Hour), &newBreach)
+
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		req := httptest.NewRequest(http.MethodGet, "/api/sla/breaches", nil)
+		w := httptest.NewRecorder()
+		h.GetSLABreaches(w, req)
+
+		var got []map[string]any
+		json.Unmarshal(w.Body.Bytes(), &got)
+		if len(got) != 2 {
+			t.Fatalf("len = %d, want 2 (active row excluded)", len(got))
+		}
+		if got[0]["checkId"] != "windows-smbv1-disabled" {
+			t.Errorf("got[0].checkId = %v, want windows-smbv1-disabled (oldest breach first)", got[0]["checkId"])
+		}
+	})
+}

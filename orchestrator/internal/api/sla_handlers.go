@@ -123,6 +123,35 @@ func (h *Handler) UpdateSLAPolicy(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]any{"severity": severity, "durationHours": body.DurationHours})
 }
 
+// GetSLABreaches returns every currently-breached finding, oldest breach
+// first. GET /api/sla/breaches
+func (h *Handler) GetSLABreaches(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(),
+		`SELECT pf.agent_id, pf.check_id, pf.title, pf.severity, pf.category, fs.breached_at, fs.deadline_at
+		   FROM finding_slas fs
+		   JOIN posture_findings pf ON pf.id = fs.posture_finding_id
+		  WHERE fs.status = 'breached'
+		  ORDER BY fs.breached_at ASC`)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var agentID, checkID, title, severity, category string
+		var breachedAt, deadlineAt time.Time
+		if rows.Scan(&agentID, &checkID, &title, &severity, &category, &breachedAt, &deadlineAt) != nil {
+			continue
+		}
+		out = append(out, map[string]any{
+			"agentId": agentID, "checkId": checkID, "title": title, "severity": severity,
+			"category": category, "breachedAt": breachedAt, "deadlineAt": deadlineAt,
+		})
+	}
+	respond(w, out)
+}
+
 // slaNotifySeverity maps a posture finding's severity to a notification
 // severity -- Critical/High elevate to the notification system's two
 // highest tiers since those are the findings whose breach is operationally
