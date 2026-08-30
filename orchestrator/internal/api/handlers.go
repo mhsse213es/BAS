@@ -124,6 +124,11 @@ type Handler struct {
 	// 'partial' itself. Defaults to 60s in New(); tests override it directly
 	// (same pattern as OpenCTIClient.retryDelay) to keep grace-period tests fast.
 	cancelGracePeriod time.Duration
+	// metricsToken, when non-empty, requires "Authorization: Bearer
+	// <token>" on GET /metrics. Empty (the default) leaves it open --
+	// same opt-in-by-default-off posture as BAS_DB_BREAKGLASS_PASSWORD
+	// and API rate limiting.
+	metricsToken string
 }
 
 // New creates a Handler.
