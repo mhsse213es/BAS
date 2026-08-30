@@ -124,6 +124,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// Readiness check -- distinct from /health above: this one actually
+	// reaches Postgres. Top-level, so it bypasses LicenseGate's
+	// prefix-based gating the same way /health does.
+	r.Get("/ready", h.handleReady)
+
 	// Exercise tracking — no auth; single-use tokens gate access.
 	if len(tracker) > 0 && tracker[0] != nil {
 		tr := tracker[0]

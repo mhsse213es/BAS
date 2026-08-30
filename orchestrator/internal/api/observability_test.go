@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +10,11 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/audspect/bas/internal/scenario"
+	"github.com/audspect/bas/internal/ws"
 )
 
 func TestRequestLoggingMiddleware_LogsAndRecordsMetrics(t *testing.T) {
@@ -43,5 +49,72 @@ func TestRequestLoggingMiddleware_LogsAndRecordsMetrics(t *testing.T) {
 		if !strings.Contains(logOut, want) {
 			t.Errorf("log output missing %q; got %s", want, logOut)
 		}
+	}
+}
+
+func TestHealthEndpoint_UnconditionalOK(t *testing.T) {
+	h := New(nil, ws.NewHub(), scenario.NewEngine(t.TempDir()), "test-secret")
+	router := Mount(h, ws.NewHub(), "test-secret", "", http.NotFoundHandler(), 0, 0)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if rec.Body.String() != `{"status":"ok"}` {
+		t.Errorf("body = %q, want exactly {\"status\":\"ok\"} (unconditional -- no DB dependency)", rec.Body.String())
+	}
+}
+
+func TestHandleReady_DatabaseReachable_Returns200(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+		rec := httptest.NewRecorder()
+		h.handleReady(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if body["status"] != "ready" {
+			t.Errorf("status field = %v, want ready", body["status"])
+		}
+	})
+}
+
+func TestHandleReady_DatabaseUnreachable_Returns503(t *testing.T) {
+	// A throwaway pool pointed at a host that doesn't exist -- distinct
+	// from sharedDB's pool (never touch that one: it's reused across this
+	// whole test binary, and closing it would break every test that runs
+	// after this one).
+	badPool, err := pgxpool.New(context.Background(), "postgres://user:pass@127.0.0.1:1/nonexistent?connect_timeout=1")
+	if err != nil {
+		t.Fatalf("pgxpool.New: %v", err)
+	}
+	defer badPool.Close()
+
+	h := New(badPool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	rec := httptest.NewRecorder()
+	h.handleReady(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body["status"] != "not_ready" {
+		t.Errorf("status field = %v, want not_ready", body["status"])
 	}
 }

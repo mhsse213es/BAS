@@ -419,6 +419,8 @@ var publicRoutes = map[string]bool{
 	"GET /ws/browser":                             true,
 	"POST /api/ticketing/webhook/{configId}":      true,
 	"GET /health":                                 true,
+	"GET /ready":                                  true,
+	"GET /metrics":                                true,
 	"POST /api/dlp/sink":                          true,
 }
 
