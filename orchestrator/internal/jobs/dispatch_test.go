@@ -70,6 +70,7 @@ func TestTick_ResolvesTerminalTargetsAndAggregatesJobState(t *testing.T) {
 			t.Fatalf("MarkTargetDispatched: %v", err)
 		}
 
+		var metricsEvents []MetricsEvent
 		d := NewDispatcher(store)
 		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
 			t.Fatal("dispatch should not be called -- the only target is already dispatched")
@@ -81,6 +82,9 @@ func TestTick_ResolvesTerminalTargetsAndAggregatesJobState(t *testing.T) {
 			}
 			return TargetStateDispatched, "", false
 		})
+		d.SetMetrics(func(evt MetricsEvent) {
+			metricsEvents = append(metricsEvents, evt)
+		})
 
 		if err := d.Tick(ctx); err != nil {
 			t.Fatalf("Tick: %v", err)
@@ -91,6 +95,15 @@ func TestTick_ResolvesTerminalTargetsAndAggregatesJobState(t *testing.T) {
 		}
 		if gotJob.State != JobStateCompleted || gotJob.CompletedAt == nil {
 			t.Fatalf("job = %+v, want State=completed CompletedAt set", gotJob)
+		}
+		if len(metricsEvents) != 1 {
+			t.Fatalf("got %d metrics events, want 1 (job_completed): %+v", len(metricsEvents), metricsEvents)
+		}
+		if metricsEvents[0].Type != MetricsEventJobCompleted || metricsEvents[0].JobType != "batch_remediation" {
+			t.Errorf("metricsEvents[0] = %+v, want job_completed for type batch_remediation", metricsEvents[0])
+		}
+		if !metricsEvents[0].HasDuration || metricsEvents[0].DurationSecs < 0 {
+			t.Errorf("metricsEvents[0] = %+v, want HasDuration=true and DurationSecs >= 0", metricsEvents[0])
 		}
 	})
 }
@@ -233,6 +246,7 @@ func TestTick_NotifiesTargetDeferred(t *testing.T) {
 		}
 
 		var events []NotifyEvent
+		var metricsEvents []MetricsEvent
 		d := NewDispatcher(store)
 		d.SetDispatch(func(ctx context.Context, j Job, target JobTarget) (string, error) {
 			t.Fatal("dispatch should not be called -- the agent is frozen")
@@ -241,6 +255,9 @@ func TestTick_NotifiesTargetDeferred(t *testing.T) {
 		d.SetStatus(func(ctx context.Context, jobType, refID string) (string, string, bool) { return "", "", false })
 		d.SetNotify(func(ctx context.Context, evt NotifyEvent) {
 			events = append(events, evt)
+		})
+		d.SetMetrics(func(evt MetricsEvent) {
+			metricsEvents = append(metricsEvents, evt)
 		})
 
 		if err := d.Tick(ctx); err != nil {
@@ -258,6 +275,12 @@ func TestTick_NotifiesTargetDeferred(t *testing.T) {
 		}
 		if events[1].Type != notifyTypeJobStarted || events[1].JobID != job.ID {
 			t.Errorf("events[1] = %+v, want job_started for job %s", events[1], job.ID)
+		}
+		if len(metricsEvents) != 1 {
+			t.Fatalf("got %d metrics events, want 1 (job_started): %+v", len(metricsEvents), metricsEvents)
+		}
+		if metricsEvents[0].Type != MetricsEventJobStarted || metricsEvents[0].JobType != "batch_remediation" {
+			t.Errorf("metricsEvents[0] = %+v, want job_started for type batch_remediation", metricsEvents[0])
 		}
 	})
 }

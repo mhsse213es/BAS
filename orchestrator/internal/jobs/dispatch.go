@@ -28,6 +28,7 @@ type Dispatcher struct {
 	dispatch DispatchFn
 	status   StatusFn
 	notify   NotifyFn
+	metrics  MetricsFn
 }
 
 func NewDispatcher(store *Store) *Dispatcher {
@@ -162,10 +163,37 @@ func (d *Dispatcher) Tick(ctx context.Context) error {
 						d.notify(ctx, NotifyEvent{Type: evtType, JobID: jobID, Severity: sev})
 					}
 				}
+				d.recordStateMetrics(ctx, jobID, job.Type, newState)
 			}
 		}
 	}
 	return nil
+}
+
+// recordStateMetrics fires the optional metrics hook for a job's state
+// transition. Called after SetJobState persists newState. For a terminal
+// transition it re-fetches the job: SetJobState's COALESCE-stamped
+// started_at/completed_at aren't reflected in the in-memory job value
+// Tick() already holds (only .State is hand-updated on the jobCache copy
+// above).
+func (d *Dispatcher) recordStateMetrics(ctx context.Context, jobID, jobType, newState string) {
+	if d.metrics == nil {
+		return
+	}
+	if newState == JobStateRunning {
+		d.metrics(MetricsEvent{Type: MetricsEventJobStarted, JobType: jobType})
+		return
+	}
+	if !IsTerminalJobState(newState) {
+		return
+	}
+	evt := MetricsEvent{Type: MetricsEventJobCompleted, JobType: jobType}
+	if fresh, err := d.store.Get(ctx, jobID); err == nil && fresh.StartedAt != nil && fresh.CompletedAt != nil {
+		dur := max(fresh.CompletedAt.Sub(*fresh.StartedAt), 0)
+		evt.DurationSecs = dur.Seconds()
+		evt.HasDuration = true
+	}
+	d.metrics(evt)
 }
 
 // spawnDueSchedules checks every enabled Schedule for a new weekly
