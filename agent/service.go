@@ -368,6 +368,18 @@ func svcUpdate() error {
 	return nil
 }
 
+// svcUninstall removes every service registration this binary has ever
+// shipped under -- both the current svcName ("Audspect Agent") and the
+// pre-rename svcNameLegacy ("BASAgent") -- not just whichever one happens
+// to currently be running. Without this, an endpoint that was enrolled
+// before the service rename (and never went through migrateLegacyServiceName,
+// which only runs as part of an --update, not automatically) could still
+// have a live, Automatic-start "BASAgent" registration sitting untouched
+// after an operator ran --uninstall against "Audspect Agent": the uninstall
+// would look completely successful (service stopped, tray gone) while the
+// legacy registration silently started itself again on the endpoint's next
+// boot, looking exactly like the "uninstall didn't take" resurrection this
+// was written to fix. See [[project_agent_uninstall_legacy_name_gap]].
 func svcUninstall() error {
 	m, err := mgr.Connect()
 	if err != nil {
@@ -375,9 +387,52 @@ func svcUninstall() error {
 	}
 	defer m.Disconnect()
 
-	s, err := m.OpenService(svcName)
-	if err != nil {
+	removedAny := false
+	var lastErr error
+	for _, name := range []string{svcName, svcNameLegacy} {
+		removed, err := uninstallServiceRegistration(m, name)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if removed {
+			removedAny = true
+		}
+	}
+	if !removedAny {
+		if lastErr != nil {
+			return lastErr
+		}
 		return fmt.Errorf("service %q not found", svcName)
+	}
+
+	// Everything below is best-effort cleanup: the tray autostart entry/
+	// window/shortcut are all independently idempotent -- a missing key,
+	// window, or file is already the desired end state -- and are not tied
+	// to whichever specific service registration(s) were removed above.
+	if err := removeTrayRunKey(); err != nil {
+		fmt.Printf("[~] Could not remove tray autostart entry: %v\n", err)
+	}
+	closeTrayWindow()
+	terminateOtherAgentProcesses()
+	if err := removeTrayShortcut(); err != nil {
+		fmt.Printf("[~] Could not remove tray shortcut: %v\n", err)
+	}
+
+	fmt.Printf("[+] Uninstall complete\n")
+	return nil
+}
+
+// uninstallServiceRegistration stops and deletes the named service
+// registration if it exists: notifies the server of decommissioning and
+// schedules its binary for delayed deletion on next reboot. Returns
+// (false, nil) -- not an error -- when the named service simply doesn't
+// exist, since svcUninstall calls this once per known service name and
+// typically only one is actually present on a given endpoint.
+func uninstallServiceRegistration(m *mgr.Mgr, name string) (removed bool, err error) {
+	s, err := m.OpenService(name)
+	if err != nil {
+		return false, nil
 	}
 	defer s.Close()
 
@@ -387,8 +442,8 @@ func svcUninstall() error {
 	// "uninstalled" before it's true (a partial failure below used to leave
 	// the server thinking the endpoint was gone while the service was still
 	// registered).
-	serverURL, _ := readServiceParams()
-	secret := ReadEncryptedSecret()
+	serverURL, _ := readServiceParamsFrom(name)
+	secret := readEncryptedSecretFrom(paramKeyFor(name))
 	agentID := collectIdentity().AgentID
 
 	// Capture the installed binary path before Delete() removes the service
@@ -401,44 +456,31 @@ func svcUninstall() error {
 	// Stop, confirming via poll like svcUpdate does; if the service is still
 	// wedged after the poll window, terminate its process directly so
 	// uninstall never hangs.
-	fmt.Printf("[*] Stopping %s...\n", svcName)
+	fmt.Printf("[*] Stopping %s...\n", name)
 	if err := stopServiceAndWait(s, 15*time.Second, 500*time.Millisecond, terminateProcessByPID); err != nil {
-		return fmt.Errorf("stop service: %w", err)
+		return false, fmt.Errorf("stop service %q: %w", name, err)
 	}
 
 	if err := s.Delete(); err != nil {
-		return err
+		return false, fmt.Errorf("delete service %q: %w", name, err)
 	}
-	_ = eventlog.Remove(svcName)
+	_ = eventlog.Remove(name)
 
 	// Best-effort: tell the server this endpoint is being decommissioned so
 	// it's hidden from the live Agents list instead of just showing
 	// "offline" -- now sent only after Delete above actually succeeded.
 	if err := notifyServerUnenroll(serverURL, secret, agentID); err != nil {
-		fmt.Printf("[~] Could not notify server of uninstall: %v\n", err)
+		fmt.Printf("[~] Could not notify server of uninstall (%s): %v\n", name, err)
 	}
 
-	// Everything below is best-effort cleanup: a running process cannot
-	// delete its own executing binary, and the tray autostart entry/window/
-	// shortcut are all independently idempotent -- a missing key, window, or
-	// file is already the desired end state. Only the service stop/delete
-	// above can fail the uninstall.
 	if binaryPath != "" {
 		if err := scheduleBinaryDeleteOnReboot(binaryPath); err != nil {
 			fmt.Printf("[~] Could not schedule binary for delayed deletion: %v\n", err)
 		}
 	}
-	if err := removeTrayRunKey(); err != nil {
-		fmt.Printf("[~] Could not remove tray autostart entry: %v\n", err)
-	}
-	closeTrayWindow()
-	terminateOtherAgentProcesses()
-	if err := removeTrayShortcut(); err != nil {
-		fmt.Printf("[~] Could not remove tray shortcut: %v\n", err)
-	}
 
-	fmt.Printf("[+] Service %q uninstalled\n", svcName)
-	return nil
+	fmt.Printf("[+] Service %q uninstalled\n", name)
+	return true, nil
 }
 
 func svcRun() error {
