@@ -1989,7 +1989,7 @@ body.theme-slate {
               </tbody>
             </table>
             <div style="padding:0.6rem 0.9rem;border-top:1px solid var(--border);font-size:0.72rem;color:var(--muted)">
-              <strong style="color:var(--text)">Base Simulations</strong> = the raw ART atomic test count (Windows). <strong style="color:var(--text)">Available Variants</strong> = Variant Engine multiplier (PS: 3 encodings × 3 privilege tiers × 4 exec contexts = 36×; CMD: 12×). <strong style="color:var(--text)">Unique ATT&amp;CK techniques</strong> is the most meaningful coverage figure — deduplicated across all sources.
+              <strong style="color:var(--text)">Base Simulations</strong> = the raw ART atomic test count (Windows). <strong style="color:var(--text)">Available Variants</strong> = Variant Engine multiplier (PS: 3 encodings × 3 privilege tiers × 4 exec contexts, minus the unreliable SYSTEM+COM combination = 33×; CMD: 3 privilege tiers × 4 exec contexts, minus SYSTEM+COM = 11×). <strong style="color:var(--text)">Unique ATT&amp;CK techniques</strong> is the most meaningful coverage figure — deduplicated across all sources.
             </div>
           </div>
         </div>
