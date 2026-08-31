@@ -1767,18 +1767,21 @@ body.theme-slate {
             <div style="font-size:0.8rem;color:var(--muted)">Lightweight collectors across your environment — they execute safe emulations locally and stream telemetry back.</div>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0;align-items:center">
-            <input type="search" id="agent-search" placeholder="Search hostname, agent ID, IP, group…"
-                   oninput="renderAgentRows()"
-                   style="padding:0.45rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;min-width:220px">
             <button class="btn btn-outline btn-sm" onclick="loadAgents()">Refresh</button>
             <button class="btn btn-primary btn-sm" onclick="showAgentDownload()">&#8595; Deploy agent</button>
           </div>
         </div>
         <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
-          <button type="button" class="dash-view-btn active" data-agents-view="operational" onclick="setAgentsView('operational')">Operational</button>
+          <button type="button" class="dash-view-btn active" data-agents-view="systemtree" onclick="setAgentsView('systemtree')">System Tree</button>
+          <button type="button" class="dash-view-btn" data-agents-view="operational" onclick="setAgentsView('operational')">Operational</button>
           <button type="button" class="dash-view-btn" data-agents-view="risk" onclick="setAgentsView('risk')">Risk &amp; Remediation</button>
         </div>
-        <div id="agents-view-operational">
+        <div id="agents-view-systemtree">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem">
+          <input type="search" id="agent-search" placeholder="Search hostname, agent ID, IP, group…"
+                 oninput="onAgentSearchInput()"
+                 style="padding:0.45rem 0.7rem;background:var(--elevated);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem;font-family:inherit;min-width:260px">
+        </div>
         <div class="agent-tree-layout">
           <div class="agent-tree-panel">
             <div class="agent-tree-hdr">
@@ -1800,8 +1803,13 @@ body.theme-slate {
             </tbody>
           </table>
         </div>
+        <div id="agent-load-more-wrap" style="text-align:center;margin-top:0.75rem;display:none">
+          <button class="btn btn-outline btn-sm" onclick="loadMoreAgents()">Load more</button>
+        </div>
           </div>
         </div>
+        </div>
+        <div id="agents-view-operational" style="display:none">
 
         <!-- Connection Config (admin only) -->
         <div id="conn-cfg-wrap" style="display:none; margin-top:2rem">
@@ -5066,6 +5074,10 @@ var overlayPinned = null; // scenario id of the pinned tile's overlay, or null
 var scenarioView = 'landing'; // 'landing' | 'em' | 'other'
 var scenarioSrcCollapsed = { em: {}, other: {}, search: {} };
 var agents   = [];
+var agentsNextCursor = '';
+var agentsHasMore = false;
+var agentTotals = { online: 0, degraded: 0, offline: 0, retired: 0 };
+var agentSearchDebounceTimer = null;
 var artCatalog = [];      // live ART catalog: [{id,name,tests}] -- always windows
 var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
 var _artCatalogByPlatform = {};  // live ART catalog per non-windows platform, keyed by 'linux'/'darwin' -- for art_selective_platform scenarios' Customize picker
@@ -5429,6 +5441,7 @@ function setDashView(view) {
   else { stopDashCampPoll(); loadExecDashboard(); }
 }
 function setAgentsView(view) {
+  document.getElementById('agents-view-systemtree').style.display = view === 'systemtree' ? '' : 'none';
   document.getElementById('agents-view-operational').style.display = view === 'operational' ? '' : 'none';
   document.getElementById('agents-view-risk').style.display = view === 'risk' ? '' : 'none';
   document.querySelectorAll('[data-agents-view]').forEach(function(b) {
@@ -8115,54 +8128,75 @@ function moveAgentToGroupPrompt(agentId) {
 }
 
 function loadAgents() {
-  apicall('/api/agents' + (activeAgentGroupId !== null ? '?groupId=' + activeAgentGroupId : '')).then(function(data) {
-    agents = data || [];
-    document.getElementById('agent-cnt').textContent = agents.length;
+  var url = '/api/agents?limit=100' + (activeAgentGroupId !== null ? '&groupId=' + activeAgentGroupId : '');
+  var searchEl = document.getElementById('agent-search');
+  var q = searchEl ? searchEl.value.trim() : '';
+  if (q) url += '&q=' + encodeURIComponent(q);
+  if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
+  apicall(url).then(function(page) {
+    agents = (page && page.items) || [];
+    agentsNextCursor = (page && page.next_cursor) || '';
+    agentsHasMore = !!(page && page.has_more);
+    agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
+    document.getElementById('agent-cnt').textContent = agentTotals.online + agentTotals.degraded + agentTotals.offline;
     renderAgentTiles(); renderAgentToolbar(); renderAgentRows();
   }).catch(function(e) { showToast(e.message, 'err'); });
 }
+function loadMoreAgents() {
+  if (!agentsHasMore || !agentsNextCursor) return;
+  var url = '/api/agents?limit=100&cursor=' + encodeURIComponent(agentsNextCursor) +
+    (activeAgentGroupId !== null ? '&groupId=' + activeAgentGroupId : '');
+  var searchEl = document.getElementById('agent-search');
+  var q = searchEl ? searchEl.value.trim() : '';
+  if (q) url += '&q=' + encodeURIComponent(q);
+  if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
+  apicall(url).then(function(page) {
+    agents = agents.concat((page && page.items) || []);
+    agentsNextCursor = (page && page.next_cursor) || '';
+    agentsHasMore = !!(page && page.has_more);
+    // totals intentionally NOT updated here -- they were already
+    // fleet-wide-accurate from the first page's response, and appending
+    // more rows to `agents` doesn't change the true totals.
+    renderAgentRows();
+  }).catch(function(e) { showToast(e.message, 'err'); });
+}
+function onAgentSearchInput() {
+  clearTimeout(agentSearchDebounceTimer);
+  agentSearchDebounceTimer = setTimeout(loadAgents, 300);
+}
 function renderAgentTiles() {
-  var b = { online: 0, degraded: 0, offline: 0, retired: 0 };
-  agents.forEach(function(a) { b[agentBucket(a)]++; });
+  var b = agentTotals;
   var tile = function(lbl, val, col) {
     return '<div class="kpi-card stat-tile"><div class="stat-top"><div><div class="kpi-label">' + lbl +
       '</div><div class="kpi-value" style="color:' + col + '">' + val + '</div></div></div></div>';
   };
   var el = document.getElementById('agent-tiles');
   if (el) el.innerHTML =
-    tile('Total agents', agents.length - b.retired, 'var(--text)') +
+    tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +
     tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +
     tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +
     tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)');
 }
 function renderAgentToolbar() {
   var c = function(k) {
-    if (k === 'all') return agents.filter(function(a) { return agentBucket(a) !== 'retired'; }).length;
-    return agents.filter(function(a) { return agentBucket(a) === k; }).length;
+    if (k === 'all') return agentTotals.online + agentTotals.degraded + agentTotals.offline;
+    return agentTotals[k] || 0;
   };
   var el = document.getElementById('agent-toolbar');
   if (el) el.innerHTML = '<div class="cov-seg">' +
     [['all', 'All'], ['online', 'Online'], ['degraded', 'Degraded'], ['offline', 'Offline'], ['retired', 'Retired']]
       .map(function(o) { return '<button class="' + (AGENT_FILTER === o[0] ? 'on' : '') + '" onclick="setAgentFilter(\'' + o[0] + '\')">' + o[1] + ' <span style="opacity:.6">' + c(o[0]) + '</span></button>'; }).join('') + '</div>';
 }
-function setAgentFilter(v) { AGENT_FILTER = v; renderAgentToolbar(); renderAgentRows(); }
+function setAgentFilter(v) { AGENT_FILTER = v; loadAgents(); }
 function renderAgentRows() {
-  // "All" means all live endpoints -- uninstalled (retired) agents are only
-  // shown when the Retired filter is explicitly selected (see agentBucket).
-  var list = agents.filter(function(a) {
-    return AGENT_FILTER === 'all' ? agentBucket(a) !== 'retired' : agentBucket(a) === AGENT_FILTER;
-  });
+  // Server already scopes `agents` by bucket/search/group -- nothing left
+  // to filter client-side.
+  var list = agents;
   var searchEl = document.getElementById('agent-search');
-  var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
-  if (q) {
-    list = list.filter(function(a) {
-      return (a.hostname || '').toLowerCase().indexOf(q) !== -1 ||
-        (a.agentId || '').toLowerCase().indexOf(q) !== -1 ||
-        (a.ipAddress || '').toLowerCase().indexOf(q) !== -1 ||
-        (a.groupName || '').toLowerCase().indexOf(q) !== -1;
-    });
-  }
+  var q = searchEl ? searchEl.value.trim() : '';
   var tbody = document.getElementById('agents-body');
+  var loadMoreWrap = document.getElementById('agent-load-more-wrap');
+  if (loadMoreWrap) loadMoreWrap.style.display = agentsHasMore ? '' : 'none';
   if (!list.length) {
     var emptyMsg = q ? 'No agents match "' + x(q) + '".' : ('No agents' + (AGENT_FILTER === 'all' ? ' registered yet.' : ' in this state.'));
     tbody.innerHTML = '<tr><td colspan="8" class="empty">' + emptyMsg + '</td></tr>';
