@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -83,6 +84,7 @@ func main() {
 	}
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
 	cfgPath := "config.json"
 	if len(os.Args) > 1 {
@@ -560,6 +562,7 @@ func main() {
 		WithContentSeed(cfg.ARTDir, cfg.ARTPayloadDir, cfg.KEVFile, cfg.ARTContentVersion).
 		WithEPSSFile(cfg.EPSSFile).
 		WithAgentSecret(cfg.AgentSecret).
+		WithMetricsToken(cfg.MetricsToken).
 		WithManifest(manifest).
 		WithCompliance(complianceMapper).
 		WithControlHealth(controlHealthMapper).

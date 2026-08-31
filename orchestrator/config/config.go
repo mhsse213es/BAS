@@ -84,6 +84,11 @@ type Config struct {
 	// fatal to the rest of the orchestrator, so leaving it enabled by
 	// default carries no risk to existing installs. Env: DNS_SINK_ENABLED.
 	DNSSinkEnabled bool `json:"dns_sink_enabled,omitempty"`
+
+	// MetricsToken, when set, requires "Authorization: Bearer <token>" on
+	// GET /metrics. Empty (the default) leaves it open -- same opt-in
+	// posture as DBBreakGlassPassword and RateLimitEnabled.
+	MetricsToken string `json:"metrics_token,omitempty"`
 }
 
 // Load reads config from a JSON file, then overrides with environment variables.
@@ -238,6 +243,9 @@ func Load(path string) (*Config, error) {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.DNSSinkEnabled = b
 		}
+	}
+	if v := os.Getenv("METRICS_TOKEN"); v != "" {
+		cfg.MetricsToken = v
 	}
 
 	if cfg.DatabaseURL == "" {
