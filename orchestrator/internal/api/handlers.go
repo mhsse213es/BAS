@@ -674,46 +674,30 @@ func secureCookies() bool {
 // ── Agents ────────────────────────────────────────────────────────────────────
 
 // GET /api/agents
-func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
-	query := `SELECT a.agent_id, a.hostname, a.ip_address, a.os_version, a.username, a.status, a.env_label,
+// agentSelectColumns is the exact SELECT list shared by every GetAgents
+// query path (unpaginated legacy, paginated, and nothing else needs it --
+// the totals query below selects a different, narrower column set).
+const agentSelectColumns = `a.agent_id, a.hostname, a.ip_address, a.os_version, a.username, a.status, a.env_label,
 	        a.has_report, a.binary_hash, a.binary_trusted, a.last_update,
 	        COALESCE(a.state, 'active'), COALESCE(a.policy_json::text, '{}'), a.enrolled_at,
 	        COALESCE(sr.sims, 0) AS sims,
 	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
-	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at
-	 FROM agents a
+	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at`
+
+// agentFromJoins is the FROM/JOIN clause shared by every GetAgents query
+// that selects agentSelectColumns above.
+const agentFromJoins = `FROM agents a
 	 LEFT JOIN users u ON u.id = a.stopped_by
 	 LEFT JOIN agent_groups g ON g.id = a.group_id
 	 LEFT JOIN (SELECT agent_id, COUNT(*) AS sims FROM scenario_runs GROUP BY agent_id) sr ON sr.agent_id = a.agent_id`
-	var args []any
-	if groupIDParam := r.URL.Query().Get("groupId"); groupIDParam != "" {
-		groupID, err := strconv.ParseInt(groupIDParam, 10, 64)
-		if err != nil {
-			jsonError(w, "invalid groupId", http.StatusBadRequest)
-			return
-		}
-		args = append(args, groupID)
-		// Recursive CTE: the target group plus every descendant group, so
-		// selecting "Finance" also surfaces agents in "Servers"/"Workstations".
-		query += ` WHERE a.group_id IN (
-			WITH RECURSIVE descendants(id) AS (
-				SELECT id FROM agent_groups WHERE id = $` + strconv.Itoa(len(args)) + `
-				UNION ALL
-				SELECT gr.id FROM agent_groups gr JOIN descendants d ON gr.parent_id = d.id
-			)
-			SELECT id FROM descendants
-		)`
-	}
-	query += ` ORDER BY a.last_update DESC`
 
-	rows, err := h.db.Query(r.Context(), query, args...)
-	if err != nil {
-		jsonError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	now := time.Now()
+// scanAgentRows scans rows produced by a query selecting agentSelectColumns
+// (in that exact order) into []models.Agent, applying the same
+// derived-field logic GetAgents has always applied: effective (heartbeat-
+// aware) status, live WSConnected from the hub, and effective uninstall
+// error. Rows that fail to scan are skipped (matches prior GetAgents
+// behavior). Does not close rows -- the caller owns that.
+func scanAgentRows(rows pgx.Rows, hub *ws.Hub, now time.Time) []models.Agent {
 	var agents []models.Agent
 	for rows.Next() {
 		var a models.Agent
@@ -734,7 +718,7 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 		// The hub's live connection map is the ground truth for whether a
 		// dispatch could actually reach this agent right now -- independent of
 		// heartbeat freshness above. See models.Agent.WSConnected's doc comment.
-		a.WSConnected = h.hub.IsAgentConnected(a.AgentID)
+		a.WSConnected = hub.IsAgentConnected(a.AgentID)
 		a.UninstallError = models.EffectiveUninstallError(a.State, a.UninstallError, uninstallRequestedAt, now)
 		var p models.PolicyBundle
 		if err := json.Unmarshal([]byte(policyRaw), &p); err == nil {
@@ -742,6 +726,52 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 		}
 		agents = append(agents, a)
 	}
+	return agents
+}
+
+// groupRecursiveFilter returns the "a.group_id IN (...)" SQL fragment that
+// selects groupID plus every descendant group (so filtering to a parent
+// group like "Finance" also surfaces agents in child groups like
+// "Servers"/"Workstations"), using the next available placeholder position
+// in args, and returns args with groupID appended. Shared by every query
+// that needs group scoping (the row-list query and the totals query in
+// Task 3) so they can never drift out of sync with each other.
+func groupRecursiveFilter(args []any, groupID int64) (string, []any) {
+	args = append(args, groupID)
+	frag := `a.group_id IN (
+		WITH RECURSIVE descendants(id) AS (
+			SELECT id FROM agent_groups WHERE id = $` + strconv.Itoa(len(args)) + `
+			UNION ALL
+			SELECT gr.id FROM agent_groups gr JOIN descendants d ON gr.parent_id = d.id
+		)
+		SELECT id FROM descendants
+	)`
+	return frag, args
+}
+
+func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
+	query := "SELECT " + agentSelectColumns + " " + agentFromJoins
+	var args []any
+	if groupIDParam := r.URL.Query().Get("groupId"); groupIDParam != "" {
+		groupID, err := strconv.ParseInt(groupIDParam, 10, 64)
+		if err != nil {
+			jsonError(w, "invalid groupId", http.StatusBadRequest)
+			return
+		}
+		var frag string
+		frag, args = groupRecursiveFilter(args, groupID)
+		query += " WHERE " + frag
+	}
+	query += " ORDER BY a.last_update DESC"
+
+	rows, err := h.db.Query(r.Context(), query, args...)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	agents := scanAgentRows(rows, h.hub, time.Now())
 	if agents == nil {
 		agents = []models.Agent{}
 	}
