@@ -20,6 +20,8 @@ import (
 // plus checking RowsAffected means a row can only ever be breached-and-
 // notified once, even across concurrent or overlapping ticks.
 func (h *Handler) TickSLABreaches(ctx context.Context) error {
+	slaBreachEvaluationsTotal.Inc()
+
 	rows, err := h.db.Query(ctx,
 		`SELECT fs.id, fs.deadline_at, pf.agent_id, pf.check_id, pf.title, pf.severity
 		   FROM finding_slas fs
@@ -51,6 +53,7 @@ func (h *Handler) TickSLABreaches(ctx context.Context) error {
 		if err != nil || tag.RowsAffected() == 0 {
 			continue // already handled (concurrent tick) or write failed -- next tick re-evaluates from the query above
 		}
+		slaBreachesTotal.WithLabelValues(c.severity).Inc()
 		if h.notifications == nil {
 			continue
 		}

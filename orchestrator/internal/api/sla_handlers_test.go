@@ -13,6 +13,7 @@ import (
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func seedFindingSLA(t *testing.T, pool *pgxpool.Pool, id, agentID, checkID, severity, status string, deadlineAt time.Time, breachedAt *time.Time) {
@@ -117,6 +118,10 @@ func TestTickSLABreaches_MultipleFindingsBreachInSameTick(t *testing.T) {
 
 		notifStore := notifications.NewStore(pool)
 		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").WithNotifications(notifStore)
+
+		evaluationsBefore := testutil.ToFloat64(slaBreachEvaluationsTotal)
+		highBreachesBefore := testutil.ToFloat64(slaBreachesTotal.WithLabelValues("High"))
+
 		if err := h.TickSLABreaches(context.Background()); err != nil {
 			t.Fatalf("TickSLABreaches: %v", err)
 		}
@@ -129,6 +134,13 @@ func TestTickSLABreaches_MultipleFindingsBreachInSameTick(t *testing.T) {
 		events, _ := notifStore.List(context.Background(), notifications.ListFilter{Type: string(notifications.EventSLABreached), Limit: 10})
 		if len(events) != 2 {
 			t.Errorf("events = %d, want 2", len(events))
+		}
+
+		if got := testutil.ToFloat64(slaBreachEvaluationsTotal); got != evaluationsBefore+1 {
+			t.Errorf("slaBreachEvaluationsTotal delta = %v, want 1", got-evaluationsBefore)
+		}
+		if got := testutil.ToFloat64(slaBreachesTotal.WithLabelValues("High")); got != highBreachesBefore+2 {
+			t.Errorf("slaBreachesTotal{High} delta = %v, want 2", got-highBreachesBefore)
 		}
 	})
 }
