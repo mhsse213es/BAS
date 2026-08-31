@@ -492,7 +492,7 @@ func runInstall() {
 	}
 	appendStatus("[2/4] Agent extracted to: " + agentPath)
 
-	appendStatus("[3/4] Installing BASAgent service...")
+	appendStatus("[3/4] Installing Audspect Agent service...")
 	cmd := exec.Command(agentPath,
 		"--install",
 		"--server", serverURL,
@@ -517,8 +517,8 @@ func runInstall() {
 		}
 	}
 
-	appendStatus("[4/4] Starting BASAgent service...")
-	sc := exec.Command("sc", "start", "BASAgent")
+	appendStatus("[4/4] Starting Audspect Agent service...")
+	sc := exec.Command("sc", "start", "Audspect Agent")
 	sc.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	scOut, scErr := sc.CombinedOutput()
 	if scErr != nil {

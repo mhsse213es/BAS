@@ -85,7 +85,15 @@ func DecryptSecret(blob []byte) (string, error) {
 
 // ── Registry helpers ──────────────────────────────────────────────────────────
 
-const paramKey = `SYSTEM\CurrentControlSet\Services\` + svcName + `\Parameters`
+// paramKeyFor returns the service Parameters registry path for the given
+// service name -- svcUpdate's migrateLegacyServiceName needs to read this
+// for svcNameLegacy specifically, since Delete() removes it along with the
+// rest of the legacy service's registration.
+func paramKeyFor(name string) string {
+	return `SYSTEM\CurrentControlSet\Services\` + name + `\Parameters`
+}
+
+var paramKey = paramKeyFor(svcName)
 
 // StoreEncryptedSecret DPAPI-encrypts secret and writes the hex blob to the
 // service Parameters registry key. Called once at install time.
@@ -108,7 +116,14 @@ func StoreEncryptedSecret(secret string) error {
 // ReadEncryptedSecret reads the DPAPI blob from registry and decrypts it.
 // Returns "" if the value is absent or decryption fails.
 func ReadEncryptedSecret() string {
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, paramKey, registry.QUERY_VALUE)
+	return readEncryptedSecretFrom(paramKey)
+}
+
+// readEncryptedSecretFrom is ReadEncryptedSecret generalized to an explicit
+// registry key -- migrateLegacyServiceName uses this to read the secret
+// from svcNameLegacy's Parameters key before that service is deleted.
+func readEncryptedSecretFrom(regKey string) string {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, regKey, registry.QUERY_VALUE)
 	if err != nil {
 		return ""
 	}
@@ -127,6 +142,19 @@ func ReadEncryptedSecret() string {
 		return ""
 	}
 	return secret
+}
+
+// readBinaryHashFrom reads the BAS_BINARY_HASH value stored at regKey (see
+// StoreBinaryHash), or "" if absent. Used by migrateLegacyServiceName to
+// carry the hash forward from svcNameLegacy before it is deleted.
+func readBinaryHashFrom(regKey string) string {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, regKey, registry.QUERY_VALUE)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	hash, _, _ := k.GetStringValue("BAS_BINARY_HASH")
+	return hash
 }
 
 // StoreBinaryHash writes the SHA-256 hex of the running binary to the registry

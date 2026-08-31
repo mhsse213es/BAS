@@ -18,9 +18,17 @@ import (
 )
 
 const (
-	svcName        = "BASAgent"
-	svcDisplayName = "BAS Platform Agent (Audspect)"
+	svcName        = "Audspect Agent"
+	svcDisplayName = "Audspect - BAS Platform Agent"
 	svcDescription = "Next-Gen Breach & Attack Simulation endpoint agent. Runs security posture checks and reports results to the BAS orchestrator."
+
+	// svcNameLegacy is the service name used before the Audspect rebrand.
+	// Windows has no in-place service rename (Name is immutable after
+	// CreateService; only DisplayName can be updated), so an endpoint
+	// enrolled under the old name still has a "BASAgent" service
+	// registered. migrateLegacyServiceName (below) detects and replaces
+	// it on the next --update. Never reuse this for anything else.
+	svcNameLegacy = "BASAgent"
 )
 
 // stopRequested signals agentSvc.Execute()'s own select loop from the
@@ -189,9 +197,103 @@ func svcInstall(serverURL, envLabel, secret string) error {
 	return nil
 }
 
+// migrateLegacyServiceName replaces an endpoint's old "BASAgent" service
+// registration with a fresh one under svcName ("Audspect Agent"), for
+// endpoints enrolled before the rename. Windows cannot rename a service's
+// Name in place (CreateService's Name is immutable; only DisplayName is
+// mutable via UpdateConfig), so this recreates the service under the new
+// name -- capturing everything Delete() would otherwise destroy (the
+// binary path, server URL/env label, DPAPI-encrypted secret, and stored
+// binary hash, all of which live in the legacy service's own Parameters
+// registry subkey) and restoring it under the new registration. No-op
+// (returns nil immediately) when svcName already exists (already migrated,
+// or a fresh install) or when svcNameLegacy does not exist (nothing to
+// migrate). Called at the start of svcUpdate so migration happens
+// transparently on an endpoint's next agent update.
+func migrateLegacyServiceName() error {
+	m, err := mgr.Connect()
+	if err != nil {
+		return fmt.Errorf("connect SCM: %w", err)
+	}
+	defer m.Disconnect()
+
+	if s, err := m.OpenService(svcName); err == nil {
+		s.Close()
+		return nil
+	}
+
+	legacy, err := m.OpenService(svcNameLegacy)
+	if err != nil {
+		return nil // no legacy service either -- fresh install, nothing to migrate
+	}
+	defer legacy.Close()
+
+	cfg, err := legacy.Config()
+	if err != nil {
+		return fmt.Errorf("query legacy service config: %w", err)
+	}
+	binaryPath := cfg.BinaryPathName
+
+	legacyParamKey := paramKeyFor(svcNameLegacy)
+	serverURL, envLabel := readServiceParamsFrom(svcNameLegacy)
+	secret := readEncryptedSecretFrom(legacyParamKey)
+	binaryHash := readBinaryHashFrom(legacyParamKey)
+
+	fmt.Printf("[*] Migrating service registration %q -> %q...\n", svcNameLegacy, svcName)
+	if err := stopServiceAndWait(legacy, 15*time.Second, 500*time.Millisecond, terminateProcessByPID); err != nil {
+		return fmt.Errorf("stop legacy service: %w", err)
+	}
+	if err := legacy.Delete(); err != nil {
+		return fmt.Errorf("delete legacy service: %w", err)
+	}
+	_ = eventlog.Remove(svcNameLegacy)
+
+	newSvc, err := m.CreateService(svcName, binaryPath, mgr.Config{
+		DisplayName:      svcDisplayName,
+		Description:      svcDescription,
+		StartType:        mgr.StartAutomatic,
+		ServiceType:      windows.SERVICE_WIN32_OWN_PROCESS,
+		ServiceStartName: "LocalSystem",
+		DelayedAutoStart: true,
+	})
+	if err != nil {
+		return fmt.Errorf("create migrated service: %w", err)
+	}
+	defer newSvc.Close()
+
+	if err := writeServiceParams(serverURL, envLabel); err != nil {
+		log.Printf("[svc] warning: could not restore service params after migration: %v", err)
+	}
+	if secret != "" {
+		if err := StoreEncryptedSecret(secret); err != nil {
+			log.Printf("[svc] warning: could not restore encrypted secret after migration: %v", err)
+		}
+	}
+	if binaryHash != "" {
+		if err := StoreBinaryHash(binaryHash); err != nil {
+			log.Printf("[svc] warning: could not restore binary hash after migration: %v", err)
+		}
+	}
+
+	_ = eventlog.InstallAsEventCreate(svcName, eventlog.Error|eventlog.Warning|eventlog.Info)
+	if err := ApplyServiceRecovery(); err != nil {
+		log.Printf("[svc] warning: recovery policy: %v", err)
+	}
+	if err := ApplyServiceDACL(); err != nil {
+		log.Printf("[svc] warning: service DACL: %v", err)
+	}
+
+	fmt.Printf("[+] Service migrated to %q\n", svcName)
+	return nil
+}
+
 // svcUpdate stops the service, replaces the binary with the currently
 // running exe, and restarts it — no uninstall/reinstall needed.
 func svcUpdate() error {
+	if err := migrateLegacyServiceName(); err != nil {
+		return fmt.Errorf("migrate legacy service: %w", err)
+	}
+
 	m, err := mgr.Connect()
 	if err != nil {
 		return err
@@ -349,10 +451,17 @@ func isWindowsService() bool {
 }
 
 // readServiceParams reads BAS_SERVER_URL and BAS_ENV_LABEL from
-// HKLM\SYSTEM\CurrentControlSet\Services\BASAgent\Parameters.
+// HKLM\SYSTEM\CurrentControlSet\Services\<svcName>\Parameters.
 func readServiceParams() (serverURL, envLabel string) {
+	return readServiceParamsFrom(svcName)
+}
+
+// readServiceParamsFrom is readServiceParams generalized to an explicit
+// service name -- migrateLegacyServiceName uses this to read from
+// svcNameLegacy's Parameters key before that service is deleted.
+func readServiceParamsFrom(name string) (serverURL, envLabel string) {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE,
-		`SYSTEM\CurrentControlSet\Services\`+svcName+`\Parameters`,
+		`SYSTEM\CurrentControlSet\Services\`+name+`\Parameters`,
 		registry.QUERY_VALUE)
 	if err != nil {
 		return "", ""
