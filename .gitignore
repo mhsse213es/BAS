@@ -6,6 +6,7 @@ logs.txt
 error.txt
 *.txt
 !scenarios/*.yaml
+!orchestrator/loadtest/results/*.txt
 
 # ART external payloads — baked into the bundle at build time; never commit the
 # binaries themselves (hacktools), but keep the folder + docs tracked.
