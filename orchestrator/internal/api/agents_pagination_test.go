@@ -291,7 +291,7 @@ func TestGetAgents_Paginated_SearchMatchesHostnameAgentIDAndGroupName(t *testing
 			want string
 		}{
 			{"special-agent", "special-agent-id"}, // matches agent_id
-			{"Finance", "other-agent"},             // matches group name
+			{"Finance", "other-agent"},            // matches group name
 		}
 		for _, c := range cases {
 			rec := httptest.NewRecorder()
