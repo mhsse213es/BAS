@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -748,6 +749,50 @@ func groupRecursiveFilter(args []any, groupID int64) (string, []any) {
 	)`
 	return frag, args
 }
+
+// agentCursor is the decoded form of the opaque "cursor" query param a
+// paginated GetAgents response hands back in next_cursor. Snapshot is
+// captured once, on the first page of a traversal, and carried forward
+// unchanged on every subsequent page -- see the design spec's "Keyset
+// pagination" section for why (last_update changes on every heartbeat, so
+// a fixed snapshot boundary is what prevents skip/duplicate rows across
+// pages of a single traversal).
+type agentCursor struct {
+	Snapshot   time.Time `json:"snapshot"`
+	LastUpdate time.Time `json:"last_update"`
+	AgentID    string    `json:"agent_id"`
+}
+
+func encodeAgentCursor(c agentCursor) string {
+	b, _ := json.Marshal(c)
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+func decodeAgentCursor(s string) (agentCursor, error) {
+	var c agentCursor
+	raw, err := base64.URLEncoding.DecodeString(s)
+	if err != nil {
+		return c, err
+	}
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return c, err
+	}
+	return c, nil
+}
+
+// agentBucketCaseSQL classifies an agent row into the same bucket
+// wwwroot/index.html's agentBucket() computes client-side (retired /
+// offline / degraded / online), reusing models.AgentOfflineAfter's 90s
+// staleness threshold. Defined once and reused by both the paginated
+// row-list query's optional bucket filter and the totals aggregate query
+// so the two can never drift out of sync with each other or with the
+// frontend's own agentBucket().
+const agentBucketCaseSQL = `CASE
+		WHEN COALESCE(a.state,'active') IN ('retired','uninstalled') THEN 'retired'
+		WHEN (NOW() - a.last_update) > INTERVAL '90 seconds' THEN 'offline'
+		WHEN COALESCE(a.state,'active') != 'active' THEN 'degraded'
+		ELSE 'online'
+	END`
 
 func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	query := "SELECT " + agentSelectColumns + " " + agentFromJoins
