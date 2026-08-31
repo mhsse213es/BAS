@@ -346,6 +346,52 @@ func TestGetAgents_WSConnectedReflectsHubNotHeartbeat(t *testing.T) {
 	})
 }
 
+// TestGetAgents_SimsCountAggregation guards the LEFT JOIN + GROUP BY rewrite
+// of the "sims" column (previously a per-row correlated subquery, which was
+// measured to scale catastrophically -- p95 read latency went from 935ms at
+// 500 agents to 17.5s at 2500 in a real load test). Confirms the rewrite
+// still produces the correct per-agent run count, including zero and
+// multi-row cases.
+func TestGetAgents_SimsCountAggregation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), nil, "")
+		ctx := context.Background()
+
+		seedActiveAgent(t, pool, "agent-no-runs", "Windows")
+		seedActiveAgent(t, pool, "agent-three-runs", "Windows")
+
+		for i := 0; i < 3; i++ {
+			if _, err := pool.Exec(ctx,
+				`INSERT INTO scenario_runs (scenario_id, agent_id, status) VALUES ('scn-1', 'agent-three-runs', 'completed')`); err != nil {
+				t.Fatalf("seed scenario_run %d: %v", i, err)
+			}
+		}
+
+		rec := httptest.NewRecorder()
+		h.GetAgents(rec, httptest.NewRequest(http.MethodGet, "/api/agents", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var agents []models.Agent
+		if err := json.Unmarshal(rec.Body.Bytes(), &agents); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		sims := make(map[string]int, len(agents))
+		for _, a := range agents {
+			sims[a.AgentID] = a.Sims
+		}
+		if sims["agent-no-runs"] != 0 {
+			t.Errorf("agent-no-runs: Sims = %d, want 0", sims["agent-no-runs"])
+		}
+		if sims["agent-three-runs"] != 3 {
+			t.Errorf("agent-three-runs: Sims = %d, want 3", sims["agent-three-runs"])
+		}
+	})
+}
+
 func TestGetAgents_EmptyOrderingAndNullableFields(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping container-backed test in -short mode")

@@ -678,10 +678,13 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 	query := `SELECT a.agent_id, a.hostname, a.ip_address, a.os_version, a.username, a.status, a.env_label,
 	        a.has_report, a.binary_hash, a.binary_trusted, a.last_update,
 	        COALESCE(a.state, 'active'), COALESCE(a.policy_json::text, '{}'), a.enrolled_at,
-	        (SELECT COUNT(*) FROM scenario_runs sr WHERE sr.agent_id = a.agent_id) AS sims,
+	        COALESCE(sr.sims, 0) AS sims,
 	        a.stopped_by, COALESCE(u.username, a.stopped_by), a.stopped_at, a.stop_reason,
 	        a.group_id, g.name, a.uninstall_error, a.uninstall_error_at, a.uninstall_requested_at
-	 FROM agents a LEFT JOIN users u ON u.id = a.stopped_by LEFT JOIN agent_groups g ON g.id = a.group_id`
+	 FROM agents a
+	 LEFT JOIN users u ON u.id = a.stopped_by
+	 LEFT JOIN agent_groups g ON g.id = a.group_id
+	 LEFT JOIN (SELECT agent_id, COUNT(*) AS sims FROM scenario_runs GROUP BY agent_id) sr ON sr.agent_id = a.agent_id`
 	var args []any
 	if groupIDParam := r.URL.Query().Get("groupId"); groupIDParam != "" {
 		groupID, err := strconv.ParseInt(groupIDParam, 10, 64)
