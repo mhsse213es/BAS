@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"audspect/agent/protocol"
 )
 
 // The on-disk spool gives run-result delivery restart-durability. submitRunResult
@@ -38,9 +41,9 @@ func resolveSpoolDir() string {
 
 // spooledResult is the on-disk envelope for a run result awaiting delivery.
 type spooledResult struct {
-	Label    string       `json:"label"`    // completed|partial|scan — for logging only
-	QueuedAt time.Time    `json:"queuedAt"` // when the result was first spooled
-	Payload  RawRunResult `json:"payload"`
+	Label    string                `json:"label"`    // completed|partial|scan — for logging only
+	QueuedAt time.Time             `json:"queuedAt"` // when the result was first spooled
+	Payload  protocol.RawRunResult `json:"payload"`
 }
 
 // spoolFileName maps a run to a stable filename so re-spooling the same run
@@ -64,7 +67,7 @@ func spoolFileName(runID string) string {
 // spoolWrite persists a run result to disk atomically (temp file + rename), so a
 // crash mid-write can never leave a half-written envelope that the drainer would
 // choke on. Returns the path of the persisted file.
-func (a *Agent) spoolWrite(payload RawRunResult, label string) (string, error) {
+func (a *Agent) spoolWrite(payload protocol.RawRunResult, label string) (string, error) {
 	dir := resolveSpoolDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
@@ -121,7 +124,7 @@ func (a *Agent) drainSpool() {
 			os.Remove(path)
 			continue
 		}
-		if err := a.postJSON("/api/scenarios/result", env.Payload); err != nil {
+		if err := protocol.SubmitResult(context.Background(), a.client, a.cfg.ServerURL, a.cfg.AgentSecret, env.Payload); err != nil {
 			log.Printf("[!] spool: delivery deferred (%s) run=%s: %v", env.Label, env.Payload.RunID, err)
 			return // server unreachable — stop; retry on next drain
 		}

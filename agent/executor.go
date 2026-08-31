@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"audspect/agent/protocol"
 )
 
 const maxOutputBytes = 8192
@@ -29,7 +31,7 @@ func declinePromptInput() io.Reader {
 	return strings.NewReader(strings.Repeat("n\r\n", 256))
 }
 
-func StagePayloads(payloads []Payload, dir string) error {
+func StagePayloads(payloads []protocol.Payload, dir string) error {
 	for _, p := range payloads {
 		data, err := base64.StdEncoding.DecodeString(p.Content)
 		if err != nil {
@@ -52,7 +54,7 @@ func StagePayloads(payloads []Payload, dir string) error {
 
 // CheckPayloadQuarantine waits briefly then checks whether any staged payload
 // was removed by AV/EDR. Returns the first quarantined filename, or "".
-func CheckPayloadQuarantine(payloads []Payload, dir string) string {
+func CheckPayloadQuarantine(payloads []protocol.Payload, dir string) string {
 	time.Sleep(200 * time.Millisecond)
 	for _, p := range payloads {
 		if _, err := os.Stat(filepath.Join(dir, p.Name)); os.IsNotExist(err) {
@@ -86,7 +88,7 @@ func graceSeconds(step ScenarioStep) int {
 	return defaultGraceSec
 }
 
-func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) ExecResult {
+func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) protocol.ExecResult {
 	timeout := executeSeconds(step)
 	grace := graceSeconds(step)
 
@@ -170,7 +172,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 		if parentCtx.Err() != nil {
 			stderrMsg = "step interrupted by scenario cancellation"
 		}
-		return ExecResult{
+		return protocol.ExecResult{
 			TaskID:        step.TaskID,
 			ExitCode:      -1,
 			Stderr:        stderrMsg,
@@ -266,7 +268,7 @@ func execStep(parentCtx context.Context, step ScenarioStep, pool *HostPool) Exec
 		}
 	}
 
-	result := ExecResult{
+	result := protocol.ExecResult{
 		TaskID:        step.TaskID,
 		PID:           stepPID,
 		StartedAt:     before,

@@ -4,6 +4,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"audspect/agent/protocol"
 )
 
 // RunEvent mirrors the server's models.RunEvent wire shape.
@@ -21,7 +23,7 @@ type RunEvent struct {
 // eventForResult derives the terminal event type and verdict from a step result.
 // Timeout takes priority (an explicit "ran, did not return" verdict); a security
 // block is a completed step with verdict "blocked"; otherwise pass/fail by exit.
-func eventForResult(r ExecResult) (typ, verdict string) {
+func eventForResult(r protocol.ExecResult) (typ, verdict string) {
 	if r.TimedOut {
 		return "timeout", ""
 	}

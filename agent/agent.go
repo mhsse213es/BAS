@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,8 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"audspect/agent/protocol"
 	"audspect/agent/sched"
-	"github.com/gorilla/websocket"
 )
 
 type Agent struct {
@@ -154,9 +153,6 @@ func (a *Agent) postJSONDecode(path string, body interface{}, out interface{}) e
 	req.Header.Set("Content-Type", "application/json")
 	if a.cfg.AgentSecret != "" {
 		req.Header.Set("X-Agent-Token", a.cfg.AgentSecret)
-		if path == "/api/scenarios/result" {
-			req.Header.Set("X-Result-MAC", SignBody(data, a.cfg.AgentSecret))
-		}
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -181,7 +177,7 @@ func (a *Agent) postJSON(path string, body interface{}) error {
 // are accepted by the server and receives the initial policy bundle.
 // Failure is non-fatal — the agent continues and will retry on next heartbeat.
 func (a *Agent) enrollWithServer() {
-	req := EnrollRequest{
+	req := protocol.EnrollRequest{
 		AgentID:        a.id.AgentID,
 		Hostname:       a.id.Hostname,
 		IPAddress:      a.id.IPAddress,
@@ -192,8 +188,8 @@ func (a *Agent) enrollWithServer() {
 		AgentVersion:   version,
 		PostureCatalog: BuildPostureCatalog(),
 	}
-	var resp EnrollResponse
-	if err := a.postJSONDecode("/api/agents/enroll", req, &resp); err != nil {
+	resp, err := protocol.Enroll(context.Background(), a.client, a.cfg.ServerURL, a.cfg.AgentSecret, req)
+	if err != nil {
 		log.Printf("[!] enrollment failed: %v — continuing; will retry on reconnect", err)
 		return
 	}
@@ -218,7 +214,7 @@ func (a *Agent) sendHeartbeat(status string) {
 	jobTotal := a.currentJobTotal
 	jobPercent := a.currentJobPercent
 	a.mu.Unlock()
-	hb := Heartbeat{
+	hb := protocol.Heartbeat{
 		AgentID:       a.id.AgentID,
 		Hostname:      a.id.Hostname,
 		IPAddress:     a.id.IPAddress,
@@ -228,15 +224,15 @@ func (a *Agent) sendHeartbeat(status string) {
 		EnvLabel:      a.cfg.EnvLabel,
 		BinaryHash:    a.binaryHash,
 		AgentVersion:  version,
-		SchemaVersion: schemaVersion,
+		SchemaVersion: protocol.SchemaVersion,
 
-		ProtocolVersion:  protocolVersion,
+		ProtocolVersion:  protocol.ProtocolVersion,
 		EmitsEvents:      true,
 		SecurityProducts: products,
 	}
 	if jobID != "" {
 		hb.CurrentJobID = jobID
-		hb.JobProgress = HeartbeatJobProgress{
+		hb.JobProgress = protocol.HeartbeatJobProgress{
 			Stage:            jobStage,
 			TargetsCompleted: jobCompleted,
 			TargetsTotal:     jobTotal,
@@ -244,8 +240,8 @@ func (a *Agent) sendHeartbeat(status string) {
 		}
 	}
 	t0 := time.Now()
-	var resp HeartbeatResponse
-	if err := a.postJSONDecode("/api/heartbeat", hb, &resp); err != nil {
+	resp, err := protocol.SendHeartbeat(context.Background(), a.client, a.cfg.ServerURL, a.cfg.AgentSecret, hb)
+	if err != nil {
 		log.Printf("[!] heartbeat: %v", err)
 		a.logger.Op("warn", "connectivity", fmt.Sprintf("heartbeat failed: %v", err))
 		// Stamp the start of the outage so the watchdog can measure how long a
@@ -467,7 +463,59 @@ func (a *Agent) runDisconnectWatchdog() {
 	}
 }
 
-func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
+// ScenarioStep is the agent's own execution-facing step representation,
+// decoded once (via decodeStep) from protocol.ScenarioStep's wire form
+// when a scenario is dispatched. Kept as a package-local type rather than
+// using protocol.ScenarioStep directly because Resource/Timeout need to be
+// the real *sched.ResourceProfile/*sched.TimeoutProfile pointer types every
+// execution file (executor.go, executor_windows.go, pool_windows.go, ...)
+// already expects -- the wire type carries them as opaque JSON since
+// agent/protocol must not depend on sched (an execution-scheduling
+// package). Every other field mirrors protocol.ScenarioStep exactly.
+type ScenarioStep struct {
+	TaskID       string
+	TechniqueID  string
+	Name         string
+	Executor     string
+	Command      string
+	TimeoutSec   int
+	Payloads     []protocol.Payload
+	Cleanup      string
+	PayloadDir   string
+	Resource     *sched.ResourceProfile
+	Timeout      *sched.TimeoutProfile
+	Env          map[string]string
+	RequiresPriv string
+}
+
+// decodeStep converts one wire-format protocol.ScenarioStep into the
+// agent's local, execution-facing ScenarioStep, decoding the opaque
+// Resource/Timeout JSON into their real sched types. A step whose
+// Resource/Timeout JSON is absent or fails to decode simply gets a nil
+// pointer for that field -- the same "no profile" behavior the original
+// pre-refactor code had for an absent *sched.ResourceProfile/*TimeoutProfile.
+func decodeStep(w protocol.ScenarioStep) ScenarioStep {
+	s := ScenarioStep{
+		TaskID: w.TaskID, TechniqueID: w.TechniqueID, Name: w.Name,
+		Executor: w.Executor, Command: w.Command, TimeoutSec: w.TimeoutSec,
+		Payloads: w.Payloads, Cleanup: w.Cleanup, RequiresPriv: w.RequiresPriv,
+	}
+	if len(w.Resource) > 0 {
+		var rp sched.ResourceProfile
+		if json.Unmarshal(w.Resource, &rp) == nil {
+			s.Resource = &rp
+		}
+	}
+	if len(w.Timeout) > 0 {
+		var tp sched.TimeoutProfile
+		if json.Unmarshal(w.Timeout, &tp) == nil {
+			s.Timeout = &tp
+		}
+	}
+	return s
+}
+
+func (a *Agent) runScenario(ctx context.Context, cmd protocol.ScenarioCommand) {
 	// Local state guard — defense-in-depth alongside server-side enforcement.
 	a.mu.Lock()
 	st := a.state
@@ -504,7 +552,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	// requires it and this host is a DC, abort the whole run before any step.
 	if cmd.Policy != nil && cmd.Policy.BlockOnDomainController && hostIsDomainController() {
 		log.Printf("[!] ABORT: host is a domain controller and policy blocks live execution on DCs (run %s)", cmd.RunID)
-		a.submitResults(cmd, []ExecResult{{
+		a.submitResults(cmd, []protocol.ExecResult{{
 			ExitCode:      -1,
 			Blocked:       true,
 			BlockedReason: "aborted by domain-controller safety interlock — live AD techniques must not run on a domain controller",
@@ -547,11 +595,22 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	start := time.Now()
 	total := len(cmd.Steps)
 
+	// Decode the wire-format steps into the agent's own execution-facing
+	// ScenarioStep once, up front. protocol.ScenarioStep carries
+	// Resource/Timeout as opaque JSON (agent/protocol must not depend on
+	// sched); everything below this point needs the real decoded
+	// *sched.ResourceProfile/*sched.TimeoutProfile, exactly as before this
+	// package's types moved to agent/protocol.
+	steps := make([]ScenarioStep, total)
+	for i, w := range cmd.Steps {
+		steps[i] = decodeStep(w)
+	}
+
 	// Steps run through the resource-lock scheduler: independent steps execute
 	// concurrently, conflicting ones serialize, and unlabeled steps run serially.
 	// Results are written to a fixed index per step so the submitted order is
 	// deterministic (identical to a serial run) regardless of completion order.
-	results := make([]ExecResult, total)
+	results := make([]protocol.ExecResult, total)
 	ran := make([]bool, total)
 	var completed int64
 
@@ -564,7 +623,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	// process cold start). Created only if the scenario has a pooled candidate,
 	// sized to the worker count, and torn down after the scheduler drains.
 	var pool *HostPool
-	if slices.ContainsFunc(cmd.Steps, pooledCandidate) {
+	if slices.ContainsFunc(steps, pooledCandidate) {
 		pool = NewHostPool(workers)
 	}
 	defer pool.Close()
@@ -596,8 +655,8 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	emitCritical(RunEvent{Type: "run_started", Payload: map[string]any{"stepsTotal": total, "mode": cmd.Mode}})
 
 	jobs := make([]sched.Job, total)
-	for i := range cmd.Steps {
-		step := cmd.Steps[i] // per-job copy (PayloadDir/Env set below)
+	for i := range steps {
+		step := steps[i] // per-job copy (PayloadDir/Env set below)
 
 		// Layer 1 (schedule timeout): bound how long this step may wait for its
 		// resource locks. On expiry the scheduler records an explicit timeout
@@ -618,7 +677,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 				n := atomic.AddInt64(&completed, 1)
 				a.localSt.UpdateProgress(int(n), total, "Execution", step.TechniqueID+" — "+step.Name)
 				log.Printf("[*]   [%d/%d] %s — schedule timeout after %ds (locks unavailable)", i+1, total, step.TechniqueID, schedSec)
-				results[i] = ExecResult{
+				results[i] = protocol.ExecResult{
 					TaskID:     step.TaskID,
 					ExitCode:   -1,
 					Stderr:     fmt.Sprintf("schedule timeout: resource locks unavailable within %ds", schedSec),
@@ -653,7 +712,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 						// AV/EDR may quarantine a payload immediately after staging.
 						if name := CheckPayloadQuarantine(step.Payloads, stepDir); name != "" {
 							log.Printf("[!]   payload quarantined by security control: %s", name)
-							results[i] = ExecResult{
+							results[i] = protocol.ExecResult{
 								TaskID:        step.TaskID,
 								ExitCode:      -1,
 								Blocked:       true,
@@ -697,7 +756,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 
 	// Collect completed results in submission order. On cancellation the
 	// scheduler skips not-yet-started jobs, so some indices stay unran.
-	final := make([]ExecResult, 0, total)
+	final := make([]protocol.ExecResult, 0, total)
 	for i := range total {
 		if ran[i] {
 			final = append(final, results[i])
@@ -730,7 +789,7 @@ func (a *Agent) runScenario(ctx context.Context, cmd ScenarioCommand) {
 	a.sendHeartbeat("idle")
 }
 
-func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial bool, reverted []string) {
+func (a *Agent) submitResults(cmd protocol.ScenarioCommand, results []protocol.ExecResult, partial bool, reverted []string) {
 	// Tally evidence collected across all steps for the local status API.
 	var ev LocalEvidenceStats
 	for _, r := range results {
@@ -751,7 +810,7 @@ func (a *Agent) submitResults(cmd ScenarioCommand, results []ExecResult, partial
 	a.localSt.UpdateProgress(len(results), len(results), "Upload", "")
 	a.localSt.CompleteOperation(resultLabel, ev, cmd.SweepID, cmd.SweepName, cmd.SweepFinal)
 
-	payload := RawRunResult{
+	payload := protocol.RawRunResult{
 		RunID:      cmd.RunID,
 		ScenarioID: cmd.ScenarioID,
 		AgentID:    a.id.AgentID,
@@ -797,7 +856,7 @@ func (a *Agent) collectAndSubmitDetections(runID string, runStart time.Time) {
 		log.Printf("[detect] run %s: no alerts collected in window", runID)
 		return
 	}
-	payload := RunDetections{
+	payload := protocol.RunDetections{
 		RunID: runID, AgentID: a.id.AgentID, Alerts: alerts,
 		WindowFrom: from, WindowTo: to, Truncated: truncated,
 	}
@@ -818,12 +877,12 @@ func (a *Agent) collectAndSubmitDetections(runID string, runStart time.Time) {
 // server REPLACES (never appends), so re-delivery is idempotent: a retry after a
 // dropped response, or a late delivery that reconciles a run the server already
 // flagged 'partial', converges to the same final state. See spool.go.
-func (a *Agent) submitRunResult(payload RawRunResult, label string) {
+func (a *Agent) submitRunResult(payload protocol.RawRunResult, label string) {
 	if _, err := a.spoolWrite(payload, label); err != nil {
 		// Could not persist — fall back to a direct best-effort send so an online
 		// agent still delivers even if the spool dir is unwritable.
 		log.Printf("[!] could not spool result run=%s: %v — attempting direct delivery", payload.RunID, err)
-		if err := a.postJSON("/api/scenarios/result", payload); err != nil {
+		if err := protocol.SubmitResult(context.Background(), a.client, a.cfg.ServerURL, a.cfg.AgentSecret, payload); err != nil {
 			log.Printf("[x] result submit (%s) run=%s failed and could not be spooled: %v", label, payload.RunID, err)
 		} else {
 			log.Printf("[+] results submitted (%s): run=%s", label, payload.RunID)
@@ -842,7 +901,7 @@ func (a *Agent) submitRunResult(payload RawRunResult, label string) {
 // ERROR/SKIPPED from scoring. The agent stays a dumb executor: it classifies
 // only on the signals it owns (Blocked / TimedOut / ExitCode), never by
 // re-parsing command output — that interpretation is the server's job.
-func deriveLocalResultLabel(results []ExecResult, partial bool) string {
+func deriveLocalResultLabel(results []protocol.ExecResult, partial bool) string {
 	if partial {
 		return "Partial" // run was cancelled before finishing
 	}
@@ -964,10 +1023,10 @@ func (a *Agent) runLocalScan(ctx context.Context, scenarioID, runID string, sele
 	// Submit full SimCheck metadata so the orchestrator can correctly populate
 	// technique ID, tactic, severity, threat impact, and remediation without
 	// having to re-derive them from an empty step definition.
-	checks := make([]SimCheckResult, 0)
+	checks := make([]protocol.SimCheckResult, 0)
 	for _, cat := range categories {
 		for _, ch := range cat.Checks {
-			checks = append(checks, SimCheckResult{
+			checks = append(checks, protocol.SimCheckResult{
 				ID:            ch.ID,
 				TechniqueID:   ch.Technique.ID,
 				TechniqueName: ch.Technique.Name,
@@ -984,7 +1043,7 @@ func (a *Agent) runLocalScan(ctx context.Context, scenarioID, runID string, sele
 		}
 	}
 
-	payload := RawRunResult{
+	payload := protocol.RawRunResult{
 		RunID:      runID,
 		ScenarioID: scenarioID,
 		AgentID:    a.id.AgentID,
@@ -1011,68 +1070,30 @@ func (a *Agent) runLocalScan(ctx context.Context, scenarioID, runID string, sele
 }
 
 func (a *Agent) connectWS() {
-	rawURL := strings.Replace(a.cfg.ServerURL, "http://", "ws://", 1)
-	rawURL = strings.Replace(rawURL, "https://", "wss://", 1)
-
-	u, err := url.Parse(rawURL + "/ws/agent")
-	if err != nil {
-		log.Printf("[!] invalid WS URL: %v", err)
-		return
-	}
-	q := u.Query()
-	q.Set("agentId", a.id.AgentID)
-	if a.cfg.AgentSecret != "" {
-		q.Set("agentSecret", a.cfg.AgentSecret)
-	}
-	u.RawQuery = q.Encode()
-
 	for {
-		conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		conn, err := protocol.DialAgentWS(a.cfg.ServerURL, a.id.AgentID, a.cfg.AgentSecret)
 		if err != nil {
 			log.Printf("[!] WS connect failed: %v — retry in 5s", err)
 			time.Sleep(wsReconnectDelay)
 			continue
 		}
-		log.Printf("[+] WS connected: %s", u.String())
+		log.Printf("[+] WS connected: %s", a.cfg.ServerURL)
 		a.logger.Op("info", "connectivity", fmt.Sprintf("WebSocket connected to %s", a.cfg.ServerURL))
 		// Flush events buffered while the connection was down.
 		go a.logger.Flush()
 
-		// Keepalive: arm a read deadline and reset it whenever the server pings.
-		// The agent never sends app frames over the WS (heartbeats/events go over
-		// HTTP), and ReadMessage does NOT return for ping control frames — so the
-		// ping handler is what keeps a healthy connection alive. If the server
-		// dies, pings stop, the deadline fires, ReadMessage errors, and we
-		// reconnect. We reply with a pong (mirroring gorilla's default handler).
-		conn.SetReadDeadline(time.Now().Add(wsPongWait))
-		conn.SetPingHandler(func(appData string) error {
-			conn.SetReadDeadline(time.Now().Add(wsPongWait))
-			err := conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(wsWriteWait))
-			if err == websocket.ErrCloseSent {
-				return nil
-			}
-			return err
-		})
-
 		for {
-			_, data, err := conn.ReadMessage()
+			msg, err := protocol.ReadMessage(conn)
 			if err != nil {
 				log.Printf("[!] WS read: %v — reconnecting", err)
 				a.logger.Op("warn", "connectivity", fmt.Sprintf("WebSocket disconnected: %v", err))
 				conn.Close()
 				break
 			}
-			// Any inbound frame is also proof of life — extend the deadline.
-			conn.SetReadDeadline(time.Now().Add(wsPongWait))
-
-			var msg WSMessage
-			if err := json.Unmarshal(data, &msg); err != nil {
-				continue
-			}
 
 			switch msg.Type {
 			case "command_scenario":
-				var cmd ScenarioCommand
+				var cmd protocol.ScenarioCommand
 				if err := json.Unmarshal(msg.Data, &cmd); err != nil {
 					log.Printf("[!] WS: bad scenario command: %v", err)
 					continue

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+
+	"audspect/agent/protocol"
 )
 
 // newSpoolTestAgent wires an Agent at a temp spool dir pointed at the given server.
@@ -25,7 +27,7 @@ func newSpoolTestAgent(t *testing.T, serverURL string) *Agent {
 
 func TestSpoolWriteRoundTrip(t *testing.T) {
 	a := newSpoolTestAgent(t, "http://127.0.0.1:0")
-	payload := RawRunResult{RunID: "run-123", ScenarioID: "scn-1", AgentID: "agt-1", Partial: true}
+	payload := protocol.RawRunResult{RunID: "run-123", ScenarioID: "scn-1", AgentID: "agt-1", Partial: true}
 
 	path, err := a.spoolWrite(payload, "partial")
 	if err != nil {
@@ -49,10 +51,10 @@ func TestSpoolWriteRoundTrip(t *testing.T) {
 
 func TestSpoolWriteOverwritesSameRun(t *testing.T) {
 	a := newSpoolTestAgent(t, "http://127.0.0.1:0")
-	if _, err := a.spoolWrite(RawRunResult{RunID: "run-x", Partial: true}, "partial"); err != nil {
+	if _, err := a.spoolWrite(protocol.RawRunResult{RunID: "run-x", Partial: true}, "partial"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.spoolWrite(RawRunResult{RunID: "run-x", Partial: false}, "completed"); err != nil {
+	if _, err := a.spoolWrite(protocol.RawRunResult{RunID: "run-x", Partial: false}, "completed"); err != nil {
 		t.Fatal(err)
 	}
 	entries, _ := os.ReadDir(resolveSpoolDir())
@@ -72,10 +74,10 @@ func TestDrainSpoolDeliversAndDeletes(t *testing.T) {
 	defer srv.Close()
 
 	a := newSpoolTestAgent(t, srv.URL)
-	if _, err := a.spoolWrite(RawRunResult{RunID: "run-a"}, "completed"); err != nil {
+	if _, err := a.spoolWrite(protocol.RawRunResult{RunID: "run-a"}, "completed"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.spoolWrite(RawRunResult{RunID: "run-b"}, "completed"); err != nil {
+	if _, err := a.spoolWrite(protocol.RawRunResult{RunID: "run-b"}, "completed"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -97,7 +99,7 @@ func TestDrainSpoolKeepsFileWhenServerDown(t *testing.T) {
 	defer srv.Close()
 
 	a := newSpoolTestAgent(t, srv.URL)
-	if _, err := a.spoolWrite(RawRunResult{RunID: "run-stuck"}, "partial"); err != nil {
+	if _, err := a.spoolWrite(protocol.RawRunResult{RunID: "run-stuck"}, "partial"); err != nil {
 		t.Fatal(err)
 	}
 

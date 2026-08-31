@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"audspect/agent/protocol"
 )
 
 const (
@@ -108,7 +110,7 @@ func (l *Logger) Metric(name string, value float64, unit string) {
 
 func (l *Logger) emit(eventType string, payload map[string]any) {
 	evt := LogEvent{
-		SchemaVersion: schemaVersion,
+		SchemaVersion: protocol.SchemaVersion,
 		EventType:     eventType,
 		AgentID:       l.agentID,
 		Seq:           l.seqCounter.Add(1),

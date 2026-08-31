@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"audspect/agent/protocol"
 )
 
 // Windows attack-path collection helpers. All recon-only: enumeration of local
@@ -86,7 +88,7 @@ func hostIsDomainJoined() bool {
 
 // runSharpHound stages the supplied SharpHound binary, runs it, and returns the
 // raw output zip bytes. The agent does not parse the result — the server does.
-func runSharpHound(payload *Payload, args string) ([]byte, error) {
+func runSharpHound(payload *protocol.Payload, args string) ([]byte, error) {
 	if payload == nil || payload.Name == "" {
 		return nil, nil
 	}
@@ -96,7 +98,7 @@ func runSharpHound(payload *Payload, args string) ([]byte, error) {
 	}
 	defer os.RemoveAll(dir)
 
-	if err := StagePayloads([]Payload{*payload}, dir); err != nil {
+	if err := StagePayloads([]protocol.Payload{*payload}, dir); err != nil {
 		return nil, err
 	}
 	exe := filepath.Join(dir, payload.Name)

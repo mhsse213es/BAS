@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"audspect/agent/protocol"
 	"audspect/agent/sched"
 )
 
@@ -171,7 +172,7 @@ func (h *psHost) kill() {
 // exec submits one step to this host. It returns the result, whether a result was
 // produced at all (ok=false → caller should fall back to the per-process path),
 // and whether the host is still healthy enough to reuse.
-func (h *psHost) exec(ctx context.Context, step ScenarioStep) (res ExecResult, ok, healthy bool) {
+func (h *psHost) exec(ctx context.Context, step ScenarioStep) (res protocol.ExecResult, ok, healthy bool) {
 	id := atomic.AddInt64(&reqSeq, 1)
 	env := map[string]string{}
 	if step.PayloadDir != "" {
@@ -184,19 +185,19 @@ func (h *psHost) exec(ctx context.Context, step ScenarioStep) (res ExecResult, o
 
 	start := time.Now()
 	if _, err := h.stdin.Write(b); err != nil {
-		return ExecResult{}, false, false // could not submit → safe to fall back
+		return protocol.ExecResult{}, false, false // could not submit → safe to fall back
 	}
 
 	select {
 	case line, open := <-h.resp:
 		if !open {
-			return ExecResult{}, false, false // host died before responding
+			return protocol.ExecResult{}, false, false // host died before responding
 		}
 		var hr hostResp
 		if err := json.Unmarshal([]byte(line), &hr); err != nil || hr.ID != id {
-			return ExecResult{}, false, false // desync → discard host, fall back
+			return protocol.ExecResult{}, false, false // desync → discard host, fall back
 		}
-		return ExecResult{
+		return protocol.ExecResult{
 			TaskID:     step.TaskID,
 			ExitCode:   hr.ExitCode,
 			Stdout:     trimOutput([]byte(hr.Stdout)),
@@ -208,7 +209,7 @@ func (h *psHost) exec(ctx context.Context, step ScenarioStep) (res ExecResult, o
 		// Step timeout or scenario cancel: the command may still be running in the
 		// host, so the host is no longer reusable — discard it. The result is owned
 		// by us (no fall-back re-run).
-		return ExecResult{
+		return protocol.ExecResult{
 			TaskID:     step.TaskID,
 			ExitCode:   -1,
 			Stderr:     "step timed out or was cancelled",
@@ -268,10 +269,10 @@ func (p *HostPool) discard(h *psHost) {
 
 // Run executes a pooled-candidate step on a warm host. ok=false means nothing ran
 // and the caller must use the per-process path.
-func (p *HostPool) Run(ctx context.Context, step ScenarioStep) (ExecResult, bool) {
+func (p *HostPool) Run(ctx context.Context, step ScenarioStep) (protocol.ExecResult, bool) {
 	h, got := p.acquire(ctx)
 	if !got {
-		return ExecResult{}, false
+		return protocol.ExecResult{}, false
 	}
 	res, ok, healthy := h.exec(ctx, step)
 	if healthy {

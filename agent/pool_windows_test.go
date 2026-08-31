@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"audspect/agent/protocol"
 	"audspect/agent/sched"
 )
 
@@ -108,7 +109,7 @@ func TestPooledCandidate(t *testing.T) {
 		{"modification not pooled", ScenarioStep{Executor: "powershell", Resource: mod}, false},
 		{"unlabeled not pooled", ScenarioStep{Executor: "powershell"}, false},
 		{"cmd executor not pooled", ScenarioStep{Executor: "cmd", Resource: obs}, false},
-		{"with payload not pooled", ScenarioStep{Executor: "powershell", Resource: obs, Payloads: []Payload{{Name: "x"}}}, false},
+		{"with payload not pooled", ScenarioStep{Executor: "powershell", Resource: obs, Payloads: []protocol.Payload{{Name: "x"}}}, false},
 	}
 	for _, c := range cases {
 		if got := pooledCandidate(c.step); got != c.want {

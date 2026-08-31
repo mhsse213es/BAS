@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"audspect/agent/protocol"
 	"audspect/agent/sched"
 )
 
@@ -132,11 +133,11 @@ func runChecks(ctx context.Context, cats []SimCategory, selected map[string]bool
 // same name/value the orchestrator falls back to in GetPostureCatalog.
 const postureCatalogDefaultKey = "*"
 
-func checksToMeta(cats []SimCategory) []PostureCheckMeta {
-	var metas []PostureCheckMeta
+func checksToMeta(cats []SimCategory) []protocol.PostureCheckMeta {
+	var metas []protocol.PostureCheckMeta
 	for _, cat := range cats {
 		for _, c := range cat.Checks {
-			metas = append(metas, PostureCheckMeta{
+			metas = append(metas, protocol.PostureCheckMeta{
 				ID: c.ID, Phase: cat.Phase, TechniqueID: c.Technique.ID,
 				Name: c.Technique.Name, Severity: c.Severity,
 			})
@@ -149,8 +150,8 @@ func checksToMeta(cats []SimCategory) []PostureCheckMeta {
 // scenario WITHOUT executing any check (checks are deferred since Part A), plus
 // a postureCatalogDefaultKey entry for RunAllChecks() -- the set any unrecognized
 // scenario ID actually runs.
-func BuildPostureCatalog() map[string][]PostureCheckMeta {
-	out := make(map[string][]PostureCheckMeta)
+func BuildPostureCatalog() map[string][]protocol.PostureCheckMeta {
+	out := make(map[string][]protocol.PostureCheckMeta)
 	for _, sid := range knownPostureScenarios() {
 		if metas := checksToMeta(RunScenarioChecks(sid)); len(metas) > 0 {
 			out[sid] = metas

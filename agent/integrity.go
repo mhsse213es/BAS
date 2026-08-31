@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -26,12 +25,4 @@ func SelfHash() (string, error) {
 		return "", fmt.Errorf("hash binary: %w", err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// SignBody returns the hex-encoded HMAC-SHA256 of body keyed with secret.
-// Used to sign result payloads so the orchestrator can detect tampered results.
-func SignBody(body []byte, secret string) string {
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	return hex.EncodeToString(mac.Sum(nil))
 }

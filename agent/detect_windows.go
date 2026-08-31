@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"audspect/agent/protocol"
 )
 
 // alertChannels are the alert-tier Windows logs scanned for detections. Defender
@@ -28,7 +30,7 @@ var alertChannels = []string{
 // collectAlerts reads alertChannels in [from,to] and returns structured records,
 // newest-first, capped at maxEvents / maxBytes (bool = truncated). Best-effort:
 // any failure returns (nil,false). The agent does NOT decide what is a detection.
-func collectAlerts(from, to time.Time, maxEvents, maxBytes int) ([]AlertRecord, bool) {
+func collectAlerts(from, to time.Time, maxEvents, maxBytes int) ([]protocol.AlertRecord, bool) {
 	fromStr := from.UTC().Format("2006-01-02T15:04:05")
 	toStr := to.UTC().Format("2006-01-02T15:04:05")
 	logsArr := "'" + strings.Join(alertChannels, "','") + "'"
@@ -76,10 +78,10 @@ $out | ConvertTo-Json -Depth 3 -Compress
 	if err := json.Unmarshal([]byte(raw), &wire); err != nil {
 		return nil, false
 	}
-	recs := make([]AlertRecord, 0, len(wire))
+	recs := make([]protocol.AlertRecord, 0, len(wire))
 	for _, w := range wire {
 		ts, _ := time.Parse(time.RFC3339, w.TS)
-		recs = append(recs, AlertRecord{
+		recs = append(recs, protocol.AlertRecord{
 			Channel: w.Channel, Provider: w.Provider, EventID: w.EventID, Level: w.Level,
 			Timestamp: ts, ThreatName: strings.TrimSpace(w.ThreatName),
 			ProcessName: w.ProcessName, ProcessPath: w.ProcessPath,
@@ -92,7 +94,7 @@ $out | ConvertTo-Json -Depth 3 -Compress
 }
 
 // capRecords keeps at most maxEvents records and ≤ maxBytes of JSON (newest-first).
-func capRecords(recs []AlertRecord, maxEvents, maxBytes int) ([]AlertRecord, bool) {
+func capRecords(recs []protocol.AlertRecord, maxEvents, maxBytes int) ([]protocol.AlertRecord, bool) {
 	truncated := false
 	if len(recs) > maxEvents {
 		recs = recs[:maxEvents]

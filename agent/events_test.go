@@ -5,19 +5,21 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"audspect/agent/protocol"
 )
 
 func TestEventForResult(t *testing.T) {
 	cases := []struct {
 		name    string
-		res     ExecResult
+		res     protocol.ExecResult
 		typ     string
 		verdict string
 	}{
-		{"pass", ExecResult{ExitCode: 0}, "completed", "pass"},
-		{"fail", ExecResult{ExitCode: 1}, "completed", "fail"},
-		{"blocked", ExecResult{ExitCode: -1, Blocked: true}, "completed", "blocked"},
-		{"timeout", ExecResult{ExitCode: -1, TimedOut: true}, "timeout", ""},
+		{"pass", protocol.ExecResult{ExitCode: 0}, "completed", "pass"},
+		{"fail", protocol.ExecResult{ExitCode: 1}, "completed", "fail"},
+		{"blocked", protocol.ExecResult{ExitCode: -1, Blocked: true}, "completed", "blocked"},
+		{"timeout", protocol.ExecResult{ExitCode: -1, TimedOut: true}, "timeout", ""},
 	}
 	for _, c := range cases {
 		typ, verdict := eventForResult(c.res)
@@ -149,7 +151,7 @@ func TestEmitCritical_SurvivesQueueEviction(t *testing.T) {
 }
 
 func TestHeartbeatAdvertisesCapability(t *testing.T) {
-	hb := Heartbeat{AgentID: "a", ProtocolVersion: protocolVersion, EmitsEvents: true}
+	hb := protocol.Heartbeat{AgentID: "a", ProtocolVersion: protocol.ProtocolVersion, EmitsEvents: true}
 	raw, _ := json.Marshal(hb)
 	var m map[string]any
 	_ = json.Unmarshal(raw, &m)
