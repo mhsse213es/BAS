@@ -315,6 +315,13 @@ $LegacyAgentDir = Join-Path $RepoRoot "agent-legacy"
 Push-Location $LegacyAgentDir
 $env:GOTOOLCHAIN = "go1.20.14"
 $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
+# go1.20.14 predates Go workspace support (added in Go 1.21) and cannot
+# parse the repo-root go.work file at all -- it errors on the go.work
+# `go` directive's version format before it can even determine
+# agent-legacy is (or isn't) a workspace member. GOWORK=off makes this
+# build step ignore go.work entirely, exactly as it did before go.work
+# existed.
+$env:GOWORK = "off"
 
 $legacyGoVersion = (go version)
 Log "  Resolved toolchain: $legacyGoVersion"
@@ -332,7 +339,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Compress-Archive -Path "$OutDir\bas-agent-windows-legacy-amd64.exe" -DestinationPath "$OutDir\bas-agent-windows-legacy-amd64-setup.zip" -Force
 
-$env:GOTOOLCHAIN = ""; $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
+$env:GOTOOLCHAIN = ""; $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""; $env:GOWORK = ""
 Pop-Location
 
 # -- 5b. Build Linux agent binaries (amd64 + arm64) --------------------------
