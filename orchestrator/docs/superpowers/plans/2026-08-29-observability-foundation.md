@@ -759,7 +759,7 @@ And immediately after the `/ready` line added in Task 3:
 	// Metrics -- Prometheus text-exposition format. Top-level, so it
 	// bypasses LicenseGate the same way /health and /ready do. Gated by
 	// h.metricsToken when configured (see WithMetricsToken).
-	r.Handle("/metrics", h.metricsHandler())
+	r.Get("/metrics", h.metricsHandler().ServeHTTP)
 ```
 
 - [ ] **Step 7: Run the full `internal/api` suite**

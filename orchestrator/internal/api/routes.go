@@ -21,7 +21,7 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	r.Use(RequestLoggingMiddleware)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.StripSlashes)
 	r.Use(LicenseGate)
@@ -128,6 +128,11 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// reaches Postgres. Top-level, so it bypasses LicenseGate's
 	// prefix-based gating the same way /health does.
 	r.Get("/ready", h.handleReady)
+
+	// Metrics -- Prometheus text-exposition format. Top-level, so it
+	// bypasses LicenseGate the same way /health and /ready do. Gated by
+	// h.metricsToken when configured (see WithMetricsToken).
+	r.Get("/metrics", h.metricsHandler().ServeHTTP)
 
 	// Exercise tracking — no auth; single-use tokens gate access.
 	if len(tracker) > 0 && tracker[0] != nil {

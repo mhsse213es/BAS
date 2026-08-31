@@ -203,6 +203,12 @@ func (h *Handler) WithTicketing(m *ticketing.Manager) *Handler {
 	return h
 }
 
+// WithMetricsToken configures the optional bearer token gating GET /metrics.
+func (h *Handler) WithMetricsToken(token string) *Handler {
+	h.metricsToken = token
+	return h
+}
+
 // WithAgentSecret configures the optional agent shared secret.
 func (h *Handler) WithAgentSecret(s string) *Handler {
 	h.agentSecret = s

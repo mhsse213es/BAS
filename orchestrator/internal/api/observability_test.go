@@ -118,3 +118,44 @@ func TestHandleReady_DatabaseUnreachable_Returns503(t *testing.T) {
 		t.Errorf("status field = %v, want not_ready", body["status"])
 	}
 }
+
+func TestMetricsHandler_NoTokenConfigured_Open(t *testing.T) {
+	h := New(nil, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	h.metricsHandler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "go_goroutines") {
+		t.Errorf("response missing expected Go runtime collector output")
+	}
+}
+
+func TestMetricsHandler_TokenConfigured_RequiresBearer(t *testing.T) {
+	h := New(nil, ws.NewHub(), scenario.NewEngine(t.TempDir()), "").WithMetricsToken("s3cr3t")
+
+	noAuth := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	recNoAuth := httptest.NewRecorder()
+	h.metricsHandler().ServeHTTP(recNoAuth, noAuth)
+	if recNoAuth.Code != http.StatusUnauthorized {
+		t.Errorf("no-auth status = %d, want 401", recNoAuth.Code)
+	}
+
+	wrongAuth := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	wrongAuth.Header.Set("Authorization", "Bearer wrong")
+	recWrong := httptest.NewRecorder()
+	h.metricsHandler().ServeHTTP(recWrong, wrongAuth)
+	if recWrong.Code != http.StatusUnauthorized {
+		t.Errorf("wrong-token status = %d, want 401", recWrong.Code)
+	}
+
+	rightAuth := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rightAuth.Header.Set("Authorization", "Bearer s3cr3t")
+	recRight := httptest.NewRecorder()
+	h.metricsHandler().ServeHTTP(recRight, rightAuth)
+	if recRight.Code != http.StatusOK {
+		t.Errorf("correct-token status = %d, want 200", recRight.Code)
+	}
+}
