@@ -28,6 +28,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# A previous invocation of this script that failed mid-run (e.g. inside the
+# legacy-agent build section below) can leave GOTOOLCHAIN/GOWORK/GOOS/GOARCH/
+# CGO_ENABLED set in this PowerShell session, since $ErrorActionPreference =
+# "Stop" aborts the script before its own env-var reset lines run. Clear them
+# unconditionally at the start so a fresh invocation never inherits a
+# poisoned environment from an earlier failed one in the same window.
+$env:GOTOOLCHAIN = ""; $env:GOWORK = ""; $env:GOOS = ""; $env:GOARCH = ""; $env:CGO_ENABLED = ""
+
 $RepoRoot  = Split-Path -Parent $PSScriptRoot
 $DistDir   = Join-Path $RepoRoot "dist"
 $OutName   = "bas-install-$Version"
