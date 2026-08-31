@@ -2,5 +2,8 @@ go 1.26.0
 
 use (
 	./agent
+	./agent-legacy
+	./installer
 	./orchestrator
+	./tray
 )
