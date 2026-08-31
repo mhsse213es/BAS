@@ -757,6 +757,19 @@ func groupRecursiveFilter(args []any, groupID int64) (string, []any) {
 // pagination" section for why (last_update changes on every heartbeat, so
 // a fixed snapshot boundary is what prevents skip/duplicate rows across
 // pages of a single traversal).
+//
+// Known, accepted limitation: this guarantees no duplicates and no
+// collateral skip of rows that don't themselves get updated mid-traversal
+// -- but a row that heartbeats ITSELF during the traversal (bumping its
+// own last_update forward) becomes unreachable for the rest of that
+// traversal. Postgres has already overwritten the prior last_update value
+// by the time the next page queries, so there's no way to distinguish "was
+// already part of this traversal, just not reached yet" from "genuinely
+// new" without a much heavier transactional-snapshot mechanism this design
+// doesn't take on. The row isn't lost -- it simply appears on the next
+// fresh traversal (a new page-1 request) instead. Same trade-off most
+// keyset-paginated APIs accept. See
+// TestGetAgents_Paginated_ConcurrentHeartbeat_NoDuplicateOrCollateralSkip.
 type agentCursor struct {
 	Snapshot   time.Time `json:"snapshot"`
 	LastUpdate time.Time `json:"last_update"`
@@ -794,7 +807,47 @@ const agentBucketCaseSQL = `CASE
 		ELSE 'online'
 	END`
 
+// AgentTotals is the fleet-wide (or group-scoped) bucket count returned
+// alongside a paginated GetAgents page -- independent of whichever page or
+// filter is currently loaded client-side, so the KPI tiles stay accurate
+// even though the row list itself is paginated.
+type AgentTotals struct {
+	Online   int `json:"online"`
+	Degraded int `json:"degraded"`
+	Offline  int `json:"offline"`
+	Retired  int `json:"retired"`
+}
+
+// AgentsPage is GetAgents' response envelope when the caller triggers
+// pagination (limit or cursor present). With neither present, GetAgents
+// returns a bare []models.Agent instead -- see GetAgents' doc comment.
+type AgentsPage struct {
+	Items      []models.Agent `json:"items"`
+	NextCursor string         `json:"next_cursor,omitempty"`
+	HasMore    bool           `json:"has_more"`
+	Totals     AgentTotals    `json:"totals"`
+}
+
+// GetAgents lists agents. With neither "limit" nor "cursor" in the query
+// string it returns the full fleet as a bare JSON array (the long-standing
+// contract every other /api/agents caller in wwwroot/index.html depends
+// on). With either present, it switches to keyset pagination and returns
+// an AgentsPage envelope instead -- see
+// docs/superpowers/specs/2026-08-31-agents-endpoint-pagination-design.md
+// for why (last_update changes on every heartbeat, so plain OFFSET would
+// skip/duplicate rows across pages of one traversal).
 func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query()
+	limitParam := qs.Get("limit")
+	cursorParam := qs.Get("cursor")
+	if limitParam == "" && cursorParam == "" {
+		h.getAgentsUnpaginated(w, r)
+		return
+	}
+	h.getAgentsPaginated(w, r, limitParam, cursorParam)
+}
+
+func (h *Handler) getAgentsUnpaginated(w http.ResponseWriter, r *http.Request) {
 	query := "SELECT " + agentSelectColumns + " " + agentFromJoins
 	var args []any
 	if groupIDParam := r.URL.Query().Get("groupId"); groupIDParam != "" {
@@ -821,6 +874,150 @@ func (h *Handler) GetAgents(w http.ResponseWriter, r *http.Request) {
 		agents = []models.Agent{}
 	}
 	respond(w, agents)
+}
+
+func (h *Handler) getAgentsPaginated(w http.ResponseWriter, r *http.Request, limitParam, cursorParam string) {
+	qs := r.URL.Query()
+
+	limit := 100
+	if limitParam != "" {
+		n, err := strconv.Atoi(limitParam)
+		if err != nil || n < 1 {
+			jsonError(w, "invalid limit", http.StatusBadRequest)
+			return
+		}
+		limit = n
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	snapshot := time.Now()
+	var cursor agentCursor
+	if cursorParam != "" {
+		c, err := decodeAgentCursor(cursorParam)
+		if err != nil {
+			jsonError(w, "invalid cursor", http.StatusBadRequest)
+			return
+		}
+		cursor = c
+		snapshot = cursor.Snapshot
+	}
+
+	var hasGroup bool
+	var groupID int64
+	if groupIDParam := qs.Get("groupId"); groupIDParam != "" {
+		id, err := strconv.ParseInt(groupIDParam, 10, 64)
+		if err != nil {
+			jsonError(w, "invalid groupId", http.StatusBadRequest)
+			return
+		}
+		groupID, hasGroup = id, true
+	}
+
+	// Row-list query.
+	var args []any
+	args = append(args, snapshot)
+	where := []string{"a.last_update <= $" + strconv.Itoa(len(args))}
+
+	if hasGroup {
+		var frag string
+		frag, args = groupRecursiveFilter(args, groupID)
+		where = append(where, frag)
+	}
+	if cursorParam != "" {
+		args = append(args, cursor.LastUpdate, cursor.AgentID)
+		where = append(where, fmt.Sprintf("(a.last_update, a.agent_id) < ($%d, $%d)", len(args)-1, len(args)))
+	}
+	if qParam := qs.Get("q"); qParam != "" {
+		args = append(args, "%"+qParam+"%")
+		n := len(args)
+		where = append(where, fmt.Sprintf(
+			"(a.hostname ILIKE $%d OR a.agent_id ILIKE $%d OR a.ip_address ILIKE $%d OR g.name ILIKE $%d)",
+			n, n, n, n))
+	}
+	if bucketParam := qs.Get("bucket"); bucketParam != "" && bucketParam != "all" {
+		args = append(args, bucketParam)
+		where = append(where, agentBucketCaseSQL+" = $"+strconv.Itoa(len(args)))
+	}
+	args = append(args, limit+1)
+
+	query := "SELECT " + agentSelectColumns + " " + agentFromJoins +
+		" WHERE " + strings.Join(where, " AND ") +
+		" ORDER BY a.last_update DESC, a.agent_id DESC" +
+		" LIMIT $" + strconv.Itoa(len(args))
+
+	rows, err := h.db.Query(r.Context(), query, args...)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	agents := scanAgentRows(rows, h.hub, time.Now())
+	rows.Close()
+
+	hasMore := len(agents) > limit
+	if hasMore {
+		agents = agents[:limit]
+	}
+	if agents == nil {
+		agents = []models.Agent{}
+	}
+
+	var nextCursor string
+	if hasMore {
+		last := agents[len(agents)-1]
+		nextCursor = encodeAgentCursor(agentCursor{
+			Snapshot:   snapshot,
+			LastUpdate: last.LastUpdate,
+			AgentID:    last.AgentID,
+		})
+	}
+
+	// Totals query -- narrower, group-scoped only (not q/bucket-scoped, so
+	// the KPI tiles always reflect the true fleet/group-wide counts
+	// regardless of whatever filter is currently narrowing the row list --
+	// matches today's behavior, where the tiles have never been
+	// search-scoped either).
+	var totalsArgs []any
+	totalsQuery := "SELECT " + agentBucketCaseSQL + " AS bucket, COUNT(*) FROM agents a"
+	if hasGroup {
+		var frag string
+		frag, totalsArgs = groupRecursiveFilter(totalsArgs, groupID)
+		totalsQuery += " WHERE " + frag
+	}
+	totalsQuery += " GROUP BY bucket"
+
+	trows, err := h.db.Query(r.Context(), totalsQuery, totalsArgs...)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var totals AgentTotals
+	for trows.Next() {
+		var bucket string
+		var count int
+		if err := trows.Scan(&bucket, &count); err != nil {
+			continue
+		}
+		switch bucket {
+		case "online":
+			totals.Online = count
+		case "degraded":
+			totals.Degraded = count
+		case "offline":
+			totals.Offline = count
+		case "retired":
+			totals.Retired = count
+		}
+	}
+	trows.Close()
+
+	respond(w, AgentsPage{
+		Items:      agents,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+		Totals:     totals,
+	})
 }
 
 // PUT /api/agents/{agentId}/state — sets an agent's lifecycle state.
