@@ -10,6 +10,7 @@ import (
 	"github.com/audspect/bas/internal/cloudsink"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/license"
+	"github.com/audspect/bas/internal/webhooksink"
 	"github.com/audspect/bas/internal/ws"
 )
 
@@ -159,6 +160,14 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// (not a separate listener) because unlike SFTP/SMTP/DNS these are all
 	// HTTPS REST APIs -- there is no separate protocol to bind a port for.
 	r.Mount("/cloudsink", cloudsink.Routes(h.db))
+
+	// Webhook / code-repository exfiltration channel (internal/webhooksink)
+	// -- Slack/Teams incoming-webhook shape (T1567.004) and GitHub/GitLab
+	// Gist/Snippet-API shape (T1567.001). Two different ATT&CK techniques
+	// because the real abuse primitives genuinely differ, not one shape
+	// flattened for convenience. Same unauthenticated posture and same
+	// mounted-on-the-existing-server reasoning as /cloudsink above.
+	r.Mount("/webhooksink", webhooksink.Routes(h.db))
 
 	// ── Authenticated endpoints (JWT required) ────────────────────────────
 	r.Group(func(r chi.Router) {

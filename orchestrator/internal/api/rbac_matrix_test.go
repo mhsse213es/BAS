@@ -432,6 +432,12 @@ var publicRoutes = map[string]bool{
 	"POST /cloudsink/dropbox/2/files/upload":                       true,
 	"POST /cloudsink/gcs/upload/storage/v1/b/{bucket}/o":           true,
 	"POST /cloudsink/box/2.0/files/content":                        true,
+	// Webhook / code-repository exfiltration channel (internal/webhooksink)
+	// -- same unauthenticated posture as /cloudsink immediately above.
+	"POST /webhooksink/slack/services/{a}/{b}/{c}":                              true,
+	"POST /webhooksink/teams/webhookb2/{guid1}/IncomingWebhook/{guid2}/{guid3}": true,
+	"POST /webhooksink/github/gists":                                            true,
+	"POST /webhooksink/gitlab/api/v4/snippets":                                  true,
 }
 
 func tierAllows(tier authTier, perm auth.Permission, role auth.Role) bool {
