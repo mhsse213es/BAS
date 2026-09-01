@@ -47,17 +47,6 @@ func solidBrush(color win.COLORREF) win.HBRUSH {
 	return b
 }
 
-// iconPen creates a geometric pen with rounded end caps -- plain
-// CreatePen always draws flat/square caps, which reads as blocky and cheap
-// at the small sizes these hand-drawn icon glyphs render at. Rounded caps
-// alone (no anti-aliasing available without GDI+, out of scope) noticeably
-// soften every icon's stroke ends.
-func iconPen(color win.COLORREF, width int) win.HPEN {
-	p, _ := win.ExtCreatePen(co.PS_TYPE_GEOMETRIC, co.PS_STYLE_SOLID, co.PS_ENDCAP_ROUND, width,
-		&win.LOGBRUSH{Style: co.BRS_SOLID, Color: color}, nil)
-	return p
-}
-
 func segoeFont(height int, weight co.FW) win.HFONT {
 	_, h := dpiPos(0, height)
 	f, _ := win.CreateFont(
@@ -135,37 +124,11 @@ func (r *resources) drawDot(hdc win.HDC, x, y, diameter int, color win.COLORREF)
 	hdc.Ellipse(win.RECT{Left: int32(x2), Top: int32(y2), Right: int32(x2 + d), Bottom: int32(y2 + d)})
 }
 
-// drawIconShield draws a simple pentagon shield outline, used for the
-// header badge and (reused, colored per-status) the Endpoint Security
-// Controls card header.
-func (r *resources) drawIconShield(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen := iconPen(color, dpiXOnly(2))
-	defer pen.DeleteObject()
-	hdc.SelectObjectPen(pen)
-	hdc.SelectObjectBrush(r.brushCard) // unfilled look: fill matches card bg
-	pts := []win.POINT{
-		{X: int32(x + size/2), Y: int32(y)},
-		{X: int32(x + size), Y: int32(y + size/4)},
-		{X: int32(x + size), Y: int32(y + size/2)},
-		{X: int32(x + size/2), Y: int32(y + size)},
-		{X: int32(x), Y: int32(y + size/2)},
-		{X: int32(x), Y: int32(y + size/4)},
-	}
-	hdc.Polygon(pts)
-}
-
-// drawIconShieldCheck draws the shield outline with a checkmark inside --
-// specifically "protection verified," a closer match for a controls
-// summary than a bare shield, which only implies "security-related"
-// without saying whether anything was actually confirmed active.
+// drawIconShieldCheck draws the ENDPOINT SECURITY CONTROLS section icon,
+// rasterized from the user-supplied endpointsecuritucontrol.svg design (see
+// statuscanvas_icons_windows.go).
 func (r *resources) drawIconShieldCheck(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	r.drawIconShield(hdc, x, y, size, color)
-	pen := iconPen(color, dpiXOnly(2))
-	defer pen.DeleteObject()
-	hdc.SelectObjectPen(pen)
-	hdc.MoveToEx(x+size*3/10, y+size/2)
-	hdc.LineTo(x+size*9/20, y+size*13/20)
-	hdc.LineTo(x+size*3/4, y+size*3/10)
+	drawTintedIcon(hdc, "endpointsecuritycontrols", iconEndpointSecurityControlsPNG, x, y, size, color)
 }
 
 // stateColor maps the same connection/lifecycle state logic used
@@ -277,64 +240,17 @@ func (r *resources) drawHero(hdc win.HDC, snap StatusSnapshot) {
 	r.drawText(hdc, "HOSTNAME", dpiRect(696, 124, 176, 16), r.fontEyebrow, colMuted, co.DT_RIGHT)
 }
 
-// drawIconSignal draws three ascending signal-strength bars with rounded
-// tops -- softer and more deliberate-looking than plain rectangles at this
-// small a size.
-// drawIconNetwork draws three connected nodes -- clearer shorthand for
-// "agent <-> server connectivity" than the previous bare signal-strength
-// bars, which read more like a wifi/cellular indicator than a link status.
+// drawIconNetwork draws the CONNECTION section icon, rasterized from the
+// user-supplied connection.svg design (see statuscanvas_icons_windows.go).
 func (r *resources) drawIconNetwork(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen := iconPen(color, dpiXOnly(2))
-	defer pen.DeleteObject()
-	hdc.SelectObjectPen(pen)
-
-	top := win.POINT{X: int32(x + size/2), Y: int32(y)}
-	bl := win.POINT{X: int32(x), Y: int32(y + size)}
-	br := win.POINT{X: int32(x + size), Y: int32(y + size)}
-	hdc.MoveToEx(int(top.X), int(top.Y))
-	hdc.LineTo(int(bl.X), int(bl.Y))
-	hdc.MoveToEx(int(top.X), int(top.Y))
-	hdc.LineTo(int(br.X), int(br.Y))
-	hdc.MoveToEx(int(bl.X), int(bl.Y))
-	hdc.LineTo(int(br.X), int(br.Y))
-
-	fill := solidBrush(color)
-	defer fill.DeleteObject()
-	hdc.SelectObjectBrush(fill)
-	// size/6 (≈2px at this icon's 16px size) reads as a stray dot, not a
-	// node -- large enough to register as a distinct shape read alongside
-	// the connecting lines.
-	nodeR := int32(size / 4)
-	for _, n := range []win.POINT{top, bl, br} {
-		hdc.Ellipse(win.RECT{Left: n.X - nodeR, Top: n.Y - nodeR, Right: n.X + nodeR, Bottom: n.Y + nodeR})
-	}
+	drawTintedIcon(hdc, "connection", iconConnectionPNG, x, y, size, color)
 }
 
-// drawIconPlayCircle draws a circled play triangle -- reads unambiguously
-// as "a task/simulation is actively executing," which a clock face (this
-// icon's previous design) doesn't convey on its own; a clock reads as
-// "time" or "schedule," not "running now."
+// drawIconPlayCircle draws the CURRENT OPERATION section icon, rasterized
+// from the user-supplied currentoperation.svg design (see
+// statuscanvas_icons_windows.go).
 func (r *resources) drawIconPlayCircle(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen := iconPen(color, dpiXOnly(2))
-	defer pen.DeleteObject()
-	hdc.SelectObjectPen(pen)
-	hdc.SelectObjectBrush(r.brushCard)
-	hdc.Ellipse(win.RECT{Left: int32(x), Top: int32(y), Right: int32(x + size), Bottom: int32(y + size)})
-
-	fill := solidBrush(color)
-	defer fill.DeleteObject()
-	hdc.SelectObjectBrush(fill)
-	cx, cy := x+size/2, y+size/2
-	tw := size * 3 / 8
-	// Optically centering a triangle inside a circle needs a slight right
-	// shift -- a triangle's own centroid sits left of its bounding box's
-	// visual center, so a geometrically-centered triangle looks off-center.
-	shift := tw / 6
-	hdc.Polygon([]win.POINT{
-		{X: int32(cx - tw/2 + shift), Y: int32(cy - tw/2)},
-		{X: int32(cx - tw/2 + shift), Y: int32(cy + tw/2)},
-		{X: int32(cx + tw/2 + shift), Y: int32(cy)},
-	})
+	drawTintedIcon(hdc, "currentoperation", iconCurrentOperationPNG, x, y, size, color)
 }
 
 func (r *resources) drawProgressBar(hdc win.HDC, rc win.RECT, pct int) {
@@ -534,60 +450,17 @@ func (r *resources) drawControlsCard(hdc win.HDC, c statusclient.ControlsRespons
 	}
 }
 
-// drawIconClipboardCheck draws a clipboard (body + top clip tab) with a
-// checkmark -- reads specifically as "a record of collected results," a
-// closer match for an evidence/last-run panel than a bare checkmark
-// circle, which could mean any generic "OK" status.
+// drawIconClipboardCheck draws the EVIDENCE section icon, rasterized from
+// the user-supplied evidence.svg design (see statuscanvas_icons_windows.go).
 func (r *resources) drawIconClipboardCheck(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen := iconPen(color, dpiXOnly(2))
-	defer pen.DeleteObject()
-	hdc.SelectObjectPen(pen)
-	hdc.SelectObjectBrush(r.brushCard)
-
-	cxy, cyy := dpiPos(2, 2)
-	hdc.RoundRect(win.RECT{Left: int32(x), Top: int32(y + size/6), Right: int32(x + size), Bottom: int32(y + size)},
-		win.SIZE{Cx: int32(cxy), Cy: int32(cyy)})
-	tabW := size * 2 / 5
-	hdc.RoundRect(win.RECT{Left: int32(x + size/2 - tabW/2), Top: int32(y), Right: int32(x + size/2 + tabW/2), Bottom: int32(y + size/4)},
-		win.SIZE{Cx: int32(cxy), Cy: int32(cyy)})
-
-	hdc.MoveToEx(x+size*3/10, y+size*11/20)
-	hdc.LineTo(x+size*9/20, y+size*7/10)
-	hdc.LineTo(x+size*7/10, y+size*2/5)
+	drawTintedIcon(hdc, "evidence", iconEvidencePNG, x, y, size, color)
 }
 
-// drawIconShieldLock draws the same shield outline as
-// ENDPOINT SECURITY CONTROLS with a small padlock centered inside --
-// "tamper resistance / policy enforcement" is what Self-Protection
-// actually reports on, which a location pin (the original icon here)
-// didn't represent at all.
+// drawIconShieldLock draws the SELF-PROTECTION section icon, rasterized
+// from the user-supplied selfprotection.svg design (see
+// statuscanvas_icons_windows.go).
 func (r *resources) drawIconShieldLock(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	r.drawIconShield(hdc, x, y, size, color)
-
-	lockW := size / 2
-	lockH := size * 5 / 16
-	lx := x + size/2 - lockW/2
-	ly := y + size*9/16
-
-	// The shackle needs a thin pen relative to its own radius to read as a
-	// ring rather than a disk -- the previous 2px-pen/2px-radius version
-	// had stroke width equal to the radius, so the "hole" in the middle
-	// vanished and it just looked like a solid blob.
-	shacklePen := iconPen(color, dpiXOnly(1))
-	defer shacklePen.DeleteObject()
-	hdc.SelectObjectPen(shacklePen)
-	hdc.SelectObjectBrush(r.brushCard)
-	shackleR := lockW * 3 / 8
-	scx, scy := x+size/2, ly
-	hdc.Ellipse(win.RECT{Left: int32(scx - shackleR), Top: int32(scy - shackleR), Right: int32(scx + shackleR), Bottom: int32(scy + shackleR)})
-
-	fill := solidBrush(color)
-	defer fill.DeleteObject()
-	hdc.SelectObjectBrush(fill)
-	hdc.SelectObjectPen(shacklePen)
-	bodyCx, bodyCy := dpiPos(1, 1)
-	hdc.RoundRect(win.RECT{Left: int32(lx), Top: int32(ly), Right: int32(lx + lockW), Bottom: int32(ly + lockH)},
-		win.SIZE{Cx: int32(bodyCx), Cy: int32(bodyCy)})
+	drawTintedIcon(hdc, "selfprotection", iconSelfProtectionPNG, x, y, size, color)
 }
 
 // drawStatTile paints an elevated-surface tile with a large value and a
@@ -656,18 +529,10 @@ func healthRow(name string, healthy bool) controlRow {
 	return controlRow{name, "CHECK", colWarning}
 }
 
+// drawIconMonitor draws the RESOURCES section icon, rasterized from the
+// user-supplied resources.svg design (see statuscanvas_icons_windows.go).
 func (r *resources) drawIconMonitor(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen := iconPen(color, dpiXOnly(2))
-	defer pen.DeleteObject()
-	hdc.SelectObjectPen(pen)
-	hdc.SelectObjectBrush(r.brushCard)
-	screenH := size * 2 / 3
-	hdc.RoundRect(win.RECT{Left: int32(x), Top: int32(y), Right: int32(x + size), Bottom: int32(y + screenH)}, win.SIZE{Cx: 3, Cy: 3})
-	standX := x + size/2
-	hdc.MoveToEx(standX, y+screenH)
-	hdc.LineTo(standX, y+size)
-	hdc.MoveToEx(x+size/4, y+size)
-	hdc.LineTo(x+size*3/4, y+size)
+	drawTintedIcon(hdc, "resources", iconResourcesPNG, x, y, size, color)
 }
 
 func (r *resources) drawResourcesCard(hdc win.HDC, s statusclient.StatusResponse) {
@@ -688,18 +553,11 @@ func (r *resources) drawResourcesCard(hdc win.HDC, s statusclient.StatusResponse
 	}
 }
 
+// drawIconPulse draws the RECENT ACTIVITY section icon, rasterized from
+// the user-supplied recentactivity.svg design (see
+// statuscanvas_icons_windows.go).
 func (r *resources) drawIconPulse(hdc win.HDC, x, y, size int, color win.COLORREF) {
-	pen := iconPen(color, dpiXOnly(2))
-	defer pen.DeleteObject()
-	hdc.SelectObjectPen(pen)
-	pts := []win.POINT{
-		{X: int32(x), Y: int32(y + size/2)},
-		{X: int32(x + size/3), Y: int32(y + size/2)},
-		{X: int32(x + size/2), Y: int32(y)},
-		{X: int32(x + size*2/3), Y: int32(y + size)},
-		{X: int32(x + size), Y: int32(y + size/2)},
-	}
-	hdc.Polyline(pts)
+	drawTintedIcon(hdc, "recentactivity", iconRecentActivityPNG, x, y, size, color)
 }
 
 // drawActivityCard shows the most recent 8 entries, newest first (no
