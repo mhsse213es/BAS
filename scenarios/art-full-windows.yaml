@@ -17,6 +17,7 @@ description: >
   single endpoint. An agent runs one scenario at a time; starting another
   mid-run is rejected.
 author: Audspect Research
+executable: true
 supported_os: [windows]
 tags:
   - art

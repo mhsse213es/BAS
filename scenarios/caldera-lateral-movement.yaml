@@ -7,6 +7,7 @@ description: >
   Caldera library (2000+ abilities). Falls back to 5 inline steps if
   Caldera is not reachable.
 author: Audspect Research
+executable: true
 supported_os: [windows]
 tags:
   - caldera

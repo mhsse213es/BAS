@@ -9,6 +9,7 @@ description: >
   With all plugins loaded: up to 2000+ abilities.
   Requires CALDERA_URL and CALDERA_API_KEY to be configured.
 author: Audspect Research
+executable: true
 supported_os: [windows]
 tags:
   - caldera
