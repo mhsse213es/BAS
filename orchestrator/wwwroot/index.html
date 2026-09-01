@@ -18610,7 +18610,16 @@ function loadAgtOverview(agentId) {
       kv('Hostname',     x(a.hostname))    + kv('Agent ID', '<code style="font-size:0.75rem">' + x(a.agentId) + '</code>') +
       kv('IP Address',   x(a.ipAddress))   + kv('OS', x(a.osVersion || '—')) +
       kv('Username',     x(a.username))    + kv('Environment', x(a.envLabel || '—')) +
-      kv('Connectivity', '<span class="sbadge s-' + x(a.status||'idle') + '">' + x(a.status||'idle') + '</span>') +
+      kv('Connectivity', '<span class="sbadge s-' + x(a.status||'idle') + '">' + x(a.status||'idle') + '</span>' +
+        // Same gap the System Tree table row already guards against (see
+        // renderAgentRows): heartbeat (HTTP, every 30s) and the WebSocket
+        // task-delivery channel are separate connections, and a fresh
+        // heartbeat alone doesn't mean a run/sweep can actually reach this
+        // agent. Previously this drawer showed only the heartbeat status,
+        // so an agent could read "idle" here while genuinely unable to
+        // receive any dispatch -- exactly what caused a stuck EM sweep to
+        // look like nothing was wrong from this view.
+        (a.status !== 'offline' && !a.wsConnected ? ' <span class="sbadge s-paused" title="Heartbeat is reaching the server, but the WebSocket task channel is down -- dispatching a run to this agent will fail until it reconnects. Often a proxy/firewall blocking the WS Upgrade handshake.">&#9888; Task channel down</span>' : '')) +
       kv('Lifecycle',    '<span class="sbadge s-' + x(a.state||'active') + '" style="color:' + stateColor + '">' + x(a.state||'active') + '</span>') +
       kv('Last Seen',    ago(a.lastUpdate)) + kv('Enrolled', a.enrolledAt ? ago(a.enrolledAt) : '—') +
       kv('Binary Trusted', a.binaryTrusted ? '<span style="color:var(--success)">&#10003; Verified</span>' : '<span style="color:var(--warning)">&#9888; Unverified</span>') +
