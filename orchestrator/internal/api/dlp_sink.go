@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -81,6 +82,23 @@ func (h *Handler) issueSinkTokensAndSubstitute(ctx context.Context, runID, publi
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_DNS_SERVER}}", dnsServerHost(publicBaseURL))
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_DNS_DOMAIN}}", dnssink.DomainSuffix)
 		}
+		if strings.Contains(steps[i].Command, "{{SINK_SFTP_HOST}}") || strings.Contains(steps[i].Command, "{{SINK_SFTP_PORT}}") {
+			// Unlike the DNS block above, this does NOT issue its own
+			// token: SFTP reuses the existing 32-byte {{SINK_TOKEN}}
+			// placeholder directly (no DNS-style label-length constraint),
+			// and every real SFTP-wired step's command contains
+			// {{SINK_TOKEN}} too (e.g. "{{SINK_TOKEN}}.dat" as the upload
+			// filename) -- the unconditional block above already issues
+			// and substitutes it whenever present. Re-issuing a second
+			// token here would insert an orphaned, never-referenced
+			// dlp_sink_tokens row on every SFTP step (the first token is
+			// the one that actually ends up in the command the agent
+			// runs; ReplaceAll on an already-substituted {{SINK_TOKEN}}
+			// is a silent no-op) -- this block only ever substitutes the
+			// two placeholders it's uniquely responsible for.
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_SFTP_HOST}}", sftpSinkHost(publicBaseURL))
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_SFTP_PORT}}", sftpSinkPort())
+		}
 	}
 	return steps, nil
 }
@@ -96,6 +114,29 @@ func dnsServerHost(publicBaseURL string) string {
 		return publicBaseURL
 	}
 	return u.Hostname()
+}
+
+// sftpSinkHost resolves the {{SINK_SFTP_HOST}} placeholder: an explicit
+// SINK_SFTP_HOST environment override if set (for deployments where the
+// externally reachable SFTP address differs from publicBaseURL's host,
+// e.g. behind NAT), otherwise the same derivation dnsServerHost already
+// uses -- no new derivation logic.
+func sftpSinkHost(publicBaseURL string) string {
+	if v := os.Getenv("SINK_SFTP_HOST"); v != "" {
+		return v
+	}
+	return dnsServerHost(publicBaseURL)
+}
+
+// sftpSinkPort resolves the {{SINK_SFTP_PORT}} placeholder: the
+// configured SINK_SFTP_PORT (the host-published port an external client
+// actually connects to, NOT the container-internal :22 the listener
+// itself binds), defaulting to 2222 if unset.
+func sftpSinkPort() string {
+	if v := os.Getenv("SINK_SFTP_PORT"); v != "" {
+		return v
+	}
+	return "2222"
 }
 
 type dlpSinkRequest struct {

