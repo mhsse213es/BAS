@@ -101,5 +101,7 @@ func writeReceipt(ctx context.Context, db *pgxpool.Pool, token, sourceIP, channe
 // internal/api/routes.go.
 func Routes(db *pgxpool.Pool) chi.Router {
 	r := chi.NewRouter()
+	r.Post("/slack/services/{a}/{b}/{c}", handleSlackWebhook(db))
+	r.Post("/teams/webhookb2/{guid1}/IncomingWebhook/{guid2}/{guid3}", handleTeamsWebhook(db))
 	return r
 }
