@@ -66,11 +66,15 @@ func (e *Engine) WriteAuditPack(ctx context.Context, agentID string, mapper *com
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 
-	dirName := fmt.Sprintf("bas-audit-pack-%s-%s",
-		report.Agent.Hostname, time.Now().UTC().Format("2006-01-02"))
-	if report.Agent.Hostname == "" {
-		dirName = fmt.Sprintf("bas-audit-pack-%s-%s", agentID, time.Now().UTC().Format("2006-01-02"))
+	// Matches internal/api's buildReportFilename convention (the outer .zip
+	// this folder ships inside gets the same name minus extension) so a
+	// customer sees one consistent, sortable name whether they're looking
+	// at the downloaded zip or what's inside it once extracted.
+	scope := report.Agent.Hostname
+	if scope == "" {
+		scope = agentID
 	}
+	dirName := fmt.Sprintf("Audspect_Audit_Pack_%s_%s", sanitize(scope), time.Now().UTC().Format("2006-01-02_15-04-05"))
 	prefix := dirName + "/"
 
 	// README.txt

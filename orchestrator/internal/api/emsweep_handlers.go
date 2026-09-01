@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -226,7 +225,7 @@ func (h *Handler) GetEMSweepPDF(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	fname := fmt.Sprintf("bas-em-sweep-%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), time.Now().UTC().Format("2006-01-02"))
+	fname := buildReportFilename("Endpoint_Mastery_Sweep", rep.Agent.Hostname, "pdf")
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	h.auditLog(r, "report.export", id, map[string]any{"format": "pdf", "type": "em_sweep"}, "ok")

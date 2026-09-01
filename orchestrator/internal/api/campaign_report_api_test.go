@@ -71,7 +71,7 @@ func TestGetCampaignPDF_Success(t *testing.T) {
 		if !strings.HasPrefix(rec.Body.String(), "%PDF") {
 			t.Fatal("body is not a PDF")
 		}
-		if !regexp.MustCompile(`filename="bas-campaign-.*\.pdf"`).MatchString(rec.Header().Get("Content-Disposition")) {
+		if !regexp.MustCompile(`filename="Audspect_Campaign_Report_.*\.pdf"`).MatchString(rec.Header().Get("Content-Disposition")) {
 			t.Fatalf("content-disposition = %q", rec.Header().Get("Content-Disposition"))
 		}
 	})
@@ -107,7 +107,7 @@ func TestGetCampaignCSV_AllChildRuns(t *testing.T) {
 		if !strings.Contains(body, "T1059.001") || !strings.Contains(body, "T1003.001") {
 			t.Fatal("campaign CSV should include rows from both child runs")
 		}
-		if !regexp.MustCompile(`filename="bas-campaign-forensic-.*\.csv"`).MatchString(rec.Header().Get("Content-Disposition")) {
+		if !regexp.MustCompile(`filename="Audspect_Campaign_Forensic_.*\.csv"`).MatchString(rec.Header().Get("Content-Disposition")) {
 			t.Fatalf("content-disposition = %q", rec.Header().Get("Content-Disposition"))
 		}
 		// unknown campaign → 404
@@ -136,8 +136,8 @@ func TestGetCampaignCSV_FilterApplied(t *testing.T) {
 		if strings.Contains(body, "T1059.001") || strings.Contains(body, "T1003.001") {
 			t.Fatalf("filter=prevented should drop the failing rows:\n%s", body)
 		}
-		if !strings.Contains(rec.Header().Get("Content-Disposition"), "-prevented-") {
-			t.Fatalf("filename missing -prevented- suffix: %q", rec.Header().Get("Content-Disposition"))
+		if !strings.Contains(rec.Header().Get("Content-Disposition"), "-prevented_") {
+			t.Fatalf("filename missing -prevented filter marker: %q", rec.Header().Get("Content-Disposition"))
 		}
 	})
 }

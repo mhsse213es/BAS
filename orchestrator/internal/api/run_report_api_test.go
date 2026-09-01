@@ -201,7 +201,7 @@ func TestGetRunPDF_Success(t *testing.T) {
 			t.Fatalf("body is not a PDF (len=%d)", rec.Body.Len())
 		}
 		cd := rec.Header().Get("Content-Disposition")
-		if !regexp.MustCompile(`filename="bas-report-.*\.pdf"`).MatchString(cd) {
+		if !regexp.MustCompile(`filename="Audspect_BAS_Report_.*\.pdf"`).MatchString(cd) {
 			t.Fatalf("content-disposition = %q", cd)
 		}
 	})
@@ -242,7 +242,7 @@ func TestGetRunForensicCSV_Success(t *testing.T) {
 		if !strings.Contains(body, "T1059.001") {
 			t.Fatalf("CSV missing seeded technique T1059.001:\n%s", body)
 		}
-		if !regexp.MustCompile(`filename="bas-forensic-.*\.csv"`).MatchString(rec.Header().Get("Content-Disposition")) {
+		if !regexp.MustCompile(`filename="Audspect_BAS_Forensic_.*\.csv"`).MatchString(rec.Header().Get("Content-Disposition")) {
 			t.Fatalf("content-disposition = %q", rec.Header().Get("Content-Disposition"))
 		}
 	})
@@ -269,8 +269,8 @@ func TestGetRunForensicCSV_FilterApplied(t *testing.T) {
 		if !strings.Contains(body, "T1547.001") {
 			t.Fatalf("filter=prevented should keep the passing T1547.001 row:\n%s", body)
 		}
-		if !strings.Contains(rec.Header().Get("Content-Disposition"), "-prevented-") {
-			t.Fatalf("filename missing -prevented- suffix: %q", rec.Header().Get("Content-Disposition"))
+		if !strings.Contains(rec.Header().Get("Content-Disposition"), "-prevented_") {
+			t.Fatalf("filename missing -prevented filter marker: %q", rec.Header().Get("Content-Disposition"))
 		}
 	})
 }

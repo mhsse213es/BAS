@@ -118,7 +118,7 @@ func TestGetFullReportPDF_Success(t *testing.T) {
 		if !strings.HasPrefix(rec.Body.String(), "%PDF") {
 			t.Fatal("body is not a PDF")
 		}
-		if !regexp.MustCompile(`filename="bas-report-.*\.pdf"`).MatchString(rec.Header().Get("Content-Disposition")) {
+		if !regexp.MustCompile(`filename="Audspect_BAS_Report_.*\.pdf"`).MatchString(rec.Header().Get("Content-Disposition")) {
 			t.Fatalf("content-disposition = %q", rec.Header().Get("Content-Disposition"))
 		}
 	})
@@ -207,8 +207,8 @@ func TestGetAuditPack_ZIPStructure(t *testing.T) {
 		if err != nil {
 			t.Fatalf("not a valid zip: %v", err)
 		}
-		// Audit-pack entries carry a "bas-audit-pack-<host>-<date>/" directory
-		// prefix, so match by suffix rather than exact name.
+		// Audit-pack entries carry an "Audspect_Audit_Pack_<host>_<timestamp>/"
+		// directory prefix, so match by suffix rather than exact name.
 		hasSuffix := func(suffix string) bool {
 			for _, f := range zr.File {
 				if strings.HasSuffix(f.Name, suffix) {
@@ -365,5 +365,44 @@ func TestSanitizeFilename_Table(t *testing.T) {
 	exactly32 := strings.Repeat("y", 32)
 	if got := sanitizeFilename(exactly32); got != exactly32 {
 		t.Errorf("exactly-32 mangled: %q", got)
+	}
+}
+
+func TestBuildReportFilename_Shape(t *testing.T) {
+	re := regexp.MustCompile(`^Audspect_BAS_Report_AcmeCorp_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.pdf$`)
+	got := buildReportFilename("BAS_Report", "AcmeCorp", "pdf")
+	if !re.MatchString(got) {
+		t.Errorf("buildReportFilename(...) = %q, want to match %s", got, re.String())
+	}
+}
+
+func TestBuildReportFilename_SanitizesScope(t *testing.T) {
+	got := buildReportFilename("Campaign_Report", "Acme/Corp: Prod", "csv")
+	if strings.ContainsAny(got, "/\\:") {
+		t.Errorf("buildReportFilename(...) = %q, still contains unsafe characters", got)
+	}
+	if !strings.Contains(got, "Acme_Corp__Prod") {
+		t.Errorf("buildReportFilename(...) = %q, want sanitized scope Acme_Corp__Prod", got)
+	}
+}
+
+func TestBuildReportFilename_EmptyScopeFallsBackToReport(t *testing.T) {
+	got := buildReportFilename("Run_Export", "", "json")
+	if !strings.Contains(got, "_report_") {
+		t.Errorf("buildReportFilename(...) = %q, want a report fallback for empty scope", got)
+	}
+}
+
+func TestBuildReportFilename_CompositeScopeWithFilterSuffixNotTruncated(t *testing.T) {
+	// Regression: buildReportFilename previously reused sanitizeFilename's
+	// 32-char cap, which silently truncated a composite scope (multiple
+	// identifying pieces joined together, e.g. "<scenario>-<host>-<filter>")
+	// before a trailing filter suffix like "-prevented" ever made it into
+	// the filename -- see TestGetCampaignCSV_FilterApplied/
+	// TestGetRunForensicCSV_FilterApplied, which caught this for real.
+	scope := "Fleet_Wide_Rollout_Scenario-DESKTOP-LONGHOSTNAME01-prevented"
+	got := buildReportFilename("BAS_Forensic", scope, "csv")
+	if !strings.Contains(got, "-prevented_") {
+		t.Errorf("buildReportFilename(...) = %q, filter suffix was truncated off a long composite scope", got)
 	}
 }

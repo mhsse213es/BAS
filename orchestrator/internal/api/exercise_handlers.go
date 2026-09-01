@@ -485,7 +485,7 @@ func (h *Handler) GetExerciseReportJSON(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="exercise-%s.json"`, id))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Exercise_Report", id, "json")))
 	if err := reporting.ExerciseReportJSON(w, rep); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -514,7 +514,7 @@ func (h *Handler) GetExerciseReportPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="exercise-%s.pdf"`, id))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, buildReportFilename("Exercise_Report", id, "pdf")))
 	if err := reporting.ExerciseReportPDF(r.Context(), w, rep); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -529,7 +529,7 @@ func (h *Handler) GetExerciseReportCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="exercise-%s.csv"`, id))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Exercise_Report", id, "csv")))
 	if err := reporting.ExerciseReportCSV(w, rep); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

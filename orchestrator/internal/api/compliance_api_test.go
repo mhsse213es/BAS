@@ -200,7 +200,7 @@ func TestGetComplianceReport_FormatCSV(t *testing.T) {
 		if rec.Header().Get("Content-Type") != "text/csv; charset=utf-8" {
 			t.Fatalf("content-type = %q", rec.Header().Get("Content-Type"))
 		}
-		if !regexp.MustCompile(`filename="compliance-SEBI_CSCRF-agent-cr-csv-.*\.csv"`).MatchString(rec.Header().Get("Content-Disposition")) {
+		if !regexp.MustCompile(`filename="Audspect_Compliance_Report_.*\.csv"`).MatchString(rec.Header().Get("Content-Disposition")) {
 			t.Fatalf("content-disposition = %q", rec.Header().Get("Content-Disposition"))
 		}
 		if !strings.HasPrefix(rec.Body.String(), "Framework,Version,Control ID,Control Name,Domain,Category,Validation,Status,Tested,Passed,Failed,Failing Techniques") {
@@ -224,7 +224,7 @@ func TestGetComplianceReport_FormatJSON(t *testing.T) {
 		if rec.Header().Get("Content-Type") != "application/json" {
 			t.Fatalf("content-type = %q", rec.Header().Get("Content-Type"))
 		}
-		if !regexp.MustCompile(`filename="compliance-SEBI_CSCRF-agent-cr-json-.*\.json"`).MatchString(rec.Header().Get("Content-Disposition")) {
+		if !regexp.MustCompile(`filename="Audspect_Compliance_Report_.*\.json"`).MatchString(rec.Header().Get("Content-Disposition")) {
 			t.Fatalf("content-disposition = %q", rec.Header().Get("Content-Disposition"))
 		}
 		var out map[string]any

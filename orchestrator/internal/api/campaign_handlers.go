@@ -403,7 +403,7 @@ func (h *Handler) GetCampaignPDF(w http.ResponseWriter, r *http.Request) {
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
 	}
-	fname := fmt.Sprintf("bas-campaign-%s-%s%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), sanitizeFilename(rep.ScenarioName), filterSuffix, time.Now().UTC().Format("2006-01-02"))
+	fname := buildReportFilename("Campaign_Report", rep.Agent.Hostname+"-"+rep.ScenarioName+filterSuffix, "pdf")
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	h.auditLog(r, "report.export", chi.URLParam(r, "id"), map[string]any{"format": "pdf", "type": "campaign"}, "ok")
@@ -450,7 +450,7 @@ func (h *Handler) GetCampaignCSV(w http.ResponseWriter, r *http.Request) {
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
 	}
-	fname := fmt.Sprintf("bas-campaign-forensic-%s-%s%s-%s.csv", sanitizeFilename(campName), sanitizeFilename(scenarioName), filterSuffix, time.Now().UTC().Format("2006-01-02"))
+	fname := buildReportFilename("Campaign_Forensic", campName+"-"+scenarioName+filterSuffix, "csv")
 	h.auditLog(r, "report.export", id, map[string]any{"format": "csv", "type": "campaign", "filter": filter}, "ok")
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))

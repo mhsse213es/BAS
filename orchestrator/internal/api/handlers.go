@@ -4896,6 +4896,43 @@ func sanitizeFilename(s string) string {
 	return string(b)
 }
 
+// buildReportFilename produces every downloadable report/export's filename
+// in one consistent, sortable, self-explanatory shape:
+// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD_HH-mm-ss>.<ext> -- so a
+// customer's Downloads folder stays identifiable even with hundreds of
+// reports accumulated, and files from the same moment sort together
+// regardless of report type. reportType is passed pre-formatted (e.g.
+// "BAS_Report", "Campaign_Forensic") since it's a fixed label per call
+// site, not user-controlled data. scope is sanitized here with its own
+// generous cap -- deliberately NOT sanitizeFilename's 32-char cap (that
+// function has its own locked-in test asserting exactly 32, and several
+// call sites here already compose scope from multiple pieces, e.g.
+// "<scenario>-<host>-<filter>"; reusing the 32-char cap on that combined
+// string silently truncated the trailing filter suffix off real
+// filenames). UTC, 24-hour time, matching every existing filename's
+// prior use of UTC dates.
+func buildReportFilename(reportType, scope, ext string) string {
+	const maxScopeLen = 80
+	var b []byte
+	for _, c := range []byte(scope) {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+			b = append(b, c)
+		default:
+			b = append(b, '_')
+		}
+	}
+	if len(b) > maxScopeLen {
+		b = b[:maxScopeLen]
+	}
+	safeScope := string(b)
+	if safeScope == "" {
+		safeScope = "report"
+	}
+	ts := time.Now().UTC().Format("2006-01-02_15-04-05")
+	return fmt.Sprintf("Audspect_%s_%s_%s.%s", reportType, safeScope, ts, ext)
+}
+
 // GET /api/report/full/pdf?agentId=X
 // Streams the agent-level assessment report as an enterprise PDF.
 func (h *Handler) GetFullReportPDF(w http.ResponseWriter, r *http.Request) {
@@ -4940,7 +4977,7 @@ func (h *Handler) GetFullReportPDF(w http.ResponseWriter, r *http.Request) {
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
 	}
-	fname := fmt.Sprintf("bas-report-%s-%s%s-%s.pdf", scenPart, sanitizeFilename(host), filterSuffix, time.Now().UTC().Format("2006-01-02"))
+	fname := buildReportFilename("BAS_Report", scenPart+"-"+host+filterSuffix, "pdf")
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	// Render from the styled HTML via the Chromium sidecar (falls back to fpdf).
@@ -4991,7 +5028,7 @@ func (h *Handler) GetFullReportCSV(w http.ResponseWriter, r *http.Request) {
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
 	}
-	fname := fmt.Sprintf("bas-forensic-%s-%s%s-%s.csv", scenPart, sanitizeFilename(hostname), filterSuffix, time.Now().UTC().Format("2006-01-02"))
+	fname := buildReportFilename("BAS_Forensic", scenPart+"-"+hostname+filterSuffix, "csv")
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	reporting.WriteForensicCSV(w, scenarioName, results, filter, totalCount)
@@ -5020,7 +5057,7 @@ func (h *Handler) GetAuditPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fname := fmt.Sprintf("bas-audit-pack-%s-%s.zip", agentID, time.Now().UTC().Format("2006-01-02"))
+	fname := buildReportFilename("Audit_Pack", agentID, "zip")
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 
@@ -5134,19 +5171,18 @@ func (h *Handler) GetComplianceReport(w http.ResponseWriter, r *http.Request) {
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
 	}
-	fname := fmt.Sprintf("compliance-%s-%s%s-%s",
-		frameworkID, resolvedAgentID, filterSuffix, time.Now().UTC().Format("2006-01-02"))
+	scope := frameworkID + "-" + resolvedAgentID + filterSuffix
 
 	switch format {
 	case "csv":
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.csv"`, fname))
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Compliance_Report", scope, "csv")))
 		compliance.WriteCSV(w, report)
 
 	case "json":
 		b, _ := json.MarshalIndent(report, "", "  ")
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.json"`, fname))
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, buildReportFilename("Compliance_Report", scope, "json")))
 		w.Write(b)
 
 	default:
@@ -5188,10 +5224,6 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(resultsJSON, &results)
 	results = reporting.FilterResults(results, filter)
 
-	idShort := runID
-	if len(idShort) > 8 {
-		idShort = idShort[:8]
-	}
 	// Prefer hostname from the report; fall back to the run name.
 	host := rep.Agent.Hostname
 	if host == "" {
@@ -5205,7 +5237,7 @@ func (h *Handler) GetRunPDF(w http.ResponseWriter, r *http.Request) {
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
 	}
-	fname := fmt.Sprintf("bas-report-%s-%s%s-%s.pdf", scenPart, sanitizeFilename(host), filterSuffix, idShort)
+	fname := buildReportFilename("BAS_Report", scenPart+"-"+host+filterSuffix, "pdf")
 
 	h.auditLog(r, "report.export", runID, map[string]any{"format": "pdf", "type": "run", "filter": filter}, "ok")
 	w.Header().Set("Content-Type", "application/pdf")
@@ -5236,10 +5268,6 @@ func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	totalCount := len(results)
 	results = reporting.FilterResults(results, filter)
-	idShort := runID
-	if len(idShort) > 8 {
-		idShort = idShort[:8]
-	}
 	if hostname == "" {
 		hostname = "host"
 	}
@@ -5247,7 +5275,7 @@ func (h *Handler) GetRunForensicCSV(w http.ResponseWriter, r *http.Request) {
 	if filter != "" && filter != "all" {
 		filterSuffix = "-" + filter
 	}
-	fname := fmt.Sprintf("bas-forensic-%s-%s%s-%s.csv", sanitizeFilename(name), sanitizeFilename(hostname), filterSuffix, idShort)
+	fname := buildReportFilename("BAS_Forensic", name+"-"+hostname+filterSuffix, "csv")
 	h.auditLog(r, "report.export", runID, map[string]any{"format": "csv", "type": "run", "filter": filter}, "ok")
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
@@ -5427,20 +5455,7 @@ func (h *Handler) ExportRunJSON(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(resultsJSON, &results)
 	json.Unmarshal(scoreRaw, &score)
 
-	// Sanitise run name for use in filename
-	var safeName []byte
-	for _, c := range []byte(runName) {
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
-			safeName = append(safeName, c)
-		default:
-			safeName = append(safeName, '_')
-		}
-	}
-	if len(safeName) > 32 {
-		safeName = safeName[:32]
-	}
-	fname := fmt.Sprintf("bas-run-%s-%s.json", string(safeName), runID[:8])
+	fname := buildReportFilename("Run_Export", runName, "json")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))

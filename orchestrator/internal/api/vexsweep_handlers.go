@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -229,7 +228,7 @@ func (h *Handler) GetSweepPDF(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	fname := fmt.Sprintf("bas-sweep-%s-%s.pdf", sanitizeFilename(rep.Agent.Hostname), time.Now().UTC().Format("2006-01-02"))
+	fname := buildReportFilename("Variant_Sweep", rep.Agent.Hostname, "pdf")
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fname))
 	h.auditLog(r, "report.export", id, map[string]any{"format": "pdf", "type": "sweep"}, "ok")

@@ -16333,10 +16333,25 @@ document.getElementById('dl-confirm-btn').onclick = function() {
   }
 };
 
+// buildReportFilename mirrors the backend's identically-named Go helper
+// (internal/api/handlers.go) so every downloaded report -- whether the
+// server streams it directly or the browser saves it via an <a download>
+// link -- gets the same consistent, sortable, self-explanatory name:
+// Audspect_<ReportType>_<Scope>_<YYYY-MM-DD_HH-mm-ss>.<ext>.
+function buildReportFilename(reportType, scope, ext) {
+  var safe = (scope || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+  if (!safe) safe = 'report';
+  var d = new Date();
+  var pad = function(n) { return String(n).padStart(2, '0'); };
+  var ts = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) +
+    '_' + pad(d.getUTCHours()) + '-' + pad(d.getUTCMinutes()) + '-' + pad(d.getUTCSeconds());
+  return 'Audspect_' + reportType + '_' + safe + '_' + ts + '.' + ext;
+}
+
 function exportRunJSON(runId) {
   var a = document.createElement('a');
   a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/export';
-  a.download = 'bas-run-' + runId.substring(0, 8) + '.json';
+  a.download = buildReportFilename('Run_Export', runId.substring(0, 8), 'json');
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -16356,7 +16371,7 @@ function downloadRunReport(runId) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
     var a = document.createElement('a');
     a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/report' + query;
-    a.download = 'bas-run-report-' + runId.substring(0, 8) + '.html';
+    a.download = buildReportFilename('BAS_Report', runId.substring(0, 8), 'html');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   });
 }
@@ -16372,7 +16387,7 @@ function downloadCampaignReport(id) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
     var a = document.createElement('a');
     a.href = '/api/campaigns/' + encodeURIComponent(id) + '/report' + query;
-    a.download = 'bas-campaign-report-' + id.substring(0, 8) + '.html';
+    a.download = buildReportFilename('Campaign_Report', id.substring(0, 8), 'html');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   });
 }
@@ -16380,14 +16395,14 @@ function downloadCampaignReport(id) {
 function downloadSweepReport(id) {
   var a = document.createElement('a');
   a.href = '/api/vex/sweeps/' + encodeURIComponent(id) + '/report';
-  a.download = 'bas-sweep-report-' + id.substring(0, 8) + '.html';
+  a.download = buildReportFilename('Variant_Sweep', id.substring(0, 8), 'html');
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 // downloadEMSweepReport mirrors downloadSweepReport for the EM sweep's combined report.
 function downloadEMSweepReport(id) {
   var a = document.createElement('a');
   a.href = '/api/em/sweeps/' + encodeURIComponent(id) + '/report';
-  a.download = 'bas-em-sweep-report-' + id.substring(0, 8) + '.html';
+  a.download = buildReportFilename('Endpoint_Mastery_Sweep', id.substring(0, 8), 'html');
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 function downloadCampaignCSV(id) {
@@ -16396,7 +16411,7 @@ function downloadCampaignCSV(id) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
     a.href = '/api/campaigns/' + encodeURIComponent(id) + '/forensic.csv' + query;
     var suffix = (filter && filter !== 'all') ? '-' + filter : '';
-    a.download = 'bas-campaign-forensic-' + id.substring(0, 8) + suffix + '.csv';
+    a.download = buildReportFilename('Campaign_Forensic', id.substring(0, 8) + suffix, 'csv');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   });
 }
@@ -16406,7 +16421,7 @@ function downloadRunCSV(runId) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
     a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/forensic.csv' + query;
     var suffix = (filter && filter !== 'all') ? '-' + filter : '';
-    a.download = 'bas-forensic-' + runId.substring(0, 8) + suffix + '.csv';
+    a.download = buildReportFilename('BAS_Forensic', runId.substring(0, 8) + suffix, 'csv');
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -18530,7 +18545,7 @@ function exportAuditLogs() {
     }).join('\n');
     var a = document.createElement('a');
     a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-    a.download = 'audit-logs-' + new Date().toISOString().slice(0,10) + '.csv';
+    a.download = buildReportFilename('Audit_Logs', actor || 'all', 'csv');
     a.click();
   }).catch(function(e) { showToast('Export failed: ' + e.message, 'err'); });
 }
@@ -18960,7 +18975,7 @@ function downloadAuditPack(agentId) {
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'bas-audit-pack-' + agentId + '.zip';
+      a.download = buildReportFilename('Audit_Pack', agentId, 'zip');
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
