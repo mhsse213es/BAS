@@ -83,18 +83,26 @@ type ParsedVariable struct {
 // Scenario is the normalized summary of one OpenAEV scenario — mirrors the
 // openaev_scenarios table row. Kept separate from Detail so list views never
 // touch the (potentially large) full bundle content.
+// Every field carries an explicit json tag pinning its wire name to the exact
+// Go identifier the frontend (and this package's own tests, via map[string]any
+// assertions) already expect -- this build is compiled with garble, which
+// renames unprotected struct fields, so an untagged field silently leaks a
+// garbled identifier onto the wire instead of "Name"/"Category"/etc. (see
+// docs/internal -- "Garble breaks reflection" is a known, established
+// constraint on this codebase; every other JSON-serialized struct already
+// follows it).
 type Scenario struct {
-	OpenAEVScenarioID string
-	Name              string
-	Category          string
-	Severity          string
-	Platforms         []string
-	TechniqueIDs      []string
-	Tags              []string
-	ObjectivesCount   int
-	InjectsCount      int
-	SourceUpdatedAt   time.Time
-	SourceType        string // "scenario" or "exercise" -- see ParsedBundle.SourceType
+	OpenAEVScenarioID string    `json:"OpenAEVScenarioID"`
+	Name              string    `json:"Name"`
+	Category          string    `json:"Category"`
+	Severity          string    `json:"Severity"`
+	Platforms         []string  `json:"Platforms"`
+	TechniqueIDs      []string  `json:"TechniqueIDs"`
+	Tags              []string  `json:"Tags"`
+	ObjectivesCount   int       `json:"ObjectivesCount"`
+	InjectsCount      int       `json:"InjectsCount"`
+	SourceUpdatedAt   time.Time `json:"SourceUpdatedAt"`
+	SourceType        string    `json:"SourceType"` // "scenario" or "exercise" -- see ParsedBundle.SourceType
 }
 
 // Detail is the richer normalized content stored in openaev_bundles.bundle —

@@ -1,0 +1,43 @@
+name: Backend Compile
+description: Compile all Maven modules and upload compiled artifacts
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Java 21
+      uses: actions/setup-java@v5
+      with:
+        java-version: "21"
+        distribution: temurin
+        cache: maven
+    - name: Compile and install all modules (skip tests)
+      run: |
+        for attempt in 1 2; do
+          echo "::group::Attempt $attempt of 2"
+          if mvn -U -B -ntp -T 1 install -DskipTests \
+               -Dspring-boot.repackage.skip=true \
+               -Djacoco.skip=true; then
+            echo "::endgroup::"
+            echo "✅ Build succeeded on attempt $attempt"
+            exit 0
+          fi
+          echo "::endgroup::"
+          if [ "$attempt" -lt 2 ]; then
+            echo "⚠️ Attempt $attempt failed, retrying…"
+          fi
+        done
+        echo "❌ Build failed after 2 attempts"
+        exit 1
+      shell: bash
+    - name: Upload compiled Maven artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: backend-compiled
+        path: ~/.m2/repository/io/openaev/
+    - name: Upload API build output
+      uses: actions/upload-artifact@v7
+      with:
+        name: api-build-output
+        path: |
+          openaev-api/target/classes/
+          openaev-api/target/test-classes/

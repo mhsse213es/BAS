@@ -44,6 +44,7 @@ import (
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/search"
 	"github.com/audspect/bas/internal/sftpsink"
+	"github.com/audspect/bas/internal/smtpsink"
 	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
@@ -725,6 +726,17 @@ func main() {
 		sftpsink.StartListener(context.Background(), ":22", pool)
 	} else {
 		log.Println("[sftpsink] disabled via SFTP_SINK_ENABLED=false")
+	}
+
+	// ── SMTP Exfiltration Sink ────────────────────────────────────────────
+	// Fourth channel of the DLP sink-verification architecture (see
+	// docs/superpowers/specs/2026-09-01-smtp-exfiltration-channel-design.md).
+	// Independently enable/disable-able; a bind failure is logged and
+	// reflected in Status(), never fatal to the rest of the orchestrator.
+	if cfg.SMTPSinkEnabled {
+		smtpsink.StartListener(context.Background(), ":587", pool)
+	} else {
+		log.Println("[smtpsink] disabled via SMTP_SINK_ENABLED=false")
 	}
 
 	srv := &http.Server{

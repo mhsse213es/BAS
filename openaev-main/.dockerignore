@@ -1,0 +1,22 @@
+# Common
+*/.idea
+*/.env
+*/dist
+*/node_modules
+*/coverage
+*/npm-debug.log*
+*/yarn-debug.log*
+*/yarn-error.log*
+*__generated__*
+
+# Frontend
+openaev-front/config/development.json
+openaev-front/.DS_Store
+openaev-front/.env.local
+openaev-front/.env.development.local
+openaev-front/.env.test.local
+openaev-front/.env.production.local
+
+# API
+openaev-api/coverage
+openaev-api/logs

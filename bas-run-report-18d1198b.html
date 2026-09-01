@@ -1,0 +1,2274 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BAS Security Assessment Report — DESKTOP-RI1639F</title>
+<style>
+ 
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
+body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
+  color:#1a2332;background:#fff;line-height:1.6;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em}
+:root{--line:#e8edf4;--line2:#eef1f6;--surface:#f7f9fc;--navy:#0b1420;--ink:#1a2332;--accent:#2563eb;--teal:#0d9488;--muted:#6b7689;--faint:#9aa5b5}
+
+ 
+.page{width:210mm;min-height:297mm;margin:0 auto;background:#fff;
+  position:relative;page-break-after:always;break-after:page;overflow:hidden}
+.page:last-child{page-break-after:avoid;break-after:avoid}
+@media screen{body{background:#c8d0da;padding:24px 0}
+  .page{box-shadow:0 6px 32px rgba(0,0,0,0.22);margin:0 auto 28px;border-radius:2px}}
+@media print{body{background:#fff;padding:0}
+   
+  .page,.page .inner{min-height:0}
+  .page .inner{display:block}
+  .page{width:100%;margin:0;box-shadow:none;overflow:visible;page-break-after:auto;break-after:auto}
+  .page:first-child{page-break-after:always;break-after:page}
+  .fc,.scard,.gloss-item{page-break-inside:avoid;break-inside:avoid}
+  thead{display:table-header-group}
+  .ph,.pf{page-break-inside:avoid}}
+@media screen and (max-width:700px){
+  body{padding:0}
+  .page{width:100%;min-height:unset;overflow:visible;border-radius:0;box-shadow:none;margin:0 0 16px}
+  .inner{padding:0 16px 20px;min-height:unset}
+  .cover{min-height:unset;padding-bottom:24px}
+  .kpi-row{grid-template-columns:1fr 1fr}
+  .score-row{grid-template-columns:1fr 1fr}
+  .fc-grid{grid-template-columns:1fr}
+  .cover-grid{grid-template-columns:1fr}
+  .risk-hero{flex-direction:column;gap:12px}
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .hm{min-width:unset;flex-wrap:wrap}
+}
+
+ 
+.cover{background:#0b1420;min-height:297mm;display:flex;flex-direction:column;position:relative}
+.cover-grain{position:absolute;inset:0;opacity:0.03;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:200px}
+.cover-accent{position:absolute;right:-100px;top:-100px;width:520px;height:520px;
+  border-radius:50%;border:70px solid rgba(13,148,136,0.07);pointer-events:none}
+.cover-accent2{position:absolute;right:40px;bottom:80px;width:280px;height:280px;
+  border-radius:50%;border:40px solid rgba(37,99,235,0.05);pointer-events:none}
+.cover-header{padding:40px 48px 0;position:relative;z-index:1}
+.clogo{display:flex;align-items:center;gap:11px}
+.clogo-mark{width:34px;height:34px;background:linear-gradient(135deg,#0d9488 0%,#2563eb 100%);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:15px;color:#fff;flex-shrink:0}
+.clogo-name{font-size:1.15rem;font-weight:800;color:#fff;letter-spacing:-0.03em}
+.clogo-name span{color:#0d9488}
+.clogo-sub{font-size:0.58rem;text-transform:uppercase;letter-spacing:0.16em;color:#4a6a8a;margin-top:1px}
+.cover-body{flex:1;padding:0 48px;display:flex;flex-direction:column;justify-content:center;
+  position:relative;z-index:1}
+.cover-eyebrow{font-size:0.62rem;text-transform:uppercase;letter-spacing:0.2em;
+  color:#0d9488;font-weight:700;margin-bottom:12px}
+.cover-title{font-size:2.8rem;font-weight:900;color:#fff;letter-spacing:-0.04em;
+  line-height:1.02;margin-bottom:8px}
+.cover-sub{font-size:0.95rem;color:#6a8aaa;margin-bottom:32px;line-height:1.6}
+.cover-rule{width:56px;height:3px;background:linear-gradient(90deg,#0d9488,#2563eb);
+  border-radius:2px;margin-bottom:30px}
+.cover-grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid rgba(255,255,255,0.07);
+  border-radius:10px;overflow:hidden;margin-bottom:30px}
+.cg-cell{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.05);
+  border-right:1px solid rgba(255,255,255,0.05)}
+.cg-cell:nth-child(even){border-right:none}
+.cg-cell:nth-last-child(-n+2){border-bottom:none}
+.cg-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;
+  color:#4a6a8a;font-weight:700;margin-bottom:4px}
+.cg-value{font-size:0.84rem;font-weight:600;color:#d8e8f8}
+.cover-badges{display:flex;gap:9px;flex-wrap:wrap}
+.cb{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;
+  border-radius:20px;font-size:0.64rem;font-weight:700;letter-spacing:0.04em}
+.cb-conf{background:rgba(220,166,0,0.1);border:1px solid rgba(220,166,0,0.28);color:#e0bc30}
+.cb-live{background:rgba(13,148,136,0.1);border:1px solid rgba(13,148,136,0.25);color:#0d9488}
+.filter-badge{display:inline-flex;align-items:center;gap:7px;
+  background:rgba(37,99,235,0.1);color:#60a5fa;border:1px solid rgba(37,99,235,0.3);
+  padding:6px 13px;border-radius:20px;font-size:0.72rem;font-weight:700;letter-spacing:0.03em;margin-top:14px}
+.cover-bottom{padding:24px 48px;border-top:1px solid rgba(255,255,255,0.06);
+  display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+.cover-bottom-copy{font-size:0.62rem;color:#2a4a6a;line-height:1.6}
+.cover-scores{display:flex;gap:22px}
+.cs-item{text-align:center}
+.cs-num{font-size:1.45rem;font-weight:900;line-height:1}
+.cs-lbl{font-size:0.56rem;text-transform:uppercase;letter-spacing:0.1em;color:#3a5a7a;margin-top:2px}
+
+ 
+.inner{padding:0 48px 28px;min-height:297mm;display:flex;flex-direction:column}
+.ph{display:flex;justify-content:space-between;align-items:center;
+  padding:16px 0 14px;border-bottom:1px solid #e8edf4;margin-bottom:24px}
+.ph-left{display:flex;align-items:center;gap:16px}
+.ph-logo{font-size:0.78rem;font-weight:800;color:#0b1420}
+.ph-logo span{color:#0d9488}
+.ph-sep{width:1px;height:14px;background:#d0d8e4}
+.ph-title{font-size:0.68rem;font-weight:600;color:#4a6a8a}
+.ph-right{display:flex;align-items:center;gap:16px}
+.ph-endpoint{font-size:0.62rem;color:#7a9ab8}
+.ph-class{font-size:0.58rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:0.08em;color:#dc2626;background:#fff0f0;border:1px solid #fca5a5;
+  padding:2px 8px;border-radius:3px}
+.pf{margin-top:auto;padding-top:12px;border-top:1px solid #f0f4f8;
+  display:flex;justify-content:space-between;align-items:center;font-size:0.58rem;color:#9ab0c8}
+ 
+.footer{margin-top:auto;padding-top:12px;border-top:1px solid #f0f4f8;
+  display:flex;justify-content:space-between;align-items:center;font-size:0.58rem;color:#9ab0c8}
+
+ 
+.stag{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.2em;color:#0d9488;font-weight:700;margin-bottom:5px}
+.stitle{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-0.025em;
+  line-height:1.15;margin-bottom:16px;padding-left:13px;border-left:4px solid #0d9488}
+h1{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-0.025em;
+  line-height:1.15;margin:0 0 16px;padding-left:13px;border-left:4px solid #0d9488}
+.toc-list{display:flex;flex-direction:column;margin-top:8px}
+.toc-item{display:flex;align-items:baseline;gap:14px;padding:9px 0;
+  border-bottom:1px solid var(--line2);text-decoration:none;color:var(--ink)}
+.toc-item:hover{color:var(--accent)}
+.toc-num{font-size:0.7rem;font-weight:700;color:var(--muted);min-width:28px;flex-shrink:0}
+.toc-title{font-size:0.86rem;font-weight:600}
+h2{font-size:0.88rem;font-weight:800;color:#0b1420;margin:18px 0 10px;letter-spacing:-0.01em}
+h3{font-size:0.63rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin:14px 0 7px}
+p{margin-bottom:9px;font-size:0.82rem}
+em{color:#6e7681;font-style:normal}
+strong{font-weight:700}
+a{color:#2563eb;text-decoration:none}
+
+ 
+.narrative{background:#f8faff;border:1px solid #dce8f8;border-left:4px solid #2563eb;
+  border-radius:0 10px 10px 0;padding:18px 20px;margin-bottom:18px}
+.narrative-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.14em;
+  color:#2563eb;font-weight:800;margin-bottom:9px}
+.narrative p{font-size:0.86rem;color:#1a2332;line-height:1.75}
+.narrative strong{color:#0b1420}
+
+ 
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid #e7eaf0;border-radius:10px;
+  padding:15px 15px 13px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:var(--c,#0d9488);border-radius:3px 3px 0 0}
+.kpi-lbl{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;
+  color:#9aa5b5;font-weight:700;margin-bottom:7px}
+.kpi-val{font-size:1.55rem;font-weight:900;color:var(--c,#0d9488);
+  letter-spacing:-0.02em;line-height:1;margin-bottom:5px}
+.kpi-sub{font-size:0.61rem;color:#9aa5b5}
+.kpi-bar{height:4px;background:#eef1f6;border-radius:2px;margin-top:7px;overflow:hidden}
+.kpi-bar-fill{height:100%;border-radius:2px;background:var(--c,#0d9488)}
+
+ 
+.score-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:11px;margin-bottom:18px}
+.scard{background:#fff;border:1px solid #e7eaf0;border-radius:10px;padding:15px 15px 13px}
+.scard-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;color:#9aa5b5;font-weight:700;margin-bottom:7px}
+.scard-value{font-size:1.55rem;font-weight:900;color:#0b1420;letter-spacing:-0.02em;line-height:1;margin-bottom:5px}
+.scard-bar{height:4px;background:#eef1f6;border-radius:2px;margin-top:7px;overflow:hidden}
+.scard-bar-fill{height:100%;border-radius:2px;background:#0d9488}
+
+ 
+.callout{border-radius:8px;padding:11px 15px;margin-bottom:10px;
+  font-size:0.77rem;line-height:1.6;display:flex;gap:10px;align-items:flex-start}
+.callout-icon{flex-shrink:0;margin-top:1px;font-size:0.9rem}
+.co-danger{background:#fff5f5;border:1px solid #fecaca;color:#991b1b}
+.co-warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.co-ok{background:#f0fdf9;border:1px solid #d1fae5;color:#065f46}
+
+ 
+.risk-hero{background:linear-gradient(130deg,#0b1420 0%,#152338 100%);
+  border-radius:13px;padding:24px 28px;margin-bottom:18px;
+  display:flex;align-items:center;gap:28px;position:relative;overflow:hidden}
+.rh-ring{position:absolute;right:-50px;top:-50px;width:200px;height:200px;
+  border-radius:50%;border:28px solid rgba(255,255,255,0.025)}
+.rh-donut{flex-shrink:0;position:relative;width:110px;height:110px}
+.rh-donut svg{display:block}
+.rh-center{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center}
+.rh-num{font-size:1.75rem;font-weight:900;color:#fff;line-height:1}
+.rh-denom{font-size:0.62rem;color:#4a6a8a;line-height:1;margin-top:1px}
+.rh-info{flex:1}
+.rh-class{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#4a6a8a;font-weight:700;margin-bottom:4px}
+.rh-label{font-size:1.35rem;font-weight:900;letter-spacing:-0.02em;margin-bottom:7px}
+.rh-desc{font-size:0.76rem;color:#7a9ab8;line-height:1.6;max-width:340px}
+.rh-pills{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+.rh-pill{padding:3px 11px;border-radius:20px;font-size:0.62rem;font-weight:700;border:1px solid}
+
+ 
+.hm-wrap{overflow-x:auto;margin-bottom:12px}
+.hm{display:flex;gap:5px;min-width:580px}
+.hm-col{flex:1;min-width:56px}
+.hm-tactic{font-size:0.5rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;
+  color:#5a7a9a;text-align:center;padding:4px 2px 5px;
+  border-bottom:2px solid #e7eaf0;margin-bottom:4px;line-height:1.3}
+.hm-cell{height:21px;border-radius:3px;margin-bottom:2px;font-size:0.48rem;font-weight:700;
+  color:#fff;display:flex;align-items:center;justify-content:center;
+  letter-spacing:0.02em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
+.hm-cell.P{background:#0d9488}.hm-cell.D{background:#2563eb}
+.hm-cell.M{background:#dc2626}.hm-cell.N{background:#e7eaf0;color:#9aa5b5}
+.hm-legend{display:flex;gap:14px;margin-top:6px;margin-bottom:16px}
+.hml-item{display:flex;align-items:center;gap:5px;font-size:0.62rem;color:#6e7681}
+.hml-dot{width:11px;height:11px;border-radius:2px}
+
+ 
+.ctx-table{width:100%;border-collapse:collapse;font-size:0.72rem;margin-bottom:14px}
+.ctx-table thead th{background:#f0f4f8;color:#5a7a9a;text-transform:uppercase;
+  font-size:0.56rem;letter-spacing:0.08em;font-weight:700;text-align:left;
+  padding:8px 10px;border-bottom:1.5px solid #e0e7ef}
+.ctx-table td{padding:8px 10px;border-bottom:1px solid #f0f4f8;vertical-align:middle}
+.priv-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
+  border-radius:3px;font-size:0.6rem;font-weight:700;border:1px solid}
+.priv-system{background:rgba(220,38,38,0.08);border-color:rgba(220,38,38,0.3);color:#dc2626}
+.priv-admin{background:rgba(234,88,12,0.08);border-color:rgba(234,88,12,0.3);color:#ea580c}
+.priv-user{background:rgba(37,99,235,0.08);border-color:rgba(37,99,235,0.3);color:#2563eb}
+.priv-fallback{background:rgba(217,119,6,0.08);border-color:rgba(217,119,6,0.3);color:#d97706}
+.priv-skipped{background:#f3f4f6;border-color:#d1d5db;color:#6b7280}
+
+ 
+.fc{border-radius:10px;margin-bottom:14px;overflow:hidden;border:1px solid #e7eaf0;
+  border-left-width:5px}
+.fc.fc-critical{border-left-color:#dc2626}
+.fc.fc-high{border-left-color:#ea580c}
+.fc.fc-medium{border-left-color:#d97706}
+.fc.fc-low{border-left-color:#0d9488}
+.fc.fc-prevented{border-left-color:#0d9488}
+.fc.fc-detected{border-left-color:#2563eb}
+.fc-stripe{height:0}
+.fc-header{padding:12px 16px;display:flex;align-items:flex-start;gap:12px;
+  background:#fafbfc;border-bottom:1px solid #f0f4f8}
+.fc-sev-block{padding:4px 10px;border-radius:5px;font-size:0.62rem;font-weight:900;
+  text-transform:uppercase;letter-spacing:0.08em;color:#fff;flex-shrink:0;margin-top:1px}
+.fc-sev-block.critical{background:#dc2626}
+.fc-sev-block.high{background:#ea580c}
+.fc-sev-block.medium{background:#d97706}
+.fc-sev-block.low{background:#0d9488}
+.fc-sev-block.prevented{background:#0d9488}
+.fc-sev-block.detected{background:#2563eb}
+.fc-heading{flex:1;min-width:0}
+.fc-name{font-size:0.9rem;font-weight:800;color:#0b1420;line-height:1.25;margin-bottom:3px}
+.fc-name.critical{font-size:1.02rem}
+.fc-tid{font-size:0.65rem;color:#9aa5b5;font-family:monospace;font-weight:500}
+.fc-verdict{flex-shrink:0}
+.fc-body{padding:14px 16px}
+.fc-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fc-detail-row{display:flex;gap:8px;margin-bottom:7px;align-items:flex-start}
+.fc-detail-label{font-size:0.6rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.08em;color:#9aa5b5;min-width:88px;padding-top:2px;flex-shrink:0}
+.fc-detail-value{font-size:0.75rem;color:#1a2332;line-height:1.5}
+.fc-blocked-by{font-size:0.73rem;font-weight:700;color:#065f46;
+  background:#f0fdf9;border:1px solid #a7f3d0;border-radius:4px;
+  padding:2px 9px;display:inline-flex;align-items:center;gap:4px}
+.fc-blocked-none{font-size:0.73rem;color:#dc2626;font-weight:600}
+ 
+.fc-evidence,.evidence-block{background:#0d1621;border-radius:7px;padding:11px 13px;font-family:monospace}
+.fc-ev-hdr,.ev-header{font-size:0.56rem;text-transform:uppercase;letter-spacing:0.14em;
+  color:#2563eb;font-weight:700;margin-bottom:8px}
+.fc-ev-row,.ev-row{display:flex;gap:6px;margin-bottom:4px;font-size:0.63rem}
+.fc-ev-k,.ev-key{color:#4a6a8a;min-width:70px;flex-shrink:0}
+.fc-ev-v,.ev-val{color:#a0c4e0;word-break:break-all;line-height:1.4}
+.fc-ev-v.ok,.ev-val.ok{color:#0d9488}
+.fc-ev-v.bad,.ev-val.bad{color:#f87171}
+.fc-ev-v.warn,.ev-val.warn{color:#fbbf24}
+.fc-ev-v.code,.ev-val.code{color:#c084fc}
+.fc-ev-sec{margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.06)}
+.fc-ev-sec-lbl{font-size:0.5rem;text-transform:uppercase;letter-spacing:0.12em;color:#2f81f7;font-weight:700;margin-bottom:4px}
+.fc-rr-none{color:#34d399}.fc-rr-partial{color:#fbbf24}.fc-rr-leaked{color:#f87171}.fc-rr-none-dash{color:#6e7681}
+.fc-remediation{background:#f0fdf9;border-left:3px solid #0d9488;
+  padding:10px 13px;margin-top:10px;border-radius:0 7px 7px 0}
+.fc-rem-label{font-size:0.57rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.1em;color:#0d9488;margin-bottom:4px}
+.fc-rem-text{font-size:0.74rem;color:#1a2332;line-height:1.6}
+ 
+.remediation{background:#f0fdf9;border-left:3px solid #0d9488;padding:8px 12px;
+  font-size:0.78rem;color:#1a2332;margin-top:6px;border-radius:0 6px 6px 0;line-height:1.55}
+
+ 
+.vb{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
+  border-radius:4px;font-size:0.62rem;font-weight:800;letter-spacing:0.04em}
+.vb-missed{background:#fee2e2;color:#dc2626}
+.vb-detected{background:#dbeafe;color:#1d4ed8}
+.vb-prevented{background:#dcfce7;color:#16a34a}
+.vb-error{background:#fef3c7;color:#d97706}
+.vb-skipped{background:#f3f4f6;color:#6b7280}
+
+ 
+table{width:100%;border-collapse:collapse;font-size:0.77rem;margin-bottom:14px}
+thead th{background:#f0f4f8;color:#5a7a9a;text-transform:uppercase;font-size:0.57rem;
+  letter-spacing:0.08em;font-weight:700;text-align:left;padding:8px 11px;
+  border-bottom:1.5px solid #e0e7ef}
+td{padding:8px 11px;border-bottom:1px solid #f0f4f8;vertical-align:middle;color:#1a2332}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#f7f9fc}
+tbody tr:nth-child(even) td{background:#fbfcfe}
+
+ 
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.tool-tag{display:inline-block;background:#eef4ff;color:#2353c4;border:1px solid #cfe0ff;
+  padding:3px 10px;border-radius:20px;font-size:0.72rem;margin:2px 3px 2px 0}
+.comp-pct{font-weight:700}
+.tbar-wrap{width:100%;height:8px;background:#eef1f6;border-radius:4px;overflow:hidden;display:inline-block;min-width:80px;vertical-align:middle;position:relative}
+.tbar-fill{height:100%;border-radius:4px}
+.sev{display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;font-weight:600}
+.sev-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sd-c{background:#dc2626}.sd-h{background:#ea580c}.sd-m{background:#d97706}.sd-l{background:#0d9488}
+.gloss-item{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb}
+</style>
+</head>
+<body>
+
+
+<div class="page">
+<div class="cover">
+  <div class="cover-grain"></div>
+  <div class="cover-accent"></div>
+  <div class="cover-accent2"></div>
+
+  <div class="cover-header">
+    <div class="clogo">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFQAAABmCAYAAABV2bZnAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAAFiUAABYlAUlSJPAAADC3SURBVHhe7ZwHeI5n&#43;/&#43;fJztixKiW2EqNKkrpXvoW1WpRau&#43;9t9qr9iZ21aotIkvIJEskkSl7ypAlQhKbfv7n9SSIFk37pv29/&#43;PwPY5b4snz3ONzndd5fs/rvhMNL1Wqegm0lPUSaCnrJdBS1kugpayXQEtZL4GWsl4CLWW9BFrKegm0lPUSaCnrJdBS1kugpaz/M6D5srkWwNQLQWyMjSa28OUXKufeA/xu5eHDA3zl/0EPIfo&#43;JN2GzLtwq/Bt/6f6PwN6Lvs&#43;rQ/7Uu&#43;kD81OODHeK4g7RT97njwy8&#43;h6xom2gYG0CI2hTWgaHcJz6RJ6lVHR11iefodfM&#43;4QKXCvy/uF87&#43;ufxXonQdw77fC749evo/58TgMHWIwt73I57Z&#43;JAqIF&#43;lM&#43;l3aOvlQ0S8S46B0yoTdpFzIXUyCr2MaeoUqYYnUD4ni3bAEvorJYlhyHssuX8dJQveafF7tvujw/5j&#43;caDqAiLzYM35GIYeP4flxSTS5TVH&#43;aeBdSh6zolUdQyhv1sQWX8C1OXqPdp4hGAWmIE26Caai7&#43;hCXiInkDVu5SHXmQO&#43;knXMUrNxzAhl0pRV6kVmkrToES&#43;iEpkYd5NrGU/kbL92Wz4u/rHgd6WPDf/bBSvrXOgzHZvalk6YRmQSZq8Pv5sMOanQvjwXBinr&#43;X/afS45RbQ2jMAU/8stH630Z7/jXLhDykXdh8zAWwcfBNtzAO0yQ/RJt3BIKqAMlESxQm3ME4rwCQpizdSrtIlJo2fErIIl32qXF6a&#43;seBXpdE1munPa&#43;stcd4qyf1t7kz/pCHDp4ELp&#43;cS&#43;KnpHzddPwzuefk0NLdU&#43;CloRcsERkukRl5B234dbRhuRiF30I/7gGa5LtoUm6gSbqBcUIBZvF3MJHNKFEgx96gTHg6tS&#43;l0yYklR/CMtmWmEOK7L80cu4/DvSW5M2Z9r7UWnGcV7e402SNDetdL&#43;l&#43;piB&#43;6xTL&#43;rgbSLH&#43;U3ldyeSzo9bUd/SjpmsMFj6plAtNxiQ2FcP4NLTRGWhirwvIAh1M9VUv8RaGcXcpG/UAE7EE&#43;on30KTdRk/SQllJC9Vjs2gWncgPqVfYWHCfIDmOTJ6/rX8lh4aJPRpgF8Qb608x8EQg8So0RQpivzPRbJZcV5KLKJARCJXk5y1vtsmBdRE59AuOpEP0JdrER/J6cBiVzodQSSLYPOw6xtE30Yu9hV7UbcqG3cFcgBon3Begt9DkSGRfv4N&#43;5g0Mr&#43;ZSRoDWT87g69g0tsi&#43;4&#43;R4Egt/Wf840EfylfnUfsspvK8WvaAktPs6BLM5PK3ohRdLRfSzUsM92VQVj5dj&#43;GU&#43;5EDcfaZdusln51Np5JdC7YA0qgdcoZrYqyoJ&#43;Zik3y5MCcnX0MuSVJD7G9osKW4SuWXFFdSITKVDXCYbs&#43;7pwJZk9jzSvwY0VKxL903W&#43;KY&#43;OT0VlX2cgtgQnfKnJ50ob9gQcxnL&#43;GQkgP5Uan/REmKnbsKOpDzGRGfSNiCOGiGXKRt5VSL1NqZSGfUvSwFLFLeQJDASJf9evofplftUTr5O44gkBiRlcEgiObdwt3&#43;qfw1opEz7/qsP4JdYNN9F6qK7uQWySiC9qCgpizPKM5DmnhdpcSGA0YHhhMpryRKaysCrz77IIajjyOGJlm1xbA495GRa&#43;eXwWuANyksRM0p6iFGKRKkCq6BeETAZ99FLzsUsIoHWEXFMScnCVXb0Z3brXwMalfeQQUt3cDH&#43;yVirqdr1XBDLEy&#43;/EGiuhHJf71gqnQ3n1Utx1Lvgz398/fnutBNT/c&#43;zKykW96vXCM25S7pE5IukZoVqU52yZZ9BqTSLv0KF&#43;HRMU/IwktyqzZCiJWlDkyJfU6R4Xc6jcmIWTRLSeScqnk3SnVyWfTxvAP89oNduM3jRZgLjnkxYBbSbRygrElJfCFQVh2V&#43;cvFHvGnu4CMe8jrOkot9U8EuPIdtF2KYaOvMuFPOTL5wnqVhIXhcu/HCfSpJIOIq24ycXF738aN&#43;Uhpm6blo0sUlZEnxkryqSZFOLOkWlcQRVEu8SvPIBMbIjErU7eGP&#43;ktA1ag8kCF&#43;KN88VF8LXy6Roq4VMGzxFoLiVfkolJqKvd0jWSWV9c8uXk01l&#43;SbnEnN0g3E76XOJbJAClJGKosiIhlj58V0Jz&#43;sEjKJvfnieq3O49ytm8xLTuZDmeIWUpDKJkvjkC0pIAv0039DP/UehlK0zOOu8GF8EmefMxNKDDThSi5WjhfYd9yTA9YXOO4YhPWZAEJiJExKoKicW4z4aSshiSrrFUqBGeAaztroPwf6SArNn9kZZdAvyw4PRKUwyc2FSefOYJ&#43;SQMafhID6nEPOAwYFptAmKIOqUkD1r0hOzRGw2ZJTr97H4Mo1Giel4vKcLqDEQHcd8&#43;T1j0ZTqdUUKrWeS9W2c6n7wRSmLz9cIr8WJ6lz3IrdhKY&#43;DbSXnStbYhJ0UaKkXlPviJVvzlx/yLzwbH5wiaaTUxSdPBPpfPEKX/pcprNXErNib2MjEaRWl3IlhFUUF89tap/p9&#43;/I9L/GJG8fxvj74yWvvWjw1LVkyj8nxFJ9fDFOqr1YLIlQTbqAvXYP7bU8SQ3ZugWXZ6nEQC0P&#43;FKhxXg0b8xH03g1miYrKNNsFiMWWD&#43;G8SLFSNM8fNVBAsX/PZKCN9DmNNuj03X57HTSA1aFXaHHuUDes/Om5glvKtqHY&#43;4Yj9GZSExcojB3S6SqewrV3JKp4ZJA7VOhtD0bQTevUBbGpHA46xrJsq/fx6La/y6xQKO9/FiTmI5j3gNOZN7RdUbPCgj1&#43;XVZN7CQ89Gmir3KQBqB&#43;5IGblBP8unpJ2blKZUY6JZDFwXohCKgq3RATZvNYfh8uxIBtY/IY9CqI4QkKwNTKAW075FT9D12gWFW8bTdFUzNwyGUk26q/BFfyh3zpbz8zMImiKZuobxzPpw2PhG0cQ2muc156h05y6sO8j4P&#43;Yy/eEy/NN5wTmboxRv8mnJfZ/Z/L3cZ2B/Ck2kubWr9iwl8FRinM&#43;&#43;/l4r0fQKvWUQWeilSnGRE1JTXJl&#43;lntQBxydx8ZRKBFTtfOthfyq/PQa9Jj&#43;ibfITBk2XUO6tWQye9eIIVdPr0PlQusxYwS6nwMfTTZmn4wk3aLB2P6&#43;usaLaOheq/exHo4PBfHEwgIUOcZyJf4A6b5X/1efUAKhprdKXmnFqpchfvlkTmUFn9yhaeErUnsvAQr428Y7kPx5R7E65Q0axcFXfHpCcUl1Sh3HENWpeSMLpGdGmrvno1eu8G5KMQdxNaVfB9OpvGEgNqCf569STzPWUShyhO4968VrLfhg2HIrhGxMxbSS59M1xDJq6T3ehz5J6/YDPJXovXs1&#43;ZzeduVbyla5ksF0w1TfupdyaPdRYeYh2O9xZG5qPu&#43;TERPXGkoR9kdSUTZb3n5PPbRKb85V7KLVcA6grsN4UuzXwUjoX5D2PuHoJwA6eETS6kMjbLuFYZfyxwiigVtLjfxiaiNFl6f0zBahsavWqXmwu9teeXTlKDDRIKvGs1b/Sa8IWuo7cTu/x&#43;xgyeS&#43;We84&#43;MwepiDoVmknPJTs4fD5EYN7XRZZNeCpfrnen7Epr9DfvpcUua1Z4xhMuOepZ&#43;1HRqdp/5SXUElu6gMuRTUWnGrDiRUhJQQu&#43;9VA6okxaSDNgHpiOecRV2gcnckK8sDoHNV7eBXfYdCmZn4KSmXf6LLE37v1hX1ZZObwXGo1Bcr70/Q8xvvIbZjJydWOuYadO4hkqMdBn6bffn0GR1EVZ&#43;UTRfcpKHIJSdCcqFpE9AVE0nbaeijMPUmfJYfr/ekp3g&#43;33uiWoIjKzORgcz2B7fz6yD6C6fLVwvkRz5xg&#43;l8LU63wqP0Xf0OWyi0JXOsU/BLXKjYMjMnkzOJ3a/um8KcVrd&#43;5t3TrsI6nDH4&#43;PZonbWRJ&#43;V/6PZl6nRXi0dEvXBai0pjKihgK0VtRV7P8JoM&#43;Te1QiA2auwMY9QLdiryJv57k43pjxC6/&#43;uIeac3ey5nwEacpwP2NQ7sm5xqbmcUKm5ICdjrTeeoqqB70pa3uJ8rYSdSeTqGybxqu2qbzumMQ7YqlGBCZzSDqc4qlN7VpsJDvj83nTPZ6qgZm8FZLGDul4irseyTLMcXdjbUD4U736ocx8GoVFo70s3ZMA1QhQbeJtakfn/DtAH8gleERH0XXKXE54BukiRsHZ6RBAswm7qDzVijcWHudAZOpTJ66mtWfuPU5ffYCflObL8sI1oaHeI601bmn3mHA6gnf2e2Pxqy/GRyPRs0rBwO4aRi75mHhc5VXvZN70iKTz2TB2Z95C0t1j3ZXIOywd79sBmVT0lpRzXqDG5D6V&#43;9XtkCkXQjieWnj3QA3GoewHvB4cizZJgEpR0qRKlCbc1AF1&#43;Cs5VJ1ASEgGrmejSUp99gefpYj0HMYsXsMOayfdSamp7xKWzLsjV1JX8m6zH49xOCTvqQuRzpA1rjE0WnuEuhvtaPOLO&#43;2OedDPy58NsdLipV4jRaa0iqjTKbcZdDqAKvvdKG99CXP7K5Szz0FPolXrlIyebzLGAYlU84tmcloeYXICxSeArQzWZ75ZVDuXyEfSLHjKTtU5Kqmr3HPtDr2iL2OZdZsQNQgS7o2DU9BLyNPZJn0BqidA60Rf/WtAnZxD6NBxOM3b9KXfqI1cFwLqxHQ583eJU/eSbDlyAjPXHWHVdmtuFhGTmcaH07fxav8VNBi0nD2ecbqcpaT7jGxD1jpQb95RDFY5YbjYE/NFfpRd7IH&#43;ujOUsTxNsx1u9DsRzJHIdF0hktrF4ugCmhzyp6xYLEP7VLRnrmLocQutyzU0LlkY&#43;1ynmkcGPSRqgwXaozNWM2azjE69U8Fiq1Lo7hZLVFFPrk55Q&#43;ZN3ggNpfmlSAZKdbeSn7WQNKEnx1NFyVA208Rb1JEcWmKgaRIxvQbMplrdzylfoyPl6/Sg96htbNnnzSHp4U87B3P23CW8fWJxPReBtXjLvTaeDP1xFat2OT0uDOp443a6Yd57PfX6rmKTlXrWo1DqAp2j8mk97xB1ph6j7MzTaBb5ol0YhcmsGAzmRKFZGYZmcwh6Oy5SdqeY&#43;F1n&#43;M7Rnx3SCqqi4iQR0946BFPbUPTdJEIdZTq7FFDxbAH6XrkYBd&#43;kllsunV2zOFVsRVqlkY3iJRs5BdNYgM8Kv6nzxGpG7Y9J49OLvrzj7clA/0tYyWC87ZeOUdgdNLFSkBLuUC4&#43;j3oRMuUlPT1LfwAanXiTdt&#43;OpVL9LzGt&#43;RVl6/5Ap/6bmLLQhnnLbVm/xYlf9ntw8Lgv&#43;455se1XF1ZIVG476kJqse7B6nwC1XqtwuzrFYxfZs21rEeTC1xjrvP&#43;Uiv0Rh7AcKwNhhNOYzjlHKYzAjGdHYb&#43;gktoll5Eu&#43;4CJjt9MPnZAz35avqLJ2&#43;dvCCtai5xEuq&#43;4qc&#43;kQ6qwplLlHG9jLlLGuXPpWEQkIJGvKeJaw41bLNp75pBqCJWJFX9&#43;wXE0VAs1Zu&#43;6RzILnw9PjufJQHejHN0wDk9l6P5d3n7QjJlgqRTihSgUQWUi8mifqhEaPFbOcX0B6A3xKTNXLqbhu98T&#43;2W3WjRbjjhUt3yZLTyZQrclAu5JSenngJR223ZbgqrYueri9Kus3Zj/OU86vdaz/nIJ6SlOaLzoiNU7L8ToyGn0B/uiN4oe7QTbNFOtUVv2kn0Z9tQdqE9ry2xpcEyK1qsseW9rWd5V6b/h1ut6bL9EDPdfIiR/V2QPNfR1k8qfhD69lGUPX8drUc6Wt8rGImDN3a7Ti3PLAaLZVP9/COFyHk3dgmhil8iXYPTKGKqSyuqZVUp4Nit2wI0ibJBD9BESIWPLMA0OlMH1D77SYAU1zNz6DXZ6&#43;lz0Zw4E0hkynNWAV4gG0kJr3w6hSrtF/DTsbDHRUg1JL2W2PBqlw2YdT&#43;IQR9HjIedwXD4cQH7C0ZjNlP5x200WbaPQUc92XA&#43;Eduwq3gl3SXw8n2kW&#43;Rs&#43;FUORcSzJsSfGU72JN64i5eY0PcPumNyMhSNQwYGUvmNzmSg8ZSc6pOLqV8WDX0jWBef/jiHKxxjQlKp4R9Dc99IjskULo5IpaUTd2/R2i&#43;ecoH3dEA1AlQ/MpO6oWKb/grQ/0Z5cpy&#43;AsX8w2m07reeqGJhYeOfhkXvrZh9tZMy31uh6XkCbZ/DlBm0h4qD19Nu6QHWe0Tgm5HHVdnPo3z8LKlIungrE89LwdyUN&#43;4S0BbH/dG3TkVjnYOZQ45E6lU0vjnoB0ukesfwqWsIocXSkkvmfd45H0b9gGhGR2VS3NAooCfv5tPKN5rygXckOhVQKXwR2dQN&#43;xeB&#43;siFNe02n4qfTmX2dicKisIzU47/3thdaNtvxrjjXoy//hn97y0p32cTbacfYoF1BCny3qziBrVEKqzhuQJjmmcqrx0OQ3vyCgYO0t24SoX2voaxXz5an2yqnY1lafL1xwOlCvyShGvU8AqjrW8sjpI&#43;HjkC9dXubh6tpQEpf7FAKr3Air4rYK9RRwf02cNdqkDVbZHNR4Mx/2gCDX&#43;Yy5ngJwtjx32SMemwGk2HXyjTcSeV2i&#43;l1vfzGb/DgyBxFuJI2OkUhkvwk8Xm4lLB45tzA8/s5z8UoR5K&#43;/SIJ2YnwtGTqqFxSkfv3FUMzuWi73OLsn6ZdI3LILnYHo4l3aCpbxQ13S&#43;xIf7u42PrgN4SJ&#43;IlQANlqkcJrKi7MvVvUDMkG7usR4nsaZUq0GviP3pM2o9&#43;m9F8M3sz2XcKT08VrlErndH/dAOa/2zHrN1SWvdezBb7QK7IeZ2Ouk3/ZUdYJIY9/TkRapdcQKdjzrS3suLMtWdDVdB3RibR4Ij4WJtk9E9noCdRqvW6gaHPbYz8s3kvLOGpG2yBV&#43;/xiV8sVdwiGBWUrYtaJR3Q/Fu08pBCFyQRGiWVPkLsU0QeNQSo7XMeFSxVoPFJUOOD6ei9O5ERq34pehVC42/wdr/taD9ai95HS2nZfx1HPOJ0qz6bHQP5ePgSvhm/kUtqqf13UnHgmlrAB5aOVLS051WrM7Q67YhV&#43;rOWj8WlCOpvDjpR9lAkZewFprMUJ59rGPrlYX4xi&#43;/CrzyGpqSwDA5MxMI9mo/PxZFelEcVUPvc32h1NgFj9ehkjBSm8FuyFWARnIVt9n8F9Ddyb90h&#43;dp94mV6xmbJJi1LlDiAjBtPTi845j5lmo7AoM1kVhw4W/QqHHAM49UvF6L9YAGVP5/JAY8rOnO&#43;&#43;8JlmgxYwOtdZjBt02nuPyPszospbye5&#43;LXljpQXL6r3qwev2PnR/nQwDnHF0RRK7WLp&#43;Xiq7gulnPUVNI6yyU70A7J41SuWGdJSKxRqMB9pX0oB1W0DedM1Ar&#43;iXSqgUtdoJU2DgQ7obYF5E72wAmoIUJvnJPsSAU3JzGXgqIW0&#43;GQkjT6cxOvvTaV&#43;27E0&#43;3gYSzYd1h1cyUaSvlHjgRi9Mw2ngCKDIiO&#43;aKcLpu&#43;PpsqXM7C0C9etwh86myoVfw3lv11C0yEbcVSmspgUmEgp5W1Wn6bMHAeMV7igt94L/V2RmPyazGsnL/O&#43;fTiukmZ&#43;Hysnk3&#43;jxh5/yh0Xg2&#43;fLvYpU8x&#43;IvWcAnQr7THyme2nCxdvlC4IxDpHzlPDJZitsYXPWalrOiWB87ZLJvo6oAVow/IwCs2nelA6J6VNfZZKBDRCOpMP2o2jrEVfDKqNxLDGOAwshlOxwRAmzD/0OJ9tPOCGYZP&#43;mLWdjV8RoAfCdfyK45i825PeP/1CtvzfxT&#43;D9/ttxqzDNkw6buSz&#43;Q46eMUVfDWbbquPUHbEQQxnnMNEwDbc5k1jywTMLTPQ351CBdsoPvb04fR1tQD3RAECrelBP8pbJ2NwShWnNIx8IvlIuirJSnjJ26ccdnq84hUmbN4&#43;eZGK0tqujFPPVxcCddQBvYpeoEz16Hz0xHOZyFYjOF0iVC3X/FElAhqTmMoHX4ygTPX&#43;6FUfjbbOWDR1RmNabwxj5x1/DHTu5hMYNBtEufdnEpJaGDdi5Rg55Wfe6dKT0Ows3WPfHScekYq/E/2OhzHr/DOd5tmRXMwfxuTn892SrVQZug7taDu0092otXYXR5Ikd4VLu7kykGoSqfoOUjBcfPjyzDl80p9MYnXLurMUprI2wWhdxJc6plDVOYbZwfm6vn1v3BW6njjyeKE5Wsi&#43;fzKAV85EMjtaZeGiHCpTvoVLCgb&#43;KnfeRBuSg6mY&#43;poC1P7KoxbhaZUIaEJaAp91GlYItMYoNPWHyTYcg3pjGTL94OOpM2vDMfTfHEylj2cRnl24InFHomXo8LWs2bVdLuYuM9a7Ubb9JjRfH9Zt5bru4PtF1jy6Xa&#43;GYdTKzVTtMhHjfhvRDLOhwhwvfo5IfpxazkiYNfs1FK19CHpO/tQ&#43;4c64I66PF41TBFAf6bSM7fzRnE3C2D6Oz06EcV7qWIRUuc8c3fjczkF3a0UpQbYPTwZSQVrXiSGFD/&#43;qYx3PvcObLvES3QVo1LQPysFYcnDtoDTOPOpVf6cS5tBUOnQbg1n1foVA6ymgQwXoKLoN3/rYvM/fchKDJkMp33YGgalqoU2qrnCdOnO79PNxhKfdoHXX1Zj8R0B9vQtN518w67KOrosOk1oULupirM6H0GrIIir2XIvBACtMhtsz7sAF3bqo&#43;vlytzvU2xMoBj4Ajd05Xj/myPGkXJ1tUlLR3v1XP4xOXkJjE0a1wzKV3RN1hWhBcKbudsoX0qYWB9rKKgAzCf9pwYX7UUB3p&#43;fS0CkaQy8BGiBRGiR&#43;VvJng8B0vJ4940sGNCMnm&#43;4DfqRs9T4CdKRMdwH6&#43;lD06g7joy6LkHZap9V7XTBsOISyzafgFaWylXQjBffxvnhZ1yqu3Hueyq0WYvC5&#43;NGvBGrnjRh9vZAOs3bqVukfSeW2g95JtB21Q6DuwazXAeqO/JnpJ2JZbJ9NoyWumG86i&#43;EvLjQ47spB6VqKF6ZIGcuOuy9hcDyUCvs96SSbehhXOkhaWF&#43;grG0M7U&#43;m6oqj7v0SEI0P&#43;1HOIZzZgRk6mGrar4yKo7pjKKbeBRgGSJckKUP/YgZvXUzTPU75LJUIaMGdu4yfsZ5yFj3QtxCgtVWEDhGgg2j2&#43;VRuFc3F3XZBGNYbQPkmk7DzviQnVvgDNeISQLzVfhmmb61F85F0TB1XSZSuw6DjfNqOXkvI72ylAmR1IYdGvTZQ5XtpV/tYUnHSAcpNOUyVxacwX3yCFlvEj14pHIDicpOxbL3ZH/OdbrTcbodN3F2S5CQ6yflVlsiscCSSLvYpjz8XKGRr/&#43;qLuUMo833Vw4qF5zw9NJxXTodhJkBNfO&#43;gH3hT/GwGnwlQdQf2WSoRUIVl&#43;YbDVKrVHUMFtNZwHVBt3QHUfmc0BUVAnWT0jGv1plLDcazb4/i4WCnZeiRTufk8jFvuRPOhAG2/UtrQDRh1XM7rvZZxOKD4XaBCKah7z6XzVr91lOlviWbgFoxmHMF02n5aLLFib/Czf9lhR2ASdZaepOUma7YHpuqW5qafz6bKfn8MD4dS46A/0y6kPk4R6jH1Gof8qWTtz9bQwlSl9js0RIC6x2LqkYeJp1R5v3xMvNMYdOnac59oLhFQpf1H3bF4oydGYpc0tSSP1hkgWz&#43;qNBkmhr4QXXh8PlUb9aOCxUCmLz74FNCV25yp2GwJ2maSOz9YI1G6BM2nW9B&#43;spby7ZbQa7HtHyJNSUE94ZdGyxHbMe66EvNhm2g5dx&#43;/hjx9k&#43;2RVO0dJe1pu13H2Rd0RfdLZkvOZ1Jmow8mx6RAHbskFskT6&#43;wntmJTQAZ1jgVS64gXF4tSj0rpb7uep/zZyxi4XKOslwD1ua57tmrtlQfPPLZSiYH6Xkyk6buDMa4&#43;DG1NVZgGS4T2w7zhcLYfCNHBSxFP1OrzsVSq1pOew7eQWyx8Vm&#43;XTqfpfDRNtqJpKxH6vkTo&#43;9vR&#43;3gHJp&#43;up9EPloQ9p3Kq3exzSuGdQRtoNGQZ23zin&#43;p0HklNlPNpKYw5cACr5DTd/ae5vrlU3&#43;KD8TaxWQdiMDvswzeOnly6XZh1FZhB9gHUk6L0kUPg44Xm0Fu3sRDwZdzTdfesTM5dQ&#43;uVQz1xDYckPRUPluIqMdDL6fl8/u0UTKoPRVt9BFqp8to6fTGrO4JhUw6RJQOeL1c&#43;Zf5OatXuQauP5uAeWPD4wA5nI6j01o8CdA3a1ivRKqitt0k7ugvth5uo3HEDa04mPF4A/r3U6w7SPh44H/tUL15cCpFTcApxQkndtexp7UvVTefQ3xCE8cYIDHb5UfOYO9M9Ah97UL/UdD751ZHqe1wZ7xX/&#43;PjL/YOprO4COF9F3y0fA49M9M6m8Y5bPPLfourwR5UYaL7Mx8HjV1HGQnLnazLt6w6V4tRHOqZRvN9hCQERWTp4J8/48tZbfalWZxzTl3uRWRRKKdl3eVP1881&#43;wqDFcgxarkD7tlT6ttvRvGuJ6X8s&#43;WLSEQIKa8Iz9byLKK4rMqiWYuY7bHak0pbTaLefR7tJ&#43;vqVQZhZnqW1lTsOCYWdlTrfE5dSaHnQiQYH3dmdeE&#43;XV5UjGXchlLInYyQ689C6iwf1SMHsXAqd3OMIejQaz1CJgSot23Rc2k8BKu2npo5EaO2&#43;6L02GotGYzjmpJ60hKj4ZNp9MgrzV8bwbodNBBQtiappO3GFIwZvzsLkrWW6p/c0LWXavyMW6n1LtDLtq3VewSa7yKcsUEml2girkDx67b5ArbkOmC90w2CdKxpL2TZ4UXVFMBaSRwe5XnqcLhS4OQKoxt4zvH3cA88ipxEvpDud9sLMPg3NKfGfzjfQnkukvHsCQ3xTyHpUzZ6hvwQ0IqmAmk2HYmwxGP2aYptqD0FTbTRGNfozYck&#43;Cu4XlpWZ83dhWnMk5k2ms3DnBR494h6UmEeTL&#43;dSrskCjBoLzOYrBKjYp/fXo313NWXaLOGjvj/jEfKAWzICOw84stjyKD7SR8dm3iYuPY&#43;09DukS6WR7pGwlIfYRN1k4l4fWk7dR/UpRzCaZoN2rhj&#43;OXHoLbyAdqUr&#43;hKZVX9yp9lqZ/yLJd&#43;T8Td5Y70jNXbbszA8VTfdVdQeiBfzbu2Gnn0SGvtcNKezMXZLoKJdMIef1LJn6i8BvSHdQfcBi6lQU&#43;xTtYHiSaU4CThN7f40/HICERGF4RicXEC1TyeiaTSct7qvwCcyWzddb9&#43;5w9qtttR6axbGjaXSN1snUboCvdbLMWkl1b7FZqq1sqTXJFdiZFYmScQMXbSb9/rM5ZPRa/h80jba//grn/1oRasp1jSccJKqo20wHmSFwYhT6I2VaJzshWaKmPrJUp2nh2Gw0BvzDR7UW3mSZb6Jj/OvmgXf7z1LhVWnaLHnuIAurNuZEhMDXIIo7&#43;ArIBMkQqUoWSuYEbzpEPJc//lIfwnoPRm&#43;ZRuO81qDblLt&#43;whQZaFGSD4djNEbvVm&#43;/pDufWqU&#43;83di16dHpRrNpy5G89wTc15UbbMs/5jt2PWcHrhk9BvCtgWqySfrsRQwBq0nEP1LxcwbsNpLovZC0jOp/uPazD7ajL6XZeh330d2q6SJr4Xt9BrN9pBh9EMVttBNEMPoTfmGHoyINqpEqXTvDGc54aFRGav/S6kFM2U&#43;/LVOVZmy8LjVFl&#43;mkHW7o9tkNhMWkk&#43;NbMNkbZVItQuTVrcWKrYBPO1U/hzi&#43;bDoidq/hJQJVefaJq9J9W9RjcpSP3FQknXVEfl1IG06jSTyxJVatfe4gHbfDaKcjW6U6ftZLbYxj2u&#43;HFX8unUbzmmjWeibbQcTVMB22KZFKiZYvonSOUfRdWOU5kinU6GzAp1P2z0Vlde6yfFq&#43;sqjL5dg1G3zRj22I5hz18w6L0HvT57pO/fj&#43;mIIxhPspZIPY7etBNUXWDDt7KfR327OjefpIe0m3eYBnNP8OlOHyKKBltBnXUunmo7XDA6FI7hoVS0thnoO8ZhYePLCunhn6cE6fuV/jLQ9Gv36DN8Pua1v5Zc2gOt5FNNrTE6s1&#43;u&#43;SQW7vAmT6bNQxnKo/tcqN&#43;wJ2XrjaB1T0uii1aUFNiAyBTa95cOqNF09Jr&#43;JEClSLWdI0BnoGkzFf02M6ktXdTs7WdJk3mq1lH3umTQTvr7V7&#43;YzSsdl1Ch01pMO2/D5Pv96PcWgP1s0B8khW&#43;sNaYz9lJx8nb67T5HcLGnPFJlgPrvDqSmWL0mP1mx/nzS44bCM/0hrbafpsJOX4z2JWC4PxOtTSbGp6P5wD2EoOf5NZF6AETpLwNVI&#43;zg7Ef95p0pV&#43;s79Kv1FahjJZdOFqM/hcYdFxMoRUTp4Y27zJ21ncoNBmLUaDTtx&#43;xG3JVuHwpqTEYeg6b9wqutBKCK1uaL0bRS/nSrfL8Vk7e3ULf9VrpOscI59LYu/yXJrjfYRvPVtL3U6iHR&#43;vVK9LpuQ/ODTPneJ9AMcMBw6AHemLaThScDSCtWhK7IDgbsD6LK3FNUnH2UGWfDdc&#43;GKqmxnugcStXNzmg3XECz/TJacfCaE6nS/weyMCr9uf63uP4yUKXr&#43;ff4usdYKtbugHG1HzCoPkbM/jSBOgOTBiOZueI494tuEN24fo&#43;hEyyp&#43;EY/aT2HMWj2fiLVrc4iZUjVXL3dhTYdF2LeaKZE7DKMm1pi0mInhm/vxEDMf7kPNvHx4A3ssL9IhLQ/KhWq56h&#43;9UhitHjNr6UVbTlqIw0GraHRyC303nSGYxezuPsox4iiJBWNORRM1VlWVFpgTYfdrjz6pXK1v5MJ&#43;TT/5RTGmz3FZoWi2Sz581gmBtaxtDzph4cQL8ySL9bfAqq0a78t1Rt2kFzaVSq&#43;tKOvSVW3mIxBnRHUbTMYN/&#43;IondKVKXlM3DEairW6kbVxv3pPXEXSY9CQ3RbclhoRB79h/xM7caTqdz4R0kfczBsJRH7zkbpqgTqx/Op/91s2o/fgpVfNtcFlgJRIJ9Ny7lFZOIVQqOSCI&#43;9rGsmiuqPTmpp8NsN7ljMPE7lmQf5dN0RfLMLHgPKkn103nOGslts0dsuxcwyWoDGoTkUjckBX8b7JT/1xPOL9LeBXs29zfDxS6hS92sMq/ZC/1WBaiEtaY0hGEqP337QIqKuFk59pVtykWPGbqFa/T4SrUNo1X4he45E6Rani4/85dR77Dp&#43;ln6zV9G423hMP56GwSfSrn64WrZlGH26GIuOC/h40GrmbXbAwT2CYjden1KOUF3jHEnTmQcwmnCYchP2MmCvO9E5T1qdm&#43;KfljlHYzZvD/q7PNDffglDyyi0lmFo93jT4JC77sHdkupvA1VPiZyw86TZu30oU1186av90ReDr1dLqn6NEZg3G8mkVYe5UexkUpNg&#43;qyj1Gg2mHL1&#43;vP6u9P5ccVJXPxiyS/2PvVt5u18PKPi2HYqiBXHwpm6&#43;yLjtpxl0lYnFu8&#43;w9bjbhx18sDtvJ8Afbq3yhbAjiFpjNzhQK3R66g86RcqjtvFkAN&#43;RBVbd1MDeTLsOs2XHsNwzWnJm9IIbAmVvv8Sput9qLLtFNP9E565EPM8/W2gSnly4gtWHqBS3a7iS39AW0u2OuJNq01Gz2ISNVuP45hziPjXJzGYK8GxbJM1DT4aQZkmQ6nYchTNvpnFxLW2qKXIdKmWeRJZRU5GJzV91S8/qMcm1R&#43;FufPwwVNTWg2Aumj11Mn5K7cZsPQAjfouo&#43;IPP1Fx0Epen7CRpQ6BuoeAi8s/E77eeYYKy&#43;3QrPOW3CnTfUMwRuv8qLLyNN2PeBH7F/vg/wqoUpo00R&#43;0H0&#43;52l3Qr9NFolNsVLUZUv3nYVpjNM0/GYOrX/QfAPhKe9d/8X4qtB2LfrMJ6DWbSNWPp/OfkdtY9LM/nkEPycoWsIrUnVvcFcIqX&#43;bJBaqn7dQsV3k0LOUOR3ySGbvFmfelYTDvOJfyXy2jQuf1VO29idG7vAhI/yMVtZz9oaUd5ZZIc7DOBc1qfzQrA9Fb7YfpCmearrLBRVpbda4lkWp6lP5roCr2jtt60uqD7phZ/AcTi17iT0ejX30qelL9TcTwdxq4inPBRSsPxZQuZH628&#43;fbMZZUaTVc&#43;vtBlHlzJK&#43;8M41mHVfx9ZDdDJ6xn/GLDzFx1RkmbfBi4npvRq/xpP8SF76ddZL3hu2mXpc1vCqetWrHlVT6cgUNvl/LkBUOWAdcJ/t3UamUJA5hkk0kFeZbo/eTM5q1FwWodEaLvaVzcqXB4iPMcbr0zAXv5&#43;lKTqER/a&#43;BKt2/f5/1G7bTsMk3mFfrjFm1nhhIcdLUHK1bjDZtMILPeq4g9PK9P4y4GhD1S2Fng1MYKp71s35LeKPDLMxbT6BM84kYvTUZw2ZTMGo5E5N35mHcdgEm7y3C5MNFUrAWUaXDMmp2Xkqz3qvpOPFnxqw9RZD4oefBuCzXPcXal1rT92A6VyJzgR&#43;aFQJzTSBGi5yoO&#43;cgw/a6kvicQvc8hScV3jYvFaBKOTn5zJ63g6q1OlKu&#43;rcY1ehbWKBqj0Sv9lDKvTGQH0av51JSwVPTv7jUxEwSO&#43;MucFft82L4AmkNe2/m7W/X0VQisFGHJbzefgGvd5xHs&#43;6L6DBxC1M227LjjD9ecanSBd167r7VwKk5MmKXExaT91DhRzv0f3RBb46HRKk3&#43;gudqDL/JJ&#43;uPcl56ayeZP2SKTq5lIEqJUlf13fIQqo16CxAJZ9aSBdVWy2gDJVI7U/lpgPoPnIdvhHqNz9fLGXKr4v5S5L2OTZZnbCY8&#43;QHRF6&#43;T1TKXeIkL16RqasK1Z/tSylWGowR2&#43;yoPno7ppNs0E44hXa6CwYznTGdY0uVWYd466cjWCU9eUb0ryg5q9CKlSpQpfiUPOn1F2BWqz36Fl0kSsVKqcovxUq/ziDKNhzIB91WcOBUhK6a/9NSkXbxyi26r7Wh6uBNlBtzBIPxdgL0NHrT3NGffIryY3fQat5OdgRd&#43;VswldT6rVKpA1U5Miwuk486j8Gsdicx&#43;99LLh1QGKm66T8Co9fH0Oqb2Ww54vbUjbzSlkoh9pHX&#43;XjBUQz7bpce/yD6w49gOFL&#43;P&#43;YEeuPsMZloyxuTt7LW&#43;eIz/2DBX1WpA1VSUeETmspXvWZSvu63GNZQq1L9Bexw8anjZZuEXt3hVG05gonLbLiUUnjxpSU1qGqh&#43;KeTF6gjNkyv7y9oBlqjGSx&#43;c7g1JsMPU2bIXkwG7KDexF9ZZuOvux1SGvpHgCqpiwq4lMV3feZRsd53mNb8Ab2aA3VQNTXVct9oXW4t22gIXw5YzcEz0oYWfvS/kjquU2QG/S3PUKnHMkz67kA74DCaQQJzkAOaIdKv991Lud4beWvMZlbZhTy&#43;A1oa&#43;seAKqmLi4zN53uB&#43;kr9b8Xodxdv2kuKlYBVj/PUlf6/1kBMGg6i/idTmbNJ&#43;ubUwoXevyo1K9RC9M5zkTQZvgHjXtsw/GEnBj1/RvODRGifQ2j6n0Db/xhGvXdRZ8A69ngmkPd3DvYC/aNAHykz46FYqp&#43;p0birGP9OGOiKVU/06w4QsGqBegTauuMwbTSNxl&#43;uYcG2UKKkuqt288&#43;kQF6V6X3YJ5u2I3ZgLl2S4Xfb0XTdJ9tuNF22o991GyYCt0zvXyjfayufzDqOQ/gt3YCXtv4VoEpXpY1cs9mGhq17UqbmlxhU/166qSHo1x4nOXWigJWtrrSgUrDMW47hu9Gb2WHlT7bMx&#43;dduPrtEjuvOEYuPSbd0UrKfLkM/Y6b0HQUoN9IZHbeJUB/Qb/bz5h120zFzssZsM4Z74T7f7ua/5n&#43;NaBKat3z9LlwOvWYSOV6XTCtPgi9ajL1LUbobqFo6ktebTASbf0B4gR6Ur3VQHqO2sBhm3DiktSfNyhUmgzOGZ9Mxv1kRf3/TKLKZ9Mx/XwJ2nbr0HxpiabTNjRfqa9b0ftWpn7nDTTov5mJ29xR/vvRfv4J/atAldTFXE7NZMY8Sxq83Q9TC&#43;mq1GOSkku1dQVoHYnY&#43;hKpDccK4MHo1e9LpeaD&#43;X7wMlIFpPp8z6m7qfbJHEzfn4fBR3PQ&#43;3wZmnYSmZ9JZH6xAW2H9Wg7bsCg/UrMOy3m4wk7sQvOee4dy9LUvw70kXLyHnLSOZz32o&#43;hQt2vMandDW31PtIADJEUMFqgihOorx5KU89Q9aN1h0kERN/QAf1g4EZM2s5D&#43;95yNNLTaz5dJtG5CYN2YpHaLcfgs7mYtZtHjW8WMHu/P&#43;LX/9GoLK7/M6CPFJNyk3mrfqXVF8MoK2CNBKxeTXEC0qrq1x6KoUStobiBZl9MwjWo8OniT4fswKjVfLStJTLfX4Dm3Tlo3lso0boUo0&#43;n8XrXHxm66ADOQVf/lmP4b/R/DlRJVfPzYSn0Hr2Ieq17UKbO19IMdMXQojdGErHGtQbT6LPxOF4sbA0/EaCmrRZg9I5E47uzMXh/OsaymX/yI5&#43;N28BR76hSt0Ml1f8EUCUVeVk37uIZFE&#43;fMYuxaNaVsrU6Y1StGybVu/PGR0Nw8E/SdVQf9l6D6ZtTMGs5hzKtxlHlg7F8PGgdhzyykID/xyp4SfQ/A7S4cm89xN4tmHGzNtP43X5UqtuBNz/qhaNfpK6wfNxjLhWlw6r//gx6TfmZnSeDdb8y&#43;b&#43;g/0mgj6TuiDqcC2Hy/E181WMY7v6hugjtMmA2PSQidx&#43;N0j0r9W8VnJLofxqokoKl1kbzbj7kzr3C9b58CVP16Iv688X/a/qfB/r/m14CLWW9BFrKegm0lPUSaCnrJdBS1kugpayXQEtV8P8Apu4AjVgY9scAAAAASUVORK5CYII=" alt="Audspect BAS" style="height:32px;filter:brightness(0) invert(1);opacity:0.9">
+    </div>
+  </div>
+
+  <div class="cover-body">
+    <div class="cover-eyebrow">Security Assessment Report</div>
+    
+    <div class="cover-title">Endpoint Security<br>Posture Assessment</div>
+    <div class="cover-sub">ATT&amp;CK-Aligned Breach &amp; Attack Simulation<br>Executive &amp; Technical Report — Confidential</div>
+    
+    <div class="cover-rule"></div>
+
+    <div class="cover-grid">
+      
+      <div class="cg-cell">
+        <div class="cg-label">Endpoint</div>
+        <div class="cg-value">DESKTOP-RI1639F</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">IP / Environment</div>
+        <div class="cg-value">192.168.146.128 &nbsp;&#183;&nbsp; Production</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Operating System</div>
+        <div class="cg-value">Windows/amd64 (10.0.19045)</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Logged-in User</div>
+        <div class="cg-value">DESKTOP-RI1639F$</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Assessment Date</div>
+        <div class="cg-value">01 Sep 2026, 04:56 UTC</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Last Scenario</div>
+        <div class="cg-value">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+      </div>
+      
+      <div class="cg-cell">
+        <div class="cg-label">Agent Status</div>
+        <div class="cg-value" style="color:#d29922;font-weight:700">&#9679; idle</div>
+      </div>
+      
+      
+    </div>
+
+    <div class="cover-badges">
+      <div class="cb cb-conf">&#9888; CONFIDENTIAL &#8212; Authorised Recipients Only</div>
+      <div class="cb cb-live">&#10003; Live Simulation &nbsp;&#183;&nbsp; Audspect BAS</div>
+    </div>
+    
+  </div>
+
+  <div class="cover-bottom">
+    <div class="cover-bottom-copy">
+      Audspect BAS Platform &nbsp;&#183;&nbsp; Classification: CONFIDENTIAL<br>
+      This document contains sensitive security posture information. Do not forward or distribute.
+    </div>
+    <div class="cover-scores">
+      <div class="cs-item">
+        <div class="cs-num" style="color:#0d9488">100.0%</div>
+        <div class="cs-lbl">Prevention</div>
+      </div>
+      <div class="cs-item">
+        <div class="cs-num" style="color:#2563eb">0.0%</div>
+        <div class="cs-lbl">Detection</div>
+      </div>
+      <div class="cs-item">
+        <div class="cs-num" style="color:#0d9488">Protected</div>
+        <div class="cs-lbl">Risk Class</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Table of Contents</div>
+  </div>
+</div>
+<div class="stag">Contents</div>
+<div class="stitle" role="heading" aria-level="1">Table of Contents</div>
+<div class="toc-list">
+<a class="toc-item" href="#sec-1"><span class="toc-num">1</span><span class="toc-title">Executive Summary</span></a>
+<a class="toc-item" href="#sec-2"><span class="toc-num">2</span><span class="toc-title">Assessment Summary</span></a>
+<a class="toc-item" href="#sec-3"><span class="toc-num">3</span><span class="toc-title">Top Risk Drivers</span></a>
+<a class="toc-item" href="#sec-4"><span class="toc-num">4</span><span class="toc-title">Risk Summary</span></a>
+<a class="toc-item" href="#sec-5"><span class="toc-num">5</span><span class="toc-title">Asset Context</span></a>
+<a class="toc-item" href="#sec-6"><span class="toc-num">6</span><span class="toc-title">Kill-Chain Path</span></a>
+<a class="toc-item" href="#sec-7"><span class="toc-num">7</span><span class="toc-title">Attack Flow</span></a>
+<a class="toc-item" href="#sec-8"><span class="toc-num">8</span><span class="toc-title">Attack Path Validation</span></a>
+<a class="toc-item" href="#sec-9"><span class="toc-num">9</span><span class="toc-title">MITRE ATT&amp;CK Tactic Summary</span></a>
+<a class="toc-item" href="#sec-10"><span class="toc-num">10</span><span class="toc-title">Threat Actor Readiness</span></a>
+<a class="toc-item" href="#sec-10b"><span class="toc-num">10b</span><span class="toc-title">EPSS Priority Index</span></a>
+<a class="toc-item" href="#sec-12"><span class="toc-num">12</span><span class="toc-title">Assessment Insights</span></a>
+<a class="toc-item" href="#sec-13"><span class="toc-num">13</span><span class="toc-title">Action Plan</span></a>
+<a class="toc-item" href="#sec-14"><span class="toc-num">14</span><span class="toc-title">Regulatory Compliance Status</span></a>
+<a class="toc-item" href="#sec-15"><span class="toc-num">15</span><span class="toc-title">Scenario Run History</span></a>
+<a class="toc-item" href="#sec-16"><span class="toc-num">16</span><span class="toc-title">Technical Findings</span></a>
+<a class="toc-item" href="#sec-17"><span class="toc-num">17</span><span class="toc-title">Environment Restoration</span></a>
+<a class="toc-item" href="#sec-18"><span class="toc-num">18</span><span class="toc-title">Detection Validation</span></a>
+<a class="toc-item" href="#sec-19"><span class="toc-num">19</span><span class="toc-title">Coverage Analytics</span></a>
+<a class="toc-item" href="#sec-20"><span class="toc-num">20</span><span class="toc-title">Technical Appendix — ATT&amp;CK Glossary</span></a>
+</div>
+</div>
+</div>
+<div class="stag" id="sec-1">Section 1</div><div class="stitle" role="heading" aria-level="1">Executive Summary</div>
+
+
+<div class="risk-hero">
+  <div class="rh-ring"></div>
+  
+  <svg width="120" height="120" viewBox="0 0 100 100" style="flex-shrink:0">
+    <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
+    <circle cx="50" cy="50" r="44" fill="none"
+      stroke="#0d9488"
+      stroke-width="10"
+      stroke-linecap="round"
+      stroke-dasharray="276.46 276.46"
+      transform="rotate(-90 50 50)"/>
+    <text x="50" y="45" text-anchor="middle" fill="#fff" font-size="18" font-weight="700" font-family="system-ui,sans-serif">100.0%</text>
+    <text x="50" y="62" text-anchor="middle" fill="rgba(255,255,255,0.55)" font-size="9" font-family="system-ui,sans-serif">PREVENTION</text>
+  </svg>
+  <div style="flex:1;min-width:0">
+    <div style="color:rgba(255,255,255,0.5);font-size:0.75rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Overall Risk Score</div>
+    <div style="font-size:2.6rem;font-weight:800;color:#0d9488;line-height:1">0<span style="font-size:1rem;color:rgba(255,255,255,0.4);font-weight:400"> / 100</span></div>
+    <div style="font-size:1.1rem;color:#fff;font-weight:600;margin-top:4px">Protected</div>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+      <span style="padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;background:#0d948822;color:#0d9488;border:1px solid #0d948855">Exposure: Low</span>
+      
+      <span style="padding:3px 10px;border-radius:20px;font-size:0.75rem;font-weight:600;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.12)">0 / 4 techniques evaded</span>
+    </div>
+  </div>
+</div>
+
+
+<div class="score-row" style="margin-bottom:16px">
+  <div class="scard">
+    <div class="scard-label">Prevention Score</div>
+    <div class="scard-value" style="color:#0d9488">100.0%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:100%;background:#0d9488"></div></div>
+  </div>
+  
+  <div class="scard">
+    <div class="scard-label">Detection Score</div>
+    <div class="scard-value" style="color:#6e7681">N/A</div>
+    <div class="scard-bar"></div>
+  </div>
+  
+  
+  <div class="scard" style="border-left:3px solid #da3633">
+    <div class="scard-label">Techniques Missed</div>
+    <div class="scard-value" style="color:#da3633">0<span style="font-size:0.9rem;color:#6e7681"> / 0</span></div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:0%;background:#da3633"></div></div>
+  </div>
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Techniques Prevented</div>
+    <div class="scard-value" style="color:#0d9488">0<span style="font-size:0.9rem;color:#6e7681"> / 0</span></div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:0%;background:#0d9488"></div></div>
+  </div>
+  
+</div>
+
+
+
+<div style="margin-bottom:18px">
+  <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.1em;color:#6e7681;font-weight:700;margin-bottom:8px">ATT&amp;CK Kill-Chain Coverage</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px">
+    
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:62px;max-width:80px;background:#f8faff;border:1px solid #e7eaf0;border-top:3px solid #8e44ad;border-radius:7px;padding:6px 8px">
+      <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.05em;color:#6e7681;text-align:center;line-height:1.3;margin-bottom:4px">Credential Access</div>
+      <div style="font-size:0.95rem;font-weight:800;color:#0d9488">100.0%</div>
+      <div style="font-size:0.58rem;color:#9ca3af;margin-top:2px">2 tested</div>
+    </div>
+    
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:62px;max-width:80px;background:#f8faff;border:1px solid #e7eaf0;border-top:3px solid #2980b9;border-radius:7px;padding:6px 8px">
+      <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.05em;color:#6e7681;text-align:center;line-height:1.3;margin-bottom:4px">Discovery</div>
+      <div style="font-size:0.95rem;font-weight:800;color:#0d9488">100.0%</div>
+      <div style="font-size:0.58rem;color:#9ca3af;margin-top:2px">1 tested</div>
+    </div>
+    
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:62px;max-width:80px;background:#f8faff;border:1px solid #e7eaf0;border-top:3px solid #16a085;border-radius:7px;padding:6px 8px">
+      <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:.05em;color:#6e7681;text-align:center;line-height:1.3;margin-bottom:4px">Lateral Movement</div>
+      <div style="font-size:0.95rem;font-weight:800;color:#0d9488">100.0%</div>
+      <div style="font-size:0.58rem;color:#9ca3af;margin-top:2px">1 tested</div>
+    </div>
+    
+  </div>
+</div>
+
+
+
+
+
+<div style="margin-bottom:18px;padding:14px 16px;background:rgba(13,17,23,0.5);border:1px solid #30363d;border-radius:8px">
+  <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin-bottom:10px">&#x1F6E1; Privilege Assessment</div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #21262d">
+    <div style="text-align:center">
+      <div style="font-size:1.3rem;font-weight:900;color:#fff">6</div>
+      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">Techniques Tested</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:1.3rem;font-weight:900;color:#c9d1d9">5</div>
+      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">Standard User</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:1.3rem;font-weight:900;color:#d29922">1</div>
+      <div style="font-size:0.58rem;color:#6e7681;white-space:nowrap">Required Elevation</div>
+    </div>
+    
+  </div>
+  
+  <div style="font-size:0.78rem;color:#c9d1d9;line-height:1.7">⚠️ 2 technique(s) succeeded from a standard user account — exploitable immediately after initial access, before any privilege escalation. Additionally, 1 technique(s) required elevated privileges to succeed.</div>
+</div>
+
+
+<h2>Executive Conclusion</h2>
+<p style="font-size:0.92rem;line-height:1.7">This assessment executed 4 techniques against the endpoint, of which 0 were not prevented (prevention score 100%, low exposure).</p>
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Executive Summary</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-2">Section 2</div><div class="stitle" role="heading" aria-level="1">Assessment Summary</div>
+
+
+<div class="score-row">
+  <div class="scard">
+    <div class="scard-label">Prevention Score</div>
+    <div class="scard-value" style="color:#0d9488">100.0%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:100%;background:#0d9488"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Severity-weighted pass rate</div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Detection Score</div>
+    
+    <div class="scard-value" style="color:#6e7681">N/A</div>
+    <div class="scard-bar"></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">No host telemetry — detection not measurable</div>
+    
+  </div>
+  <div class="scard">
+    <div class="scard-label">Exposure Level</div>
+    <div class="scard-value" style="color:#0d9488">Low</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:0%;background:#0d9488"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Derived from prevention effectiveness</div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Penetration Ratio</div>
+    <div class="scard-value" style="color:#da3633">0/4</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:0%;background:#da3633"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">0% of executed techniques got through</div>
+  </div>
+  
+  <div class="scard">
+    <div class="scard-label">Trend vs. Previous</div>
+    
+    <div class="scard-value" style="color:#0d9488">
+      ▲ +100.0
+    </div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Prevention pts vs previous (0.0% → 100.0%)</div>
+    
+  </div>
+</div>
+
+<div class="score-row" style="margin-top:20px;margin-bottom:20px">
+  <div class="scard" style="flex:1;min-width:100%;border-left:4px solid #0d9488;background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
+    <div class="scard-label" style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Attack Surface Age</div>
+    <div class="scard-value" style="font-size:1.15rem;font-weight:700;color:var(--navy)">Exposed weakness present for 0 days</div>
+    <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
+      
+      No open findings or weaknesses detected on this agent.
+      
+    </div>
+  </div>
+</div>
+
+
+
+
+<div class="score-row" style="margin-top:20px;margin-bottom:20px">
+  <div class="scard" style="flex:1;min-width:100%;border-left:4px solid #0d9488;background:#f7f9fc;padding:12px 16px;border-radius:6px;display:block">
+    <div class="scard-label" style="font-size:0.72rem;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Endpoint Stability Check</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:0.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px">Before Running</div>
+        <div style="font-size:0.8rem;color:var(--navy)">
+          CPU: <strong>3.3%</strong> &middot;
+          RAM: <strong>4.8 GB</strong> &middot;
+          Disk: <strong>61.9%</strong>
+        </div>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:0.7rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px">After Running</div>
+        <div style="font-size:0.8rem;color:var(--navy)">
+          CPU: <strong>3.6%</strong> &middot;
+          RAM: <strong>4.8 GB</strong> &middot;
+          Disk: <strong>61.9%</strong>
+        </div>
+      </div>
+      <div style="text-align:right;min-width:150px">
+        <div class="scard-label" style="font-size:0.6rem;text-transform:uppercase;color:var(--muted);margin-bottom:2px">Health Impact</div>
+        <div style="font-size:1.15rem;font-weight:700;color:#0d9488">Negligible</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<h3>Secondary Metrics</h3>
+<table>
+  <tr>
+    <td>Tactic Coverage (breadth)</td><td><strong>21.4%</strong> of 14 ATT&amp;CK tactics</td>
+    <td>Defense Rate</td><td><strong>100.0%</strong> tactics fully blocked</td>
+  </tr>
+  <tr>
+    <td>Kill-Chain Amplifier</td><td><strong>1.0×</strong></td>
+    <td>Mean Time-to-Detect</td><td><strong>—</strong></td>
+  </tr>
+</table>
+
+<h3>Execution Summary</h3>
+<table>
+  <tr><td>Executed</td><td><strong>4</strong></td>
+      <td>Succeeded</td><td style="color:#0d9488"><strong>4</strong></td></tr>
+  <tr><td>Failed</td><td style="color:#da3633"><strong>0</strong></td>
+      <td></td><td></td></tr>
+  <tr><td>Skipped (Policy)</td><td><strong>0</strong></td>
+      <td>Skipped (Content)</td><td><strong>2</strong></td></tr>
+  <tr><td>Skipped (Platform)</td><td><strong>0</strong></td>
+      <td></td><td></td></tr>
+  <tr><td>Scenario Coverage</td><td colspan="3"><strong>6/6</strong> (100%)</td></tr>
+  <tr><td>Eligible Coverage</td><td colspan="3"><strong>6/6</strong> (100%)</td></tr>
+</table>
+
+<h3>Simulation Reliability</h3>
+<p style="color:#6e7681;margin-bottom:8px">A high environmental-error rate lowers confidence in the result — it means the BAS could not execute techniques, <strong>not</strong> that the endpoint blocked them. ERROR and SKIPPED are excluded from all scores.</p>
+<table>
+  <tr><td>Attempted</td><td><strong>6</strong></td>
+      <td>Valid (scored)</td><td style="color:#0d9488"><strong>4</strong></td></tr>
+  <tr><td>Environmental Errors</td><td style="color:#d29922"><strong>0</strong></td>
+      <td>Skipped</td><td style="color:#6e7681"><strong>2</strong></td></tr>
+  <tr><td>Result Confidence</td><td colspan="3"><strong style="color:#0d9488">High</strong></td></tr>
+</table>
+
+<h3>Execution Context (Privilege)</h3>
+<p style="color:#6e7681;margin-bottom:8px">Per-step privilege context from multi-context execution. <strong>Legacy</strong> steps ran in the agent's default context (requires_priv not yet annotated). <strong>User→Admin</strong> indicates a requested user-context step that fell back to admin because no interactive session was available. Prevention rate = steps blocked / steps attempted per tier.</p>
+<table>
+  <thead><tr><th>Tier</th><th>Steps</th><th>Prevented</th><th>Prevention Rate</th></tr></thead>
+  <tr>
+    <td>User (interactive)</td>
+    <td><strong>5</strong></td>
+    <td><strong style="color:#0d9488">3</strong></td>
+    <td><strong>60%</strong></td>
+  </tr>
+  <tr>
+    <td>Admin (elevated)</td>
+    <td><strong>1</strong></td>
+    <td><strong style="color:#0d9488">1</strong></td>
+    <td><strong>100%</strong></td>
+  </tr>
+  
+  
+  
+</table>
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Assessment Summary</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-3">Section 3</div><div class="stitle" role="heading" aria-level="1">Top Risk Drivers</div>
+
+<p style="color:#6e7681;margin-bottom:14px">The techniques whose failures account for the most lost prevention points (severity-weighted, the same weighting as the headline score). "Score points" is how much of the 100-point scale each technique's failures <em>account for</em> — not a guaranteed gain from any single fix.</p>
+
+<p style="color:#0d9488;font-weight:600">✓ No techniques penetrated this endpoint — there are no risk drivers to rank.</p>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Top Risk Drivers</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-4">Section 4</div><div class="stitle" role="heading" aria-level="1">Risk Summary</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Business-objective risk derived from the per-tactic outcome: <strong>High</strong> when most tested techniques in the objective went unprevented, <strong>Medium</strong> when some did, <strong>Low</strong> when all were blocked. Objectives with no executed techniques are omitted.</p>
+
+<table>
+  <thead><tr><th>Business Objective</th><th>ATT&amp;CK Tactic</th><th>Risk</th><th>Tested</th><th>Unprevented</th></tr></thead>
+  <tbody>
+  
+  <tr>
+    <td style="font-weight:600">Credential Theft</td>
+    <td>Credential Access</td>
+    <td><span class="dot" style="background:#6e7681"></span>Low</td>
+    <td>2</td>
+    <td style="color:#0d9488">0</td>
+  </tr>
+  
+  <tr>
+    <td style="font-weight:600">Lateral Movement</td>
+    <td>Lateral Movement</td>
+    <td><span class="dot" style="background:#6e7681"></span>Low</td>
+    <td>1</td>
+    <td style="color:#0d9488">0</td>
+  </tr>
+  
+  <tr>
+    <td style="font-weight:600">Discovery</td>
+    <td>Discovery</td>
+    <td><span class="dot" style="background:#6e7681"></span>Low</td>
+    <td>1</td>
+    <td style="color:#0d9488">0</td>
+  </tr>
+  
+  </tbody>
+</table>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Risk Summary</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-5">Section 5</div><div class="stitle" role="heading" aria-level="1">Asset Context</div>
+
+
+<table>
+  <tr><td>Hostname</td><td><strong>DESKTOP-RI1639F</strong></td></tr>
+  <tr><td>IP Address</td><td>192.168.146.128</td></tr>
+  <tr><td>Operating System</td><td>Windows/amd64 (10.0.19045)</td></tr>
+  <tr><td>Logged-in User</td><td>DESKTOP-RI1639F$</td></tr>
+  <tr><td>Environment</td><td>Production</td></tr>
+  <tr><td>Agent Status</td><td>idle</td></tr>
+  <tr><td>Last Update</td><td>01 Sep 2026, 05:16 UTC</td></tr>
+</table>
+
+
+<h3>Reported Security Tooling</h3>
+<div><span class="tool-tag">AV: Windows Defender</span><span class="tool-tag">Microsoft Defender (real-time protection ON)</span></div>
+
+
+
+
+<h3>Post-Run Cleanup (changes rolled back)</h3>
+<ul style="padding-left:20px;color:#6e7681;font-size:0.82rem"><li>tmp removed: C:\Windows\SystemTemp\bas-18d1198be023a163-184431279</li></ul>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Asset Context</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-6">Section 6</div><div class="stitle" role="heading" aria-level="1">Kill-Chain Path</div>
+
+<p style="color:#6e7681;margin-bottom:14px">The chain of kill-chain phases this endpoint's gaps actually permit — built strictly from observed unprevented techniques, ordered by ATT&amp;CK phase. No hypothetical or inferred steps.</p>
+
+
+
+<div style="margin-bottom:20px">
+  <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin-bottom:10px">Attack Simulation Timeline</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px">
+    
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;width:88px;padding:7px 4px 6px;border:1px solid #0d948833;border-top:3px solid #0d9488;border-radius:6px;background:#fafbfc">
+      <div style="font-size:0.5rem;font-weight:700;color:#9aa5b5;letter-spacing:0.04em">#1</div>
+      <div style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#0d9488">
+        <span style="font-size:10px;color:#fff;line-height:1">&#10003;</span>
+      </div>
+      <div style="font-size:0.42rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6e7681;text-align:center">Credential Access</div>
+      <div style="font-size:0.48rem;font-weight:700;color:#0b1420;font-family:monospace;text-align:center">T1528</div>
+      <div style="font-size:0.42rem;color:#6e7681;text-align:center;line-height:1.3;word-break:break-word">Stage 2 - Condition Check: Cached M365/Entra Identity Artifact Discovery (T1528)</div>
+      <div style="font-size:0.44rem;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#0d9488">prevented</div>
+    </div>
+    
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;width:88px;padding:7px 4px 6px;border:1px solid #0d948833;border-top:3px solid #0d9488;border-radius:6px;background:#fafbfc">
+      <div style="font-size:0.5rem;font-weight:700;color:#9aa5b5;letter-spacing:0.04em">#2</div>
+      <div style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#0d9488">
+        <span style="font-size:10px;color:#fff;line-height:1">&#10003;</span>
+      </div>
+      <div style="font-size:0.42rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6e7681;text-align:center">Credential Access</div>
+      <div style="font-size:0.48rem;font-weight:700;color:#0b1420;font-family:monospace;text-align:center">T1556.007</div>
+      <div style="font-size:0.42rem;color:#6e7681;text-align:center;line-height:1.3;word-break:break-word">Stage 6 - Condition Check: Hybrid Identity Bridge Exposure (T1556.007)</div>
+      <div style="font-size:0.44rem;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#0d9488">prevented</div>
+    </div>
+    
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;width:88px;padding:7px 4px 6px;border:1px solid #0d948833;border-top:3px solid #0d9488;border-radius:6px;background:#fafbfc">
+      <div style="font-size:0.5rem;font-weight:700;color:#9aa5b5;letter-spacing:0.04em">#3</div>
+      <div style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#0d9488">
+        <span style="font-size:10px;color:#fff;line-height:1">&#10003;</span>
+      </div>
+      <div style="font-size:0.42rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6e7681;text-align:center">Discovery</div>
+      <div style="font-size:0.48rem;font-weight:700;color:#0b1420;font-family:monospace;text-align:center">T1082</div>
+      <div style="font-size:0.42rem;color:#6e7681;text-align:center;line-height:1.3;word-break:break-word">System Information Discovery</div>
+      <div style="font-size:0.44rem;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#0d9488">prevented</div>
+    </div>
+    
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;width:88px;padding:7px 4px 6px;border:1px solid #0d948833;border-top:3px solid #0d9488;border-radius:6px;background:#fafbfc">
+      <div style="font-size:0.5rem;font-weight:700;color:#9aa5b5;letter-spacing:0.04em">#4</div>
+      <div style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#0d9488">
+        <span style="font-size:10px;color:#fff;line-height:1">&#10003;</span>
+      </div>
+      <div style="font-size:0.42rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6e7681;text-align:center">Lateral Movement</div>
+      <div style="font-size:0.48rem;font-weight:700;color:#0b1420;font-family:monospace;text-align:center">T1550.001</div>
+      <div style="font-size:0.42rem;color:#6e7681;text-align:center;line-height:1.3;word-break:break-word">Use Alternate Authentication Material</div>
+      <div style="font-size:0.44rem;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#0d9488">prevented</div>
+    </div>
+    
+  </div>
+  <div style="display:flex;gap:16px;margin-top:8px">
+    <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#6e7681"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#0d9488"></span>Prevented</div>
+    <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#6e7681"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#d29922"></span>Detected (not blocked)</div>
+    <div style="display:flex;align-items:center;gap:5px;font-size:0.6rem;color:#6e7681"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#da3633"></span>Missed (no detection)</div>
+  </div>
+</div>
+
+
+
+<p style="color:#0d9488;font-weight:600">✓ No unprevented techniques formed a traversable kill-chain path this run.</p>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Kill-Chain Path</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-7">Section 7</div><div class="stitle" role="heading" aria-level="1">Attack Flow</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Per-technique execution outcome ordered by ATT&amp;CK kill-chain phase. Each row shows which security control acted (or failed to act) on the technique and the resulting verdict: <strong style="color:#238636">Blocked</strong> (control prevented execution), <strong style="color:#d29922">Detected</strong> (logged and alerted but not stopped), <strong style="color:#b58800">Logged</strong> (telemetry captured, no alert), or <strong style="color:#da3633">Bypassed</strong> (no control observed the technique).</p>
+
+
+
+<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #238636;border-radius:4px;padding:8px 12px">
+    <div style="font-size:1.3rem;font-weight:700;color:#238636">4</div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Blocked</div>
+  </div>
+  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #d29922;border-radius:4px;padding:8px 12px">
+    <div style="font-size:1.3rem;font-weight:700;color:#d29922">0</div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Detected</div>
+  </div>
+  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #b58800;border-radius:4px;padding:8px 12px">
+    <div style="font-size:1.3rem;font-weight:700;color:#b58800">0</div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Logged</div>
+  </div>
+  <div style="flex:1;min-width:80px;border:1px solid #30363d;border-top:3px solid #da3633;border-radius:4px;padding:8px 12px">
+    <div style="font-size:1.3rem;font-weight:700;color:#da3633">0</div>
+    <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:#6e7681">Bypassed</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:9%">Technique</th>
+      <th style="width:25%">Name</th>
+      <th style="width:14%">Tactic</th>
+      <th style="width:14%">Verdict</th>
+      <th>Security Control</th>
+      <th style="width:8%">Severity</th>
+      <th style="width:7%">Duration</th>
+    </tr>
+  </thead>
+  <tbody>
+  
+  
+  
+  
+  <tr>
+    <td colspan="7" style="background:#161b22;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#58a6ff;padding:5px 8px;border-left:3px solid #58a6ff">Credential Access</td>
+  </tr>
+  
+  
+  
+  
+  
+  
+  
+  <tr>
+    <td><code>T1528</code></td>
+    <td>Stage 2 - Condition Check: Cached M365/Entra Identity Artifact Discovery (T1528)</td>
+    <td style="font-size:0.7rem;color:#6e7681">Credential Access</td>
+    <td style="font-weight:600;color:#238636">Blocked</td>
+    <td>
+      Security Control
+      <div style="font-size:0.68rem;color:#238636;font-weight:600;margin-top:2px">&#9940; Attack stopped here</div>
+    </td>
+    <td style="font-size:0.8rem">Critical</td>
+    <td style="font-size:0.8rem;color:#6e7681">3038ms</td>
+  </tr>
+  
+  
+  
+  
+  
+  
+  
+  
+  <tr>
+    <td><code>T1539</code></td>
+    <td>Stage 3 - Execution: Browser-Cached M365 Session Cookie Theft (T1539)</td>
+    <td style="font-size:0.7rem;color:#6e7681">Credential Access</td>
+    <td style="font-weight:600;color:#6e7681">Skipped</td>
+    <td>
+      —
+      
+    </td>
+    <td style="font-size:0.8rem">Critical</td>
+    <td style="font-size:0.8rem;color:#6e7681">2618ms</td>
+  </tr>
+  
+  
+  
+  
+  
+  
+  
+  
+  <tr>
+    <td><code>T1555.003</code></td>
+    <td>Credentials from Password Stores: Credentials from Web Browsers<br><span style="font-weight:400;font-size:0.75rem;color:#6e7681">Stage 4 - Execution: Browser-Cached M365 Credential Theft (T1555.003)</span></td>
+    <td style="font-size:0.7rem;color:#6e7681">Credential Access</td>
+    <td style="font-weight:600;color:#6e7681">Skipped</td>
+    <td>
+      —
+      
+    </td>
+    <td style="font-size:0.8rem">Critical</td>
+    <td style="font-size:0.8rem;color:#6e7681">2739ms</td>
+  </tr>
+  
+  
+  
+  
+  
+  
+  
+  
+  <tr>
+    <td><code>T1556.007</code></td>
+    <td>Stage 6 - Condition Check: Hybrid Identity Bridge Exposure (T1556.007)</td>
+    <td style="font-size:0.7rem;color:#6e7681">Credential Access</td>
+    <td style="font-weight:600;color:#238636">Blocked</td>
+    <td>
+      Security Control
+      <div style="font-size:0.68rem;color:#238636;font-weight:600;margin-top:2px">&#9940; Attack stopped here</div>
+    </td>
+    <td style="font-size:0.8rem">Critical</td>
+    <td style="font-size:0.8rem;color:#6e7681">2980ms</td>
+  </tr>
+  
+  
+  
+  <tr>
+    <td colspan="7" style="background:#161b22;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#58a6ff;padding:5px 8px;border-left:3px solid #58a6ff">Discovery</td>
+  </tr>
+  
+  
+  
+  
+  
+  
+  
+  <tr>
+    <td><code>T1082</code></td>
+    <td>System Information Discovery<br><span style="font-weight:400;font-size:0.75rem;color:#6e7681">Stage 1 - Condition Check: Entra ID Join &amp; Device Identity Discovery (T1082)</span></td>
+    <td style="font-size:0.7rem;color:#6e7681">Discovery</td>
+    <td style="font-weight:600;color:#238636">Blocked</td>
+    <td>
+      Security Control
+      <div style="font-size:0.68rem;color:#238636;font-weight:600;margin-top:2px">&#9940; Attack stopped here</div>
+    </td>
+    <td style="font-size:0.8rem">Medium</td>
+    <td style="font-size:0.8rem;color:#6e7681">5892ms</td>
+  </tr>
+  
+  
+  
+  <tr>
+    <td colspan="7" style="background:#161b22;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#58a6ff;padding:5px 8px;border-left:3px solid #58a6ff">Lateral Movement</td>
+  </tr>
+  
+  
+  
+  
+  
+  
+  
+  <tr>
+    <td><code>T1550.001</code></td>
+    <td>Use Alternate Authentication Material<br><span style="font-weight:400;font-size:0.75rem;color:#6e7681">Stage 5 - Condition Check: OAuth Application Consent Artifact Discovery (T1550.001)</span></td>
+    <td style="font-size:0.7rem;color:#6e7681">Lateral Movement</td>
+    <td style="font-weight:600;color:#238636">Blocked</td>
+    <td>
+      Security Control
+      <div style="font-size:0.68rem;color:#238636;font-weight:600;margin-top:2px">&#9940; Attack stopped here</div>
+    </td>
+    <td style="font-size:0.8rem">Critical</td>
+    <td style="font-size:0.8rem;color:#6e7681">3137ms</td>
+  </tr>
+  
+  </tbody>
+</table>
+
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Attack Flow</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-8">Section 8</div><div class="stitle" role="heading" aria-level="1">Attack Path Validation</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Lateral-movement reachability mapped as a graph of hosts, users and groups. Recon/relationship analysis only — no exploitation, no propagation. It answers what ART and Caldera cannot: if a host is compromised, how far can an attacker move and can they reach Domain Admin or a crown jewel?</p>
+
+<p style="color:#6e7681">No attack-path data has been collected yet. Enable the <code>attackpath.collect</code> task on enrolled agents to map lateral-movement reachability, blast radius, segmentation, and crown-jewel exposure across the fleet.</p>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Attack Path Validation</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-9">Section 9</div><div class="stitle" role="heading" aria-level="1">MITRE ATT&amp;CK Tactic Summary</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Per-tactic coverage (techniques tested), prevention rate, detection rate, and mean time-to-detect. MTTD shows "—" when detection latency was not measured. Tactics with no tested techniques are omitted.</p>
+
+<table>
+  <thead><tr>
+    <th>Tactic</th><th>Weight</th><th>Coverage</th><th>Prevented</th><th>Detected</th><th>MTTD</th><th style="min-width:110px">Prevented / Detected / Missed</th>
+  </tr></thead>
+  <tbody>
+  
+  <tr>
+    <td style="font-weight:600">Credential Access</td>
+    <td><span class="dot" style="background:#da3633"></span>Critical</td>
+    <td>2 tested</td>
+    <td style="font-weight:700;color:#0d9488">100%</td>
+    <td>—</td>
+    <td>—</td>
+    <td>
+      
+      <div class="tbar-wrap" style="height:9px;position:relative">
+        <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:#0d9488;border-radius:4px 0 0 4px"></div>
+        <div style="position:absolute;left:100%;top:0;height:100%;width:0%;background:#d29922"></div>
+      </div>
+    </td>
+  </tr>
+  
+  <tr>
+    <td style="font-weight:600">Discovery</td>
+    <td><span class="dot" style="background:#6e7681"></span>Low</td>
+    <td>1 tested</td>
+    <td style="font-weight:700;color:#0d9488">100%</td>
+    <td>—</td>
+    <td>—</td>
+    <td>
+      
+      <div class="tbar-wrap" style="height:9px;position:relative">
+        <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:#0d9488;border-radius:4px 0 0 4px"></div>
+        <div style="position:absolute;left:100%;top:0;height:100%;width:0%;background:#d29922"></div>
+      </div>
+    </td>
+  </tr>
+  
+  <tr>
+    <td style="font-weight:600">Lateral Movement</td>
+    <td><span class="dot" style="background:#da3633"></span>Critical</td>
+    <td>1 tested</td>
+    <td style="font-weight:700;color:#0d9488">100%</td>
+    <td>—</td>
+    <td>—</td>
+    <td>
+      
+      <div class="tbar-wrap" style="height:9px;position:relative">
+        <div style="position:absolute;left:0;top:0;height:100%;width:100%;background:#0d9488;border-radius:4px 0 0 4px"></div>
+        <div style="position:absolute;left:100%;top:0;height:100%;width:0%;background:#d29922"></div>
+      </div>
+    </td>
+  </tr>
+  
+  </tbody>
+</table>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Tactic Summary</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-10">Section 10</div><div class="stitle" role="heading" aria-level="1">Threat Actor Readiness</div>
+
+<p style="color:#6e7681;margin-bottom:6px">For each ATT&amp;CK threat group whose techniques overlap this assessment, how well are your controls positioned? Derived from the MITRE ATT&amp;CK knowledge base — no external feed required. Worst prevention readiness shown first.</p>
+<p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">
+  <strong>Prevention Readiness:</strong> % of tested techniques that were blocked.&nbsp;
+  <strong>Detection Readiness:</strong> % of tested techniques that were blocked <em>or</em> detected (alert raised).&nbsp;
+  The gap between the two reveals how much you rely on detection-only coverage.
+</p>
+<table>
+  <thead><tr>
+    <th>Threat Actor / Group</th>
+    <th style="text-align:right">Tested / Total</th>
+    <th style="text-align:right">Coverage</th>
+    <th style="text-align:right">Prevention Readiness</th>
+    <th style="text-align:right">Detection Readiness</th>
+    <th style="text-align:right">Trend</th>
+    <th>Readiness</th>
+    <th>Confidence</th>
+  </tr></thead>
+  <tbody>
+  
+  <tr>
+    <td style="font-weight:600">APT29</td>
+    <td style="text-align:right;font-size:0.82rem;color:#6e7681">4 / 121</td>
+    <td style="text-align:right;font-size:0.82rem;color:#6e7681">3%</td>
+    <td style="text-align:right;font-weight:700;color:#0d9488">
+      100.0%
+      <div style="font-size:0.72rem;font-weight:400;color:#6e7681">4 prevented</div>
+    </td>
+    <td style="text-align:right;font-weight:700;color:#0d9488">
+      100.0%
+      <div style="font-size:0.72rem;font-weight:400;color:#6e7681">+0 detected</div>
+    </td>
+    <td style="text-align:right">
+      
+        <span style="font-size:0.75rem;color:#6e7681">&#8212;</span>
+      
+    </td>
+    <td>
+      <span style="font-size:0.78rem;font-weight:700;border-radius:4px;padding:2px 8px;
+        background:#f0fdf4;border:1px solid #86efac;color:#15803d
+        ">
+        High
+      </span>
+    </td>
+    <td>
+      <span style="font-size:0.72rem;border-radius:4px;padding:2px 8px;
+        background:#f8fafc;border:1px solid #cbd5e1;color:#94a3b8">
+        Low Confidence
+        <span style="font-size:0.65rem;color:#94a3b8">(4 tested)</span>
+      </span>
+    </td>
+  </tr>
+  
+  <tr>
+    <td style="font-weight:600">APT28</td>
+    <td style="text-align:right;font-size:0.82rem;color:#6e7681">3 / 92</td>
+    <td style="text-align:right;font-size:0.82rem;color:#6e7681">3%</td>
+    <td style="text-align:right;font-weight:700;color:#0d9488">
+      100.0%
+      <div style="font-size:0.72rem;font-weight:400;color:#6e7681">3 prevented</div>
+    </td>
+    <td style="text-align:right;font-weight:700;color:#0d9488">
+      100.0%
+      <div style="font-size:0.72rem;font-weight:400;color:#6e7681">+0 detected</div>
+    </td>
+    <td style="text-align:right">
+      
+        <span style="font-size:0.75rem;color:#6e7681">&#8212;</span>
+      
+    </td>
+    <td>
+      <span style="font-size:0.78rem;font-weight:700;border-radius:4px;padding:2px 8px;
+        background:#f0fdf4;border:1px solid #86efac;color:#15803d
+        ">
+        High
+      </span>
+    </td>
+    <td>
+      <span style="font-size:0.72rem;border-radius:4px;padding:2px 8px;
+        background:#f8fafc;border:1px solid #cbd5e1;color:#94a3b8">
+        Low Confidence
+        <span style="font-size:0.65rem;color:#94a3b8">(3 tested)</span>
+      </span>
+    </td>
+  </tr>
+  
+  </tbody>
+</table>
+<p style="font-size:0.72rem;color:#6e7681;margin-top:10px">Groups with fewer than 3 tested techniques are excluded. Technique attribution sourced from MITRE ATT&amp;CK&reg;. &copy; The MITRE Corporation.</p>
+<div class="pf">
+  <span>DESKTOP-RI1639F &#8212; Threat Actor Readiness</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+
+
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-10b">Section 10b</div><div class="stitle" role="heading" aria-level="1">EPSS Priority Index</div>
+
+<p style="color:#6e7681;margin-bottom:6px">Composite prioritisation combining CISA KEV active-exploitation status, FIRST EPSS exploitation probability, and ATT&amp;CK threat-actor usage frequency. Techniques with higher scores represent the greatest unremediated risk.</p>
+<p style="font-size:0.75rem;color:#6e7681;margin-bottom:14px">
+  Formula: <strong>KEV</strong> +40 pts · <strong>EPSS ≥90th %ile</strong> +30 pts · <strong>≥70th</strong> +20 pts · <strong>≥50th</strong> +10 pts · <strong>Threat Actors ≥5</strong> +20 pts · <strong>≥2</strong> +10 pts · <strong>Unblocked</strong> +10 pts.
+</p>
+<table>
+  <thead><tr>
+    <th>#</th>
+    <th>Technique</th>
+    <th>Tactic</th>
+    <th style="text-align:right">Score</th>
+    <th>Tier</th>
+    <th style="text-align:center">KEV</th>
+    <th style="text-align:right">EPSS</th>
+    <th style="text-align:right">Actors</th>
+    <th>Verdict</th>
+  </tr></thead>
+  <tbody>
+  
+  <tr>
+    <td style="font-size:0.8rem;color:#6e7681">1</td>
+    <td>
+      <code style="font-size:0.8rem">T1082</code>
+      <div style="font-size:0.75rem;color:#374151">System Information Discovery</div>
+      
+    </td>
+    <td style="font-size:0.8rem;color:#6e7681">Discovery</td>
+    <td style="text-align:right">
+      <strong style="font-size:1rem;color:#2f81f7">20</strong>
+      <div style="width:50px;height:4px;background:#e5e7eb;border-radius:2px;margin:2px 0 0 auto">
+        <div style="height:4px;border-radius:2px;width:20%;background:#2f81f7"></div>
+      </div>
+    </td>
+    <td>
+      <span style="font-size:0.73rem;font-weight:700;border-radius:4px;padding:2px 7px;
+        background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8
+        ">
+        Medium
+      </span>
+    </td>
+    <td style="text-align:center">
+      <span style="color:#e5e7eb">—</span>
+    </td>
+    <td style="text-align:right;font-size:0.8rem;color:#6e7681">
+      —
+    </td>
+    <td style="text-align:right;font-size:0.85rem">15</td>
+    <td>
+      <span style="font-size:0.75rem;font-weight:600;color:#0d9488">
+        PASS
+      </span>
+    </td>
+  </tr>
+  
+  <tr>
+    <td style="font-size:0.8rem;color:#6e7681">2</td>
+    <td>
+      <code style="font-size:0.8rem">T1528</code>
+      <div style="font-size:0.75rem;color:#374151">Stage 2 - Condition Check: Cached M365/Entra Identity Artifact Discovery (T1528)</div>
+      
+    </td>
+    <td style="font-size:0.8rem;color:#6e7681">Credential Access</td>
+    <td style="text-align:right">
+      <strong style="font-size:1rem;color:#6e7681">10</strong>
+      <div style="width:50px;height:4px;background:#e5e7eb;border-radius:2px;margin:2px 0 0 auto">
+        <div style="height:4px;border-radius:2px;width:10%;background:#6e7681"></div>
+      </div>
+    </td>
+    <td>
+      <span style="font-size:0.73rem;font-weight:700;border-radius:4px;padding:2px 7px;
+        background:#f8fafc;border:1px solid #cbd5e1;color:#64748b">
+        Low
+      </span>
+    </td>
+    <td style="text-align:center">
+      <span style="color:#e5e7eb">—</span>
+    </td>
+    <td style="text-align:right;font-size:0.8rem;color:#6e7681">
+      —
+    </td>
+    <td style="text-align:right;font-size:0.85rem">2</td>
+    <td>
+      <span style="font-size:0.75rem;font-weight:600;color:#0d9488">
+        PASS
+      </span>
+    </td>
+  </tr>
+  
+  <tr>
+    <td style="font-size:0.8rem;color:#6e7681">3</td>
+    <td>
+      <code style="font-size:0.8rem">T1550.001</code>
+      <div style="font-size:0.75rem;color:#374151">Use Alternate Authentication Material</div>
+      
+    </td>
+    <td style="font-size:0.8rem;color:#6e7681">Lateral Movement</td>
+    <td style="text-align:right">
+      <strong style="font-size:1rem;color:#6e7681">10</strong>
+      <div style="width:50px;height:4px;background:#e5e7eb;border-radius:2px;margin:2px 0 0 auto">
+        <div style="height:4px;border-radius:2px;width:10%;background:#6e7681"></div>
+      </div>
+    </td>
+    <td>
+      <span style="font-size:0.73rem;font-weight:700;border-radius:4px;padding:2px 7px;
+        background:#f8fafc;border:1px solid #cbd5e1;color:#64748b">
+        Low
+      </span>
+    </td>
+    <td style="text-align:center">
+      <span style="color:#e5e7eb">—</span>
+    </td>
+    <td style="text-align:right;font-size:0.8rem;color:#6e7681">
+      —
+    </td>
+    <td style="text-align:right;font-size:0.85rem">2</td>
+    <td>
+      <span style="font-size:0.75rem;font-weight:600;color:#0d9488">
+        PASS
+      </span>
+    </td>
+  </tr>
+  
+  <tr>
+    <td style="font-size:0.8rem;color:#6e7681">4</td>
+    <td>
+      <code style="font-size:0.8rem">T1556.007</code>
+      <div style="font-size:0.75rem;color:#374151">Stage 6 - Condition Check: Hybrid Identity Bridge Exposure (T1556.007)</div>
+      
+    </td>
+    <td style="font-size:0.8rem;color:#6e7681">Credential Access</td>
+    <td style="text-align:right">
+      <strong style="font-size:1rem;color:#6e7681">5</strong>
+      <div style="width:50px;height:4px;background:#e5e7eb;border-radius:2px;margin:2px 0 0 auto">
+        <div style="height:4px;border-radius:2px;width:5%;background:#6e7681"></div>
+      </div>
+    </td>
+    <td>
+      <span style="font-size:0.73rem;font-weight:700;border-radius:4px;padding:2px 7px;
+        background:#f8fafc;border:1px solid #cbd5e1;color:#64748b">
+        Low
+      </span>
+    </td>
+    <td style="text-align:center">
+      <span style="color:#e5e7eb">—</span>
+    </td>
+    <td style="text-align:right;font-size:0.8rem;color:#6e7681">
+      —
+    </td>
+    <td style="text-align:right;font-size:0.85rem">1</td>
+    <td>
+      <span style="font-size:0.75rem;font-weight:600;color:#0d9488">
+        PASS
+      </span>
+    </td>
+  </tr>
+  
+  </tbody>
+</table>
+<p style="font-size:0.72rem;color:#6e7681;margin-top:10px">EPSS scores from FIRST.org (offline snapshot). KEV from CISA Known Exploited Vulnerabilities catalog. ATT&amp;CK attribution from MITRE &copy; The MITRE Corporation. CVE↔technique relationships shown here are Active with High/Medium confidence only — Low-confidence (illustrative) links are excluded from this score.</p>
+<div class="pf">
+  <span>DESKTOP-RI1639F &#8212; EPSS Priority Index</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+
+
+
+
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-12">Section 12</div><div class="stitle" role="heading" aria-level="1">Assessment Insights</div>
+
+
+<div class="score-row">
+  
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Most Protected</div>
+    <div class="scard-value" style="color:#0d9488;font-size:1.2rem">Credential Access</div>
+    <div style="font-size:0.8rem;color:#6e7681">100% prevented across 2 techniques</div>
+  </div>
+  
+  
+  <div class="scard" style="border-left:3px solid #da3633">
+    <div class="scard-label">Least Protected</div>
+    <div class="scard-value" style="color:#da3633;font-size:1.2rem">Credential Access</div>
+    <div style="font-size:0.8rem;color:#6e7681">100% prevented across 2 techniques</div>
+  </div>
+  
+</div>
+
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Insights</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-13">Section 13</div><div class="stitle" role="heading" aria-level="1">Action Plan</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Remediations ordered by the prevention-score points their failures account for. The points quantify current exposure attributable to each tactic — they are not a promised score gain, since a single control may not resolve every underlying finding.</p>
+
+<p style="color:#0d9488;font-weight:600">✓ No failing tactics — no remediation actions required from this assessment.</p>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Action Plan</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-14">Section 14</div><div class="stitle" role="heading" aria-level="1">Regulatory Compliance Status</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Compliance percentages are derived from BAS evidence over the <em>BAS-testable</em> control subset. A control is <em>Passing</em> when all mapped techniques passed; <em>Failing</em> when at least one failed; <em>Untested</em> when no mapped techniques were included in the run. <em>Manual</em> controls are governance/process requirements (board policy, asset inventory, risk-assessment cadence, IR/DR planning, data residency) that cannot be validated by simulation and require manual attestation — they are excluded from the Compliance and Coverage percentages.</p>
+
+<p style="color:#6e7681">Compliance data unavailable.</p>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Compliance Status</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-15">Section 15</div><div class="stitle" role="heading" aria-level="1">Scenario Run History</div>
+
+
+<table>
+  <thead><tr>
+    <th>Date</th><th>Scenario</th><th>Status</th><th>Risk Score</th><th>Classification</th><th>Prevention</th><th>Exposure</th><th>Tested</th><th>Failed</th>
+  </tr></thead>
+  <tbody>
+  
+  <tr>
+    <td style="white-space:nowrap">01 Sep 2026, 04:56 UTC</td>
+    <td>Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</td>
+    <td>completed</td>
+    <td style="font-weight:700">0</td>
+    <td>Protected</td>
+    <td>100.0%</td>
+    <td>0.0%</td>
+    <td>6</td>
+    <td style="color:#0d9488">0</td>
+  </tr>
+  
+  </tbody>
+</table>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Run History</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-16">Section 16</div><div class="stitle" role="heading" aria-level="1">Technical Findings</div>
+
+
+
+
+<p style="color:#0d9488;font-weight:600">&#10003; No Critical or High severity failures in the latest run. Continue to validate with future assessments.</p>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Technical Findings</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-17">Section 17</div><div class="stitle" role="heading" aria-level="1">Environment Restoration</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Documents whether all simulation-induced environment changes were successfully reverted. Answers the key enterprise question: <em>"Did the BAS restore everything it touched?"</em></p>
+
+
+<div style="border-radius:8px;padding:20px 24px;margin-bottom:20px;
+  background:#f0fdf4;border:2px solid #86efac
+  ">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
+    <div style="font-size:2.4rem;line-height:1;
+      color:#15803d">
+      &#10003;
+    </div>
+    <div>
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+        color:#15803d">
+        Environment Restoration
+      </div>
+      <div style="font-size:1.4rem;font-weight:800;
+        color:#15803d">
+        Successful
+      </div>
+      <div style="font-size:0.9rem;font-weight:600;margin-top:2px;
+        color:#166534">
+        No Persistent Changes
+      </div>
+    </div>
+  </div>
+  <div style="font-size:0.88rem;line-height:1.5;color:#374151">No environment changes required cleanup. Simulation left no persistent modifications.</div>
+</div>
+
+
+<div class="score-row">
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Cleanup Success Rate</div>
+    <div class="scard-value" style="color:#0d9488">100.0%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:100%;background:#0d9488"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">stepsCleaned / (cleaned + leaked)</div>
+  </div>
+  <div class="scard">
+    <div class="scard-label">Coverage Rate</div>
+    <div class="scard-value" style="color:#2563eb">0%</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:0%;background:#2563eb"></div></div>
+    <div style="font-size:0.72rem;color:#6e7681;margin-top:5px">Steps with cleanup defined</div>
+  </div>
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Steps Cleaned</div>
+    <div class="scard-value" style="color:#0d9488">0</div>
+    <div style="font-size:0.78rem;color:#6e7681">of 0 cleanup-capable</div>
+  </div>
+  <div class="scard" style="border-left:3px solid #6e7681">
+    <div class="scard-label">Steps Leaked</div>
+    <div class="scard-value" style="color:#6e7681">0</div>
+    <div style="font-size:0.78rem;color:#6e7681">cleanup failed or timed out</div>
+  </div>
+  
+  <div class="scard">
+    <div class="scard-label">Agent-Confirmed Rollbacks</div>
+    <div class="scard-value" style="color:#0d9488">1</div>
+    <div style="font-size:0.78rem;color:#6e7681">endpoint changes confirmed reverted</div>
+  </div>
+  
+  
+  <div class="scard">
+    <div class="scard-label">No Cleanup Defined</div>
+    <div class="scard-value" style="color:#6e7681">6</div>
+    <div style="font-size:0.78rem;color:#6e7681">steps with no cleanup command</div>
+  </div>
+  
+</div>
+
+
+
+
+
+
+
+
+
+
+
+<h2 style="margin-top:20px">Agent-Confirmed Rollbacks</h2>
+<p style="color:#6e7681;font-size:0.82rem;margin-bottom:8px">Endpoint changes confirmed reverted by the agent post-run.</p>
+<ul style="padding-left:20px;color:#374151;font-size:0.82rem;line-height:1.8"><li>tmp removed: C:\Windows\SystemTemp\bas-18d1198be023a163-184431279</li></ul>
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F &#8212; Environment Restoration</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-18">Section 18</div><div class="stitle" role="heading" aria-level="1">Detection Validation</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Per-technique outcome from the post-run EDR/alert sweep. <strong>PREVENTED</strong> = control blocked execution before it could run. <strong>DETECTED</strong> = technique executed and the security control raised an alert (detection source shown). <strong>UNDETECTED</strong> = technique executed with no alert — the security gap an attacker would exploit silently. Techniques where the agent has not yet submitted detection telemetry show "NO DATA".</p>
+
+
+
+<h3 style="margin-top:16px;margin-bottom:8px">Detection Source Ranking</h3>
+<p style="color:#6e7681;font-size:0.85rem;margin-bottom:12px">Ranking of security products based on total detection count (most often) and speed (first to detect/lowest minimum MTTD).</p>
+<table style="width:100%;margin-bottom:20px;max-width:600px">
+  <thead>
+    <tr>
+      <th style="text-align:left">Rank</th>
+      <th style="text-align:left">Product</th>
+      <th style="text-align:right">Detections</th>
+      <th style="text-align:right">Min Time-to-Detect</th>
+      <th style="text-align:right">Avg Time-to-Detect</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr>
+      <td><strong>#1</strong></td>
+      <td><strong>Trellix</strong></td>
+      <td style="text-align:right;font-weight:bold;color:#0d9488">18</td>
+      <td style="text-align:right">4s</td>
+      <td style="text-align:right;color:#6e7681">8s</td>
+    </tr>
+    
+    <tr>
+      <td><strong>#2</strong></td>
+      <td><strong>Defender</strong></td>
+      <td style="text-align:right;font-weight:bold;color:#0d9488">14</td>
+      <td style="text-align:right">2s</td>
+      <td style="text-align:right;color:#6e7681">4s</td>
+    </tr>
+    
+    <tr>
+      <td><strong>#3</strong></td>
+      <td><strong>SIEM</strong></td>
+      <td style="text-align:right;font-weight:bold;color:#0d9488">5</td>
+      <td style="text-align:right">12s</td>
+      <td style="text-align:right;color:#6e7681">25s</td>
+    </tr>
+    
+  </tbody>
+</table>
+
+
+<table>
+  <thead><tr>
+    <th>Technique</th><th>Tactic</th><th>Sev</th><th>Execution</th><th>Requested Priv</th><th>Executed As</th><th>Detection</th><th>Alert Source</th><th>Event&nbsp;ID</th><th>Threat&nbsp;/&nbsp;Process</th><th>MTTD</th><th>Cleanup</th><th>Blocking Control</th>
+  </tr></thead>
+  <tbody>
+  
+  <tr>
+    <td><code style="font-size:0.78rem">T1082</code><br><span style="font-size:0.8rem">System Information Discovery</span><br><span style="font-size:0.72rem;color:#9aa5b5">Stage 1 - Condition Check: Entra ID Join &amp; Device Identity Discovery (T1082)</span></td>
+    <td style="font-size:0.8rem;color:#6e7681">Discovery</td>
+    <td><span class="dot" style="background:#d29922"></span>Medium</td>
+    <td><span style="font-size:0.78rem;font-weight:600;color:#0d9488">PASS</span></td>
+    <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">
+      User
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap;color:#9aa9bc">Admin</td>
+    <td>
+      
+      <span style="font-size:0.78rem;color:#6e7681">NO DATA</span>
+      
+    </td>
+    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all"></td>
+    <td style="font-size:0.78rem;text-align:center">—</td>
+    <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
+      
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap">—</td>
+    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:#6e7681">—</td>
+    <td style="font-size:0.75rem;max-width:160px">
+      —
+    </td>
+  </tr>
+  
+  <tr>
+    <td><code style="font-size:0.78rem">T1528</code><br><span style="font-size:0.8rem">Stage 2 - Condition Check: Cached M365/Entra Identity Artifact Discovery (T1528)</span></td>
+    <td style="font-size:0.8rem;color:#6e7681">Credential Access</td>
+    <td><span class="dot" style="background:#da3633"></span>Critical</td>
+    <td><span style="font-size:0.78rem;font-weight:600;color:#0d9488">PASS</span></td>
+    <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">
+      User
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap;color:#9aa9bc">User</td>
+    <td>
+      
+      <span style="font-size:0.78rem;color:#6e7681">NO DATA</span>
+      
+    </td>
+    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all"></td>
+    <td style="font-size:0.78rem;text-align:center">—</td>
+    <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
+      
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap">—</td>
+    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:#6e7681">—</td>
+    <td style="font-size:0.75rem;max-width:160px">
+      —
+    </td>
+  </tr>
+  
+  <tr>
+    <td><code style="font-size:0.78rem">T1539</code><br><span style="font-size:0.8rem">Stage 3 - Execution: Browser-Cached M365 Session Cookie Theft (T1539)</span></td>
+    <td style="font-size:0.8rem;color:#6e7681">Credential Access</td>
+    <td><span class="dot" style="background:#da3633"></span>Critical</td>
+    <td><span style="font-size:0.78rem;font-weight:600;color:#6e7681">SKIPPED</span></td>
+    <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">
+      User
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap;color:#9aa9bc">User</td>
+    <td>
+      
+      <span style="font-size:0.78rem;color:#6e7681">NO DATA</span>
+      
+    </td>
+    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all"></td>
+    <td style="font-size:0.78rem;text-align:center">—</td>
+    <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
+      
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap">—</td>
+    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:#6e7681">—</td>
+    <td style="font-size:0.75rem;max-width:160px">
+      —
+    </td>
+  </tr>
+  
+  <tr>
+    <td><code style="font-size:0.78rem">T1555.003</code><br><span style="font-size:0.8rem">Credentials from Password Stores: Credentials from Web Browsers</span><br><span style="font-size:0.72rem;color:#9aa5b5">Stage 4 - Execution: Browser-Cached M365 Credential Theft (T1555.003)</span></td>
+    <td style="font-size:0.8rem;color:#6e7681">Credential Access</td>
+    <td><span class="dot" style="background:#da3633"></span>Critical</td>
+    <td><span style="font-size:0.78rem;font-weight:600;color:#6e7681">SKIPPED</span></td>
+    <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">
+      User
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap;color:#9aa9bc">User</td>
+    <td>
+      
+      <span style="font-size:0.78rem;color:#6e7681">NO DATA</span>
+      
+    </td>
+    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all"></td>
+    <td style="font-size:0.78rem;text-align:center">—</td>
+    <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
+      
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap">—</td>
+    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:#6e7681">—</td>
+    <td style="font-size:0.75rem;max-width:160px">
+      —
+    </td>
+  </tr>
+  
+  <tr>
+    <td><code style="font-size:0.78rem">T1550.001</code><br><span style="font-size:0.8rem">Use Alternate Authentication Material</span><br><span style="font-size:0.72rem;color:#9aa5b5">Stage 5 - Condition Check: OAuth Application Consent Artifact Discovery (T1550.001)</span></td>
+    <td style="font-size:0.8rem;color:#6e7681">Lateral Movement</td>
+    <td><span class="dot" style="background:#da3633"></span>Critical</td>
+    <td><span style="font-size:0.78rem;font-weight:600;color:#0d9488">PASS</span></td>
+    <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">
+      User
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap;color:#9aa9bc">User</td>
+    <td>
+      
+      <span style="font-size:0.78rem;color:#6e7681">NO DATA</span>
+      
+    </td>
+    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all"></td>
+    <td style="font-size:0.78rem;text-align:center">—</td>
+    <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
+      
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap">—</td>
+    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:#6e7681">—</td>
+    <td style="font-size:0.75rem;max-width:160px">
+      —
+    </td>
+  </tr>
+  
+  <tr>
+    <td><code style="font-size:0.78rem">T1556.007</code><br><span style="font-size:0.8rem">Stage 6 - Condition Check: Hybrid Identity Bridge Exposure (T1556.007)</span></td>
+    <td style="font-size:0.8rem;color:#6e7681">Credential Access</td>
+    <td><span class="dot" style="background:#da3633"></span>Critical</td>
+    <td><span style="font-size:0.78rem;font-weight:600;color:#0d9488">PASS</span></td>
+    <td style="font-size:0.78rem;color:#6e7681;white-space:nowrap">
+      User
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap;color:#9aa9bc">User</td>
+    <td>
+      
+      <span style="font-size:0.78rem;color:#6e7681">NO DATA</span>
+      
+    </td>
+    <td style="font-size:0.75rem;color:#6e7681;max-width:140px;word-break:break-all"></td>
+    <td style="font-size:0.78rem;text-align:center">—</td>
+    <td style="font-size:0.75rem;max-width:160px;word-break:break-all">
+      
+      
+    </td>
+    <td style="font-size:0.78rem;white-space:nowrap">—</td>
+    <td style="font-size:0.78rem;font-weight:600;white-space:nowrap;color:#6e7681">—</td>
+    <td style="font-size:0.75rem;max-width:160px">
+      —
+    </td>
+  </tr>
+  
+  </tbody>
+</table>
+
+
+
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Detection Validation</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-19">Section 19</div><div class="stitle" role="heading" aria-level="1">Coverage Analytics</div>
+
+<p style="color:#6e7681;margin-bottom:14px">
+  3-bucket breakdown of every technique executed in this assessment.
+  <strong style="color:#0d9488">Prevented</strong> — a control blocked execution (PASS/BLOCKED).
+  <strong style="color:#d29922">Detected Only</strong> — execution succeeded but an EDR or SIEM alert fired (FAIL + detection).
+  <strong style="color:#da3633">Missed</strong> — execution succeeded with no detection signal (highest risk, immediate remediation priority).
+  ERROR and SKIPPED results are excluded.
+</p>
+
+
+
+
+<div class="score-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px">
+  <div class="scard">
+    <div class="scard-label">Techniques Attempted</div>
+    <div class="scard-value">0</div>
+    <div class="scard-bar"></div>
+  </div>
+  <div class="scard" style="border-left:3px solid #0d9488">
+    <div class="scard-label">Prevented</div>
+    <div class="scard-value" style="color:#0d9488">0</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:0%;background:#0d9488"></div></div>
+  </div>
+  <div class="scard" style="border-left:3px solid #d29922">
+    <div class="scard-label">Detected Only</div>
+    <div class="scard-value" style="color:#d29922">0</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:0%;background:#d29922"></div></div>
+  </div>
+  <div class="scard" style="border-left:3px solid #da3633">
+    <div class="scard-label">Missed (Blind Spots)</div>
+    <div class="scard-value" style="color:#da3633">0</div>
+    <div class="scard-bar"><div class="scard-bar-fill" style="width:0%;background:#da3633"></div></div>
+  </div>
+</div>
+
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+  <div>
+    <div style="display:flex;justify-content:space-between;font-size:0.74rem;margin-bottom:4px">
+      <span style="color:#6e7681;font-weight:600">Prevention Rate</span>
+      <strong style="color:#0d9488">0%</strong>
+    </div>
+    <div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:0%;background:#0d9488;border-radius:4px"></div>
+    </div>
+  </div>
+  <div>
+    <div style="display:flex;justify-content:space-between;font-size:0.74rem;margin-bottom:4px">
+      <span style="color:#6e7681;font-weight:600">Detection Coverage (prevented + detected)</span>
+      <strong style="color:#d29922">0%</strong>
+    </div>
+    <div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:0%;background:#d29922;border-radius:4px"></div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — Coverage Analytics</span>
+  <span>192.168.146.128&nbsp;&middot;&nbsp;<span style="color:#d29922">&#9679;</span>&nbsp;idle&nbsp;&middot;&nbsp;Audspect&nbsp;BAS</span>
+</div>
+</div>
+</div>
+
+
+<div class="page">
+<div class="inner">
+<div class="ph">
+  <div class="ph-left">
+    <div class="ph-logo">Aud<span>spect</span> BAS</div>
+    <div class="ph-sep"></div>
+    <div class="ph-title">Entra ID / M365 Hybrid Identity Attack  -  Token Theft, Session Theft, Hybrid Bridge Exposure</div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-endpoint">DESKTOP-RI1639F</div>
+    <div class="ph-class">CONFIDENTIAL</div>
+  </div>
+</div>
+<div class="stag" id="sec-20">Section 20</div><div class="stitle" role="heading" aria-level="1">Technical Appendix — ATT&amp;CK Glossary</div>
+
+<p style="color:#6e7681;margin-bottom:14px">Authoritative MITRE ATT&amp;CK reference for every technique exercised in this assessment. Sourced from the bundled ATT&amp;CK enterprise data.</p>
+
+
+<div class="gloss-item" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">
+  <h3 style="margin:0 0 4px"><code>T1082</code> — System Information Discovery <span style="font-weight:400;color:#6e7681;font-size:0.8rem">(Discovery)</span></h3>
+  <p style="font-size:0.82rem;color:#444">An adversary may attempt to get detailed information about the operating system and hardware, including version, patches, hotfixes, service packs, and architecture. Adversaries may use the information from [System Information Discovery](https://attack.mitre.org/techniques/T1082) during automated discovery to shape follow-on behaviors, including whether or not the adversary fully infects the target and/or attempts specific actions. Tools such as [Systeminfo](https://attack.mitre.org/software/S0096) can be used to gather detailed system information.</p>
+  <p style="font-size:0.8rem;color:#444"><strong>Detection:</strong> System and network discovery techniques normally occur throughout an operation as an adversary learns the environment. Data and events should not be viewed in isolation, but as part of a chain of behavior that could lead to other activities based on the information obtained. Monitor processes and command-line arguments for actions that could be taken to gather system and network information. Remote access tools with built-in features may interact directly with the Windows API to gather information.</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Data sources:</strong> Command: Command Execution, Process: OS API Execution, Process: Process Creation</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Mitigations:</strong> System Information Discovery Mitigation</p>
+  <p style="font-size:0.78rem"><a href="https://attack.mitre.org/techniques/T1082">https://attack.mitre.org/techniques/T1082</a></p>
+</div>
+
+<div class="gloss-item" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">
+  <h3 style="margin:0 0 4px"><code>T1528</code> — Steal Application Access Token <span style="font-weight:400;color:#6e7681;font-size:0.8rem">(Credential Access)</span></h3>
+  <p style="font-size:0.82rem;color:#444">Adversaries can steal application access tokens as a means of acquiring credentials to access remote systems and resources. Application access tokens are used to make authorized API requests on behalf of a user or service and are commonly used as a way to access resources in cloud and container-based applications and software-as-a-service (SaaS).(Citation: Auth0 - Why You Should Always Use Access Tokens to Secure APIs Sept 2019) Adversaries who steal account API tokens in cloud and containerized environments may be able to access data and perform actions with the permissions of these accounts,…</p>
+  <p style="font-size:0.8rem;color:#444"><strong>Detection:</strong> Administrators should set up monitoring to trigger automatic alerts when policy criteria are met. For example, using a Cloud Access Security Broker (CASB), admins can create a “High severity app permissions” policy that generates alerts if apps request high severity permissions or send permissions requests for too many users.</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Data sources:</strong> Active Directory: Active Directory Object Modification, User Account: User Account Modification</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Mitigations:</strong> Audit, Restrict Web-Based Content, User Account Management, User Training</p>
+  <p style="font-size:0.78rem"><a href="https://attack.mitre.org/techniques/T1528">https://attack.mitre.org/techniques/T1528</a></p>
+</div>
+
+<div class="gloss-item" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">
+  <h3 style="margin:0 0 4px"><code>T1539</code> — Steal Web Session Cookie <span style="font-weight:400;color:#6e7681;font-size:0.8rem">(Credential Access)</span></h3>
+  <p style="font-size:0.82rem;color:#444">An adversary may steal web application or service session cookies and use them to gain access to web applications or Internet services as an authenticated user without needing credentials. Web applications and services often use session cookies as an authentication token after a user has authenticated to a website. Cookies are often valid for an extended period of time, even if the web application is not actively used. Cookies can be found on disk, in the process memory of the browser, and in network traffic to remote systems.</p>
+  <p style="font-size:0.8rem;color:#444"><strong>Detection:</strong> Monitor for attempts to access files and repositories on a local system that are used to store browser session cookies. Monitor for attempts by programs to inject into or dump browser process memory.</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Data sources:</strong> File: File Access, Process: Process Access</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Mitigations:</strong> Audit, Multi-factor Authentication, Restrict Web-Based Content, Software Configuration, Update Software, User Training</p>
+  <p style="font-size:0.78rem"><a href="https://attack.mitre.org/techniques/T1539">https://attack.mitre.org/techniques/T1539</a></p>
+</div>
+
+<div class="gloss-item" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">
+  <h3 style="margin:0 0 4px"><code>T1550.001</code> — Application Access Token <span style="font-weight:400;color:#6e7681;font-size:0.8rem">(Lateral Movement)</span></h3>
+  <p style="font-size:0.82rem;color:#444">Adversaries may use stolen application access tokens to bypass the typical authentication process and access restricted accounts, information, or services on remote systems. These tokens are typically stolen from users or services and used in lieu of login credentials. Application access tokens are used to make authorized API requests on behalf of a user or service and are commonly used to access resources in cloud, container-based applications, and software-as-a-service (SaaS).(Citation: Auth0 - Why You Should Always Use Access Tokens to Secure APIs Sept 2019) OAuth is one commonly implemente…</p>
+  <p style="font-size:0.8rem;color:#444"><strong>Detection:</strong> Monitor access token activity for abnormal use and permissions granted to unusual or suspicious applications and APIs. Additionally, administrators should review logs for calls to the AWS Security Token Service (STS) and usage of GCP service accounts in order to identify anomalous actions.(Citation: AWS Logging IAM Calls)(Citation: GCP Monitoring Service Account Usage)</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Data sources:</strong> Web Credential: Web Credential Usage</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Mitigations:</strong> Account Use Policies, Application Developer Guidance, Audit, Encrypt Sensitive Information, Restrict Web-Based Content</p>
+  <p style="font-size:0.78rem"><a href="https://attack.mitre.org/techniques/T1550/001">https://attack.mitre.org/techniques/T1550/001</a></p>
+</div>
+
+<div class="gloss-item" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">
+  <h3 style="margin:0 0 4px"><code>T1555.003</code> — Credentials from Web Browsers <span style="font-weight:400;color:#6e7681;font-size:0.8rem">(Credential Access)</span></h3>
+  <p style="font-size:0.82rem;color:#444">Adversaries may acquire credentials from web browsers by reading files specific to the target browser.(Citation: Talos Olympic Destroyer 2018) Web browsers commonly save credentials such as website usernames and passwords so that they do not need to be entered manually in the future. Web browsers typically store the credentials in an encrypted format within a credential store; however, methods exist to extract plaintext credentials from web browsers.</p>
+  <p style="font-size:0.8rem;color:#444"><strong>Detection:</strong> Identify web browser files that contain credentials such as Google Chrome’s Login Data database file: &lt;code&gt;AppData\Local\Google\Chrome\User Data\Default\Login Data&lt;/code&gt;. Monitor file read events of web browser files that contain credentials, especially when the reading process is unrelated to the subject web browser.</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Data sources:</strong> Command: Command Execution, File: File Access, Process: OS API Execution, Process: Process Access</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Mitigations:</strong> Password Policies, Restrict Web-Based Content, Update Software, User Account Management, User Training</p>
+  <p style="font-size:0.78rem"><a href="https://attack.mitre.org/techniques/T1555/003">https://attack.mitre.org/techniques/T1555/003</a></p>
+</div>
+
+<div class="gloss-item" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e5e7eb">
+  <h3 style="margin:0 0 4px"><code>T1556.007</code> — Hybrid Identity <span style="font-weight:400;color:#6e7681;font-size:0.8rem">(Credential Access)</span></h3>
+  <p style="font-size:0.82rem;color:#444">Adversaries may patch, modify, or otherwise backdoor cloud authentication processes that are tied to on-premises user identities in order to bypass typical authentication mechanisms, access credentials, and enable persistent access to accounts. Many organizations maintain hybrid user and device identities that are shared between on-premises and cloud-based environments. These can be maintained in a number of ways.</p>
+  
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Data sources:</strong> Application Log: Application Log Content, File: File Modification, Logon Session: Logon Session Creation, Module: Module Load</p>
+  <p style="font-size:0.78rem;color:#6e7681"><strong>Mitigations:</strong> Audit, Multi-factor Authentication, Privileged Account Management</p>
+  <p style="font-size:0.78rem"><a href="https://attack.mitre.org/techniques/T1556/007">https://attack.mitre.org/techniques/T1556/007</a></p>
+</div>
+
+
+
+<div class="pf">
+  <span>DESKTOP-RI1639F — ATT&amp;CK Glossary</span>
+  <span>Generated 01 Sep 2026, 05:16 UTC &nbsp;·&nbsp; Audspect BAS Platform &nbsp;·&nbsp; CONFIDENTIAL</span>
+</div>
+</div>
+</div>
+
+
+
+
+</body>
+</html>

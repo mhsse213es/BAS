@@ -124,6 +124,9 @@ services:
       SFTP_SINK_ENABLED: ${SFTP_SINK_ENABLED:-true}
       SINK_SFTP_HOST:   ${SINK_SFTP_HOST:-}
       SINK_SFTP_PORT:   ${SINK_SFTP_PORT:-2222}
+      SMTP_SINK_ENABLED: ${SMTP_SINK_ENABLED:-true}
+      SINK_SMTP_HOST:   ${SINK_SMTP_HOST:-}
+      SINK_SMTP_PORT:   ${SINK_SMTP_PORT:-587}
       CALDERA_URL:      "${CALDERA_URL:-http://caldera:8888}"
       CALDERA_API_KEY:  ${CALDERA_API_KEY:-BASPlatform2024}
       BAS_ADMIN_EMAIL:    ${BAS_ADMIN_EMAIL:-}
@@ -201,6 +204,11 @@ services:
       # rejection). No wildcard-bind conflict risk here the way DNS/53 has,
       # since nothing else claims 2222 by default.
       - "${SINK_SFTP_PORT:-2222}:22/tcp"
+      # SMTP sink (internal/smtpsink): container-internal and
+      # host-published are the SAME port (unlike SFTP's 22-vs-2222 split)
+      # -- port 587 carries much lower collision risk than 22 or 53, since
+      # a host's local MTA (if any) conventionally listens on 25, not 587.
+      - "${SINK_SMTP_PORT:-587}:587/tcp"
     networks:
       - bas-internal
     restart: unless-stopped

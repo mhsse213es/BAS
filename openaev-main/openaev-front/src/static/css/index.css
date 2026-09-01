@@ -1,0 +1,184 @@
+* {
+  scrollbar-width: thin;
+}
+
+:focus {
+  outline: 0;
+}
+
+input:-webkit-autofill {
+  transition-delay: 9999s;
+}
+
+a,
+a:hover,
+a:visited,
+a:focus {
+  text-decoration: none;
+}
+
+pre {
+  padding: 10px;
+  font-family: Consolas, monaco, monospace;
+  font-size: 12px;
+  border-radius: 5px;
+  white-space: pre-wrap;
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  word-wrap: break-word;
+  font-weight: 400;
+}
+
+span.raw {
+  white-space: pre-line;
+}
+
+ul.rc-tree {
+  margin: 0;
+  padding: 0;
+}
+
+ul.rc-tree li {
+  list-style-type: none;
+  vertical-align: middle;
+}
+
+div.clearfix {
+  margin: 0;
+  padding: 0;
+  clear: both;
+}
+
+div.break {
+  word-break: break-word;
+}
+
+.paper{
+  padding: 20px;
+}
+/* region markdown */
+
+div.markdown p {
+  margin: 0 0 10px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+div.markdown p:last-child {
+  margin: 0 !important;
+}
+
+/* .mde-preview .mde-preview-content table th, .mde-preview .mde-preview-content table td */
+div.markdown table th, div.markdown table td {
+  padding: 6px 13px;
+  border: 1px solid #c8ccd0;
+}
+/* .mde-preview .mde-preview-content table */
+div.markdown table {
+  border-collapse: collapse;
+}
+
+/* end region markdown*/
+
+.layout {
+  max-width: 100%;
+}
+
+.force-graph-container {
+  overflow: hidden !important;
+}
+
+.force-graph-container .graph-tooltip {
+  position: absolute;
+  text-align: center;
+  overflow: hidden !important;
+  transform: translate(-50%, 25px);
+  font-size: 12px !important;
+  padding: 8px !important;
+  border-radius: 3px;
+  color: #eee;
+  background: rgba(0, 0, 0, 0.65);
+  visibility: hidden; /* by default */
+  display: block;
+  unicode-bidi: embed;
+  white-space: pre;
+}
+
+.timerange {
+  width: 100%;
+  height: 100%;
+}
+
+.react_time_range__rail__inner {
+  background-color: transparent !important;
+}
+
+input[type="file"] {
+  width: 100% !important;
+}
+
+.ck-powered-by {
+  display: none !important;
+}
+
+.marker-yellow {
+  background-color: rgb(255, 255, 0) !important;
+}
+
+@keyframes pulse-red {
+  0% { box-shadow:0 0 4px #f44336, inset 0 0 4px #f44336; }
+  50% { box-shadow:0 0 8px #f44336, inset 0 0 7px #f44336; }
+  100% { box-shadow:0 0 4px #f44336, inset 0 0 4px #f44336; }
+}
+
+@keyframes pulse-green {
+  0% { box-shadow:0 0 4px #4caf50, inset 0 0 4px #4caf50; }
+  50% { box-shadow:0 0 8px #4caf50, inset 0 0 7px #4caf50; }
+  100% { box-shadow:0 0 4px #4caf50, inset 0 0 4px #4caf50; }
+}
+
+@keyframes detect-scroll {
+  from, to { --can-scroll: ; }
+}
+
+.react-flow__controls-button {
+  border-bottom: none !important;
+}
+.react-flow__controls-button:hover {
+  background-color: #0d1626 !important;
+}
+
+.react-flow__controls {
+  border: 1px solid #b5b7ba;
+}
+
+.chainedTimeline .react-flow__pane.draggable:not(.react-flow__pane.draggable.dragging, :has(.react-flow__connection)) {
+  cursor: none !important;
+}
+
+.react-flow__handle {
+  width: 12px;
+  height: 12px;
+}
+
+.dark.react-flow {
+  --xy-minimap-background-color-props: #070d19;
+  --xy-background-color: #070d19;
+  --xy-background-color-props: #070d19;
+  --xy-background-color-default:#070d19;
+  --xy-minimap-mask-background-color-default: rgba(80, 80, 80, 0.8);
+  --xy-controls-button-background-color-default: #070d19;
+}
+
+.light.react-flow {
+  --xy-minimap-background-color-props: #f8f8f8;
+  --xy-background-color: #f8f8f8;
+  --xy-background-color-props: #f8f8f8;
+  --xy-background-color-default:#f8f8f8;
+  --xy-minimap-mask-background-color-default: rgba(255, 255, 255, 0.8);
+}
+
+.react-flow__minimap {
+  margin: 15px 40px 15px 15px;
+}

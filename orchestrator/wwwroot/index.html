@@ -9055,7 +9055,7 @@ function openCampaignDetail(id) {
           : '<button class="btn btn-outline btn-sm" onclick="pauseCampaign(\'' + x(c.id) + '\')" title="Pause every running child run">&#10073;&#10073; Pause campaign</button> ')
         + '<button class="btn btn-outline-red btn-sm" onclick="stopCampaign(\'' + x(c.id) + '\')">&#9632; Stop campaign</button>'
       : '<button class="btn btn-outline btn-sm" onclick="openCampaignReport(\'' + x(c.id) + '\')" title="Open the fleet-wide HTML report">&#8599; HTML Report</button>' +
-        ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignReport(\'' + x(c.id) + '\')" title="Download the fleet-wide HTML report as a file">&#8595; HTML Report</button>' +
+        ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignReport(\'' + x(c.id) + '\')" title="Download the fleet-wide report as a PDF file">&#8595; PDF Report</button>' +
         ' <button class="btn btn-outline btn-sm" onclick="downloadCampaignCSV(\'' + x(c.id) + '\')" title="Download the fleet forensic CSV (one row per technique across all agents)">&#8595; CSV</button>' +
         ' ' + ((ROLE === 'admin' || ROLE === 'analyst')
           ? '<button class="btn btn-outline btn-sm" onclick=\'openCampaignRerunReview(' + JSON.stringify(c).replace(/'/g,"&#39;") + ')\' title="Review and re-run this exact campaign configuration">Re-run</button>'
@@ -11706,7 +11706,7 @@ function loadReports() {
         '<div class="rep-main"><div class="rep-host">' + x(host) + '</div>' +
           '<div class="rep-sub">Reports on: <strong style="color:var(--text)">' + x(lastName || 'unnamed scenario') + '</strong> (latest run) · ' + n + ' run' + (n === 1 ? '' : 's') + ' total · last ' + ago(byAgent[id].last) + '</div></div>' +
         '<div class="rep-acts">' +
-          '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'html\')">HTML Report</button>' +
+          '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'pdf\')">PDF Report</button>' +
           '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'posture\',\'csv\')">CSV</button>' +
           '<button class="btn btn-outline btn-sm" onclick="genAgentReport(\'' + x(id) + '\',\'audit\',\'\')">Audit pack</button>' +
         '</div></div>';
@@ -13803,7 +13803,7 @@ function viewRunResults(run) {
     actionsHtml =
       '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')" title="Download full run data as JSON">&#8595; JSON</button>' +
       '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')" title="Open self-contained HTML report in new tab">&#8599; HTML Report</button>' +
-      '<button class="btn btn-sm btn-outline" onclick="downloadRunReport(\'' + runId + '\')" title="Download the HTML report as a file">&#8595; HTML Report</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="downloadRunReport(\'' + runId + '\')" title="Download the report as a PDF file">&#8595; PDF Report</button>' +
       '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')" title="Download forensic CSV (one row per technique)">&#8595; CSV</button>' +
       '<button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed" title="Compare against another run — coming soon">Compare</button>' +
       (canRerun
@@ -14248,7 +14248,7 @@ function viewRunResults(run) {
         '<div class="dash-panel"><div class="dash-panel-hdr">Export</div><div class="dash-panel-body" style="display:flex;gap:0.5rem;flex-wrap:wrap">' +
           '<button class="btn btn-sm btn-outline" onclick="exportRunJSON(\'' + runId + '\')">&#8595; JSON</button>' +
           '<button class="btn btn-sm btn-outline" onclick="openRunReport(\'' + runId + '\')">&#8599; HTML Report</button>' +
-          '<button class="btn btn-sm btn-outline" onclick="downloadRunReport(\'' + runId + '\')">&#8595; HTML Report</button>' +
+          '<button class="btn btn-sm btn-outline" onclick="downloadRunReport(\'' + runId + '\')">&#8595; PDF Report</button>' +
           '<button class="btn btn-sm btn-outline" onclick="downloadRunCSV(\'' + runId + '\')">&#8595; CSV</button>' +
         '</div></div>';
     } else {
@@ -15904,8 +15904,7 @@ function openSweepDrilldown(sweepId) {
       sw.status + ' · ' + childRuns.length + ' technique(s) dispatched';
     document.getElementById('sweep-drilldown-actions').innerHTML =
       '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/report\',\'_blank\')" title="Open the combined sweep report">&#8599; HTML Report</button> ' +
-      '<button class="btn btn-outline btn-sm" onclick="downloadSweepReport(\'' + x(sweepId) + '\')" title="Download the combined sweep report as a file">&#8595; HTML Report</button> ' +
-      '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/vex/sweeps/' + encodeURIComponent(sweepId) + '/pdf\',\'_blank\')" title="Download the combined sweep report as PDF">&#8595; PDF</button>';
+      '<button class="btn btn-outline btn-sm" onclick="downloadSweepReport(\'' + x(sweepId) + '\')" title="Download the combined sweep report as a PDF file">&#8595; PDF Report</button>';
     document.getElementById('sweep-drilldown-list').innerHTML = childRuns.map(function(r) {
       var cnt = (r.results || []).length;
       var fail = (r.results || []).filter(function(c) { return c.result === 'fail'; }).length;
@@ -16362,47 +16361,51 @@ function openRunReport(runId) {
     window.open('/api/scenarios/runs/' + encodeURIComponent(runId) + '/report' + query, '_blank');
   });
 }
-// downloadRunReport saves the report as an actual .html file instead of just
-// opening it inline -- previously the only option was "open in a new tab"
-// (openRunReport above), with no way to save a copy without knowing to use
-// the browser's own "Save Page As".
+// downloadRunReport saves the report as an actual .pdf file instead of just
+// opening the HTML inline -- previously the only option was "open in a new
+// tab" (openRunReport above), with no way to save a copy without knowing to
+// use the browser's own "Save Page As". PDF (not HTML) is what enterprises
+// expect from a "download report" action; the report content/design is
+// identical either way, this only changes the file format, via the
+// already-built /pdf endpoint (same headless-Chromium render as every other
+// PDF export in this app).
 function downloadRunReport(runId) {
-  showDownloadOptions('Simulation HTML Report', function(filter) {
+  showDownloadOptions('Simulation Report', function(filter) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
     var a = document.createElement('a');
-    a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/report' + query;
-    a.download = buildReportFilename('BAS_Report', runId.substring(0, 8), 'html');
+    a.href = '/api/scenarios/runs/' + encodeURIComponent(runId) + '/pdf' + query;
+    a.download = buildReportFilename('BAS_Report', runId.substring(0, 8), 'pdf');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   });
 }
 function openCampaignReport(id) {
-  showDownloadOptions('Campaign HTML Report', function(filter) {
+  showDownloadOptions('Campaign Report', function(filter) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
     window.open('/api/campaigns/' + encodeURIComponent(id) + '/report' + query, '_blank');
   });
 }
 // downloadCampaignReport mirrors downloadRunReport for the campaign report.
 function downloadCampaignReport(id) {
-  showDownloadOptions('Campaign HTML Report', function(filter) {
+  showDownloadOptions('Campaign Report', function(filter) {
     var query = filter ? '?filter=' + encodeURIComponent(filter) : '';
     var a = document.createElement('a');
-    a.href = '/api/campaigns/' + encodeURIComponent(id) + '/report' + query;
-    a.download = buildReportFilename('Campaign_Report', id.substring(0, 8), 'html');
+    a.href = '/api/campaigns/' + encodeURIComponent(id) + '/pdf' + query;
+    a.download = buildReportFilename('Campaign_Report', id.substring(0, 8), 'pdf');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   });
 }
 // downloadSweepReport mirrors downloadCampaignReport for the sweep report.
 function downloadSweepReport(id) {
   var a = document.createElement('a');
-  a.href = '/api/vex/sweeps/' + encodeURIComponent(id) + '/report';
-  a.download = buildReportFilename('Variant_Sweep', id.substring(0, 8), 'html');
+  a.href = '/api/vex/sweeps/' + encodeURIComponent(id) + '/pdf';
+  a.download = buildReportFilename('Variant_Sweep', id.substring(0, 8), 'pdf');
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 // downloadEMSweepReport mirrors downloadSweepReport for the EM sweep's combined report.
 function downloadEMSweepReport(id) {
   var a = document.createElement('a');
-  a.href = '/api/em/sweeps/' + encodeURIComponent(id) + '/report';
-  a.download = buildReportFilename('Endpoint_Mastery_Sweep', id.substring(0, 8), 'html');
+  a.href = '/api/em/sweeps/' + encodeURIComponent(id) + '/pdf';
+  a.download = buildReportFilename('Endpoint_Mastery_Sweep', id.substring(0, 8), 'pdf');
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 function downloadCampaignCSV(id) {
@@ -20954,8 +20957,7 @@ function renderEMSweepProgress(sw, runs) {
   var terminal = sw.status !== 'running' && sw.status !== 'agent_disconnected';
   document.getElementById('em-sweep-progress-actions').innerHTML = terminal
     ? '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/em/sweeps/' + encodeURIComponent(sw.id) + '/report\',\'_blank\')" title="Open the combined EM sweep report">&#8599; HTML Report</button> ' +
-      '<button class="btn btn-outline btn-sm" onclick="downloadEMSweepReport(\'' + x(sw.id) + '\')" title="Download the combined EM sweep report as a file">&#8595; HTML Report</button> ' +
-      '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/em/sweeps/' + encodeURIComponent(sw.id) + '/pdf\',\'_blank\')" title="Download the combined EM sweep report as PDF">&#8595; PDF</button>'
+      '<button class="btn btn-outline btn-sm" onclick="downloadEMSweepReport(\'' + x(sw.id) + '\')" title="Download the combined EM sweep report as a PDF file">&#8595; PDF Report</button>'
     // Previously there was no cancel control here at all -- a sweep stuck in
     // agent_disconnected (e.g. the agent's heartbeat looks fine but its
     // WebSocket never reconnected) had a working server-side cancel endpoint

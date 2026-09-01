@@ -1,0 +1,1207 @@
+package io.openaev.service;
+
+import static io.openaev.database.model.Filters.FilterMode.and;
+import static io.openaev.database.model.Filters.isEmptyFilterGroup;
+import static io.openaev.database.specification.EndpointSpecification.*;
+import static io.openaev.helper.StreamHelper.fromIterable;
+import static io.openaev.helper.StreamHelper.iterableToSet;
+import static io.openaev.integration.impl.executors.crowdstrike.CrowdStrikeExecutorIntegration.CROWDSTRIKE_EXECUTOR_TYPE;
+import static io.openaev.integration.impl.executors.openaev.OpenAEVExecutorIntegration.OPENAEV_EXECUTOR_ID;
+import static io.openaev.integration.impl.executors.paloaltocortex.PaloAltoCortexExecutorIntegration.PALOALTOCORTEX_EXECUTOR_TYPE;
+import static io.openaev.utils.ArchitectureFilterUtils.handleEndpointFilter;
+import static io.openaev.utils.FilterUtilsJpa.computeFilterGroupJpa;
+import static io.openaev.utils.SecurityUtils.validateJFrogUri;
+import static io.openaev.utils.pagination.PaginationUtils.buildPageable;
+import static io.openaev.utils.pagination.PaginationUtils.buildPaginationJPA;
+import static java.time.Instant.now;
+import static java.util.Optional.ofNullable;
+import static java.util.stream.Collectors.toList;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.openaev.config.OpenAEVConfig;
+import io.openaev.config.cache.LicenseCacheManager;
+import io.openaev.database.audit.AuditLoggedService;
+import io.openaev.database.model.*;
+import io.openaev.database.repository.*;
+import io.openaev.database.specification.AssetAgentJobSpecification;
+import io.openaev.ee.EnterpriseEditionService;
+import io.openaev.executors.model.AgentRegisterInput;
+import io.openaev.rest.asset.endpoint.form.EndpointInput;
+import io.openaev.rest.asset.endpoint.form.EndpointOutput;
+import io.openaev.rest.asset.endpoint.form.EndpointRegisterInput;
+import io.openaev.rest.exception.BadRequestException;
+import io.openaev.rest.exception.ElementNotFoundException;
+import io.openaev.service.account.ServiceAccountPrivilegeService;
+import io.openaev.utils.FilterUtilsJpa;
+import io.openaev.utils.mapper.EndpointMapper;
+import io.openaev.utils.pagination.SearchPaginationInput;
+import jakarta.annotation.Resource;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.*;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@RequiredArgsConstructor
+@Service
+@Slf4j
+public class EndpointService implements AuditLoggedService {
+
+  private static final String ASSET_GROUP_FILTER = "assetGroups";
+
+  public static final int DELETE_TTL = 86400000; // 24 hours
+  public static final String OPENAEV_AGENT_INSTALLER = "openaev-agent-installer";
+  public static final String OPENAEV_AGENT_UPGRADE = "openaev-agent-upgrade";
+  public static final String SERVICE = "service";
+  public static final String SERVICE_USER = "service-user";
+  public static final String SESSION_USER = "session-user";
+
+  public static final String OPENAEV_INSTALL_DIR_WINDOWS_SERVICE =
+      "C:\\Program Files (x86)\\Filigran\\OAEV Agent";
+  public static final String OPENAEV_INSTALL_DIR_WINDOWS_SERVICE_USER = ".openaev";
+  public static final String OPENAEV_INSTALL_DIR_WINDOWS_SESSION_USER = "$HOME\\.openaev";
+  public static final String OPENAEV_INSTALL_DIR_UNIX_SERVICE = "/opt/openaev-agent";
+  public static final String OPENAEV_INSTALL_DIR_UNIX_SERVICE_USER = ".local/openaev-agent-service";
+  public static final String OPENAEV_INSTALL_DIR_UNIX_SESSION_USER = ".local/openaev-agent-session";
+
+  public static final String OPENAEV_SERVICE_NAME_WINDOWS_SERVICE = "OAEVAgentService";
+  public static final String OPENAEV_SERVICE_NAME_WINDOWS_SERVICE_USER = "OAEVAgent-Service";
+  public static final String OPENAEV_SERVICE_NAME_WINDOWS_SESSION_USER = "OAEVAgent-Session";
+  public static final String OPENAEV_SERVICE_NAME_UNIX_SERVICE = "openaev-agent";
+  public static final String OPENAEV_SERVICE_NAME_UNIX_SERVICE_USER = "openaev-agent";
+  public static final String OPENAEV_SERVICE_NAME_UNIX_SESSION_USER = "openaev-agent-session";
+
+  @Resource private OpenAEVConfig openAEVConfig;
+
+  private final EndpointMapper endpointMapper;
+  private final ObjectMapper objectMapper;
+
+  /** Cache of raw install/upgrade script templates keyed by platform/script name. */
+  private final Map<String, String> agentScriptTemplateCache = new ConcurrentHashMap<>();
+
+  private final ServiceAccountPrivilegeService privilegeService;
+
+  @Value("${info.app.version:unknown}")
+  String version;
+
+  @Value("${executor.openaev-agent.binaries.origin:${executor.openaev.binaries.origin:local}}")
+  private String agentBinaryOrigin;
+
+  @Value(
+      "${executor.openaev-agent.binaries.version:${executor.openaev.binaries.version:${info.app.version:unknown}}}")
+  private String agentBinaryVersion;
+
+  @Value("${executor.openaev.agent.max-simultaneous-jobs:5}")
+  private int maxSimultaneousJobs;
+
+  @Value("${executor.openaev.agent.auto-update-enabled:true}")
+  private boolean agentAutoUpdateEnabled;
+
+  private final EndpointRepository endpointRepository;
+  private final ExecutorRepository executorRepository;
+  private final AssetGroupRepository assetGroupRepository;
+  private final AssetAgentJobRepository assetAgentJobRepository;
+  private final TagRepository tagRepository;
+  private final AgentService agentService;
+  private final AssetService assetService;
+  private final EnterpriseEditionService enterpriseEditionService;
+  private final LicenseCacheManager licenseCacheManager;
+  private final TenantRepository tenantRepository;
+
+  // -- CRUD --
+  public Endpoint createEndpoint(@NotNull final Endpoint endpoint) {
+    return this.endpointRepository.save(endpoint);
+  }
+
+  public Endpoint createEndpoint(@NotNull final EndpointInput input) {
+    Endpoint endpoint = new Endpoint();
+    endpoint.setUpdateAttributes(input);
+    String[] ips = EndpointMapper.setIps(input.getIps());
+    endpoint.setIps(ips);
+    ensureSeenIp(endpoint);
+    endpoint.setMacAddresses(EndpointMapper.setMacAddresses(input.getMacAddresses()));
+    endpoint.setTags(iterableToSet(this.tagRepository.findAllById(input.getTagIds())));
+    endpoint.setEoL(input.isEol());
+    return createEndpoint(endpoint);
+  }
+
+  public Endpoint createEndpoint(
+      @NotNull final EndpointInput input, @NotNull final String tenantId) {
+    validateLinkedPersonInTenant(input.getLinkedPerson(), tenantId);
+    return createEndpoint(input);
+  }
+
+  // Rejects a linked person that is not a member of the current tenant, so an identity asset
+  // cannot reference a users row from another tenant. A blank value is a no-op (it unlinks).
+  private void validateLinkedPersonInTenant(String linkedPerson, String tenantId) {
+    if (StringUtils.isNotBlank(linkedPerson)
+        && !this.tenantRepository.existsByUserIdAndTenantId(linkedPerson, tenantId)) {
+      throw new BadRequestException(
+          "asset_linked_person must reference a user of the current tenant");
+    }
+  }
+
+  public Endpoint endpoint(@NotBlank final String endpointId, @NotNull final String tenantId) {
+    return this.endpointRepository
+        .findByIdAndTenantId(endpointId, tenantId)
+        .orElseThrow(() -> new ElementNotFoundException("Endpoint not found"));
+  }
+
+  public List<Endpoint> findEndpointByHostnameAndAtLeastOneIp(
+      @NotBlank final String hostname,
+      @NotNull final String[] ips,
+      @NotNull final String tenantId) {
+    return this.endpointRepository.findByHostnameAndAtleastOneIp(hostname, ips, tenantId);
+  }
+
+  public List<Endpoint> findEndpointByHostnameAndAtLeastOneMacAddress(
+      @NotBlank final String hostname,
+      @NotNull final String[] macAddresses,
+      @NotNull final String tenantId) {
+    return this.endpointRepository.findByHostnameAndAtleastOneMacAddress(
+        hostname, macAddresses, tenantId);
+  }
+
+  public Optional<Endpoint> findEndpointByExternalReference(
+      @NotNull final String externalReference, @NotNull final String tenantId) {
+    return this.endpointRepository.findByExternalReference(externalReference, tenantId).stream()
+        .findFirst();
+  }
+
+  public Optional<Endpoint> findEndpointByAtLeastOneMacAddress(
+      @NotNull final String[] macAddresses, @NotNull final String tenantId) {
+    return this.endpointRepository.findByAtleastOneMacAddress(macAddresses, tenantId).stream()
+        .findFirst();
+  }
+
+  public List<Endpoint> findEndpointsByMacAddresses(
+      final String[] macAddresses, @NotNull final String tenantId) {
+    return this.endpointRepository.findByAtleastOneMacAddress(macAddresses, tenantId);
+  }
+
+  public List<Endpoint> endpoints() {
+    return fromIterable(this.endpointRepository.findAll());
+  }
+
+  public List<Endpoint> endpoints(List<String> endpointIds) {
+    return fromIterable(this.endpointRepository.findAll(fromIds(endpointIds)));
+  }
+
+  public List<Endpoint> endpoints(@NotNull final Specification<Endpoint> specification) {
+    return fromIterable(this.endpointRepository.findAll(specification));
+  }
+
+  public Endpoint updateEndpoint(@NotNull final Endpoint endpoint) {
+    endpoint.setUpdatedAt(now());
+    return this.endpointRepository.save(endpoint);
+  }
+
+  public void deleteEndpoint(@NotBlank final String endpointId) {
+    this.endpointRepository.deleteById(endpointId);
+  }
+
+  /**
+   * Resolves a hostname to its IP address(es) via DNS. Returns an empty list when the hostname
+   * cannot be resolved so the caller can surface a friendly message rather than an error.
+   */
+  public List<String> resolveHostnameToIps(@NotBlank final String hostname) {
+    try {
+      return Arrays.stream(InetAddress.getAllByName(hostname))
+          .map(InetAddress::getHostAddress)
+          .distinct()
+          .toList();
+    } catch (UnknownHostException e) {
+      log.warn("Could not resolve hostname '{}': {}", hostname, e.getMessage());
+      return List.of();
+    }
+  }
+
+  public Endpoint getEndpoint(@NotBlank final String endpointId, @NotNull final String tenantId) {
+    return endpoint(endpointId, tenantId);
+  }
+
+  public Page<Endpoint> searchEndpoints(SearchPaginationInput searchPaginationInput) {
+    return buildPaginationJPA(
+        (Specification<Endpoint> specification, Pageable pageable) ->
+            this.endpointRepository.findAll(
+                findEndpointsForInjectionOrAgentlessEndpoints().and(specification), pageable),
+        handleEndpointFilter(searchPaginationInput),
+        Endpoint.class);
+  }
+
+  private List<Specification<Endpoint>> getDynamicAssetGroupSpecifications(
+      List<AssetGroup> assetGroups) {
+    return assetGroups.stream()
+        .filter(assetGroup -> !isEmptyFilterGroup(assetGroup.getDynamicFilter()))
+        .map(
+            assetGroup -> {
+              Specification<Endpoint> specificationDynamic =
+                  computeFilterGroupJpa(assetGroup.getDynamicFilter());
+              return specificationDynamic;
+            })
+        .collect(toList());
+  }
+
+  private List<AssetGroup> getAssetGroupFromFilter(Filters.Filter assetGroupFilter) {
+    return fromIterable(assetGroupRepository.findAllById(assetGroupFilter.getValues()));
+  }
+
+  private Specification<Endpoint> getStaticAssetGroupSpecification(
+      SearchPaginationInput searchPaginationInput, Filters.Filter assetGroupFilter) {
+    Filters.FilterGroup filterGroup = new Filters.FilterGroup();
+    filterGroup.setMode(searchPaginationInput.getFilterGroup().getMode());
+    filterGroup.setFilters(List.of(assetGroupFilter));
+    return computeFilterGroupJpa(filterGroup);
+  }
+
+  private Specification<Endpoint> buildAdditionalEndpointSpecifications(
+      SearchPaginationInput searchPaginationInput) {
+    Optional<Filters.Filter> assetGroupFilter =
+        ofNullable(searchPaginationInput.getFilterGroup())
+            .flatMap(f -> f.findByKey(ASSET_GROUP_FILTER));
+
+    if (assetGroupFilter.isEmpty()) {
+      return findEndpointsForInjectionOrAgentlessEndpoints();
+    }
+
+    // Handle dynamic asset group filters
+    List<AssetGroup> assetGroups = getAssetGroupFromFilter(assetGroupFilter.get());
+    List<Specification<Endpoint>> assetGroupSpecifications =
+        getDynamicAssetGroupSpecifications(assetGroups);
+
+    // Handle static asset group filter
+    assetGroupSpecifications.add(
+        getStaticAssetGroupSpecification(searchPaginationInput, assetGroupFilter.get()));
+    searchPaginationInput.getFilterGroup().removeByKey(ASSET_GROUP_FILTER);
+
+    return Specification.anyOf(assetGroupSpecifications)
+        .and(findEndpointsForInjectionOrAgentlessEndpoints());
+  }
+
+  public Page<Endpoint> searchManagedEndpoints(SearchPaginationInput searchPaginationInput) {
+    Specification<Endpoint> finalSpec =
+        buildAdditionalEndpointSpecifications(searchPaginationInput);
+    Filters.FilterMode mode = searchPaginationInput.getFilterGroup().getMode();
+
+    return buildPaginationJPA(
+        (Specification<Endpoint> specification, Pageable pageable) ->
+            this.endpointRepository.findAll(
+                searchPaginationInput.getFilterGroup().getFilters().isEmpty()
+                    ? finalSpec
+                    : (and.equals(mode)
+                        ? finalSpec.and(specification)
+                        : finalSpec.or(specification)),
+                pageable),
+        handleEndpointFilter(searchPaginationInput),
+        Endpoint.class);
+  }
+
+  public Page<Endpoint> searchManagedEndpointsByAssetGroup(
+      String assetGroupId, SearchPaginationInput searchPaginationInput) {
+    AssetGroup assetGroup =
+        assetGroupRepository
+            .findById(assetGroupId)
+            .orElseThrow(() -> new IllegalArgumentException("Asset group not found"));
+
+    Specification<Endpoint> specificationStatic =
+        findEndpointsForAssetGroup(assetGroupId)
+            .and(findEndpointsForInjectionOrAgentlessEndpoints());
+
+    if (!isEmptyFilterGroup(assetGroup.getDynamicFilter())) {
+      Specification<Endpoint> specificationDynamic =
+          computeFilterGroupJpa(assetGroup.getDynamicFilter());
+      Specification<Endpoint> specificationDynamicWithInjection =
+          specificationDynamic.and(findEndpointsForInjectionOrAgentlessEndpoints());
+
+      Page<Endpoint> dynamicResult =
+          buildPaginationJPA(
+              (Specification<Endpoint> specification, Pageable pageable) ->
+                  this.endpointRepository.findAll(
+                      specificationDynamicWithInjection.and(specification), pageable),
+              handleEndpointFilter(searchPaginationInput),
+              Endpoint.class);
+      Page<Endpoint> staticResult =
+          buildPaginationJPA(
+              (Specification<Endpoint> specification, Pageable pageable) ->
+                  this.endpointRepository.findAll(specificationStatic.and(specification), pageable),
+              handleEndpointFilter(searchPaginationInput),
+              Endpoint.class);
+      List<Endpoint> mergedContent =
+          Stream.concat(dynamicResult.getContent().stream(), staticResult.getContent().stream())
+              .distinct()
+              .limit(searchPaginationInput.getSize())
+              .collect(toList());
+
+      long total = dynamicResult.getTotalElements() + staticResult.getTotalElements();
+
+      Pageable pageable = buildPageable(searchPaginationInput, Endpoint.class);
+      return new PageImpl<>(mergedContent, pageable, total);
+    } else {
+      return buildPaginationJPA(
+          (Specification<Endpoint> specification, Pageable pageable) ->
+              this.endpointRepository.findAll(specificationStatic.and(specification), pageable),
+          handleEndpointFilter(searchPaginationInput),
+          Endpoint.class);
+    }
+  }
+
+  public Endpoint updateEndpoint(
+      @NotBlank final String endpointId,
+      @NotNull final EndpointInput input,
+      @NotNull final String tenantId) {
+    validateLinkedPersonInTenant(input.getLinkedPerson(), tenantId);
+    Endpoint toUpdate = this.endpoint(endpointId, tenantId);
+    toUpdate.setUpdateAttributes(input);
+    ensureSeenIp(toUpdate);
+    toUpdate.setEoL(input.isEol());
+    toUpdate.setTags(iterableToSet(this.tagRepository.findAllById(input.getTagIds())));
+    return updateEndpoint(toUpdate);
+  }
+
+  // -- INSTALLATION AGENT --
+
+  /**
+   * Get agents from external executor API and register them into OpenAEV agents and endpoints
+   *
+   * @param inputs from the API
+   * @param existingAgents in the database
+   * @return OpenAEV agents
+   */
+  @Transactional
+  public List<Agent> syncAgentsEndpoints(
+      List<AgentRegisterInput> inputs, List<Agent> existingAgents, @NotNull String tenantId) {
+    log.info(
+        ":::::> syncAgentsEndpoints: tenantId={}, inputs={}, existingAgents={}",
+        tenantId,
+        inputs.size(),
+        existingAgents.size());
+    List<Agent> agentsToSave = new ArrayList<>();
+    List<Asset> endpointsToSave = new ArrayList<>();
+    Endpoint endpointToSave;
+    Agent agentToSave;
+    // Update agents/endpoints with external reference
+    Set<String> inputsExternalRefs =
+        inputs.stream().map(AgentRegisterInput::getExternalReference).collect(Collectors.toSet());
+    if (!inputsExternalRefs.isEmpty()) {
+      Set<Agent> agentsToUpdate =
+          existingAgents.stream()
+              .filter(agent -> inputsExternalRefs.contains(agent.getExternalReference()))
+              .collect(Collectors.toSet());
+      Map<String, AgentRegisterInput> inputsByExternalReference =
+          inputs.stream()
+              .collect(
+                  Collectors.toMap(AgentRegisterInput::getExternalReference, agent2 -> agent2));
+      for (Agent agentToUpdate : agentsToUpdate) {
+        final AgentRegisterInput inputToSave =
+            inputsByExternalReference.get(agentToUpdate.getExternalReference());
+        endpointToSave = (Endpoint) agentToUpdate.getAsset();
+        setUpdatedEndpointAttributes(endpointToSave, inputToSave);
+        // Ensure the endpoint tenant is always consistent with the executor's tenant.
+        // Guards against stale cross-tenant data created before TenantContext was set correctly.
+        endpointToSave.setTenant(new Tenant(inputToSave.getExecutor().getTenantId()));
+        agentToUpdate.setAsset(endpointToSave);
+        agentToUpdate.setLastSeen(inputToSave.getLastSeen());
+        endpointsToSave.add(endpointToSave);
+        agentsToSave.add(agentToUpdate);
+        inputs.removeIf(
+            input -> input.getExternalReference().equals(inputToSave.getExternalReference()));
+      }
+    }
+    // Update agents/endpoints with mac address
+    String[] inputsMacAddresses =
+        inputs.stream().map(AgentRegisterInput::getMacAddresses).toList().stream()
+            .flatMap(Arrays::stream)
+            .toArray(String[]::new);
+    if (inputsMacAddresses.length > 0) {
+      List<Endpoint> endpointsToUpdate = findEndpointsByMacAddresses(inputsMacAddresses, tenantId);
+      Optional<AgentRegisterInput> optionalInputToSave;
+      for (Endpoint endpointToUpdate : endpointsToUpdate) {
+        optionalInputToSave =
+            inputs.stream()
+                .filter(
+                    input ->
+                        Arrays.stream(endpointToUpdate.getMacAddresses())
+                            .anyMatch(
+                                macAddress ->
+                                    Arrays.asList(input.getMacAddresses()).contains(macAddress)))
+                .findFirst();
+        if (optionalInputToSave.isPresent()) {
+          // If no existing agent in this endpoint, add to it
+          if (existingAgents.stream()
+              .noneMatch(agent -> agent.getAsset().getId().equals(endpointToUpdate.getId()))) {
+            final AgentRegisterInput inputToSave = optionalInputToSave.get();
+            setUpdatedEndpointAttributes(endpointToUpdate, inputToSave);
+            agentToSave = new Agent();
+            setNewAgentAttributes(inputToSave, agentToSave);
+            setUpdatedAgentAttributes(agentToSave, inputToSave, endpointToUpdate);
+            endpointsToSave.add(endpointToUpdate);
+            agentsToSave.add(agentToSave);
+            inputs.removeIf(
+                input -> Arrays.equals(input.getMacAddresses(), inputToSave.getMacAddresses()));
+          }
+        }
+      }
+    }
+    // Create new agents/endpoints
+    if (!inputs.isEmpty()) {
+      for (AgentRegisterInput inputToUpdate : inputs) {
+        endpointToSave = new Endpoint();
+        endpointToSave.setUpdateAttributes(inputToUpdate);
+        endpointToSave.setIps(inputToUpdate.getIps());
+        endpointToSave.setSeenIp(inputToUpdate.getSeenIp());
+        endpointToSave.setMacAddresses(inputToUpdate.getMacAddresses());
+        // Set tenant explicitly so TenantBaseListener is not needed for this background path.
+        endpointToSave.setTenant(new Tenant(tenantId));
+        endpointsToSave.add(endpointToSave);
+        agentToSave = new Agent();
+        setNewAgentAttributes(inputToUpdate, agentToSave);
+        setUpdatedAgentAttributes(agentToSave, inputToUpdate, endpointToSave);
+        agentsToSave.add(agentToSave);
+      }
+    }
+
+    assetService.saveAllAssets(endpointsToSave);
+    List<Agent> savedAgents = agentService.saveAllAgents(agentsToSave);
+
+    // Update source tags after both endpoints and agents are saved
+    if (!savedAgents.isEmpty()) {
+      List<Agent> inactiveAgents = new ArrayList<>();
+      for (Agent agent : savedAgents) {
+        if (!(agent.getAsset() instanceof Endpoint endpoint) || agent.getExecutor() == null) {
+          continue;
+        }
+        if (agent.isActive()) {
+          addSourceTagToEndpoint(endpoint, agent.getExecutor());
+        } else {
+          inactiveAgents.add(agent);
+        }
+      }
+      if (!inactiveAgents.isEmpty()) {
+        removeSourceTagsFromAgentEndpoints(inactiveAgents);
+      }
+    }
+
+    log.info(
+        ":::::> syncAgentsEndpoints saved: endpoints={}, agents={}, tenantId={}",
+        endpointsToSave.stream()
+            .map(
+                a ->
+                    a.getId() + "/" + (a.getTenant() != null ? a.getTenant().getId() : "NO_TENANT"))
+            .toList(),
+        savedAgents.stream().map(Agent::getId).toList(),
+        tenantId);
+    return savedAgents;
+  }
+
+  @Transactional
+  public Endpoint register(final EndpointRegisterInput input, @NotNull final String tenantId)
+      throws IOException {
+    AgentRegisterInput agentInput = toAgentEndpoint(input, tenantId);
+    Agent agent;
+    // Check if agents exist (because we can find X openaev agent on an endpoint)
+    List<Agent> existingAgents =
+        agentService.findByExternalReference(agentInput.getExternalReference(), tenantId);
+    if (!existingAgents.isEmpty()) {
+      // Check if this specific agent exist
+      Agent.DEPLOYMENT_MODE deploymentMode =
+          agentInput.isService() ? Agent.DEPLOYMENT_MODE.service : Agent.DEPLOYMENT_MODE.session;
+      Agent.PRIVILEGE privilege =
+          agentInput.isElevated() ? Agent.PRIVILEGE.admin : Agent.PRIVILEGE.standard;
+      Optional<Agent> existingAgent =
+          existingAgents.stream()
+              .filter(
+                  ag ->
+                      ag.getExecutedByUser().equals(agentInput.getExecutedByUser())
+                          && ag.getDeploymentMode().equals(deploymentMode)
+                          && ag.getPrivilege().equals(privilege))
+              .findFirst();
+      if (existingAgent.isPresent()) {
+        agent = updateExistingAgent(existingAgent.get(), agentInput);
+      } else {
+        agent =
+            updateExistingEndpointAndCreateAgent(
+                (Endpoint) existingAgents.getFirst().getAsset(), agentInput);
+      }
+    } else {
+      // Check if endpoint exists
+      Optional<Endpoint> existingEndpoint =
+          findEndpointByAtLeastOneMacAddress(agentInput.getMacAddresses(), tenantId);
+      if (existingEndpoint.isPresent()) {
+        agent = updateExistingEndpointAndManageAgent(existingEndpoint.get(), agentInput);
+      } else {
+        agent = createNewEndpointAndAgent(agentInput);
+      }
+    }
+    // If agent is not temporary and not the same version as the platform => Create an upgrade task
+    // for the agent if auto update is enabled (enabled by default)
+    Endpoint endpoint = (Endpoint) agent.getAsset();
+    if (agent.getParent() == null && !agent.getVersion().equals(version)) {
+      if (enterpriseEditionService.isLicenseActive(licenseCacheManager.getEnterpriseEditionInfo())
+          && !agentAutoUpdateEnabled) {
+        log.warn(
+            String.format(
+                "A new version for the agent %s is available, his current version is %s and the new version is %s",
+                agent.getAsset().getName(), agent.getVersion(), version));
+      } else {
+        if (assetAgentJobRepository
+            .findUpgradeJobByAgentIdAndInjectNull(agent.getId(), agent.getTenant().getId())
+            .isEmpty()) {
+          AssetAgentJob assetAgentJob = new AssetAgentJob();
+          assetAgentJob.setCommand(
+              generateUpgradeCommand(
+                  endpoint.getPlatform().name(),
+                  input.getInstallationMode(),
+                  input.getInstallationDirectory(),
+                  input.getServiceName(),
+                  agent.getTenant().getId()));
+          assetAgentJob.setAgent(agent);
+          assetAgentJob.setTenant(agent.getTenant());
+          assetAgentJob.setCreatedAt(now());
+
+          try {
+            assetAgentJobRepository.save(assetAgentJob);
+          } catch (DataIntegrityViolationException e) {
+            // Concurrent registration already created the upgrade job — safe to ignore
+            log.warn(
+                "Upgrade job already exists for agent {} (concurrent insert)", agent.getId(), e);
+          }
+        } else {
+          log.warn("Upgrade job already exists");
+        }
+      }
+    }
+
+    return endpoint;
+  }
+
+  public List<AssetAgentJob> getEndpointJobs(final EndpointRegisterInput input) {
+    return this.assetAgentJobRepository
+        .findAll(
+            AssetAgentJobSpecification.forEndpoint(
+                input.getExternalReference(),
+                input.isService()
+                    ? Agent.DEPLOYMENT_MODE.service.name()
+                    : Agent.DEPLOYMENT_MODE.session.name(),
+                input.isElevated() ? Agent.PRIVILEGE.admin.name() : Agent.PRIVILEGE.standard.name(),
+                input.getExecutedByUser()),
+            PageRequest.of(0, maxSimultaneousJobs, Sort.by(Sort.Direction.ASC, "createdAt")))
+        .getContent();
+  }
+
+  private void addSourceTagToEndpoint(Endpoint endpoint, AgentRegisterInput input) {
+    addSourceTagToEndpoint(endpoint, input.getExecutor());
+  }
+
+  private void addSourceTagToEndpoint(Endpoint endpoint, Executor executor) {
+    Set<Tag> existingTags = loadEndpointTags(endpoint);
+    String tagName = getExecutorSourceTagName(executor);
+    String tenantId = endpoint.getTenant().getId();
+
+    // Check if the tag already exists on this endpoint, if so, nothing to do.
+    boolean alreadyHasTag = existingTags.stream().anyMatch(t -> tagName.equals(t.getName()));
+    if (alreadyHasTag) {
+      return;
+    }
+
+    // Find or create the tag entity scoped by tenant, then add to the endpoint
+    Optional<Tag> tag = tagRepository.findByNameAndTenantId(tagName, tenantId);
+    if (tag.isEmpty()) {
+      Tag newTag = new Tag();
+      newTag.setColor(executor.getBackgroundColor());
+      newTag.setName(tagName);
+      newTag.setTenant(endpoint.getTenant());
+      tagRepository.save(newTag);
+      existingTags.add(newTag);
+    } else {
+      existingTags.add(tag.get());
+    }
+    endpoint.setTags(existingTags);
+    endpointRepository.save(endpoint);
+  }
+
+  /**
+   * Remove source tags from endpoints for a collection of agents. Each agent's executor tag will be
+   * removed from its associated endpoint.
+   *
+   * @param agents the agents whose executor source tags should be removed from their endpoints
+   */
+  public void removeSourceTagsFromAgentEndpoints(Collection<Agent> agents) {
+    if (agents == null || agents.isEmpty()) {
+      return;
+    }
+
+    // Group executors by endpoint
+    Map<String, List<Executor>> executorsByEndpointId =
+        agents.stream()
+            .filter(agent -> agent.getExecutor() != null && agent.getAsset() != null)
+            .collect(
+                Collectors.groupingBy(
+                    agent -> agent.getAsset().getId(),
+                    Collectors.mapping(Agent::getExecutor, Collectors.toList())));
+
+    if (executorsByEndpointId.isEmpty()) {
+      return;
+    }
+
+    // Batch load all endpoints
+    List<Endpoint> endpoints =
+        fromIterable(endpointRepository.findAllById(executorsByEndpointId.keySet()));
+
+    // Remove tags per endpoint and collect modified ones
+    List<Endpoint> modifiedEndpoints = new ArrayList<>();
+    for (Endpoint endpoint : endpoints) {
+      Set<Tag> existingTags = loadEndpointTags(endpoint);
+      if (existingTags.isEmpty()) {
+        continue;
+      }
+      List<Executor> executors = executorsByEndpointId.get(endpoint.getId());
+      boolean modified = false;
+      for (Executor executor : executors) {
+        String tagName = getExecutorSourceTagName(executor);
+        if (existingTags.removeIf(t -> t.getName() != null && t.getName().equals(tagName))) {
+          modified = true;
+        }
+      }
+      if (modified) {
+        endpoint.setTags(existingTags);
+        endpoint.setUpdatedAt(now());
+        modifiedEndpoints.add(endpoint);
+      }
+    }
+
+    // Batch save all modified endpoints
+    if (!modifiedEndpoints.isEmpty()) {
+      endpointRepository.saveAll(modifiedEndpoints);
+    }
+  }
+
+  private String getExecutorSourceTagName(Executor executor) {
+    return "source:" + executor.getName().toLowerCase(Locale.ROOT);
+  }
+
+  /**
+   * Remove the source tag for a specific executor from all endpoints that have agents for it.
+   * Called when an executor is deleted to clean up orphaned tags.
+   *
+   * @param executorId the executor ID whose agents' endpoints should be cleaned
+   * @param tenantId the tenant scope
+   */
+  public void removeSourceTagsForExecutor(String executorId, String tenantId) {
+    List<Agent> agents = agentService.getAgentsByExecutorIdAndTenantId(executorId, tenantId);
+    removeSourceTagsFromAgentEndpoints(agents);
+  }
+
+  /**
+   * Load endpoint tags from the database. This is used to check for existing tags before adding a
+   * new source tag.
+   */
+  private Set<Tag> loadEndpointTags(Endpoint endpoint) {
+    if (endpoint.getId() == null) {
+      return new HashSet<>();
+    }
+    return new HashSet<>(
+        tagRepository.findByAssetIdAndTenantId(endpoint.getId(), endpoint.getTenant().getId()));
+  }
+
+  private Agent updateExistingEndpointAndManageAgent(Endpoint endpoint, AgentRegisterInput input) {
+    setUpdatedEndpointAttributes(endpoint, input);
+    addSourceTagToEndpoint(endpoint, input);
+    Agent agent = createOrUpdateAgent(endpoint, input);
+    updateEndpoint(endpoint);
+    return agent;
+  }
+
+  private Agent updateExistingAgent(Agent agent, AgentRegisterInput input) {
+    Endpoint endpoint = (Endpoint) agent.getAsset();
+    // Capture significant state before mutation
+    Map<String, Object> before = endpoint.significantState(objectMapper);
+
+    setUpdatedEndpointAttributes(endpoint, input);
+    addSourceTagToEndpoint(endpoint, input);
+    setUpdatedAgentAttributes(agent, input, endpoint);
+    updateEndpoint(endpoint);
+
+    // Suppress audit logging for heartbeat-only updates (no significant endpoint change)
+    suppressAuditIfUnchanged(before, endpoint.significantState(objectMapper));
+
+    return agent;
+  }
+
+  private Agent updateExistingEndpointAndCreateAgent(Endpoint endpoint, AgentRegisterInput input) {
+    setUpdatedEndpointAttributes(endpoint, input);
+    addSourceTagToEndpoint(endpoint, input);
+    Agent agent = new Agent();
+    setNewAgentAttributes(input, agent);
+    setUpdatedAgentAttributes(agent, input, endpoint);
+    endpoint.getAgents().add(agent);
+    updateEndpoint(endpoint);
+    return agent;
+  }
+
+  private Agent createOrUpdateAgent(Endpoint endpoint, AgentRegisterInput input) {
+    Agent.DEPLOYMENT_MODE deploymentMode =
+        input.isService() ? Agent.DEPLOYMENT_MODE.service : Agent.DEPLOYMENT_MODE.session;
+    Agent.PRIVILEGE privilege =
+        input.isElevated() ? Agent.PRIVILEGE.admin : Agent.PRIVILEGE.standard;
+    Optional<Agent> existingAgent =
+        agentService.getAgentForAnAssetByExecutorId(
+            endpoint.getId(),
+            input.getExecutedByUser(),
+            deploymentMode,
+            privilege,
+            input.getExecutor().getId());
+    Agent agent;
+    if (existingAgent.isPresent()) {
+      agent = existingAgent.get();
+    } else {
+      agent = new Agent();
+      setNewAgentAttributes(input, agent);
+    }
+    setUpdatedAgentAttributes(agent, input, endpoint);
+    if (!endpoint.getAgents().contains(agent)) {
+      endpoint.getAgents().add(agent);
+    }
+    return agent;
+  }
+
+  private void setUpdatedEndpointAttributes(Endpoint endpoint, AgentRegisterInput input) {
+    // Hostname and arch not updated by Crowdstrike because Crowdstrike hostname is 15 length max
+    // and arch is hard coded for Crowdstrike and Palo Alto Cortex
+    if (!CROWDSTRIKE_EXECUTOR_TYPE.equals(input.getExecutor().getType())) {
+      endpoint.setHostname(input.getHostname());
+      if (!PALOALTOCORTEX_EXECUTOR_TYPE.equals(input.getExecutor().getType())) {
+        endpoint.setArch(input.getArch());
+      }
+    }
+    if (!PALOALTOCORTEX_EXECUTOR_TYPE.equals(input.getExecutor().getType())) {
+      endpoint.setArch(input.getArch());
+    }
+    endpoint.setIps(EndpointMapper.mergeAddressArrays(endpoint.getIps(), input.getIps()));
+    endpoint.setSeenIp(input.getSeenIp());
+    endpoint.setMacAddresses(
+        EndpointMapper.mergeAddressArrays(endpoint.getMacAddresses(), input.getMacAddresses()));
+  }
+
+  private void setUpdatedAgentAttributes(Agent agent, AgentRegisterInput input, Endpoint endpoint) {
+    agent.setAsset(endpoint);
+    agent.setLastSeen(input.getLastSeen());
+    agent.setExternalReference(input.getExternalReference());
+    // For OpenAEV agent
+    agent.setVersion(input.getAgentVersion());
+  }
+
+  private Agent createNewEndpointAndAgent(AgentRegisterInput input) {
+    Endpoint endpoint = new Endpoint();
+    endpoint.setUpdateAttributes(input);
+    endpoint.setIps(input.getIps());
+    endpoint.setSeenIp(input.getSeenIp());
+    endpoint.setMacAddresses(input.getMacAddresses());
+    endpoint.setTenant(new Tenant(input.getExecutor().getTenantId()));
+    Agent agent = new Agent();
+    setNewAgentAttributes(input, agent);
+    setUpdatedAgentAttributes(agent, input, endpoint);
+    endpoint.getAgents().add(agent);
+    createEndpoint(endpoint);
+    addSourceTagToEndpoint(endpoint, input);
+    return agent;
+  }
+
+  private void setNewAgentAttributes(AgentRegisterInput input, Agent agent) {
+    agent.setPrivilege(input.isElevated() ? Agent.PRIVILEGE.admin : Agent.PRIVILEGE.standard);
+    agent.setDeploymentMode(
+        input.isService() ? Agent.DEPLOYMENT_MODE.service : Agent.DEPLOYMENT_MODE.session);
+    agent.setExecutedByUser(input.getExecutedByUser());
+    agent.setExecutor(input.getExecutor());
+    agent.setTenant(new Tenant(input.getExecutor().getTenantId()));
+  }
+
+  private AgentRegisterInput toAgentEndpoint(
+      EndpointRegisterInput input, @NotNull String tenantId) {
+    AgentRegisterInput agentInput = new AgentRegisterInput();
+    agentInput.setExecutor(
+        executorRepository.findByIdAndTenantId(OPENAEV_EXECUTOR_ID, tenantId).orElse(null));
+    agentInput.setLastSeen(Instant.now());
+    agentInput.setExternalReference(input.getExternalReference());
+    agentInput.setIps(input.getIps());
+    agentInput.setSeenIp(input.getSeenIp());
+    agentInput.setMacAddresses(input.getMacAddresses());
+    agentInput.setHostname(input.getHostname());
+    agentInput.setAgentVersion(input.getAgentVersion());
+    agentInput.setName(input.getName());
+    agentInput.setPlatform(input.getPlatform());
+    agentInput.setArch(input.getArch());
+    agentInput.setService(input.isService());
+    agentInput.setElevated(input.isElevated());
+    agentInput.setExecutedByUser(input.getExecutedByUser());
+    agentInput.setInstallationMode(input.getInstallationMode());
+    agentInput.setInstallationDirectory(input.getInstallationDirectory());
+    agentInput.setServiceName(input.getServiceName());
+    return agentInput;
+  }
+
+  public String getFileOrDownloadFromJfrog(
+      String platform,
+      String file,
+      String adminToken,
+      String installationDir,
+      String serviceNameOrPrefix,
+      String tenantId)
+      throws IOException {
+    // Validate the platform and map it to a fixed directory plus script extension. Mapping to
+    // literal values (rather than reusing the raw platform string) keeps user-controlled data out
+    // of the resource path resolved in loadAgentScriptTemplate (avoids java/path-injection).
+    String platformDir =
+        switch (platform.toLowerCase(Locale.ROOT)) {
+          case "windows" -> "windows";
+          case "linux" -> "linux";
+          case "macos" -> "macos";
+          default ->
+              throw new UnsupportedOperationException("Unsupported agent platform: " + platform);
+        };
+    String extension = "windows".equals(platformDir) ? "ps1" : "sh";
+
+    // Cache the raw script template per platform/script: the content only depends on static
+    // configuration (origin + version), and this method is called from the agent-registration
+    // transaction - without the cache every registration could trigger an HTTP download from
+    // JFrog while holding the DB transaction open
+    String cacheKey = platformDir + "/" + file;
+    String template = agentScriptTemplateCache.get(cacheKey);
+    if (template == null) {
+      template = loadAgentScriptTemplate(platformDir, file, extension);
+      agentScriptTemplateCache.put(cacheKey, template);
+    }
+
+    if (installationDir == null) {
+      installationDir = "";
+    }
+
+    return template
+        .replace("${OPENAEV_URL}", openAEVConfig.getBaseUrlForAgent())
+        .replace("${OPENAEV_TOKEN}", adminToken)
+        .replace(
+            "${OPENAEV_UNSECURED_CERTIFICATE}",
+            String.valueOf(openAEVConfig.isUnsecuredCertificate()))
+        .replace("${OPENAEV_WITH_PROXY}", String.valueOf(openAEVConfig.isWithProxy()))
+        .replace("${OPENAEV_SERVICE_NAME}", serviceNameOrPrefix)
+        .replace("${OPENAEV_INSTALL_DIR}", installationDir)
+        .replace("${OPENAEV_TENANT_ID}", tenantId);
+  }
+
+  private String loadAgentScriptTemplate(String platformDir, String file, String extension)
+      throws IOException {
+    InputStream in = null;
+    String filename;
+    String resourcePath = "/openaev-agent/" + platformDir + "/";
+
+    if (agentBinaryOrigin.equals("local")) { // if we want the local binaries
+      filename = file + "-" + version + "." + extension;
+      in = getClass().getResourceAsStream("/agents" + resourcePath + filename);
+    } else if (agentBinaryOrigin.equals(
+        "repository")) { // if we want a specific version from artifactory
+      filename = file + "-" + agentBinaryVersion + "." + extension;
+      in = new BufferedInputStream(validateJFrogUri(resourcePath, filename).toURL().openStream());
+    }
+    if (in == null) {
+      throw new UnsupportedOperationException(
+          "Agent installer version " + agentBinaryVersion + " not found");
+    }
+    try (InputStream stream = in) {
+      return IOUtils.toString(stream, StandardCharsets.UTF_8);
+    }
+  }
+
+  public String generateServiceNameOrPrefix(
+      String platform, String installationMode, String serviceNameOrPrefix) {
+    if (serviceNameOrPrefix != null && !serviceNameOrPrefix.equals("")) {
+      return serviceNameOrPrefix;
+    }
+    if (platform.equalsIgnoreCase(Endpoint.PLATFORM_TYPE.Windows.name())) {
+      if (installationMode != null && installationMode.equals(SERVICE)) {
+        return OPENAEV_SERVICE_NAME_WINDOWS_SERVICE;
+      }
+      if (installationMode != null && installationMode.equals(SERVICE_USER)) {
+        return OPENAEV_SERVICE_NAME_WINDOWS_SERVICE_USER;
+      }
+      if (installationMode != null && installationMode.equals(SESSION_USER)) {
+        return OPENAEV_SERVICE_NAME_WINDOWS_SESSION_USER;
+      }
+      return OPENAEV_SERVICE_NAME_WINDOWS_SERVICE;
+    } else {
+      if (installationMode != null && installationMode.equals(SERVICE)) {
+        return OPENAEV_SERVICE_NAME_UNIX_SERVICE;
+      }
+      if (installationMode != null && installationMode.equals(SERVICE_USER)) {
+        return OPENAEV_SERVICE_NAME_UNIX_SERVICE_USER;
+      }
+      if (installationMode != null && installationMode.equals(SESSION_USER)) {
+        return OPENAEV_SERVICE_NAME_UNIX_SESSION_USER;
+      }
+      return OPENAEV_SERVICE_NAME_UNIX_SERVICE;
+    }
+  }
+
+  public String generateInstallationDir(
+      String platform, String installationMode, String installationDir) {
+    if (installationDir != null && !installationDir.equals("")) {
+      return installationDir;
+    }
+    if (platform.equalsIgnoreCase(Endpoint.PLATFORM_TYPE.Windows.name())) {
+      if (installationMode != null && installationMode.equals(SERVICE)) {
+        return OPENAEV_INSTALL_DIR_WINDOWS_SERVICE;
+      }
+      if (installationMode != null && installationMode.equals(SERVICE_USER)) {
+        return OPENAEV_INSTALL_DIR_WINDOWS_SERVICE_USER;
+      }
+      if (installationMode != null && installationMode.equals(SESSION_USER)) {
+        return OPENAEV_INSTALL_DIR_WINDOWS_SESSION_USER;
+      }
+      return OPENAEV_INSTALL_DIR_WINDOWS_SERVICE;
+    } else {
+      if (installationMode != null && installationMode.equals(SERVICE)) {
+        return OPENAEV_INSTALL_DIR_UNIX_SERVICE;
+      }
+      if (installationMode != null && installationMode.equals(SERVICE_USER)) {
+        return OPENAEV_INSTALL_DIR_UNIX_SERVICE_USER;
+      }
+      if (installationMode != null && installationMode.equals(SESSION_USER)) {
+        return OPENAEV_INSTALL_DIR_UNIX_SESSION_USER;
+      }
+      return OPENAEV_INSTALL_DIR_UNIX_SERVICE;
+    }
+  }
+
+  public String generateInstallCommand(
+      String platform,
+      String token,
+      String installationMode,
+      String installationDir,
+      String serviceNameOrPrefix,
+      String tenantId)
+      throws IOException {
+    if (token == null || token.isEmpty()) {
+      throw new IllegalArgumentException("Token must not be null or empty.");
+    }
+    String installerName = OPENAEV_AGENT_INSTALLER;
+    if (installationMode != null && !installationMode.equals(SERVICE)) {
+      installerName = installerName.concat("-").concat(installationMode);
+    }
+    installationDir = generateInstallationDir(platform, installationMode, installationDir);
+    serviceNameOrPrefix =
+        generateServiceNameOrPrefix(platform, installationMode, serviceNameOrPrefix);
+    return getFileOrDownloadFromJfrog(
+        platform, installerName, token, installationDir, serviceNameOrPrefix, tenantId);
+  }
+
+  public String generateUpgradeCommand(
+      String platform,
+      String installationMode,
+      String installationDir,
+      String serviceNameOrPrefix,
+      String tenantId)
+      throws IOException {
+    // FIND TOKEN BY TENANT
+    String token = privilegeService.getTokenUserServiceAccountByTenant(tenantId);
+    String upgradeName = OPENAEV_AGENT_UPGRADE;
+    if (installationMode != null && !installationMode.equals(SERVICE)) {
+      upgradeName = upgradeName.concat("-").concat(installationMode);
+    }
+    installationDir = generateInstallationDir(platform, installationMode, installationDir);
+    serviceNameOrPrefix =
+        generateServiceNameOrPrefix(platform, installationMode, serviceNameOrPrefix);
+    return getFileOrDownloadFromJfrog(
+        platform, upgradeName, token, installationDir, serviceNameOrPrefix, tenantId);
+  }
+
+  public List<Endpoint> endpointsForScenario(String scenarioId) {
+    return this.endpointRepository.findDistinctByInjectsScenarioId(scenarioId);
+  }
+
+  public List<EndpointOutput> endpointsByIdsForScenario(
+      String scenarioId, List<String> endpointIds) {
+    return this.endpointRepository
+        .findDistinctByInjectsScenarioIdAndIdIn(scenarioId, endpointIds)
+        .stream()
+        .map(endpointMapper::toEndpointOutput)
+        .toList();
+  }
+
+  public List<Endpoint> endpointsForSimulation(String simulationId) {
+    return this.endpointRepository.findDistinctByInjectsExerciseId(simulationId);
+  }
+
+  public List<EndpointOutput> endpointsByIdsForSimulation(
+      String simulationId, List<String> endpointIds) {
+    return this.endpointRepository
+        .findDistinctByInjectsExerciseIdAndIdIn(simulationId, endpointIds)
+        .stream()
+        .map(endpointMapper::toEndpointOutput)
+        .toList();
+  }
+
+  // -- OPTIONS --
+  public List<FilterUtilsJpa.Option> getOptionsByNameLinkedToFindings(
+      String searchText, String sourceId, Pageable pageable) {
+    String trimmedSearchText = StringUtils.trimToNull(searchText);
+    String trimmedSourceId = StringUtils.trimToNull(sourceId);
+
+    List<Object[]> results;
+
+    if (trimmedSourceId == null) {
+      results = endpointRepository.findAllByNameLinkedToFindings(trimmedSearchText, pageable);
+    } else {
+      results =
+          endpointRepository.findAllByNameLinkedToFindingsWithContext(
+              trimmedSourceId, trimmedSearchText, pageable);
+    }
+
+    return results.stream()
+        .map(i -> new FilterUtilsJpa.Option((String) i[0], (String) i[1]))
+        .toList();
+  }
+
+  /**
+   * Creates a new endpoint or updates an existing one based on the provided input.
+   *
+   * <p>If an endpoint matching the input is found (by external reference, hostname + IP, or
+   * hostname + MAC), it is updated with the new values. Otherwise, a new endpoint is created.
+   *
+   * @param input the endpoint input data
+   * @return the created or updated Endpoint entity
+   */
+  public Endpoint upsertEndpoint(EndpointInput input, @NotNull String tenantId) {
+    validateLinkedPersonInTenant(input.getLinkedPerson(), tenantId);
+    Optional<Endpoint> endpoint = findExistingEndpoint(input, tenantId);
+    if (endpoint.isPresent()) {
+      Endpoint endpointToUpdate = endpoint.get();
+      // Mandatory fields
+      endpointToUpdate.setName(input.getName());
+      Iterable<String> tags =
+          Stream.concat(
+                  endpointToUpdate.getTags().stream().map(Tag::getId).toList().stream(),
+                  input.getTagIds().stream())
+              .distinct()
+              .toList();
+      endpointToUpdate.setTags(iterableToSet(tagRepository.findAllById(tags)));
+      // Optional fields: only override when provided so category inputs that omit
+      // platform/arch (web app, cloud, ...) do not reset existing values to Unknown.
+      if (input.getArch() != null) {
+        endpointToUpdate.setArch(input.getArch());
+      }
+      if (input.getPlatform() != null) {
+        endpointToUpdate.setPlatform(input.getPlatform());
+      }
+      if (input.getIps() != null) {
+        String[] ips = EndpointMapper.setIps(input.getIps());
+        endpointToUpdate.setIps(ips);
+        ensureSeenIp(endpointToUpdate);
+      }
+      if (input.getHostname() != null) {
+        endpointToUpdate.setHostname(input.getHostname());
+      }
+      if (input.getMacAddresses() != null) {
+        endpointToUpdate.setMacAddresses(input.getMacAddresses());
+      }
+      // Categorization: only override when provided so an existing classification is preserved.
+      if (input.getCategory() != null) {
+        endpointToUpdate.setCategory(input.getCategory());
+      }
+      if (input.getSubcategory() != null) {
+        endpointToUpdate.setSubcategory(input.getSubcategory());
+      }
+      if (input.getCriticality() != null) {
+        endpointToUpdate.setCriticality(input.getCriticality());
+      }
+      if (input.getInternetFacing() != null) {
+        endpointToUpdate.setInternetFacing(input.getInternetFacing());
+      }
+      if (input.getCloudProvider() != null) {
+        endpointToUpdate.setCloudProvider(input.getCloudProvider());
+      }
+      if (input.getCloudNativeType() != null) {
+        endpointToUpdate.setCloudNativeType(input.getCloudNativeType());
+      }
+      if (input.getCloudRegion() != null) {
+        endpointToUpdate.setCloudRegion(input.getCloudRegion());
+      }
+      if (input.getUrl() != null) {
+        endpointToUpdate.setUrl(input.getUrl());
+      }
+      if (input.getMetadata() != null && !input.getMetadata().isEmpty()) {
+        endpointToUpdate.setMetadata(input.getMetadata());
+      }
+      // A blank value unlinks (the setter normalizes it to null); null preserves the existing link.
+      if (input.getLinkedPerson() != null) {
+        endpointToUpdate.setLinkedPerson(input.getLinkedPerson());
+      }
+      return updateEndpoint(endpointToUpdate);
+    }
+    return createEndpoint(input);
+  }
+
+  /**
+   * Attempts to find an existing endpoint matching the provided input.
+   *
+   * <p>The search is performed in the following order:
+   *
+   * <ol>
+   *   <li>By external reference
+   *   <li>By hostname and at least one IP address
+   *   <li>By hostname and at least one MAC address
+   * </ol>
+   *
+   * Returns the first match found, or {@code Optional.empty()} if no match exists.
+   *
+   * @param input the endpoint input data
+   * @param tenantId the tenant scope for the lookup
+   * @return an Optional containing the found Endpoint, or empty if none found
+   */
+  public Optional<Endpoint> findExistingEndpoint(EndpointInput input, @NotNull String tenantId) {
+    // 1. By external reference
+    if (input.getExternalReference() != null && !input.getExternalReference().isEmpty()) {
+      Optional<Endpoint> found =
+          findEndpointByExternalReference(input.getExternalReference(), tenantId);
+      if (found.isPresent()) return found;
+    }
+
+    // 2. By hostname + at least one IP
+    if (input.getIps() != null) {
+      List<Endpoint> found =
+          findEndpointByHostnameAndAtLeastOneIp(input.getHostname(), input.getIps(), tenantId);
+      if (!found.isEmpty()) return Optional.of(found.getFirst());
+    }
+
+    // 3. By hostname + at least one MAC address
+    if (input.getMacAddresses() != null) {
+      List<Endpoint> found =
+          findEndpointByHostnameAndAtLeastOneMacAddress(
+              input.getHostname(), input.getMacAddresses(), tenantId);
+      if (!found.isEmpty()) return Optional.of(found.getFirst());
+    }
+    return Optional.empty();
+  }
+
+  /** Ensures seenIp is populated from the first available IP when not already set. */
+  private void ensureSeenIp(Endpoint endpoint) {
+    if (endpoint.getSeenIp() == null && endpoint.getIps() != null && endpoint.getIps().length > 0) {
+      endpoint.setSeenIp(endpoint.getIps()[0]);
+    }
+  }
+}

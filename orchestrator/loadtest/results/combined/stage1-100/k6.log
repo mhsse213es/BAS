@@ -1,0 +1,1221 @@
+time="2026-08-31T15:34:34+05:30" level=warning msg="\"cli\" level configuration overrode scenarios configuration entirely"
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: orchestrator/loadtest/k6/api-mix.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 50 max VUs, 5m30s max duration (incl. graceful stop):
+              * default: 50 looping VUs for 5m0s (gracefulStop: 30s)
+
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+running (0m09.0s), 50/50 VUs, 0 complete and 0 interrupted iterations
+default   [   0% ] 50 VUs  0m00.2s/5m0s
+
+running (0m10.0s), 50/50 VUs, 0 complete and 0 interrupted iterations
+default   [   0% ] 50 VUs  0m01.2s/5m0s
+
+running (0m11.0s), 50/50 VUs, 15 complete and 0 interrupted iterations
+default   [   1% ] 50 VUs  0m02.2s/5m0s
+
+running (0m12.0s), 50/50 VUs, 37 complete and 0 interrupted iterations
+default   [   1% ] 50 VUs  0m03.2s/5m0s
+
+running (0m13.0s), 50/50 VUs, 56 complete and 0 interrupted iterations
+default   [   1% ] 50 VUs  0m04.2s/5m0s
+
+running (0m14.0s), 50/50 VUs, 75 complete and 0 interrupted iterations
+default   [   2% ] 50 VUs  0m05.2s/5m0s
+
+running (0m15.0s), 50/50 VUs, 93 complete and 0 interrupted iterations
+default   [   2% ] 50 VUs  0m06.2s/5m0s
+
+running (0m16.0s), 50/50 VUs, 108 complete and 0 interrupted iterations
+default   [   2% ] 50 VUs  0m07.2s/5m0s
+
+running (0m17.0s), 50/50 VUs, 123 complete and 0 interrupted iterations
+default   [   3% ] 50 VUs  0m08.2s/5m0s
+
+running (0m18.0s), 50/50 VUs, 133 complete and 0 interrupted iterations
+default   [   3% ] 50 VUs  0m09.2s/5m0s
+
+running (0m19.0s), 50/50 VUs, 147 complete and 0 interrupted iterations
+default   [   3% ] 50 VUs  0m10.2s/5m0s
+
+running (0m20.0s), 50/50 VUs, 153 complete and 0 interrupted iterations
+default   [   4% ] 50 VUs  0m11.2s/5m0s
+
+running (0m21.0s), 50/50 VUs, 170 complete and 0 interrupted iterations
+default   [   4% ] 50 VUs  0m12.2s/5m0s
+
+running (0m22.0s), 50/50 VUs, 178 complete and 0 interrupted iterations
+default   [   4% ] 50 VUs  0m13.2s/5m0s
+
+running (0m23.0s), 50/50 VUs, 189 complete and 0 interrupted iterations
+default   [   5% ] 50 VUs  0m14.2s/5m0s
+
+running (0m24.0s), 50/50 VUs, 197 complete and 0 interrupted iterations
+default   [   5% ] 50 VUs  0m15.2s/5m0s
+
+running (0m25.0s), 50/50 VUs, 203 complete and 0 interrupted iterations
+default   [   5% ] 50 VUs  0m16.2s/5m0s
+
+running (0m26.0s), 50/50 VUs, 214 complete and 0 interrupted iterations
+default   [   6% ] 50 VUs  0m17.2s/5m0s
+
+running (0m27.0s), 50/50 VUs, 221 complete and 0 interrupted iterations
+default   [   6% ] 50 VUs  0m18.2s/5m0s
+
+running (0m28.0s), 50/50 VUs, 229 complete and 0 interrupted iterations
+default   [   6% ] 50 VUs  0m19.2s/5m0s
+
+running (0m29.0s), 50/50 VUs, 235 complete and 0 interrupted iterations
+default   [   7% ] 50 VUs  0m20.2s/5m0s
+
+running (0m30.0s), 50/50 VUs, 241 complete and 0 interrupted iterations
+default   [   7% ] 50 VUs  0m21.2s/5m0s
+
+running (0m31.0s), 50/50 VUs, 245 complete and 0 interrupted iterations
+default   [   7% ] 50 VUs  0m22.2s/5m0s
+
+running (0m32.0s), 50/50 VUs, 253 complete and 0 interrupted iterations
+default   [   8% ] 50 VUs  0m23.2s/5m0s
+
+running (0m33.0s), 50/50 VUs, 254 complete and 0 interrupted iterations
+default   [   8% ] 50 VUs  0m24.2s/5m0s
+
+running (0m34.0s), 50/50 VUs, 256 complete and 0 interrupted iterations
+default   [   8% ] 50 VUs  0m25.2s/5m0s
+
+running (0m35.0s), 50/50 VUs, 259 complete and 0 interrupted iterations
+default   [   9% ] 50 VUs  0m26.2s/5m0s
+
+running (0m36.0s), 50/50 VUs, 260 complete and 0 interrupted iterations
+default   [   9% ] 50 VUs  0m27.2s/5m0s
+
+running (0m37.0s), 50/50 VUs, 263 complete and 0 interrupted iterations
+default   [   9% ] 50 VUs  0m28.2s/5m0s
+
+running (0m38.0s), 50/50 VUs, 263 complete and 0 interrupted iterations
+default   [  10% ] 50 VUs  0m29.2s/5m0s
+
+running (0m39.0s), 50/50 VUs, 266 complete and 0 interrupted iterations
+default   [  10% ] 50 VUs  0m30.2s/5m0s
+
+running (0m40.0s), 50/50 VUs, 266 complete and 0 interrupted iterations
+default   [  10% ] 50 VUs  0m31.2s/5m0s
+
+running (0m41.0s), 50/50 VUs, 267 complete and 0 interrupted iterations
+default   [  11% ] 50 VUs  0m32.2s/5m0s
+
+running (0m42.0s), 50/50 VUs, 269 complete and 0 interrupted iterations
+default   [  11% ] 50 VUs  0m33.2s/5m0s
+
+running (0m43.0s), 50/50 VUs, 270 complete and 0 interrupted iterations
+default   [  11% ] 50 VUs  0m34.2s/5m0s
+
+running (0m44.0s), 50/50 VUs, 271 complete and 0 interrupted iterations
+default   [  12% ] 50 VUs  0m35.2s/5m0s
+
+running (0m45.0s), 50/50 VUs, 272 complete and 0 interrupted iterations
+default   [  12% ] 50 VUs  0m36.2s/5m0s
+
+running (0m46.0s), 50/50 VUs, 273 complete and 0 interrupted iterations
+default   [  12% ] 50 VUs  0m37.2s/5m0s
+
+running (0m47.0s), 50/50 VUs, 275 complete and 0 interrupted iterations
+default   [  13% ] 50 VUs  0m38.2s/5m0s
+
+running (0m48.0s), 50/50 VUs, 275 complete and 0 interrupted iterations
+default   [  13% ] 50 VUs  0m39.2s/5m0s
+
+running (0m49.0s), 50/50 VUs, 276 complete and 0 interrupted iterations
+default   [  13% ] 50 VUs  0m40.2s/5m0s
+
+running (0m50.0s), 50/50 VUs, 276 complete and 0 interrupted iterations
+default   [  14% ] 50 VUs  0m41.2s/5m0s
+
+running (0m51.0s), 50/50 VUs, 277 complete and 0 interrupted iterations
+default   [  14% ] 50 VUs  0m42.2s/5m0s
+
+running (0m52.0s), 50/50 VUs, 277 complete and 0 interrupted iterations
+default   [  14% ] 50 VUs  0m43.2s/5m0s
+
+running (0m53.0s), 50/50 VUs, 278 complete and 0 interrupted iterations
+default   [  15% ] 50 VUs  0m44.2s/5m0s
+
+running (0m54.0s), 50/50 VUs, 279 complete and 0 interrupted iterations
+default   [  15% ] 50 VUs  0m45.2s/5m0s
+
+running (0m55.0s), 50/50 VUs, 279 complete and 0 interrupted iterations
+default   [  15% ] 50 VUs  0m46.2s/5m0s
+
+running (0m56.0s), 50/50 VUs, 279 complete and 0 interrupted iterations
+default   [  16% ] 50 VUs  0m47.2s/5m0s
+
+running (0m57.0s), 50/50 VUs, 279 complete and 0 interrupted iterations
+default   [  16% ] 50 VUs  0m48.2s/5m0s
+
+running (0m58.0s), 50/50 VUs, 279 complete and 0 interrupted iterations
+default   [  16% ] 50 VUs  0m49.2s/5m0s
+
+running (0m59.0s), 50/50 VUs, 279 complete and 0 interrupted iterations
+default   [  17% ] 50 VUs  0m50.2s/5m0s
+
+running (1m00.0s), 50/50 VUs, 279 complete and 0 interrupted iterations
+default   [  17% ] 50 VUs  0m51.2s/5m0s
+
+running (1m01.0s), 50/50 VUs, 281 complete and 0 interrupted iterations
+default   [  17% ] 50 VUs  0m52.2s/5m0s
+
+running (1m02.0s), 50/50 VUs, 282 complete and 0 interrupted iterations
+default   [  18% ] 50 VUs  0m53.2s/5m0s
+
+running (1m03.0s), 50/50 VUs, 282 complete and 0 interrupted iterations
+default   [  18% ] 50 VUs  0m54.2s/5m0s
+
+running (1m04.0s), 50/50 VUs, 284 complete and 0 interrupted iterations
+default   [  18% ] 50 VUs  0m55.2s/5m0s
+
+running (1m05.0s), 50/50 VUs, 286 complete and 0 interrupted iterations
+default   [  19% ] 50 VUs  0m56.2s/5m0s
+
+running (1m06.0s), 50/50 VUs, 288 complete and 0 interrupted iterations
+default   [  19% ] 50 VUs  0m57.2s/5m0s
+
+running (1m07.0s), 50/50 VUs, 290 complete and 0 interrupted iterations
+default   [  19% ] 50 VUs  0m58.2s/5m0s
+
+running (1m08.0s), 50/50 VUs, 293 complete and 0 interrupted iterations
+default   [  20% ] 50 VUs  0m59.2s/5m0s
+
+running (1m09.0s), 50/50 VUs, 296 complete and 0 interrupted iterations
+default   [  20% ] 50 VUs  1m00.2s/5m0s
+
+running (1m10.0s), 50/50 VUs, 297 complete and 0 interrupted iterations
+default   [  20% ] 50 VUs  1m01.2s/5m0s
+
+running (1m11.0s), 50/50 VUs, 301 complete and 0 interrupted iterations
+default   [  21% ] 50 VUs  1m02.2s/5m0s
+
+running (1m12.0s), 50/50 VUs, 307 complete and 0 interrupted iterations
+default   [  21% ] 50 VUs  1m03.2s/5m0s
+
+running (1m13.0s), 50/50 VUs, 309 complete and 0 interrupted iterations
+default   [  21% ] 50 VUs  1m04.2s/5m0s
+time="2026-08-31T15:35:47+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:48+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m14.0s), 50/50 VUs, 312 complete and 0 interrupted iterations
+default   [  22% ] 50 VUs  1m05.2s/5m0s
+time="2026-08-31T15:35:49+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:49+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:49+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:49+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:49+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m15.0s), 50/50 VUs, 319 complete and 0 interrupted iterations
+default   [  22% ] 50 VUs  1m06.2s/5m0s
+time="2026-08-31T15:35:50+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:50+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:50+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m16.0s), 50/50 VUs, 323 complete and 0 interrupted iterations
+default   [  22% ] 50 VUs  1m07.2s/5m0s
+time="2026-08-31T15:35:51+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m17.0s), 50/50 VUs, 329 complete and 0 interrupted iterations
+default   [  23% ] 50 VUs  1m08.2s/5m0s
+
+running (1m18.0s), 50/50 VUs, 340 complete and 0 interrupted iterations
+default   [  23% ] 50 VUs  1m09.2s/5m0s
+
+running (1m19.0s), 50/50 VUs, 346 complete and 0 interrupted iterations
+default   [  23% ] 50 VUs  1m10.2s/5m0s
+time="2026-08-31T15:35:53+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:54+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m20.0s), 50/50 VUs, 351 complete and 0 interrupted iterations
+default   [  24% ] 50 VUs  1m11.2s/5m0s
+time="2026-08-31T15:35:55+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:55+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m21.0s), 50/50 VUs, 361 complete and 0 interrupted iterations
+default   [  24% ] 50 VUs  1m12.2s/5m0s
+time="2026-08-31T15:35:56+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:56+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:35:56+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m22.0s), 50/50 VUs, 371 complete and 0 interrupted iterations
+default   [  24% ] 50 VUs  1m13.2s/5m0s
+
+running (1m23.0s), 50/50 VUs, 377 complete and 0 interrupted iterations
+default   [  25% ] 50 VUs  1m14.2s/5m0s
+
+running (1m24.0s), 50/50 VUs, 386 complete and 0 interrupted iterations
+default   [  25% ] 50 VUs  1m15.2s/5m0s
+time="2026-08-31T15:35:59+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m25.0s), 50/50 VUs, 395 complete and 0 interrupted iterations
+default   [  25% ] 50 VUs  1m16.2s/5m0s
+
+running (1m26.0s), 50/50 VUs, 402 complete and 0 interrupted iterations
+default   [  26% ] 50 VUs  1m17.2s/5m0s
+time="2026-08-31T15:36:01+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m27.0s), 50/50 VUs, 410 complete and 0 interrupted iterations
+default   [  26% ] 50 VUs  1m18.2s/5m0s
+time="2026-08-31T15:36:01+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:36:02+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:36:02+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:36:02+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m28.0s), 50/50 VUs, 418 complete and 0 interrupted iterations
+default   [  26% ] 50 VUs  1m19.2s/5m0s
+time="2026-08-31T15:36:03+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m29.0s), 50/50 VUs, 424 complete and 0 interrupted iterations
+default   [  27% ] 50 VUs  1m20.2s/5m0s
+time="2026-08-31T15:36:04+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m30.0s), 50/50 VUs, 434 complete and 0 interrupted iterations
+default   [  27% ] 50 VUs  1m21.2s/5m0s
+time="2026-08-31T15:36:05+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m31.0s), 50/50 VUs, 441 complete and 0 interrupted iterations
+default   [  27% ] 50 VUs  1m22.2s/5m0s
+time="2026-08-31T15:36:06+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:36:06+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:36:06+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:36:06+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:36:06+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m32.0s), 50/50 VUs, 449 complete and 0 interrupted iterations
+default   [  28% ] 50 VUs  1m23.2s/5m0s
+
+running (1m33.0s), 50/50 VUs, 459 complete and 0 interrupted iterations
+default   [  28% ] 50 VUs  1m24.2s/5m0s
+
+running (1m34.0s), 50/50 VUs, 467 complete and 0 interrupted iterations
+default   [  28% ] 50 VUs  1m25.2s/5m0s
+
+running (1m35.0s), 50/50 VUs, 475 complete and 0 interrupted iterations
+default   [  29% ] 50 VUs  1m26.2s/5m0s
+time="2026-08-31T15:36:10+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (1m36.0s), 50/50 VUs, 488 complete and 0 interrupted iterations
+default   [  29% ] 50 VUs  1m27.2s/5m0s
+
+running (1m37.0s), 50/50 VUs, 500 complete and 0 interrupted iterations
+default   [  29% ] 50 VUs  1m28.2s/5m0s
+
+running (1m38.0s), 50/50 VUs, 505 complete and 0 interrupted iterations
+default   [  30% ] 50 VUs  1m29.2s/5m0s
+
+running (1m39.0s), 50/50 VUs, 516 complete and 0 interrupted iterations
+default   [  30% ] 50 VUs  1m30.2s/5m0s
+
+running (1m40.0s), 50/50 VUs, 525 complete and 0 interrupted iterations
+default   [  30% ] 50 VUs  1m31.2s/5m0s
+
+running (1m41.0s), 50/50 VUs, 532 complete and 0 interrupted iterations
+default   [  31% ] 50 VUs  1m32.2s/5m0s
+
+running (1m42.0s), 50/50 VUs, 537 complete and 0 interrupted iterations
+default   [  31% ] 50 VUs  1m33.2s/5m0s
+
+running (1m43.0s), 50/50 VUs, 546 complete and 0 interrupted iterations
+default   [  31% ] 50 VUs  1m34.2s/5m0s
+
+running (1m44.0s), 50/50 VUs, 555 complete and 0 interrupted iterations
+default   [  32% ] 50 VUs  1m35.2s/5m0s
+
+running (1m45.0s), 50/50 VUs, 559 complete and 0 interrupted iterations
+default   [  32% ] 50 VUs  1m36.2s/5m0s
+
+running (1m46.0s), 50/50 VUs, 568 complete and 0 interrupted iterations
+default   [  32% ] 50 VUs  1m37.2s/5m0s
+
+running (1m47.0s), 50/50 VUs, 574 complete and 0 interrupted iterations
+default   [  33% ] 50 VUs  1m38.2s/5m0s
+
+running (1m48.0s), 50/50 VUs, 581 complete and 0 interrupted iterations
+default   [  33% ] 50 VUs  1m39.2s/5m0s
+
+running (1m49.0s), 50/50 VUs, 588 complete and 0 interrupted iterations
+default   [  33% ] 50 VUs  1m40.2s/5m0s
+
+running (1m50.0s), 50/50 VUs, 593 complete and 0 interrupted iterations
+default   [  34% ] 50 VUs  1m41.2s/5m0s
+
+running (1m51.0s), 50/50 VUs, 601 complete and 0 interrupted iterations
+default   [  34% ] 50 VUs  1m42.2s/5m0s
+
+running (1m52.0s), 50/50 VUs, 606 complete and 0 interrupted iterations
+default   [  34% ] 50 VUs  1m43.2s/5m0s
+
+running (1m53.0s), 50/50 VUs, 611 complete and 0 interrupted iterations
+default   [  35% ] 50 VUs  1m44.2s/5m0s
+
+running (1m54.0s), 50/50 VUs, 618 complete and 0 interrupted iterations
+default   [  35% ] 50 VUs  1m45.2s/5m0s
+
+running (1m55.0s), 50/50 VUs, 622 complete and 0 interrupted iterations
+default   [  35% ] 50 VUs  1m46.2s/5m0s
+
+running (1m56.0s), 50/50 VUs, 627 complete and 0 interrupted iterations
+default   [  36% ] 50 VUs  1m47.2s/5m0s
+
+running (1m57.0s), 50/50 VUs, 633 complete and 0 interrupted iterations
+default   [  36% ] 50 VUs  1m48.2s/5m0s
+
+running (1m58.0s), 50/50 VUs, 635 complete and 0 interrupted iterations
+default   [  36% ] 50 VUs  1m49.2s/5m0s
+
+running (1m59.0s), 50/50 VUs, 639 complete and 0 interrupted iterations
+default   [  37% ] 50 VUs  1m50.2s/5m0s
+
+running (2m00.0s), 50/50 VUs, 641 complete and 0 interrupted iterations
+default   [  37% ] 50 VUs  1m51.2s/5m0s
+
+running (2m01.0s), 50/50 VUs, 644 complete and 0 interrupted iterations
+default   [  37% ] 50 VUs  1m52.2s/5m0s
+
+running (2m02.0s), 50/50 VUs, 646 complete and 0 interrupted iterations
+default   [  38% ] 50 VUs  1m53.2s/5m0s
+
+running (2m03.0s), 50/50 VUs, 649 complete and 0 interrupted iterations
+default   [  38% ] 50 VUs  1m54.2s/5m0s
+
+running (2m04.0s), 50/50 VUs, 652 complete and 0 interrupted iterations
+default   [  38% ] 50 VUs  1m55.2s/5m0s
+
+running (2m05.0s), 50/50 VUs, 654 complete and 0 interrupted iterations
+default   [  39% ] 50 VUs  1m56.2s/5m0s
+
+running (2m06.0s), 50/50 VUs, 657 complete and 0 interrupted iterations
+default   [  39% ] 50 VUs  1m57.2s/5m0s
+time="2026-08-31T15:36:41+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m07.0s), 50/50 VUs, 664 complete and 0 interrupted iterations
+default   [  39% ] 50 VUs  1m58.2s/5m0s
+
+running (2m08.0s), 50/50 VUs, 666 complete and 0 interrupted iterations
+default   [  40% ] 50 VUs  1m59.2s/5m0s
+
+running (2m09.0s), 50/50 VUs, 671 complete and 0 interrupted iterations
+default   [  40% ] 50 VUs  2m00.2s/5m0s
+
+running (2m10.0s), 50/50 VUs, 676 complete and 0 interrupted iterations
+default   [  40% ] 50 VUs  2m01.2s/5m0s
+
+running (2m11.0s), 50/50 VUs, 678 complete and 0 interrupted iterations
+default   [  41% ] 50 VUs  2m02.2s/5m0s
+time="2026-08-31T15:36:46+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m12.0s), 50/50 VUs, 681 complete and 0 interrupted iterations
+default   [  41% ] 50 VUs  2m03.2s/5m0s
+
+running (2m13.0s), 50/50 VUs, 685 complete and 0 interrupted iterations
+default   [  41% ] 50 VUs  2m04.2s/5m0s
+
+running (2m14.0s), 50/50 VUs, 687 complete and 0 interrupted iterations
+default   [  42% ] 50 VUs  2m05.2s/5m0s
+
+running (2m15.0s), 50/50 VUs, 693 complete and 0 interrupted iterations
+default   [  42% ] 50 VUs  2m06.2s/5m0s
+
+running (2m16.0s), 50/50 VUs, 696 complete and 0 interrupted iterations
+default   [  42% ] 50 VUs  2m07.2s/5m0s
+
+running (2m17.0s), 50/50 VUs, 697 complete and 0 interrupted iterations
+default   [  43% ] 50 VUs  2m08.2s/5m0s
+time="2026-08-31T15:36:52+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m18.0s), 50/50 VUs, 699 complete and 0 interrupted iterations
+default   [  43% ] 50 VUs  2m09.2s/5m0s
+
+running (2m19.0s), 50/50 VUs, 702 complete and 0 interrupted iterations
+default   [  43% ] 50 VUs  2m10.2s/5m0s
+
+running (2m20.0s), 50/50 VUs, 706 complete and 0 interrupted iterations
+default   [  44% ] 50 VUs  2m11.2s/5m0s
+
+running (2m21.0s), 50/50 VUs, 708 complete and 0 interrupted iterations
+default   [  44% ] 50 VUs  2m12.2s/5m0s
+time="2026-08-31T15:36:56+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m22.0s), 50/50 VUs, 711 complete and 0 interrupted iterations
+default   [  44% ] 50 VUs  2m13.2s/5m0s
+
+running (2m23.0s), 50/50 VUs, 714 complete and 0 interrupted iterations
+default   [  45% ] 50 VUs  2m14.2s/5m0s
+time="2026-08-31T15:36:58+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m24.0s), 50/50 VUs, 719 complete and 0 interrupted iterations
+default   [  45% ] 50 VUs  2m15.2s/5m0s
+
+running (2m25.0s), 50/50 VUs, 721 complete and 0 interrupted iterations
+default   [  45% ] 50 VUs  2m16.2s/5m0s
+time="2026-08-31T15:37:00+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m26.0s), 50/50 VUs, 727 complete and 0 interrupted iterations
+default   [  46% ] 50 VUs  2m17.2s/5m0s
+time="2026-08-31T15:37:01+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m27.0s), 50/50 VUs, 732 complete and 0 interrupted iterations
+default   [  46% ] 50 VUs  2m18.2s/5m0s
+
+running (2m28.0s), 50/50 VUs, 737 complete and 0 interrupted iterations
+default   [  46% ] 50 VUs  2m19.2s/5m0s
+time="2026-08-31T15:37:03+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:37:03+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m29.0s), 50/50 VUs, 740 complete and 0 interrupted iterations
+default   [  47% ] 50 VUs  2m20.2s/5m0s
+
+running (2m30.0s), 50/50 VUs, 745 complete and 0 interrupted iterations
+default   [  47% ] 50 VUs  2m21.2s/5m0s
+
+running (2m31.0s), 50/50 VUs, 752 complete and 0 interrupted iterations
+default   [  47% ] 50 VUs  2m22.2s/5m0s
+
+running (2m32.0s), 50/50 VUs, 758 complete and 0 interrupted iterations
+default   [  48% ] 50 VUs  2m23.2s/5m0s
+
+running (2m33.0s), 50/50 VUs, 763 complete and 0 interrupted iterations
+default   [  48% ] 50 VUs  2m24.2s/5m0s
+
+running (2m34.0s), 50/50 VUs, 766 complete and 0 interrupted iterations
+default   [  48% ] 50 VUs  2m25.2s/5m0s
+
+running (2m35.0s), 50/50 VUs, 773 complete and 0 interrupted iterations
+default   [  49% ] 50 VUs  2m26.2s/5m0s
+time="2026-08-31T15:37:09+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:37:10+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m36.0s), 50/50 VUs, 777 complete and 0 interrupted iterations
+default   [  49% ] 50 VUs  2m27.2s/5m0s
+time="2026-08-31T15:37:11+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:37:11+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m37.0s), 50/50 VUs, 780 complete and 0 interrupted iterations
+default   [  49% ] 50 VUs  2m28.2s/5m0s
+
+running (2m38.0s), 50/50 VUs, 787 complete and 0 interrupted iterations
+default   [  50% ] 50 VUs  2m29.2s/5m0s
+time="2026-08-31T15:37:13+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m39.0s), 50/50 VUs, 793 complete and 0 interrupted iterations
+default   [  50% ] 50 VUs  2m30.2s/5m0s
+time="2026-08-31T15:37:13+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m40.0s), 50/50 VUs, 796 complete and 0 interrupted iterations
+default   [  50% ] 50 VUs  2m31.2s/5m0s
+
+running (2m41.0s), 50/50 VUs, 806 complete and 0 interrupted iterations
+default   [  51% ] 50 VUs  2m32.2s/5m0s
+
+running (2m42.0s), 50/50 VUs, 810 complete and 0 interrupted iterations
+default   [  51% ] 50 VUs  2m33.2s/5m0s
+time="2026-08-31T15:37:16+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m43.0s), 50/50 VUs, 818 complete and 0 interrupted iterations
+default   [  51% ] 50 VUs  2m34.2s/5m0s
+
+running (2m44.0s), 50/50 VUs, 825 complete and 0 interrupted iterations
+default   [  52% ] 50 VUs  2m35.2s/5m0s
+
+running (2m45.0s), 50/50 VUs, 831 complete and 0 interrupted iterations
+default   [  52% ] 50 VUs  2m36.2s/5m0s
+
+running (2m46.0s), 50/50 VUs, 838 complete and 0 interrupted iterations
+default   [  52% ] 50 VUs  2m37.2s/5m0s
+time="2026-08-31T15:37:21+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m47.0s), 50/50 VUs, 842 complete and 0 interrupted iterations
+default   [  53% ] 50 VUs  2m38.2s/5m0s
+
+running (2m48.0s), 50/50 VUs, 850 complete and 0 interrupted iterations
+default   [  53% ] 50 VUs  2m39.2s/5m0s
+
+running (2m49.0s), 50/50 VUs, 856 complete and 0 interrupted iterations
+default   [  53% ] 50 VUs  2m40.2s/5m0s
+
+running (2m50.0s), 50/50 VUs, 861 complete and 0 interrupted iterations
+default   [  54% ] 50 VUs  2m41.2s/5m0s
+time="2026-08-31T15:37:24+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m51.0s), 50/50 VUs, 866 complete and 0 interrupted iterations
+default   [  54% ] 50 VUs  2m42.2s/5m0s
+time="2026-08-31T15:37:25+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:37:26+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m52.0s), 50/50 VUs, 869 complete and 0 interrupted iterations
+default   [  54% ] 50 VUs  2m43.2s/5m0s
+time="2026-08-31T15:37:27+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m53.0s), 50/50 VUs, 875 complete and 0 interrupted iterations
+default   [  55% ] 50 VUs  2m44.2s/5m0s
+
+running (2m54.0s), 50/50 VUs, 881 complete and 0 interrupted iterations
+default   [  55% ] 50 VUs  2m45.2s/5m0s
+time="2026-08-31T15:37:29+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:37:29+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m55.0s), 50/50 VUs, 886 complete and 0 interrupted iterations
+default   [  55% ] 50 VUs  2m46.2s/5m0s
+time="2026-08-31T15:37:29+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m56.0s), 50/50 VUs, 891 complete and 0 interrupted iterations
+default   [  56% ] 50 VUs  2m47.2s/5m0s
+time="2026-08-31T15:37:30+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m57.0s), 50/50 VUs, 896 complete and 0 interrupted iterations
+default   [  56% ] 50 VUs  2m48.2s/5m0s
+time="2026-08-31T15:37:32+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (2m58.0s), 50/50 VUs, 902 complete and 0 interrupted iterations
+default   [  56% ] 50 VUs  2m49.2s/5m0s
+
+running (2m59.0s), 50/50 VUs, 908 complete and 0 interrupted iterations
+default   [  57% ] 50 VUs  2m50.2s/5m0s
+
+running (3m00.0s), 50/50 VUs, 914 complete and 0 interrupted iterations
+default   [  57% ] 50 VUs  2m51.2s/5m0s
+
+running (3m01.0s), 50/50 VUs, 918 complete and 0 interrupted iterations
+default   [  57% ] 50 VUs  2m52.2s/5m0s
+
+running (3m02.0s), 50/50 VUs, 924 complete and 0 interrupted iterations
+default   [  58% ] 50 VUs  2m53.2s/5m0s
+
+running (3m03.0s), 50/50 VUs, 931 complete and 0 interrupted iterations
+default   [  58% ] 50 VUs  2m54.2s/5m0s
+
+running (3m04.0s), 50/50 VUs, 936 complete and 0 interrupted iterations
+default   [  58% ] 50 VUs  2m55.2s/5m0s
+
+running (3m05.0s), 50/50 VUs, 944 complete and 0 interrupted iterations
+default   [  59% ] 50 VUs  2m56.2s/5m0s
+
+running (3m06.0s), 50/50 VUs, 950 complete and 0 interrupted iterations
+default   [  59% ] 50 VUs  2m57.2s/5m0s
+time="2026-08-31T15:37:41+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m07.0s), 50/50 VUs, 954 complete and 0 interrupted iterations
+default   [  59% ] 50 VUs  2m58.2s/5m0s
+
+running (3m08.0s), 50/50 VUs, 959 complete and 0 interrupted iterations
+default   [  60% ] 50 VUs  2m59.2s/5m0s
+time="2026-08-31T15:37:43+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m09.0s), 50/50 VUs, 962 complete and 0 interrupted iterations
+default   [  60% ] 50 VUs  3m00.2s/5m0s
+time="2026-08-31T15:37:44+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m10.0s), 50/50 VUs, 964 complete and 0 interrupted iterations
+default   [  60% ] 50 VUs  3m01.2s/5m0s
+time="2026-08-31T15:37:45+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m11.0s), 50/50 VUs, 970 complete and 0 interrupted iterations
+default   [  61% ] 50 VUs  3m02.2s/5m0s
+time="2026-08-31T15:37:45+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m12.0s), 50/50 VUs, 973 complete and 0 interrupted iterations
+default   [  61% ] 50 VUs  3m03.2s/5m0s
+
+running (3m13.0s), 50/50 VUs, 977 complete and 0 interrupted iterations
+default   [  61% ] 50 VUs  3m04.2s/5m0s
+time="2026-08-31T15:37:48+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m14.0s), 50/50 VUs, 982 complete and 0 interrupted iterations
+default   [  62% ] 50 VUs  3m05.2s/5m0s
+time="2026-08-31T15:37:49+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m15.0s), 50/50 VUs, 986 complete and 0 interrupted iterations
+default   [  62% ] 50 VUs  3m06.2s/5m0s
+
+running (3m16.0s), 50/50 VUs, 989 complete and 0 interrupted iterations
+default   [  62% ] 50 VUs  3m07.2s/5m0s
+
+running (3m17.0s), 50/50 VUs, 994 complete and 0 interrupted iterations
+default   [  63% ] 50 VUs  3m08.2s/5m0s
+time="2026-08-31T15:37:52+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m18.0s), 50/50 VUs, 999 complete and 0 interrupted iterations
+default   [  63% ] 50 VUs  3m09.2s/5m0s
+time="2026-08-31T15:37:52+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m19.0s), 50/50 VUs, 1001 complete and 0 interrupted iterations
+default   [  63% ] 50 VUs  3m10.2s/5m0s
+time="2026-08-31T15:37:54+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:37:54+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m20.0s), 50/50 VUs, 1006 complete and 0 interrupted iterations
+default   [  64% ] 50 VUs  3m11.2s/5m0s
+
+running (3m21.0s), 50/50 VUs, 1008 complete and 0 interrupted iterations
+default   [  64% ] 50 VUs  3m12.2s/5m0s
+
+running (3m22.0s), 50/50 VUs, 1013 complete and 0 interrupted iterations
+default   [  64% ] 50 VUs  3m13.2s/5m0s
+time="2026-08-31T15:37:57+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m23.0s), 50/50 VUs, 1016 complete and 0 interrupted iterations
+default   [  65% ] 50 VUs  3m14.2s/5m0s
+
+running (3m24.0s), 50/50 VUs, 1021 complete and 0 interrupted iterations
+default   [  65% ] 50 VUs  3m15.2s/5m0s
+time="2026-08-31T15:37:59+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m25.0s), 50/50 VUs, 1025 complete and 0 interrupted iterations
+default   [  65% ] 50 VUs  3m16.2s/5m0s
+time="2026-08-31T15:38:00+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m26.0s), 50/50 VUs, 1029 complete and 0 interrupted iterations
+default   [  66% ] 50 VUs  3m17.2s/5m0s
+time="2026-08-31T15:38:01+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m27.0s), 50/50 VUs, 1031 complete and 0 interrupted iterations
+default   [  66% ] 50 VUs  3m18.2s/5m0s
+time="2026-08-31T15:38:02+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m28.0s), 50/50 VUs, 1038 complete and 0 interrupted iterations
+default   [  66% ] 50 VUs  3m19.2s/5m0s
+time="2026-08-31T15:38:03+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m29.0s), 50/50 VUs, 1042 complete and 0 interrupted iterations
+default   [  67% ] 50 VUs  3m20.2s/5m0s
+
+running (3m30.0s), 50/50 VUs, 1048 complete and 0 interrupted iterations
+default   [  67% ] 50 VUs  3m21.2s/5m0s
+time="2026-08-31T15:38:05+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m31.0s), 50/50 VUs, 1052 complete and 0 interrupted iterations
+default   [  67% ] 50 VUs  3m22.2s/5m0s
+
+running (3m32.0s), 50/50 VUs, 1055 complete and 0 interrupted iterations
+default   [  68% ] 50 VUs  3m23.2s/5m0s
+time="2026-08-31T15:38:07+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m33.0s), 50/50 VUs, 1062 complete and 0 interrupted iterations
+default   [  68% ] 50 VUs  3m24.2s/5m0s
+
+running (3m34.0s), 50/50 VUs, 1065 complete and 0 interrupted iterations
+default   [  68% ] 50 VUs  3m25.2s/5m0s
+time="2026-08-31T15:38:08+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m35.0s), 50/50 VUs, 1071 complete and 0 interrupted iterations
+default   [  69% ] 50 VUs  3m26.2s/5m0s
+time="2026-08-31T15:38:10+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m36.0s), 50/50 VUs, 1075 complete and 0 interrupted iterations
+default   [  69% ] 50 VUs  3m27.2s/5m0s
+
+running (3m37.0s), 50/50 VUs, 1080 complete and 0 interrupted iterations
+default   [  69% ] 50 VUs  3m28.2s/5m0s
+time="2026-08-31T15:38:12+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m38.0s), 50/50 VUs, 1083 complete and 0 interrupted iterations
+default   [  70% ] 50 VUs  3m29.2s/5m0s
+
+running (3m39.0s), 50/50 VUs, 1085 complete and 0 interrupted iterations
+default   [  70% ] 50 VUs  3m30.2s/5m0s
+
+running (3m40.0s), 50/50 VUs, 1091 complete and 0 interrupted iterations
+default   [  70% ] 50 VUs  3m31.2s/5m0s
+
+running (3m41.0s), 50/50 VUs, 1094 complete and 0 interrupted iterations
+default   [  71% ] 50 VUs  3m32.2s/5m0s
+
+running (3m42.0s), 50/50 VUs, 1098 complete and 0 interrupted iterations
+default   [  71% ] 50 VUs  3m33.2s/5m0s
+time="2026-08-31T15:38:17+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m43.0s), 50/50 VUs, 1102 complete and 0 interrupted iterations
+default   [  71% ] 50 VUs  3m34.2s/5m0s
+time="2026-08-31T15:38:17+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m44.0s), 50/50 VUs, 1105 complete and 0 interrupted iterations
+default   [  72% ] 50 VUs  3m35.2s/5m0s
+time="2026-08-31T15:38:19+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m45.0s), 50/50 VUs, 1111 complete and 0 interrupted iterations
+default   [  72% ] 50 VUs  3m36.2s/5m0s
+time="2026-08-31T15:38:20+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m46.0s), 50/50 VUs, 1116 complete and 0 interrupted iterations
+default   [  72% ] 50 VUs  3m37.2s/5m0s
+
+running (3m47.0s), 50/50 VUs, 1121 complete and 0 interrupted iterations
+default   [  73% ] 50 VUs  3m38.2s/5m0s
+time="2026-08-31T15:38:22+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m48.0s), 50/50 VUs, 1127 complete and 0 interrupted iterations
+default   [  73% ] 50 VUs  3m39.2s/5m0s
+
+running (3m49.0s), 50/50 VUs, 1132 complete and 0 interrupted iterations
+default   [  73% ] 50 VUs  3m40.2s/5m0s
+time="2026-08-31T15:38:24+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:38:24+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m50.0s), 50/50 VUs, 1136 complete and 0 interrupted iterations
+default   [  74% ] 50 VUs  3m41.2s/5m0s
+time="2026-08-31T15:38:25+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m51.0s), 50/50 VUs, 1143 complete and 0 interrupted iterations
+default   [  74% ] 50 VUs  3m42.2s/5m0s
+
+running (3m52.0s), 50/50 VUs, 1149 complete and 0 interrupted iterations
+default   [  74% ] 50 VUs  3m43.2s/5m0s
+
+running (3m53.0s), 50/50 VUs, 1156 complete and 0 interrupted iterations
+default   [  75% ] 50 VUs  3m44.2s/5m0s
+time="2026-08-31T15:38:28+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m54.0s), 50/50 VUs, 1163 complete and 0 interrupted iterations
+default   [  75% ] 50 VUs  3m45.2s/5m0s
+time="2026-08-31T15:38:28+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m55.0s), 50/50 VUs, 1168 complete and 0 interrupted iterations
+default   [  75% ] 50 VUs  3m46.2s/5m0s
+time="2026-08-31T15:38:30+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m56.0s), 50/50 VUs, 1176 complete and 0 interrupted iterations
+default   [  76% ] 50 VUs  3m47.2s/5m0s
+time="2026-08-31T15:38:31+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (3m57.0s), 50/50 VUs, 1181 complete and 0 interrupted iterations
+default   [  76% ] 50 VUs  3m48.2s/5m0s
+
+running (3m58.0s), 50/50 VUs, 1185 complete and 0 interrupted iterations
+default   [  76% ] 50 VUs  3m49.2s/5m0s
+
+running (3m59.0s), 50/50 VUs, 1193 complete and 0 interrupted iterations
+default   [  77% ] 50 VUs  3m50.2s/5m0s
+
+running (4m00.0s), 50/50 VUs, 1197 complete and 0 interrupted iterations
+default   [  77% ] 50 VUs  3m51.2s/5m0s
+
+running (4m01.0s), 50/50 VUs, 1204 complete and 0 interrupted iterations
+default   [  77% ] 50 VUs  3m52.2s/5m0s
+
+running (4m02.0s), 50/50 VUs, 1206 complete and 0 interrupted iterations
+default   [  78% ] 50 VUs  3m53.2s/5m0s
+
+running (4m03.0s), 50/50 VUs, 1214 complete and 0 interrupted iterations
+default   [  78% ] 50 VUs  3m54.2s/5m0s
+time="2026-08-31T15:38:38+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m04.0s), 50/50 VUs, 1216 complete and 0 interrupted iterations
+default   [  78% ] 50 VUs  3m55.2s/5m0s
+time="2026-08-31T15:38:38+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:38:39+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m05.0s), 50/50 VUs, 1221 complete and 0 interrupted iterations
+default   [  79% ] 50 VUs  3m56.2s/5m0s
+time="2026-08-31T15:38:40+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:38:40+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:38:40+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m06.0s), 50/50 VUs, 1225 complete and 0 interrupted iterations
+default   [  79% ] 50 VUs  3m57.2s/5m0s
+
+running (4m07.0s), 50/50 VUs, 1231 complete and 0 interrupted iterations
+default   [  79% ] 50 VUs  3m58.2s/5m0s
+time="2026-08-31T15:38:41+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m08.0s), 50/50 VUs, 1234 complete and 0 interrupted iterations
+default   [  80% ] 50 VUs  3m59.2s/5m0s
+time="2026-08-31T15:38:43+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m09.0s), 50/50 VUs, 1245 complete and 0 interrupted iterations
+default   [  80% ] 50 VUs  4m00.2s/5m0s
+
+running (4m10.0s), 50/50 VUs, 1249 complete and 0 interrupted iterations
+default   [  80% ] 50 VUs  4m01.2s/5m0s
+
+running (4m11.0s), 50/50 VUs, 1256 complete and 0 interrupted iterations
+default   [  81% ] 50 VUs  4m02.2s/5m0s
+
+running (4m12.0s), 50/50 VUs, 1263 complete and 0 interrupted iterations
+default   [  81% ] 50 VUs  4m03.2s/5m0s
+time="2026-08-31T15:38:47+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m13.0s), 50/50 VUs, 1269 complete and 0 interrupted iterations
+default   [  81% ] 50 VUs  4m04.2s/5m0s
+
+running (4m14.0s), 50/50 VUs, 1274 complete and 0 interrupted iterations
+default   [  82% ] 50 VUs  4m05.2s/5m0s
+time="2026-08-31T15:38:48+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:38:49+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m15.0s), 50/50 VUs, 1278 complete and 0 interrupted iterations
+default   [  82% ] 50 VUs  4m06.2s/5m0s
+time="2026-08-31T15:38:50+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m16.0s), 50/50 VUs, 1286 complete and 0 interrupted iterations
+default   [  82% ] 50 VUs  4m07.2s/5m0s
+time="2026-08-31T15:38:51+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m17.0s), 50/50 VUs, 1290 complete and 0 interrupted iterations
+default   [  83% ] 50 VUs  4m08.2s/5m0s
+
+running (4m18.0s), 50/50 VUs, 1296 complete and 0 interrupted iterations
+default   [  83% ] 50 VUs  4m09.2s/5m0s
+time="2026-08-31T15:38:53+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m19.0s), 50/50 VUs, 1302 complete and 0 interrupted iterations
+default   [  83% ] 50 VUs  4m10.2s/5m0s
+
+running (4m20.0s), 50/50 VUs, 1305 complete and 0 interrupted iterations
+default   [  84% ] 50 VUs  4m11.2s/5m0s
+time="2026-08-31T15:38:55+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m21.0s), 50/50 VUs, 1311 complete and 0 interrupted iterations
+default   [  84% ] 50 VUs  4m12.2s/5m0s
+
+running (4m22.0s), 50/50 VUs, 1313 complete and 0 interrupted iterations
+default   [  84% ] 50 VUs  4m13.2s/5m0s
+time="2026-08-31T15:38:57+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m23.0s), 50/50 VUs, 1320 complete and 0 interrupted iterations
+default   [  85% ] 50 VUs  4m14.2s/5m0s
+
+running (4m24.0s), 50/50 VUs, 1325 complete and 0 interrupted iterations
+default   [  85% ] 50 VUs  4m15.2s/5m0s
+time="2026-08-31T15:38:59+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m25.0s), 50/50 VUs, 1329 complete and 0 interrupted iterations
+default   [  85% ] 50 VUs  4m16.2s/5m0s
+
+running (4m26.0s), 50/50 VUs, 1332 complete and 0 interrupted iterations
+default   [  86% ] 50 VUs  4m17.2s/5m0s
+
+running (4m27.0s), 50/50 VUs, 1341 complete and 0 interrupted iterations
+default   [  86% ] 50 VUs  4m18.2s/5m0s
+time="2026-08-31T15:39:02+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m28.0s), 50/50 VUs, 1344 complete and 0 interrupted iterations
+default   [  86% ] 50 VUs  4m19.2s/5m0s
+time="2026-08-31T15:39:03+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:39:03+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m29.0s), 50/50 VUs, 1349 complete and 0 interrupted iterations
+default   [  87% ] 50 VUs  4m20.2s/5m0s
+
+running (4m30.0s), 50/50 VUs, 1356 complete and 0 interrupted iterations
+default   [  87% ] 50 VUs  4m21.2s/5m0s
+time="2026-08-31T15:39:05+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m31.0s), 50/50 VUs, 1361 complete and 0 interrupted iterations
+default   [  87% ] 50 VUs  4m22.2s/5m0s
+time="2026-08-31T15:39:06+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m32.0s), 50/50 VUs, 1364 complete and 0 interrupted iterations
+default   [  88% ] 50 VUs  4m23.2s/5m0s
+
+running (4m33.0s), 50/50 VUs, 1369 complete and 0 interrupted iterations
+default   [  88% ] 50 VUs  4m24.2s/5m0s
+
+running (4m34.0s), 50/50 VUs, 1376 complete and 0 interrupted iterations
+default   [  88% ] 50 VUs  4m25.2s/5m0s
+time="2026-08-31T15:39:09+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m35.0s), 50/50 VUs, 1381 complete and 0 interrupted iterations
+default   [  89% ] 50 VUs  4m26.2s/5m0s
+time="2026-08-31T15:39:10+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m36.0s), 50/50 VUs, 1388 complete and 0 interrupted iterations
+default   [  89% ] 50 VUs  4m27.2s/5m0s
+time="2026-08-31T15:39:11+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:39:11+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m37.0s), 50/50 VUs, 1398 complete and 0 interrupted iterations
+default   [  89% ] 50 VUs  4m28.2s/5m0s
+
+running (4m38.0s), 50/50 VUs, 1404 complete and 0 interrupted iterations
+default   [  90% ] 50 VUs  4m29.2s/5m0s
+
+running (4m39.0s), 50/50 VUs, 1410 complete and 0 interrupted iterations
+default   [  90% ] 50 VUs  4m30.2s/5m0s
+
+running (4m40.0s), 50/50 VUs, 1417 complete and 0 interrupted iterations
+default   [  90% ] 50 VUs  4m31.2s/5m0s
+
+running (4m41.0s), 50/50 VUs, 1423 complete and 0 interrupted iterations
+default   [  91% ] 50 VUs  4m32.2s/5m0s
+
+running (4m42.0s), 50/50 VUs, 1429 complete and 0 interrupted iterations
+default   [  91% ] 50 VUs  4m33.2s/5m0s
+
+running (4m43.0s), 50/50 VUs, 1434 complete and 0 interrupted iterations
+default   [  91% ] 50 VUs  4m34.2s/5m0s
+
+running (4m44.0s), 50/50 VUs, 1436 complete and 0 interrupted iterations
+default   [  92% ] 50 VUs  4m35.2s/5m0s
+
+running (4m45.0s), 50/50 VUs, 1445 complete and 0 interrupted iterations
+default   [  92% ] 50 VUs  4m36.2s/5m0s
+
+running (4m46.0s), 50/50 VUs, 1446 complete and 0 interrupted iterations
+default   [  92% ] 50 VUs  4m37.2s/5m0s
+
+running (4m47.0s), 50/50 VUs, 1452 complete and 0 interrupted iterations
+default   [  93% ] 50 VUs  4m38.2s/5m0s
+
+running (4m48.0s), 50/50 VUs, 1459 complete and 0 interrupted iterations
+default   [  93% ] 50 VUs  4m39.2s/5m0s
+time="2026-08-31T15:39:23+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m49.0s), 50/50 VUs, 1462 complete and 0 interrupted iterations
+default   [  93% ] 50 VUs  4m40.2s/5m0s
+
+running (4m50.0s), 50/50 VUs, 1466 complete and 0 interrupted iterations
+default   [  94% ] 50 VUs  4m41.2s/5m0s
+
+running (4m51.0s), 50/50 VUs, 1470 complete and 0 interrupted iterations
+default   [  94% ] 50 VUs  4m42.2s/5m0s
+
+running (4m52.0s), 50/50 VUs, 1476 complete and 0 interrupted iterations
+default   [  94% ] 50 VUs  4m43.2s/5m0s
+time="2026-08-31T15:39:26+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m53.0s), 50/50 VUs, 1479 complete and 0 interrupted iterations
+default   [  95% ] 50 VUs  4m44.2s/5m0s
+
+running (4m54.0s), 50/50 VUs, 1484 complete and 0 interrupted iterations
+default   [  95% ] 50 VUs  4m45.2s/5m0s
+time="2026-08-31T15:39:29+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m55.0s), 50/50 VUs, 1487 complete and 0 interrupted iterations
+default   [  95% ] 50 VUs  4m46.2s/5m0s
+time="2026-08-31T15:39:30+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (4m56.0s), 50/50 VUs, 1492 complete and 0 interrupted iterations
+default   [  96% ] 50 VUs  4m47.2s/5m0s
+
+running (4m57.0s), 50/50 VUs, 1499 complete and 0 interrupted iterations
+default   [  96% ] 50 VUs  4m48.2s/5m0s
+
+running (4m58.0s), 50/50 VUs, 1503 complete and 0 interrupted iterations
+default   [  96% ] 50 VUs  4m49.2s/5m0s
+
+running (4m59.0s), 50/50 VUs, 1508 complete and 0 interrupted iterations
+default   [  97% ] 50 VUs  4m50.2s/5m0s
+
+running (5m00.0s), 50/50 VUs, 1513 complete and 0 interrupted iterations
+default   [  97% ] 50 VUs  4m51.2s/5m0s
+
+running (5m01.0s), 50/50 VUs, 1517 complete and 0 interrupted iterations
+default   [  97% ] 50 VUs  4m52.2s/5m0s
+
+running (5m02.0s), 50/50 VUs, 1522 complete and 0 interrupted iterations
+default   [  98% ] 50 VUs  4m53.2s/5m0s
+
+running (5m03.0s), 50/50 VUs, 1527 complete and 0 interrupted iterations
+default   [  98% ] 50 VUs  4m54.2s/5m0s
+time="2026-08-31T15:39:38+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (5m04.0s), 50/50 VUs, 1535 complete and 0 interrupted iterations
+default   [  98% ] 50 VUs  4m55.2s/5m0s
+
+running (5m05.0s), 50/50 VUs, 1539 complete and 0 interrupted iterations
+default   [  99% ] 50 VUs  4m56.2s/5m0s
+
+running (5m06.0s), 50/50 VUs, 1541 complete and 0 interrupted iterations
+default   [  99% ] 50 VUs  4m57.2s/5m0s
+
+running (5m07.0s), 50/50 VUs, 1547 complete and 0 interrupted iterations
+default   [  99% ] 50 VUs  4m58.2s/5m0s
+
+running (5m08.0s), 50/50 VUs, 1551 complete and 0 interrupted iterations
+default   [ 100% ] 50 VUs  4m59.2s/5m0s
+time="2026-08-31T15:39:43+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (5m09.0s), 49/50 VUs, 1555 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m10.0s), 47/50 VUs, 1557 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+time="2026-08-31T15:39:45+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (5m11.0s), 44/50 VUs, 1560 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+time="2026-08-31T15:39:46+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (5m12.0s), 41/50 VUs, 1563 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m13.0s), 41/50 VUs, 1563 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m14.0s), 38/50 VUs, 1566 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m15.0s), 37/50 VUs, 1567 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m16.0s), 37/50 VUs, 1567 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+time="2026-08-31T15:39:51+05:30" level=warning msg="Request Failed" error="request timeout"
+time="2026-08-31T15:39:51+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (5m17.0s), 36/50 VUs, 1568 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m18.0s), 35/50 VUs, 1569 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m19.0s), 33/50 VUs, 1571 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m20.0s), 32/50 VUs, 1572 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m21.0s), 31/50 VUs, 1573 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m22.0s), 31/50 VUs, 1573 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m23.0s), 31/50 VUs, 1573 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m24.0s), 30/50 VUs, 1574 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+time="2026-08-31T15:39:58+05:30" level=warning msg="Request Failed" error="request timeout"
+
+running (5m25.0s), 30/50 VUs, 1574 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m26.0s), 29/50 VUs, 1575 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m27.0s), 28/50 VUs, 1576 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m28.0s), 28/50 VUs, 1576 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m29.0s), 27/50 VUs, 1577 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m30.0s), 25/50 VUs, 1579 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m31.0s), 24/50 VUs, 1580 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m32.0s), 24/50 VUs, 1580 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m33.0s), 24/50 VUs, 1580 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m34.0s), 20/50 VUs, 1584 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m35.0s), 19/50 VUs, 1585 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m36.0s), 16/50 VUs, 1588 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m37.0s), 16/50 VUs, 1588 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+running (5m38.0s), 16/50 VUs, 1588 complete and 0 interrupted iterations
+default ↓ [ 100% ] 50 VUs  5m0s
+
+
+  █ THRESHOLDS 
+
+    api_error_rate
+    ✗ 'rate<0.01' rate=8.16%
+
+    dashboard_read_duration
+    ✗ 'p(95)<2000' p(95)=60001.80772
+
+    findings_duration
+    ✓ 'p(95)<3000' p(95)=155.182175
+
+    report_gen_duration
+    ✓ 'p(95)<8000' p(95)=145.81673
+
+    run_result_duration
+    ✓ 'p(95)<3000' p(95)=159.69846
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 1592   4.698797/s
+    checks_succeeded...: 91.83% 1462 out of 1592
+    checks_failed......: 8.16%  130 out of 1592
+
+    ✗ dashboard: status is 2xx
+      ↳  86% — ✓ 807 / ✗ 130
+    ✓ run_result: status is 2xx
+    ✓ findings: status is 2xx
+    ✓ report: status is 2xx
+
+    CUSTOM
+    api_error_rate.................: 8.16%  130 out of 1592
+    dashboard_read_duration........: avg=13008.61053 min=24.8063 med=115.1018  max=60006.8886 p(90)=60001.09164 p(95)=60001.80772
+    findings_duration..............: avg=110.324606  min=21.9743 med=103.42955 max=373.6156   p(90)=132.4336    p(95)=155.182175 
+    report_gen_duration............: avg=120.400378  min=49.2224 med=110.264   max=783.9375   p(90)=121.97772   p(95)=145.81673  
+    run_result_duration............: avg=109.772274  min=15.0607 med=102.3985  max=433.8292   p(90)=123.43339   p(95)=159.69846  
+
+    HTTP
+    http_req_duration..............: avg=7.7s        min=15.06ms med=107.55ms  max=1m0s       p(90)=58.02s      p(95)=1m0s       
+      { expected_response:true }...: avg=3.05s       min=15.06ms med=106.07ms  max=59.98s     p(90)=206.42ms    p(95)=47.92s     
+    http_req_failed................: 8.16%  130 out of 1593
+    http_reqs......................: 1593   4.701749/s
+
+    EXECUTION
+    iteration_duration.............: avg=9.59s       min=1.05s   med=2.25s     max=1m2s       p(90)=1m0s        p(95)=1m1s       
+    iterations.....................: 1588   4.686991/s
+    vus............................: 16     min=0           max=50
+    vus_max........................: 50     min=50          max=50
+
+    NETWORK
+    data_received..................: 868 MB 2.6 MB/s
+    data_sent......................: 680 kB 2.0 kB/s
+
+
+
+
+running (5m38.8s), 00/50 VUs, 1588 complete and 16 interrupted iterations
+default ✓ [ 100% ] 50 VUs  5m0s
+time="2026-08-31T15:40:14+05:30" level=error msg="thresholds on metrics 'api_error_rate, dashboard_read_duration' have been crossed"

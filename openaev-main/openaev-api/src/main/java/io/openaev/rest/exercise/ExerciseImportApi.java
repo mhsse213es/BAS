@@ -1,0 +1,133 @@
+package io.openaev.rest.exercise;
+
+import static io.openaev.rest.exercise.ExerciseApi.EXERCISE_URI;
+import static io.openaev.rest.exercise.ExerciseApi.TENANT_EXERCISE_URI;
+
+import io.openaev.aop.AccessControl;
+import io.openaev.context.TxCtx;
+import io.openaev.database.model.Action;
+import io.openaev.database.model.Exercise;
+import io.openaev.database.model.ImportMapper;
+import io.openaev.database.model.ResourceType;
+import io.openaev.database.repository.ImportMapperRepository;
+import io.openaev.rest.exception.ElementNotFoundException;
+import io.openaev.rest.exception.UnprocessableContentException;
+import io.openaev.rest.exercise.service.ExerciseService;
+import io.openaev.rest.helper.RestBehavior;
+import io.openaev.rest.scenario.form.InjectsImportInput;
+import io.openaev.rest.scenario.response.ImportTestSummary;
+import io.openaev.service.InjectImportService;
+import io.swagger.v3.oas.annotations.Operation;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+@RestController
+@RequiredArgsConstructor
+@Slf4j
+public class ExerciseImportApi extends RestBehavior {
+
+  private final InjectImportService injectImportService;
+  private final ImportMapperRepository importMapperRepository;
+  private final ExerciseService exerciseService;
+
+  @PostMapping({
+    EXERCISE_URI + "/{exerciseId}/xls/{importId}/dry",
+    TENANT_EXERCISE_URI + "/{exerciseId}/xls/{importId}/dry"
+  })
+  @AccessControl(
+      resourceId = "#exerciseId",
+      actionPerformed = Action.WRITE,
+      resourceType = ResourceType.SIMULATION)
+  @Transactional(rollbackFor = Exception.class)
+  @Operation(summary = "Test the import of injects from an xls file")
+  // TxCtx scopes the mapper lookup so a cross-tenant mapper is not found. Not used directly.
+  public ImportTestSummary dryRunImportXLSFile(
+      TxCtx ctx,
+      @PathVariable @NotBlank final String exerciseId,
+      @PathVariable @NotBlank final String importId,
+      @Valid @RequestBody final InjectsImportInput input) {
+    Exercise exercise = this.exerciseService.exercise(exerciseId);
+
+    // Getting the mapper to use
+    ImportMapper importMapper =
+        this.importMapperRepository
+            .findById(UUID.fromString(input.getImportMapperId()))
+            .orElseThrow(
+                () ->
+                    new ElementNotFoundException(
+                        String.format(
+                            "The import mapper %s was not found", input.getImportMapperId())));
+
+    return this.injectImportService.importInjectIntoExerciseFromXLS(
+        exercise, importMapper, importId, input.getName(), input.getTimezoneOffset(), false);
+  }
+
+  @PostMapping({
+    EXERCISE_URI + "/{exerciseId}/xls/{importId}/import",
+    TENANT_EXERCISE_URI + "/{exerciseId}/xls/{importId}/import"
+  })
+  @AccessControl(
+      resourceId = "#exerciseId",
+      actionPerformed = Action.WRITE,
+      resourceType = ResourceType.SIMULATION)
+  @Transactional(rollbackFor = Exception.class)
+  @Operation(summary = "Validate and import injects from an xls file")
+  // TxCtx scopes the mapper lookup so a cross-tenant mapper is not found. Not used directly.
+  public ImportTestSummary validateImportXLSFile(
+      TxCtx ctx,
+      @PathVariable @NotBlank final String exerciseId,
+      @PathVariable @NotBlank final String importId,
+      @Valid @RequestBody final InjectsImportInput input) {
+    Exercise exercise = this.exerciseService.exercise(exerciseId);
+
+    if (input.getLaunchDate() != null) {
+      exercise.setStart(input.getLaunchDate().toInstant());
+    }
+
+    // Getting the mapper to use
+    ImportMapper importMapper =
+        importMapperRepository
+            .findById(UUID.fromString(input.getImportMapperId()))
+            .orElseThrow(
+                () ->
+                    new ElementNotFoundException(
+                        String.format(
+                            "The import mapper %s was not found", input.getImportMapperId())));
+
+    ImportTestSummary importTestSummary =
+        injectImportService.importInjectIntoExerciseFromXLS(
+            exercise, importMapper, importId, input.getName(), input.getTimezoneOffset(), true);
+    this.exerciseService.updateExercise(exercise);
+    return importTestSummary;
+  }
+
+  @PostMapping(
+      path = {
+        EXERCISE_URI + "/{simulationId}/injects/import",
+        TENANT_EXERCISE_URI + "/{simulationId}/injects/import"
+      },
+      consumes = {MediaType.MULTIPART_FORM_DATA_VALUE})
+  @Transactional
+  @AccessControl(
+      resourceId = "#simulationId",
+      actionPerformed = Action.WRITE,
+      resourceType = ResourceType.SIMULATION)
+  public void injectsImport(
+      @RequestPart("file") MultipartFile file,
+      @PathVariable @NotBlank final String simulationId,
+      HttpServletResponse response)
+      throws Exception {
+    if (file == null || file.isEmpty()) {
+      throw new UnprocessableContentException("Insufficient input: file is required");
+    }
+    this.injectImportService.importInjectsForSimulation(file, simulationId);
+  }
+}

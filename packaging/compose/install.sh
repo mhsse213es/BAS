@@ -63,7 +63,7 @@ fi
 log()   { echo -e "${GREEN}[PASS]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[FAIL]${NC} $*" >&2; }
-step()  { echo -e "\n${BOLD}${CYAN}--  $*${NC}"; }
+step()  { CURRENT_STEP="$*"; echo -e "\n${BOLD}${CYAN}--  $*${NC}"; }
 info()  { echo -e "      $*"; }
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
@@ -107,6 +107,31 @@ if [[ -z "$MODE" ]]; then
   exit 1
 fi
 
+# ── Interrupt handling ────────────────────────────────────────────────────────
+# Message-only: no automatic cleanup/rollback. Most steps below are safe to
+# re-run as-is (mkdir -p, docker load, .env/file staging are all idempotent);
+# the one non-obvious gotcha is that once docker-compose.yml has been copied
+# into DATA_DIR (step 7/10 of --install), a plain --install re-run refuses
+# with "already installed" even though the run never finished. This handler
+# just tells the operator which resume command is correct -- it doesn't touch
+# Docker or DATA_DIR itself, matching this script's existing policy elsewhere
+# (see _diagnose_orchestrator_failure) of leaving risky actions to the operator.
+CURRENT_STEP=""
+_on_interrupt() {
+  echo ""
+  echo -e "${YELLOW}${BOLD}Interrupted${NC} (mode: ${MODE:-none}${CURRENT_STEP:+, during: ${CURRENT_STEP}})"
+  if [[ -n "${DATA_DIR:-}" && -f "${DATA_DIR}/docker-compose.yml" ]]; then
+    echo "  docker-compose.yml is already installed at ${DATA_DIR} -- a plain --install"
+    echo "  re-run will refuse with \"already installed\". To resume:"
+    echo "    sudo bash install.sh --upgrade --config ${CONFIG_FILE:-setup.conf}"
+  elif [[ "${MODE:-}" == "install" ]]; then
+    echo "  Nothing has been finalised yet -- safe to resume with:"
+    echo "    sudo bash install.sh --install --config ${CONFIG_FILE:-setup.conf}"
+  fi
+  exit 130
+}
+trap _on_interrupt INT TERM
+
 # ── Root check ────────────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
   echo "This installer must be run as root: sudo bash $0 $*"
@@ -128,6 +153,8 @@ JWT_SECRET=""
 AGENT_SECRET=""
 SINK_SFTP_PORT=""
 SINK_SFTP_HOST=""
+SINK_SMTP_PORT=""
+SINK_SMTP_HOST=""
 LIC_PATH=""
 # LICENSE_FILE is never set directly by the operator's config -- it's
 # derived from LIC_PATH's own basename (see _resolve_license_file) so the
@@ -176,6 +203,8 @@ load_config() {
       AGENT_SECRET)            AGENT_SECRET="$val"            ;;
       SINK_SFTP_PORT)          SINK_SFTP_PORT="$val"          ;;
       SINK_SFTP_HOST)          SINK_SFTP_HOST="$val"          ;;
+      SINK_SMTP_PORT)          SINK_SMTP_PORT="$val"          ;;
+      SINK_SMTP_HOST)          SINK_SMTP_HOST="$val"          ;;
       LIC_PATH)                LIC_PATH="$val"                ;;
       BACKUP_RETENTION_DAILY)   BACKUP_RETENTION_DAILY="$val"   ;;
       BACKUP_RETENTION_WEEKLY)  BACKUP_RETENTION_WEEKLY="$val"  ;;
@@ -222,6 +251,12 @@ load_config() {
 
   [[ -z "$SINK_SFTP_PORT" ]] && SINK_SFTP_PORT="2222"
   [[ "$SINK_SFTP_PORT" == "22" ]] && { err "setup.conf: SINK_SFTP_PORT must not be 22 -- this collides with the deployment host's own sshd. Leave unset for the default (2222) or choose a different unused host port."; exit 1; }
+
+  # SMTP sink: container-internal and host-published are the SAME value
+  # (unlike SFTP's 22-vs-2222 split) -- 587 carries no equivalent
+  # collision risk (a host's local MTA, if any, conventionally listens on
+  # 25, not 587), so this needs only a default, no rejection check.
+  [[ -z "$SINK_SMTP_PORT" ]] && SINK_SMTP_PORT="587"
 
   # TLS cert paths
   if [[ "$BAS_TLS" == "true" ]]; then
@@ -1065,6 +1100,8 @@ JWT_SECRET=${JWT_SECRET}
 AGENT_SECRET=${AGENT_SECRET}
 SINK_SFTP_PORT=${SINK_SFTP_PORT}
 SINK_SFTP_HOST=${SINK_SFTP_HOST}
+SINK_SMTP_PORT=${SINK_SMTP_PORT}
+SINK_SMTP_HOST=${SINK_SMTP_HOST}
 CALDERA_API_KEY=${_CALDERA_KEY:-$(openssl rand -hex 20)}
 CALDERA_API_KEY_BLUE=${_CALDERA_KEY_BLUE:-$(openssl rand -hex 20)}
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}

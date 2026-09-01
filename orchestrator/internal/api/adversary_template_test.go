@@ -86,3 +86,57 @@ func TestRunAdversaryTemplate_ExecutionPolicyFiltersStep(t *testing.T) {
 		}
 	})
 }
+
+// TestRunAdversaryTemplate_ARTBranchDoesNotDependOnSelectiveScenario proves
+// the ART branch synthesizes its own ad-hoc scenario instead of loading a
+// standalone "art-selective" catalog entry (which no longer exists — the
+// operator-facing "Selective" scenarios were removed, only Full Sweep
+// remains there). No scenario named "art-selective" is registered in this
+// test's engine at all; the old code path would skip with "art-selective
+// scenario not loaded" here, the new one reaches real ART step-building and
+// fails there instead (no ART store configured in this test), proving the
+// dependency on the catalog entry is gone.
+func TestRunAdversaryTemplate_ARTBranchDoesNotDependOnSelectiveScenario(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		_, engine := minimalLiveScenario(t, "apt29-kill-chain")
+		h := New(pool, ws.NewHub(), engine, "")
+		agentID := "rat-art-agent"
+		seedActiveAgent(t, pool, agentID, "Windows")
+		fake := startFakeAgent(t, h.hub, agentID)
+		defer fake.Disconnect(t)
+
+		rec := httptest.NewRecorder()
+		h.RunAdversaryTemplate(rec, runAdversaryTemplateReq("apt29-quick", map[string]any{
+			"agentId": agentID, "mode": "telemetry", "useArt": true,
+		}))
+		// No ART store is configured in this test, so the ART branch is
+		// expected to fail past dispatch (asserted below) -- what matters
+		// here is WHERE it fails, not that it fully succeeds.
+
+		var out struct {
+			Skipped []struct {
+				Source string `json:"source"`
+				Reason string `json:"reason"`
+			} `json:"skipped"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		var artResult *struct {
+			Source string `json:"source"`
+			Reason string `json:"reason"`
+		}
+		for i := range out.Skipped {
+			if out.Skipped[i].Source == "art" {
+				artResult = &out.Skipped[i]
+			}
+		}
+		if artResult == nil {
+			t.Fatalf("out = %+v, want an art-source skip entry", out)
+		}
+		if artResult.Reason == "art-selective scenario not loaded" {
+			t.Fatalf("art skip reason = %q, still depends on the removed art-selective scenario", artResult.Reason)
+		}
+	})
+}

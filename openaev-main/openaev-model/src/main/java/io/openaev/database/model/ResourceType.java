@@ -1,0 +1,73 @@
+package io.openaev.database.model;
+
+import jakarta.validation.constraints.NotNull;
+
+public enum ResourceType {
+  ASSET,
+  AGENT,
+  SCENARIO,
+  SIMULATION,
+  PLAYER,
+  USER,
+  TEAM,
+  ATOMIC_TESTING,
+  NOTIFICATION_RULE,
+  @Deprecated(
+      since = "Remove after closing https://github.com/OpenAEV-Platform/client-python/issues/211")
+  PAYLOAD,
+  THREAT_ARSENAL,
+  RESOURCE_TYPE,
+  SECURITY_PLATFORM,
+  DOCUMENT,
+  CHANNEL,
+  FINDING,
+  DASHBOARD,
+  PLATFORM_SETTING,
+  LESSON_LEARNED,
+  CHALLENGE,
+  INJECT,
+  JOB,
+  TAG,
+  TAG_RULE,
+  KILL_CHAIN_PHASE,
+  ATTACK_PATTERN,
+  ASSET_GROUP,
+  VULNERABILITY,
+  USER_GROUP,
+  INJECTOR,
+  INJECTOR_CONTRACT,
+  MAPPER,
+  GROUP_ROLE,
+  ORGANIZATION,
+  COLLECTOR,
+  STIX_BUNDLE,
+  DOMAIN,
+  OBJECTIVE,
+  EVALUATION,
+  CATALOG,
+  CONNECTOR_INSTANCE_LOG,
+  TENANT,
+  TENANT_SETTING,
+  PLATFORM_ROLE,
+  PLATFORM_GROUP,
+  PLATFORM_USER,
+  XTM_HUB_REGISTRATION,
+  // Special resource types
+  UNKNOWN,
+  SIMULATION_OR_SCENARIO, // Used to represent either a simulation or a scenario.
+  WORKFLOW,
+  STEP,
+  CONDITION,
+  SKIP_RBAC; // Used to skip RBAC checks.
+
+  public static ResourceType fromString(@NotNull String name) {
+    try {
+      if ("CVE".equals(name)) {
+        return VULNERABILITY;
+      }
+      return ResourceType.valueOf(name.toUpperCase());
+    } catch (IllegalArgumentException e) {
+      return UNKNOWN;
+    }
+  }
+}

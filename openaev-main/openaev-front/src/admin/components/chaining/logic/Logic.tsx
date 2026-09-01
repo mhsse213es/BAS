@@ -1,0 +1,141 @@
+import { useCallback, useEffect, useState } from 'react';
+
+import { fetchConditions, fetchSteps } from '../../../../actions/chaining/chaining-actions';
+import { fetchValidAssets } from '../../../../actions/chaining/workflow-actions';
+import type {
+  EventOutput,
+  ScopeAssetOutput,
+  StepOutput,
+} from '../../../../utils/api-types';
+import AddComponentButton, { type LogicContext } from './AddComponentButton';
+import ChainingFlowConfiguration, { type DrawerView } from './chaining_flow/ChainingFlowConfiguration';
+import LogicFlow from './chaining_flow/LogicFlow';
+import OutputProvidersProvider from './OutputProvidersContext';
+import type { ActionMeta, EventMeta } from './types';
+
+interface LogicProps {
+  workflowId: string | undefined;
+  context: LogicContext;
+}
+
+const Logic = ({ workflowId, context }: LogicProps) => {
+  // Fetch computed valid assets (allowlist minus denylist)
+  const [validAssets, setValidAssets] = useState<ScopeAssetOutput[]>([]);
+  // Track whether existing steps/events exist
+  const [hasExistingData, setHasExistingData] = useState<boolean | null>(null);
+  // Count of existing events (used to generate default names)
+  const [eventCount, setEventCount] = useState(0);
+  // Key to force LogicFlow re-mount after adding a step
+  const [refreshKey, setRefreshKey] = useState(0);
+  // Drawer navigation state (shared with ChainingFlowConfiguration)
+  const [drawerView, setDrawerView] = useState<DrawerView>('closed');
+  // Step currently being edited
+  const [editingStep, setEditingStep] = useState<{
+    stepId: string;
+    meta: ActionMeta;
+  } | null>(null);
+
+  // Event currently being edited
+  const [editingEvent, setEditingEvent] = useState<{
+    eventId: string;
+    meta: EventMeta;
+  } | null>(null);
+
+  useEffect(() => {
+    if (workflowId) {
+      fetchValidAssets(workflowId).then((assets: ScopeAssetOutput[]) => {
+        setValidAssets(assets);
+      });
+    }
+  }, [workflowId]);
+
+  // Check if there are existing steps or events
+  useEffect(() => {
+    if (!workflowId) return;
+    Promise.all([
+      fetchSteps(workflowId),
+      fetchConditions(workflowId),
+    ]).then(([stepsRes, conditionsRes]) => {
+      const steps: StepOutput[] = stepsRes.data ?? [];
+      const events: EventOutput[] = conditionsRes.data ?? [];
+      setHasExistingData(steps.length > 0 || events.length > 0);
+      setEventCount(events.length);
+    });
+  }, [workflowId]);
+
+  const handleStepCreated = useCallback(() => {
+    setHasExistingData(true);
+    setRefreshKey(k => k + 1);
+  }, []);
+
+  const handleEventCreated = useCallback(() => {
+    setHasExistingData(true);
+    setEventCount(c => c + 1);
+    setRefreshKey(k => k + 1);
+  }, []);
+
+  const handleOpenDrawer = useCallback(() => {
+    setDrawerView('choose');
+  }, []);
+
+  const handleEditStep = useCallback((stepId: string, meta: ActionMeta) => {
+    setEditingStep({
+      stepId,
+      meta,
+    });
+    setDrawerView('actionDetail');
+  }, []);
+
+  const handleEditEvent = useCallback((eventId: string, meta: EventMeta) => {
+    setEditingEvent({
+      eventId,
+      meta,
+    });
+    setDrawerView('event');
+  }, []);
+
+  // Loading state
+  if (hasExistingData === null) {
+    return null;
+  }
+
+  return (
+    <OutputProvidersProvider>
+      <div style={{
+        width: '100%',
+        height: 'calc(100vh - 230px)',
+        position: 'relative',
+      }}
+      >
+        {hasExistingData && workflowId
+          ? (
+              <LogicFlow
+                reloadTrigger={refreshKey}
+                workflowId={workflowId}
+                onAddComponent={handleOpenDrawer}
+                onEditStep={handleEditStep}
+                onEditEvent={handleEditEvent}
+              />
+            )
+          : (
+              <AddComponentButton nodeCount={0} context={context} onClick={handleOpenDrawer} />
+            )}
+        <ChainingFlowConfiguration
+          workflowId={workflowId}
+          validAssets={validAssets}
+          drawerView={drawerView}
+          onDrawerViewChange={setDrawerView}
+          editingStep={editingStep}
+          onEditingStepChange={setEditingStep}
+          editingEvent={editingEvent}
+          onEditingEventChange={setEditingEvent}
+          onStepCreated={handleStepCreated}
+          onEventCreated={handleEventCreated}
+          eventCount={eventCount}
+        />
+      </div>
+    </OutputProvidersProvider>
+  );
+};
+
+export default Logic;

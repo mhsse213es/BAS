@@ -10,7 +10,7 @@
 # connector exists to verify them — this profile intentionally declares none.
 profile: windows_dlp_exfiltration
 version: 1
-technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001, T1567, T1071.004, T1048.002]
+technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001, T1567, T1071.004, T1048.002, T1048.003]
 expected_detection:
   - id: dlp-usb-block
     provider: trellix_dlp
@@ -133,3 +133,19 @@ expected_detection:
         sftp.exe on the endpoint resolves to a skipped (not evaluable)
         result, not a passing control.
       reference: "MITRE ATT&CK T1048.002 — Exfiltration Over Asymmetric Encrypted Non-C2 Protocol"
+  - id: dlp-smtp-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP/mail-gateway controls did not block SMTP exfiltration of regulated data"
+      remediation: >-
+        Confirm mail-gateway/DLP content inspection covers outbound SMTP
+        messages for PAN/Aadhaar/SWIFT/UPI/credit-card patterns in both
+        subject and body, and blocks or quarantines the message rather
+        than allowing it to reach an external recipient.
+      reference: "MITRE ATT&CK T1048.003 — Exfiltration Over Unencrypted Non-C2 Protocol"

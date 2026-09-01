@@ -301,3 +301,91 @@ func TestIssueSinkTokensAndSubstitute_SFTPHost_HonorsExplicitOverride(t *testing
 		}
 	})
 }
+
+func TestIssueSinkTokensAndSubstitute_SMTPPlaceholders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1048.003", Command: "Send-MailMessage -Subject '{{SINK_TOKEN}}' -SmtpServer {{SINK_SMTP_HOST}} -Port {{SINK_SMTP_PORT}}"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-smtp-1", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		cmd := out[0].Command
+		if strings.Contains(cmd, "{{SINK_TOKEN}}") || strings.Contains(cmd, "{{SINK_SMTP_HOST}}") || strings.Contains(cmd, "{{SINK_SMTP_PORT}}") {
+			t.Fatalf("SMTP placeholders not fully substituted: %s", cmd)
+		}
+		if !strings.Contains(cmd, "orchestrator.example") {
+			t.Fatalf("expected the bare host in the command: %s", cmd)
+		}
+		if strings.Contains(cmd, "orchestrator.example:9443") {
+			t.Fatalf("SINK_SMTP_HOST must not include the port: %s", cmd)
+		}
+		if !strings.Contains(cmd, "587") {
+			t.Fatalf("expected the default SINK_SMTP_PORT (587) in the command: %s", cmd)
+		}
+
+		var tokenLen int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT length(token) FROM dlp_sink_tokens WHERE run_id = 'run-smtp-1' AND technique_id = 'T1048.003'`,
+		).Scan(&tokenLen); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if tokenLen != 64 {
+			t.Fatalf("token length = %d, want 64 (SMTP reuses the existing 32-byte/64-hex-char token, not a new byte-length variant)", tokenLen)
+		}
+	})
+}
+
+func TestIssueSinkTokensAndSubstitute_SMTPDoesNotIssueOrphanedSecondToken(t *testing.T) {
+	// Regression: the SMTP placeholder block must NOT generate its own
+	// {{SINK_TOKEN}} -- guards against the same class of bug SFTP's
+	// implementation had to fix mid-stream (see
+	// TestIssueSinkTokensAndSubstitute_SFTPDoesNotIssueOrphanedSecondToken),
+	// applied here from the start.
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1048.003", Command: "Send-MailMessage -Subject '{{SINK_TOKEN}}' -SmtpServer {{SINK_SMTP_HOST}} -Port {{SINK_SMTP_PORT}}"},
+		}
+		if _, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-smtp-orphan", "https://orchestrator.example:9443", steps); err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM dlp_sink_tokens WHERE run_id = 'run-smtp-orphan' AND technique_id = 'T1048.003'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("dlp_sink_tokens rows = %d, want exactly 1 (no orphaned second token from the SMTP block)", count)
+		}
+	})
+}
+
+func TestIssueSinkTokensAndSubstitute_SMTPHost_HonorsExplicitOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	t.Setenv("SINK_SMTP_HOST", "smtp-external.example.net")
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1048.003", Command: "target={{SINK_SMTP_HOST}}"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-smtp-2", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		if !strings.Contains(out[0].Command, "smtp-external.example.net") {
+			t.Fatalf("expected the SINK_SMTP_HOST override to win over the derived publicBaseURL host: %s", out[0].Command)
+		}
+	})
+}

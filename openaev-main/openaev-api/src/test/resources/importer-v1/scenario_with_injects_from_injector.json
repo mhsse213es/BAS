@@ -1,0 +1,360 @@
+{
+  "export_version": 1,
+  "scenario_information": {
+    "scenario_id": "f3f53dd2-bf43-4d3b-b34b-1c2868eea096",
+    "scenario_name": "Test  Scenario",
+    "scenario_description": "test",
+    "scenario_subtitle": "",
+    "scenario_category": "attack-scenario",
+    "scenario_main_focus": "endpoint-protection",
+    "scenario_severity": "high",
+    "scenario_message_header": "SIMULATION HEADER",
+    "scenario_message_footer": "SIMULATION FOOTER",
+    "scenario_mail_from": "test@filigran.cloud",
+    "scenario_tags": [],
+    "scenario_documents": [],
+    "scenario_dependencies": ["STARTERPACK"]
+  },
+  "scenario_teams": [],
+  "scenario_objectives": null,
+  "scenario_users": [],
+  "scenario_organizations": [],
+  "scenario_injects": [
+    {
+      "inject_id": "714a2883-21d1-499e-8908-2e90dd3ea75a",
+      "inject_title": "Nmap  inject",
+      "inject_description": "",
+      "inject_country": null,
+      "inject_city": null,
+      "inject_enabled": true,
+      "inject_content": {
+        "expectations": [
+          {
+            "expectation_type": "DETECTION",
+            "expectation_name": "Detection",
+            "expectation_description": "",
+            "expectation_score": 100,
+            "expectation_expectation_group": false
+          }
+        ],
+        "target_selector": "assets",
+        "target_property_selector": "hostname",
+        "targets": ""
+      },
+      "inject_all_teams": false,
+      "inject_depends_on": [],
+      "inject_depends_duration": 0,
+      "inject_injector_contract": {
+        "convertedContent": {
+          "contract_id": "93d27459-68d0-43b1-ad65-eacc3cfa5cf7",
+          "label": {
+            "en": "Nmap - inject",
+            "fr": "Nmap - inject"
+          },
+          "fields": [
+            {
+              "key": "target_selector",
+              "label": "Type of targets",
+              "type": "select",
+              "mandatoryGroups": [],
+              "mandatoryConditionFields": [],
+              "mandatoryConditionValues": [],
+              "visibleConditionFields": [],
+              "visibleConditionValues": [],
+              "linkedFields": [],
+              "mandatory": true,
+              "readOnly": false,
+              "cardinality": "1",
+              "defaultValue": [
+                "assets"
+              ],
+              "choices": {
+                "assets": "Assets",
+                "manual": "Manual"
+              }
+            },
+            {
+              "key": "assets",
+              "label": "Targeted assets",
+              "type": "asset",
+              "mandatoryGroups": [],
+              "mandatoryConditionFields": [
+                "target_selector"
+              ],
+              "mandatoryConditionValues": {
+                "target_selector": "assets"
+              },
+              "visibleConditionFields": [
+                "target_selector"
+              ],
+              "visibleConditionValues": {
+                "target_selector": "assets"
+              },
+              "linkedFields": [],
+              "mandatory": false,
+              "readOnly": false,
+              "cardinality": "n",
+              "defaultValue": []
+            },
+            {
+              "key": "target_property_selector",
+              "label": "Targeted assets property",
+              "type": "select",
+              "mandatoryGroups": [],
+              "mandatoryConditionFields": [
+                "target_selector"
+              ],
+              "mandatoryConditionValues": {
+                "target_selector": "assets"
+              },
+              "visibleConditionFields": [
+                "target_selector"
+              ],
+              "visibleConditionValues": {
+                "target_selector": "assets"
+              },
+              "linkedFields": [],
+              "mandatory": false,
+              "readOnly": false,
+              "cardinality": "1",
+              "defaultValue": [
+                "seen_ip"
+              ],
+              "choices": {
+                "seen_ip": "Seen IP",
+                "local_ip": "Local IP (first)",
+                "hostname": "Hostname"
+              }
+            },
+            {
+              "key": "targets",
+              "label": "Manual targets (comma-separated)",
+              "type": "text",
+              "mandatoryGroups": [],
+              "mandatoryConditionFields": [
+                "target_selector"
+              ],
+              "mandatoryConditionValues": {
+                "target_selector": "manual"
+              },
+              "visibleConditionFields": [
+                "target_selector"
+              ],
+              "visibleConditionValues": {
+                "target_selector": "manual"
+              },
+              "linkedFields": [],
+              "mandatory": false,
+              "readOnly": false,
+              "cardinality": "1",
+              "defaultValue": ""
+            },
+            {
+              "key": "expectations",
+              "label": "Expectations",
+              "type": "expectation",
+              "mandatoryGroups": [],
+              "mandatoryConditionFields": [],
+              "mandatoryConditionValues": [],
+              "visibleConditionFields": [],
+              "visibleConditionValues": [],
+              "linkedFields": [],
+              "mandatory": false,
+              "readOnly": false,
+              "cardinality": "n",
+              "defaultValue": [],
+              "predefinedExpectations": [
+                {
+                  "expectation_type": "DETECTION",
+                  "expectation_name": "Detection",
+                  "expectation_description": "",
+                  "expectation_score": 100,
+                  "expectation_expectation_group": false
+                }
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "type": "portscan",
+              "field": "scan_results",
+              "labels": [
+                "scan"
+              ],
+              "isFindingCompatible": true,
+              "isMultiple": true
+            },
+            {
+              "type": "port",
+              "field": "ports",
+              "labels": [
+                "scan"
+              ],
+              "isFindingCompatible": false,
+              "isMultiple": true
+            }
+          ],
+          "config": {
+            "type": "openaev_nmap",
+            "expose": true,
+            "label": {
+              "en": "Nmap Scan",
+              "fr": "Nmap Scan"
+            },
+            "color_dark": "#00bcd4",
+            "color_light": "#00bcd4"
+          },
+          "manual": false,
+          "variables": [
+            {
+              "key": "user",
+              "label": "User that will receive the injection",
+              "type": "String",
+              "cardinality": "1",
+              "children": [
+                {
+                  "key": "user.id",
+                  "label": "Id of the user in the platform",
+                  "type": "String",
+                  "cardinality": "1",
+                  "children": []
+                },
+                {
+                  "key": "user.email",
+                  "label": "Email of the user",
+                  "type": "String",
+                  "cardinality": "1",
+                  "children": []
+                },
+                {
+                  "key": "user.firstname",
+                  "label": "Firstname of the user",
+                  "type": "String",
+                  "cardinality": "1",
+                  "children": []
+                },
+                {
+                  "key": "user.lastname",
+                  "label": "Lastname of the user",
+                  "type": "String",
+                  "cardinality": "1",
+                  "children": []
+                },
+                {
+                  "key": "user.lang",
+                  "label": "Lang of the user",
+                  "type": "String",
+                  "cardinality": "1",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "key": "exercise",
+              "label": "Exercise of the current injection",
+              "type": "Object",
+              "cardinality": "1",
+              "children": [
+                {
+                  "key": "exercise.id",
+                  "label": "Id of the exercise in the platform",
+                  "type": "String",
+                  "cardinality": "1",
+                  "children": []
+                },
+                {
+                  "key": "exercise.name",
+                  "label": "Name of the exercise",
+                  "type": "String",
+                  "cardinality": "1",
+                  "children": []
+                },
+                {
+                  "key": "exercise.description",
+                  "label": "Description of the exercise",
+                  "type": "String",
+                  "cardinality": "1",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "key": "teams",
+              "label": "List of team name for the injection",
+              "type": "String",
+              "cardinality": "n",
+              "children": []
+            },
+            {
+              "key": "player_uri",
+              "label": "Player interface platform link",
+              "type": "String",
+              "cardinality": "1",
+              "children": []
+            },
+            {
+              "key": "challenges_uri",
+              "label": "Challenges interface platform link",
+              "type": "String",
+              "cardinality": "1",
+              "children": []
+            },
+            {
+              "key": "scoreboard_uri",
+              "label": "Scoreboard interface platform link",
+              "type": "String",
+              "cardinality": "1",
+              "children": []
+            },
+            {
+              "key": "lessons_uri",
+              "label": "Lessons learned interface platform link",
+              "type": "String",
+              "cardinality": "1",
+              "children": []
+            }
+          ],
+          "contract_attack_patterns_external_ids": [],
+          "contract_vulnerability_external_ids": [],
+          "is_atomic_testing": true,
+          "platforms": [],
+          "external_id": null
+        },
+        "listened": true,
+        "injector_contract_id": "93d27459-68d0-43b1-ad65-eacc3cfa5cf7",
+        "injector_contract_external_id": null,
+        "injector_contract_labels": {
+          "en": "Nmap inject",
+          "fr": "Nmap inject"
+        },
+        "injector_contract_manual": false,
+        "injector_contract_content": "{\"contract_id\": \"93d27459-68d0-43b1-ad65-eacc3cfa5cf7\", \"label\": {\"en\": \"Nmap inject\", \"fr\": \"Nmap inject\"}, \"fields\": [{\"key\": \"target_selector\", \"label\": \"Type of targets\", \"type\": \"select\", \"mandatoryGroups\": [], \"mandatoryConditionFields\": [], \"mandatoryConditionValues\": [], \"visibleConditionFields\": [], \"visibleConditionValues\": [], \"linkedFields\": [], \"mandatory\": true, \"readOnly\": false, \"cardinality\": \"1\", \"defaultValue\": [\"assets\"], \"choices\": {\"assets\": \"Assets\", \"manual\": \"Manual\"}}, {\"key\": \"assets\", \"label\": \"Targeted assets\", \"type\": \"asset\", \"mandatoryGroups\": [], \"mandatoryConditionFields\": [\"target_selector\"], \"mandatoryConditionValues\": {\"target_selector\": \"assets\"}, \"visibleConditionFields\": [\"target_selector\"], \"visibleConditionValues\": {\"target_selector\": \"assets\"}, \"linkedFields\": [], \"mandatory\": false, \"readOnly\": false, \"cardinality\": \"n\", \"defaultValue\": []}, {\"key\": \"target_property_selector\", \"label\": \"Targeted assets property\", \"type\": \"select\", \"mandatoryGroups\": [], \"mandatoryConditionFields\": [\"target_selector\"], \"mandatoryConditionValues\": {\"target_selector\": \"assets\"}, \"visibleConditionFields\": [\"target_selector\"], \"visibleConditionValues\": {\"target_selector\": \"assets\"}, \"linkedFields\": [], \"mandatory\": false, \"readOnly\": false, \"cardinality\": \"1\", \"defaultValue\": [\"seen_ip\"], \"choices\": {\"seen_ip\": \"Seen IP\", \"local_ip\": \"Local IP (first)\", \"hostname\": \"Hostname\"}}, {\"key\": \"targets\", \"label\": \"Manual targets (comma-separated)\", \"type\": \"text\", \"mandatoryGroups\": [], \"mandatoryConditionFields\": [\"target_selector\"], \"mandatoryConditionValues\": {\"target_selector\": \"manual\"}, \"visibleConditionFields\": [\"target_selector\"], \"visibleConditionValues\": {\"target_selector\": \"manual\"}, \"linkedFields\": [], \"mandatory\": false, \"readOnly\": false, \"cardinality\": \"1\", \"defaultValue\": \"\"}, {\"key\": \"expectations\", \"label\": \"Expectations\", \"type\": \"expectation\", \"mandatoryGroups\": [], \"mandatoryConditionFields\": [], \"mandatoryConditionValues\": [], \"visibleConditionFields\": [], \"visibleConditionValues\": [], \"linkedFields\": [], \"mandatory\": false, \"readOnly\": false, \"cardinality\": \"n\", \"defaultValue\": [], \"predefinedExpectations\": [{\"expectation_type\": \"DETECTION\", \"expectation_name\": \"Detection\", \"expectation_description\": \"\", \"expectation_score\": 100, \"expectation_expectation_group\": false}]}], \"outputs\": [{\"type\": \"portscan\", \"field\": \"scan_results\", \"labels\": [\"scan\"], \"isFindingCompatible\": true, \"isMultiple\": true}, {\"type\": \"port\", \"field\": \"ports\", \"labels\": [\"scan\"], \"isFindingCompatible\": false, \"isMultiple\": true}], \"config\": {\"type\": \"openaev_nmap\", \"expose\": true, \"label\": {\"en\": \"Nmap Scan\", \"fr\": \"Nmap Scan\"}, \"color_dark\": \"#00bcd4\", \"color_light\": \"#00bcd4\"}, \"manual\": false, \"variables\": [{\"key\": \"user\", \"label\": \"User that will receive the injection\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": [{\"key\": \"user.id\", \"label\": \"Id of the user in the platform\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}, {\"key\": \"user.email\", \"label\": \"Email of the user\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}, {\"key\": \"user.firstname\", \"label\": \"Firstname of the user\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}, {\"key\": \"user.lastname\", \"label\": \"Lastname of the user\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}, {\"key\": \"user.lang\", \"label\": \"Lang of the user\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}]}, {\"key\": \"exercise\", \"label\": \"Exercise of the current injection\", \"type\": \"Object\", \"cardinality\": \"1\", \"children\": [{\"key\": \"exercise.id\", \"label\": \"Id of the exercise in the platform\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}, {\"key\": \"exercise.name\", \"label\": \"Name of the exercise\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}, {\"key\": \"exercise.description\", \"label\": \"Description of the exercise\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}]}, {\"key\": \"teams\", \"label\": \"List of team name for the injection\", \"type\": \"String\", \"cardinality\": \"n\", \"children\": []}, {\"key\": \"player_uri\", \"label\": \"Player interface platform link\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}, {\"key\": \"challenges_uri\", \"label\": \"Challenges interface platform link\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}, {\"key\": \"scoreboard_uri\", \"label\": \"Scoreboard interface platform link\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}, {\"key\": \"lessons_uri\", \"label\": \"Lessons learned interface platform link\", \"type\": \"String\", \"cardinality\": \"1\", \"children\": []}], \"contract_attack_patterns_external_ids\": [], \"contract_vulnerability_external_ids\": [], \"is_atomic_testing\": true, \"platforms\": [], \"external_id\": null}",
+        "injector_contract_custom": false,
+        "injector_contract_needs_executor": false,
+        "injector_contract_platforms": [],
+        "injector_contract_payload": null,
+        "injector_contract_created_at": "2025-03-04T10:20:00.669882Z",
+        "injector_contract_updated_at": "2025-10-07T13:32:43.958759Z",
+        "injector_contract_injector": "3cab575d-3d44-47bd-8203-385855873a83",
+        "injector_contract_attack_patterns": [],
+        "injector_contract_vulnerabilities": [],
+        "injector_contract_atomic_testing": true,
+        "injector_contract_import_available": false,
+        "injector_contract_arch": null,
+        "injector_contract_injector_type": "openaev_nmap",
+        "injector_contract_injector_type_name": "Nmap"
+      },
+      "inject_tags": [],
+      "inject_teams": [],
+      "inject_documents": []
+    }
+  ],
+  "scenario_tags": [],
+  "scenario_documents": [],
+  "scenario_channels": [],
+  "scenario_articles": [],
+  "scenario_challenges": [],
+  "scenario_lessons_categories": [],
+  "scenario_lessons_questions": [],
+  "scenario_variables": []
+}

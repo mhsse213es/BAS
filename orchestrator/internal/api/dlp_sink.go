@@ -99,6 +99,17 @@ func (h *Handler) issueSinkTokensAndSubstitute(ctx context.Context, runID, publi
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_SFTP_HOST}}", sftpSinkHost(publicBaseURL))
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_SFTP_PORT}}", sftpSinkPort())
 		}
+		if strings.Contains(steps[i].Command, "{{SINK_SMTP_HOST}}") || strings.Contains(steps[i].Command, "{{SINK_SMTP_PORT}}") {
+			// Same reasoning as the SFTP block above: does NOT issue its
+			// own token. SMTP reuses the existing 32-byte {{SINK_TOKEN}}
+			// placeholder directly (no DNS-style label-length constraint),
+			// and every real SMTP-wired step's command contains
+			// {{SINK_TOKEN}} too (as the -Subject value) -- the
+			// unconditional block above already issues and substitutes it
+			// whenever present.
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_SMTP_HOST}}", smtpSinkHost(publicBaseURL))
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_SMTP_PORT}}", smtpSinkPort())
+		}
 	}
 	return steps, nil
 }
@@ -137,6 +148,30 @@ func sftpSinkPort() string {
 		return v
 	}
 	return "2222"
+}
+
+// smtpSinkHost resolves the {{SINK_SMTP_HOST}} placeholder: an explicit
+// SINK_SMTP_HOST environment override if set (for deployments where the
+// externally reachable SMTP address differs from publicBaseURL's host,
+// e.g. behind NAT), otherwise the same derivation dnsServerHost/
+// sftpSinkHost already use -- no new derivation logic.
+func smtpSinkHost(publicBaseURL string) string {
+	if v := os.Getenv("SINK_SMTP_HOST"); v != "" {
+		return v
+	}
+	return dnsServerHost(publicBaseURL)
+}
+
+// smtpSinkPort resolves the {{SINK_SMTP_PORT}} placeholder: the
+// configured SINK_SMTP_PORT, defaulting to 587 if unset. Unlike
+// sftpSinkPort, this is the SAME value the container-internal listener
+// binds -- no host-vs-container split, per the design spec's port
+// collision analysis for 587.
+func smtpSinkPort() string {
+	if v := os.Getenv("SINK_SMTP_PORT"); v != "" {
+		return v
+	}
+	return "587"
 }
 
 type dlpSinkRequest struct {

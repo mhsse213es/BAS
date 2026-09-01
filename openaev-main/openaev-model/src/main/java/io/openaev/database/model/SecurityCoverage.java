@@ -1,0 +1,152 @@
+package io.openaev.database.model;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import io.hypersistence.utils.hibernate.type.array.ListArrayType;
+import io.hypersistence.utils.hibernate.type.json.JsonType;
+import io.openaev.database.audit.ModelBaseListener;
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Type;
+import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.UuidGenerator;
+
+@Entity
+@Table(name = "security_coverages")
+@EntityListeners(ModelBaseListener.class)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+public class SecurityCoverage implements Base {
+
+  private Set<String> getDefaultPlatformsAffinity() {
+    return new HashSet<>(
+        List.of(
+            Endpoint.PLATFORM_TYPE.Windows.toString().toLowerCase(),
+            Endpoint.PLATFORM_TYPE.Linux.toString().toLowerCase(),
+            Endpoint.PLATFORM_TYPE.MacOS.toString().toLowerCase()));
+  }
+
+  @Id
+  @Column(name = "security_coverage_id")
+  @GeneratedValue(generator = "UUID")
+  @UuidGenerator
+  @EqualsAndHashCode.Include
+  @JsonProperty("security_coverage_id")
+  private String id;
+
+  @Column(name = "security_coverage_external_id", nullable = false)
+  @JsonProperty("security_coverage_external_id")
+  private String externalId;
+
+  @Column(name = "security_coverage_external_url", nullable = false)
+  @JsonProperty("security_coverage_external_url")
+  private String externalUrl;
+
+  @Column(name = "security_coverage_name", nullable = false)
+  @JsonProperty("security_coverage_name")
+  @NotBlank
+  private String name;
+
+  @Column(name = "security_coverage_description")
+  @JsonProperty("security_coverage_description")
+  private String description;
+
+  @Column(name = "security_coverage_scheduling", nullable = false)
+  @JsonProperty("security_coverage_scheduling")
+  private String scheduling;
+
+  @Transient
+  @JsonProperty("security_coverage_duration")
+  private String duration;
+
+  @Column(name = "security_coverage_period_start")
+  @JsonProperty("security_coverage_period_start")
+  private Instant periodStart;
+
+  @Column(name = "security_coverage_period_end")
+  @JsonProperty("security_coverage_period_end")
+  private Instant periodEnd;
+
+  @Column(name = "security_coverage_stix_modified")
+  @JsonProperty("security_coverage_stix_modified")
+  private Instant stixModified;
+
+  @Type(ListArrayType.class)
+  @Column(name = "security_coverage_labels", columnDefinition = "text[]")
+  @JsonProperty("security_coverage_labels")
+  private Set<String> labels = new HashSet<>();
+
+  @Type(ListArrayType.class)
+  @Column(name = "security_coverage_platforms_affinity", columnDefinition = "text[]")
+  @JsonProperty("security_coverage_platforms_affinity")
+  // not we want to force a default to these values
+  private Set<String> platformsAffinity = getDefaultPlatformsAffinity();
+
+  public Set<String> getPlatformsAffinity() {
+    return platformsAffinity == null || platformsAffinity.isEmpty()
+        ? getDefaultPlatformsAffinity()
+        : platformsAffinity;
+  }
+
+  @Column(name = "security_coverage_type_affinity")
+  @JsonProperty("security_coverage_type_affinity")
+  private String typeAffinity;
+
+  @Type(JsonType.class)
+  @Column(name = "security_coverage_attack_pattern_refs", columnDefinition = "jsonb")
+  @JsonProperty("security_coverage_attack_pattern_refs")
+  private Set<StixRefToExternalRef> attackPatternRefs = new HashSet<>();
+
+  @Type(JsonType.class)
+  @Column(name = "security_coverage_content", columnDefinition = "jsonb", nullable = false)
+  @JsonProperty("security_coverage_content")
+  private String content;
+
+  @Column(
+      name = "security_coverage_bundle_hash_md5",
+      nullable = false,
+      unique = true,
+      length = 32 // MD5 produces a 32-character hex string
+      )
+  @JsonIgnore
+  private String bundleHashMd5;
+
+  @Type(JsonType.class)
+  @Column(name = "security_coverage_vulnerabilities_refs", columnDefinition = "jsonb")
+  @JsonProperty("security_coverage_vulnerabilities_refs")
+  private Set<StixRefToExternalRef> vulnerabilitiesRefs = new HashSet<>();
+
+  @Type(JsonType.class)
+  @Column(name = "security_coverage_indicators_refs", columnDefinition = "jsonb")
+  @JsonProperty("security_coverage_indicators_refs")
+  private Set<StixRefToExternalRef> indicatorsRefs = new HashSet<>();
+
+  @Type(JsonType.class)
+  @Column(name = "security_coverage_artifacts_refs", columnDefinition = "jsonb")
+  @JsonProperty("security_coverage_artifacts_refs")
+  private Set<StixRefToExternalRef> artifactsRefs = new HashSet<>();
+
+  @OneToOne
+  @JoinColumn(name = "security_coverage_scenario")
+  @JsonIgnore
+  private Scenario scenario;
+
+  @CreationTimestamp
+  @Column(name = "security_coverage_created_at", updatable = false)
+  @JsonProperty("security_coverage_created_at")
+  private Instant createdAt;
+
+  @UpdateTimestamp
+  @Column(name = "security_coverage_updated_at")
+  @JsonProperty("security_coverage_updated_at")
+  private Instant updatedAt;
+}

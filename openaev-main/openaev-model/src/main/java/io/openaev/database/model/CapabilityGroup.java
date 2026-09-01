@@ -1,0 +1,18 @@
+package io.openaev.database.model;
+
+/** Logical groups used to organize capabilities in the UI tree. */
+public enum CapabilityGroup {
+  SUPERUSER,
+  ASSESSMENT,
+  TARGETS,
+  THREAT_ARSENALS,
+  DASHBOARDS,
+  FINDINGS,
+  CONTENT,
+  PLATFORM_SETTINGS,
+  TENANTS,
+  TENANT_SETTINGS,
+  PLATFORM_USERS_GROUPS_AND_ROLES,
+  STIX,
+  SERVICE
+}

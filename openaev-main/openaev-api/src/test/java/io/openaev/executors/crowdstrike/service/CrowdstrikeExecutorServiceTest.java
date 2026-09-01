@@ -1,0 +1,183 @@
+package io.openaev.executors.crowdstrike.service;
+
+import static io.openaev.integration.impl.executors.crowdstrike.CrowdStrikeExecutorIntegration.CROWDSTRIKE_EXECUTOR_NAME;
+import static io.openaev.integration.impl.executors.crowdstrike.CrowdStrikeExecutorIntegration.CROWDSTRIKE_EXECUTOR_TYPE;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import io.openaev.config.OpenAEVConfig;
+import io.openaev.config.cache.LicenseCacheManager;
+import io.openaev.database.model.*;
+import io.openaev.ee.EnterpriseEditionService;
+import io.openaev.executors.ExecutorService;
+import io.openaev.executors.crowdstrike.client.CrowdStrikeExecutorClient;
+import io.openaev.executors.crowdstrike.config.CrowdStrikeExecutorConfig;
+import io.openaev.executors.crowdstrike.model.CrowdStrikeDevice;
+import io.openaev.executors.crowdstrike.model.CrowdStrikeHostGroup;
+import io.openaev.executors.crowdstrike.model.ResourcesGroups;
+import io.openaev.executors.model.AgentRegisterInput;
+import io.openaev.service.AgentService;
+import io.openaev.service.AssetGroupService;
+import io.openaev.service.EndpointService;
+import io.openaev.utils.fixtures.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+public class CrowdstrikeExecutorServiceTest {
+
+  private static final String HOST_GROUP_CS = "hostGroupCs";
+  private static final String TENANT_ID = "test-tenant-id";
+
+  @Mock private CrowdStrikeExecutorClient client;
+  @Mock private CrowdStrikeExecutorConfig config;
+  @Mock private LicenseCacheManager licenseCacheManager;
+  @Mock private AssetGroupService assetGroupService;
+  @Mock private EnterpriseEditionService enterpriseEditionService;
+  @Mock private EndpointService endpointService;
+  @Mock private AgentService agentService;
+  @Mock private ExecutorService executorService;
+  @Mock private OpenAEVConfig openAEVConfig;
+
+  @InjectMocks private CrowdStrikeExecutorService crowdStrikeExecutorService;
+
+  @InjectMocks private CrowdStrikeExecutorContextService crowdStrikeExecutorContextService;
+
+  private CrowdStrikeDevice crowdstrikeAgent;
+  private Executor crowdstrikeExecutor;
+
+  @BeforeEach
+  void setUp() {
+    crowdstrikeAgent = CrowdstrikeDeviceFixture.createDefaultCrowdStrikeDevice();
+    crowdstrikeExecutor = new Executor();
+    crowdstrikeExecutor.setName(CROWDSTRIKE_EXECUTOR_NAME);
+    crowdstrikeExecutor.setType(CROWDSTRIKE_EXECUTOR_TYPE);
+    crowdstrikeExecutor.setTenantId(TENANT_ID);
+  }
+
+  @Test
+  void test_run_crowdstrike() {
+    // Init datas
+    ResourcesGroups resourcesGroups = new ResourcesGroups();
+    CrowdStrikeHostGroup crowdstrikeHostGroup = new CrowdStrikeHostGroup();
+    crowdstrikeHostGroup.setId(HOST_GROUP_CS);
+    crowdstrikeHostGroup.setName("crowdstrike");
+    resourcesGroups.setResources(List.of(crowdstrikeHostGroup));
+    when(config.getHostGroup()).thenReturn(HOST_GROUP_CS);
+    when(client.hostGroup(HOST_GROUP_CS)).thenReturn(resourcesGroups);
+    when(client.devices(HOST_GROUP_CS)).thenReturn(List.of(crowdstrikeAgent));
+    crowdStrikeExecutorService.setExecutor(crowdstrikeExecutor);
+    // Run method to test
+    crowdStrikeExecutorService.run();
+    // Asserts
+    ArgumentCaptor<String> executorIdCaptor = ArgumentCaptor.forClass(String.class);
+    verify(agentService)
+        .getAgentsByExecutorIdAndTenantId(executorIdCaptor.capture(), eq(TENANT_ID));
+
+    ArgumentCaptor<List<AgentRegisterInput>> inputsCaptor = ArgumentCaptor.forClass(List.class);
+    ArgumentCaptor<List<Agent>> agents = ArgumentCaptor.forClass(List.class);
+    verify(endpointService)
+        .syncAgentsEndpoints(inputsCaptor.capture(), agents.capture(), eq(TENANT_ID));
+    assertEquals(1, inputsCaptor.getValue().size());
+    assertEquals(0, agents.getValue().size());
+
+    ArgumentCaptor<AssetGroup> assetGroupCaptor = ArgumentCaptor.forClass(AssetGroup.class);
+    verify(assetGroupService)
+        .createOrUpdateAssetGroupWithoutDynamicAssets(assetGroupCaptor.capture());
+    assertEquals(HOST_GROUP_CS, assetGroupCaptor.getValue().getExternalReference());
+  }
+
+  @Test
+  void test_launchBatchExecutorSubprocess_crowdstrike()
+      throws JsonProcessingException, InterruptedException {
+    // Init datas
+    when(licenseCacheManager.getEnterpriseEditionInfo()).thenReturn(null);
+    doNothing().when(enterpriseEditionService).throwEEExecutorService(any(), any(), any());
+    when(config.getApiBatchExecutionActionPagination()).thenReturn(1);
+    when(config.getWindowsScriptName()).thenReturn("MyScript");
+    Command payloadCommand = PayloadFixture.createCommand("cmd", "whoami", List.of(), "whoami");
+    Injector injector = InjectorFixture.createDefaultPayloadInjector();
+    Map<String, String> executorCommands = new HashMap<>();
+    executorCommands.put(
+        Endpoint.PLATFORM_TYPE.Windows.name() + "." + Endpoint.PLATFORM_ARCH.x86_64, "x86_64");
+    injector.setExecutorCommands(executorCommands);
+    Inject inject =
+        InjectFixture.createTechnicalInject(
+            InjectorContractFixture.createPayloadInjectorContractWithDefaultDomain(
+                injector, payloadCommand),
+            "Inject",
+            EndpointFixture.createEndpoint());
+    inject.setId("1234567890");
+    inject.setInjector(injector);
+    List<Agent> agents =
+        List.of(AgentFixture.createAgent(EndpointFixture.createEndpoint(), "12345"));
+    InjectStatus injectStatus = InjectStatusFixture.createPendingInjectStatus();
+    when(executorService.manageWithoutPlatformAgents(agents, injectStatus)).thenReturn(agents);
+    when(openAEVConfig.getBaseUrlForAgent()).thenReturn("http://localhost:8080");
+    // Run method to test
+    crowdStrikeExecutorContextService.launchBatchExecutorSubprocess(
+        inject, new HashSet<>(agents), injectStatus, "token");
+    // Executor scheduled so we have to wait before the execution
+    Thread.sleep(1000);
+    // Asserts
+    ArgumentCaptor<String> agentId = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> scriptName = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> commandEncoded = ArgumentCaptor.forClass(String.class);
+    verify(client).executeAction(agentId.capture(), scriptName.capture(), commandEncoded.capture());
+    assertEquals("12345", agentId.getValue());
+    assertEquals("MyScript", scriptName.getValue());
+    assertEquals(
+        "cwB3AGkAdABjAGgAIAAoACQAZQBuAHYAOgBQAFIATwBDAEUAUwBTAE8AUgBfAEEAUgBDAEgASQBUAEUAQwBUAFUAUgBFACkAIAB7ACAAIgBBAE0ARAA2ADQAIgAgAHsAJABhAHIAYwBoAGkAdABlAGMAdAB1AHIAZQAgAD0AIAAiAHgAOAA2AF8ANgA0ACIAOwAgAEIAcgBlAGEAawB9ACAAIgBBAFIATQA2ADQAIgAgAHsAJABhAHIAYwBoAGkAdABlAGMAdAB1AHIAZQAgAD0AIAAiAGEAcgBtADYANAAiADsAIABCAHIAZQBhAGsAfQAgACIAeAA4ADYAIgAgAHsAIABzAHcAaQB0AGMAaAAgACgAJABlAG4AdgA6AFAAUgBPAEMARQBTAFMATwBSAF8AQQBSAEMASABJAFQARQBXADYANAAzADIAKQAgAHsAIAAiAEEATQBEADYANAAiACAAewAkAGEAcgBjAGgAaQB0AGUAYwB0AHUAcgBlACAAPQAgACIAeAA4ADYAXwA2ADQAIgA7ACAAQgByAGUAYQBrAH0AIAAiAEEAUgBNADYANAAiACAAewAkAGEAcgBjAGgAaQB0AGUAYwB0AHUAcgBlACAAPQAgACIAYQByAG0ANgA0ACIAOwAgAEIAcgBlAGEAawB9ACAAfQAgAH0AIAB9ADsAJABhAHIAYwBoAGkAdABlAGMAdAB1AHIAZQBgAA==",
+        commandEncoded.getValue());
+  }
+
+  @Test
+  @DisplayName(
+      "given legacy inject without injector, should fallback to contract and execute action")
+  void given_legacyInjectWithoutInjector_should_fallbackToContractAndExecuteAction()
+      throws InterruptedException, JsonProcessingException {
+    // Arrange
+    when(licenseCacheManager.getEnterpriseEditionInfo()).thenReturn(null);
+    doNothing().when(enterpriseEditionService).throwEEExecutorService(any(), any(), any());
+    when(config.getApiBatchExecutionActionPagination()).thenReturn(1);
+    when(config.getWindowsScriptName()).thenReturn("MyScript");
+    Command payloadCommand = PayloadFixture.createCommand("cmd", "whoami", List.of(), "whoami");
+    Injector injector = InjectorFixture.createDefaultPayloadInjector();
+    Map<String, String> executorCommands = new HashMap<>();
+    executorCommands.put(
+        Endpoint.PLATFORM_TYPE.Windows.name() + "." + Endpoint.PLATFORM_ARCH.x86_64, "x86_64");
+    injector.setExecutorCommands(executorCommands);
+    InjectorContract contract =
+        InjectorContractFixture.createPayloadInjectorContract(injector, payloadCommand);
+    Inject inject =
+        InjectFixture.createTechnicalInject(
+            contract, "Legacy Inject", EndpointFixture.createEndpoint());
+    inject.setId("legacyInjectId");
+    // inject.setInjector is NOT called — this simulates a legacy inject
+    List<Agent> agents =
+        List.of(AgentFixture.createAgent(EndpointFixture.createEndpoint(), "12345"));
+    InjectStatus injectStatus = InjectStatusFixture.createPendingInjectStatus();
+    when(executorService.manageWithoutPlatformAgents(agents, injectStatus)).thenReturn(agents);
+    when(openAEVConfig.getBaseUrlForAgent()).thenReturn("http://localhost:8080");
+
+    // Act
+    crowdStrikeExecutorContextService.launchBatchExecutorSubprocess(
+        inject, new HashSet<>(agents), injectStatus, "token");
+    Thread.sleep(1000);
+
+    // Assert
+    verify(client).executeAction(any(), any(), any());
+  }
+}

@@ -1,0 +1,65 @@
+package io.openaev.injects.manual;
+
+import static org.mockito.Mockito.*;
+
+import io.openaev.IntegrationTest;
+import io.openaev.database.model.BaseInjectExpectation;
+import io.openaev.database.model.Execution;
+import io.openaev.database.model.Inject;
+import io.openaev.database.model.Injection;
+import io.openaev.execution.ExecutableInject;
+import io.openaev.executors.InjectorContext;
+import io.openaev.expectation.ManualExpectation;
+import io.openaev.injectors.manual.ManualExecutor;
+import io.openaev.injectors.manual.model.ManualContent;
+import io.openaev.model.inject.form.Expectation;
+import io.openaev.service.InjectExpectationService;
+import io.openaev.utilstest.RabbitMQTestListener;
+import java.time.Instant;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestExecutionListeners;
+
+@SpringBootTest
+@TestExecutionListeners(
+    value = {RabbitMQTestListener.class},
+    mergeMode = TestExecutionListeners.MergeMode.MERGE_WITH_DEFAULTS)
+public class ManualExecutorTest extends IntegrationTest {
+
+  @Mock InjectExpectationService injectExpectationService;
+
+  @InjectMocks private InjectorContext injectorContext;
+
+  @Test
+  void process() throws Exception {
+
+    // mock input
+    Expectation expectation = new Expectation();
+    expectation.setExpectationGroup(false);
+    expectation.setName("Expectation 1");
+    expectation.setDescription("Expectation 1");
+    expectation.setType(BaseInjectExpectation.EXPECTATION_TYPE.MANUAL);
+    expectation.setScore(80D);
+    expectation.setExpirationTime(Instant.now().toEpochMilli());
+    ManualContent manualContent = new ManualContent();
+    manualContent.setExpectations(List.of(expectation));
+    Execution execution = mock(Execution.class);
+    ExecutableInject executableInject = mock(ExecutableInject.class);
+    Injection injection = mock(Injection.class);
+    Inject inject = mock(Inject.class);
+    when(injectExpectationService.contentConvert(any(), any())).thenReturn(manualContent);
+    when(injection.getInject()).thenReturn(inject);
+    when(executableInject.getInjection()).thenReturn(injection);
+
+    ManualExecutor executor = new ManualExecutor(injectorContext, injectExpectationService);
+    executor.process(execution, executableInject);
+
+    // verify that the expectations are saved
+    verify(injectExpectationService)
+        .buildAndSaveInjectExpectations(
+            executableInject, List.of(new ManualExpectation(expectation)));
+  }
+}

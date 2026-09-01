@@ -92,6 +92,13 @@ type Config struct {
 	// Env: SFTP_SINK_ENABLED.
 	SFTPSinkEnabled bool `json:"sftp_sink_enabled,omitempty"`
 
+	// SMTPSinkEnabled controls the SMTP exfiltration listener
+	// (internal/smtpsink). Defaults to true for the same reason
+	// DNSSinkEnabled/SFTPSinkEnabled do -- a bind failure is logged and
+	// reflected in the listener's own Status(), never fatal to the rest
+	// of the orchestrator. Env: SMTP_SINK_ENABLED.
+	SMTPSinkEnabled bool `json:"smtp_sink_enabled,omitempty"`
+
 	// MetricsToken, when set, requires "Authorization: Bearer <token>" on
 	// GET /metrics. Empty (the default) leaves it open -- same opt-in
 	// posture as DBBreakGlassPassword and RateLimitEnabled.
@@ -113,6 +120,7 @@ func Load(path string) (*Config, error) {
 		RateLimitBurst:   200,
 		DNSSinkEnabled:   true,
 		SFTPSinkEnabled:  true,
+		SMTPSinkEnabled:  true,
 	}
 
 	// Try file first (local dev)
@@ -255,6 +263,11 @@ func Load(path string) (*Config, error) {
 	if v := os.Getenv("SFTP_SINK_ENABLED"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.SFTPSinkEnabled = b
+		}
+	}
+	if v := os.Getenv("SMTP_SINK_ENABLED"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.SMTPSinkEnabled = b
 		}
 	}
 	if v := os.Getenv("METRICS_TOKEN"); v != "" {

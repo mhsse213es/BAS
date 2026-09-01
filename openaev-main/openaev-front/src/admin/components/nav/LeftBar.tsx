@@ -1,0 +1,244 @@
+import {
+  DashboardOutlined,
+  DescriptionOutlined,
+  DnsOutlined,
+  ExtensionOutlined,
+  GroupsOutlined,
+  HubOutlined,
+  InsertChartOutlined,
+  LayersOutlined,
+  MovieFilterOutlined,
+  OnlinePredictionOutlined,
+  PersonOutlined,
+  RocketLaunchOutlined,
+  RowingOutlined,
+  SchoolOutlined,
+  SmartButtonOutlined,
+  SmartToyOutlined,
+  TerminalOutlined,
+  Widgets,
+} from '@mui/icons-material';
+import {
+  Binoculars,
+  NewspaperVariantMultipleOutline,
+  PostOutline,
+  SecurityNetwork,
+  SelectGroup,
+  Target,
+} from 'mdi-material-ui';
+import { useContext } from 'react';
+
+import LeftMenu from '../../../components/common/menu/leftmenu/LeftMenu';
+import { type LeftMenuEntries } from '../../../components/common/menu/leftmenu/leftmenu-model';
+import { AbilityContext } from '../../../utils/permissions/permissionsContext';
+import { ACTIONS, SUBJECTS } from '../../../utils/permissions/types';
+import { GETTING_STARTED_URI } from '../getting_started/GettingStartedRoutes';
+import settingsEntries from './config/settings.config';
+import TenantSwitcher from './LeftBarTenantSwitcher';
+
+const LeftBar = () => {
+  const ability = useContext(AbilityContext);
+  const entries: LeftMenuEntries[] = [
+    {
+      userRight: true,
+      items: [
+        {
+          path: `/admin`,
+          icon: () => (<DashboardOutlined />),
+          label: 'Home',
+          userRight: true,
+        },
+        {
+          path: `/admin/workspaces/custom_dashboards`,
+          icon: () => (<InsertChartOutlined />),
+          label: 'Dashboards',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.DASHBOARDS),
+        },
+        {
+          path: '/admin/findings',
+          icon: () => (<Binoculars />),
+          label: 'Findings',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.FINDINGS),
+        },
+      ],
+    },
+    {
+      userRight: true,
+      items: [
+        {
+          path: `/admin/scenarios`,
+          icon: () => (<MovieFilterOutlined />),
+          label: 'Scenarios',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.ASSESSMENT),
+        },
+        {
+          path: `/admin/simulations`,
+          icon: () => (<HubOutlined />),
+          label: 'Simulations',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.ASSESSMENT),
+        },
+        {
+          path: `/admin/atomic_testings`,
+          icon: () => (<Target />),
+          label: 'Atomic testings',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.ASSESSMENT),
+        },
+        {
+          path: `/admin/threat-arsenal`,
+          icon: () => (<LayersOutlined />),
+          label: 'Threat Arsenal',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.THREAT_ARSENALS) || ability.can(ACTIONS.ACCESS, SUBJECTS.SECURITY_PLATFORMS),
+        },
+      ],
+    },
+    {
+      userRight: true,
+      items: [
+        {
+          path: `/admin/assets/inventory`,
+          icon: () => (<DnsOutlined />),
+          label: 'Assets',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.ASSETS),
+        },
+        {
+          path: `/admin/assets/asset_groups`,
+          icon: () => (<SelectGroup />),
+          label: 'Asset groups',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.ASSETS),
+        },
+        {
+          path: `/admin/assets/ai_targets`,
+          icon: () => (<SmartToyOutlined />),
+          label: 'AI targets',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.ASSETS),
+        },
+      ],
+    },
+    {
+      userRight: true,
+      items: [
+        {
+          path: `/admin/teams/persons`,
+          icon: () => (<PersonOutlined />),
+          label: 'Persons',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.TEAMS_AND_PLAYERS),
+        },
+        {
+          path: `/admin/teams/teams`,
+          icon: () => (<GroupsOutlined />),
+          label: 'Teams',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.TEAMS_AND_PLAYERS),
+        },
+      ],
+    },
+    {
+      userRight: true,
+      items: [
+        {
+          path: `/admin/assets/security_platforms`,
+          icon: () => (<SecurityNetwork />),
+          label: 'Security platforms',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.SECURITY_PLATFORMS),
+        },
+        {
+          path: `/admin/components`,
+          icon: () => (<NewspaperVariantMultipleOutline />),
+          label: 'Components',
+          href: 'components',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.DOCUMENTS)
+            || ability.can(ACTIONS.ACCESS, SUBJECTS.CHANNELS)
+            || ability.can(ACTIONS.ACCESS, SUBJECTS.CHALLENGES)
+            || ability.can(ACTIONS.ACCESS, SUBJECTS.LESSONS_LEARNED),
+          subItems: [
+            {
+              link: '/admin/components/documents',
+              label: 'Documents',
+              icon: () => (<DescriptionOutlined fontSize="small" />),
+              userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.DOCUMENTS),
+            },
+            {
+              link: '/admin/components/channels',
+              label: 'Channels',
+              icon: () => (<PostOutline fontSize="small" />),
+              userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.CHANNELS),
+            },
+            {
+              link: '/admin/components/challenges',
+              label: 'Challenges',
+              icon: () => (<RowingOutlined fontSize="small" />),
+              userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.CHALLENGES),
+            },
+            {
+              link: '/admin/components/lessons',
+              label: 'Lessons learned',
+              icon: () => (<SchoolOutlined fontSize="small" />),
+              userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.LESSONS_LEARNED),
+            },
+          ],
+        },
+        {
+          path: `/admin/integrations`,
+          icon: () => (<ExtensionOutlined />),
+          label: 'Integrations',
+          href: 'integrations',
+          userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.TENANT_SETTINGS),
+          subItems: [
+            {
+              link: '/admin/integrations/catalog',
+              label: 'Catalog',
+              icon: () => (<Widgets fontSize="small" />),
+              userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.TENANT_SETTINGS),
+            },
+            {
+              link: '/admin/integrations/injectors',
+              label: 'Injectors',
+              icon: () => (<SmartButtonOutlined fontSize="small" />),
+              userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.TENANT_SETTINGS),
+            },
+            {
+              link: '/admin/integrations/collectors',
+              label: 'Collectors',
+              icon: () => (<OnlinePredictionOutlined fontSize="small" />),
+              userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.TENANT_SETTINGS),
+            },
+            {
+              link: '/admin/integrations/executors',
+              label: 'Executors',
+              icon: () => (<TerminalOutlined fontSize="small" />),
+              userRight: ability.can(ACTIONS.ACCESS, SUBJECTS.TENANT_SETTINGS),
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  const settingsItems = settingsEntries(ability);
+  entries.push(
+    {
+      userRight: settingsItems.some(item => item.userRight),
+      items: settingsItems,
+    },
+  );
+  const bottomEntries = [
+    {
+      userRight: true,
+      items: [
+        {
+          path: `/admin/${GETTING_STARTED_URI}`,
+          icon: () => (<RocketLaunchOutlined />),
+          label: 'Getting Started',
+          userRight: true,
+        },
+      ],
+    },
+  ];
+  return (
+    <LeftMenu
+      entries={entries}
+      bottomEntries={bottomEntries}
+      headerElement={(navOpen: boolean) => <TenantSwitcher navOpen={navOpen} />}
+    />
+  );
+};
+
+export default LeftBar;
