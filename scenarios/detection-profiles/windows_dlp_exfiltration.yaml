@@ -10,7 +10,7 @@
 # connector exists to verify them — this profile intentionally declares none.
 profile: windows_dlp_exfiltration
 version: 1
-technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001, T1567, T1071.004]
+technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001, T1567, T1071.004, T1048.002]
 expected_detection:
   - id: dlp-usb-block
     provider: trellix_dlp
@@ -116,3 +116,20 @@ expected_detection:
         query volume/entropy consistent with DNS tunneling, independent
         of HTTP-based content inspection.
       reference: "MITRE ATT&CK T1071.004 — Application Layer Protocol: DNS"
+  - id: dlp-sftp-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP/network controls did not block SFTP exfiltration of regulated data"
+      remediation: >-
+        Confirm DLP/network inspection covers outbound SFTP/SSH file
+        transfers for PAN/Aadhaar/SWIFT/UPI/credit-card patterns,
+        independent of HTTP-based content inspection -- a missing
+        sftp.exe on the endpoint resolves to a skipped (not evaluable)
+        result, not a passing control.
+      reference: "MITRE ATT&CK T1048.002 — Exfiltration Over Asymmetric Encrypted Non-C2 Protocol"
