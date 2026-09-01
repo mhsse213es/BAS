@@ -105,6 +105,44 @@ func TestInsightsMostLeastProtected(t *testing.T) {
 	}
 }
 
+func TestInsightsNoLeastProtectedWhenNothingFailed(t *testing.T) {
+	// Regression: a run with only one scored tactic (or several, all at
+	// 100%) previously showed the SAME tactic as both "Most Protected" and
+	// "Least Protected" -- there is no legitimate "least protected" story
+	// when nothing failed anywhere. Least must be nil so the report's
+	// {{if .insights.least}} guard hides the card entirely.
+	heatmap := []TacticEntry{
+		{Tactic: "credential-access", Total: 2, PassPct: 100},
+	}
+	ins := buildInsights(heatmap, DetectionSummary{TelemetryObserved: true})
+	if !ins.HasData || ins.Most == nil {
+		t.Fatal("expected insights with Most populated")
+	}
+	if ins.Most.Tactic != "credential-access" || ins.Most.PassPct != 100 {
+		t.Errorf("most=%+v, want credential-access/100", ins.Most)
+	}
+	if ins.Least != nil {
+		t.Errorf("least=%+v, want nil (nothing failed, so there is no least-protected tactic)", ins.Least)
+	}
+}
+
+func TestInsightsLeastProtected_StillShownWhenSomethingActuallyFailed(t *testing.T) {
+	// Guard against an over-broad fix: Least must still populate normally
+	// whenever any tactic's PassPct is below 100, even alongside a tactic
+	// that IS at 100%.
+	heatmap := []TacticEntry{
+		{Tactic: "credential-access", Total: 5, PassPct: 20},
+		{Tactic: "privilege-escalation", Total: 4, PassPct: 100},
+	}
+	ins := buildInsights(heatmap, DetectionSummary{TelemetryObserved: true})
+	if ins.Least == nil || ins.Least.Tactic != "credential-access" {
+		t.Errorf("least=%+v, want credential-access/20", ins.Least)
+	}
+	if ins.Most == nil || ins.Most.Tactic != "privilege-escalation" {
+		t.Errorf("most=%+v, want privilege-escalation/100", ins.Most)
+	}
+}
+
 func TestReliabilityConfidence(t *testing.T) {
 	// 107 errored of 165 attempted ⇒ Low confidence (Caldera-style).
 	s := ExecutiveSummary{PassedTechniques: 30, FailedTechniques: 28, ErroredTechniques: 107}

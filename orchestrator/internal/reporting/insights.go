@@ -156,8 +156,15 @@ func buildInsights(heatmap []TacticEntry, det DetectionSummary) Insights {
 			most = t
 		}
 	}
-	ins.Least = &TacticInsight{Tactic: least.Tactic, PassPct: least.PassPct, Tested: least.Total}
 	ins.Most = &TacticInsight{Tactic: most.Tactic, PassPct: most.PassPct, Tested: most.Total}
+	// A "least protected" callout implies something is comparatively weak.
+	// When the worst tactic is still at 100% (nothing failed anywhere,
+	// whether because only one tactic had data or every tactic tied at
+	// 100%), there is no legitimate "least protected" story -- showing it
+	// anyway previously duplicated the Most Protected card verbatim.
+	if least.PassPct < 100 {
+		ins.Least = &TacticInsight{Tactic: least.Tactic, PassPct: least.PassPct, Tested: least.Total}
+	}
 	if !det.TelemetryObserved {
 		ins.TelemetryNote = "No host telemetry was collected this run — detection effectiveness could not be measured (the agent may be offline or an older build). Undetected counts reflect missing measurement, not confirmed evasion."
 	}

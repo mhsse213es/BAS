@@ -379,12 +379,27 @@ func TestBuildCoverageSummary(t *testing.T) {
 			wantExecuted: 1, wantScenarioPct: 50, wantEligiblePct: 100,
 		},
 		{
-			name: "non-policy skip still counts as executed",
+			// Regression for a real reporting bug: a content-skipped technique
+			// was never dispatched real test content and produced no PASS/FAIL
+			// verdict, so counting it as "executed" inflated Scenario/Eligible
+			// Coverage to 100% on runs where 2 of 6 techniques never actually
+			// ran -- misreading "we attempted to dispatch it" as "we validated
+			// it." Executed must match the Execution Summary table's own
+			// Executed count (passedTechniques+failedTechniques) exactly.
+			name: "non-policy skip does NOT count as executed",
 			results: []models.SimulationResult{
 				{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultSkipped, SkipReason: models.SkipReasonMissingContent},
 			},
 			totalBase: 1, eligibleBase: 1,
-			wantExecuted: 1, wantScenarioPct: 100, wantEligiblePct: 100,
+			wantExecuted: 0, wantScenarioPct: 0, wantEligiblePct: 0,
+		},
+		{
+			name: "environmental error does NOT count as executed",
+			results: []models.SimulationResult{
+				{Technique: models.AttackTechnique{ID: "T1059"}, Result: models.ResultError},
+			},
+			totalBase: 1, eligibleBase: 1,
+			wantExecuted: 0, wantScenarioPct: 0, wantEligiblePct: 0,
 		},
 		{
 			name: "dispatched but never returned — Executed < Eligible",

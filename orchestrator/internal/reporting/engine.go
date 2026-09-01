@@ -1237,21 +1237,27 @@ type CoverageSummary struct {
 
 // buildCoverageSummary derives Executed from results — distinct base
 // techniques (by Technique.ID, the same key groupResultsByTechnique uses)
-// with at least one non-policy-skip result — and combines it with the
+// that actually produced a PASS or FAIL verdict — and combines it with the
 // dispatch-time-captured totalBase/eligibleBase counts into both coverage
-// ratios. A policy-skipped technique was never dispatched to the agent at
-// all, so it must not count as executed. A zero denominator means coverage
-// data isn't available for this run (e.g. it predates this feature) — 0%,
-// not an error.
+// ratios. This must match the Execution Summary table's own Executed count
+// (passedTechniques+failedTechniques) exactly: previously this counted any
+// non-policy-skip result, which meant a content-skipped technique (never
+// dispatched real test content, no verdict produced) or an environmental
+// error still counted as "executed" -- silently inflating Scenario/Eligible
+// Coverage to 100% on a run where, e.g., 2 of 6 techniques never actually
+// ran (see the real report this was caught against, and buildInsights'
+// "100% prevented" wording, which has the identical failure mode). A zero
+// denominator means coverage data isn't available for this run (e.g. it
+// predates this feature) — 0%, not an error.
 func buildCoverageSummary(results []models.SimulationResult, totalBase, eligibleBase int) CoverageSummary {
-	executable := make([]models.SimulationResult, 0, len(results))
+	scored := make([]models.SimulationResult, 0, len(results))
 	for _, r := range results {
-		if r.SkipReason == models.SkipReasonPolicyPrivilege {
+		if r.Result != models.ResultPass && r.Result != models.ResultFail {
 			continue
 		}
-		executable = append(executable, r)
+		scored = append(scored, r)
 	}
-	executed := len(groupResultsByTechnique(executable))
+	executed := len(groupResultsByTechnique(scored))
 	cs := CoverageSummary{ScenarioTotal: totalBase, Eligible: eligibleBase, Executed: executed}
 	if totalBase > 0 {
 		cs.ScenarioCoveragePct = executed * 100 / totalBase

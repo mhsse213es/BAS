@@ -1312,6 +1312,7 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <tr><td>Scenario Coverage</td><td colspan="3"><strong>{{.coverage.executed}}/{{.coverage.scenarioTotal}}</strong> ({{.coverage.scenarioCoveragePct}}%)</td></tr>
   <tr><td>Eligible Coverage</td><td colspan="3"><strong>{{.coverage.executed}}/{{.coverage.eligible}}</strong> ({{.coverage.eligibleCoveragePct}}%)</td></tr>
 </table>
+{{if gt .skipBreakdown.content 0.0}}<p style="color:#6e7681;margin-top:6px;font-size:0.82rem">{{.skipBreakdown.content}} technique{{if ne .skipBreakdown.content 1.0}}s{{end}} could not be validated because required test content was unavailable — Scenario/Eligible Coverage above reflect only techniques that actually produced a Pass/Fail result, not the total defined by the scenario.</p>{{end}}
 
 <h3>Simulation Reliability</h3>
 <p style="color:#6e7681;margin-bottom:8px">A high environmental-error rate lowers confidence in the result — it means the BAS could not execute techniques, <strong>not</strong> that the endpoint blocked them. ERROR and SKIPPED are excluded from all scores.</p>
@@ -2478,14 +2479,14 @@ tbody tr:nth-child(even) td{background:#fbfcfe}
   <div class="scard" style="border-left:3px solid #0d9488">
     <div class="scard-label">Most Protected</div>
     <div class="scard-value" style="color:#0d9488;font-size:1.2rem">{{humanize .insights.most.tactic}}</div>
-    <div style="font-size:0.8rem;color:#6e7681">{{.insights.most.passPct}}% prevented across {{.insights.most.tested}} techniques</div>
+    <div style="font-size:0.8rem;color:#6e7681">{{.insights.most.passPct}}% prevented across {{.insights.most.tested}} executed technique{{if ne .insights.most.tested 1.0}}s{{end}}</div>
   </div>
   {{end}}
   {{if .insights.least}}
   <div class="scard" style="border-left:3px solid #da3633">
     <div class="scard-label">Least Protected</div>
     <div class="scard-value" style="color:#da3633;font-size:1.2rem">{{humanize .insights.least.tactic}}</div>
-    <div style="font-size:0.8rem;color:#6e7681">{{.insights.least.passPct}}% prevented across {{.insights.least.tested}} techniques</div>
+    <div style="font-size:0.8rem;color:#6e7681">{{.insights.least.passPct}}% prevented across {{.insights.least.tested}} executed technique{{if ne .insights.least.tested 1.0}}s{{end}}</div>
   </div>
   {{end}}
 </div>
