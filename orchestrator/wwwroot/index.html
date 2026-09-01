@@ -20504,6 +20504,20 @@ function _emDispatchFullSweep(targets, extraScenarioIds) {
       apicall('/api/em/sweeps/active?agentId=' + encodeURIComponent(agentIds[0])).then(function(sw) {
         if (sw && sw.id) openEMSweepProgress(sw.id);
       }).catch(function() {});
+    } else if (agentIds.length === 1 && failed.length === 1 && /already has a running EM sweep/i.test(failed[0].error || '')) {
+      // The 409 conflict means an EM sweep already exists for this agent --
+      // possibly one that stalled (e.g. agent_disconnected, never resumed)
+      // with zero dispatched runs, so it never appeared anywhere in Live
+      // Runs and was otherwise undiscoverable. Rather than leave the
+      // operator stuck on a bare error with no path forward, look it up and
+      // open its progress drawer directly, which now has a real Cancel
+      // Sweep control (renderEMSweepProgress) to actually unblock a new one.
+      apicall('/api/em/sweeps/active?agentId=' + encodeURIComponent(agentIds[0])).then(function(sw) {
+        if (sw && sw.id) {
+          openEMSweepProgress(sw.id);
+          showToast('Found the existing sweep blocking this one -- cancel it here to start a new one.', 'err');
+        }
+      }).catch(function() {});
     }
     showTab('runs');
   });
@@ -20886,6 +20900,17 @@ function closeEMSweepProgress() {
   _emSweepCurrentId = null;
 }
 
+// cancelEMSweep mirrors stopVexSweep's exact pattern -- the server-side
+// POST /api/em/sweeps/{id}/cancel endpoint already existed and already
+// correctly handles both 'running' and 'agent_disconnected' sweeps; this
+// was simply never wired to anything clickable.
+function cancelEMSweep(sweepId) {
+  if (!confirm('Stop this sweep? The current layer finishes or is cancelled; no further layers dispatch.')) return;
+  apicall('/api/em/sweeps/' + encodeURIComponent(sweepId) + '/cancel', { method: 'POST' })
+    .then(function() { pollEMSweepProgress(); })
+    .catch(function(e) { showToast(e.message || 'Failed to stop sweep', 'err'); });
+}
+
 function pollEMSweepProgress() {
   if (!_emSweepCurrentId) return;
   // Fetches both the sweep's own status (layers, currentIndex, overall
@@ -20922,7 +20947,13 @@ function renderEMSweepProgress(sw, runs) {
     ? '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/em/sweeps/' + encodeURIComponent(sw.id) + '/report\',\'_blank\')" title="Open the combined EM sweep report">&#8599; HTML Report</button> ' +
       '<button class="btn btn-outline btn-sm" onclick="downloadEMSweepReport(\'' + x(sw.id) + '\')" title="Download the combined EM sweep report as a file">&#8595; HTML Report</button> ' +
       '<button class="btn btn-outline btn-sm" onclick="window.open(\'/api/em/sweeps/' + encodeURIComponent(sw.id) + '/pdf\',\'_blank\')" title="Download the combined EM sweep report as PDF">&#8595; PDF</button>'
-    : '';
+    // Previously there was no cancel control here at all -- a sweep stuck in
+    // agent_disconnected (e.g. the agent's heartbeat looks fine but its
+    // WebSocket never reconnected) had a working server-side cancel endpoint
+    // (POST /api/em/sweeps/{id}/cancel) with no UI path to reach it, so an
+    // operator had no way to unblock a new sweep short of a raw API call.
+    : '<button class="btn btn-outline-red btn-sm" onclick="cancelEMSweep(\'' + x(sw.id) + '\')" title="Stop this sweep -- the current layer finishes or is cancelled; no further layers dispatch">&#9632; Cancel Sweep</button>' +
+      (sw.status === 'agent_disconnected' ? ' <span class="tiny" style="color:var(--warning)">Paused -- agent not connected. Will resume automatically on reconnect, or cancel to start a new sweep now.</span>' : '');
   var runsByScenario = {};
   (runs || []).forEach(function(r) { runsByScenario[r.scenarioId] = r; });
   var list = document.getElementById('em-sweep-progress-list');
