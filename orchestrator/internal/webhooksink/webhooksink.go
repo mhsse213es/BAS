@@ -103,5 +103,7 @@ func Routes(db *pgxpool.Pool) chi.Router {
 	r := chi.NewRouter()
 	r.Post("/slack/services/{a}/{b}/{c}", handleSlackWebhook(db))
 	r.Post("/teams/webhookb2/{guid1}/IncomingWebhook/{guid2}/{guid3}", handleTeamsWebhook(db))
+	r.Post("/github/gists", handleGitHubGist(db))
+	r.Post("/gitlab/api/v4/snippets", handleGitLabSnippet(db))
 	return r
 }
