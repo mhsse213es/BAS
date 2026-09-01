@@ -139,3 +139,46 @@ func TestDLPVerifier_NoSinkToken_UnaffectedByNewLogic(t *testing.T) {
 		t.Errorf("nil SinkTokenObserved must fall back to the local-marker path: got status=%s comparison=%v", r.Status, r.Comparison)
 	}
 }
+
+func TestDLPVerifier_SkipMarker_TakesPrecedenceOverSinkTokenObserved(t *testing.T) {
+	// A step whose client tool was absent never attempted a transfer, so
+	// SinkTokenObserved=false here is NOT evidence of a blocked
+	// exfiltration -- it's the absence of an attempt. Without this check,
+	// this would resolve to ObservationBlocked and likely grade as a
+	// false "DLP successfully blocked it."
+	exp := dlpExp("dlp-sftp-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput:         "skip: sftp.exe (OpenSSH Client) not found on this endpoint",
+		SinkTokenObserved: boolPtr(false),
+	})
+	if r.Status != StatusUnknown {
+		t.Errorf("Status = %s, want %s (a skip: marker must never resolve to Blocked)", r.Status, StatusUnknown)
+	}
+	if r.Comparison != MissingEvidence {
+		t.Errorf("Comparison = %v, want MissingEvidence", r.Comparison)
+	}
+}
+
+func TestDLPVerifier_SkipMarker_CaseInsensitiveAndWhitespaceTolerant(t *testing.T) {
+	exp := dlpExp("dlp-sftp-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput:         "  SKIP: sftp.exe not found\nDLP_OBSERVATION: OperationBlocked",
+		SinkTokenObserved: boolPtr(true), // even a true receipt must not override a genuine skip
+	})
+	if r.Status != StatusUnknown {
+		t.Errorf("Status = %s, want %s", r.Status, StatusUnknown)
+	}
+}
+
+func TestDLPVerifier_NoSkipMarker_SinkPrimaryStillWorks(t *testing.T) {
+	// Regression: HTTPS/DNS steps never emit skip: -- confirm the new
+	// check doesn't touch their existing sink-primary resolution.
+	exp := dlpExp("dlp-https-block", "Block")
+	r := dlpVerifier{}.Verify(exp, StepEvidence{
+		RawOutput:         "EXEC T1567: exfiltration attempt sent. [BAS-SIM-DLP-HTTPS]",
+		SinkTokenObserved: boolPtr(false),
+	})
+	if r.Status != StatusDetected || r.Comparison != Match {
+		t.Errorf("Status=%s Comparison=%v, want StatusDetected/Match (unaffected by the new skip: check)", r.Status, r.Comparison)
+	}
+}

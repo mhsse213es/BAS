@@ -2,6 +2,7 @@ package reporting
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/audspect/bas/internal/scenario"
 )
@@ -80,6 +81,18 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 	r.ExpectedOutcome = scenario.ResolveExpectedOutcome(exp)
 
 	observed := ObservationUnknown
+	if isSkipMarker(ev.RawOutput) {
+		// A step that never ran (client tool absent, technique not
+		// applicable, etc.) produced no attempt at all -- SinkTokenObserved
+		// being false here is the absence of an attempt, not evidence the
+		// attempt was blocked. Checked BEFORE SinkTokenObserved so a skip
+		// can never resolve to ObservationBlocked. See
+		// docs/superpowers/specs/2026-09-01-sftp-exfiltration-channel-design.md.
+		r.ObservedOutcome = observed // ObservationUnknown
+		r.Comparison = comparatorFor("dlp").Compare(r.ExpectedOutcome, r.ObservedOutcome)
+		r.Status = collapseToStatus(r.Comparison)
+		return r
+	}
 	if ev.SinkTokenObserved != nil {
 		// Sink-primary: destination-side receipt is authoritative ground
 		// truth for whether the data actually left, superseding the local
@@ -100,4 +113,17 @@ func (dlpVerifier) Verify(exp scenario.ExpectedDetection, ev StepEvidence) Verif
 	r.Comparison = comparatorFor("dlp").Compare(r.ExpectedOutcome, r.ObservedOutcome)
 	r.Status = collapseToStatus(r.Comparison)
 	return r
+}
+
+// isSkipMarker reports whether raw's first line matches the "skip:"
+// convention internal/scenario/outcome.go's classifyExecution already
+// established (case-insensitive, leading whitespace tolerated). This is a
+// small local equivalent, not a cross-package call: internal/scenario's
+// own firstLine/classifyExecution use the identical convention, but
+// firstLine is unexported there and this package deliberately stays a
+// pure function throughout (see this file's own top-of-file doc comment).
+func isSkipMarker(raw string) bool {
+	first, _, _ := strings.Cut(strings.TrimLeft(raw, "\r\n"), "\n")
+	first = strings.TrimSpace(first)
+	return len(first) >= 5 && strings.EqualFold(first[:5], "skip:")
 }
