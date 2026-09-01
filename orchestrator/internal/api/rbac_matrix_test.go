@@ -422,6 +422,16 @@ var publicRoutes = map[string]bool{
 	"GET /ready":                                  true,
 	"GET /metrics":                                true,
 	"POST /api/dlp/sink":                          true,
+	// Cloud storage exfiltration channel (internal/cloudsink) -- same
+	// unauthenticated posture as /api/dlp/sink immediately above: content/
+	// protocol inspection is what's being tested, not access control.
+	"PUT /cloudsink/s3/{bucket}/{key}":                             true,
+	"PUT /cloudsink/azureblob/{container}/{blob}":                  true,
+	"PUT /cloudsink/graph/v1.0/me/drive/root:/{filename}:/content": true,
+	"POST /cloudsink/gdrive/upload/drive/v3/files":                 true,
+	"POST /cloudsink/dropbox/2/files/upload":                       true,
+	"POST /cloudsink/gcs/upload/storage/v1/b/{bucket}/o":           true,
+	"POST /cloudsink/box/2.0/files/content":                        true,
 }
 
 func tierAllows(tier authTier, perm auth.Permission, role auth.Role) bool {
