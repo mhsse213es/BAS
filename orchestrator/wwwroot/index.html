@@ -12530,7 +12530,26 @@ function renderWizardReview() {
   // confirmRun()'s own _targetMode branch so Review shows what will actually
   // run, not what the (hidden, in this mode) Individual-mode dropdown holds.
   var addlIds = additionalAgentIds();
-  var agentsRow, blastRow = '';
+  var agentsRow, blastRow = '', offlineWarnRow = '';
+  // Dispatch succeeds server-side (a runId comes back, the modal shows
+  // "Dispatched") even when the target agent is offline -- the run then
+  // fails moments later on delivery, previously with no visible reason at
+  // all (see Live Runs failReason fix). Warning here, before the operator
+  // clicks Run, catches the common case up front instead of only after the
+  // fact. This is advisory, not a hard block -- the agent can reconnect
+  // between Review and the actual dispatch, and a stale status shouldn't
+  // prevent a legitimate run.
+  var offlineNames = [];
+  if (_targetMode !== 'group' && _targetMode !== 'all') {
+    [agSel.value].concat(addlIds).forEach(function(id) {
+      var a = agents.find(function(ag) { return ag.agentId === id; });
+      if (a && agentBucket(a) === 'offline') offlineNames.push(x(a.hostname || a.agentId));
+    });
+  }
+  if (offlineNames.length) {
+    offlineWarnRow = '<div class="wz-rev-warn">&#9888; Currently offline: ' + offlineNames.join(', ') +
+      '. The run will likely fail to reach ' + (offlineNames.length > 1 ? 'these agents' : 'this agent') + '.</div>';
+  }
   if (_targetMode === 'group' || _targetMode === 'all') {
     var resolved = _targetMode === 'group' ? resolvedGroupTargetIds() : resolvedAllTargetIds();
     var eligible = resolved.eligible;
@@ -12556,6 +12575,7 @@ function renderWizardReview() {
   var html = row('Scenario', x(sc ? sc.name : scId)) +
              agentsRow +
              blastRow +
+             offlineWarnRow +
              row('Mode', x(modeLabel)) +
              row('Scope', x(subset)) +
              (variantLabel ? row('Variant depth', x(variantLabel)) : '') +
