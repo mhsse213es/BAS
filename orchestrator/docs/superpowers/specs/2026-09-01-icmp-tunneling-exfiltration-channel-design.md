@@ -1,5 +1,66 @@
 # ICMP Tunneling Exfiltration Channel — Design
 
+> **STATUS: DEFERRED 2026-09-01 — the unprivileged-socket architecture below
+> is invalidated. Do not implement this spec as written; read this notice in
+> full before attempting any variant of it.**
+>
+> The core assumption — that `golang.org/x/net/icmp.ListenPacket("udp4",
+> addr)` (the unprivileged Linux "ping socket") can act as a **server**,
+> receiving unsolicited incoming echo requests from other hosts — is false.
+> This was proven empirically, not just reasoned about, via a genuine
+> cross-container test:
+>
+> 1. A probe program bound `icmp.ListenPacket("udp4", "0.0.0.0")` in one
+>    Docker container and logged every packet its own `ReadFrom` received.
+> 2. A **separate** container on the same network sent 3 real ICMP echo
+>    requests to the probe container's IP. All 3 got valid replies —
+>    `ping` reported 0% packet loss.
+> 3. The probe's own log showed nothing past "listening" — its `ReadFrom`
+>    never received any of those 3 packets.
+>
+> The replies came from **the receiving container's own kernel**, which
+> auto-answers ICMP echo requests addressed to itself — ordinary OS
+> behavior, completely independent of any userspace ping-socket. The
+> `udp4` mechanism (and the `net.ipv4.ping_group_range` sysctl gating it)
+> is a **client-side** facility: it lets an unprivileged process send a
+> ping and match the reply back to itself via a kernel-assigned
+> identifier. It was never designed to receive arbitrary incoming echo
+> requests from other hosts, which is what a server role needs.
+>
+> This session's Task 1 acceptance test (sending to `127.0.0.1` and
+> reading back a reply) had exactly this same blind spot and could not
+> have caught the flaw — a loopback self-test can never distinguish "my
+> code replied" from "the kernel replied to itself." Only a genuine
+> cross-host test exposes it. If ICMP tunneling is ever revisited, any new
+> acceptance test **must** repeat the cross-container methodology above,
+> not a loopback-only test.
+>
+> **The only mechanism that can genuinely receive incoming ICMP echo
+> requests is a raw ICMP socket (`CAP_NET_RAW`)** — `ip4:icmp` mode
+> instead of `udp4`. That capability was deliberately not granted: it
+> lets a process craft/sniff arbitrary raw IP packets, a materially larger
+> privilege than anything else this program has requested, for a channel
+> whose payload is only ~150 bytes and whose exfiltration technique is
+> already covered in spirit by five other, non-privilege-expanding
+> channels. **Do not add `CAP_NET_RAW` to the normal orchestrator
+> container to revive this channel.** If ICMP tunneling becomes
+> strategically important later, it should be investigated as a
+> separately security-reviewed deployment mode with its own minimal
+> component holding `CAP_NET_RAW` — never folded into the main
+> orchestrator's privilege set. See
+> `project_dlp_exfiltration_channel_roadmap.md` (memory) for the current
+> roadmap state.
+>
+> Also explicitly rejected: reporting a channel "success" whenever the
+> kernel's own auto-reply comes back. That would break this program's
+> sink-primary verdict model everywhere else — a kernel Echo Reply proves
+> only that the target host is reachable, never that the BAS sink
+> received, validated, or recorded a payload.
+>
+> Everything below this notice is preserved as a historical record of the
+> design and the (invalid) reasoning that led to it — useful context for
+> understanding what was tried, not a spec to build from.
+
 ## Problem
 
 Sixth channel of the DLP exfiltration maturity program, following HTTPS, DNS

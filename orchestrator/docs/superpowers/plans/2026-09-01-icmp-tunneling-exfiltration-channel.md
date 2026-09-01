@@ -1,5 +1,16 @@
 # ICMP Tunneling Exfiltration Channel Implementation Plan
 
+> **STATUS: DEFERRED 2026-09-01.** Task 1's real acceptance test (loopback)
+> passed, but a follow-up genuine cross-container test proved the
+> underlying architecture is invalid — the unprivileged `udp4` ping-socket
+> cannot receive incoming echo requests from other hosts, only replies to
+> its own outgoing ones. See the full finding and rationale at the top of
+> `2026-09-01-icmp-tunneling-exfiltration-channel-design.md`. **Do not
+> execute this plan.** `internal/icmpsink` was removed (it was never
+> committed) and the `docker-compose.yml` sysctl change was reverted.
+> Preserved here only as a historical record of the intended task
+> breakdown.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a sixth DLP exfiltration channel — an unprivileged ICMP echo listener that receives a synthetic-data payload embedded directly in an echo request, always replies like an ordinary host, and independently records a destination-side receipt when the payload's token matches a live run.
