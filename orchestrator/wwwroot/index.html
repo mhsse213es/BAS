@@ -13973,15 +13973,26 @@ function viewRunResults(run) {
     var rows = used.map(function(t) {
       var tc = counts[t];
       var col = tierColor[t] || 'var(--muted)';
+      // Bar shows the tier's whole pass/fail/error mix (stacked), not just
+      // the fail share -- a fail-only bar renders identically empty for "0
+      // failures out of many, all clean" and "nothing tested here," giving a
+      // fully-passing tier zero visual signal even though real data exists.
+      // failPct/errPct are rounded independently; passPct absorbs the
+      // remainder so the three segments always sum to exactly 100% width
+      // (no rounding-error gap in the track) whenever tc.total > 0.
       var failPct = tc.total ? Math.round(tc.fail * 100 / tc.total) : 0;
-      var barBg = t === 'inherited' ? 'var(--border)' : col;
+      var errPct  = tc.total ? Math.round(tc.error * 100 / tc.total) : 0;
+      var passPct = tc.total ? Math.max(0, 100 - failPct - errPct) : 0;
+      var failLabelPct = tc.total ? Math.round(tc.fail * 100 / tc.total) : 0;
       return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.28rem 0">' +
         '<span style="min-width:12px;height:12px;border-radius:2px;background:' + col + ';display:inline-block;flex-shrink:0"></span>' +
         '<span style="min-width:155px;font-size:0.72rem;color:' + col + '">' + x(tierLabel[t] || t) + '</span>' +
-        '<div style="flex:1;height:7px;background:var(--bg);border-radius:4px;overflow:hidden">' +
-          '<div style="height:100%;width:' + failPct + '%;background:var(--danger)"></div>' +
+        '<div style="flex:1;height:7px;background:var(--bg);border-radius:4px;overflow:hidden;display:flex">' +
+          (passPct ? '<div style="height:100%;width:' + passPct + '%;background:var(--success)"></div>' : '') +
+          (failPct ? '<div style="height:100%;width:' + failPct + '%;background:var(--danger)"></div>' : '') +
+          (errPct  ? '<div style="height:100%;width:' + errPct  + '%;background:var(--warning)"></div>' : '') +
         '</div>' +
-        '<span style="min-width:40px;text-align:right;font-size:0.72rem;font-weight:600;color:var(--danger)">' + (failPct ? failPct + '%' : '—') + '</span>' +
+        '<span style="min-width:40px;text-align:right;font-size:0.72rem;font-weight:600;color:var(--danger)">' + (failLabelPct ? failLabelPct + '%' : '—') + '</span>' +
         '<span style="min-width:110px;text-align:right;font-size:0.66rem;color:var(--muted)">' +
           tc.pass + ' pass · ' + tc.fail + ' fail' + (tc.error ? ' · ' + tc.error + ' err' : '') +
         '</span>' +
