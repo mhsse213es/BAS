@@ -5076,8 +5076,10 @@ var scenarioSrcCollapsed = { em: {}, other: {}, search: {} };
 var agents   = [];
 var agentsNextCursor = '';
 var agentsHasMore = false;
+var agentsPagesLoaded = 1;
 var agentTotals = { online: 0, degraded: 0, offline: 0, retired: 0 };
 var agentSearchDebounceTimer = null;
+var agentLiveRefreshTimer = null;
 var artCatalog = [];      // live ART catalog: [{id,name,tests}] -- always windows
 var calderaCatalog = [];  // live Caldera catalog: [{id,name,tactic,technique}]
 var _artCatalogByPlatform = {};  // live ART catalog per non-windows platform, keyed by 'linux'/'darwin' -- for art_selective_platform scenarios' Customize picker
@@ -8133,10 +8135,11 @@ function loadAgents() {
   var q = searchEl ? searchEl.value.trim() : '';
   if (q) url += '&q=' + encodeURIComponent(q);
   if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
-  apicall(url).then(function(page) {
+  return apicall(url).then(function(page) {
     agents = (page && page.items) || [];
     agentsNextCursor = (page && page.next_cursor) || '';
     agentsHasMore = !!(page && page.has_more);
+    agentsPagesLoaded = 1;
     agentTotals = (page && page.totals) || { online: 0, degraded: 0, offline: 0, retired: 0 };
     document.getElementById('agent-cnt').textContent = agentTotals.online + agentTotals.degraded + agentTotals.offline;
     renderAgentTiles(); renderAgentToolbar(); renderAgentRows();
@@ -8150,10 +8153,11 @@ function loadMoreAgents() {
   var q = searchEl ? searchEl.value.trim() : '';
   if (q) url += '&q=' + encodeURIComponent(q);
   if (AGENT_FILTER !== 'all') url += '&bucket=' + encodeURIComponent(AGENT_FILTER);
-  apicall(url).then(function(page) {
+  return apicall(url).then(function(page) {
     agents = agents.concat((page && page.items) || []);
     agentsNextCursor = (page && page.next_cursor) || '';
     agentsHasMore = !!(page && page.has_more);
+    agentsPagesLoaded++;
     // totals intentionally NOT updated here -- they were already
     // fleet-wide-accurate from the first page's response, and appending
     // more rows to `agents` doesn't change the true totals.
@@ -8163,6 +8167,19 @@ function loadMoreAgents() {
 function onAgentSearchInput() {
   clearTimeout(agentSearchDebounceTimer);
   agentSearchDebounceTimer = setTimeout(loadAgents, 300);
+}
+// Live WS pushes (agentUpdate/scenario_result) arrive per-agent -- on a large
+// fleet, dozens can fire in a burst. Calling loadAgents() directly on each one
+// would both hammer the API and silently collapse any "Load more" pages the
+// operator had loaded back down to page 1. This debounces the burst into one
+// refresh and re-walks back to the same page depth via loadMoreAgents().
+function requestAgentsLiveRefresh() {
+  clearTimeout(agentLiveRefreshTimer);
+  agentLiveRefreshTimer = setTimeout(function() {
+    var targetDepth = agentsPagesLoaded;
+    var chain = loadAgents();
+    for (var i = 1; i < targetDepth; i++) chain = chain.then(loadMoreAgents);
+  }, 800);
 }
 function renderAgentTiles() {
   var b = agentTotals;
@@ -16534,8 +16551,8 @@ function connectWS() {
         }
         return;
       }
-      if (msg.type === 'agentUpdate')        loadAgents();
-      if (msg.type === 'scenario_result')    { loadRuns(); loadAgents(); refreshDashboardCampaigns(); }
+      if (msg.type === 'agentUpdate')        requestAgentsLiveRefresh();
+      if (msg.type === 'scenario_result')    { loadRuns(); requestAgentsLiveRefresh(); refreshDashboardCampaigns(); }
       if (msg.type === 'tamper_alert')       { showTamperBanner(msg.data); }
       if (msg.type === 'attackpath_collected') { _apOnCollected(msg); }
       if (msg.type === 'ap_job_update')   { _apOnJobUpdate(msg); }
