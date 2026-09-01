@@ -43,6 +43,7 @@ import (
 	"github.com/audspect/bas/internal/rulelib"
 	"github.com/audspect/bas/internal/scenario"
 	"github.com/audspect/bas/internal/search"
+	"github.com/audspect/bas/internal/sftpsink"
 	"github.com/audspect/bas/internal/taxii"
 	"github.com/audspect/bas/internal/threatpriority"
 	"github.com/audspect/bas/internal/ticketing"
@@ -713,6 +714,17 @@ func main() {
 		dnssink.StartListener(context.Background(), ":53", dnssink.DomainSuffix, pool)
 	} else {
 		log.Println("[dnssink] disabled via DNS_SINK_ENABLED=false")
+	}
+
+	// ── SFTP Exfiltration Sink ────────────────────────────────────────────
+	// Third channel of the DLP sink-verification architecture (see
+	// docs/superpowers/specs/2026-09-01-sftp-exfiltration-channel-design.md).
+	// Independently enable/disable-able; a bind failure is logged and
+	// reflected in Status(), never fatal to the rest of the orchestrator.
+	if cfg.SFTPSinkEnabled {
+		sftpsink.StartListener(context.Background(), ":22", pool)
+	} else {
+		log.Println("[sftpsink] disabled via SFTP_SINK_ENABLED=false")
 	}
 
 	srv := &http.Server{

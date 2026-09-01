@@ -126,6 +126,8 @@ ADMIN_PASSWORD=""
 LOG_RETENTION_DAYS=""
 JWT_SECRET=""
 AGENT_SECRET=""
+SINK_SFTP_PORT=""
+SINK_SFTP_HOST=""
 LIC_PATH=""
 # LICENSE_FILE is never set directly by the operator's config -- it's
 # derived from LIC_PATH's own basename (see _resolve_license_file) so the
@@ -172,6 +174,8 @@ load_config() {
       LOG_RETENTION_DAYS)   LOG_RETENTION_DAYS="$val"  ;;
       JWT_SECRET)              JWT_SECRET="$val"              ;;
       AGENT_SECRET)            AGENT_SECRET="$val"            ;;
+      SINK_SFTP_PORT)          SINK_SFTP_PORT="$val"          ;;
+      SINK_SFTP_HOST)          SINK_SFTP_HOST="$val"          ;;
       LIC_PATH)                LIC_PATH="$val"                ;;
       BACKUP_RETENTION_DAILY)   BACKUP_RETENTION_DAILY="$val"   ;;
       BACKUP_RETENTION_WEEKLY)  BACKUP_RETENTION_WEEKLY="$val"  ;;
@@ -215,6 +219,9 @@ load_config() {
   [[ ${#ADMIN_PASSWORD} -lt 10 ]] && { err "ADMIN_PASSWORD must be at least 10 characters.";  exit 1; }
   [[ "$ADMIN_EMAIL" != *@*     ]] && { err "ADMIN_EMAIL must be a valid email address.";       exit 1; }
   [[ -z "$DNS_SINK_BIND_IP"    ]] && { err "Could not auto-detect a host IP for DNS_SINK_BIND_IP (hostname -I returned nothing). Set DNS_SINK_BIND_IP explicitly in setup.conf."; exit 1; }
+
+  [[ -z "$SINK_SFTP_PORT" ]] && SINK_SFTP_PORT="2222"
+  [[ "$SINK_SFTP_PORT" == "22" ]] && { err "setup.conf: SINK_SFTP_PORT must not be 22 -- this collides with the deployment host's own sshd. Leave unset for the default (2222) or choose a different unused host port."; exit 1; }
 
   # TLS cert paths
   if [[ "$BAS_TLS" == "true" ]]; then
@@ -1056,6 +1063,8 @@ POSTGRES_USER=bas_user
 POSTGRES_PASSWORD=${DB_PASSWORD}
 JWT_SECRET=${JWT_SECRET}
 AGENT_SECRET=${AGENT_SECRET}
+SINK_SFTP_PORT=${SINK_SFTP_PORT}
+SINK_SFTP_HOST=${SINK_SFTP_HOST}
 CALDERA_API_KEY=${_CALDERA_KEY:-$(openssl rand -hex 20)}
 CALDERA_API_KEY_BLUE=${_CALDERA_KEY_BLUE:-$(openssl rand -hex 20)}
 BAS_ADMIN_PASSWORD=${ADMIN_PASSWORD}
