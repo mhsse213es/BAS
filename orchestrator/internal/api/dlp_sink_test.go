@@ -389,3 +389,101 @@ func TestIssueSinkTokensAndSubstitute_SMTPHost_HonorsExplicitOverride(t *testing
 		}
 	})
 }
+
+func TestIssueSinkTokensAndSubstitute_CloudPlaceholders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1567.002", Command: "$uri = 'https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/s3/bas-sim-bucket/{{SINK_TOKEN}}.dat'"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-cloud-1", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		cmd := out[0].Command
+		if strings.Contains(cmd, "{{SINK_TOKEN}}") || strings.Contains(cmd, "{{SINK_CLOUD_HOST}}") || strings.Contains(cmd, "{{SINK_CLOUD_PORT}}") {
+			t.Fatalf("cloud storage placeholders not fully substituted: %s", cmd)
+		}
+		if !strings.Contains(cmd, "orchestrator.example") {
+			t.Fatalf("expected the bare host in the command: %s", cmd)
+		}
+		if !strings.Contains(cmd, ":9443/") {
+			t.Fatalf("expected SINK_CLOUD_PORT to be derived from publicBaseURL's own port (9443): %s", cmd)
+		}
+
+		var tokenLen int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT length(token) FROM dlp_sink_tokens WHERE run_id = 'run-cloud-1' AND technique_id = 'T1567.002'`,
+		).Scan(&tokenLen); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if tokenLen != 64 {
+			t.Fatalf("token length = %d, want 64 (cloud storage reuses the existing 32-byte/64-hex-char token, not a new byte-length variant)", tokenLen)
+		}
+	})
+}
+
+func TestIssueSinkTokensAndSubstitute_CloudDoesNotIssueOrphanedSecondToken(t *testing.T) {
+	// Regression: the cloud-storage placeholder block must NOT generate its
+	// own {{SINK_TOKEN}} -- guards against the same class of bug SFTP's
+	// implementation had to fix mid-stream, applied here from the start
+	// like SMTP already did.
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1567.002", Command: "$uri = 'https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/s3/bas-sim-bucket/{{SINK_TOKEN}}.dat'"},
+		}
+		if _, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-cloud-orphan", "https://orchestrator.example:9443", steps); err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM dlp_sink_tokens WHERE run_id = 'run-cloud-orphan' AND technique_id = 'T1567.002'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("dlp_sink_tokens rows = %d, want exactly 1 (no orphaned second token from the cloud storage block)", count)
+		}
+	})
+}
+
+func TestCloudSinkPort_DerivesFromPublicBaseURL(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://orchestrator.example:9443", "9443"},
+		{"https://10.0.0.5:8443", "8443"},
+		{"https://orchestrator.example", "443"}, // no explicit port -- assume default HTTPS
+	}
+	for _, c := range cases {
+		got := cloudSinkPort(c.in)
+		if got != c.want {
+			t.Errorf("cloudSinkPort(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestCloudSinkHost_HonorsExplicitOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	t.Setenv("SINK_CLOUD_HOST", "cloud-external.example.net")
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1567.002", Command: "target={{SINK_CLOUD_HOST}}"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-cloud-2", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		if !strings.Contains(out[0].Command, "cloud-external.example.net") {
+			t.Fatalf("expected the SINK_CLOUD_HOST override to win over the derived publicBaseURL host: %s", out[0].Command)
+		}
+	})
+}

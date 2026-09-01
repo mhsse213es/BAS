@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/audspect/bas/internal/auth"
+	"github.com/audspect/bas/internal/cloudsink"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/license"
 	"github.com/audspect/bas/internal/ws"
@@ -149,6 +150,15 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// correlation mechanism. Same "no auth; single-use tokens gate access"
 	// pattern as the exercise-tracking routes above.
 	r.Post("/api/dlp/sink", h.DLPSink)
+
+	// Cloud storage exfiltration channel (internal/cloudsink) -- seven
+	// provider-shaped routes mimicking S3/Azure Blob/OneDrive/Google Drive/
+	// Dropbox/Google Storage/Box upload requests. Same unauthenticated
+	// posture as /api/dlp/sink immediately above: content/protocol
+	// inspection is what's being tested, not access control. Mounted here
+	// (not a separate listener) because unlike SFTP/SMTP/DNS these are all
+	// HTTPS REST APIs -- there is no separate protocol to bind a port for.
+	r.Mount("/cloudsink", cloudsink.Routes(h.db))
 
 	// ── Authenticated endpoints (JWT required) ────────────────────────────
 	r.Group(func(r chi.Router) {

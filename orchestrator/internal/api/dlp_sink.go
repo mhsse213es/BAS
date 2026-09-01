@@ -110,6 +110,17 @@ func (h *Handler) issueSinkTokensAndSubstitute(ctx context.Context, runID, publi
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_SMTP_HOST}}", smtpSinkHost(publicBaseURL))
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_SMTP_PORT}}", smtpSinkPort())
 		}
+		if strings.Contains(steps[i].Command, "{{SINK_CLOUD_HOST}}") || strings.Contains(steps[i].Command, "{{SINK_CLOUD_PORT}}") {
+			// Same reasoning as the SFTP/SMTP blocks above: does NOT issue
+			// its own token. Cloud storage reuses the existing 32-byte
+			// {{SINK_TOKEN}} placeholder directly, and every real
+			// cloud-storage-wired step's command contains {{SINK_TOKEN}}
+			// too (embedded in its provider-specific object key/path) --
+			// the unconditional block above already issues and substitutes
+			// it whenever present.
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_CLOUD_HOST}}", cloudSinkHost(publicBaseURL))
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_CLOUD_PORT}}", cloudSinkPort(publicBaseURL))
+		}
 	}
 	return steps, nil
 }
@@ -172,6 +183,40 @@ func smtpSinkPort() string {
 		return v
 	}
 	return "587"
+}
+
+// cloudSinkHost resolves the {{SINK_CLOUD_HOST}} placeholder: an explicit
+// SINK_CLOUD_HOST environment override if set, otherwise the same
+// derivation dnsServerHost/sftpSinkHost/smtpSinkHost already use -- no new
+// derivation logic.
+func cloudSinkHost(publicBaseURL string) string {
+	if v := os.Getenv("SINK_CLOUD_HOST"); v != "" {
+		return v
+	}
+	return dnsServerHost(publicBaseURL)
+}
+
+// cloudSinkPort resolves the {{SINK_CLOUD_PORT}} placeholder. Unlike
+// sftpSinkPort/smtpSinkPort -- each defaulting to a *configured* value
+// because SFTP/SMTP each bind their own independent, independently-
+// configurable port -- cloud storage's routes live on the main API
+// server's own port, so there is no independent bind to configure.
+// Defaulting to a hardcoded value would be wrong whenever the externally-
+// reachable port differs from any container-internal one (a reverse proxy
+// mapping 443 -> 9443, for instance); instead this extracts the port
+// directly from publicBaseURL, the same URL every request to reach this
+// orchestrator already uses. SINK_CLOUD_PORT remains available as an
+// explicit override for the rare case where cloud storage's routes are
+// deliberately reachable on a different externally-published port than the
+// rest of the API.
+func cloudSinkPort(publicBaseURL string) string {
+	if v := os.Getenv("SINK_CLOUD_PORT"); v != "" {
+		return v
+	}
+	if u, err := url.Parse(publicBaseURL); err == nil && u.Port() != "" {
+		return u.Port()
+	}
+	return "443" // publicBaseURL has no explicit port -- assume default HTTPS
 }
 
 type dlpSinkRequest struct {

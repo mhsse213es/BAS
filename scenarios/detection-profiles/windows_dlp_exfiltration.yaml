@@ -10,7 +10,7 @@
 # connector exists to verify them — this profile intentionally declares none.
 profile: windows_dlp_exfiltration
 version: 1
-technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001, T1567, T1071.004, T1048.002, T1048.003]
+technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001, T1567, T1071.004, T1048.002, T1048.003, T1567.002]
 expected_detection:
   - id: dlp-usb-block
     provider: trellix_dlp
@@ -149,3 +149,21 @@ expected_detection:
         subject and body, and blocks or quarantines the message rather
         than allowing it to reach an external recipient.
       reference: "MITRE ATT&CK T1048.003 — Exfiltration Over Unencrypted Non-C2 Protocol"
+  - id: dlp-cloud-storage-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP/CASB controls did not block cloud-storage-shaped exfiltration of regulated data"
+      remediation: >-
+        Confirm DLP/CASB content inspection recognizes and inspects
+        traffic shaped like S3, Azure Blob, OneDrive, Google Drive,
+        Dropbox, Google Storage, and Box upload requests (destination
+        path structure, vendor-specific headers, and body/content-type
+        shape) for PAN/Aadhaar/SWIFT/UPI/credit-card patterns, and
+        blocks the upload rather than allowing it to complete.
+      reference: "MITRE ATT&CK T1567.002 — Exfiltration to Cloud Storage"
