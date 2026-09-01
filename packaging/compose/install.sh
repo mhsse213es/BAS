@@ -222,7 +222,19 @@ load_config() {
     [[ -z "$TLS_KEY"  ]] && { err "setup.conf: TLS_KEY path required when BAS_TLS=true.";  exit 1; }
   fi
 
-  # Auto-generate secrets if not supplied
+  # JWT/agent secrets — priority order:
+  #   1. explicit setup.conf value
+  #   2. existing .env in DATA_DIR (upgrade of an already-installed system —
+  #      regenerating here would invalidate every enrolled agent's secret
+  #      and every live session's JWT with no visible error to the operator)
+  #   3. generate fresh random value (very first install)
+  local existing_env="${DATA_DIR}/.env"
+  if [[ -z "$JWT_SECRET" && -f "$existing_env" ]]; then
+    JWT_SECRET=$(grep -oP '(?<=^JWT_SECRET=).+' "$existing_env" 2>/dev/null || true)
+  fi
+  if [[ -z "$AGENT_SECRET" && -f "$existing_env" ]]; then
+    AGENT_SECRET=$(grep -oP '(?<=^AGENT_SECRET=).+' "$existing_env" 2>/dev/null || true)
+  fi
   [[ -z "$JWT_SECRET"   ]] && JWT_SECRET=$(openssl rand -hex 32)
   [[ -z "$AGENT_SECRET" ]] && AGENT_SECRET=$(openssl rand -hex 24)
 
@@ -234,7 +246,7 @@ load_config() {
   # The container is checked FIRST so that install/upgrade never silently writes
   # a different key than what Caldera is running with, which would cause every
   # orchestrator→Caldera call to get a 401 with no visible error to the operator.
-  local CALDERA_KEY CALDERA_KEY_BLUE existing_env="${DATA_DIR}/.env"
+  local CALDERA_KEY CALDERA_KEY_BLUE
   CALDERA_KEY=""
   CALDERA_KEY_BLUE=""
 
