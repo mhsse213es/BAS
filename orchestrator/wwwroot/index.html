@@ -11886,6 +11886,13 @@ function runRowHtml(r) {
         var pr = r.progress;
         var toBadge = pr.stepsFailed + ' fail / ' + pr.stepsPassed + ' pass' + (pr.stepsTimeout ? ' / ' + pr.stepsTimeout + ' timeout' : '');
         acts += '<button class="btn btn-outline btn-sm" onclick="openRunPanel(\'' + x(r.id) + '\',\'' + x(r.name).replace(/'/g,'&#39;') + '\',' + (pr.stepsTotal || 0) + ',\'' + x(r.mode||'') + '\',\'' + x(r.maxPrivilege||'') + '\')" title="Per-step results for this partial run">' + toBadge + '</button>';
+      } else if (r.failReason) {
+        // A run that failed before any step produced results/progress (e.g.
+        // dispatch-time failure -- agent offline, no matching agent, etc.)
+        // has nothing for the two branches above to render, but the API
+        // already returns exactly why (r.failReason) -- it was simply never
+        // surfaced here, leaving the cell a dead "—" with no way to see it.
+        acts += '<span style="color:var(--danger);font-size:0.78rem" title="' + x(r.failReason) + '">' + x(r.failReason) + '</span>';
       }
       return acts || '—';
     })() + '</td>' +
