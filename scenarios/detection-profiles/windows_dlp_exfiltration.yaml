@@ -201,3 +201,19 @@ expected_detection:
         content) for PAN/Aadhaar/SWIFT/UPI/credit-card patterns, and
         blocks the request rather than allowing it to complete.
       reference: "MITRE ATT&CK T1567.001 — Exfiltration to Code Repository"
+  - id: dlp-telnet-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP/network controls did not block Telnet-based exfiltration of regulated data"
+      remediation: >-
+        Confirm DLP/network inspection covers outbound Telnet (simulated
+        or actual TCP/23) sessions for PAN/Aadhaar/SWIFT/UPI/credit-card
+        patterns, and blocks or terminates the connection rather than
+        allowing the data to reach a remote Telnet server.
+      reference: "MITRE ATT&CK T1048.003 — Exfiltration Over Unencrypted Non-C2 Protocol"
