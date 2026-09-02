@@ -444,7 +444,7 @@ func (r *resources) drawControlsCard(hdc win.HDC, c statusclient.ControlsRespons
 	for i, row := range rows {
 		col := colX[i%2]
 		y := 454 + (i/2)*44
-		r.drawDot(hdc, col, y+2, 8, row.color)
+		r.drawDot(hdc, col, y+6, 8, row.color)
 		r.drawText(hdc, row.name, dpiRect(col+16, y, 200, 20), r.fontBody, colText, co.DT_LEFT)
 		r.drawStatusBadge(hdc, dpiRect(col+240, y, 100, 24), row.badge, row.color)
 	}
@@ -515,7 +515,7 @@ func (r *resources) drawSelfProtectionCard(hdc win.HDC, s statusclient.StatusRes
 	}
 	y := 660
 	for _, row := range rows {
-		r.drawDot(hdc, 484, y+2, 8, row.color)
+		r.drawDot(hdc, 484, y+6, 8, row.color)
 		r.drawText(hdc, row.name, dpiRect(500, y, 220, 20), r.fontBody, colText, co.DT_LEFT)
 		r.drawStatusBadge(hdc, dpiRect(756, y, 100, 24), row.badge, row.color)
 		y += 28
