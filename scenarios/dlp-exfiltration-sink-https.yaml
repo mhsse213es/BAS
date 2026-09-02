@@ -67,3 +67,163 @@ steps:
       # server-side by internal/verifysync, not from anything this script
       # can locally confirm.
     cleanup: ""
+
+  - name: "DLP Validation — HTTPS Exfiltration of AWS Cloud Credentials (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic AWS-credential-shaped payload to the platform's own sink endpoint over HTTPS. No real data, no external destination -- the receiving endpoint is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST body matching cloud-credential patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[default]`naws_access_key_id=AKIAIOSFODNN7EXAMPLE`naws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: AWS-credential-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
+      } catch {
+        Write-Output "EXEC T1567: HTTPS POST to sink was blocked or failed before completing. [BAS-SIM-DLP-SINK-HTTPS]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the sink endpoint received the token, resolved
+      # server-side by internal/verifysync, not from anything this script
+      # can locally confirm.
+    cleanup: ""
+
+  - name: "DLP Validation — HTTPS Exfiltration of Oracle DB Connection String (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic Oracle-DB-connection-string-shaped payload to the platform's own sink endpoint over HTTPS. No real data, no external destination -- the receiving endpoint is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST body matching database-connection-string patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "Data Source=BAS-SIM-ORACLE;User Id=bas_sim_user;Password=BAS-SIM-DLP-Placeholder1;"
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: Oracle-connection-string-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
+      } catch {
+        Write-Output "EXEC T1567: HTTPS POST to sink was blocked or failed before completing. [BAS-SIM-DLP-SINK-HTTPS]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the sink endpoint received the token, resolved
+      # server-side by internal/verifysync, not from anything this script
+      # can locally confirm.
+    cleanup: ""
+
+  - name: "DLP Validation — HTTPS Exfiltration of Python Source Code (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic Python-source-code-shaped payload (embedded fake secret) to the platform's own sink endpoint over HTTPS. No real data, no external destination -- the receiving endpoint is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST body matching source-code/embedded-secret patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "# [BAS-SIM-DLP]`nAWS_SECRET = `"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`"  # test fixture"
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: Python-source-code-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
+      } catch {
+        Write-Output "EXEC T1567: HTTPS POST to sink was blocked or failed before completing. [BAS-SIM-DLP-SINK-HTTPS]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the sink endpoint received the token, resolved
+      # server-side by internal/verifysync, not from anything this script
+      # can locally confirm.
+    cleanup: ""
+
+  - name: "DLP Validation — HTTPS Exfiltration of US SSN Record (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic US-SSN-shaped payload to the platform's own sink endpoint over HTTPS. No real data, no external destination -- the receiving endpoint is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST body matching US SSN patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DLP] Name,SSN`nJohn BasSim,000-12-3456"
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: US-SSN-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
+      } catch {
+        Write-Output "EXEC T1567: HTTPS POST to sink was blocked or failed before completing. [BAS-SIM-DLP-SINK-HTTPS]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the sink endpoint received the token, resolved
+      # server-side by internal/verifysync, not from anything this script
+      # can locally confirm.
+    cleanup: ""
+
+  - name: "DLP Validation — HTTPS Exfiltration of Visa Card Record (T1567)"
+    technique_id: T1567
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic Visa-card-shaped payload to the platform's own sink endpoint over HTTPS. No real data, no external destination -- the receiving endpoint is this same on-prem deployment."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: network connection to the orchestrator's own HTTPS port"
+    detection:
+      - "DLP: outbound HTTPS POST body matching payment-card patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DLP] CardBrand,CardNumber`nVisa,4111111111111111"
+      try {
+        Invoke-RestMethod -Uri '{{SINK_URL}}' -Method Post -Body (@{token='{{SINK_TOKEN}}'; payload=$payload; channel='https-post'} | ConvertTo-Json) -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "EXEC T1567: Visa-card-shaped record POSTed over HTTPS. [BAS-SIM-DLP-SINK-HTTPS]"
+      } catch {
+        Write-Output "EXEC T1567: HTTPS POST to sink was blocked or failed before completing. [BAS-SIM-DLP-SINK-HTTPS]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the sink endpoint received the token, resolved
+      # server-side by internal/verifysync, not from anything this script
+      # can locally confirm.
+    cleanup: ""
