@@ -438,6 +438,9 @@ var publicRoutes = map[string]bool{
 	"POST /webhooksink/teams/webhookb2/{guid1}/IncomingWebhook/{guid2}/{guid3}": true,
 	"POST /webhooksink/github/gists":                                            true,
 	"POST /webhooksink/gitlab/api/v4/snippets":                                  true,
+	// Telnet exfiltration channel (internal/telnetsink)
+	// -- same unauthenticated posture as /cloudsink and /webhooksink above.
+	"POST /telnet/session": true,
 }
 
 func tierAllows(tier authTier, perm auth.Permission, role auth.Role) bool {

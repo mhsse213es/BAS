@@ -10,6 +10,7 @@ import (
 	"github.com/audspect/bas/internal/cloudsink"
 	exercisetracker "github.com/audspect/bas/internal/exercise/tracker"
 	"github.com/audspect/bas/internal/license"
+	"github.com/audspect/bas/internal/telnetsink"
 	"github.com/audspect/bas/internal/webhooksink"
 	"github.com/audspect/bas/internal/ws"
 )
@@ -168,6 +169,12 @@ func Mount(h *Handler, hub *ws.Hub, jwtSecret, agentSecret string, staticHandler
 	// flattened for convenience. Same unauthenticated posture and same
 	// mounted-on-the-existing-server reasoning as /cloudsink above.
 	r.Mount("/webhooksink", webhooksink.Routes(h.db))
+
+	// Telnet exfiltration channel (internal/telnetsink)
+	// -- Simulated Telnet conversation via JSON, same unauthenticated
+	// posture and same mounted-on-the-existing-server reasoning as
+	// /cloudsink and /webhooksink above.
+	r.Mount("/telnet", telnetsink.Routes(h.db))
 
 	// ── Authenticated endpoints (JWT required) ────────────────────────────
 	r.Group(func(r chi.Router) {
