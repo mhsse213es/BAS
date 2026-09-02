@@ -279,6 +279,10 @@ body {
   min-width: 190px; background: var(--elevated); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,0.35);
   padding: 0.3rem; flex-direction: column; gap: 1px;
+  /* toggleRowMenu clamps max-height and may flip the panel upward when it
+     would otherwise overflow the viewport -- overflow-y:auto is the actual
+     scroll affordance for whichever case applies. */
+  overflow-y: auto;
 }
 .row-menu-panel.open { display: flex; }
 .row-menu-item {
@@ -8324,10 +8328,28 @@ function toggleRowMenu(ev, id) {
   // rect (see the .row-menu-panel CSS comment for why fixed instead of
   // absolute), right-aligned under the button like a standard menu.
   var btnRect = ev.currentTarget.getBoundingClientRect();
-  panel.style.top = (btnRect.bottom + 4) + 'px';
   panel.style.right = (window.innerWidth - btnRect.right) + 'px';
   panel.style.left = 'auto';
+  panel.style.top = (btnRect.bottom + 4) + 'px';
+  panel.style.bottom = 'auto';
+  panel.style.maxHeight = 'none';
   panel.classList.add('open');
+  // Now that it's rendered, clamp it to the viewport -- a menu opened near
+  // the bottom of the screen would otherwise extend past the bottom edge
+  // with no way to reach the remaining items.
+  var margin = 8;
+  var panelRect = panel.getBoundingClientRect();
+  if (panelRect.bottom > window.innerHeight - margin) {
+    var spaceBelow = window.innerHeight - btnRect.bottom - 4 - margin;
+    var spaceAbove = btnRect.top - 4 - margin;
+    if (spaceAbove > spaceBelow) {
+      panel.style.top = 'auto';
+      panel.style.bottom = (window.innerHeight - btnRect.top + 4) + 'px';
+      panel.style.maxHeight = Math.max(spaceAbove, 80) + 'px';
+    } else {
+      panel.style.maxHeight = Math.max(spaceBelow, 80) + 'px';
+    }
+  }
 }
 function closeAllRowMenus() {
   document.querySelectorAll('.row-menu-panel.open').forEach(function(p) { p.classList.remove('open'); });
