@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -36,6 +37,45 @@ func (e *Engine) PDFFromReport(ctx context.Context, w io.Writer, rep *FullReport
 	return RenderReportPDF(w, rep, results)
 }
 
+// resolveBaseToIP rewrites base's host to a literal IP address, preferring
+// an IPv4 result. Chrome's own DevTools HTTP handler rejects any request
+// whose Host header isn't "localhost" or an IP literal -- an anti-DNS-
+// rebinding check with no command-line override -- so a Docker Compose
+// service-name host like "chrome" is refused outright even though the TCP
+// connection itself works fine. Resolving to the container's actual IP on
+// every call (rather than baking one into a static env var) keeps this
+// correct across container recreates, when the IP can change. Falls back to
+// the original base unchanged if the host is already an IP/localhost or
+// resolution fails, so the existing reachability retry/fpdf-fallback path
+// still applies to genuine outages.
+func resolveBaseToIP(base string) string {
+	u, err := url.Parse(base)
+	if err != nil {
+		return base
+	}
+	host := u.Hostname()
+	if net.ParseIP(host) != nil {
+		return base
+	}
+	addrs, err := net.LookupHost(host)
+	if err != nil || len(addrs) == 0 {
+		return base
+	}
+	ip := addrs[0]
+	for _, a := range addrs {
+		if parsed := net.ParseIP(a); parsed != nil && parsed.To4() != nil {
+			ip = a
+			break
+		}
+	}
+	if port := u.Port(); port != "" {
+		u.Host = net.JoinHostPort(ip, port)
+	} else {
+		u.Host = ip
+	}
+	return u.String()
+}
+
 // chromeWSURL resolves the sidecar's browser CDP websocket URL from CHROME_WS_URL.
 // Accepts a ws:// URL directly, or an http://host:port base whose /json/version
 // is queried for the browser webSocketDebuggerUrl. Returns "" when unconfigured.
@@ -47,6 +87,7 @@ func chromeWSURL(ctx context.Context, base string) string {
 	if strings.HasPrefix(base, "ws://") || strings.HasPrefix(base, "wss://") {
 		return base
 	}
+	base = resolveBaseToIP(base)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/json/version", nil)
 	if err != nil {
 		return ""
