@@ -8242,7 +8242,8 @@ function renderAgentTiles() {
     tile('Total agents', b.online + b.degraded + b.offline, 'var(--text)') +
     tile('Online', b.online, b.online ? 'var(--success)' : 'var(--muted)') +
     tile('Degraded', b.degraded, b.degraded ? 'var(--warning)' : 'var(--muted)') +
-    tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)');
+    tile('Offline', b.offline, b.offline ? 'var(--danger)' : 'var(--muted)') +
+    tile('Retired', b.retired, 'var(--muted)');
 }
 function renderAgentToolbar() {
   var c = function(k) {
