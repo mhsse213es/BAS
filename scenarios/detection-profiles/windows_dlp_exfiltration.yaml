@@ -10,7 +10,7 @@
 # connector exists to verify them — this profile intentionally declares none.
 profile: windows_dlp_exfiltration
 version: 1
-technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001, T1567, T1071.004, T1048.002, T1048.003, T1567.002]
+technique_ids: [T1052, T1052.001, T1074.001, T1115, T1560.001, T1567, T1071.004, T1048.002, T1048.003, T1567.002, T1567.004, T1567.001]
 expected_detection:
   - id: dlp-usb-block
     provider: trellix_dlp
@@ -167,3 +167,37 @@ expected_detection:
         shape) for PAN/Aadhaar/SWIFT/UPI/credit-card patterns, and
         blocks the upload rather than allowing it to complete.
       reference: "MITRE ATT&CK T1567.002 — Exfiltration to Cloud Storage"
+  - id: dlp-webhook-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP/CASB controls did not block webhook-shaped exfiltration of regulated data"
+      remediation: >-
+        Confirm DLP/CASB content inspection recognizes and inspects
+        traffic shaped like Slack and Microsoft Teams incoming-webhook
+        POST requests for PAN/Aadhaar/SWIFT/UPI/credit-card patterns,
+        and blocks or quarantines the message rather than allowing it
+        to reach the destination.
+      reference: "MITRE ATT&CK T1567.004 — Exfiltration Over Webhook"
+  - id: dlp-coderepo-block
+    provider: trellix_dlp
+    type: dlp
+    outcome_family: dlp
+    expected_outcome: Block
+    verification: automatic
+    confidence: required
+    finding:
+      severity: High
+      title: "DLP/CASB controls did not block code-repository-API-shaped exfiltration of regulated data"
+      remediation: >-
+        Confirm DLP/CASB content inspection recognizes and inspects
+        traffic shaped like GitHub Gist and GitLab Snippet creation API
+        requests (path structure, auth-header presence, and JSON body
+        content) for PAN/Aadhaar/SWIFT/UPI/credit-card patterns, and
+        blocks the request rather than allowing it to complete.
+      reference: "MITRE ATT&CK T1567.001 — Exfiltration to Code Repository"
