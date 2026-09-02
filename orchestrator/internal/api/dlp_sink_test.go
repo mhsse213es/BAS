@@ -487,3 +487,126 @@ func TestCloudSinkHost_HonorsExplicitOverride(t *testing.T) {
 		}
 	})
 }
+
+func TestIssueSinkTokensAndSubstitute_WebhookPlaceholders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1567.004", Command: "$uri = 'https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/slack/services/T0/B0/X0'; $token = '{{SINK_TOKEN}}'"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-webhook-1", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		cmd := out[0].Command
+		if strings.Contains(cmd, "{{SINK_TOKEN}}") || strings.Contains(cmd, "{{SINK_WEBHOOK_HOST}}") || strings.Contains(cmd, "{{SINK_WEBHOOK_PORT}}") {
+			t.Fatalf("webhook placeholders not fully substituted: %s", cmd)
+		}
+		if !strings.Contains(cmd, "orchestrator.example") {
+			t.Fatalf("expected the bare host in the command: %s", cmd)
+		}
+		if !strings.Contains(cmd, ":9443/") {
+			t.Fatalf("expected SINK_WEBHOOK_PORT to be derived from publicBaseURL's own port (9443): %s", cmd)
+		}
+
+		var tokenLen int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT length(token) FROM dlp_sink_tokens WHERE run_id = 'run-webhook-1' AND technique_id = 'T1567.004'`,
+		).Scan(&tokenLen); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if tokenLen != 64 {
+			t.Fatalf("token length = %d, want 64 (webhook channel reuses the existing 32-byte/64-hex-char token)", tokenLen)
+		}
+	})
+}
+
+func TestIssueSinkTokensAndSubstitute_WebhookDoesNotIssueOrphanedSecondToken(t *testing.T) {
+	// Regression: the webhook placeholder block must NOT generate its own
+	// {{SINK_TOKEN}} -- same bug class SFTP's implementation had to fix
+	// mid-stream, guarded here for the T1567.004 (Slack/Teams) half.
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1567.004", Command: "$uri = 'https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/slack/services/T0/B0/X0'; $token = '{{SINK_TOKEN}}'"},
+		}
+		if _, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-webhook-orphan-1", "https://orchestrator.example:9443", steps); err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM dlp_sink_tokens WHERE run_id = 'run-webhook-orphan-1' AND technique_id = 'T1567.004'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("dlp_sink_tokens rows = %d, want exactly 1 (no orphaned second token from the webhook block)", count)
+		}
+	})
+}
+
+func TestIssueSinkTokensAndSubstitute_CoderepoDoesNotIssueOrphanedSecondToken(t *testing.T) {
+	// Same regression, for the T1567.001 (GitHub/GitLab) technique -- this
+	// channel spans two techniques, so both need their own coverage.
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1567.001", Command: "$uri = 'https://{{SINK_WEBHOOK_HOST}}:{{SINK_WEBHOOK_PORT}}/webhooksink/github/gists'; $token = '{{SINK_TOKEN}}'"},
+		}
+		if _, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-webhook-orphan-2", "https://orchestrator.example:9443", steps); err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM dlp_sink_tokens WHERE run_id = 'run-webhook-orphan-2' AND technique_id = 'T1567.001'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("dlp_sink_tokens rows = %d, want exactly 1 (no orphaned second token from the webhook block)", count)
+		}
+	})
+}
+
+func TestWebhookSinkPort_DerivesFromPublicBaseURL(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://orchestrator.example:9443", "9443"},
+		{"https://10.0.0.5:8443", "8443"},
+		{"https://orchestrator.example", "443"}, // no explicit port -- assume default HTTPS
+	}
+	for _, c := range cases {
+		got := webhookSinkPort(c.in)
+		if got != c.want {
+			t.Errorf("webhookSinkPort(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestWebhookSinkHost_HonorsExplicitOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	t.Setenv("SINK_WEBHOOK_HOST", "webhook-external.example.net")
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1567.004", Command: "target={{SINK_WEBHOOK_HOST}}"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-webhook-2", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		if !strings.Contains(out[0].Command, "webhook-external.example.net") {
+			t.Fatalf("expected the SINK_WEBHOOK_HOST override to win over the derived publicBaseURL host: %s", out[0].Command)
+		}
+	})
+}

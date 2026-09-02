@@ -121,6 +121,19 @@ func (h *Handler) issueSinkTokensAndSubstitute(ctx context.Context, runID, publi
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_CLOUD_HOST}}", cloudSinkHost(publicBaseURL))
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_CLOUD_PORT}}", cloudSinkPort(publicBaseURL))
 		}
+		if strings.Contains(steps[i].Command, "{{SINK_WEBHOOK_HOST}}") || strings.Contains(steps[i].Command, "{{SINK_WEBHOOK_PORT}}") {
+			// Same reasoning as the cloud storage block above: does NOT
+			// issue its own token. Both halves of this channel -- the
+			// Slack/Teams incoming-webhook shape (T1567.004) and the
+			// GitHub/GitLab Gist/Snippet-API shape (T1567.001) -- reuse
+			// the existing 32-byte {{SINK_TOKEN}} placeholder directly,
+			// each embedding it in its own provider-natural location
+			// (the "text" field's first line, the "files" map key, the
+			// "file_name" field). The unconditional block above already
+			// issues and substitutes it whenever present.
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_WEBHOOK_HOST}}", webhookSinkHost(publicBaseURL))
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_WEBHOOK_PORT}}", webhookSinkPort(publicBaseURL))
+		}
 	}
 	return steps, nil
 }
@@ -211,6 +224,35 @@ func cloudSinkHost(publicBaseURL string) string {
 // rest of the API.
 func cloudSinkPort(publicBaseURL string) string {
 	if v := os.Getenv("SINK_CLOUD_PORT"); v != "" {
+		return v
+	}
+	if u, err := url.Parse(publicBaseURL); err == nil && u.Port() != "" {
+		return u.Port()
+	}
+	return "443" // publicBaseURL has no explicit port -- assume default HTTPS
+}
+
+// webhookSinkHost resolves the {{SINK_WEBHOOK_HOST}} placeholder: an
+// explicit SINK_WEBHOOK_HOST environment override if set, otherwise the
+// same derivation dnsServerHost/sftpSinkHost/smtpSinkHost/cloudSinkHost
+// already use -- no new derivation logic.
+func webhookSinkHost(publicBaseURL string) string {
+	if v := os.Getenv("SINK_WEBHOOK_HOST"); v != "" {
+		return v
+	}
+	return dnsServerHost(publicBaseURL)
+}
+
+// webhookSinkPort resolves the {{SINK_WEBHOOK_PORT}} placeholder,
+// following cloudSinkPort's reasoning exactly: internal/webhooksink's
+// four routes are mounted on the main API server rather than binding an
+// independent listener, so there is no independently-configurable port to
+// default to. The port comes from publicBaseURL itself.
+// SINK_WEBHOOK_PORT remains available as an explicit override for the
+// rare case where these routes are deliberately reachable on a different
+// externally-published port than the rest of the API.
+func webhookSinkPort(publicBaseURL string) string {
+	if v := os.Getenv("SINK_WEBHOOK_PORT"); v != "" {
 		return v
 	}
 	if u, err := url.Parse(publicBaseURL); err == nil && u.Port() != "" {
