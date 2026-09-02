@@ -12687,10 +12687,21 @@ function openPicker(scId, fw) {
     }).catch(function(e) { showToast('Posture catalog request failed: ' + (e && e.message ? e.message : e), 'err'); });
     return;
   }
-  // art_selective_platform scenarios (Linux/macOS) need their own platform's
-  // catalog, not the Windows-only one every other 'art' scenario uses --
-  // GetARTTechniques defaults to windows, so only override for those.
-  var artPlatform = sc.artSelectivePlatform ? ((sc.supportedOs && sc.supportedOs[0]) || 'windows') : 'windows';
+  // Any scenario whose supportedOs names only non-Windows platforms (the
+  // art_selective_platform/art_all_platform sweeps, but also curated
+  // Linux/macOS scenarios with their own sc.artTechniques list) needs its
+  // own platform's catalog, not the Windows-only one 'art' scenarios use by
+  // default -- GetARTTechniques defaults to windows, so only override when
+  // Windows genuinely isn't one of the scenario's supported platforms.
+  // Without this, a curated Linux/macOS scenario's Customize picker showed
+  // Windows-only atomic tests (e.g. "findstr") scoped by technique ID from
+  // the wrong catalog, inflating the displayed test count above what the
+  // run actually executes.
+  var nonWindowsOnly = (sc.supportedOs || []).length > 0 &&
+    sc.supportedOs.every(function(p) { return String(p).toLowerCase() !== 'windows'; });
+  var artPlatform = (sc.artSelectivePlatform || nonWindowsOnly)
+    ? ((sc.supportedOs && sc.supportedOs[0]) || 'windows')
+    : 'windows';
   var artCache = (artPlatform === 'windows') ? artCatalog : (_artCatalogByPlatform[artPlatform] || []);
   var have = (fw === 'art') ? scopeArtItems(sc, artCache) : calderaCatalog;
   if (have.length) { openPickerWith(scId, fw, sc, have); return; }
