@@ -15771,8 +15771,25 @@ function submitIOCImport() {
       return;
     }
 
+    // Sort running/finished steps above still-queued ones. state.steps is a
+    // Map in first-event-seen (dispatch) order -- with concurrency-limited
+    // execution and hundreds of steps in a full sweep, that order does NOT
+    // match completion order, so the unsorted list could show a screen full
+    // of QUEUED rows above the fold indefinitely even as the counters ticked
+    // up elsewhere further down. STATE_PRIORITY surfaces what's actually
+    // happening (running, then done/failed) first; Array.prototype.sort is
+    // stable in every engine we target (ES2019+), so same-priority rows keep
+    // their original relative order.
+    var STATE_PRIORITY = { running: 0, done: 1, timeout: 1, killed: 1, blocked: 1, queued: 2 };
+    var entries = [];
+    state.steps.forEach(function (s, task) { entries.push([task, s]); });
+    entries.sort(function (a, b) {
+      return (STATE_PRIORITY[a[1].state] ?? 1) - (STATE_PRIORITY[b[1].state] ?? 1);
+    });
+
     var rows = [];
-    state.steps.forEach(function (s, task) {
+    entries.forEach(function (entry) {
+      var task = entry[0], s = entry[1];
       var color  = STEP_COLOR[s.state] || 'var(--muted)';
       var blink  = s.state === 'running' ? ';animation:blink 1.5s infinite' : '';
       var techId = s.tech || task;
