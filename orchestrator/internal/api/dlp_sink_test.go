@@ -610,3 +610,90 @@ func TestWebhookSinkHost_HonorsExplicitOverride(t *testing.T) {
 		}
 	})
 }
+
+func TestIssueSinkTokensAndSubstitute_TelnetPlaceholders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{
+				TechniqueID: "T1048.003",
+				Command:     `$uri = "https://{{SINK_TELNET_HOST}}:{{SINK_TELNET_PORT}}/telnet/session"`,
+			},
+		}
+		result, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-1", "https://orchestrator.internal:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		if !strings.Contains(result[0].Command, "orchestrator.internal") {
+			t.Fatalf("SINK_TELNET_HOST not substituted; got %q", result[0].Command)
+		}
+		if !strings.Contains(result[0].Command, "9443") {
+			t.Fatalf("SINK_TELNET_PORT not substituted; got %q", result[0].Command)
+		}
+	})
+}
+
+func TestTelnetSinkPort_DerivesFromPublicBaseURL(t *testing.T) {
+	tests := []struct {
+		publicBaseURL string
+		want          string
+	}{
+		{"https://orchestrator.internal:9443", "9443"},
+		{"https://orchestrator.internal", "443"},
+		{"http://localhost:8080", "8080"},
+		{"http://localhost", "443"},
+	}
+	for _, tt := range tests {
+		got := telnetSinkPort(tt.publicBaseURL)
+		if got != tt.want {
+			t.Errorf("telnetSinkPort(%q) = %q, want %q", tt.publicBaseURL, got, tt.want)
+		}
+	}
+}
+
+func TestTelnetSinkHost_HonorsExplicitOverride(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	t.Setenv("SINK_TELNET_HOST", "telnet.override.local")
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1048.003", Command: "target={{SINK_TELNET_HOST}}"},
+		}
+		out, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-telnet-2", "https://orchestrator.example:9443", steps)
+		if err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		if !strings.Contains(out[0].Command, "telnet.override.local") {
+			t.Fatalf("expected the SINK_TELNET_HOST override to win: %s", out[0].Command)
+		}
+	})
+}
+
+func TestIssueSinkTokensAndSubstitute_TelnetDoesNotIssueOrphanedSecondToken(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping container-backed test in -short mode")
+	}
+	sharedDB.RunWithPool(t, func(pool *pgxpool.Pool) {
+		h := New(pool, ws.NewHub(), scenario.NewEngine(t.TempDir()), "")
+		steps := []scenario.ScenarioStep{
+			{TechniqueID: "T1048.003", Command: "$uri = 'https://{{SINK_TELNET_HOST}}/telnet/session'; $token = '{{SINK_TOKEN}}'"},
+		}
+		if _, err := h.issueSinkTokensAndSubstitute(context.Background(), "run-telnet-orphan", "https://orchestrator.internal", steps); err != nil {
+			t.Fatalf("issueSinkTokensAndSubstitute: %v", err)
+		}
+		var count int
+		if err := pool.QueryRow(context.Background(),
+			`SELECT count(*) FROM dlp_sink_tokens WHERE run_id = 'run-telnet-orphan' AND technique_id = 'T1048.003'`,
+		).Scan(&count); err != nil {
+			t.Fatalf("query dlp_sink_tokens: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("dlp_sink_tokens rows = %d, want exactly 1 (no orphaned second token from the telnet block)", count)
+		}
+	})
+}

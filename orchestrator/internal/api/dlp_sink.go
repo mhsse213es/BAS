@@ -134,6 +134,16 @@ func (h *Handler) issueSinkTokensAndSubstitute(ctx context.Context, runID, publi
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_WEBHOOK_HOST}}", webhookSinkHost(publicBaseURL))
 			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_WEBHOOK_PORT}}", webhookSinkPort(publicBaseURL))
 		}
+		if strings.Contains(steps[i].Command, "{{SINK_TELNET_HOST}}") || strings.Contains(steps[i].Command, "{{SINK_TELNET_PORT}}") {
+			// Same reasoning as the cloud storage and webhook blocks above:
+			// does NOT issue its own token. Telnet reuses the existing
+			// 32-byte {{SINK_TOKEN}} placeholder directly, and every
+			// real Telnet-wired step's command contains {{SINK_TOKEN}} too
+			// (embedded in the conversation JSON) -- the unconditional block
+			// above already issues and substitutes it whenever present.
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_TELNET_HOST}}", telnetSinkHost(publicBaseURL))
+			steps[i].Command = strings.ReplaceAll(steps[i].Command, "{{SINK_TELNET_PORT}}", telnetSinkPort(publicBaseURL))
+		}
 	}
 	return steps, nil
 }
@@ -253,6 +263,34 @@ func webhookSinkHost(publicBaseURL string) string {
 // externally-published port than the rest of the API.
 func webhookSinkPort(publicBaseURL string) string {
 	if v := os.Getenv("SINK_WEBHOOK_PORT"); v != "" {
+		return v
+	}
+	if u, err := url.Parse(publicBaseURL); err == nil && u.Port() != "" {
+		return u.Port()
+	}
+	return "443" // publicBaseURL has no explicit port -- assume default HTTPS
+}
+
+// telnetSinkHost resolves the {{SINK_TELNET_HOST}} placeholder: an
+// explicit SINK_TELNET_HOST environment override if set, otherwise the
+// same derivation dnsServerHost/sftpSinkHost/smtpSinkHost/cloudSinkHost/
+// webhookSinkHost already use.
+func telnetSinkHost(publicBaseURL string) string {
+	if v := os.Getenv("SINK_TELNET_HOST"); v != "" {
+		return v
+	}
+	return dnsServerHost(publicBaseURL)
+}
+
+// telnetSinkPort resolves the {{SINK_TELNET_PORT}} placeholder,
+// following cloudSinkPort's reasoning exactly: internal/telnetsink's
+// route is mounted on the main API server rather than binding an
+// independent listener, so the port comes from publicBaseURL itself.
+// SINK_TELNET_PORT remains available as an explicit override for the
+// rare case where this route is deliberately reachable on a different
+// externally-published port than the rest of the API.
+func telnetSinkPort(publicBaseURL string) string {
+	if v := os.Getenv("SINK_TELNET_PORT"); v != "" {
 		return v
 	}
 	if u, err := url.Parse(publicBaseURL); err == nil && u.Port() != "" {
