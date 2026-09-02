@@ -14,8 +14,12 @@
 #
 # Notes:
 #   • Docker requires net.ipv4.ip_forward=1 — this script preserves it.
-#   • UFW + Docker: Docker manages its own iptables chains; this script applies
-#     host-level UFW rules but does NOT disable Docker's iptables management.
+#   • UFW + Docker: Docker manages its own iptables chains for container-internal
+#     traffic; this script applies host-level UFW rules and also sets ufw's
+#     DEFAULT_FORWARD_POLICY to ACCEPT, since Docker's DNAT'd published ports
+#     traverse ufw's FORWARD chain (Ubuntu's ufw package defaults FORWARD to
+#     DROP, which otherwise silently drops every connection to a docker -p
+#     port, including the BAS console, despite correct INPUT-side allow rules).
 #   • Run from the directory containing this script or pass full paths.
 set -euo pipefail
 
@@ -283,8 +287,9 @@ harden_sysctl() {
 # ══════════════════════════════════════════════════════════════════════════════
 harden_ufw() {
   section "4. Firewall (UFW)"
-  info "Note: Docker manages its own iptables chains. UFW rules apply to host traffic only."
-  info "Port 9000 is exposed by Docker directly via iptables — UFW FORWARD rules do not block it."
+  info "Note: Docker manages its own iptables chains for container-internal traffic."
+  info "Published ports (docker -p) are DNAT'd and traverse ufw's FORWARD chain, not INPUT —"
+  info "see the DEFAULT_FORWARD_POLICY check below."
 
   if ! command -v ufw &>/dev/null; then
     apply "Install UFW" apt-get install -y -qq ufw
@@ -318,6 +323,19 @@ harden_ufw() {
   else
     apply "Rate-limit SSH on UFW" bash -c 'ufw delete allow 22/tcp 2>/dev/null; ufw limit 22/tcp'
     fail "UFW SSH not rate-limited — applied"
+  fi
+
+  # Forward policy — required for Docker-published ports. Ubuntu's ufw package
+  # ships DEFAULT_FORWARD_POLICY="DROP" by default; since docker -p ports are
+  # DNAT'd and traverse FORWARD (not INPUT), a DROP policy here silently drops
+  # every inbound connection to the BAS console even though the INPUT-side
+  # allow rule for that port is correct (confirmed via kern.log [UFW BLOCK]
+  # entries showing the connection on the FORWARD path, DST=<container IP>).
+  if grep -q '^DEFAULT_FORWARD_POLICY="ACCEPT"' /etc/default/ufw 2>/dev/null; then
+    pass "UFW forward policy is ACCEPT (required for Docker-published ports)"
+  else
+    apply "Set UFW forward policy to ACCEPT" sed -i 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+    fail "UFW forward policy was not ACCEPT — Docker-published ports (e.g. the BAS console) would be silently dropped. Applied."
   fi
 
   # Reload

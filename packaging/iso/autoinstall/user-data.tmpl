@@ -236,6 +236,12 @@ autoinstall:
     - curtin in-target -- ufw default deny incoming
     - curtin in-target -- ufw default allow outgoing
     - curtin in-target -- ufw limit 22/tcp
+    # Docker's published ports (docker -p) are DNAT'd and traverse ufw's FORWARD
+    # chain, not INPUT. Ubuntu's ufw package defaults DEFAULT_FORWARD_POLICY to
+    # DROP, which silently drops every connection to the BAS console despite a
+    # correct INPUT-side allow rule for that port. Set it here so a freshly
+    # imaged appliance works on first boot without needing harden.sh to run first.
+    - curtin in-target -- sed -i 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
     - curtin in-target -- ufw --force enable
 
     # Disable unattended-upgrades during initial setup (post-install will re-enable)
